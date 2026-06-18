@@ -1,6 +1,7 @@
 name: LUPI CI
 
 on:
+  workflow_dispatch: {}
   pull_request:
     paths:
       - 'apps/**'
@@ -87,6 +88,7 @@ jobs:
         run: npm run verify:streaming
 
   gallery-e2e:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs: build-test
     continue-on-error: true
