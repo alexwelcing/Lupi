@@ -1,7 +1,7 @@
 /**
  * Build script: generate compact NIST catalog JSON for the viewer.
  *
- * Reads atlas/nist_ipr/index/master_index.json and optionally joins
+ * Reads an in-repo NIST master index and optionally joins
  * with demo manifest to produce apps/web/public/nist/nist_catalog.json.
  *
  * Run from atlas-view root:
@@ -72,7 +72,20 @@ function deriveElementsFromPotid(potid: string): string[] {
 }
 
 const CWD = process.cwd();
-const MASTER_INDEX = resolve(CWD, '../nist_ipr/index/master_index.json');
+
+function firstExisting(label: string, paths: string[]): string {
+  const found = paths.find((candidate) => existsSync(candidate));
+  if (!found) {
+    throw new Error(`${label} not found. Checked: ${paths.join(', ')}`);
+  }
+  return found;
+}
+
+const MASTER_INDEX = firstExisting('NIST master index', [
+  resolve(CWD, 'nist_ipr/index/master_index.json'),
+  resolve(CWD, 'atlas/nist_ipr/index/master_index.json'),
+  resolve(CWD, '../nist_ipr/index/master_index.json'),
+]);
 // Canonical, committed demo manifest — makes the catalog reproducible from
 // in-repo inputs (the generated ../nist_ipr/demos/manifest.json is gitignored
 // because the .glimbin blobs are GCS-hosted). Regenerating demos? Refresh

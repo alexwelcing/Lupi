@@ -1,14 +1,22 @@
-name: Deploy LUPI viewer
+name: LUPI deploy readiness
 
 on:
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
-  todo:
+  readiness:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          echo "TODO: wire standalone lupi.live Cloud Run deploy."
-          echo "The monorepo deploy used atlas/deploy_slim.py, which also built old research-site output."
-          echo "Split that deploy bundle before enabling production deploys here."
-          exit 1
+      - name: Report deploy status
+        run: |
+          {
+            echo "### LUPI deploy is not armed yet"
+            echo
+            echo "The standalone viewer CI is active, but production deploy still needs a clean Cloud Run bundle and repo secrets."
+            echo
+            echo "Required next step: split the old atlas/deploy_slim.py flow so it builds only the viewer bundle for lupi.live."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "LUPI deploy is intentionally readiness-only for now."
