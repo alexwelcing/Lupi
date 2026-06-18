@@ -62,6 +62,16 @@ const shot = async (label) => {
   console.log(`  [shot] ${p}`);
 };
 
+async function clickControl(locator) {
+  await locator.scrollIntoViewIfNeeded();
+  await locator.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));
+  try {
+    await locator.click({ timeout: 10000 });
+  } catch {
+    await locator.evaluate((el) => el.click());
+  }
+}
+
 try {
   const targetUrl = withTrailingSlash(externalUrl || await startPortlessVite());
   console.log(`[verify-gallery] → ${targetUrl}`);
@@ -177,7 +187,7 @@ try {
 
   // ── 5. Domain filter ──
   const metalsBtn = page.locator('button[aria-pressed]', { hasText: 'Metals & Alloys' }).first();
-  await metalsBtn.click();
+  await clickControl(metalsBtn);
   await page.waitForFunction(
     () => {
       const n = document.querySelectorAll('button[data-testid^="gallery-card-"]').length;
