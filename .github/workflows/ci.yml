@@ -90,6 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-test
     continue-on-error: true
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -120,6 +121,7 @@ jobs:
           done
 
       - name: Run gallery UI harness
+        timeout-minutes: 6
         run: node tools/verify-gallery.mjs
 
       - name: Upload screenshots
