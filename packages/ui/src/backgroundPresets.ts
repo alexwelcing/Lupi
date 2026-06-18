@@ -330,6 +330,10 @@ export const BG_PRESETS: Record<string, BgPreset> = {
   'vacuum-foam':   { top: '#050b12', bottom: '#000000', label: 'Vacuum Foam',      image: '/backgrounds/bg_vacuum_foam.jpg',      category: 'signature', badge: 'NEW', intensity: 'quiet' },
   'moire-field':   { top: '#06221f', bottom: '#010604', label: 'Moire Field',      image: '/backgrounds/bg_moire_field.jpg',      category: 'signature', badge: 'NEW', intensity: 'active' },
   'molten-circuit': { top: '#100806', bottom: '#000000', label: 'Molten Circuit',  image: '/backgrounds/bg_molten_circuit_sea.jpg', category: 'signature', badge: 'NEW', intensity: 'active' },
+  'neutral-atrium': { top: '#1a2228', bottom: '#05070a', label: 'Neutral Atrium', image: '/backgrounds/bg_world_neutral_atrium.png', category: 'neutral-world', badge: 'WORLD', intensity: 'quiet', context: 'Seam-safe neutral lab atrium with a calm molecule center for gallery and default world work.' },
+  'graphite-orbit': { top: '#17191d', bottom: '#020203', label: 'Graphite Orbit', image: '/backgrounds/bg_world_graphite_orbit.png', category: 'neutral-world', badge: 'WORLD', intensity: 'quiet', context: 'Graphite instrumentation field with subdued orbit traces and exact equirectangular wrap.' },
+  'cryo-haze': { top: '#0b1d22', bottom: '#020609', label: 'Cryo Haze', image: '/backgrounds/bg_world_cryo_haze.png', category: 'neutral-world', badge: 'WORLD', intensity: 'balanced', context: 'Cool neutral haze for biomolecular and materials scenes with edge-safe angular texture.' },
+  'spectrum-quiet': { top: '#151515', bottom: '#020203', label: 'Spectrum Quiet', image: '/backgrounds/bg_world_spectrum_quiet.png', category: 'neutral-world', badge: 'WORLD', intensity: 'balanced', context: 'Dark publication spectrum room with traces placed away from the inspection center.' },
   ...MOTION_LOOP_PRESETS,
 };
 
@@ -342,6 +346,7 @@ export const BG_VIDEO_PRESETS: BgPresetWithId[] = Object.entries(BG_PRESETS)
   .map(([id, preset]) => ({ id, ...preset }));
 
 const TEXTURE_CATEGORY_ORDER = [
+  { label: 'Neutral Worlds', categories: ['neutral-world'] },
   { label: 'Mathematical Fields', categories: ['math'] },
   { label: 'Publication Contexts', categories: ['publication'] },
   { label: 'Motion Loops', categories: ['motion'] },

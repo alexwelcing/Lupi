@@ -26,7 +26,7 @@ export function LandingFooter() {
   return (
     <footer style={{
       padding: '60px 24px 32px 24px',
-      background: 'linear-gradient(180deg, #06080d 0%, #020204 100%)',
+      background: 'linear-gradient(180deg, rgba(6,8,13,0.74) 0%, rgba(2,2,4,0.88) 100%)',
       borderTop: '1px solid rgba(255,255,255,0.04)',
     }}>
       <div style={{

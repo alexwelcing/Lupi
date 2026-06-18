@@ -40,7 +40,7 @@ export function GallerySection() {
       ref={sectionRef}
       style={{
         padding: '60px 0 100px',
-        background: '#06080d',
+        background: 'linear-gradient(180deg, rgba(6,8,13,0.68), rgba(2,4,8,0.72))',
         opacity: visible ? 1 : 0,
         transform: visible ? 'translateY(0)' : 'translateY(20px)',
         transition: 'all 0.8s ease-out',

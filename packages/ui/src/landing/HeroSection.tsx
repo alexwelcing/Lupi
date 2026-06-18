@@ -214,7 +214,7 @@ const HERO_CSS = `
   min-height: calc(100dvh - 104px);
   overflow: hidden;
   background:
-    linear-gradient(120deg, rgba(2, 2, 4, 0.98) 0%, rgba(6, 12, 18, 0.96) 48%, rgba(24, 15, 9, 0.94) 100%);
+    linear-gradient(120deg, rgba(2, 2, 4, 0.9) 0%, rgba(6, 12, 18, 0.78) 48%, rgba(24, 15, 9, 0.62) 100%);
   color: #f8fafc;
   isolation: isolate;
 }
@@ -224,7 +224,7 @@ const HERO_CSS = `
   inset: auto 0 0;
   height: 140px;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(2, 2, 4, 0), #020204);
+  background: linear-gradient(180deg, rgba(2, 2, 4, 0), rgba(2, 2, 4, 0.78));
   z-index: 1;
 }
 .lupi-hero-shell {

@@ -104,7 +104,7 @@ export function DropZoneSection() {
       ref={sectionRef}
       style={{
         padding: '100px 24px',
-        background: 'linear-gradient(180deg, #0a0e18 0%, #06080d 100%)',
+        background: 'linear-gradient(180deg, rgba(10,14,24,0.7) 0%, rgba(6,8,13,0.66) 100%)',
       }}
     >
       <div style={{

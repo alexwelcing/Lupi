@@ -39,7 +39,7 @@ export function FeaturedShowcase() {
   return (
     <section
       ref={sectionRef}
-      style={{ padding: '80px 24px', background: 'linear-gradient(180deg, #020204 0%, #0a0e18 100%)' }}
+      style={{ padding: '80px 24px', background: 'linear-gradient(180deg, rgba(2,2,4,0.74) 0%, rgba(10,14,24,0.68) 100%)' }}
     >
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         {/* Section header */}

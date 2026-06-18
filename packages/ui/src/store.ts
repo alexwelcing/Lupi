@@ -558,7 +558,7 @@ const DEFAULTS = {
   activeBondDataset: null as string | null,
   renderStyle: 'standard' as RenderStyle,
   atomScale: 1.0,
-  backgroundPreset: 'deep',
+  backgroundPreset: 'neutral-atrium',
   backgroundStyle: 'radial' as const,
   filterShellShape: 'off' as FilterShellShape,
   filterShellPreset: 'haze' as FilterShellPreset,
@@ -1130,7 +1130,7 @@ export const useStore = create<AppState>()(
       if (!s.showCell)                                 delta.cell = 0;
       if (!s.showAxes)                                 delta.axes = 0;
       if (r(s.atomScale) !== 1.0)                      delta.as = r(s.atomScale);
-      if (s.backgroundPreset !== 'deep')               delta.bg = s.backgroundPreset;
+      if (s.backgroundPreset !== DEFAULTS.backgroundPreset) delta.bg = s.backgroundPreset;
       if (s.backgroundStyle !== DEFAULTS.backgroundStyle) delta.bgs = s.backgroundStyle;
       if (s.filterShellShape !== 'off')                delta.fss = s.filterShellShape;
       if (s.filterShellPreset !== 'haze')              delta.fsp = s.filterShellPreset;
@@ -1202,7 +1202,7 @@ export const useStore = create<AppState>()(
           showCell: s.cell !== 0,
           showAxes: s.axes !== 0,
           atomScale: s.as ?? 1.0,
-          backgroundPreset: s.bg ?? 'deep',
+          backgroundPreset: s.bg ?? DEFAULTS.backgroundPreset,
           backgroundStyle: s.bgs ?? DEFAULTS.backgroundStyle,
           filterShellShape: sanitizeFilterShellShape(s.fss),
           filterShellPreset: sanitizeFilterShellPreset(s.fsp),

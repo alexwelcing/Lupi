@@ -49,7 +49,7 @@ export function LandingProofSection() {
 const PROOF_CSS = `
 .lupi-proof {
   width: 100%;
-  background: #020204;
+  background: linear-gradient(180deg, rgba(2, 2, 4, 0.82), rgba(2, 2, 4, 0.72));
   color: #f8fafc;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);

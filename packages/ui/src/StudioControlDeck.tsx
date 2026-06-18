@@ -5,11 +5,14 @@ import { getElementSpec } from '@atlas/core';
 import type { ColormapName, RenderStyle } from '@atlas/core/types';
 import { MATERIAL_SCENES, type MaterialScene } from '@atlas/scene/materials';
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from './coloring';
-import { useStore, type FilterShellPreset, type FilterShellShape } from './store';
+import { useStore, type AppState, type FilterShellPreset, type FilterShellShape } from './store';
 import {
   BG_GRADIENT_PRESETS,
   BG_TEXTURE_CATEGORIES,
   BG_VIDEO_PRESETS,
+  getBgBadge,
+  getBgMedia,
+  getBgPoster,
   type BgPresetWithId,
 } from './backgroundPresets';
 
@@ -64,6 +67,12 @@ const FILTER_SHELL_PRESETS: Array<{ id: FilterShellPreset; label: string; code: 
   { id: 'cryo', label: 'Cryo', code: 'CRY', accent: '#84c9ff' },
   { id: 'prism', label: 'Prism', code: 'PRI', accent: '#ff7ab6' },
   { id: 'graphite', label: 'Graphite', code: 'GRF', accent: '#d1d5db' },
+];
+
+const BACKGROUND_STYLE_OPTIONS: Array<{ id: AppState['backgroundStyle']; label: string; code: string; accent: string }> = [
+  { id: 'radial', label: 'Radial', code: 'RAD', accent: '#7de9ff' },
+  { id: 'linear', label: 'Linear', code: 'LIN', accent: '#a7f3d0' },
+  { id: 'spotlight', label: 'Spot', code: 'SPT', accent: '#fbbf24' },
 ];
 
 const FEATURED_SCENE_IDS = [
@@ -150,6 +159,8 @@ export function StudioControlDeck({
 
   const backgroundPreset = useStore(s => s.backgroundPreset);
   const setBackgroundPreset = useStore(s => s.setBackgroundPreset);
+  const backgroundStyle = useStore(s => s.backgroundStyle);
+  const setBackgroundStyle = useStore(s => s.setBackgroundStyle);
   const filterShellShape = useStore(s => s.filterShellShape);
   const setFilterShellShape = useStore(s => s.setFilterShellShape);
   const filterShellPreset = useStore(s => s.filterShellPreset);
@@ -173,6 +184,7 @@ export function StudioControlDeck({
     () => MATERIAL_SCENES.filter(scene => FEATURED_SCENE_IDS.includes(scene.id)),
     [],
   );
+  const neutralWorldPresets = useMemo(() => categoryPresets('Neutral Worlds'), []);
   const mathPresets = useMemo(() => categoryPresets('Mathematical Fields'), []);
   const publicationPresets = useMemo(() => categoryPresets('Publication Contexts').slice(0, 8), []);
   const signaturePresets = useMemo(() => categoryPresets('Signature Stills').slice(0, 8), []);
@@ -181,12 +193,13 @@ export function StudioControlDeck({
     [],
   );
   const backgroundGroups = useMemo(() => [
-    { label: 'Math', presets: mathPresets },
-    { label: 'Motion', presets: BG_VIDEO_PRESETS.slice(0, 8) },
+    { label: 'Neutral Worlds', presets: neutralWorldPresets },
+    { label: 'Motion Loops', presets: BG_VIDEO_PRESETS.slice(0, 8) },
     { label: 'Publication', presets: publicationPresets },
     { label: 'Signature', presets: signaturePresets },
+    { label: 'Math Fields', presets: mathPresets },
     { label: 'Base', presets: gradientPresets },
-  ], [gradientPresets, mathPresets, publicationPresets, signaturePresets]);
+  ].filter(group => group.presets.length > 0), [gradientPresets, mathPresets, neutralWorldPresets, publicationPresets, signaturePresets]);
   const activeBackgroundIsVideo = useMemo(
     () => BG_VIDEO_PRESETS.some(preset => preset.id === backgroundPreset),
     [backgroundPreset],
@@ -292,7 +305,7 @@ export function StudioControlDeck({
     ? `${postprocessPreset} grade / ${colorScheme} color`
     : mode === 'surface'
       ? `${renderStyle} / ${materialScene}`
-      : backgroundPreset;
+      : `${backgroundPreset} / ${backgroundStyle}`;
 
   return (
     <div
@@ -346,6 +359,120 @@ export function StudioControlDeck({
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 7px;
+        }
+        .lupi-world-library {
+          display: grid;
+          gap: 8px;
+          max-height: 286px;
+          overflow: auto;
+          padding-right: 2px;
+          scrollbar-width: thin;
+        }
+        .lupi-world-library-head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 8px;
+          min-width: 0;
+          padding: 1px 1px 0;
+        }
+        .lupi-world-library-head span {
+          color: #94a3b8;
+          font-size: 10px;
+          font-weight: 820;
+          line-height: 1;
+          letter-spacing: 0;
+          text-transform: uppercase;
+        }
+        .lupi-world-library-head strong {
+          min-width: 0;
+          color: #f8fafc;
+          font-size: 11px;
+          font-weight: 780;
+          line-height: 1.1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .lupi-world-library-group {
+          display: grid;
+          gap: 5px;
+          min-width: 0;
+        }
+        .lupi-world-library-title {
+          color: rgba(203,213,225,0.58);
+          font-size: 10px;
+          font-weight: 820;
+          line-height: 1;
+          letter-spacing: 0;
+        }
+        .lupi-world-card-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+          gap: 6px;
+        }
+        .lupi-world-card {
+          min-width: 0;
+          display: grid;
+          grid-template-columns: 42px minmax(0, 1fr);
+          gap: 7px;
+          align-items: center;
+          min-height: 48px;
+          padding: 5px;
+          border-radius: 8px;
+          border: 1px solid rgba(148,163,184,0.18);
+          background: linear-gradient(135deg, rgba(15,23,42,0.64), rgba(3,7,18,0.55));
+          color: #cbd5e1;
+          cursor: pointer;
+          text-align: left;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .lupi-world-card[data-active="true"] {
+          border-color: rgba(30,220,224,0.7);
+          background: linear-gradient(135deg, rgba(30,220,224,0.16), rgba(3,7,18,0.72));
+          color: #f8fafc;
+          box-shadow: 0 0 18px rgba(30,220,224,0.14), inset 0 1px 0 rgba(255,255,255,0.08);
+        }
+        .lupi-world-card-preview {
+          position: relative;
+          width: 42px;
+          height: 36px;
+          border-radius: 7px;
+          border: 1px solid rgba(255,255,255,0.14);
+          background-size: cover;
+          background-position: center;
+          overflow: hidden;
+        }
+        .lupi-world-card-preview::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle at 50% 50%, transparent 0 42%, rgba(0,0,0,0.38) 100%);
+        }
+        .lupi-world-card-copy {
+          min-width: 0;
+          display: grid;
+          gap: 3px;
+        }
+        .lupi-world-card-copy strong,
+        .lupi-world-card-copy span {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          letter-spacing: 0;
+        }
+        .lupi-world-card-copy strong {
+          font-size: 11px;
+          font-weight: 800;
+          line-height: 1.1;
+        }
+        .lupi-world-card-copy span {
+          color: rgba(203,213,225,0.56);
+          font-size: 9px;
+          font-weight: 820;
+          line-height: 1;
+          text-transform: uppercase;
         }
         .lupi-native-color::-webkit-color-swatch-wrapper {
           padding: 0;
@@ -590,11 +717,23 @@ export function StudioControlDeck({
         {mode === 'world' && (
           <div className="lupi-deck-grid">
             <ControlGroup title="Backdrop">
-              <BackgroundSelect
+              <BackgroundWorldLibrary
                 value={backgroundPreset}
                 groups={backgroundGroups}
                 onChange={setBackgroundPreset}
               />
+              <div className="lupi-studio-segments">
+                {BACKGROUND_STYLE_OPTIONS.map(option => (
+                  <SegmentButton
+                    key={option.id}
+                    label={option.label}
+                    meta={option.code}
+                    active={backgroundStyle === option.id}
+                    accent={option.accent}
+                    onClick={() => setBackgroundStyle(option.id)}
+                  />
+                ))}
+              </div>
             </ControlGroup>
 
             <ControlGroup title="Shell">
@@ -1017,7 +1156,7 @@ function CompactSelect({
   );
 }
 
-function BackgroundSelect({
+function BackgroundWorldLibrary({
   value,
   groups,
   onChange,
@@ -1026,24 +1165,59 @@ function BackgroundSelect({
   groups: Array<{ label: string; presets: BgPresetWithId[] }>;
   onChange: (value: string) => void;
 }) {
+  const activePreset = groups.flatMap(group => group.presets).find(preset => preset.id === value);
+
   return (
-    <label style={compactFieldStyle}>
-      <span style={compactFieldLabelStyle}>Scene</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        style={compactSelectStyle}
-      >
-        {groups.map(group => (
-          <optgroup key={group.label} label={group.label}>
-            {group.presets.map(preset => (
-              <option key={preset.id} value={preset.id}>{preset.label}</option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-    </label>
+    <div className="lupi-world-library" data-testid="world-background-library">
+      <div className="lupi-world-library-head">
+        <span>Scene</span>
+        <strong>{activePreset?.label ?? value}</strong>
+      </div>
+      {groups.map(group => (
+        <div key={group.label} className="lupi-world-library-group">
+          <div className="lupi-world-library-title">{group.label}</div>
+          <div className="lupi-world-card-grid">
+            {group.presets.map(preset => {
+              const media = getBgMedia(preset);
+              const badge = getBgBadge(preset) ?? media.kind;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="lupi-world-card"
+                  data-active={value === preset.id}
+                  data-world-id={preset.id}
+                  data-testid={`world-background-${preset.id}`}
+                  aria-pressed={value === preset.id}
+                  aria-label={`${preset.label} world background`}
+                  onClick={() => onChange(preset.id)}
+                >
+                  <span
+                    className="lupi-world-card-preview"
+                    style={{ background: backgroundPreview(preset) }}
+                    aria-hidden="true"
+                  />
+                  <span className="lupi-world-card-copy">
+                    <strong>{preset.label}</strong>
+                    <span>{badge}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
+}
+
+function backgroundPreview(preset: BgPresetWithId): string {
+  if (preset.preview) return preset.preview;
+  const poster = getBgPoster(preset);
+  if (poster) {
+    return `linear-gradient(180deg, rgba(2,6,23,0.04), rgba(2,6,23,0.44)), url("${poster.replace(/"/g, '\\"')}") center center / cover no-repeat`;
+  }
+  return `linear-gradient(135deg, ${preset.top}, ${preset.bottom})`;
 }
 
 function ColorPicker({
