@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(data) {
+      return signedIn() && data.ownerId == request.auth.uid;
+    }
+
+    match /lupiViews/{slug} {
+      // Allow existence checks on missing documents (the save flow reads before
+      // writing), but otherwise restrict reads to public views or the owner.
+      allow get: if resource.data == null || resource.data.visibility == 'public' || isOwner(resource.data);
+      allow list: if resource.data.visibility == 'public' || isOwner(resource.data);
+
+      allow create: if signedIn()
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.slug == slug
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.visibility == 'public';
+
+      allow update: if isOwner(resource.data)
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.slug == slug
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.visibility == 'public';
+
+      allow delete: if isOwner(resource.data);
+    }
+
+    // API keys: written ONLY by the Cloud Functions admin SDK (create/revoke).
+    // Clients may read their own keys to render the management UI, but the raw
+    // key is never stored — only its SHA-256 hash — so a read leaks nothing usable.
+    match /apiKeys/{keyId} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Rate-limit counters: written ONLY by the Cloud Functions admin SDK (the
+    // per-IP exchange throttle). Never client-accessible; a TTL policy on the
+    // `expireAt` field reaps stale window docs.
+    match /rateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // Curated molecule library — public-readable; any signed-in user may add an
+    // owner-stamped entry, and edit/remove only their own. Backs the federated
+    // search 'library' source.
+    match /moleculeLibrary/{id} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data);
+    }
+  }
+}

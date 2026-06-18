@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Allow: /scenes/
+Allow: /study/
+Allow: /materials/
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /brand.json
+
+Sitemap: https://lupi.live/sitemap.xml

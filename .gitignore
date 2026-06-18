@@ -1,0 +1,26 @@
+# Dependency and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.turbo/
+.verify-artifacts/
+*.log
+
+# NIST demo trajectories are large glimbin blobs — hosted on GCS in prod
+# (resolved via VITE_NIST_BASE_URL), symlinked locally for dev. Never commit.
+apps/web/public/nist/demos/
+
+# Local environment-pack candidate runs are promoted explicitly before commit.
+tools/lupi-environment-candidates/
+tools/lupi-motion-cache/
+tools/lupi-panorama-runs.jsonl
+
+# Local Firebase/GCP and Vite runtime config.
+.env.local
+.env.*.local
+apps/*/.env.local
+apps/*/.env.*.local
+
+# Generated MD trajectories (regenerate via tools/sims/make_phase_trajectories.py)
+tools/sims/output/

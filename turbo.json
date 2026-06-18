@@ -1,0 +1,32 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "pkg/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "@atlas/core#build": { "outputs": [] },
+    "@atlas/parsers#build": { "outputs": [] },
+    "@atlas/renderer#build": { "outputs": [] },
+    "@atlas/scene#build": { "outputs": [] },
+    "@atlas/ui#build": { "outputs": [] },
+    "@lupine/ui#build": { "outputs": [] },
+    "@atlas/remotion-trailer#build": { "outputs": [] },
+    "test": {
+      "outputs": [],
+      "dependsOn": ["build"]
+    },
+    "lint": {
+      "outputs": [],
+      "dependsOn": ["^build"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

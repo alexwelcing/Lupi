@@ -1,0 +1,14 @@
+name: Deploy LUPI viewer
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  todo:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "TODO: wire standalone lupi.live Cloud Run deploy."
+          echo "The monorepo deploy used atlas/deploy_slim.py, which also built old research-site output."
+          echo "Split that deploy bundle before enabling production deploys here."
+          exit 1

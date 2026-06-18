@@ -1,0 +1,81 @@
+{
+  "name": "lupi-live",
+  "version": "0.2.1",
+  "private": true,
+  "description": "WebGPU-powered LAMMPS molecular dynamics visualization platform",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexwelcing/Lupi.git"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "start": "node tools/serve-web.mjs",
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "build:wasm": "cd packages/parsers/wasm && wasm-pack build --target web --out-dir ../pkg",
+    "nist:build": "npx -y tsx scripts/build-nist-catalog.ts",
+    "test": "turbo run test --concurrency=1",
+    "test:rust": "cd packages/parsers/wasm && cargo test",
+    "verify:viewer": "node tools/verify-viewer.mjs",
+    "verify:controls": "node tools/verify-controls.mjs",
+    "verify:controls:mobile": "node tools/verify-controls.mjs --profile=mobile",
+    "verify:study-lens": "node tools/verify-study-lens.mjs",
+    "verify:study-lens:mobile": "node tools/verify-study-lens.mjs --profile=mobile",
+    "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
+    "verify:gallery": "node tools/verify-gallery.mjs",
+    "verify:streaming": "npx -y tsx tools/verify-streaming.mjs",
+    "verify:exports": "node tools/verify-exports.mjs",
+    "verify:export-colors": "node tools/verify-export-colors.mjs",
+    "verify:local-trajectory": "npx -y tsx tools/verify-local-trajectory.mjs",
+    "verify:real-trajectory": "npx -y tsx tools/verify-real-trajectory.mjs",
+    "verify:standalone": "pnpm build && pnpm verify:controls --no-screenshot && pnpm verify:study-lens --no-screenshot",
+    "doctor": "npx -y tsx tools/lupi-doctor.mjs",
+    "bake:glimbin": "npx -y tsx tools/bake-glimbin.mjs",
+    "sims:phase-change": "python3 tools/sims/make_phase_trajectories.py all --size demo",
+    "atomize:media": "node tools/atomize-media.mjs",
+    "verify:atomize-media": "node tools/verify-atomize-media.mjs",
+    "verify:saved-views": "node tools/verify-saved-views.mjs",
+    "verify:save-view-ui": "node tools/verify-save-view-ui.mjs",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.3.0",
+    "@gltf-transform/extensions": "^4.3.0",
+    "@react-three/test-renderer": "^9.1.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@webgpu/types": "^0.1.69",
+    "canvas": "^3.2.3",
+    "jsdom": "^29.1.1",
+    "jsqr": "^1.4.0",
+    "playwright": "^1.59.1",
+    "qrcode": "^1.5.4",
+    "three": "^0.184.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@types/node": "^22.0.0",
+    "leva": "^0.10.1",
+    "serve": "^14.2.6"
+  },
+  "pnpm": {
+    "packageExtensions": {
+      "@iwer/devui": {
+        "dependencies": {
+          "zustand": "^4.5.5"
+        }
+      }
+    }
+  }
+}
