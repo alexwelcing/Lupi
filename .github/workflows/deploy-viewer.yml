@@ -1,0 +1,202 @@
+name: Deploy LUPI viewer to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/deploy-viewer.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: lupi-viewer-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  VITE_FIREBASE_AUTH_DOMAIN: lupi.live
+  VITE_FIREBASE_PROJECT_ID: shed-489901
+  VITE_FIREBASE_APP_ID: 1:350452481649:web:c12dea9ce6f6ae045065d0
+  VITE_FIREBASE_STORAGE_BUCKET: shed-489901.firebasestorage.app
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '350452481649'
+  VITE_FIREBASE_MEASUREMENT_ID: G-BDBRM73QVJ
+  VITE_FIREBASE_ANALYTICS_ENABLED: 'false'
+  VITE_FIREBASE_ANALYTICS_CONSENT: denied
+  VITE_LUPI_MCP_ENDPOINT: https://lupi.live/mcp
+  VITE_LUPI_AUTH_FLOW: popup
+  VITE_NIST_BASE_URL: https://storage.googleapis.com/shed-489901-nist-demos/nist
+  VITE_LUPI_ANALYTICS_URL: https://us-central1-shed-489901.cloudfunctions.net/collectAnalytics
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate deploy configuration
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SERVICE_NAME_VIEWER: ${{ secrets.GCP_SERVICE_NAME_VIEWER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          missing=0
+          for name in \
+            VITE_FIREBASE_API_KEY \
+            GCP_PROJECT_ID \
+            GCP_REGION \
+            GCP_SERVICE_NAME_VIEWER \
+            GCP_SERVICE_ACCOUNT \
+            GCP_WORKLOAD_IDENTITY_PROVIDER
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::MISSING SECRET: ${name}"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Build viewer
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify viewer controls
+        run: pnpm verify:controls --no-screenshot
+
+      - name: Build Cloud Run source bundle
+        run: node tools/build-cloud-run-bundle.mjs
+
+      - name: Smoke local Cloud Run bundle
+        run: |
+          PORT=8080 node deploy_bundle/tools/serve-web.mjs > /tmp/lupi-bundle.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/ | grep -q "Lupi - 1M Atom Molecular Viewer"; then
+              echo "Local bundle smoke passed"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/lupi-bundle.log
+          echo "::error::Local bundle smoke failed"
+          exit 1
+
+      - name: Google auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy candidate without traffic
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SERVICE_NAME_VIEWER: ${{ secrets.GCP_SERVICE_NAME_VIEWER }}
+        run: |
+          gcloud run deploy "$GCP_SERVICE_NAME_VIEWER" \
+            --source=deploy_bundle \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --allow-unauthenticated \
+            --no-traffic \
+            --tag=candidate \
+            --quiet
+
+          service_json="$(gcloud run services describe "$GCP_SERVICE_NAME_VIEWER" \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --format=json)"
+          revision="$(printf '%s' "$service_json" | node -e "let data=''; process.stdin.on('data', c => data += c); process.stdin.on('end', () => { const service = JSON.parse(data); process.stdout.write(service.status?.latestCreatedRevisionName || ''); });")"
+          candidate_url="$(printf '%s' "$service_json" | node -e "let data=''; process.stdin.on('data', c => data += c); process.stdin.on('end', () => { const service = JSON.parse(data); const tagged = service.status?.traffic?.find(item => item.tag === 'candidate'); process.stdout.write(tagged?.url || ''); });")"
+
+          if [ -z "$revision" ] || [ -z "$candidate_url" ]; then
+            echo "::error::Could not resolve candidate revision URL"
+            exit 1
+          fi
+
+          echo "CANDIDATE_REVISION=$revision" >> "$GITHUB_ENV"
+          echo "CANDIDATE_URL=$candidate_url" >> "$GITHUB_ENV"
+          echo "Candidate revision: $revision"
+          echo "Candidate URL: $candidate_url"
+
+      - name: Smoke deployed candidate
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS "$CANDIDATE_URL" | grep -q "Lupi - 1M Atom Molecular Viewer"; then
+              echo "Candidate smoke passed"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Candidate smoke failed: $CANDIDATE_URL"
+          exit 1
+
+      - name: Route production traffic
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SERVICE_NAME_VIEWER: ${{ secrets.GCP_SERVICE_NAME_VIEWER }}
+        run: |
+          gcloud run services update-traffic "$GCP_SERVICE_NAME_VIEWER" \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --to-revisions="$CANDIDATE_REVISION=100" \
+            --quiet
+
+      - name: Smoke production URL
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS https://lupi.live/ | grep -q "Lupi - 1M Atom Molecular Viewer"; then
+              echo "Production smoke passed"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Production smoke failed: https://lupi.live/"
+          exit 1
+
+      - name: Report deploy status
+        if: always()
+        run: |
+          curl -X POST https://glim-think-v1.aw-ab5.workers.dev/ops/report \
+            -H "Content-Type: application/json" \
+            -d "{\"repo\":\"$GITHUB_REPOSITORY\",\"workflow\":\"$GITHUB_WORKFLOW\",\"run_id\":\"$GITHUB_RUN_ID\",\"status\":\"${{ job.status }}\",\"commit_sha\":\"$GITHUB_SHA\",\"branch\":\"$GITHUB_REF_NAME\",\"service\":\"lupi.live\",\"revision\":\"${CANDIDATE_REVISION:-unknown}\",\"run_url\":\"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\",\"started_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" || true

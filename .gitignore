@@ -3,6 +3,7 @@ node_modules/
 **/node_modules/
 dist/
 **/dist/
+deploy_bundle/
 .turbo/
 .verify-artifacts/
 *.log

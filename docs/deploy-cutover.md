@@ -1,24 +1,24 @@
 # Deploy Cutover
 
-The standalone `lupi.live` repo should not enable production deploys until the
-viewer deploy path is separated from old monorepo research-site output.
+The standalone `lupi.live` repo owns production deploys for the viewer. Its
+deploy path builds only the extracted viewer output and does not call the old
+monorepo research-site pipeline.
 
 ## Current State
 
 The repo has:
 
 - standalone CI in `.github/workflows/ci.yml`
-- a deliberately failing deploy placeholder in
-  `.github/workflows/deploy-viewer.todo.yml`
+- production viewer deploy in `.github/workflows/deploy-viewer.yml`
 - a root `start` script that serves `apps/web/dist`
 - local build verification passing from this extracted copy
 
-The deploy placeholder is intentional. It prevents a copied repo from looking
-production-ready before the infrastructure boundary is real.
+The old deploy placeholder was removed only after adding a viewer-only Cloud Run
+bundle and disabling the monorepo viewer auto-deploy.
 
 ## Cutover Requirements
 
-Before enabling production deploy:
+The production deploy must continue to satisfy these constraints:
 
 1. Build only `apps/web/dist` and viewer-owned static assets.
 2. Do not call the old `atlas/deploy_slim.py` path.
@@ -64,9 +64,11 @@ Do not add:
 - Phoenix keys unrelated to viewer telemetry
 - Library or landing-site deploy secrets
 
-## Preview First
+## Candidate First
 
-Before mapping `lupi.live`, deploy a preview service and run:
+The deploy workflow publishes each revision with no production traffic first,
+smokes the tagged candidate URL, and only then routes traffic to that revision.
+For manual pre-release checks against any preview URL, run:
 
 ```bash
 VERIFY_URL=https://PREVIEW_URL pnpm verify:controls --no-screenshot
@@ -83,16 +85,20 @@ Then verify manually:
 - export drawer renders expected options
 - public metadata and social preview are current
 
-## Enabling Deploy
+## Deploy Workflow
 
-When the preview path is proven:
+The deploy workflow:
 
-1. Replace `deploy-viewer.todo.yml` with a real deploy workflow.
-2. Keep the workflow rooted at this repo, not the old monorepo paths.
-3. Run `pnpm build` and at least one browser verifier before deploy.
-4. Smoke the deployed preview.
-5. Route domain traffic.
-6. Record live proof in the release notes or PR.
+1. Installs pnpm dependencies from this repo.
+2. Builds the viewer with the production Vite environment.
+3. Runs a browser controls verifier.
+4. Packages `apps/web/dist` with `tools/serve-web.mjs`.
+5. Smokes the local bundle.
+6. Deploys a tagged Cloud Run candidate with no traffic.
+7. Smokes the candidate URL.
+8. Routes production traffic to the candidate revision.
+9. Smokes `https://lupi.live/`.
+10. Reports deploy status to `glim-think` `/ops/report`.
 
 ## Done State
 

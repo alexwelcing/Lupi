@@ -35,7 +35,7 @@ pnpm verify:exports
 
 ## Deploy
 
-- [ ] `deploy-viewer.todo.yml` has been replaced only after preview proof.
+- [ ] `deploy-viewer.yml` is rooted in this repo and packages only viewer assets.
 - [ ] Deploy workflow builds only viewer output.
 - [ ] Old `atlas/deploy_slim.py` coupling is gone.
 - [ ] Cloud Run service and region are correct.

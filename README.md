@@ -78,15 +78,16 @@ Some visual verifiers launch Chromium and write artifacts under
 
 ## Deploy Status
 
-Production deploy is intentionally still blocked in:
+Production deploy is owned by this standalone repo:
 
 ```text
-.github/workflows/deploy-viewer.todo.yml
+.github/workflows/deploy-viewer.yml
 ```
 
-The old monorepo deploy path bundled viewer output together with legacy
-research-site output. Split that path before enabling a live production deploy
-from this repo. See [docs/deploy-cutover.md](docs/deploy-cutover.md).
+The workflow builds only the viewer, packages `apps/web/dist` with the local
+static server, deploys a no-traffic Cloud Run candidate, smokes it, and then
+routes `lupi.live` traffic to the proven revision. See
+[docs/deploy-cutover.md](docs/deploy-cutover.md).
 
 ## Docs
 

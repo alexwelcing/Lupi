@@ -82,14 +82,16 @@ Current CI does:
 
 ## Deploy
 
-Production deploy is intentionally not enabled yet. The placeholder workflow is:
+Production viewer deploy is owned by this repo:
 
 ```text
-.github/workflows/deploy-viewer.todo.yml
+.github/workflows/deploy-viewer.yml
 ```
 
-Do not remove the failing TODO until the old monorepo deploy path is split away
-from legacy research-site output. See [deploy-cutover.md](deploy-cutover.md).
+The workflow builds `apps/web/dist`, packages only the static viewer runtime
+with `tools/serve-web.mjs`, deploys a no-traffic Cloud Run candidate, smokes it,
+then routes production traffic to the proven revision. See
+[deploy-cutover.md](deploy-cutover.md).
 
 ## Live Checks After Cutover
 
