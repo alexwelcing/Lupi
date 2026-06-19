@@ -10,7 +10,7 @@
   },
   "routes": {
     "home": {
-      "title": "Lupi - 1M Atom Molecular Viewer",
+      "title": "Lupi shows molecules.",
       "description": "Visualize million-atom molecular scenes, organic chemistry functional groups, OMol25 geometries, and materials science structures in the browser.",
       "canonicalPath": "/",
       "image": "https://lupi.live/og-lupi.png",
