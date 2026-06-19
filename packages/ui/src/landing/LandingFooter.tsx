@@ -26,7 +26,7 @@ export function LandingFooter() {
   return (
     <footer style={{
       padding: '60px 24px 32px 24px',
-      background: 'linear-gradient(180deg, rgba(6,8,13,0.74) 0%, rgba(2,2,4,0.88) 100%)',
+      background: 'linear-gradient(180deg, #06080d 0%, #020204 100%)',
       borderTop: '1px solid rgba(255,255,255,0.04)',
     }}>
       <div style={{
@@ -158,7 +158,7 @@ export function LandingFooter() {
             &copy; {new Date().getFullYear()} LUPI by Lupine Science. Geometric error analysis for atomistic ML.
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: 'rgba(255, 255, 255, 0.4)' }}>
-            AGPL-3.0-or-later Licensed
+            Apache 2.0 Licensed
           </div>
         </div>
       </div>

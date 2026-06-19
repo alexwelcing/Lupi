@@ -7,62 +7,19 @@
 
 import { useEffect, useCallback, useRef, useState, Component, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport, ContactShadows } from '@react-three/drei';
 import { Perf } from 'r3f-perf';
 import { ScenePostprocessing } from './postprocess/ScenePostprocessing';
-import { POSTPROCESS_PRESETS } from './postprocess/presets';
 import { DevProbe } from './DevProbe';
 import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { StateInspector } from './StateInspector';
 import * as THREE from 'three';
-import { XR, createXRStore, useXR } from '@react-three/xr';
+import { useXR } from '@react-three/xr';
 import { USDZExportHelper } from './export/USDZExportPipeline';
 import { XREnvironmentDome } from './xr/XREnvironmentDome';
 import { XRLightEstimation } from './xr/XRLightEstimation';
 import { SceneLighting } from './SceneLighting';
-
-// XR store — tuned for the Meta Quest browser (Quest 2/3/Pro) while staying
-// graceful on non-Meta runtimes. All advanced features are requested as
-// *optional* (XRSessionFeatureRequest = true) so a session still starts on
-// devices that lack them.
-export const xrStore = createXRStore({
-  offerSession: false,
-  emulate: false,
-  // Quest 3 reliably hits 90 Hz; default of 72 leaves frames on the table.
-  frameRate: 'high',
-  // Foveated rendering — Quest GPU loves this; 0 disables, 1 is max.
-  foveation: 0.5,
-  // We hand-build the session init (rather than use the named feature options)
-  // so we can request 'light-estimation' alongside the usual Quest 3 features —
-  // @react-three/xr has no first-class option for it, and customSessionInit
-  // takes over feature negotiation entirely (see @pmndrs/xr buildXRSessionInit).
-  // 'light-estimation' lets XRLightEstimation mirror the real surroundings onto
-  // the molecule (campfire reflections in low light). Everything stays optional,
-  // so a session still starts on devices that lack any given feature; this list
-  // mirrors the previous defaults (hand-tracking, layers, hit-test, anchors,
-  // plane/mesh detection, dom-overlay) plus light-estimation.
-  customSessionInit: {
-    requiredFeatures: ['local-floor'],
-    optionalFeatures: [
-      'hand-tracking',
-      'layers',
-      'hit-test',
-      'anchors',
-      'plane-detection',
-      'mesh-detection',
-      'dom-overlay',
-      'light-estimation',
-    ],
-  },
-  // Direct manipulation lives in XRMoleculeInteraction (reads joint poses
-  // every frame). The short hand ray remains as a fallback for menu / UI.
-  hand: {
-    rayPointer: { rayModel: { maxLength: 1.5 } },
-    teleportPointer: false,
-    grabPointer: false,
-  },
-});
 
 import { MobileHUD } from './MobileHUD';
 import { ChronosHUD } from './ChronosHUD';
@@ -73,7 +30,7 @@ import { useStore } from './store';
 import { getMaxSafeAtomCount, getDefaultQualityTier } from './deviceCapabilities';
 import { LandingPage } from './LandingPage';
 import { SceneLandingPage } from './landing/SceneLandingPage';
-import { SeoEducationPage, type SeoEducationKind } from './landing/SeoEducationPage';
+import { SeoEducationPage } from './landing/SeoEducationPage';
 import { ThermoMinimap } from './ThermoMinimap';
 import { AtomsOptimized } from '@atlas/scene/AtomsOptimized';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
@@ -113,18 +70,36 @@ import { LupiAgentDock } from './LupiAgentDock';
 import { SavedViewButton } from './SavedViewButton';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
 import { openRandomOmol25Molecule } from './molecules/randomOmol';
-import { loadSavedMolecularView, slugifySavedViewTitle } from './savedViews';
-import { loadMoleculeSource } from './loadMoleculeSource';
+import { loadSavedMolecularView } from './savedViews';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
-import { openGalleryExampleById } from './galleryExampleLoader';
 import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
-import { detectRenderCapability, fallbackCopyFor } from './renderCapability';
-import { RendererFallback } from './RendererFallback';
-import { CanvasErrorBoundary } from './CanvasErrorBoundary';
+import { detectRenderCapability } from './renderCapability';
 import { MoleculeFilterShell } from './MoleculeFilterShell';
 import { PanelHost } from './PanelHost';
 import { ViewerControlsDrawer, type ViewerControlMode } from './ViewerControlsDrawer';
 import { StudyLensPanel } from './StudyLensPanel';
+import {
+  useViewerBackgroundState,
+  useViewerFileState,
+  useViewerPanelState,
+  useViewerPlaybackState,
+} from './storeSelectors';
+import {
+  SEO_EDUCATION_ROUTES,
+  currentHashRoute,
+  currentPathRoute,
+  isEmojiRoute,
+  isMcpViewerRoute as isMcpViewerRouteMatch,
+  isTestbedRoute,
+  normalizedPathRoute,
+  savedViewSlugFromRoute,
+} from './viewer/viewerRoutes';
+import { openMolecule } from './viewer/openMolecule';
+import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
+import { ViewerCanvas } from './viewer/ViewerCanvas';
+import { useViewerSceneModel } from './viewer/useViewerSceneModel';
+
+export { xrStore } from './viewer/xrStore';
 
 // ─── Icons ────────────────────────────────────────────────────────────
 const IconFirst = () => (
@@ -490,41 +465,52 @@ function CameraManager({
   fileId,
   center,
   distance,
+  near,
 }: {
   fileId?: string;
   center: [number, number, number];
   distance: number;
+  near: number;
 }) {
   const { camera, controls } = useThree((s) => ({ camera: s.camera, controls: s.controls as any }));
   const flythroughPreview = useStore(s => s.flythroughPreview);
 
-  // Sync continuously during flythrough preview + keep clipping planes generous
-  useFrame(() => {
-    // Dynamic clipping: always keep far plane far enough to see everything
+  const applyPerspectiveProjection = useCallback((nextFov?: number) => {
     if (camera instanceof THREE.PerspectiveCamera) {
-      const camDist = camera.position.length();
+      const camDist = Math.hypot(
+        camera.position.x - center[0],
+        camera.position.y - center[1],
+        camera.position.z - center[2],
+      );
       const minFar = Math.max(10000, distance * 100, camDist * 20);
-      if (camera.far < minFar) {
+      const fovChanged = Number.isFinite(nextFov) && Math.abs(camera.fov - nextFov!) > 1e-4;
+      const nearChanged = Math.abs(camera.near - near) > 1e-4;
+      const farChanged = camera.far < minFar;
+      if (fovChanged || nearChanged || farChanged) {
+        if (fovChanged) camera.fov = nextFov!;
+        camera.near = near;
         camera.far = minFar;
         camera.updateProjectionMatrix();
       }
     }
+  }, [camera, center, distance, near]);
 
+  // Sync continuously during flythrough preview + keep clipping planes generous
+  useFrame(() => {
     if (flythroughPreview) {
       const state = useStore.getState();
       camera.position.set(...state.cameraPosition);
       camera.lookAt(...state.cameraTarget);
-
-      if (camera instanceof THREE.PerspectiveCamera) {
-        camera.fov = state.cameraFov;
-        camera.updateProjectionMatrix();
-      }
+      applyPerspectiveProjection(state.cameraFov);
 
       if (controls && controls.target) {
         controls.target.set(...state.cameraTarget);
         controls.update();
       }
+      return;
     }
+
+    applyPerspectiveProjection();
   });
 
   // Fit on load
@@ -532,13 +518,13 @@ function CameraManager({
     if (!fileId) return;
     camera.position.set(center[0], center[1], center[2] + distance);
     camera.lookAt(center[0], center[1], center[2]);
-    camera.updateProjectionMatrix();
+    applyPerspectiveProjection();
     if (controls && controls.target) {
       controls.target.set(center[0], center[1], center[2]);
       controls.update();
     }
     useStore.getState().setCameraState(camera.position.toArray() as any, center);
-  }, [fileId, center, distance, camera, controls]);
+  }, [fileId, center, distance, camera, controls, applyPerspectiveProjection]);
 
   // Sync with presets
   useEffect(() => {
@@ -548,7 +534,7 @@ function CameraManager({
         const { cameraPosition, cameraTarget } = useStore.getState();
         camera.position.set(...cameraPosition);
         camera.lookAt(...cameraTarget);
-        camera.updateProjectionMatrix();
+        applyPerspectiveProjection();
         if (controls && controls.target) {
           controls.target.set(...cameraTarget);
           controls.update();
@@ -556,17 +542,14 @@ function CameraManager({
       }
     );
     return unsub;
-  }, [camera, controls]);
+  }, [camera, controls, applyPerspectiveProjection]);
 
   useEffect(() => {
     const applyStoredCamera = () => {
       const { cameraPosition, cameraTarget, cameraFov } = useStore.getState();
       camera.position.set(...cameraPosition);
       camera.lookAt(...cameraTarget);
-      if (camera instanceof THREE.PerspectiveCamera) {
-        camera.fov = cameraFov;
-        camera.updateProjectionMatrix();
-      }
+      applyPerspectiveProjection(cameraFov);
       if (controls && controls.target) {
         controls.target.set(...cameraTarget);
         controls.update();
@@ -578,73 +561,20 @@ function CameraManager({
       useStore.subscribe((s) => s.cameraFov, applyStoredCamera),
     ];
     return () => unsubs.forEach((unsub) => unsub());
-  }, [camera, controls]);
+  }, [camera, controls, applyPerspectiveProjection]);
 
-  return null;
-}
-
-/** Sync legacy postprocess fields so older surfaces remain coherent while the
- *  renderer reads the authored preset as the source of truth. */
-function PresetLegacyBridge() {
-  const presetId = useStore(s => s.postprocessPreset);
-  useEffect(() => {
-    const preset = POSTPROCESS_PRESETS[presetId];
-    if (!preset) return;
-    useStore.setState({
-      ssao: preset.ssao.enabled,
-      bloom: preset.bloom.enabled,
-      dof: preset.dof.enabled,
-      autoDepthOfField: preset.dof.auto,
-      toneMapping: preset.toneMapping,
-    });
-  }, [presetId]);
   return null;
 }
 
 import { Testbed } from './Testbed';
 import EmojiPlayground from './EmojiPlayground';
 
-function currentHashRoute() {
-  if (typeof window === 'undefined') return '/';
-  const hash = window.location.hash.replace(/^#/, '').trim();
-  return hash.startsWith('/') ? hash : '/';
-}
-
-function currentPathRoute() {
-  if (typeof window === 'undefined') return '/';
-  return window.location.pathname || '/';
-}
-
-function normalizedPathRoute(route: string) {
-  if (route === '/') return route;
-  return route.replace(/\/+$/, '') || '/';
-}
-
-function savedViewSlugFromRoute(route: string): string | null {
-  const routePath = route.split('?')[0] || '/';
-  if (!routePath.startsWith('/view/')) return null;
-  try {
-    return slugifySavedViewTitle(decodeURIComponent(routePath.slice('/view/'.length)));
-  } catch {
-    return null;
-  }
-}
-
-const SEO_EDUCATION_ROUTES: Record<string, SeoEducationKind> = {
-  '/study/organic-functional-groups': 'functional-groups',
-  '/study/functional-group-examples': 'functional-group-examples',
-  '/study/organic-chemistry-3d-molecule-viewer': 'ochem-viewer',
-  '/materials/omol25': 'omol25',
-  '/materials/omol25-molecule-geometry': 'omol25-geometry',
-  '/materials/million-atom-viewer': 'million-atom-viewer',
-};
-
 export default function App() {
-  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('testbed')) {
+  if (typeof window !== 'undefined' && isTestbedRoute()) {
     return <Testbed />;
   }
 
-  if (typeof window !== 'undefined' && (new URLSearchParams(window.location.search).has('emoji') || currentHashRoute().split('?')[0] === '/system/emoji')) {
+  if (typeof window !== 'undefined' && isEmojiRoute()) {
     return <EmojiPlayground />;
   }
 
@@ -658,7 +588,7 @@ export default function App() {
   const hashPath = hashRoute.split('?')[0] || '/';
   const normalizedPath = normalizedPathRoute(pathRoute);
   const isMlipFlywheelRoute = hashPath === '/system/mlip-flywheel';
-  const isMcpViewerRoute = hashPath === '/mcp' || new URLSearchParams(window.location.search).has('mcp');
+  const isMcpViewerRoute = isMcpViewerRouteMatch(hashPath);
   const savedViewSlug = savedViewSlugFromRoute(hashPath) ?? savedViewSlugFromRoute(normalizedPath);
   const isSavedViewRoute = Boolean(savedViewSlug);
   const isCopperSceneRoute = normalizedPath === '/scenes/1m-copper-lattice';
@@ -713,12 +643,8 @@ export default function App() {
     }
   }, [savedViewSlug, savedViewQuery.isPending, savedViewQuery.data, savedViewQuery.error]);
 
-  const file = useStore(s => s.file);
-  const ghostFile = useStore(s => s.ghostFile);
-  const loading = useStore(s => s.loading);
-  const frame = useStore(s => s.frame);
-  const playing = useStore(s => s.playing);
-  const playbackSpeed = useStore(s => s.playbackSpeed);
+  const { file, ghostFile, loading, frame, loadedAtomCount } = useViewerFileState();
+  const { playing, playbackSpeed, setFrame, nextFrame, togglePlay } = useViewerPlaybackState();
   const colorMode = useStore(s => s.colorMode);
   const colorProperty = useStore(s => s.colorProperty);
   const materialPreset = useStore(s => s.materialPreset);
@@ -805,17 +731,19 @@ export default function App() {
   const bondColorMode = useStore(s => s.bondColorMode);
   const renderStyle = useStore(s => s.renderStyle);
   const atomScale = useStore(s => s.atomScale);
-  const activePanel = useStore(s => s.activePanel);
-  const backgroundPreset = useStore(s => s.backgroundPreset);
-  const backgroundStyle = useStore(s => s.backgroundStyle);
-  const backgroundMotionPaused = useStore(s => s.backgroundMotionPaused);
-  const backgroundMotionSpeed = useStore(s => s.backgroundMotionSpeed);
-  const backgroundOpacity = useStore(s => s.backgroundOpacity);
-  const backgroundBrightness = useStore(s => s.backgroundBrightness);
-  const backgroundSaturation = useStore(s => s.backgroundSaturation);
-  const backgroundContrast = useStore(s => s.backgroundContrast);
-  const backgroundYawDegrees = useStore(s => s.backgroundYawDegrees);
-  const backgroundPitchDegrees = useStore(s => s.backgroundPitchDegrees);
+  const { activePanel, setActivePanel, showPotentialBrowser, setShowPotentialBrowser } = useViewerPanelState();
+  const {
+    backgroundPreset,
+    backgroundStyle,
+    backgroundMotionPaused,
+    backgroundMotionSpeed,
+    backgroundOpacity,
+    backgroundBrightness,
+    backgroundSaturation,
+    backgroundContrast,
+    backgroundYawDegrees,
+    backgroundPitchDegrees,
+  } = useViewerBackgroundState();
   const filterShellShape = useStore(s => s.filterShellShape);
   const filterShellPreset = useStore(s => s.filterShellPreset);
   const filterShellOpacity = useStore(s => s.filterShellOpacity);
@@ -826,17 +754,10 @@ export default function App() {
   const setCameraPreset = useStore(s => s.setCameraPreset);
   const bloomIntensity = useStore(s => s.bloomIntensity);
   const propRange = useStore(s => s.propRange);
-  const setFrame = useStore(s => s.setFrame);
-  const nextFrame = useStore(s => s.nextFrame);
-  const togglePlay = useStore(s => s.togglePlay);
-  const setActivePanel = useStore(s => s.setActivePanel);
-  const showPotentialBrowser = useStore(s => s.showPotentialBrowser);
-  const setShowPotentialBrowser = useStore(s => s.setShowPotentialBrowser);
   const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
   const atomTypeScales = useStore(s => s.atomTypeScales);
   const anomalyTracking = useStore(s => s.anomalyTracking);
   const atomTexture = useStore(s => s.atomTexture);
-  const loadedAtomCount = useStore(s => s.loadedAtomCount);
   // Cluster splats for huge-scene LOD (Phase 4). Built once per frame
   // identity, AFTER streaming completes — running on a partial frame
   // would aggregate uninitialized zero-positions into a giant fake
@@ -899,8 +820,8 @@ export default function App() {
   // rect — the single biggest cold-mobile bounce source). Audit findings:
   // ios-safari-webgpu-silent-fail, android-firefox-no-webgpu-message,
   // no-canvas-webgl-fallback.
+  // Advisory only: a false preflight must not prevent the real Canvas mount.
   const renderCapability = useMemo(() => detectRenderCapability(), []);
-  const canRenderScene = renderCapability.canRenderWebGL;
 
   // Surface a NON-BLOCKING warning when the optional WebGPU bond accelerator
   // is unavailable/timed out while the user had it enabled. The scene still
@@ -1022,17 +943,10 @@ export default function App() {
     }
 
     const loadUrl = intent?.kind === 'loadUrl' ? intent.url : params.get('load');
-    const gallerySceneId = params.get('sim');
     if (loadUrl && !file) {
       (async () => {
-        try {
-          await loadMoleculeSource(loadUrl);
-        } catch (err: any) {
-          useStore.getState().setError(err.message);
-        }
+        await openMolecule({ kind: 'url', url: loadUrl, history: 'none' });
       })();
-    } else if (gallerySceneId && !file) {
-      void openGalleryExampleById(gallerySceneId);
     }
   }, []);
 
@@ -1107,30 +1021,13 @@ export default function App() {
   }, [file?.name]);
   const clusterFadeFar = useMemo(() => clusterFadeNear * 3.3, [clusterFadeNear]);
 
-  const cameraDistance = useMemo(() => file
-    ? (() => {
-        const { min, max } = file.trajectory.globalBounds;
-        const dx = max[0] - min[0], dy = max[1] - min[1], dz = max[2] - min[2];
-        const diagonal = Math.hypot(dx, dy, dz);
-        // Field of view is 50 deg. To fit bounding sphere with radius (diagonal/2):
-        // D = (diagonal / 2) / Math.sin(25 * Math.PI / 180) ≈ diagonal * 1.18
-        // Multiply by an extra margin to give breathing room.
-        return diagonal * 1.4;
-      })()
-    : 50, [file?.name]);
-
-  const center = useMemo(() => file
-    ? file.trajectory.globalBounds.min.map(
-        (v, i) => (v + file.trajectory.globalBounds.max[i]) / 2
-      ) as [number, number, number]
-    : [0, 0, 0] as [number, number, number], [file?.name]);
-
-  const filterShellBaseRadius = useMemo(() => {
-    if (!file) return 4;
-    const { min, max } = file.trajectory.globalBounds;
-    const diagonal = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
-    return Math.max(4, diagonal * 0.58);
-  }, [file?.name]);
+  const {
+    cameraDistance,
+    cameraMinDistance,
+    cameraNear,
+    center,
+    filterShellBaseRadius,
+  } = useViewerSceneModel(file);
 
   const bg = resolveBackground(backgroundPreset, colormap);
   const bgMedia = bg.media;
@@ -1156,6 +1053,17 @@ export default function App() {
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
   const mobilePanelHeight = 'clamp(260px, 38dvh, 340px)';
   const activeMobilePanelHeight = activePanel === 'studio' ? 'clamp(460px, 72dvh, 680px)' : mobilePanelHeight;
+  const mobileLoadedHeader = isMobile && !!file;
+  const headerHeight = isMobile
+    ? `calc(${mobileLoadedHeader ? '76px' : '48px'} + env(safe-area-inset-top))`
+    : 56;
+  const clearLoadedFile = useCallback(() => {
+    useStore.getState().clearFile();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('sim');
+    url.searchParams.delete('load');
+    window.history.pushState({}, '', url);
+  }, []);
 
   return (
     <div style={{
@@ -1169,11 +1077,17 @@ export default function App() {
       <header
         className={file ? 'lupine-glass' : ''}
         style={{
-          height: isMobile ? 'calc(48px + env(safe-area-inset-top))' : 56,
-          minHeight: isMobile ? 'calc(48px + env(safe-area-inset-top))' : 56,
+          height: headerHeight,
+          minHeight: headerHeight,
           flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px',
+          display: mobileLoadedHeader ? 'grid' : 'flex',
+          alignItems: 'center',
+          justifyContent: mobileLoadedHeader ? undefined : 'space-between',
+          gridTemplateColumns: mobileLoadedHeader ? 'auto minmax(0, 1fr) auto' : undefined,
+          gridTemplateRows: mobileLoadedHeader ? '38px 28px' : undefined,
+          columnGap: mobileLoadedHeader ? 8 : undefined,
+          rowGap: mobileLoadedHeader ? 2 : undefined,
+          padding: mobileLoadedHeader ? 'calc(env(safe-area-inset-top) + 4px) 8px 4px' : (isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px'),
           margin: file ? (isMobile ? '6px 6px 0' : '14px 16px 0') : 0,
           borderRadius: file ? 8 : 0,
           borderBottom: file ? 'none' : '1px solid var(--border-subtle)',
@@ -1185,35 +1099,44 @@ export default function App() {
         }}
       >
         {/* Logo + file breadcrumb */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: isMobile ? 6 : 12,
+          minWidth: 0,
+          gridColumn: mobileLoadedHeader ? '1 / 2' : undefined,
+          gridRow: mobileLoadedHeader ? '1' : undefined,
+        }}>
           <button
             onClick={() => {
               if (file) {
-                useStore.getState().clearFile();
-                const url = new URL(window.location.href);
-                url.searchParams.delete('sim');
-                window.history.pushState({}, '', url);
+                clearLoadedFile();
               }
             }}
+            aria-label={file ? 'Return to Lupi home' : 'Lupi home'}
             className="lupine-btn icon-only"
             style={{
               background: 'transparent',
               borderColor: 'transparent',
               boxShadow: 'none',
-              padding: 6,
+              padding: isMobile ? '0 2px' : 6,
               gap: 4,
               cursor: file ? 'pointer' : 'default',
+              height: isMobile ? 34 : undefined,
+              minHeight: isMobile ? 34 : undefined,
+              aspectRatio: isMobile ? 'auto' : undefined,
+              flexShrink: 0,
             }}
           >
             <span style={{
-              fontSize: 21, fontWeight: 750, color: 'var(--text-primary)',
+              fontSize: isMobile ? 19 : 21, fontWeight: 750, color: 'var(--text-primary)',
               letterSpacing: 0
             }}>
               Lupi
             </span>
           </button>
 
-          {file && (
+          {file && !isMobile && (
             <>
               <div className="lupine-divider" style={{ display: isMobile ? 'none' : 'block' }} />
 
@@ -1241,17 +1164,12 @@ export default function App() {
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
-                }}>
+                }} title={file.name}>
                   {file.name}
                 </span>
               </span>
               <button
-                onClick={() => {
-                  useStore.getState().clearFile();
-                  const url = new URL(window.location.href);
-                  url.searchParams.delete('sim');
-                  window.history.pushState({}, '', url);
-                }}
+                onClick={clearLoadedFile}
                 title="Close"
                 aria-label="Close dataset"
                 className="lupine-icon-btn"
@@ -1263,8 +1181,72 @@ export default function App() {
           )}
         </div>
 
+        {file && isMobile && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              minWidth: 0,
+              gridColumn: '1 / -1',
+              gridRow: '2',
+              padding: '0 1px',
+            }}
+          >
+            <span style={{
+              flexShrink: 0,
+              fontSize: 9,
+              color: 'rgba(203,213,225,0.48)',
+              fontWeight: 760,
+              lineHeight: 1,
+              textTransform: 'uppercase',
+              letterSpacing: 0,
+            }}>
+              Loaded
+            </span>
+            <span
+              title={file.name}
+              style={{
+                minWidth: 0,
+                flex: '1 1 auto',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+                fontWeight: 650,
+                lineHeight: 1.15,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {file.name}
+            </span>
+            <button
+              onClick={clearLoadedFile}
+              title="Close"
+              aria-label="Close dataset"
+              className="lupine-icon-btn"
+              style={{
+                width: 28,
+                height: 28,
+                flexShrink: 0,
+              }}
+            >
+              <IconClose />
+            </button>
+          </div>
+        )}
+
         {/* Top-right actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: isMobile ? 4 : 10,
+          minWidth: 0,
+          gridColumn: mobileLoadedHeader ? '2 / 4' : undefined,
+          gridRow: mobileLoadedHeader ? '1' : undefined,
+          justifySelf: mobileLoadedHeader ? 'end' : undefined,
+        }}>
           {!file && (
             <>
               <a
@@ -1282,6 +1264,7 @@ export default function App() {
                 style={{
                   padding: isMobile ? '7px 9px' : '8px 12px',
                   fontSize: isMobile ? 12 : 13,
+                  minHeight: isMobile ? 34 : undefined,
                 }}
               >
                 {isMobile ? 'Atoms' : 'Gallery'}
@@ -1292,7 +1275,11 @@ export default function App() {
             <button
               onClick={() => void openRandomOmol25Molecule()}
               className="lupine-btn primary"
-              style={{ padding: '8px 14px', fontSize: 14 }}
+              style={{
+                padding: isMobile ? '7px 10px' : '8px 14px',
+                fontSize: isMobile ? 12 : 14,
+                minHeight: isMobile ? 34 : undefined,
+              }}
             >
               {isMobile ? 'View' : 'View a molecule'}
             </button>
@@ -1307,8 +1294,8 @@ export default function App() {
             title="Comparison Theater — cinema movie watching"
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              height: isMobile ? 42 : 38, minWidth: isMobile ? 42 : 80,
-              padding: isMobile ? '0 8px' : '0 10px',
+              height: isMobile ? 36 : 38, minWidth: isMobile ? 36 : 80,
+              padding: isMobile ? 0 : '0 10px',
               borderRadius: 999, border: '1px solid rgba(255,255,255,0.15)',
               background: 'rgba(123,92,255,0.12)', color: '#c4b5fd', fontSize: isMobile ? 10 : 11,
               textDecoration: 'none', touchAction: 'manipulation',
@@ -1340,38 +1327,14 @@ export default function App() {
               height: 100% !important;
             }
           `}</style>
-          {!canRenderScene ? (
-            // Capability gate: device can't start a WebGL context. Render the
-            // branded recovery banner INSTEAD of a silent blank canvas.
-            <RendererFallback copy={fallbackCopyFor(renderCapability)} />
-          ) : (
-          <CanvasErrorBoundary capability={renderCapability}>
-          <Canvas
-            camera={{
-              position: [center[0], center[1], center[2] + cameraDistance],
-              fov: 50,
-              near: 0.1,
-              far: Math.max(10000, cameraDistance * 100),
-            }}
-            gl={{
-              antialias: false,
-              preserveDrawingBuffer: true,
-              powerPreference: 'high-performance',
-            }}
-            onCreated={({ gl }) => {
-              // r182 deprecates PCFSoftShadowMap; PCFShadowMap is now soft.
-              gl.shadowMap.type = THREE.PCFShadowMap;
-            }}
-            style={{
-              background: 'transparent',
-              display: 'block',
-              width: '100%',
-              height: '100%',
-            }}
+          <ViewerCanvas
+            capability={renderCapability}
+            center={center}
+            cameraDistance={cameraDistance}
+            cameraNear={cameraNear}
           >
             {import.meta.env.DEV && showDebugHud && <Perf position="top-left" logsPerSecond={4} matrixUpdate />}
             {(import.meta.env.DEV || showDebugHud) && <DevProbe enabled={showDebugHud} />}
-            <XR store={xrStore}>
               <USDZExportHelper trigger={isExportingQuickLook} onComplete={() => setIsExportingQuickLook(false)} />
             <ExportManager />
             <SceneBackground
@@ -1397,7 +1360,7 @@ export default function App() {
                 read scene.environment for IBL reflections. */}
             <SceneLighting />
 
-            <CameraManager fileId={file?.name} center={center} distance={cameraDistance} />
+            <CameraManager fileId={file?.name} center={center} distance={cameraDistance} near={cameraNear} />
             <PresetLegacyBridge />
             <OrbitControls
               makeDefault
@@ -1408,7 +1371,7 @@ export default function App() {
               rotateSpeed={0.5}
               panSpeed={0.4}
               zoomSpeed={0.8}
-              minDistance={Math.max(0.5, cameraDistance * 0.04)}
+              minDistance={cameraMinDistance}
               maxDistance={cameraDistance * 6}
               onEnd={(e: any) => {
                 if (e?.target?.object && e?.target?.target) {
@@ -1630,10 +1593,7 @@ export default function App() {
 
 
             <ScenePostprocessing />
-            </XR>
-          </Canvas>
-          </CanvasErrorBoundary>
-          )}
+          </ViewerCanvas>
 
           {import.meta.env.DEV && showDebugHud && <StateInspector />}
 
@@ -2188,12 +2148,7 @@ export default function App() {
               label: 'Close current molecule',
               group: 'Scene',
               disabled: !file,
-              onSelect: () => {
-                useStore.getState().clearFile();
-                const url = new URL(window.location.href);
-                url.searchParams.delete('sim');
-                window.history.pushState({}, '', url);
-              },
+              onSelect: clearLoadedFile,
             },
             {
               id: 'close-panel',
@@ -2204,7 +2159,7 @@ export default function App() {
             },
           ];
           return list;
-        }, [file, activePanel, totalFrames, studyLensOpen])}
+        }, [file, activePanel, totalFrames, studyLensOpen, clearLoadedFile])}
       />
     </div>
   );
@@ -2217,31 +2172,85 @@ export default function App() {
  *  politely without stealing focus. The scene keeps rendering underneath. */
 function RendererWarningToast() {
   const rendererWarning = useStore(s => s.rendererWarning);
+  const isCompact = useMediaQuery('(max-width: 640px)');
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  useEffect(() => {
+    setDetailsOpen(false);
+  }, [rendererWarning, isCompact]);
+
   if (!rendererWarning) return null;
+  const isCpuFallback = /GPU bond acceleration|CPU path/i.test(rendererWarning);
+  const severity = isCpuFallback ? 'notice' : 'warning';
+  const isNotice = severity === 'notice';
+  const isQuietNotice = isCompact && severity === 'notice';
+  const isExpanded = !isQuietNotice || detailsOpen;
+  const visibleWarning = isQuietNotice && !isExpanded ? 'CPU bond path active' : rendererWarning;
+  const announceWarning = isQuietNotice ? rendererWarning : undefined;
   return (
     <div
       role="status"
       aria-live="polite"
+      aria-label={announceWarning}
+      title={isQuietNotice ? rendererWarning : undefined}
       style={{
         position: 'absolute',
-        top: 16,
-        right: 16,
-        maxWidth: 280,
+        top: isCompact ? 10 : 16,
+        right: isCompact ? 10 : 16,
+        maxWidth: isCompact ? (isExpanded ? 'min(280px, calc(100vw - 20px))' : 'min(188px, calc(100vw - 20px))') : 280,
         display: 'flex',
-        alignItems: 'flex-start',
-        gap: 8,
-        padding: '10px 12px',
-        background: 'rgba(20,24,33,0.92)',
-        border: '1px solid rgba(255,255,255,0.14)',
-        borderRadius: 'var(--radius-sm, 8px)',
+        alignItems: isExpanded ? 'flex-start' : 'center',
+        gap: isCompact ? 6 : 8,
+        padding: isCompact ? '6px 8px' : '10px 12px',
+        background: isQuietNotice
+          ? (isExpanded ? 'rgba(12,16,24,0.86)' : 'rgba(12,16,24,0.58)')
+          : 'rgba(20,24,33,0.92)',
+        border: isNotice
+          ? '1px solid rgba(148,163,184,0.14)'
+          : '1px solid rgba(245,158,11,0.22)',
+        borderRadius: isQuietNotice && !isExpanded ? 999 : 'var(--radius-sm, 8px)',
         backdropFilter: 'blur(10px)',
-        fontSize: 12,
-        lineHeight: 1.45,
-        color: 'var(--text-muted, #9aa7bd)',
+        fontSize: isCompact ? 11 : 12,
+        lineHeight: 1.35,
+        color: isNotice && isCompact ? 'rgba(226,232,240,0.78)' : 'var(--text-muted, #9aa7bd)',
         zIndex: 160,
       }}
     >
-      <span style={{ flex: 1 }}>{rendererWarning}</span>
+      {isQuietNotice ? (
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(open => !open)}
+          aria-expanded={detailsOpen}
+          aria-label={detailsOpen ? 'Collapse renderer warning details' : `Expand renderer warning details: ${rendererWarning}`}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: isExpanded ? 'normal' : 'nowrap',
+            background: 'transparent',
+            border: 'none',
+            color: 'inherit',
+            cursor: 'pointer',
+            font: 'inherit',
+            lineHeight: 'inherit',
+            padding: 0,
+            textAlign: 'left',
+          }}
+        >
+          {visibleWarning}
+        </button>
+      ) : (
+        <span style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: isCompact && isNotice ? 'nowrap' : 'normal',
+        }}>
+          {visibleWarning}
+        </span>
+      )}
       <button
         type="button"
         onClick={() => useStore.getState().setRendererWarning(null)}
@@ -2249,8 +2258,8 @@ function RendererWarningToast() {
         title="Dismiss"
         style={{
           flexShrink: 0,
-          width: 18,
-          height: 18,
+          width: isCompact ? 20 : 18,
+          height: isCompact ? 20 : 18,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

@@ -12,7 +12,6 @@ export interface GalleryExample {
   atoms: string;
   frames: string;
   file: string;
-  sourceUrl?: string;
   available: boolean;
   colors: [string, string, string];
   featured?: boolean;
