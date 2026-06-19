@@ -97,6 +97,25 @@ try {
     .then(() => true)
     .catch(() => false);
 
+  await page.locator('#gallery').scrollIntoViewIfNeeded();
+  const simpleScene = page.locator('[data-testid="simple-scene-c60_buckyball"]');
+  if (await simpleScene.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await clickControl(simpleScene);
+    if (atlasStoreAvailable) {
+      await page.waitForFunction(
+        () => window.__atlas.getState().activeCardId === 'c60_buckyball' && !!window.__atlas.getState().file,
+        null,
+        { timeout },
+      );
+      const simpleFileName = await page.evaluate(() => window.__atlas.getState().file?.name ?? null);
+      check('simple gallery scene button loads the viewer', simpleFileName === 'Buckminsterfullerene', `file=${simpleFileName}`);
+    } else {
+      await page.waitForURL(/sim=c60_buckyball/, { timeout });
+      check('simple gallery scene button updates the scene URL', true);
+    }
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout });
+  }
+
   // The section is IntersectionObserver-gated — scroll it into view.
   await page.locator('#gallery').scrollIntoViewIfNeeded();
   const revealLibrary = page.getByRole('button', { name: 'Browse full library' });

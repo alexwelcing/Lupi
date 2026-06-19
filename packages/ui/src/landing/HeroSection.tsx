@@ -1,6 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
 import { ParticleCanvas } from './ParticleCanvas';
 import { ALL_EXAMPLES, type GalleryExample } from './shared';
+import { openGalleryExampleById } from '../galleryExampleLoader';
 import { useStore } from '../store';
 
 type HeroScene = {
@@ -64,10 +65,7 @@ export function HeroSection() {
   );
 
   const openScene = (id: string) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('sim', id);
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    void openGalleryExampleById(id);
   };
 
   return (

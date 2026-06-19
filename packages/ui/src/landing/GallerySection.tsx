@@ -5,6 +5,7 @@ import { MoleculeBrowser } from '../molecules/MoleculeBrowser';
 import { OmolCollection } from '../molecules/OmolCollection';
 import { PotentialBrowser } from '../panels/PotentialBrowser';
 import { ALL_EXAMPLES, type GalleryExample } from './shared';
+import { openGalleryExampleById } from '../galleryExampleLoader';
 
 type CatalogTab = 'simulations' | 'omol25' | 'browse' | 'potentials' | 'equilibrium';
 
@@ -106,10 +107,7 @@ export function GallerySection() {
   );
 
   const openScene = (id: string) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('sim', id);
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    void openGalleryExampleById(id);
   };
 
   return (
