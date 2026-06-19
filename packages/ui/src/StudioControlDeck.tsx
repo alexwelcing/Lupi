@@ -382,16 +382,15 @@ export function StudioControlDeck({
           gap: 7px;
           overflow-x: auto;
           overflow-y: hidden;
-          padding: 1px 1px 5px;
+          padding: 1px;
           scroll-snap-type: x proximity;
-          scrollbar-width: thin;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
         }
         .lupi-world-rail::-webkit-scrollbar {
-          height: 6px;
-        }
-        .lupi-world-rail::-webkit-scrollbar-thumb {
-          background: rgba(148, 163, 184, 0.32);
-          border-radius: 999px;
+          display: none;
+          width: 0;
+          height: 0;
         }
         .lupi-native-color::-webkit-color-swatch-wrapper {
           padding: 0;

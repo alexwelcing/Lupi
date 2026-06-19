@@ -567,7 +567,9 @@ function escapeHtml(value) {
 }
 
 function withTrailingSlash(url) {
-  return url.endsWith('/') ? url : `${url}/`;
+  const parsed = new URL(url);
+  if (!parsed.pathname.endsWith('/')) parsed.pathname = `${parsed.pathname}/`;
+  return parsed.toString();
 }
 
 function controlsSmokeUrl(baseUrl, external) {

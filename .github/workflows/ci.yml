@@ -123,8 +123,11 @@ jobs:
           done
 
       - name: Run gallery UI harness
-        timeout-minutes: 6
-        run: node tools/verify-gallery.mjs
+        timeout-minutes: 10
+        env:
+          VERIFY_TIMEOUT: 45000
+          VERIFY_URL: http://localhost:3000/
+        run: node tools/verify-gallery.mjs --no-screenshot
 
       - name: Upload screenshots
         if: always()

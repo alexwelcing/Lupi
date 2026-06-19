@@ -116,6 +116,7 @@ import { openRandomOmol25Molecule } from './molecules/randomOmol';
 import { loadSavedMolecularView, slugifySavedViewTitle } from './savedViews';
 import { loadMoleculeSource } from './loadMoleculeSource';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
+import { openGalleryExampleById } from './galleryExampleLoader';
 import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
 import { detectRenderCapability, fallbackCopyFor } from './renderCapability';
 import { RendererFallback } from './RendererFallback';
@@ -1021,6 +1022,7 @@ export default function App() {
     }
 
     const loadUrl = intent?.kind === 'loadUrl' ? intent.url : params.get('load');
+    const gallerySceneId = params.get('sim');
     if (loadUrl && !file) {
       (async () => {
         try {
@@ -1029,6 +1031,8 @@ export default function App() {
           useStore.getState().setError(err.message);
         }
       })();
+    } else if (gallerySceneId && !file) {
+      void openGalleryExampleById(gallerySceneId);
     }
   }, []);
 

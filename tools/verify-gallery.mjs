@@ -41,7 +41,7 @@ const { createServer } = await import(pathToFileURL(requireFromWeb.resolve('vite
 const args = parseArgs(process.argv.slice(2));
 const skipShots = Boolean(args['no-screenshot']);
 const externalUrl = process.env.VERIFY_URL || args.url;
-const timeout = 30000;
+const timeout = Number(args.timeout ?? process.env.VERIFY_TIMEOUT ?? 30000);
 
 if (!existsSync(ARTIFACTS)) mkdirSync(ARTIFACTS, { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -347,5 +347,7 @@ function parseArgs(argv) {
 }
 
 function withTrailingSlash(url) {
-  return url.endsWith('/') ? url : `${url}/`;
+  const parsed = new URL(url);
+  if (!parsed.pathname.endsWith('/')) parsed.pathname = `${parsed.pathname}/`;
+  return parsed.toString();
 }
