@@ -99,6 +99,10 @@ try {
 
   // The section is IntersectionObserver-gated — scroll it into view.
   await page.locator('#gallery').scrollIntoViewIfNeeded();
+  const revealLibrary = page.getByRole('button', { name: 'Browse full library' });
+  if (await revealLibrary.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await clickControl(revealLibrary);
+  }
   await page.waitForSelector('[data-testid="gallery"]', { timeout });
 
   // ── 1. Curated card set renders ──

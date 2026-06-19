@@ -23,22 +23,11 @@ const NEUTRAL_BACKGROUND_IDS = [
   'fog',
 ] as const;
 
-const BACKGROUND_STYLE_OPTIONS: Array<{
-  id: AppState['backgroundStyle'];
-  label: string;
-  glyph: string;
-}> = [
-  { id: 'radial', label: 'Radial', glyph: 'radial-gradient(circle at 50% 35%, #f8fafc 0 10%, transparent 11% 100%)' },
-  { id: 'linear', label: 'Linear', glyph: 'linear-gradient(135deg, #f8fafc 0 46%, transparent 47% 100%)' },
-  { id: 'spotlight', label: 'Spot', glyph: 'radial-gradient(circle at 62% 34%, #f8fafc 0 14%, transparent 15% 100%)' },
-];
-
 export function WorldHomeBackground() {
   const backgroundPreset = useStore((s) => s.backgroundPreset);
   const backgroundStyle = useStore((s) => s.backgroundStyle);
   const colormap = useStore((s) => s.colormap);
   const setBackgroundPreset = useStore((s) => s.setBackgroundPreset);
-  const setBackgroundStyle = useStore((s) => s.setBackgroundStyle);
 
   const resolved = useMemo(
     () => resolveHomeBackground(backgroundPreset, colormap),
@@ -85,39 +74,7 @@ export function WorldHomeBackground() {
             ))}
           </select>
         </label>
-        <div className="lupi-world-home-style" role="group" aria-label="Background style">
-          {BACKGROUND_STYLE_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={backgroundStyle === option.id ? 'active' : undefined}
-              onClick={() => setBackgroundStyle(option.id)}
-              aria-pressed={backgroundStyle === option.id}
-              aria-label={`${option.label} background style`}
-              title={option.label}
-            >
-              <i style={{ background: option.glyph }} aria-hidden="true" />
-              <span>{option.label}</span>
-            </button>
-          ))}
-        </div>
         {badge && <span className="lupi-world-home-badge">{badge}</span>}
-        <div className="lupi-world-home-quick" role="group" aria-label="Featured world backgrounds">
-          {groups[0]?.presets.slice(0, 4).map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              className={backgroundPreset === preset.id ? 'active' : undefined}
-              onClick={() => setBackgroundPreset(preset.id)}
-              aria-pressed={backgroundPreset === preset.id}
-              aria-label={`${preset.label} world background`}
-              data-testid={`home-world-${preset.id}`}
-            >
-              <i style={{ background: backgroundSwatchStyle(preset) }} aria-hidden="true" />
-              <span>{preset.label}</span>
-            </button>
-          ))}
-        </div>
       </div>
     </>
   );
@@ -301,7 +258,7 @@ const WORLD_HOME_CSS = `
   right: 20px;
   z-index: 5;
   display: grid;
-  grid-template-columns: 42px minmax(180px, 250px) auto auto;
+  grid-template-columns: 42px minmax(180px, 250px) auto;
   gap: 8px;
   align-items: center;
   box-sizing: border-box;
@@ -350,40 +307,6 @@ const WORLD_HOME_CSS = `
   font-weight: 720;
   outline: none;
 }
-.lupi-world-home-style {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
-}
-.lupi-world-home-style button {
-  height: 30px;
-  min-width: 58px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border-radius: 7px;
-  border: 1px solid rgba(255,255,255,0.11);
-  background: rgba(255,255,255,0.045);
-  color: rgba(226,232,240,0.66);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 760;
-  letter-spacing: 0;
-  cursor: pointer;
-}
-.lupi-world-home-style button.active {
-  border-color: rgba(30,220,224,0.68);
-  background: linear-gradient(135deg, rgba(30,220,224,0.18), rgba(255,255,255,0.06));
-  color: #f8fafc;
-}
-.lupi-world-home-style i {
-  width: 13px;
-  height: 13px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  flex: 0 0 auto;
-}
 .lupi-world-home-badge {
   justify-self: end;
   align-self: center;
@@ -400,77 +323,22 @@ const WORLD_HOME_CSS = `
   font-weight: 840;
   line-height: 1;
 }
-.lupi-world-home-quick {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-.lupi-world-home-quick button {
-  min-width: 0;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 7px 4px 4px;
-  border-radius: 7px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
-  color: rgba(226,232,240,0.72);
-  font: inherit;
-  font-size: 10px;
-  font-weight: 760;
-  letter-spacing: 0;
-  cursor: pointer;
-}
-.lupi-world-home-quick button.active {
-  border-color: rgba(30,220,224,0.62);
-  background: rgba(30,220,224,0.12);
-  color: #f8fafc;
-}
-.lupi-world-home-quick i {
-  width: 26px;
-  height: 24px;
-  flex: 0 0 auto;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.14);
-  background-size: cover !important;
-  background-position: center !important;
-}
-.lupi-world-home-quick span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 @media (max-width: 900px) {
   .lupi-world-home-picker {
     position: relative;
     top: auto;
     right: auto;
     margin: 10px 12px 0;
-    grid-template-columns: 38px minmax(0, 1fr);
-  }
-  .lupi-world-home-style,
-  .lupi-world-home-quick,
-  .lupi-world-home-badge {
-    grid-column: 1 / -1;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
   }
   .lupi-world-home-badge {
-    justify-self: start;
+    justify-self: end;
   }
 }
 @media (max-width: 520px) {
   .lupi-world-home-picker {
     gap: 7px;
     padding: 7px;
-  }
-  .lupi-world-home-style button {
-    min-width: 0;
-    font-size: 10px;
-  }
-  .lupi-world-home-quick {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .lupi-world-home-swatch {
     width: 38px;
