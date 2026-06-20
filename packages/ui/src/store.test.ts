@@ -297,7 +297,7 @@ describe('Store — File Loading', () => {
     expect(s.colorProperty).toBeNull();
   });
 
-  it('opens small molecules with the polished visual default', () => {
+  it('opens small molecules with the high-contrast polished visual default', () => {
     const traj = createMockTrajectory(1, 61);
     const file = { name: 'showcase.xyz', size: 4096, trajectory: traj, thermo: null };
 
@@ -308,7 +308,7 @@ describe('Store — File Loading', () => {
     expect(s.showCell).toBe(false);
     expect(s.showAxes).toBe(false);
     expect(s.postprocessPreset).toBe('editorial');
-    expect(s.backgroundPreset).toBe('pub-figure-neutral');
+    expect(s.backgroundPreset).toBe('deep');
     expect(s.rimLightColor).toBe('#7de9ff');
     expect(s.surfacePolish).toBeGreaterThan(0);
     expect(s.surfaceClearcoat).toBeGreaterThan(0);
