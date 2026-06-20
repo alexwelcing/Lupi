@@ -20,6 +20,7 @@ type WorldHomeBackgroundProps = {
   className?: string;
   value?: string;
   onChange?: (presetId: string) => void;
+  variant?: 'full' | 'gallery';
 };
 
 const HOME_GROUP_ORDER = [
@@ -31,11 +32,26 @@ const HOME_GROUP_ORDER = [
 ] as const;
 
 const BASE_PRESET_IDS = new Set(['deep', 'blueprint', 'void', 'fog', 'warm', 'white']);
+const GALLERY_HOME_PRESET_IDS = [
+  'neutral-atrium',
+  'graphite-orbit',
+  'cryo-haze',
+  'spectrum-quiet',
+  'pub-figure-neutral',
+  'pub-diffraction-plate',
+  'world-graphene-dawn',
+  'world-alloy-foundry',
+  'world-solvent-blue',
+  'world-electrolyte-drift',
+  'manifold-field',
+  'deep',
+] as const;
 
 export function WorldHomeBackground({
   className,
   value,
   onChange,
+  variant = 'full',
 }: WorldHomeBackgroundProps) {
   const storeValue = useStore((state) => state.backgroundPreset);
   const setBackgroundPreset = useStore((state) => state.setBackgroundPreset);
@@ -50,6 +66,10 @@ export function WorldHomeBackground({
   const mobilePresets = useMemo(
     () => flattenPresets(activePreset, groups),
     [activePreset, groups],
+  );
+  const galleryPresets = useMemo(
+    () => galleryHomePresets(activePreset),
+    [activePreset],
   );
 
   const selectPreset = (presetId: string) => {
@@ -69,7 +89,48 @@ export function WorldHomeBackground({
   };
 
   const badge = getBgBadge(activePreset);
-  const classNames = ['lupi-world-home', className].filter(Boolean).join(' ');
+  const classNames = [
+    'lupi-world-home',
+    variant === 'gallery' ? 'lupi-world-home--gallery' : null,
+    className,
+  ].filter(Boolean).join(' ');
+
+  if (variant === 'gallery') {
+    return (
+      <section className={classNames} aria-label="Gallery world background picker">
+        <style>{WORLD_HOME_BACKGROUND_CSS}</style>
+        <div className="lupi-world-home__gallery-head">
+          <div className="lupi-world-home__gallery-copy">
+            <span>Gallery world</span>
+            <strong>{activePreset.label}</strong>
+            <p>{activePreset.context ?? 'A calm presentation world for the catalog.'}</p>
+          </div>
+          <div className="lupi-world-home__actions" aria-label="Random background shortcuts">
+            <button type="button" onClick={randomWorld} aria-label="Pick a random world background">
+              <IconShuffle />
+              <span>World</span>
+            </button>
+            <button type="button" onClick={randomLoop} aria-label="Pick a random motion background">
+              <IconPlay />
+              <span>Loop</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="lupi-world-home__gallery-grid" aria-label="Gallery backdrop presets">
+          {galleryPresets.map((preset) => (
+            <BackgroundTile
+              key={preset.id}
+              preset={preset}
+              active={preset.id === activePreset.id}
+              gallery
+              onClick={() => selectPreset(preset.id)}
+            />
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={classNames} aria-label="World background picker">
@@ -162,6 +223,23 @@ function flattenPresets(activePreset: BgPresetWithId, groups: BackgroundGroup[])
   return presets;
 }
 
+function galleryHomePresets(activePreset: BgPresetWithId): BgPresetWithId[] {
+  const seen = new Set<string>();
+  const presets: BgPresetWithId[] = [];
+  const add = (preset: BgPresetWithId) => {
+    if (seen.has(preset.id)) return;
+    seen.add(preset.id);
+    presets.push(preset);
+  };
+
+  add(activePreset);
+  for (const id of GALLERY_HOME_PRESET_IDS) {
+    const preset = BG_PRESETS[id];
+    if (preset) add({ id, ...preset });
+  }
+  return presets;
+}
+
 function randomPreset(presets: BgPresetWithId[], currentId: string): BgPresetWithId | undefined {
   if (presets.length === 0) return undefined;
   const pool = presets.filter((preset) => preset.id !== currentId);
@@ -202,18 +280,26 @@ function BackgroundTile({
   preset,
   active,
   compact = false,
+  gallery = false,
   onClick,
 }: {
   preset: BgPresetWithId;
   active: boolean;
   compact?: boolean;
+  gallery?: boolean;
   onClick: () => void;
 }) {
   const badge = getBgBadge(preset);
+  const className = [
+    'lupi-world-home__tile',
+    compact ? 'lupi-world-home__tile--compact' : null,
+    gallery ? 'lupi-world-home__tile--gallery' : null,
+  ].filter(Boolean).join(' ');
+
   return (
     <button
       type="button"
-      className={compact ? 'lupi-world-home__tile lupi-world-home__tile--compact' : 'lupi-world-home__tile'}
+      className={className}
       title={preset.context ? `${preset.label}: ${preset.context}` : preset.label}
       aria-label={`Use ${preset.label} background`}
       aria-pressed={active}
@@ -296,6 +382,65 @@ const WORLD_HOME_BACKGROUND_CSS = `
   gap: 10px;
   overflow: hidden;
   color: #f8fafc;
+}
+.lupi-world-home--gallery {
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.50), rgba(2, 6, 23, 0.34)),
+    rgba(2, 6, 23, 0.44);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+}
+.lupi-world-home__gallery-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.lupi-world-home__gallery-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.lupi-world-home__gallery-copy span {
+  color: #7de9ff;
+  font-size: 10px;
+  font-weight: 860;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.lupi-world-home__gallery-copy strong {
+  color: #f8fafc;
+  font-size: 17px;
+  font-weight: 840;
+  line-height: 1.08;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lupi-world-home__gallery-copy p {
+  max-width: 68ch;
+  margin: 0;
+  color: rgba(203, 213, 225, 0.68);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.38;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lupi-world-home__gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(98px, 1fr));
+  gap: 7px;
+  min-width: 0;
 }
 .lupi-world-home *,
 .lupi-world-home *::before,
@@ -526,6 +671,21 @@ const WORLD_HOME_BACKGROUND_CSS = `
   scroll-snap-align: start;
   touch-action: manipulation;
 }
+.lupi-world-home__tile--gallery {
+  width: 100%;
+  min-width: 0;
+  height: 58px;
+  min-height: 58px;
+  flex: initial;
+  scroll-snap-align: none;
+}
+.lupi-world-home__tile--gallery .lupi-world-home__tile-label {
+  font-size: 9px;
+}
+.lupi-world-home__tile--gallery .lupi-world-home__tile-badge {
+  max-width: 44px;
+  font-size: 7px;
+}
 .lupi-world-home__tile[data-active="true"] {
   border-color: #1edce0;
   color: #f8fafc;
@@ -651,6 +811,43 @@ const WORLD_HOME_BACKGROUND_CSS = `
     right: 6px;
     bottom: 6px;
     font-size: 9px;
+  }
+  .lupi-world-home--gallery {
+    gap: 7px;
+    padding: 8px;
+    contain: none;
+  }
+  .lupi-world-home--gallery .lupi-world-home__gallery-head {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+  .lupi-world-home--gallery .lupi-world-home__gallery-copy p {
+    display: none;
+  }
+  .lupi-world-home--gallery .lupi-world-home__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lupi-world-home--gallery .lupi-world-home__actions button {
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 8px;
+  }
+  .lupi-world-home--gallery .lupi-world-home__actions button span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+  .lupi-world-home__gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .lupi-world-home__tile--gallery {
+    height: 54px;
+    min-height: 54px;
   }
 }
 `;
