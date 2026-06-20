@@ -5,7 +5,7 @@ import { getElementSpec } from '@atlas/core';
 import type { ColormapName, RenderStyle } from '@atlas/core/types';
 import { MATERIAL_SCENES, type MaterialScene } from '@atlas/scene/materials';
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from './coloring';
-import { useStore, type FilterShellPreset, type FilterShellShape } from './store';
+import { useStore, type BackgroundBackdropPattern, type BackgroundBackdropShape, type FilterShellPreset, type FilterShellShape } from './store';
 import {
   BG_PRESETS,
   BG_GRADIENT_PRESETS,
@@ -15,6 +15,7 @@ import {
   getBgPoster,
   type BgPresetWithId,
 } from './backgroundPresets';
+import { getBackdropRadiusLimit } from './viewer/useViewerSceneModel';
 
 export type StudioDeckMode = 'look' | 'surface' | 'world';
 
@@ -60,6 +61,18 @@ const FILTER_SHELL_SHAPES: Array<{ id: FilterShellShape; label: string; code: st
   { id: 'off', label: 'Off', code: 'OFF', accent: '#64748b' },
   { id: 'sphere', label: 'Sphere', code: 'SPH', accent: '#7de9ff' },
   { id: 'cube', label: 'Cube', code: 'CUB', accent: '#f59e0b' },
+];
+
+const BACKDROP_SHAPES: Array<{ id: BackgroundBackdropShape; label: string; code: string; accent: string }> = [
+  { id: 'dome', label: 'Dome', code: 'SKY', accent: '#1edce0' },
+  { id: 'sphere', label: 'Sphere', code: 'SPH', accent: '#7de9ff' },
+  { id: 'cube', label: 'Cube', code: 'CUB', accent: '#f59e0b' },
+];
+
+const BACKDROP_PATTERNS: Array<{ id: BackgroundBackdropPattern; label: string; code: string; accent: string }> = [
+  { id: 'image', label: 'Image', code: 'IMG', accent: '#c084fc' },
+  { id: 'plain', label: 'Plain', code: 'PLN', accent: '#e5e7eb' },
+  { id: 'grid', label: 'Grid', code: 'GRD', accent: '#34d399' },
 ];
 
 const FILTER_SHELL_PRESETS: Array<{ id: FilterShellPreset; label: string; code: string; accent: string }> = [
@@ -169,6 +182,12 @@ export function StudioControlDeck({
   const setBackgroundYawDegrees = useStore(s => s.setBackgroundYawDegrees);
   const backgroundPitchDegrees = useStore(s => s.backgroundPitchDegrees);
   const setBackgroundPitchDegrees = useStore(s => s.setBackgroundPitchDegrees);
+  const backgroundBackdropShape = useStore(s => s.backgroundBackdropShape);
+  const setBackgroundBackdropShape = useStore(s => s.setBackgroundBackdropShape);
+  const backgroundBackdropPattern = useStore(s => s.backgroundBackdropPattern);
+  const setBackgroundBackdropPattern = useStore(s => s.setBackgroundBackdropPattern);
+  const backgroundBackdropRadius = useStore(s => s.backgroundBackdropRadius);
+  const setBackgroundBackdropRadius = useStore(s => s.setBackgroundBackdropRadius);
   const resetBackgroundAdjustments = useStore(s => s.resetBackgroundAdjustments);
   const filterShellShape = useStore(s => s.filterShellShape);
   const setFilterShellShape = useStore(s => s.setFilterShellShape);
@@ -228,6 +247,8 @@ export function StudioControlDeck({
       .sort((a, b) => a - b)
       .map(atomicNumber => ({ atomicNumber, spec: getElementSpec(atomicNumber) }));
   }, [file, frame]);
+  const backgroundBackdropRadiusMax = useMemo(() => getBackdropRadiusLimit(file), [file]);
+  const safeBackgroundBackdropRadius = clamp(backgroundBackdropRadius, 0.25, backgroundBackdropRadiusMax);
   const activeElement = presentElements.find(element => element.atomicNumber === selectedAtomicNumber) ?? presentElements[0] ?? null;
   const activeElementColor = activeElement
     ? elementColorOverrides[activeElement.atomicNumber] ?? activeElement.spec.color
@@ -704,6 +725,44 @@ export function StudioControlDeck({
                 onChange={setBackgroundContrast}
                 format={value => value.toFixed(2)}
               />
+            </ControlGroup>
+
+            <ControlGroup title="Backdrop">
+              <div className="lupi-studio-segments">
+                {BACKDROP_SHAPES.map(option => (
+                  <SegmentButton
+                    key={option.id}
+                    label={option.label}
+                    meta={option.code}
+                    active={backgroundBackdropShape === option.id}
+                    accent={option.accent}
+                    onClick={() => setBackgroundBackdropShape(option.id)}
+                  />
+                ))}
+              </div>
+              <div className="lupi-studio-segments">
+                {BACKDROP_PATTERNS.map(option => (
+                  <SegmentButton
+                    key={option.id}
+                    label={option.label}
+                    meta={option.code}
+                    active={backgroundBackdropPattern === option.id}
+                    accent={option.accent}
+                    onClick={() => setBackgroundBackdropPattern(option.id)}
+                  />
+                ))}
+              </div>
+              {backgroundBackdropShape !== 'dome' && (
+                <CompactSlider
+                  label="Radius"
+                  value={safeBackgroundBackdropRadius}
+                  min={0.25}
+                  max={backgroundBackdropRadiusMax}
+                  step={0.05}
+                  onChange={setBackgroundBackdropRadius}
+                  format={value => value.toFixed(2)}
+                />
+              )}
             </ControlGroup>
 
             <ControlGroup title="Shell">

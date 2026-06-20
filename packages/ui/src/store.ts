@@ -36,6 +36,8 @@ export interface Annotation {
 export type LabelStyle = 'tag' | 'glyph' | 'halo' | 'etched';
 export type FilterShellShape = 'off' | 'sphere' | 'cube';
 export type FilterShellPreset = 'haze' | 'cryo' | 'prism' | 'graphite';
+export type BackgroundBackdropShape = 'dome' | 'sphere' | 'cube';
+export type BackgroundBackdropPattern = 'image' | 'plain' | 'grid';
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -65,6 +67,14 @@ function sanitizeFilterShellPreset(value: unknown): FilterShellPreset {
   return value === 'haze' || value === 'cryo' || value === 'prism' || value === 'graphite'
     ? value
     : 'haze';
+}
+
+function sanitizeBackgroundBackdropShape(value: unknown): BackgroundBackdropShape {
+  return value === 'sphere' || value === 'cube' || value === 'dome' ? value : 'dome';
+}
+
+function sanitizeBackgroundBackdropPattern(value: unknown): BackgroundBackdropPattern {
+  return value === 'plain' || value === 'grid' || value === 'image' ? value : 'image';
 }
 
 function sanitizeAtomColorSource(value: unknown, fallback: AtomColorSource): AtomColorSource {
@@ -261,6 +271,9 @@ export interface AppState {
   backgroundContrast: number;
   backgroundYawDegrees: number;
   backgroundPitchDegrees: number;
+  backgroundBackdropShape: BackgroundBackdropShape;
+  backgroundBackdropPattern: BackgroundBackdropPattern;
+  backgroundBackdropRadius: number;
   filterShellShape: FilterShellShape;
   filterShellPreset: FilterShellPreset;
   filterShellOpacity: number;
@@ -480,6 +493,9 @@ export interface AppState {
   setBackgroundContrast: (contrast: number) => void;
   setBackgroundYawDegrees: (degrees: number) => void;
   setBackgroundPitchDegrees: (degrees: number) => void;
+  setBackgroundBackdropShape: (shape: BackgroundBackdropShape) => void;
+  setBackgroundBackdropPattern: (pattern: BackgroundBackdropPattern) => void;
+  setBackgroundBackdropRadius: (radius: number) => void;
   resetBackgroundAdjustments: () => void;
   setFilterShellShape: (shape: FilterShellShape) => void;
   setFilterShellPreset: (preset: FilterShellPreset) => void;
@@ -591,6 +607,9 @@ const DEFAULTS = {
   backgroundContrast: 1.0,
   backgroundYawDegrees: 0,
   backgroundPitchDegrees: 0,
+  backgroundBackdropShape: 'dome' as BackgroundBackdropShape,
+  backgroundBackdropPattern: 'image' as BackgroundBackdropPattern,
+  backgroundBackdropRadius: 5,
   filterShellShape: 'off' as FilterShellShape,
   filterShellPreset: 'haze' as FilterShellPreset,
   filterShellOpacity: 0.24,
@@ -879,6 +898,10 @@ export const useStore = create<AppState>()(
       set({ backgroundYawDegrees: sanitizeNumberRange(backgroundYawDegrees, DEFAULTS.backgroundYawDegrees, -180, 180) }),
     setBackgroundPitchDegrees: (backgroundPitchDegrees) =>
       set({ backgroundPitchDegrees: sanitizeNumberRange(backgroundPitchDegrees, DEFAULTS.backgroundPitchDegrees, -45, 45) }),
+    setBackgroundBackdropShape: (backgroundBackdropShape) => set({ backgroundBackdropShape }),
+    setBackgroundBackdropPattern: (backgroundBackdropPattern) => set({ backgroundBackdropPattern }),
+    setBackgroundBackdropRadius: (backgroundBackdropRadius) =>
+      set({ backgroundBackdropRadius: sanitizeNumberRange(backgroundBackdropRadius, DEFAULTS.backgroundBackdropRadius, 0.25, 5) }),
     resetBackgroundAdjustments: () => set({
       backgroundMotionPaused: DEFAULTS.backgroundMotionPaused,
       backgroundMotionSpeed: DEFAULTS.backgroundMotionSpeed,
@@ -888,6 +911,9 @@ export const useStore = create<AppState>()(
       backgroundContrast: DEFAULTS.backgroundContrast,
       backgroundYawDegrees: DEFAULTS.backgroundYawDegrees,
       backgroundPitchDegrees: DEFAULTS.backgroundPitchDegrees,
+      backgroundBackdropShape: DEFAULTS.backgroundBackdropShape,
+      backgroundBackdropPattern: DEFAULTS.backgroundBackdropPattern,
+      backgroundBackdropRadius: DEFAULTS.backgroundBackdropRadius,
     }),
     setFilterShellShape: (filterShellShape) => set({ filterShellShape }),
     setFilterShellPreset: (filterShellPreset) => set({ filterShellPreset }),
@@ -1196,6 +1222,9 @@ export const useStore = create<AppState>()(
       if (r(s.backgroundContrast) !== DEFAULTS.backgroundContrast) delta.bct = r(s.backgroundContrast);
       if (r(s.backgroundYawDegrees) !== DEFAULTS.backgroundYawDegrees) delta.by = r(s.backgroundYawDegrees);
       if (r(s.backgroundPitchDegrees) !== DEFAULTS.backgroundPitchDegrees) delta.bp = r(s.backgroundPitchDegrees);
+      if (s.backgroundBackdropShape !== DEFAULTS.backgroundBackdropShape) delta.bds = s.backgroundBackdropShape;
+      if (s.backgroundBackdropPattern !== DEFAULTS.backgroundBackdropPattern) delta.bdp = s.backgroundBackdropPattern;
+      if (r(s.backgroundBackdropRadius) !== DEFAULTS.backgroundBackdropRadius) delta.bdr = r(s.backgroundBackdropRadius);
       if (s.filterShellShape !== 'off')                delta.fss = s.filterShellShape;
       if (s.filterShellPreset !== 'haze')              delta.fsp = s.filterShellPreset;
       if (r(s.filterShellOpacity) !== 0.24)            delta.fso = r(s.filterShellOpacity);
@@ -1276,6 +1305,9 @@ export const useStore = create<AppState>()(
           backgroundContrast: sanitizeNumberRange(s.bct, DEFAULTS.backgroundContrast, 0.5, 1.8),
           backgroundYawDegrees: sanitizeNumberRange(s.by, DEFAULTS.backgroundYawDegrees, -180, 180),
           backgroundPitchDegrees: sanitizeNumberRange(s.bp, DEFAULTS.backgroundPitchDegrees, -45, 45),
+          backgroundBackdropShape: sanitizeBackgroundBackdropShape(s.bds),
+          backgroundBackdropPattern: sanitizeBackgroundBackdropPattern(s.bdp),
+          backgroundBackdropRadius: sanitizeNumberRange(s.bdr, DEFAULTS.backgroundBackdropRadius, 0.25, 5),
           filterShellShape: sanitizeFilterShellShape(s.fss),
           filterShellPreset: sanitizeFilterShellPreset(s.fsp),
           filterShellOpacity: Math.max(0, Math.min(0.65, s.fso ?? 0.24)),

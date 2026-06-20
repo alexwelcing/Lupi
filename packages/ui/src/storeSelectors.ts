@@ -41,5 +41,8 @@ export function useViewerBackgroundState() {
     backgroundContrast: useStore(s => s.backgroundContrast),
     backgroundYawDegrees: useStore(s => s.backgroundYawDegrees),
     backgroundPitchDegrees: useStore(s => s.backgroundPitchDegrees),
+    backgroundBackdropShape: useStore(s => s.backgroundBackdropShape),
+    backgroundBackdropPattern: useStore(s => s.backgroundBackdropPattern),
+    backgroundBackdropRadius: useStore(s => s.backgroundBackdropRadius),
   };
 }

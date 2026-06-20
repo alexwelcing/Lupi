@@ -168,6 +168,9 @@ describe('Store — URL Serialization', () => {
     s.setBackgroundContrast(0.86);
     s.setBackgroundYawDegrees(74);
     s.setBackgroundPitchDegrees(-12);
+    s.setBackgroundBackdropShape('cube');
+    s.setBackgroundBackdropPattern('grid');
+    s.setBackgroundBackdropRadius(3.4);
     s.setRimLightIntensity(0.75);
     s.setFillLightColor('#223344');
     s.setRimLightColor('#ddeeff');
@@ -196,6 +199,9 @@ describe('Store — URL Serialization', () => {
     expect(restored.backgroundContrast).toBeCloseTo(0.86);
     expect(restored.backgroundYawDegrees).toBeCloseTo(74);
     expect(restored.backgroundPitchDegrees).toBeCloseTo(-12);
+    expect(restored.backgroundBackdropShape).toBe('cube');
+    expect(restored.backgroundBackdropPattern).toBe('grid');
+    expect(restored.backgroundBackdropRadius).toBeCloseTo(3.4);
     expect(restored.rimLightIntensity).toBeCloseTo(0.75);
     expect(restored.fillLightColor).toBe('#223344');
     expect(restored.rimLightColor).toBe('#ddeeff');

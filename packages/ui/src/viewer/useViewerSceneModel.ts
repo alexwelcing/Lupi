@@ -1,6 +1,28 @@
 import { useMemo } from 'react';
 import type { LoadedFile } from '../store';
 
+export function getMoleculeOuterRadius(file: LoadedFile | null): number {
+  if (!file) return 5;
+
+  const { min, max } = file.trajectory.globalBounds;
+  const center = min.map((value, index) => (value + max[index]) / 2) as [number, number, number];
+  let radius = 0;
+
+  for (const x of [min[0], max[0]]) {
+    for (const y of [min[1], max[1]]) {
+      for (const z of [min[2], max[2]]) {
+        radius = Math.max(radius, Math.hypot(x - center[0], y - center[1], z - center[2]));
+      }
+    }
+  }
+
+  return Number.isFinite(radius) && radius > 0 ? radius : 5;
+}
+
+export function getBackdropRadiusLimit(file: LoadedFile | null): number {
+  return Math.max(0.5, Math.min(5, getMoleculeOuterRadius(file)));
+}
+
 export function useViewerSceneModel(file: LoadedFile | null) {
   const cameraDistance = useMemo(() => file
     ? (() => {

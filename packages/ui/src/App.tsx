@@ -26,7 +26,7 @@ import { ChronosHUD } from './ChronosHUD';
 import { VolcanicHUD } from './VolcanicHUD';
 import { TelemetryHUD } from './TelemetryHUD';
 
-import { useStore } from './store';
+import { useStore, type BackgroundBackdropPattern, type BackgroundBackdropShape } from './store';
 import { getMaxSafeAtomCount, getDefaultQualityTier } from './deviceCapabilities';
 import { LandingPage } from './LandingPage';
 import { SceneLandingPage } from './landing/SceneLandingPage';
@@ -97,7 +97,7 @@ import {
 import { openMolecule } from './viewer/openMolecule';
 import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
 import { ViewerCanvas } from './viewer/ViewerCanvas';
-import { useViewerSceneModel } from './viewer/useViewerSceneModel';
+import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
 
 export { xrStore } from './viewer/xrStore';
 
@@ -259,7 +259,19 @@ const DEFAULT_BACKGROUND_ADJUSTMENTS: BackgroundAssetAdjustments = {
   motionSpeed: 1,
 };
 
-function SceneBackground({ top, bottom, style = 'linear', media, procedural, adjustments = DEFAULT_BACKGROUND_ADJUSTMENTS, center = [0, 0, 0], distance = 1 }: {
+function SceneBackground({
+  top,
+  bottom,
+  style = 'linear',
+  media,
+  procedural,
+  adjustments = DEFAULT_BACKGROUND_ADJUSTMENTS,
+  center = [0, 0, 0],
+  distance = 1,
+  backdropShape = 'dome',
+  backdropPattern = 'image',
+  backdropRadius = 5,
+}: {
   top: string; bottom: string;
   style?: BackgroundGradientStyle;
   media: BgMedia;
@@ -267,6 +279,9 @@ function SceneBackground({ top, bottom, style = 'linear', media, procedural, adj
   adjustments?: BackgroundAssetAdjustments;
   center?: [number, number, number];
   distance?: number;
+  backdropShape?: BackgroundBackdropShape;
+  backdropPattern?: BackgroundBackdropPattern;
+  backdropRadius?: number;
 }) {
   const { scene } = useThree();
 
@@ -275,13 +290,14 @@ function SceneBackground({ top, bottom, style = 'linear', media, procedural, adj
   const xrMode = mode as string | null;
   const isImmersiveAR = xrMode === 'immersive-ar';
   const isImmersiveVR = xrMode === 'immersive-vr';
+  const usesBackdropMesh = media.kind !== 'gradient' || backdropShape !== 'dome' || backdropPattern !== 'image';
   const texture = useEquirectMediaTexture({
     media,
     top,
     bottom,
     style,
     enabled: !isImmersiveAR && !procedural,
-    projection: media.kind === 'gradient' ? 'scene-background' : 'dome',
+    projection: usesBackdropMesh ? 'dome' : 'scene-background',
     paused: adjustments.motionPaused,
     playbackRate: adjustments.motionSpeed,
     logPrefix: 'bg',
@@ -303,9 +319,9 @@ function SceneBackground({ top, bottom, style = 'linear', media, procedural, adj
       return;
     }
 
-    if (media.kind !== 'gradient') {
+    if (usesBackdropMesh || media.kind !== 'gradient') {
       scene.background = null;
-      scene.fog = new THREE.FogExp2(bottom, media.kind === 'image' ? 0.0008 : 0.00055);
+      scene.fog = null;
       return () => {
         scene.background = null;
         scene.fog = null;
@@ -319,7 +335,7 @@ function SceneBackground({ top, bottom, style = 'linear', media, procedural, adj
       if (scene.background === texture) scene.background = null;
       scene.fog = null;
     };
-  }, [bottom, isImmersiveAR, media.kind, procedural, scene, texture]);
+  }, [bottom, isImmersiveAR, media.kind, procedural, scene, texture, usesBackdropMesh]);
 
   if (procedural) {
     const visible = !isImmersiveAR;
@@ -331,8 +347,19 @@ function SceneBackground({ top, bottom, style = 'linear', media, procedural, adj
     );
   }
 
-  if ((media.kind === 'image' || media.kind === 'video') && texture && !isImmersiveAR && !isImmersiveVR) {
-    return <PanoramaBackgroundDome texture={texture} adjustments={adjustments} />;
+  if (usesBackdropMesh && texture && !isImmersiveAR && !isImmersiveVR) {
+    return (
+      <BackdropVolume
+        texture={texture}
+        top={top}
+        bottom={bottom}
+        adjustments={adjustments}
+        shape={backdropShape}
+        pattern={backdropPattern}
+        center={center}
+        radius={backdropShape === 'dome' ? PANORAMA_DOME_RADIUS : backdropRadius}
+      />
+    );
   }
 
   return null;
@@ -350,43 +377,84 @@ const PANORAMA_VERTEX_SHADER = `
 
 const PANORAMA_FRAGMENT_SHADER = `
   uniform sampler2D map;
+  uniform vec3 topColor;
+  uniform vec3 bottomColor;
   uniform float opacity;
   uniform float brightness;
   uniform float saturation;
   uniform float contrast;
+  uniform int patternMode;
   varying vec2 vUv;
 
   void main() {
     vec4 texel = texture2D(map, vUv);
-    vec3 color = texel.rgb;
+    vec3 gradient = mix(bottomColor, topColor, smoothstep(0.0, 1.0, vUv.y));
+    vec3 color = patternMode == 0 ? texel.rgb : gradient;
+    if (patternMode == 2) {
+      vec2 cell = fract(vUv * vec2(24.0, 12.0));
+      float line = max(
+        max(1.0 - step(0.018, cell.x), step(0.982, cell.x)),
+        max(1.0 - step(0.024, cell.y), step(0.976, cell.y))
+      );
+      vec3 gridColor = mix(vec3(0.92, 0.98, 1.0), vec3(0.15, 0.86, 0.90), 0.45);
+      color = mix(color, gridColor, line * 0.42);
+    }
     float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
     color = mix(vec3(luma), color, saturation);
     color = (color - 0.5) * contrast + 0.5;
     color *= brightness;
-    gl_FragColor = vec4(clamp(color, 0.0, 1.0), texel.a * opacity);
+    color = mix(bottomColor, color, opacity);
+    gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
   }
 `;
 
-function PanoramaBackgroundDome({ texture, adjustments }: { texture: THREE.Texture; adjustments: BackgroundAssetAdjustments }) {
+function BackdropVolume({
+  texture,
+  top,
+  bottom,
+  adjustments,
+  shape,
+  pattern,
+  center,
+  radius,
+}: {
+  texture: THREE.Texture;
+  top: string;
+  bottom: string;
+  adjustments: BackgroundAssetAdjustments;
+  shape: BackgroundBackdropShape;
+  pattern: BackgroundBackdropPattern;
+  center: [number, number, number];
+  radius: number;
+}) {
   const meshRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
   const geometry = useMemo(() => {
-    const geo = new THREE.SphereGeometry(PANORAMA_DOME_RADIUS, 128, 64);
-    geo.scale(-1, 1, 1);
+    const safeRadius = Math.max(0.25, radius);
+    if (shape === 'cube') {
+      const diameter = safeRadius * 2;
+      return new THREE.BoxGeometry(diameter, diameter, diameter, 1, 1, 1);
+    }
+
+    const geo = new THREE.SphereGeometry(safeRadius, 128, 64);
+    if (shape === 'dome') geo.scale(-1, 1, 1);
     return geo;
-  }, []);
+  }, [radius, shape]);
   const material = useMemo(() => new THREE.ShaderMaterial({
     uniforms: {
       map: { value: texture },
+      topColor: { value: new THREE.Color(top) },
+      bottomColor: { value: new THREE.Color(bottom) },
       opacity: { value: adjustments.opacity },
       brightness: { value: adjustments.brightness },
       saturation: { value: adjustments.saturation },
       contrast: { value: adjustments.contrast },
+      patternMode: { value: patternMode(pattern) },
     },
     vertexShader: PANORAMA_VERTEX_SHADER,
     fragmentShader: PANORAMA_FRAGMENT_SHADER,
-    side: THREE.FrontSide,
-    transparent: true,
+    side: THREE.DoubleSide,
+    transparent: false,
     depthWrite: false,
     depthTest: false,
     toneMapped: false,
@@ -395,12 +463,19 @@ function PanoramaBackgroundDome({ texture, adjustments }: { texture: THREE.Textu
 
   useEffect(() => {
     material.uniforms.map.value = texture;
+    material.uniforms.topColor.value.set(top);
+    material.uniforms.bottomColor.value.set(bottom);
     material.uniforms.opacity.value = adjustments.opacity;
     material.uniforms.brightness.value = adjustments.brightness;
     material.uniforms.saturation.value = adjustments.saturation;
     material.uniforms.contrast.value = adjustments.contrast;
+    material.uniforms.patternMode.value = patternMode(pattern);
     material.needsUpdate = true;
-  }, [adjustments.brightness, adjustments.contrast, adjustments.opacity, adjustments.saturation, material, texture]);
+  }, [adjustments.brightness, adjustments.contrast, adjustments.opacity, adjustments.saturation, bottom, material, pattern, texture, top]);
+
+  useEffect(() => () => {
+    geometry.dispose();
+  }, [geometry]);
 
   useEffect(() => () => {
     material.dispose();
@@ -408,7 +483,11 @@ function PanoramaBackgroundDome({ texture, adjustments }: { texture: THREE.Textu
 
   useFrame(() => {
     if (!meshRef.current) return;
-    meshRef.current.position.copy(camera.position);
+    if (shape === 'dome') {
+      meshRef.current.position.copy(camera.position);
+    } else {
+      meshRef.current.position.set(center[0], center[1], center[2]);
+    }
     meshRef.current.rotation.set(
       THREE.MathUtils.degToRad(adjustments.pitchDegrees),
       THREE.MathUtils.degToRad(adjustments.yawDegrees),
@@ -421,6 +500,12 @@ function PanoramaBackgroundDome({ texture, adjustments }: { texture: THREE.Textu
       <primitive object={material} attach="material" />
     </mesh>
   );
+}
+
+function patternMode(pattern: BackgroundBackdropPattern): number {
+  if (pattern === 'plain') return 1;
+  if (pattern === 'grid') return 2;
+  return 0;
 }
 
 // Error Boundary for side panels
@@ -743,6 +828,9 @@ export default function App() {
     backgroundContrast,
     backgroundYawDegrees,
     backgroundPitchDegrees,
+    backgroundBackdropShape,
+    backgroundBackdropPattern,
+    backgroundBackdropRadius,
   } = useViewerBackgroundState();
   const filterShellShape = useStore(s => s.filterShellShape);
   const filterShellPreset = useStore(s => s.filterShellPreset);
@@ -1050,6 +1138,13 @@ export default function App() {
     backgroundSaturation,
     backgroundYawDegrees,
   ]);
+  const backgroundBackdropRadiusMax = useMemo(() => {
+    return getBackdropRadiusLimit(file);
+  }, [file]);
+  const backgroundBackdropEffectiveRadius = Math.max(
+    0.25,
+    Math.min(backgroundBackdropRadius, backgroundBackdropRadiusMax),
+  );
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
   const mobilePanelHeight = 'clamp(260px, 38dvh, 340px)';
   const activeMobilePanelHeight = activePanel === 'studio' ? 'clamp(460px, 72dvh, 680px)' : mobilePanelHeight;
@@ -1346,6 +1441,9 @@ export default function App() {
               adjustments={bgAdjustments}
               center={center}
               distance={cameraDistance}
+              backdropShape={backgroundBackdropShape}
+              backdropPattern={backgroundBackdropPattern}
+              backdropRadius={backgroundBackdropEffectiveRadius}
             />
             <XREnvironmentDome media={bgMedia} top={bg.top} bottom={bg.bottom} style={backgroundStyle} adjustments={bgAdjustments} disabled={!!bg.procedural} />
             {/* Real-world light estimation: in AR this takes over scene.environment

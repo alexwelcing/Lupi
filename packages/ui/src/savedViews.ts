@@ -300,6 +300,9 @@ function captureCanonicalView(): CanonicalMolecularView {
       'backgroundContrast',
       'backgroundYawDegrees',
       'backgroundPitchDegrees',
+      'backgroundBackdropShape',
+      'backgroundBackdropPattern',
+      'backgroundBackdropRadius',
     ]),
     material: pick(s, [
       'environmentPreset',
