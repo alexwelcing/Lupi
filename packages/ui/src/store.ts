@@ -39,6 +39,10 @@ export interface KnowledgeLabel {
   sphereIndex?: number;
   atomIndex?: number;
   nodeKind?: string;
+  /** Original knowledge-graph node id (path) when available. */
+  nodeId?: string;
+  /** Number of edges connected to this node. */
+  degree?: number;
   position: [number, number, number];
 }
 

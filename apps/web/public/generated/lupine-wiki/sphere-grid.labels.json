@@ -1,78 +1,78 @@
 {
   "labels": [
     {
-      "detail": "79 nodes · 1 sphere, 2 config, 28 directory, 1 repo, 47 file",
+      "detail": "79 nodes · 2 config, 28 directory, 47 file, 1 repo, 1 sphere",
       "id": "sphere-hermes-core",
       "kind": "sphere",
       "position": [
-        14.084147439009012,
-        -11.896840818331547,
-        10.793874284552682
+        13.834998163388624,
+        -11.954274413560274,
+        10.567825961341544
       ],
       "sphere_id": "hermes-core",
       "sphere_index": 0,
       "text": "Hermes Core"
     },
     {
-      "detail": "131 nodes · 1 plugin, 1 skill, 33 file, 1 sphere, 2 config, 1 mcp_server, 92 directory",
+      "detail": "131 nodes · 1 skill, 92 directory, 1 mcp_server, 1 sphere, 1 plugin, 2 config, 33 file",
       "id": "sphere-hermes-local-extensions",
       "kind": "sphere",
       "position": [
-        17.561502942925458,
-        7.931538265548965,
-        -2.8267861290687475
+        17.510413704546224,
+        7.942529442122448,
+        -2.3984686660225085
       ],
       "sphere_id": "hermes-local-extensions",
       "sphere_index": 1,
       "text": "Hermes Local Extensions"
     },
     {
-      "detail": "269 nodes · 6 repo, 1 sphere, 193 file, 69 directory",
+      "detail": "271 nodes · 6 repo, 194 file, 70 directory, 1 sphere",
       "id": "sphere-lupine-science",
       "kind": "sphere",
       "position": [
-        -8.425840494686863,
-        9.272352191820083,
-        0.2421659727572893
+        -8.365893298130194,
+        9.098699824283777,
+        -0.053304775857853516
       ],
       "sphere_id": "lupine-science",
       "sphere_index": 5,
       "text": "Lupine Science"
     },
     {
-      "detail": "79 nodes · 1 sphere, 2 repo, 12 directory, 64 file",
+      "detail": "79 nodes · 12 directory, 2 repo, 64 file, 1 sphere",
       "id": "sphere-lupine-ledger",
       "kind": "sphere",
       "position": [
-        -17.307113431788693,
-        -14.165895225591555,
-        1.5855406716509788
+        -16.909917682314344,
+        -14.087623780926867,
+        2.4684649071662856
       ],
       "sphere_id": "lupine-ledger",
       "sphere_index": 2,
       "text": "Lupine Ledger"
     },
     {
-      "detail": "52 nodes · 1 doc, 24 directory, 24 file, 1 project, 1 repo, 1 sphere",
+      "detail": "52 nodes · 1 project, 1 sphere, 24 directory, 24 file, 1 repo, 1 doc",
       "id": "sphere-lupine-media",
       "kind": "sphere",
       "position": [
-        -0.46884999422732637,
-        -22.272120356287026,
-        -5.8413012567506275
+        -0.7236722018614488,
+        -21.828858391466593,
+        -6.545213620777419
       ],
       "sphere_id": "lupine-media",
       "sphere_index": 3,
       "text": "Lupine Media"
     },
     {
-      "detail": "23 nodes · 1 sphere, 4 directory, 1 repo, 17 file",
+      "detail": "23 nodes · 4 directory, 1 sphere, 1 repo, 17 file",
       "id": "sphere-lupine-public",
       "kind": "sphere",
       "position": [
-        10.651683507693575,
-        -13.747297669116103,
-        -16.046077389250573
+        11.036629782158743,
+        -13.64384415557383,
+        -15.6900382967507
       ],
       "sphere_id": "lupine-public",
       "sphere_index": 4,
@@ -80,14 +80,16 @@
     },
     {
       "atom_index": 77,
-      "detail": "repo · hermes-core",
+      "degree": 76,
+      "detail": "repo · hermes-core · 76 connections",
       "id": "node-hermes-core://repo//home/alex/.hermes/hermes-agent",
       "kind": "node",
+      "node_id": "hermes-core://repo//home/alex/.hermes/hermes-agent",
       "node_kind": "repo",
       "position": [
-        14.426160799378282,
-        -11.876697698449751,
-        11.031016364418015
+        14.046527458783766,
+        -11.658947465497278,
+        10.840269433045284
       ],
       "sphere_id": "hermes-core",
       "sphere_index": 0,
@@ -95,14 +97,16 @@
     },
     {
       "atom_index": 208,
-      "detail": "skill · hermes-local-extensions",
+      "degree": 24,
+      "detail": "skill · hermes-local-extensions · 24 connections",
       "id": "node-hermes-local-extensions://skill//home/alex/.hermes/skills",
       "kind": "node",
+      "node_id": "hermes-local-extensions://skill//home/alex/.hermes/skills",
       "node_kind": "skill",
       "position": [
-        17.519078644937743,
-        7.247606295383823,
-        -1.5664842900594118
+        17.440778233760632,
+        6.863090813434119,
+        -1.351409057676552
       ],
       "sphere_id": "hermes-local-extensions",
       "sphere_index": 1,
@@ -110,14 +114,16 @@
     },
     {
       "atom_index": 286,
-      "detail": "repo · lupine-ledger",
+      "degree": 12,
+      "detail": "repo · lupine-ledger · 12 connections",
       "id": "node-lupine-ledger://repo//home/alex/Dev/lupine/lupine/library-site",
       "kind": "node",
+      "node_id": "lupine-ledger://repo//home/alex/Dev/lupine/lupine/library-site",
       "node_kind": "repo",
       "position": [
-        -18.233380974995644,
-        -14.897014516029511,
-        -4.547676118724088
+        -17.990170408208854,
+        -14.957680052658803,
+        -3.618157286957179
       ],
       "sphere_id": "lupine-ledger",
       "sphere_index": 2,
@@ -125,14 +131,16 @@
     },
     {
       "atom_index": 287,
-      "detail": "repo · lupine-ledger",
+      "degree": 18,
+      "detail": "repo · lupine-ledger · 18 connections",
       "id": "node-lupine-ledger://repo//home/alex/Dev/lupine/lupine/../lupine-ledger",
       "kind": "node",
+      "node_id": "lupine-ledger://repo//home/alex/Dev/lupine/lupine/../lupine-ledger",
       "node_kind": "repo",
       "position": [
-        -20.323254928964666,
-        -11.82580204152851,
-        4.263907588409277
+        -19.77868507089451,
+        -11.96019595514092,
+        5.30455666094374
       ],
       "sphere_id": "lupine-ledger",
       "sphere_index": 2,
@@ -140,14 +148,16 @@
     },
     {
       "atom_index": 338,
-      "detail": "project · lupine-media",
+      "degree": 7,
+      "detail": "project · lupine-media · 7 connections",
       "id": "node-lupine-media://project//home/alex/Dev/lupine/lupine/self-reliant-skunk",
       "kind": "node",
+      "node_id": "lupine-media://project//home/alex/Dev/lupine/lupine/self-reliant-skunk",
       "node_kind": "project",
       "position": [
-        -0.33072271716119467,
-        -25.415765042561098,
-        -3.056510957585782
+        -0.7034221581694434,
+        -24.767002753246402,
+        -3.2264520614033785
       ],
       "sphere_id": "lupine-media",
       "sphere_index": 3,
@@ -155,14 +165,16 @@
     },
     {
       "atom_index": 339,
-      "detail": "repo · lupine-media",
+      "degree": 6,
+      "detail": "repo · lupine-media · 6 connections",
       "id": "node-lupine-media://repo//home/alex/Dev/lupine/lupine/lupine-media",
       "kind": "node",
+      "node_id": "lupine-media://repo//home/alex/Dev/lupine/lupine/lupine-media",
       "node_kind": "repo",
       "position": [
-        -3.7723834158671394,
-        -20.633827566773697,
-        -8.401042459016454
+        -3.500753923373853,
+        -20.258722022744617,
+        -9.420251911874736
       ],
       "sphere_id": "lupine-media",
       "sphere_index": 3,
@@ -170,104 +182,118 @@
     },
     {
       "atom_index": 362,
-      "detail": "repo · lupine-public",
+      "degree": 12,
+      "detail": "repo · lupine-public · 12 connections",
       "id": "node-lupine-public://repo//home/alex/Dev/lupine/lupine/../lupine-science",
       "kind": "node",
+      "node_id": "lupine-public://repo//home/alex/Dev/lupine/lupine/../lupine-science",
       "node_kind": "repo",
       "position": [
-        12.267281782169428,
-        -12.90506689742773,
-        -16.0690294735861
+        12.196432336479349,
+        -12.428059924631627,
+        -15.113892250669718
       ],
       "sphere_id": "lupine-public",
       "sphere_index": 4,
       "text": "lupine-science"
     },
     {
-      "atom_index": 626,
-      "detail": "repo · lupine-science",
+      "atom_index": 628,
+      "degree": 43,
+      "detail": "repo · lupine-science · 43 connections",
       "id": "node-lupine-science://repo//home/alex/Dev/lupine/lupine/atlas",
       "kind": "node",
+      "node_id": "lupine-science://repo//home/alex/Dev/lupine/lupine/atlas",
       "node_kind": "repo",
       "position": [
-        -8.40436287423775,
-        14.861240044102702,
-        -0.8838392950864624
+        -14.460315209325433,
+        9.963959143800613,
+        -3.2747603230521696
       ],
       "sphere_id": "lupine-science",
       "sphere_index": 5,
       "text": "atlas"
     },
     {
-      "atom_index": 627,
-      "detail": "repo · lupine-science",
+      "atom_index": 629,
+      "degree": 8,
+      "detail": "repo · lupine-science · 8 connections",
       "id": "node-lupine-science://repo//home/alex/Dev/lupine/lupine/cocoindex",
       "kind": "node",
+      "node_id": "lupine-science://repo//home/alex/Dev/lupine/lupine/cocoindex",
       "node_kind": "repo",
       "position": [
-        -19.020409729515677,
-        5.458061692310191,
-        -1.2897304601869437
+        -10.37543464805554,
+        5.813371696583433,
+        -12.266126141762806
       ],
       "sphere_id": "lupine-science",
       "sphere_index": 5,
       "text": "cocoindex"
     },
     {
-      "atom_index": 628,
-      "detail": "repo · lupine-science",
+      "atom_index": 630,
+      "degree": 22,
+      "detail": "repo · lupine-science · 22 connections",
       "id": "node-lupine-science://repo//home/alex/Dev/lupine/lupine/glim-think",
       "kind": "node",
+      "node_id": "lupine-science://repo//home/alex/Dev/lupine/lupine/glim-think",
       "node_kind": "repo",
       "position": [
-        -3.2051176995989845,
-        7.429518737844788,
-        0.24196046576209593
+        -7.076261501292709,
+        12.516846940875954,
+        4.721515651597194
       ],
       "sphere_id": "lupine-science",
       "sphere_index": 5,
       "text": "glim-think"
     },
     {
-      "atom_index": 629,
-      "detail": "repo · lupine-science",
+      "atom_index": 631,
+      "degree": 6,
+      "detail": "repo · lupine-science · 6 connections",
       "id": "node-lupine-science://repo//home/alex/Dev/lupine/lupine/tools/hermes-hive",
       "kind": "node",
+      "node_id": "lupine-science://repo//home/alex/Dev/lupine/lupine/tools/hermes-hive",
       "node_kind": "repo",
       "position": [
-        -9.741099599387264,
-        21.190065002252126,
-        0.4431331446247416
+        -17.93037572208752,
+        5.986924860922879,
+        4.9207501795071495
       ],
       "sphere_id": "lupine-science",
       "sphere_index": 5,
       "text": "hermes-hive"
     },
     {
-      "atom_index": 630,
-      "detail": "repo · lupine-science",
+      "atom_index": 632,
+      "degree": 11,
+      "detail": "repo · lupine-science · 11 connections",
       "id": "node-lupine-science://repo//home/alex/Dev/lupine/lupine/lean-spec",
       "kind": "node",
+      "node_id": "lupine-science://repo//home/alex/Dev/lupine/lupine/lean-spec",
       "node_kind": "repo",
       "position": [
-        -14.26994127057912,
-        11.796614310872453,
-        -8.95178994705945
+        -9.243804498777061,
+        19.70165645119039,
+        -0.7958135390598682
       ],
       "sphere_id": "lupine-science",
       "sphere_index": 5,
       "text": "lean-spec"
     },
     {
-      "atom_index": 631,
-      "detail": "repo · lupine-science",
+      "atom_index": 633,
+      "degree": 9,
+      "detail": "repo · lupine-science · 9 connections",
       "id": "node-lupine-science://repo//home/alex/Dev/lupine/lupine/python",
       "kind": "node",
+      "node_id": "lupine-science://repo//home/alex/Dev/lupine/lupine/python",
       "node_kind": "repo",
       "position": [
-        -12.887094334661265,
-        3.923625222806801,
-        -0.8842610885954567
+        -5.7977282609151,
+        7.901859117588939,
+        -0.534059434171731
       ],
       "sphere_id": "lupine-science",
       "sphere_index": 5,
