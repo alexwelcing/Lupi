@@ -39,6 +39,9 @@ function exec(cmd, opts = {}) {
 
 async function ensureWikiBuilt() {
   if (await fileExists(LUPINE_WIKI_BIN)) return;
+  if (!(await fileExists(LUPINE_WIKI_DIR))) {
+    throw new Error(`lupine-wiki directory not found: ${LUPINE_WIKI_DIR}`);
+  }
   console.log('[sphere-grid] Building lupine-wiki...');
   exec('cargo build --release', { cwd: LUPINE_WIKI_DIR });
 }
@@ -60,6 +63,16 @@ async function exportMolecule(tempDir) {
     data: path.join(tempDir, 'sphere-grid.data'),
     dump: path.join(tempDir, 'sphere-grid.lammpstrj'),
     meta: path.join(tempDir, 'sphere-grid.molecule.json'),
+  };
+}
+
+async function useExistingAssets() {
+  console.log('[sphere-grid] Falling back to committed assets in', PUBLIC_OUT);
+  return {
+    xyz: path.join(PUBLIC_OUT, 'sphere-grid.xyz'),
+    data: path.join(PUBLIC_OUT, 'sphere-grid.data'),
+    dump: path.join(PUBLIC_OUT, 'sphere-grid.lammpstrj'),
+    meta: path.join(PUBLIC_OUT, 'sphere-grid.molecule.json'),
   };
 }
 
@@ -190,23 +203,33 @@ async function main() {
 
   let files;
   if (useExisting) {
-    console.log('[sphere-grid] Using existing committed assets in', PUBLIC_OUT);
-    files = {
-      xyz: path.join(PUBLIC_OUT, 'sphere-grid.xyz'),
-      data: path.join(PUBLIC_OUT, 'sphere-grid.data'),
-      dump: path.join(PUBLIC_OUT, 'sphere-grid.lammpstrj'),
-      meta: path.join(PUBLIC_OUT, 'sphere-grid.molecule.json'),
-    };
+    files = await useExistingAssets();
   } else {
-    await ensureWikiBuilt();
-    files = await exportMolecule(tempDir);
+    try {
+      await ensureWikiBuilt();
+      files = await exportMolecule(tempDir);
+    } catch (err) {
+      console.warn('[sphere-grid] Wiki export failed:', err.message);
+      if (await fileExists(path.join(PUBLIC_OUT, 'sphere-grid.lammpstrj'))) {
+        files = await useExistingAssets();
+      } else {
+        throw new Error(
+          'Wiki export failed and no committed assets exist. ' +
+            'Run a wiki scan first or pass --use-existing.',
+        );
+      }
+    }
   }
 
   // Use the LAMMPS dump as the canonical gallery format (fastest lupi path).
   const trajectoryFile = files.dump;
   const destTrajectory = path.join(PUBLIC_OUT, 'sphere-grid.lammpstrj');
-  await fs.copyFile(trajectoryFile, destTrajectory);
-  console.log('[sphere-grid] Copied trajectory:', destTrajectory);
+  if (path.resolve(trajectoryFile) !== path.resolve(destTrajectory)) {
+    await fs.copyFile(trajectoryFile, destTrajectory);
+    console.log('[sphere-grid] Copied trajectory:', destTrajectory);
+  } else {
+    console.log('[sphere-grid] Using committed trajectory:', destTrajectory);
+  }
 
   // Update the catalog first so the ?sim= load path can read initialAtomScale
   // and other gallery-specific overrides during snapshot rendering.
