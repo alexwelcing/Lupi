@@ -39,6 +39,7 @@ import { SpatialAnchor } from './SpatialAnchor';
 import { Bonds } from '@atlas/scene/Bonds';
 import { AnnotationsLayer } from './AnnotationsLayer';
 import { KnowledgeLabelsLayer } from './KnowledgeLabelsLayer';
+import { LabelPerfHUD } from './LabelPerfHUD';
 import { SelectionMarkers } from './SelectionMarkers';
 import { AtomInfoHUD } from './AtomInfoHUD';
 import { CameraFocus } from './CameraFocus';
@@ -1762,6 +1763,7 @@ export default function App() {
           )}
 
           {showDebugHud && <TelemetryHUD />}
+          <LabelPerfHUD />
 
           {/* Camera view selector */}
           {file && (

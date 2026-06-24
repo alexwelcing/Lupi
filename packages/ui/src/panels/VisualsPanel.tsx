@@ -186,6 +186,9 @@ export function VisualsPanel({ availableProperties, embedded = false }: { availa
     knowledgeLabels, knowledgeLabelKinds, showKnowledgeLabels,
     setShowKnowledgeLabels, toggleKnowledgeLabelKind,
     knowledgeLabelThreshold, setKnowledgeLabelThreshold,
+    knowledgeLabelMaxCount, setKnowledgeLabelMaxCount,
+    knowledgeLabelCullDistance, setKnowledgeLabelCullDistance,
+    showLabelPerfHud, setShowLabelPerfHud,
     hiddenAtomTypes, toggleAtomType, showAllAtomTypes, soloAtomType,
     atomTypeScales, setAtomTypeScale, resetAtomTypeScales,
     // Materials & Lighting
@@ -831,6 +834,33 @@ export function VisualsPanel({ availableProperties, embedded = false }: { availa
                         />
                       </div>
                     )}
+                    <div style={{ marginTop: 4 }}>
+                      <WaveformSlider
+                        label="Max Label Count"
+                        value={knowledgeLabelMaxCount}
+                        min={10}
+                        max={500}
+                        step={10}
+                        onChange={setKnowledgeLabelMaxCount}
+                        format={v => v.toString()}
+                      />
+                    </div>
+                    <div style={{ marginTop: 4 }}>
+                      <WaveformSlider
+                        label="Cull Distance"
+                        value={knowledgeLabelCullDistance}
+                        min={5}
+                        max={100}
+                        step={1}
+                        onChange={setKnowledgeLabelCullDistance}
+                        format={v => `${v}u`}
+                      />
+                    </div>
+                    <OrbitalToggle
+                      label="Show Label Perf HUD"
+                      active={showLabelPerfHud}
+                      onClick={() => setShowLabelPerfHud(!showLabelPerfHud)}
+                    />
                   </div>
                 </div>
               )}
