@@ -52,6 +52,7 @@ describe('parseKnowledgeLabelsPayload', () => {
           sphere_id: 'core',
           sphere_index: 1,
           degree: 7,
+          salience: 1,
           position: [4, 5, 6],
         },
       ],
@@ -68,8 +69,25 @@ describe('parseKnowledgeLabelsPayload', () => {
       sphereId: 'core',
       sphereIndex: 1,
       degree: 7,
+      salience: 1,
       position: [4, 5, 6],
     });
+  });
+
+  it('leaves salience undefined when absent', () => {
+    const payload = {
+      labels: [
+        {
+          id: 'node-no-salience',
+          kind: 'node',
+          text: 'plain',
+          position: [0, 0, 0],
+        },
+      ],
+    };
+    const labels = parseKnowledgeLabelsPayload(payload);
+    expect(labels).toHaveLength(1);
+    expect(labels[0].salience).toBeUndefined();
   });
 
   it('skips malformed labels', () => {

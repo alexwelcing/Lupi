@@ -50,6 +50,7 @@ export function parseKnowledgeLabelsPayload(payload: unknown): KnowledgeLabel[] 
       nodeKind: l.node_kind ? String(l.node_kind) : undefined,
       nodeId: l.node_id ? String(l.node_id) : undefined,
       degree: typeof l.degree === 'number' ? l.degree : undefined,
+      salience: typeof l.salience === 'number' ? l.salience : undefined,
       position: [Number(l.position[0]), Number(l.position[1]), Number(l.position[2])] as [number, number, number],
     }));
 }

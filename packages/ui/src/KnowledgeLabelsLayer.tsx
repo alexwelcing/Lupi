@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import { Html, Text, Billboard } from '@react-three/drei';
-import type { KnowledgeLabel } from './store';
+import { useStore, type KnowledgeLabel } from './store';
 
 export type KnowledgeLabelStyle = 'card' | 'glyph';
 
@@ -28,18 +28,44 @@ export function KnowledgeLabelsLayer({
   style = 'card',
   visible = true,
 }: KnowledgeLabelsLayerProps) {
+  const hoveredAtom = useStore((s) => s.hoveredAtom);
+  const threshold = useStore((s) => s.knowledgeLabelThreshold);
+
   if (!visible || labels.length === 0) return null;
+
+  const visibleLabels = labels.filter((label) => {
+    if (!visibleKinds.has(label.kind)) return false;
+    // Sphere labels always render; node labels respect the salience threshold.
+    if (label.kind === 'sphere') return true;
+    return (label.salience ?? 0) >= threshold;
+  });
+
+  const visibleIds = new Set(visibleLabels.map((l) => l.id));
+  const hoveredLabel =
+    hoveredAtom != null
+      ? labels.find((l) => l.kind === 'node' && l.atomIndex === hoveredAtom && visibleKinds.has('node'))
+      : undefined;
+  const hoverLabelToRender =
+    hoveredLabel && !visibleIds.has(hoveredLabel.id) ? hoveredLabel : undefined;
 
   return (
     <group>
-      {labels.map((label) => {
-        if (!visibleKinds.has(label.kind)) return null;
+      {visibleLabels.map((label) => {
         const pos = label.position;
         if (style === 'glyph') {
           return <GlyphLabel key={label.id} pos={pos} text={label.text} kind={label.kind} />;
         }
         return <CardLabel key={label.id} pos={pos} text={label.text} detail={label.detail} kind={label.kind} />;
       })}
+      {hoverLabelToRender && (
+        <CardLabel
+          key={`${hoverLabelToRender.id}-hover`}
+          pos={hoverLabelToRender.position}
+          text={hoverLabelToRender.text}
+          detail={hoverLabelToRender.detail}
+          kind={hoverLabelToRender.kind}
+        />
+      )}
     </group>
   );
 }
