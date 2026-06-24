@@ -12,6 +12,7 @@ import type { NistCatalogEntry } from '@atlas/nist';
 import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
 import { MATERIAL_SCENES, getScene, DEFAULT_SCENE_ID } from '@atlas/scene/materials';
+import { getElementSpec } from '@atlas/core';
 
 /** A pinned text annotation tied to a specific atom by index in the
  *  current frame. Persists across frame changes; if the atom moves, the
@@ -711,6 +712,31 @@ export const useStore = create<AppState>()(
       const schemeId = pickInitialScheme({ hasProperty, uniqueTypes });
       const scheme = COLOR_SCHEMES[schemeId];
 
+      // Heuristic for sparse knowledge-graph style datasets: if the bounding
+      // box is huge relative to the average atomic radius, scale atoms up and
+      // switch to a dark background so clusters read immediately.
+      const bounds = file?.trajectory?.globalBounds;
+      let sparseAtomScale: number | undefined;
+      let sparseBackgroundPreset: string | undefined;
+      if (bounds && atomCount > 0) {
+        const dx = bounds.max[0] - bounds.min[0];
+        const dy = bounds.max[1] - bounds.min[1];
+        const dz = bounds.max[2] - bounds.min[2];
+        const diagonal = Math.hypot(dx, dy, dz);
+        const seenTypes = new Set(firstFrame?.types ?? []);
+        let totalRadius = 0;
+        let typeCount = 0;
+        for (const t of seenTypes) {
+          totalRadius += getElementSpec(t).radius;
+          typeCount += 1;
+        }
+        const avgRadius = typeCount > 0 ? totalRadius / typeCount : 1.4;
+        if (diagonal / avgRadius > 150) {
+          sparseAtomScale = Math.min(5, Math.max(2, diagonal / 200));
+          sparseBackgroundPreset = 'deep';
+        }
+      }
+
       set({
         file,
         ghostFile: null,
@@ -732,7 +758,8 @@ export const useStore = create<AppState>()(
         dirLightIntensity: materialScene?.dirLightIntensity ?? DEFAULTS.dirLightIntensity,
         rimLightIntensity: sceneDirective.rimLightIntensity,
         toneMapping: materialScene?.toneMapping ?? DEFAULTS.toneMapping,
-        backgroundPreset: sceneDirective.backgroundPreset,
+        backgroundPreset: sparseBackgroundPreset ?? sceneDirective.backgroundPreset,
+        atomScale: sparseAtomScale ?? DEFAULTS.atomScale,
         atomTexture: materialScene?.atomTexture ?? DEFAULTS.atomTexture,
         surfaceRoughness: sceneDirective.surfaceRoughness,
         surfacePolish: sceneDirective.surfacePolish,
