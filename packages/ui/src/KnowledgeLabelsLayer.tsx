@@ -6,10 +6,18 @@
  * node positions from the Lupine Wiki sphere-grid export). They are always
  * billboarded toward the camera and use a small callout style that stays
  * readable against the molecular scene.
+ *
+ * Round A performance improvements:
+ * - Camera-distance culling: labels farther than `cullDistance` are hidden.
+ * - Max label ceiling: only the closest `maxCount` labels render.
+ * - Frame-time telemetry: label count and FPS are reported to the store
+ *   and optionally surfaced in a HUD.
  */
 
-import { useState } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Html, Text, Billboard } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import { useStore, type KnowledgeLabel } from './store';
 
 export type KnowledgeLabelStyle = 'card' | 'glyph';
@@ -30,23 +38,87 @@ export function KnowledgeLabelsLayer({
 }: KnowledgeLabelsLayerProps) {
   const hoveredAtom = useStore((s) => s.hoveredAtom);
   const threshold = useStore((s) => s.knowledgeLabelThreshold);
+  const maxCount = useStore((s) => s.knowledgeLabelMaxCount);
+  const cullDistance = useStore((s) => s.knowledgeLabelCullDistance);
+  const showPerfHud = useStore((s) => s.showLabelPerfHud);
+  const setShowLabelPerfHud = useStore((s) => s.setShowLabelPerfHud);
 
-  if (!visible || labels.length === 0) return null;
+  const { camera } = useThree();
+  const camPosRef = useRef(new THREE.Vector3());
+  const [renderedCount, setRenderedCount] = useState(0);
+  const frameTimeRef = useRef(0);
+  const lastReportRef = useRef(0);
 
-  const visibleLabels = labels.filter((label) => {
-    if (!visibleKinds.has(label.kind)) return false;
-    // Sphere labels always render; node labels respect the salience threshold.
-    if (label.kind === 'sphere') return true;
-    return (label.salience ?? 0) >= threshold;
+  // Compute visible labels with distance culling and max-count ceiling.
+  const { visibleLabels, hoverLabelToRender } = useMemo(() => {
+    if (!visible || labels.length === 0) {
+      return { visibleLabels: [] as KnowledgeLabel[], hoverLabelToRender: undefined as KnowledgeLabel | undefined };
+    }
+
+    camera.getWorldPosition(camPosRef.current);
+    const cx = camPosRef.current.x;
+    const cy = camPosRef.current.y;
+    const cz = camPosRef.current.z;
+
+    const scored: Array<{ label: KnowledgeLabel; dist: number }> = [];
+    for (const label of labels) {
+      if (!visibleKinds.has(label.kind)) continue;
+      if (label.kind === 'sphere') {
+        // Spheres always count but still respect distance culling.
+        const dx = label.position[0] - cx;
+        const dy = label.position[1] - cy;
+        const dz = label.position[2] - cz;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist <= cullDistance) scored.push({ label, dist });
+        continue;
+      }
+      if ((label.salience ?? 0) < threshold) continue;
+      const dx = label.position[0] - cx;
+      const dy = label.position[1] - cy;
+      const dz = label.position[2] - cz;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist <= cullDistance) scored.push({ label, dist });
+    }
+
+    // Sort by distance ascending; keep only the closest maxCount.
+    scored.sort((a, b) => a.dist - b.dist);
+    const kept = scored.slice(0, maxCount).map((s) => s.label);
+
+    const visibleIds = new Set(kept.map((l) => l.id));
+    const hoveredLabel =
+      hoveredAtom != null
+        ? labels.find((l) => l.kind === 'node' && l.atomIndex === hoveredAtom && visibleKinds.has('node'))
+        : undefined;
+    const hoverLabelToRender =
+      hoveredLabel && !visibleIds.has(hoveredLabel.id) ? hoveredLabel : undefined;
+
+    return { visibleLabels: kept, hoverLabelToRender };
+  }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, camera, hoveredAtom]);
+
+  // Telemetry: report label count and frame time every 500ms.
+  useFrame(() => {
+    const now = performance.now();
+    const count = visibleLabels.length + (hoverLabelToRender ? 1 : 0);
+    if (count !== renderedCount) setRenderedCount(count);
+    frameTimeRef.current = now;
+
+    if (now - lastReportRef.current > 500) {
+      lastReportRef.current = now;
+      // Write to window for external HUDs / DevProbe to pick up.
+      if (typeof window !== 'undefined') {
+        const w = window as any;
+        w.__atlas = w.__atlas ?? {};
+        w.__atlas.labelPerf = {
+          renderedLabels: count,
+          maxCount,
+          cullDistance,
+          timestamp: now,
+        };
+      }
+    }
   });
 
-  const visibleIds = new Set(visibleLabels.map((l) => l.id));
-  const hoveredLabel =
-    hoveredAtom != null
-      ? labels.find((l) => l.kind === 'node' && l.atomIndex === hoveredAtom && visibleKinds.has('node'))
-      : undefined;
-  const hoverLabelToRender =
-    hoveredLabel && !visibleIds.has(hoveredLabel.id) ? hoveredLabel : undefined;
+  if (!visible || labels.length === 0) return null;
 
   return (
     <group>

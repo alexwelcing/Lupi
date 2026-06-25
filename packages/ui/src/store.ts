@@ -417,10 +417,19 @@ export interface AppState {
   /** Minimum salience required for a node label to render by default.
    *  Sphere labels always render. Hover always reveals the hovered node. */
   knowledgeLabelThreshold: number;
+  /** Maximum labels to render at once (distance-culled + salience). */
+  knowledgeLabelMaxCount: number;
+  /** Camera distance beyond which labels are hidden (world units). */
+  knowledgeLabelCullDistance: number;
+  /** Show a small HUD with label count and frame time. */
+  showLabelPerfHud: boolean;
   setKnowledgeLabels: (labels: KnowledgeLabel[]) => void;
   clearKnowledgeLabels: () => void;
   setShowKnowledgeLabels: (show: boolean) => void;
   setKnowledgeLabelThreshold: (threshold: number) => void;
+  setKnowledgeLabelMaxCount: (count: number) => void;
+  setKnowledgeLabelCullDistance: (dist: number) => void;
+  setShowLabelPerfHud: (show: boolean) => void;
   toggleKnowledgeLabelKind: (kind: string) => void;
 
   // ─── Atom visibility ───
@@ -714,9 +723,12 @@ const DEFAULTS = {
   annotations: [] as Annotation[],
   labelStyle: 'tag' as LabelStyle,
   knowledgeLabels: [] as KnowledgeLabel[],
-  knowledgeLabelKinds: new Set<string>(['sphere', 'node']),
-  showKnowledgeLabels: true,
   knowledgeLabelThreshold: 1,
+  knowledgeLabelMaxCount: 120,
+  knowledgeLabelCullDistance: 35,
+  knowledgeLabelKinds: new Set(['sphere', 'node']),
+  showKnowledgeLabels: true,
+  showLabelPerfHud: false,
   hiddenAtomTypes: new Set<number>(),
   atomTypeScales: {} as Record<number, number>,
   anomalyTracking: false,
@@ -1136,12 +1148,16 @@ export const useStore = create<AppState>()(
     clearKnowledgeLabels: () => set({ knowledgeLabels: [], knowledgeLabelKinds: new Set(['sphere', 'node']) }),
     setShowKnowledgeLabels: (showKnowledgeLabels) => set({ showKnowledgeLabels }),
     setKnowledgeLabelThreshold: (knowledgeLabelThreshold) => set({ knowledgeLabelThreshold }),
-    toggleKnowledgeLabelKind: (kind) => set((s) => {
-      const next = new Set(s.knowledgeLabelKinds);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
-      return { knowledgeLabelKinds: next };
-    }),
+    setKnowledgeLabelMaxCount: (knowledgeLabelMaxCount) => set({ knowledgeLabelMaxCount }),
+    setKnowledgeLabelCullDistance: (knowledgeLabelCullDistance) => set({ knowledgeLabelCullDistance }),
+    setShowLabelPerfHud: (showLabelPerfHud) => set({ showLabelPerfHud }),
+    toggleKnowledgeLabelKind: (kind) =>
+      set((state) => {
+        const next = new Set(state.knowledgeLabelKinds);
+        if (next.has(kind)) next.delete(kind);
+        else next.add(kind);
+        return { knowledgeLabelKinds: next };
+      }),
 
     toggleAtomType: (type) => set((s) => {
       const next = new Set(s.hiddenAtomTypes);
