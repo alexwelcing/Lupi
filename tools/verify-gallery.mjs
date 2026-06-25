@@ -318,7 +318,20 @@ try {
       check('labeled gallery card loads the viewer', true);
       await shot('knowledge-labels-loaded');
 
-      // Wait for labels to be fetched and rendered (up to 10s).
+      // Wait for the knowledge-label payload to be fetched and parsed. The
+      // gallery loader sets `file` before awaiting labels, so the harness can
+      // reach this point while labels are still loading.
+      const labelsLoaded = await page
+        .waitForFunction(
+          () => (window.__atlas?.getState?.().knowledgeLabels?.length ?? 0) > 0,
+          null,
+          { timeout: 30000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      check('knowledge-label payload loads', labelsLoaded, `loaded=${labelsLoaded}`);
+
+      // Wait for labels to be rendered (up to 15s).
       const labelsRendered = await page
         .waitForFunction(
           () => {
@@ -326,7 +339,7 @@ try {
             return lp && lp.renderedLabels > 0;
           },
           null,
-          { timeout: 10000 },
+          { timeout: 15000 },
         )
         .then(() => true)
         .catch(() => false);
@@ -387,10 +400,20 @@ try {
       const canvas = page.locator('canvas');
       if (await canvas.isVisible({ timeout: 3000 }).catch(() => false)) {
         const canvasPath = resolve(ARTIFACTS, `${stamp}-knowledge-labels-canvas.png`);
-        await canvas.screenshot({ path: canvasPath });
-        const { statSync } = await import('node:fs');
-        const stats = statSync(canvasPath);
-        check('sphere-grid gallery card snapshot captured', stats.size > 0, `${stats.size} bytes`);
+        const canvasShotOk = await canvas
+          .screenshot({ path: canvasPath, timeout: 10000 })
+          .then(() => true)
+          .catch((err) => {
+            console.log(`[canvas screenshot] ${err.message}`);
+            return false;
+          });
+        if (canvasShotOk) {
+          const { statSync } = await import('node:fs');
+          const stats = statSync(canvasPath);
+          check('sphere-grid gallery card snapshot captured', stats.size > 0, `${stats.size} bytes`);
+        } else {
+          check('sphere-grid gallery card snapshot captured', false, 'screenshot timed out');
+        }
       } else {
         check('sphere-grid gallery card snapshot captured', false, 'canvas not visible');
       }
