@@ -46,6 +46,8 @@ export interface KnowledgeLabel {
   /** Salience score used to throttle default label density.
    *  sphere=2, project/repo/skill=1, everything else=0. */
   salience?: number;
+  /** Neighbor atom indices (0-based) for graph navigation. */
+  neighbors?: number[];
   position: [number, number, number];
 }
 
@@ -432,6 +434,13 @@ export interface AppState {
   setShowLabelPerfHud: (show: boolean) => void;
   toggleKnowledgeLabelKind: (kind: string) => void;
 
+  /** Atom indices to highlight as neighbors of the hovered/selected atom. */
+  highlightedNeighbors: Set<number>;
+  setHighlightedNeighbors: (neighbors: Set<number>) => void;
+  /** Whether to persist neighbor highlighting for the selected atom. */
+  showNeighbors: boolean;
+  setShowNeighbors: (show: boolean) => void;
+
   // ─── Atom visibility ───
   hiddenAtomTypes: Set<number>;
   atomTypeScales: Record<number, number>; // per-type scale overrides
@@ -729,6 +738,8 @@ const DEFAULTS = {
   knowledgeLabelKinds: new Set(['sphere', 'node']),
   showKnowledgeLabels: true,
   showLabelPerfHud: false,
+  highlightedNeighbors: new Set<number>(),
+  showNeighbors: false,
   hiddenAtomTypes: new Set<number>(),
   atomTypeScales: {} as Record<number, number>,
   anomalyTracking: false,
@@ -1151,6 +1162,8 @@ export const useStore = create<AppState>()(
     setKnowledgeLabelMaxCount: (knowledgeLabelMaxCount) => set({ knowledgeLabelMaxCount }),
     setKnowledgeLabelCullDistance: (knowledgeLabelCullDistance) => set({ knowledgeLabelCullDistance }),
     setShowLabelPerfHud: (showLabelPerfHud) => set({ showLabelPerfHud }),
+    setHighlightedNeighbors: (highlightedNeighbors) => set({ highlightedNeighbors }),
+    setShowNeighbors: (showNeighbors) => set({ showNeighbors }),
     toggleKnowledgeLabelKind: (kind) =>
       set((state) => {
         const next = new Set(state.knowledgeLabelKinds);

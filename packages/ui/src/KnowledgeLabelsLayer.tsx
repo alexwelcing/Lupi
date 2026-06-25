@@ -120,6 +120,20 @@ export function KnowledgeLabelsLayer({
 
   if (!visible || labels.length === 0) return null;
 
+  const handleSelectAtom = (atomIndex: number) => {
+    useStore.getState().setSelectedAtoms([atomIndex]);
+  };
+
+  const handleFocusSphere = (sphereIndex: number) => {
+    const sphereLabel = labels.find((l) => l.kind === 'sphere' && l.sphereIndex === sphereIndex);
+    if (sphereLabel) {
+      useStore.getState().setCameraState(
+        [sphereLabel.position[0] + 8, sphereLabel.position[1] + 8, sphereLabel.position[2] + 8],
+        sphereLabel.position,
+      );
+    }
+  };
+
   return (
     <group>
       {visibleLabels.map((label) => {
@@ -127,7 +141,19 @@ export function KnowledgeLabelsLayer({
         if (style === 'glyph') {
           return <GlyphLabel key={label.id} pos={pos} text={label.text} kind={label.kind} />;
         }
-        return <CardLabel key={label.id} pos={pos} text={label.text} detail={label.detail} kind={label.kind} />;
+        return (
+          <CardLabel
+            key={label.id}
+            pos={pos}
+            text={label.text}
+            detail={label.detail}
+            kind={label.kind}
+            atomIndex={label.atomIndex}
+            sphereIndex={label.sphereIndex}
+            onSelectAtom={handleSelectAtom}
+            onFocusSphere={handleFocusSphere}
+          />
+        );
       })}
       {hoverLabelToRender && (
         <CardLabel
@@ -136,6 +162,10 @@ export function KnowledgeLabelsLayer({
           text={hoverLabelToRender.text}
           detail={hoverLabelToRender.detail}
           kind={hoverLabelToRender.kind}
+          atomIndex={hoverLabelToRender.atomIndex}
+          sphereIndex={hoverLabelToRender.sphereIndex}
+          onSelectAtom={handleSelectAtom}
+          onFocusSphere={handleFocusSphere}
         />
       )}
     </group>
@@ -147,15 +177,33 @@ function CardLabel({
   text,
   detail,
   kind,
+  atomIndex,
+  sphereIndex,
+  onSelectAtom,
+  onFocusSphere,
 }: {
   pos: [number, number, number];
   text: string;
   detail?: string;
   kind: string;
+  atomIndex?: number;
+  sphereIndex?: number;
+  onSelectAtom?: (atomIndex: number) => void;
+  onFocusSphere?: (sphereIndex: number) => void;
 }) {
   const [hover, setHover] = useState(false);
   const tint = kind === 'sphere' ? '#8bd3ff' : kind === 'node' ? '#a0ffc8' : '#d8b4fe';
   const title = detail ? `${text}\n${detail}` : text;
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (kind === 'node' && atomIndex != null && onSelectAtom) {
+      onSelectAtom(atomIndex);
+    } else if (kind === 'sphere' && sphereIndex != null && onFocusSphere) {
+      onFocusSphere(sphereIndex);
+    }
+  };
+
   return (
     <group position={pos}>
       <mesh position={[0, 0.8, 0]}>
@@ -173,6 +221,7 @@ function CardLabel({
           title={title}
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
+          onClick={handleClick}
           style={{
             maxWidth: hover ? 360 : 220,
             background: hover ? 'rgba(10, 18, 32, 0.94)' : 'rgba(10, 18, 32, 0.86)',
@@ -191,7 +240,7 @@ function CardLabel({
             boxShadow: '0 4px 14px rgba(0, 0, 0, 0.45)',
             userSelect: 'none',
             transition: 'max-width 0.15s ease, background 0.15s ease',
-            cursor: 'default',
+            cursor: kind === 'node' || kind === 'sphere' ? 'pointer' : 'default',
           }}
         >
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{text}</div>

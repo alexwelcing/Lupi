@@ -16,6 +16,10 @@ interface SelectionMarkersProps {
   typeRadii?: Record<number, number>;
   /** Default radius if a type isn't in the lookup. */
   defaultRadius?: number;
+  /** Atom indices to highlight as neighbors (dim everything else). */
+  highlightedNeighbors?: Set<number>;
+  /** Whether to dim non-neighbor atoms when a node is selected/hovered. */
+  dimNonNeighbors?: boolean;
 }
 
 export function SelectionMarkers({
@@ -24,6 +28,8 @@ export function SelectionMarkers({
   hoveredAtom,
   typeRadii,
   defaultRadius = 1.2,
+  highlightedNeighbors = new Set(),
+  dimNonNeighbors = false,
 }: SelectionMarkersProps) {
   const radiusFor = (atomIndex: number): number => {
     if (atomIndex < 0 || atomIndex >= frame.natoms) return defaultRadius;
@@ -40,6 +46,10 @@ export function SelectionMarkers({
       frame.positions[atomIndex * 3 + 2],
     ];
   };
+
+  // Determine active focus atom (selected takes priority over hovered)
+  const focusAtom = selectedAtoms.length === 1 ? selectedAtoms[0] : hoveredAtom;
+  const showDimming = dimNonNeighbors && focusAtom != null && highlightedNeighbors.size > 0;
 
   return (
     <group>
@@ -59,6 +69,17 @@ export function SelectionMarkers({
         if (!pos) return null;
         return <HoverMarker position={pos} radius={radiusFor(hoveredAtom) * 1.20} />;
       })()}
+      {showDimming && Array.from(highlightedNeighbors).map((idx) => {
+        const pos = positionOf(idx);
+        if (!pos) return null;
+        return (
+          <NeighborMarker
+            key={`neighbor-${idx}`}
+            position={pos}
+            radius={radiusFor(idx) * 1.15}
+          />
+        );
+      })}
     </group>
   );
 }
@@ -117,6 +138,33 @@ function HoverMarker({
           side={THREE.DoubleSide}
           transparent
           opacity={0.45}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+    </Billboard>
+  );
+}
+
+function NeighborMarker({
+  position,
+  radius,
+}: {
+  position: [number, number, number];
+  radius: number;
+}) {
+  const ringGeo = useMemo(
+    () => new THREE.RingGeometry(radius * 0.92, radius * 1.08, 64),
+    [radius],
+  );
+  return (
+    <Billboard position={position}>
+      <mesh geometry={ringGeo}>
+        <meshBasicMaterial
+          color="#a0ffc8"
+          side={THREE.DoubleSide}
+          transparent
+          opacity={0.55}
           depthWrite={false}
           toneMapped={false}
         />
