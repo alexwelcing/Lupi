@@ -761,6 +761,11 @@ export default function App() {
   const showKnowledgeLabels = useStore(s => s.showKnowledgeLabels);
   const hoveredAtom = useStore(s => s.hoveredAtom);
   const selectedAtoms = useStore(s => s.selectedAtoms);
+  // Lifted to top level so hook order is stable (these were previously passed
+  // as inline JSX props, which React's dev tooling can flag as a hook-order
+  // violation when combined with conditional early returns elsewhere in App).
+  const highlightedNeighbors = useStore(s => s.highlightedNeighbors);
+  const dimNonNeighbors = useStore(s => s.showNeighbors);
 
   // Atoms that get worldline trails. Currently annotation-driven only.
   // Lifted to component top so the useMemo's hook
@@ -1645,8 +1650,8 @@ export default function App() {
                   selectedAtoms={selectedAtoms}
                   hoveredAtom={hoveredAtom}
                   typeRadii={TYPE_RADII}
-                  highlightedNeighbors={useStore(s => s.highlightedNeighbors)}
-                  dimNonNeighbors={useStore(s => s.showNeighbors)}
+                  highlightedNeighbors={highlightedNeighbors}
+                  dimNonNeighbors={dimNonNeighbors}
                 />
                 <AtomInfoHUD
                   frame={currentFrame}
