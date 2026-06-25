@@ -42,6 +42,9 @@ export function KnowledgeLabelsLayer({
   const cullDistance = useStore((s) => s.knowledgeLabelCullDistance);
   const showPerfHud = useStore((s) => s.showLabelPerfHud);
   const setShowLabelPerfHud = useStore((s) => s.setShowLabelPerfHud);
+  const searchQuery = useStore((s) => s.knowledgeLabelSearchQuery);
+  const searchFilter = useStore((s) => s.knowledgeLabelSearchFilter);
+  const pinnedIds = useStore((s) => s.pinnedKnowledgeLabelIds);
 
   const { camera } = useThree();
   const camPosRef = useRef(new THREE.Vector3());
@@ -138,6 +141,8 @@ export function KnowledgeLabelsLayer({
     <group>
       {visibleLabels.map((label) => {
         const pos = label.position;
+        const isMatch = labelMatches(label, searchQuery, searchFilter);
+        const isPinned = pinnedIds.has(label.id);
         if (style === 'glyph') {
           return <GlyphLabel key={label.id} pos={pos} text={label.text} kind={label.kind} />;
         }
@@ -152,6 +157,8 @@ export function KnowledgeLabelsLayer({
             sphereIndex={label.sphereIndex}
             onSelectAtom={handleSelectAtom}
             onFocusSphere={handleFocusSphere}
+            isMatch={isMatch}
+            isPinned={isPinned}
           />
         );
       })}
@@ -166,6 +173,8 @@ export function KnowledgeLabelsLayer({
           sphereIndex={hoverLabelToRender.sphereIndex}
           onSelectAtom={handleSelectAtom}
           onFocusSphere={handleFocusSphere}
+          isMatch={labelMatches(hoverLabelToRender, searchQuery, searchFilter)}
+          isPinned={pinnedIds.has(hoverLabelToRender.id)}
         />
       )}
     </group>
@@ -181,6 +190,8 @@ function CardLabel({
   sphereIndex,
   onSelectAtom,
   onFocusSphere,
+  isMatch,
+  isPinned,
 }: {
   pos: [number, number, number];
   text: string;
@@ -190,10 +201,13 @@ function CardLabel({
   sphereIndex?: number;
   onSelectAtom?: (atomIndex: number) => void;
   onFocusSphere?: (sphereIndex: number) => void;
+  isMatch?: boolean;
+  isPinned?: boolean;
 }) {
   const [hover, setHover] = useState(false);
   const tint = kind === 'sphere' ? '#8bd3ff' : kind === 'node' ? '#a0ffc8' : '#d8b4fe';
   const title = detail ? `${text}\n${detail}` : text;
+  const borderColor = isMatch ? '#fbbf24' : isPinned ? '#1edce0' : `${tint}${hover ? '88' : '55'}`;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -227,7 +241,7 @@ function CardLabel({
             background: hover ? 'rgba(10, 18, 32, 0.94)' : 'rgba(10, 18, 32, 0.86)',
             backdropFilter: 'blur(10px)',
             WebkitBackdropFilter: 'blur(10px)',
-            border: `1px solid ${tint}${hover ? '88' : '55'}`,
+            border: `1px solid ${borderColor}`,
             borderRadius: 8,
             padding: '5px 9px',
             color: 'rgba(240, 248, 255, 0.96)',
@@ -263,6 +277,22 @@ function CardLabel({
       </Html>
     </group>
   );
+}
+
+function labelMatches(label: KnowledgeLabel, query: string, filter: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  const textMatch = label.text.toLowerCase().includes(q);
+  const nodeIdMatch = label.nodeId?.toLowerCase().includes(q) ?? false;
+  const nodeKindMatch = label.nodeKind?.toLowerCase().includes(q) ?? false;
+  const sphereIdMatch = label.sphereId?.toLowerCase().includes(q) ?? false;
+  switch (filter) {
+    case 'text': return textMatch;
+    case 'nodeId': return nodeIdMatch;
+    case 'nodeKind': return nodeKindMatch;
+    case 'sphereId': return sphereIdMatch;
+    default: return textMatch || nodeIdMatch || nodeKindMatch || sphereIdMatch;
+  }
 }
 
 function GlyphLabel({
