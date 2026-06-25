@@ -123,6 +123,7 @@ export interface CanonicalMolecularView {
   camera: Pick<AppState, 'cameraPosition' | 'cameraTarget' | 'cameraFov' | 'cameraPreset'>;
   publication: Pick<AppState, 'showScaleBar' | 'colorblindMode' | 'viewportMode'>;
   annotations: Pick<AppState, 'annotations' | 'labelStyle'>;
+  knowledgeLabels: Pick<AppState, 'knowledgeLabelSearchQuery' | 'knowledgeLabelSearchFilter' | 'pinnedKnowledgeLabelIds'>;
   atomVisibility: {
     hiddenAtomTypes: number[];
     atomTypeScales: Record<number, number>;
@@ -345,6 +346,7 @@ function captureCanonicalView(): CanonicalMolecularView {
     camera: pick(s, ['cameraPosition', 'cameraTarget', 'cameraFov', 'cameraPreset']),
     publication: pick(s, ['showScaleBar', 'colorblindMode', 'viewportMode']),
     annotations: pick(s, ['annotations', 'labelStyle']),
+    knowledgeLabels: pick(s, ['knowledgeLabelSearchQuery', 'knowledgeLabelSearchFilter', 'pinnedKnowledgeLabelIds']),
     atomVisibility: {
       hiddenAtomTypes: Array.from(s.hiddenAtomTypes),
       atomTypeScales: s.atomTypeScales,
@@ -357,6 +359,7 @@ function applyCanonicalView(view: CanonicalMolecularView) {
   const file = useStore.getState().file;
   const maxFrame = Math.max(0, (file?.trajectory.totalFrames ?? 1) - 1);
   const atomVisibility = view.atomVisibility ?? { hiddenAtomTypes: [], atomTypeScales: {} };
+  const knowledgeLabels = view.knowledgeLabels ?? {};
   useStore.setState({
     ...(view.color ?? {}),
     ...(view.display ?? {}),
@@ -367,6 +370,7 @@ function applyCanonicalView(view: CanonicalMolecularView) {
     ...(view.camera ?? {}),
     ...(view.publication ?? {}),
     ...(view.annotations ?? {}),
+    ...(knowledgeLabels ?? {}),
     flythrough: view.flythrough ?? null,
     hiddenAtomTypes: new Set(atomVisibility.hiddenAtomTypes ?? []),
     atomTypeScales: atomVisibility.atomTypeScales ?? {},

@@ -377,7 +377,7 @@ export interface AppState {
   colorblindMode: boolean;
 
   // ─── UI ───
-  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'equilibrium' | 'mlipLongRun' | null;
+  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'equilibrium' | 'mlipLongRun' | 'search' | null;
   /** Sign-in callout visibility. Defaults CLOSED — the app never auto-prompts
    *  anonymous visitors to sign up; opened only by an explicit user action. */
   authPromptOpen: boolean;
@@ -425,6 +425,12 @@ export interface AppState {
   knowledgeLabelCullDistance: number;
   /** Show a small HUD with label count and frame time. */
   showLabelPerfHud: boolean;
+  /** Current search query string for knowledge labels. */
+  knowledgeLabelSearchQuery: string;
+  /** Filter mode: 'all' | 'text' | 'nodeId' | 'nodeKind' | 'sphereId'. */
+  knowledgeLabelSearchFilter: 'all' | 'text' | 'nodeId' | 'nodeKind' | 'sphereId';
+  /** Set of pinned knowledge-label ids (persisted in saved views). */
+  pinnedKnowledgeLabelIds: Set<string>;
   setKnowledgeLabels: (labels: KnowledgeLabel[]) => void;
   clearKnowledgeLabels: () => void;
   setShowKnowledgeLabels: (show: boolean) => void;
@@ -432,6 +438,10 @@ export interface AppState {
   setKnowledgeLabelMaxCount: (count: number) => void;
   setKnowledgeLabelCullDistance: (dist: number) => void;
   setShowLabelPerfHud: (show: boolean) => void;
+  setKnowledgeLabelSearchQuery: (query: string) => void;
+  setKnowledgeLabelSearchFilter: (filter: AppState['knowledgeLabelSearchFilter']) => void;
+  togglePinnedKnowledgeLabel: (id: string) => void;
+  clearPinnedKnowledgeLabels: () => void;
   toggleKnowledgeLabelKind: (kind: string) => void;
 
   /** Atom indices to highlight as neighbors of the hovered/selected atom. */
@@ -738,6 +748,9 @@ const DEFAULTS = {
   knowledgeLabelKinds: new Set(['sphere', 'node']),
   showKnowledgeLabels: true,
   showLabelPerfHud: false,
+  knowledgeLabelSearchQuery: '',
+  knowledgeLabelSearchFilter: 'all' as const,
+  pinnedKnowledgeLabelIds: new Set<string>(),
   highlightedNeighbors: new Set<number>(),
   showNeighbors: false,
   hiddenAtomTypes: new Set<number>(),
@@ -1162,6 +1175,15 @@ export const useStore = create<AppState>()(
     setKnowledgeLabelMaxCount: (knowledgeLabelMaxCount) => set({ knowledgeLabelMaxCount }),
     setKnowledgeLabelCullDistance: (knowledgeLabelCullDistance) => set({ knowledgeLabelCullDistance }),
     setShowLabelPerfHud: (showLabelPerfHud) => set({ showLabelPerfHud }),
+    setKnowledgeLabelSearchQuery: (knowledgeLabelSearchQuery) => set({ knowledgeLabelSearchQuery }),
+    setKnowledgeLabelSearchFilter: (knowledgeLabelSearchFilter) => set({ knowledgeLabelSearchFilter }),
+    togglePinnedKnowledgeLabel: (id) => set((s) => {
+      const next = new Set(s.pinnedKnowledgeLabelIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { pinnedKnowledgeLabelIds: next };
+    }),
+    clearPinnedKnowledgeLabels: () => set({ pinnedKnowledgeLabelIds: new Set<string>() }),
     setHighlightedNeighbors: (highlightedNeighbors) => set({ highlightedNeighbors }),
     setShowNeighbors: (showNeighbors) => set({ showNeighbors }),
     toggleKnowledgeLabelKind: (kind) =>
@@ -1377,6 +1399,10 @@ export const useStore = create<AppState>()(
       if (s.fillLightColor !== DEFAULTS.fillLightColor) delta.flc = s.fillLightColor;
       if (s.rimLightColor !== DEFAULTS.rimLightColor)  delta.rlc = s.rimLightColor;
 
+      if (s.knowledgeLabelSearchQuery)               delta.ksq = s.knowledgeLabelSearchQuery;
+      if (s.knowledgeLabelSearchFilter !== 'all')    delta.ksf = s.knowledgeLabelSearchFilter;
+      if (s.pinnedKnowledgeLabelIds.size > 0)        delta.kpl = Array.from(s.pinnedKnowledgeLabelIds);
+
       const json = JSON.stringify(delta);
       // URL-safe base64: replace +/= with -_. for shorter, URL-friendly tokens
       return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -1459,6 +1485,9 @@ export const useStore = create<AppState>()(
           rimLightElevation: s.rle ?? 30,
           fillLightColor: s.flc ?? DEFAULTS.fillLightColor,
           rimLightColor: s.rlc ?? DEFAULTS.rimLightColor,
+          knowledgeLabelSearchQuery: s.ksq ?? '',
+          knowledgeLabelSearchFilter: (s.ksf as any) ?? 'all',
+          pinnedKnowledgeLabelIds: new Set((s.kpl as string[]) ?? []),
         });
       } catch {
         console.warn('Failed to decode URL state');

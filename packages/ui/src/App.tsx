@@ -52,6 +52,7 @@ import { getBackgroundFromColormap } from '@atlas/scene';
 import { FigureExportPanel } from './panels/FigureExportPanel';
 import { FlythroughPanel } from './panels/FlythroughPanel';
 import { TelemetryPanel } from './panels/TelemetryPanel';
+import { SearchPanel } from './panels/SearchPanel';
 import { PotentialBrowser } from './panels/PotentialBrowser';
 import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
 import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
@@ -1941,6 +1942,13 @@ export default function App() {
             >
               ATOMS
             </button>
+            <button
+              onClick={() => setActivePanel('search')}
+              aria-label="Open search and curation panel"
+              style={{ minHeight: 36, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 10, padding: '0 10px', touchAction: 'manipulation' }}
+            >
+              SEARCH
+            </button>
           </div>
         )}
 
@@ -2008,6 +2016,7 @@ export default function App() {
               )}
               {activePanel === 'equilibrium' && <EquilibriumSolveWorkbench />}
               {activePanel === 'mlipLongRun' && <MlipLongRunWorkbench />}
+              {activePanel === 'search' && <SearchPanel />}
             </ErrorBoundary>
           </div>
         )}
@@ -2220,6 +2229,17 @@ export default function App() {
               onSelect: () => {
                 setShowPotentialBrowser(false);
                 setActivePanel('flythrough');
+              },
+            },
+            {
+              id: 'search-panel',
+              label: 'Open search & curation',
+              group: 'Panels',
+              shortcut: 'S',
+              disabled: !file,
+              onSelect: () => {
+                setShowPotentialBrowser(false);
+                setActivePanel('search');
               },
             },
             {
