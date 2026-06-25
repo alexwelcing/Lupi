@@ -68,12 +68,28 @@ export function KnowledgeLabelsLayer({
       hoveredAtom,
     });
 
+  const reportLabelPerf = (count: number) => {
+    if (typeof window !== 'undefined') {
+      const w = window as any;
+      w.__atlas = w.__atlas ?? {};
+      w.__atlas.labelPerf = {
+        renderedLabels: count,
+        maxCount,
+        cullDistance,
+        timestamp: performance.now(),
+      };
+    }
+  };
+
   // Recompute immediately when non-camera dependencies change.
   useEffect(() => {
     camera.getWorldPosition(camPosRef.current);
     const result = computeVisible(camPosRef.current);
     setVisibleLabels(result.visibleLabels);
     setHoverLabelToRender(result.hoverLabelToRender);
+    const count = result.visibleLabels.length + (result.hoverLabelToRender ? 1 : 0);
+    setRenderedCount(count);
+    reportLabelPerf(count);
     lastCamRef.current.copy(camPosRef.current);
     lastHoverRef.current = hoveredAtom;
   }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, hoveredAtom, camera]);
@@ -98,16 +114,7 @@ export function KnowledgeLabelsLayer({
 
     if (now - lastReportRef.current > 500) {
       lastReportRef.current = now;
-      if (typeof window !== 'undefined') {
-        const w = window as any;
-        w.__atlas = w.__atlas ?? {};
-        w.__atlas.labelPerf = {
-          renderedLabels: count,
-          maxCount,
-          cullDistance,
-          timestamp: now,
-        };
-      }
+      reportLabelPerf(count);
     }
   });
 

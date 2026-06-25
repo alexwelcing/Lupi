@@ -744,7 +744,7 @@ const DEFAULTS = {
   knowledgeLabels: [] as KnowledgeLabel[],
   knowledgeLabelThreshold: 1,
   knowledgeLabelMaxCount: 120,
-  knowledgeLabelCullDistance: 35,
+  knowledgeLabelCullDistance: 150,
   knowledgeLabelKinds: new Set(['sphere', 'node']),
   showKnowledgeLabels: true,
   showLabelPerfHud: false,

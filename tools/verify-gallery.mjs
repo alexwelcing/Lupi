@@ -76,9 +76,13 @@ try {
   const targetUrl = withTrailingSlash(externalUrl || await startPortlessVite());
   console.log(`[verify-gallery] → ${targetUrl}`);
 
+  const chromiumExe = process.env.PW_EXECUTABLE_PATH || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
   browser = await chromium.launch({
     headless: true,
-    args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan,WebGPU', '--use-vulkan'],
+    executablePath: chromiumExe || undefined,
+    args: chromiumExe
+      ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
+      : ['--enable-unsafe-webgpu', '--enable-features=Vulkan,WebGPU', '--use-vulkan'],
   });
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   page = await ctx.newPage();
