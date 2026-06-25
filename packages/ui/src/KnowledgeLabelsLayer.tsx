@@ -14,11 +14,12 @@
  *   and optionally surfaced in a HUD.
  */
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Html, Text, Billboard } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore, type KnowledgeLabel } from './store';
+import { selectVisibleLabels } from './knowledgeLabels/selectVisibleLabels';
 
 export type KnowledgeLabelStyle = 'card' | 'glyph';
 
@@ -41,83 +42,79 @@ export function KnowledgeLabelsLayer({
   const maxCount = useStore((s) => s.knowledgeLabelMaxCount);
   const cullDistance = useStore((s) => s.knowledgeLabelCullDistance);
   const showPerfHud = useStore((s) => s.showLabelPerfHud);
-  const setShowLabelPerfHud = useStore((s) => s.setShowLabelPerfHud);
   const searchQuery = useStore((s) => s.knowledgeLabelSearchQuery);
   const searchFilter = useStore((s) => s.knowledgeLabelSearchFilter);
   const pinnedIds = useStore((s) => s.pinnedKnowledgeLabelIds);
 
   const { camera } = useThree();
   const camPosRef = useRef(new THREE.Vector3());
+  const lastCamRef = useRef(new THREE.Vector3());
+  const lastHoverRef = useRef<number | null>(null);
+  const frameRef = useRef(0);
+  const [visibleLabels, setVisibleLabels] = useState<KnowledgeLabel[]>([]);
+  const [hoverLabelToRender, setHoverLabelToRender] = useState<KnowledgeLabel | undefined>();
   const [renderedCount, setRenderedCount] = useState(0);
-  const frameTimeRef = useRef(0);
   const lastReportRef = useRef(0);
 
-  // Compute visible labels with distance culling and max-count ceiling.
-  const { visibleLabels, hoverLabelToRender } = useMemo(() => {
-    if (!visible || labels.length === 0) {
-      return { visibleLabels: [] as KnowledgeLabel[], hoverLabelToRender: undefined as KnowledgeLabel | undefined };
-    }
+  const computeVisible = (camPos: THREE.Vector3) =>
+    selectVisibleLabels({
+      labels,
+      visibleKinds,
+      visible,
+      threshold,
+      maxCount,
+      cullDistance,
+      cameraPosition: [camPos.x, camPos.y, camPos.z],
+      hoveredAtom,
+    });
 
+  const reportLabelPerf = (count: number) => {
+    if (typeof window !== 'undefined') {
+      const w = window as any;
+      w.__atlas = w.__atlas ?? {};
+      w.__atlas.labelPerf = {
+        renderedLabels: count,
+        maxCount,
+        cullDistance,
+        timestamp: performance.now(),
+      };
+    }
+  };
+
+  // Recompute immediately when non-camera dependencies change.
+  useEffect(() => {
     camera.getWorldPosition(camPosRef.current);
-    const cx = camPosRef.current.x;
-    const cy = camPosRef.current.y;
-    const cz = camPosRef.current.z;
+    const result = computeVisible(camPosRef.current);
+    setVisibleLabels(result.visibleLabels);
+    setHoverLabelToRender(result.hoverLabelToRender);
+    const count = result.visibleLabels.length + (result.hoverLabelToRender ? 1 : 0);
+    setRenderedCount(count);
+    reportLabelPerf(count);
+    lastCamRef.current.copy(camPosRef.current);
+    lastHoverRef.current = hoveredAtom;
+  }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, hoveredAtom, camera]);
 
-    const scored: Array<{ label: KnowledgeLabel; dist: number }> = [];
-    for (const label of labels) {
-      if (!visibleKinds.has(label.kind)) continue;
-      if (label.kind === 'sphere') {
-        // Spheres always count but still respect distance culling.
-        const dx = label.position[0] - cx;
-        const dy = label.position[1] - cy;
-        const dz = label.position[2] - cz;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist <= cullDistance) scored.push({ label, dist });
-        continue;
-      }
-      if ((label.salience ?? 0) < threshold) continue;
-      const dx = label.position[0] - cx;
-      const dy = label.position[1] - cy;
-      const dz = label.position[2] - cz;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist <= cullDistance) scored.push({ label, dist });
-    }
-
-    // Sort by distance ascending; keep only the closest maxCount.
-    scored.sort((a, b) => a.dist - b.dist);
-    const kept = scored.slice(0, maxCount).map((s) => s.label);
-
-    const visibleIds = new Set(kept.map((l) => l.id));
-    const hoveredLabel =
-      hoveredAtom != null
-        ? labels.find((l) => l.kind === 'node' && l.atomIndex === hoveredAtom && visibleKinds.has('node'))
-        : undefined;
-    const hoverLabelToRender =
-      hoveredLabel && !visibleIds.has(hoveredLabel.id) ? hoveredLabel : undefined;
-
-    return { visibleLabels: kept, hoverLabelToRender };
-  }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, camera, hoveredAtom]);
-
-  // Telemetry: report label count and frame time every 500ms.
+  // Recompute as the camera moves so distance culling stays accurate.
   useFrame(() => {
+    frameRef.current += 1;
+    camera.getWorldPosition(camPosRef.current);
+    const moved = camPosRef.current.distanceToSquared(lastCamRef.current) > 0.04;
+    const hoverChanged = hoveredAtom !== lastHoverRef.current;
+    if (frameRef.current % 3 !== 0 && !moved && !hoverChanged) return;
+
+    lastCamRef.current.copy(camPosRef.current);
+    lastHoverRef.current = hoveredAtom;
+    const result = computeVisible(camPosRef.current);
+    setVisibleLabels(result.visibleLabels);
+    setHoverLabelToRender(result.hoverLabelToRender);
+
     const now = performance.now();
-    const count = visibleLabels.length + (hoverLabelToRender ? 1 : 0);
+    const count = result.visibleLabels.length + (result.hoverLabelToRender ? 1 : 0);
     if (count !== renderedCount) setRenderedCount(count);
-    frameTimeRef.current = now;
 
     if (now - lastReportRef.current > 500) {
       lastReportRef.current = now;
-      // Write to window for external HUDs / DevProbe to pick up.
-      if (typeof window !== 'undefined') {
-        const w = window as any;
-        w.__atlas = w.__atlas ?? {};
-        w.__atlas.labelPerf = {
-          renderedLabels: count,
-          maxCount,
-          cullDistance,
-          timestamp: now,
-        };
-      }
+      reportLabelPerf(count);
     }
   });
 

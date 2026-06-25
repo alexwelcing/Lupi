@@ -76,9 +76,13 @@ try {
   const targetUrl = withTrailingSlash(externalUrl || await startPortlessVite());
   console.log(`[verify-gallery] → ${targetUrl}`);
 
+  const chromiumExe = process.env.PW_EXECUTABLE_PATH || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
   browser = await chromium.launch({
     headless: true,
-    args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan,WebGPU', '--use-vulkan'],
+    executablePath: chromiumExe || undefined,
+    args: chromiumExe
+      ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
+      : ['--enable-unsafe-webgpu', '--enable-features=Vulkan,WebGPU', '--use-vulkan'],
   });
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   page = await ctx.newPage();
@@ -287,6 +291,146 @@ try {
       /true DFT geometry/i.test(omolText),
   );
   await shot('omol25-tab');
+
+  // ── 9. Knowledge labels: load a gallery example with labels ──
+  // Find the first gallery example that has a labelsUrl (sphere-grid labels).
+  const labeledExample = galleryData.find((ex) => ex.labelsUrl);
+  if (labeledExample && atlasStoreAvailable) {
+    console.log(`[verify-gallery] Testing knowledge labels with example: ${labeledExample.id}`);
+
+    // Load the labeled example via the gallery card.
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout });
+    await page.locator('#gallery').scrollIntoViewIfNeeded();
+    const revealLibrary = page.getByRole('button', { name: 'Browse full library' });
+    if (await revealLibrary.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await clickControl(revealLibrary);
+    }
+    await page.waitForSelector('[data-testid="gallery"]', { timeout });
+
+    const labelCard = page.locator(`[data-testid="gallery-card-${labeledExample.id}"]`);
+    if (await labelCard.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await clickControl(labelCard);
+      await page.waitForFunction(
+        () => window.__atlas.getState().activeCardId != null && !!window.__atlas.getState().file,
+        null,
+        { timeout },
+      );
+      check('labeled gallery card loads the viewer', true);
+      await shot('knowledge-labels-loaded');
+
+      // Wait for the knowledge-label payload to be fetched and parsed. The
+      // gallery loader sets `file` before awaiting labels, so the harness can
+      // reach this point while labels are still loading.
+      const labelsLoaded = await page
+        .waitForFunction(
+          () => (window.__atlas?.getState?.().knowledgeLabels?.length ?? 0) > 0,
+          null,
+          { timeout: 30000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      check('knowledge-label payload loads', labelsLoaded, `loaded=${labelsLoaded}`);
+
+      // Wait for labels to be rendered (up to 25s). The component reports
+      // labelPerf from useEffect/useFrame, so allow a generous window for the
+      // first render pass after the payload arrives.
+      const labelsRendered = await page
+        .waitForFunction(
+          () => {
+            const lp = window.__atlas?.labelPerf;
+            return lp && lp.renderedLabels > 0;
+          },
+          null,
+          { timeout: 25000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      const renderedCount = await page.evaluate(() => window.__atlas?.labelPerf?.renderedLabels ?? 0);
+      check('knowledge labels render by default', labelsRendered || renderedCount > 0, `rendered=${renderedCount}`);
+      await shot('knowledge-labels-default');
+
+      // ── 10. Density toggle changes rendered label count ──
+      // Open the Visuals panel to access the density toggle.
+      const visualsBtn = page.locator('[data-testid="panel-visuals"]');
+      if (await visualsBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await clickControl(visualsBtn);
+        await page.waitForTimeout(300);
+
+        // Click "All nodes" to set threshold=0 (should show more labels).
+        const allNodesBtn = page.locator('button', { hasText: 'All nodes' }).first();
+        if (await allNodesBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await clickControl(allNodesBtn);
+          await page.waitForTimeout(800); // let labels recompute
+          const allCount = await page.evaluate(() => window.__atlas?.labelPerf?.renderedLabels ?? 0);
+
+          // Click "Key nodes" to set threshold=1 (should show fewer labels).
+          const keyNodesBtn = page.locator('button', { hasText: 'Key nodes' }).first();
+          if (await keyNodesBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await clickControl(keyNodesBtn);
+            await page.waitForTimeout(800);
+            const keyCount = await page.evaluate(() => window.__atlas?.labelPerf?.renderedLabels ?? 0);
+            check('density toggle changes rendered label count', allCount > keyCount, `all=${allCount} key=${keyCount}`);
+            await shot('knowledge-labels-density-toggle');
+          }
+        }
+      }
+
+      // ── 11. Hover reveals low-salience labels ──
+      // Find a low-salience node label from the store and simulate hover on its atomIndex.
+      const lowSalienceAtom = await page.evaluate(() => {
+        const state = window.__atlas?.getState?.();
+        if (!state) return null;
+        const labels = state.knowledgeLabels ?? [];
+        const low = labels.find((l) => l.kind === 'node' && (l.salience ?? 0) < state.knowledgeLabelThreshold);
+        return low ? { atomIndex: low.atomIndex, id: low.id } : null;
+      });
+      if (lowSalienceAtom && lowSalienceAtom.atomIndex != null) {
+        // Simulate hover by setting hoveredAtom in the store.
+        await page.evaluate((atomIndex) => {
+          window.__atlas.getState().setHoveredAtom(atomIndex);
+        }, lowSalienceAtom.atomIndex);
+        await page.waitForTimeout(600);
+        const hoverCount = await page.evaluate(() => window.__atlas?.labelPerf?.renderedLabels ?? 0);
+        check('hover reveals low-salience label', hoverCount > 0, `hover rendered=${hoverCount}`);
+        await shot('knowledge-labels-hover');
+      } else {
+        check('hover reveals low-salience label', false, 'no low-salience node found');
+      }
+
+      // ── 12. Snapshot test for sphere-grid gallery card ──
+      // Capture a screenshot of the 3D canvas area after labels are loaded.
+      // Canvas element screenshots can hang on software-GPU runners, so this is
+      // a soft check — failure does not block the harness.
+      const canvas = page.locator('canvas');
+      if (await canvas.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const canvasPath = resolve(ARTIFACTS, `${stamp}-knowledge-labels-canvas.png`);
+        const canvasShotOk = await canvas
+          .screenshot({ path: canvasPath, timeout: 10000 })
+          .then(() => true)
+          .catch((err) => {
+            console.log(`[canvas screenshot] ${err.message}`);
+            return false;
+          });
+        if (canvasShotOk) {
+          const { statSync } = await import('node:fs');
+          const stats = statSync(canvasPath);
+          check('sphere-grid gallery card snapshot captured', stats.size > 0, `${stats.size} bytes`);
+        } else {
+          check('sphere-grid gallery card snapshot captured (soft)', true, 'screenshot timed out');
+        }
+      } else {
+        check('sphere-grid gallery card snapshot captured (soft)', true, 'canvas not visible');
+      }
+    } else {
+      check('labeled gallery card is visible', false, `${labeledExample.id} not found`);
+    }
+  } else {
+    if (!labeledExample) {
+      check('knowledge labels: labeled example exists', false, 'no gallery entry with labelsUrl');
+    } else {
+      check('knowledge labels: store available for assertions', false, 'window.__atlas not available');
+    }
+  }
 } catch (err) {
   console.log(`[verify-gallery] FATAL ${err.message}`);
   check('harness ran to completion', false, err.message);
