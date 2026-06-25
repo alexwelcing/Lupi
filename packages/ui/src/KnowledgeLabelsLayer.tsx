@@ -19,6 +19,7 @@ import { Html, Text, Billboard } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore, type KnowledgeLabel } from './store';
+import { selectVisibleLabels } from './knowledgeLabels/selectVisibleLabels';
 
 export type KnowledgeLabelStyle = 'card' | 'glyph';
 
@@ -54,48 +55,17 @@ export function KnowledgeLabelsLayer({
 
   // Compute visible labels with distance culling and max-count ceiling.
   const { visibleLabels, hoverLabelToRender } = useMemo(() => {
-    if (!visible || labels.length === 0) {
-      return { visibleLabels: [] as KnowledgeLabel[], hoverLabelToRender: undefined as KnowledgeLabel | undefined };
-    }
-
     camera.getWorldPosition(camPosRef.current);
-    const cx = camPosRef.current.x;
-    const cy = camPosRef.current.y;
-    const cz = camPosRef.current.z;
-
-    const scored: Array<{ label: KnowledgeLabel; dist: number }> = [];
-    for (const label of labels) {
-      if (!visibleKinds.has(label.kind)) continue;
-      if (label.kind === 'sphere') {
-        // Spheres always count but still respect distance culling.
-        const dx = label.position[0] - cx;
-        const dy = label.position[1] - cy;
-        const dz = label.position[2] - cz;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist <= cullDistance) scored.push({ label, dist });
-        continue;
-      }
-      if ((label.salience ?? 0) < threshold) continue;
-      const dx = label.position[0] - cx;
-      const dy = label.position[1] - cy;
-      const dz = label.position[2] - cz;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist <= cullDistance) scored.push({ label, dist });
-    }
-
-    // Sort by distance ascending; keep only the closest maxCount.
-    scored.sort((a, b) => a.dist - b.dist);
-    const kept = scored.slice(0, maxCount).map((s) => s.label);
-
-    const visibleIds = new Set(kept.map((l) => l.id));
-    const hoveredLabel =
-      hoveredAtom != null
-        ? labels.find((l) => l.kind === 'node' && l.atomIndex === hoveredAtom && visibleKinds.has('node'))
-        : undefined;
-    const hoverLabelToRender =
-      hoveredLabel && !visibleIds.has(hoveredLabel.id) ? hoveredLabel : undefined;
-
-    return { visibleLabels: kept, hoverLabelToRender };
+    return selectVisibleLabels({
+      labels,
+      visibleKinds,
+      visible,
+      threshold,
+      maxCount,
+      cullDistance,
+      cameraPosition: [camPosRef.current.x, camPosRef.current.y, camPosRef.current.z],
+      hoveredAtom,
+    });
   }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, camera, hoveredAtom]);
 
   // Telemetry: report label count and frame time every 500ms.
