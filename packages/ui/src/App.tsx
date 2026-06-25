@@ -1645,6 +1645,8 @@ export default function App() {
                   selectedAtoms={selectedAtoms}
                   hoveredAtom={hoveredAtom}
                   typeRadii={TYPE_RADII}
+                  highlightedNeighbors={useStore(s => s.highlightedNeighbors)}
+                  dimNonNeighbors={useStore(s => s.showNeighbors)}
                 />
                 <AtomInfoHUD
                   frame={currentFrame}

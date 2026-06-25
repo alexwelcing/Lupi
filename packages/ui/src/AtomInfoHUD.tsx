@@ -2,6 +2,7 @@
  * <AtomInfoHUD /> - small anchored data card for clicked atoms.
  */
 
+import { useEffect } from 'react';
 import { Html } from '@react-three/drei';
 import type { Frame } from '@atlas/core/types';
 import { getElementSpec } from '@atlas/core';
@@ -39,6 +40,18 @@ export function AtomInfoHUD({
   const subtitle = nodeLabel?.nodeId
     ? formatNodePath(nodeLabel.nodeId)
     : `atom #${atomIndex} / id ${id} / type ${type}`;
+  const showNeighbors = useStore(s => s.showNeighbors);
+  const setShowNeighbors = useStore(s => s.setShowNeighbors);
+  const setHighlightedNeighbors = useStore(s => s.setHighlightedNeighbors);
+
+  // Auto-populate neighbors when a node is selected and showNeighbors is on
+  useEffect(() => {
+    if (showNeighbors && nodeLabel?.neighbors) {
+      setHighlightedNeighbors(new Set(nodeLabel.neighbors));
+    } else {
+      setHighlightedNeighbors(new Set());
+    }
+  }, [showNeighbors, nodeLabel, setHighlightedNeighbors]);
 
   return (
     <Html
@@ -147,6 +160,30 @@ export function AtomInfoHUD({
               {knowledge.map((row) => (
                 <DetailRow key={row.label} label={row.label} value={row.value} strong />
               ))}
+            </>
+          )}
+          {nodeLabel?.neighbors && (
+            <>
+              <div style={{ height: 1, background: 'rgba(122, 211, 255, 0.12)', margin: '5px 0 3px' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ color: 'rgba(148, 178, 207, 0.72)' }}>neighbors</span>
+                <button
+                  type="button"
+                  onClick={() => setShowNeighbors(!showNeighbors)}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    border: `1px solid ${showNeighbors ? 'rgba(160, 255, 200, 0.5)' : 'rgba(122, 211, 255, 0.25)'}`,
+                    background: showNeighbors ? 'rgba(160, 255, 200, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                    color: showNeighbors ? '#a0ffc8' : 'rgba(205, 225, 244, 0.9)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {showNeighbors ? 'On' : 'Off'}
+                </button>
+              </div>
             </>
           )}
         </div>
