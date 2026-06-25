@@ -14,7 +14,7 @@
  *   and optionally surfaced in a HUD.
  */
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Html, Text, Billboard } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -42,42 +42,62 @@ export function KnowledgeLabelsLayer({
   const maxCount = useStore((s) => s.knowledgeLabelMaxCount);
   const cullDistance = useStore((s) => s.knowledgeLabelCullDistance);
   const showPerfHud = useStore((s) => s.showLabelPerfHud);
-  const setShowLabelPerfHud = useStore((s) => s.setShowLabelPerfHud);
   const searchQuery = useStore((s) => s.knowledgeLabelSearchQuery);
   const searchFilter = useStore((s) => s.knowledgeLabelSearchFilter);
   const pinnedIds = useStore((s) => s.pinnedKnowledgeLabelIds);
 
   const { camera } = useThree();
   const camPosRef = useRef(new THREE.Vector3());
+  const lastCamRef = useRef(new THREE.Vector3());
+  const lastHoverRef = useRef<number | null>(null);
+  const frameRef = useRef(0);
+  const [visibleLabels, setVisibleLabels] = useState<KnowledgeLabel[]>([]);
+  const [hoverLabelToRender, setHoverLabelToRender] = useState<KnowledgeLabel | undefined>();
   const [renderedCount, setRenderedCount] = useState(0);
-  const frameTimeRef = useRef(0);
   const lastReportRef = useRef(0);
 
-  // Compute visible labels with distance culling and max-count ceiling.
-  const { visibleLabels, hoverLabelToRender } = useMemo(() => {
-    camera.getWorldPosition(camPosRef.current);
-    return selectVisibleLabels({
+  const computeVisible = (camPos: THREE.Vector3) =>
+    selectVisibleLabels({
       labels,
       visibleKinds,
       visible,
       threshold,
       maxCount,
       cullDistance,
-      cameraPosition: [camPosRef.current.x, camPosRef.current.y, camPosRef.current.z],
+      cameraPosition: [camPos.x, camPos.y, camPos.z],
       hoveredAtom,
     });
-  }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, camera, hoveredAtom]);
 
-  // Telemetry: report label count and frame time every 500ms.
+  // Recompute immediately when non-camera dependencies change.
+  useEffect(() => {
+    camera.getWorldPosition(camPosRef.current);
+    const result = computeVisible(camPosRef.current);
+    setVisibleLabels(result.visibleLabels);
+    setHoverLabelToRender(result.hoverLabelToRender);
+    lastCamRef.current.copy(camPosRef.current);
+    lastHoverRef.current = hoveredAtom;
+  }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, hoveredAtom, camera]);
+
+  // Recompute as the camera moves so distance culling stays accurate.
   useFrame(() => {
+    frameRef.current += 1;
+    camera.getWorldPosition(camPosRef.current);
+    const moved = camPosRef.current.distanceToSquared(lastCamRef.current) > 0.04;
+    const hoverChanged = hoveredAtom !== lastHoverRef.current;
+    if (frameRef.current % 3 !== 0 && !moved && !hoverChanged) return;
+
+    lastCamRef.current.copy(camPosRef.current);
+    lastHoverRef.current = hoveredAtom;
+    const result = computeVisible(camPosRef.current);
+    setVisibleLabels(result.visibleLabels);
+    setHoverLabelToRender(result.hoverLabelToRender);
+
     const now = performance.now();
-    const count = visibleLabels.length + (hoverLabelToRender ? 1 : 0);
+    const count = result.visibleLabels.length + (result.hoverLabelToRender ? 1 : 0);
     if (count !== renderedCount) setRenderedCount(count);
-    frameTimeRef.current = now;
 
     if (now - lastReportRef.current > 500) {
       lastReportRef.current = now;
-      // Write to window for external HUDs / DevProbe to pick up.
       if (typeof window !== 'undefined') {
         const w = window as any;
         w.__atlas = w.__atlas ?? {};
