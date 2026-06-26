@@ -1176,7 +1176,7 @@ export default function App() {
       width: '100%', minHeight: '100vh',
       height: file ? '100dvh' : 'auto',
       overflow: file ? 'hidden' : 'visible',
-      background: `linear-gradient(180deg, ${bg.top}, ${bg.bottom})`,
+      background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
       display: 'flex', flexDirection: 'column',
     }}>
       {/* ─── Desktop Header ─── */}
