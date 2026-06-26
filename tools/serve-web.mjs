@@ -1,8 +1,10 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { URL } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distRoot = path.join(repoRoot, 'apps', 'web', 'dist');
@@ -77,7 +79,47 @@ async function resolveFile(requestUrl) {
   return indexStat ? { filePath: indexPath, fileStat: indexStat } : null;
 }
 
+const FIREBASE_APP_HOST = 'shed-489901.firebaseapp.com';
+
+function isFirebaseReservedPath(url) {
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(url || '/', 'http://localhost').pathname);
+  } catch {
+    return false;
+  }
+  return pathname.startsWith('/__/auth/') || pathname.startsWith('/__/firebase/');
+}
+
+function proxyToFirebase(request, response) {
+  const targetUrl = new URL(request.url || '/', `https://${FIREBASE_APP_HOST}`);
+  const options = {
+    method: request.method,
+    hostname: targetUrl.hostname,
+    port: 443,
+    path: targetUrl.pathname + targetUrl.search,
+    headers: { ...request.headers, host: targetUrl.hostname },
+  };
+  delete options.headers.connection;
+
+  const proxyReq = https.request(options, (proxyRes) => {
+    response.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(response);
+  });
+  proxyReq.on('error', (error) => {
+    console.error(`Proxy error for ${request.url}:`, error);
+    if (!response.headersSent) response.writeHead(502);
+    response.end('Bad gateway');
+  });
+  request.pipe(proxyReq);
+}
+
 const server = createServer(async (request, response) => {
+  if (isFirebaseReservedPath(request.url)) {
+    proxyToFirebase(request, response);
+    return;
+  }
+
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     response.writeHead(405, { Allow: 'GET, HEAD' });
     response.end('Method not allowed');
