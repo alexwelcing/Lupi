@@ -1201,5 +1201,805 @@
       "potential": "Visual adjacency grid (1.55 A)",
       "reference": "Lupine Science - linkedin.com/company/lupine-science"
     }
+  },
+  {
+    "id": "adrenaline",
+    "title": "Adrenaline",
+    "subtitle": "Adrenaline molecular structure (C9H13NO3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "26",
+    "frames": "1",
+    "file": "gallery/curated/popular/adrenaline.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "melatonin",
+    "title": "Melatonin",
+    "subtitle": "Melatonin molecular structure (C13H16N2O2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "33",
+    "frames": "1",
+    "file": "gallery/curated/popular/melatonin.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "gaba",
+    "title": "GABA",
+    "subtitle": "GABA molecular structure (C4H9NO2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "16",
+    "frames": "1",
+    "file": "gallery/curated/popular/gaba.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "norepinephrine",
+    "title": "Norepinephrine",
+    "subtitle": "Norepinephrine molecular structure (C8H11NO3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "23",
+    "frames": "1",
+    "file": "gallery/curated/popular/norepinephrine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "cortisol",
+    "title": "Cortisol",
+    "subtitle": "Cortisol molecular structure (C21H30O5) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "56",
+    "frames": "1",
+    "file": "gallery/curated/popular/cortisol.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "phenethylamine",
+    "title": "Phenylethylamine",
+    "subtitle": "Phenylethylamine molecular structure (C8H11N) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "20",
+    "frames": "1",
+    "file": "gallery/curated/popular/phenethylamine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "theobromine",
+    "title": "Theobromine",
+    "subtitle": "Theobromine molecular structure (C7H8N4O2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "21",
+    "frames": "1",
+    "file": "gallery/curated/popular/theobromine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "ethanol",
+    "title": "Ethanol",
+    "subtitle": "Ethanol molecular structure (C2H6O) — PubChem 3D conformer.",
+    "domain": "Fluids & Solvents",
+    "atoms": "9",
+    "frames": "1",
+    "file": "gallery/curated/popular/ethanol.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "capsaicin",
+    "title": "Capsaicin",
+    "subtitle": "Capsaicin molecular structure (C18H27NO3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "49",
+    "frames": "1",
+    "file": "gallery/curated/popular/capsaicin.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "sucrose",
+    "title": "Sucrose",
+    "subtitle": "Sucrose molecular structure (C12H22O11) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "45",
+    "frames": "1",
+    "file": "gallery/curated/popular/sucrose.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "vanillin",
+    "title": "Vanillin",
+    "subtitle": "Vanillin molecular structure (C8H8O3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "19",
+    "frames": "1",
+    "file": "gallery/curated/popular/vanillin.xyz",
+    "available": true,
+    "colors": [
+      "#f8fafc",
+      "#e5e7eb",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "menthol",
+    "title": "Menthol",
+    "subtitle": "Menthol molecular structure (C10H20O) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "31",
+    "frames": "1",
+    "file": "gallery/curated/popular/menthol.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "quinine",
+    "title": "Quinine",
+    "subtitle": "Quinine molecular structure (C20H24N2O2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "48",
+    "frames": "1",
+    "file": "gallery/curated/popular/quinine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "gingerol",
+    "title": "Gingerol",
+    "subtitle": "Gingerol molecular structure (C17H26O4) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "47",
+    "frames": "1",
+    "file": "gallery/curated/popular/gingerol.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "limonene",
+    "title": "Limonene",
+    "subtitle": "Limonene molecular structure (C10H16) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "26",
+    "frames": "1",
+    "file": "gallery/curated/popular/limonene.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#94a3b8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "resveratrol",
+    "title": "Resveratrol",
+    "subtitle": "Resveratrol molecular structure (C14H12O3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "29",
+    "frames": "1",
+    "file": "gallery/curated/popular/resveratrol.xyz",
+    "available": true,
+    "colors": [
+      "#f8fafc",
+      "#e5e7eb",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "piperine",
+    "title": "Piperine",
+    "subtitle": "Piperine molecular structure (C17H19NO3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "40",
+    "frames": "1",
+    "file": "gallery/curated/popular/piperine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "humulone",
+    "title": "Humulone",
+    "subtitle": "Humulone molecular structure (C21H30O5) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "56",
+    "frames": "1",
+    "file": "gallery/curated/popular/humulone.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "nicotine",
+    "title": "Nicotine",
+    "subtitle": "Nicotine molecular structure (C10H14N2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "26",
+    "frames": "1",
+    "file": "gallery/curated/popular/nicotine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "creatine",
+    "title": "Creatine",
+    "subtitle": "Creatine molecular structure (C4H9N3O2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "18",
+    "frames": "1",
+    "file": "gallery/curated/popular/creatine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "lactic_acid",
+    "title": "Lactic Acid",
+    "subtitle": "Lactic Acid molecular structure (C3H6O3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "12",
+    "frames": "1",
+    "file": "gallery/curated/popular/lactic_acid.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "adenosine",
+    "title": "Adenosine",
+    "subtitle": "Adenosine molecular structure (C10H13N5O4) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "32",
+    "frames": "1",
+    "file": "gallery/curated/popular/adenosine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "theanine",
+    "title": "L-Theanine",
+    "subtitle": "L-Theanine molecular structure (C7H14N2O3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "26",
+    "frames": "1",
+    "file": "gallery/curated/popular/theanine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "curcumin",
+    "title": "Curcumin",
+    "subtitle": "Curcumin molecular structure (C21H20O6) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "47",
+    "frames": "1",
+    "file": "gallery/curated/popular/curcumin.xyz",
+    "available": true,
+    "colors": [
+      "#f8fafc",
+      "#e5e7eb",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "tryptophan",
+    "title": "Tryptophan",
+    "subtitle": "Tryptophan molecular structure (C11H12N2O2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "27",
+    "frames": "1",
+    "file": "gallery/curated/popular/tryptophan.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "histamine",
+    "title": "Histamine",
+    "subtitle": "Histamine molecular structure (C5H9N3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "17",
+    "frames": "1",
+    "file": "gallery/curated/popular/histamine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "linalool",
+    "title": "Linalool",
+    "subtitle": "Linalool molecular structure (C10H18O) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "29",
+    "frames": "1",
+    "file": "gallery/curated/popular/linalool.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "geraniol",
+    "title": "Geraniol",
+    "subtitle": "Geraniol molecular structure (C10H18O) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "29",
+    "frames": "1",
+    "file": "gallery/curated/popular/geraniol.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "water",
+    "title": "Water",
+    "subtitle": "Water molecular structure (H2O) — PubChem 3D conformer.",
+    "domain": "Fluids & Solvents",
+    "atoms": "3",
+    "frames": "1",
+    "file": "gallery/curated/popular/water.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f97316",
+      "#94a3b8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "oxygen",
+    "title": "Oxygen",
+    "subtitle": "Oxygen molecular structure (O2) — PubChem 3D conformer.",
+    "domain": "Fluids & Solvents",
+    "atoms": "2",
+    "frames": "1",
+    "file": "gallery/curated/popular/oxygen.xyz",
+    "available": true,
+    "colors": [
+      "#f97316",
+      "#94a3b8",
+      "#94a3b8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "glucose",
+    "title": "Glucose",
+    "subtitle": "Glucose molecular structure (C6H12O6) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "24",
+    "frames": "1",
+    "file": "gallery/curated/popular/glucose.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "atp",
+    "title": "ATP",
+    "subtitle": "ATP molecular structure (C10H16N5O13P3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "47",
+    "frames": "1",
+    "file": "gallery/curated/popular/atp.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f97316",
+      "#f8fafc"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "benzene",
+    "title": "Benzene",
+    "subtitle": "Benzene molecular structure (C6H6) — PubChem 3D conformer.",
+    "domain": "Fluids & Solvents",
+    "atoms": "12",
+    "frames": "1",
+    "file": "gallery/curated/popular/benzene.xyz",
+    "available": true,
+    "colors": [
+      "#f8fafc",
+      "#e5e7eb",
+      "#94a3b8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "sodium_chloride",
+    "title": "Sodium Chloride",
+    "subtitle": "Sodium Chloride molecular structure (NaCl) — RDKit 3D-embedded from PubChem.",
+    "domain": "Ceramics & Oxides",
+    "atoms": "2",
+    "frames": "1",
+    "file": "gallery/curated/popular/sodium_chloride.xyz",
+    "available": true,
+    "colors": [
+      "#a78bfa",
+      "#4ade80",
+      "#94a3b8"
+    ],
+    "metadata": {
+      "method": "RDKit ETKDG 3D embed",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "nitrous_oxide",
+    "title": "Nitrous Oxide",
+    "subtitle": "Nitrous Oxide molecular structure (N2O) — PubChem 3D conformer.",
+    "domain": "Fluids & Solvents",
+    "atoms": "3",
+    "frames": "1",
+    "file": "gallery/curated/popular/nitrous_oxide.xyz",
+    "available": true,
+    "colors": [
+      "#38bdf8",
+      "#f97316",
+      "#94a3b8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "cbd",
+    "title": "CBD",
+    "subtitle": "CBD molecular structure (C21H30O2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "53",
+    "frames": "1",
+    "file": "gallery/curated/popular/cbd.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "mdma",
+    "title": "MDMA",
+    "subtitle": "MDMA molecular structure (C11H15NO2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "29",
+    "frames": "1",
+    "file": "gallery/curated/popular/mdma.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "mescaline",
+    "title": "Mescaline",
+    "subtitle": "Mescaline molecular structure (C11H17NO3) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "32",
+    "frames": "1",
+    "file": "gallery/curated/popular/mescaline.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "dmt",
+    "title": "DMT",
+    "subtitle": "DMT molecular structure (C12H16N2) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "30",
+    "frames": "1",
+    "file": "gallery/curated/popular/dmt.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#38bdf8"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
+  },
+  {
+    "id": "ketamine",
+    "title": "Ketamine",
+    "subtitle": "Ketamine molecular structure (C13H16ClNO) — PubChem 3D conformer.",
+    "domain": "Biomolecules",
+    "atoms": "32",
+    "frames": "1",
+    "file": "gallery/curated/popular/ketamine.xyz",
+    "available": true,
+    "colors": [
+      "#e5e7eb",
+      "#f8fafc",
+      "#4ade80"
+    ],
+    "metadata": {
+      "method": "PubChem 3D geometry",
+      "potential": "XYZ coordinates",
+      "reference": "Lupi catalog molecule (lupishop pipeline)"
+    }
   }
 ]

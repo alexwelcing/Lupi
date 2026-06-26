@@ -247,6 +247,406 @@
       "geometrySource": "PubChem 3D conformer exported to XYZ",
       "confidence": "source-backed",
       "aliases": ["THC", "delta-9-THC", "dronabinol"]
+    },
+    "adrenaline": {
+      "preferredName": "Adrenaline",
+      "systematicName": "4-[(1r)-1-hydroxy-2-(methylamino)ethyl]benzene-1,2-diol",
+      "molecularFormula": "C9H13NO3",
+      "pubchemCid": 5816,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/5816",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["epinephrine"]
+    },
+    "melatonin": {
+      "preferredName": "Melatonin",
+      "systematicName": "n-[2-(5-methoxy-1h-indol-3-yl)ethyl]acetamide",
+      "molecularFormula": "C13H16N2O2",
+      "pubchemCid": 896,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/896",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "gaba": {
+      "preferredName": "GABA",
+      "systematicName": "4-aminobutanoic acid",
+      "molecularFormula": "C4H9NO2",
+      "pubchemCid": 119,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/119",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["gamma-aminobutyric acid"]
+    },
+    "norepinephrine": {
+      "preferredName": "Norepinephrine",
+      "systematicName": "4-[(1r)-2-amino-1-hydroxyethyl]benzene-1,2-diol",
+      "molecularFormula": "C8H11NO3",
+      "pubchemCid": 439260,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/439260",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "cortisol": {
+      "preferredName": "Cortisol",
+      "systematicName": "(8s,9s,10r,11s,13s,14s,17r)-11,17-dihydroxy-17-(2-hydroxyacetyl)-10,13-dimethyl-2,6,7,8,9,11,12,14,15,16-decahydro-1h-cyclopenta[a]phenanthren-3-one",
+      "molecularFormula": "C21H30O5",
+      "pubchemCid": 5754,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/5754",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "phenethylamine": {
+      "preferredName": "Phenylethylamine",
+      "systematicName": "2-phenylethanamine",
+      "molecularFormula": "C8H11N",
+      "pubchemCid": 1001,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/1001",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["phenethylamine"]
+    },
+    "theobromine": {
+      "preferredName": "Theobromine",
+      "systematicName": "3,7-dimethylpurine-2,6-dione",
+      "molecularFormula": "C7H8N4O2",
+      "pubchemCid": 5429,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/5429",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "ethanol": {
+      "preferredName": "Ethanol",
+      "systematicName": "ethanol",
+      "molecularFormula": "C2H6O",
+      "pubchemCid": 702,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/702",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "capsaicin": {
+      "preferredName": "Capsaicin",
+      "systematicName": "(e)-n-[(4-hydroxy-3-methoxyphenyl)methyl]-8-methylnon-6-enamide",
+      "molecularFormula": "C18H27NO3",
+      "pubchemCid": 1548943,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/1548943",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "sucrose": {
+      "preferredName": "Sucrose",
+      "systematicName": "(2r,3r,4s,5s,6r)-2-[(2s,3s,4s,5r)-3,4-dihydroxy-2,5-bis(hydroxymethyl)oxolan-2-yl]oxy-6-(hydroxymethyl)oxane-3,4,5-triol",
+      "molecularFormula": "C12H22O11",
+      "pubchemCid": 5988,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/5988",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "vanillin": {
+      "preferredName": "Vanillin",
+      "systematicName": "4-hydroxy-3-methoxybenzaldehyde",
+      "molecularFormula": "C8H8O3",
+      "pubchemCid": 1183,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/1183",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "menthol": {
+      "preferredName": "Menthol",
+      "systematicName": "5-methyl-2-propan-2-ylcyclohexan-1-ol",
+      "molecularFormula": "C10H20O",
+      "pubchemCid": 1254,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/1254",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "quinine": {
+      "preferredName": "Quinine",
+      "systematicName": "(r)-[(2s,4s,5r)-5-ethenyl-1-azabicyclo[2.2.2]octan-2-yl]-(6-methoxyquinolin-4-yl)methanol",
+      "molecularFormula": "C20H24N2O2",
+      "pubchemCid": 3034034,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/3034034",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "gingerol": {
+      "preferredName": "Gingerol",
+      "systematicName": "(5s)-5-hydroxy-1-(4-hydroxy-3-methoxyphenyl)decan-3-one",
+      "molecularFormula": "C17H26O4",
+      "pubchemCid": 442793,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/442793",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["6-gingerol"]
+    },
+    "limonene": {
+      "preferredName": "Limonene",
+      "systematicName": "1-methyl-4-prop-1-en-2-ylcyclohexene",
+      "molecularFormula": "C10H16",
+      "pubchemCid": 22311,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/22311",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "resveratrol": {
+      "preferredName": "Resveratrol",
+      "systematicName": "5-[(e)-2-(4-hydroxyphenyl)ethenyl]benzene-1,3-diol",
+      "molecularFormula": "C14H12O3",
+      "pubchemCid": 445154,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/445154",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "piperine": {
+      "preferredName": "Piperine",
+      "systematicName": "(2e,4e)-5-(1,3-benzodioxol-5-yl)-1-piperidin-1-ylpenta-2,4-dien-1-one",
+      "molecularFormula": "C17H19NO3",
+      "pubchemCid": 638024,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/638024",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "humulone": {
+      "preferredName": "Humulone",
+      "systematicName": "(6r)-3,5,6-trihydroxy-2-(3-methylbutanoyl)-4,6-bis(3-methylbut-2-enyl)cyclohexa-2,4-dien-1-one",
+      "molecularFormula": "C21H30O5",
+      "pubchemCid": 442911,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/442911",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "nicotine": {
+      "preferredName": "Nicotine",
+      "systematicName": "3-[(2s)-1-methylpyrrolidin-2-yl]pyridine",
+      "molecularFormula": "C10H14N2",
+      "pubchemCid": 89594,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/89594",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "creatine": {
+      "preferredName": "Creatine",
+      "systematicName": "2-[carbamimidoyl(methyl)amino]acetic acid",
+      "molecularFormula": "C4H9N3O2",
+      "pubchemCid": 586,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/586",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "lactic_acid": {
+      "preferredName": "Lactic Acid",
+      "systematicName": "2-hydroxypropanoic acid",
+      "molecularFormula": "C3H6O3",
+      "pubchemCid": 612,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/612",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "adenosine": {
+      "preferredName": "Adenosine",
+      "systematicName": "(2r,3r,4s,5r)-2-(6-aminopurin-9-yl)-5-(hydroxymethyl)oxolane-3,4-diol",
+      "molecularFormula": "C10H13N5O4",
+      "pubchemCid": 60961,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/60961",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "theanine": {
+      "preferredName": "L-Theanine",
+      "systematicName": "(2s)-2-amino-5-(ethylamino)-5-oxopentanoic acid",
+      "molecularFormula": "C7H14N2O3",
+      "pubchemCid": 439378,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/439378",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["theanine"]
+    },
+    "curcumin": {
+      "preferredName": "Curcumin",
+      "systematicName": "(1e,6e)-1,7-bis(4-hydroxy-3-methoxyphenyl)hepta-1,6-diene-3,5-dione",
+      "molecularFormula": "C21H20O6",
+      "pubchemCid": 969516,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/969516",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "tryptophan": {
+      "preferredName": "Tryptophan",
+      "systematicName": "(2s)-2-amino-3-(1h-indol-3-yl)propanoic acid",
+      "molecularFormula": "C11H12N2O2",
+      "pubchemCid": 6305,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/6305",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "histamine": {
+      "preferredName": "Histamine",
+      "systematicName": "2-(1h-imidazol-5-yl)ethanamine",
+      "molecularFormula": "C5H9N3",
+      "pubchemCid": 774,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/774",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "linalool": {
+      "preferredName": "Linalool",
+      "systematicName": "3,7-dimethylocta-1,6-dien-3-ol",
+      "molecularFormula": "C10H18O",
+      "pubchemCid": 6549,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/6549",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "geraniol": {
+      "preferredName": "Geraniol",
+      "systematicName": "(2e)-3,7-dimethylocta-2,6-dien-1-ol",
+      "molecularFormula": "C10H18O",
+      "pubchemCid": 637566,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/637566",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "water": {
+      "preferredName": "Water",
+      "systematicName": "oxidane",
+      "molecularFormula": "H2O",
+      "pubchemCid": 962,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/962",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "oxygen": {
+      "preferredName": "Oxygen",
+      "systematicName": "molecular oxygen",
+      "molecularFormula": "O2",
+      "pubchemCid": 977,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/977",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "glucose": {
+      "preferredName": "Glucose",
+      "systematicName": "(3r,4s,5s,6r)-6-(hydroxymethyl)oxane-2,3,4,5-tetrol",
+      "molecularFormula": "C6H12O6",
+      "pubchemCid": 5793,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/5793",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["D-glucose"]
+    },
+    "atp": {
+      "preferredName": "ATP",
+      "systematicName": "[[(2r,3s,4r,5r)-5-(6-aminopurin-9-yl)-3,4-dihydroxyoxolan-2-yl]methoxy-hydroxyphosphoryl] phosphono hydrogen phosphate",
+      "molecularFormula": "C10H16N5O13P3",
+      "pubchemCid": 5957,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/5957",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["adenosine triphosphate"]
+    },
+    "benzene": {
+      "preferredName": "Benzene",
+      "systematicName": "benzene",
+      "molecularFormula": "C6H6",
+      "pubchemCid": 241,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/241",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "sodium_chloride": {
+      "preferredName": "Sodium Chloride",
+      "systematicName": "sodium chloride",
+      "molecularFormula": "NaCl",
+      "pubchemCid": 5234,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/5234",
+      "geometrySource": "RDKit ETKDG 3D embed from PubChem 2D",
+      "confidence": "computed",
+      "aliases": []
+    },
+    "nitrous_oxide": {
+      "preferredName": "Nitrous Oxide",
+      "systematicName": "nitrous oxide",
+      "molecularFormula": "N2O",
+      "pubchemCid": 948,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/948",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "cbd": {
+      "preferredName": "CBD",
+      "systematicName": "2-[(1r,6r)-3-methyl-6-prop-1-en-2-ylcyclohex-2-en-1-yl]-5-pentylbenzene-1,3-diol",
+      "molecularFormula": "C21H30O2",
+      "pubchemCid": 644019,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/644019",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["cannabidiol"]
+    },
+    "mdma": {
+      "preferredName": "MDMA",
+      "systematicName": "1-(1,3-benzodioxol-5-yl)-n-methylpropan-2-amine",
+      "molecularFormula": "C11H15NO2",
+      "pubchemCid": 1615,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/1615",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["3,4-methylenedioxymethamphetamine"]
+    },
+    "mescaline": {
+      "preferredName": "Mescaline",
+      "systematicName": "2-(3,4,5-trimethoxyphenyl)ethanamine",
+      "molecularFormula": "C11H17NO3",
+      "pubchemCid": 4076,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/4076",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
+    },
+    "dmt": {
+      "preferredName": "DMT",
+      "systematicName": "2-(1h-indol-3-yl)-n,n-dimethylethanamine",
+      "molecularFormula": "C12H16N2",
+      "pubchemCid": 6089,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/6089",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": ["N,N-dimethyltryptamine"]
+    },
+    "ketamine": {
+      "preferredName": "Ketamine",
+      "systematicName": "2-(2-chlorophenyl)-2-(methylamino)cyclohexan-1-one",
+      "molecularFormula": "C13H16ClNO",
+      "pubchemCid": 3821,
+      "sourceUrl": "https://pubchem.ncbi.nlm.nih.gov/compound/3821",
+      "geometrySource": "PubChem 3D conformer exported to XYZ",
+      "confidence": "source-backed",
+      "aliases": []
     }
   }
 }
