@@ -1173,7 +1173,14 @@ export default function App() {
     if (url.pathname.startsWith('/view/')) {
       url.pathname = '/';
     }
+    // Saved views opened via #/view/<slug> must also be cleared; otherwise the
+    // hash route keeps isSavedViewRoute true and the landing page renders null.
+    url.hash = '';
     window.history.pushState({}, '', url);
+    // Force the SPA route state to update synchronously so the landing page
+    // renders immediately instead of waiting for a popstate/hashchange event.
+    setHashRoute(currentHashRoute());
+    setPathRoute(currentPathRoute());
   }, []);
 
   return (

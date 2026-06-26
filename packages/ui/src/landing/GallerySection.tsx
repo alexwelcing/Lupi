@@ -9,7 +9,9 @@ import { useStore } from '../store';
 import { WorldHomeBackground } from './WorldHomeBackground';
 
 export function GallerySection() {
-  const [visible, setVisible] = useState(false);
+  // Start visible immediately so the catalog does not flash or paint hidden
+  // while the IntersectionObserver fires.
+  const [visible] = useState(true);
   const [tab, setTab] = useState<'simulations' | 'omol25' | 'browse' | 'potentials' | 'equilibrium'>('simulations');
   const sectionRef = useRef<HTMLDivElement>(null);
   const backgroundPreset = useStore((state) => state.backgroundPreset);
@@ -33,17 +35,6 @@ export function GallerySection() {
     }
   }, []);
 
-  useEffect(() => {
-    const el = sectionRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
-      { threshold: 0.05 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   return (
     <section
       id="gallery"
@@ -55,7 +46,8 @@ export function GallerySection() {
         padding: 'clamp(30px, 4.5vw, 58px) 0 clamp(48px, 8vw, 100px)',
         opacity: visible ? 1 : 0,
         transform: visible ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.8s ease-out',
+        transition: 'opacity 0.8s ease-out, transform 0.8s ease-out',
+        willChange: 'opacity, transform',
       }}
     >
       <style>{GALLERY_SECTION_CSS}</style>
