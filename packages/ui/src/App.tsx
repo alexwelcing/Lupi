@@ -1168,6 +1168,11 @@ export default function App() {
     const url = new URL(window.location.href);
     url.searchParams.delete('sim');
     url.searchParams.delete('load');
+    // Strip /view/:slug from the path so closing a saved view always
+    // returns the user to the landing page instead of a blank route.
+    if (url.pathname.startsWith('/view/')) {
+      url.pathname = '/';
+    }
     window.history.pushState({}, '', url);
   }, []);
 
