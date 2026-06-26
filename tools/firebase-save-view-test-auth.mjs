@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 export const DEFAULT_PROJECT_ID = 'shed-489901';
 export const DEFAULT_SMOKE_UID = 'cdyiZs902pMrAxvuFOiAjpDhBEe2';
-export const DEFAULT_INIT_URL = 'https://lupi.live/__/firebase/init.json';
+export const DEFAULT_INIT_URL = 'https://shed-489901.firebaseapp.com/__/firebase/init.json';
 export const DEFAULT_EXCHANGE_URL = 'https://us-central1-shed-489901.cloudfunctions.net/exchangeApiKey';
 
 export async function requestJson(url, options = {}) {

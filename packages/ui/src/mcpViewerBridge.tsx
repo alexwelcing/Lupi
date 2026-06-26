@@ -25,7 +25,8 @@ type LupiMcpToolName =
   | 'lupi.search_molecules'
   | 'lupi.set_viewer'
   | 'lupi.export_xyz'
-  | 'lupi.viewer_state';
+  | 'lupi.viewer_state'
+  | 'lupi.knowledge_graph';
 
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
 type PostprocessPreset = ReturnType<typeof useStore.getState>['postprocessPreset'];
@@ -104,6 +105,22 @@ interface LupiMcpResponse {
       tags?: string[];
       load: MoleculeHit['load'];
     }>;
+    knowledgeGraph?: {
+      total: number;
+      returned: number;
+      nodes: Array<{
+        id: string;
+        nodeId?: string;
+        kind: string;
+        nodeKind?: string;
+        text: string;
+        detail?: string;
+        sphereId?: string;
+        degree?: number;
+        salience?: number;
+        position: [number, number, number];
+      }>;
+    };
   };
   error?: {
     code: string;
@@ -1199,6 +1216,49 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
           tags: h.tags,
           load: h.load,
         })),
+        viewer: readViewerState(),
+      });
+    }
+
+    if (request.tool === 'lupi.knowledge_graph') {
+      const labels = useStore.getState().knowledgeLabels;
+      const args = request.arguments ?? {};
+      const query = typeof args.query === 'string' ? args.query.toLowerCase() : '';
+      const kind = typeof args.kind === 'string' ? args.kind : undefined;
+      const sphereId = typeof args.sphereId === 'string' ? args.sphereId : undefined;
+      const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(500, args.limit)) : 100;
+
+      let filtered = labels;
+      if (query) {
+        filtered = filtered.filter((l) =>
+          l.text.toLowerCase().includes(query) ||
+          (l.nodeId?.toLowerCase().includes(query) ?? false) ||
+          (l.nodeKind?.toLowerCase().includes(query) ?? false)
+        );
+      }
+      if (kind) filtered = filtered.filter((l) => l.kind === kind);
+      if (sphereId) filtered = filtered.filter((l) => l.sphereId === sphereId);
+
+      const nodes = filtered.slice(0, limit).map((l) => ({
+        id: l.id,
+        nodeId: l.nodeId,
+        kind: l.kind,
+        nodeKind: l.nodeKind,
+        text: l.text,
+        detail: l.detail,
+        sphereId: l.sphereId,
+        degree: l.degree,
+        salience: l.salience,
+        position: l.position,
+      }));
+
+      transcript.push(`knowledge graph: ${nodes.length} labels`);
+      return okResponse(request, transcript, {
+        knowledgeGraph: {
+          total: labels.length,
+          returned: nodes.length,
+          nodes,
+        },
         viewer: readViewerState(),
       });
     }

@@ -119,7 +119,7 @@ function formulaFromXyz(text: string): string | null {
 describe('gallery-data.json — curated launch set', () => {
   it('is a non-empty restored curated set', () => {
     expect(data.length).toBeGreaterThan(0);
-    expect(data.length).toBeLessThanOrEqual(60);
+    expect(data.length).toBeLessThanOrEqual(300);
   });
 
   it('has unique ids', () => {

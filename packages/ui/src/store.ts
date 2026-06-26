@@ -451,6 +451,15 @@ export interface AppState {
   showNeighbors: boolean;
   setShowNeighbors: (show: boolean) => void;
 
+  // ─── HERDR integration ───
+  /** Set of node IDs that have open HERDR tasks. */
+  herdrTaskNodeIds: Set<string>;
+  /** Whether HERDR task creation is enabled. */
+  herdrEnabled: boolean;
+  setHerdrEnabled: (enabled: boolean) => void;
+  addHerdrTaskNode: (nodeId: string) => void;
+  removeHerdrTaskNode: (nodeId: string) => void;
+
   // ─── Atom visibility ───
   hiddenAtomTypes: Set<number>;
   atomTypeScales: Record<number, number>; // per-type scale overrides
@@ -753,6 +762,8 @@ const DEFAULTS = {
   pinnedKnowledgeLabelIds: new Set<string>(),
   highlightedNeighbors: new Set<number>(),
   showNeighbors: false,
+  herdrTaskNodeIds: new Set<string>(),
+  herdrEnabled: true,
   hiddenAtomTypes: new Set<number>(),
   atomTypeScales: {} as Record<number, number>,
   anomalyTracking: false,
@@ -1186,6 +1197,15 @@ export const useStore = create<AppState>()(
     clearPinnedKnowledgeLabels: () => set({ pinnedKnowledgeLabelIds: new Set<string>() }),
     setHighlightedNeighbors: (highlightedNeighbors) => set({ highlightedNeighbors }),
     setShowNeighbors: (showNeighbors) => set({ showNeighbors }),
+    setHerdrEnabled: (herdrEnabled) => set({ herdrEnabled }),
+    addHerdrTaskNode: (nodeId) => set((s) => ({
+      herdrTaskNodeIds: new Set([...s.herdrTaskNodeIds, nodeId]),
+    })),
+    removeHerdrTaskNode: (nodeId) => set((s) => {
+      const next = new Set(s.herdrTaskNodeIds);
+      next.delete(nodeId);
+      return { herdrTaskNodeIds: next };
+    }),
     toggleKnowledgeLabelKind: (kind) =>
       set((state) => {
         const next = new Set(state.knowledgeLabelKinds);

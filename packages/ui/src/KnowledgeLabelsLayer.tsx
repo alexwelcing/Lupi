@@ -20,6 +20,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore, type KnowledgeLabel } from './store';
 import { selectVisibleLabels } from './knowledgeLabels/selectVisibleLabels';
+import { emitHerdrTask } from './herdr/herdrEvents';
 
 export type KnowledgeLabelStyle = 'card' | 'glyph';
 
@@ -45,6 +46,7 @@ export function KnowledgeLabelsLayer({
   const searchQuery = useStore((s) => s.knowledgeLabelSearchQuery);
   const searchFilter = useStore((s) => s.knowledgeLabelSearchFilter);
   const pinnedIds = useStore((s) => s.pinnedKnowledgeLabelIds);
+  const herdrTaskNodeIds = useStore((s) => s.herdrTaskNodeIds);
 
   const { camera } = useThree();
   const camPosRef = useRef(new THREE.Vector3());
@@ -134,6 +136,20 @@ export function KnowledgeLabelsLayer({
     }
   };
 
+  const handleCreateTask = (label: KnowledgeLabel) => {
+    if (!label.nodeId) return;
+    emitHerdrTask({
+      nodeId: label.nodeId,
+      nodeKind: label.nodeKind,
+      text: label.text,
+      sphereId: label.sphereId,
+      degree: label.degree,
+      salience: label.salience,
+      position: label.position,
+      source: 'lupi-viewer',
+    });
+  };
+
   return (
     <group>
       {visibleLabels.map((label) => {
@@ -152,10 +168,13 @@ export function KnowledgeLabelsLayer({
             kind={label.kind}
             atomIndex={label.atomIndex}
             sphereIndex={label.sphereIndex}
+            nodeId={label.nodeId}
             onSelectAtom={handleSelectAtom}
             onFocusSphere={handleFocusSphere}
+            onCreateTask={() => handleCreateTask(label)}
             isMatch={isMatch}
             isPinned={isPinned}
+            hasTask={label.nodeId ? herdrTaskNodeIds.has(label.nodeId) : false}
           />
         );
       })}
@@ -168,10 +187,13 @@ export function KnowledgeLabelsLayer({
           kind={hoverLabelToRender.kind}
           atomIndex={hoverLabelToRender.atomIndex}
           sphereIndex={hoverLabelToRender.sphereIndex}
+          nodeId={hoverLabelToRender.nodeId}
           onSelectAtom={handleSelectAtom}
           onFocusSphere={handleFocusSphere}
+          onCreateTask={() => handleCreateTask(hoverLabelToRender)}
           isMatch={labelMatches(hoverLabelToRender, searchQuery, searchFilter)}
           isPinned={pinnedIds.has(hoverLabelToRender.id)}
+          hasTask={hoverLabelToRender.nodeId ? herdrTaskNodeIds.has(hoverLabelToRender.nodeId) : false}
         />
       )}
     </group>
@@ -185,10 +207,13 @@ function CardLabel({
   kind,
   atomIndex,
   sphereIndex,
+  nodeId,
   onSelectAtom,
   onFocusSphere,
+  onCreateTask,
   isMatch,
   isPinned,
+  hasTask,
 }: {
   pos: [number, number, number];
   text: string;
@@ -196,15 +221,20 @@ function CardLabel({
   kind: string;
   atomIndex?: number;
   sphereIndex?: number;
+  nodeId?: string;
   onSelectAtom?: (atomIndex: number) => void;
   onFocusSphere?: (sphereIndex: number) => void;
+  onCreateTask?: () => void;
   isMatch?: boolean;
   isPinned?: boolean;
+  hasTask?: boolean;
 }) {
   const [hover, setHover] = useState(false);
   const tint = kind === 'sphere' ? '#8bd3ff' : kind === 'node' ? '#a0ffc8' : '#d8b4fe';
   const title = detail ? `${text}\n${detail}` : text;
-  const borderColor = isMatch ? '#fbbf24' : isPinned ? '#1edce0' : `${tint}${hover ? '88' : '55'}`;
+  const borderColor = hasTask
+    ? '#ff6b6b'
+    : isMatch ? '#fbbf24' : isPinned ? '#1edce0' : `${tint}${hover ? '88' : '55'}`;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -268,6 +298,25 @@ function CardLabel({
               }}
             >
               {detail}
+            </div>
+          )}
+          {hover && nodeId && onCreateTask && (
+            <div style={{ marginTop: 4, display: 'flex', gap: 4 }}>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onCreateTask(); }}
+                style={{
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  border: '1px solid rgba(160, 255, 200, 0.4)',
+                  background: 'rgba(160, 255, 200, 0.1)',
+                  color: '#a0ffc8',
+                  cursor: 'pointer',
+                }}
+              >
+                HERDR task
+              </button>
             </div>
           )}
         </div>
