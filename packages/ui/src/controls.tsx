@@ -226,3 +226,54 @@ export function TransportButton({ onClick, title, icon, active = false, width = 
     </button>
   );
 }
+
+// ─── MobileTabButton ───────────────────────────────────────────────────
+// Pill segment used by the persistent mobile tab bar. Carries a clear active
+// state (teal fill) so the open surface is always legible at a glance, with a
+// 40px+ hit target and tactile press feedback.
+interface MobileTabButtonProps {
+  onClick: () => void;
+  ariaLabel: string;
+  active: boolean;
+  wide?: boolean;
+  children: ReactNode;
+}
+
+export function MobileTabButton({ onClick, ariaLabel, active, wide = false, children }: MobileTabButtonProps) {
+  const press = usePressSpring({ pressedScale: 0.92, sound: false });
+  return (
+    <button
+      ref={press.ref}
+      onClick={onClick}
+      onPointerDown={press.onPointerDown}
+      onPointerUp={press.onPointerUp}
+      onPointerLeave={press.onPointerLeave}
+      onPointerCancel={press.onPointerCancel}
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      style={{
+        minHeight: 40,
+        minWidth: wide ? 48 : 0,
+        flex: wide ? '0 0 auto' : '1 1 auto',
+        padding: wide ? '0 12px' : '0 12px',
+        borderRadius: 999,
+        border: `1px solid ${active ? 'rgba(30,220,224,0.55)' : 'rgba(255,255,255,0.12)'}`,
+        background: active
+          ? 'linear-gradient(180deg, rgba(30,220,224,0.26), rgba(30,220,224,0.10))'
+          : 'rgba(255,255,255,0.03)',
+        color: active ? '#eaffff' : '#cbd5e1',
+        fontSize: wide ? 13 : 10.5,
+        fontWeight: active ? 760 : 680,
+        letterSpacing: wide ? 0 : 0.4,
+        lineHeight: 1,
+        cursor: 'pointer',
+        touchAction: 'manipulation',
+        WebkitTapHighlightColor: 'transparent',
+        boxShadow: active ? '0 0 0 1px rgba(30,220,224,0.18), 0 0 16px rgba(30,220,224,0.14)' : 'none',
+        transition: 'background 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out',
+      }}
+    >
+      {children}
+    </button>
+  );
+}

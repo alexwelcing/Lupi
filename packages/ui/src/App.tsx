@@ -66,7 +66,7 @@ import { getElementSpec } from '@atlas/core';
 import { ExportManager } from './ExportManager';
 import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
-import { CameraPresetButton, TransportButton } from './controls';
+import { CameraPresetButton, MobileTabButton, TransportButton } from './controls';
 import { CommandPalette } from './CommandPalette';
 import { LupiAuthCallout } from './LupiAuthCallout';
 import { LupiAgentDock } from './LupiAgentDock';
@@ -1157,12 +1157,28 @@ export default function App() {
     Math.min(backgroundBackdropRadius, backgroundBackdropRadiusMax),
   );
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
-  const mobilePanelHeight = 'clamp(260px, 38dvh, 340px)';
-  const activeMobilePanelHeight = activePanel === 'studio' ? 'clamp(460px, 72dvh, 680px)' : mobilePanelHeight;
+  const mobilePanelHeight = 'clamp(240px, 34dvh, 320px)';
+  const activeMobilePanelHeight = activePanel === 'studio' ? 'clamp(340px, 54dvh, 520px)' : mobilePanelHeight;
   const mobileLoadedHeader = isMobile && !!file;
   const headerHeight = isMobile
-    ? `calc(${mobileLoadedHeader ? '76px' : '48px'} + env(safe-area-inset-top))`
+    ? `calc(${mobileLoadedHeader ? '64px' : '48px'} + env(safe-area-inset-top))`
     : 56;
+  // Mobile chrome anchoring — the persistent tab bar lifts above the timeline
+  // when a trajectory is loaded, and the bottom sheet always docks above the
+  // tab bar so the two never overlap. Centralized here so the bar, the sheet,
+  // and the floating launchers stay in lockstep.
+  const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
+  const mobileTabBarBottom = mobileTimelineActive
+    ? 'calc(env(safe-area-inset-bottom) + 78px)'
+    : 'calc(env(safe-area-inset-bottom) + 10px)';
+  // The sheet is absolutely positioned inside the main viewport container, which
+  // already sits ABOVE the timeline; the tab bar is fixed to the viewport. When a
+  // timeline is present, the safe-area term cancels between the two anchors, so the
+  // sheet only needs a constant offset to clear the bar that overlaps the container.
+  const mobileSheetBottom = mobileTimelineActive
+    ? '88px'
+    : 'calc(env(safe-area-inset-bottom) + 66px)';
+  const mobilePanelOpen = isMobile && !!activePanel;
   const clearLoadedFile = useCallback(() => {
     useStore.getState().clearFile();
     const url = new URL(window.location.href);
@@ -1205,8 +1221,8 @@ export default function App() {
           gridTemplateRows: mobileLoadedHeader ? '38px 28px' : undefined,
           columnGap: mobileLoadedHeader ? 8 : undefined,
           rowGap: mobileLoadedHeader ? 2 : undefined,
-          padding: mobileLoadedHeader ? 'calc(env(safe-area-inset-top) + 4px) 8px 4px' : (isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px'),
-          margin: file ? (isMobile ? '6px 6px 0' : '14px 16px 0') : 0,
+          padding: mobileLoadedHeader ? 'calc(env(safe-area-inset-top) + 10px) 10px 6px' : (isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px'),
+          margin: file ? (isMobile ? '0 8px 0' : '14px 16px 0') : 0,
           borderRadius: file ? 8 : 0,
           borderBottom: file ? 'none' : '1px solid var(--border-subtle)',
           background: file ? undefined : 'var(--bg-glass)',
@@ -1789,8 +1805,8 @@ export default function App() {
           {file && (
             <div style={{
               position: 'absolute',
-              top: file ? (isMobile ? 72 : 88) : 72,
-              left: isMobile ? 12 : 18,
+              top: file ? (isMobile ? 'calc(env(safe-area-inset-top) + 108px)' : 88) : 72,
+              left: isMobile ? 10 : 18,
               display: 'grid',
               flexDirection: 'column',
               alignItems: 'start',
@@ -1802,7 +1818,10 @@ export default function App() {
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)',
-              zIndex: 150,
+              zIndex: mobilePanelOpen ? 80 : 150,
+              opacity: mobilePanelOpen ? 0.5 : 1,
+              pointerEvents: mobilePanelOpen ? 'none' : undefined,
+              transition: 'opacity 160ms ease-out',
             }}>
               <button
                 onClick={() => {
@@ -1867,8 +1886,8 @@ export default function App() {
           {file && !showPotentialBrowser && (
             <div style={{
               position: 'absolute',
-              top: file ? (isMobile ? 72 : 88) : 72,
-              right: isMobile ? 12 : 18,
+              top: file ? (isMobile ? 'calc(env(safe-area-inset-top) + 108px)' : 88) : 72,
+              right: isMobile ? 10 : 18,
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 8,
@@ -1879,7 +1898,10 @@ export default function App() {
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)',
-              zIndex: 150,
+              zIndex: mobilePanelOpen ? 80 : 150,
+              opacity: mobilePanelOpen ? 0.5 : 1,
+              pointerEvents: mobilePanelOpen ? 'none' : undefined,
+              transition: 'opacity 160ms ease-out',
             }}>
               <button
                 type="button"
@@ -1912,97 +1934,123 @@ export default function App() {
             close via setShowPotentialBrowser(false). */}
         {showPotentialBrowser && <PotentialBrowser />}
 
-        {/* Mobile quick actions bar (thumb friendly, always reachable on phones) */}
-        {isMobile && file && !activePanel && (
-          <div
-            role="toolbar"
-            aria-label="Mobile quick actions"
+        {/* Mobile tab bar — persistent thumb-reachable navigation. Stays mounted
+            whenever a molecule is on screen (even with a panel open) so the
+            active surface is always one tap away, with a clear active state and
+            tap-to-toggle. Hidden only behind the full-screen atom browser. */}
+        {isMobile && file && !showPotentialBrowser && (
+          <nav
+            aria-label="Viewer navigation"
             style={{
               position: 'fixed',
-              bottom: 'calc(env(safe-area-inset-bottom) + 4px)',
+              bottom: mobileTabBarBottom,
               left: '50%',
               transform: 'translateX(-50%)',
-              zIndex: 95,
+              zIndex: 130,
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              background: 'rgba(15,16,22,0.92)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              gap: 4,
+              maxWidth: 'calc(100vw - 16px)',
+              background: 'linear-gradient(180deg, rgba(17,19,27,0.96), rgba(8,9,14,0.96))',
+              border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 999,
-              padding: '4px 6px',
-              backdropFilter: 'blur(12px)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+              padding: '5px 6px',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
             }}>
-            <button
+            <MobileTabButton
               onClick={() => useStore.getState().togglePlay()}
-              aria-label={playing ? 'Pause playback' : 'Play animation'}
-              style={{ minHeight: 36, minWidth: 46, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 11, padding: '0 10px', touchAction: 'manipulation' }}
+              ariaLabel={playing ? 'Pause playback' : 'Play animation'}
+              active={playing}
+              wide
             >
               {playing ? '⏸' : '▶'}
-            </button>
-            <button
-              onClick={() => { setStudioDeck('look'); setActivePanel('studio'); }}
-              aria-label="Open controls panel"
-              style={{ minHeight: 36, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 10, padding: '0 10px', touchAction: 'manipulation' }}
+            </MobileTabButton>
+            <MobileTabButton
+              onClick={() => {
+                if (activePanel === 'studio') { setActivePanel(null); return; }
+                setStudioDeck('look');
+                setActivePanel('studio');
+              }}
+              ariaLabel="Toggle controls panel"
+              active={activePanel === 'studio'}
             >
               CONTROLS
-            </button>
-            <button
-              onClick={() => setShowPotentialBrowser(true)}
-              aria-label="Browse gallery and atoms"
-              style={{ minHeight: 36, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 10, padding: '0 10px', touchAction: 'manipulation' }}
+            </MobileTabButton>
+            <MobileTabButton
+              onClick={() => { setActivePanel(null); setShowPotentialBrowser(true); }}
+              ariaLabel="Browse gallery and atoms"
+              active={false}
             >
               ATOMS
-            </button>
-            <button
-              onClick={() => setActivePanel('search')}
-              aria-label="Open search and curation panel"
-              style={{ minHeight: 36, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 10, padding: '0 10px', touchAction: 'manipulation' }}
+            </MobileTabButton>
+            <MobileTabButton
+              onClick={() => setActivePanel(activePanel === 'search' ? null : 'search')}
+              ariaLabel="Toggle search and curation panel"
+              active={activePanel === 'search'}
             >
               SEARCH
-            </button>
-          </div>
+            </MobileTabButton>
+          </nav>
         )}
 
-        {/* Mobile: legacy bottom sheet */}
+        {/* Mobile: dimming scrim behind the bottom sheet. Tapping the dimmed
+            scene closes the panel — a familiar bottom-sheet gesture. */}
+        {activePanel && file && isMobile && (
+          <div
+            aria-hidden="true"
+            onClick={() => setActivePanel(null)}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(2,4,10,0.42)',
+              zIndex: 90,
+              animation: 'fadeIn 200ms ease-out',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          />
+        )}
+
+        {/* Mobile: bottom sheet — docks above the persistent tab bar */}
         {activePanel && file && isMobile && (
           <div style={{
             position: 'absolute',
             top: 'auto',
-            right: 0,
-            bottom: 0,
-            left: 0,
-            width: '100%',
+            right: 8,
+            bottom: mobileSheetBottom,
+            left: 8,
+            width: 'auto',
             height: activeMobilePanelHeight,
             maxHeight: activeMobilePanelHeight,
             boxSizing: 'border-box',
-            borderTop: '1px solid var(--border-subtle)',
-            borderTopLeftRadius: 14,
-            borderTopRightRadius: 14,
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 18,
             background: 'var(--bg-glass)',
-            backdropFilter: 'blur(18px)',
-            WebkitBackdropFilter: 'blur(18px)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
             display: 'flex',
             flexDirection: 'column',
             overflowY: activePanel === 'export' || activePanel === 'studio' ? 'hidden' : 'auto',
-            paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
-            paddingTop: 4,
-            boxShadow: '0 -18px 48px rgba(0,0,0,0.45)',
+            paddingBottom: 8,
+            paddingTop: 6,
+            boxShadow: '0 -2px 0 rgba(255,255,255,0.05) inset, 0 24px 64px rgba(0,0,0,0.55)',
             zIndex: 100,
+            animation: 'slideInUp 240ms cubic-bezier(0.22, 1, 0.36, 1)',
             WebkitOverflowScrolling: 'touch',
           }}>
             {/* Drag handle + close */}
             <div
               role="presentation"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px 6px', position: 'relative' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 12px 8px', position: 'relative' }}
             >
               <div
                 aria-hidden="true"
-                style={{ width: 42, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.2)' }}
+                style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.28)' }}
               />
               <button
                 onClick={() => setActivePanel(null)}
-                style={{ position: 'absolute', right: 12, background: 'transparent', border: 'none', color: '#aaa', fontSize: 16, lineHeight: 1, padding: 8, minWidth: 36, minHeight: 36 }}
+                style={{ position: 'absolute', right: 10, top: 0, background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: 16, lineHeight: 1, padding: 8, minWidth: 40, minHeight: 40, touchAction: 'manipulation' }}
                 aria-label="Close panel"
               >
                 ✕
@@ -2065,16 +2113,18 @@ export default function App() {
       {/* ─── Timeline ─── */}
       {file && totalFrames > 1 && (
         <div style={{
-          height: 60, flexShrink: 0,
-          display: 'flex', alignItems: 'center', gap: 16,
-          padding: isMobile ? '0 12px 48px' : '0 20px',
+          height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16,
+          padding: isMobile ? '8px 12px calc(env(safe-area-inset-bottom) + 8px)' : '0 20px',
           borderTop: '1px solid #1f2937',
-          background: '#0a0a0c',
+          background: 'rgba(10,10,12,0.96)',
           overflowX: 'auto',
+          position: 'relative',
+          zIndex: 120,
           scrollbarWidth: 'none',
         }}>
           {/* Transport controls */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
             <TransportButton
               onClick={() => useStore.getState().setFrame(0)}
               title="First frame"
@@ -2120,7 +2170,8 @@ export default function App() {
             fontSize: '11px',
             fontFamily: 'var(--font-mono)',
             color: '#64748b',
-            minWidth: 90,
+            minWidth: isMobile ? 58 : 90,
+            flexShrink: 0,
             textAlign: 'right',
             fontVariantNumeric: 'tabular-nums',
           }}>
@@ -2129,20 +2180,20 @@ export default function App() {
           </div>
 
           {/* Speed selector */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
             {[0.25, 0.5, 1, 2, 4].map(speed => (
               <button
                 key={speed}
                 onClick={() => useStore.getState().setPlaybackSpeed(speed)}
                 style={{
-                  padding: '6px 8px',
-                  minWidth: 36,
+                  padding: isMobile ? '7px 7px' : '6px 8px',
+                  minWidth: isMobile ? 34 : 36,
                   fontSize: '10px',
                   fontFamily: 'var(--font-mono)',
                   fontWeight: playbackSpeed === speed ? 600 : 400,
-                  color: playbackSpeed === speed ? '#0a0a0c' : '#64748b',
-                  background: playbackSpeed === speed ? '#f59e0b' : '#121418',
-                  border: `1px solid ${playbackSpeed === speed ? '#f59e0b' : '#334155'}`,
+                  color: playbackSpeed === speed ? '#031314' : '#94a3b8',
+                  background: playbackSpeed === speed ? '#1edce0' : '#121418',
+                  border: `1px solid ${playbackSpeed === speed ? '#1edce0' : '#334155'}`,
                   borderRadius: 0,
                   cursor: 'pointer',
                   transition: 'all 100ms ease-out',

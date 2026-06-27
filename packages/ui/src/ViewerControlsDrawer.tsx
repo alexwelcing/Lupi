@@ -46,30 +46,19 @@ export function ViewerControlsDrawer({
         <div style={{
           flexShrink: 0,
           display: 'grid',
-          gap: 10,
-          padding: '12px 12px 10px',
-          borderBottom: '1px solid rgba(255,255,255,0.09)',
-          background: 'linear-gradient(180deg, rgba(15,23,42,0.84), rgba(7,12,22,0.42))',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+          gap: 7,
+          padding: '2px 4px 8px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          background: 'transparent',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span style={{ color: '#1edce0', display: 'flex', flexShrink: 0 }}><IconControls /></span>
+              <span style={{ color: 'rgba(30,220,224,0.82)', display: 'flex', flexShrink: 0, transform: 'scale(0.9)' }}><IconControls /></span>
               <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 820, letterSpacing: 0, lineHeight: 1.1 }}>Controls</span>
-                <span style={{ color: 'rgba(203,213,225,0.52)', fontSize: 10, fontWeight: 720, lineHeight: 1.1, textTransform: 'uppercase' }}>{activeLabel}</span>
+                <span style={{ color: 'var(--text-primary)', fontSize: 12, fontWeight: 820, letterSpacing: 0, lineHeight: 1 }}>Controls</span>
               </span>
             </div>
-            <button
-              type="button"
-              aria-label="Close controls"
-              title="Close"
-              onClick={onClose}
-              className="lupine-icon-btn"
-              style={{ width: 44, height: 44, minWidth: 44, minHeight: 44, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <IconClose />
-            </button>
+            <span style={{ color: 'rgba(30,220,224,0.86)', fontSize: 10, fontWeight: 760, letterSpacing: 0.4, textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>{activeLabel}</span>
           </div>
           <ModeTabs activeMode={activeMode} onModeChange={onModeChange} />
         </div>
@@ -110,11 +99,11 @@ function ModeTabs({ activeMode, onModeChange }: { activeMode: ViewerControlMode;
       style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-        gap: 6,
+        gap: 5,
         padding: 4,
         border: '1px solid rgba(255,255,255,0.07)',
-        borderRadius: 8,
-        background: 'rgba(2,6,23,0.44)',
+        borderRadius: 9,
+        background: 'rgba(2,6,23,0.5)',
       }}
     >
       <ControlModeTab icon={<IconLook />} label="Look" active={activeMode === 'look'} onClick={() => onModeChange('look')} />
@@ -163,7 +152,7 @@ function ControlModeTab({
         lineHeight: 1,
         letterSpacing: 0,
         borderRadius: 7,
-        boxShadow: active ? undefined : 'none',
+        boxShadow: active ? '0 0 0 1px rgba(30,220,224,0.28), 0 0 14px rgba(30,220,224,0.16)' : 'none',
         touchAction: 'manipulation',
       }}
     >
@@ -172,7 +161,7 @@ function ControlModeTab({
         width: 18,
         height: 18,
         flexShrink: 0,
-        color: active ? '#1edce0' : 'rgba(226,232,240,0.68)',
+        color: active ? '#1edce0' : 'rgba(226,232,240,0.78)',
       }}>{icon}</span>
       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
     </button>
@@ -240,10 +229,4 @@ const IconExport = () => (
     <path d="M15.4 6.6h2.5v2.5" />
     <path d="m17.9 6.6-4.2 4.2" />
   </LupiGlyph>
-);
-
-const IconClose = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M18 6 6 18M6 6l12 12" />
-  </svg>
 );
