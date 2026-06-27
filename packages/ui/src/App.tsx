@@ -49,13 +49,7 @@ import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/use
 import { SimulationCell } from '@atlas/scene/SimulationCell';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { getBackgroundFromColormap } from '@atlas/scene';
-import { FigureExportPanel } from './panels/FigureExportPanel';
-import { FlythroughPanel } from './panels/FlythroughPanel';
-import { TelemetryPanel } from './panels/TelemetryPanel';
-import { SearchPanel } from './panels/SearchPanel';
 import { PotentialBrowser } from './panels/PotentialBrowser';
-import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
-import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
 import { MlipFlywheelPage } from './MlipFlywheelPage';
 import { GhostAtoms } from './GhostAtoms';
 import { AtomPicker } from '@atlas/scene/AtomPicker';
@@ -79,7 +73,8 @@ import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
 import { detectRenderCapability } from './renderCapability';
 import { MoleculeFilterShell } from './MoleculeFilterShell';
 import { PanelHost } from './PanelHost';
-import { ViewerControlsDrawer, type ViewerControlMode } from './ViewerControlsDrawer';
+import { type ViewerControlMode } from './ViewerControlsDrawer';
+import { ViewerPanelBody } from './ViewerPanelBody';
 import { StudyLensPanel } from './StudyLensPanel';
 import {
   useViewerBackgroundState,
@@ -989,9 +984,16 @@ export default function App() {
         setShowPotentialBrowser(false);
       }
       if (e.key === 'v' && !e.metaKey && !e.ctrlKey) {
-        setActivePanel(null);
+        // Toggle the Controls panel. setActivePanel is the store's toggling
+        // setter, so passing 'studio' opens it (or closes it if already open).
+        // Seed studioDeck so the studio invariant holds on the way in — every
+        // other entry point keeps activePanel='studio' and studioDeck in sync,
+        // and this used to break that by nulling activePanel while setting the
+        // deck, which left the panel unrenderable on both desktop and mobile.
         setShowPotentialBrowser(false);
-        setStudioDeck(current => current === 'look' ? null : 'look');
+        setViewMenuOpen(false);
+        setStudioDeck(current => current ?? 'look');
+        setActivePanel('studio');
       }
       if (e.key === 'x' && !e.metaKey && !e.ctrlKey) {
         setStudioDeck(null);
@@ -2057,26 +2059,13 @@ export default function App() {
               </button>
             </div>
             <ErrorBoundary>
-              {activePanel === 'studio' && (
-                <ViewerControlsDrawer
-                  activeMode={studioDeck ?? 'look'}
-                  onModeChange={openStudioDeck}
-                  onClose={() => setActivePanel(null)}
-                  showChrome
-                />
-              )}
-              {activePanel === 'export' && <FigureExportPanel />}
-              {activePanel === 'flythrough' && <FlythroughPanel />}
-              {activePanel === 'telemetry' && (
-                <TelemetryPanel
-                  thermo={file?.thermo ?? null}
-                  currentFrame={currentFrame}
-                  totalFrames={totalFrames}
-                />
-              )}
-              {activePanel === 'equilibrium' && <EquilibriumSolveWorkbench />}
-              {activePanel === 'mlipLongRun' && <MlipLongRunWorkbench />}
-              {activePanel === 'search' && <SearchPanel />}
+              <ViewerPanelBody
+                activePanel={activePanel}
+                studioDeck={studioDeck}
+                onModeChange={openStudioDeck}
+                onClose={() => setActivePanel(null)}
+                showChrome
+              />
             </ErrorBoundary>
           </div>
         )}

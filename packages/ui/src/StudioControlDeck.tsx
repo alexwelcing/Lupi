@@ -44,7 +44,15 @@ const PALETTE_OPTIONS: Array<{ id: ColormapName; label: string; accent: string }
   { id: 'grayscale', label: 'Gray', accent: '#cbd5e1' },
 ];
 
-const ATOM_COLOR_SCHEMES = SCHEME_ORDER.filter(scheme => scheme !== 'botanical');
+// Per-scheme accent for the scheme picker chips. One map instead of an inline
+// ternary so adding a scheme is a one-line change.
+const SCHEME_ACCENTS: Record<ColorSchemeId, string> = {
+  element: '#1edce0',
+  property: '#1edce0',
+  family: '#1edce0',
+  botanical: '#69f0ae',
+  uniform: '#f59e0b',
+};
 
 const COLORMAP_PREVIEWS: Partial<Record<ColormapName, string>> = {
   viridis: 'linear-gradient(90deg, #440154, #21918c, #fde725)',
@@ -256,13 +264,6 @@ export function StudioControlDeck({
   const activeElementHasOverride = activeElement
     ? Boolean(elementColorOverrides[activeElement.atomicNumber])
     : false;
-  const atomColorSchemes = useMemo(
-    () => colorScheme === 'botanical'
-      ? [...ATOM_COLOR_SCHEMES, 'botanical' as ColorSchemeId]
-      : ATOM_COLOR_SCHEMES,
-    [colorScheme],
-  );
-
   useEffect(() => {
     if (presentElements.length === 0) {
       if (selectedAtomicNumber !== null) setSelectedAtomicNumber(null);
@@ -554,44 +555,38 @@ export function StudioControlDeck({
               </button>
             </ControlGroup>
 
-            <ControlGroup title="Atoms">
+            {/* Color — one group. Pick a scheme, then tune the single control
+                that scheme actually uses. The scheme decides everything else
+                (atom color mode + palette source) via setColorScheme, so there
+                is no second "Elements/Color/Palette" group to keep in sync and
+                no colormap rail shown for schemes that ignore the colormap. */}
+            <ControlGroup title="Color">
               <div className="lupi-studio-segments">
-                {atomColorSchemes.map(schemeId => {
+                {SCHEME_ORDER.map(schemeId => {
                   const scheme = COLOR_SCHEMES[schemeId];
                   return (
                     <SegmentButton
                       key={scheme.id}
                       label={scheme.label}
                       active={colorScheme === scheme.id}
-                      accent={scheme.id === 'botanical' ? '#69f0ae' : scheme.id === 'uniform' ? '#f59e0b' : '#1edce0'}
-                      onClick={() => applyColorScheme(scheme.id as ColorSchemeId)}
+                      accent={SCHEME_ACCENTS[scheme.id]}
+                      onClick={() => applyColorScheme(scheme.id)}
                     />
                   );
                 })}
               </div>
-              {colorScheme === 'property' && availableProperties.length > 0 && (
-                <CompactSelect
-                  label="Property"
-                  value={colorProperty ?? ''}
-                  onChange={(value) => {
-                    setColorProperty(value || null);
-                    if (value) setColorScheme('property');
-                  }}
-                  options={availableProperties.slice(0, 12).map(property => ({ value: property, label: property }))}
-                  placeholder="Property"
-                />
-              )}
-            </ControlGroup>
 
-            <ControlGroup title={colorScheme === 'element' ? 'Elements' : colorScheme === 'uniform' ? 'Color' : 'Palette'}>
+              <p style={schemeHintStyle}>{COLOR_SCHEMES[colorScheme].tagline}</p>
+
               {colorScheme === 'uniform' && (
                 <ColorPicker
                   label="Uniform"
                   value={uniformAtomColor}
-                  active={colorScheme === 'uniform'}
+                  active
                   onChange={applyUniformAtomColor}
                 />
               )}
+
               {colorScheme === 'element' && activeElement && (
                 <ElementColorPicker
                   active={colorScheme === 'element' || activeElementHasOverride}
@@ -610,7 +605,25 @@ export function StudioControlDeck({
                   }}
                 />
               )}
-              {(colorScheme === 'property' || colorScheme === 'family' || colorScheme === 'botanical') && (
+
+              {colorScheme === 'property' && (
+                availableProperties.length > 0 ? (
+                  <CompactSelect
+                    label="Property"
+                    value={colorProperty ?? ''}
+                    onChange={(value) => {
+                      setColorProperty(value || null);
+                      if (value) setColorScheme('property');
+                    }}
+                    options={availableProperties.slice(0, 12).map(property => ({ value: property, label: property }))}
+                    placeholder="Property"
+                  />
+                ) : (
+                  <p style={schemeHintStyle}>No per-atom properties in this dataset.</p>
+                )
+              )}
+
+              {(colorScheme === 'property' || colorScheme === 'family') && (
                 <div style={paletteRailStyle}>
                   {PALETTE_OPTIONS.map(option => (
                     <SwatchButton
@@ -1776,4 +1789,12 @@ const paletteRailStyle: CSSProperties = {
   flexWrap: 'wrap',
   gap: 4,
   minWidth: 0,
+};
+
+const schemeHintStyle: CSSProperties = {
+  margin: 0,
+  color: 'rgba(203,213,225,0.62)',
+  fontSize: 10,
+  lineHeight: 1.35,
+  fontWeight: 600,
 };

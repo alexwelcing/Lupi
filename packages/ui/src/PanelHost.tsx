@@ -4,16 +4,14 @@
  * On desktop this replaces the fixed right-side sheet with a floating,
  * draggable, resizable, snap-to-edge palette. On mobile the caller still
  * renders the bottom sheet; this component renders nothing when invisible.
+ *
+ * The panel body itself is shared with the mobile sheet via ViewerPanelBody —
+ * this component only owns the desktop dock chrome (title, size, position).
  */
 import { useStore, type AppState } from './store';
 import { DockableWindow } from './DockableWindow';
-import { ViewerControlsDrawer, type ViewerControlMode } from './ViewerControlsDrawer';
-import { FigureExportPanel } from './panels/FigureExportPanel';
-import { FlythroughPanel } from './panels/FlythroughPanel';
-import { TelemetryPanel } from './panels/TelemetryPanel';
-import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
-import { SearchPanel } from './panels/SearchPanel';
-import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
+import { type ViewerControlMode } from './ViewerControlsDrawer';
+import { ViewerPanelBody } from './ViewerPanelBody';
 
 interface PanelHostProps {
   activePanel: AppState['activePanel'];
@@ -44,9 +42,6 @@ const INITIALS: Record<NonNullable<PanelHostProps['activePanel']>, { x?: number;
 
 export function PanelHost({ activePanel, studioDeck, onOpenStudioDeck, onClose }: PanelHostProps) {
   const file = useStore(s => s.file);
-  const frame = useStore(s => s.frame);
-  const currentFrame = file ? file.trajectory.frames[frame] : null;
-  const totalFrames = file?.trajectory.totalFrames ?? 0;
 
   if (!activePanel || !file) return null;
 
@@ -59,26 +54,13 @@ export function PanelHost({ activePanel, studioDeck, onOpenStudioDeck, onClose }
       minW={320}
       minH={240}
     >
-      {activePanel === 'studio' && (
-        <ViewerControlsDrawer
-          activeMode={studioDeck ?? 'look'}
-          onModeChange={onOpenStudioDeck}
-          onClose={onClose}
-          showChrome={false}
-        />
-      )}
-      {activePanel === 'export' && <FigureExportPanel showCloseButton={false} />}
-      {activePanel === 'flythrough' && <FlythroughPanel />}
-      {activePanel === 'telemetry' && (
-        <TelemetryPanel
-          thermo={file?.thermo ?? null}
-          currentFrame={currentFrame ?? undefined}
-          totalFrames={totalFrames}
-        />
-      )}
-      {activePanel === 'equilibrium' && <EquilibriumSolveWorkbench />}
-      {activePanel === 'mlipLongRun' && <MlipLongRunWorkbench />}
-      {activePanel === 'search' && <SearchPanel />}
+      <ViewerPanelBody
+        activePanel={activePanel}
+        studioDeck={studioDeck}
+        onModeChange={onOpenStudioDeck}
+        onClose={onClose}
+        showChrome={false}
+      />
     </DockableWindow>
   );
 }
