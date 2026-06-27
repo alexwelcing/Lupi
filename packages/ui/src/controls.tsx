@@ -110,12 +110,8 @@ export function ToolButton({ icon, label, active, onClick }: ToolButtonProps) {
   const press = usePressSpring();
   return (
     <button
-      ref={press.ref}
+      {...press}
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       title={label}
       aria-label={label}
       aria-pressed={active}
@@ -170,12 +166,8 @@ export function CameraPresetButton({ label, active, onClick, title }: CameraPres
   const press = usePressSpring();
   return (
     <button
-      ref={press.ref}
+      {...press}
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       title={title}
       aria-pressed={active}
       className={`lupine-btn compact icon-only ${active ? 'active' : ''}`}
@@ -207,12 +199,8 @@ export function TransportButton({ onClick, title, icon, active = false, width = 
   const press = usePressSpring({ pressedScale: 0.9 });
   return (
     <button
-      ref={press.ref}
+      {...press}
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       title={title}
       aria-label={title}
       aria-pressed={active}
@@ -243,12 +231,8 @@ export function MobileTabButton({ onClick, ariaLabel, active, wide = false, chil
   const press = usePressSpring({ pressedScale: 0.92, sound: false });
   return (
     <button
-      ref={press.ref}
+      {...press}
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       aria-label={ariaLabel}
       aria-pressed={active}
       style={{

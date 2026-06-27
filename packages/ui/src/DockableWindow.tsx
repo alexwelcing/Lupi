@@ -270,13 +270,9 @@ function WinBtn({ icon, title, onClick }: { icon: ReactNode; title: string; onCl
   return (
     <button
       type="button"
-      ref={press.ref}
+      {...press}
       data-no-drag="1"
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       aria-label={title}
       title={title}
       className="lupine-icon-btn"

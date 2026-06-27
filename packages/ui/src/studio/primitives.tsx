@@ -117,13 +117,9 @@ export function SegmentButton({
 
   return (
     <button
-      ref={press.ref}
+      {...press}
       type="button"
       onClick={handleClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       title={label}
       aria-label={meta ? `${label} ${meta}` : label}
       aria-pressed={active}
@@ -570,15 +566,11 @@ export function SwatchButton({
   const press = usePressSpring({ pressedScale: 0.92, sound: false });
   return (
     <button
-      ref={press.ref}
+      {...press}
       type="button"
       aria-label={label}
       title={label}
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       style={{
         height: 25,
         flex: '1 1 24px',

@@ -125,16 +125,12 @@ function ControlModeTab({
   const press = usePressSpring({ pressedScale: 0.96, sound: false });
   return (
     <button
-      ref={press.ref}
+      {...press}
       type="button"
       aria-label={label}
       aria-pressed={active}
       title={label}
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       className={`lupine-btn ${active ? 'active' : ''}`}
       style={{
         minWidth: 0,
