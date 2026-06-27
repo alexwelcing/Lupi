@@ -1160,7 +1160,11 @@ export default function App() {
   );
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
   const mobilePanelHeight = 'clamp(240px, 34dvh, 320px)';
-  const activeMobilePanelHeight = activePanel === 'studio' ? 'clamp(340px, 54dvh, 520px)' : mobilePanelHeight;
+  // Content-heavy editors (studio controls, the flythrough sequencer, the export
+  // surface) get a taller sheet so they're usable on a phone; quick panels stay
+  // compact.
+  const tallMobilePanel = activePanel === 'studio' || activePanel === 'flythrough' || activePanel === 'export';
+  const activeMobilePanelHeight = tallMobilePanel ? 'clamp(340px, 54dvh, 520px)' : mobilePanelHeight;
   const mobileLoadedHeader = isMobile && !!file;
   const headerHeight = isMobile
     ? `calc(${mobileLoadedHeader ? '64px' : '48px'} + env(safe-area-inset-top))`
