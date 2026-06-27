@@ -285,7 +285,7 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
     showAxes: false,
     backgroundPreset: 'blueprint',
     postprocessPreset: 'diagram',
-    colorScheme: 'family',
+    colorScheme: 'colorway',
     cameraPreset: 'iso',
   }));
 

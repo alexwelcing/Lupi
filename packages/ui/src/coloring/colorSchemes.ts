@@ -13,7 +13,7 @@
 
 import type { ColorMode } from '@atlas/core/types';
 
-export type ColorSchemeId = 'element' | 'property' | 'family' | 'uniform';
+export type ColorSchemeId = 'element' | 'colorway' | 'property' | 'uniform';
 
 /**
  * The source of per-atom color when atom color mode is 'type'. Determines
@@ -46,19 +46,19 @@ export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
     atomColorMode: 'type',
     atomColorSource: 'element',
   },
+  colorway: {
+    id: 'colorway',
+    label: 'Colorway',
+    tagline: 'Spread a colorway across the atoms — one hue per element.',
+    atomColorMode: 'type',
+    atomColorSource: 'colormap',
+  },
   property: {
     id: 'property',
     label: 'Property',
-    tagline: 'Colormap of a loaded per-atom source scalar.',
+    tagline: 'Map the colorway onto a loaded per-atom scalar.',
     atomColorMode: 'property',
     atomColorSource: 'colormap', // property mode reads from uColormap, not uPalette
-  },
-  family: {
-    id: 'family',
-    label: 'Family',
-    tagline: 'Colormap by type rank. Generic, abstract, ordering-friendly.',
-    atomColorMode: 'type',
-    atomColorSource: 'colormap',
   },
   uniform: {
     id: 'uniform',
@@ -69,15 +69,15 @@ export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
   },
 };
 
-export const SCHEME_ORDER: ColorSchemeId[] = ['element', 'property', 'family', 'uniform'];
+export const SCHEME_ORDER: ColorSchemeId[] = ['element', 'colorway', 'property', 'uniform'];
 
 /**
  * Pick the default scheme for a freshly-loaded file. Property data is often
  * diagnostic, but the viewer's first read should be molecular identity.
- * Users can still switch to Property explicitly from Molecule Color.
+ * Users can still switch to Colorway or Property explicitly from Molecule Color.
  *
  *   - Element is the default for all molecular loads.
- *   - Property, Family, and Uniform are opt-in looks.
+ *   - Colorway, Property, and Uniform are opt-in looks.
  */
 export function pickInitialScheme(_opts: {
   hasProperty: boolean;

@@ -261,7 +261,7 @@ const DEFAULT_COMMAND = [
         showAxes: true,
         backgroundPreset: 'manifold-field',
         postprocessPreset: 'diagram',
-        colorScheme: 'family',
+        colorScheme: 'colorway',
         colormap: 'turbo',
         cameraPreset: 'iso',
       },
@@ -308,7 +308,7 @@ const MCP_VIEWER_EXAMPLES: Array<{
           showAxes: true,
           backgroundPreset: 'blueprint',
           postprocessPreset: 'diagram',
-          colorScheme: 'family',
+          colorScheme: 'colorway',
           colormap: 'cividis',
           cameraPreset: 'iso',
         },
@@ -360,7 +360,7 @@ const MCP_VIEWER_EXAMPLES: Array<{
           showAxes: false,
           backgroundPreset: 'bioluminescent',
           postprocessPreset: 'studio',
-          colorScheme: 'family',
+          colorScheme: 'colorway',
           cameraPreset: 'iso',
         },
       },
@@ -370,7 +370,7 @@ const MCP_VIEWER_EXAMPLES: Array<{
     id: 'url-scale',
     label: 'URL: 500k scale',
     summary: 'Equivalent agent bootstrap URL: ?mcp=1&atomCount=500000...',
-    command: 'http://127.0.0.1:5177/?mcp=1&atomCount=500000&elements=Co,Cr,Fe,Mn,Ni&lattice=fcc&bonds=off&atomScale=0.28&background=manifold-field&postprocess=diagram&colorScheme=family&colormap=turbo&camera=iso#/mcp',
+    command: 'http://127.0.0.1:5177/?mcp=1&atomCount=500000&elements=Co,Cr,Fe,Mn,Ni&lattice=fcc&bonds=off&atomScale=0.28&background=manifold-field&postprocess=diagram&colorScheme=colorway&colormap=turbo&camera=iso#/mcp',
   },
   {
     id: 'export-xyz',
@@ -390,7 +390,7 @@ const MCP_HARNESS_PANELS: Array<{ id: McpHarnessPanel; label: string }> = [
   { id: 'response', label: 'Log' },
 ];
 
-const DEFAULT_AGENT_COMMAND = 'generate 250k copper fcc atoms, hide bonds, show cell, diagram look, family color, camera iso';
+const DEFAULT_AGENT_COMMAND = 'generate 250k copper fcc atoms, hide bonds, show cell, diagram look, colorway color, camera iso';
 const CATALOG_QUICK_FILTERS = ['Cu', 'Fe', 'Ni', 'Al', 'Si', 'C', 'W', 'Co'];
 
 const MCP_TOOL_CAPABILITIES = [
@@ -1938,7 +1938,7 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\bcinematic\b/.test(normalized)) patch.postprocessPreset = 'cinematic';
   if (/\bdiagram\b/.test(normalized)) patch.postprocessPreset = 'diagram';
   if (/\bproperty\b/.test(normalized)) patch.colorScheme = 'property';
-  if (/\bfamily\b/.test(normalized)) patch.colorScheme = 'family';
+  if (/\bcolorway\b/.test(normalized) || /\bfamily\b/.test(normalized)) patch.colorScheme = 'colorway';
   if (/\belement\b/.test(normalized)) patch.colorScheme = 'element';
   if (/\buniform\b/.test(normalized)) patch.colorScheme = 'uniform';
 
@@ -2390,7 +2390,7 @@ function catalogEntryToGenerateArgs(entry: NistCatalogEntry): Record<string, unk
       showAxes: true,
       backgroundPreset: 'blueprint',
       postprocessPreset: 'diagram',
-      colorScheme: entry.elements.length > 1 ? 'family' : 'element',
+      colorScheme: entry.elements.length > 1 ? 'colorway' : 'element',
       colormap: 'turbo',
       cameraPreset: 'iso',
     },

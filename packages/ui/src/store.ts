@@ -113,10 +113,12 @@ function sanitizeColorMode(value: unknown, fallback: ColorMode): ColorMode {
 }
 
 function resolveUrlColorScheme(value: unknown, delta: Record<string, unknown>): ColorSchemeId {
+  // Back-compat: 'family' was the prior id for the Colorway scheme.
+  if (value === 'family') return 'colorway';
   if (typeof value === 'string' && value in COLOR_SCHEMES) return value as ColorSchemeId;
   if (delta.cm === 'property') return 'property';
   if (delta.cm === 'uniform') return 'uniform';
-  if (delta.acs === 'colormap' || typeof delta.cmap === 'string') return 'family';
+  if (delta.acs === 'colormap' || typeof delta.cmap === 'string') return 'colorway';
   return 'element';
 }
 

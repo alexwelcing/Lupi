@@ -44,8 +44,8 @@ const PALETTE_OPTIONS: Array<{ id: ColormapName; label: string; accent: string }
 // ternary so adding a scheme is a one-line change.
 const SCHEME_ACCENTS: Record<ColorSchemeId, string> = {
   element: '#1edce0',
+  colorway: '#1edce0',
   property: '#1edce0',
-  family: '#1edce0',
   uniform: '#f59e0b',
 };
 
@@ -176,7 +176,7 @@ export function MoleculeControls() {
   const applyColormap = (map: ColormapName) => {
     setColormap(map);
     if (colorScheme !== 'property') {
-      setColorScheme('family');
+      setColorScheme('colorway');
     }
   };
 
@@ -276,17 +276,22 @@ export function MoleculeControls() {
           )
         )}
 
-        {(colorScheme === 'property' || colorScheme === 'family') && (
-          <div style={paletteRailStyle}>
-            {PALETTE_OPTIONS.map(option => (
-              <SwatchButton
-                key={option.id}
-                label={option.label}
-                active={colormap === option.id}
-                background={COLORMAP_PREVIEWS[option.id] ?? option.accent}
-                onClick={() => applyColormap(option.id)}
-              />
-            ))}
+        {(colorScheme === 'colorway' || colorScheme === 'property') && (
+          <div style={{ display: 'grid', gap: 5 }}>
+            <span style={{ color: '#94a3b8', fontSize: 10, fontWeight: 820, textTransform: 'uppercase', lineHeight: 1 }}>
+              Colorway
+            </span>
+            <div style={paletteRailStyle}>
+              {PALETTE_OPTIONS.map(option => (
+                <SwatchButton
+                  key={option.id}
+                  label={option.label}
+                  active={colormap === option.id}
+                  background={COLORMAP_PREVIEWS[option.id] ?? option.accent}
+                  onClick={() => applyColormap(option.id)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </ControlGroup>

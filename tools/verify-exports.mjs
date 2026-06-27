@@ -53,7 +53,7 @@ const MOLECULES = [
 // atomScale changes sphere radii, colorScheme changes materials.
 const VIEWS = [
   { name: 'atoms', state: { bondTolerance: 0, atomScale: 1.0, colorScheme: 'element' } },
-  { name: 'bonded', state: { bondTolerance: 0.8, atomScale: 0.6, colorScheme: 'family' } },
+  { name: 'bonded', state: { bondTolerance: 0.8, atomScale: 0.6, colorScheme: 'colorway' } },
 ];
 
 const FORMATS = [

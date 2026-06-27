@@ -95,10 +95,10 @@ describe('Store — Color & Visuals', () => {
   });
 
   it('color scheme drives the atom color source', () => {
-    getStoreState().setColorScheme('family');
+    getStoreState().setColorScheme('colorway');
 
     const s = getStoreState();
-    expect(s.colorScheme).toBe('family');
+    expect(s.colorScheme).toBe('colorway');
     expect(s.atomColorSource).toBe('colormap');
   });
 
@@ -231,10 +231,16 @@ describe('Store — URL Serialization', () => {
     }));
 
     restored = getStoreState();
-    expect(restored.colorScheme).toBe('family');
+    expect(restored.colorScheme).toBe('colorway');
     expect(restored.atomColorSource).toBe('colormap');
     expect(restored.colorMode).toBe('type');
     expect(restored.colormap).toBe('plasma');
+  });
+
+  it('migrates the legacy "family" color scheme id to "colorway"', () => {
+    resetStore();
+    getStoreState().decodeFromURL(encodeStateDelta({ cs: 'family' }));
+    expect(getStoreState().colorScheme).toBe('colorway');
   });
 });
 
