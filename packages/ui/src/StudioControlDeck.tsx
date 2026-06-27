@@ -17,7 +17,7 @@ import {
 } from './backgroundPresets';
 import { getBackdropRadiusLimit } from './viewer/useViewerSceneModel';
 
-export type StudioDeckMode = 'look' | 'surface' | 'world';
+export type StudioDeckMode = 'molecule' | 'scene';
 
 const LOOK_OPTIONS = [
   { id: 'paper', label: 'Paper', code: 'FIG', accent: '#e5e7eb' },
@@ -157,14 +157,9 @@ export function StudioControlDeck({
   const setAtomTexture = useStore(s => s.setAtomTexture);
   const atomScale = useStore(s => s.atomScale);
   const setAtomScale = useStore(s => s.setAtomScale);
-  const materialIntensity = useStore(s => s.materialIntensity);
+  // setMaterialIntensity is still applied by recipes; the standalone Mix/Rough/
+  // Polish/Coat sliders were retired in favor of recipe presets.
   const setMaterialIntensity = useStore(s => s.setMaterialIntensity);
-  const surfaceRoughness = useStore(s => s.surfaceRoughness);
-  const setSurfaceRoughness = useStore(s => s.setSurfaceRoughness);
-  const surfacePolish = useStore(s => s.surfacePolish);
-  const setSurfacePolish = useStore(s => s.setSurfacePolish);
-  const surfaceClearcoat = useStore(s => s.surfaceClearcoat);
-  const setSurfaceClearcoat = useStore(s => s.setSurfaceClearcoat);
   const showBonds = useStore(s => s.showBonds);
   const toggleBonds = useStore(s => s.toggleBonds);
   const bondTolerance = useStore(s => s.bondTolerance);
@@ -344,12 +339,11 @@ export function StudioControlDeck({
     shareTimerRef.current = window.setTimeout(() => setShareStatus('idle'), 1800);
   };
 
-  const title = mode === 'look' ? 'Look' : mode === 'surface' ? 'Surface' : 'World';
-  const subtitle = mode === 'look'
-    ? `${postprocessPreset} grade / ${colorScheme} color`
-    : mode === 'surface'
-      ? `${renderStyle} / ${materialScene}`
-      : backgroundPreset;
+  const activeRecipe = materialScenes.find(scene => scene.id === materialScene);
+  const title = mode === 'molecule' ? 'Molecule' : 'Scene';
+  const subtitle = mode === 'molecule'
+    ? `${postprocessPreset} grade · ${colorScheme} color`
+    : (activeBackgroundPreset?.label ?? backgroundPreset);
 
   return (
     <div
@@ -510,7 +504,7 @@ export function StudioControlDeck({
           )}
         </div>
 
-        {mode === 'look' && (
+        {mode === 'molecule' && (
           <div className="lupi-deck-grid">
             <ControlGroup title="Grade">
               <div className="lupi-studio-segments">
@@ -637,11 +631,7 @@ export function StudioControlDeck({
                 </div>
               )}
             </ControlGroup>
-          </div>
-        )}
 
-        {mode === 'surface' && (
-          <div className="lupi-deck-grid">
             <ControlGroup title="Shape">
               <div className="lupi-studio-segments">
                 {RENDER_OPTIONS.map(option => (
@@ -655,6 +645,13 @@ export function StudioControlDeck({
                   />
                 ))}
               </div>
+            </ControlGroup>
+
+            {/* Material is a single clear choice — pick a recipe, read what it
+                does. The recipe sets finish/lighting/texture together, so the
+                old Mix/Rough/Polish/Coat sliders are gone; only atom size (a
+                geometry control no recipe owns) stays exposed. */}
+            <ControlGroup title="Material">
               <CompactSelect
                 label="Recipe"
                 value={materialScene}
@@ -662,34 +659,30 @@ export function StudioControlDeck({
                   const scene = materialScenes.find(item => item.id === value);
                   if (scene) applyMoleculeRecipe(scene);
                 }}
-                options={materialScenes.map(scene => ({ value: scene.id, label: `${scene.label} / ${scene.materialPreset}` }))}
+                options={materialScenes.map(scene => ({ value: scene.id, label: scene.label }))}
               />
+              {activeRecipe && <p style={schemeHintStyle}>{activeRecipe.description}</p>}
+              <CompactSlider label="Atom size" value={atomScale} min={0.1} max={2} step={0.05} onChange={setAtomScale} format={value => value.toFixed(2)} />
             </ControlGroup>
 
-            <ControlGroup title="Material">
-              <div className="lupi-studio-slider-grid">
-                <CompactSlider label="Atom" value={atomScale} min={0.1} max={2} step={0.05} onChange={setAtomScale} format={value => value.toFixed(2)} />
-                <CompactSlider label="Mix" value={materialIntensity} min={0} max={1} step={0.02} onChange={setMaterialIntensity} />
-                <CompactSlider label="Rough" value={surfaceRoughness} min={-1} max={1} step={0.02} onChange={setSurfaceRoughness} />
-                <CompactSlider label="Polish" value={surfacePolish} min={-1} max={1} step={0.02} onChange={setSurfacePolish} />
-                <CompactSlider label="Coat" value={surfaceClearcoat} min={0} max={1} step={0.02} onChange={setSurfaceClearcoat} />
-              </div>
-            </ControlGroup>
-
-            <ControlGroup title="Bond Guides">
+            <ControlGroup title="Bonds">
               <div className="lupi-studio-segments">
-                <SegmentButton label={showBonds ? 'Guides on' : 'Guides off'} active={showBonds} accent="#1edce0" onClick={toggleBonds} />
-                <SegmentButton label="Type" active={bondColorMode === 'type'} accent="#7de9ff" onClick={() => setBondColorMode('type')} />
-                <SegmentButton label="Length" active={bondColorMode === 'length'} accent="#f59e0b" onClick={() => setBondColorMode('length')} />
+                <SegmentButton label={showBonds ? 'Bonds on' : 'Bonds off'} active={showBonds} accent="#1edce0" onClick={toggleBonds} />
+                <SegmentButton label="By type" active={bondColorMode === 'type'} accent="#7de9ff" onClick={() => setBondColorMode('type')} />
+                <SegmentButton label="By length" active={bondColorMode === 'length'} accent="#f59e0b" onClick={() => setBondColorMode('length')} />
               </div>
               <CompactSlider label="Tolerance" value={bondTolerance} min={0} max={1.2} step={0.02} onChange={setBondTolerance} format={value => value.toFixed(2)} />
             </ControlGroup>
           </div>
         )}
 
-        {mode === 'world' && (
+        {mode === 'scene' && (
           <div className="lupi-deck-grid">
-            <ControlGroup title="World Library" wide>
+            {/* Easy path: pick a world, set how present it is, toggle framing
+                guides, control any motion loop. Everything finicky lives under
+                "Advanced" below so the common path stays clear. */}
+            <ControlGroup title="World" wide>
+              <p style={schemeHintStyle}>The space around your molecule — backdrop, lighting, and framing.</p>
               <WorldBackdropBrowser
                 value={backgroundPreset}
                 activePreset={activeBackgroundPresetWithId}
@@ -700,27 +693,9 @@ export function StudioControlDeck({
               />
             </ControlGroup>
 
-            <ControlGroup title="Asset">
+            <ControlGroup title="Adjust">
               <CompactSlider
-                label="Yaw"
-                value={backgroundYawDegrees}
-                min={-180}
-                max={180}
-                step={1}
-                onChange={setBackgroundYawDegrees}
-                format={value => `${Math.round(value)} deg`}
-              />
-              <CompactSlider
-                label="Pitch"
-                value={backgroundPitchDegrees}
-                min={-45}
-                max={45}
-                step={1}
-                onChange={setBackgroundPitchDegrees}
-                format={value => `${Math.round(value)} deg`}
-              />
-              <CompactSlider
-                label="Opacity"
+                label="Presence"
                 value={backgroundOpacity}
                 min={0.15}
                 max={1}
@@ -728,12 +703,8 @@ export function StudioControlDeck({
                 onChange={setBackgroundOpacity}
                 format={value => `${Math.round(value * 100)}%`}
               />
-              <SegmentButton label="Reset asset" active={false} accent="#94a3b8" onClick={resetBackgroundAdjustments} />
-            </ControlGroup>
-
-            <ControlGroup title="Grade">
               <CompactSlider
-                label="Bright"
+                label="Brightness"
                 value={backgroundBrightness}
                 min={0.35}
                 max={1.8}
@@ -741,134 +712,7 @@ export function StudioControlDeck({
                 onChange={setBackgroundBrightness}
                 format={value => value.toFixed(2)}
               />
-              <CompactSlider
-                label="Saturate"
-                value={backgroundSaturation}
-                min={0}
-                max={2}
-                step={0.01}
-                onChange={setBackgroundSaturation}
-                format={value => value.toFixed(2)}
-              />
-              <CompactSlider
-                label="Contrast"
-                value={backgroundContrast}
-                min={0.5}
-                max={1.8}
-                step={0.01}
-                onChange={setBackgroundContrast}
-                format={value => value.toFixed(2)}
-              />
-            </ControlGroup>
-
-            <ControlGroup title="Backdrop">
-              <div className="lupi-studio-segments">
-                {BACKDROP_SHAPES.map(option => (
-                  <SegmentButton
-                    key={option.id}
-                    label={option.label}
-                    meta={option.code}
-                    active={backgroundBackdropShape === option.id}
-                    accent={option.accent}
-                    onClick={() => setBackgroundBackdropShape(option.id)}
-                  />
-                ))}
-              </div>
-              <div className="lupi-studio-segments">
-                {BACKDROP_PATTERNS.map(option => (
-                  <SegmentButton
-                    key={option.id}
-                    label={option.label}
-                    meta={option.code}
-                    active={backgroundBackdropPattern === option.id}
-                    accent={option.accent}
-                    onClick={() => setBackgroundBackdropPattern(option.id)}
-                  />
-                ))}
-              </div>
-              {backgroundBackdropShape !== 'dome' && (
-                <CompactSlider
-                  label="Radius"
-                  value={safeBackgroundBackdropRadius}
-                  min={0.25}
-                  max={backgroundBackdropRadiusMax}
-                  step={0.05}
-                  onChange={setBackgroundBackdropRadius}
-                  format={value => value.toFixed(2)}
-                />
-              )}
-            </ControlGroup>
-
-            <ControlGroup title="Shell">
-              <div className="lupi-studio-segments">
-                {FILTER_SHELL_SHAPES.map(option => (
-                  <SegmentButton
-                    key={option.id}
-                    label={option.label}
-                    meta={option.code}
-                    active={filterShellShape === option.id}
-                    accent={option.accent}
-                    onClick={() => setFilterShellShape(option.id)}
-                  />
-                ))}
-              </div>
-              <div className="lupi-studio-segments">
-                {FILTER_SHELL_PRESETS.map(option => (
-                  <SegmentButton
-                    key={option.id}
-                    label={option.label}
-                    meta={option.code}
-                    active={filterShellPreset === option.id}
-                    accent={option.accent}
-                    onClick={() => setFilterShellPreset(option.id)}
-                  />
-                ))}
-              </div>
-              <div className="lupi-studio-slider-grid">
-                <RiveKnob
-                  label="Tint"
-                  value={filterShellOpacity}
-                  min={0}
-                  max={0.65}
-                  step={0.01}
-                  onChange={setFilterShellOpacity}
-                  format={value => `${Math.round(value * 100)}%`}
-                />
-                <RiveKnob
-                  label="Radius"
-                  value={filterShellRadius}
-                  min={0.75}
-                  max={1.6}
-                  step={0.01}
-                  onChange={setFilterShellRadius}
-                  format={value => value.toFixed(2)}
-                />
-              </div>
-            </ControlGroup>
-
-            <ControlGroup title="Loop">
-              <div className="lupi-studio-segments">
-                <SegmentButton label="Random loop" active={activeBackgroundIsVideo} accent="#f59e0b" onClick={handleRandomVideo} />
-                {activeBackgroundIsVideo && (
-                  <SegmentButton
-                    label={backgroundMotionPaused ? 'Play loop' : 'Pause loop'}
-                    active={!backgroundMotionPaused}
-                    accent="#1edce0"
-                    onClick={() => setBackgroundMotionPaused(!backgroundMotionPaused)}
-                  />
-                )}
-              </div>
-              {activeBackgroundIsVideo && (
-                <CompactSlider
-                  label="Speed"
-                  value={backgroundMotionSpeed}
-                  min={0.05}
-                  max={2}
-                  step={0.05}
-                  onChange={setBackgroundMotionSpeed}
-                  format={value => `${value.toFixed(2)}x`}
-                />
-              )}
+              <SegmentButton label="Reset" active={false} accent="#94a3b8" onClick={resetBackgroundAdjustments} />
             </ControlGroup>
 
             <ControlGroup title="Guides">
@@ -878,10 +722,146 @@ export function StudioControlDeck({
               </div>
             </ControlGroup>
 
+            {activeBackgroundIsVideo && (
+              <ControlGroup title="Motion loop">
+                <div className="lupi-studio-segments">
+                  <SegmentButton
+                    label={backgroundMotionPaused ? 'Play' : 'Pause'}
+                    active={!backgroundMotionPaused}
+                    accent="#1edce0"
+                    onClick={() => setBackgroundMotionPaused(!backgroundMotionPaused)}
+                  />
+                  <SegmentButton label="Shuffle" active={false} accent="#f59e0b" onClick={handleRandomVideo} />
+                </div>
+                <CompactSlider
+                  label="Speed"
+                  value={backgroundMotionSpeed}
+                  min={0.05}
+                  max={2}
+                  step={0.05}
+                  onChange={setBackgroundMotionSpeed}
+                  format={value => `${value.toFixed(2)}x`}
+                />
+              </ControlGroup>
+            )}
+
+            <AdvancedSection title="Advanced scene">
+              <ControlGroup title="Backdrop geometry">
+                <div className="lupi-studio-segments">
+                  {BACKDROP_SHAPES.map(option => (
+                    <SegmentButton
+                      key={option.id}
+                      label={option.label}
+                      meta={option.code}
+                      active={backgroundBackdropShape === option.id}
+                      accent={option.accent}
+                      onClick={() => setBackgroundBackdropShape(option.id)}
+                    />
+                  ))}
+                </div>
+                <div className="lupi-studio-segments">
+                  {BACKDROP_PATTERNS.map(option => (
+                    <SegmentButton
+                      key={option.id}
+                      label={option.label}
+                      meta={option.code}
+                      active={backgroundBackdropPattern === option.id}
+                      accent={option.accent}
+                      onClick={() => setBackgroundBackdropPattern(option.id)}
+                    />
+                  ))}
+                </div>
+                {backgroundBackdropShape !== 'dome' && (
+                  <CompactSlider
+                    label="Radius"
+                    value={safeBackgroundBackdropRadius}
+                    min={0.25}
+                    max={backgroundBackdropRadiusMax}
+                    step={0.05}
+                    onChange={setBackgroundBackdropRadius}
+                    format={value => value.toFixed(2)}
+                  />
+                )}
+              </ControlGroup>
+
+              <ControlGroup title="Orientation & grade">
+                <CompactSlider label="Yaw" value={backgroundYawDegrees} min={-180} max={180} step={1} onChange={setBackgroundYawDegrees} format={value => `${Math.round(value)} deg`} />
+                <CompactSlider label="Pitch" value={backgroundPitchDegrees} min={-45} max={45} step={1} onChange={setBackgroundPitchDegrees} format={value => `${Math.round(value)} deg`} />
+                <CompactSlider label="Saturate" value={backgroundSaturation} min={0} max={2} step={0.01} onChange={setBackgroundSaturation} format={value => value.toFixed(2)} />
+                <CompactSlider label="Contrast" value={backgroundContrast} min={0.5} max={1.8} step={0.01} onChange={setBackgroundContrast} format={value => value.toFixed(2)} />
+              </ControlGroup>
+
+              <ControlGroup title="Filter shell">
+                <div className="lupi-studio-segments">
+                  {FILTER_SHELL_SHAPES.map(option => (
+                    <SegmentButton
+                      key={option.id}
+                      label={option.label}
+                      meta={option.code}
+                      active={filterShellShape === option.id}
+                      accent={option.accent}
+                      onClick={() => setFilterShellShape(option.id)}
+                    />
+                  ))}
+                </div>
+                <div className="lupi-studio-segments">
+                  {FILTER_SHELL_PRESETS.map(option => (
+                    <SegmentButton
+                      key={option.id}
+                      label={option.label}
+                      meta={option.code}
+                      active={filterShellPreset === option.id}
+                      accent={option.accent}
+                      onClick={() => setFilterShellPreset(option.id)}
+                    />
+                  ))}
+                </div>
+                <div className="lupi-studio-slider-grid">
+                  <RiveKnob label="Tint" value={filterShellOpacity} min={0} max={0.65} step={0.01} onChange={setFilterShellOpacity} format={value => `${Math.round(value * 100)}%`} />
+                  <RiveKnob label="Radius" value={filterShellRadius} min={0.75} max={1.6} step={0.01} onChange={setFilterShellRadius} format={value => value.toFixed(2)} />
+                </div>
+              </ControlGroup>
+            </AdvancedSection>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// Progressive disclosure — the easy path stays visible; finicky controls live
+// behind one tap. Spans the full deck width so its contents stack cleanly.
+function AdvancedSection({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section style={{ gridColumn: '1 / -1', display: 'grid', gap: open ? 8 : 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          minHeight: 38,
+          padding: '0 12px',
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(2,6,23,0.3)',
+          color: '#94a3b8',
+          fontSize: 10,
+          fontWeight: 820,
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+          cursor: 'pointer',
+          touchAction: 'manipulation',
+        }}
+      >
+        <span>{title}</span>
+        <span aria-hidden="true" style={{ transition: 'transform 140ms ease-out', transform: open ? 'rotate(90deg)' : 'none', fontSize: 12, lineHeight: 1 }}>▸</span>
+      </button>
+      {open && <div style={{ display: 'grid', gap: 8 }}>{children}</div>}
+    </section>
   );
 }
 

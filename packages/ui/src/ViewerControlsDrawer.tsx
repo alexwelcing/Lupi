@@ -26,11 +26,9 @@ export function ViewerControlsDrawer({
 }: ViewerControlsDrawerProps) {
   const activeLabel = activeMode === 'export'
     ? 'Export'
-    : activeMode === 'look'
-      ? 'Look'
-      : activeMode === 'surface'
-        ? 'Surface'
-        : 'World';
+    : activeMode === 'molecule'
+      ? 'Molecule'
+      : 'Scene';
 
   return (
     <div
@@ -98,7 +96,7 @@ function ModeTabs({ activeMode, onModeChange }: { activeMode: ViewerControlMode;
       aria-label="Viewer control modes"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
         gap: 5,
         padding: 4,
         border: '1px solid rgba(255,255,255,0.07)',
@@ -106,9 +104,8 @@ function ModeTabs({ activeMode, onModeChange }: { activeMode: ViewerControlMode;
         background: 'rgba(2,6,23,0.5)',
       }}
     >
-      <ControlModeTab icon={<IconLook />} label="Look" active={activeMode === 'look'} onClick={() => onModeChange('look')} />
-      <ControlModeTab icon={<IconSurface />} label="Surface" active={activeMode === 'surface'} onClick={() => onModeChange('surface')} />
-      <ControlModeTab icon={<IconWorld />} label="World" active={activeMode === 'world'} onClick={() => onModeChange('world')} />
+      <ControlModeTab icon={<IconSurface />} label="Molecule" active={activeMode === 'molecule'} onClick={() => onModeChange('molecule')} />
+      <ControlModeTab icon={<IconWorld />} label="Scene" active={activeMode === 'scene'} onClick={() => onModeChange('scene')} />
       <ControlModeTab icon={<IconExport />} label="Export" active={activeMode === 'export'} onClick={() => onModeChange('export')} />
     </div>
   );
@@ -189,15 +186,6 @@ const IconControls = () => (
     <circle cx="10" cy="8.2" r="1.15" fill="currentColor" stroke="none" />
     <circle cx="14.2" cy="12" r="1.15" fill="currentColor" stroke="none" />
     <circle cx="11.7" cy="15.8" r="1.15" fill="currentColor" stroke="none" />
-  </LupiGlyph>
-);
-
-const IconLook = () => (
-  <LupiGlyph>
-    <path d="M7 12c1.35-2.15 3.02-3.22 5-3.22S15.65 9.85 17 12c-1.35 2.15-3.02 3.22-5 3.22S8.35 14.15 7 12Z" />
-    <circle cx="12" cy="12" r="1.65" />
-    <path d="M8.4 6.75 7.5 5.5" opacity="0.58" />
-    <path d="M15.6 17.25l.9 1.25" opacity="0.58" />
   </LupiGlyph>
 );
 

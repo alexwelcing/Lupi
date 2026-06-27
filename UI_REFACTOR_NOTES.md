@@ -53,6 +53,33 @@ consistent. Removed six now-unused panel imports from `App.tsx`.
   curated set. They are **not** dead — `XRControlPanel`, `mcpViewerBridge`, and
   `Testbed` all expose them. Removing them would break those surfaces.
 
+## Pass 2 — fewer tabs, progressive disclosure, clearer Scene
+
+Driven by the directive "less, not more": cut the menu surface area, keep the
+ideas, make them accessible.
+
+- **4 tabs → 3.** Look + Surface merged into **Molecule** (color, grade, shape,
+  material, bonds); World renamed **Scene**; Export unchanged. `StudioDeckMode`
+  is now `'molecule' | 'scene'`; ModeTabs, the command palette, keyboard `v`,
+  and all default seeds follow.
+- **Progressive disclosure on Scene.** Easy path = World picker, Adjust
+  (Presence + Brightness), Guides, Motion loop. The finicky controls (backdrop
+  geometry, orientation/grade, filter shell) moved into a collapsible
+  **Advanced scene** section — nothing deleted, just out of the way. New
+  `AdvancedSection` disclosure component.
+- **Scene clarity.** A one-line description of what "Scene" is, plus plain-language
+  labels (Presence, Brightness) instead of Yaw/Saturate/Contrast up front.
+- **Material → recipes.** Dropped the Mix/Rough/Polish/Coat PBR sliders; the
+  Recipe selector now shows the recipe's own description (e.g. "Clean scientific
+  documentation. Neutral light, per-element identity."). Only **Atom size**
+  remains as an exposed control, since no recipe owns geometry.
+- Removed the now-unused `IconLook` and the four retired material store
+  subscriptions.
+
+Net: the studio panel went from **4 tabs / ~12 always-visible groups** to
+**3 tabs / 7 easy-path groups** with the rest one tap away. Verified with
+`tsc --noEmit` and `store.test.ts` (22/22).
+
 ## Recommended follow-ups (larger, want a green light first)
 - **Consolidate button variants** — `ToolButton`, `CameraPresetButton`,
   `TransportButton`, `MobileTabButton`, `LupiButton`, plus hand-rolled

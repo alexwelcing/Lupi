@@ -885,7 +885,7 @@ export default function App() {
   const toggleControlsPanel = useCallback(() => {
     setShowPotentialBrowser(false);
     setViewMenuOpen(false);
-    setStudioDeck(current => current ?? 'look');
+    setStudioDeck(current => current ?? 'molecule');
     setActivePanel('studio');
   }, [setActivePanel, setShowPotentialBrowser]);
 
@@ -992,7 +992,7 @@ export default function App() {
         // deck, which left the panel unrenderable on both desktop and mobile.
         setShowPotentialBrowser(false);
         setViewMenuOpen(false);
-        setStudioDeck(current => current ?? 'look');
+        setStudioDeck(current => current ?? 'molecule');
         setActivePanel('studio');
       }
       if (e.key === 'x' && !e.metaKey && !e.ctrlKey) {
@@ -1972,7 +1972,7 @@ export default function App() {
             <MobileTabButton
               onClick={() => {
                 if (activePanel === 'studio') { setActivePanel(null); return; }
-                setStudioDeck('look');
+                setStudioDeck('molecule');
                 setActivePanel('studio');
               }}
               ariaLabel="Toggle controls panel"
@@ -2220,26 +2220,19 @@ export default function App() {
               },
             },
             {
-              id: 'controls-look',
-              label: 'Open Look controls',
+              id: 'controls-molecule',
+              label: 'Open Molecule controls',
               group: 'Panels',
               shortcut: 'V',
               disabled: !file,
-              onSelect: () => openStudioDeck('look'),
+              onSelect: () => openStudioDeck('molecule'),
             },
             {
-              id: 'controls-surface',
-              label: 'Open Surface controls',
+              id: 'controls-scene',
+              label: 'Open Scene controls',
               group: 'Panels',
               disabled: !file,
-              onSelect: () => openStudioDeck('surface'),
-            },
-            {
-              id: 'controls-world',
-              label: 'Open World controls',
-              group: 'Panels',
-              disabled: !file,
-              onSelect: () => openStudioDeck('world'),
+              onSelect: () => openStudioDeck('scene'),
             },
             {
               id: 'export-panel',

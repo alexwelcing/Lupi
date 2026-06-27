@@ -38,7 +38,7 @@ export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, onClose
     case 'studio':
       return (
         <ViewerControlsDrawer
-          activeMode={studioDeck ?? 'look'}
+          activeMode={studioDeck ?? 'molecule'}
           onModeChange={onModeChange}
           onClose={onClose}
           showChrome={showChrome}
