@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store';
 
-export function SearchPanel({ embedded = false }: { embedded?: boolean }) {
+export function SearchPanel({ embedded = false, showCloseButton = true }: { embedded?: boolean; showCloseButton?: boolean }) {
   const {
     knowledgeLabels,
     knowledgeLabelSearchQuery,
@@ -78,16 +78,18 @@ export function SearchPanel({ embedded = false }: { embedded?: boolean }) {
               Search & Curation
             </span>
           </div>
-          <button
-            onClick={() => setActivePanel(null)}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 24, height: 24, background: 'transparent', border: '1px solid #334155',
-              borderRadius: 0, color: '#94a3b8', cursor: 'pointer',
-            }}
-          >
-            ×
-          </button>
+          {showCloseButton && (
+            <button
+              onClick={() => setActivePanel(null)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 24, height: 24, background: 'transparent', border: '1px solid #334155',
+                borderRadius: 0, color: '#94a3b8', cursor: 'pointer',
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
       )}
 

@@ -23,12 +23,6 @@ export function ViewerControlsDrawer({
   onModeChange,
   showChrome = true,
 }: ViewerControlsDrawerProps) {
-  const activeLabel = activeMode === 'export'
-    ? 'Export'
-    : activeMode === 'molecule'
-      ? 'Molecule'
-      : 'Scene';
-
   return (
     <div
       data-testid="viewer-controls-drawer"
@@ -48,14 +42,9 @@ export function ViewerControlsDrawer({
           borderBottom: '1px solid rgba(255,255,255,0.08)',
           background: 'transparent',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span style={{ color: 'rgba(30,220,224,0.82)', display: 'flex', flexShrink: 0, transform: 'scale(0.9)' }}><IconControls /></span>
-              <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--text-primary)', fontSize: 12, fontWeight: 820, letterSpacing: 0, lineHeight: 1 }}>Controls</span>
-              </span>
-            </div>
-            <span style={{ color: 'rgba(30,220,224,0.86)', fontSize: 10, fontWeight: 760, letterSpacing: 0.4, textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>{activeLabel}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, minHeight: 20 }}>
+            <span style={{ color: 'rgba(30,220,224,0.82)', display: 'flex', flexShrink: 0, transform: 'scale(0.9)' }}><IconControls /></span>
+            <span style={{ color: 'var(--text-primary)', fontSize: 12, fontWeight: 820, letterSpacing: 0, lineHeight: 1 }}>Controls</span>
           </div>
           <ModeTabs activeMode={activeMode} onModeChange={onModeChange} />
         </div>

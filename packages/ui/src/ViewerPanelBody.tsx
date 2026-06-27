@@ -45,7 +45,7 @@ export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, showChr
     case 'export':
       return <FigureExportPanel showCloseButton={false} />;
     case 'flythrough':
-      return <FlythroughPanel />;
+      return <FlythroughPanel showCloseButton={false} />;
     case 'telemetry':
       return (
         <TelemetryPanel
@@ -59,7 +59,7 @@ export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, showChr
     case 'mlipLongRun':
       return <MlipLongRunWorkbench />;
     case 'search':
-      return <SearchPanel />;
+      return <SearchPanel showCloseButton={false} />;
     default:
       return null;
   }
