@@ -69,7 +69,6 @@ export interface CanonicalMolecularView {
     | 'grDrivenCutoff'
     | 'filamentMode'
     | 'meamScreening'
-    | 'renderStyle'
     | 'atomScale'
     | 'backgroundPreset'
     | 'backgroundStyle'
@@ -289,7 +288,6 @@ function captureCanonicalView(): CanonicalMolecularView {
       'grDrivenCutoff',
       'filamentMode',
       'meamScreening',
-      'renderStyle',
       'atomScale',
       'backgroundPreset',
       'backgroundStyle',

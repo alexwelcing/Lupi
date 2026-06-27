@@ -42,12 +42,9 @@ const mockTypeToElement = new Map([
 ]);
 
 export function Testbed() {
-  const { colorPalette, renderStyle, showGrid, showBonds, showCell, environment } = useControls('Visual Settings', {
+  const { colorPalette, showGrid, showBonds, showCell, environment } = useControls('Visual Settings', {
     colorPalette: {
       options: ['ocean', 'fire', 'ice', 'forest', 'cyberpunk', 'turbo', 'grayscale']
-    },
-    renderStyle: {
-      options: ['standard', 'matte', 'glass', 'wireframe', 'toon', 'glow']
     },
     showGrid: true,
     showBonds: true,
@@ -78,16 +75,14 @@ export function Testbed() {
             {showGrid && <Grid infiniteGrid fadeDistance={20} cellColor="#444" sectionColor="#888" />}
             
             <group scale={0.5}>
-              <AtomsOptimized 
-                frame={mockFrame} 
-                colormap={colorPalette as any} 
-                renderStyle={renderStyle as any} 
+              <AtomsOptimized
+                frame={mockFrame}
+                colormap={colorPalette as any}
               />
               {showBonds && (
-                <Bonds 
-                  frame={mockFrame} 
-                  colormap={colorPalette as any} 
-                  renderStyle={renderStyle as any} 
+                <Bonds
+                  frame={mockFrame}
+                  colormap={colorPalette as any}
                   maxBondLength={3.0}
                 />
               )}

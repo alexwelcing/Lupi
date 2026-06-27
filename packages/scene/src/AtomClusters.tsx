@@ -16,7 +16,7 @@
  * What's intentionally simpler than AtomsOptimized:
  *   - Color is direct per-instance vec3, not a palette lookup. Each
  *     cluster's average color is baked in at build time.
- *   - No property mode, no botanical swap, no etched annotations,
+ *   - No property mode, no etched annotations,
  *     no per-bond gradient — splats are display-only signal, not
  *     interactive picking targets.
  *   - Single quality tier (Lambertian + tiny specular). Far-view

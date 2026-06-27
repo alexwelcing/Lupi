@@ -1,7 +1,7 @@
 /**
- * Background presets — shared definition used by both the desktop VisualsPanel
- * and the immersive XRControlPanel. Extracted to its own module to avoid
- * circular dependencies between App.tsx ↔ xr/*.tsx.
+ * Background presets — shared definition used by the studio Scene controls and
+ * the immersive XRControlPanel. Extracted to its own module to avoid circular
+ * dependencies between App.tsx ↔ xr/*.tsx.
  */
 
 import motionLoopManifestJson from '../../../tools/lupi-motion-loops.json';

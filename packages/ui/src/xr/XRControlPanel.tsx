@@ -125,8 +125,6 @@ export function XRControlPanel() {
   const toggleAxes = useStore(s => s.toggleAxes);
 
   // Styles & Visuals
-  const renderStyle = useStore(s => s.renderStyle);
-  const setRenderStyle = useStore(s => s.setRenderStyle);
   const atomScale = useStore(s => s.atomScale);
   const setAtomScale = useStore(s => s.setAtomScale);
   
@@ -281,10 +279,7 @@ export function XRControlPanel() {
             <group position={[0, 0, 0]}>
               <XRLabel position={[0, 0.18, 0]} text="Aesthetics & Shading" fontSize={0.025} color="#aaaaaa" />
 
-              <XRButton position={[0, 0.10, 0]} label={`Style: ${renderStyle === 'botanical' ? 'Botanical' : 'Physical'}`}
-                onClick={() => setRenderStyle(renderStyle === 'botanical' ? 'standard' : 'botanical')} active={renderStyle === 'botanical'} activeColor="#2ea155" />
-
-              <XRButton position={[0, 0, 0]} label={`Material: ${materialPreset}`} onClick={cycleMaterial} />
+              <XRButton position={[0, 0.10, 0]} label={`Material: ${materialPreset}`} onClick={cycleMaterial} />
 
               <XRLabel position={[0, -0.09, 0]} text="Color Mapping" fontSize={0.025} color="#aaaaaa" />
 

@@ -49,13 +49,7 @@ import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/use
 import { SimulationCell } from '@atlas/scene/SimulationCell';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { getBackgroundFromColormap } from '@atlas/scene';
-import { FigureExportPanel } from './panels/FigureExportPanel';
-import { FlythroughPanel } from './panels/FlythroughPanel';
-import { TelemetryPanel } from './panels/TelemetryPanel';
-import { SearchPanel } from './panels/SearchPanel';
 import { PotentialBrowser } from './panels/PotentialBrowser';
-import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
-import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
 import { MlipFlywheelPage } from './MlipFlywheelPage';
 import { GhostAtoms } from './GhostAtoms';
 import { AtomPicker } from '@atlas/scene/AtomPicker';
@@ -66,7 +60,7 @@ import { getElementSpec } from '@atlas/core';
 import { ExportManager } from './ExportManager';
 import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
-import { CameraPresetButton, TransportButton } from './controls';
+import { CameraPresetButton, MobileTabButton, TransportButton } from './controls';
 import { CommandPalette } from './CommandPalette';
 import { LupiAuthCallout } from './LupiAuthCallout';
 import { LupiAgentDock } from './LupiAgentDock';
@@ -78,8 +72,11 @@ import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
 import { detectRenderCapability } from './renderCapability';
 import { MoleculeFilterShell } from './MoleculeFilterShell';
+import { MoleculeShadow } from './MoleculeShadow';
+import { IconClose, IconPlay, IconPause, LupiGlyph, IconControls } from './icons';
 import { PanelHost } from './PanelHost';
-import { ViewerControlsDrawer, type ViewerControlMode } from './ViewerControlsDrawer';
+import { type ViewerControlMode } from './ViewerControlsDrawer';
+import { ViewerPanelBody } from './ViewerPanelBody';
 import { StudyLensPanel } from './StudyLensPanel';
 import {
   useViewerBackgroundState,
@@ -105,6 +102,9 @@ import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerS
 export { xrStore } from './viewer/xrStore';
 
 // ─── Icons ────────────────────────────────────────────────────────────
+// Play/Pause and the Lupi toolbar glyphs (LupiGlyph, IconControls) live in
+// the shared ./icons module. The single-use transport arrows and the Study
+// glyph stay local — they're only referenced here.
 const IconFirst = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M6 4v16M10 12l8-6v12l-8-6z" />
@@ -113,17 +113,6 @@ const IconFirst = () => (
 const IconPrev = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M19 20L9 12l10-8v16z" />
-  </svg>
-);
-const IconPlay = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M8 5v14l11-7L8 5z" />
-  </svg>
-);
-const IconPause = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="6" y="4" width="4" height="16" rx="1" />
-    <rect x="14" y="4" width="4" height="16" rx="1" />
   </svg>
 );
 const IconNext = () => (
@@ -135,84 +124,6 @@ const IconLast = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M18 4v16M14 12L6 6v12l8-6z" />
   </svg>
-);
-const IconClose = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M18 6L6 18M6 6l12 12" />
-  </svg>
-);
-// ─── Friendly Toolbar Icons ───────────────────────────────────────────
-// Lupi toolbar glyphs: specimen-frame linework, not emoji or generic app art.
-function LupiGlyph({ children }: { children: React.ReactNode }) {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.65"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M4.5 7.25V4.5h2.75" opacity="0.46" />
-      <path d="M16.75 4.5h2.75v2.75" opacity="0.46" />
-      <path d="M19.5 16.75v2.75h-2.75" opacity="0.46" />
-      <path d="M7.25 19.5H4.5v-2.75" opacity="0.46" />
-      {children}
-    </svg>
-  );
-}
-
-const IconLook = () => (
-  <LupiGlyph>
-    <path d="M7 12c1.35-2.15 3.02-3.22 5-3.22S15.65 9.85 17 12c-1.35 2.15-3.02 3.22-5 3.22S8.35 14.15 7 12Z" />
-    <circle cx="12" cy="12" r="1.65" />
-    <path d="M8.4 6.75 7.5 5.5" opacity="0.58" />
-    <path d="M15.6 17.25l.9 1.25" opacity="0.58" />
-  </LupiGlyph>
-);
-
-const IconSurface = () => (
-  <LupiGlyph>
-    <path d="M6.7 15.8c2.15-1.35 4.1-1.35 5.85 0 1.4 1.05 3.03 1.05 4.75 0" />
-    <path d="M6.7 11.8c2.15-1.35 4.1-1.35 5.85 0 1.4 1.05 3.03 1.05 4.75 0" opacity="0.72" />
-    <circle cx="8" cy="8" r="0.8" fill="currentColor" stroke="none" opacity="0.72" />
-    <circle cx="12" cy="7" r="0.8" fill="currentColor" stroke="none" opacity="0.72" />
-    <circle cx="16" cy="8" r="0.8" fill="currentColor" stroke="none" opacity="0.72" />
-  </LupiGlyph>
-);
-
-const IconWorld = () => (
-  <LupiGlyph>
-    <path d="M6.5 14.8c1.75 1.05 3.58 1.58 5.5 1.58s3.75-.53 5.5-1.58" />
-    <path d="M6.5 10.2c1.75-1.05 3.58-1.58 5.5-1.58s3.75.53 5.5 1.58" />
-    <path d="M12 6.5v11" opacity="0.7" />
-    <path d="M8.8 7.2c-.82 3.12-.82 6.48 0 9.6" opacity="0.54" />
-    <path d="M15.2 7.2c.82 3.12.82 6.48 0 9.6" opacity="0.54" />
-  </LupiGlyph>
-);
-
-const IconExport = () => (
-  <LupiGlyph>
-    <path d="M7.1 8.3h6.3c1.28 0 2.32 1.04 2.32 2.32v4.58H7.1V8.3Z" />
-    <path d="M9.1 8.3 10.2 6h3.1l1.1 2.3" opacity="0.7" />
-    <circle cx="11.45" cy="12.05" r="1.45" />
-    <path d="M15.4 6.6h2.5v2.5" />
-    <path d="m17.9 6.6-4.2 4.2" />
-  </LupiGlyph>
-);
-const IconControls = () => (
-  <LupiGlyph>
-    <path d="M7 8.2h10" />
-    <path d="M7 12h10" opacity="0.82" />
-    <path d="M7 15.8h10" opacity="0.64" />
-    <circle cx="10" cy="8.2" r="1.15" fill="currentColor" stroke="none" />
-    <circle cx="14.2" cy="12" r="1.15" fill="currentColor" stroke="none" />
-    <circle cx="11.7" cy="15.8" r="1.15" fill="currentColor" stroke="none" />
-  </LupiGlyph>
 );
 const IconStudy = () => (
   <LupiGlyph>
@@ -825,7 +736,6 @@ export default function App() {
   const bondTolerance = useStore(s => s.bondTolerance);
   const useGpuBonds = useStore(s => s.useGpuBonds);
   const bondColorMode = useStore(s => s.bondColorMode);
-  const renderStyle = useStore(s => s.renderStyle);
   const atomScale = useStore(s => s.atomScale);
   const { activePanel, setActivePanel, showPotentialBrowser, setShowPotentialBrowser } = useViewerPanelState();
   const {
@@ -890,7 +800,7 @@ export default function App() {
   const toggleControlsPanel = useCallback(() => {
     setShowPotentialBrowser(false);
     setViewMenuOpen(false);
-    setStudioDeck(current => current ?? 'look');
+    setStudioDeck(current => current ?? 'molecule');
     setActivePanel('studio');
   }, [setActivePanel, setShowPotentialBrowser]);
 
@@ -989,9 +899,16 @@ export default function App() {
         setShowPotentialBrowser(false);
       }
       if (e.key === 'v' && !e.metaKey && !e.ctrlKey) {
-        setActivePanel(null);
+        // Toggle the Controls panel. setActivePanel is the store's toggling
+        // setter, so passing 'studio' opens it (or closes it if already open).
+        // Seed studioDeck so the studio invariant holds on the way in — every
+        // other entry point keeps activePanel='studio' and studioDeck in sync,
+        // and this used to break that by nulling activePanel while setting the
+        // deck, which left the panel unrenderable on both desktop and mobile.
         setShowPotentialBrowser(false);
-        setStudioDeck(current => current === 'look' ? null : 'look');
+        setViewMenuOpen(false);
+        setStudioDeck(current => current ?? 'molecule');
+        setActivePanel('studio');
       }
       if (e.key === 'x' && !e.metaKey && !e.ctrlKey) {
         setStudioDeck(null);
@@ -1157,12 +1074,32 @@ export default function App() {
     Math.min(backgroundBackdropRadius, backgroundBackdropRadiusMax),
   );
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
-  const mobilePanelHeight = 'clamp(260px, 38dvh, 340px)';
-  const activeMobilePanelHeight = activePanel === 'studio' ? 'clamp(460px, 72dvh, 680px)' : mobilePanelHeight;
+  const mobilePanelHeight = 'clamp(240px, 34dvh, 320px)';
+  // Content-heavy editors (studio controls, the flythrough sequencer, the export
+  // surface) get a taller sheet so they're usable on a phone; quick panels stay
+  // compact.
+  const tallMobilePanel = activePanel === 'studio' || activePanel === 'flythrough' || activePanel === 'export';
+  const activeMobilePanelHeight = tallMobilePanel ? 'clamp(340px, 54dvh, 520px)' : mobilePanelHeight;
   const mobileLoadedHeader = isMobile && !!file;
   const headerHeight = isMobile
-    ? `calc(${mobileLoadedHeader ? '76px' : '48px'} + env(safe-area-inset-top))`
+    ? `calc(${mobileLoadedHeader ? '64px' : '48px'} + env(safe-area-inset-top))`
     : 56;
+  // Mobile chrome anchoring — the persistent tab bar lifts above the timeline
+  // when a trajectory is loaded, and the bottom sheet always docks above the
+  // tab bar so the two never overlap. Centralized here so the bar, the sheet,
+  // and the floating launchers stay in lockstep.
+  const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
+  const mobileTabBarBottom = mobileTimelineActive
+    ? 'calc(env(safe-area-inset-bottom) + 78px)'
+    : 'calc(env(safe-area-inset-bottom) + 10px)';
+  // The sheet is absolutely positioned inside the main viewport container, which
+  // already sits ABOVE the timeline; the tab bar is fixed to the viewport. When a
+  // timeline is present, the safe-area term cancels between the two anchors, so the
+  // sheet only needs a constant offset to clear the bar that overlaps the container.
+  const mobileSheetBottom = mobileTimelineActive
+    ? '88px'
+    : 'calc(env(safe-area-inset-bottom) + 66px)';
+  const mobilePanelOpen = isMobile && !!activePanel;
   const clearLoadedFile = useCallback(() => {
     useStore.getState().clearFile();
     const url = new URL(window.location.href);
@@ -1205,8 +1142,8 @@ export default function App() {
           gridTemplateRows: mobileLoadedHeader ? '38px 28px' : undefined,
           columnGap: mobileLoadedHeader ? 8 : undefined,
           rowGap: mobileLoadedHeader ? 2 : undefined,
-          padding: mobileLoadedHeader ? 'calc(env(safe-area-inset-top) + 4px) 8px 4px' : (isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px'),
-          margin: file ? (isMobile ? '6px 6px 0' : '14px 16px 0') : 0,
+          padding: mobileLoadedHeader ? 'calc(env(safe-area-inset-top) + 10px) 10px 6px' : (isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px'),
+          margin: file ? (isMobile ? '0 8px 0' : '14px 16px 0') : 0,
           borderRadius: file ? 8 : 0,
           borderBottom: file ? 'none' : '1px solid var(--border-subtle)',
           background: file ? undefined : 'var(--bg-glass)',
@@ -1385,7 +1322,7 @@ export default function App() {
                   minHeight: isMobile ? 34 : undefined,
                 }}
               >
-                {isMobile ? 'Atoms' : 'Gallery'}
+                Gallery
               </a>
             </>
           )}
@@ -1514,6 +1451,16 @@ export default function App() {
                   opacity={filterShellOpacity}
                   radiusScale={filterShellRadius}
                 />
+                {filterShellShape !== 'off' && filterShellOpacity > 0 && (
+                  <MoleculeShadow
+                    center={center}
+                    moleculeRadius={filterShellBaseRadius}
+                    shellRadius={Math.max(0.5, filterShellBaseRadius * filterShellRadius)}
+                    azimuthDeg={keyLightAzimuth}
+                    elevationDeg={keyLightElevation}
+                    opacity={0.5}
+                  />
+                )}
                 <AnomalyTracker
                   frame={currentFrame}
                   colorProperty={colorProperty}
@@ -1536,13 +1483,11 @@ export default function App() {
                   elementColorOverrides={elementColorOverrides}
                   atomColorSource={atomColorSource}
                   scale={atomScale}
-                  renderStyle={renderStyle}
                   maxAtoms={deviceMaxAtoms}
                   loadedAtomCount={loadedAtomCount}
                   onSpatialHash={setSpatialHash}
                   hiddenAtomTypes={hiddenAtomTypes}
                   atomTypeScales={atomTypeScales}
-                  botanicalMode={renderStyle === 'botanical'}
                   materialPreset={materialPreset}
                   materialIntensity={materialIntensity}
                   rimLightIntensity={rimLightIntensity}
@@ -1577,7 +1522,6 @@ export default function App() {
                     interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
                     maxBondLength={effectiveBondCutoff}
                     tolerance={bondTolerance}
-                    renderStyle={renderStyle}
                     colormap={colormap}
                     colorMode={colorMode}
                     colorProperty={colorProperty ?? undefined}
@@ -1585,7 +1529,6 @@ export default function App() {
                     elementColorOverrides={elementColorOverrides}
                     radius={0.12}
                     opacity={0.85}
-                    botanicalMode={renderStyle === 'botanical'}
                     materialPreset={materialPreset}
                     materialIntensity={materialIntensity}
                     rimLightIntensity={rimLightIntensity}
@@ -1611,11 +1554,12 @@ export default function App() {
                   <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />
                 )}
 
-                {/* Contact shadow under the molecule. Sized to box-bounds
-                    diagonal × 1.5 so the soft falloff catches even atoms at
-                    the very edge of the cell. Disabled in 'diagram' preset
-                    (flat, figure-faithful) where any shadow would mislead. */}
-                {currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
+                {/* Floor contact shadow under the molecule (when no shell is
+                    active — with a shell, MoleculeShadow lands on the shell
+                    instead). Sized to box-bounds diagonal so the soft falloff
+                    catches edge atoms. Disabled in 'diagram' preset (flat,
+                    figure-faithful) where any shadow would mislead. */}
+                {!(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
                   const b = currentFrame.boxBounds;
                   const cx = (b[0] + b[1]) / 2;
                   const cy = b[2]; // floor = min Y of the cell
@@ -1789,8 +1733,8 @@ export default function App() {
           {file && (
             <div style={{
               position: 'absolute',
-              top: file ? (isMobile ? 72 : 88) : 72,
-              left: isMobile ? 12 : 18,
+              top: file ? (isMobile ? 'calc(env(safe-area-inset-top) + 108px)' : 88) : 72,
+              left: isMobile ? 10 : 18,
               display: 'grid',
               flexDirection: 'column',
               alignItems: 'start',
@@ -1802,7 +1746,10 @@ export default function App() {
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)',
-              zIndex: 150,
+              zIndex: mobilePanelOpen ? 80 : 150,
+              opacity: mobilePanelOpen ? 0.5 : 1,
+              pointerEvents: mobilePanelOpen ? 'none' : undefined,
+              transition: 'opacity 160ms ease-out',
             }}>
               <button
                 onClick={() => {
@@ -1863,12 +1810,14 @@ export default function App() {
             </div>
           )}
 
-          {/* Top-right controls launcher */}
-          {file && !showPotentialBrowser && (
+          {/* Top-right controls launcher — desktop only. On mobile the
+              persistent bottom tab bar owns the Controls entry, so showing
+              this too would duplicate it. */}
+          {file && !showPotentialBrowser && !isMobile && (
             <div style={{
               position: 'absolute',
-              top: file ? (isMobile ? 72 : 88) : 72,
-              right: isMobile ? 12 : 18,
+              top: file ? 88 : 72,
+              right: 18,
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 8,
@@ -1889,18 +1838,18 @@ export default function App() {
                 onClick={toggleControlsPanel}
                 className={`lupine-btn ${activePanel === 'studio' ? 'active' : ''}`}
                 style={{
-                  minWidth: isMobile ? 48 : 118,
-                  height: isMobile ? 44 : 38,
+                  minWidth: 118,
+                  height: 38,
                   gap: 8,
-                  padding: isMobile ? '0 10px' : '0 14px',
-                  fontSize: isMobile ? 0 : 13,
+                  padding: '0 14px',
+                  fontSize: 13,
                   fontWeight: 760,
                   letterSpacing: 0,
                   touchAction: 'manipulation',
                 }}
               >
                 <IconControls />
-                {!isMobile && <span>Controls</span>}
+                <span>Controls</span>
               </button>
             </div>
           )}
@@ -1912,123 +1861,127 @@ export default function App() {
             close via setShowPotentialBrowser(false). */}
         {showPotentialBrowser && <PotentialBrowser />}
 
-        {/* Mobile quick actions bar (thumb friendly, always reachable on phones) */}
-        {isMobile && file && !activePanel && (
-          <div
-            role="toolbar"
-            aria-label="Mobile quick actions"
+        {/* Mobile tab bar — persistent thumb-reachable navigation. Stays mounted
+            whenever a molecule is on screen (even with a panel open) so the
+            active surface is always one tap away, with a clear active state and
+            tap-to-toggle. Hidden only behind the full-screen atom browser. */}
+        {isMobile && file && !showPotentialBrowser && (
+          <nav
+            aria-label="Viewer navigation"
             style={{
               position: 'fixed',
-              bottom: 'calc(env(safe-area-inset-bottom) + 4px)',
+              bottom: mobileTabBarBottom,
               left: '50%',
               transform: 'translateX(-50%)',
-              zIndex: 95,
+              zIndex: 130,
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              background: 'rgba(15,16,22,0.92)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              gap: 4,
+              maxWidth: 'calc(100vw - 16px)',
+              background: 'linear-gradient(180deg, rgba(17,19,27,0.96), rgba(8,9,14,0.96))',
+              border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 999,
-              padding: '4px 6px',
-              backdropFilter: 'blur(12px)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+              padding: '5px 6px',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
             }}>
-            <button
-              onClick={() => useStore.getState().togglePlay()}
-              aria-label={playing ? 'Pause playback' : 'Play animation'}
-              style={{ minHeight: 36, minWidth: 46, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 11, padding: '0 10px', touchAction: 'manipulation' }}
-            >
-              {playing ? '⏸' : '▶'}
-            </button>
-            <button
-              onClick={() => { setStudioDeck('look'); setActivePanel('studio'); }}
-              aria-label="Open controls panel"
-              style={{ minHeight: 36, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 10, padding: '0 10px', touchAction: 'manipulation' }}
+            <MobileTabButton
+              onClick={() => {
+                if (activePanel === 'studio') { setActivePanel(null); return; }
+                setStudioDeck('molecule');
+                setActivePanel('studio');
+              }}
+              ariaLabel="Toggle controls panel"
+              active={activePanel === 'studio'}
             >
               CONTROLS
-            </button>
-            <button
-              onClick={() => setShowPotentialBrowser(true)}
-              aria-label="Browse gallery and atoms"
-              style={{ minHeight: 36, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 10, padding: '0 10px', touchAction: 'manipulation' }}
+            </MobileTabButton>
+            <MobileTabButton
+              onClick={() => { setActivePanel(null); setShowPotentialBrowser(true); }}
+              ariaLabel="Browse the molecule library"
+              active={false}
             >
-              ATOMS
-            </button>
-            <button
-              onClick={() => setActivePanel('search')}
-              aria-label="Open search and curation panel"
-              style={{ minHeight: 36, borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e6e6e6', fontSize: 10, padding: '0 10px', touchAction: 'manipulation' }}
+              LIBRARY
+            </MobileTabButton>
+            <MobileTabButton
+              onClick={() => setActivePanel(activePanel === 'search' ? null : 'search')}
+              ariaLabel="Toggle search and curation panel"
+              active={activePanel === 'search'}
             >
               SEARCH
-            </button>
-          </div>
+            </MobileTabButton>
+          </nav>
         )}
 
-        {/* Mobile: legacy bottom sheet */}
+        {/* Mobile: dimming scrim behind the bottom sheet. Tapping the dimmed
+            scene closes the panel — a familiar bottom-sheet gesture. */}
+        {activePanel && file && isMobile && (
+          <div
+            aria-hidden="true"
+            onClick={() => setActivePanel(null)}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(2,4,10,0.42)',
+              zIndex: 90,
+              animation: 'fadeIn 200ms ease-out',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          />
+        )}
+
+        {/* Mobile: bottom sheet — docks above the persistent tab bar */}
         {activePanel && file && isMobile && (
           <div style={{
             position: 'absolute',
             top: 'auto',
-            right: 0,
-            bottom: 0,
-            left: 0,
-            width: '100%',
+            right: 8,
+            bottom: mobileSheetBottom,
+            left: 8,
+            width: 'auto',
             height: activeMobilePanelHeight,
             maxHeight: activeMobilePanelHeight,
             boxSizing: 'border-box',
-            borderTop: '1px solid var(--border-subtle)',
-            borderTopLeftRadius: 14,
-            borderTopRightRadius: 14,
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 18,
             background: 'var(--bg-glass)',
-            backdropFilter: 'blur(18px)',
-            WebkitBackdropFilter: 'blur(18px)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
             display: 'flex',
             flexDirection: 'column',
             overflowY: activePanel === 'export' || activePanel === 'studio' ? 'hidden' : 'auto',
-            paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
-            paddingTop: 4,
-            boxShadow: '0 -18px 48px rgba(0,0,0,0.45)',
+            paddingBottom: 8,
+            paddingTop: 6,
+            boxShadow: '0 -2px 0 rgba(255,255,255,0.05) inset, 0 24px 64px rgba(0,0,0,0.55)',
             zIndex: 100,
+            animation: 'slideInUp 240ms cubic-bezier(0.22, 1, 0.36, 1)',
             WebkitOverflowScrolling: 'touch',
           }}>
             {/* Drag handle + close */}
             <div
               role="presentation"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px 6px', position: 'relative' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 12px 8px', position: 'relative' }}
             >
               <div
                 aria-hidden="true"
-                style={{ width: 42, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.2)' }}
+                style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.28)' }}
               />
               <button
                 onClick={() => setActivePanel(null)}
-                style={{ position: 'absolute', right: 12, background: 'transparent', border: 'none', color: '#aaa', fontSize: 16, lineHeight: 1, padding: 8, minWidth: 36, minHeight: 36 }}
+                style={{ position: 'absolute', right: 10, top: 0, background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: 16, lineHeight: 1, padding: 8, minWidth: 40, minHeight: 40, touchAction: 'manipulation' }}
                 aria-label="Close panel"
               >
                 ✕
               </button>
             </div>
             <ErrorBoundary>
-              {activePanel === 'studio' && (
-                <ViewerControlsDrawer
-                  activeMode={studioDeck ?? 'look'}
-                  onModeChange={openStudioDeck}
-                  onClose={() => setActivePanel(null)}
-                  showChrome
-                />
-              )}
-              {activePanel === 'export' && <FigureExportPanel />}
-              {activePanel === 'flythrough' && <FlythroughPanel />}
-              {activePanel === 'telemetry' && (
-                <TelemetryPanel
-                  thermo={file?.thermo ?? null}
-                  currentFrame={currentFrame}
-                  totalFrames={totalFrames}
-                />
-              )}
-              {activePanel === 'equilibrium' && <EquilibriumSolveWorkbench />}
-              {activePanel === 'mlipLongRun' && <MlipLongRunWorkbench />}
-              {activePanel === 'search' && <SearchPanel />}
+              <ViewerPanelBody
+                activePanel={activePanel}
+                studioDeck={studioDeck}
+                onModeChange={openStudioDeck}
+                showChrome
+              />
             </ErrorBoundary>
           </div>
         )}
@@ -2065,16 +2018,18 @@ export default function App() {
       {/* ─── Timeline ─── */}
       {file && totalFrames > 1 && (
         <div style={{
-          height: 60, flexShrink: 0,
-          display: 'flex', alignItems: 'center', gap: 16,
-          padding: isMobile ? '0 12px 48px' : '0 20px',
+          height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16,
+          padding: isMobile ? '8px 12px calc(env(safe-area-inset-bottom) + 8px)' : '0 20px',
           borderTop: '1px solid #1f2937',
-          background: '#0a0a0c',
+          background: 'rgba(10,10,12,0.96)',
           overflowX: 'auto',
+          position: 'relative',
+          zIndex: 120,
           scrollbarWidth: 'none',
         }}>
           {/* Transport controls */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
             <TransportButton
               onClick={() => useStore.getState().setFrame(0)}
               title="First frame"
@@ -2120,7 +2075,8 @@ export default function App() {
             fontSize: '11px',
             fontFamily: 'var(--font-mono)',
             color: '#64748b',
-            minWidth: 90,
+            minWidth: isMobile ? 58 : 90,
+            flexShrink: 0,
             textAlign: 'right',
             fontVariantNumeric: 'tabular-nums',
           }}>
@@ -2129,20 +2085,20 @@ export default function App() {
           </div>
 
           {/* Speed selector */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
             {[0.25, 0.5, 1, 2, 4].map(speed => (
               <button
                 key={speed}
                 onClick={() => useStore.getState().setPlaybackSpeed(speed)}
                 style={{
-                  padding: '6px 8px',
-                  minWidth: 36,
+                  padding: isMobile ? '7px 7px' : '6px 8px',
+                  minWidth: isMobile ? 34 : 36,
                   fontSize: '10px',
                   fontFamily: 'var(--font-mono)',
                   fontWeight: playbackSpeed === speed ? 600 : 400,
-                  color: playbackSpeed === speed ? '#0a0a0c' : '#64748b',
-                  background: playbackSpeed === speed ? '#f59e0b' : '#121418',
-                  border: `1px solid ${playbackSpeed === speed ? '#f59e0b' : '#334155'}`,
+                  color: playbackSpeed === speed ? '#031314' : '#94a3b8',
+                  background: playbackSpeed === speed ? '#1edce0' : '#121418',
+                  border: `1px solid ${playbackSpeed === speed ? '#1edce0' : '#334155'}`,
                   borderRadius: 0,
                   cursor: 'pointer',
                   transition: 'all 100ms ease-out',
@@ -2180,26 +2136,19 @@ export default function App() {
               },
             },
             {
-              id: 'controls-look',
-              label: 'Open Look controls',
+              id: 'controls-molecule',
+              label: 'Open Molecule controls',
               group: 'Panels',
               shortcut: 'V',
               disabled: !file,
-              onSelect: () => openStudioDeck('look'),
+              onSelect: () => openStudioDeck('molecule'),
             },
             {
-              id: 'controls-surface',
-              label: 'Open Surface controls',
+              id: 'controls-scene',
+              label: 'Open Scene controls',
               group: 'Panels',
               disabled: !file,
-              onSelect: () => openStudioDeck('surface'),
-            },
-            {
-              id: 'controls-world',
-              label: 'Open World controls',
-              group: 'Panels',
-              disabled: !file,
-              onSelect: () => openStudioDeck('world'),
+              onSelect: () => openStudioDeck('scene'),
             },
             {
               id: 'export-panel',

@@ -8,6 +8,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useStore } from '../store';
+import { IconClose, IconPlay, IconPause } from '../icons';
 import {
   createKeyframe, createDefaultSequence,
   encodeFlythrough, decodeFlythrough,
@@ -18,11 +19,6 @@ import {
 import { Slider } from '../controls';
 
 // ─── Icons ────────────────────────────────────────────────────────────
-const IconClose = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square">
-    <path d="M18 6L6 18M6 6l12 12" />
-  </svg>
-);
 const IconPlus = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
     <path d="M12 5v14M5 12h14" />
@@ -37,17 +33,6 @@ const IconCamera = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
     <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
     <circle cx="12" cy="13" r="3" />
-  </svg>
-);
-const IconPlay = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M8 5v14l11-7L8 5z" />
-  </svg>
-);
-const IconPause = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="6" y="4" width="4" height="16" rx="1" />
-    <rect x="14" y="4" width="4" height="16" rx="1" />
   </svg>
 );
 const IconShare = () => (
@@ -449,7 +434,7 @@ export function FlythroughPanel() {
                     color: flythroughPreview ? '#e2e8f0' : '#0a0a0c',
                   }}
                 >
-                  {flythroughPreview ? <><IconPause /> Stop</> : <><IconPlay /> Preview</>}
+                  {flythroughPreview ? <><IconPause size={14} /> Stop</> : <><IconPlay size={14} /> Preview</>}
                 </button>
               </div>
 

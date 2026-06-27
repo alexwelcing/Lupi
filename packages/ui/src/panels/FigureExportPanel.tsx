@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { getElementSpec } from '@atlas/core';
+import { IconClose } from '../icons';
 import { createKeyframe, type FlythroughSequence } from '../flythrough';
 import { useStore } from '../store';
 import { buildMoleculeStudyFacts, renderStudySheetHtml, studySheetFileName } from '../studyFacts';
@@ -43,11 +44,6 @@ const VIDEO_EXPORT = {
   meta: '1080p / 5s',
 };
 
-const IconClose = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-    <path d="M18 6 6 18M6 6l12 12" />
-  </svg>
-);
 
 const IconDownload = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -80,6 +76,21 @@ const IconVideo = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="5" width="14" height="14" rx="2" />
     <path d="m17 9 4-2.5v11L17 15" />
+  </svg>
+);
+const IconPath = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="5" cy="6" r="2" />
+    <circle cx="19" cy="10" r="2" />
+    <circle cx="9" cy="18" r="2" />
+    <path d="M6.7 7.2C12 9 9 13 10.5 16" opacity="0.7" />
+    <path d="M7 6.6c4 0 6.5 1.4 10.3 2.9" opacity="0.7" />
+  </svg>
+);
+const IconLink = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 13a4 4 0 0 0 5.66 0l2.83-2.83a4 4 0 0 0-5.66-5.66l-1 1" />
+    <path d="M15 11a4 4 0 0 0-5.66 0L6.5 13.83a4 4 0 0 0 5.66 5.66l1-1" />
   </svg>
 );
 
@@ -162,6 +173,7 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
   const triggerExport = useStore(s => s.triggerExport);
+  const encodeToURL = useStore(s => s.encodeToURL);
   const setShowScaleBar = useStore(s => s.setShowScaleBar);
   const cameraPosition = useStore(s => s.cameraPosition);
   const cameraTarget = useStore(s => s.cameraTarget);
@@ -325,6 +337,22 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
     });
   }, [cameraPosition, cameraTarget, file, hasVideoExport, triggerExport]);
 
+  // Share the current view as a URL that restores camera, colors, material, and
+  // scene. Relocated here from the studio "Grade" group, where it was an orphan
+  // share button sitting among grade controls.
+  const runCopyViewLink = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    setStatus({ kind: 'working', label: 'Copying view link' });
+    const url = new URL(window.location.href);
+    url.searchParams.set('s', encodeToURL());
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setStatus({ kind: 'success', label: 'Copied view link' });
+    } catch {
+      setStatus({ kind: 'error', label: 'Copy failed' });
+    }
+  }, [encodeToURL]);
+
   const busy = status.kind === 'working';
   const videoMeta = hasVideoExport ? VIDEO_EXPORT.meta : 'Not supported here';
 
@@ -403,67 +431,99 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: compact ? 'repeat(2, minmax(0, 1fr))' : '1fr',
-        gap: compact ? 6 : 8,
+        gap: compact ? 10 : 14,
         padding: compact ? 8 : 12,
       }}>
-        {IMAGE_EXPORTS.map(preset => (
+        <ExportSection label="Image" compact={compact}>
+          {IMAGE_EXPORTS.map(preset => (
+            <ExportAction
+              key={preset.id}
+              testId={`export-${preset.id}`}
+              icon={<IconDownload />}
+              label={preset.label}
+              meta={preset.meta}
+              disabled={!file || busy}
+              onClick={() => runImageExport(preset)}
+              compact={compact}
+            />
+          ))}
           <ExportAction
-            key={preset.id}
-            testId={`export-${preset.id}`}
-            icon={<IconDownload />}
-            label={preset.label}
-            meta={preset.meta}
-            disabled={!file || busy}
-            onClick={() => runImageExport(preset)}
+            testId="export-study-sheet"
+            icon={<IconStudySheet />}
+            label="Study sheet"
+            meta="print / PDF"
+            disabled={!file || !currentFrame || busy}
+            onClick={runStudySheetExport}
             compact={compact}
           />
-        ))}
-        <ExportAction
-          testId="export-study-sheet"
-          icon={<IconStudySheet />}
-          label="Study sheet"
-          meta="print / PDF"
-          disabled={!file || !currentFrame || busy}
-          onClick={runStudySheetExport}
-          compact={compact}
-        />
-        <ExportAction
-          testId="export-usdz"
-          icon={<IconCube />}
-          label="USDZ"
-          meta={systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'AR model'}
-          disabled={!file || busy}
-          onClick={runUsdExport}
-          compact={compact}
-        />
-        <ExportAction
-          testId="export-glb"
-          icon={<IconCube />}
-          label="GLB"
-          meta={systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'glTF 3D model'}
-          disabled={!file || busy}
-          onClick={runGlbExport}
-          compact={compact}
-        />
-        <ExportAction
-          testId="export-mp4-rotate"
-          icon={<IconVideo />}
-          label="MP4 rotate"
-          meta={videoMeta}
-          disabled={!file || busy || !hasVideoExport}
-          onClick={() => runVideoExport('rotate')}
-          compact={compact}
-        />
-        <ExportAction
-          testId="export-mp4-auto-flythrough"
-          icon={<IconVideo />}
-          label="MP4 auto flythrough"
-          meta={videoMeta}
-          disabled={!file || busy || !hasVideoExport}
-          onClick={() => runVideoExport('flythrough')}
-          compact={compact}
-        />
+        </ExportSection>
+
+        <ExportSection label="3D model" compact={compact}>
+          <ExportAction
+            testId="export-glb"
+            icon={<IconCube />}
+            label="GLB"
+            meta={systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'glTF 3D model'}
+            disabled={!file || busy}
+            onClick={runGlbExport}
+            compact={compact}
+          />
+          <ExportAction
+            testId="export-usdz"
+            icon={<IconCube />}
+            label="USDZ"
+            meta={systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'AR model'}
+            disabled={!file || busy}
+            onClick={runUsdExport}
+            compact={compact}
+          />
+        </ExportSection>
+
+        <ExportSection label="Video" compact={compact}>
+          <ExportAction
+            testId="export-mp4-rotate"
+            icon={<IconVideo />}
+            label="MP4 rotate"
+            meta={hasVideoExport ? '360° orbit · 5s' : videoMeta}
+            disabled={!file || busy || !hasVideoExport}
+            onClick={() => runVideoExport('rotate')}
+            compact={compact}
+          />
+          <ExportAction
+            testId="export-mp4-auto-flythrough"
+            icon={<IconVideo />}
+            label="Auto flythrough"
+            meta={hasVideoExport ? 'auto camera path · 5s' : videoMeta}
+            disabled={!file || busy || !hasVideoExport}
+            onClick={() => runVideoExport('flythrough')}
+            compact={compact}
+          />
+          {/* Resurfaced entry to the custom flythrough studio — place camera
+              stops, set transitions, preview, and export the video. The editor
+              is its own panel (works on desktop dock + mobile sheet); this is
+              the discoverable doorway from the Export surface. */}
+          <ExportAction
+            testId="export-custom-flythrough"
+            icon={<IconPath />}
+            label="Custom flythrough"
+            meta="place camera stops → video"
+            disabled={!file || busy}
+            onClick={() => setActivePanel('flythrough')}
+            compact={compact}
+          />
+        </ExportSection>
+
+        <ExportSection label="Share" compact={compact}>
+          <ExportAction
+            testId="export-copy-view-link"
+            icon={<IconLink />}
+            label="Copy view link"
+            meta="URL that restores this exact view"
+            disabled={!file || busy}
+            onClick={runCopyViewLink}
+            compact={compact}
+          />
+        </ExportSection>
       </div>
 
       <div
@@ -483,6 +543,29 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
         {status.label}
       </div>
     </div>
+  );
+}
+
+function ExportSection({ label, compact, children }: { label: string; compact?: boolean; children: ReactNode }) {
+  return (
+    <section style={{ display: 'grid', gap: compact ? 5 : 6 }}>
+      <div style={{
+        color: 'rgba(203, 213, 225, 0.6)',
+        fontSize: compact ? 9 : 10,
+        fontWeight: 800,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+      }}>
+        {label}
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: compact ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+        gap: compact ? 6 : 8,
+      }}>
+        {children}
+      </div>
+    </section>
   );
 }
 

@@ -5,6 +5,7 @@ import { ALL_EXAMPLES } from './shared';
 import { useStore } from '../store';
 import { MillionAtomPreview, type SceneMode } from './MillionAtomPreview';
 import { openMolecule } from '../viewer/openMolecule';
+import { IconPlay } from '../icons';
 
 interface SceneModeConfig {
   id: SceneMode;
@@ -94,7 +95,7 @@ export function HeroSection() {
 
           <div className="lupi-hero-actions" aria-label="Primary actions">
             <button type="button" className="lupi-hero-primary" onClick={openMassiveScene}>
-              <IconPlay />
+              <IconPlay size={18} />
               <span>Open 1M lattice</span>
             </button>
             <a className="lupi-hero-secondary" href="#dropzone">
@@ -178,14 +179,6 @@ function Metric({ value, label }: { value: ReactNode; label: string }) {
       <strong>{value}</strong>
       <span>{label}</span>
     </div>
-  );
-}
-
-function IconPlay() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M8 5v14l11-7L8 5z" />
-    </svg>
   );
 }
 

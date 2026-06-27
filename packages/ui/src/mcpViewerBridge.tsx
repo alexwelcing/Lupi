@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { ColorMode, ColormapName, Frame, Trajectory, RenderStyle } from '@atlas/core/types';
+import type { ColorMode, ColormapName, Frame, Trajectory } from '@atlas/core/types';
 import { getAtomicNumberBySymbol, getElementSpec, getElementSpecBySymbol } from '@atlas/core';
 import type { NistCatalogEntry, NistSummary } from '@atlas/nist';
 import { filterCatalog, loadNistCatalog, summarize } from '@atlas/nist';
@@ -45,7 +45,6 @@ interface ViewerPatch extends Record<string, unknown> {
   atomScale?: number;
   showCell?: boolean;
   showAxes?: boolean;
-  renderStyle?: RenderStyle;
   backgroundPreset?: string;
   postprocessPreset?: PostprocessPreset;
   colorScheme?: ColorSchemeId;
@@ -260,10 +259,9 @@ const DEFAULT_COMMAND = [
         atomScale: 0.28,
         showCell: true,
         showAxes: true,
-        renderStyle: 'standard',
         backgroundPreset: 'manifold-field',
         postprocessPreset: 'diagram',
-        colorScheme: 'family',
+        colorScheme: 'colorway',
         colormap: 'turbo',
         cameraPreset: 'iso',
       },
@@ -308,10 +306,9 @@ const MCP_VIEWER_EXAMPLES: Array<{
           atomScale: 0.24,
           showCell: true,
           showAxes: true,
-          renderStyle: 'standard',
           backgroundPreset: 'blueprint',
           postprocessPreset: 'diagram',
-          colorScheme: 'family',
+          colorScheme: 'colorway',
           colormap: 'cividis',
           cameraPreset: 'iso',
         },
@@ -336,7 +333,6 @@ const MCP_VIEWER_EXAMPLES: Array<{
           atomScale: 0.42,
           showCell: true,
           showAxes: true,
-          renderStyle: 'standard',
           backgroundPreset: 'slate',
           postprocessPreset: 'paper',
           colorScheme: 'property',
@@ -348,11 +344,11 @@ const MCP_VIEWER_EXAMPLES: Array<{
     }, null, 2),
   },
   {
-    id: 'botanical-small',
-    label: 'Botanical molecule',
-    summary: 'Small-molecule gallery polish: botanical shader, image background, bonds on.',
+    id: 'gallery-small',
+    label: 'Gallery molecule',
+    summary: 'Small-molecule gallery polish: family colorway, image background, bonds on.',
     command: JSON.stringify({
-      id: 'mcp-botanical-caffeine',
+      id: 'mcp-gallery-caffeine',
       tool: 'lupi.generate_molecule',
       arguments: {
         inputType: 'template',
@@ -362,10 +358,9 @@ const MCP_VIEWER_EXAMPLES: Array<{
           atomScale: 1.08,
           showCell: false,
           showAxes: false,
-          renderStyle: 'botanical',
           backgroundPreset: 'bioluminescent',
           postprocessPreset: 'studio',
-          colorScheme: 'botanical',
+          colorScheme: 'colorway',
           cameraPreset: 'iso',
         },
       },
@@ -375,7 +370,7 @@ const MCP_VIEWER_EXAMPLES: Array<{
     id: 'url-scale',
     label: 'URL: 500k scale',
     summary: 'Equivalent agent bootstrap URL: ?mcp=1&atomCount=500000...',
-    command: 'http://127.0.0.1:5177/?mcp=1&atomCount=500000&elements=Co,Cr,Fe,Mn,Ni&lattice=fcc&bonds=off&atomScale=0.28&background=manifold-field&postprocess=diagram&colorScheme=family&colormap=turbo&camera=iso#/mcp',
+    command: 'http://127.0.0.1:5177/?mcp=1&atomCount=500000&elements=Co,Cr,Fe,Mn,Ni&lattice=fcc&bonds=off&atomScale=0.28&background=manifold-field&postprocess=diagram&colorScheme=colorway&colormap=turbo&camera=iso#/mcp',
   },
   {
     id: 'export-xyz',
@@ -395,7 +390,7 @@ const MCP_HARNESS_PANELS: Array<{ id: McpHarnessPanel; label: string }> = [
   { id: 'response', label: 'Log' },
 ];
 
-const DEFAULT_AGENT_COMMAND = 'generate 250k copper fcc atoms, hide bonds, show cell, diagram look, family color, camera iso';
+const DEFAULT_AGENT_COMMAND = 'generate 250k copper fcc atoms, hide bonds, show cell, diagram look, colorway color, camera iso';
 const CATALOG_QUICK_FILTERS = ['Cu', 'Fe', 'Ni', 'Al', 'Si', 'C', 'W', 'Co'];
 
 const MCP_TOOL_CAPABILITIES = [
@@ -1431,7 +1426,6 @@ function viewerPatchFromUrlParams(params: URLSearchParams): ViewerPatch {
   const cell = booleanFromUrlParam(params.get('showCell') ?? params.get('cell'));
   const axes = booleanFromUrlParam(params.get('showAxes') ?? params.get('axes'));
   const atomScale = numberFromUrlParam(params.get('atomScale'));
-  const renderStyle = params.get('renderStyle');
   const backgroundPreset = params.get('backgroundPreset') ?? params.get('background');
   const postprocessPreset = params.get('postprocessPreset') ?? params.get('postprocess') ?? params.get('look');
   const colorScheme = params.get('colorScheme') ?? params.get('scheme');
@@ -1444,10 +1438,6 @@ function viewerPatchFromUrlParams(params: URLSearchParams): ViewerPatch {
   if (cell !== undefined) patch.showCell = cell;
   if (axes !== undefined) patch.showAxes = axes;
   if (atomScale !== undefined) patch.atomScale = atomScale;
-  if (renderStyle) {
-    const value = readRenderStyle(renderStyle);
-    if (value !== undefined) patch.renderStyle = value;
-  }
   if (backgroundPreset) patch.backgroundPreset = backgroundPreset;
   if (postprocessPreset) {
     const value = readPostprocessPreset(postprocessPreset);
@@ -1772,7 +1762,6 @@ function readViewerState() {
     atomScale: state.atomScale,
     showCell: state.showCell,
     showAxes: state.showAxes,
-    renderStyle: state.renderStyle,
     backgroundPreset: state.backgroundPreset,
     postprocessPreset: state.postprocessPreset,
     colorScheme: state.colorScheme,
@@ -1821,7 +1810,6 @@ function applyViewerPatch(patch: ViewerPatch, transcript: string[]) {
   if (patch.atomScale !== undefined) next.atomScale = clamp(patch.atomScale, 0.2, 3);
   if (patch.showCell !== undefined) next.showCell = patch.showCell;
   if (patch.showAxes !== undefined) next.showAxes = patch.showAxes;
-  if (patch.renderStyle !== undefined) next.renderStyle = patch.renderStyle;
   if (patch.backgroundPreset !== undefined) next.backgroundPreset = patch.backgroundPreset;
   if (patch.postprocessPreset !== undefined) next.postprocessPreset = patch.postprocessPreset;
 
@@ -1849,7 +1837,6 @@ function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   const atomScale = readNumber(args.atomScale);
   const showCell = readBoolean(args.showCell);
   const showAxes = readBoolean(args.showAxes);
-  const renderStyle = readRenderStyle(args.renderStyle);
   const backgroundPreset = readString(args.backgroundPreset);
   const postprocessPreset = readPostprocessPreset(args.postprocessPreset ?? args.postprocess ?? args.look);
   const colorScheme = readColorScheme(args.colorScheme ?? args.scheme);
@@ -1866,7 +1853,6 @@ function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   if (bondColorMode !== undefined) patch.bondColorMode = bondColorMode;
   if (showCell !== undefined) patch.showCell = showCell;
   if (showAxes !== undefined) patch.showAxes = showAxes;
-  if (renderStyle !== undefined) patch.renderStyle = renderStyle;
   if (backgroundPreset !== undefined) patch.backgroundPreset = backgroundPreset;
   if (postprocessPreset !== undefined) patch.postprocessPreset = postprocessPreset;
   if (colorScheme !== undefined) patch.colorScheme = colorScheme;
@@ -1946,19 +1932,15 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\bshow\s+(cell|box)\b/.test(normalized)) patch.showCell = true;
   if (/\bhide\s+axes\b/.test(normalized)) patch.showAxes = false;
   if (/\bshow\s+axes\b/.test(normalized)) patch.showAxes = true;
-  if (/\btoon\b/.test(normalized)) patch.renderStyle = 'toon';
-  if (/\bbotanical\b/.test(normalized)) patch.renderStyle = 'botanical';
-  if (/\bstandard\b/.test(normalized)) patch.renderStyle = 'standard';
   if (/\bstudio\b/.test(normalized)) patch.postprocessPreset = 'studio';
   if (/\bpaper\b/.test(normalized)) patch.postprocessPreset = 'paper';
   if (/\beditorial\b/.test(normalized)) patch.postprocessPreset = 'editorial';
   if (/\bcinematic\b/.test(normalized)) patch.postprocessPreset = 'cinematic';
   if (/\bdiagram\b/.test(normalized)) patch.postprocessPreset = 'diagram';
   if (/\bproperty\b/.test(normalized)) patch.colorScheme = 'property';
-  if (/\bfamily\b/.test(normalized)) patch.colorScheme = 'family';
+  if (/\bcolorway\b/.test(normalized) || /\bfamily\b/.test(normalized)) patch.colorScheme = 'colorway';
   if (/\belement\b/.test(normalized)) patch.colorScheme = 'element';
   if (/\buniform\b/.test(normalized)) patch.colorScheme = 'uniform';
-  if (/\bbotanical\b/.test(normalized)) patch.colorScheme = 'botanical';
 
   const scaleMatch = command.match(/\b(?:atom\s+scale|scale(?:\s+atoms?)?)\s*(?:to|=|:)?\s*(\d+(?:\.\d+)?)/i);
   if (scaleMatch?.[1]) patch.atomScale = Number(scaleMatch[1]);
@@ -2245,10 +2227,6 @@ function parseScaleAtomCount(value: string): number | undefined {
   return undefined;
 }
 
-function readRenderStyle(value: unknown): RenderStyle | undefined {
-  return value === 'standard' || value === 'toon' || value === 'botanical' ? value : undefined;
-}
-
 function readPostprocessPreset(value: unknown): PostprocessPreset | undefined {
   return value === 'paper' || value === 'studio' || value === 'editorial' || value === 'cinematic' || value === 'diagram'
     ? value
@@ -2410,10 +2388,9 @@ function catalogEntryToGenerateArgs(entry: NistCatalogEntry): Record<string, unk
       atomScale: entry.elements.length > 2 ? 0.36 : 0.48,
       showCell: true,
       showAxes: true,
-      renderStyle: 'standard',
       backgroundPreset: 'blueprint',
       postprocessPreset: 'diagram',
-      colorScheme: entry.elements.length > 1 ? 'family' : 'element',
+      colorScheme: entry.elements.length > 1 ? 'colorway' : 'element',
       colormap: 'turbo',
       cameraPreset: 'iso',
     },

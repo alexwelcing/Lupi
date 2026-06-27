@@ -19,11 +19,11 @@ import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { wrapDelta } from './interpolation';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { Frame, ColormapName, RenderStyle } from '@atlas/core/types';
+import type { Frame, ColormapName } from '@atlas/core/types';
 import { SpatialHash3D } from './SpatialHash';
 import { useGlobalTimer } from './useTimer';
 
-import { TYPE_COLORS, TYPE_RADII, COLORMAPS, BOTANICAL_COLORS, BOTANICAL_RADII, DEFAULT_TYPE_COLOR } from './constants';
+import { TYPE_COLORS, TYPE_RADII, COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
 import { buildMaterialPaletteData } from './materials';
 import { getElementSpec, hexToRgb } from '@atlas/core';
 
@@ -39,13 +39,11 @@ interface AtomsOptimizedProps {
   elementColorOverrides?: Record<number, string>;
   propRange?: [number, number];
   scale?: number;
-  renderStyle?: RenderStyle;
   maxAtoms?: number;
   onSpatialHash?: (hash: SpatialHash3D) => void;
   highlightedAtoms?: Set<number>;
   hiddenAtomTypes?: Set<number>;
   atomTypeScales?: Record<number, number>;
-  botanicalMode?: boolean;
   materialPreset?: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
   /** 0 = pure per-element identity, 1 = full preset override. Scenes can
    *  blend, e.g. 0.7 means 70% preset + 30% element character. */
@@ -67,7 +65,7 @@ interface AtomsOptimizedProps {
   atomTexture?: 'none' | 'scratched' | 'noise';
   /** Where per-type atom colors come from. Overrides the legacy
    *  colormap-only behavior. 'colormap' is the original default. */
-  atomColorSource?: 'colormap' | 'element' | 'botanical';
+  atomColorSource?: 'colormap' | 'element';
   /** Etched annotation texture — text rasterized via Canvas2D, alpha
    *  channel used as the stamp mask. When set together with `etchAtomId`,
    *  the impostor shader engraves it onto that atom's surface. */
@@ -610,13 +608,11 @@ export function AtomsOptimized({
   elementColorOverrides = {},
   propRange,
   scale = 1.0,
-  renderStyle = 'standard',
   maxAtoms,
   onSpatialHash,
   highlightedAtoms,
   hiddenAtomTypes,
   atomTypeScales,
-  botanicalMode = false,
   atomColorSource = 'colormap',
   etchTexture = null,
   etchAtomId = null,
@@ -821,16 +817,8 @@ export function AtomsOptimized({
     // Rebuild the 256×1 type palette (768 bytes, instant)
     const oldPalette = uniforms.uPalette.value as THREE.DataTexture;
 
-    // Source the per-type palette from one of three places. botanicalMode
-    // forces botanical regardless of atomColorSource — historical UX.
-    const effectiveSource = botanicalMode ? 'botanical' : atomColorSource;
-
-    if (effectiveSource === 'botanical') {
-      uniforms.uPalette.value = buildPaletteTexture((typeId) => {
-        const c = BOTANICAL_COLORS[typeId] ?? [0.3, 0.5, 0.2];
-        return [c[0], c[1], c[2]];
-      });
-    } else if (effectiveSource === 'element') {
+    // Source the per-type palette from one of two places.
+    if (atomColorSource === 'element') {
       // Element-natural colors from the periodic table data. Cu is warm, Au
       // is gold, O is red — no colormap mediation. Pairs with the per-element
       // material identity for a chemically-honest read.
@@ -862,7 +850,7 @@ export function AtomsOptimized({
     oldColormap.dispose();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, botanicalMode, atomColorSource, material, frame.types, frame.natoms, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor]);
+  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, material, frame.types, frame.natoms, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor]);
 
   // ─── PMREM env sync and dynamic lighting ───────────────────────────────────────────────
   // scene.environment is set by drei's <Environment> in App.tsx; it can
@@ -954,7 +942,7 @@ export function AtomsOptimized({
     const scaleOverrideLookup = new Float32Array(MAX_TYPES).fill(1.0);
 
     for (let typeId = 0; typeId < MAX_TYPES; typeId++) {
-      radiiLookup[typeId] = botanicalMode ? (BOTANICAL_RADII[typeId] ?? 1.2) : (TYPE_RADII[typeId] ?? 1.2);
+      radiiLookup[typeId] = TYPE_RADII[typeId] ?? 1.2;
       if (hiddenAtomTypes?.has(typeId)) hiddenLookup[typeId] = 1;
       if (atomTypeScales?.[typeId] !== undefined) scaleOverrideLookup[typeId] = atomTypeScales[typeId];
     }
@@ -1056,7 +1044,7 @@ export function AtomsOptimized({
     return cleanupIdle;
   }, [
     frame, nextFrame, scale, propData, pMin, pMax,
-    hiddenAtomTypes, atomTypeScales, botanicalMode,
+    hiddenAtomTypes, atomTypeScales,
     onSpatialHash, capacity, colorProperty, geometry,
   ]);
 

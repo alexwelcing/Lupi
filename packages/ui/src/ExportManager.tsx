@@ -294,7 +294,7 @@ export function ExportManager() {
     if (!req) return;
 
     try {
-      const { TYPE_COLORS, TYPE_RADII, DEFAULT_TYPE_COLOR, BOTANICAL_COLORS, COLORMAPS } = await import('@atlas/scene');
+      const { TYPE_COLORS, TYPE_RADII, DEFAULT_TYPE_COLOR, COLORMAPS } = await import('@atlas/scene');
 
       const state = useStore.getState();
       const currentFile = state.file;
@@ -332,9 +332,6 @@ export function ExportManager() {
       }
 
       const resolveTypeColor = (typeId: number): [number, number, number] => {
-        if (state.renderStyle === 'botanical' || state.atomColorSource === 'botanical') {
-          return BOTANICAL_COLORS[typeId] ?? [0.3, 0.5, 0.2];
-        }
         if (state.atomColorSource === 'element') {
           const override = state.elementColorOverrides[typeId];
           if (override) return new THREE.Color(override).toArray() as [number, number, number];

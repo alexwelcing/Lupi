@@ -94,19 +94,12 @@ describe('Store — Color & Visuals', () => {
     expect(getStoreState().activeProfile).toBeNull();
   });
 
-  it('sets render style', () => {
-    getStoreState().setRenderStyle('toon');
-    expect(getStoreState().renderStyle).toBe('toon');
-  });
-
-  it('keeps atom color schemes independent from surface render style', () => {
-    getStoreState().setRenderStyle('toon');
-    getStoreState().setColorScheme('botanical');
+  it('color scheme drives the atom color source', () => {
+    getStoreState().setColorScheme('colorway');
 
     const s = getStoreState();
-    expect(s.colorScheme).toBe('botanical');
-    expect(s.atomColorSource).toBe('botanical');
-    expect(s.renderStyle).toBe('toon');
+    expect(s.colorScheme).toBe('colorway');
+    expect(s.atomColorSource).toBe('colormap');
   });
 
   it('applies neon visual profile', () => {
@@ -153,7 +146,6 @@ describe('Store — URL Serialization', () => {
     s.setUniformAtomColor('#ff8844');
     s.setPostprocessPreset('cinematic');
     s.setPostprocessIntensity(1.35);
-    s.setRenderStyle('botanical');
     s.setMaterialScene('forge');
     s.setMaterialPreset('metallic');
     s.setMaterialIntensity(0.42);
@@ -184,7 +176,6 @@ describe('Store — URL Serialization', () => {
     expect(restored.uniformAtomColor).toBe('#ff8844');
     expect(restored.postprocessPreset).toBe('cinematic');
     expect(restored.postprocessIntensity).toBeCloseTo(1.35);
-    expect(restored.renderStyle).toBe('botanical');
     expect(restored.materialScene).toBe('forge');
     expect(restored.materialPreset).toBe('metallic');
     expect(restored.materialIntensity).toBeCloseTo(0.42);
@@ -240,10 +231,16 @@ describe('Store — URL Serialization', () => {
     }));
 
     restored = getStoreState();
-    expect(restored.colorScheme).toBe('family');
+    expect(restored.colorScheme).toBe('colorway');
     expect(restored.atomColorSource).toBe('colormap');
     expect(restored.colorMode).toBe('type');
     expect(restored.colormap).toBe('plasma');
+  });
+
+  it('migrates the legacy "family" color scheme id to "colorway"', () => {
+    resetStore();
+    getStoreState().decodeFromURL(encodeStateDelta({ cs: 'family' }));
+    expect(getStoreState().colorScheme).toBe('colorway');
   });
 });
 

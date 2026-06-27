@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { usePressSpring } from './hooks/usePressSpring';
+import { IconClose } from './icons';
 
 interface DockableWindowProps {
   title: string;
@@ -233,7 +234,7 @@ export function DockableWindow({
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <WinBtn icon={<IconCollapse />} title="Collapse" onClick={() => setCollapsed(true)} />
-          <WinBtn icon={<IconClose />} title="Close" onClick={onClose} />
+          <WinBtn icon={<IconClose size={13} />} title="Close" onClick={onClose} />
         </div>
       </div>
 
@@ -269,13 +270,9 @@ function WinBtn({ icon, title, onClick }: { icon: ReactNode; title: string; onCl
   return (
     <button
       type="button"
-      ref={press.ref}
+      {...press}
       data-no-drag="1"
       onClick={onClick}
-      onPointerDown={press.onPointerDown}
-      onPointerUp={press.onPointerUp}
-      onPointerLeave={press.onPointerLeave}
-      onPointerCancel={press.onPointerCancel}
       aria-label={title}
       title={title}
       className="lupine-icon-btn"
@@ -285,15 +282,6 @@ function WinBtn({ icon, title, onClick }: { icon: ReactNode; title: string; onCl
     </button>
   );
 }
-
-function IconClose() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
-  );
-}
-
 function IconCollapse() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

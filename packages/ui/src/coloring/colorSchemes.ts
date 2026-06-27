@@ -2,9 +2,8 @@
  * Color schemes — directorial atom-coloring decisions.
  *
  * Same pattern as the postprocess presets: a coherent recipe (atom color
- * source + bond default + botanical flag) bundled into one editorial choice.
- * The drawer picks one; the granular fields underneath get set by the scheme
- * resolver.
+ * mode + palette source) bundled into one editorial choice. The drawer picks
+ * one; the granular fields underneath get set by the scheme resolver.
  *
  * Adding a new scheme: append a SchemeId, define the SchemeProfile here,
  * and update `setColorScheme` in the store. Most user complaints about
@@ -14,7 +13,7 @@
 
 import type { ColorMode } from '@atlas/core/types';
 
-export type ColorSchemeId = 'element' | 'property' | 'family' | 'botanical' | 'uniform';
+export type ColorSchemeId = 'element' | 'colorway' | 'property' | 'uniform';
 
 /**
  * The source of per-atom color when atom color mode is 'type'. Determines
@@ -25,9 +24,8 @@ export type ColorSchemeId = 'element' | 'property' | 'family' | 'botanical' | 'u
  *                 generic LAMMPS dumps with type=1,2,3 and no element map).
  *   'element'   — use the element's natural color from getElementSpec.
  *                 Cu reads orange, O reads red, Au reads gold.
- *   'botanical' — use BOTANICAL_COLORS — a hand-tuned plant-like palette.
  */
-export type AtomColorSource = 'colormap' | 'element' | 'botanical';
+export type AtomColorSource = 'colormap' | 'element';
 
 export interface SchemeProfile {
   id: ColorSchemeId;
@@ -38,11 +36,6 @@ export interface SchemeProfile {
   atomColorMode: ColorMode;
   /** Where the per-type palette comes from when atomColorMode === 'type'. */
   atomColorSource: AtomColorSource;
-  /** True when the scheme should engage botanical-mode shader paths. */
-  botanical: boolean;
-  /** True when the scheme expects per-element material identity to drive
-   *  visuals (vs a flat preset). All schemes currently keep this on. */
-  perElementMaterial: boolean;
 }
 
 export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
@@ -52,35 +45,20 @@ export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
     tagline: 'Natural element colors. Cu warm, Au gold, O red.',
     atomColorMode: 'type',
     atomColorSource: 'element',
-    botanical: false,
-    perElementMaterial: true,
+  },
+  colorway: {
+    id: 'colorway',
+    label: 'Colorway',
+    tagline: 'Spread a colorway across the atoms — one hue per element.',
+    atomColorMode: 'type',
+    atomColorSource: 'colormap',
   },
   property: {
     id: 'property',
     label: 'Property',
-    tagline: 'Colormap of a loaded per-atom source scalar.',
+    tagline: 'Map the colorway onto a loaded per-atom scalar.',
     atomColorMode: 'property',
     atomColorSource: 'colormap', // property mode reads from uColormap, not uPalette
-    botanical: false,
-    perElementMaterial: true,
-  },
-  family: {
-    id: 'family',
-    label: 'Family',
-    tagline: 'Colormap by type rank. Generic, abstract, ordering-friendly.',
-    atomColorMode: 'type',
-    atomColorSource: 'colormap',
-    botanical: false,
-    perElementMaterial: true,
-  },
-  botanical: {
-    id: 'botanical',
-    label: 'Botanical',
-    tagline: 'Plant-like palette + soft material. For storytelling shots.',
-    atomColorMode: 'type',
-    atomColorSource: 'botanical',
-    botanical: true,
-    perElementMaterial: false, // botanical look overrides material profile
   },
   uniform: {
     id: 'uniform',
@@ -88,20 +66,18 @@ export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
     tagline: 'Single color across all atoms. Lets shape and material speak.',
     atomColorMode: 'uniform',
     atomColorSource: 'colormap', // not used in uniform mode
-    botanical: false,
-    perElementMaterial: true,
   },
 };
 
-export const SCHEME_ORDER: ColorSchemeId[] = ['element', 'property', 'family', 'botanical', 'uniform'];
+export const SCHEME_ORDER: ColorSchemeId[] = ['element', 'colorway', 'property', 'uniform'];
 
 /**
  * Pick the default scheme for a freshly-loaded file. Property data is often
  * diagnostic, but the viewer's first read should be molecular identity.
- * Users can still switch to Property explicitly from Molecule Color.
+ * Users can still switch to Colorway or Property explicitly from Molecule Color.
  *
  *   - Element is the default for all molecular loads.
- *   - Property, Family, Botanical, and Uniform are opt-in looks.
+ *   - Colorway, Property, and Uniform are opt-in looks.
  */
 export function pickInitialScheme(_opts: {
   hasProperty: boolean;

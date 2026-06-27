@@ -153,7 +153,6 @@ export function DevProbe({ enabled = false }: DevProbeProps) {
           playing: state.playing,
           playbackSpeed: state.playbackSpeed,
           loadedAtomCount: state.loadedAtomCount,
-          renderStyle: state.renderStyle,
           colorMode: state.colorMode,
           colorProperty: state.colorProperty,
           colormap: state.colormap,

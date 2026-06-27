@@ -126,7 +126,6 @@ export function BatchAssetGenerator() {
       const state = useStore.getState();
       state.setCameraPreset('iso');
       state.setAtomScale(1.0);
-      state.setRenderStyle('standard');
       if (!state.showBonds) state.toggleBonds();
       if (!state.showCell) state.toggleCell();
       if (!state.showAxes) state.toggleAxes();
