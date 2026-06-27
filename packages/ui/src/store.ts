@@ -105,7 +105,7 @@ function sanitizeBackgroundBackdropPattern(value: unknown): BackgroundBackdropPa
 }
 
 function sanitizeAtomColorSource(value: unknown, fallback: AtomColorSource): AtomColorSource {
-  return value === 'colormap' || value === 'element' || value === 'botanical' ? value : fallback;
+  return value === 'colormap' || value === 'element' ? value : fallback;
 }
 
 function sanitizeColorMode(value: unknown, fallback: ColorMode): ColorMode {

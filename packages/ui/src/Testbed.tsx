@@ -78,16 +78,14 @@ export function Testbed() {
             {showGrid && <Grid infiniteGrid fadeDistance={20} cellColor="#444" sectionColor="#888" />}
             
             <group scale={0.5}>
-              <AtomsOptimized 
-                frame={mockFrame} 
-                colormap={colorPalette as any} 
-                renderStyle={renderStyle as any} 
+              <AtomsOptimized
+                frame={mockFrame}
+                colormap={colorPalette as any}
               />
               {showBonds && (
-                <Bonds 
-                  frame={mockFrame} 
-                  colormap={colorPalette as any} 
-                  renderStyle={renderStyle as any} 
+                <Bonds
+                  frame={mockFrame}
+                  colormap={colorPalette as any}
                   maxBondLength={3.0}
                 />
               )}

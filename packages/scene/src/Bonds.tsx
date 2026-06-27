@@ -16,10 +16,10 @@
 import { useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { Frame, ColormapName, RenderStyle } from '@atlas/core/types';
+import type { Frame, ColormapName } from '@atlas/core/types';
 import { getElementSpec, hexToRgb } from '@atlas/core';
 import { useGlobalTimer } from './useTimer';
-import { DEFAULT_TYPE_COLOR, getTypeColorFromColormap, BOTANICAL_COLORS, COLORMAPS } from './constants';
+import { DEFAULT_TYPE_COLOR, getTypeColorFromColormap, COLORMAPS } from './constants';
 import { useBondGpuPipeline } from './useBondGpuPipeline';
 // Vite ?worker import: produces a real bundled .js worker module in prod.
 // The plain `new URL('./bondWorker.ts', import.meta.url)` form does NOT
@@ -93,8 +93,6 @@ interface BondsProps {
   cellBounds?: [number, number, number, number, number, number];
   radius?: number;
   opacity?: number;
-  renderStyle?: RenderStyle;
-  botanicalMode?: boolean;
   materialPreset?: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
   materialIntensity?: number;
   rimLightIntensity?: number;
@@ -114,7 +112,7 @@ interface BondsProps {
   useGpu?: boolean;
   /** Source of per-type atom colors used as gradient endpoints. Should
    *  match the value passed to AtomsOptimized so bonds and atoms agree. */
-  atomColorSource?: 'colormap' | 'element' | 'botanical';
+  atomColorSource?: 'colormap' | 'element';
   /** Telemetry hook — fires after every bond detection completes, with the
    *  backend that produced the result and the count. Used by the dev HUD
    *  to verify state-flow; safe to omit. */
@@ -140,8 +138,6 @@ export function Bonds({
   cellBounds,
   radius = 0.12,
   opacity = 0.85,
-  renderStyle = 'standard',
-  botanicalMode = false,
   materialPreset = 'default',
   materialIntensity = 0.0,
   rimLightIntensity = 0.3,
@@ -600,8 +596,7 @@ export function Bonds({
   //  via key={capacity}, not in a post-commit useEffect.)
 
   // ─── Material ──────────────────────────────────────────────────────
-  const uniformsRef = useRef({ 
-    uTime: { value: 0 },
+  const uniformsRef = useRef({
     uSurfaceRoughness: { value: surfaceRoughness },
     uSurfacePolish: { value: surfacePolish },
     uFillLightColor: { value: new THREE.Color(fillLightColor) },
@@ -636,62 +631,39 @@ export function Bonds({
   }, [surfaceRoughness, surfacePolish, fillLightColor, rimLightColor, rimLightIntensity, fillLightAzimuth, fillLightElevation, rimLightAzimuth, rimLightElevation]);
 
   const material = useMemo(() => {
-    let mat: THREE.Material;
-    if (botanicalMode) {
-      // Botanical mode keeps MeshPhysicalMaterial — needs transmission for organic look
-      mat = new THREE.MeshPhysicalMaterial({
-        metalness: 0.05,
-        roughness: 0.65,
-        clearcoat: 0.2,
-        clearcoatRoughness: 0.3,
-        transmission: 0.3,
-        thickness: 1.5,
-        ior: 1.4,
-      });
-    } else if (renderStyle === 'toon') {
-      mat = new THREE.MeshToonMaterial({
-        transparent: opacity < 1,
-        opacity,
-      });
-    } else {
-      // MeshPhysicalMaterial, isotropic. Anisotropy was removed (it strobed
-      // on thin moving cylinders); clearcoat (surface knob) is the only
-      // Physical-only feature still used, transmission stays off.
-      let matConfig: THREE.MeshPhysicalMaterialParameters = {};
-      switch (materialPreset) {
-        case 'matte':
-          matConfig = { metalness: 0.05, roughness: 0.85 };
-          break;
-        case 'metallic':
-          matConfig = { metalness: 0.8, roughness: 0.2, envMapIntensity: 2.0 };
-          break;
-        case 'glass':
-          matConfig = { metalness: 0.3, roughness: 0.05, envMapIntensity: 1.5 };
-          break;
-        case 'plastic':
-          matConfig = { metalness: 0.0, roughness: 0.4, envMapIntensity: 1.0 };
-          break;
-        case 'default':
-        default:
-          // Isotropic: the anisotropic streak (formerly 0.4) caused
-          // specular strobing on thin moving cylinders and is gone.
-          matConfig = { metalness: 0.35, roughness: 0.45, envMapIntensity: 1.0 };
-          break;
-      }
-      mat = new THREE.MeshPhysicalMaterial({
-        ...matConfig,
-        clearcoat: surfaceClearcoat,
-        clearcoatRoughness: 0.1,
-        transparent: true,
-        opacity,
-      });
+    // MeshPhysicalMaterial, isotropic. Anisotropy was removed (it strobed
+    // on thin moving cylinders); clearcoat (surface knob) is the only
+    // Physical-only feature still used, transmission stays off.
+    let matConfig: THREE.MeshPhysicalMaterialParameters = {};
+    switch (materialPreset) {
+      case 'matte':
+        matConfig = { metalness: 0.05, roughness: 0.85 };
+        break;
+      case 'metallic':
+        matConfig = { metalness: 0.8, roughness: 0.2, envMapIntensity: 2.0 };
+        break;
+      case 'glass':
+        matConfig = { metalness: 0.3, roughness: 0.05, envMapIntensity: 1.5 };
+        break;
+      case 'plastic':
+        matConfig = { metalness: 0.0, roughness: 0.4, envMapIntensity: 1.0 };
+        break;
+      case 'default':
+      default:
+        // Isotropic: the anisotropic streak (formerly 0.4) caused
+        // specular strobing on thin moving cylinders and is gone.
+        matConfig = { metalness: 0.35, roughness: 0.45, envMapIntensity: 1.0 };
+        break;
     }
+    const mat = new THREE.MeshPhysicalMaterial({
+      ...matConfig,
+      clearcoat: surfaceClearcoat,
+      clearcoatRoughness: 0.1,
+      transparent: true,
+      opacity,
+    });
 
     mat.onBeforeCompile = (shader) => {
-      if (botanicalMode) {
-        shader.uniforms.uTime = uniformsRef.current.uTime;
-      }
-
       // Bond LOD via distance fade. uBondFadeStart and uBondFadeEnd are in
       // world units (Å). Bonds closer than start render fully opaque; those
       // beyond end are fully transparent (early-z rejection in the fragment
@@ -711,7 +683,6 @@ export function Bonds({
       shader.vertexShader = `
         attribute vec2 radiusBT;
         varying float vBondViewDist;
-        ${botanicalMode ? 'uniform float uTime;' : ''}
         ${shader.vertexShader}
       `;
 
@@ -721,24 +692,13 @@ export function Bonds({
       // gradient — that stack produced visual noise and bloom strobing.
       // metalness/roughness now come uniformly from the material preset.
 
-      let vertexChunk = `
+      const vertexChunk = `
         #include <begin_vertex>
         // Taper bonds using per-instance radiusBT (bottom, top)
         float instanceRadius = mix(radiusBT.x, radiusBT.y, position.y + 0.5);
         transformed.x *= instanceRadius;
         transformed.z *= instanceRadius;
       `;
-
-      if (botanicalMode) {
-        vertexChunk += `
-        // Organic wind sway based on world height (instanceMatrix[3].y)
-        float heightFactor = max(0.0, instanceMatrix[3].y - 2.0);
-        float swayAmount = heightFactor * 0.04;
-        float noise = sin(uTime * 1.2 + instanceMatrix[3].x * 0.5 + instanceMatrix[3].z * 0.5);
-        transformed.x += noise * swayAmount;
-        transformed.z += cos(uTime * 0.9 + instanceMatrix[3].x) * swayAmount;
-        `;
-      }
 
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', vertexChunk);
 
@@ -809,17 +769,11 @@ export function Bonds({
         vec3 fillColor = uFillLightColor * wrapNoL2;
         
         gl_FragColor.rgb += rimColor + fillColor;
-
-        ${botanicalMode ? `
-        // Velvet rim/fuzz (Schlick approximation)
-        float botFresnel = pow(1.0 - ndotv, 3.0);
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb + vec3(0.15, 0.2, 0.05), botFresnel * 0.6);
-        ` : ''}
         `,
       );
     };
     return mat;
-  }, [renderStyle, opacity, botanicalMode, materialPreset, surfaceClearcoat]);
+  }, [opacity, materialPreset, surfaceClearcoat]);
 
   // Cleanup
   useEffect(() => {
@@ -1016,7 +970,6 @@ export function Bonds({
       colorProperty ?? '',
       colormap,
       atomColorSource,
-      botanicalMode ? 'botanical' : 'standard',
       bondColorMode,
       radius,
       propRange?.[0] ?? 'auto',
@@ -1120,9 +1073,6 @@ export function Bonds({
         // type, otherwise the bond gradient terminates in colors that don't
         // exist on the atoms it connects. Mirror that branch structure here.
         const colorForType = (typeId: number): [number, number, number] => {
-          if (botanicalMode || atomColorSource === 'botanical') {
-            return BOTANICAL_COLORS[typeId] ?? [0.3, 0.5, 0.2];
-          }
           if (atomColorSource === 'element') {
             return hexToRgb(elementColorOverrides[typeId] ?? getElementSpec(typeId).color);
           }
@@ -1191,7 +1141,7 @@ export function Bonds({
     // frame for property coloring. In static modes (type/element/uniform/
     // botanical), propData is null and frame changes don't refire this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, botanicalMode, bondColorMode, nextFrame, interpolationFactor, colorProperty]);
+  }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, interpolationFactor, colorProperty]);
 
   // Matrix upload runs in the rAF loop, NOT in a useEffect. This bypasses
   // React's commit cycle so per-frame matrix updates flow at native rAF
@@ -1212,9 +1162,6 @@ export function Bonds({
   }>({ frame: null, nextFrame: undefined, interp: -1, bondPairs: null, capacity: 0 });
 
   useFrame(() => {
-    if (botanicalMode) {
-      uniformsRef.current.uTime.value = timer.getElapsedTime();
-    }
 
     // Skip when nothing that affects matrices has changed since last upload.
     // capacity remounts the mesh via key, so capacity flips also trigger an

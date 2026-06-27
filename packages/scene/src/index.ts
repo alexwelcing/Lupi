@@ -1,5 +1,4 @@
 // Scene components
-export { Atoms } from './Atoms';
 export { AtomsOptimized } from './AtomsOptimized';
 export { AtomClusters } from './AtomClusters';
 export { buildClusters, MAX_GRID_DIM, clusterCellRadius } from './ClusterBuilder';
@@ -17,7 +16,6 @@ export {
   TYPE_COLORS,
   DEFAULT_TYPE_COLOR,
   TYPE_RADII,
-  BOTANICAL_COLORS,
   COLORMAPS,
   getBackgroundFromColormap,
 } from './constants';

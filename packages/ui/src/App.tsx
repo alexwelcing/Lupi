@@ -1569,13 +1569,11 @@ export default function App() {
                   elementColorOverrides={elementColorOverrides}
                   atomColorSource={atomColorSource}
                   scale={atomScale}
-                  renderStyle={renderStyle}
                   maxAtoms={deviceMaxAtoms}
                   loadedAtomCount={loadedAtomCount}
                   onSpatialHash={setSpatialHash}
                   hiddenAtomTypes={hiddenAtomTypes}
                   atomTypeScales={atomTypeScales}
-                  botanicalMode={renderStyle === 'botanical'}
                   materialPreset={materialPreset}
                   materialIntensity={materialIntensity}
                   rimLightIntensity={rimLightIntensity}
@@ -1610,7 +1608,6 @@ export default function App() {
                     interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
                     maxBondLength={effectiveBondCutoff}
                     tolerance={bondTolerance}
-                    renderStyle={renderStyle}
                     colormap={colormap}
                     colorMode={colorMode}
                     colorProperty={colorProperty ?? undefined}
@@ -1618,7 +1615,6 @@ export default function App() {
                     elementColorOverrides={elementColorOverrides}
                     radius={0.12}
                     opacity={0.85}
-                    botanicalMode={renderStyle === 'botanical'}
                     materialPreset={materialPreset}
                     materialIntensity={materialIntensity}
                     rimLightIntensity={rimLightIntensity}

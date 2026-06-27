@@ -25,9 +25,8 @@ export type ColorSchemeId = 'element' | 'property' | 'family' | 'uniform';
  *                 generic LAMMPS dumps with type=1,2,3 and no element map).
  *   'element'   — use the element's natural color from getElementSpec.
  *                 Cu reads orange, O reads red, Au reads gold.
- *   'botanical' — use BOTANICAL_COLORS — a hand-tuned plant-like palette.
  */
-export type AtomColorSource = 'colormap' | 'element' | 'botanical';
+export type AtomColorSource = 'colormap' | 'element';
 
 export interface SchemeProfile {
   id: ColorSchemeId;
