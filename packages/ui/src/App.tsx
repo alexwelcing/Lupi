@@ -1408,7 +1408,7 @@ export default function App() {
                   minHeight: isMobile ? 34 : undefined,
                 }}
               >
-                {isMobile ? 'Atoms' : 'Gallery'}
+                Gallery
               </a>
             </>
           )}
@@ -1998,10 +1998,10 @@ export default function App() {
             </MobileTabButton>
             <MobileTabButton
               onClick={() => { setActivePanel(null); setShowPotentialBrowser(true); }}
-              ariaLabel="Browse gallery and atoms"
+              ariaLabel="Browse the molecule library"
               active={false}
             >
-              ATOMS
+              LIBRARY
             </MobileTabButton>
             <MobileTabButton
               onClick={() => setActivePanel(activePanel === 'search' ? null : 'search')}

@@ -91,6 +91,12 @@ const IconPath = () => (
     <path d="M7 6.6c4 0 6.5 1.4 10.3 2.9" opacity="0.7" />
   </svg>
 );
+const IconLink = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 13a4 4 0 0 0 5.66 0l2.83-2.83a4 4 0 0 0-5.66-5.66l-1 1" />
+    <path d="M15 11a4 4 0 0 0-5.66 0L6.5 13.83a4 4 0 0 0 5.66 5.66l1-1" />
+  </svg>
+);
 
 function useCompactExportPanel() {
   const [compact, setCompact] = useState(false);
@@ -171,6 +177,7 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
   const triggerExport = useStore(s => s.triggerExport);
+  const encodeToURL = useStore(s => s.encodeToURL);
   const setShowScaleBar = useStore(s => s.setShowScaleBar);
   const cameraPosition = useStore(s => s.cameraPosition);
   const cameraTarget = useStore(s => s.cameraTarget);
@@ -334,6 +341,22 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
     });
   }, [cameraPosition, cameraTarget, file, hasVideoExport, triggerExport]);
 
+  // Share the current view as a URL that restores camera, colors, material, and
+  // scene. Relocated here from the studio "Grade" group, where it was an orphan
+  // share button sitting among grade controls.
+  const runCopyViewLink = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    setStatus({ kind: 'working', label: 'Copying view link' });
+    const url = new URL(window.location.href);
+    url.searchParams.set('s', encodeToURL());
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setStatus({ kind: 'success', label: 'Copied view link' });
+    } catch {
+      setStatus({ kind: 'error', label: 'Copy failed' });
+    }
+  }, [encodeToURL]);
+
   const busy = status.kind === 'working';
   const videoMeta = hasVideoExport ? VIDEO_EXPORT.meta : 'Not supported here';
 
@@ -490,6 +513,18 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
             meta="place camera stops → video"
             disabled={!file || busy}
             onClick={() => setActivePanel('flythrough')}
+            compact={compact}
+          />
+        </ExportSection>
+
+        <ExportSection label="Share" compact={compact}>
+          <ExportAction
+            testId="export-copy-view-link"
+            icon={<IconLink />}
+            label="Copy view link"
+            meta="URL that restores this exact view"
+            disabled={!file || busy}
+            onClick={runCopyViewLink}
             compact={compact}
           />
         </ExportSection>
