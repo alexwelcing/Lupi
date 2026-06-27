@@ -1989,7 +1989,6 @@ export default function App() {
                 activePanel={activePanel}
                 studioDeck={studioDeck}
                 onModeChange={openStudioDeck}
-                onClose={() => setActivePanel(null)}
                 showChrome
               />
             </ErrorBoundary>

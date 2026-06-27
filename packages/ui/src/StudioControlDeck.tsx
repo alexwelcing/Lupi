@@ -1,60 +1,44 @@
 /**
  * StudioControlDeck — the shell for the Molecule / Scene control surfaces.
  *
- * Owns only the chrome: positioning (overlay vs drawer), the shared <style>
- * block that both bodies' CSS classes resolve against, and the header with the
- * live title/subtitle. The bodies themselves are composed in — MoleculeControls
+ * Always renders inside the Controls drawer (the desktop dock and the mobile
+ * sheet both mount it via ViewerControlsDrawer). It owns only the chrome: the
+ * shared <style> block both bodies' CSS classes resolve against, and a compact
+ * live-status line. The bodies themselves are composed in — MoleculeControls
  * and SceneControls each own their own store wiring.
+ *
+ * The mode name isn't repeated here: the drawer's mode tabs sit directly above
+ * and already show which surface is active, so the status line carries the
+ * live detail (grade · color, or the active world) instead.
  */
 import { useStore } from './store';
 import { BG_PRESETS } from './backgroundPresets';
-import { IconClose } from './icons';
 import { MoleculeControls } from './studio/MoleculeControls';
 import { SceneControls } from './studio/SceneControls';
 
 export type StudioDeckMode = 'molecule' | 'scene';
 
-export function StudioControlDeck({
-  mode,
-  onClose,
-  bottomOffset = 0,
-  maxHeight = 'none',
-  variant = 'overlay',
-  showCloseButton = true,
-}: {
-  mode: StudioDeckMode;
-  onClose: () => void;
-  bottomOffset?: number;
-  maxHeight?: string;
-  variant?: 'overlay' | 'drawer';
-  showCloseButton?: boolean;
-}) {
-  const isDrawer = variant === 'drawer';
+export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
   const postprocessPreset = useStore(s => s.postprocessPreset);
   const colorScheme = useStore(s => s.colorScheme);
   const backgroundPreset = useStore(s => s.backgroundPreset);
   const activeBackgroundPreset = BG_PRESETS[backgroundPreset];
 
-  const title = mode === 'molecule' ? 'Molecule' : 'Scene';
-  const subtitle = mode === 'molecule'
+  const status = mode === 'molecule'
     ? `${postprocessPreset} grade · ${colorScheme} color`
     : (activeBackgroundPreset?.label ?? backgroundPreset);
 
   return (
     <div
       data-testid="studio-control-deck"
+      className="lupi-studio-deck"
       style={{
-        position: isDrawer ? 'relative' : 'absolute',
-        left: isDrawer ? undefined : 0,
-        right: isDrawer ? undefined : 0,
-        bottom: isDrawer ? undefined : bottomOffset,
-        display: 'flex',
-        justifyContent: isDrawer ? 'stretch' : 'center',
-        pointerEvents: isDrawer ? 'auto' : 'none',
-        zIndex: isDrawer ? undefined : 148,
-        padding: isDrawer ? 0 : '0 12px',
-        minHeight: 0,
-        height: isDrawer ? '100%' : undefined,
+        width: '100%',
+        height: '100%',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        scrollbarWidth: 'none',
+        padding: '6px 6px 10px',
       }}
     >
       <style>{`
@@ -79,13 +63,13 @@ export function StudioControlDeck({
         }
         .lupi-deck-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 8px;
+          grid-template-columns: 1fr;
+          gap: 7px;
           align-items: stretch;
         }
         .lupi-studio-segments {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 6px;
         }
         .lupi-studio-slider-grid {
@@ -115,92 +99,49 @@ export function StudioControlDeck({
           border: 0;
           border-radius: 5px;
         }
-        .lupi-studio-deck-drawer .lupi-deck-grid {
-          grid-template-columns: 1fr;
-          gap: 7px;
-        }
-        .lupi-studio-deck-drawer .lupi-studio-segments {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
         @media (max-width: 768px) {
-          .lupi-deck-grid {
-            gap: 8px;
-          }
           .lupi-studio-slider-grid {
             grid-template-columns: 1fr;
             gap: 7px;
           }
         }
       `}</style>
-      <div
-        className={isDrawer ? 'lupi-studio-deck lupi-studio-deck-drawer' : 'lupi-studio-deck'}
-        style={{
-          pointerEvents: 'auto',
-          width: isDrawer ? '100%' : 'min(940px, calc(100vw - 24px))',
-          height: isDrawer ? '100%' : undefined,
-          maxHeight: isDrawer ? 'none' : maxHeight,
-          overflowY: isDrawer ? 'auto' : 'hidden',
-          overflowX: 'hidden',
-          scrollbarWidth: 'none',
-          border: isDrawer ? 'none' : '1px solid rgba(255,255,255,0.12)',
-          borderRadius: isDrawer ? 0 : 8,
-          background: isDrawer ? 'transparent' : 'linear-gradient(180deg, rgba(4,9,17,0.88), rgba(0,0,0,0.78))',
-          boxShadow: isDrawer ? 'none' : '0 24px 80px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.08)',
-          backdropFilter: isDrawer ? 'none' : 'blur(18px)',
-          WebkitBackdropFilter: isDrawer ? 'none' : 'blur(18px)',
-          padding: isDrawer ? '6px 6px 10px' : 8,
-        }}
-      >
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-          marginBottom: isDrawer ? 6 : 8,
-          padding: isDrawer ? '0 0 1px' : '2px 2px 0',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <div style={{
-              width: isDrawer ? 5 : 6,
-              height: isDrawer ? 26 : 30,
-              borderRadius: 3,
-              background: 'linear-gradient(180deg, #1edce0, #f59e0b)',
-              boxShadow: '0 0 16px rgba(30,220,224,0.28)',
-              flexShrink: 0,
-            }} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ color: '#f8fafc', fontSize: isDrawer ? 12 : 13, fontWeight: 820, lineHeight: 1.1 }}>{title}</div>
-              <div style={{
-                color: '#94a3b8',
-                fontSize: isDrawer ? 9 : 10,
-                fontFamily: 'var(--font-mono)',
-                textTransform: 'uppercase',
-                lineHeight: 1.25,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {subtitle}
-              </div>
-            </div>
-          </div>
-          {showCloseButton && (
-            <button
-              type="button"
-              aria-label={`Close ${title} controls`}
-              onClick={onClose}
-              title="Close"
-              className="lupine-icon-btn"
-              style={{ width: 28, height: 28 }}
-            >
-              <IconClose />
-            </button>
-          )}
-        </div>
 
-        {mode === 'molecule' ? <MoleculeControls /> : <SceneControls />}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+        padding: '0 2px 1px',
+        minWidth: 0,
+      }}>
+        <div style={{
+          width: 4,
+          height: 18,
+          borderRadius: 3,
+          background: 'linear-gradient(180deg, #1edce0, #f59e0b)',
+          boxShadow: '0 0 16px rgba(30,220,224,0.28)',
+          flexShrink: 0,
+        }} />
+        <div style={{
+          minWidth: 0,
+          color: '#94a3b8',
+          fontSize: 10,
+          fontWeight: 760,
+          fontFamily: 'var(--font-mono)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.3,
+          lineHeight: 1.25,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {status}
+        </div>
       </div>
+
+      {mode === 'molecule' ? <MoleculeControls /> : <SceneControls />}
     </div>
   );
 }

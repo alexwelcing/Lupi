@@ -22,13 +22,12 @@ export interface ViewerPanelBodyProps {
   activePanel: AppState['activePanel'];
   studioDeck: ViewerControlMode | null;
   onModeChange: (mode: ViewerControlMode) => void;
-  onClose: () => void;
   /** Studio drawer renders its own header + mode tabs only inside the mobile
    *  sheet; the desktop dock supplies that chrome via its title bar. */
   showChrome: boolean;
 }
 
-export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, onClose, showChrome }: ViewerPanelBodyProps) {
+export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, showChrome }: ViewerPanelBodyProps) {
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
 
@@ -40,7 +39,6 @@ export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, onClose
         <ViewerControlsDrawer
           activeMode={studioDeck ?? 'molecule'}
           onModeChange={onModeChange}
-          onClose={onClose}
           showChrome={showChrome}
         />
       );

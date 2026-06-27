@@ -58,7 +58,6 @@ export function PanelHost({ activePanel, studioDeck, onOpenStudioDeck, onClose }
         activePanel={activePanel}
         studioDeck={studioDeck}
         onModeChange={onOpenStudioDeck}
-        onClose={onClose}
         showChrome={false}
       />
     </DockableWindow>

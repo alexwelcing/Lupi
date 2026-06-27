@@ -15,14 +15,12 @@ export type ViewerControlMode = StudioDeckMode | 'export';
 interface ViewerControlsDrawerProps {
   activeMode: ViewerControlMode;
   onModeChange: (mode: ViewerControlMode) => void;
-  onClose: () => void;
   showChrome?: boolean;
 }
 
 export function ViewerControlsDrawer({
   activeMode,
   onModeChange,
-  onClose,
   showChrome = true,
 }: ViewerControlsDrawerProps) {
   const activeLabel = activeMode === 'export'
@@ -78,12 +76,7 @@ export function ViewerControlsDrawer({
         {activeMode === 'export' ? (
           <FigureExportPanel showCloseButton={false} />
         ) : (
-          <StudioControlDeck
-            mode={activeMode}
-            onClose={onClose}
-            showCloseButton={false}
-            variant="drawer"
-          />
+          <StudioControlDeck mode={activeMode} />
         )}
       </div>
     </div>
