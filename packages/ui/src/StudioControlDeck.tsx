@@ -14,9 +14,7 @@ import {
   getBgPoster,
   type BgPresetWithId,
 } from './backgroundPresets';
-import { getBackdropRadiusLimit } from './viewer/useViewerSceneModel';
 import {
-  clamp,
   AdvancedSection,
   ControlGroup,
   SegmentButton,
@@ -204,8 +202,6 @@ export function StudioControlDeck({
   const setBackgroundBackdropShape = useStore(s => s.setBackgroundBackdropShape);
   const backgroundBackdropPattern = useStore(s => s.backgroundBackdropPattern);
   const setBackgroundBackdropPattern = useStore(s => s.setBackgroundBackdropPattern);
-  const backgroundBackdropRadius = useStore(s => s.backgroundBackdropRadius);
-  const setBackgroundBackdropRadius = useStore(s => s.setBackgroundBackdropRadius);
   const resetBackgroundAdjustments = useStore(s => s.resetBackgroundAdjustments);
   const filterShellShape = useStore(s => s.filterShellShape);
   const setFilterShellShape = useStore(s => s.setFilterShellShape);
@@ -265,8 +261,6 @@ export function StudioControlDeck({
       .sort((a, b) => a - b)
       .map(atomicNumber => ({ atomicNumber, spec: getElementSpec(atomicNumber) }));
   }, [file, frame]);
-  const backgroundBackdropRadiusMax = useMemo(() => getBackdropRadiusLimit(file), [file]);
-  const safeBackgroundBackdropRadius = clamp(backgroundBackdropRadius, 0.25, backgroundBackdropRadiusMax);
   const activeElement = presentElements.find(element => element.atomicNumber === selectedAtomicNumber) ?? presentElements[0] ?? null;
   const activeElementColor = activeElement
     ? elementColorOverrides[activeElement.atomicNumber] ?? activeElement.spec.color
@@ -796,17 +790,6 @@ export function StudioControlDeck({
                     />
                   ))}
                 </div>
-                {backgroundBackdropShape !== 'dome' && (
-                  <CompactSlider
-                    label="Radius"
-                    value={safeBackgroundBackdropRadius}
-                    min={0.25}
-                    max={backgroundBackdropRadiusMax}
-                    step={0.05}
-                    onChange={setBackgroundBackdropRadius}
-                    format={value => value.toFixed(2)}
-                  />
-                )}
               </ControlGroup>
 
               <ControlGroup title="Orientation & grade">
@@ -843,7 +826,7 @@ export function StudioControlDeck({
                 </div>
                 <div className="lupi-studio-slider-grid">
                   <RiveKnob label="Tint" value={filterShellOpacity} min={0} max={0.65} step={0.01} onChange={setFilterShellOpacity} format={value => `${Math.round(value * 100)}%`} />
-                  <RiveKnob label="Radius" value={filterShellRadius} min={0.75} max={1.6} step={0.01} onChange={setFilterShellRadius} format={value => value.toFixed(2)} />
+                  <RiveKnob label="Size" value={filterShellRadius} min={0.75} max={4} step={0.05} onChange={setFilterShellRadius} format={value => `${value.toFixed(2)}×`} />
                 </div>
               </ControlGroup>
             </AdvancedSection>

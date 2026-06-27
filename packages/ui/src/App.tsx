@@ -72,6 +72,7 @@ import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
 import { detectRenderCapability } from './renderCapability';
 import { MoleculeFilterShell } from './MoleculeFilterShell';
+import { MoleculeShadow } from './MoleculeShadow';
 import { PanelHost } from './PanelHost';
 import { type ViewerControlMode } from './ViewerControlsDrawer';
 import { ViewerPanelBody } from './ViewerPanelBody';
@@ -1536,6 +1537,16 @@ export default function App() {
                   opacity={filterShellOpacity}
                   radiusScale={filterShellRadius}
                 />
+                {filterShellShape !== 'off' && filterShellOpacity > 0 && (
+                  <MoleculeShadow
+                    center={center}
+                    moleculeRadius={filterShellBaseRadius}
+                    shellRadius={Math.max(0.5, filterShellBaseRadius * filterShellRadius)}
+                    azimuthDeg={keyLightAzimuth}
+                    elevationDeg={keyLightElevation}
+                    opacity={0.5}
+                  />
+                )}
                 <AnomalyTracker
                   frame={currentFrame}
                   colorProperty={colorProperty}
@@ -1633,11 +1644,12 @@ export default function App() {
                   <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />
                 )}
 
-                {/* Contact shadow under the molecule. Sized to box-bounds
-                    diagonal × 1.5 so the soft falloff catches even atoms at
-                    the very edge of the cell. Disabled in 'diagram' preset
-                    (flat, figure-faithful) where any shadow would mislead. */}
-                {currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
+                {/* Floor contact shadow under the molecule (when no shell is
+                    active — with a shell, MoleculeShadow lands on the shell
+                    instead). Sized to box-bounds diagonal so the soft falloff
+                    catches edge atoms. Disabled in 'diagram' preset (flat,
+                    figure-faithful) where any shadow would mislead. */}
+                {!(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
                   const b = currentFrame.boxBounds;
                   const cx = (b[0] + b[1]) / 2;
                   const cy = b[2]; // floor = min Y of the cell
