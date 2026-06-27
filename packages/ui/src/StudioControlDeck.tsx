@@ -160,6 +160,15 @@ export function StudioControlDeck({
   const setAmbientLightIntensity = useStore(s => s.setAmbientLightIntensity);
   const setDirLightIntensity = useStore(s => s.setDirLightIntensity);
   const setRimLightIntensity = useStore(s => s.setRimLightIntensity);
+  // Lighting controls — the key light's azimuth/elevation drive its world
+  // position live in SceneLighting, so spinning these knobs moves the light
+  // around the molecule in real time.
+  const ambientLightIntensity = useStore(s => s.ambientLightIntensity);
+  const dirLightIntensity = useStore(s => s.dirLightIntensity);
+  const keyLightAzimuth = useStore(s => s.keyLightAzimuth);
+  const setKeyLightAzimuth = useStore(s => s.setKeyLightAzimuth);
+  const keyLightElevation = useStore(s => s.keyLightElevation);
+  const setKeyLightElevation = useStore(s => s.setKeyLightElevation);
   const setAtomTexture = useStore(s => s.setAtomTexture);
   const atomScale = useStore(s => s.atomScale);
   const setAtomScale = useStore(s => s.setAtomScale);
@@ -719,6 +728,16 @@ export function StudioControlDeck({
                 format={value => value.toFixed(2)}
               />
               <SegmentButton label="Reset" active={false} accent="#94a3b8" onClick={resetBackgroundAdjustments} />
+            </ControlGroup>
+
+            <ControlGroup title="Lighting">
+              <p style={schemeHintStyle}>Spin the dials to move the key light around the molecule.</p>
+              <div className="lupi-studio-slider-grid">
+                <RiveKnob label="Angle" value={keyLightAzimuth} min={-180} max={180} step={5} onChange={setKeyLightAzimuth} format={value => `${Math.round(value)}°`} />
+                <RiveKnob label="Height" value={keyLightElevation} min={5} max={89} step={1} onChange={setKeyLightElevation} format={value => `${Math.round(value)}°`} />
+              </div>
+              <CompactSlider label="Key light" value={dirLightIntensity} min={0} max={4} step={0.1} onChange={setDirLightIntensity} format={value => value.toFixed(1)} />
+              <CompactSlider label="Ambient" value={ambientLightIntensity} min={0} max={2} step={0.05} onChange={setAmbientLightIntensity} format={value => `${Math.round(value * 100)}%`} />
             </ControlGroup>
 
             <ControlGroup title="Guides">
