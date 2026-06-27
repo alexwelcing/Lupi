@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { getElementSpec } from '@atlas/core';
-import type { ColormapName, RenderStyle } from '@atlas/core/types';
+import type { ColormapName } from '@atlas/core/types';
 import { MATERIAL_SCENES, type MaterialScene } from '@atlas/scene/materials';
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from './coloring';
 import { useStore, type BackgroundBackdropPattern, type BackgroundBackdropShape, type FilterShellPreset, type FilterShellShape } from './store';
@@ -39,12 +39,6 @@ const LOOK_OPTIONS = [
   { id: 'diagram', label: 'Diagram', code: 'DGM', accent: '#a7f3d0' },
 ] as const;
 
-const RENDER_OPTIONS: Array<{ id: RenderStyle; label: string; code: string; accent: string }> = [
-  { id: 'standard', label: 'Standard', code: 'STD', accent: '#1edce0' },
-  { id: 'toon', label: 'Toon', code: 'INK', accent: '#facc15' },
-  { id: 'botanical', label: 'Botanical', code: 'BOT', accent: '#69f0ae' },
-];
-
 const PALETTE_OPTIONS: Array<{ id: ColormapName; label: string; accent: string }> = [
   { id: 'viridis', label: 'Viridis', accent: '#35d07f' },
   { id: 'plasma', label: 'Plasma', accent: '#f97316' },
@@ -62,7 +56,6 @@ const SCHEME_ACCENTS: Record<ColorSchemeId, string> = {
   element: '#1edce0',
   property: '#1edce0',
   family: '#1edce0',
-  botanical: '#69f0ae',
   uniform: '#f59e0b',
 };
 
@@ -148,8 +141,6 @@ export function StudioControlDeck({
   const elementColorOverrides = useStore(s => s.elementColorOverrides);
   const setElementColorOverride = useStore(s => s.setElementColorOverride);
   const resetElementColorOverride = useStore(s => s.resetElementColorOverride);
-  const renderStyle = useStore(s => s.renderStyle);
-  const setRenderStyle = useStore(s => s.setRenderStyle);
 
   const materialScene = useStore(s => s.materialScene);
   const setMaterialScene = useStore(s => s.setMaterialScene);
@@ -639,21 +630,6 @@ export function StudioControlDeck({
                   ))}
                 </div>
               )}
-            </ControlGroup>
-
-            <ControlGroup title="Shape">
-              <div className="lupi-studio-segments">
-                {RENDER_OPTIONS.map(option => (
-                  <SegmentButton
-                    key={option.id}
-                    label={option.label}
-                    meta={option.code}
-                    active={renderStyle === option.id}
-                    accent={option.accent}
-                    onClick={() => setRenderStyle(option.id)}
-                  />
-                ))}
-              </div>
             </ControlGroup>
 
             {/* Material is a single clear choice — pick a recipe, read what it

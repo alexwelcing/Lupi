@@ -14,7 +14,7 @@
 
 import type { ColorMode } from '@atlas/core/types';
 
-export type ColorSchemeId = 'element' | 'property' | 'family' | 'botanical' | 'uniform';
+export type ColorSchemeId = 'element' | 'property' | 'family' | 'uniform';
 
 /**
  * The source of per-atom color when atom color mode is 'type'. Determines
@@ -73,15 +73,6 @@ export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
     botanical: false,
     perElementMaterial: true,
   },
-  botanical: {
-    id: 'botanical',
-    label: 'Botanical',
-    tagline: 'Plant-like palette + soft material. For storytelling shots.',
-    atomColorMode: 'type',
-    atomColorSource: 'botanical',
-    botanical: true,
-    perElementMaterial: false, // botanical look overrides material profile
-  },
   uniform: {
     id: 'uniform',
     label: 'Uniform',
@@ -93,7 +84,7 @@ export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
   },
 };
 
-export const SCHEME_ORDER: ColorSchemeId[] = ['element', 'property', 'family', 'botanical', 'uniform'];
+export const SCHEME_ORDER: ColorSchemeId[] = ['element', 'property', 'family', 'uniform'];
 
 /**
  * Pick the default scheme for a freshly-loaded file. Property data is often

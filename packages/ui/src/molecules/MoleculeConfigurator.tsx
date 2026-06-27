@@ -22,7 +22,7 @@ const STEP_LABEL: Record<Step, string> = {
   molecule: 'Molecule', color: 'Color', bonds: 'Guides', size: 'Size', review: 'Review',
 };
 
-type ColorChoice = 'element' | 'property' | 'botanical' | 'uniform';
+type ColorChoice = 'element' | 'property' | 'uniform';
 type BondsChoice = 'off' | 'loose' | 'standard' | 'tight';
 type SizeChoice = 'small' | 'medium' | 'large';
 
@@ -224,7 +224,6 @@ export function MoleculeConfigurator() {
               options={[
                 { id: 'element', label: 'By element', hint: 'Standard CPK colors (O red, N blue…)' },
                 { id: 'property', label: 'By property', hint: propertyAvailable ? `Color by ${colorProperty}` : 'This molecule has no per-atom property', disabled: !propertyAvailable },
-                { id: 'botanical', label: 'Botanical', hint: 'Soft plant-like palette' },
                 { id: 'uniform', label: 'Uniform', hint: 'One color — shape & material speak' },
               ]}
               value={color}

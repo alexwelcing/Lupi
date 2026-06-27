@@ -483,7 +483,7 @@ export function VisualsPanel({ availableProperties, embedded = false }: { availa
               )}
 
               {/* Colormap selector — only relevant when the scheme uses one.
-                  Element / Botanical / Uniform schemes don't, so we hide it. */}
+                  Element / Uniform schemes don't, so we hide it. */}
               {(colorScheme === 'property' || colorScheme === 'family') && (
                 <div>
                   <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Palette</div>

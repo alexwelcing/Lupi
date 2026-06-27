@@ -101,11 +101,11 @@ describe('Store — Color & Visuals', () => {
 
   it('keeps atom color schemes independent from surface render style', () => {
     getStoreState().setRenderStyle('toon');
-    getStoreState().setColorScheme('botanical');
+    getStoreState().setColorScheme('family');
 
     const s = getStoreState();
-    expect(s.colorScheme).toBe('botanical');
-    expect(s.atomColorSource).toBe('botanical');
+    expect(s.colorScheme).toBe('family');
+    expect(s.atomColorSource).toBe('colormap');
     expect(s.renderStyle).toBe('toon');
   });
 

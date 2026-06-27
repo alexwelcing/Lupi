@@ -116,7 +116,6 @@ function resolveUrlColorScheme(value: unknown, delta: Record<string, unknown>): 
   if (typeof value === 'string' && value in COLOR_SCHEMES) return value as ColorSchemeId;
   if (delta.cm === 'property') return 'property';
   if (delta.cm === 'uniform') return 'uniform';
-  if (delta.acs === 'botanical') return 'botanical';
   if (delta.acs === 'colormap' || typeof delta.cmap === 'string') return 'family';
   return 'element';
 }

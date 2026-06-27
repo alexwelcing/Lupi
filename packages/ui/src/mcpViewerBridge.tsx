@@ -1958,7 +1958,6 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\bfamily\b/.test(normalized)) patch.colorScheme = 'family';
   if (/\belement\b/.test(normalized)) patch.colorScheme = 'element';
   if (/\buniform\b/.test(normalized)) patch.colorScheme = 'uniform';
-  if (/\bbotanical\b/.test(normalized)) patch.colorScheme = 'botanical';
 
   const scaleMatch = command.match(/\b(?:atom\s+scale|scale(?:\s+atoms?)?)\s*(?:to|=|:)?\s*(\d+(?:\.\d+)?)/i);
   if (scaleMatch?.[1]) patch.atomScale = Number(scaleMatch[1]);
