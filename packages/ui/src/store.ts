@@ -225,8 +225,8 @@ export interface AppState {
 
   // ─── Visualization ───
   frame: number;
-  /** The directorial color choice. Drives atomColorMode / atomColorSource /
-   *  botanical via setColorScheme. Smart-defaulted on file load. */
+  /** The directorial color choice. Drives atomColorMode / atomColorSource
+   *  via setColorScheme. Smart-defaulted on file load. */
   colorScheme: ColorSchemeId;
   /** Source of per-type colors when atomColorMode === 'type'. Set by the
    *  scheme but exposed independently so power users can override. */

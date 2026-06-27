@@ -344,11 +344,11 @@ const MCP_VIEWER_EXAMPLES: Array<{
     }, null, 2),
   },
   {
-    id: 'botanical-small',
-    label: 'Botanical molecule',
-    summary: 'Small-molecule gallery polish: botanical shader, image background, bonds on.',
+    id: 'gallery-small',
+    label: 'Gallery molecule',
+    summary: 'Small-molecule gallery polish: family colorway, image background, bonds on.',
     command: JSON.stringify({
-      id: 'mcp-botanical-caffeine',
+      id: 'mcp-gallery-caffeine',
       tool: 'lupi.generate_molecule',
       arguments: {
         inputType: 'template',

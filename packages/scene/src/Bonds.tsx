@@ -1057,8 +1057,8 @@ export function Bonds({
       // Per-bond modes (length/energy/screening): same color along the whole
       // bond. Both halves get B == T == that color, so the shader's lerp is
       // a no-op and the bond reads as uniform — current behavior preserved.
-      // Per-atom modes (type/property/uniform/botanical): the gradient is
-      // visible. tcA at the A end, tcB at the B end, midpoint is the average.
+      // Per-atom modes (type/property/uniform): the gradient is visible.
+      // tcA at the A end, tcB at the B end, midpoint is the average.
       if (bondColorMode === 'length' && bondDistances.length > i) {
         const normDist = (bondDistances[i] - distMin) / distRange;
         const tcLen = mapFn(normDist);
@@ -1136,8 +1136,8 @@ export function Bonds({
     // Deps: NO frame.positions / nextFrame / interpolationFactor / periodic —
     // those drive matrices, not attributes. In property mode `propData` (a
     // per-frame Float32Array) IS in deps, so attribute updates do fire per
-    // frame for property coloring. In static modes (type/element/uniform/
-    // botanical), propData is null and frame changes don't refire this.
+    // frame for property coloring. In static modes (type/element/uniform),
+    // propData is null and frame changes don't refire this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, interpolationFactor, colorProperty]);
 
