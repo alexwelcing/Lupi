@@ -1810,12 +1810,14 @@ export default function App() {
             </div>
           )}
 
-          {/* Top-right controls launcher */}
-          {file && !showPotentialBrowser && (
+          {/* Top-right controls launcher — desktop only. On mobile the
+              persistent bottom tab bar owns the Controls entry, so showing
+              this too would duplicate it. */}
+          {file && !showPotentialBrowser && !isMobile && (
             <div style={{
               position: 'absolute',
-              top: file ? (isMobile ? 'calc(env(safe-area-inset-top) + 108px)' : 88) : 72,
-              right: isMobile ? 10 : 18,
+              top: file ? 88 : 72,
+              right: 18,
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 8,
@@ -1826,10 +1828,7 @@ export default function App() {
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)',
-              zIndex: mobilePanelOpen ? 80 : 150,
-              opacity: mobilePanelOpen ? 0.5 : 1,
-              pointerEvents: mobilePanelOpen ? 'none' : undefined,
-              transition: 'opacity 160ms ease-out',
+              zIndex: 150,
             }}>
               <button
                 type="button"
@@ -1839,18 +1838,18 @@ export default function App() {
                 onClick={toggleControlsPanel}
                 className={`lupine-btn ${activePanel === 'studio' ? 'active' : ''}`}
                 style={{
-                  minWidth: isMobile ? 48 : 118,
-                  height: isMobile ? 44 : 38,
+                  minWidth: 118,
+                  height: 38,
                   gap: 8,
-                  padding: isMobile ? '0 10px' : '0 14px',
-                  fontSize: isMobile ? 0 : 13,
+                  padding: '0 14px',
+                  fontSize: 13,
                   fontWeight: 760,
                   letterSpacing: 0,
                   touchAction: 'manipulation',
                 }}
               >
                 <IconControls />
-                {!isMobile && <span>Controls</span>}
+                <span>Controls</span>
               </button>
             </div>
           )}
@@ -1887,14 +1886,6 @@ export default function App() {
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
             }}>
-            <MobileTabButton
-              onClick={() => useStore.getState().togglePlay()}
-              ariaLabel={playing ? 'Pause playback' : 'Play animation'}
-              active={playing}
-              wide
-            >
-              {playing ? '⏸' : '▶'}
-            </MobileTabButton>
             <MobileTabButton
               onClick={() => {
                 if (activePanel === 'studio') { setActivePanel(null); return; }

@@ -223,11 +223,10 @@ interface MobileTabButtonProps {
   onClick: () => void;
   ariaLabel: string;
   active: boolean;
-  wide?: boolean;
   children: ReactNode;
 }
 
-export function MobileTabButton({ onClick, ariaLabel, active, wide = false, children }: MobileTabButtonProps) {
+export function MobileTabButton({ onClick, ariaLabel, active, children }: MobileTabButtonProps) {
   const press = usePressSpring({ pressedScale: 0.92, sound: false });
   return (
     <button
@@ -237,18 +236,18 @@ export function MobileTabButton({ onClick, ariaLabel, active, wide = false, chil
       aria-pressed={active}
       style={{
         minHeight: 40,
-        minWidth: wide ? 48 : 0,
-        flex: wide ? '0 0 auto' : '1 1 auto',
-        padding: wide ? '0 12px' : '0 12px',
+        minWidth: 0,
+        flex: '1 1 auto',
+        padding: '0 12px',
         borderRadius: 999,
         border: `1px solid ${active ? 'rgba(30,220,224,0.55)' : 'rgba(255,255,255,0.12)'}`,
         background: active
           ? 'linear-gradient(180deg, rgba(30,220,224,0.26), rgba(30,220,224,0.10))'
           : 'rgba(255,255,255,0.03)',
         color: active ? '#eaffff' : '#cbd5e1',
-        fontSize: wide ? 13 : 10.5,
+        fontSize: 10.5,
         fontWeight: active ? 760 : 680,
-        letterSpacing: wide ? 0 : 0.4,
+        letterSpacing: 0.4,
         lineHeight: 1,
         cursor: 'pointer',
         touchAction: 'manipulation',
