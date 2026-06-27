@@ -1336,21 +1336,6 @@ export default function App() {
               Anonymous → prompts sign-in (pending draft) → resumes save → share link. */}
           {file && <SavedViewButton compact={isMobile} />}
           <LupiAgentDock compact={isMobile} />
-          <a
-            href="?view=compare"
-            aria-label="Open Comparison Theater for cinema-style movie watching of relaxations"
-            title="Comparison Theater — cinema movie watching"
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              height: isMobile ? 36 : 38, minWidth: isMobile ? 36 : 80,
-              padding: isMobile ? 0 : '0 10px',
-              borderRadius: 999, border: '1px solid rgba(255,255,255,0.15)',
-              background: 'rgba(123,92,255,0.12)', color: '#c4b5fd', fontSize: isMobile ? 10 : 11,
-              textDecoration: 'none', touchAction: 'manipulation',
-            }}
-          >
-            {isMobile ? '🎥' : 'CINEMA'}
-          </a>
         </div>
       </header>
       <LupiAuthCallout compact={isMobile} />
@@ -1722,12 +1707,13 @@ export default function App() {
           {showDebugHud && <TelemetryHUD />}
           <LabelPerfHUD />
 
-          {/* Camera view selector */}
-          {file && (
+          {/* Camera view selector — desktop only. On mobile these tools live in
+              the bottom tool bar so they're thumb-reachable, not floating. */}
+          {file && !isMobile && (
             <div style={{
               position: 'absolute',
-              top: file ? (isMobile ? 'calc(env(safe-area-inset-top) + 108px)' : 88) : 72,
-              left: isMobile ? 10 : 18,
+              top: 88,
+              left: 18,
               display: 'grid',
               flexDirection: 'column',
               alignItems: 'start',
@@ -1754,7 +1740,7 @@ export default function App() {
                 aria-expanded={viewMenuOpen}
                 className={`lupine-btn compact icon-only ${viewMenuOpen ? 'active' : ''}`}
                 style={{
-                  width: isMobile ? 44 : 48,
+                  width: 48,
                   height: 36,
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
@@ -1791,7 +1777,7 @@ export default function App() {
                 aria-pressed={studyLensOpen}
                 className={`lupine-btn compact ${studyLensOpen ? 'active' : ''}`}
                 style={{
-                  width: isMobile ? 44 : 48,
+                  width: 48,
                   height: 36,
                   padding: 0,
                   display: 'grid',
@@ -1875,8 +1861,29 @@ export default function App() {
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
             }}>
+            {viewMenuOpen && (
+              <div
+                className="lupine-glass lupine-glass--menu animate-menu-in"
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 8px)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  minWidth: 132,
+                  gap: 5,
+                }}
+              >
+                <CameraPresetButton label="XY" active={cameraPreset === 'top'} onClick={() => { setCameraPreset('top'); setViewMenuOpen(false); }} title="Top view (XY plane)" />
+                <CameraPresetButton label="XZ" active={cameraPreset === 'side'} onClick={() => { setCameraPreset('side'); setViewMenuOpen(false); }} title="Side view (XZ plane)" />
+                <CameraPresetButton label="YZ" active={cameraPreset === 'front'} onClick={() => { setCameraPreset('front'); setViewMenuOpen(false); }} title="Front view (YZ plane)" />
+                <CameraPresetButton label="ISO" active={cameraPreset === 'iso'} onClick={() => { setCameraPreset('iso'); setViewMenuOpen(false); }} title="Isometric view" />
+              </div>
+            )}
             <MobileTabButton
               onClick={() => {
+                setViewMenuOpen(false);
                 if (activePanel === 'studio') { setActivePanel(null); return; }
                 setStudioDeck('molecule');
                 setActivePanel('studio');
@@ -1885,6 +1892,20 @@ export default function App() {
               active={activePanel === 'studio'}
             >
               CONTROLS
+            </MobileTabButton>
+            <MobileTabButton
+              onClick={() => setViewMenuOpen(open => !open)}
+              ariaLabel="Camera view"
+              active={viewMenuOpen}
+            >
+              {cameraPresetLabel}
+            </MobileTabButton>
+            <MobileTabButton
+              onClick={() => { setViewMenuOpen(false); setStudyLensOpen(open => !open); }}
+              ariaLabel="Study lens"
+              active={studyLensOpen}
+            >
+              STUDY
             </MobileTabButton>
           </nav>
         )}
