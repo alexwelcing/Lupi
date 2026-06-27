@@ -8,6 +8,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useStore } from '../store';
+import { IconClose } from '../icons';
 import {
   createKeyframe, createDefaultSequence,
   encodeFlythrough, decodeFlythrough,
@@ -18,11 +19,6 @@ import {
 import { Slider } from '../controls';
 
 // ─── Icons ────────────────────────────────────────────────────────────
-const IconClose = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square">
-    <path d="M18 6L6 18M6 6l12 12" />
-  </svg>
-);
 const IconPlus = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
     <path d="M12 5v14M5 12h14" />

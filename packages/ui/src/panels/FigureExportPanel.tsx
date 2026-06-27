@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { getElementSpec } from '@atlas/core';
+import { IconClose } from '../icons';
 import { createKeyframe, type FlythroughSequence } from '../flythrough';
 import { useStore } from '../store';
 import { buildMoleculeStudyFacts, renderStudySheetHtml, studySheetFileName } from '../studyFacts';
@@ -43,11 +44,6 @@ const VIDEO_EXPORT = {
   meta: '1080p / 5s',
 };
 
-const IconClose = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-    <path d="M18 6 6 18M6 6l12 12" />
-  </svg>
-);
 
 const IconDownload = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

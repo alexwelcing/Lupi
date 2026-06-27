@@ -24,10 +24,10 @@ import {
   ColorPicker,
   ElementColorPicker,
   SwatchButton,
-  IconClose,
   paletteRailStyle,
   schemeHintStyle,
 } from './studio/primitives';
+import { IconClose } from './icons';
 
 export type StudioDeckMode = 'molecule' | 'scene';
 

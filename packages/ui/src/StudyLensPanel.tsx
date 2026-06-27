@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useMemo, useState } from 'react';
 import { useStore } from './store';
+import { IconClose } from './icons';
 import { buildMoleculeStudyFacts, type ElementStudyFact } from './studyFacts';
 import type {
   OchemLearningStep,
@@ -421,14 +422,6 @@ function SpectroscopyRow({ check }: { check: OchemSpectroscopyCheck }) {
       <strong>{check.signal}</strong>
       <p>{check.reason}</p>
     </article>
-  );
-}
-
-function IconClose() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
   );
 }
 
