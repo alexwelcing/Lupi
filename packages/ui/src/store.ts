@@ -389,7 +389,6 @@ export interface AppState {
   // ─── NIST IPR potential browser ───
   nistCatalog: NistCatalogEntry[] | null;
   activePotentialId: string | null;
-  showPotentialBrowser: boolean;
   showStats: boolean;
   showThermo: boolean;
 
@@ -600,7 +599,6 @@ export interface AppState {
   setEquilibriumSolve: (state: EquilibriumSolveState | null) => void;
   setNistCatalog: (catalog: NistCatalogEntry[] | null) => void;
   setActivePotentialId: (id: string | null) => void;
-  setShowPotentialBrowser: (show: boolean) => void;
   clearFile: () => void;
   reset: () => void;
   setHoveredAtom: (atom: number | null) => void;
@@ -736,7 +734,6 @@ const DEFAULTS = {
   equilibriumSolve: null,
   nistCatalog: null,
   activePotentialId: null,
-  showPotentialBrowser: false,
   showStats: false,
   showThermo: true,
   hoveredAtom: null as number | null,
@@ -1076,7 +1073,6 @@ export const useStore = create<AppState>()(
     setEquilibriumSolve: (equilibriumSolve) => set({ equilibriumSolve }),
     setNistCatalog: (nistCatalog) => set({ nistCatalog }),
     setActivePotentialId: (activePotentialId) => set({ activePotentialId }),
-    setShowPotentialBrowser: (showPotentialBrowser) => set({ showPotentialBrowser }),
 
     clearFile: () => set({
       file: null,

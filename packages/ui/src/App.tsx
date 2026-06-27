@@ -49,7 +49,6 @@ import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/use
 import { SimulationCell } from '@atlas/scene/SimulationCell';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { getBackgroundFromColormap } from '@atlas/scene';
-import { PotentialBrowser } from './panels/PotentialBrowser';
 import { MlipFlywheelPage } from './MlipFlywheelPage';
 import { GhostAtoms } from './GhostAtoms';
 import { AtomPicker } from '@atlas/scene/AtomPicker';
@@ -737,7 +736,7 @@ export default function App() {
   const useGpuBonds = useStore(s => s.useGpuBonds);
   const bondColorMode = useStore(s => s.bondColorMode);
   const atomScale = useStore(s => s.atomScale);
-  const { activePanel, setActivePanel, showPotentialBrowser, setShowPotentialBrowser } = useViewerPanelState();
+  const { activePanel, setActivePanel } = useViewerPanelState();
   const {
     backgroundPreset,
     backgroundStyle,
@@ -791,28 +790,26 @@ export default function App() {
     cameraPreset === 'iso' ? 'ISO' : 'View';
 
   const openStudioDeck = useCallback((mode: ViewerControlMode) => {
-    setShowPotentialBrowser(false);
     setViewMenuOpen(false);
     setStudioDeck(mode);
     if (activePanel !== 'studio') setActivePanel('studio');
-  }, [activePanel, setActivePanel, setShowPotentialBrowser]);
+  }, [activePanel, setActivePanel]);
 
   const toggleControlsPanel = useCallback(() => {
-    setShowPotentialBrowser(false);
     setViewMenuOpen(false);
     setStudioDeck(current => current ?? 'molecule');
     setActivePanel('studio');
-  }, [setActivePanel, setShowPotentialBrowser]);
+  }, [setActivePanel]);
 
   useEffect(() => {
-    if (showPotentialBrowser || !file) {
+    if (!file) {
       setStudioDeck(null);
       setViewMenuOpen(false);
-      if (!file) setStudyLensOpen(false);
+      setStudyLensOpen(false);
     } else if (activePanel && activePanel !== 'studio') {
       setViewMenuOpen(false);
     }
-  }, [activePanel, showPotentialBrowser, file?.name]);
+  }, [activePanel, file?.name]);
 
   // Device-capability budget. Computed once at mount — hardware doesn't
   // change during a session. The cap reflects MEMORY ceiling now (not GPU
@@ -896,7 +893,6 @@ export default function App() {
       if (e.key === 'Escape') {
         setActivePanel(null);
         setStudioDeck(null);
-        setShowPotentialBrowser(false);
       }
       if (e.key === 'v' && !e.metaKey && !e.ctrlKey) {
         // Toggle the Controls panel. setActivePanel is the store's toggling
@@ -905,20 +901,17 @@ export default function App() {
         // other entry point keeps activePanel='studio' and studioDeck in sync,
         // and this used to break that by nulling activePanel while setting the
         // deck, which left the panel unrenderable on both desktop and mobile.
-        setShowPotentialBrowser(false);
         setViewMenuOpen(false);
         setStudioDeck(current => current ?? 'molecule');
         setActivePanel('studio');
       }
       if (e.key === 'x' && !e.metaKey && !e.ctrlKey) {
         setStudioDeck(null);
-        setShowPotentialBrowser(false);
         setActivePanel('export');
       }
       if (e.key === 'b' && !e.metaKey && !e.ctrlKey) useStore.getState().toggleBonds();
       if (e.key === 't' && !e.metaKey && !e.ctrlKey) {
         setStudioDeck(null);
-        setShowPotentialBrowser(false);
         setActivePanel('telemetry');
       }
     };
@@ -939,7 +932,7 @@ export default function App() {
       window.removeEventListener('keyup', shiftUp);
       window.removeEventListener('blur', blurReset);
     };
-  }, [togglePlay, nextFrame, setActivePanel, setShowPotentialBrowser, commandPaletteOpen]);
+  }, [togglePlay, nextFrame, setActivePanel, commandPaletteOpen]);
 
   // URL state restore + auto-load
   useEffect(() => {
@@ -1813,7 +1806,7 @@ export default function App() {
           {/* Top-right controls launcher — desktop only. On mobile the
               persistent bottom tab bar owns the Controls entry, so showing
               this too would duplicate it. */}
-          {file && !showPotentialBrowser && !isMobile && (
+          {file && !isMobile && (
             <div style={{
               position: 'absolute',
               top: file ? 88 : 72,
@@ -1857,15 +1850,11 @@ export default function App() {
         </div>
 
         {/* ─── Side panel / dockable windows ─── */}
-        {/* NIST IPR potential browser — full-screen overlay, manages its own
-            close via setShowPotentialBrowser(false). */}
-        {showPotentialBrowser && <PotentialBrowser />}
-
         {/* Mobile tab bar — persistent thumb-reachable navigation. Stays mounted
             whenever a molecule is on screen (even with a panel open) so the
             active surface is always one tap away, with a clear active state and
-            tap-to-toggle. Hidden only behind the full-screen atom browser. */}
-        {isMobile && file && !showPotentialBrowser && (
+            tap-to-toggle. */}
+        {isMobile && file && (
           <nav
             aria-label="Viewer navigation"
             style={{
@@ -1896,13 +1885,6 @@ export default function App() {
               active={activePanel === 'studio'}
             >
               CONTROLS
-            </MobileTabButton>
-            <MobileTabButton
-              onClick={() => { setActivePanel(null); setShowPotentialBrowser(true); }}
-              ariaLabel="Browse the molecule library"
-              active={false}
-            >
-              LIBRARY
             </MobileTabButton>
           </nav>
         )}
@@ -2150,7 +2132,6 @@ export default function App() {
               shortcut: 'X',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setActivePanel('export');
               },
             },
@@ -2160,7 +2141,6 @@ export default function App() {
               group: 'Panels',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setStudyLensOpen(open => !open);
               },
             },
@@ -2171,7 +2151,6 @@ export default function App() {
               shortcut: 'T',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setActivePanel('telemetry');
               },
             },
@@ -2181,7 +2160,6 @@ export default function App() {
               group: 'Panels',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setActivePanel('flythrough');
               },
             },
