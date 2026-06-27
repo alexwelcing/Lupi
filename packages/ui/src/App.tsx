@@ -49,7 +49,6 @@ import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/use
 import { SimulationCell } from '@atlas/scene/SimulationCell';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { getBackgroundFromColormap } from '@atlas/scene';
-import { PotentialBrowser } from './panels/PotentialBrowser';
 import { MlipFlywheelPage } from './MlipFlywheelPage';
 import { GhostAtoms } from './GhostAtoms';
 import { AtomPicker } from '@atlas/scene/AtomPicker';
@@ -737,7 +736,7 @@ export default function App() {
   const useGpuBonds = useStore(s => s.useGpuBonds);
   const bondColorMode = useStore(s => s.bondColorMode);
   const atomScale = useStore(s => s.atomScale);
-  const { activePanel, setActivePanel, showPotentialBrowser, setShowPotentialBrowser } = useViewerPanelState();
+  const { activePanel, setActivePanel } = useViewerPanelState();
   const {
     backgroundPreset,
     backgroundStyle,
@@ -791,28 +790,26 @@ export default function App() {
     cameraPreset === 'iso' ? 'ISO' : 'View';
 
   const openStudioDeck = useCallback((mode: ViewerControlMode) => {
-    setShowPotentialBrowser(false);
     setViewMenuOpen(false);
     setStudioDeck(mode);
     if (activePanel !== 'studio') setActivePanel('studio');
-  }, [activePanel, setActivePanel, setShowPotentialBrowser]);
+  }, [activePanel, setActivePanel]);
 
   const toggleControlsPanel = useCallback(() => {
-    setShowPotentialBrowser(false);
     setViewMenuOpen(false);
     setStudioDeck(current => current ?? 'molecule');
     setActivePanel('studio');
-  }, [setActivePanel, setShowPotentialBrowser]);
+  }, [setActivePanel]);
 
   useEffect(() => {
-    if (showPotentialBrowser || !file) {
+    if (!file) {
       setStudioDeck(null);
       setViewMenuOpen(false);
-      if (!file) setStudyLensOpen(false);
+      setStudyLensOpen(false);
     } else if (activePanel && activePanel !== 'studio') {
       setViewMenuOpen(false);
     }
-  }, [activePanel, showPotentialBrowser, file?.name]);
+  }, [activePanel, file?.name]);
 
   // Device-capability budget. Computed once at mount — hardware doesn't
   // change during a session. The cap reflects MEMORY ceiling now (not GPU
@@ -896,7 +893,6 @@ export default function App() {
       if (e.key === 'Escape') {
         setActivePanel(null);
         setStudioDeck(null);
-        setShowPotentialBrowser(false);
       }
       if (e.key === 'v' && !e.metaKey && !e.ctrlKey) {
         // Toggle the Controls panel. setActivePanel is the store's toggling
@@ -905,20 +901,17 @@ export default function App() {
         // other entry point keeps activePanel='studio' and studioDeck in sync,
         // and this used to break that by nulling activePanel while setting the
         // deck, which left the panel unrenderable on both desktop and mobile.
-        setShowPotentialBrowser(false);
         setViewMenuOpen(false);
         setStudioDeck(current => current ?? 'molecule');
         setActivePanel('studio');
       }
       if (e.key === 'x' && !e.metaKey && !e.ctrlKey) {
         setStudioDeck(null);
-        setShowPotentialBrowser(false);
         setActivePanel('export');
       }
       if (e.key === 'b' && !e.metaKey && !e.ctrlKey) useStore.getState().toggleBonds();
       if (e.key === 't' && !e.metaKey && !e.ctrlKey) {
         setStudioDeck(null);
-        setShowPotentialBrowser(false);
         setActivePanel('telemetry');
       }
     };
@@ -939,7 +932,7 @@ export default function App() {
       window.removeEventListener('keyup', shiftUp);
       window.removeEventListener('blur', blurReset);
     };
-  }, [togglePlay, nextFrame, setActivePanel, setShowPotentialBrowser, commandPaletteOpen]);
+  }, [togglePlay, nextFrame, setActivePanel, commandPaletteOpen]);
 
   // URL state restore + auto-load
   useEffect(() => {
@@ -1343,21 +1336,6 @@ export default function App() {
               Anonymous → prompts sign-in (pending draft) → resumes save → share link. */}
           {file && <SavedViewButton compact={isMobile} />}
           <LupiAgentDock compact={isMobile} />
-          <a
-            href="?view=compare"
-            aria-label="Open Comparison Theater for cinema-style movie watching of relaxations"
-            title="Comparison Theater — cinema movie watching"
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              height: isMobile ? 36 : 38, minWidth: isMobile ? 36 : 80,
-              padding: isMobile ? 0 : '0 10px',
-              borderRadius: 999, border: '1px solid rgba(255,255,255,0.15)',
-              background: 'rgba(123,92,255,0.12)', color: '#c4b5fd', fontSize: isMobile ? 10 : 11,
-              textDecoration: 'none', touchAction: 'manipulation',
-            }}
-          >
-            {isMobile ? '🎥' : 'CINEMA'}
-          </a>
         </div>
       </header>
       <LupiAuthCallout compact={isMobile} />
@@ -1729,12 +1707,13 @@ export default function App() {
           {showDebugHud && <TelemetryHUD />}
           <LabelPerfHUD />
 
-          {/* Camera view selector */}
-          {file && (
+          {/* Camera view selector — desktop only. On mobile these tools live in
+              the bottom tool bar so they're thumb-reachable, not floating. */}
+          {file && !isMobile && (
             <div style={{
               position: 'absolute',
-              top: file ? (isMobile ? 'calc(env(safe-area-inset-top) + 108px)' : 88) : 72,
-              left: isMobile ? 10 : 18,
+              top: 88,
+              left: 18,
               display: 'grid',
               flexDirection: 'column',
               alignItems: 'start',
@@ -1761,7 +1740,7 @@ export default function App() {
                 aria-expanded={viewMenuOpen}
                 className={`lupine-btn compact icon-only ${viewMenuOpen ? 'active' : ''}`}
                 style={{
-                  width: isMobile ? 44 : 48,
+                  width: 48,
                   height: 36,
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
@@ -1798,7 +1777,7 @@ export default function App() {
                 aria-pressed={studyLensOpen}
                 className={`lupine-btn compact ${studyLensOpen ? 'active' : ''}`}
                 style={{
-                  width: isMobile ? 44 : 48,
+                  width: 48,
                   height: 36,
                   padding: 0,
                   display: 'grid',
@@ -1813,7 +1792,7 @@ export default function App() {
           {/* Top-right controls launcher — desktop only. On mobile the
               persistent bottom tab bar owns the Controls entry, so showing
               this too would duplicate it. */}
-          {file && !showPotentialBrowser && !isMobile && (
+          {file && !isMobile && (
             <div style={{
               position: 'absolute',
               top: file ? 88 : 72,
@@ -1857,15 +1836,11 @@ export default function App() {
         </div>
 
         {/* ─── Side panel / dockable windows ─── */}
-        {/* NIST IPR potential browser — full-screen overlay, manages its own
-            close via setShowPotentialBrowser(false). */}
-        {showPotentialBrowser && <PotentialBrowser />}
-
         {/* Mobile tab bar — persistent thumb-reachable navigation. Stays mounted
             whenever a molecule is on screen (even with a panel open) so the
             active surface is always one tap away, with a clear active state and
-            tap-to-toggle. Hidden only behind the full-screen atom browser. */}
-        {isMobile && file && !showPotentialBrowser && (
+            tap-to-toggle. */}
+        {isMobile && file && (
           <nav
             aria-label="Viewer navigation"
             style={{
@@ -1886,8 +1861,29 @@ export default function App() {
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
             }}>
+            {viewMenuOpen && (
+              <div
+                className="lupine-glass lupine-glass--menu animate-menu-in"
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 8px)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  minWidth: 132,
+                  gap: 5,
+                }}
+              >
+                <CameraPresetButton label="XY" active={cameraPreset === 'top'} onClick={() => { setCameraPreset('top'); setViewMenuOpen(false); }} title="Top view (XY plane)" />
+                <CameraPresetButton label="XZ" active={cameraPreset === 'side'} onClick={() => { setCameraPreset('side'); setViewMenuOpen(false); }} title="Side view (XZ plane)" />
+                <CameraPresetButton label="YZ" active={cameraPreset === 'front'} onClick={() => { setCameraPreset('front'); setViewMenuOpen(false); }} title="Front view (YZ plane)" />
+                <CameraPresetButton label="ISO" active={cameraPreset === 'iso'} onClick={() => { setCameraPreset('iso'); setViewMenuOpen(false); }} title="Isometric view" />
+              </div>
+            )}
             <MobileTabButton
               onClick={() => {
+                setViewMenuOpen(false);
                 if (activePanel === 'studio') { setActivePanel(null); return; }
                 setStudioDeck('molecule');
                 setActivePanel('studio');
@@ -1898,18 +1894,18 @@ export default function App() {
               CONTROLS
             </MobileTabButton>
             <MobileTabButton
-              onClick={() => { setActivePanel(null); setShowPotentialBrowser(true); }}
-              ariaLabel="Browse the molecule library"
-              active={false}
+              onClick={() => setViewMenuOpen(open => !open)}
+              ariaLabel="Camera view"
+              active={viewMenuOpen}
             >
-              LIBRARY
+              {cameraPresetLabel}
             </MobileTabButton>
             <MobileTabButton
-              onClick={() => setActivePanel(activePanel === 'search' ? null : 'search')}
-              ariaLabel="Toggle search and curation panel"
-              active={activePanel === 'search'}
+              onClick={() => { setViewMenuOpen(false); setStudyLensOpen(open => !open); }}
+              ariaLabel="Study lens"
+              active={studyLensOpen}
             >
-              SEARCH
+              STUDY
             </MobileTabButton>
           </nav>
         )}
@@ -2157,7 +2153,6 @@ export default function App() {
               shortcut: 'X',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setActivePanel('export');
               },
             },
@@ -2167,7 +2162,6 @@ export default function App() {
               group: 'Panels',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setStudyLensOpen(open => !open);
               },
             },
@@ -2178,7 +2172,6 @@ export default function App() {
               shortcut: 'T',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setActivePanel('telemetry');
               },
             },
@@ -2188,19 +2181,7 @@ export default function App() {
               group: 'Panels',
               disabled: !file,
               onSelect: () => {
-                setShowPotentialBrowser(false);
                 setActivePanel('flythrough');
-              },
-            },
-            {
-              id: 'search-panel',
-              label: 'Open search & curation',
-              group: 'Panels',
-              shortcut: 'S',
-              disabled: !file,
-              onSelect: () => {
-                setShowPotentialBrowser(false);
-                setActivePanel('search');
               },
             },
             {

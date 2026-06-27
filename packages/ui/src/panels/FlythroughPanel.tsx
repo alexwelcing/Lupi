@@ -74,7 +74,7 @@ function EasingPreview({ easing }: { easing: EasingType }) {
 }
 
 // ─── Main Panel ───────────────────────────────────────────────────────
-export function FlythroughPanel() {
+export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: boolean } = {}) {
   const { setActivePanel, flythrough, cameraPosition, cameraTarget, cameraFov, triggerExport } = useStore();
   const setFlythrough = useStore(s => s.setFlythrough);
   const addFlythroughKeyframe = useStore(s => s.addFlythroughKeyframe);
@@ -305,15 +305,17 @@ export function FlythroughPanel() {
             }}>{keyframes.length} stops · {totalDuration.toFixed(1)}s</span>
           )}
         </div>
-        <button
-          onClick={() => setActivePanel(null)}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 24, height: 24, background: 'transparent',
-            border: '1px solid #334155', borderRadius: 0,
-            color: '#94a3b8', cursor: 'pointer',
-          }}
-        ><IconClose /></button>
+        {showCloseButton && (
+          <button
+            onClick={() => setActivePanel(null)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 24, height: 24, background: 'transparent',
+              border: '1px solid #334155', borderRadius: 0,
+              color: '#94a3b8', cursor: 'pointer',
+            }}
+          ><IconClose /></button>
+        )}
       </div>
 
       {/* Content */}

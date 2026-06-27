@@ -131,7 +131,6 @@ export function PotentialBrowser() {
   const catalog = useStore((s) => s.nistCatalog);
   const setCatalog = useStore((s) => s.setNistCatalog);
   const setActiveId = useStore((s) => s.setActivePotentialId);
-  const setShow = useStore((s) => s.setShowPotentialBrowser);
 
   const [query, setQuery] = useState('');
   const [selectedElements, setSelectedElements] = useState<string[]>([]);
@@ -271,7 +270,6 @@ export function PotentialBrowser() {
       };
 
       store.setLoading(false, 1);
-      setShow(false);
     } catch (err: any) {
       console.error('[NIST] Failed to load demo:', err);
       store.setLoading(false);

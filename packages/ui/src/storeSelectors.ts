@@ -24,8 +24,6 @@ export function useViewerPanelState() {
   return {
     activePanel: useStore(s => s.activePanel),
     setActivePanel: useStore(s => s.setActivePanel),
-    showPotentialBrowser: useStore(s => s.showPotentialBrowser),
-    setShowPotentialBrowser: useStore(s => s.setShowPotentialBrowser),
   };
 }
 

@@ -91,9 +91,7 @@ export function SceneControls() {
   // Lighting controls — the key light's azimuth/elevation drive its world
   // position live in SceneLighting, so spinning these knobs moves the light
   // around the molecule in real time.
-  const ambientLightIntensity = useStore(s => s.ambientLightIntensity);
   const dirLightIntensity = useStore(s => s.dirLightIntensity);
-  const setAmbientLightIntensity = useStore(s => s.setAmbientLightIntensity);
   const setDirLightIntensity = useStore(s => s.setDirLightIntensity);
   const keyLightAzimuth = useStore(s => s.keyLightAzimuth);
   const setKeyLightAzimuth = useStore(s => s.setKeyLightAzimuth);
@@ -186,7 +184,6 @@ export function SceneControls() {
           <RiveKnob label="Height" value={keyLightElevation} min={5} max={89} step={1} onChange={setKeyLightElevation} format={value => `${Math.round(value)}°`} />
         </div>
         <CompactSlider label="Key light" value={dirLightIntensity} min={0} max={4} step={0.1} onChange={setDirLightIntensity} format={value => value.toFixed(1)} />
-        <CompactSlider label="Ambient" value={ambientLightIntensity} min={0} max={2} step={0.05} onChange={setAmbientLightIntensity} format={value => `${Math.round(value * 100)}%`} />
       </ControlGroup>
 
       <ControlGroup title="Guides">

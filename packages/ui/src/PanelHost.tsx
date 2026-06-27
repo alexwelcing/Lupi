@@ -27,7 +27,6 @@ const TITLES: Record<NonNullable<PanelHostProps['activePanel']>, string> = {
   telemetry: 'Telemetry',
   equilibrium: 'Equilibrium Solve',
   mlipLongRun: 'MLIP Long Run',
-  search: 'Search & Curation',
 };
 
 const INITIALS: Record<NonNullable<PanelHostProps['activePanel']>, { x?: number; y?: number; w?: number; h?: number }> = {
@@ -37,7 +36,6 @@ const INITIALS: Record<NonNullable<PanelHostProps['activePanel']>, { x?: number;
   telemetry: { x: undefined, y: undefined, w: 400, h: 580 },
   equilibrium: { x: undefined, y: undefined, w: 460, h: 720 },
   mlipLongRun: { x: undefined, y: undefined, w: 460, h: 720 },
-  search: { x: undefined, y: undefined, w: 380, h: 640 },
 };
 
 export function PanelHost({ activePanel, studioDeck, onOpenStudioDeck, onClose }: PanelHostProps) {

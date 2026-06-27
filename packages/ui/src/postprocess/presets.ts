@@ -54,7 +54,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
   paper: {
     id: 'paper',
     label: 'Paper',
-    tagline: 'Print-faithful. Neutral exposure, accurate depth cues.',
+    tagline: 'Soft, true-to-print shading with neutral exposure — reads like a journal figure.',
     performanceTier: 'fast',
     ssao: { enabled: true, intensity: 0.4, radius: 0.25 },
     bloom: { enabled: false, intensity: 0, threshold: 0.9, smoothing: 0.3 },
@@ -67,7 +67,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
   studio: {
     id: 'studio',
     label: 'Studio',
-    tagline: 'Clean lighting, balanced contrast. The default.',
+    tagline: 'Balanced studio light with a subtle glow and soft shadows. The everyday default.',
     performanceTier: 'fast',
     ssao: { enabled: true, intensity: 0.55, radius: 0.3 },
     bloom: { enabled: true, intensity: 0.18, threshold: 0.85, smoothing: 0.3 },
@@ -80,7 +80,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
   editorial: {
     id: 'editorial',
     label: 'Editorial',
-    tagline: 'Moody contrast, strong rim emphasis. For dark slides.',
+    tagline: 'Dark and high-contrast with a heavy vignette and glow. Built to pop on dark slides.',
     performanceTier: 'balanced',
     ssao: { enabled: true, intensity: 0.85, radius: 0.32 },
     bloom: { enabled: true, intensity: 0.45, threshold: 0.7, smoothing: 0.25 },
@@ -93,7 +93,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
   cinematic: {
     id: 'cinematic',
     label: 'Cinematic',
-    tagline: 'Target-tracked focus, warm bloom. Tells a story.',
+    tagline: 'Shallow depth-of-field that tracks the molecule, plus warm bloom. Hero shots and trailers.',
     performanceTier: 'heavy',
     ssao: { enabled: true, intensity: 0.7, radius: 0.32 },
     bloom: { enabled: true, intensity: 0.6, threshold: 0.55, smoothing: 0.2 },
@@ -106,7 +106,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
   diagram: {
     id: 'diagram',
     label: 'Diagram',
-    tagline: 'No tricks. Pixel-faithful colors for figures.',
+    tagline: 'No effects at all — flat, exact element colors. Best for labeled, schematic figures.',
     performanceTier: 'fast',
     ssao: { enabled: false, intensity: 0, radius: 0.3 },
     bloom: { enabled: false, intensity: 0, threshold: 0.9, smoothing: 0.3 },
