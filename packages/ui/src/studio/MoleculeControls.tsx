@@ -8,6 +8,7 @@ import { getElementSpec } from '@atlas/core';
 import type { ColormapName } from '@atlas/core/types';
 import { MATERIAL_SCENES, type MaterialScene } from '@atlas/scene/materials';
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from '../coloring';
+import { POSTPROCESS_PRESETS } from '../postprocess/presets';
 import { useStore } from '../store';
 import {
   ControlGroup,
@@ -21,12 +22,16 @@ import {
   schemeHintStyle,
 } from './primitives';
 
+// Ordered flat → dramatic so the row reads as a spectrum: Diagram (no
+// effects) on the left, Cinematic (full depth-of-field + bloom) on the right.
+// The selected look's plain-language description shows below the row, so a
+// grade is never a mystery.
 const LOOK_OPTIONS = [
-  { id: 'paper', label: 'Paper', code: 'FIG', accent: '#e5e7eb' },
-  { id: 'studio', label: 'Studio', code: 'STD', accent: '#1edce0' },
-  { id: 'editorial', label: 'Editorial', code: 'EDT', accent: '#38bdf8' },
-  { id: 'cinematic', label: 'Cinematic', code: 'CIN', accent: '#f59e0b' },
-  { id: 'diagram', label: 'Diagram', code: 'DGM', accent: '#a7f3d0' },
+  { id: 'diagram', label: 'Diagram', accent: '#a7f3d0' },
+  { id: 'paper', label: 'Paper', accent: '#e5e7eb' },
+  { id: 'studio', label: 'Studio', accent: '#1edce0' },
+  { id: 'editorial', label: 'Editorial', accent: '#38bdf8' },
+  { id: 'cinematic', label: 'Cinematic', accent: '#f59e0b' },
 ] as const;
 
 const PALETTE_OPTIONS: Array<{ id: ColormapName; label: string; accent: string }> = [
@@ -190,13 +195,13 @@ export function MoleculeControls() {
             <SegmentButton
               key={option.id}
               label={option.label}
-              meta={option.code}
               active={postprocessPreset === option.id}
               accent={option.accent}
               onClick={() => setPostprocessPreset(option.id)}
             />
           ))}
         </div>
+        <p style={schemeHintStyle}>{POSTPROCESS_PRESETS[postprocessPreset].tagline}</p>
         <CompactSlider
           label="Effect"
           value={postprocessIntensity}
