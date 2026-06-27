@@ -376,7 +376,7 @@ export interface AppState {
   colorblindMode: boolean;
 
   // ─── UI ───
-  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'equilibrium' | 'mlipLongRun' | 'search' | null;
+  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'equilibrium' | 'mlipLongRun' | null;
   /** Sign-in callout visibility. Defaults CLOSED — the app never auto-prompts
    *  anonymous visitors to sign up; opened only by an explicit user action. */
   authPromptOpen: boolean;
@@ -437,10 +437,6 @@ export interface AppState {
   setKnowledgeLabelMaxCount: (count: number) => void;
   setKnowledgeLabelCullDistance: (dist: number) => void;
   setShowLabelPerfHud: (show: boolean) => void;
-  setKnowledgeLabelSearchQuery: (query: string) => void;
-  setKnowledgeLabelSearchFilter: (filter: AppState['knowledgeLabelSearchFilter']) => void;
-  togglePinnedKnowledgeLabel: (id: string) => void;
-  clearPinnedKnowledgeLabels: () => void;
   toggleKnowledgeLabelKind: (kind: string) => void;
 
   /** Atom indices to highlight as neighbors of the hovered/selected atom. */
@@ -1181,15 +1177,6 @@ export const useStore = create<AppState>()(
     setKnowledgeLabelMaxCount: (knowledgeLabelMaxCount) => set({ knowledgeLabelMaxCount }),
     setKnowledgeLabelCullDistance: (knowledgeLabelCullDistance) => set({ knowledgeLabelCullDistance }),
     setShowLabelPerfHud: (showLabelPerfHud) => set({ showLabelPerfHud }),
-    setKnowledgeLabelSearchQuery: (knowledgeLabelSearchQuery) => set({ knowledgeLabelSearchQuery }),
-    setKnowledgeLabelSearchFilter: (knowledgeLabelSearchFilter) => set({ knowledgeLabelSearchFilter }),
-    togglePinnedKnowledgeLabel: (id) => set((s) => {
-      const next = new Set(s.pinnedKnowledgeLabelIds);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return { pinnedKnowledgeLabelIds: next };
-    }),
-    clearPinnedKnowledgeLabels: () => set({ pinnedKnowledgeLabelIds: new Set<string>() }),
     setHighlightedNeighbors: (highlightedNeighbors) => set({ highlightedNeighbors }),
     setShowNeighbors: (showNeighbors) => set({ showNeighbors }),
     setHerdrEnabled: (herdrEnabled) => set({ herdrEnabled }),

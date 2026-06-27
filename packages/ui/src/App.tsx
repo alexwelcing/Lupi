@@ -1904,13 +1904,6 @@ export default function App() {
             >
               LIBRARY
             </MobileTabButton>
-            <MobileTabButton
-              onClick={() => setActivePanel(activePanel === 'search' ? null : 'search')}
-              ariaLabel="Toggle search and curation panel"
-              active={activePanel === 'search'}
-            >
-              SEARCH
-            </MobileTabButton>
           </nav>
         )}
 
@@ -2190,17 +2183,6 @@ export default function App() {
               onSelect: () => {
                 setShowPotentialBrowser(false);
                 setActivePanel('flythrough');
-              },
-            },
-            {
-              id: 'search-panel',
-              label: 'Open search & curation',
-              group: 'Panels',
-              shortcut: 'S',
-              disabled: !file,
-              onSelect: () => {
-                setShowPotentialBrowser(false);
-                setActivePanel('search');
               },
             },
             {

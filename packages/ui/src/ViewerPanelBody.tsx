@@ -15,7 +15,6 @@ import { FigureExportPanel } from './panels/FigureExportPanel';
 import { FlythroughPanel } from './panels/FlythroughPanel';
 import { TelemetryPanel } from './panels/TelemetryPanel';
 import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
-import { SearchPanel } from './panels/SearchPanel';
 import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
 
 export interface ViewerPanelBodyProps {
@@ -58,8 +57,6 @@ export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, showChr
       return <EquilibriumSolveWorkbench />;
     case 'mlipLongRun':
       return <MlipLongRunWorkbench />;
-    case 'search':
-      return <SearchPanel showCloseButton={false} />;
     default:
       return null;
   }
