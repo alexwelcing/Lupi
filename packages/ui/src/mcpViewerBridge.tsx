@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { ColorMode, ColormapName, Frame, Trajectory, RenderStyle } from '@atlas/core/types';
+import type { ColorMode, ColormapName, Frame, Trajectory } from '@atlas/core/types';
 import { getAtomicNumberBySymbol, getElementSpec, getElementSpecBySymbol } from '@atlas/core';
 import type { NistCatalogEntry, NistSummary } from '@atlas/nist';
 import { filterCatalog, loadNistCatalog, summarize } from '@atlas/nist';
@@ -45,7 +45,6 @@ interface ViewerPatch extends Record<string, unknown> {
   atomScale?: number;
   showCell?: boolean;
   showAxes?: boolean;
-  renderStyle?: RenderStyle;
   backgroundPreset?: string;
   postprocessPreset?: PostprocessPreset;
   colorScheme?: ColorSchemeId;
@@ -260,7 +259,6 @@ const DEFAULT_COMMAND = [
         atomScale: 0.28,
         showCell: true,
         showAxes: true,
-        renderStyle: 'standard',
         backgroundPreset: 'manifold-field',
         postprocessPreset: 'diagram',
         colorScheme: 'family',
@@ -308,7 +306,6 @@ const MCP_VIEWER_EXAMPLES: Array<{
           atomScale: 0.24,
           showCell: true,
           showAxes: true,
-          renderStyle: 'standard',
           backgroundPreset: 'blueprint',
           postprocessPreset: 'diagram',
           colorScheme: 'family',
@@ -336,7 +333,6 @@ const MCP_VIEWER_EXAMPLES: Array<{
           atomScale: 0.42,
           showCell: true,
           showAxes: true,
-          renderStyle: 'standard',
           backgroundPreset: 'slate',
           postprocessPreset: 'paper',
           colorScheme: 'property',
@@ -362,10 +358,9 @@ const MCP_VIEWER_EXAMPLES: Array<{
           atomScale: 1.08,
           showCell: false,
           showAxes: false,
-          renderStyle: 'botanical',
           backgroundPreset: 'bioluminescent',
           postprocessPreset: 'studio',
-          colorScheme: 'botanical',
+          colorScheme: 'family',
           cameraPreset: 'iso',
         },
       },
@@ -1431,7 +1426,6 @@ function viewerPatchFromUrlParams(params: URLSearchParams): ViewerPatch {
   const cell = booleanFromUrlParam(params.get('showCell') ?? params.get('cell'));
   const axes = booleanFromUrlParam(params.get('showAxes') ?? params.get('axes'));
   const atomScale = numberFromUrlParam(params.get('atomScale'));
-  const renderStyle = params.get('renderStyle');
   const backgroundPreset = params.get('backgroundPreset') ?? params.get('background');
   const postprocessPreset = params.get('postprocessPreset') ?? params.get('postprocess') ?? params.get('look');
   const colorScheme = params.get('colorScheme') ?? params.get('scheme');
@@ -1444,10 +1438,6 @@ function viewerPatchFromUrlParams(params: URLSearchParams): ViewerPatch {
   if (cell !== undefined) patch.showCell = cell;
   if (axes !== undefined) patch.showAxes = axes;
   if (atomScale !== undefined) patch.atomScale = atomScale;
-  if (renderStyle) {
-    const value = readRenderStyle(renderStyle);
-    if (value !== undefined) patch.renderStyle = value;
-  }
   if (backgroundPreset) patch.backgroundPreset = backgroundPreset;
   if (postprocessPreset) {
     const value = readPostprocessPreset(postprocessPreset);
@@ -1772,7 +1762,6 @@ function readViewerState() {
     atomScale: state.atomScale,
     showCell: state.showCell,
     showAxes: state.showAxes,
-    renderStyle: state.renderStyle,
     backgroundPreset: state.backgroundPreset,
     postprocessPreset: state.postprocessPreset,
     colorScheme: state.colorScheme,
@@ -1821,7 +1810,6 @@ function applyViewerPatch(patch: ViewerPatch, transcript: string[]) {
   if (patch.atomScale !== undefined) next.atomScale = clamp(patch.atomScale, 0.2, 3);
   if (patch.showCell !== undefined) next.showCell = patch.showCell;
   if (patch.showAxes !== undefined) next.showAxes = patch.showAxes;
-  if (patch.renderStyle !== undefined) next.renderStyle = patch.renderStyle;
   if (patch.backgroundPreset !== undefined) next.backgroundPreset = patch.backgroundPreset;
   if (patch.postprocessPreset !== undefined) next.postprocessPreset = patch.postprocessPreset;
 
@@ -1849,7 +1837,6 @@ function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   const atomScale = readNumber(args.atomScale);
   const showCell = readBoolean(args.showCell);
   const showAxes = readBoolean(args.showAxes);
-  const renderStyle = readRenderStyle(args.renderStyle);
   const backgroundPreset = readString(args.backgroundPreset);
   const postprocessPreset = readPostprocessPreset(args.postprocessPreset ?? args.postprocess ?? args.look);
   const colorScheme = readColorScheme(args.colorScheme ?? args.scheme);
@@ -1866,7 +1853,6 @@ function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   if (bondColorMode !== undefined) patch.bondColorMode = bondColorMode;
   if (showCell !== undefined) patch.showCell = showCell;
   if (showAxes !== undefined) patch.showAxes = showAxes;
-  if (renderStyle !== undefined) patch.renderStyle = renderStyle;
   if (backgroundPreset !== undefined) patch.backgroundPreset = backgroundPreset;
   if (postprocessPreset !== undefined) patch.postprocessPreset = postprocessPreset;
   if (colorScheme !== undefined) patch.colorScheme = colorScheme;
@@ -1946,9 +1932,6 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\bshow\s+(cell|box)\b/.test(normalized)) patch.showCell = true;
   if (/\bhide\s+axes\b/.test(normalized)) patch.showAxes = false;
   if (/\bshow\s+axes\b/.test(normalized)) patch.showAxes = true;
-  if (/\btoon\b/.test(normalized)) patch.renderStyle = 'toon';
-  if (/\bbotanical\b/.test(normalized)) patch.renderStyle = 'botanical';
-  if (/\bstandard\b/.test(normalized)) patch.renderStyle = 'standard';
   if (/\bstudio\b/.test(normalized)) patch.postprocessPreset = 'studio';
   if (/\bpaper\b/.test(normalized)) patch.postprocessPreset = 'paper';
   if (/\beditorial\b/.test(normalized)) patch.postprocessPreset = 'editorial';
@@ -2244,10 +2227,6 @@ function parseScaleAtomCount(value: string): number | undefined {
   return undefined;
 }
 
-function readRenderStyle(value: unknown): RenderStyle | undefined {
-  return value === 'standard' || value === 'toon' || value === 'botanical' ? value : undefined;
-}
-
 function readPostprocessPreset(value: unknown): PostprocessPreset | undefined {
   return value === 'paper' || value === 'studio' || value === 'editorial' || value === 'cinematic' || value === 'diagram'
     ? value
@@ -2409,7 +2388,6 @@ function catalogEntryToGenerateArgs(entry: NistCatalogEntry): Record<string, unk
       atomScale: entry.elements.length > 2 ? 0.36 : 0.48,
       showCell: true,
       showAxes: true,
-      renderStyle: 'standard',
       backgroundPreset: 'blueprint',
       postprocessPreset: 'diagram',
       colorScheme: entry.elements.length > 1 ? 'family' : 'element',

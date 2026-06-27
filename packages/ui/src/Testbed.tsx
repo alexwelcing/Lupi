@@ -42,12 +42,9 @@ const mockTypeToElement = new Map([
 ]);
 
 export function Testbed() {
-  const { colorPalette, renderStyle, showGrid, showBonds, showCell, environment } = useControls('Visual Settings', {
+  const { colorPalette, showGrid, showBonds, showCell, environment } = useControls('Visual Settings', {
     colorPalette: {
       options: ['ocean', 'fire', 'ice', 'forest', 'cyberpunk', 'turbo', 'grayscale']
-    },
-    renderStyle: {
-      options: ['standard', 'matte', 'glass', 'wireframe', 'toon', 'glow']
     },
     showGrid: true,
     showBonds: true,

@@ -821,7 +821,6 @@ export default function App() {
   const bondTolerance = useStore(s => s.bondTolerance);
   const useGpuBonds = useStore(s => s.useGpuBonds);
   const bondColorMode = useStore(s => s.bondColorMode);
-  const renderStyle = useStore(s => s.renderStyle);
   const atomScale = useStore(s => s.atomScale);
   const { activePanel, setActivePanel, showPotentialBrowser, setShowPotentialBrowser } = useViewerPanelState();
   const {

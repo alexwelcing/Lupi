@@ -18,7 +18,6 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import { getElementSpec, hexToRgb } from '@atlas/core';
-import { useGlobalTimer } from './useTimer';
 import { DEFAULT_TYPE_COLOR, getTypeColorFromColormap, COLORMAPS } from './constants';
 import { useBondGpuPipeline } from './useBondGpuPipeline';
 // Vite ?worker import: produces a real bundled .js worker module in prod.
@@ -158,7 +157,6 @@ export function Bonds({
   onGpuStatusChange,
 }: BondsProps) {
   const dummy = useMemo(() => new THREE.Object3D(), []);
-  const timer = useGlobalTimer();
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const workerRef = useRef<Worker | null>(null);
   const workerBusyRef = useRef<boolean>(false);

@@ -94,19 +94,12 @@ describe('Store — Color & Visuals', () => {
     expect(getStoreState().activeProfile).toBeNull();
   });
 
-  it('sets render style', () => {
-    getStoreState().setRenderStyle('toon');
-    expect(getStoreState().renderStyle).toBe('toon');
-  });
-
-  it('keeps atom color schemes independent from surface render style', () => {
-    getStoreState().setRenderStyle('toon');
+  it('color scheme drives the atom color source', () => {
     getStoreState().setColorScheme('family');
 
     const s = getStoreState();
     expect(s.colorScheme).toBe('family');
     expect(s.atomColorSource).toBe('colormap');
-    expect(s.renderStyle).toBe('toon');
   });
 
   it('applies neon visual profile', () => {
@@ -153,7 +146,6 @@ describe('Store — URL Serialization', () => {
     s.setUniformAtomColor('#ff8844');
     s.setPostprocessPreset('cinematic');
     s.setPostprocessIntensity(1.35);
-    s.setRenderStyle('botanical');
     s.setMaterialScene('forge');
     s.setMaterialPreset('metallic');
     s.setMaterialIntensity(0.42);
@@ -184,7 +176,6 @@ describe('Store — URL Serialization', () => {
     expect(restored.uniformAtomColor).toBe('#ff8844');
     expect(restored.postprocessPreset).toBe('cinematic');
     expect(restored.postprocessIntensity).toBeCloseTo(1.35);
-    expect(restored.renderStyle).toBe('botanical');
     expect(restored.materialScene).toBe('forge');
     expect(restored.materialPreset).toBe('metallic');
     expect(restored.materialIntensity).toBeCloseTo(0.42);

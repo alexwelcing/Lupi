@@ -283,7 +283,6 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
     showBonds: false,
     showCell: true,
     showAxes: false,
-    renderStyle: 'standard',
     backgroundPreset: 'blueprint',
     postprocessPreset: 'diagram',
     colorScheme: 'family',

@@ -7,7 +7,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Frame, Trajectory, ThermoData, ColormapName, ColorMode, RenderStyle, BondStats } from '@atlas/core/types';
+import type { Frame, Trajectory, ThermoData, ColormapName, ColorMode, BondStats } from '@atlas/core/types';
 import type { NistCatalogEntry } from '@atlas/nist';
 import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
@@ -284,8 +284,6 @@ export interface AppState {
   // ─── Bond Registry (Phase 3) ───
   bondRegistry: Record<string, BondDataset>;
   activeBondDataset: string | null;
-
-  renderStyle: RenderStyle;
   atomScale: number;
   backgroundPreset: string;
   backgroundStyle: 'linear' | 'radial' | 'spotlight';
@@ -557,7 +555,6 @@ export interface AppState {
   reportBondsUpdate: (source: AppState['bondSource'], count: number) => void;
   registerBondDataset: (dataset: BondDataset) => void;
   setActiveBondDataset: (id: string | null) => void;
-  setRenderStyle: (style: RenderStyle) => void;
   setAtomScale: (scale: number) => void;
   setBackgroundPreset: (preset: string) => void;
   setBackgroundStyle: (style: AppState['backgroundStyle']) => void;
@@ -671,7 +668,6 @@ const DEFAULTS = {
   // ─── Bond Registry ───
   bondRegistry: {} as Record<string, BondDataset>,
   activeBondDataset: null as string | null,
-  renderStyle: 'standard' as RenderStyle,
   atomScale: 1.0,
   backgroundPreset: 'pub-figure-neutral',
   backgroundStyle: 'radial' as const,
@@ -994,8 +990,6 @@ export const useStore = create<AppState>()(
       activeBondDataset: s.activeBondDataset === null ? dataset.id : s.activeBondDataset
     })),
     setActiveBondDataset: (id: string | null) => set({ activeBondDataset: id }),
-
-    setRenderStyle: (renderStyle) => set({ renderStyle }),
     setAtomScale: (atomScale) => set({ atomScale }),
     setBackgroundPreset: (backgroundPreset) => set({ backgroundPreset }),
     setBackgroundStyle: (backgroundStyle) => set({ backgroundStyle }),
@@ -1303,7 +1297,7 @@ export const useStore = create<AppState>()(
             toneMapping: 'aces', ssao: true, ssaoIntensity: 0.8,
             bloom: false, dof: false, materialPreset: 'matte', atomTexture: 'none',
             environmentPreset: 'studio', ambientLightIntensity: 0.8, dirLightIntensity: 1.0,
-            colormap: 'coolwarm', colorMode: 'type', renderStyle: 'standard'
+            colormap: 'coolwarm', colorMode: 'type'
           };
         case 'neon':
           return {
@@ -1313,7 +1307,7 @@ export const useStore = create<AppState>()(
             bloom: true, bloomIntensity: 0.6, dof: false,
             materialPreset: 'metallic', atomTexture: 'none',
             environmentPreset: 'none', ambientLightIntensity: 0.1, dirLightIntensity: 0.2,
-            colormap: 'neon', colorMode: 'type', renderStyle: 'standard'
+            colormap: 'neon', colorMode: 'type'
           };
         case 'cinematic':
           return {
@@ -1323,7 +1317,7 @@ export const useStore = create<AppState>()(
             bloom: true, bloomIntensity: 0.3, dof: true, dofFocus: 50, autoDepthOfField: true,
             materialPreset: 'metallic', atomTexture: 'scratched',
             environmentPreset: 'studio', ambientLightIntensity: 0.4, dirLightIntensity: 1.5,
-            colormap: 'viridis', colorMode: 'type', renderStyle: 'standard'
+            colormap: 'viridis', colorMode: 'type'
           };
         case 'raw':
           return {
@@ -1332,7 +1326,7 @@ export const useStore = create<AppState>()(
             toneMapping: 'none', ssao: false,
             bloom: false, dof: false, materialPreset: 'default', atomTexture: 'none',
             environmentPreset: 'studio', ambientLightIntensity: 0.35, dirLightIntensity: 1.2,
-            colormap: 'viridis', colorMode: 'type', renderStyle: 'standard'
+            colormap: 'viridis', colorMode: 'type'
           };
         default:
           return {};
@@ -1397,7 +1391,6 @@ export const useStore = create<AppState>()(
       if (s.showBonds)                                 delta.bonds = 1;
       if (r(s.bondCutoff) !== 3.2)                     delta.bc = r(s.bondCutoff);
       if (r(s.bondTolerance) !== 0.45)                 delta.bt = r(s.bondTolerance);
-      if (s.renderStyle !== 'standard')                delta.rs = s.renderStyle;
       if (s.materialScene !== DEFAULTS.materialScene)  delta.ms = s.materialScene;
       if (s.materialPreset !== DEFAULTS.materialPreset) delta.mp = s.materialPreset;
       if (r(s.materialIntensity) !== DEFAULTS.materialIntensity) delta.mi = r(s.materialIntensity);
@@ -1484,7 +1477,6 @@ export const useStore = create<AppState>()(
           showBonds: s.bonds === 1,
           bondCutoff: s.bc ?? 3.2,
           bondTolerance: s.bt ?? 0.45,
-          renderStyle: s.rs ?? 'standard',
           materialScene: sanitizeMaterialScene(s.ms),
           materialPreset: sanitizeMaterialPreset(s.mp),
           materialIntensity: Math.max(0, Math.min(1, s.mi ?? DEFAULTS.materialIntensity)),
