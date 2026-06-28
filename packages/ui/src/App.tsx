@@ -1676,8 +1676,10 @@ export default function App() {
             />
           )}
 
-          {/* Simple stats overlay */}
-          {file && totalFrames > 1 && (
+          {/* Frame readout overlay — desktop only. On mobile the timeline at
+              the bottom already shows the frame counter, so this would just
+              duplicate it under the header. */}
+          {file && totalFrames > 1 && !isMobile && (
             <div style={{
               position: 'absolute', top: 16, left: 16,
               pointerEvents: 'none',
@@ -2080,30 +2082,59 @@ export default function App() {
             <span style={{ color: '#475569' }}> / {totalFrames}</span>
           </div>
 
-          {/* Speed selector */}
-          <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
-            {[0.25, 0.5, 1, 2, 4].map(speed => (
-              <button
-                key={speed}
-                onClick={() => useStore.getState().setPlaybackSpeed(speed)}
-                style={{
-                  padding: isMobile ? '7px 7px' : '6px 8px',
-                  minWidth: isMobile ? 34 : 36,
-                  fontSize: '10px',
-                  fontFamily: 'var(--font-mono)',
-                  fontWeight: playbackSpeed === speed ? 600 : 400,
-                  color: playbackSpeed === speed ? '#031314' : '#94a3b8',
-                  background: playbackSpeed === speed ? '#1edce0' : '#121418',
-                  border: `1px solid ${playbackSpeed === speed ? '#1edce0' : '#334155'}`,
-                  borderRadius: 0,
-                  cursor: 'pointer',
-                  transition: 'all 100ms ease-out',
-                }}
-              >
-                {speed}×
-              </button>
-            ))}
-          </div>
+          {/* Speed selector. Desktop shows the full row; mobile collapses to a
+              single tap-to-cycle chip so the scrubber keeps real width instead
+              of the whole row scrolling. All five speeds stay reachable. */}
+          {isMobile ? (
+            <button
+              onClick={() => {
+                const speeds = [0.25, 0.5, 1, 2, 4];
+                const next = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] ?? 1;
+                useStore.getState().setPlaybackSpeed(next);
+              }}
+              aria-label={`Playback speed ${playbackSpeed}×, tap to change`}
+              style={{
+                flexShrink: 0,
+                minWidth: 46,
+                padding: '7px 8px',
+                fontSize: '11px',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 600,
+                color: '#1edce0',
+                background: '#121418',
+                border: '1px solid #334155',
+                borderRadius: 999,
+                cursor: 'pointer',
+                touchAction: 'manipulation',
+              }}
+            >
+              {playbackSpeed}×
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              {[0.25, 0.5, 1, 2, 4].map(speed => (
+                <button
+                  key={speed}
+                  onClick={() => useStore.getState().setPlaybackSpeed(speed)}
+                  style={{
+                    padding: '6px 8px',
+                    minWidth: 36,
+                    fontSize: '10px',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: playbackSpeed === speed ? 600 : 400,
+                    color: playbackSpeed === speed ? '#031314' : '#94a3b8',
+                    background: playbackSpeed === speed ? '#1edce0' : '#121418',
+                    border: `1px solid ${playbackSpeed === speed ? '#1edce0' : '#334155'}`,
+                    borderRadius: 0,
+                    cursor: 'pointer',
+                    transition: 'all 100ms ease-out',
+                  }}
+                >
+                  {speed}×
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
