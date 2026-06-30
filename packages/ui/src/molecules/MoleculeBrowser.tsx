@@ -59,10 +59,10 @@ const SOURCE_LABEL: Record<MoleculeSourceId, string> = {
 
 const PER_SOURCE_LIMIT = 24;
 
-export function MoleculeBrowser() {
+export function MoleculeBrowser({ initialSource = null }: { initialSource?: MoleculeSourceId | null } = {}) {
   const [text, setText] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [source, setSource] = useState<MoleculeSourceId | null>(null);
+  const [source, setSource] = useState<MoleculeSourceId | null>(initialSource);
   const [elements, setElements] = useState<string[]>([]);
   const [hits, setHits] = useState<MoleculeHit[]>([]);
   const [loading, setLoading] = useState(false);

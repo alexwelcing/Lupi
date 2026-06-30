@@ -315,348 +315,9 @@ const GALLERY_STUDIO_CSS = `
     color: rgba(226,232,240,0.74);
     cursor: pointer;
   }
-  .lupi-gallery-filter-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-width: 0;
-  }
-  .lupi-gallery-chips {
-    display: flex;
-    gap: 8px;
-    min-width: 0;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-  }
-  .lupi-gallery-chips::-webkit-scrollbar {
-    display: none;
-  }
-  .lupi-gallery-chip {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 7px 12px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.09);
-    background: rgba(255,255,255,0.035);
-    color: rgba(226,232,240,0.66);
-    font-size: 12px;
-    font-weight: 650;
-    cursor: pointer;
-  }
-  .lupi-gallery-chip[data-active="true"] {
-    color: #fff;
-    border-color: var(--chip-color, rgba(30,220,224,0.55));
-    background: color-mix(in srgb, var(--chip-color, #1edce0) 16%, transparent);
-  }
-  .lupi-gallery-chip-count {
-    color: rgba(226,232,240,0.42);
-    font-size: 10px;
-  }
-  .lupi-gallery-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 0 0 auto;
-  }
-  .lupi-gallery-select {
-    min-width: 142px;
-    padding: 8px 11px;
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.09);
-    background: rgba(255,255,255,0.045);
-    color: rgba(226,232,240,0.78);
-    font: inherit;
-    font-size: 12px;
-    outline: none;
-  }
-  .lupi-gallery-view-toggle {
-    display: inline-flex;
-    overflow: hidden;
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.09);
-    background: rgba(255,255,255,0.035);
-  }
-  .lupi-gallery-view-toggle button {
-    display: grid;
-    place-items: center;
-    width: 35px;
-    height: 34px;
-    border: 0;
-    background: transparent;
-    color: rgba(226,232,240,0.44);
-    cursor: pointer;
-  }
-  .lupi-gallery-view-toggle button[data-active="true"] {
-    background: #1edce0;
-    color: #061316;
-  }
-  .lupi-gallery-section-title {
-    margin: 0 0 18px;
-    color: #fff;
-    font-size: 24px;
-    font-weight: 380;
-    letter-spacing: 0;
-  }
-  .lupi-gallery-domain-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-    margin-bottom: 44px;
-  }
-  .lupi-gallery-domain-card {
-    min-height: 148px;
-    padding: 18px;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px;
-    background: rgba(255,255,255,0.032);
-    color: #f8fafc;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
-  }
-  .lupi-gallery-domain-card:hover,
-  .lupi-gallery-domain-card[data-active="true"] {
-    border-color: color-mix(in srgb, var(--domain-color, #1edce0) 58%, transparent);
-    background: color-mix(in srgb, var(--domain-color, #1edce0) 10%, rgba(255,255,255,0.035));
-    box-shadow: 0 14px 34px rgba(0,0,0,0.22);
-  }
-  .lupi-gallery-domain-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 14px;
-  }
-  .lupi-gallery-domain-icon {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 11px;
-    color: var(--domain-color, #1edce0);
-    background: color-mix(in srgb, var(--domain-color, #1edce0) 13%, transparent);
-    font-size: 16px;
-    font-weight: 800;
-  }
-  .lupi-gallery-domain-count {
-    color: rgba(226,232,240,0.42);
-    font-size: 12px;
-  }
-  .lupi-gallery-domain-card h3 {
-    margin: 0 0 6px;
-    font-size: 16px;
-    font-weight: 620;
-  }
-  .lupi-gallery-domain-card p {
-    margin: 0;
-    color: rgba(203,213,225,0.58);
-    font-size: 13px;
-    line-height: 1.45;
-  }
-  .lupi-gallery-results-head {
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 16px;
-    margin: 0 0 18px;
-  }
-  .lupi-gallery-results-head p {
-    margin: 4px 0 0;
-    color: rgba(203,213,225,0.52);
-    font-size: 13px;
-  }
-  .lupi-gallery-results-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 18px;
-  }
-  .lupi-gallery-results-list {
-    display: grid;
-    gap: 12px;
-  }
-  .lupi-gallery-card {
-    --thread-color: #1edce0;
-    position: relative;
-    width: 100%;
-    padding: 0;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 12px;
-    overflow: hidden;
-    background: rgba(255,255,255,0.035);
-    color: #f8fafc;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
-  }
-  .lupi-gallery-card:hover,
-  .lupi-gallery-card[data-hovered="true"] {
-    border-color: color-mix(in srgb, var(--thread-color) 58%, transparent);
-    background: rgba(255,255,255,0.052);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--thread-color) 22%, transparent), 0 14px 32px rgba(0,0,0,0.28);
-  }
-  .lupi-gallery-card:disabled {
-    opacity: 0.46;
-    cursor: not-allowed;
-  }
-  .lupi-gallery-card-list {
-    display: grid;
-    grid-template-columns: 148px minmax(0, 1fr) auto;
-    align-items: stretch;
-    min-height: 134px;
-  }
-  .lupi-gallery-thumb {
-    position: relative;
-    height: 168px;
-    overflow: hidden;
-    background: #050508;
-  }
-  .lupi-gallery-card-list .lupi-gallery-thumb {
-    height: auto;
-    min-height: 134px;
-  }
-  .lupi-gallery-thumb img,
-  .lupi-gallery-thumb canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  .lupi-gallery-thumb img {
-    z-index: 1;
-    filter: saturate(0.92) contrast(1.04);
-    transition: opacity 180ms ease, transform 220ms ease, filter 220ms ease;
-  }
-  .lupi-gallery-card:hover .lupi-gallery-thumb img,
-  .lupi-gallery-card[data-hovered="true"] .lupi-gallery-thumb img {
-    transform: scale(1.018);
-    filter: saturate(1.05) contrast(1.08);
-  }
   .lupi-gallery-live-preview {
     z-index: 3;
     background: #050508;
-  }
-  .lupi-gallery-fallback-preview {
-    z-index: 2;
-  }
-  .lupi-gallery-thumb::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    pointer-events: none;
-    background:
-      radial-gradient(circle at 50% 36%, transparent 0 45%, rgba(0,0,0,0.18) 78%),
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.20));
-  }
-  .lupi-gallery-card-body {
-    padding: 16px;
-    display: grid;
-    gap: 8px;
-  }
-  .lupi-gallery-card-list .lupi-gallery-card-body {
-    align-content: center;
-  }
-  .lupi-gallery-card-kicker {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    color: rgba(226,232,240,0.52);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-  .lupi-gallery-card-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--domain-color, #1edce0);
-  }
-  .lupi-gallery-card h4 {
-    margin: 0;
-    color: #fff;
-    font-size: 16px;
-    font-weight: 610;
-    line-height: 1.25;
-  }
-  .lupi-gallery-card p {
-    margin: 0;
-    color: rgba(203,213,225,0.56);
-    font-size: 13px;
-    line-height: 1.45;
-  }
-  .lupi-gallery-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 4px;
-  }
-  .lupi-gallery-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    min-height: 22px;
-    padding: 3px 8px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.055);
-    color: rgba(226,232,240,0.62);
-    font-size: 11px;
-    font-weight: 620;
-  }
-  .lupi-gallery-tag-live {
-    color: #34d399;
-    background: rgba(52, 211, 153, 0.09);
-  }
-  .lupi-gallery-meta {
-    display: grid;
-    gap: 2px;
-    color: rgba(203,213,225,0.42);
-    font-size: 11px;
-    line-height: 1.45;
-  }
-  .lupi-gallery-card-action {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 64px;
-    color: rgba(226,232,240,0.32);
-    border-left: 1px solid rgba(255,255,255,0.06);
-  }
-  .lupi-gallery-card-list .lupi-gallery-card-action {
-    display: flex;
-  }
-  .lupi-gallery-loading {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    background: rgba(3,5,10,0.86);
-    backdrop-filter: blur(5px);
-    z-index: 10;
-    color: rgba(226,232,240,0.78);
-    font-size: 12px;
-    font-weight: 650;
-  }
-  .lupi-gallery-progress {
-    width: min(220px, 72%);
-    height: 4px;
-    overflow: hidden;
-    border-radius: 99px;
-    background: rgba(255,255,255,0.12);
-  }
-  .lupi-gallery-progress > span {
-    display: block;
-    height: 100%;
-    background: var(--thread-color, #1edce0);
-    transition: width 180ms ease;
   }
   .lupi-gallery-empty {
     display: grid;
@@ -688,77 +349,6 @@ const GALLERY_STUDIO_CSS = `
     color: #f8fafc;
     font-weight: 650;
     cursor: pointer;
-  }
-  @media (max-width: 980px) {
-    .lupi-gallery-domain-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @media (max-width: 720px) {
-    .lupi-gallery {
-      padding: 0 16px 34px;
-    }
-    .lupi-gallery-title {
-      font-size: 34px;
-    }
-    .lupi-gallery-hero {
-      padding-top: 18px;
-      text-align: left;
-      justify-items: stretch;
-    }
-    .lupi-gallery-stats {
-      justify-content: flex-start;
-      gap: 8px;
-    }
-    .lupi-gallery-stat {
-      min-width: calc(50% - 4px);
-      padding: 10px 12px;
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 8px;
-      background: rgba(255,255,255,0.028);
-    }
-    .lupi-gallery-controls {
-      margin-inline: -16px;
-      padding-inline: 16px;
-    }
-    .lupi-gallery-filter-row {
-      align-items: stretch;
-      flex-direction: column;
-    }
-    .lupi-gallery-actions {
-      justify-content: space-between;
-    }
-    .lupi-gallery-select {
-      flex: 1;
-      min-width: 0;
-    }
-    .lupi-gallery-domain-grid {
-      grid-template-columns: 1fr;
-      gap: 10px;
-      margin-bottom: 34px;
-    }
-    .lupi-gallery-domain-card {
-      min-height: 116px;
-    }
-    .lupi-gallery-results-head {
-      align-items: start;
-      flex-direction: column;
-    }
-    .lupi-gallery-results-grid {
-      grid-template-columns: 1fr;
-    }
-    .lupi-gallery-card-list {
-      grid-template-columns: 112px minmax(0, 1fr);
-    }
-    .lupi-gallery-card-list .lupi-gallery-card-action {
-      display: none;
-    }
-    .lupi-gallery-card-list .lupi-gallery-thumb {
-      min-height: 126px;
-    }
-    .lupi-gallery-card h4 {
-      font-size: 15px;
-    }
   }
 
   .lupi-gallery-fast {
@@ -1128,7 +718,12 @@ const GALLERY_STUDIO_CSS = `
     --thread-color: #1edce0;
     position: relative;
     display: grid;
-    grid-template-columns: 36px minmax(180px, 1.2fr) minmax(130px, 0.5fr) minmax(190px, 0.8fr) 70px;
+    /* Flexible tracks (minmax(0, …)) are the cut-off fix: hard px floors here
+       summed to ~654px, wider than the index column resolves to between
+       ~820–1500px, so the row overflowed and overflow:hidden clipped the
+       right-side facts/chips. With a 0 floor the text columns ellipsize and
+       the facts row wraps instead of being clipped. */
+    grid-template-columns: 36px minmax(0, 1.2fr) minmax(0, 0.5fr) minmax(0, 0.8fr) 70px;
     align-items: center;
     gap: 12px;
     min-height: 68px;
@@ -1186,6 +781,7 @@ const GALLERY_STUDIO_CSS = `
     font-size: 12px;
   }
   .lupi-gallery-row-domain {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1194,6 +790,7 @@ const GALLERY_STUDIO_CSS = `
     font-weight: 620;
   }
   .lupi-gallery-row-facts {
+    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
@@ -1983,7 +1580,8 @@ function GallerySpotlight({
           <img
             src={gallerySnapshotUrl(example.id)}
             alt={example.title}
-            loading="eager"
+            loading="lazy"
+            decoding="async"
             onError={() => setImgError(true)}
           />
         ) : (

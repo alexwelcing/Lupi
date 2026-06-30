@@ -159,11 +159,19 @@ export default defineConfig({
   base: '/',
   plugins: [
     react(),
-    wasm(),
-    topLevelAwait(),
     galleryAssetUploadPlugin(),
     pruneGcsHostedAssets(),
   ],
+  // The WASM parsers live ONLY inside web workers (parse/transcode workers),
+  // and vite-plugin-wasm needs top-level-await for the wasm glue. Scoping both
+  // plugins to the worker build keeps top-level-await OFF the main graph — the
+  // TLA transform was statically sequencing chunk init and dragging the
+  // three/R3F vendor chunk onto the landing entry. The main thread imports no
+  // .wasm and uses no top-level await, so it needs neither plugin.
+  worker: {
+    format: 'es',
+    plugins: () => [wasm(), topLevelAwait()],
+  },
   resolve: {
     dedupe: ['three', '@react-three/fiber', '@react-three/drei', 'react', 'react-dom', 'zustand'],
     alias: {
@@ -182,19 +190,35 @@ export default defineConfig({
   build: {
     target: 'esnext',
     sourcemap: false,
-    chunkSizeWarningLimit: 3000,
+    // Kept tight on purpose: a chunk over this size is a signal to split, not
+    // something to silence. (Was 3000, which hid the 2.6MB App chunk entirely.)
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Vite's dynamic-import preload helper (__vitePreload) is imported by
+          // the entry AND every dynamic chunk, so Rollup hoists it to a shared
+          // chunk — and it was landing INSIDE vendor-react-three, which forced
+          // the landing entry to static-import that chunk (dragging three onto
+          // the marketing critical path) purely to get the helper. Pin it to a
+          // tiny dedicated chunk so the entry imports ~nothing and three stays
+          // an App-only dependency.
+          if (id.includes('vite/preload-helper')) return 'vendor-preload';
           if (id.includes('music_room')) return 'env-music-room';
           if (id.includes('living_room')) return 'env-living-room';
           if (id.includes('city')) return 'env-city';
           if (id.includes('park')) return 'env-park';
-          
+
           if (id.includes('node_modules')) {
             if (id.includes('/node_modules/three/')) return 'vendor-three';
+            // Keep the whole @react-three family (fiber/drei/xr) in one chunk:
+            // they cross-reference, so splitting drei out creates a circular
+            // chunk. The real win for this stack is route-level lazy loading
+            // (deferred Phase 1), not finer vendor slicing.
             if (id.includes('/node_modules/@react-three/')) return 'vendor-react-three';
             if (id.includes('/node_modules/postprocessing/')) return 'vendor-postprocess';
+            if (id.includes('/node_modules/@tanstack/')) return 'vendor-query';
+            if (id.includes('/node_modules/zustand/')) return 'vendor-state';
             if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) return 'vendor-react';
           }
         },

@@ -3,16 +3,28 @@ import { EquilibriumSolveWorkbench } from '../EquilibriumSolveWorkbench';
 import { Gallery } from '../Gallery';
 import { BG_PRESETS, getBgPoster, type BgPresetWithId } from '../backgroundPresets';
 import { MoleculeBrowser } from '../molecules/MoleculeBrowser';
-import { OmolCollection } from '../molecules/OmolCollection';
+import { type MoleculeSourceId } from '../molecules';
 import { PotentialBrowser } from '../panels/PotentialBrowser';
 import { useStore } from '../store';
 import { WorldHomeBackground } from './WorldHomeBackground';
+
+// One browse surface, two doors: "Explore" is the curated showcase (the
+// pedagogically rich Gallery), "Search" is the federated faceted search over
+// every source (curated, OMol25, NIST, PubChem, your saved/uploaded views).
+// The old standalone OMol25 tab is gone — it's now a source facet inside
+// Search. NIST Potentials and Equilibrium Solve are power-user tools, demoted
+// out of the primary tab bar into a secondary Tools row so they stop competing
+// with a first-time visitor's path to a render.
+type GalleryView = 'explore' | 'search' | 'potentials' | 'equilibrium';
 
 export function GallerySection() {
   // Start visible immediately so the catalog does not flash or paint hidden
   // while the IntersectionObserver fires.
   const [visible] = useState(true);
-  const [tab, setTab] = useState<'simulations' | 'omol25' | 'browse' | 'potentials' | 'equilibrium'>('simulations');
+  const [view, setView] = useState<GalleryView>('explore');
+  // When a deep link lands on Search, preselect the source facet it asked for
+  // (e.g. ?tab=omol25 opens Search filtered to Meta OMol25).
+  const [searchSource, setSearchSource] = useState<MoleculeSourceId | null>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
   const backgroundPreset = useStore((state) => state.backgroundPreset);
 
@@ -23,11 +35,20 @@ export function GallerySection() {
   }, [backgroundPreset]);
 
   useEffect(() => {
-    // Allow deep-linking to research catalog tabs.
+    // Allow deep-linking to catalog views. Legacy ?tab values are mapped onto
+    // the consolidated structure so existing links keep working.
     const params = new URLSearchParams(window.location.search);
     const requestedTab = params.get('tab');
-    if (requestedTab === 'omol25' || requestedTab === 'browse' || requestedTab === 'potentials' || requestedTab === 'equilibrium') {
-      setTab(requestedTab);
+    const mapping: Record<string, GalleryView> = {
+      simulations: 'explore',
+      omol25: 'search',
+      browse: 'search',
+      potentials: 'potentials',
+      equilibrium: 'equilibrium',
+    };
+    if (requestedTab && mapping[requestedTab]) {
+      setView(mapping[requestedTab]);
+      if (requestedTab === 'omol25') setSearchSource('omol');
       params.delete('tab');
       const url = new URL(window.location.href);
       url.search = params.toString();
@@ -63,60 +84,50 @@ export function GallerySection() {
 
         <WorldHomeBackground variant="gallery" />
 
-        <div style={sTabBar} role="tablist" aria-label="Catalog">
+        <div style={sTabBar} role="tablist" aria-label="Browse molecules">
           <button
             role="tab"
-            aria-selected={tab === 'simulations'}
-            data-testid="tab-simulations"
-            style={sTab(tab === 'simulations', '#1edce0')}
-            onClick={() => setTab('simulations')}
+            aria-selected={view === 'explore'}
+            data-testid="tab-explore"
+            style={sTab(view === 'explore', '#1edce0')}
+            onClick={() => setView('explore')}
           >
-            Structures
+            Explore
           </button>
           <button
             role="tab"
-            aria-selected={tab === 'omol25'}
-            data-testid="tab-omol25"
-            style={sTab(tab === 'omol25', '#34d399')}
-            onClick={() => setTab('omol25')}
+            aria-selected={view === 'search'}
+            data-testid="tab-search"
+            style={sTab(view === 'search', '#34d399')}
+            onClick={() => setView('search')}
           >
-            Meta OMol25
+            Search all molecules
           </button>
+        </div>
+
+        <div style={sToolsRow} aria-label="Advanced tools">
+          <span style={sToolsLabel}>Tools</span>
           <button
-            role="tab"
-            aria-selected={tab === 'browse'}
-            data-testid="tab-browse"
-            style={sTab(tab === 'browse', '#38bdf8')}
-            onClick={() => setTab('browse')}
-          >
-            Browse All
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'potentials'}
-            data-testid="tab-potentials"
-            style={sTab(tab === 'potentials', '#c084fc')}
-            onClick={() => setTab('potentials')}
+            data-testid="tool-potentials"
+            style={sToolBtn(view === 'potentials')}
+            onClick={() => setView('potentials')}
           >
             NIST Potentials
           </button>
           <button
-            role="tab"
-            aria-selected={tab === 'equilibrium'}
-            data-testid="tab-equilibrium"
-            style={sTab(tab === 'equilibrium', '#10b981')}
-            onClick={() => setTab('equilibrium')}
+            data-testid="tool-equilibrium"
+            style={sToolBtn(view === 'equilibrium')}
+            onClick={() => setView('equilibrium')}
           >
             Equilibrium Solve
           </button>
         </div>
 
         <div className="lupi-gallery-section__panel">
-          {tab === 'simulations' && <Gallery />}
-          {tab === 'omol25' && <OmolCollection />}
-          {tab === 'browse' && <MoleculeBrowser />}
-          {tab === 'potentials' && <PotentialBrowser />}
-          {tab === 'equilibrium' && <EquilibriumSolveWorkbench embedded />}
+          {view === 'explore' && <Gallery />}
+          {view === 'search' && <MoleculeBrowser initialSource={searchSource} />}
+          {view === 'potentials' && <PotentialBrowser />}
+          {view === 'equilibrium' && <EquilibriumSolveWorkbench embedded />}
         </div>
       </div>
     </section>
@@ -244,6 +255,38 @@ const sTab = (active: boolean, color: string): CSSProperties => ({
   color: active ? '#f8fafc' : 'rgba(255,255,255,0.45)',
   background: active ? `${color}15` : 'transparent',
   border: active ? `1.5px dashed ${color}` : '1.5px dashed rgba(255,255,255,0.1)',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+});
+
+// Secondary "Tools" row — deliberately quieter than the primary tab bar so the
+// power-user surfaces (potentials, equilibrium solve) stay reachable without
+// competing with Explore/Search for a first-time visitor's attention.
+const sToolsRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexWrap: 'wrap',
+  gap: 8,
+  margin: '-8px 0 24px',
+};
+
+const sToolsLabel: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'rgba(255,255,255,0.32)',
+};
+
+const sToolBtn = (active: boolean): CSSProperties => ({
+  padding: '5px 12px',
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: active ? 650 : 550,
+  color: active ? '#f8fafc' : 'rgba(255,255,255,0.5)',
+  background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+  border: `1px solid ${active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)'}`,
   cursor: 'pointer',
   transition: 'all 0.2s ease',
 });

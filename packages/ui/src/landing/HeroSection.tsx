@@ -96,15 +96,11 @@ export function HeroSection() {
           <div className="lupi-hero-actions" aria-label="Primary actions">
             <button type="button" className="lupi-hero-primary" onClick={openMassiveScene}>
               <IconPlay size={18} />
-              <span>Open 1M lattice</span>
+              <span>Open the 1M-atom scene</span>
             </button>
             <a className="lupi-hero-secondary" href="#dropzone">
               <IconUpload />
               <span>Load your data</span>
-            </a>
-            <a className="lupi-hero-secondary" href="?view=compare" aria-label="Open Comparison Theater">
-              <IconFilm />
-              <span>Cinema</span>
             </a>
           </div>
 
@@ -201,15 +197,6 @@ function IconSearch() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
       <circle cx="11" cy="11" r="8" />
       <path d="m21 21-4.35-4.35" />
-    </svg>
-  );
-}
-
-function IconFilm() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="5" width="14" height="14" rx="2" />
-      <path d="m17 9 4-2.5v11L17 15" />
     </svg>
   );
 }

@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "build:wasm": "cd wasm && wasm-pack build --target web --out-dir ../pkg",
+    "test": "vitest run",
     "test:rust": "cd wasm && cargo test",
     "clean": "rm -rf dist pkg"
   },
