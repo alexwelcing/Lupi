@@ -89,7 +89,7 @@
       "size_by": "kind (radius property)"
     },
     "featured": true,
-    "initialAtomScale": 5,
+    "initialAtomScale": 1.3,
     "initialBackgroundPreset": "deep",
     "labelsUrl": "generated/lupine-wiki/sphere-grid.labels.json"
   },
