@@ -159,11 +159,19 @@ export default defineConfig({
   base: '/',
   plugins: [
     react(),
-    wasm(),
-    topLevelAwait(),
     galleryAssetUploadPlugin(),
     pruneGcsHostedAssets(),
   ],
+  // The WASM parsers live ONLY inside web workers (parse/transcode workers),
+  // and vite-plugin-wasm needs top-level-await for the wasm glue. Scoping both
+  // plugins to the worker build keeps top-level-await OFF the main graph — the
+  // TLA transform was statically sequencing chunk init and dragging the
+  // three/R3F vendor chunk onto the landing entry. The main thread imports no
+  // .wasm and uses no top-level await, so it needs neither plugin.
+  worker: {
+    format: 'es',
+    plugins: () => [wasm(), topLevelAwait()],
+  },
   resolve: {
     dedupe: ['three', '@react-three/fiber', '@react-three/drei', 'react', 'react-dom', 'zustand'],
     alias: {
@@ -188,6 +196,14 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Vite's dynamic-import preload helper (__vitePreload) is imported by
+          // the entry AND every dynamic chunk, so Rollup hoists it to a shared
+          // chunk — and it was landing INSIDE vendor-react-three, which forced
+          // the landing entry to static-import that chunk (dragging three onto
+          // the marketing critical path) purely to get the helper. Pin it to a
+          // tiny dedicated chunk so the entry imports ~nothing and three stays
+          // an App-only dependency.
+          if (id.includes('vite/preload-helper')) return 'vendor-preload';
           if (id.includes('music_room')) return 'env-music-room';
           if (id.includes('living_room')) return 'env-living-room';
           if (id.includes('city')) return 'env-city';
