@@ -1,6 +1,5 @@
 import { HeroSection } from './HeroSection';
 import { LandingProofSection } from './LandingProofSection';
-import { FeaturedShowcase } from './FeaturedShowcase';
 import { DropZoneSection } from './DropZoneSection';
 import { GallerySection } from './GallerySection';
 import { LandingFooter } from './LandingFooter';
@@ -18,7 +17,6 @@ export function LandingPage() {
         <GallerySection />
         <DropZoneSection />
         <LandingProofSection />
-        <FeaturedShowcase />
         <LandingFooter />
       </div>
     </>

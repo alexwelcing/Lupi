@@ -102,14 +102,14 @@ export function LandingFooter() {
               />
             </a>
             <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
-              The audit layer for the MLIP ecosystem and the low-rank retraining target that compounds out of it. Applied learning mechanics for atomistic ML.
+              A browser-based viewer for molecules and million-atom materials — load LAMMPS dumps, OMol25 geometries, or curated structures and explore them in real time. Built by Lupine Science.
             </p>
           </div>
 
           {/* Links */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 40 }}>
             <div style={columnStyle}>
-              <span style={headerStyle}>Audit layer</span>
+              <span style={headerStyle}>Lupine Science</span>
               <a href="https://lupine.science/research" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Research</a>
               <a href="https://lupine.science/lineage" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Lineage</a>
               <a href="https://lupine.science/proof" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Research Defense</a>
@@ -155,7 +155,7 @@ export function LandingFooter() {
           flexWrap: 'wrap',
         }}>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: 'rgba(255, 255, 255, 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            &copy; {new Date().getFullYear()} LUPI by Lupine Science. Geometric error analysis for atomistic ML.
+            &copy; {new Date().getFullYear()} LUPI by Lupine Science. Molecular &amp; materials visualization in the browser.
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: 'rgba(255, 255, 255, 0.4)' }}>
             Apache 2.0 Licensed
