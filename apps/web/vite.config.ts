@@ -182,7 +182,9 @@ export default defineConfig({
   build: {
     target: 'esnext',
     sourcemap: false,
-    chunkSizeWarningLimit: 3000,
+    // Kept tight on purpose: a chunk over this size is a signal to split, not
+    // something to silence. (Was 3000, which hid the 2.6MB App chunk entirely.)
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -190,11 +192,17 @@ export default defineConfig({
           if (id.includes('living_room')) return 'env-living-room';
           if (id.includes('city')) return 'env-city';
           if (id.includes('park')) return 'env-park';
-          
+
           if (id.includes('node_modules')) {
             if (id.includes('/node_modules/three/')) return 'vendor-three';
+            // Keep the whole @react-three family (fiber/drei/xr) in one chunk:
+            // they cross-reference, so splitting drei out creates a circular
+            // chunk. The real win for this stack is route-level lazy loading
+            // (deferred Phase 1), not finer vendor slicing.
             if (id.includes('/node_modules/@react-three/')) return 'vendor-react-three';
             if (id.includes('/node_modules/postprocessing/')) return 'vendor-postprocess';
+            if (id.includes('/node_modules/@tanstack/')) return 'vendor-query';
+            if (id.includes('/node_modules/zustand/')) return 'vendor-state';
             if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) return 'vendor-react';
           }
         },
