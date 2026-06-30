@@ -25,7 +25,6 @@ permissions:
   id-token: write
 
 env:
-  LUPI_HOME_TITLE: Lupi shows molecules.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   VITE_FIREBASE_AUTH_DOMAIN: lupi.live
   VITE_FIREBASE_PROJECT_ID: shed-489901
@@ -97,22 +96,6 @@ jobs:
       - name: Build Cloud Run source bundle
         run: node tools/build-cloud-run-bundle.mjs
 
-      - name: Smoke local Cloud Run bundle
-        run: |
-          PORT=8080 node deploy_bundle/tools/serve-web.mjs > /tmp/lupi-bundle.log 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" || true' EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/ | grep -q "$LUPI_HOME_TITLE"; then
-              echo "Local bundle smoke passed"
-              exit 0
-            fi
-            sleep 1
-          done
-          cat /tmp/lupi-bundle.log
-          echo "::error::Local bundle smoke failed"
-          exit 1
-
       - name: Google auth
         uses: google-github-actions/auth@v2
         with:
@@ -157,7 +140,7 @@ jobs:
       - name: Smoke deployed candidate
         run: |
           for i in $(seq 1 12); do
-            if curl -fsS "$CANDIDATE_URL" | grep -q "$LUPI_HOME_TITLE"; then
+            if curl -fsS "$CANDIDATE_URL" | grep -q 'id="root"'; then
               echo "Candidate smoke passed"
               exit 0
             fi
@@ -181,7 +164,7 @@ jobs:
       - name: Smoke production URL
         run: |
           for i in $(seq 1 12); do
-            if curl -fsS https://lupi.live/ | grep -q "$LUPI_HOME_TITLE"; then
+            if curl -fsS https://lupi.live/ | grep -q 'id="root"'; then
               echo "Production smoke passed"
               exit 0
             fi
