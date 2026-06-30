@@ -26,7 +26,7 @@ Every output gets a sidecar **`<name>.manifest.json`** with full
 provenance: potential, protocol phases, seed, LAMMPS version, dump
 cadence, and an `expected.min_moved_fraction` verification hint (melting
 moves nearly every atom; sintering legitimately moves few). Downstream
-tools key off the manifest — `verify-real-trajectory` reads its
+tooling keys off the manifest — the parser pipeline tests read its
 threshold, and gallery/library ingestion can trust its metadata.
 
 ## Generate
@@ -53,21 +53,20 @@ follow the Scenario-1 write path in `docs/trajectory-architecture.md`
 
 ## Verify and diagnose
 
-```bash
-npm run verify:real-trajectory                      # demo files, if present
-npx -y tsx tools/verify-real-trajectory.mjs <file>  # any dump: full pipeline + physics check
-npm run doctor -- [--deep] <file>                   # compatibility report for ANY user file
-```
+The exact viewer ingest pipeline (streaming gate → multi-frame parse →
+incremental `.glimbin` transcode → `LocalGlimbinSource` read-back), plus
+the physics assertion that the manifest's transformation actually
+happened, is regression-tested by the `@atlas/parsers` unit suite:
 
-`verify-real-trajectory` drives the exact viewer pipeline (streaming
-gate → multi-frame parse → incremental `.glimbin` transcode →
-`LocalGlimbinSource` read-back) plus a physics assertion that the
-transformation in the manifest actually happened. `lupi-doctor` runs the
-viewer's compatibility contract against any LAMMPS user's file and says
-which path it takes, why, and what to change.
+```bash
+pnpm --filter @atlas/parsers test          # the full pipeline + physics check
+npm run doctor -- [--deep] <file>          # compatibility report for ANY user file
+```
 
 Gzipped `ci`-size runs of all scenarios are committed at
 `packages/parsers/src/__fixtures__/` and locked in by
 `packages/parsers/src/realDumpPipeline.test.ts`, so the pipeline is
 regression-tested against what LAMMPS *actually writes* (scientific-
 notation box bounds, `pp pp ff` boundaries), not just hand-rolled text.
+`lupi-doctor` runs the viewer's compatibility contract against any LAMMPS
+user's file and says which path it takes, why, and what to change.

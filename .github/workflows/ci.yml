@@ -53,6 +53,15 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Cloud Functions are a standalone npm package (own lockfile, separate
+      # Firebase deploy), so they're not in the pnpm/turbo workspace. Gate their
+      # security-adjacent tests (keygen, rate limiting, social meta) in isolation.
+      - name: Test Cloud Functions
+        working-directory: functions
+        run: |
+          npm ci
+          npm test
+
       - name: Rebuild catalog and fail on drift
         run: |
           npm run nist:build
