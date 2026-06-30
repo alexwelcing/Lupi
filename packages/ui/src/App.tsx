@@ -583,6 +583,11 @@ export default function App() {
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [studyLensOpen, setStudyLensOpen] = useState(false);
   const loadedSavedViewSlugRef = useRef<string | null>(null);
+  // Fire molecule_interacted at most once per loaded molecule, on the first
+  // real camera manipulation. This is the activation/AHA signal the analytics
+  // taxonomy names as the leading indicator of a Save — previously defined but
+  // never emitted, leaving the funnel blind past molecule_loaded.
+  const interactedForFileRef = useRef<string | null>(null);
   const hashPath = hashRoute.split('?')[0] || '/';
   const normalizedPath = normalizedPathRoute(pathRoute);
   const isMlipFlywheelRoute = hashPath === '/system/mlip-flywheel';
@@ -1409,6 +1414,15 @@ export default function App() {
               zoomSpeed={0.8}
               minDistance={cameraMinDistance}
               maxDistance={cameraDistance * 6}
+              onStart={() => {
+                const f = useStore.getState().file;
+                if (f && interactedForFileRef.current !== f.name) {
+                  interactedForFileRef.current = f.name;
+                  track(ANALYTICS_EVENTS.MOLECULE_INTERACTED, {
+                    atoms: f.trajectory.frames[0]?.natoms ?? 0,
+                  });
+                }
+              }}
               onEnd={(e: any) => {
                 if (e?.target?.object && e?.target?.target) {
                   useStore.getState().setCameraState(

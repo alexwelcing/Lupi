@@ -13,6 +13,7 @@
 import { Component, type ReactNode } from 'react';
 import { RendererFallback } from './RendererFallback';
 import { fallbackCopyFor, type RenderCapability } from './renderCapability';
+import { track, ANALYTICS_EVENTS } from './analytics';
 
 interface Props {
   capability: RenderCapability;
@@ -37,6 +38,13 @@ export class CanvasErrorBoundary extends Component<Props, State> {
     // signal for field debugging without leaking anything sensitive.
     // eslint-disable-next-line no-console
     console.error('[canvas] renderer init failed:', error?.message ?? error);
+    // The silent-blank-canvas bounce was previously invisible to analytics —
+    // render_failed was defined but never fired. Emit it here, the one place a
+    // real WebGL/WebGPU init throw is caught, so the funnel can see it.
+    track(ANALYTICS_EVENTS.RENDER_FAILED, {
+      reason: this.props.capability.reason,
+      message: error?.message ?? String(error),
+    });
   }
 
   handleRetry = () => {
