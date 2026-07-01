@@ -2001,5 +2001,28 @@
       "potential": "XYZ coordinates",
       "reference": "Lupi catalog molecule (lupishop pipeline)"
     }
+  },
+  {
+    "id": "this_is_water",
+    "title": "This is Water",
+    "subtitle": "150 H2O molecules jiggling, sloshing, and swirling in a continuous 120-frame loop — a whole bucket, not one snapshot.",
+    "domain": "Fluids & Solvents",
+    "atoms": "450",
+    "frames": "120",
+    "file": "gallery/this_is_water.lammpstrj",
+    "available": true,
+    "isTrajectory": true,
+    "autoPlay": true,
+    "colors": [
+      "#38bdf8",
+      "#e5e7eb",
+      "#f97316"
+    ],
+    "metadata": {
+      "method": "Procedural rigid-body kinematics (stylized loop, not a force-field integration)",
+      "potential": "N/A — real O-H bond length (0.9572 Å) and H-O-H angle (104.5°), no measured MD",
+      "reference": "scripts/generate_water_bucket.py — every jiggle, slosh, and swirl term is an integer harmonic of one shared period, so the loop repeats with no jump between frame 120 and frame 0."
+    },
+    "featured": true
   }
 ]
