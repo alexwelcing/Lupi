@@ -108,6 +108,9 @@ export function MelancholiaLanding() {
     if (ex.route) { window.location.assign(ex.route); return; }
     void openMolecule({ kind: 'gallery', id: ex.id, history: 'push' });
   }, []);
+  const toCollection = useCallback(() => {
+    document.getElementById('mel-part-one')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
   const toIndex = useCallback(() => {
     document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
@@ -124,7 +127,7 @@ export function MelancholiaLanding() {
       {/* ── Overture ── */}
       <Overture
         onApproach={approachBillion}
-        onCollection={toIndex}
+        onCollection={toCollection}
         onMatter={toMatter}
       />
 
@@ -170,29 +173,30 @@ function Overture({
       <div ref={ref} className={`mel-overture-copy${shown ? ' is-shown' : ''}`}>
         <div className="mel-eyebrow">Lupi &mdash; an archive of matter</div>
         <h1 className="mel-title">
-          A billion atoms,<br />in slow approach.
+          Look closely<br />at the matter.
         </h1>
         <p className="mel-lede">
-          Everything here is a small body of matter &mdash; a molecule you could
-          hold, a crystal, a fluid caught mid-motion. One of them is a billion
-          atoms wide. Look closely, while there is time.
+          Every structure here is a small body of matter &mdash; a molecule you
+          could hold, a crystal, a fluid caught mid-motion. Open one from the
+          archive, or drop your own, and turn it in real time: its bonds, its
+          forces, its energy, its motion.
         </p>
         <div className="mel-actions">
-          <button type="button" className="mel-btn mel-btn--primary" onClick={onApproach}>
-            Approach the billion <span aria-hidden="true">&rarr;</span>
+          <button type="button" className="mel-btn mel-btn--primary" onClick={onCollection}>
+            Enter the collection <span aria-hidden="true">&rarr;</span>
           </button>
-          <button type="button" className="mel-btn" onClick={onCollection}>
-            Enter the collection
+          <button type="button" className="mel-btn" onClick={onMatter}>
+            Bring your own matter
           </button>
         </div>
-        <button type="button" className="mel-quiet" onClick={onMatter}>
-          &mdash; or bring your own matter into the field
+        <button type="button" className="mel-quiet" onClick={onApproach}>
+          &mdash; or approach the largest body in the field &rarr;
         </button>
 
-        <dl className="mel-readout" aria-label="The largest body">
-          <div><dt>specimen</dt><dd>&Oslash; &mdash; the largest body</dd></div>
-          <div><dt>count</dt><dd>1,000,188,000 atoms &middot; Cu &middot; fcc</dd></div>
-          <div><dt>provenance</dt><dd>procedural &middot; GPU&#8209;resident &middot; no data held</dd></div>
+        <dl className="mel-readout" aria-label="The instrument">
+          <div><dt>archive</dt><dd>100 bodies &middot; 11 fields of matter</dd></div>
+          <div><dt>formats</dt><dd>LAMMPS &middot; XYZ &middot; trajectories &middot; profiles</dd></div>
+          <div><dt>opens in</dt><dd>a live instrument, in the browser</dd></div>
         </dl>
       </div>
 
