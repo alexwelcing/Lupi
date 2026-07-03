@@ -1,5 +1,69 @@
 [
   {
+    "id": "hfc_r32_research",
+    "title": "R32 Refrigerant · Research Payload",
+    "subtitle": "2000 difluoromethane molecules at 273 K with per-atom forces, velocities, and energies — the Maginn Group's validated force field, replayed live.",
+    "domain": "Fluids & Solvents",
+    "atoms": "10,000",
+    "frames": "61",
+    "isTrajectory": true,
+    "autoPlay": true,
+    "file": "gallery/research/hfc/r32_nvt_273K.glimbin",
+    "available": true,
+    "colors": [
+      "#90e050",
+      "#909090",
+      "#e8f1f8"
+    ],
+    "metadata": {
+      "method": "LAMMPS MD · NVT (Nose-Hoover)",
+      "potential": "GAFF-derived MLD-tuned FF (R32 v52)",
+      "temperature": "273 K",
+      "ensemble": "NVT",
+      "reference": "MaginnGroup/Validation-of-HFC-FFs",
+      "doi": "10.1039/D5DD00537J",
+      "density": "0.66 g/cm³ (published NPT start box)"
+    },
+    "featured": true,
+    "outputs": {
+      "thermoUrl": "gallery/research/hfc/r32_nvt_273K_thermo.txt",
+      "profileUrls": [
+        "gallery/research/hfc/r32_nvt_273K_temp_profile.txt"
+      ]
+    }
+  },
+  {
+    "id": "hfc_r125_research",
+    "title": "R125 Refrigerant · Research Payload",
+    "subtitle": "1000 pentafluoroethane molecules at 273 K — charmm dihedral chemistry with full force/velocity/energy channels per atom.",
+    "domain": "Fluids & Solvents",
+    "atoms": "8,000",
+    "frames": "31",
+    "isTrajectory": true,
+    "autoPlay": true,
+    "file": "gallery/research/hfc/r125_nvt_273K.glimbin",
+    "available": true,
+    "colors": [
+      "#90e050",
+      "#909090",
+      "#e8f1f8"
+    ],
+    "metadata": {
+      "method": "LAMMPS MD · NVT (Nose-Hoover)",
+      "potential": "GAFF-derived MLD-tuned FF (R125 v7)",
+      "temperature": "273 K",
+      "ensemble": "NVT",
+      "reference": "MaginnGroup/Validation-of-HFC-FFs",
+      "doi": "10.1039/D5DD00537J"
+    },
+    "outputs": {
+      "thermoUrl": "gallery/research/hfc/r125_nvt_273K_thermo.txt",
+      "profileUrls": [
+        "gallery/research/hfc/r125_nvt_273K_temp_profile.txt"
+      ]
+    }
+  },
+  {
     "id": "massive_1m",
     "title": "1M Atom Scale Test",
     "subtitle": "FCC Cu generated scale test.",

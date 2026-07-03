@@ -10,6 +10,8 @@ export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
 export { AtomPicker } from './AtomPicker';
 export { SpatialHash3D } from './SpatialHash';
+export { VectorGlyphs } from './VectorGlyphs';
+export type { VectorGlyphStats } from './VectorGlyphs';
 
 // Shared constants
 export {

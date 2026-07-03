@@ -49,6 +49,14 @@ export interface GalleryExample {
   initialBackgroundPreset?: string;
   /** Optional URL to a knowledge-labels JSON file (e.g. sphere-grid labels). */
   labelsUrl?: string;
+  /** Simulation output sidecars loaded alongside the structure: a thermo
+   *  table (LAMMPS log / fix-print dialect) and/or `fix ave/chunk` spatial
+   *  profiles. Public-relative or absolute URLs, fetched best-effort after
+   *  the structure mounts and attached without re-running scene setup. */
+  outputs?: {
+    thermoUrl?: string;
+    profileUrls?: string[];
+  };
 }
 
 export const EXAMPLES: GalleryExample[] = galleryData as GalleryExample[];

@@ -1,5 +1,54 @@
 # Changelog
 
+## [Unreleased] - Research Payloads, Vector/Energy Views, Export Scaling, AR Grab
+
+### Added
+- **Real research payload support (MaginnGroup HFC validation)**: the LAMMPS
+  `.data` parser now reads the Masses section and remaps atom types to
+  elements (mass table + `# c3`-style label fallback), so research topology
+  files render with correct CPK chemistry; Velocities sections parse into
+  `vx/vy/vz` properties, molecule ids into `mol`, original type ids survive
+  as `type_id`, triclinic tilt is honored, and `Atoms # style` hints are
+  respected. Trailing `#` comments on data lines no longer corrupt parsing.
+- **`fix ave/chunk` profile parser** (`parseChunkProfile`): the spatial-profile
+  time series real transport studies produce (temperature/density/velocity
+  profiles) parse, replay in sync with trajectory playback in the Telemetry
+  panel, and can be dropped alongside — or attached to — a loaded structure.
+  Thermo tables in the `fix print` dialect load the same way.
+- **Vector glyph representation** — the first view beyond ball-and-stick:
+  per-atom force/velocity/dipole arrows (instanced camera-facing ribbon
+  impostors, GPU frame interpolation, p95 auto-scaling, magnitude colormap),
+  with a Vectors section in Molecule controls, `?s=` URL round-tripping, and
+  derived `|F|`/`|v|` magnitudes available to property coloring.
+- **Colormap legend HUD**: property coloring and vector fields now show a
+  readable legend (colormap bar + numeric bounds + quantity name).
+- **Curated LAMMPS research collection**: R32/R125 hydrofluorocarbon liquids
+  (10k/8k atoms) simulated with the Maginn group's published force fields,
+  streamed as `.glimbin` with full per-atom research payload (charges,
+  velocities, forces, per-atom PE/KE) plus thermo + temperature-profile
+  sidecars; reproducible via `tools/sims/make_hfc_trajectories.py`.
+- **AR/VR entry buttons** (production UI, previously dev-testbed-only) and
+  physical hand manipulation in XR: one-hand pinch-grab now carries wrist
+  rotation, a second pinch enters two-hand grab (scale + rotate + translate),
+  release keeps linear + angular momentum, and controllers grab via squeeze.
+- `tools/verify-exports.mjs`: headless export scaling harness (10k/100k/500k).
+
+### Changed
+- **3D export scales to large systems**: bond detection during export now uses
+  the spatial-hash detector in x-sorted slabs (the O(N²) loop and its 50k-atom
+  gate are gone), sphere tessellation adapts to atom count, GLB keeps
+  `EXT_mesh_gpu_instancing` (500k atoms ≈ 6 s / 42 MB), USDZ bakes instanced
+  meshes into merged geometry instead of exploding per-atom `Mesh` objects
+  (100k atoms ≈ 1.5 s where it previously froze for tens of seconds; 1M no
+  longer OOMs), and GLB/USDZ exports report progress and disable their
+  buttons while running.
+- Large streamable dumps dropped on the landing page now take the worker
+  transcode path (progressive frame-0 paint, OPFS-backed `.glimbin`,
+  frames-on-demand replay) instead of an in-memory whole-file parse.
+- Gallery entries can declare simulation output sidecars
+  (`outputs.thermoUrl` / `outputs.profileUrls`) and `autoPlay` now applies to
+  streamed glimbin trajectories.
+
 ## [0.3.0] - Lupi Studio, Mobile UX, Data Layer, and Viral Sharing
 
 ### Added

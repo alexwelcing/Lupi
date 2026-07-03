@@ -44,7 +44,9 @@ import { SelectionMarkers } from './SelectionMarkers';
 import { AtomInfoHUD } from './AtomInfoHUD';
 import { CameraFocus } from './CameraFocus';
 import { AtomTrails } from './AtomTrails';
-import { TYPE_RADII } from '@atlas/scene';
+import { TYPE_RADII, VectorGlyphs, type VectorGlyphStats } from '@atlas/scene';
+import { detectFrameVectorFields, ensureVectorMagnitude } from '@atlas/core';
+import { PropertyLegendHUD } from './PropertyLegendHUD';
 import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/useSmoothFramePlayback';
 import { SimulationCell } from '@atlas/scene/SimulationCell';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
@@ -99,6 +101,8 @@ import { ViewerCanvas } from './viewer/ViewerCanvas';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
 
 export { xrStore } from './viewer/xrStore';
+import { xrStore } from './viewer/xrStore';
+import { XREntryButton } from './xr/XREntryButton';
 
 // ─── Icons ────────────────────────────────────────────────────────────
 // Play/Pause and the Lupi toolbar glyphs (LupiGlyph, IconControls) live in
@@ -650,6 +654,10 @@ export default function App() {
   const { playing, playbackSpeed, setFrame, nextFrame, togglePlay } = useViewerPlaybackState();
   const colorMode = useStore(s => s.colorMode);
   const colorProperty = useStore(s => s.colorProperty);
+  const vectorField = useStore(s => s.vectorField);
+  const vectorScale = useStore(s => s.vectorScale);
+  const vectorDensity = useStore(s => s.vectorDensity);
+  const [vectorStats, setVectorStats] = useState<VectorGlyphStats | null>(null);
   const materialPreset = useStore(s => s.materialPreset);
   const materialIntensity = useStore(s => s.materialIntensity);
   const rimLightIntensity = useStore(s => s.rimLightIntensity);
@@ -966,6 +974,36 @@ export default function App() {
 
   const currentFrame = file?.trajectory.frames[frame];
   const totalFrames = file?.trajectory.totalFrames ?? 0;
+
+  // Vector fields available on the loaded data (velocity/force triplets in
+  // frame.properties). Detected once per file — column sets don't change
+  // frame to frame in practice, and the store's vectorField id is validated
+  // against this list before mounting glyphs.
+  const vectorFieldSpecs = useMemo(() => {
+    const f0 = file?.trajectory.frames[0];
+    return f0 ? detectFrameVectorFields(f0) : [];
+  }, [file]);
+  const activeVectorField = useMemo(
+    () => (vectorField ? vectorFieldSpecs.find((s) => s.id === vectorField) ?? null : null),
+    [vectorField, vectorFieldSpecs],
+  );
+
+  // Derived magnitude properties (|F|, |v|) are lazy: the controls list them
+  // before the arrays exist. Materialize them across the loaded frames the
+  // moment one is selected for coloring — an idempotent cache fill on each
+  // frame's properties map, done during render (an effect would be one paint
+  // late and AtomsOptimized memoizes per frame). Playback renders
+  // frames[interpState.frameIndex] which can lead the store's `frame`, so
+  // covering every resident frame keeps scrubbing/playing flash-free.
+  // Streaming trajectories have sparse placeholder arrays — null-guarded.
+  useMemo(() => {
+    if (!colorProperty || !file) return;
+    const spec = vectorFieldSpecs.find((s) => s.magnitudeProperty === colorProperty);
+    if (!spec) return;
+    for (const f of file.trajectory.frames) {
+      if (f) ensureVectorMagnitude(f, spec);
+    }
+  }, [colorProperty, file, vectorFieldSpecs]);
 
   // Auto-derive the spatial-hash upper cap from the element-aware cutoff so
   // the bond detector can never under-size its search radius. Walks the
@@ -1499,6 +1537,24 @@ export default function App() {
                   etchTexture={etchTexture}
                   etchAtomId={etchAtomId}
                 />
+                {/* Per-atom vector glyphs — force/velocity arrows for
+                    research payloads that dump vx/vy/vz, fx/fy/fz, or
+                    compute triplets. Rides the same frame pair + GPU
+                    interpolation as the atom impostors so arrows track
+                    atoms exactly during playback. */}
+                {activeVectorField && (
+                  <VectorGlyphs
+                    frame={file!.trajectory.frames[interpState.frameIndex]}
+                    nextFrame={interpState.isInterpolating ? file!.trajectory.frames[interpState.nextFrameIndex] : undefined}
+                    interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
+                    field={activeVectorField}
+                    scale={vectorScale}
+                    density={vectorDensity}
+                    colormap={colormap}
+                    hiddenAtomTypes={hiddenAtomTypes}
+                    onStats={setVectorStats}
+                  />
+                )}
                 {/* Phase 4: cluster splats fill the far-LOD gap left
                     by the atom mesh's sub-pixel cull. Built off the
                     main thread after streaming completes; renders
@@ -1721,6 +1777,20 @@ export default function App() {
           {showDebugHud && <TelemetryHUD />}
           <LabelPerfHUD />
 
+          {/* Colormap legend — appears when atoms are colored by a per-atom
+              scalar or a vector field is drawn, so the mapping is readable
+              as a measurement, not just a look. */}
+          <PropertyLegendHUD
+            frame={currentFrame}
+            colorMode={colorMode}
+            colorProperty={colorProperty}
+            colormap={colormap}
+            activeVectorField={activeVectorField}
+            vectorStats={vectorStats}
+            bottomOffset={isMobile ? 96 : 44}
+          />
+
+
           {/* Camera view selector — desktop only. On mobile these tools live in
               the bottom tool bar so they're thumb-reachable, not floating. */}
           {file && !isMobile && (
@@ -1844,6 +1914,21 @@ export default function App() {
                 <IconControls />
                 <span>Controls</span>
               </button>
+            </div>
+          )}
+
+          {/* AR/VR session entry — renders nothing when WebXR is
+              unsupported, so desktop browsers never see it. Mounted
+              outside the desktop-only cluster because headset browsers
+              (Quest) report as mobile. */}
+          {file && (
+            <div style={{
+              position: 'absolute',
+              top: isMobile ? 72 : 140,
+              right: 18,
+              zIndex: 149,
+            }}>
+              <XREntryButton store={xrStore} />
             </div>
           )}
 

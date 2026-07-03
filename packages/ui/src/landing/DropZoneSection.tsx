@@ -30,7 +30,7 @@ export function DropZoneSection() {
 
   const handleFiles = useCallback(async (files: FileList) => {
     if (files.length === 0) return;
-    const { detectFileType } = await import('@atlas/parsers');
+    const { detectFileType, parseFile, readDumpHead, analyzeDumpHead } = await import('@atlas/parsers');
     const sorted = Array.from(files).sort((a, b) => {
       const ta = detectFileType(a.name);
       const tb = detectFileType(b.name);
@@ -41,16 +41,61 @@ export function DropZoneSection() {
     setLoading(true, 0);
     setError(null);
     try {
+      // Large streamable dumps take the worker transcode path: progressive
+      // frame-0 paint, off-main-thread .glimbin transcode, frames read on
+      // demand — the reliable-replay path for real research trajectories.
+      // Small or non-streamable files stay on the simple in-memory path.
+      let streamedDump: File | null = null;
+      const dumpFile = sorted.find((f) => detectFileType(f.name) === 'dump');
+      if (dumpFile && dumpFile.size > 4 * 1024 * 1024) {
+        try {
+          const head = await readDumpHead(dumpFile);
+          if (analyzeDumpHead(head).tier === 'streamable') {
+            const { importDumpFileStreaming } = await import('../loadMoleculeSource');
+            const res = await importDumpFileStreaming(dumpFile);
+            if (res.handled) streamedDump = dumpFile;
+          }
+        } catch {
+          // Pre-flight failed — the plain parse path below still applies.
+        }
+      }
+
       let trajectory = null;
       let thermo = null;
-      const { parseFile } = await import('@atlas/parsers');
+      const profiles: import('@atlas/parsers').ChunkProfileData[] = [];
       for (const f of sorted) {
+        if (f === streamedDump) continue;
         const result = await parseFile(f);
         if (result.trajectory) trajectory = result.trajectory;
         if (result.thermo) thermo = result.thermo;
+        if (result.profiles) profiles.push(...result.profiles);
       }
-      if (trajectory) {
-        setFile({ name: sorted[0].name, size: sorted.reduce((s, f) => s + f.size, 0), trajectory, thermo });
+
+      const sidecarsOnly = !trajectory && (thermo || profiles.length > 0);
+      if (streamedDump) {
+        // Structure mounted by the streaming path; attach any output tables
+        // without re-running scene setup.
+        if (thermo || profiles.length > 0) {
+          useStore.getState().attachFileSidecars({ thermo, profiles });
+        }
+      } else if (trajectory) {
+        setFile({
+          name: sorted[0].name,
+          size: sorted.reduce((s, f) => s + f.size, 0),
+          trajectory,
+          thermo,
+          profiles: profiles.length > 0 ? profiles : undefined,
+        });
+      } else if (sidecarsOnly && useStore.getState().file) {
+        // Output tables dropped onto an already-loaded structure.
+        useStore.getState().attachFileSidecars({ thermo, profiles });
+        setLoading(false);
+      } else if (sidecarsOnly) {
+        throw new Error(
+          'These are LAMMPS output tables (thermo log / ave-chunk profile). ' +
+          'Drop them together with the structure they belong to — a .data, ' +
+          '.lammpstrj, or .xyz file.',
+        );
       } else {
         throw new Error('No valid trajectory data found in the uploaded files.');
       }
@@ -133,13 +178,13 @@ export function DropZoneSection() {
           marginLeft: 'auto',
           marginRight: 'auto',
         }}>
-          Drop LAMMPS dumps, XYZ coordinates, or log files. We handle the parsing — you handle the science.
+          Drop LAMMPS dumps, data files, XYZ coordinates, thermo logs, or ave/chunk profiles. We handle the parsing — you handle the science.
         </p>
 
         <input
           ref={inputRef}
           type="file"
-          accept=".lammpstrj,.dump,.gz,.log,.data,.lmp,.xyz"
+          accept=".lammpstrj,.dump,.gz,.log,.data,.lmp,.xyz,.txt,.profile,text/plain"
           multiple
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
           style={{ display: 'none' }}
@@ -193,7 +238,7 @@ export function DropZoneSection() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {['LAMMPS', 'XYZ', 'GZip', 'Log'].map((tag) => (
+            {['LAMMPS', 'Data', 'XYZ', 'GZip', 'Log', 'Profiles'].map((tag) => (
               <span key={tag} style={{
                 fontSize: 11,
                 padding: '4px 12px',
