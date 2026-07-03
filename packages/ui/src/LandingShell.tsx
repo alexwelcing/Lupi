@@ -66,33 +66,46 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
 
   return (
     <div style={{ width: '100%', minHeight: '100vh', background: '#020204', display: 'flex', flexDirection: 'column' }}>
+      {/* Landing header — kept in the Melancholia register: transparent over the
+          twilight sky, a serif wordmark, gold-outlined actions. No filled blue. */}
       <header
         style={{
-          height: 56,
-          minHeight: 56,
-          flexShrink: 0,
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 60,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: isMobile ? '0 10px' : '0 16px',
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-glass)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
+          padding: isMobile ? '0 14px' : '0 clamp(20px, 4vw, 40px)',
+          background: 'transparent',
           zIndex: 200,
         }}
       >
         <a
           href="/"
           aria-label="Lupi home"
-          style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none', flexShrink: 0 }}
+          style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, textDecoration: 'none', flexShrink: 0 }}
         >
-          <span style={{ fontSize: isMobile ? 19 : 21, fontWeight: 750, color: 'var(--text-primary)', letterSpacing: 0 }}>
+          <span style={{
+            fontFamily: "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif",
+            fontSize: isMobile ? 22 : 25, fontWeight: 400, color: '#eef2f8', letterSpacing: '0.01em',
+          }}>
             Lupi
           </span>
+          {!isMobile && (
+            <span style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              fontSize: 10, letterSpacing: '0.28em', textTransform: 'uppercase',
+              color: 'rgba(216,184,120,0.72)',
+            }}>
+              archive of matter
+            </span>
+          )}
         </a>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: isMobile ? 6 : 10, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: isMobile ? 8 : 14, minWidth: 0 }}>
           <a
             href="#gallery"
             onClick={(e) => {
@@ -102,18 +115,27 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }
             }}
-            className="lupine-btn"
-            style={{ padding: isMobile ? '7px 9px' : '8px 12px', fontSize: isMobile ? 12 : 13 }}
+            style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              fontSize: isMobile ? 11 : 12, letterSpacing: '0.06em',
+              color: 'rgba(205,214,228,0.72)', textDecoration: 'none',
+              padding: '8px 4px',
+            }}
           >
-            Gallery
+            The index
           </a>
           <button
             type="button"
             onClick={() => void openRandomOmol25Molecule()}
-            className="lupine-btn primary"
-            style={{ padding: isMobile ? '7px 10px' : '8px 14px', fontSize: isMobile ? 12 : 14 }}
+            style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              fontSize: isMobile ? 11 : 12, letterSpacing: '0.04em', cursor: 'pointer',
+              padding: isMobile ? '8px 12px' : '9px 16px', borderRadius: 2,
+              color: '#f2ead8', background: 'rgba(216,184,120,0.06)',
+              border: '1px solid rgba(216,184,120,0.4)',
+            }}
           >
-            {isMobile ? 'View' : 'View a molecule'}
+            {isMobile ? 'At random' : 'A body at random'}
           </button>
           <LupiAgentDock compact={isMobile} />
         </div>
