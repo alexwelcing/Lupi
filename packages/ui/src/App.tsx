@@ -1002,11 +1002,14 @@ export default function App() {
     { trajectory: undefined, frame: undefined },
   );
   const rawCurrentFrame = file?.trajectory.frames[frame];
-  if (file && lastResidentRef.current.trajectory !== file.trajectory) {
-    lastResidentRef.current = { trajectory: file.trajectory, frame: undefined };
+  if (lastResidentRef.current.trajectory !== file?.trajectory) {
+    // New trajectory or file closed — never carry a frame across; a stale
+    // hold after clearFile would keep the scene subtree alive with a null
+    // file and blank the whole page.
+    lastResidentRef.current = { trajectory: file?.trajectory, frame: undefined };
   }
   if (rawCurrentFrame) lastResidentRef.current.frame = rawCurrentFrame;
-  const currentFrame = rawCurrentFrame ?? lastResidentRef.current.frame;
+  const currentFrame = file ? (rawCurrentFrame ?? lastResidentRef.current.frame) : undefined;
   const totalFrames = file?.trajectory.totalFrames ?? 0;
 
   // Vector fields available on the loaded data (velocity/force triplets in
