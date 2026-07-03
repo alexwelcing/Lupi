@@ -169,6 +169,20 @@ export interface ExportRequest {
   format?: 'png' | 'jpeg' | 'webp' | 'mp4' | 'webm' | 'glb' | 'usdz';
   flythrough?: FlythroughSequence;
   transparent?: boolean;
+  /** Molecule-only transparent PNG (print-on-demand). Routes an `image`
+   *  export to the offscreen molecule renderer instead of the live-scene
+   *  screenshot, so the asset is a clean cutout with no background, dome,
+   *  ground shadow, or postprocess halo — ready for POD services. */
+  moleculeOnly?: boolean;
+  /** View direction (camera → molecule) for a molecule-only PNG. Defaults to
+   *  the current live-camera angle, or an iso hero angle when headless. */
+  viewDirection?: [number, number, number];
+  /** Projection for a molecule-only PNG ('perspective' | 'orthographic'). */
+  projection?: 'perspective' | 'orthographic';
+  /** Supersample factor for a molecule-only PNG (edge quality; default 2). */
+  supersample?: number;
+  /** Bounding-sphere padding fraction for a molecule-only PNG (default 0.06). */
+  margin?: number;
   durationSeconds?: number;
   orbit?: boolean;
   cinematic?: boolean;

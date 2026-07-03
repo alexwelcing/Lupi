@@ -19,7 +19,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { useStore } from './store';
-import { getElementSpec } from '@atlas/core';
 import * as THREE from 'three';
 import { sampleFlythrough, getSequenceDuration } from './flythrough';
 import { restoreInstancedMeshes } from './export/USDZExportPipeline';
@@ -30,9 +29,8 @@ import {
   disposeExportScene,
   MAX_EXPORT_BONDS,
 } from './export/exportSceneBuilder';
-
-const SINGLE_TYPE_NORM_VALUE = 0.5;
-const MIN_NUMERIC_RANGE = 1e-6;
+import { buildExportStyle } from './export/exportStyle';
+import { renderMoleculePngBlob, deriveViewDirection } from './export/moleculePngRenderer';
 
 // ─── Video Capture Loop Component ──────────────────────────────────
 // By isolating the priority=2 useFrame into a conditionally mounted component,
@@ -298,6 +296,68 @@ export function ExportManager() {
     gl.setClearColor(originalClearColor, originalClearAlpha);
   }, [exportRequest, gl, scene, camera, size, clearExportRequest, frame]);
 
+  // ─── Molecule-only transparent PNG (print-on-demand) ──────────
+  // Renders ONLY the molecule to a clean, transparent, high-resolution PNG via
+  // a dedicated offscreen renderer — no background, no environment dome, no
+  // ground shadow, no UI. Uses the SAME export geometry + coloring as GLB/USDZ
+  // so the print asset matches the 3D model exactly.
+  const handleMoleculePngExport = useCallback(async () => {
+    const req = exportRequest;
+    if (!req) return;
+    try {
+      const state = useStore.getState();
+      const currentFile = state.file;
+      const currentFrame = currentFile?.trajectory.frames[state.frame];
+      if (!currentFile || !currentFrame) {
+        console.error('[PNG Export] No molecule loaded');
+        if (req.onComplete) req.onComplete(false);
+        clearExportRequest();
+        return;
+      }
+
+      const style = await buildExportStyle(state, currentFrame);
+
+      // View angle: honor an explicit request, else match how the user framed
+      // the live molecule (live camera → molecule center), else iso hero angle.
+      let viewDirection = req.viewDirection;
+      if (!viewDirection) {
+        const { min, max } = currentFile.trajectory.globalBounds;
+        const center: [number, number, number] = [
+          (min[0] + max[0]) / 2,
+          (min[1] + max[1]) / 2,
+          (min[2] + max[2]) / 2,
+        ];
+        viewDirection = deriveViewDirection(
+          [camera.position.x, camera.position.y, camera.position.z],
+          center,
+        );
+      }
+
+      const { blob, width, height } = await renderMoleculePngBlob(currentFrame, style, {
+        width: req.resolution?.width ?? 2048,
+        height: req.resolution?.height ?? 2048,
+        transparent: req.transparent ?? true,
+        viewDirection,
+        projection: req.projection,
+        supersample: req.supersample,
+        margin: req.margin,
+        onProgress: req.onProgress,
+      });
+
+      const baseName = req.baseName || 'Lupi-print';
+      const filename = `${baseName}-frame${state.frame + 1}-${width}x${height}.png`;
+      if (req.onComplete) {
+        req.onComplete(true, blob, filename);
+      } else {
+        downloadBlob(blob, filename);
+      }
+    } catch (err) {
+      console.error('[PNG Export] Failed:', err);
+      if (req.onComplete) req.onComplete(false);
+    }
+    clearExportRequest();
+  }, [exportRequest, camera, clearExportRequest]);
+
   // ─── 3D Model Export (GLB / USDZ) ─────────────────────
   // Scene construction (instancing, LOD, chunked bond detection, progress)
   // lives in export/exportSceneBuilder so the exact same code path runs
@@ -308,8 +368,6 @@ export function ExportManager() {
     if (!req) return;
 
     try {
-      const { TYPE_COLORS, TYPE_RADII, DEFAULT_TYPE_COLOR, COLORMAPS } = await import('@atlas/scene');
-
       const state = useStore.getState();
       const currentFile = state.file;
       if (!currentFile) {
@@ -329,82 +387,26 @@ export function ExportManager() {
 
       const isUsdZ = req.type === 'usdz';
 
-      const mapFn = COLORMAPS[state.colormap] ?? COLORMAPS.viridis;
-      const typeSet = new Set<number>();
-      for (let i = 0; i < currentFrame.natoms; i++) {
-        typeSet.add(currentFrame.types[i]);
-      }
-      const sortedTypes = Array.from(typeSet).sort((a, b) => a - b);
-      const typeToNorm = new Map<number, number>();
-      for (let i = 0; i < sortedTypes.length; i++) {
-        typeToNorm.set(
-          sortedTypes[i],
-          sortedTypes.length > 1 ? i / (sortedTypes.length - 1) : SINGLE_TYPE_NORM_VALUE,
-        );
-      }
-
-      const resolveTypeColor = (typeId: number): [number, number, number] => {
-        if (state.atomColorSource === 'element') {
-          const override = state.elementColorOverrides[typeId];
-          if (override) return new THREE.Color(override).toArray() as [number, number, number];
-          return TYPE_COLORS[typeId] ?? DEFAULT_TYPE_COLOR;
-        }
-        const t = typeToNorm.get(typeId) ?? SINGLE_TYPE_NORM_VALUE;
-        return mapFn(t);
-      };
-
-      const propertyData = state.colorMode === 'property' && state.colorProperty
-        ? currentFrame.properties?.get(state.colorProperty)
-        : null;
-      let propertyMin = state.propRange[0];
-      let propertyMax = state.propRange[1];
-      if (propertyData && (!Number.isFinite(propertyMin) || !Number.isFinite(propertyMax) || propertyMin >= propertyMax)) {
-        propertyMin = Infinity;
-        propertyMax = -Infinity;
-        for (let i = 0; i < propertyData.length; i++) {
-          const v = propertyData[i];
-          if (v < propertyMin) propertyMin = v;
-          if (v > propertyMax) propertyMax = v;
-        }
-      }
-      const propertyRange = Math.max(propertyMax - propertyMin, MIN_NUMERIC_RANGE);
-
-      const resolveAtomColor = (atomIndex: number, atomType: number): [number, number, number] => {
-        if (state.colorMode === 'property' && propertyData) {
-          const t = Math.max(0, Math.min(1, (propertyData[atomIndex] - propertyMin) / propertyRange));
-          return mapFn(t);
-        }
-        if (state.colorMode === 'uniform') {
-          return new THREE.Color(state.uniformAtomColor).toArray() as [number, number, number];
-        }
-        return resolveTypeColor(atomType);
-      };
-
-      // Mirror the live viewer's element-aware bond test:
-      //   d ≤ r_cov(A) + r_cov(B) + tolerance
-      // using the same tolerance the slider controls, so the export matches
-      // the on-screen bond set.
-      let maxTypeId = 0;
-      for (const t of typeSet) if (t > maxTypeId) maxTypeId = t;
-      const covalentRadii = new Float32Array(maxTypeId + 1);
-      for (const t of typeSet) covalentRadii[t] = getElementSpec(t).radius;
+      // Shared coloring / radii / material / bond resolvers — identical to the
+      // transparent print PNG path so every export format renders the exact
+      // same molecule (colors, radii, material preset, element-aware bonds).
+      const style = await buildExportStyle(state, currentFrame);
 
       const framing = isUsdZ
-        ? computeUsdzFraming(currentFrame, state.hiddenAtomTypes)
+        ? computeUsdzFraming(currentFrame, style.hiddenTypes)
         : { center: [0, 0, 0] as [number, number, number], arScale: 1 };
 
       const { scene: exportScene, bondsCapped } = await buildExportScene(currentFrame, {
         format: isUsdZ ? 'usdz' : 'glb',
-        hiddenTypes: state.hiddenAtomTypes,
-        displayRadiusForType: (typeId) =>
-          (TYPE_RADII[typeId] ?? 1.0) * (state.atomScale ?? 1.0) * (state.atomTypeScales[typeId] ?? 1.0),
-        resolveAtomColor,
-        materialPreset: state.materialPreset,
-        surfacePolish: state.surfacePolish || 0.0,
-        surfaceRoughness: state.surfaceRoughness || 0.0,
-        showBonds: state.showBonds,
-        bondTolerance: state.bondTolerance ?? 0.45,
-        covalentRadii,
+        hiddenTypes: style.hiddenTypes,
+        displayRadiusForType: style.displayRadiusForType,
+        resolveAtomColor: style.resolveAtomColor,
+        materialPreset: style.materialPreset,
+        surfacePolish: style.surfacePolish,
+        surfaceRoughness: style.surfaceRoughness,
+        showBonds: style.showBonds,
+        bondTolerance: style.bondTolerance,
+        covalentRadii: style.covalentRadii,
         center: framing.center,
         arScale: framing.arScale,
         onProgress: req.onProgress,
@@ -617,6 +619,8 @@ export function ExportManager() {
   // to break the React dependency cycle that causes "Maximum update depth exceeded".
   const handleImageExportRef = useRef(handleImageExport);
   handleImageExportRef.current = handleImageExport;
+  const handleMoleculePngExportRef = useRef(handleMoleculePngExport);
+  handleMoleculePngExportRef.current = handleMoleculePngExport;
   const startVideoRecordingRef = useRef(startVideoRecording);
   startVideoRecordingRef.current = startVideoRecording;
   const handle3DExportRef = useRef(handle3DExport);
@@ -626,7 +630,11 @@ export function ExportManager() {
     if (!exportRequest || !exportRequest.type) return;
 
     if (exportRequest.type === 'image') {
-      handleImageExportRef.current();
+      if (exportRequest.moleculeOnly) {
+        handleMoleculePngExportRef.current();
+      } else {
+        handleImageExportRef.current();
+      }
     }
     if (exportRequest.type === 'video') {
       startVideoRecordingRef.current();

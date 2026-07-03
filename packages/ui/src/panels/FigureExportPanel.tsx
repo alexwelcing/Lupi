@@ -48,6 +48,36 @@ const IMAGE_EXPORTS = [
   },
 ];
 
+// Molecule-only transparent PNGs for print-on-demand. Square, high-resolution,
+// clean alpha cutout — drop straight into Printful / Redbubble / Society6 etc.
+// Physical size assumes ~300 DPI. Framing follows the current camera angle.
+const PRINT_EXPORTS = [
+  {
+    id: 'print-2k',
+    label: 'Sticker · 2K',
+    meta: 'transparent · 2048² · ~7in',
+    width: 2048,
+    height: 2048,
+    baseName: 'Lupi-print-2k',
+  },
+  {
+    id: 'print-4k',
+    label: 'Print · 4K',
+    meta: 'transparent · 4096² · ~13.6in',
+    width: 4096,
+    height: 4096,
+    baseName: 'Lupi-print-4k',
+  },
+  {
+    id: 'print-6k',
+    label: 'Poster · 6K',
+    meta: 'transparent · 6000² · 20in',
+    width: 6000,
+    height: 6000,
+    baseName: 'Lupi-print-6k',
+  },
+] as const;
+
 const VIDEO_EXPORT = {
   width: 1920,
   height: 1080,
@@ -71,6 +101,13 @@ const IconStudySheet = () => (
     <path d="M9 11h6" />
     <path d="M9 14h6" />
     <path d="M9 17h3" />
+  </svg>
+);
+
+const IconPrintCutout = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3" />
+    <circle cx="12" cy="12" r="4.4" fill="currentColor" fillOpacity="0.2" />
   </svg>
 );
 
@@ -244,6 +281,36 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
       },
     });
   }, [file, setShowScaleBar, triggerExport]);
+
+  const runTransparentPngExport = useCallback((preset: typeof PRINT_EXPORTS[number]) => {
+    if (!file) return;
+    // Molecule-only cutout: the offscreen renderer builds its own scene (no
+    // scale bar, no background, no UI) and frames the molecule from the current
+    // camera angle, so the PNG drops straight into a print-on-demand mockup —
+    // the live viewport is left untouched.
+    setStatus({ kind: 'working', label: `Rendering ${preset.label}` });
+    const viewDirection: [number, number, number] = [
+      cameraPosition[0] - cameraTarget[0],
+      cameraPosition[1] - cameraTarget[1],
+      cameraPosition[2] - cameraTarget[2],
+    ];
+    triggerExport({
+      type: 'image',
+      moleculeOnly: true,
+      transparent: true,
+      resolution: { width: preset.width, height: preset.height },
+      format: 'png',
+      viewDirection,
+      baseName: `${preset.baseName}-${safeName(file.name)}`,
+      onComplete: (success, blob, filename) => {
+        if (success && blob && filename) {
+          handoffDownload(blob, filename, preset.label, setStatus);
+        } else {
+          setStatus({ kind: 'error', label: `${preset.label} failed` });
+        }
+      },
+    });
+  }, [cameraPosition, cameraTarget, file, triggerExport]);
 
   const runStudySheetExport = useCallback(() => {
     if (!file || !currentFrame) return;
@@ -474,6 +541,21 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
             onClick={runStudySheetExport}
             compact={compact}
           />
+        </ExportSection>
+
+        <ExportSection label="Print · transparent" compact={compact}>
+          {PRINT_EXPORTS.map(preset => (
+            <ExportAction
+              key={preset.id}
+              testId={`export-${preset.id}`}
+              icon={<IconPrintCutout />}
+              label={preset.label}
+              meta={preset.meta}
+              disabled={!file || busy}
+              onClick={() => runTransparentPngExport(preset)}
+              compact={compact}
+            />
+          ))}
         </ExportSection>
 
         <ExportSection label="3D model" compact={compact}>

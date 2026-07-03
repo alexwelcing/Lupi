@@ -25,8 +25,24 @@ type LupiMcpToolName =
   | 'lupi.search_molecules'
   | 'lupi.set_viewer'
   | 'lupi.export_xyz'
+  | 'lupi.export_png'
   | 'lupi.viewer_state'
   | 'lupi.knowledge_graph';
+
+/** Transparent molecule-only PNG asset produced by lupi.export_png. The
+ *  base64 `dataUrl` is print-on-demand ready (clean alpha cutout). It rides
+ *  the live MCP response for same-window/agent pickup and is mirrored onto
+ *  `window.__lupiRenderResult`; the persisted ledger strips the heavy dataUrl. */
+export interface LupiMcpImageResult {
+  format: 'png';
+  filename: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  byteLength: number;
+  atomCount: number;
+  transparent: boolean;
+}
 
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
 type PostprocessPreset = ReturnType<typeof useStore.getState>['postprocessPreset'];
@@ -94,6 +110,7 @@ interface LupiMcpResponse {
       filename: string;
       contents: string;
     };
+    image?: LupiMcpImageResult;
     molecules?: Array<{
       id: string;
       source: MoleculeSourceId;
@@ -158,6 +175,10 @@ declare global {
     __lupiViewerMcpResponses?: LupiMcpResponsePayload[];
     __lupiViewerMcpUrlRunKey?: string;
     __lupiViewerMcpVersion?: string;
+    /** Last transparent PNG asset rendered by lupi.export_png. Held in-memory
+     *  (never persisted) so a same-window agent or a headless driver can pick
+     *  up the base64 `dataUrl` after generating a molecule. */
+    __lupiRenderResult?: LupiMcpImageResult & { createdAt: number };
   }
 }
 
@@ -378,6 +399,12 @@ const MCP_VIEWER_EXAMPLES: Array<{
     summary: 'Small-system export from the active real viewer frame.',
     command: '{"id":"dogfood-export","tool":"lupi.export_xyz","arguments":{}}',
   },
+  {
+    id: 'export-png',
+    label: 'Transparent print PNG',
+    summary: 'Render the active molecule to a print-on-demand transparent PNG (2048², iso hero angle).',
+    command: '{"id":"dogfood-export-png","tool":"lupi.export_png","arguments":{"size":2048,"transparent":true}}',
+  },
 ];
 
 type McpHarnessPanel = 'catalog' | 'agent' | 'actions' | 'command' | 'response';
@@ -523,20 +550,27 @@ function sanitizeMcpPayloadForStorage(entry: LupiMcpResponsePayload): LupiMcpRes
     requests: entry.requests ? cloneMcpRequests(entry.requests) : undefined,
     responses: entry.responses.map((response) => {
       const exportResult = response.result?.export;
-      if (!exportResult || exportResult.contents.length <= MAX_PERSISTED_EXPORT_CHARS) return response;
+      const imageResult = response.result?.image;
+      const stripExport = !!exportResult && exportResult.contents.length > MAX_PERSISTED_EXPORT_CHARS;
+      // PNG base64 is always heavy — never persist it (it lives on
+      // window.__lupiRenderResult and was already downloaded/returned live).
+      const stripImage = !!imageResult && imageResult.dataUrl.length > 0;
+      if (!stripExport && !stripImage) return response;
+
+      const notes: string[] = [];
+      const nextResult = { ...response.result };
+      if (stripExport && exportResult) {
+        nextResult.export = { ...exportResult, contents: '' };
+        notes.push(`persistent ledger omitted ${formatCount(exportResult.contents.length)} XYZ characters; rerun entry to download`);
+      }
+      if (stripImage && imageResult) {
+        nextResult.image = { ...imageResult, dataUrl: '' };
+        notes.push(`persistent ledger omitted ${formatBytes(imageResult.byteLength)} PNG data; rerun entry to re-render`);
+      }
       return {
         ...response,
-        result: {
-          ...response.result,
-          export: {
-            ...exportResult,
-            contents: '',
-          },
-        },
-        transcript: [
-          ...response.transcript,
-          `persistent ledger omitted ${formatCount(exportResult.contents.length)} XYZ characters; rerun entry to download`,
-        ],
+        result: nextResult,
+        transcript: [...response.transcript, ...notes],
       };
     }),
   };
@@ -1179,6 +1213,11 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
       });
     }
 
+    if (request.tool === 'lupi.export_png') {
+      const image = await exportActiveMoleculePng(request.arguments ?? {}, transcript);
+      return okResponse(request, transcript, { image, viewer: readViewerState() });
+    }
+
     if (request.tool === 'lupi.search_molecules') {
       const args = request.arguments ?? {};
       const text =
@@ -1351,7 +1390,9 @@ function readMcpUrlRequestsFromParams(params: URLSearchParams): LupiMcpRequest[]
   const proceduralCount = params.get('atomCount') ?? params.get('atoms') ?? params.get('count') ?? params.get('molecules');
   const hasProceduralParams = proceduralCount !== null || params.get('kind') === 'scale-test' || params.get('lattice') !== null;
   const tool = params.get('tool');
-  const wantsExport = tool === 'lupi.export_xyz' || params.get('export')?.toLowerCase() === 'xyz';
+  const exportParam = params.get('export')?.toLowerCase();
+  const wantsExport = tool === 'lupi.export_xyz' || exportParam === 'xyz';
+  const wantsPng = tool === 'lupi.export_png' || exportParam === 'png';
   const wantsState = tool === 'lupi.viewer_state' || params.get('state') === '1';
 
   if (moleculeInput || hasProceduralParams) {
@@ -1373,11 +1414,42 @@ function readMcpUrlRequestsFromParams(params: URLSearchParams): LupiMcpRequest[]
   if (wantsExport) {
     requests.push(makeRequest('lupi.export_xyz', {}));
   }
+  if (wantsPng) {
+    requests.push(makeRequest('lupi.export_png', pngArgsFromUrlParams(params)));
+  }
   if (wantsState) {
     requests.push(makeRequest('lupi.viewer_state', {}));
   }
 
   return requests;
+}
+
+/** Map ?export=png bootstrap params onto lupi.export_png arguments. Lets an
+ *  agent request a molecule and its transparent print asset in a single URL,
+ *  e.g. ?mcp=1&name=caffeine&export=png&size=2048&download=0 */
+function pngArgsFromUrlParams(params: URLSearchParams): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  const size = params.get('pngSize') ?? params.get('size');
+  const width = params.get('pngWidth') ?? params.get('width');
+  const height = params.get('pngHeight') ?? params.get('height');
+  const transparent = params.get('transparent');
+  const download = params.get('download');
+  const projection = params.get('projection');
+  const view = params.get('view');
+  const supersample = params.get('supersample') ?? params.get('ssaa');
+  const margin = params.get('margin');
+  const viewDirection = params.get('viewDirection') ?? params.get('direction');
+  if (size) args.size = size;
+  if (width) args.width = width;
+  if (height) args.height = height;
+  if (transparent !== null) args.transparent = transparent;
+  if (download !== null) args.download = download;
+  if (projection) args.projection = projection;
+  if (view) args.view = view;
+  if (supersample) args.supersample = supersample;
+  if (margin) args.margin = margin;
+  if (viewDirection) args.viewDirection = viewDirection;
+  return args;
 }
 
 function readParamsFromUrl(value: string) {
@@ -1881,6 +1953,126 @@ function moleculeFromActiveViewer(): ResolvedMolecule | null {
     bounds: state.file.trajectory.globalBounds,
     xyz: frameToXYZ(name, frame),
   };
+}
+
+/**
+ * Render the currently-loaded molecule to a transparent, print-on-demand PNG
+ * and return its base64 asset. This is the API counterpart to the export
+ * panel's "Print · transparent" buttons: an agent can `lupi.generate_molecule`
+ * then `lupi.export_png` and immediately have the print-ready asset — via the
+ * MCP response, `window.__lupiRenderResult`, or an auto-download.
+ *
+ * Reuses the shared offscreen renderer, so no live viewer canvas is required;
+ * it builds its own WebGL context, which means it also works headless.
+ */
+async function exportActiveMoleculePng(
+  args: Record<string, unknown>,
+  transcript: string[],
+): Promise<LupiMcpImageResult> {
+  const state = useStore.getState();
+  const frame = state.file?.trajectory.frames[state.frame];
+  if (!state.file || !frame) {
+    throw new Error('No active molecule is loaded in the Lupi viewer.');
+  }
+
+  const [{ buildExportStyle }, pngModule] = await Promise.all([
+    import('./export/exportStyle'),
+    import('./export/moleculePngRenderer'),
+  ]);
+  const { renderMoleculePngBlob, blobToPngDataUrl, deriveViewDirection } = pngModule;
+
+  const size = readNumber(args.size);
+  const width = clampInteger(readNumber(args.width) ?? size ?? 2048, 64, 8192);
+  const height = clampInteger(readNumber(args.height) ?? size ?? width, 64, 8192);
+  const transparent = readBoolean(args.transparent) ?? true;
+  const projection = readString(args.projection) === 'orthographic' ? 'orthographic' : 'perspective';
+  const supersample = readNumber(args.supersample);
+  const margin = readNumber(args.margin);
+
+  // View direction: explicit vector wins; `view: 'current'` follows the live
+  // camera pose; otherwise the deterministic iso hero angle (renderer default).
+  let viewDirection: [number, number, number] | undefined;
+  const explicitDir = readVec3(args.viewDirection ?? args.direction);
+  const viewMode = readString(args.view)?.toLowerCase();
+  if (explicitDir) {
+    viewDirection = explicitDir;
+  } else if (viewMode === 'current') {
+    viewDirection = deriveViewDirection(state.cameraPosition, state.cameraTarget);
+  } else if (viewMode === 'front') {
+    viewDirection = [0, 0, 1];
+  } else if (viewMode === 'top') {
+    viewDirection = [0, 1, 0.0001];
+  }
+
+  const style = await buildExportStyle(state, frame);
+  const render = await renderMoleculePngBlob(frame, style, {
+    width,
+    height,
+    transparent,
+    projection,
+    supersample,
+    margin,
+    viewDirection,
+  });
+  const dataUrl = await blobToPngDataUrl(render.blob);
+
+  const name = state.file.name.replace(/^MCP:\s*/, '');
+  const filename = `${slug(name)}-${render.width}x${render.height}.png`;
+  const image: LupiMcpImageResult = {
+    format: 'png',
+    filename,
+    dataUrl,
+    width: render.width,
+    height: render.height,
+    byteLength: render.blob.size,
+    atomCount: render.atomCount,
+    transparent,
+  };
+
+  if (typeof window !== 'undefined') {
+    window.__lupiRenderResult = { ...image, createdAt: Date.now() };
+    if ((readBoolean(args.download) ?? true) && typeof document !== 'undefined') {
+      downloadBlobFile(filename, render.blob);
+    }
+  }
+
+  transcript.push(
+    `rendered transparent PNG ${render.width}x${render.height} ` +
+    `(${formatCount(render.atomCount)} atoms, ${formatBytes(render.blob.size)})`,
+  );
+  return image;
+}
+
+function readVec3(value: unknown): [number, number, number] | undefined {
+  let parts: unknown[];
+  if (Array.isArray(value)) {
+    parts = value;
+  } else if (typeof value === 'string') {
+    parts = value.split(/[\s,]+/).filter(Boolean);
+  } else {
+    return undefined;
+  }
+  if (parts.length < 3) return undefined;
+  const nums = parts.slice(0, 3).map((p) => Number(p));
+  if (nums.some((n) => !Number.isFinite(n))) return undefined;
+  return [nums[0], nums[1], nums[2]];
+}
+
+function downloadBlobFile(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 function extractMoleculeArgs(command: string): Record<string, unknown> | null {
