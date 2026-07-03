@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_EXAMPLES, publicAssetUrl, type GalleryExample } from '../shared';
 import { openMolecule } from '../../viewer/openMolecule';
 import { MatterPlanet } from './MatterPlanet';
+import { MatterField } from './MatterField';
 
 // The bodies drawn into the Collection — chosen for range and for the new
 // research/scale work, weighted toward ids that carry a rendered snapshot.
@@ -161,6 +162,7 @@ function Overture({
 
   return (
     <section className="mel-overture" aria-label="Lupi — an archive of matter">
+      <MatterField className="mel-field" />
       <div
         className="mel-planet-frame"
         style={{ transform: `translateY(${drift}px)` }}
@@ -357,8 +359,14 @@ const MEL_CSS = `
   padding: clamp(28px, 6vw, 96px);
   box-sizing: border-box;
 }
+.mel-field {
+  position: absolute; inset: 0; z-index: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
 .mel-planet-frame {
   position: absolute;
+  z-index: 1;
   right: clamp(-220px, -6vw, -40px);
   bottom: clamp(-180px, -8vw, -60px);
   width: 640px; height: 640px;
@@ -387,11 +395,14 @@ const MEL_CSS = `
   font-size: clamp(38px, 6vw, 82px); line-height: 1.02;
   letter-spacing: -0.01em; margin: 0 0 26px; color: #eef2f8;
   text-wrap: balance;
+  text-shadow: 0 2px 34px rgba(4, 6, 11, 0.8), 0 0 2px rgba(4, 6, 11, 0.5);
 }
 .mel-lede {
   font-size: clamp(15px, 1.5vw, 18px); line-height: 1.72; max-width: 46ch;
   color: var(--ink-dim); margin: 0 0 34px; font-weight: 380;
+  text-shadow: 0 1px 16px rgba(4, 6, 11, 0.92);
 }
+.mel-eyebrow, .mel-readout dt, .mel-readout dd { text-shadow: 0 1px 12px rgba(4, 6, 11, 0.85); }
 .mel-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
 .mel-btn {
   appearance: none; cursor: pointer;
@@ -552,9 +563,11 @@ const MEL_CSS = `
 }
 
 @media (max-width: 760px) {
-  .mel-planet-frame { right: -180px; bottom: auto; top: -80px; width: 420px; height: 420px; opacity: 0.7; }
-  .mel-loop { width: 480px; height: 480px; }
-  .mel-overture { align-items: end; padding-bottom: 80px; }
+  /* Planet rises from the bottom-right, below the copy, so it never sits
+     behind the text; the field thins and the copy carries its own shadow. */
+  .mel-planet-frame { right: -150px; top: auto; bottom: -170px; width: 380px; height: 380px; opacity: 0.6; }
+  .mel-loop { width: 440px; height: 440px; }
+  .mel-overture { align-items: start; padding-top: 84px; padding-bottom: 60px; }
   .mel-scrollcue { display: none; }
   .mel-readout div { grid-template-columns: 78px 1fr; }
 }
