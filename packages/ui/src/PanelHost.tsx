@@ -23,6 +23,7 @@ interface PanelHostProps {
 const TITLES: Record<NonNullable<PanelHostProps['activePanel']>, string> = {
   studio: 'Controls',
   export: 'Export Figure',
+  merch: 'Merch Studio',
   flythrough: 'Flythrough',
   telemetry: 'Telemetry',
   equilibrium: 'Equilibrium Solve',
@@ -32,6 +33,7 @@ const TITLES: Record<NonNullable<PanelHostProps['activePanel']>, string> = {
 const INITIALS: Record<NonNullable<PanelHostProps['activePanel']>, { x?: number; y?: number; w?: number; h?: number }> = {
   studio: { x: undefined, y: undefined, w: 400, h: 720 },
   export: { x: undefined, y: undefined, w: 420, h: 680 },
+  merch: { x: undefined, y: undefined, w: 460, h: 760 },
   flythrough: { x: undefined, y: undefined, w: 400, h: 620 },
   telemetry: { x: undefined, y: undefined, w: 400, h: 580 },
   equilibrium: { x: undefined, y: undefined, w: 460, h: 720 },

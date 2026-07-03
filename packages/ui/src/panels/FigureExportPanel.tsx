@@ -104,6 +104,12 @@ const IconStudySheet = () => (
   </svg>
 );
 
+const IconMerch = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 3 4 6l2 3 2-1v10h8V8l2 1 2-3-4-3-2 2H10z" />
+  </svg>
+);
+
 const IconPrintCutout = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3" />
@@ -556,6 +562,18 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
               compact={compact}
             />
           ))}
+        </ExportSection>
+
+        <ExportSection label="Merch" compact={compact}>
+          <ExportAction
+            testId="export-open-merch"
+            icon={<IconMerch />}
+            label="Sell as merch"
+            meta="mugs · tees · caps · posters → Shopify"
+            disabled={!file}
+            onClick={() => setActivePanel('merch')}
+            compact={compact}
+          />
         </ExportSection>
 
         <ExportSection label="3D model" compact={compact}>

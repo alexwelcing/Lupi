@@ -1151,7 +1151,7 @@ export default function App() {
   // Content-heavy editors (studio controls, the flythrough sequencer, the export
   // surface) get a taller sheet so they're usable on a phone; quick panels stay
   // compact.
-  const tallMobilePanel = activePanel === 'studio' || activePanel === 'flythrough' || activePanel === 'export';
+  const tallMobilePanel = activePanel === 'studio' || activePanel === 'flythrough' || activePanel === 'export' || activePanel === 'merch';
   const activeMobilePanelHeight = tallMobilePanel ? 'clamp(340px, 54dvh, 520px)' : mobilePanelHeight;
   const mobileLoadedHeader = isMobile && !!file;
   const headerHeight = isMobile

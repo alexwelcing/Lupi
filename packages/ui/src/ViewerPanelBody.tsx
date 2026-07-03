@@ -12,6 +12,7 @@
 import { useStore, type AppState } from './store';
 import { ViewerControlsDrawer, type ViewerControlMode } from './ViewerControlsDrawer';
 import { FigureExportPanel } from './panels/FigureExportPanel';
+import { MerchStudio } from './merch/MerchStudio';
 import { FlythroughPanel } from './panels/FlythroughPanel';
 import { TelemetryPanel } from './panels/TelemetryPanel';
 import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
@@ -43,6 +44,8 @@ export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, showChr
       );
     case 'export':
       return <FigureExportPanel showCloseButton={false} />;
+    case 'merch':
+      return <MerchStudio showCloseButton={false} />;
     case 'flythrough':
       return <FlythroughPanel showCloseButton={false} />;
     case 'telemetry':
