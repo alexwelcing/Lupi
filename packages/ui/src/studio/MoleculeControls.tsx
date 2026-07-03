@@ -4,7 +4,7 @@
  * shell just mounts it.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { getElementSpec } from '@atlas/core';
+import { getElementSpec, detectVectorFields } from '@atlas/core';
 import type { ColormapName } from '@atlas/core/types';
 import { MATERIAL_SCENES, type MaterialScene } from '@atlas/scene/materials';
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from '../coloring';
@@ -120,19 +120,43 @@ export function MoleculeControls() {
     () => MATERIAL_SCENES.filter(scene => FEATURED_SCENE_IDS.includes(scene.id)),
     [],
   );
+  const vectorField = useStore(s => s.vectorField);
+  const setVectorField = useStore(s => s.setVectorField);
+  const vectorScale = useStore(s => s.vectorScale);
+  const setVectorScale = useStore(s => s.setVectorScale);
+  const vectorDensity = useStore(s => s.vectorDensity);
+  const setVectorDensity = useStore(s => s.setVectorDensity);
+
+  // Streamed trajectories keep placeholder (undefined) frames until fetched —
+  // fall back to frame 0 (always resident) so the controls don't flicker away
+  // mid-scrub. Column sets don't change frame to frame in practice.
+  const residentFrame = useMemo(
+    () => file?.trajectory.frames[frame] ?? file?.trajectory.frames[0],
+    [file, frame],
+  );
+  const vectorSpecs = useMemo(() => {
+    const props = residentFrame?.properties;
+    return props ? detectVectorFields(props.keys()) : [];
+  }, [residentFrame]);
   const availableProperties = useMemo(() => {
-    const props = file?.trajectory.frames[frame]?.properties;
-    return props ? Array.from(props.keys()) : [];
-  }, [file, frame]);
+    const props = residentFrame?.properties;
+    const names = props ? Array.from(props.keys()) : [];
+    // Derived vector magnitudes (|F|, |v|, ...) color like any scalar —
+    // App ensures the arrays exist on demand when one is selected.
+    for (const spec of vectorSpecs) {
+      if (!names.includes(spec.magnitudeProperty)) names.push(spec.magnitudeProperty);
+    }
+    return names;
+  }, [residentFrame, vectorSpecs]);
   const presentElements = useMemo(() => {
-    const types = file?.trajectory.frames[frame]?.types;
+    const types = residentFrame?.types;
     if (!types) return [];
     const atomicNumbers = new Set<number>();
     for (let i = 0; i < types.length; i++) atomicNumbers.add(types[i]);
     return Array.from(atomicNumbers)
       .sort((a, b) => a - b)
       .map(atomicNumber => ({ atomicNumber, spec: getElementSpec(atomicNumber) }));
-  }, [file, frame]);
+  }, [residentFrame]);
   const activeElement = presentElements.find(element => element.atomicNumber === selectedAtomicNumber) ?? presentElements[0] ?? null;
   const activeElementColor = activeElement
     ? elementColorOverrides[activeElement.atomicNumber] ?? activeElement.spec.color
@@ -327,6 +351,40 @@ export function MoleculeControls() {
         </div>
         <CompactSlider label="Tolerance" value={bondTolerance} min={0} max={1.2} step={0.02} onChange={setBondTolerance} format={value => value.toFixed(2)} />
       </ControlGroup>
+
+      {/* Vectors — per-atom force/velocity arrows. Only shown when the
+          loaded data actually carries a vector triplet (vx/vy/vz, fx/fy/fz,
+          or a compute output), which is what real research dumps provide. */}
+      {vectorSpecs.length > 0 && (
+        <ControlGroup title="Vectors">
+          <div className="lupi-studio-segments">
+            <SegmentButton
+              label="Off"
+              active={vectorField === null}
+              accent="#94a3b8"
+              onClick={() => setVectorField(null)}
+            />
+            {vectorSpecs.slice(0, 3).map(spec => (
+              <SegmentButton
+                key={spec.id}
+                label={spec.label}
+                active={vectorField === spec.id}
+                accent={spec.kind === 'force' ? '#fb7185' : '#7de9ff'}
+                onClick={() => setVectorField(spec.id)}
+              />
+            ))}
+          </div>
+          {vectorField !== null && (
+            <>
+              <CompactSlider label="Length" value={vectorScale} min={0.2} max={4} step={0.1} onChange={setVectorScale} format={value => `${value.toFixed(1)}×`} />
+              <CompactSlider label="Density" value={vectorDensity} min={0.05} max={1} step={0.05} onChange={setVectorDensity} format={value => `${Math.round(value * 100)}%`} />
+              <p style={schemeHintStyle}>
+                Arrows colored by magnitude. Tip: Color → Property → {vectorSpecs.find(s => s.id === vectorField)?.magnitudeProperty ?? '|v|'} paints atoms with the same scale.
+              </p>
+            </>
+          )}
+        </ControlGroup>
+      )}
     </div>
   );
 }

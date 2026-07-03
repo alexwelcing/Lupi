@@ -10,6 +10,14 @@ export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
 export { AtomPicker } from './AtomPicker';
 export { SpatialHash3D } from './SpatialHash';
+export { VectorGlyphs } from './VectorGlyphs';
+export type { VectorGlyphStats } from './VectorGlyphs';
+export {
+  BillionAtomBlock,
+  TOTAL_ATOMS as BILLION_BLOCK_TOTAL_ATOMS,
+  ATOMS_PER_BRICK as BILLION_BLOCK_ATOMS_PER_BRICK,
+} from './BillionAtomBlock';
+export type { BillionAtomStats } from './BillionAtomBlock';
 
 // Shared constants
 export {

@@ -11,6 +11,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ThermoData, ThermoRun, Frame } from '@atlas/core/types';
 import type { AppState } from '../store';
 import { useStore } from '../store';
+import { ProfileReplaySection } from './ProfileReplaySection';
 import heatmapData from './heatmap_data.json';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -354,6 +355,9 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
   const [expandedProp, setExpandedProp] = useState<string | null>(null);
   const [autoJumpSpikes, setAutoJumpSpikes] = useState(false);
 
+  // Spatial profile time series (fix ave/chunk outputs) loaded with the file.
+  const profiles = useStore(s => s.file?.profiles);
+
   // Per-atom properties available in the current frame
   const atomProperties = useMemo(() => {
     if (!currentFrame?.properties) return [];
@@ -389,8 +393,11 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
   const fileName = useStore(s => s.file?.name);
   const sourceUrl = useStore(s => s.file?.sourceUrl);
   const isResearch = useMemo(() => {
+    // NIST potential-benchmark entries only — other research collections
+    // (e.g. gallery/research/hfc) are plain trajectories, not per-frame
+    // potential comparisons, and must not get the "Potential N" framing.
     return fileName?.includes('Potential Benchmark') || fileName?.includes('research_')
-      || sourceUrl?.includes('gallery/research/');
+      || sourceUrl?.includes('gallery/research/research_');
   }, [fileName, sourceUrl]);
 
   // Extract the material symbol from the file name or source URL
@@ -612,6 +619,16 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
             ))}
           </div>
         </div>
+      )}
+
+      {/* Spatial profile replay (fix ave/chunk output files) */}
+      {profiles && profiles.length > 0 && (
+        <ProfileReplaySection
+          profiles={profiles}
+          currentTimestep={currentFrame?.timestep}
+          currentFrameIndex={frame}
+          totalFrames={totalFrames}
+        />
       )}
 
       {/* Research Showcase Context */}

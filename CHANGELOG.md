@@ -1,5 +1,105 @@
 # Changelog
 
+## [Unreleased] - Gallery Truth Audit + One Billion Atoms
+
+### Added
+- **One billion atoms in view** (`/?billion-atoms`, gallery card "One
+  Billion Atoms"): a procedural 630³-unit-cell FCC copper block —
+  1,000,188,000 atoms — rendered through hierarchical brick LOD. No atom
+  data exists in memory: every position is derived in the vertex shader
+  from its instance index (lattice + FCC basis + deterministic thermal
+  shimmer). 9,261 bricks classify per frame into four tiers (atoms /
+  2³-cell / 6³-cell / brick splats), so drawn primitives stay in the low
+  millions while the scene semantically holds the full billion. The HUD
+  separates "atoms at full detail" (up to ~3.5M near the camera) from
+  aggregate-tier accounting, with High/Medium/Low budgets. Labeled
+  explicitly as a rendering scale testbed, not a simulation.
+- `tools/audit-gallery-claims.mjs` (`pnpm audit:gallery-claims`): parses
+  every local gallery asset (dump/XYZ/data/glimbin/MLIP JSON, gz-aware,
+  content-sniffed) and fails CI-style when a card's atom/frame labels
+  disagree with the file.
+
+### Fixed
+- **Gallery card accuracy**: 7 cards claimed wrong scales — worst,
+  "Cantor Alloy Dislocation Glide" claimed 2,500,000 atoms over a
+  13,086-atom file and "Tungsten Collision Cascade" claimed 4,000,000
+  over 31,250 (128–191× overclaims); also LLZO (12,000→960), GST
+  (32,000→4,096), SiO₂ glass (24,000→12,000), graphene ribbon (86→112),
+  alanine dipeptide (66→70). Labels now match the files, and the four
+  famous-study recreations say "representative recreation" with the
+  original study's scale moved into the description.
+- Share links now restore the shared view faithfully: `setFile`'s
+  per-file scene defaults no longer clobber URL-decoded state (vector
+  field, color scheme, bonds…) — the decode re-applies once after the
+  file mounts.
+- Streaming playback no longer unmount-thrashes the scene when playback
+  briefly outruns frame fetches — the viewer holds the last resident
+  frame; Molecule controls similarly stop flickering on placeholder
+  frames while scrubbing streamed trajectories.
+- Flythrough/orbit video export restores the camera pose and FOV after
+  recording (previously flythrough left the viewport at the final pose).
+- XR grab survives brief hand-tracking dropouts (0.25 s grace) instead of
+  spontaneously throwing the molecule with stale velocity; releases from
+  tracking loss drop gently.
+- `.data` element resolution: united-atom pseudo-masses (CH2 ≈ N,
+  NH2 ≈ O) no longer mislabel chemistry — the Masses comment label wins
+  when the file mass is consistent with "element + implicit hydrogens",
+  the nearest standard mass otherwise (so GAFF's "ca" stays carbon, real
+  Ca stays calcium).
+- USDZ export's triangle budget now accounts for bond cylinders, and the
+  property-legend HUD caches per-frame ranges instead of rescanning every
+  playback tick; gallery output sidecars can't double-attach on
+  overlapping loads.
+
+## [Unreleased] - Research Payloads, Vector/Energy Views, Export Scaling, AR Grab
+
+### Added
+- **Real research payload support (MaginnGroup HFC validation)**: the LAMMPS
+  `.data` parser now reads the Masses section and remaps atom types to
+  elements (mass table + `# c3`-style label fallback), so research topology
+  files render with correct CPK chemistry; Velocities sections parse into
+  `vx/vy/vz` properties, molecule ids into `mol`, original type ids survive
+  as `type_id`, triclinic tilt is honored, and `Atoms # style` hints are
+  respected. Trailing `#` comments on data lines no longer corrupt parsing.
+- **`fix ave/chunk` profile parser** (`parseChunkProfile`): the spatial-profile
+  time series real transport studies produce (temperature/density/velocity
+  profiles) parse, replay in sync with trajectory playback in the Telemetry
+  panel, and can be dropped alongside — or attached to — a loaded structure.
+  Thermo tables in the `fix print` dialect load the same way.
+- **Vector glyph representation** — the first view beyond ball-and-stick:
+  per-atom force/velocity/dipole arrows (instanced camera-facing ribbon
+  impostors, GPU frame interpolation, p95 auto-scaling, magnitude colormap),
+  with a Vectors section in Molecule controls, `?s=` URL round-tripping, and
+  derived `|F|`/`|v|` magnitudes available to property coloring.
+- **Colormap legend HUD**: property coloring and vector fields now show a
+  readable legend (colormap bar + numeric bounds + quantity name).
+- **Curated LAMMPS research collection**: R32/R125 hydrofluorocarbon liquids
+  (10k/8k atoms) simulated with the Maginn group's published force fields,
+  streamed as `.glimbin` with full per-atom research payload (charges,
+  velocities, forces, per-atom PE/KE) plus thermo + temperature-profile
+  sidecars; reproducible via `tools/sims/make_hfc_trajectories.py`.
+- **AR/VR entry buttons** (production UI, previously dev-testbed-only) and
+  physical hand manipulation in XR: one-hand pinch-grab now carries wrist
+  rotation, a second pinch enters two-hand grab (scale + rotate + translate),
+  release keeps linear + angular momentum, and controllers grab via squeeze.
+- `tools/verify-exports.mjs`: headless export scaling harness (10k/100k/500k).
+
+### Changed
+- **3D export scales to large systems**: bond detection during export now uses
+  the spatial-hash detector in x-sorted slabs (the O(N²) loop and its 50k-atom
+  gate are gone), sphere tessellation adapts to atom count, GLB keeps
+  `EXT_mesh_gpu_instancing` (500k atoms ≈ 6 s / 42 MB), USDZ bakes instanced
+  meshes into merged geometry instead of exploding per-atom `Mesh` objects
+  (100k atoms ≈ 1.5 s where it previously froze for tens of seconds; 1M no
+  longer OOMs), and GLB/USDZ exports report progress and disable their
+  buttons while running.
+- Large streamable dumps dropped on the landing page now take the worker
+  transcode path (progressive frame-0 paint, OPFS-backed `.glimbin`,
+  frames-on-demand replay) instead of an in-memory whole-file parse.
+- Gallery entries can declare simulation output sidecars
+  (`outputs.thermoUrl` / `outputs.profileUrls`) and `autoPlay` now applies to
+  streamed glimbin trajectories.
+
 ## [0.3.0] - Lupi Studio, Mobile UX, Data Layer, and Viral Sharing
 
 ### Added

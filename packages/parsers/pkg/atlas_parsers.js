@@ -306,7 +306,8 @@ export function init() {
 
 /**
  * Parse a LAMMPS data file (read_data format).
- * Extracts atom coordinates, types, and bond topology.
+ * Extracts atom coordinates, types, bond topology, masses (with element
+ * remapping), velocities, and triclinic tilt.
  * @param {string} content
  * @returns {any}
  */

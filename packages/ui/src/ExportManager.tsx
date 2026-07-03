@@ -22,13 +22,17 @@ import { useStore } from './store';
 import { getElementSpec } from '@atlas/core';
 import * as THREE from 'three';
 import { sampleFlythrough, getSequenceDuration } from './flythrough';
-import { expandInstancedMeshes, restoreInstancedMeshes } from './export/USDZExportPipeline';
+import { restoreInstancedMeshes } from './export/USDZExportPipeline';
+import { bakeInstancedMeshesForExport } from './export/instanceBake';
+import {
+  buildExportScene,
+  computeUsdzFraming,
+  disposeExportScene,
+  MAX_EXPORT_BONDS,
+} from './export/exportSceneBuilder';
 
-const TARGET_USDZ_EXTENT_METERS = 0.4;
 const SINGLE_TYPE_NORM_VALUE = 0.5;
 const MIN_NUMERIC_RANGE = 1e-6;
-const MIN_USDZ_SCALE = 0.0001;
-const MAX_USDZ_SCALE = 2.0;
 
 // ─── Video Capture Loop Component ──────────────────────────────────
 // By isolating the priority=2 useFrame into a conditionally mounted component,
@@ -172,6 +176,7 @@ export function ExportManager() {
   const frameCount = useRef(0);
   const originalPixelRatio = useRef<number>(1);
   const originalCameraPosition = useRef<THREE.Vector3 | null>(null);
+  const originalCameraFov = useRef<number | null>(null);
   const originalSize = useRef<{ width: number; height: number; aspect: number } | null>(null);
   const originalStoreState = useRef<{ bondTolerance: number; atomScale: number; frame: number } | null>(null);
 
@@ -184,6 +189,11 @@ export function ExportManager() {
       camera.position.copy(originalCameraPosition.current);
       camera.lookAt(center);
       originalCameraPosition.current = null;
+    }
+    if (originalCameraFov.current !== null && camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = originalCameraFov.current;
+      camera.updateProjectionMatrix();
+      originalCameraFov.current = null;
     }
     if (originalSize.current) {
       setSize(originalSize.current.width, originalSize.current.height);
@@ -289,6 +299,10 @@ export function ExportManager() {
   }, [exportRequest, gl, scene, camera, size, clearExportRequest, frame]);
 
   // ─── 3D Model Export (GLB / USDZ) ─────────────────────
+  // Scene construction (instancing, LOD, chunked bond detection, progress)
+  // lives in export/exportSceneBuilder so the exact same code path runs
+  // headless from Node (tools/verify-exports.mjs). This handler only wires
+  // store state into the builder and drives the format-specific encoders.
   const handle3DExport = useCallback(async () => {
     const req = exportRequest;
     if (!req) return;
@@ -313,8 +327,6 @@ export function ExportManager() {
         return;
       }
 
-      const exportScene = new THREE.Scene();
-      exportScene.name = currentFile.name || 'LUPI-export';
       const isUsdZ = req.type === 'usdz';
 
       const mapFn = COLORMAPS[state.colormap] ?? COLORMAPS.viridis;
@@ -368,220 +380,41 @@ export function ExportManager() {
         return resolveTypeColor(atomType);
       };
 
-      let centerX = 0;
-      let centerY = 0;
-      let centerZ = 0;
-      let arScale = 1;
-      if (isUsdZ) {
-        let minX = Infinity, minY = Infinity, minZ = Infinity;
-        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-        let visibleAtoms = 0;
-        for (let i = 0; i < currentFrame.natoms; i++) {
-          const typeId = currentFrame.types[i];
-          if (state.hiddenAtomTypes.has(typeId)) continue;
-          const x = currentFrame.positions[i * 3];
-          const y = currentFrame.positions[i * 3 + 1];
-          const z = currentFrame.positions[i * 3 + 2];
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-          if (z < minZ) minZ = z;
-          if (z > maxZ) maxZ = z;
-          visibleAtoms++;
-        }
-        if (visibleAtoms > 0) {
-          centerX = (minX + maxX) * 0.5;
-          centerY = (minY + maxY) * 0.5;
-          centerZ = (minZ + maxZ) * 0.5;
-          const extent = Math.max(maxX - minX, maxY - minY, maxZ - minZ, MIN_NUMERIC_RANGE);
-          arScale = Math.max(MIN_USDZ_SCALE, Math.min(MAX_USDZ_SCALE, TARGET_USDZ_EXTENT_METERS / extent));
-        }
-      }
+      // Mirror the live viewer's element-aware bond test:
+      //   d ≤ r_cov(A) + r_cov(B) + tolerance
+      // using the same tolerance the slider controls, so the export matches
+      // the on-screen bond set.
+      let maxTypeId = 0;
+      for (const t of typeSet) if (t > maxTypeId) maxTypeId = t;
+      const covalentRadii = new Float32Array(maxTypeId + 1);
+      for (const t of typeSet) covalentRadii[t] = getElementSpec(t).radius;
 
-      // ── Build atom meshes ──
-      // Group atoms by type for instanced rendering efficiency in downstream tools
-      const atomsByType = new Map<number, number[]>();
-      for (let i = 0; i < currentFrame.natoms; i++) {
-        const typeId = currentFrame.types[i];
-        if (state.hiddenAtomTypes.has(typeId)) continue;
-        if (!atomsByType.has(typeId)) atomsByType.set(typeId, []);
-        atomsByType.get(typeId)!.push(i);
-      }
+      const framing = isUsdZ
+        ? computeUsdzFraming(currentFrame, state.hiddenAtomTypes)
+        : { center: [0, 0, 0] as [number, number, number], arScale: 1 };
 
-      const sphereGeo = new THREE.SphereGeometry(1, 16, 12);
+      const { scene: exportScene, bondsCapped } = await buildExportScene(currentFrame, {
+        format: isUsdZ ? 'usdz' : 'glb',
+        hiddenTypes: state.hiddenAtomTypes,
+        displayRadiusForType: (typeId) =>
+          (TYPE_RADII[typeId] ?? 1.0) * (state.atomScale ?? 1.0) * (state.atomTypeScales[typeId] ?? 1.0),
+        resolveAtomColor,
+        materialPreset: state.materialPreset,
+        surfacePolish: state.surfacePolish || 0.0,
+        surfaceRoughness: state.surfaceRoughness || 0.0,
+        showBonds: state.showBonds,
+        bondTolerance: state.bondTolerance ?? 0.45,
+        covalentRadii,
+        center: framing.center,
+        arScale: framing.arScale,
+        onProgress: req.onProgress,
+      });
+      exportScene.name = currentFile.name || 'LUPI-export';
 
-      for (const [typeId, indices] of atomsByType) {
-        const baseRadius = (TYPE_RADII[typeId] ?? 1.0) * (state.atomScale ?? 1.0);
-        const typeScale = state.atomTypeScales[typeId] ?? 1.0;
-        const radius = baseRadius * typeScale * arScale;
-
-        let matConfig: any = { metalness: 0.1, roughness: 0.5 };
-        switch (state.materialPreset) {
-          case 'matte':
-            matConfig = { metalness: 0.05, roughness: 0.85 };
-            break;
-          case 'metallic':
-            matConfig = { metalness: 0.8, roughness: 0.2 };
-            break;
-          case 'glass':
-            matConfig = isUsdZ
-              ? { metalness: 0.1, roughness: 0.2 }
-              : { metalness: 0.1, roughness: 0.1, transmission: 0.8, transparent: true, opacity: 0.8, ior: 1.5 };
-            break;
-          case 'plastic':
-            matConfig = { metalness: 0.0, roughness: 0.4 };
-            break;
-        }
-
-        matConfig.metalness = Math.max(0.0, Math.min(1.0, matConfig.metalness + (state.surfacePolish || 0.0)));
-        matConfig.roughness = Math.max(0.0, Math.min(1.0, matConfig.roughness + (state.surfaceRoughness || 0.0)));
-
-        const MaterialClass = state.materialPreset === 'glass' && !isUsdZ ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
-        const material = new MaterialClass({
-          color: new THREE.Color(1, 1, 1),
-          ...matConfig
-        });
-
-        const mesh = new THREE.InstancedMesh(sphereGeo, material, indices.length);
-        mesh.name = `atoms-type-${typeId}`;
-        const matrix = new THREE.Matrix4();
-        const color = new THREE.Color();
-
-        for (let j = 0; j < indices.length; j++) {
-          const idx = indices[j];
-          const x = (currentFrame.positions[idx * 3] - centerX) * arScale;
-          const y = (currentFrame.positions[idx * 3 + 1] - centerY) * arScale;
-          const z = (currentFrame.positions[idx * 3 + 2] - centerZ) * arScale;
-          const [r, g, b] = resolveAtomColor(idx, typeId);
-          color.setRGB(r, g, b);
-          mesh.setColorAt(j, color);
-          matrix.compose(
-            new THREE.Vector3(x, y, z),
-            new THREE.Quaternion(),
-            new THREE.Vector3(radius, radius, radius)
-          );
-          mesh.setMatrixAt(j, matrix);
-        }
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-        exportScene.add(mesh);
-      }
-
-      // ── Build bond cylinders (if bonds are visible) ──
-      if (state.showBonds && currentFrame.natoms < 50000) {
-        // Mirror the live viewer's element-aware test:
-        //   d ≤ r_cov(A) + r_cov(B) + tolerance
-        // GLB export was previously a flat distance threshold which gave
-        // wildly different bond sets from what the user saw on-screen
-        // (e.g., LLZO La–O at 2.6 Å was kept by the flat cutoff but
-        // dropped by the in-app element-aware filter). Use the same
-        // tolerance the slider controls so the export matches the view.
-        const tolerance = state.bondTolerance ?? 0.45;
-        const radiusForType = new Map<number, number>();
-        for (let i = 0; i < currentFrame.natoms; i++) {
-          const t = currentFrame.types[i];
-          if (!radiusForType.has(t)) radiusForType.set(t, getElementSpec(t).radius);
-        }
-        let maxR = 0;
-        radiusForType.forEach((r) => { if (r > maxR) maxR = r; });
-        const hardCapSq = (2 * maxR + tolerance + 0.5) ** 2; // outer cap on the O(N²) loop
-
-        const bonds: [number, number][] = [];
-
-        // Simple O(n²) for small systems, spatial hash for larger
-        // For GLB export we cap at 50k atoms to avoid memory issues
-        for (let i = 0; i < currentFrame.natoms && bonds.length < 500000; i++) {
-          const xi = currentFrame.positions[i * 3];
-          const yi = currentFrame.positions[i * 3 + 1];
-          const zi = currentFrame.positions[i * 3 + 2];
-          const ri = radiusForType.get(currentFrame.types[i]) ?? 1.4;
-          for (let j = i + 1; j < currentFrame.natoms; j++) {
-            const dx = currentFrame.positions[j * 3] - xi;
-            const dy = currentFrame.positions[j * 3 + 1] - yi;
-            const dz = currentFrame.positions[j * 3 + 2] - zi;
-            const distSq = dx * dx + dy * dy + dz * dz;
-            if (distSq <= 0.01 || distSq > hardCapSq) continue;
-            const rj = radiusForType.get(currentFrame.types[j]) ?? 1.4;
-            const cutoff = ri + rj + tolerance;
-            if (distSq < cutoff * cutoff) {
-              bonds.push([i, j]);
-            }
-          }
-        }
-
-        if (bonds.length > 0) {
-          const bondRadius = 0.12 * arScale;
-          const cylGeo = new THREE.CylinderGeometry(bondRadius, bondRadius, 1, 8, 1);
-          // Rotate cylinder so it aligns along +Y (default cylinder axis)
-          let matConfig: any = { metalness: 0.1, roughness: 0.5 };
-          switch (state.materialPreset) {
-            case 'matte':
-              matConfig = { metalness: 0.05, roughness: 0.85 };
-              break;
-            case 'metallic':
-              matConfig = { metalness: 0.8, roughness: 0.2 };
-              break;
-            case 'glass':
-              matConfig = isUsdZ
-                ? { metalness: 0.1, roughness: 0.2 }
-                : { metalness: 0.1, roughness: 0.1, transmission: 0.8, transparent: true, opacity: 0.8, ior: 1.5 };
-              break;
-            case 'plastic':
-              matConfig = { metalness: 0.0, roughness: 0.4 };
-              break;
-          }
-
-          matConfig.metalness = Math.max(0.0, Math.min(1.0, matConfig.metalness + (state.surfacePolish || 0.0)));
-          matConfig.roughness = Math.max(0.0, Math.min(1.0, matConfig.roughness + (state.surfaceRoughness || 0.0)));
-
-          const MaterialClass = state.materialPreset === 'glass' && !isUsdZ ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
-          const bondMat = new MaterialClass({
-            color: new THREE.Color(1, 1, 1),
-            ...matConfig
-          });
-
-          const bondMesh = new THREE.InstancedMesh(cylGeo, bondMat, bonds.length);
-          bondMesh.name = 'bonds';
-          const mat = new THREE.Matrix4();
-          const pos = new THREE.Vector3();
-          const dir = new THREE.Vector3();
-          const up = new THREE.Vector3(0, 1, 0);
-          const quat = new THREE.Quaternion();
-          const scale = new THREE.Vector3();
-          const colorA = new THREE.Color();
-          const colorB = new THREE.Color();
-          const colorMid = new THREE.Color();
-
-          for (let b = 0; b < bonds.length; b++) {
-            const [ai, aj] = bonds[b];
-            const ax = (currentFrame.positions[ai * 3] - centerX) * arScale;
-            const ay = (currentFrame.positions[ai * 3 + 1] - centerY) * arScale;
-            const az = (currentFrame.positions[ai * 3 + 2] - centerZ) * arScale;
-            const bx = (currentFrame.positions[aj * 3] - centerX) * arScale;
-            const by = (currentFrame.positions[aj * 3 + 1] - centerY) * arScale;
-            const bz = (currentFrame.positions[aj * 3 + 2] - centerZ) * arScale;
-
-            const length = Math.sqrt((bx-ax)**2 + (by-ay)**2 + (bz-az)**2);
-            pos.set((ax+bx)/2, (ay+by)/2, (az+bz)/2);
-            dir.set(bx-ax, by-ay, bz-az).normalize();
-            quat.setFromUnitVectors(up, dir);
-            scale.set(1, length, 1);
-            mat.compose(pos, quat, scale);
-            bondMesh.setMatrixAt(b, mat);
-
-            const [ar, ag, ab] = resolveAtomColor(ai, currentFrame.types[ai]);
-            const [br, bg, bb] = resolveAtomColor(aj, currentFrame.types[aj]);
-            colorA.setRGB(ar, ag, ab);
-            colorB.setRGB(br, bg, bb);
-            // Keep bond color visually tied to both connected atoms.
-            colorMid.copy(colorA).lerp(colorB, 0.5);
-            bondMesh.setColorAt(b, colorMid);
-          }
-          bondMesh.instanceMatrix.needsUpdate = true;
-          if (bondMesh.instanceColor) bondMesh.instanceColor.needsUpdate = true;
-          exportScene.add(bondMesh);
-        }
+      if (bondsCapped) {
+        state.setRendererWarning(
+          `3D export bond count exceeded ${MAX_EXPORT_BONDS.toLocaleString()} — extra bonds were dropped.`,
+        );
       }
 
       // ── Export via chosen format ──
@@ -589,23 +422,31 @@ export function ExportManager() {
       let filename: string;
       const baseName = req.baseName || 'LUPI';
 
-      if (req.type === 'usdz') {
-        console.log('[ExportManager] FIXED USDZ EXPORT RUNNING');
+      if (isUsdZ) {
         const { USDZExporter } = await import('three/addons/exporters/USDZExporter.js');
         const exporter = new USDZExporter();
-        const swaps = expandInstancedMeshes(exportScene);
+        // Merged bake (one geometry + palette texture per InstancedMesh).
+        // The old expandInstancedMeshes path created one Object3D per atom,
+        // which froze the tab around 100k atoms and OOMed near 1M.
+        req.onProgress?.('encode', 0, 1);
+        const swaps = await bakeInstancedMeshesForExport(exportScene, {
+          onProgress: (done, total) => req.onProgress?.('encode', done, total + 1),
+        });
         let usdz: ArrayBuffer;
         try {
           usdz = (await (exporter as any).parseAsync(exportScene)) as ArrayBuffer;
         } finally {
           restoreInstancedMeshes(swaps);
         }
+        req.onProgress?.('encode', 1, 1);
         blob = new Blob([usdz], { type: 'model/vnd.usdz+zip' });
         filename = `${baseName}-frame${state.frame + 1}.usdz`;
       } else {
         const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
         const exporter = new GLTFExporter();
+        req.onProgress?.('encode', 0, 1);
         const glb = (await exporter.parseAsync(exportScene, { binary: true })) as ArrayBuffer;
+        req.onProgress?.('encode', 1, 1);
         blob = new Blob([glb], { type: 'model/gltf-binary' });
         filename = `${baseName}-frame${state.frame + 1}.glb`;
       }
@@ -616,15 +457,7 @@ export function ExportManager() {
         downloadBlob(blob, filename);
       }
 
-      // Cleanup export scene
-      exportScene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
-          obj.geometry.dispose();
-          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-          else obj.material.dispose();
-        }
-      });
-      sphereGeo.dispose();
+      disposeExportScene(exportScene);
 
     } catch (err) {
       console.error('[3D Export] Failed:', err);
@@ -647,9 +480,14 @@ export function ExportManager() {
     onCompleteRef.current = req.onComplete || null;
     requestRef.current = req;
 
-    // Capture standard canvas size bounds to restore later
-    if (req.orbit) {
+    // Capture the camera pose to restore after capture. The flythrough
+    // path drives position AND fov every tick, so both video modes need
+    // this — previously only orbit captured, leaving the viewport stuck
+    // at the flythrough's final pose after export.
+    if (req.orbit || (req.flythrough && req.flythrough.keyframes.length >= 2)) {
       originalCameraPosition.current = camera.position.clone();
+      originalCameraFov.current =
+        camera instanceof THREE.PerspectiveCamera ? camera.fov : null;
     }
 
     if (req.cinematic) {

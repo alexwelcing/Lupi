@@ -30,6 +30,16 @@ export {
 
 export * from './elements';
 
+// ─── Per-atom vector fields (velocity/force/dipole glyph support) ───
+export type { VectorFieldKind, VectorFieldSpec } from './vectorFields';
+export {
+  detectVectorFields,
+  detectFrameVectorFields,
+  getVectorComponents,
+  ensureVectorMagnitude,
+  magnitudePercentile,
+} from './vectorFields';
+
 // ─── Streaming binary format ────────────────────────────────────────
 export type {
   GlimbinHeader,

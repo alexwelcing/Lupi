@@ -16,6 +16,17 @@ type ExportStatus =
   | { kind: 'success'; label: string }
   | { kind: 'error'; label: string };
 
+/** Live phase feed for long 3D exports (bonds → geometry → encode),
+ *  rendered inline on the GLB/USDZ buttons while the export runs. */
+type Export3DProgress = { target: 'glb' | 'usdz'; phase: string; done: number; total: number };
+
+function format3DProgress(p: Export3DProgress) {
+  if (p.total > 0) {
+    return `${p.phase} ${Math.min(100, Math.round((p.done / p.total) * 100))}%`;
+  }
+  return `${p.phase}…`;
+}
+
 const IMAGE_EXPORTS = [
   {
     id: 'png',
@@ -181,6 +192,7 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
   const lastBondCount = useStore(s => s.lastBondCount);
   const showBonds = useStore(s => s.showBonds);
   const [status, setStatus] = useState<ExportStatus>({ kind: 'idle', label: 'Ready' });
+  const [progress3d, setProgress3d] = useState<Export3DProgress | null>(null);
   // Video export now uses native MediaRecorder (works on every browser incl. iOS
   // Safari), so it no longer requires WebCodecs/desktop Chrome.
   const hasVideoExport = typeof globalThis.MediaRecorder !== 'undefined';
@@ -281,11 +293,14 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
   const runUsdExport = useCallback(() => {
     if (!file) return;
     setStatus({ kind: 'working', label: 'Building USDZ' });
+    setProgress3d({ target: 'usdz', phase: 'preparing', done: 0, total: 0 });
     triggerExport({
       type: 'usdz',
       format: 'usdz',
       baseName: `Lupi-usdz-${safeName(file.name)}`,
+      onProgress: (phase, done, total) => setProgress3d({ target: 'usdz', phase, done, total }),
       onComplete: (success, blob, filename) => {
+        setProgress3d(null);
         if (success && blob && filename) {
           handoffDownload(blob, filename, 'USDZ', setStatus);
         } else {
@@ -298,11 +313,14 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
   const runGlbExport = useCallback(() => {
     if (!file) return;
     setStatus({ kind: 'working', label: 'Building GLB' });
+    setProgress3d({ target: 'glb', phase: 'preparing', done: 0, total: 0 });
     triggerExport({
       type: 'glb',
       format: 'glb',
       baseName: `Lupi-glb-${safeName(file.name)}`,
+      onProgress: (phase, done, total) => setProgress3d({ target: 'glb', phase, done, total }),
       onComplete: (success, blob, filename) => {
+        setProgress3d(null);
         if (success && blob && filename) {
           handoffDownload(blob, filename, 'GLB', setStatus);
         } else if (success) {
@@ -463,7 +481,9 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
             testId="export-glb"
             icon={<IconCube />}
             label="GLB"
-            meta={systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'glTF 3D model'}
+            meta={progress3d?.target === 'glb'
+              ? format3DProgress(progress3d)
+              : systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'glTF 3D model'}
             disabled={!file || busy}
             onClick={runGlbExport}
             compact={compact}
@@ -472,7 +492,9 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
             testId="export-usdz"
             icon={<IconCube />}
             label="USDZ"
-            meta={systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'AR model'}
+            meta={progress3d?.target === 'usdz'
+              ? format3DProgress(progress3d)
+              : systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'AR model'}
             disabled={!file || busy}
             onClick={runUsdExport}
             compact={compact}

@@ -5,31 +5,58 @@
  * Wraps the molecule mesh and provides three layers of interaction:
  *
  *  1. **Pointer / mouse drag** (legacy) — used in 2D viewport and as a fallback
- *     when the XR runtime forwards controller rays as pointer events.
+ *     when the XR runtime forwards controller rays as pointer events. Drag
+ *     rotates, wheel zooms.
  *
- *  2. **Hand tracking pinch-grab** — when an XR session has hand tracking
- *     enabled, either hand can pinch (thumb tip + index tip < 2.5 cm) within
- *     reach of the model to grab it. While pinched, the model follows the
- *     hand. Releasing the pinch hands control back to physics.
+ *  2. **Grab manipulation** — in an immersive session either hand can pinch
+ *     (thumb tip + index tip < 2.5 cm), or a controller can squeeze, within
+ *     reach of the model to grab it. One hand moves AND rotates the model
+ *     rigidly about the grab point, so turning the wrist turns the molecule
+ *     like a held object. A second pinch while held enters two-hand mode:
+ *     translate with the grip midpoint, rotate with the grip axis (plus roll
+ *     from the wrists), scale with grip separation. Releasing either hand
+ *     re-anchors cleanly back to a one-hand grab without a jump.
  *
  *  3. **Throw physics** — once released, the molecule retains the hand's
- *     velocity, falls under gravity, and bounces off a virtual floor at y=0
- *     (with damping) so it settles instead of clipping through the ground.
+ *     linear velocity plus its recent spin, falls under gravity, and bounces
+ *     off a virtual floor at y=0 (with damping) so it settles instead of
+ *     clipping through the ground.
+ *
+ * Grab targets are smoothed with frame-rate-independent exponential damping
+ * (see grabMath) so tracked-joint jitter never reaches the model. The
+ * grabbed "squish" pulse is a separate multiplier composed with the
+ * interaction (two-hand zoom / wheel) scale each frame — neither ever
+ * overwrites the other.
  *
  * The visual scaling and the AR entry animation live in `SpatialAnchor` —
- * this component only mutates a single inner group's transform.
+ * this component only mutates a single inner group's transform. The parent
+ * anchor is translation-only, so world-space rotation deltas apply to the
+ * local quaternion directly; only positions need world↔local conversion.
  */
 
 import React, { useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useXR } from '@react-three/xr';
-import { useXRHands } from './useXRHands';
+import { useXRHands, type HandLabel, type HandJointSnapshot } from './useXRHands';
+import {
+  type GripPose,
+  makeGripPose,
+  makeRigidDelta,
+  makeTwoHandDelta,
+  oneHandDelta,
+  twoHandTransform,
+  dampScalar,
+  dampVector3,
+  dampQuaternion,
+  angularVelocityFromDelta,
+} from './grabMath';
 
 // Tunables — feel free to tweak. These were chosen to feel "Quest-grade":
 // reachable without lunging, throw weight similar to a tennis ball, soft
 // floor bounce that always comes to rest.
 const GRAB_RADIUS_M = 0.5;     // a hand within 50 cm of model center can grab
+const TRACKING_GRACE_S = 0.25; // hold through brief hand-tracking dropouts
 const GRAVITY_M_S2  = 6.5;     // softened gravity — a real-feeling 9.8 makes it crash
 const RESTITUTION   = 0.45;    // floor bounce energy retained per hit
 const AIR_DAMPING   = 0.995;   // ~0.5% velocity bleed per frame in flight
@@ -38,6 +65,13 @@ const FLOOR_Y_M     = 0.0;     // world-y of the virtual floor
 const MIN_REST_VEL  = 0.06;    // below this, freeze to silence jitter
 const THROW_SCALE   = 1.15;    // small momentum boost so a flick feels alive
 const HOVER_SCALE   = 1.06;    // visual squish when grabbed/hovered
+const PULSE_RATE    = 12;      // 1/s — squish pulse damping rate
+const POS_SMOOTH_RATE = 20;    // 1/s — held-position damping toward the grab target
+const ROT_SMOOTH_RATE = 15;    // 1/s — held-rotation slerp rate toward the grab target
+const SPIN_DAMPING  = 1.5;     // 1/s — angular velocity bleed after release
+const SPIN_SAMPLE_BLEND = 0.4; // smoothing of per-frame spin estimates (matches hand velocity)
+const SCALE_TOTAL_MIN = 0.25;  // two-hand / wheel zoom bounds relative to base scale
+const SCALE_TOTAL_MAX = 4;
 
 export function XRMoleculeInteraction({ children }: { children: React.ReactNode }) {
   const group = useRef<THREE.Group>(null);
@@ -48,14 +82,39 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
 
   const hands = useXRHands();
 
-  // Hand-grab state
-  const grabbedBy = useRef<'left' | 'right' | null>(null);
-  const grabOffset = useRef(new THREE.Vector3()); // world: model - hand at grab moment
+  // Live grip views — the snapshot vectors are stable objects, so these
+  // GripPose wrappers stay valid for the component's lifetime.
+  const leftGrip = useRef<GripPose>({
+    position: hands.left.current.gripPosition,
+    quaternion: hands.left.current.gripOrientation,
+  });
+  const rightGrip = useRef<GripPose>({
+    position: hands.right.current.gripPosition,
+    quaternion: hands.right.current.gripOrientation,
+  });
+
+  // Grab state
+  const grabbedBy = useRef<HandLabel | null>(null);   // primary hand
+  const secondHand = useRef<HandLabel | null>(null);  // non-null → two-hand mode
+  const trackingLostFor = useRef(0);                  // seconds since primary lost tracking
+  const prevPrimary = useRef<GripPose>(makeGripPose());
+  const prevSecondary = useRef<GripPose>(makeGripPose());
+  const targetPos = useRef(new THREE.Vector3());      // grab target, world space
+  const targetQuat = useRef(new THREE.Quaternion());  // grab target, world == local (translation-only parent)
+  const interactionScale = useRef(1);                 // accumulated two-hand / wheel zoom
+  const pulseScale = useRef(1);                       // grabbed squish multiplier
+
+  // Physics state
   const velocity = useRef(new THREE.Vector3());
+  const angularVelocity = useRef(new THREE.Vector3()); // axis * rad/s
 
   // Reusable scratch
   const worldPos = useRef(new THREE.Vector3());
-  const desiredWorld = useRef(new THREE.Vector3());
+  const localTarget = useRef(new THREE.Vector3());
+  const spinSample = useRef(new THREE.Vector3());
+  const spinStep = useRef(new THREE.Quaternion());
+  const oneDelta = useRef(makeRigidDelta());
+  const twoDelta = useRef(makeTwoHandDelta());
 
   // Pointer-drag fallback state (mouse + controller-ray pointer events)
   const [isDragging, setIsDragging] = useState(false);
@@ -108,41 +167,48 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
   const handleWheel = (e: any) => {
     if (isImmersive) return;
     e.stopPropagation();
-    if (group.current) {
-      const scaleDelta = e.deltaY > 0 ? 0.9 : 1.1;
-      group.current.scale.multiplyScalar(scaleDelta);
-    }
+    const scaleDelta = e.deltaY > 0 ? 0.9 : 1.1;
+    interactionScale.current = THREE.MathUtils.clamp(
+      interactionScale.current * scaleDelta,
+      SCALE_TOTAL_MIN,
+      SCALE_TOTAL_MAX,
+    );
   };
 
-  // ─── Per-frame: hand-grab + throw physics in immersive mode ─────────────
+  const reAnchor = (pose: GripPose, snap: HandJointSnapshot) => {
+    pose.position.copy(snap.gripPosition);
+    pose.quaternion.copy(snap.gripOrientation);
+  };
+
+  // ─── Per-frame: grab manipulation + throw physics in immersive mode ─────
   useFrame((_state, dt) => {
     const g = group.current;
     if (!g) return;
 
     if (!isImmersive) {
-      // 2D fallback: gentle hover/active visual feedback.
-      const t = isDragging ? HOVER_SCALE : 1.0;
-      g.scale.lerp(new THREE.Vector3(t, t, t), 0.1);
+      // 2D fallback: gentle hover/active feedback composed with wheel zoom.
+      pulseScale.current = dampScalar(pulseScale.current, isDragging ? HOVER_SCALE : 1.0, PULSE_RATE, dt);
+      g.scale.setScalar(interactionScale.current * pulseScale.current);
       return;
     }
 
     const left = hands.left.current;
     const right = hands.right.current;
 
-    // 1) GRAB / RELEASE detection
+    // 1) GRAB LIFECYCLE
     if (grabbedBy.current === null) {
       // Look for a hand pinching within reach
-      const candidates: Array<['left' | 'right', typeof left]> = [];
+      const candidates: Array<[HandLabel, HandJointSnapshot]> = [];
       if (left.present && left.pinching) candidates.push(['left', left]);
       if (right.present && right.pinching) candidates.push(['right', right]);
       if (candidates.length > 0) {
         g.getWorldPosition(worldPos.current);
         // Pick the closest pinching hand within GRAB_RADIUS_M
-        let bestLabel: 'left' | 'right' | null = null;
+        let bestLabel: HandLabel | null = null;
         let bestDist = GRAB_RADIUS_M;
-        let bestSnap: typeof left | null = null;
+        let bestSnap: HandJointSnapshot | null = null;
         for (const [label, snap] of candidates) {
-          const d = snap.pinchPosition.distanceTo(worldPos.current);
+          const d = snap.gripPosition.distanceTo(worldPos.current);
           if (d < bestDist) {
             bestDist = d;
             bestLabel = label;
@@ -151,36 +217,129 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
         }
         if (bestLabel && bestSnap) {
           grabbedBy.current = bestLabel;
-          grabOffset.current.copy(worldPos.current).sub(bestSnap.pinchPosition);
+          reAnchor(prevPrimary.current, bestSnap);
+          targetPos.current.copy(worldPos.current);
+          targetQuat.current.copy(g.quaternion);
           velocity.current.set(0, 0, 0);
+          angularVelocity.current.set(0, 0, 0);
         }
       }
     } else {
-      const snap = grabbedBy.current === 'left' ? left : right;
-      const stillHolding = snap.present && snap.pinching;
-      if (!stillHolding) {
-        // RELEASE — transfer hand velocity to the model
-        velocity.current.copy(snap.pinchVelocity).multiplyScalar(THROW_SCALE);
+      const primary = grabbedBy.current === 'left' ? left : right;
+      const other = grabbedBy.current === 'left' ? right : left;
+      const otherLabel: HandLabel = grabbedBy.current === 'left' ? 'right' : 'left';
+
+      // A momentary tracking dropout (hand occluded, runtime hiccup) reads
+      // as present=false — indistinguishable from a deliberate un-pinch.
+      // Without a grace window the molecule gets spontaneously thrown with
+      // the stale pre-dropout velocity. Freeze the hold briefly instead:
+      // release only on a genuine un-pinch (present && !pinching) or after
+      // the hand stays lost past the grace period.
+      if (primary.present) {
+        trackingLostFor.current = 0;
+      } else {
+        trackingLostFor.current += dt;
+      }
+      const primaryHeld = primary.present
+        ? primary.pinching
+        : trackingLostFor.current < TRACKING_GRACE_S;
+      const otherHeld = other.present && other.pinching;
+
+      if (!primaryHeld && secondHand.current !== null) {
+        // HAND-OFF — the surviving hand becomes primary. Re-anchoring means
+        // the incremental delta restarts from its current pose: no jump.
+        grabbedBy.current = secondHand.current;
+        secondHand.current = null;
+        reAnchor(prevPrimary.current, grabbedBy.current === 'left' ? left : right);
+      } else if (!primaryHeld) {
+        // RELEASE — hand velocity becomes throw velocity; angularVelocity
+        // already tracks the recent spin and carries over as-is. When the
+        // release comes from tracking-loss expiry (not a deliberate
+        // un-pinch), the recorded velocity is stale — drop gently instead
+        // of flinging.
+        if (primary.present) {
+          velocity.current.copy(primary.pinchVelocity).multiplyScalar(THROW_SCALE);
+        } else {
+          velocity.current.set(0, 0, 0);
+          angularVelocity.current.set(0, 0, 0);
+        }
         grabbedBy.current = null;
       } else {
-        // Track hand: world-space target = pinch + grabOffset
-        desiredWorld.current.copy(snap.pinchPosition).add(grabOffset.current);
-        const parent = g.parent;
-        if (parent) {
-          parent.updateWorldMatrix(true, false);
-          // Convert desired world position into our parent's local space
-          const local = desiredWorld.current.clone();
-          parent.worldToLocal(local);
-          g.position.copy(local);
+        // Second hand joining / leaving two-hand mode. Both transitions
+        // re-anchor so no stale delta gets applied across the switch.
+        if (secondHand.current === null && otherHeld) {
+          g.getWorldPosition(worldPos.current);
+          if (other.gripPosition.distanceTo(worldPos.current) < GRAB_RADIUS_M) {
+            secondHand.current = otherLabel;
+            reAnchor(prevSecondary.current, other);
+            reAnchor(prevPrimary.current, primary);
+          }
+        } else if (secondHand.current !== null && !otherHeld) {
+          secondHand.current = null;
+          reAnchor(prevPrimary.current, primary);
+        }
+
+        const curPrimary = grabbedBy.current === 'left' ? leftGrip.current : rightGrip.current;
+        const curSecondary = grabbedBy.current === 'left' ? rightGrip.current : leftGrip.current;
+
+        if (secondHand.current !== null) {
+          twoHandTransform(prevPrimary.current, prevSecondary.current, curPrimary, curSecondary, twoDelta.current);
+          const total = THREE.MathUtils.clamp(
+            interactionScale.current * twoDelta.current.scaleFactor,
+            SCALE_TOTAL_MIN,
+            SCALE_TOTAL_MAX,
+          );
+          const applied = total / interactionScale.current;
+          if (applied !== twoDelta.current.scaleFactor) {
+            // Total-scale clamp changed the step — recompute the translation
+            // so the grip midpoint still maps exactly.
+            localTarget.current
+              .copy(twoDelta.current.prevMid)
+              .multiplyScalar(applied)
+              .applyQuaternion(twoDelta.current.deltaQuat);
+            twoDelta.current.deltaPos.copy(twoDelta.current.curMid).sub(localTarget.current);
+          }
+          interactionScale.current = total;
+          targetPos.current
+            .multiplyScalar(applied)
+            .applyQuaternion(twoDelta.current.deltaQuat)
+            .add(twoDelta.current.deltaPos);
+          targetQuat.current.premultiply(twoDelta.current.deltaQuat).normalize();
+          angularVelocityFromDelta(twoDelta.current.deltaQuat, dt, spinSample.current);
+          angularVelocity.current.lerp(spinSample.current, SPIN_SAMPLE_BLEND);
+          reAnchor(prevPrimary.current, primary);
+          reAnchor(prevSecondary.current, other);
         } else {
-          g.position.copy(desiredWorld.current);
+          oneHandDelta(
+            prevPrimary.current.position,
+            prevPrimary.current.quaternion,
+            primary.gripPosition,
+            primary.gripOrientation,
+            oneDelta.current,
+          );
+          targetPos.current.applyQuaternion(oneDelta.current.deltaQuat).add(oneDelta.current.deltaPos);
+          targetQuat.current.premultiply(oneDelta.current.deltaQuat).normalize();
+          angularVelocityFromDelta(oneDelta.current.deltaQuat, dt, spinSample.current);
+          angularVelocity.current.lerp(spinSample.current, SPIN_SAMPLE_BLEND);
+          reAnchor(prevPrimary.current, primary);
         }
         velocity.current.set(0, 0, 0);
       }
     }
 
-    // 2) PHYSICS — only when not held
-    if (grabbedBy.current === null) {
+    // 2) FOLLOW (held) or PHYSICS (free)
+    if (grabbedBy.current !== null) {
+      // Smooth toward the grab target — damped, frame-rate independent, so
+      // joint jitter is filtered but the molecule still feels rigidly held.
+      const parent = g.parent;
+      localTarget.current.copy(targetPos.current);
+      if (parent) {
+        parent.updateWorldMatrix(true, false);
+        parent.worldToLocal(localTarget.current);
+      }
+      dampVector3(g.position, localTarget.current, POS_SMOOTH_RATE, dt);
+      dampQuaternion(g.quaternion, targetQuat.current, ROT_SMOOTH_RATE, dt);
+    } else {
       // Apply gravity
       velocity.current.y -= GRAVITY_M_S2 * dt;
 
@@ -192,6 +351,16 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
 
       // Air drag
       velocity.current.multiplyScalar(AIR_DAMPING);
+
+      // Spin carry-over — integrate the released angular velocity, bleeding
+      // it off exponentially so a flicked molecule twirls then settles.
+      const spin = angularVelocity.current.length();
+      if (spin > 1e-4) {
+        spinSample.current.copy(angularVelocity.current).divideScalar(spin);
+        spinStep.current.setFromAxisAngle(spinSample.current, spin * dt);
+        g.quaternion.premultiply(spinStep.current);
+        angularVelocity.current.multiplyScalar(Math.exp(-SPIN_DAMPING * dt));
+      }
 
       // Floor collision in WORLD space
       g.getWorldPosition(worldPos.current);
@@ -209,12 +378,14 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
       }
     }
 
-    // 3) Visual feedback — gentle scale pulse when grabbed
-    const grabbed = grabbedBy.current !== null;
-    const targetMult = grabbed ? HOVER_SCALE : 1.0;
-    const cur = g.scale.x;
-    const next = cur + (targetMult - cur) * Math.min(1, dt * 12);
-    g.scale.setScalar(next);
+    // 3) Visual feedback — squish pulse composed with the interaction zoom
+    pulseScale.current = dampScalar(
+      pulseScale.current,
+      grabbedBy.current !== null ? HOVER_SCALE : 1.0,
+      PULSE_RATE,
+      dt,
+    );
+    g.scale.setScalar(interactionScale.current * pulseScale.current);
   });
 
   return (

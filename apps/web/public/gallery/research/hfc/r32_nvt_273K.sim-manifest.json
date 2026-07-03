@@ -1,0 +1,21 @@
+{
+  "system": "r32",
+  "source_data": "R32_v52_2000mol.data",
+  "provenance": "MaginnGroup/Validation-of-HFC-FFs (github)",
+  "force_field": {
+    "pair_style": "lj/cut/coul/long 12.0",
+    "kspace": "pppm 1.0e-4",
+    "mixing": "arithmetic",
+    "tail": true,
+    "bond": "harmonic",
+    "angle": "harmonic",
+    "dihedral": null
+  },
+  "ensemble": "NVT 273.0 K (Nose-Hoover, 100 fs damp)",
+  "timestep_fs": 1.0,
+  "steps": 3000,
+  "dump_every": 50,
+  "natoms": 10000,
+  "wall_seconds": 69.7,
+  "dump_columns": "id mol type q x y z vx vy vz fx fy fz c_peatom c_keatom"
+}

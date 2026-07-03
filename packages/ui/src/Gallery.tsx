@@ -1154,6 +1154,12 @@ export function Gallery() {
   }, [selectedExample, selectedId]);
 
   const handleLoad = useCallback(async (example: GalleryExample, isPopState = false) => {
+    // Route cards navigate to a dedicated page (e.g. the billion-atom
+    // scale testbed) instead of loading a file into the viewer.
+    if (example.route) {
+      window.location.assign(example.route);
+      return;
+    }
     setLoadingId(example.id);
     try {
       await openMolecule({

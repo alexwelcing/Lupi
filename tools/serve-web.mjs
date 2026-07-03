@@ -137,18 +137,49 @@ const server = createServer(async (request, response) => {
   const extension = path.extname(filePath).toLowerCase();
   const relative = path.relative(distRoot, filePath).replaceAll(path.sep, '/');
   const headers = {
+    'Accept-Ranges': 'bytes',
     'Cache-Control': relative.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
     'Content-Length': String(fileStat.size),
     'Content-Type': contentTypes.get(extension) || 'application/octet-stream',
   };
 
-  response.writeHead(200, headers);
+  // Single-range support — the .glimbin streaming substrate fetches the
+  // header, frame index, and individual frames via Range requests, and a
+  // 200-with-full-body answer would turn every frame seek into a re-download
+  // of the whole trajectory. Unsatisfiable or multi-range requests fall back
+  // to a full 200 (multi-range is legal to ignore per RFC 9110).
+  const rangeMatch = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range ?? '');
+  let start = 0;
+  let end = fileStat.size - 1;
+  let status = 200;
+  if (rangeMatch && (rangeMatch[1] !== '' || rangeMatch[2] !== '')) {
+    if (rangeMatch[1] === '') {
+      // suffix form: last N bytes
+      const suffix = Number.parseInt(rangeMatch[2], 10);
+      start = Math.max(0, fileStat.size - suffix);
+    } else {
+      start = Number.parseInt(rangeMatch[1], 10);
+      if (rangeMatch[2] !== '') end = Math.min(end, Number.parseInt(rangeMatch[2], 10));
+    }
+    if (start > end || start >= fileStat.size) {
+      response.writeHead(416, { 'Content-Range': `bytes */${fileStat.size}` });
+      response.end();
+      return;
+    }
+    status = 206;
+    headers['Content-Length'] = String(end - start + 1);
+    headers['Content-Range'] = `bytes ${start}-${end}/${fileStat.size}`;
+  }
+
+  response.writeHead(status, headers);
   if (request.method === 'HEAD') {
     response.end();
     return;
   }
 
-  const stream = createReadStream(filePath);
+  const stream = status === 206
+    ? createReadStream(filePath, { start, end })
+    : createReadStream(filePath);
   stream.on('error', error => {
     console.error(`Failed to stream ${filePath}:`, error);
     if (!response.headersSent) response.writeHead(500);

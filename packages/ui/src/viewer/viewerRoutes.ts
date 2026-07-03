@@ -44,6 +44,10 @@ export function isEmojiRoute(hashRoute = currentHashRoute(), search = typeof win
   return new URLSearchParams(search).has('emoji') || hashRoute.split('?')[0] === '/system/emoji';
 }
 
+export function isBillionAtomsRoute(search = typeof window === 'undefined' ? '' : window.location.search) {
+  return new URLSearchParams(search).has('billion-atoms');
+}
+
 export function isMcpViewerRoute(hashPath: string, search = typeof window === 'undefined' ? '' : window.location.search) {
   return hashPath === '/mcp' || new URLSearchParams(search).has('mcp');
 }

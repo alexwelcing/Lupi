@@ -79,6 +79,62 @@ async function loadKnowledgeLabels(example: GalleryExample): Promise<void> {
   }
 }
 
+/**
+ * Best-effort fetch + parse of an entry's simulation output sidecars
+ * (thermo table, ave/chunk profiles), attached to the already-mounted file
+ * without re-running scene setup. Fire-and-forget: a missing or malformed
+ * output file never fails the structure load.
+ */
+let sidecarGeneration = 0;
+
+async function loadOutputSidecars(example: GalleryExample): Promise<void> {
+  const outputs = example.outputs;
+  if (!outputs) return;
+  // Overlapping loads of the same card would otherwise both pass the
+  // activeCardId check below and double-attach (profiles append).
+  const generation = ++sidecarGeneration;
+  const toUrl = (p: string) =>
+    p.startsWith('http://') || p.startsWith('https://') ? p : publicAssetUrl(p);
+  try {
+    const { parseLogFile, parseChunkProfile } = await import('@atlas/parsers');
+    let thermo: import('@atlas/core/types').ThermoData | null = null;
+    const profiles: import('@atlas/parsers').ChunkProfileData[] = [];
+
+    if (outputs.thermoUrl) {
+      try {
+        const resp = await fetch(toUrl(outputs.thermoUrl));
+        if (resp.ok) {
+          const name = outputs.thermoUrl.split('/').pop() ?? 'thermo.log';
+          thermo = await parseLogFile(new File([await resp.blob()], name));
+        }
+      } catch (err) {
+        console.warn('[gallery-outputs] thermo load failed:', err);
+      }
+    }
+    for (const profileUrl of outputs.profileUrls ?? []) {
+      try {
+        const resp = await fetch(toUrl(profileUrl));
+        if (resp.ok) profiles.push(parseChunkProfile(await resp.text()));
+      } catch (err) {
+        console.warn('[gallery-outputs] profile load failed:', err);
+      }
+    }
+    if (thermo || profiles.length > 0) {
+      // The fetches raced against user navigation — only attach if this
+      // example is still the loaded one AND this is the newest sidecar
+      // load, otherwise outputs land on the wrong molecule or attach twice.
+      if (
+        generation === sidecarGeneration
+        && useStore.getState().activeCardId === example.id
+      ) {
+        useStore.getState().attachFileSidecars({ thermo, profiles });
+      }
+    }
+  } catch (err) {
+    console.warn('[gallery-outputs] sidecar load failed:', err);
+  }
+}
+
 export async function loadGalleryExample(example: GalleryExample): Promise<ViewerOpenResult> {
   if (!example.available) {
     return { ok: false, message: `"${example.title}" is not available.` };
@@ -187,7 +243,11 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
         loader.dispose();
       };
 
+      if (example.autoPlay && meta.totalFrames > 1) {
+        useStore.setState({ playing: true });
+      }
       await loadKnowledgeLabels(example);
+      void loadOutputSidecars(example);
       return resultFromCurrentFile();
     }
 
@@ -244,6 +304,7 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
           }
         }
         await loadKnowledgeLabels(example);
+        void loadOutputSidecars(example);
         return resultFromCurrentFile();
       }
     }
@@ -284,7 +345,11 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
     if (example.initialBackgroundPreset) {
       useStore.setState({ backgroundPreset: example.initialBackgroundPreset });
     }
+    if (example.autoPlay && result.trajectory.totalFrames > 1) {
+      useStore.setState({ playing: true });
+    }
     await loadKnowledgeLabels(example);
+    void loadOutputSidecars(example);
     return resultFromCurrentFile();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

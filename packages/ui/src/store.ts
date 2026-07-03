@@ -175,6 +175,10 @@ export interface ExportRequest {
   baseName?: string;
   fileStream?: FileSystemWritableFileStream;
   onComplete?: (success: boolean, blob?: Blob, filename?: string) => void;
+  /** Progress reporting for long exports (large 3D scenes). `phase` is a
+   *  short human label ("bonds", "geometry", "encode"); done/total are
+   *  phase-relative. Exporters may call this from any thread cadence. */
+  onProgress?: (phase: string, done: number, total: number) => void;
 }
 
 export interface LoadedFile {
@@ -182,6 +186,10 @@ export interface LoadedFile {
   size: number;
   trajectory: Trajectory;
   thermo: ThermoData | null;
+  /** Spatial profile time series (LAMMPS `fix ave/chunk` outputs) loaded
+   *  alongside the structure — temperature/density/velocity profiles from
+   *  real research runs. Replayed in sync with trajectory playback. */
+  profiles?: import('@atlas/parsers').ChunkProfileData[];
   sourceUrl?: string;
   /** Visual playback cadence for files that expand sparse measured frames
    *  into viewer-only display frames. Scientific frame data remains in the
@@ -239,6 +247,15 @@ export interface AppState {
   uniformAtomColor: string;
   elementColorOverrides: Record<number, string>;
   propRange: [number, number];
+
+  // ─── Vector glyphs (forces / velocities) ───
+  /** Vector-field id to draw as per-atom arrows ('f', 'v', ...). Null = off.
+   *  Ids come from detectFrameVectorFields on the loaded frame's properties. */
+  vectorField: string | null;
+  /** User length multiplier on top of the p95 auto-scale. */
+  vectorScale: number;
+  /** Fraction of atoms drawn as glyphs, (0, 1]. Strided deterministically. */
+  vectorDensity: number;
 
   // ─── Display ───
   showCell: boolean;
@@ -503,6 +520,13 @@ export interface AppState {
   // ─── Actions ───
   setFile: (file: LoadedFile | null) => void;
   setGhostFile: (file: LoadedFile | null) => void;
+  /** Attach output-file sidecars (thermo tables, ave/chunk profiles) to the
+   *  already-loaded file WITHOUT re-running scene directives or resetting
+   *  playback — used when outputs arrive alongside or after the structure. */
+  attachFileSidecars: (sidecars: {
+    thermo?: import('@atlas/core/types').ThermoData | null;
+    profiles?: import('@atlas/parsers').ChunkProfileData[];
+  }) => void;
   setLoading: (loading: boolean, progress?: number) => void;
   setActiveCardId: (id: string | null) => void;
   setError: (error: string | null) => void;
@@ -518,6 +542,9 @@ export interface AppState {
   setColorMode: (mode: ColorMode) => void;
   setColorProperty: (prop: string | null) => void;
   setColormap: (map: ColormapName) => void;
+  setVectorField: (fieldId: string | null) => void;
+  setVectorScale: (scale: number) => void;
+  setVectorDensity: (density: number) => void;
   setUniformAtomColor: (color: string) => void;
   setElementColorOverride: (atomicNumber: number, color: string) => void;
   resetElementColorOverride: (atomicNumber: number) => void;
@@ -641,6 +668,9 @@ const DEFAULTS = {
   uniformAtomColor: '#1edce0',
   elementColorOverrides: {},
   propRange: [0, 1] as [number, number],
+  vectorField: null as string | null,
+  vectorScale: 1.0,
+  vectorDensity: 1.0,
   showCell: true,
   showAxes: true,
   showBonds: false,
@@ -851,6 +881,10 @@ export const useStore = create<AppState>()(
         atomColorSource: scheme.atomColorSource,
         colorMode: scheme.atomColorMode,
         colorProperty: scheme.atomColorMode === 'property' ? get().colorProperty : null,
+        // Vector glyphs reset per file — field ids are dataset-specific.
+        vectorField: null,
+        vectorScale: DEFAULTS.vectorScale,
+        vectorDensity: DEFAULTS.vectorDensity,
         // Legacy mirrors of preset (PresetLegacyBridge re-syncs but writing
         // them here avoids a one-frame flash before the bridge catches up).
         // SSAO follows the same threshold as bond detection / preset
@@ -872,6 +906,18 @@ export const useStore = create<AppState>()(
     },
 
     setGhostFile: (ghostFile) => set({ ghostFile }),
+    attachFileSidecars: ({ thermo, profiles }) => set((s) => {
+      if (!s.file) return {};
+      return {
+        file: {
+          ...s.file,
+          thermo: thermo !== undefined && thermo !== null ? thermo : s.file.thermo,
+          profiles: profiles && profiles.length > 0
+            ? [...(s.file.profiles ?? []), ...profiles]
+            : s.file.profiles,
+        },
+      };
+    }),
     setLoading: (loading, progress) => set((s) => ({ loading, loadProgress: progress ?? s.loadProgress })),
     setActiveCardId: (id) => set({ activeCardId: id }),
 
@@ -921,6 +967,11 @@ export const useStore = create<AppState>()(
     setColorMode: (colorMode) => set({ colorMode }),
     setColorProperty: (colorProperty) => set({ colorProperty }),
     setColormap: (colormap) => set({ colormap, activeProfile: null }),
+    setVectorField: (vectorField) => set({ vectorField }),
+    setVectorScale: (vectorScale) =>
+      set({ vectorScale: Math.max(0.1, Math.min(10, vectorScale)) }),
+    setVectorDensity: (vectorDensity) =>
+      set({ vectorDensity: Math.max(0.01, Math.min(1, vectorDensity)) }),
     setUniformAtomColor: (uniformAtomColor) => set({ uniformAtomColor: sanitizeHexColor(uniformAtomColor) }),
     setElementColorOverride: (atomicNumber, color) => set((state) => {
       const key = Math.round(atomicNumber);
@@ -1337,6 +1388,9 @@ export const useStore = create<AppState>()(
       if (s.colorMode !== 'type')                     delta.cm = s.colorMode;
       if (s.colorProperty !== null)                    delta.cp = s.colorProperty;
       if (s.colormap !== 'viridis')                    delta.cmap = s.colormap;
+      if (s.vectorField !== null)                      delta.vf = s.vectorField;
+      if (r(s.vectorScale) !== DEFAULTS.vectorScale)   delta.vsc = r(s.vectorScale);
+      if (r(s.vectorDensity) !== DEFAULTS.vectorDensity) delta.vd = r(s.vectorDensity);
       if (s.uniformAtomColor !== '#1edce0')            delta.uac = s.uniformAtomColor;
       if (Object.keys(s.elementColorOverrides).length > 0) delta.eco = s.elementColorOverrides;
       if (s.postprocessPreset !== DEFAULTS.postprocessPreset) delta.pp = s.postprocessPreset;
@@ -1425,6 +1479,9 @@ export const useStore = create<AppState>()(
           colormap: s.cmap ?? 'viridis',
           uniformAtomColor: sanitizeHexColor(s.uac ?? '#1edce0'),
           elementColorOverrides: sanitizeElementColorOverrides(s.eco),
+          vectorField: typeof s.vf === 'string' && s.vf.length <= 64 ? s.vf : null,
+          vectorScale: sanitizeNumberRange(s.vsc, DEFAULTS.vectorScale, 0.1, 10),
+          vectorDensity: sanitizeNumberRange(s.vd, DEFAULTS.vectorDensity, 0.01, 1),
           postprocessPreset: sanitizePostprocessPreset(s.pp),
           postprocessIntensity: Math.max(0, Math.min(2, s.pi ?? DEFAULTS.postprocessIntensity)),
           propertyEmissionStrength: Math.max(0, Math.min(1, s.pe ?? DEFAULTS.propertyEmissionStrength)),
