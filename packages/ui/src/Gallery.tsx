@@ -1496,7 +1496,10 @@ function GallerySceneRow({
 }) {
   const loadProgress = useStore((s) => (loading ? s.loadProgress : 0));
   const frameCount = parseFrameCountLabel(example.frames);
-  const exceedsCap = parseAtomCountLabel(example.atoms) > atomCeiling;
+  // Route cards open a dedicated page (e.g. the billion-atom LOD testbed)
+  // instead of loading atoms into the viewer — the device atom ceiling
+  // doesn't apply to them.
+  const exceedsCap = !example.route && parseAtomCountLabel(example.atoms) > atomCeiling;
   const disabled = loading || !example.available || exceedsCap;
   const pct = Math.round(Math.min(1, Math.max(0, loadProgress)) * 100);
   const threadColor = DOMAIN_THREAD[example.domain];
