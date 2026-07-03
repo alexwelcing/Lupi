@@ -24,6 +24,20 @@ const QUALITY = {
 } as const;
 type QualityId = keyof typeof QUALITY;
 
+/** Phones start at Low (~430k atom impostors), tablets/laptops with modest
+ *  memory at Medium — the aggregate tiers carry the block either way, and
+ *  the picker stays one tap away. */
+function defaultQuality(): QualityId {
+  if (typeof navigator === 'undefined') return 'high';
+  const ua = navigator.userAgent;
+  const uaDataMobile = (navigator as { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile;
+  const isMobile = uaDataMobile ?? /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  if (isMobile) return 'low';
+  const deviceMemory = (navigator as { deviceMemory?: number }).deviceMemory;
+  if (deviceMemory !== undefined && deviceMemory < 6) return 'medium';
+  return 'high';
+}
+
 const nf = (n: number) => n.toLocaleString('en-US');
 
 function useFps(): { fps: number; onFrame: () => void } {
@@ -67,8 +81,9 @@ function DevProbe() {
 }
 
 export default function BillionAtomsPage() {
-  const [quality, setQuality] = useState<QualityId>('high');
+  const [quality, setQuality] = useState<QualityId>(defaultQuality);
   const [stats, setStats] = useState<BillionAtomStats | null>(null);
+  const [hudOpen, setHudOpen] = useState(true);
   const { fps, onFrame } = useFps();
 
   useEffect(() => {
@@ -86,6 +101,7 @@ export default function BillionAtomsPage() {
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         camera={{ position: [1350, 950, 1750], near: 2, far: 40000, fov: 55 }}
         dpr={[1, 1.5]}
+        style={{ touchAction: 'none' }}
       >
         <color attach="background" args={['#0a0c12']} />
         <BillionAtomBlock
@@ -103,26 +119,43 @@ export default function BillionAtomsPage() {
         />
       </Canvas>
 
-      {/* ── HUD ── */}
+      {/* ── HUD — collapsible so phones keep the view unobstructed ── */}
       <div style={{
-        position: 'absolute', top: 16, left: 16, maxWidth: 380,
-        padding: '14px 16px', borderRadius: 12,
+        position: 'absolute', top: 12, left: 12,
+        maxWidth: 'min(380px, calc(100vw - 24px))',
+        padding: '12px 14px', borderRadius: 12,
         background: 'rgba(8, 11, 18, 0.82)', border: '1px solid rgba(148,163,184,0.18)',
         backdropFilter: 'blur(10px)', fontFamily: 'system-ui, sans-serif',
       }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: '#7de9ff', textTransform: 'uppercase' }}>
-          Scale testbed
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: '#7de9ff', textTransform: 'uppercase' }}>
+            Scale testbed
+          </div>
+          <button
+            onClick={() => setHudOpen((v) => !v)}
+            aria-label={hudOpen ? 'Collapse details' : 'Expand details'}
+            style={{
+              marginLeft: 'auto', width: 26, height: 26, borderRadius: 6,
+              border: '1px solid rgba(148,163,184,0.3)', cursor: 'pointer',
+              background: 'rgba(20,24,34,0.9)', color: '#cbd5e1',
+              fontSize: 13, lineHeight: 1, fontWeight: 700,
+            }}
+          >
+            {hudOpen ? '–' : '+'}
+          </button>
         </div>
-        <div style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 4px' }}>
+        <div style={{ fontSize: 'clamp(17px, 4.5vw, 22px)', fontWeight: 800, margin: '2px 0 4px' }}>
           {stats ? nf(stats.totalAtoms) : '1,000,188,000'} atoms in view
         </div>
-        <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, marginBottom: 10 }}>
-          Procedural FCC copper, 630³ unit cells (~228 nm edge). Every atom
-          position is generated on the GPU from its index — no atom data
-          exists in memory. Nearby bricks render atom-by-atom; the rest of
-          the block renders as aggregated splats through 3 LOD tiers.
-        </div>
-        {stats && (
+        {hudOpen && (
+          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, marginBottom: 10 }}>
+            Procedural FCC copper, 630³ unit cells (~228 nm edge). Every atom
+            position is generated on the GPU from its index — no atom data
+            exists in memory. Nearby bricks render atom-by-atom; the rest of
+            the block renders as aggregated splats through 3 LOD tiers.
+          </div>
+        )}
+        {hudOpen && stats && (
           <div style={{ display: 'grid', gap: 3, fontSize: 12, color: '#cbd5e1' }}>
             <div style={hudRow}><span>Atoms at full detail</span><strong>{nf(stats.atomsDrawn)}</strong></div>
             <div style={hudRow}><span>Atoms in aggregate tiers</span><strong>{nf(stats.atomsAggregated)}</strong></div>
@@ -164,12 +197,12 @@ export default function BillionAtomsPage() {
       </div>
 
       <div style={{
-        position: 'absolute', bottom: 14, left: 16, fontSize: 11, color: '#64748b',
-        fontFamily: 'system-ui, sans-serif', maxWidth: 520,
+        position: 'absolute', bottom: 12, left: 12, right: 12, fontSize: 11, color: '#64748b',
+        fontFamily: 'system-ui, sans-serif', maxWidth: 520, pointerEvents: 'none',
       }}>
         Rendering testbed — a perfect lattice with stylized thermal motion,
-        not a simulation. Drag to orbit, scroll to dive in until individual
-        copper atoms resolve.
+        not a simulation. Drag to orbit, scroll or pinch to dive in until
+        individual copper atoms resolve.
       </div>
     </div>
   );
