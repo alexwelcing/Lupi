@@ -21,6 +21,7 @@
     "test": "turbo run test --concurrency=1",
     "test:rust": "cd packages/parsers/wasm && cargo test",
     "audit:nomenclature": "node tools/audit-gallery-nomenclature.mjs",
+    "audit:gallery-claims": "node tools/audit-gallery-claims.mjs",
     "backup:gallery": "node tools/audit-gallery-nomenclature.mjs --write --backup",
     "doctor": "npx -y tsx tools/lupi-doctor.mjs",
     "bake:glimbin": "npx -y tsx tools/bake-glimbin.mjs",

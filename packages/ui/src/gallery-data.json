@@ -1,5 +1,26 @@
 [
   {
+    "id": "billion_atom_block",
+    "title": "One Billion Atoms",
+    "subtitle": "Procedural FCC copper block — 1,000,188,000 atoms through hierarchical brick LOD. Every position generated on the GPU; a rendering scale testbed, not a simulation.",
+    "domain": "Methods",
+    "atoms": "1,000,188,000",
+    "frames": "1",
+    "file": "",
+    "route": "/?billion-atoms",
+    "available": true,
+    "colors": [
+      "#e28743",
+      "#b87333",
+      "#7de9ff"
+    ],
+    "metadata": {
+      "method": "Procedural lattice + LOD renderer",
+      "potential": "N/A (rendering testbed)"
+    },
+    "featured": true
+  },
+  {
     "id": "hfc_r32_research",
     "title": "R32 Refrigerant · Research Payload",
     "subtitle": "2000 difluoromethane molecules at 273 K with per-atom forces, velocities, and energies — the Maginn Group's validated force field, replayed live.",
@@ -306,9 +327,9 @@
   {
     "id": "curtin_hea_dislocation",
     "title": "Cantor Alloy Dislocation Glide",
-    "subtitle": "W. Curtin et al. (Nature 2023): Edge dislocation mobility in CoCrFeMnNi High-Entropy Alloy using MLIP.",
+    "subtitle": "Representative recreation after W. Curtin et al. (Nature 2023): edge dislocation mobility in CoCrFeMnNi high-entropy alloy (original study: 2.5M atoms).",
     "domain": "Metals & Alloys",
-    "atoms": "2,500,000",
+    "atoms": "13,086",
     "frames": "1",
     "file": "archive/curtin_hea_dislocation.lammpstrj",
     "available": true,
@@ -330,9 +351,9 @@
   {
     "id": "ceder_llzo_diffusion",
     "title": "LLZO Solid Electrolyte Ion Dynamics",
-    "subtitle": "G. Ceder et al. (Nature Materials 2024): Correlated Li-ion diffusion pathways in garnet-type solid electrolytes.",
+    "subtitle": "Representative recreation after G. Ceder et al. (Nature Materials 2024): correlated Li-ion diffusion pathways in garnet-type solid electrolyte.",
     "domain": "Energy Materials",
-    "atoms": "12,000",
+    "atoms": "960",
     "frames": "1",
     "file": "archive/llzo_diffusion.lammpstrj",
     "available": true,
@@ -378,9 +399,9 @@
   {
     "id": "sand_w_cascade",
     "title": "Tungsten Collision Cascade",
-    "subtitle": "A.E. Sand et al. (PRL 2022): Primary radiation damage and defect clustering in plasma-facing materials.",
+    "subtitle": "Representative recreation after A.E. Sand et al. (PRL 2022): primary radiation damage in plasma-facing tungsten (original study: 4M-atom 150 keV cascade).",
     "domain": "Defects & Mechanics",
-    "atoms": "4,000,000",
+    "atoms": "31,250",
     "frames": "1",
     "file": "archive/w_cascade_150keV.lammpstrj",
     "available": true,
@@ -402,9 +423,9 @@
   {
     "id": "elliott_gst_crystallization",
     "title": "GST Phase-Change Crystallization",
-    "subtitle": "S.R. Elliott et al. (Nature Comms 2024): Ultrafast nucleation in Ge2Sb2Te5 memory materials.",
+    "subtitle": "Representative recreation after S.R. Elliott et al. (Nature Comms 2024): ultrafast nucleation in Ge2Sb2Te5 memory materials.",
     "domain": "Ceramics & Oxides",
-    "atoms": "32,000",
+    "atoms": "4,096",
     "frames": "1",
     "file": "archive/gst_crystallization.lammpstrj",
     "available": true,
@@ -471,7 +492,7 @@
     "title": "Graphene Nanoribbon",
     "subtitle": "Armchair Graphene Nanoribbon with Hydrogen-passivated edges.",
     "domain": "Nanomaterials",
-    "atoms": "86",
+    "atoms": "112",
     "frames": "1",
     "file": "gallery/curated/graphene_ribbon.xyz",
     "available": true,
@@ -623,7 +644,7 @@
     "title": "SiO₂ Amorphous Silica",
     "subtitle": "Vitreous silica with tetrahedral network structure",
     "domain": "Ceramics & Oxides",
-    "atoms": "24,000",
+    "atoms": "12,000",
     "frames": "1",
     "file": "gallery/sio2_glass_24k.lammpstrj",
     "available": true,
@@ -645,7 +666,7 @@
     "title": "Alanine Dipeptide",
     "subtitle": "Ace-Ala-Nme with CHARMM potential",
     "domain": "Biomolecules",
-    "atoms": "66",
+    "atoms": "70",
     "frames": "1",
     "file": "gallery/ala_dipeptide.lammpstrj",
     "available": true,
