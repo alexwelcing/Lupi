@@ -113,7 +113,8 @@ export function init(): void;
 
 /**
  * Parse a LAMMPS data file (read_data format).
- * Extracts atom coordinates, types, and bond topology.
+ * Extracts atom coordinates, types, bond topology, masses (with element
+ * remapping), velocities, and triclinic tilt.
  */
 export function parseDataFile(content: string): any;
 
@@ -177,6 +178,7 @@ export interface InitOutput {
     readonly parseDumpFrame: (a: number, b: number, c: number) => [number, number, number];
     readonly parseDataFile: (a: number, b: number) => [number, number, number];
     readonly parseXyzFile: (a: number, b: number) => [number, number, number];
+    readonly init: () => void;
     readonly __wbg_frame_free: (a: number, b: number) => void;
     readonly __wbg_get_frame_natoms: (a: number) => number;
     readonly __wbg_get_frame_timestep: (a: number) => bigint;
@@ -200,7 +202,6 @@ export interface InitOutput {
     readonly thermodata_getColumns: (a: number, b: number) => [number, number];
     readonly thermodata_getRunData: (a: number, b: number) => [number, number];
     readonly thermodata_getRunLength: (a: number, b: number) => number;
-    readonly init: () => void;
     readonly countLogRuns: (a: number, b: number) => number;
     readonly parseLog: (a: number, b: number) => [number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;

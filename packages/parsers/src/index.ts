@@ -430,6 +430,12 @@ export {
   guessPairStyle,
   type PotentialFormat,
 } from './potentialDetector';
+export {
+  parseChunkProfile,
+  looksLikeChunkProfile,
+  type ChunkProfileData,
+  type ChunkProfileSnapshot,
+} from './chunkProfileParser';
 
 /**
  * Sniff the molecular format from the file's head, independent of its name.
@@ -439,10 +445,12 @@ export {
  * valid XYZ frames found". Returns null when the head is inconclusive, so the
  * caller can fall back to the extension.
  */
-export function detectFormatFromContent(head: string): 'dump' | 'xyz' | 'data' | null {
+export function detectFormatFromContent(head: string): 'dump' | 'xyz' | 'data' | 'profile' | null {
   const text = head.replace(/^﻿/, ''); // strip BOM
   // LAMMPS dump — the section markers are unmistakable.
   if (/^\s*ITEM:\s/m.test(text)) return 'dump';
+  // fix ave/chunk profile output — unmistakable first-line header.
+  if (/^\s*#\s*Chunk-averaged data for fix\s+\S+/m.test(text)) return 'profile';
   // LAMMPS data file — atom count plus a section keyword near the top.
   if (/^\s*\d+\s+atoms\b/m.test(text) && /^\s*(Atoms|Masses|Velocities)\b/m.test(text)) {
     return 'data';
@@ -460,10 +468,11 @@ export function detectFormatFromContent(head: string): 'dump' | 'xyz' | 'data' |
 export async function parseFile(file: File): Promise<{
   trajectory?: Trajectory;
   thermo?: ThermoData;
+  profiles?: import('./chunkProfileParser').ChunkProfileData[];
 }> {
   // Content beats extension. Extensions are frequently wrong in the corpus
   // (extended-XYZ stored as .lammpstrj), so route by what the bytes actually are.
-  let sniffed: 'dump' | 'xyz' | 'data' | null = null;
+  let sniffed: 'dump' | 'xyz' | 'data' | 'profile' | null = null;
   try {
     sniffed = detectFormatFromContent(await file.slice(0, 4096).text());
   } catch {
@@ -475,6 +484,10 @@ export async function parseFile(file: File): Promise<{
   if (type === 'dump') return { trajectory: await parseDumpFile(file) };
   if (type === 'data') return { trajectory: await parseDataFile(file) };
   if (type === 'log') return { thermo: await parseLogFile(file) };
+  if (type === 'profile') {
+    const { parseChunkProfile } = await import('./chunkProfileParser');
+    return { profiles: [parseChunkProfile(await file.text())] };
+  }
 
   // Unknown: try each parser, but surface a clear, format-agnostic error rather
   // than letting the last attempt's misleading "No valid XYZ frames found" win.
@@ -483,7 +496,8 @@ export async function parseFile(file: File): Promise<{
   try { return { trajectory: await parseXyzFile(file) }; } catch { /* not xyz */ }
   throw new Error(
     `Unrecognized molecular file format: ${file.name}. Supported: LAMMPS dump ` +
-    `(.lammpstrj/.dump), XYZ / extended-XYZ (.xyz), LAMMPS data (.data), and .glimbin.`,
+    `(.lammpstrj/.dump), XYZ / extended-XYZ (.xyz), LAMMPS data (.data), LAMMPS ` +
+    `thermo logs, fix ave/chunk profiles, and .glimbin.`,
   );
 }
 

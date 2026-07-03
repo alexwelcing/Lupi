@@ -7,6 +7,7 @@ export const parseDump: (a: number, b: number) => [number, number, number, numbe
 export const parseDumpFrame: (a: number, b: number, c: number) => [number, number, number];
 export const parseDataFile: (a: number, b: number) => [number, number, number];
 export const parseXyzFile: (a: number, b: number) => [number, number, number];
+export const init: () => void;
 export const __wbg_frame_free: (a: number, b: number) => void;
 export const __wbg_get_frame_natoms: (a: number) => number;
 export const __wbg_get_frame_timestep: (a: number) => bigint;
@@ -30,7 +31,6 @@ export const thermodata_getColumn: (a: number, b: number, c: number, d: number) 
 export const thermodata_getColumns: (a: number, b: number) => [number, number];
 export const thermodata_getRunData: (a: number, b: number) => [number, number];
 export const thermodata_getRunLength: (a: number, b: number) => number;
-export const init: () => void;
 export const countLogRuns: (a: number, b: number) => number;
 export const parseLog: (a: number, b: number) => [number, number, number];
 export const __wbindgen_malloc: (a: number, b: number) => number;

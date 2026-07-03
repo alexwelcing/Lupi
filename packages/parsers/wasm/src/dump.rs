@@ -395,7 +395,13 @@ ITEM: ATOMS id type xs ys zs
     
     #[test]
     fn test_ti_hcp_real() {
-        let content = std::fs::read_to_string("../../../apps/web/public/gallery/ti_hcp_tension_13k.lammpstrj").unwrap();
+        // Opportunistic real-file test: the gallery asset is not committed,
+        // so skip (instead of failing `cargo test`) when it's absent.
+        let path = "../../../apps/web/public/gallery/ti_hcp_tension_13k.lammpstrj";
+        let Ok(content) = std::fs::read_to_string(path) else {
+            eprintln!("test_ti_hcp_real skipped: {path} not present");
+            return;
+        };
         let frames = parse_dump_frames(&content).unwrap();
         println!("test_ti_hcp_real parsed frames: {}", frames.len());
     }
