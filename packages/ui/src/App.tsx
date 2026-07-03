@@ -59,6 +59,8 @@ import type { SpatialHash3D } from '@atlas/scene/SpatialHash';
 import type { ColormapName, Frame, Trajectory } from '@atlas/core/types';
 import { getElementSpec } from '@atlas/core';
 import { ExportManager } from './ExportManager';
+import { ShopDrawer } from './commerce/ShopDrawer';
+import { commerceConfigured } from './commerce/storefront';
 import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
 import { CameraPresetButton, MobileTabButton, TransportButton } from './controls';
@@ -756,6 +758,7 @@ export default function App() {
   const bondColorMode = useStore(s => s.bondColorMode);
   const atomScale = useStore(s => s.atomScale);
   const { activePanel, setActivePanel } = useViewerPanelState();
+  const setShopOpen = useStore(s => s.setShopOpen);
   const {
     backgroundPreset,
     backgroundStyle,
@@ -1969,6 +1972,33 @@ export default function App() {
             </div>
           )}
 
+          {/* Shop — one click from the viewer to buying the loaded molecule's
+              merch. Only shown when a Storefront token is configured (so public
+              visitors never see a dead button). */}
+          {file && commerceConfigured() && (
+            <div style={{ position: 'absolute', top: isMobile ? 116 : 190, right: 18, zIndex: 149 }}>
+              <button
+                type="button"
+                data-testid="viewer-shop-button"
+                aria-label="Shop this molecule"
+                onClick={() => setShopOpen(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, padding: '0 16px',
+                  borderRadius: 999, cursor: 'pointer', fontSize: 13, fontWeight: 780, letterSpacing: 0.2,
+                  color: '#06202b', background: 'linear-gradient(135deg,#d8b878,#7dd3fc)',
+                  border: '1px solid rgba(216,184,120,0.5)', boxShadow: '0 10px 28px -12px rgba(216,184,120,0.7)',
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 2 3 6v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V6l-3-4z" />
+                  <path d="M3 6h18" />
+                  <path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                <span>Shop</span>
+              </button>
+            </div>
+          )}
+
         </div>
 
         {/* ─── Side panel / dockable windows ─── */}
@@ -2143,6 +2173,9 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* ─── Shop drawer — in-viewer commerce ─── */}
+      <ShopDrawer />
 
       {/* ─── Batch Asset Generator overlay ─── */}
       {isBatchExport && <BatchAssetGenerator />}

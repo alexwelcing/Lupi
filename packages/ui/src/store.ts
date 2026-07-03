@@ -408,6 +408,9 @@ export interface AppState {
 
   // ─── UI ───
   activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'equilibrium' | 'mlipLongRun' | 'merch' | null;
+  /** In-viewer Shop drawer (buy the loaded molecule's merch). Independent of
+   *  activePanel so it can overlay any panel. */
+  shopOpen: boolean;
   /** Sign-in callout visibility. Defaults CLOSED — the app never auto-prompts
    *  anonymous visitors to sign up; opened only by an explicit user action. */
   authPromptOpen: boolean;
@@ -634,6 +637,7 @@ export interface AppState {
   setFillLightColor: (val: string) => void;
   setRimLightColor: (val: string) => void;
   setActivePanel: (panel: AppState['activePanel']) => void;
+  setShopOpen: (open: boolean) => void;
   setAuthPromptOpen: (open: boolean) => void;
   openConfigurator: (seed?: string) => void;
   closeConfigurator: () => void;
@@ -771,6 +775,7 @@ const DEFAULTS = {
   showScaleBar: true,
   colorblindMode: false,
   activePanel: null,
+  shopOpen: false,
   authPromptOpen: false,
   configuratorOpen: false,
   configuratorSeed: null,
@@ -1132,6 +1137,7 @@ export const useStore = create<AppState>()(
     setActivePanel: (activePanel) => set(s => ({
       activePanel: s.activePanel === activePanel ? null : activePanel,
     })),
+    setShopOpen: (shopOpen) => set({ shopOpen }),
     setAuthPromptOpen: (authPromptOpen) => set({ authPromptOpen }),
     openConfigurator: (seed) => set({ configuratorOpen: true, configuratorSeed: seed ?? null }),
     closeConfigurator: () => set({ configuratorOpen: false }),

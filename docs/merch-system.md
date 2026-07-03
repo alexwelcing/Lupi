@@ -122,6 +122,47 @@ The Creatine Tee and Serotonin Poster drafts still need their designs — run
 `merch-render --name creatine --product tee` / `--name serotonin --product
 poster` then `merch-publish`.
 
+## Buy from the viewer (in-app commerce)
+
+The viewer sells directly. When a Storefront token is configured, a **Shop**
+button appears on the loaded molecule; it opens a drawer with that molecule's
+products (via the Shopify **Storefront API**), and **Buy now** goes straight to
+Shopify checkout — two clicks from viewer to buying, all in-app until the final
+payment page.
+
+```
+viewer ─(click 1: Shop)─► drawer: molecule's products, variant pick, price
+                          └(click 2: Buy now)─► Shopify secure checkout (new tab)
+```
+
+- `packages/ui/src/commerce/storefront.ts` — Storefront API client (browser-safe
+  public token), molecule→products (by tag), and cart (`buyNow`, `addToCart`).
+- `packages/ui/src/commerce/ShopDrawer.tsx` — the in-viewer buy surface; also a
+  mini-cart with a Checkout button. Falls back to a clear "not connected" or
+  "no merch yet" state.
+
+### Turning it on
+
+1. **Create a public Storefront access token** in Shopify admin → *Apps →
+   Develop apps → (create app) → Storefront API access token* (or install a
+   Headless/Hydrogen channel). Read scopes for products + cart. *(This can't be
+   done via the API tools — token management is admin-only.)*
+2. **Set the build env** (never commit the token):
+   ```
+   VITE_SHOPIFY_STORE_DOMAIN=lupi-8182.myshopify.com
+   VITE_SHOPIFY_STOREFRONT_TOKEN=<public storefront token>
+   ```
+3. **Publish the products** — the Storefront API only returns products that are
+   **ACTIVE** and published to the sales channel the token reads (Online Store /
+   Headless). Publishing is also what makes them buyable, so "shows in the
+   drawer" == "purchasable".
+4. **Map the Gooten SKUs first** (see above) so a real order can actually be
+   fulfilled — fill `gooten.sku_map` before going live.
+
+Checkout itself is Shopify's hosted page (required below Shopify Plus); the
+drawer opens it in a new tab so the viewer stays open. The token is public and
+read/cart-only — safe in the browser.
+
 ## Extending
 
 - **Per-size print files** — `export_merch` currently emits one print file per
