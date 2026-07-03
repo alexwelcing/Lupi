@@ -6,7 +6,6 @@ import { MoleculeBrowser } from '../molecules/MoleculeBrowser';
 import { type MoleculeSourceId } from '../molecules';
 import { PotentialBrowser } from '../panels/PotentialBrowser';
 import { useStore } from '../store';
-import { WorldHomeBackground } from './WorldHomeBackground';
 
 // One browse surface, two doors: "Explore" is the curated showcase (the
 // pedagogically rich Gallery), "Search" is the federated faceted search over
@@ -76,20 +75,18 @@ export function GallerySection() {
       <div className="lupi-gallery-section__shell">
         <div className="lupi-gallery-section__intro">
           <div>
-            <p>Explore Lupi</p>
-            <h2>Pick a structure, then open the same scene in the full viewer.</h2>
+            <p>The complete index</p>
+            <h2>Every body in the archive. Search, or narrow to a field of matter.</h2>
           </div>
-          <a href="#dropzone">Load your data</a>
+          <a href="#dropzone">Bring your own matter</a>
         </div>
-
-        <WorldHomeBackground variant="gallery" />
 
         <div style={sTabBar} role="tablist" aria-label="Browse molecules">
           <button
             role="tab"
             aria-selected={view === 'explore'}
             data-testid="tab-explore"
-            style={sTab(view === 'explore', '#1edce0')}
+            style={sTab(view === 'explore', '#d8b878')}
             onClick={() => setView('explore')}
           >
             Explore
@@ -98,7 +95,7 @@ export function GallerySection() {
             role="tab"
             aria-selected={view === 'search'}
             data-testid="tab-search"
-            style={sTab(view === 'search', '#34d399')}
+            style={sTab(view === 'search', '#8fb0d4')}
             onClick={() => setView('search')}
           >
             Search all molecules
@@ -164,8 +161,8 @@ const GALLERY_SECTION_CSS = `
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 16%, rgba(30, 220, 224, 0.10), transparent 31%),
-    linear-gradient(180deg, rgba(2, 2, 4, 0.10), rgba(2, 2, 4, 0.46) 72%, #06080d);
+    radial-gradient(circle at 50% 12%, rgba(216, 184, 120, 0.07), transparent 34%),
+    linear-gradient(180deg, rgba(4, 6, 11, 0.20), rgba(4, 6, 11, 0.5) 72%, #05060b);
 }
 .lupi-gallery-section__shell {
   position: relative;
@@ -184,21 +181,23 @@ const GALLERY_SECTION_CSS = `
   color: #f8fafc;
 }
 .lupi-gallery-section__intro p {
-  margin: 0 0 8px;
-  color: #7dd3fc;
-  font-size: 12px;
-  font-weight: 820;
-  letter-spacing: 0;
+  margin: 0 0 10px;
+  color: rgba(216, 184, 120, 0.82);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
 }
 .lupi-gallery-section__intro h2 {
   max-width: 820px;
   margin: 0;
-  color: #f8fafc;
-  font-size: clamp(28px, 4.2vw, 48px);
-  line-height: 1.02;
-  font-weight: 820;
-  letter-spacing: 0;
+  color: #eef2f8;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  font-size: clamp(26px, 4vw, 44px);
+  line-height: 1.06;
+  font-weight: 400;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 .lupi-gallery-section__intro a {
@@ -208,12 +207,13 @@ const GALLERY_SECTION_CSS = `
   justify-content: center;
   padding: 0 14px;
   border-radius: 8px;
-  border: 1px solid rgba(125, 211, 252, 0.28);
-  background: rgba(2, 6, 23, 0.48);
-  color: #dff7ff;
-  font-size: 13px;
-  font-weight: 780;
-  letter-spacing: 0;
+  border: 1px solid rgba(216, 184, 120, 0.34);
+  background: rgba(216, 184, 120, 0.05);
+  color: #f2ead8;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
   text-decoration: none;
   backdrop-filter: blur(12px);
 }
@@ -249,14 +249,16 @@ const sTabBar: CSSProperties = {
 
 const sTab = (active: boolean, color: string): CSSProperties => ({
   padding: '8px 20px',
-  borderRadius: 8,
-  fontSize: 14,
+  borderRadius: 2,
+  fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+  fontSize: 13,
+  letterSpacing: '0.03em',
   fontWeight: active ? 600 : 500,
-  color: active ? '#f8fafc' : 'rgba(255,255,255,0.45)',
-  background: active ? `${color}15` : 'transparent',
-  border: active ? `1.5px dashed ${color}` : '1.5px dashed rgba(255,255,255,0.1)',
+  color: active ? '#f2f5fa' : 'rgba(205,214,228,0.5)',
+  background: active ? `${color}14` : 'transparent',
+  border: active ? `1px solid ${color}` : '1px solid rgba(200,214,236,0.12)',
   cursor: 'pointer',
-  transition: 'all 0.2s ease',
+  transition: 'all 0.3s ease',
 });
 
 // Secondary "Tools" row — deliberately quieter than the primary tab bar so the

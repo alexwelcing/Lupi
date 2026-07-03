@@ -111,12 +111,12 @@ export function DropZoneSection() {
           <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
           <circle
             cx="40" cy="40" r="34"
-            fill="none" stroke="#0f62fe" strokeWidth="3"
+            fill="none" stroke="#d8b878" strokeWidth="3"
             strokeLinecap="round"
             strokeDasharray={`${Math.PI * 68}`}
             strokeDashoffset={`${Math.PI * 68 * (1 - loadProgress)}`}
             transform="rotate(-90 40 40)"
-            style={{ transition: 'stroke-dashoffset 200ms ease-out', filter: 'drop-shadow(0 0 8px rgba(15,98,254,0.4))' }}
+            style={{ transition: 'stroke-dashoffset 200ms ease-out', filter: 'drop-shadow(0 0 8px rgba(216,184,120,0.45))' }}
           />
         </svg>
         <div style={{ fontSize: 18, fontWeight: 500, color: '#f8fafc', marginBottom: 8 }}>Parsing...</div>
@@ -148,8 +148,12 @@ export function DropZoneSection() {
       id="dropzone"
       ref={sectionRef}
       style={{
-        padding: '100px 24px',
-        background: 'linear-gradient(180deg, #0a0e18 0%, #06080d 100%)',
+        // The Melancholia "Part Two" heading sits directly above; this section
+        // is only the drop target, so it opens with negative top padding to
+        // close the gap and carries the twilight palette rather than the old
+        // slate blue.
+        padding: '8px 24px 96px',
+        background: 'linear-gradient(180deg, #05060b 0%, #070a12 100%)',
       }}
     >
       <div style={{
@@ -160,27 +164,6 @@ export function DropZoneSection() {
         transform: visible ? 'translateY(0)' : 'translateY(30px)',
         transition: 'all 0.8s ease-out',
       }}>
-        <h2 style={{
-          margin: '0 0 12px',
-          fontSize: 'clamp(24px, 3.5vw, 36px)',
-          fontWeight: 700,
-          color: '#f8fafc',
-          letterSpacing: '-0.02em',
-        }}>
-          Bring Your Own Data
-        </h2>
-        <p style={{
-          margin: '0 0 40px',
-          fontSize: 16,
-          color: 'rgba(255,255,255,0.45)',
-          lineHeight: 1.6,
-          maxWidth: 480,
-          marginLeft: 'auto',
-          marginRight: 'auto',
-        }}>
-          Drop LAMMPS dumps, data files, XYZ coordinates, thermo logs, or ave/chunk profiles. We handle the parsing — you handle the science.
-        </p>
-
         <input
           ref={inputRef}
           type="file"
@@ -199,8 +182,8 @@ export function DropZoneSection() {
             position: 'relative',
             padding: '72px 48px',
             borderRadius: 28,
-            border: `1.5px dashed ${dragOver ? '#0f62fe' : 'rgba(255,255,255,0.12)'}`,
-            background: dragOver ? 'rgba(15,98,254,0.06)' : 'rgba(255,255,255,0.015)',
+            border: `1.5px dashed ${dragOver ? '#d8b878' : 'rgba(200,214,236,0.14)'}`,
+            background: dragOver ? 'rgba(216,184,120,0.06)' : 'rgba(255,255,255,0.015)',
             cursor: 'pointer',
             transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
             animation: dragOver ? 'pulseGlow 2s ease-in-out infinite' : 'none',
@@ -209,14 +192,14 @@ export function DropZoneSection() {
           {/* Animated SVG border on drag */}
           {dragOver && (
             <svg style={{ position: 'absolute', inset: -2, width: 'calc(100% + 4px)', height: 'calc(100% + 4px)', pointerEvents: 'none' }}>
-              <rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="28" fill="none" stroke="#0f62fe" strokeWidth="1.5" strokeDasharray="8 4" style={{ animation: 'borderDash 1s linear infinite' }} />
+              <rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="28" fill="none" stroke="#d8b878" strokeWidth="1.5" strokeDasharray="8 4" style={{ animation: 'borderDash 1s linear infinite' }} />
             </svg>
           )}
 
           <div style={{
             width: 72, height: 72,
             borderRadius: 24,
-            background: dragOver ? 'linear-gradient(135deg, #0f62fe, #7c3aed)' : 'rgba(255,255,255,0.04)',
+            background: dragOver ? 'linear-gradient(135deg, #d8b878, #b98cae)' : 'rgba(255,255,255,0.04)',
             border: `1px solid ${dragOver ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 24px',

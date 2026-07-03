@@ -20,6 +20,8 @@ export interface GalleryExample {
   isTrajectory?: boolean;
   autoPlay?: boolean;
   colorBy?: string;
+  /** Dedicated-page card: navigates to this route instead of loading a file. */
+  route?: string;
 }
 
 export const ALL_EXAMPLES: GalleryExample[] = galleryData as any[];
