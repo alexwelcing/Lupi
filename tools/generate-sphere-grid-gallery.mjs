@@ -88,7 +88,18 @@ async function generateSnapshot(trajectoryUrl) {
   const browser = await chromium.launch({
     executablePath: CHROME_BIN,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    // SwiftShader gives headless Chrome a software WebGL context. Without it,
+    // the viewer's renderer-capability check fails and the canvas paints the
+    // "needs hardware graphics" fallback — which is exactly what got captured
+    // and committed as the snapshot before. These flags make the molecule
+    // actually render in CI / on GPU-less machines.
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--use-gl=swiftshader',
+      '--enable-unsafe-swiftshader',
+      '--ignore-gpu-blocklist',
+    ],
   });
   const browserCtx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await browserCtx.newPage();
@@ -104,12 +115,27 @@ async function generateSnapshot(trajectoryUrl) {
     null,
     { timeout: 30000 },
   );
-  // Force a readable knowledge-graph look: large atoms, dark background, no bonds.
+  // Readable knowledge-graph look: dark background, no bonds, and atoms at the
+  // gallery's default scale (1.3) so the snapshot matches what the card opens to
+  // — node spheres read as distinct points, not a fused blob.
   await page.evaluate(() => {
     const store = window.__atlas.store;
-    store.setState({ atomScale: 5, backgroundPreset: 'deep', showBonds: false });
+    store.setState({ atomScale: 1.3, backgroundPreset: 'deep', showBonds: false });
   });
   await page.waitForTimeout(3000);
+
+  // Guard: never commit the renderer fallback again. If the canvas could not
+  // start a GL context, the viewer paints the "needs hardware graphics" panel
+  // instead of the molecule — fail loudly rather than save a broken JPG.
+  const renderFailed = await page.evaluate(
+    () => document.body.innerText.includes('needs hardware graphics'),
+  );
+  if (renderFailed) {
+    throw new Error(
+      'Renderer fallback was shown instead of the molecule — the browser could ' +
+        'not start a WebGL context. Ensure SwiftShader flags are active.',
+    );
+  }
 
   const screenshotPath = path.join(REPO_ROOT, '.verify-artifacts', 'sphere-grid-gallery-source.png');
   await fs.mkdir(path.dirname(screenshotPath), { recursive: true });
@@ -175,7 +201,7 @@ async function updateGalleryData(trajectoryFile, metaFile) {
       size_by: 'kind (radius property)',
     },
     featured: true,
-    initialAtomScale: 5,
+    initialAtomScale: 1.3,
     initialBackgroundPreset: 'deep',
     labelsUrl: 'generated/lupine-wiki/sphere-grid.labels.json',
   };
