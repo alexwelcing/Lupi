@@ -6,6 +6,7 @@ import {
   currentPathRoute,
   normalizedPathRoute,
   savedViewSlugFromRoute,
+  isBillionAtomsRoute,
   isTestbedRoute,
   isEmojiRoute,
   isMcpViewerRoute,
@@ -35,7 +36,7 @@ const isCompare = params.get('view') === 'compare';
  */
 function wantsViewerImmediately(): boolean {
   if (params.has('load') || params.has('sim') || params.has('s') || params.has('fly')) return true;
-  if (isTestbedRoute() || isEmojiRoute()) return true;
+  if (isTestbedRoute() || isEmojiRoute() || isBillionAtomsRoute()) return true;
   const hashPath = currentHashRoute().split('?')[0] || '/';
   if (hashPath === '/system/mlip-flywheel') return true;
   if (isMcpViewerRoute(hashPath)) return true;

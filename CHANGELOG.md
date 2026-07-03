@@ -1,5 +1,56 @@
 # Changelog
 
+## [Unreleased] - Gallery Truth Audit + One Billion Atoms
+
+### Added
+- **One billion atoms in view** (`/?billion-atoms`, gallery card "One
+  Billion Atoms"): a procedural 630³-unit-cell FCC copper block —
+  1,000,188,000 atoms — rendered through hierarchical brick LOD. No atom
+  data exists in memory: every position is derived in the vertex shader
+  from its instance index (lattice + FCC basis + deterministic thermal
+  shimmer). 9,261 bricks classify per frame into four tiers (atoms /
+  2³-cell / 6³-cell / brick splats), so drawn primitives stay in the low
+  millions while the scene semantically holds the full billion. The HUD
+  separates "atoms at full detail" (up to ~3.5M near the camera) from
+  aggregate-tier accounting, with High/Medium/Low budgets. Labeled
+  explicitly as a rendering scale testbed, not a simulation.
+- `tools/audit-gallery-claims.mjs` (`pnpm audit:gallery-claims`): parses
+  every local gallery asset (dump/XYZ/data/glimbin/MLIP JSON, gz-aware,
+  content-sniffed) and fails CI-style when a card's atom/frame labels
+  disagree with the file.
+
+### Fixed
+- **Gallery card accuracy**: 7 cards claimed wrong scales — worst,
+  "Cantor Alloy Dislocation Glide" claimed 2,500,000 atoms over a
+  13,086-atom file and "Tungsten Collision Cascade" claimed 4,000,000
+  over 31,250 (128–191× overclaims); also LLZO (12,000→960), GST
+  (32,000→4,096), SiO₂ glass (24,000→12,000), graphene ribbon (86→112),
+  alanine dipeptide (66→70). Labels now match the files, and the four
+  famous-study recreations say "representative recreation" with the
+  original study's scale moved into the description.
+- Share links now restore the shared view faithfully: `setFile`'s
+  per-file scene defaults no longer clobber URL-decoded state (vector
+  field, color scheme, bonds…) — the decode re-applies once after the
+  file mounts.
+- Streaming playback no longer unmount-thrashes the scene when playback
+  briefly outruns frame fetches — the viewer holds the last resident
+  frame; Molecule controls similarly stop flickering on placeholder
+  frames while scrubbing streamed trajectories.
+- Flythrough/orbit video export restores the camera pose and FOV after
+  recording (previously flythrough left the viewport at the final pose).
+- XR grab survives brief hand-tracking dropouts (0.25 s grace) instead of
+  spontaneously throwing the molecule with stale velocity; releases from
+  tracking loss drop gently.
+- `.data` element resolution: united-atom pseudo-masses (CH2 ≈ N,
+  NH2 ≈ O) no longer mislabel chemistry — the Masses comment label wins
+  when the file mass is consistent with "element + implicit hydrogens",
+  the nearest standard mass otherwise (so GAFF's "ca" stays carbon, real
+  Ca stays calcium).
+- USDZ export's triangle budget now accounts for bond cylinders, and the
+  property-legend HUD caches per-frame ranges instead of rescanning every
+  playback tick; gallery output sidecars can't double-attach on
+  overlapping loads.
+
 ## [Unreleased] - Research Payloads, Vector/Energy Views, Export Scaling, AR Grab
 
 ### Added
