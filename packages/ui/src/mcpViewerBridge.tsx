@@ -26,6 +26,7 @@ type LupiMcpToolName =
   | 'lupi.set_viewer'
   | 'lupi.export_xyz'
   | 'lupi.export_png'
+  | 'lupi.export_merch'
   | 'lupi.viewer_state'
   | 'lupi.knowledge_graph';
 
@@ -42,6 +43,41 @@ export interface LupiMcpImageResult {
   byteLength: number;
   atomCount: number;
   transparent: boolean;
+}
+
+/** One print-on-demand asset (Gooten print file or storefront mockup). */
+export interface LupiMcpMerchAsset {
+  product: string;
+  kind: 'print' | 'mockup';
+  filename: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  byteLength: number;
+}
+
+/** A print-ready product listing derived from the active molecule: the
+ *  Shopify shape (title/handle/tags/variants+SKUs+prices) plus the Gooten
+ *  print file and storefront mockup. The connector turns this into a real
+ *  Shopify product mapped to Gooten by SKU. */
+export interface LupiMcpMerchListing {
+  molecule: { name: string; code: string };
+  product: string;
+  title: string;
+  handle: string;
+  tags: string[];
+  vendor: string;
+  productType: string;
+  gootenProductName: string;
+  variants: Array<{
+    title: string;
+    sku: string;
+    priceUsd: number;
+    options: string[];
+    printWidth: number;
+    printHeight: number;
+  }>;
+  assets: LupiMcpMerchAsset[];
 }
 
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
@@ -111,6 +147,7 @@ interface LupiMcpResponse {
       contents: string;
     };
     image?: LupiMcpImageResult;
+    merch?: LupiMcpMerchListing[];
     molecules?: Array<{
       id: string;
       source: MoleculeSourceId;
@@ -179,6 +216,9 @@ declare global {
      *  (never persisted) so a same-window agent or a headless driver can pick
      *  up the base64 `dataUrl` after generating a molecule. */
     __lupiRenderResult?: LupiMcpImageResult & { createdAt: number };
+    /** Last print-on-demand listing(s) built by lupi.export_merch (in-memory,
+     *  never persisted) for the Shopify/Gooten connector to pick up. */
+    __lupiMerchResult?: { listings: LupiMcpMerchListing[]; createdAt: number };
   }
 }
 
@@ -405,6 +445,12 @@ const MCP_VIEWER_EXAMPLES: Array<{
     summary: 'Render the active molecule to a print-on-demand transparent PNG (2048², iso hero angle).',
     command: '{"id":"dogfood-export-png","tool":"lupi.export_png","arguments":{"size":2048,"transparent":true}}',
   },
+  {
+    id: 'export-merch',
+    label: 'Merch listing (mug/tee/hat)',
+    summary: 'Build Gooten print files + storefront mockups + Shopify listing shape for every product.',
+    command: '{"id":"dogfood-export-merch","tool":"lupi.export_merch","arguments":{"product":"all"}}',
+  },
 ];
 
 type McpHarnessPanel = 'catalog' | 'agent' | 'actions' | 'command' | 'response';
@@ -551,11 +597,14 @@ function sanitizeMcpPayloadForStorage(entry: LupiMcpResponsePayload): LupiMcpRes
     responses: entry.responses.map((response) => {
       const exportResult = response.result?.export;
       const imageResult = response.result?.image;
+      const merchResult = response.result?.merch;
       const stripExport = !!exportResult && exportResult.contents.length > MAX_PERSISTED_EXPORT_CHARS;
-      // PNG base64 is always heavy — never persist it (it lives on
-      // window.__lupiRenderResult and was already downloaded/returned live).
+      // Base64 image/merch assets are always heavy — never persist them (they
+      // live on window.__lupiRenderResult / __lupiMerchResult and were already
+      // downloaded/returned live).
       const stripImage = !!imageResult && imageResult.dataUrl.length > 0;
-      if (!stripExport && !stripImage) return response;
+      const stripMerch = !!merchResult && merchResult.some((l) => l.assets.some((a) => a.dataUrl.length > 0));
+      if (!stripExport && !stripImage && !stripMerch) return response;
 
       const notes: string[] = [];
       const nextResult = { ...response.result };
@@ -566,6 +615,14 @@ function sanitizeMcpPayloadForStorage(entry: LupiMcpResponsePayload): LupiMcpRes
       if (stripImage && imageResult) {
         nextResult.image = { ...imageResult, dataUrl: '' };
         notes.push(`persistent ledger omitted ${formatBytes(imageResult.byteLength)} PNG data; rerun entry to re-render`);
+      }
+      if (stripMerch && merchResult) {
+        let dropped = 0;
+        nextResult.merch = merchResult.map((listing) => ({
+          ...listing,
+          assets: listing.assets.map((a) => { dropped += a.byteLength; return { ...a, dataUrl: '' }; }),
+        }));
+        notes.push(`persistent ledger omitted ${formatBytes(dropped)} of merch assets; rerun entry to re-render`);
       }
       return {
         ...response,
@@ -1218,6 +1275,11 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
       return okResponse(request, transcript, { image, viewer: readViewerState() });
     }
 
+    if (request.tool === 'lupi.export_merch') {
+      const merch = await exportActiveMoleculeMerch(request.arguments ?? {}, transcript);
+      return okResponse(request, transcript, { merch, viewer: readViewerState() });
+    }
+
     if (request.tool === 'lupi.search_molecules') {
       const args = request.arguments ?? {};
       const text =
@@ -1393,6 +1455,7 @@ function readMcpUrlRequestsFromParams(params: URLSearchParams): LupiMcpRequest[]
   const exportParam = params.get('export')?.toLowerCase();
   const wantsExport = tool === 'lupi.export_xyz' || exportParam === 'xyz';
   const wantsPng = tool === 'lupi.export_png' || exportParam === 'png';
+  const wantsMerch = tool === 'lupi.export_merch' || params.get('merch') !== null;
   const wantsState = tool === 'lupi.viewer_state' || params.get('state') === '1';
 
   if (moleculeInput || hasProceduralParams) {
@@ -1417,11 +1480,32 @@ function readMcpUrlRequestsFromParams(params: URLSearchParams): LupiMcpRequest[]
   if (wantsPng) {
     requests.push(makeRequest('lupi.export_png', pngArgsFromUrlParams(params)));
   }
+  if (wantsMerch) {
+    requests.push(makeRequest('lupi.export_merch', merchArgsFromUrlParams(params)));
+  }
   if (wantsState) {
     requests.push(makeRequest('lupi.viewer_state', {}));
   }
 
   return requests;
+}
+
+/** Map ?merch=<product> bootstrap params onto lupi.export_merch arguments.
+ *  e.g. ?mcp=1&name=caffeine&merch=mug&download=0 */
+function merchArgsFromUrlParams(params: URLSearchParams): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  const product = params.get('merch') || params.get('product');
+  const renderSize = params.get('renderSize') ?? params.get('size');
+  const download = params.get('download');
+  const view = params.get('view');
+  const viewDirection = params.get('viewDirection') ?? params.get('direction');
+  if (product && product !== '1' && product !== 'true') args.product = product;
+  else args.product = 'mug';
+  if (renderSize) args.renderSize = renderSize;
+  if (download !== null) args.download = download;
+  if (view) args.view = view;
+  if (viewDirection) args.viewDirection = viewDirection;
+  return args;
 }
 
 /** Map ?export=png bootstrap params onto lupi.export_png arguments. Lets an
@@ -2041,6 +2125,127 @@ async function exportActiveMoleculePng(
     `(${formatCount(render.atomCount)} atoms, ${formatBytes(render.blob.size)})`,
   );
   return image;
+}
+
+/**
+ * Build print-ready merchandise listing(s) from the active molecule: render
+ * the molecule, then compose the Gooten print file + storefront mockup for
+ * each requested product (mug / tee / hat / poster), returning the full
+ * Shopify+Gooten listing shape (title, handle, tags, variant SKUs, prices,
+ * print dimensions) alongside the base64 assets. This is the API that lets an
+ * agent go molecule → merch in one call; the Shopify connector consumes it.
+ */
+async function exportActiveMoleculeMerch(
+  args: Record<string, unknown>,
+  transcript: string[],
+): Promise<LupiMcpMerchListing[]> {
+  const state = useStore.getState();
+  const frame = state.file?.trajectory.frames[state.frame];
+  if (!state.file || !frame) {
+    throw new Error('No active molecule is loaded in the Lupi viewer.');
+  }
+
+  const [{ buildExportStyle }, pngModule, catalog, composer] = await Promise.all([
+    import('./export/exportStyle'),
+    import('./export/moleculePngRenderer'),
+    import('./merch/merchCatalog'),
+    import('./merch/printComposer'),
+  ]);
+  const { renderMoleculePngBlob, blobToPngDataUrl, deriveViewDirection } = pngModule;
+  const {
+    MERCH_PRODUCTS, MERCH_PRODUCT_LIST, molCode, titleFor, handleFor, tagsFor, skuFor, printSpecFor,
+  } = catalog;
+  const { loadImageElement, composeForProduct, trimToContent } = composer;
+
+  // Which products to build.
+  const requested = readString(args.product ?? args.products)?.toLowerCase() ?? 'mug';
+  let products: import('./merch/merchCatalog').MerchProduct[];
+  if (requested === 'all') {
+    products = MERCH_PRODUCT_LIST;
+  } else {
+    products = requested.split(/[\s,]+/).filter(Boolean)
+      .map((id) => MERCH_PRODUCTS[id as import('./merch/merchCatalog').MerchProductId])
+      .filter((p): p is import('./merch/merchCatalog').MerchProduct => Boolean(p));
+    if (products.length === 0) products = [MERCH_PRODUCTS.mug];
+  }
+
+  const renderSize = clampInteger(readNumber(args.renderSize) ?? readNumber(args.size) ?? 3072, 512, 4096);
+
+  // View direction: explicit vector, live camera, or iso hero default.
+  let viewDirection: [number, number, number] | undefined;
+  const explicitDir = readVec3(args.viewDirection ?? args.direction);
+  const viewMode = readString(args.view)?.toLowerCase();
+  if (explicitDir) viewDirection = explicitDir;
+  else if (viewMode === 'current') viewDirection = deriveViewDirection(state.cameraPosition, state.cameraTarget);
+  else if (viewMode === 'front') viewDirection = [0, 0, 1];
+
+  const style = await buildExportStyle(state, frame);
+  const render = await renderMoleculePngBlob(frame, style, {
+    width: renderSize, height: renderSize, transparent: true, viewDirection,
+  });
+  const moleculeDataUrl = await blobToPngDataUrl(render.blob);
+  const loaded = await loadImageElement(moleculeDataUrl);
+  // Trim the transparent margin once so every product's medallion fills its
+  // print area consistently.
+  const moleculeImage = typeof document !== 'undefined' ? trimToContent(loaded) : loaded;
+
+  const name = state.file.name.replace(/^MCP:\s*/, '');
+  const code = molCode(name);
+  const doDownload = (readBoolean(args.download) ?? true) && typeof document !== 'undefined';
+
+  const listings: LupiMcpMerchListing[] = [];
+  for (const product of products) {
+    const { printFile, mockup } = await composeForProduct(moleculeImage, product);
+    const handle = handleFor(name, product);
+
+    const variants = product.buildVariants().map((v) => {
+      const spec = printSpecFor(product, v);
+      return {
+        title: v.title,
+        sku: skuFor(name, product, v),
+        priceUsd: v.priceUsd,
+        options: v.options,
+        printWidth: spec.widthPx,
+        printHeight: spec.heightPx,
+      };
+    });
+
+    const [printUrl, mockupUrl] = await Promise.all([
+      blobToPngDataUrl(printFile.blob),
+      blobToPngDataUrl(mockup.blob),
+    ]);
+    const assets: LupiMcpMerchAsset[] = [
+      { product: product.id, kind: 'print', filename: `${handle}-print.png`, dataUrl: printUrl, width: printFile.width, height: printFile.height, byteLength: printFile.blob.size },
+      { product: product.id, kind: 'mockup', filename: `${handle}-mockup.png`, dataUrl: mockupUrl, width: mockup.width, height: mockup.height, byteLength: mockup.blob.size },
+    ];
+
+    if (doDownload) {
+      downloadBlobFile(assets[0].filename, printFile.blob);
+      downloadBlobFile(assets[1].filename, mockup.blob);
+    }
+
+    listings.push({
+      molecule: { name, code },
+      product: product.id,
+      title: titleFor(name, product),
+      handle,
+      tags: tagsFor(name, product),
+      vendor: 'Lupi',
+      productType: product.shopifyProductType,
+      gootenProductName: product.gootenProductName,
+      variants,
+      assets,
+    });
+    transcript.push(
+      `built ${product.id} listing: ${variants.length} variants, ` +
+      `print ${printFile.width}x${printFile.height}, mockup ${mockup.width}²`,
+    );
+  }
+
+  if (typeof window !== 'undefined') {
+    window.__lupiMerchResult = { listings, createdAt: Date.now() };
+  }
+  return listings;
 }
 
 function readVec3(value: unknown): [number, number, number] | undefined {
