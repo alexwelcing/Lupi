@@ -85,9 +85,14 @@ async function loadKnowledgeLabels(example: GalleryExample): Promise<void> {
  * without re-running scene setup. Fire-and-forget: a missing or malformed
  * output file never fails the structure load.
  */
+let sidecarGeneration = 0;
+
 async function loadOutputSidecars(example: GalleryExample): Promise<void> {
   const outputs = example.outputs;
   if (!outputs) return;
+  // Overlapping loads of the same card would otherwise both pass the
+  // activeCardId check below and double-attach (profiles append).
+  const generation = ++sidecarGeneration;
   const toUrl = (p: string) =>
     p.startsWith('http://') || p.startsWith('https://') ? p : publicAssetUrl(p);
   try {
@@ -115,7 +120,15 @@ async function loadOutputSidecars(example: GalleryExample): Promise<void> {
       }
     }
     if (thermo || profiles.length > 0) {
-      useStore.getState().attachFileSidecars({ thermo, profiles });
+      // The fetches raced against user navigation — only attach if this
+      // example is still the loaded one AND this is the newest sidecar
+      // load, otherwise outputs land on the wrong molecule or attach twice.
+      if (
+        generation === sidecarGeneration
+        && useStore.getState().activeCardId === example.id
+      ) {
+        useStore.getState().attachFileSidecars({ thermo, profiles });
+      }
     }
   } catch (err) {
     console.warn('[gallery-outputs] sidecar load failed:', err);

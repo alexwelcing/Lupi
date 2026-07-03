@@ -115,6 +115,28 @@ fn element_from_mass(mass: f64) -> Option<i32> {
     best.filter(|&(_, d)| d <= 0.5).map(|(i, _)| i as i32 + 1)
 }
 
+/// Combine the mass and label signals for one Masses row.
+///
+/// Neither wins unconditionally: a united-atom CH2 pseudo-mass (14.026)
+/// sits within 0.5 amu of nitrogen, so mass-first would paint a polymer
+/// backbone as N; but GAFF's aromatic-carbon label "ca" symbol-matches
+/// calcium, so label-first would paint benzene as Ca. The tiebreak is a
+/// consistency window: trust the label iff the file mass is plausible for
+/// that element — between (element − 0.5) and (element + 4.6), i.e. the
+/// element itself plus up to ~4 implicit hydrogens, the united-atom
+/// convention. Otherwise the label is just a type name that happens to
+/// start with a symbol, and the nearest standard mass wins.
+fn resolve_element(mass: f64, label: Option<&str>) -> Option<i32> {
+    let by_label = label.and_then(element_from_label);
+    if let Some(le) = by_label {
+        let label_mass = ELEMENTS[(le - 1) as usize].1;
+        if mass >= label_mass - 0.5 && mass <= label_mass + 4.6 {
+            return Some(le);
+        }
+    }
+    element_from_mass(mass).or(by_label)
+}
+
 /// Resolve a Masses comment label like "c3", "h2", "ow", "cl1" to an element.
 /// Force-field type names prefix the element symbol, so match the leading
 /// alphabetic run case-insensitively — two letters first ("cl" → Cl) so
@@ -297,7 +319,7 @@ fn parse_data_internal(content: &str) -> Result<Frame, String> {
                 Err(_) => continue,
             };
             let mass: f64 = parts[1].parse().unwrap_or(0.0);
-            let element = element_from_mass(mass).or_else(|| comment.and_then(element_from_label));
+            let element = resolve_element(mass, comment);
             type_to_element.insert(type_id, element);
         }
     }
@@ -638,5 +660,16 @@ Velocities\n\n2 0.5 0.6 0.7\n1 0.1 0.2 0.3\n";
         assert_eq!(element_from_label("ow"), Some(8));
         assert_eq!(element_from_label("cl"), Some(17));
         assert_eq!(element_from_label("123"), None);
+
+        // Mass/label tiebreak: united-atom pseudo-masses trust a consistent
+        // label; symbol-colliding labels with inconsistent masses defer to
+        // the nearest standard mass.
+        assert_eq!(resolve_element(14.026, Some("CH2 backbone")), Some(6)); // not N
+        assert_eq!(resolve_element(16.023, Some("NH2")), Some(7)); // not O
+        assert_eq!(resolve_element(12.011, Some("ca aromatic")), Some(6)); // not Ca
+        assert_eq!(resolve_element(40.08, Some("ca ion")), Some(20)); // real calcium
+        assert_eq!(resolve_element(14.007, Some("n3")), Some(7));
+        assert_eq!(resolve_element(12.011, None), Some(6));
+        assert_eq!(resolve_element(13.0, None), None); // no signal at all
     }
 }

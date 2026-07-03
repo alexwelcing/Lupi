@@ -127,12 +127,19 @@ export function MoleculeControls() {
   const vectorDensity = useStore(s => s.vectorDensity);
   const setVectorDensity = useStore(s => s.setVectorDensity);
 
+  // Streamed trajectories keep placeholder (undefined) frames until fetched —
+  // fall back to frame 0 (always resident) so the controls don't flicker away
+  // mid-scrub. Column sets don't change frame to frame in practice.
+  const residentFrame = useMemo(
+    () => file?.trajectory.frames[frame] ?? file?.trajectory.frames[0],
+    [file, frame],
+  );
   const vectorSpecs = useMemo(() => {
-    const props = file?.trajectory.frames[frame]?.properties;
+    const props = residentFrame?.properties;
     return props ? detectVectorFields(props.keys()) : [];
-  }, [file, frame]);
+  }, [residentFrame]);
   const availableProperties = useMemo(() => {
-    const props = file?.trajectory.frames[frame]?.properties;
+    const props = residentFrame?.properties;
     const names = props ? Array.from(props.keys()) : [];
     // Derived vector magnitudes (|F|, |v|, ...) color like any scalar —
     // App ensures the arrays exist on demand when one is selected.
@@ -140,16 +147,16 @@ export function MoleculeControls() {
       if (!names.includes(spec.magnitudeProperty)) names.push(spec.magnitudeProperty);
     }
     return names;
-  }, [file, frame, vectorSpecs]);
+  }, [residentFrame, vectorSpecs]);
   const presentElements = useMemo(() => {
-    const types = file?.trajectory.frames[frame]?.types;
+    const types = residentFrame?.types;
     if (!types) return [];
     const atomicNumbers = new Set<number>();
     for (let i = 0; i < types.length; i++) atomicNumbers.add(types[i]);
     return Array.from(atomicNumbers)
       .sort((a, b) => a - b)
       .map(atomicNumber => ({ atomicNumber, spec: getElementSpec(atomicNumber) }));
-  }, [file, frame]);
+  }, [residentFrame]);
   const activeElement = presentElements.find(element => element.atomicNumber === selectedAtomicNumber) ?? presentElements[0] ?? null;
   const activeElementColor = activeElement
     ? elementColorOverrides[activeElement.atomicNumber] ?? activeElement.spec.color

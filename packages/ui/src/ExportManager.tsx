@@ -176,6 +176,7 @@ export function ExportManager() {
   const frameCount = useRef(0);
   const originalPixelRatio = useRef<number>(1);
   const originalCameraPosition = useRef<THREE.Vector3 | null>(null);
+  const originalCameraFov = useRef<number | null>(null);
   const originalSize = useRef<{ width: number; height: number; aspect: number } | null>(null);
   const originalStoreState = useRef<{ bondTolerance: number; atomScale: number; frame: number } | null>(null);
 
@@ -188,6 +189,11 @@ export function ExportManager() {
       camera.position.copy(originalCameraPosition.current);
       camera.lookAt(center);
       originalCameraPosition.current = null;
+    }
+    if (originalCameraFov.current !== null && camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = originalCameraFov.current;
+      camera.updateProjectionMatrix();
+      originalCameraFov.current = null;
     }
     if (originalSize.current) {
       setSize(originalSize.current.width, originalSize.current.height);
@@ -474,9 +480,14 @@ export function ExportManager() {
     onCompleteRef.current = req.onComplete || null;
     requestRef.current = req;
 
-    // Capture standard canvas size bounds to restore later
-    if (req.orbit) {
+    // Capture the camera pose to restore after capture. The flythrough
+    // path drives position AND fov every tick, so both video modes need
+    // this — previously only orbit captured, leaving the viewport stuck
+    // at the flythrough's final pose after export.
+    if (req.orbit || (req.flythrough && req.flythrough.keyframes.length >= 2)) {
       originalCameraPosition.current = camera.position.clone();
+      originalCameraFov.current =
+        camera instanceof THREE.PerspectiveCamera ? camera.fov : null;
     }
 
     if (req.cinematic) {

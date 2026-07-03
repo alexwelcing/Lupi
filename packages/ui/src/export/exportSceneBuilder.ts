@@ -57,16 +57,34 @@ export function sphereTriangleCount(lod: SphereLod): number {
   return 2 * lod.widthSegments * (lod.heightSegments - 1);
 }
 
-export function selectSphereLod(natoms: number, format: 'glb' | 'usdz'): SphereLod {
+/**
+ * Pick the sphere tessellation tier. For USDZ the merged bake pays per-atom
+ * vertices, so tiers walk down until atoms fit the triangle budget —
+ * `reservedTriangles` (bond cylinders, also vertex-baked) is subtracted
+ * first, floored at a quarter of the budget so a bond-heavy system still
+ * gets non-degenerate spheres.
+ */
+export function selectSphereLod(
+  natoms: number,
+  format: 'glb' | 'usdz',
+  reservedTriangles = 0,
+): SphereLod {
   const byCountIndex = natoms <= 50_000 ? 0 : natoms <= 250_000 ? 1 : 2;
   if (format !== 'usdz') return SPHERE_LOD_TIERS[byCountIndex];
 
+  const budget = Math.max(USDZ_TRIANGLE_BUDGET - reservedTriangles, USDZ_TRIANGLE_BUDGET / 4);
   for (let i = byCountIndex; i < SPHERE_LOD_TIERS.length; i++) {
-    if (natoms * sphereTriangleCount(SPHERE_LOD_TIERS[i]) <= USDZ_TRIANGLE_BUDGET) {
+    if (natoms * sphereTriangleCount(SPHERE_LOD_TIERS[i]) <= budget) {
       return SPHERE_LOD_TIERS[i];
     }
   }
   return USDZ_FALLBACK_LOD;
+}
+
+/** Radial segments for bond cylinders (USDZ trims tiers by bond count). */
+export function bondRadialSegments(format: 'glb' | 'usdz', bondCount: number): number {
+  if (format !== 'usdz') return 8;
+  return bondCount > 250_000 ? 5 : bondCount > 50_000 ? 6 : 8;
 }
 
 export function yieldToEventLoop(): Promise<void> {
@@ -394,7 +412,10 @@ export async function buildExportScene(
   };
 
   // ── Atom meshes: one InstancedMesh per type sharing a single LOD'd sphere.
-  const sphereLod = opts.sphereLod ?? selectSphereLod(visibleAtoms, opts.format);
+  // Bond cylinders are vertex-baked in USDZ too, so their triangles come out
+  // of the same budget before the sphere tier is chosen.
+  const bondTriangles = bonds.count * bondRadialSegments(opts.format, bonds.count) * 4;
+  const sphereLod = opts.sphereLod ?? selectSphereLod(visibleAtoms, opts.format, bondTriangles);
   const sphereGeo = new THREE.SphereGeometry(1, sphereLod.widthSegments, sphereLod.heightSegments);
 
   // Hoisted scratch — the previous per-atom `new Vector3/Quaternion` churn
@@ -437,7 +458,7 @@ export async function buildExportScene(
     const bondRadius = 0.12 * arScale;
     // USDZ bakes cylinder vertices per bond, so trim radial segments when the
     // bond count alone would blow the triangle budget.
-    const radialSegments = !isUsdZ ? 8 : bonds.count > 250_000 ? 5 : bonds.count > 50_000 ? 6 : 8;
+    const radialSegments = bondRadialSegments(opts.format, bonds.count);
     const cylGeo = new THREE.CylinderGeometry(bondRadius, bondRadius, 1, radialSegments, 1);
     const bondMat = createExportMaterial(preset, surfacePolish, surfaceRoughness, isUsdZ);
     const bondMesh = new THREE.InstancedMesh(cylGeo, bondMat, bonds.count);

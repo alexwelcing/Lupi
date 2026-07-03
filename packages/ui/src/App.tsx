@@ -56,7 +56,7 @@ import { GhostAtoms } from './GhostAtoms';
 import { AtomPicker } from '@atlas/scene/AtomPicker';
 import { decodeFlythrough } from './flythrough';
 import type { SpatialHash3D } from '@atlas/scene/SpatialHash';
-import type { ColormapName } from '@atlas/core/types';
+import type { ColormapName, Frame, Trajectory } from '@atlas/core/types';
 import { getElementSpec } from '@atlas/core';
 import { ExportManager } from './ExportManager';
 import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
@@ -89,6 +89,7 @@ import {
   SEO_EDUCATION_ROUTES,
   currentHashRoute,
   currentPathRoute,
+  isBillionAtomsRoute,
   isEmojiRoute,
   isMcpViewerRoute as isMcpViewerRouteMatch,
   isTestbedRoute,
@@ -570,6 +571,7 @@ function CameraManager({
 
 import { Testbed } from './Testbed';
 import EmojiPlayground from './EmojiPlayground';
+import BillionAtomsPage from './BillionAtomsPage';
 
 export default function App() {
   if (typeof window !== 'undefined' && isTestbedRoute()) {
@@ -578,6 +580,10 @@ export default function App() {
 
   if (typeof window !== 'undefined' && isEmojiRoute()) {
     return <EmojiPlayground />;
+  }
+
+  if (typeof window !== 'undefined' && isBillionAtomsRoute()) {
+    return <BillionAtomsPage />;
   }
 
   const [hashRoute, setHashRoute] = useState(currentHashRoute);
@@ -952,7 +958,23 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const intent = recognizeLupiUrlPayload(window.location.href);
     const state = intent?.state ?? params.get('s');
-    if (state) useStore.getState().decodeFromURL(state);
+    if (state) {
+      useStore.getState().decodeFromURL(state);
+      // Share links carry both a file source (sim=/load=) and view state
+      // (s=). The file lands asynchronously and setFile applies per-file
+      // scene defaults — which would silently clobber the decoded state
+      // (vector field, color scheme, bonds, ...). Re-apply the decode once
+      // after the first file mounts so the shared view actually wins.
+      const unsub = useStore.subscribe(
+        (s) => s.file,
+        (loadedFile, prevFile) => {
+          if (loadedFile && loadedFile !== prevFile) {
+            unsub();
+            useStore.getState().decodeFromURL(state);
+          }
+        },
+      );
+    }
 
     // Restore flythrough from URL
     const flyParam = intent?.fly ?? params.get('fly');
@@ -972,7 +994,19 @@ export default function App() {
     }
   }, []);
 
-  const currentFrame = file?.trajectory.frames[frame];
+  // Streaming trajectories keep placeholder (undefined) slots until each
+  // frame is fetched; playback and scrubbing can briefly outrun the fetch.
+  // Hold the last resident frame instead of unmounting the scene subtree —
+  // an unmount/remount per gap thrashes GPU buffers and flashes the view.
+  const lastResidentRef = useRef<{ trajectory: Trajectory | undefined; frame: Frame | undefined }>(
+    { trajectory: undefined, frame: undefined },
+  );
+  const rawCurrentFrame = file?.trajectory.frames[frame];
+  if (file && lastResidentRef.current.trajectory !== file.trajectory) {
+    lastResidentRef.current = { trajectory: file.trajectory, frame: undefined };
+  }
+  if (rawCurrentFrame) lastResidentRef.current.frame = rawCurrentFrame;
+  const currentFrame = rawCurrentFrame ?? lastResidentRef.current.frame;
   const totalFrames = file?.trajectory.totalFrames ?? 0;
 
   // Vector fields available on the loaded data (velocity/force triplets in
@@ -1503,7 +1537,7 @@ export default function App() {
                   />
                 )}
                 <AtomsOptimized
-                  frame={file!.trajectory.frames[interpState.frameIndex]}
+                  frame={file!.trajectory.frames[interpState.frameIndex] ?? currentFrame!}
                   nextFrame={interpState.isInterpolating ? file!.trajectory.frames[interpState.nextFrameIndex] : undefined}
                   interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
                   colorMode={colorMode}
@@ -1544,7 +1578,7 @@ export default function App() {
                     atoms exactly during playback. */}
                 {activeVectorField && (
                   <VectorGlyphs
-                    frame={file!.trajectory.frames[interpState.frameIndex]}
+                    frame={file!.trajectory.frames[interpState.frameIndex] ?? currentFrame!}
                     nextFrame={interpState.isInterpolating ? file!.trajectory.frames[interpState.nextFrameIndex] : undefined}
                     interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
                     field={activeVectorField}

@@ -56,6 +56,7 @@ import {
 // reachable without lunging, throw weight similar to a tennis ball, soft
 // floor bounce that always comes to rest.
 const GRAB_RADIUS_M = 0.5;     // a hand within 50 cm of model center can grab
+const TRACKING_GRACE_S = 0.25; // hold through brief hand-tracking dropouts
 const GRAVITY_M_S2  = 6.5;     // softened gravity — a real-feeling 9.8 makes it crash
 const RESTITUTION   = 0.45;    // floor bounce energy retained per hit
 const AIR_DAMPING   = 0.995;   // ~0.5% velocity bleed per frame in flight
@@ -95,6 +96,7 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
   // Grab state
   const grabbedBy = useRef<HandLabel | null>(null);   // primary hand
   const secondHand = useRef<HandLabel | null>(null);  // non-null → two-hand mode
+  const trackingLostFor = useRef(0);                  // seconds since primary lost tracking
   const prevPrimary = useRef<GripPose>(makeGripPose());
   const prevSecondary = useRef<GripPose>(makeGripPose());
   const targetPos = useRef(new THREE.Vector3());      // grab target, world space
@@ -226,7 +228,21 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
       const primary = grabbedBy.current === 'left' ? left : right;
       const other = grabbedBy.current === 'left' ? right : left;
       const otherLabel: HandLabel = grabbedBy.current === 'left' ? 'right' : 'left';
-      const primaryHeld = primary.present && primary.pinching;
+
+      // A momentary tracking dropout (hand occluded, runtime hiccup) reads
+      // as present=false — indistinguishable from a deliberate un-pinch.
+      // Without a grace window the molecule gets spontaneously thrown with
+      // the stale pre-dropout velocity. Freeze the hold briefly instead:
+      // release only on a genuine un-pinch (present && !pinching) or after
+      // the hand stays lost past the grace period.
+      if (primary.present) {
+        trackingLostFor.current = 0;
+      } else {
+        trackingLostFor.current += dt;
+      }
+      const primaryHeld = primary.present
+        ? primary.pinching
+        : trackingLostFor.current < TRACKING_GRACE_S;
       const otherHeld = other.present && other.pinching;
 
       if (!primaryHeld && secondHand.current !== null) {
@@ -237,8 +253,16 @@ export function XRMoleculeInteraction({ children }: { children: React.ReactNode 
         reAnchor(prevPrimary.current, grabbedBy.current === 'left' ? left : right);
       } else if (!primaryHeld) {
         // RELEASE — hand velocity becomes throw velocity; angularVelocity
-        // already tracks the recent spin and carries over as-is.
-        velocity.current.copy(primary.pinchVelocity).multiplyScalar(THROW_SCALE);
+        // already tracks the recent spin and carries over as-is. When the
+        // release comes from tracking-loss expiry (not a deliberate
+        // un-pinch), the recorded velocity is stale — drop gently instead
+        // of flinging.
+        if (primary.present) {
+          velocity.current.copy(primary.pinchVelocity).multiplyScalar(THROW_SCALE);
+        } else {
+          velocity.current.set(0, 0, 0);
+          angularVelocity.current.set(0, 0, 0);
+        }
         grabbedBy.current = null;
       } else {
         // Second hand joining / leaving two-hand mode. Both transitions

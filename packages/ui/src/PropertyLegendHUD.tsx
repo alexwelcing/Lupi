@@ -28,6 +28,31 @@ interface PropertyLegendHUDProps {
   bottomOffset?: number;
 }
 
+// Min/max per (frame, property), cached on the frame object — playback
+// re-renders per frame change, and an O(natoms) rescan each time would
+// duplicate work at exactly the moment the main thread is busiest. Frames
+// are immutable once parsed, so a WeakMap cache is safe and self-evicting.
+const rangeCache = new WeakMap<Frame, Map<string, [number, number] | null>>();
+
+function propertyRange(frame: Frame, property: string, data: Float32Array): [number, number] | null {
+  let perFrame = rangeCache.get(frame);
+  if (!perFrame) {
+    perFrame = new Map();
+    rangeCache.set(frame, perFrame);
+  }
+  const cached = perFrame.get(property);
+  if (cached !== undefined) return cached;
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i];
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+  }
+  const range: [number, number] | null = mn === Infinity ? null : [mn, mx];
+  perFrame.set(property, range);
+  return range;
+}
+
 function formatBound(v: number): string {
   if (!Number.isFinite(v)) return '—';
   const a = Math.abs(v);
@@ -62,14 +87,9 @@ export function PropertyLegendHUD({
     if (colorMode !== 'property' || !colorProperty || !frame) return null;
     const data = frame.properties?.get(colorProperty);
     if (!data || data.length === 0) return null;
-    let mn = Infinity, mx = -Infinity;
-    for (let i = 0; i < data.length; i++) {
-      const v = data[i];
-      if (v < mn) mn = v;
-      if (v > mx) mx = v;
-    }
-    if (mn === Infinity) return null;
-    return { label: colorProperty, min: mn, max: mx };
+    const range = propertyRange(frame, colorProperty, data);
+    if (!range) return null;
+    return { label: colorProperty, min: range[0], max: range[1] };
   }, [colorMode, colorProperty, frame]);
 
   const vectorEntry = useMemo(() => {
