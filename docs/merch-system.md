@@ -113,9 +113,13 @@ Or call the tool directly: `{"tool":"lupi.export_merch","arguments":{"product":"
 ## What's already live in the store
 
 - **Caffeine Molecule Mug** — molecule design as the featured image, 2700×1155
-  Gooten print file attached, `lupi.*` + `gooten.*` metafields set.
-- **Caffeine Molecule Cap** — created (3 color variants, correct SKUs), design
-  attached, metafields set.
+  Gooten print file attached, `lupi.*` + `gooten.*` metafields set, and
+  **SKUs mapped** (`gooten.status: mapped` → `Mug-11oz` / `Mug-15oz`).
+- **Caffeine Molecule Cap** — Black + Navy variants, design attached, **SKUs
+  mapped** to Gooten's Richardson 113 Foamie Trucker (DTF print):
+  `TruckerCap-DTF-Richardson-113-{Black,Navy}`. Khaki was dropped (no Gooten
+  SKU) and the copy reworded from "embroidered" to DTF print to match what
+  Gooten actually produces.
 - **Molecule Merch** collection — groups the mug, tee, poster, and cap.
 
 The Creatine Tee and Serotonin Poster drafts still need their designs — run
@@ -226,8 +230,10 @@ published (ACTIVE) — otherwise a real purchase can't be fulfilled.
   product (the primary variant). For products whose sizes need distinct print
   canvases (poster sizes, 11oz vs 15oz mug), loop the distinct `printKey`s in
   `merchCatalog` and compose one file each.
-- **Embroidered caps** — Gooten embroidery needs a simplified, high-contrast,
-  few-color mark. Add a `flatten` pass in `printComposer` for the hat print.
+- **Embroidered caps** — the store's caps are DTF-printed (Richardson 113),
+  which takes the full-color render directly. If a true embroidery product is
+  ever added, Gooten embroidery needs a simplified, high-contrast, few-color
+  mark — add a `flatten` pass in `printComposer` for that variant.
 - **Gooten API push** — the manifest is import-ready today. To automate the
   bind, add a Gooten adapter behind `GOOTEN_API_KEY` in `merch-publish.mjs` that
   creates the Gooten product and writes the real SKUs back into

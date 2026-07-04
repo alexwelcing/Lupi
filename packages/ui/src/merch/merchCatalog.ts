@@ -190,24 +190,27 @@ const TEE: MerchProduct = {
 
 const HAT: MerchProduct = {
   id: 'hat',
-  label: 'Embroidered / Printed Cap',
+  label: 'Printed Trucker Cap',
   shopifyProductType: 'Hat',
   code: 'HAT',
   categoryTags: ['apparel', 'hat', 'headwear', 'molecule art'],
-  options: [{ name: 'Color', values: ['Black', 'Navy', 'Khaki'] }],
+  // Colors mirror Gooten's Richardson 113 Foamie Trucker (DTF print) — the
+  // product family the store's caps are mapped to. Khaki was dropped because
+  // Gooten has no Khaki SKU for this cap; add a color here only after
+  // confirming its TruckerCap-DTF-Richardson-113-<Color> SKU exists.
+  options: [{ name: 'Color', values: ['Black', 'Navy'] }],
   // Cap front panel ≈ 6" × 4" @ 300 DPI. Small area → the medallion fills most
-  // of it. For EMBROIDERED caps Gooten needs a simplified, high-contrast mark
-  // (few colors, no fine gradients); the printComposer's `flatten` path serves
-  // that. Printed/patch caps can use the full render.
+  // of it. DTF handles the full-color molecule render directly; a simplified
+  // high-contrast mark is only needed if we ever add a true embroidery product.
   print: {
     widthPx: 1800, heightPx: 1200, dpi: 300,
     background: 'transparent', medallionScale: 0.9, center: [0.5, 0.5], safeMargin: 0.08,
   },
   mockup: { size: 1200, background: '#20242b', medallionScale: 0.66 },
-  gootenProductName: 'Embroidered Hat',
+  gootenProductName: 'Richardson 113 Foamie Trucker Cap',
   buildVariants() {
-    const colorCode: Record<string, string> = { Black: 'BLK', Navy: 'NVY', Khaki: 'KHA' };
-    return ['Black', 'Navy', 'Khaki'].map((color) => ({
+    const colorCode: Record<string, string> = { Black: 'BLK', Navy: 'NVY' };
+    return ['Black', 'Navy'].map((color) => ({
       options: [color],
       title: color,
       variantCode: `OS-${colorCode[color]}`,
