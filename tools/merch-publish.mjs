@@ -86,16 +86,25 @@ async function uploadStaged(filePath, filename) {
   return target.resourceUrl;
 }
 
-async function findProductIdByHandle(handle) {
+async function findExistingProduct(handle) {
   const data = await admin(
-    `query($handle:String!){ productByIdentifier(identifier:{handle:$handle}){ id } }`,
+    `query($handle:String!){ productByIdentifier(identifier:{handle:$handle}){ id skuMap: metafield(namespace:"gooten", key:"sku_map"){ value } } }`,
     { handle },
   );
-  return data.productByIdentifier?.id ?? null;
+  const p = data.productByIdentifier;
+  return p ? { id: p.id, skuMapRaw: p.skuMap?.value ?? null } : null;
+}
+
+/** True if a gooten.sku_map already has at least one real Gooten SKU — used to
+ *  avoid clobbering existing mappings when re-publishing. */
+function hasGootenMapping(raw) {
+  if (!raw) return false;
+  try { return Object.values(JSON.parse(raw)).some((v) => typeof v === 'string' && v.trim()); }
+  catch { return false; }
 }
 
 // ─── Build the productSet input for a listing ───────────────────────
-function buildProductSetInput(listing, { mockupSource, printSource }) {
+function buildProductSetInput(listing, { mockupSource, printSources, preserveMapping }) {
   // Reconstruct the option axes from the variants' option values.
   const optionNames = listing.variants[0].options.length === 2 ? ['Size', 'Color']
     : listing.product === 'hat' ? ['Color'] : ['Size'];
@@ -133,8 +142,12 @@ function buildProductSetInput(listing, { mockupSource, printSource }) {
       { namespace: 'lupi', key: 'molecule', type: 'json', value: JSON.stringify(listing.molecule) },
       { namespace: 'lupi', key: 'view', type: 'single_line_text_field', value: 'iso' },
       { namespace: 'gooten', key: 'product', type: 'single_line_text_field', value: listing.gootenProductName },
-      { namespace: 'gooten', key: 'sku_map', type: 'json', value: JSON.stringify(Object.fromEntries(listing.variants.map((v) => [v.sku, '']))) },
-      { namespace: 'gooten', key: 'status', type: 'single_line_text_field', value: 'pending-map' },
+      // Seed the SKU map + status only when the product has no mapping yet, so
+      // re-publishing a design never wipes Gooten SKUs already filled in.
+      ...(preserveMapping ? [] : [
+        { namespace: 'gooten', key: 'sku_map', type: 'json', value: JSON.stringify(Object.fromEntries(listing.variants.map((v) => [v.sku, '']))) },
+        { namespace: 'gooten', key: 'status', type: 'single_line_text_field', value: 'pending-map' },
+      ]),
     ],
   };
 }
@@ -220,14 +233,16 @@ async function main() {
     }
     console.log(`  uploaded ${prints.length} print file(s) + mockup to staged storage`);
 
-    const existingId = await findProductIdByHandle(listing.handle);
-    const input = buildProductSetInput(listing, { mockupSource, printSources });
+    const existing = await findExistingProduct(listing.handle);
+    const preserveMapping = hasGootenMapping(existing?.skuMapRaw);
+    if (preserveMapping) console.log('  preserving existing gooten.sku_map');
+    const input = buildProductSetInput(listing, { mockupSource, printSources, preserveMapping });
 
     // productSet identifies the product to UPDATE via the `identifier`
     // argument; omit it (null) to CREATE a new product.
     const result = await admin(
       `mutation($input:ProductSetInput!, $identifier:ProductSetIdentifiers){ productSet(input:$input, identifier:$identifier, synchronous:true){ product{ id handle status } userErrors{ field message } } }`,
-      { input, identifier: existingId ? { id: existingId } : null },
+      { input, identifier: existing ? { id: existing.id } : null },
     );
     const errs = result.productSet.userErrors;
     if (errs?.length) throw new Error(`productSet(${listing.handle}): ${JSON.stringify(errs)}`);
