@@ -163,6 +163,63 @@ Checkout itself is Shopify's hosted page (required below Shopify Plus); the
 drawer opens it in a new tab so the viewer stays open. The token is public and
 read/cart-only — safe in the browser.
 
+## Fulfillment: Shopify → Gooten (the order wire)
+
+When a customer checks out, the Shopify order has to reach Gooten to be printed
+and shipped. That's a webhook bridge:
+
+```
+Shopify checkout ─► orders/create webhook ─► gootenOrderWebhook (Firebase)
+                                              │ verify HMAC
+                                              │ per line: gooten.sku_map[sku] + lupi.design_url
+                                              ▼
+                                        Gooten Orders API  ─►  printed + shipped
+```
+
+- `functions/src/gooten.ts` — Gooten client + a **pure** Shopify-order →
+  Gooten-order transform (`buildGootenOrder`) + HMAC verify. Unit-tested
+  (`gooten.test.ts`, 8 tests) with no credentials.
+- `functions/src/gootenBridge.ts` — `gootenOrderWebhook`: authenticates the
+  Shopify webhook, resolves each line's Gooten SKU + print file from the
+  product's metafields, and submits the order (idempotent via the Shopify order
+  id, so webhook re-delivery never double-charges).
+- `tools/gooten.mjs` — CLI to read the Gooten catalog and resolve SKUs:
+  `catalog`, `variants --product "Coffee Mug"`, and a `test-order` (test mode,
+  no charge) that proves the pipeline end to end.
+
+### Turning fulfillment on
+
+1. **Get your Gooten keys** — Gooten panel → *Settings → API*: the **Recipe ID**
+   (goes in request URLs) and the **Partner Billing Key** (server-side only,
+   charges fulfillment).
+2. **Map the SKUs** — for each product family, list Gooten's orderable SKUs and
+   write them into each product's `gooten.sku_map` (`{ shopifySku: gootenSku }`):
+   ```
+   GOOTEN_RECIPE_ID=… node tools/gooten.mjs variants --product "Coffee Mug"
+   # pick the SKU per size/color, then set gooten.sku_map on the Shopify product
+   ```
+   (The `merch-publish` connector seeds `gooten.sku_map` with empty values +
+   `gooten.status: pending-map`; fill them here.)
+3. **Set the function secrets** (never in source) and deploy:
+   ```
+   firebase functions:secrets:set GOOTEN_RECIPE_ID
+   firebase functions:secrets:set GOOTEN_PARTNER_BILLING_KEY
+   firebase functions:secrets:set SHOPIFY_ADMIN_TOKEN
+   firebase functions:secrets:set SHOPIFY_WEBHOOK_SECRET
+   # SHOPIFY_STORE_DOMAIN + GOOTEN_TEST_MODE are non-secret params
+   firebase deploy --only functions:gootenOrderWebhook
+   ```
+4. **Register the Shopify webhook** — Settings → Notifications → Webhooks (or
+   Admin API `webhookSubscriptionCreate`): topic `orders/create` →
+   the deployed function URL. Use the webhook's signing secret as
+   `SHOPIFY_WEBHOOK_SECRET`.
+5. **Test** — keep `GOOTEN_TEST_MODE=true`, place a test order (or
+   `node tools/gooten.mjs test-order --sku … --image …`), confirm it appears in
+   Gooten, then set `GOOTEN_TEST_MODE=false` to go live.
+
+Only after the SKUs are mapped and a test order flows should the products be
+published (ACTIVE) — otherwise a real purchase can't be fulfilled.
+
 ## Extending
 
 - **Per-size print files** — `export_merch` currently emits one print file per
