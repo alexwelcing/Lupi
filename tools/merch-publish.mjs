@@ -107,7 +107,11 @@ function buildProductSetInput(listing, { mockupSource, printSource }) {
 
   const files = [];
   if (mockupSource) files.push({ originalSource: mockupSource, contentType: 'IMAGE', alt: `${listing.title} — Lupi design` });
-  if (printSource) files.push({ originalSource: printSource, contentType: 'IMAGE', alt: `${listing.variants[0].sku} Gooten print file` });
+  // One media per print spec; the alt carries the printKey so we can resolve
+  // each file's CDN URL afterward and build gooten.print_map.
+  for (const ps of printSources ?? []) {
+    files.push({ originalSource: ps.source, contentType: 'IMAGE', alt: `Gooten print file [${ps.printKey}]` });
+  }
 
   const variants = listing.variants.map((v) => ({
     sku: v.sku,
@@ -137,18 +141,23 @@ function buildProductSetInput(listing, { mockupSource, printSource }) {
 
 // ─── Gooten fulfillment manifest ────────────────────────────────────
 function gootenRows(listing) {
-  const printAsset = listing.assets.find((a) => a.kind === 'print');
-  return listing.variants.map((v) => ({
-    sku: v.sku,
-    product: listing.product,
-    gooten_product: listing.gootenProductName,
-    title: `${listing.title} — ${v.title}`,
-    options: v.options.join(' / '),
-    price_usd: v.priceUsd.toFixed(2),
-    print_file: printAsset ? printAsset.file : '',
-    print_w: v.printWidth,
-    print_h: v.printHeight,
-  }));
+  const prints = listing.assets.filter((a) => a.kind === 'print');
+  const byKey = new Map(prints.map((a) => [a.printKey ?? 'default', a]));
+  return listing.variants.map((v) => {
+    const p = byKey.get(v.printKey) ?? prints[0];
+    return {
+      sku: v.sku,
+      product: listing.product,
+      gooten_product: listing.gootenProductName,
+      title: `${listing.title} — ${v.title}`,
+      options: v.options.join(' / '),
+      price_usd: v.priceUsd.toFixed(2),
+      print_key: v.printKey,
+      print_file: p ? p.file : '',
+      print_w: v.printWidth,
+      print_h: v.printHeight,
+    };
+  });
 }
 
 function toCsv(rows) {
@@ -185,9 +194,9 @@ async function main() {
       handle: l.handle,
       productType: l.productType,
       status,
-      variants: l.variants.map((v) => `${v.sku}  $${v.priceUsd}  [${v.options.join('/')}]`),
-      files: l.assets.map((a) => `${a.kind}: ${a.file}`),
-      metafields: ['lupi.molecule', 'lupi.view', 'gooten.product', 'gooten.sku_map', 'gooten.status'],
+      variants: l.variants.map((v) => `${v.sku}  $${v.priceUsd}  [${v.options.join('/')}]  print:${v.printKey}`),
+      files: l.assets.map((a) => `${a.kind}${a.printKey ? `[${a.printKey}]` : ''}: ${a.file}`),
+      metafields: ['lupi.molecule', 'lupi.view', 'lupi.design_url', 'gooten.product', 'gooten.sku_map', 'gooten.print_map', 'gooten.status'],
     }));
     await writeFile(path.join(dir, 'shopify-plan.json'), JSON.stringify(plan, null, 2));
     console.log(`[publish] DRY RUN — Shopify plan → ${path.join(dir, 'shopify-plan.json')}`);
@@ -203,13 +212,16 @@ async function main() {
   for (const listing of listings) {
     console.log(`\n[publish] ${listing.title} …`);
     const mockup = listing.assets.find((a) => a.kind === 'mockup');
-    const print = listing.assets.find((a) => a.kind === 'print');
+    const prints = listing.assets.filter((a) => a.kind === 'print');
     const mockupSource = mockup ? await uploadStaged(path.join(dir, mockup.file), path.basename(mockup.file)) : null;
-    const printSource = print ? await uploadStaged(path.join(dir, print.file), path.basename(print.file)) : null;
-    console.log('  uploaded assets to staged storage');
+    const printSources = [];
+    for (const p of prints) {
+      printSources.push({ printKey: p.printKey ?? 'default', source: await uploadStaged(path.join(dir, p.file), path.basename(p.file)) });
+    }
+    console.log(`  uploaded ${prints.length} print file(s) + mockup to staged storage`);
 
     const existingId = await findProductIdByHandle(listing.handle);
-    const input = buildProductSetInput(listing, { mockupSource, printSource });
+    const input = buildProductSetInput(listing, { mockupSource, printSources });
 
     // productSet identifies the product to UPDATE via the `identifier`
     // argument; omit it (null) to CREATE a new product.
@@ -222,32 +234,58 @@ async function main() {
     const product = result.productSet.product;
     console.log(`  ${existingId ? 'updated' : 'created'} ${product.handle} (${product.status})  ${product.id}`);
 
-    // Point lupi.design_url at the ingested print-file CDN URL.
-    const printMediaUrl = await resolvePrintUrl(product.id);
-    if (printMediaUrl) {
-      await admin(
-        `mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ field message } } }`,
-        { m: [{ ownerId: product.id, namespace: 'lupi', key: 'design_url', type: 'url', value: printMediaUrl }] },
-      );
-      console.log(`  set lupi.design_url → ${printMediaUrl}`);
+    // Resolve each print file's ingested CDN URL (by printKey) and set the
+    // design-file metafields: gooten.print_map (per-variant SKU → print URL)
+    // for the fulfillment bridge, plus lupi.design_url as the primary/fallback.
+    const urlByKey = await resolvePrintUrls(product.id);
+    const printMap = {};
+    for (const v of listing.variants) {
+      const url = urlByKey[v.printKey] ?? Object.values(urlByKey)[0];
+      if (url) printMap[v.sku] = url;
+    }
+    const metas = [];
+    const primary = Object.values(urlByKey)[0];
+    if (primary) metas.push({ ownerId: product.id, namespace: 'lupi', key: 'design_url', type: 'url', value: primary });
+    if (Object.keys(printMap).length) metas.push({ ownerId: product.id, namespace: 'gooten', key: 'print_map', type: 'json', value: JSON.stringify(printMap) });
+    if (metas.length) {
+      await admin(`mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ field message } } }`, { m: metas });
+      console.log(`  set lupi.design_url + gooten.print_map (${Object.keys(printMap).length} SKUs, ${Object.keys(urlByKey).length} file(s))`);
     }
   }
   console.log('\n[publish] Done. Products are DRAFT unless --publish was passed. Map the SKUs in Gooten using gooten-manifest.csv.');
 }
 
-async function resolvePrintUrl(productId) {
-  // Poll briefly for the print-file media to finish processing.
-  for (let attempt = 0; attempt < 6; attempt++) {
+/** Resolve print-file CDN URLs keyed by printKey (parsed from the media alt
+ *  "Gooten print file [<key>]"), polling until processing finishes. */
+async function resolvePrintUrls(productId) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     const data = await admin(
-      `query($id:ID!){ product(id:$id){ media(first:10){ edges{ node{ ... on MediaImage { alt status image{ url } } } } } } }`,
+      `query($id:ID!){ product(id:$id){ media(first:20){ edges{ node{ ... on MediaImage { alt status image{ url } } } } } } }`,
       { id: productId },
     );
-    const edges = data.product?.media?.edges ?? [];
-    const printNode = edges.map((e) => e.node).find((n) => /print file/i.test(n?.alt ?? '') && n?.image?.url);
-    if (printNode) return printNode.image.url;
+    const nodes = (data.product?.media?.edges ?? []).map((e) => e.node);
+    const out = {};
+    let pending = false;
+    for (const n of nodes) {
+      const m = /Gooten print file \[([^\]]+)\]/.exec(n?.alt ?? '');
+      if (!m) continue;
+      if (n.image?.url) out[m[1]] = n.image.url;
+      else pending = true;
+    }
+    if (Object.keys(out).length > 0 && !pending) return out;
     await new Promise((r) => setTimeout(r, 1500));
   }
-  return null;
+  // Best-effort: return whatever resolved.
+  const data = await admin(
+    `query($id:ID!){ product(id:$id){ media(first:20){ edges{ node{ ... on MediaImage { alt image{ url } } } } } } }`,
+    { id: productId },
+  );
+  const out = {};
+  for (const e of data.product?.media?.edges ?? []) {
+    const m = /Gooten print file \[([^\]]+)\]/.exec(e.node?.alt ?? '');
+    if (m && e.node.image?.url) out[m[1]] = e.node.image.url;
+  }
+  return out;
 }
 
 main().catch((err) => { console.error(`[publish] FAILED: ${err.message}`); process.exit(1); });

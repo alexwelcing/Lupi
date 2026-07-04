@@ -41,15 +41,16 @@ const GOOTEN_TEST_MODE = defineString('GOOTEN_TEST_MODE', { default: 'true' });
 
 const ADMIN_API_VERSION = '2025-01';
 
-interface ProductMapping { skuMapRaw: string | null; designUrl: string | null; }
+interface ProductMapping { skuMapRaw: string | null; printMapRaw: string | null; designUrl: string | null; }
 
-/** Fetch gooten.sku_map + lupi.design_url for each product in the order. */
+/** Fetch gooten.sku_map + gooten.print_map + lupi.design_url for each product. */
 async function fetchProductMappings(domain: string, token: string, productIds: string[]): Promise<Map<string, ProductMapping>> {
   const out = new Map<string, ProductMapping>();
   if (productIds.length === 0) return out;
   const gids = productIds.map((id) => `gid://shopify/Product/${id}`);
   const query = `query($ids:[ID!]!){ nodes(ids:$ids){ ... on Product { id
     skuMap: metafield(namespace:"gooten", key:"sku_map"){ value }
+    printMap: metafield(namespace:"gooten", key:"print_map"){ value }
     design: metafield(namespace:"lupi", key:"design_url"){ value }
   } } }`;
   const res = await fetch(`https://${domain}/admin/api/${ADMIN_API_VERSION}/graphql.json`, {
@@ -62,7 +63,11 @@ async function fetchProductMappings(domain: string, token: string, productIds: s
   for (const node of json.data?.nodes ?? []) {
     if (!node?.id) continue;
     const numericId = String(node.id).split('/').pop() as string;
-    out.set(numericId, { skuMapRaw: node.skuMap?.value ?? null, designUrl: node.design?.value ?? null });
+    out.set(numericId, {
+      skuMapRaw: node.skuMap?.value ?? null,
+      printMapRaw: node.printMap?.value ?? null,
+      designUrl: node.design?.value ?? null,
+    });
   }
   return out;
 }
@@ -97,7 +102,10 @@ export const gootenOrderWebhook = onRequest(
         const m = line.product_id != null ? mappings.get(String(line.product_id)) : undefined;
         if (!m || !m.skuMapRaw) return null; // not a Lupi merch product → skip
         const gootenSku = line.sku ? parseSkuMap(m.skuMapRaw)[line.sku] : undefined;
-        return { gootenSku: gootenSku ?? '', imageUrl: m.designUrl ?? '' };
+        // Per-variant print file (correctly-sized) if present, else the product's
+        // single design file.
+        const perVariantUrl = line.sku ? parseSkuMap(m.printMapRaw)[line.sku] : undefined;
+        return { gootenSku: gootenSku ?? '', imageUrl: perVariantUrl ?? m.designUrl ?? '' };
       };
 
       const gootenOrder = buildGootenOrder(order, resolve, {

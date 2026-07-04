@@ -227,18 +227,21 @@ const POSTER: MerchProduct = {
   code: 'POST',
   categoryTags: ['wall art', 'poster', 'molecule art'],
   options: [{ name: 'Size', values: ['11x14', '12x18', '16x20', '18x24', '24x36'] }],
-  // Posters print opaque (the paper is the background). Base spec is 18x24 @
-  // 300; per-size overrides carry the exact pixel dimensions.
+  // Posters print opaque (the paper is the background). Dimensions are capped
+  // at ~19.4 MP so the files are hostable on Shopify's CDN (its product-image
+  // limit is ~20 MP) — that still leaves 150–300 DPI, which is standard for
+  // large-format wall art viewed at distance. Small sizes stay at full 300 DPI;
+  // the largest sizes step down in DPI to fit.
   print: {
-    widthPx: 5400, heightPx: 7200, dpi: 300,
+    widthPx: 3600, heightPx: 4800, dpi: 200,
     background: '#0b0e14', medallionScale: 0.78, center: [0.5, 0.46], safeMargin: 0.08,
   },
   printByOption: {
-    '11x14': { widthPx: 3300, heightPx: 4200 },
-    '12x18': { widthPx: 3600, heightPx: 5400 },
-    '16x20': { widthPx: 4800, heightPx: 6000 },
-    '18x24': { widthPx: 5400, heightPx: 7200 },
-    '24x36': { widthPx: 7200, heightPx: 10800 },
+    '11x14': { widthPx: 3300, heightPx: 4200, dpi: 300 }, // 13.9 MP
+    '12x18': { widthPx: 3600, heightPx: 5400, dpi: 300 }, // 19.4 MP
+    '16x20': { widthPx: 3600, heightPx: 4500, dpi: 225 }, // 16.2 MP
+    '18x24': { widthPx: 3600, heightPx: 4800, dpi: 200 }, // 17.3 MP
+    '24x36': { widthPx: 3600, heightPx: 5400, dpi: 150 }, // 19.4 MP
   },
   mockup: { size: 1200, background: '#0b0e14', medallionScale: 0.8 },
   gootenProductName: 'Giclée Art Print',

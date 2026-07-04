@@ -63,12 +63,20 @@ describe('Gooten print specs', () => {
     expect(printSpecFor(mug, oz11).widthPx).toBe(2700);
     expect(printSpecFor(mug, oz15).widthPx).toBe(2963);
   });
-  it('scales poster print files per size at 300 DPI', () => {
+  it('gives each poster size its own print spec, capped for Shopify hosting', () => {
     const poster = MERCH_PRODUCTS.poster;
+    const small = poster.buildVariants().find((v) => v.title === '11x14')!;
     const big = poster.buildVariants().find((v) => v.title === '24x36')!;
-    const spec = printSpecFor(poster, big);
-    expect(spec.widthPx).toBe(7200);   // 24in * 300
-    expect(spec.heightPx).toBe(10800); // 36in * 300
-    expect(spec.background).not.toBe('transparent'); // posters print opaque
+    const smallSpec = printSpecFor(poster, small);
+    const bigSpec = printSpecFor(poster, big);
+    // Small sizes stay full 300 DPI; large sizes step down to fit Shopify's
+    // ~20 MP product-image limit (still 150+ DPI for wall art).
+    expect(smallSpec.widthPx).toBe(3300);
+    expect(bigSpec.widthPx).toBe(3600);
+    for (const v of poster.buildVariants()) {
+      const s = printSpecFor(poster, v);
+      expect(s.widthPx * s.heightPx).toBeLessThanOrEqual(20_000_000); // hostable
+    }
+    expect(bigSpec.background).not.toBe('transparent'); // posters print opaque
   });
 });

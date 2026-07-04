@@ -120,11 +120,24 @@ Or call the tool directly: `{"tool":"lupi.export_merch","arguments":{"product":"
   `TruckerCap-DTF-Richardson-113-{Black,Navy}`. Khaki was dropped (no Gooten
   SKU) and the copy reworded from "embroidered" to DTF print to match what
   Gooten actually produces.
+- **Creatine Molecule T-Shirt** — creatine design attached (one 4500×5400 DTG
+  print file), `lupi.*` + `gooten.*` metafields incl. `print_map` for all 10
+  size/color SKUs.
+- **Serotonin Molecule Poster** — serotonin design attached with **per-size
+  print files** (five files, one per size), each SKU pointing at its correctly-
+  dimensioned file via `gooten.print_map`.
 - **Molecule Merch** collection — groups the mug, tee, poster, and cap.
 
-The Creatine Tee and Serotonin Poster drafts still need their designs — run
-`merch-render --name creatine --product tee` / `--name serotonin --product
-poster` then `merch-publish`.
+All four caffeine/creatine/serotonin products now carry designs. SKU
+resolution to Gooten is done for the mug + cap; the tee + poster are
+`gooten.status: pending-map` until their Gooten SKUs are filled (same
+`tools/gooten.mjs variants` step).
+
+> **Shopify image cap** — Shopify processes product images up to ~20 MP, so
+> the poster's large sizes are dimensioned to fit (150–300 DPI, `printByOption`
+> in `merchCatalog.ts`) rather than a raw 300-DPI 24×36 (78 MP). For higher-res
+> large-format print files, host them off Shopify and point `gooten.print_map`
+> there.
 
 ## Buy from the viewer (in-app commerce)
 

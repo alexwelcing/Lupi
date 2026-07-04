@@ -19,7 +19,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -41,9 +41,17 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 
-function moleculeParams(a) {
+async function moleculeParams(a) {
   const p = new URLSearchParams();
-  if (a.name) p.set('name', String(a.name));
+  if (a['xyz-file']) {
+    // Load geometry from a local XYZ file (e.g. fetched server-side when the
+    // browser can't reach the structure source). --molecule-name keeps the
+    // product identity (SKUs/title/tags) correct.
+    const xyz = await readFile(String(a['xyz-file']), 'utf8');
+    p.set('xyz', xyz);
+    p.set('inputType', 'xyz');
+    if (a['molecule-name']) p.set('moleculeName', String(a['molecule-name']));
+  } else if (a.name) p.set('name', String(a.name));
   else if (a.template) p.set('name', String(a.template));
   else if (a.smiles) p.set('smiles', String(a.smiles));
   else if (a.atoms || a.atomCount) {
@@ -75,7 +83,7 @@ async function main() {
   const timeout = Number(args.timeout ?? 180000);
   const port = Number(args.port ?? 8241);
   const product = String(args.product ?? 'all');
-  const molName = args.name || args.template || args.smiles || (args.atoms ? `${args.atoms}-atoms` : 'molecule');
+  const molName = args['molecule-name'] || args.name || args.template || args.smiles || (args.atoms ? `${args.atoms}-atoms` : 'molecule');
   const outDir = path.resolve(args['out-dir'] ?? `merch/${String(molName).replace(/[^a-z0-9_-]+/gi, '-')}`);
   await mkdir(outDir, { recursive: true });
 
@@ -87,7 +95,7 @@ async function main() {
     baseUrl = `http://127.0.0.1:${port}`;
   }
 
-  const merged = new URLSearchParams(moleculeParams(args));
+  const merged = new URLSearchParams(await moleculeParams(args));
   merged.set('merch', product);
   merged.set('download', '0');
   if (args['render-size']) merged.set('renderSize', String(args['render-size']));

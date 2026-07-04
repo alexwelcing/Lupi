@@ -45,10 +45,13 @@ export interface LupiMcpImageResult {
   transparent: boolean;
 }
 
-/** One print-on-demand asset (Gooten print file or storefront mockup). */
+/** One print-on-demand asset (Gooten print file or storefront mockup). Print
+ *  assets carry the `printKey` (e.g. a poster size) they were composed for, so
+ *  a variant can be matched to the correctly-sized file. */
 export interface LupiMcpMerchAsset {
   product: string;
   kind: 'print' | 'mockup';
+  printKey?: string;
   filename: string;
   dataUrl: string;
   width: number;
@@ -74,6 +77,7 @@ export interface LupiMcpMerchListing {
     sku: string;
     priceUsd: number;
     options: string[];
+    printKey: string;
     printWidth: number;
     printHeight: number;
   }>;
@@ -1499,12 +1503,14 @@ function merchArgsFromUrlParams(params: URLSearchParams): Record<string, unknown
   const download = params.get('download');
   const view = params.get('view');
   const viewDirection = params.get('viewDirection') ?? params.get('direction');
+  const moleculeName = params.get('moleculeName');
   if (product && product !== '1' && product !== 'true') args.product = product;
   else args.product = 'mug';
   if (renderSize) args.renderSize = renderSize;
   if (download !== null) args.download = download;
   if (view) args.view = view;
   if (viewDirection) args.viewDirection = viewDirection;
+  if (moleculeName) args.moleculeName = moleculeName;
   return args;
 }
 
@@ -2155,7 +2161,7 @@ async function exportActiveMoleculeMerch(
   const {
     MERCH_PRODUCTS, MERCH_PRODUCT_LIST, molCode, titleFor, handleFor, tagsFor, skuFor, printSpecFor,
   } = catalog;
-  const { loadImageElement, composeForProduct, trimToContent } = composer;
+  const { loadImageElement, composePrintFile, composeMockup, trimToContent } = composer;
 
   // Which products to build.
   const requested = readString(args.product ?? args.products)?.toLowerCase() ?? 'mug';
@@ -2189,40 +2195,52 @@ async function exportActiveMoleculeMerch(
   // print area consistently.
   const moleculeImage = typeof document !== 'undefined' ? trimToContent(loaded) : loaded;
 
-  const name = state.file.name.replace(/^MCP:\s*/, '');
+  // The name drives SKUs / title / tags. Allow an explicit override so a
+  // molecule loaded by geometry (XYZ) still gets the right product identity
+  // (e.g. geometry fetched server-side, named "serotonin").
+  const name = readString(args.moleculeName) ?? state.file.name.replace(/^MCP:\s*/, '');
   const code = molCode(name);
   const doDownload = (readBoolean(args.download) ?? true) && typeof document !== 'undefined';
 
   const listings: LupiMcpMerchListing[] = [];
   for (const product of products) {
-    const { printFile, mockup } = await composeForProduct(moleculeImage, product);
     const handle = handleFor(name, product);
+    const variantList = product.buildVariants();
 
-    const variants = product.buildVariants().map((v) => {
+    // One print file per DISTINCT print spec (printKey). Sizes that share a
+    // spec (all tee sizes, both cap colors) share one file; sizes that differ
+    // (mug 11/15oz, every poster size) each get a correctly-dimensioned,
+    // full-300-DPI file instead of one file stretched across mismatched sizes.
+    const printKeyToVariant = new Map<string, import('./merch/merchCatalog').MerchVariant>();
+    for (const v of variantList) if (!printKeyToVariant.has(v.printKey)) printKeyToVariant.set(v.printKey, v);
+    const singlePrint = printKeyToVariant.size === 1;
+
+    const assets: LupiMcpMerchAsset[] = [];
+    for (const [printKey, v] of printKeyToVariant) {
+      const pf = await composePrintFile(moleculeImage, product, v);
+      const url = await blobToPngDataUrl(pf.blob);
+      const filename = singlePrint ? `${handle}-print.png` : `${handle}-print-${printKey}.png`;
+      assets.push({ product: product.id, kind: 'print', printKey, filename, dataUrl: url, width: pf.width, height: pf.height, byteLength: pf.blob.size });
+      if (doDownload) downloadBlobFile(filename, pf.blob);
+    }
+
+    const mockup = await composeMockup(moleculeImage, product);
+    const mockupFile = `${handle}-mockup.png`;
+    assets.push({ product: product.id, kind: 'mockup', filename: mockupFile, dataUrl: await blobToPngDataUrl(mockup.blob), width: mockup.width, height: mockup.height, byteLength: mockup.blob.size });
+    if (doDownload) downloadBlobFile(mockupFile, mockup.blob);
+
+    const variants = variantList.map((v) => {
       const spec = printSpecFor(product, v);
       return {
         title: v.title,
         sku: skuFor(name, product, v),
         priceUsd: v.priceUsd,
         options: v.options,
+        printKey: v.printKey,
         printWidth: spec.widthPx,
         printHeight: spec.heightPx,
       };
     });
-
-    const [printUrl, mockupUrl] = await Promise.all([
-      blobToPngDataUrl(printFile.blob),
-      blobToPngDataUrl(mockup.blob),
-    ]);
-    const assets: LupiMcpMerchAsset[] = [
-      { product: product.id, kind: 'print', filename: `${handle}-print.png`, dataUrl: printUrl, width: printFile.width, height: printFile.height, byteLength: printFile.blob.size },
-      { product: product.id, kind: 'mockup', filename: `${handle}-mockup.png`, dataUrl: mockupUrl, width: mockup.width, height: mockup.height, byteLength: mockup.blob.size },
-    ];
-
-    if (doDownload) {
-      downloadBlobFile(assets[0].filename, printFile.blob);
-      downloadBlobFile(assets[1].filename, mockup.blob);
-    }
 
     listings.push({
       molecule: { name, code },
@@ -2236,9 +2254,10 @@ async function exportActiveMoleculeMerch(
       variants,
       assets,
     });
+    const printCount = assets.filter((a) => a.kind === 'print').length;
     transcript.push(
       `built ${product.id} listing: ${variants.length} variants, ` +
-      `print ${printFile.width}x${printFile.height}, mockup ${mockup.width}²`,
+      `${printCount} print file${printCount === 1 ? '' : 's'}, mockup ${mockup.width}²`,
     );
   }
 
