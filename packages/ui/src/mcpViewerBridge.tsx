@@ -65,6 +65,15 @@ export interface LupiMcpMerchAsset {
  *  Shopify product mapped to Gooten by SKU. */
 export interface LupiMcpMerchListing {
   molecule: { name: string; code: string };
+  /** Portrait metadata for the storefront copy (formula, systematic name,
+   *  caption, accent) — the same descriptor that art-directed the print. */
+  descriptor?: {
+    formula: string;
+    iupac?: string;
+    tagline?: string;
+    accent: string;
+    atomCount: number;
+  };
   product: string;
   title: string;
   handle: string;
@@ -2151,17 +2160,21 @@ async function exportActiveMoleculeMerch(
     throw new Error('No active molecule is loaded in the Lupi viewer.');
   }
 
-  const [{ buildExportStyle }, pngModule, catalog, composer] = await Promise.all([
+  const [{ buildExportStyle }, pngModule, catalog, composer, artDirection] = await Promise.all([
     import('./export/exportStyle'),
     import('./export/moleculePngRenderer'),
     import('./merch/merchCatalog'),
     import('./merch/printComposer'),
+    import('./merch/artDirection'),
   ]);
   const { renderMoleculePngBlob, blobToPngDataUrl, deriveViewDirection } = pngModule;
   const {
     MERCH_PRODUCTS, MERCH_PRODUCT_LIST, molCode, titleFor, handleFor, tagsFor, skuFor, printSpecFor,
   } = catalog;
   const { loadImageElement, composePrintFile, composeMockup, trimToContent } = composer;
+  const { buildDescriptor, ensureBrandFonts } = artDirection;
+  // Warm the brand fonts (Fraunces + Plex Mono) before any text is composited.
+  await ensureBrandFonts();
 
   // Which products to build.
   const requested = readString(args.product ?? args.products)?.toLowerCase() ?? 'mug';
@@ -2200,6 +2213,9 @@ async function exportActiveMoleculeMerch(
   // (e.g. geometry fetched server-side, named "serotonin").
   const name = readString(args.moleculeName) ?? state.file.name.replace(/^MCP:\s*/, '');
   const code = molCode(name);
+  // The portrait descriptor: formula (from geometry), systematic name, tagline,
+  // and the molecule-keyed accent that drives the aura + keylines.
+  const descriptor = buildDescriptor(name, code, frame);
   const doDownload = (readBoolean(args.download) ?? true) && typeof document !== 'undefined';
 
   const listings: LupiMcpMerchListing[] = [];
@@ -2217,14 +2233,14 @@ async function exportActiveMoleculeMerch(
 
     const assets: LupiMcpMerchAsset[] = [];
     for (const [printKey, v] of printKeyToVariant) {
-      const pf = await composePrintFile(moleculeImage, product, v);
+      const pf = await composePrintFile(moleculeImage, product, v, descriptor);
       const url = await blobToPngDataUrl(pf.blob);
       const filename = singlePrint ? `${handle}-print.png` : `${handle}-print-${printKey}.png`;
       assets.push({ product: product.id, kind: 'print', printKey, filename, dataUrl: url, width: pf.width, height: pf.height, byteLength: pf.blob.size });
       if (doDownload) downloadBlobFile(filename, pf.blob);
     }
 
-    const mockup = await composeMockup(moleculeImage, product);
+    const mockup = await composeMockup(moleculeImage, product, descriptor);
     const mockupFile = `${handle}-mockup.png`;
     assets.push({ product: product.id, kind: 'mockup', filename: mockupFile, dataUrl: await blobToPngDataUrl(mockup.blob), width: mockup.width, height: mockup.height, byteLength: mockup.blob.size });
     if (doDownload) downloadBlobFile(mockupFile, mockup.blob);
@@ -2244,6 +2260,13 @@ async function exportActiveMoleculeMerch(
 
     listings.push({
       molecule: { name, code },
+      descriptor: {
+        formula: descriptor.formula,
+        iupac: descriptor.iupac,
+        tagline: descriptor.tagline,
+        accent: descriptor.accent,
+        atomCount: descriptor.atomCount,
+      },
       product: product.id,
       title: titleFor(name, product),
       handle,

@@ -1,163 +1,225 @@
 /**
- * printComposer — turns a rendered molecule PNG into the two assets a
- * print-on-demand listing needs:
+ * printComposer — composes the two finished assets a listing needs:
  *
- *   • print file — the exact Gooten canvas (dims/DPI/background from the
- *     catalog) with the molecule placed as a centered medallion in the safe
- *     area. This is what Gooten prints onto the physical product.
- *   • mockup tile — a square storefront image (molecule on a product-tinted
- *     backdrop) used as the Shopify product photo until Gooten's real mockups
- *     sync in.
+ *   • print file — the production art Gooten prints. Placement and scale come
+ *     from the product's archetype (artDirection.PLACEMENTS): the tee is an
+ *     oversized specimen cropped by the print area, the cap a micro-emblem, the
+ *     mug an editorial wrap, the poster an opaque gallery print. Garment prints
+ *     are transparent (the fabric shows) with only a whisper of type so they
+ *     read on any colour; the poster carries the full, restrained title block.
+ *   • mockup tile — a flat-lay lookbook image (garments.ts) showing the piece
+ *     on a studio ground with the molecule placed exactly as it prints, so the
+ *     storefront grid reads as one editioned collection.
  *
- * Browser canvas only (2D compositing). The heavy 3D work already happened in
- * moleculePngRenderer; this is pure raster placement, so it is cheap and runs
- * anywhere a canvas exists — the Merch Studio, the export_merch MCP tool, and
- * the headless CLI all share it.
+ * All the drawing primitives live in canvasKit; this module is composition +
+ * per-product art direction only. Browser canvas only.
  */
 
 import type { GootenPrintSpec, MerchProduct, MerchVariant } from './merchCatalog';
 import { printSpecFor } from './merchCatalog';
+import {
+  LUPI_PALETTE,
+  assignLook,
+  ensureBrandFonts,
+  type Look,
+  type MoleculeDescriptor,
+} from './artDirection';
+import { drawGarmentMockup } from './garments';
+import {
+  type ComposeResult,
+  canvasToPngBlob,
+  drawAura,
+  drawFormula,
+  drawHairline,
+  drawLabel,
+  drawMoleculeScaled,
+  drawOrbit,
+  drawRegistrationTicks,
+  drawVignette,
+  fillVertical,
+  fitDisplaySize,
+  loadImageElement,
+  newCanvas,
+  trimToContent,
+} from './canvasKit';
 
-/** Load a data/blob URL into an <img> ready to draw. */
-export function loadImageElement(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Could not load molecule image for compositing.'));
-    img.src = src;
-  });
-}
+// Re-exported so existing callers (the MCP bridge) keep working unchanged.
+export { loadImageElement, trimToContent };
+export type { ComposeResult };
 
-/**
- * Crop a rendered molecule to its opaque bounding box, removing the transparent
- * margin the bounding-sphere fit leaves around a diagonal molecule. Placing the
- * *trimmed* mark means `medallionScale` genuinely controls how much of the
- * product it fills — otherwise the empty margin scales too and the design lands
- * small. Returns a tight canvas (may be non-square; aspect preserved).
- */
-export function trimToContent(
-  source: CanvasImageSource & { width: number; height: number },
-  alphaThreshold = 8,
-): HTMLCanvasElement {
-  const w = source.width;
-  const h = source.height;
-  const scratch = document.createElement('canvas');
-  scratch.width = w;
-  scratch.height = h;
-  const sctx = scratch.getContext('2d');
-  if (!sctx) return scratch;
-  sctx.drawImage(source, 0, 0);
+// ─── print-file compositions ────────────────────────────────────────
 
-  const data = sctx.getImageData(0, 0, w, h).data;
-  let minX = w, minY = h, maxX = -1, maxY = -1;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (data[(y * w + x) * 4 + 3] > alphaThreshold) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
+/** Poster — opaque gallery print. Two looks live at opposite extremes:
+ *  'specimen' floats a small molecule in a vast dark field with a full title
+ *  block; 'colossal' blows the molecule past the sheet edges — an abstract
+ *  crop of bonds — signed only by a whisper line at the foot. */
+function paintPoster(ctx: CanvasRenderingContext2D, w: number, h: number, molecule: CanvasImageSource, d: MoleculeDescriptor, look: Look) {
+  const m = w * 0.088;
+  const p = look.placement;
+  fillVertical(ctx, w, h, LUPI_PALETTE.groundTop, LUPI_PALETTE.groundBottom);
+
+  const cx = w * p.anchor[0];
+  const cy = h * p.anchor[1];
+  const molLong = p.scale * w;
+  if (look.name === 'specimen') drawOrbit(ctx, cx, cy, molLong * 0.62, molLong * 0.24, d.accent, 0.15);
+  drawAura(ctx, cx, cy, Math.min(molLong * 0.6, w * 0.75), d.accent, look.name === 'colossal' ? 0.7 : 1);
+  drawMoleculeScaled(ctx, molecule, cx, cy, molLong, { shadow: w * 0.02 });
+  drawVignette(ctx, w, h, w / 2, h * 0.4, look.name === 'colossal' ? 0.62 : 0.55);
+
+  if (look.name === 'colossal') {
+    // signature line only — the crop is the art
+    const y = h - m * 0.85;
+    drawLabel(ctx, d.name, m, y, { font: 'display', size: w * 0.052, weight: 380, tracking: w * 0.004, color: LUPI_PALETTE.bone, align: 'left' });
+    drawFormula(ctx, d.formulaParts, w - m, y, { size: w * 0.028, color: LUPI_PALETTE.bone, weight: 500, tracking: w * 0.028 * 0.03, align: 'right' });
+    drawLabel(ctx, `LUPI · MOLECULAR EDITIONS · Nº ${d.code}–001`, m, y + w * 0.028, { font: 'mono', size: w * 0.014, weight: 400, tracking: w * 0.014 * 0.3, color: LUPI_PALETTE.boneMuted, align: 'left' });
+    return;
   }
-  if (maxX < minX) return scratch; // fully transparent — nothing to trim
 
-  const cw = maxX - minX + 1;
-  const ch = maxY - minY + 1;
-  const out = document.createElement('canvas');
-  out.width = cw;
-  out.height = ch;
-  out.getContext('2d')?.drawImage(scratch, minX, minY, cw, ch, 0, 0, cw, ch);
-  return out;
+  // 'specimen' — restrained title block, lower third
+  let y = h * 0.75;
+  const nameSize = fitDisplaySize(ctx, d.name, w - m * 2, w * 0.115, 360, w * 0.006);
+  drawLabel(ctx, d.name, m, y, { font: 'display', size: nameSize, weight: 360, tracking: w * 0.006, color: LUPI_PALETTE.bone, align: 'left' });
+  y += nameSize * 0.34;
+  drawHairline(ctx, m, w - m, y, d.accent, Math.max(1.5, w * 0.0016), 0.85);
+  y += w * 0.05;
+  const dataSize = w * 0.031;
+  drawFormula(ctx, d.formulaParts, m, y, { size: dataSize, color: LUPI_PALETTE.bone, weight: 500, tracking: dataSize * 0.02 });
+  drawLabel(ctx, `${d.atomCount} ATOMS`, w - m, y, { font: 'mono', size: dataSize * 0.66, weight: 400, tracking: dataSize * 0.16, color: LUPI_PALETTE.boneMuted, align: 'right' });
+  if (d.tagline) {
+    y += dataSize * 1.7;
+    drawLabel(ctx, d.tagline, m, y, { font: 'display', size: w * 0.032, italic: true, weight: 380, tracking: w * 0.0003, color: LUPI_PALETTE.bone, align: 'left' });
+  }
+  drawLabel(ctx, 'LUPI · MOLECULAR EDITIONS', m, h - m * 0.7, { font: 'mono', size: w * 0.0155, weight: 500, tracking: w * 0.0155 * 0.32, color: LUPI_PALETTE.boneMuted, align: 'left' });
+  drawLabel(ctx, `Nº ${d.code}–001`, w - m, h - m * 0.7, { font: 'mono', size: w * 0.0155, weight: 500, tracking: w * 0.0155 * 0.26, color: LUPI_PALETTE.boneMuted, align: 'right' });
+  drawRegistrationTicks(ctx, w, h, m * 0.55, d.accent, 0.5);
 }
 
-function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('PNG encode failed.'))), 'image/png');
-  });
+/** Mug — white ceramic, charcoal ink. 'wrap' is the editorial name/molecule
+ *  spread; 'mark' is a single tiny specimen dead-centre with its formula —
+ *  nothing else on the cup. */
+function paintMug(ctx: CanvasRenderingContext2D, w: number, h: number, molecule: CanvasImageSource, d: MoleculeDescriptor, look: Look, safeMargin: number) {
+  const p = look.placement;
+  if (look.name === 'mark') {
+    const cx = w * p.anchor[0];
+    const cy = h * p.anchor[1];
+    const molLong = p.scale * w;
+    drawAura(ctx, cx, cy, molLong * 0.7, d.accent, 0.35);
+    drawMoleculeScaled(ctx, molecule, cx, cy, molLong);
+    const dataSize = h * 0.052;
+    drawFormula(ctx, d.formulaParts, cx, cy + molLong * 0.62 + dataSize, { size: dataSize, color: LUPI_PALETTE.ink, weight: 500, tracking: dataSize * 0.04, align: 'center' });
+    return;
+  }
+
+  const pad = w * safeMargin;
+  const vPad = h * (safeMargin + 0.05);
+  const dividerX = w * 0.5;
+
+  // specimen on the right with a soft accent halo (prints as a light tint)
+  const cx = w * p.anchor[0];
+  const cy = h * p.anchor[1];
+  const molLong = p.scale * w;
+  drawAura(ctx, cx, cy, molLong * 0.5, d.accent, 0.5);
+  drawMoleculeScaled(ctx, molecule, cx, cy, molLong);
+
+  // divider hairline between the specimen and the lockup
+  ctx.save();
+  ctx.strokeStyle = d.accent;
+  ctx.globalAlpha = 0.45;
+  ctx.lineWidth = Math.max(1.5, w * 0.0012);
+  ctx.beginPath();
+  ctx.moveTo(dividerX, vPad); ctx.lineTo(dividerX, h - vPad);
+  ctx.stroke();
+  ctx.restore();
+
+  // tucked lockup on the left, right-aligned to the divider
+  const rightEdge = dividerX - w * 0.04;
+  const leftEdge = pad;
+  const maxW = rightEdge - leftEdge;
+  let y = h * 0.42;
+  const nameSize = fitDisplaySize(ctx, d.name, maxW, h * 0.26, 380, w * 0.0025);
+  drawLabel(ctx, d.name, rightEdge, y, { font: 'display', size: nameSize, weight: 380, tracking: w * 0.0025, color: LUPI_PALETTE.ink, align: 'right' });
+  y += nameSize * 0.32;
+  drawHairline(ctx, leftEdge + maxW * 0.35, rightEdge, y, d.accent, Math.max(1.5, w * 0.0014), 0.8);
+  y += h * 0.085;
+  const dataSize = h * 0.058;
+  drawFormula(ctx, d.formulaParts, rightEdge, y, { size: dataSize, color: LUPI_PALETTE.ink, weight: 500, tracking: dataSize * 0.02, align: 'right' });
+  y += dataSize * 1.15;
+  drawLabel(ctx, 'LUPI · MOLECULAR EDITIONS', rightEdge, y, { font: 'mono', size: h * 0.026, weight: 500, tracking: h * 0.026 * 0.3, color: LUPI_PALETTE.inkMuted, align: 'right' });
 }
 
-/**
- * Draw the (square, transparent) molecule medallion centered per spec. The
- * medallion spans `medallionScale` of the shorter canvas edge, inset by
- * `safeMargin`, so nothing lands in the wrap seam / trim bleed.
- */
-function drawMedallion(
-  ctx: CanvasRenderingContext2D,
-  molecule: CanvasImageSource,
-  canvasW: number,
-  canvasH: number,
-  medallionScale: number,
-  center: [number, number],
-  safeMargin: number,
-) {
-  const srcW = (molecule as HTMLImageElement).width || canvasW;
-  const srcH = (molecule as HTMLImageElement).height || canvasH;
-  const shorter = Math.min(canvasW, canvasH);
-  const target = shorter * medallionScale * (1 - safeMargin * 2);
-  const scale = target / Math.max(srcW, srcH);
-  const w = srcW * scale;
-  const h = srcH * scale;
-  const cx = canvasW * center[0];
-  const cy = canvasH * center[1];
-  (ctx as CanvasRenderingContext2D & { imageSmoothingQuality?: ImageSmoothingQuality }).imageSmoothingQuality = 'high';
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(molecule, cx - w / 2, cy - h / 2, w, h);
+/** Tee — transparent chest print. 'grand' crops an oversized specimen with a
+ *  whisper hem tab; 'pocket' sets a jewel-small mark where a pocket would sit,
+ *  captioned by a tiny formula. */
+function paintTee(ctx: CanvasRenderingContext2D, w: number, h: number, molecule: CanvasImageSource, d: MoleculeDescriptor, look: Look) {
+  const p = look.placement;
+  const cx = w * p.anchor[0];
+  const cy = h * p.anchor[1];
+  const molLong = p.scale * w;
+  drawMoleculeScaled(ctx, molecule, cx, cy, molLong);
+  if (look.name === 'pocket') {
+    const dataSize = molLong * 0.13;
+    drawFormula(ctx, d.formulaParts, cx, cy + molLong * 0.62 + dataSize, { size: dataSize, color: LUPI_PALETTE.bone, weight: 500, tracking: dataSize * 0.05, align: 'center', adaptive: true });
+    return;
+  }
+  // whisper hem tab, legible on any garment colour
+  drawLabel(ctx, `LUPI · ${d.name.toUpperCase()} · ${d.formula}`, w / 2, h * 0.955,
+    { font: 'mono', size: w * 0.0165, weight: 400, tracking: w * 0.0165 * 0.24, color: LUPI_PALETTE.bone, align: 'center', adaptive: true });
 }
 
-export interface ComposeResult {
-  blob: Blob;
-  width: number;
-  height: number;
+/** Cap — transparent micro-emblem for the small front panel. */
+function paintCap(ctx: CanvasRenderingContext2D, w: number, h: number, molecule: CanvasImageSource, d: MoleculeDescriptor, look: Look) {
+  const p = look.placement;
+  const cx = w * p.anchor[0];
+  const cy = h * p.anchor[1];
+  drawMoleculeScaled(ctx, molecule, cx, cy, p.scale * w);
+  drawFormula(ctx, d.formulaParts, cx, h * 0.9, { size: h * 0.075, color: LUPI_PALETTE.bone, weight: 500, tracking: h * 0.075 * 0.05, align: 'center', adaptive: true });
 }
+
+// ─── public compose API ─────────────────────────────────────────────
 
 /** Compose the Gooten print file for one product variant. */
 export async function composePrintFile(
   molecule: CanvasImageSource,
   product: MerchProduct,
   variant: MerchVariant,
+  descriptor: MoleculeDescriptor,
 ): Promise<ComposeResult & { spec: GootenPrintSpec }> {
+  await ensureBrandFonts();
   const spec = printSpecFor(product, variant);
-  const canvas = document.createElement('canvas');
-  canvas.width = spec.widthPx;
-  canvas.height = spec.heightPx;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No 2D context for print-file compositing.');
+  const { canvas, ctx } = newCanvas(spec.widthPx, spec.heightPx);
+  const w = canvas.width;
+  const h = canvas.height;
+  const look = assignLook(descriptor.name, product.id);
 
   if (spec.background !== 'transparent') {
     ctx.fillStyle = spec.background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, w, h);
   } else {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, w, h);
   }
 
-  drawMedallion(ctx, molecule, canvas.width, canvas.height, spec.medallionScale, spec.center, spec.safeMargin);
+  switch (product.id) {
+    case 'poster': paintPoster(ctx, w, h, molecule, descriptor, look); break;
+    case 'mug': paintMug(ctx, w, h, molecule, descriptor, look, spec.safeMargin); break;
+    case 'tee': paintTee(ctx, w, h, molecule, descriptor, look); break;
+    case 'hat': paintCap(ctx, w, h, molecule, descriptor, look); break;
+    default: paintTee(ctx, w, h, molecule, descriptor, look); break;
+  }
 
   const blob = await canvasToPngBlob(canvas);
-  return { blob, width: canvas.width, height: canvas.height, spec };
+  return { blob, width: w, height: h, spec };
 }
 
-/** Compose the square storefront mockup tile for a product. */
+/** Compose the square flat-lay storefront tile for a product. */
 export async function composeMockup(
   molecule: CanvasImageSource,
   product: MerchProduct,
+  descriptor: MoleculeDescriptor,
 ): Promise<ComposeResult> {
-  const { size, background, medallionScale } = product.mockup;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No 2D context for mockup compositing.');
-
-  // Soft radial backdrop so the molecule reads as a product hero, not a raw cutout.
-  const grad = ctx.createRadialGradient(size * 0.5, size * 0.44, size * 0.1, size * 0.5, size * 0.5, size * 0.72);
-  grad.addColorStop(0, lighten(background, 0.10));
-  grad.addColorStop(1, background);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  drawMedallion(ctx, molecule, size, size, medallionScale, [0.5, 0.48], 0.04);
-
+  await ensureBrandFonts();
+  const size = product.mockup.size;
+  const { canvas, ctx } = newCanvas(size, size);
+  drawGarmentMockup(ctx, size, product.id, molecule, descriptor);
   const blob = await canvasToPngBlob(canvas);
   return { blob, width: size, height: size };
 }
@@ -166,22 +228,12 @@ export async function composeMockup(
 export async function composeForProduct(
   molecule: CanvasImageSource,
   product: MerchProduct,
+  descriptor: MoleculeDescriptor,
 ): Promise<{ printFile: ComposeResult & { spec: GootenPrintSpec }; mockup: ComposeResult }> {
   const firstVariant = product.buildVariants()[0];
   const [printFile, mockup] = await Promise.all([
-    composePrintFile(molecule, product, firstVariant),
-    composeMockup(molecule, product),
+    composePrintFile(molecule, product, firstVariant, descriptor),
+    composeMockup(molecule, product, descriptor),
   ]);
   return { printFile, mockup };
-}
-
-// ─── color helper ───────────────────────────────────────────────────
-function lighten(hex: string, amount: number): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const r = Math.min(255, ((n >> 16) & 0xff) + Math.round(255 * amount));
-  const g = Math.min(255, ((n >> 8) & 0xff) + Math.round(255 * amount));
-  const b = Math.min(255, (n & 0xff) + Math.round(255 * amount));
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }

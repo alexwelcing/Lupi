@@ -30,6 +30,34 @@ Every stage shares one source of truth (`merchCatalog.ts`), so the in-app
 Studio, the headless CLIs, and the connector always agree on SKUs, prices,
 tags, and print dimensions.
 
+## Design system — LUPI · Molecular Editions
+
+The collection is art-directed, not templated. Brand voice: **The Row ×
+Magic School Bus** — quiet-luxury grounds (bone studio, ink garments, white
+ceramic), the vivid 3D molecule as the only loud thing in frame, and type at
+a whisper (Fraunces display + IBM Plex Mono data, real subscript formulas).
+
+**Scale is the design language.** Every product has a small wardrobe of
+*looks* at opposite extremes, and each molecule×product pair is assigned one
+(`LOOKS` / `assignLook` in `artDirection.ts`):
+
+| Product | Looks | The extreme |
+| --- | --- | --- |
+| Tee | `grand` / `pocket` | specimen blown past the print edge on ink ↔ jewel-small left-chest mark on bone |
+| Cap | `micro` | tiny exact emblem, dead-centre crown |
+| Mug | `wrap` / `mark` | editorial name+molecule wrap ↔ one tiny mark on all that ceramic |
+| Poster | `specimen` / `colossal` | small specimen adrift in dark ↔ abstract crop larger than the sheet |
+
+Each molecule also carries a descriptor computed from its real geometry
+(`buildDescriptor`): Hill-order formula with subscripts, atom count, curated
+IUPAC/tagline copy, and an accent colour keyed to its dominant heteroatom
+(N → blue, O → red …) that drives the aura and keylines. Storefront images
+are flat-lay lookbook tiles (`garments.ts`) showing the piece with the
+molecule at its true placement/scale.
+
+Brand fonts live in `apps/web/public/fonts/` (same-origin so the headless
+renderer and production load identically).
+
 ## Components
 
 | File | Role |
@@ -37,7 +65,10 @@ tags, and print dimensions.
 | `packages/ui/src/export/moleculePngRenderer.ts` | Renders the molecule-only transparent PNG (offscreen WebGL, straight alpha, print resolution). |
 | `packages/ui/src/export/exportStyle.ts` | Shared coloring/radii/material/bond resolvers — one look across PNG, GLB, USDZ, merch. |
 | `packages/ui/src/merch/merchCatalog.ts` | Product catalog: Gooten print specs + Shopify option/variant/SKU/tag/price templates. **Single source of truth.** |
-| `packages/ui/src/merch/printComposer.ts` | Trims the molecule to content, composes the Gooten print file + storefront mockup. |
+| `packages/ui/src/merch/artDirection.ts` | The brand layer: palette, fonts, molecule descriptor (formula/accent/copy), and the look wardrobe + per-molecule assignment. |
+| `packages/ui/src/merch/canvasKit.ts` | Shared 2D primitives: grounds, aura/orbit/grain, molecule placement, tracked type + subscript formula. |
+| `packages/ui/src/merch/printComposer.ts` | Production art: composes each look's Gooten print file per product. |
+| `packages/ui/src/merch/garments.ts` | Flat-lay lookbook mockups: garment silhouettes with the molecule at true placement/scale. |
 | `packages/ui/src/merch/MerchStudio.tsx` | In-app interface: preview the molecule on every product, export the pack, show the publish command. |
 | `packages/ui/src/mcpViewerBridge.tsx` | `lupi.export_merch` MCP tool + `?merch=<product>` URL bootstrap → `window.__lupiMerchResult`. |
 | `tools/merch-render.mjs` | Headless CLI: molecule → print files + mockups + `listing.json`. |
