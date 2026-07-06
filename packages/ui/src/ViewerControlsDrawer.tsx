@@ -7,10 +7,9 @@
 import type { ReactNode } from 'react';
 import { usePressSpring } from './hooks/usePressSpring';
 import { LupiGlyph, IconControls } from './icons';
-import { StudioControlDeck, type StudioDeckMode } from './StudioControlDeck';
+import { StudioControlDeck } from './StudioControlDeck';
 import { FigureExportPanel } from './panels/FigureExportPanel';
-
-export type ViewerControlMode = StudioDeckMode | 'export';
+import { type ViewerControlMode } from './store';
 
 interface ViewerControlsDrawerProps {
   activeMode: ViewerControlMode;

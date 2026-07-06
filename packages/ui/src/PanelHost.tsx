@@ -8,9 +8,8 @@
  * The panel body itself is shared with the mobile sheet via ViewerPanelBody —
  * this component only owns the desktop dock chrome (title, size, position).
  */
-import { useStore, type AppState } from './store';
+import { useStore, type AppState, type ViewerControlMode } from './store';
 import { DockableWindow } from './DockableWindow';
-import { type ViewerControlMode } from './ViewerControlsDrawer';
 import { ViewerPanelBody } from './ViewerPanelBody';
 
 interface PanelHostProps {

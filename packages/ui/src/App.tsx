@@ -3,89 +3,27 @@
  *
  * Professional molecular dynamics visualization with
  * glassmorphic UI, side panels, and publication-quality rendering.
+ *
+ * Refactored into an orchestration layer: layout, route/URL effects,
+ * playback state, and command palette live here; visual pieces are
+ * composed from packages/ui/src/app/* and primitives/AppShell.
  */
 
-import { useEffect, useCallback, useRef, useState, Component, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, GizmoHelper, GizmoViewport, ContactShadows } from '@react-three/drei';
-import { Perf } from 'r3f-perf';
-import { ScenePostprocessing } from './postprocess/ScenePostprocessing';
-import { DevProbe } from './DevProbe';
-import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
-import { StateInspector } from './StateInspector';
-import * as THREE from 'three';
-import { useXR } from '@react-three/xr';
-import { USDZExportHelper } from './export/USDZExportPipeline';
-import { XREnvironmentDome } from './xr/XREnvironmentDome';
-import { XRLightEstimation } from './xr/XRLightEstimation';
-import { SceneLighting } from './SceneLighting';
-
-import { MobileHUD } from './MobileHUD';
-import { ChronosHUD } from './ChronosHUD';
-import { VolcanicHUD } from './VolcanicHUD';
-import { TelemetryHUD } from './TelemetryHUD';
-
-import { useStore, type BackgroundBackdropPattern, type BackgroundBackdropShape } from './store';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useStore } from './store';
 import { getMaxSafeAtomCount, getDefaultQualityTier } from './deviceCapabilities';
+import { detectFrameVectorFields } from '@atlas/core';
+import type { VectorGlyphStats } from '@atlas/scene';
+
 import { LandingPage } from './LandingPage';
 import { SceneLandingPage } from './landing/SceneLandingPage';
 import { SeoEducationPage } from './landing/SeoEducationPage';
-import { ThermoMinimap } from './ThermoMinimap';
-import { AtomsOptimized } from '@atlas/scene/AtomsOptimized';
-import { AtomClusters } from '@atlas/scene/AtomClusters';
-import { buildClusters, type Clusters } from '@atlas/scene/ClusterBuilder';
-import { SpatialAnchor } from './SpatialAnchor';
-import { Bonds } from '@atlas/scene/Bonds';
-import { AnnotationsLayer } from './AnnotationsLayer';
-import { KnowledgeLabelsLayer } from './KnowledgeLabelsLayer';
-import { LabelPerfHUD } from './LabelPerfHUD';
-import { SelectionMarkers } from './SelectionMarkers';
-import { AtomInfoHUD } from './AtomInfoHUD';
-import { CameraFocus } from './CameraFocus';
-import { AtomTrails } from './AtomTrails';
-import { TYPE_RADII, VectorGlyphs, type VectorGlyphStats } from '@atlas/scene';
-import { detectFrameVectorFields, ensureVectorMagnitude } from '@atlas/core';
-import { PropertyLegendHUD } from './PropertyLegendHUD';
-import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/useSmoothFramePlayback';
-import { SimulationCell } from '@atlas/scene/SimulationCell';
-import { ScaleBar } from '@atlas/scene/ScaleBar';
-import { getBackgroundFromColormap } from '@atlas/scene';
 import { MlipFlywheelPage } from './MlipFlywheelPage';
-import { GhostAtoms } from './GhostAtoms';
-import { AtomPicker } from '@atlas/scene/AtomPicker';
-import { decodeFlythrough } from './flythrough';
-import type { SpatialHash3D } from '@atlas/scene/SpatialHash';
-import type { ColormapName, Frame, Trajectory } from '@atlas/core/types';
-import { getElementSpec } from '@atlas/core';
-import { ExportManager } from './ExportManager';
-import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
-import { BatchAssetGenerator } from './BatchAssetGenerator';
-import { CameraPresetButton, MobileTabButton, TransportButton } from './controls';
-import { CommandPalette } from './CommandPalette';
-import { LupiAuthCallout } from './LupiAuthCallout';
-import { LupiAgentDock } from './LupiAgentDock';
-import { SavedViewButton } from './SavedViewButton';
-import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
-import { openRandomOmol25Molecule } from './molecules/randomOmol';
-import { loadSavedMolecularView } from './savedViews';
-import { requestStreamingFrame } from './streamingFrameCoordinator';
-import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
-import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
-import { detectRenderCapability } from './renderCapability';
-import { MoleculeFilterShell } from './MoleculeFilterShell';
-import { MoleculeShadow } from './MoleculeShadow';
-import { IconClose, IconPlay, IconPause, LupiGlyph, IconControls } from './icons';
-import { PanelHost } from './PanelHost';
-import { type ViewerControlMode } from './ViewerControlsDrawer';
-import { ViewerPanelBody } from './ViewerPanelBody';
-import { StudyLensPanel } from './StudyLensPanel';
-import {
-  useViewerBackgroundState,
-  useViewerFileState,
-  useViewerPanelState,
-  useViewerPlaybackState,
-} from './storeSelectors';
+import { Testbed } from './Testbed';
+import EmojiPlayground from './EmojiPlayground';
+import BillionAtomsPage from './BillionAtomsPage';
+
+import { useViewerBackgroundState, useViewerFileState, useViewerPanelState, useViewerPlaybackState } from './storeSelectors';
 import {
   SEO_EDUCATION_ROUTES,
   currentHashRoute,
@@ -98,517 +36,68 @@ import {
   savedViewSlugFromRoute,
 } from './viewer/viewerRoutes';
 import { openMolecule } from './viewer/openMolecule';
-import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
-import { ViewerCanvas } from './viewer/ViewerCanvas';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
-
-export { xrStore } from './viewer/xrStore';
+import { ViewerCanvas } from './viewer/ViewerCanvas';
+import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
 import { xrStore } from './viewer/xrStore';
+export { xrStore } from './viewer/xrStore';
+
+import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
+import { BatchAssetGenerator } from './BatchAssetGenerator';
+import { CommandPalette } from './CommandPalette';
+import { LupiAuthCallout } from './LupiAuthCallout';
+import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
+import { openRandomOmol25Molecule } from './molecules/randomOmol';
+import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
+import { decodeFlythrough } from './flythrough';
+import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
+import { detectRenderCapability } from './renderCapability';
+import { PanelHost } from './PanelHost';
+import { StudyLensPanel } from './StudyLensPanel';
 import { XREntryButton } from './xr/XREntryButton';
 
-// ─── Icons ────────────────────────────────────────────────────────────
-// Play/Pause and the Lupi toolbar glyphs (LupiGlyph, IconControls) live in
-// the shared ./icons module. The single-use transport arrows and the Study
-// glyph stay local — they're only referenced here.
-const IconFirst = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M6 4v16M10 12l8-6v12l-8-6z" />
-  </svg>
-);
-const IconPrev = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M19 20L9 12l10-8v16z" />
-  </svg>
-);
-const IconNext = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M5 4l10 8-10 8V4z" />
-  </svg>
-);
-const IconLast = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M18 4v16M14 12L6 6v12l8-6z" />
-  </svg>
-);
-const IconStudy = () => (
-  <LupiGlyph>
-    <path d="M7.2 7.4h4.2c1.1 0 2 .9 2 2v7.2H9.2c-1.1 0-2-.9-2-2V7.4Z" />
-    <path d="M13.4 9.4c.38-.32.88-.5 1.42-.5h2v7.2h-2c-.54 0-1.04.18-1.42.5" opacity="0.72" />
-    <path d="M9.1 10.2h2.1" opacity="0.7" />
-    <path d="M9.1 12.7h2.1" opacity="0.52" />
-  </LupiGlyph>
-);
-const IconFlythrough = () => (
-  <LupiGlyph>
-    <path d="M7.1 15.8c1.92-3.9 5.25-6.42 9.8-7.6" />
-    <path d="M12.4 7.2h4.5v4.5" />
-    <circle cx="7.35" cy="15.85" r="1.35" />
-    <circle cx="16.9" cy="8.2" r="1.35" />
-    <path d="M9.2 13.1c1.6.82 3.22.7 4.86-.36" opacity="0.56" />
-  </LupiGlyph>
-);
-const IconTelemetryTool = () => (
-  <LupiGlyph>
-    <path d="M7 15.9h10" opacity="0.54" />
-    <path d="M7.5 14.1l2.1-3 2.15 1.85 2.6-4.45 2.15 2.8" />
-    <path d="M7 7.4h2.2" opacity="0.54" />
-    <path d="M14.8 17.2H17" opacity="0.54" />
-  </LupiGlyph>
-);
-const IconExport = () => (
-  <LupiGlyph>
-    <path d="M7.1 8.3h6.3c1.28 0 2.32 1.04 2.32 2.32v4.58H7.1V8.3Z" />
-    <path d="M9.1 8.3 10.2 6h3.1l1.1 2.3" opacity="0.7" />
-    <circle cx="11.45" cy="12.05" r="1.45" />
-    <path d="M15.4 6.6h2.5v2.5" />
-    <path d="m17.9 6.6-4.2 4.2" />
-  </LupiGlyph>
-);
-// ─── Background presets ───────────────────────────────────────────────
-import { BG_PRESETS, getBgMedia, type BgMedia, type BgPreset } from './backgroundPresets';
-import { useEquirectMediaTexture } from './hooks/useEquirectMediaTexture';
-import type { BackgroundGradientStyle } from './equirectTexture';
-import { ProceduralBackground, ProceduralMathField } from './ProceduralBackground';
+import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/useSmoothFramePlayback';
+import { useMediaQuery } from './hooks/useMediaQuery';
+import { requestStreamingFrame } from './streamingFrameCoordinator';
 
+import { AppHeader } from './app/AppHeader';
+import { resolveBackground, type BackgroundAssetAdjustments } from './app/AppBackground';
+import { CameraManager } from './app/CameraManager';
+import { ToolRail } from './app/ToolRail';
+import { CameraPresetRail } from './app/CameraPresetRail';
+import { PlaybackStatus } from './app/PlaybackStatus';
+import { MobileShell } from './app/MobileShell';
+import { RendererWarningToast } from './app/RendererWarningToast';
+import { GlobalShortcuts } from './app/GlobalShortcuts';
+import { useSavedViewQuerySync } from './app/useSavedViewQuerySync';
+import { ViewerScene } from './app/ViewerScene';
 
-function resolveBackground(backgroundPreset: string, colormap: ColormapName): { top: string; bottom: string; media: BgMedia; procedural?: BgPreset['procedural'] } {
-  if (backgroundPreset.startsWith('palette:')) {
-    const [, palette] = backgroundPreset.split(':');
-    const colors = getBackgroundFromColormap((palette as ColormapName) ?? colormap);
-    return { ...colors, media: { kind: 'gradient', projection: 'equirectangular' } };
-  }
-  const preset = BG_PRESETS[backgroundPreset] ?? BG_PRESETS.void;
-  return { top: preset.top, bottom: preset.bottom, media: getBgMedia(preset), procedural: preset.procedural };
-}
+import {
+  IconFirst,
+  IconPrev,
+  IconPlay,
+  IconPause,
+  IconNext,
+  IconLast,
+} from './icons';
+import { TransportButton } from './controls';
+import { ThermoMinimap } from './ThermoMinimap';
 
-// ─── Scene Background component ──────────────────────────────────────
-type BackgroundAssetAdjustments = {
-  yawDegrees: number;
-  pitchDegrees: number;
-  opacity: number;
-  brightness: number;
-  saturation: number;
-  contrast: number;
-  motionPaused: boolean;
-  motionSpeed: number;
-};
-
-const DEFAULT_BACKGROUND_ADJUSTMENTS: BackgroundAssetAdjustments = {
-  yawDegrees: 0,
-  pitchDegrees: 0,
-  opacity: 1,
-  brightness: 1,
-  saturation: 1,
-  contrast: 1,
-  motionPaused: false,
-  motionSpeed: 1,
-};
-
-function SceneBackground({
-  top,
-  bottom,
-  style = 'linear',
-  media,
-  procedural,
-  adjustments = DEFAULT_BACKGROUND_ADJUSTMENTS,
-  center = [0, 0, 0],
-  distance = 1,
-  backdropShape = 'dome',
-  backdropPattern = 'image',
-  backdropRadius = 5,
-}: {
-  top: string; bottom: string;
-  style?: BackgroundGradientStyle;
-  media: BgMedia;
-  procedural?: BgPreset['procedural'];
-  adjustments?: BackgroundAssetAdjustments;
-  center?: [number, number, number];
-  distance?: number;
-  backdropShape?: BackgroundBackdropShape;
-  backdropPattern?: BackgroundBackdropPattern;
-  backdropRadius?: number;
-}) {
-  const { scene } = useThree();
-
-  // Hook must be called unconditionally
-  const mode = useXR(state => state.mode);
-  const xrMode = mode as string | null;
-  const isImmersiveAR = xrMode === 'immersive-ar';
-  const isImmersiveVR = xrMode === 'immersive-vr';
-  const usesBackdropMesh = media.kind !== 'gradient' || backdropShape !== 'dome' || backdropPattern !== 'image';
-  const texture = useEquirectMediaTexture({
-    media,
-    top,
-    bottom,
-    style,
-    enabled: !isImmersiveAR && !procedural,
-    projection: usesBackdropMesh ? 'dome' : 'scene-background',
-    paused: adjustments.motionPaused,
-    playbackRate: adjustments.motionSpeed,
-    logPrefix: 'bg',
-  });
-
-  useEffect(() => {
-    if (isImmersiveAR || procedural) {
-      scene.background = null;
-      scene.fog = procedural && !isImmersiveAR ? new THREE.FogExp2(bottom, 0.0007) : null;
-      return () => {
-        scene.background = null;
-        scene.fog = null;
-      };
-    }
-
-    if (!texture) {
-      scene.background = null;
-      scene.fog = null;
-      return;
-    }
-
-    if (usesBackdropMesh || media.kind !== 'gradient') {
-      scene.background = null;
-      scene.fog = null;
-      return () => {
-        scene.background = null;
-        scene.fog = null;
-      };
-    }
-
-    scene.background = texture;
-    scene.fog = new THREE.FogExp2(bottom, 0.0015);
-
-    return () => {
-      if (scene.background === texture) scene.background = null;
-      scene.fog = null;
-    };
-  }, [bottom, isImmersiveAR, media.kind, procedural, scene, texture, usesBackdropMesh]);
-
-  if (procedural) {
-    const visible = !isImmersiveAR;
-    return (
-      <>
-        <ProceduralBackground variant={procedural} top={top} bottom={bottom} visible={visible} />
-        <ProceduralMathField variant={procedural} center={center} radius={distance * 1.46} visible={visible} />
-      </>
-    );
-  }
-
-  if (usesBackdropMesh && texture && !isImmersiveAR && !isImmersiveVR) {
-    return (
-      <BackdropVolume
-        texture={texture}
-        top={top}
-        bottom={bottom}
-        adjustments={adjustments}
-        shape={backdropShape}
-        pattern={backdropPattern}
-        center={center}
-        radius={backdropShape === 'dome' ? PANORAMA_DOME_RADIUS : backdropRadius}
-      />
-    );
-  }
-
-  return null;
-}
-
-const PANORAMA_DOME_RADIUS = 5000;
-
-const PANORAMA_VERTEX_SHADER = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const PANORAMA_FRAGMENT_SHADER = `
-  uniform sampler2D map;
-  uniform vec3 topColor;
-  uniform vec3 bottomColor;
-  uniform float opacity;
-  uniform float brightness;
-  uniform float saturation;
-  uniform float contrast;
-  uniform int patternMode;
-  varying vec2 vUv;
-
-  void main() {
-    vec4 texel = texture2D(map, vUv);
-    vec3 gradient = mix(bottomColor, topColor, smoothstep(0.0, 1.0, vUv.y));
-    vec3 color = patternMode == 0 ? texel.rgb : gradient;
-    if (patternMode == 2) {
-      vec2 cell = fract(vUv * vec2(24.0, 12.0));
-      float line = max(
-        max(1.0 - step(0.018, cell.x), step(0.982, cell.x)),
-        max(1.0 - step(0.024, cell.y), step(0.976, cell.y))
-      );
-      vec3 gridColor = mix(vec3(0.92, 0.98, 1.0), vec3(0.15, 0.86, 0.90), 0.45);
-      color = mix(color, gridColor, line * 0.42);
-    }
-    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    color = mix(vec3(luma), color, saturation);
-    color = (color - 0.5) * contrast + 0.5;
-    color *= brightness;
-    color = mix(bottomColor, color, opacity);
-    gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
-  }
-`;
-
-function BackdropVolume({
-  texture,
-  top,
-  bottom,
-  adjustments,
-  shape,
-  pattern,
-  center,
-  radius,
-}: {
-  texture: THREE.Texture;
-  top: string;
-  bottom: string;
-  adjustments: BackgroundAssetAdjustments;
-  shape: BackgroundBackdropShape;
-  pattern: BackgroundBackdropPattern;
-  center: [number, number, number];
-  radius: number;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const { camera } = useThree();
-  const geometry = useMemo(() => {
-    const safeRadius = Math.max(0.25, radius);
-    if (shape === 'cube') {
-      const diameter = safeRadius * 2;
-      return new THREE.BoxGeometry(diameter, diameter, diameter, 1, 1, 1);
-    }
-
-    const geo = new THREE.SphereGeometry(safeRadius, 128, 64);
-    if (shape === 'dome') geo.scale(-1, 1, 1);
-    return geo;
-  }, [radius, shape]);
-  const material = useMemo(() => new THREE.ShaderMaterial({
-    uniforms: {
-      map: { value: texture },
-      topColor: { value: new THREE.Color(top) },
-      bottomColor: { value: new THREE.Color(bottom) },
-      opacity: { value: adjustments.opacity },
-      brightness: { value: adjustments.brightness },
-      saturation: { value: adjustments.saturation },
-      contrast: { value: adjustments.contrast },
-      patternMode: { value: patternMode(pattern) },
-    },
-    vertexShader: PANORAMA_VERTEX_SHADER,
-    fragmentShader: PANORAMA_FRAGMENT_SHADER,
-    side: THREE.DoubleSide,
-    transparent: false,
-    depthWrite: false,
-    depthTest: false,
-    toneMapped: false,
-    fog: false,
-  }), []);
-
-  useEffect(() => {
-    material.uniforms.map.value = texture;
-    material.uniforms.topColor.value.set(top);
-    material.uniforms.bottomColor.value.set(bottom);
-    material.uniforms.opacity.value = adjustments.opacity;
-    material.uniforms.brightness.value = adjustments.brightness;
-    material.uniforms.saturation.value = adjustments.saturation;
-    material.uniforms.contrast.value = adjustments.contrast;
-    material.uniforms.patternMode.value = patternMode(pattern);
-    material.needsUpdate = true;
-  }, [adjustments.brightness, adjustments.contrast, adjustments.opacity, adjustments.saturation, bottom, material, pattern, texture, top]);
-
-  useEffect(() => () => {
-    geometry.dispose();
-  }, [geometry]);
-
-  useEffect(() => () => {
-    material.dispose();
-  }, [material]);
-
-  useFrame(() => {
-    if (!meshRef.current) return;
-    if (shape === 'dome') {
-      meshRef.current.position.copy(camera.position);
-    } else {
-      meshRef.current.position.set(center[0], center[1], center[2]);
-    }
-    meshRef.current.rotation.set(
-      THREE.MathUtils.degToRad(adjustments.pitchDegrees),
-      THREE.MathUtils.degToRad(adjustments.yawDegrees),
-      0,
-    );
-  });
-
-  return (
-    <mesh ref={meshRef} geometry={geometry} frustumCulled={false} renderOrder={-1000}>
-      <primitive object={material} attach="material" />
-    </mesh>
-  );
-}
-
-function patternMode(pattern: BackgroundBackdropPattern): number {
-  if (pattern === 'plain') return 1;
-  if (pattern === 'grid') return 2;
-  return 0;
-}
-
-// Error Boundary for side panels
-class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: string | null }> {
-  state = { error: null as string | null };
-  static getDerivedStateFromError(err: Error) {
-    return { error: err.message };
-  }
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{
-          padding: 16,
-          color: 'var(--danger)',
-          fontSize: 'var(--fs-xs)',
-          fontFamily: 'var(--font-mono)',
-        }}>
-          <div style={{ marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>
-            Panel Error
-          </div>
-          {this.state.error}
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    if (media.matches !== matches) setMatches(media.matches);
-    const listener = () => setMatches(media.matches);
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
-  }, [matches, query]);
-  return matches;
-}
-
-function CameraManager({
-  fileId,
-  center,
-  distance,
-  near,
-}: {
-  fileId?: string;
-  center: [number, number, number];
-  distance: number;
-  near: number;
-}) {
-  const { camera, controls } = useThree((s) => ({ camera: s.camera, controls: s.controls as any }));
-  const flythroughPreview = useStore(s => s.flythroughPreview);
-
-  const applyPerspectiveProjection = useCallback((nextFov?: number) => {
-    if (camera instanceof THREE.PerspectiveCamera) {
-      const camDist = Math.hypot(
-        camera.position.x - center[0],
-        camera.position.y - center[1],
-        camera.position.z - center[2],
-      );
-      const minFar = Math.max(10000, distance * 100, camDist * 20);
-      const fovChanged = Number.isFinite(nextFov) && Math.abs(camera.fov - nextFov!) > 1e-4;
-      const nearChanged = Math.abs(camera.near - near) > 1e-4;
-      const farChanged = camera.far < minFar;
-      if (fovChanged || nearChanged || farChanged) {
-        if (fovChanged) camera.fov = nextFov!;
-        camera.near = near;
-        camera.far = minFar;
-        camera.updateProjectionMatrix();
-      }
-    }
-  }, [camera, center, distance, near]);
-
-  // Sync continuously during flythrough preview + keep clipping planes generous
-  useFrame(() => {
-    if (flythroughPreview) {
-      const state = useStore.getState();
-      camera.position.set(...state.cameraPosition);
-      camera.lookAt(...state.cameraTarget);
-      applyPerspectiveProjection(state.cameraFov);
-
-      if (controls && controls.target) {
-        controls.target.set(...state.cameraTarget);
-        controls.update();
-      }
-      return;
-    }
-
-    applyPerspectiveProjection();
-  });
-
-  // Fit on load
-  useEffect(() => {
-    if (!fileId) return;
-    camera.position.set(center[0], center[1], center[2] + distance);
-    camera.lookAt(center[0], center[1], center[2]);
-    applyPerspectiveProjection();
-    if (controls && controls.target) {
-      controls.target.set(center[0], center[1], center[2]);
-      controls.update();
-    }
-    useStore.getState().setCameraState(camera.position.toArray() as any, center);
-  }, [fileId, center, distance, camera, controls, applyPerspectiveProjection]);
-
-  // Sync with presets
-  useEffect(() => {
-    const unsub = useStore.subscribe(
-      (s) => s.cameraPreset,
-      (preset) => {
-        const { cameraPosition, cameraTarget } = useStore.getState();
-        camera.position.set(...cameraPosition);
-        camera.lookAt(...cameraTarget);
-        applyPerspectiveProjection();
-        if (controls && controls.target) {
-          controls.target.set(...cameraTarget);
-          controls.update();
-        }
-      }
-    );
-    return unsub;
-  }, [camera, controls, applyPerspectiveProjection]);
-
-  useEffect(() => {
-    const applyStoredCamera = () => {
-      const { cameraPosition, cameraTarget, cameraFov } = useStore.getState();
-      camera.position.set(...cameraPosition);
-      camera.lookAt(...cameraTarget);
-      applyPerspectiveProjection(cameraFov);
-      if (controls && controls.target) {
-        controls.target.set(...cameraTarget);
-        controls.update();
-      }
-    };
-    const unsubs = [
-      useStore.subscribe((s) => s.cameraPosition, applyStoredCamera),
-      useStore.subscribe((s) => s.cameraTarget, applyStoredCamera),
-      useStore.subscribe((s) => s.cameraFov, applyStoredCamera),
-    ];
-    return () => unsubs.forEach((unsub) => unsub());
-  }, [camera, controls, applyPerspectiveProjection]);
-
-  return null;
-}
-
-import { Testbed } from './Testbed';
-import EmojiPlayground from './EmojiPlayground';
-import BillionAtomsPage from './BillionAtomsPage';
+import { TelemetryHUD } from './TelemetryHUD';
+import { StateInspector } from './StateInspector';
+import { LabelPerfHUD } from './LabelPerfHUD';
+import { PropertyLegendHUD } from './PropertyLegendHUD';
+import { DevProbe } from './DevProbe';
+import { Perf } from 'r3f-perf';
+import { ScaleBar } from '@atlas/scene/ScaleBar';
 
 export default function App() {
   if (typeof window !== 'undefined' && isTestbedRoute()) {
     return <Testbed />;
   }
-
   if (typeof window !== 'undefined' && isEmojiRoute()) {
     return <EmojiPlayground />;
   }
-
   if (typeof window !== 'undefined' && isBillionAtomsRoute()) {
     return <BillionAtomsPage />;
   }
@@ -616,15 +105,11 @@ export default function App() {
   const [hashRoute, setHashRoute] = useState(currentHashRoute);
   const [pathRoute, setPathRoute] = useState(currentPathRoute);
   const [isExportingQuickLook, setIsExportingQuickLook] = useState(false);
-  const [studioDeck, setStudioDeck] = useState<ViewerControlMode | null>(null);
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
-  const [studyLensOpen, setStudyLensOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [vectorStats, setVectorStats] = useState<VectorGlyphStats | null>(null);
   const loadedSavedViewSlugRef = useRef<string | null>(null);
-  // Fire molecule_interacted at most once per loaded molecule, on the first
-  // real camera manipulation. This is the activation/AHA signal the analytics
-  // taxonomy names as the leading indicator of a Save — previously defined but
-  // never emitted, leaving the funnel blind past molecule_loaded.
   const interactedForFileRef = useRef<string | null>(null);
+
   const hashPath = hashRoute.split('?')[0] || '/';
   const normalizedPath = normalizedPathRoute(pathRoute);
   const isMlipFlywheelRoute = hashPath === '/system/mlip-flywheel';
@@ -634,6 +119,7 @@ export default function App() {
   const isCopperSceneRoute = normalizedPath === '/scenes/1m-copper-lattice';
   const seoEducationKind = SEO_EDUCATION_ROUTES[normalizedPath] ?? null;
 
+  // Route sync
   useEffect(() => {
     const syncRoute = () => {
       setHashRoute(currentHashRoute());
@@ -647,141 +133,20 @@ export default function App() {
     };
   }, []);
 
-  // Analytics: top-of-funnel landing. Mint the session (UTM/returning) and
-  // emit app_landed once per mount. Fire-and-forget; never blocks the app.
+  // Analytics: top-of-funnel landing.
   useEffect(() => {
     ensureAnalyticsSession();
     track(ANALYTICS_EVENTS.APP_LANDED);
   }, []);
 
-  // Use TanStack Query for saved view data (viral sharing, caching, proper loading states)
-  const savedViewQuery = useQuery({
-    queryKey: ['savedView', savedViewSlug],
-    queryFn: () => loadSavedMolecularView(savedViewSlug!),
-    enabled: !!savedViewSlug,
-    staleTime: 1000 * 60 * 10, // shared views don't change often
-  });
-
-  useEffect(() => {
-    if (!savedViewSlug) return;
-    if (loadedSavedViewSlugRef.current === savedViewSlug) return;
-
+  // Saved view query (mirrors loading/error/title state into the store).
+  useSavedViewQuerySync(savedViewSlug);
+  if (savedViewSlug && loadedSavedViewSlugRef.current !== savedViewSlug) {
     loadedSavedViewSlugRef.current = savedViewSlug;
-
-    if (savedViewQuery.isPending) {
-      useStore.getState().setLoading(true, 0);
-    }
-
-    if (savedViewQuery.data) {
-      document.title = `${savedViewQuery.data.title} - Lupi`;
-    }
-
-    if (savedViewQuery.error) {
-      const message = savedViewQuery.error instanceof Error ? savedViewQuery.error.message : String(savedViewQuery.error);
-      useStore.getState().setLoading(false);
-      useStore.getState().setError(message);
-    }
-  }, [savedViewSlug, savedViewQuery.isPending, savedViewQuery.data, savedViewQuery.error]);
+  }
 
   const { file, ghostFile, loading, frame, loadedAtomCount } = useViewerFileState();
   const { playing, playbackSpeed, setFrame, nextFrame, togglePlay } = useViewerPlaybackState();
-  const colorMode = useStore(s => s.colorMode);
-  const colorProperty = useStore(s => s.colorProperty);
-  const vectorField = useStore(s => s.vectorField);
-  const vectorScale = useStore(s => s.vectorScale);
-  const vectorDensity = useStore(s => s.vectorDensity);
-  const [vectorStats, setVectorStats] = useState<VectorGlyphStats | null>(null);
-  const materialPreset = useStore(s => s.materialPreset);
-  const materialIntensity = useStore(s => s.materialIntensity);
-  const rimLightIntensity = useStore(s => s.rimLightIntensity);
-  const surfaceRoughness = useStore(s => s.surfaceRoughness);
-  const surfacePolish = useStore(s => s.surfacePolish);
-  const surfaceClearcoat = useStore(s => s.surfaceClearcoat);
-  const keyLightAzimuth = useStore(s => s.keyLightAzimuth);
-  const keyLightElevation = useStore(s => s.keyLightElevation);
-  const fillLightAzimuth = useStore(s => s.fillLightAzimuth);
-  const fillLightElevation = useStore(s => s.fillLightElevation);
-  const rimLightAzimuth = useStore(s => s.rimLightAzimuth);
-  const rimLightElevation = useStore(s => s.rimLightElevation);
-  const fillLightColor = useStore(s => s.fillLightColor);
-  const rimLightColor = useStore(s => s.rimLightColor);
-  const colormap = useStore(s => s.colormap);
-  const uniformAtomColor = useStore(s => s.uniformAtomColor);
-  const elementColorOverrides = useStore(s => s.elementColorOverrides);
-  const atomColorSource = useStore(s => s.atomColorSource);
-  const postprocessPreset = useStore(s => s.postprocessPreset);
-  const propertyEmissionStrength = useStore(s => s.propertyEmissionStrength);
-  const annotations = useStore(s => s.annotations);
-  const labelStyle = useStore(s => s.labelStyle);
-  const knowledgeLabels = useStore(s => s.knowledgeLabels);
-  const knowledgeLabelKinds = useStore(s => s.knowledgeLabelKinds);
-  const showKnowledgeLabels = useStore(s => s.showKnowledgeLabels);
-  const hoveredAtom = useStore(s => s.hoveredAtom);
-  const selectedAtoms = useStore(s => s.selectedAtoms);
-  // Lifted to top level so hook order is stable (these were previously passed
-  // as inline JSX props, which React's dev tooling can flag as a hook-order
-  // violation when combined with conditional early returns elsewhere in App).
-  const highlightedNeighbors = useStore(s => s.highlightedNeighbors);
-  const dimNonNeighbors = useStore(s => s.showNeighbors);
-
-  // Atoms that get worldline trails. Currently annotation-driven only.
-  // Lifted to component top so the useMemo's hook
-  // index is stable across renders — embedding it inside conditional JSX
-  // changes the hook count when `currentFrame` flips and crashes React
-  // with "Rendered more hooks than during the previous render."
-  const trackedAtomIndices = useMemo(() => {
-    const set = new Set<number>();
-    for (const ann of annotations) set.add(ann.atomIndex);
-    return Array.from(set);
-  }, [annotations]);
-
-  // Etched annotation: when the user picks the 'etched' label style and
-  // has at least one annotation, rasterize the most-recent text into a
-  // CanvasTexture and pass it (plus the target atom index) into the atom
-  // impostor shader. The shader gates on uHasEtch and atom-id match, so a
-  // single texture engraves exactly one atom. Multi-atom etching at once
-  // is plumbing-feasible (texture array) but visually noisy; one at a
-  // time reads cleaner. Memoized so editing other annotations doesn't
-  // re-rasterize. Disposes previous texture on text change to avoid leaks.
-  const { etchTexture, etchAtomId } = useMemo<{
-    etchTexture: THREE.CanvasTexture | null;
-    etchAtomId: number | null;
-  }>(() => {
-    if (labelStyle !== 'etched' || annotations.length === 0) {
-      return { etchTexture: null, etchAtomId: null };
-    }
-    const newest = annotations[annotations.length - 1];
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, 256, 256);
-    ctx.fillStyle = 'rgba(255,255,255,1)';
-    ctx.font = 'bold 48px ui-monospace, "SF Mono", Consolas, monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(newest.text.slice(0, 16), 128, 128);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    tex.needsUpdate = true;
-    return { etchTexture: tex, etchAtomId: newest.atomIndex };
-  }, [labelStyle, annotations]);
-  // Dispose stale textures when the memo recomputes.
-  useEffect(() => () => { etchTexture?.dispose(); }, [etchTexture]);
-  const ssao = useStore(s => s.ssao);
-  const bloom = useStore(s => s.bloom);
-  const dof = useStore(s => s.dof);
-  const dofFocus = useStore(s => s.dofFocus);
-  const toneMapping = useStore(s => s.toneMapping);
-  const showCell = useStore(s => s.showCell);
-  const showAxes = useStore(s => s.showAxes);
-  const flythroughPreview = useStore(s => s.flythroughPreview);
-  const showBonds = useStore(s => s.showBonds);
-  const bondTolerance = useStore(s => s.bondTolerance);
-  const useGpuBonds = useStore(s => s.useGpuBonds);
-  const bondColorMode = useStore(s => s.bondColorMode);
-  const atomScale = useStore(s => s.atomScale);
   const { activePanel, setActivePanel } = useViewerPanelState();
   const {
     backgroundPreset,
@@ -798,110 +163,35 @@ export default function App() {
     backgroundBackdropPattern,
     backgroundBackdropRadius,
   } = useViewerBackgroundState();
-  const filterShellShape = useStore(s => s.filterShellShape);
-  const filterShellPreset = useStore(s => s.filterShellPreset);
-  const filterShellOpacity = useStore(s => s.filterShellOpacity);
-  const filterShellRadius = useStore(s => s.filterShellRadius);
-  const ssaoIntensity = useStore(s => s.ssaoIntensity);
-  const showScaleBar = useStore(s => s.showScaleBar);
-  const cameraPreset = useStore(s => s.cameraPreset);
-  const setCameraPreset = useStore(s => s.setCameraPreset);
-  const bloomIntensity = useStore(s => s.bloomIntensity);
-  const propRange = useStore(s => s.propRange);
-  const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
-  const atomTypeScales = useStore(s => s.atomTypeScales);
-  const anomalyTracking = useStore(s => s.anomalyTracking);
-  const atomTexture = useStore(s => s.atomTexture);
-  // Cluster splats for huge-scene LOD (Phase 4). Built once per frame
-  // identity, AFTER streaming completes — running on a partial frame
-  // would aggregate uninitialized zero-positions into a giant fake
-  // cluster at the origin. Stored as React state so the cluster mesh
-  // remounts when the build finishes.
-  const [clusters, setClusters] = useState<Clusters | null>(null);
 
-  // Spatial hash for atom picking
-  const [spatialHash, setSpatialHash] = useState<SpatialHash3D | null>(null);
+  const useGpuBonds = useStore(s => s.useGpuBonds);
+  const gpuBondsStatus = useStore(s => s.gpuBondsStatus);
+  const showScaleBar = useStore(s => s.showScaleBar);
+  const studyLensOpen = useStore(s => s.studyLensOpen);
+  const colorMode = useStore(s => s.colorMode);
+  const colorProperty = useStore(s => s.colorProperty);
+  const colormap = useStore(s => s.colormap);
 
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const showDebugHud = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
     return params.has('debug') || params.has('devhud') || params.has('dev');
   }, []);
-  const cameraPresetLabel =
-    cameraPreset === 'top' ? 'XY' :
-    cameraPreset === 'side' ? 'XZ' :
-    cameraPreset === 'front' ? 'YZ' :
-    cameraPreset === 'iso' ? 'ISO' : 'View';
-  const cameraPresetName =
-    cameraPreset === 'top' ? 'Top' :
-    cameraPreset === 'side' ? 'Side' :
-    cameraPreset === 'front' ? 'Front' :
-    cameraPreset === 'iso' ? 'Iso' : 'Free';
 
-  const openStudioDeck = useCallback((mode: ViewerControlMode) => {
-    setViewMenuOpen(false);
-    setStudioDeck(mode);
-    if (activePanel !== 'studio') setActivePanel('studio');
-  }, [activePanel, setActivePanel]);
-
-  const toggleControlsPanel = useCallback(() => {
-    setViewMenuOpen(false);
-    if (activePanel === 'studio' && (studioDeck ?? 'molecule') !== 'export') {
-      setActivePanel(null);
-      return;
-    }
-    setStudioDeck(current => current === 'export' ? 'molecule' : current ?? 'molecule');
-    if (activePanel !== 'studio') setActivePanel('studio');
-  }, [activePanel, setActivePanel, studioDeck]);
-
-  const openUtilityPanel = useCallback((panel: 'flythrough' | 'telemetry') => {
-    setViewMenuOpen(false);
-    setStudioDeck(null);
-    setActivePanel(panel);
-  }, [setActivePanel]);
-
-  useEffect(() => {
-    if (!file) {
-      setStudioDeck(null);
-      setViewMenuOpen(false);
-      setStudyLensOpen(false);
-    } else if (activePanel && activePanel !== 'studio') {
-      setViewMenuOpen(false);
-    }
-  }, [activePanel, file?.name]);
-
-  // Device-capability budget. Computed once at mount — hardware doesn't
-  // change during a session. The cap reflects MEMORY ceiling now (not GPU
-  // shader cost) since the quality-tier system below makes any tier render
-  // any count. The fast tier specifically restores early-Z on mobile by
-  // skipping gl_FragDepth, so 1M impostor spheres become feasible on a
-  // phone where the premium shader would freeze the page.
   const deviceMaxAtoms = useMemo(() => getMaxSafeAtomCount(), []);
   const deviceQualityTier = useMemo(() => getDefaultQualityTier(), []);
-
-  // Renderer capability probe — run once at mount (hardware/browser support
-  // doesn't change within a session). When the device can't start a WebGL
-  // context we must NOT mount the <Canvas> (it would paint a silent blank
-  // rect — the single biggest cold-mobile bounce source). Audit findings:
-  // ios-safari-webgpu-silent-fail, android-firefox-no-webgpu-message,
-  // no-canvas-webgl-fallback.
-  // Advisory only: a false preflight must not prevent the real Canvas mount.
   const renderCapability = useMemo(() => detectRenderCapability(), []);
 
-  // Surface a NON-BLOCKING warning when the optional WebGPU bond accelerator
-  // is unavailable/timed out while the user had it enabled. The scene still
-  // renders via the CPU bond path. Audit finding: no-offline-fallback-webgpu-init.
-  const gpuBondsStatus = useStore(s => s.gpuBondsStatus);
+  // Renderer warning is derived from gpu bond state.
   useEffect(() => {
-    const setRendererWarning = useStore.getState().setRendererWarning;
     if (useGpuBonds && gpuBondsStatus === 'unsupported') {
-      setRendererWarning('GPU bond acceleration unavailable on this device — using the slower CPU path.');
+      useStore.getState().setRendererWarning('GPU bond acceleration unavailable on this device — using the slower CPU path.');
     } else if (gpuBondsStatus === 'ready') {
-      setRendererWarning(null);
+      useStore.getState().setRendererWarning(null);
     }
   }, [useGpuBonds, gpuBondsStatus]);
+
   const playbackFrameRate = file?.playbackFrameRate ?? 30;
   const highFidelityPlayback = Boolean(file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000);
   const totalFrames = file?.trajectory.totalFrames ?? 0;
@@ -909,34 +199,17 @@ export default function App() {
   const bufferedFrameCount = useMemo(() => (
     file?.trajectory.frames.reduce((count, candidate) => count + (candidate ? 1 : 0), 0) ?? 0
   ), [file]);
-  const streamingFrameStatus = useMemo(() => {
-    if (!file || totalFrames <= 1 || bufferedFrameCount >= totalFrames) return null;
-    if (!frameIsBuffered) {
-      return {
-        tone: 'buffering',
-        label: 'Buffering',
-        detail: `${Math.floor(frame) + 1}/${totalFrames}`,
-      };
-    }
-    return {
-      tone: 'warming',
-      label: 'Buffered',
-      detail: `${bufferedFrameCount}/${totalFrames}`,
-    };
-  }, [bufferedFrameCount, file, frame, frameIsBuffered, totalFrames]);
+
   const displayFrameIndex = useMemo(() => {
     if (!file || totalFrames <= 0) return 0;
     const frames = file.trajectory.frames;
     const requested = Math.max(0, Math.min(frame, totalFrames - 1));
     if (frames[requested]) return requested;
-    for (let i = requested - 1; i >= 0; i -= 1) {
-      if (frames[i]) return i;
-    }
-    for (let i = requested + 1; i < totalFrames; i += 1) {
-      if (frames[i]) return i;
-    }
+    for (let i = requested - 1; i >= 0; i -= 1) if (frames[i]) return i;
+    for (let i = requested + 1; i < totalFrames; i += 1) if (frames[i]) return i;
     return 0;
   }, [file, frame, totalFrames]);
+
   const isFrameReady = useCallback((frameIndex: number) => {
     const frames = useStore.getState().file?.trajectory.frames;
     return Boolean(frames?.[frameIndex]);
@@ -947,7 +220,6 @@ export default function App() {
     requestStreamingFrame(frameIndex, direction, 12);
   }, []);
 
-  // Playback timer (replaced with smooth 60fps interpolator)
   const { currentState: interpState, setFrame: setSmoothFrame } = useSmoothFramePlayback(playing, {
     frames: file?.trajectory.frames ?? [],
     speed: playbackSpeed,
@@ -956,9 +228,7 @@ export default function App() {
     stateSyncFPS: highFidelityPlayback ? 120 : 15,
     isFrameReady,
     onFrameNeeded: requestBufferedFrame,
-    onFrame: (state) => {
-      // Sync UI timeline without forcing expensive React renders unnecessarily
-      // Only sync when playing. When paused, the store (user scrubbing) drives the hook.
+    onFrame: (state: InterpolatedFrameState) => {
       if (!isFrameReady(state.frameIndex)) {
         requestBufferedFrame(state.frameIndex);
         return;
@@ -968,11 +238,8 @@ export default function App() {
       }
     }
   });
-  const ghostFrame = ghostFile
-    ? ghostFile.trajectory.frames[Math.min(interpState.frameIndex, Math.max(ghostFile.trajectory.totalFrames - 1, 0))]
-    : null;
 
-  // Sync external frame updates (like timeline scrubber manually dragging) back to the hook when NOT playing
+  // Sync external frame updates back to the hook when NOT playing.
   useEffect(() => {
     if (!playing && frameIsBuffered && interpState.effectiveFrame !== frame) {
       setSmoothFrame(frame);
@@ -981,70 +248,6 @@ export default function App() {
     }
   }, [frame, frameIsBuffered, playing, requestBufferedFrame, setSmoothFrame, interpState.effectiveFrame]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Cmd/Ctrl+K opens the command palette from anywhere.
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setCommandPaletteOpen(open => !open);
-        return;
-      }
-
-      if (commandPaletteOpen) return; // palette owns its own keyboard nav
-
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
-
-      const currentFile = useStore.getState().file;
-      const isResearch = Boolean(currentFile?.name?.startsWith('research_') || currentFile?.sourceUrl?.includes('/research/'));
-
-      if (e.key === ' ' && !isResearch) { e.preventDefault(); togglePlay(); }
-      if (e.key === 'ArrowRight') nextFrame();
-      if (e.key === 'ArrowLeft') useStore.getState().prevFrame();
-      if (e.key === 'Escape') {
-        setActivePanel(null);
-        setStudioDeck(null);
-      }
-      if (e.key === 'v' && !e.metaKey && !e.ctrlKey) {
-        // Toggle the Controls panel. setActivePanel is the store's toggling
-        // setter, so passing 'studio' opens it (or closes it if already open).
-        // Seed studioDeck so the studio invariant holds on the way in — every
-        // other entry point keeps activePanel='studio' and studioDeck in sync,
-        // and this used to break that by nulling activePanel while setting the
-        // deck, which left the panel unrenderable on both desktop and mobile.
-        setViewMenuOpen(false);
-        setStudioDeck(current => current ?? 'molecule');
-        setActivePanel('studio');
-      }
-      if (e.key === 'x' && !e.metaKey && !e.ctrlKey) {
-        setStudioDeck(null);
-        setActivePanel('export');
-      }
-      if (e.key === 'b' && !e.metaKey && !e.ctrlKey) useStore.getState().toggleBonds();
-      if (e.key === 't' && !e.metaKey && !e.ctrlKey) {
-        setStudioDeck(null);
-        setActivePanel('telemetry');
-      }
-    };
-    window.addEventListener('keydown', handler);
-    // Track Shift for the click-to-annotate flow. AtomPicker's onClick can't
-    // see the original DOM event, so we mirror the modifier on a global
-    // ambient flag the click handler reads. Released-on-blur to avoid
-    // sticky state when the user alt-tabs while holding shift.
-    const shiftDown = (e: KeyboardEvent) => { if (e.key === 'Shift') (window as any).__atlasShiftHeld = true; };
-    const shiftUp = (e: KeyboardEvent) => { if (e.key === 'Shift') (window as any).__atlasShiftHeld = false; };
-    const blurReset = () => { (window as any).__atlasShiftHeld = false; };
-    window.addEventListener('keydown', shiftDown);
-    window.addEventListener('keyup', shiftUp);
-    window.addEventListener('blur', blurReset);
-    return () => {
-      window.removeEventListener('keydown', handler);
-      window.removeEventListener('keydown', shiftDown);
-      window.removeEventListener('keyup', shiftUp);
-      window.removeEventListener('blur', blurReset);
-    };
-  }, [togglePlay, nextFrame, setActivePanel, commandPaletteOpen]);
-
   // URL state restore + auto-load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1052,11 +255,6 @@ export default function App() {
     const state = intent?.state ?? params.get('s');
     if (state) {
       useStore.getState().decodeFromURL(state);
-      // Share links carry both a file source (sim=/load=) and view state
-      // (s=). The file lands asynchronously and setFile applies per-file
-      // scene defaults — which would silently clobber the decoded state
-      // (vector field, color scheme, bonds, ...). Re-apply the decode once
-      // after the first file mounts so the shared view actually wins.
       const unsub = useStore.subscribe(
         (s) => s.file,
         (loadedFile, prevFile) => {
@@ -1068,7 +266,6 @@ export default function App() {
       );
     }
 
-    // Restore flythrough from URL
     const flyParam = intent?.fly ?? params.get('fly');
     if (flyParam) {
       const seq = decodeFlythrough(flyParam);
@@ -1086,18 +283,12 @@ export default function App() {
     }
   }, []);
 
-  // Streaming trajectories keep placeholder (undefined) slots until each
-  // frame is fetched; playback and scrubbing can briefly outrun the fetch.
-  // Hold the last resident frame instead of unmounting the scene subtree —
-  // an unmount/remount per gap thrashes GPU buffers and flashes the view.
-  const lastResidentRef = useRef<{ trajectory: Trajectory | undefined; frame: Frame | undefined }>(
+  // Hold the last resident frame across streaming gaps.
+  const lastResidentRef = useRef<{ trajectory: import('@atlas/core/types').Trajectory | undefined; frame: import('@atlas/core/types').Frame | undefined }>(
     { trajectory: undefined, frame: undefined },
   );
   const rawCurrentFrame = file?.trajectory.frames[frame];
   if (lastResidentRef.current.trajectory !== file?.trajectory) {
-    // New trajectory or file closed — never carry a frame across; a stale
-    // hold after clearFile would keep the scene subtree alive with a null
-    // file and blank the whole page.
     lastResidentRef.current = { trajectory: file?.trajectory, frame: undefined };
   }
   if (rawCurrentFrame) lastResidentRef.current.frame = rawCurrentFrame;
@@ -1111,103 +302,14 @@ export default function App() {
     ? interpState.frameIndex
     : displayFrameIndex;
 
-  // Vector fields available on the loaded data (velocity/force triplets in
-  // frame.properties). Detected once per file — column sets don't change
-  // frame to frame in practice, and the store's vectorField id is validated
-  // against this list before mounting glyphs.
   const vectorFieldSpecs = useMemo(() => {
     const f0 = file?.trajectory.frames[0];
     return f0 ? detectFrameVectorFields(f0) : [];
   }, [file]);
   const activeVectorField = useMemo(
-    () => (vectorField ? vectorFieldSpecs.find((s) => s.id === vectorField) ?? null : null),
-    [vectorField, vectorFieldSpecs],
+    () => (useStore.getState().vectorField ? vectorFieldSpecs.find((s) => s.id === useStore.getState().vectorField) ?? null : null),
+    [vectorFieldSpecs],
   );
-
-  // Derived magnitude properties (|F|, |v|) are lazy: the controls list them
-  // before the arrays exist. Materialize them across the loaded frames the
-  // moment one is selected for coloring — an idempotent cache fill on each
-  // frame's properties map, done during render (an effect would be one paint
-  // late and AtomsOptimized memoizes per frame). Playback renders
-  // frames[interpState.frameIndex] which can lead the store's `frame`, so
-  // covering every resident frame keeps scrubbing/playing flash-free.
-  // Streaming trajectories have sparse placeholder arrays — null-guarded.
-  useMemo(() => {
-    if (!colorProperty || !file) return;
-    const spec = vectorFieldSpecs.find((s) => s.magnitudeProperty === colorProperty);
-    if (!spec) return;
-    for (const f of file.trajectory.frames) {
-      if (f) ensureVectorMagnitude(f, spec);
-    }
-  }, [colorProperty, file, vectorFieldSpecs]);
-
-  // Auto-derive the spatial-hash upper cap from the element-aware cutoff so
-  // the bond detector can never under-size its search radius. Walks the
-  // unique types in the current frame, finds the largest pair of covalent
-  // radii, and adds tolerance + a 0.5 Å slack. Bonds.tsx queries the
-  // spatial hash with this radius, so any pair the element-aware filter
-  // would accept is in scope. Capped at 6 Å (sane upper bound for any
-  // single chemical bond) to keep the spatial hash from collapsing into a
-  // single cell on systems with rare-earth radii. This is what the slider
-  // previously controlled directly; the slider now drives `bondTolerance`
-  // and the cap follows automatically.
-  const effectiveBondCutoff = useMemo(() => {
-    if (!currentFrame || !currentFrame.types || currentFrame.natoms === 0) {
-      return Math.min(6, 2 * 1.4 + bondTolerance);
-    }
-    const seen = new Set<number>();
-    let maxR = 0;
-    for (let i = 0; i < currentFrame.natoms; i++) {
-      const t = currentFrame.types[i];
-      if (seen.has(t)) continue;
-      seen.add(t);
-      const r = getElementSpec(t).radius;
-      if (r > maxR) maxR = r;
-    }
-    if (maxR === 0) maxR = 1.4;
-    return Math.min(6, 2 * maxR + bondTolerance + 0.5);
-  }, [currentFrame, bondTolerance]);
-
-  // Build cluster splats once streaming completes on a sufficiently
-  // large frame. Skips small frames (cluster overhead doesn't pay off
-  // below ~50K atoms), and skips during streaming (ClusterBuilder
-  // would aggregate the unfilled zero-position tail into a giant fake
-  // cluster at the origin). Runs in requestIdleCallback so the build
-  // doesn't compete with the streaming-completion render.
-  useEffect(() => {
-    setClusters(null);  // clear stale clusters when frame changes.
-    if (!currentFrame) return;
-    if (currentFrame.natoms < 50_000) return;
-    if (loadedAtomCount < currentFrame.natoms) return;
-    let cancelled = false;
-    const idleCb = (typeof requestIdleCallback !== 'undefined')
-      ? requestIdleCallback
-      : (cb: () => void) => setTimeout(cb, 0);
-    const cancelIdle = (typeof cancelIdleCallback !== 'undefined')
-      ? cancelIdleCallback
-      : clearTimeout;
-    const handle = idleCb(() => {
-      if (cancelled) return;
-      const built = buildClusters(currentFrame, { mobile: deviceQualityTier === 0 });
-      if (!cancelled) setClusters(built);
-    });
-    return () => { cancelled = true; cancelIdle(handle as any); };
-  }, [currentFrame, loadedAtomCount, deviceQualityTier]);
-
-  // Tune the splat fade range to the scene size. Splats stay invisible
-  // at default zoom (which is ~diagonal × 1.4) so atoms own the visible
-  // detail; they fade in as the user zooms out and atoms hit the
-  // sub-pixel cull. Values picked so the crossover lines up with
-  // pixel-cull range on a typical 1080p viewport: an atom of radius
-  // ~1 Å goes sub-pixel around camera distance ≈ diagonal × 3,
-  // saturated invisible by ≈ diagonal × 10.
-  const clusterFadeNear = useMemo(() => {
-    if (!file) return 300;
-    const { min, max } = file.trajectory.globalBounds;
-    const diag = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
-    return diag * 3;
-  }, [file?.name]);
-  const clusterFadeFar = useMemo(() => clusterFadeNear * 3.3, [clusterFadeNear]);
 
   const {
     cameraDistance,
@@ -1217,7 +319,7 @@ export default function App() {
     filterShellBaseRadius,
   } = useViewerSceneModel(file);
 
-  const bg = resolveBackground(backgroundPreset, colormap);
+  const bg = resolveBackground(backgroundPreset, useStore(s => s.colormap));
   const bgMedia = bg.media;
   const bgAdjustments = useMemo<BackgroundAssetAdjustments>(() => ({
     yawDegrees: backgroundYawDegrees,
@@ -1229,305 +331,52 @@ export default function App() {
     motionPaused: backgroundMotionPaused,
     motionSpeed: backgroundMotionSpeed,
   }), [
-    backgroundBrightness,
-    backgroundContrast,
-    backgroundMotionPaused,
-    backgroundMotionSpeed,
-    backgroundOpacity,
-    backgroundPitchDegrees,
-    backgroundSaturation,
-    backgroundYawDegrees,
+    backgroundBrightness, backgroundContrast, backgroundMotionPaused, backgroundMotionSpeed,
+    backgroundOpacity, backgroundPitchDegrees, backgroundSaturation, backgroundYawDegrees,
   ]);
-  const backgroundBackdropRadiusMax = useMemo(() => {
-    return getBackdropRadiusLimit(file);
-  }, [file]);
-  const backgroundBackdropEffectiveRadius = Math.max(
-    0.25,
-    Math.min(backgroundBackdropRadius, backgroundBackdropRadiusMax),
-  );
+  const backgroundBackdropRadiusMax = useMemo(() => getBackdropRadiusLimit(file), [file]);
+  const backgroundBackdropEffectiveRadius = Math.max(0.25, Math.min(backgroundBackdropRadius, backgroundBackdropRadiusMax));
+
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
-  const mobilePanelHeight = 'clamp(240px, 34dvh, 320px)';
-  // Content-heavy editors (studio controls, the flythrough sequencer, the export
-  // surface) get a taller sheet so they're usable on a phone; quick panels stay
-  // compact.
-  const tallMobilePanel = activePanel === 'studio' || activePanel === 'flythrough' || activePanel === 'export' || activePanel === 'telemetry';
-  const activeMobilePanelHeight = tallMobilePanel ? 'clamp(340px, 54dvh, 520px)' : mobilePanelHeight;
-  const mobileLoadedHeader = isMobile && !!file;
-  const headerHeight = isMobile
-    ? `calc(${mobileLoadedHeader ? '64px' : '48px'} + env(safe-area-inset-top))`
-    : 56;
-  // Mobile chrome anchoring — the persistent tab bar lifts above the timeline
-  // when a trajectory is loaded, and the bottom sheet always docks above the
-  // tab bar so the two never overlap. Centralized here so the bar, the sheet,
-  // and the floating launchers stay in lockstep.
   const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
-  const mobileTabBarBottom = mobileTimelineActive
-    ? 'calc(env(safe-area-inset-bottom) + 78px)'
-    : 'calc(env(safe-area-inset-bottom) + 10px)';
-  // The sheet is absolutely positioned inside the main viewport container, which
-  // already sits ABOVE the timeline; the tab bar is fixed to the viewport. When a
-  // timeline is present, the safe-area term cancels between the two anchors, so the
-  // sheet only needs a constant offset to clear the bar that overlaps the container.
-  const mobileSheetBottom = mobileTimelineActive
-    ? '88px'
-    : 'calc(env(safe-area-inset-bottom) + 66px)';
-  const mobilePanelOpen = isMobile && !!activePanel;
+
   const clearLoadedFile = useCallback(() => {
     useStore.getState().clearFile();
     const url = new URL(window.location.href);
     url.searchParams.delete('sim');
     url.searchParams.delete('load');
-    // Strip /view/:slug from the path so closing a saved view always
-    // returns the user to the landing page instead of a blank route.
-    if (url.pathname.startsWith('/view/')) {
-      url.pathname = '/';
-    }
-    // Saved views opened via #/view/<slug> must also be cleared; otherwise the
-    // hash route keeps isSavedViewRoute true and the landing page renders null.
+    if (url.pathname.startsWith('/view/')) url.pathname = '/';
     url.hash = '';
     window.history.pushState({}, '', url);
-    // Force the SPA route state to update synchronously so the landing page
-    // renders immediately instead of waiting for a popstate/hashchange event.
     setHashRoute(currentHashRoute());
     setPathRoute(currentPathRoute());
   }, []);
 
+  const studioDeck = useStore(s => s.studioDeck);
+
   return (
-    <div style={{
-      width: '100%', minHeight: '100vh',
-      height: file ? '100dvh' : 'auto',
-      overflow: file ? 'hidden' : 'visible',
-      background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
-      display: 'flex', flexDirection: 'column',
-    }}>
-      {/* ─── Desktop Header ─── */}
-      <header
-        className={file ? 'lupine-glass' : ''}
-        style={{
-          height: headerHeight,
-          minHeight: headerHeight,
-          flexShrink: 0,
-          display: mobileLoadedHeader ? 'grid' : 'flex',
-          alignItems: 'center',
-          justifyContent: mobileLoadedHeader ? undefined : 'space-between',
-          gridTemplateColumns: mobileLoadedHeader ? 'auto minmax(0, 1fr) auto' : undefined,
-          gridTemplateRows: mobileLoadedHeader ? '38px 28px' : undefined,
-          columnGap: mobileLoadedHeader ? 8 : undefined,
-          rowGap: mobileLoadedHeader ? 2 : undefined,
-          padding: mobileLoadedHeader ? 'calc(env(safe-area-inset-top) + 10px) 10px 6px' : (isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px'),
-          margin: file ? (isMobile ? '0 8px 0' : '14px 16px 0') : 0,
-          borderRadius: file ? 8 : 0,
-          borderBottom: file ? 'none' : '1px solid var(--border-subtle)',
-          background: file ? undefined : 'var(--bg-glass)',
-          backdropFilter: file ? undefined : 'blur(12px)',
-          WebkitBackdropFilter: file ? undefined : 'blur(12px)',
-          boxShadow: file ? '0 18px 48px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
-          zIndex: 200,
-        }}
-      >
-        {/* Logo + file breadcrumb */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: isMobile ? 6 : 12,
-          minWidth: 0,
-          gridColumn: mobileLoadedHeader ? '1 / 2' : undefined,
-          gridRow: mobileLoadedHeader ? '1' : undefined,
-        }}>
-          <button
-            onClick={() => {
-              if (file) {
-                clearLoadedFile();
-              }
-            }}
-            aria-label={file ? 'Return to Lupi home' : 'Lupi home'}
-            className="lupine-btn icon-only"
-            style={{
-              background: 'transparent',
-              borderColor: 'transparent',
-              boxShadow: 'none',
-              padding: isMobile ? '0 2px' : 6,
-              gap: 4,
-              cursor: file ? 'pointer' : 'default',
-              height: isMobile ? 34 : undefined,
-              minHeight: isMobile ? 34 : undefined,
-              aspectRatio: isMobile ? 'auto' : undefined,
-              flexShrink: 0,
-            }}
-          >
-            <span style={{
-              fontSize: isMobile ? 19 : 21, fontWeight: 750, color: 'var(--text-primary)',
-              letterSpacing: 0
-            }}>
-              Lupi
-            </span>
-          </button>
-
-          {file && !isMobile && (
-            <>
-              <div className="lupine-divider" style={{ display: isMobile ? 'none' : 'block' }} />
-
-              <span style={{
-                display: 'grid',
-                gap: 1,
-                minWidth: 0,
-                maxWidth: isMobile ? 92 : 300,
-              }}>
-                <span style={{
-                  fontSize: 10,
-                  color: 'rgba(203,213,225,0.48)',
-                  fontWeight: 760,
-                  lineHeight: 1,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0,
-                }}>
-                  Loaded
-                </span>
-                <span style={{
-                  fontSize: 13,
-                  color: 'var(--text-primary)',
-                  fontWeight: 650,
-                  lineHeight: 1.2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }} title={file.name}>
-                  {file.name}
-                </span>
-              </span>
-              <button
-                onClick={clearLoadedFile}
-                title="Close"
-                aria-label="Close dataset"
-                className="lupine-icon-btn"
-                style={{ width: 28, height: 28 }}
-              >
-                <IconClose />
-              </button>
-            </>
-          )}
-        </div>
-
-        {file && isMobile && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              minWidth: 0,
-              gridColumn: '1 / -1',
-              gridRow: '2',
-              padding: '0 1px',
-            }}
-          >
-            <span style={{
-              flexShrink: 0,
-              fontSize: 9,
-              color: 'rgba(203,213,225,0.48)',
-              fontWeight: 760,
-              lineHeight: 1,
-              textTransform: 'uppercase',
-              letterSpacing: 0,
-            }}>
-              Loaded
-            </span>
-            <span
-              title={file.name}
-              style={{
-                minWidth: 0,
-                flex: '1 1 auto',
-                fontSize: 12,
-                color: 'var(--text-primary)',
-                fontWeight: 650,
-                lineHeight: 1.15,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {file.name}
-            </span>
-            <button
-              onClick={clearLoadedFile}
-              title="Close"
-              aria-label="Close dataset"
-              className="lupine-icon-btn"
-              style={{
-                width: 28,
-                height: 28,
-                flexShrink: 0,
-              }}
-            >
-              <IconClose />
-            </button>
-          </div>
-        )}
-
-        {/* Top-right actions */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: isMobile ? 4 : 10,
-          minWidth: 0,
-          gridColumn: mobileLoadedHeader ? '2 / 4' : undefined,
-          gridRow: mobileLoadedHeader ? '1' : undefined,
-          justifySelf: mobileLoadedHeader ? 'end' : undefined,
-        }}>
-          {!file && (
-            <>
-              <a
-                href="#gallery"
-                onClick={(e) => {
-                  // Smooth-scroll to the Gallery section on the landing page
-                  // instead of mutating the hash route (which #/ left as a no-op).
-                  const el = document.getElementById('gallery');
-                  if (el) {
-                    e.preventDefault();
-                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }
-                }}
-                className="lupine-btn"
-                style={{
-                  padding: isMobile ? '7px 9px' : '8px 12px',
-                  fontSize: isMobile ? 12 : 13,
-                  minHeight: isMobile ? 34 : undefined,
-                }}
-              >
-                Gallery
-              </a>
-            </>
-          )}
-          {!file && (
-            <button
-              onClick={() => void openRandomOmol25Molecule()}
-              className="lupine-btn primary"
-              style={{
-                padding: isMobile ? '7px 10px' : '8px 14px',
-                fontSize: isMobile ? 12 : 14,
-                minHeight: isMobile ? 34 : undefined,
-              }}
-            >
-              {isMobile ? 'View' : 'View a molecule'}
-            </button>
-          )}
-          {/* Loop step 3: a clear Save entry the moment a molecule is on screen.
-              Anonymous → prompts sign-in (pending draft) → resumes save → share link. */}
-          {file && <SavedViewButton compact={isMobile} />}
-          <LupiAgentDock compact={isMobile} />
-        </div>
-      </header>
-      <LupiAuthCallout compact={isMobile} />
+    <div
+      className="lupine-app-root"
+      data-mobile={isMobile}
+      data-file={!!file}
+      data-timeline={mobileTimelineActive}
+      style={{
+        height: file ? '100dvh' : 'auto',
+        overflow: file ? 'hidden' : 'visible',
+        background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
+      }}
+    >
+      <GlobalShortcuts commandPaletteOpen={commandPaletteOpen} setCommandPaletteOpen={setCommandPaletteOpen} />
+      <AppHeader isMobile={isMobile} clearLoadedFile={clearLoadedFile} />
       <MoleculeConfigurator />
 
-      {/* ─── Main content ─── */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
         <McpViewerBridge />
         {isMcpViewerRoute && <McpViewerHarness />}
-        {/* 3D viewport */}
-        <div className="lupi-main-viewport" style={{
+
+        <div className="lupine-main-viewport" style={{
           position: file ? 'absolute' : 'fixed',
-          top: file ? 0 : 56, // below header when fixed
+          top: file ? 0 : 56,
           right: 0,
           bottom: 0,
           left: 0,
@@ -1547,326 +396,45 @@ export default function App() {
           >
             {import.meta.env.DEV && showDebugHud && <Perf position="top-left" logsPerSecond={4} matrixUpdate />}
             {(import.meta.env.DEV || showDebugHud) && <DevProbe enabled={showDebugHud} />}
-              <USDZExportHelper trigger={isExportingQuickLook} onComplete={() => setIsExportingQuickLook(false)} />
-            <ExportManager />
-            <SceneBackground
-              top={bg.top}
-              bottom={bg.bottom}
-              style={backgroundStyle}
-              media={bgMedia}
-              procedural={bg.procedural}
-              adjustments={bgAdjustments}
+            <ViewerScene
+              file={file}
+              currentFrame={currentFrame}
+              interpolatedFrame={interpolatedFrame}
+              interpolatedNextFrame={interpolatedNextFrame}
+              interpolationFactor={interpolationFactor}
+              interpolatedFrameKey={interpolatedFrameKey}
+              ghostFile={ghostFile}
+              interpState={interpState}
+              deviceMaxAtoms={deviceMaxAtoms}
+              deviceQualityTier={deviceQualityTier}
+              loadedAtomCount={loadedAtomCount}
               center={center}
-              distance={cameraDistance}
+              cameraDistance={cameraDistance}
+              cameraMinDistance={cameraMinDistance}
+              filterShellBaseRadius={filterShellBaseRadius}
+              bgTop={bg.top}
+              bgBottom={bg.bottom}
+              bgMedia={bgMedia}
+              bgProcedural={bg.procedural}
+              bgAdjustments={bgAdjustments}
+              bgStyle={backgroundStyle}
               backdropShape={backgroundBackdropShape}
               backdropPattern={backgroundBackdropPattern}
               backdropRadius={backgroundBackdropEffectiveRadius}
+              isExportingQuickLook={isExportingQuickLook}
+              setIsExportingQuickLook={setIsExportingQuickLook}
+              interactedForFileRef={interactedForFileRef}
+              activeVectorField={activeVectorField}
+              setVectorStats={setVectorStats}
             />
-            <XREnvironmentDome media={bgMedia} top={bg.top} bottom={bg.bottom} style={backgroundStyle} adjustments={bgAdjustments} disabled={!!bg.procedural} />
-            {/* Real-world light estimation: in AR this takes over scene.environment
-                with a live reflection map so the molecule mirrors the surroundings
-                (e.g. campfire) and adds a directional light tracking the real key
-                light. No-op outside an estimation-capable immersive-ar session. */}
-            <XRLightEstimation />
-
-            {/* Authored 3-point rig + HDRI environment, XR-aware: dims itself and
-                yields scene.environment to XRLightEstimation when AR lighting is
-                live. Bonds (MeshPhysicalMaterial) and the atom impostor shader both
-                read scene.environment for IBL reflections. */}
-            <SceneLighting />
-
             <CameraManager fileId={file?.name} center={center} distance={cameraDistance} near={cameraNear} />
             <PresetLegacyBridge />
-            <OrbitControls
-              makeDefault
-              enabled={!flythroughPreview}
-              target={center}
-              enableDamping
-              dampingFactor={0.08}
-              rotateSpeed={0.5}
-              panSpeed={0.4}
-              zoomSpeed={0.8}
-              minDistance={cameraMinDistance}
-              maxDistance={cameraDistance * 6}
-              onStart={() => {
-                const f = useStore.getState().file;
-                if (f && interactedForFileRef.current !== f.name) {
-                  interactedForFileRef.current = f.name;
-                  track(ANALYTICS_EVENTS.MOLECULE_INTERACTED, {
-                    atoms: f.trajectory.frames[0]?.natoms ?? 0,
-                  });
-                }
-              }}
-              onEnd={(e: any) => {
-                if (e?.target?.object && e?.target?.target) {
-                  useStore.getState().setCameraState(
-                    e.target.object.position.toArray(),
-                    e.target.target.toArray()
-                  );
-                }
-              }}
-            />
-
-            {currentFrame && (
-              <SpatialAnchor cameraDistance={cameraDistance}>
-                <MoleculeFilterShell
-                  center={center}
-                  radius={filterShellBaseRadius}
-                  shape={filterShellShape}
-                  preset={filterShellPreset}
-                  opacity={filterShellOpacity}
-                  radiusScale={filterShellRadius}
-                />
-                {filterShellShape !== 'off' && filterShellOpacity > 0 && (
-                  <MoleculeShadow
-                    center={center}
-                    moleculeRadius={filterShellBaseRadius}
-                    shellRadius={Math.max(0.5, filterShellBaseRadius * filterShellRadius)}
-                    azimuthDeg={keyLightAzimuth}
-                    elevationDeg={keyLightElevation}
-                    opacity={0.5}
-                  />
-                )}
-                <AnomalyTracker
-                  frame={currentFrame}
-                  colorProperty={colorProperty}
-                  active={anomalyTracking}
-                />
-                {ghostFrame && (
-                  <GhostAtoms
-                    frame={ghostFrame}
-                    scale={atomScale * 0.34}
-                  />
-                )}
-                <AtomsOptimized
-                  frame={interpolatedFrame ?? currentFrame!}
-                  nextFrame={interpolatedNextFrame}
-                  interpolationFactor={interpolationFactor}
-                  colorMode={colorMode}
-                  colorProperty={colorProperty ?? undefined}
-                  colormap={colormap}
-                  uniformColor={uniformAtomColor}
-                  elementColorOverrides={elementColorOverrides}
-                  atomColorSource={atomColorSource}
-                  scale={atomScale}
-                  maxAtoms={deviceMaxAtoms}
-                  loadedAtomCount={loadedAtomCount}
-                  onSpatialHash={setSpatialHash}
-                  hiddenAtomTypes={hiddenAtomTypes}
-                  atomTypeScales={atomTypeScales}
-                  materialPreset={materialPreset}
-                  materialIntensity={materialIntensity}
-                  rimLightIntensity={rimLightIntensity}
-                  surfaceRoughness={surfaceRoughness}
-                  surfacePolish={surfacePolish}
-                  surfaceClearcoat={surfaceClearcoat}
-                  keyLightAzimuth={keyLightAzimuth}
-                  keyLightElevation={keyLightElevation}
-                  fillLightAzimuth={fillLightAzimuth}
-                  fillLightElevation={fillLightElevation}
-                  rimLightAzimuth={rimLightAzimuth}
-                  rimLightElevation={rimLightElevation}
-                  fillLightColor={fillLightColor}
-                  rimLightColor={rimLightColor}
-                  atomTexture={atomTexture}
-                  propertyEmissionStrength={propertyEmissionStrength}
-                  etchTexture={etchTexture}
-                  etchAtomId={etchAtomId}
-                />
-                {/* Per-atom vector glyphs — force/velocity arrows for
-                    research payloads that dump vx/vy/vz, fx/fy/fz, or
-                    compute triplets. Rides the same frame pair + GPU
-                    interpolation as the atom impostors so arrows track
-                    atoms exactly during playback. */}
-                {activeVectorField && (
-                  <VectorGlyphs
-                    frame={interpolatedFrame ?? currentFrame!}
-                    nextFrame={interpolatedNextFrame}
-                    interpolationFactor={interpolationFactor}
-                    field={activeVectorField}
-                    scale={vectorScale}
-                    density={vectorDensity}
-                    colormap={colormap}
-                    hiddenAtomTypes={hiddenAtomTypes}
-                    onStats={setVectorStats}
-                  />
-                )}
-                {/* Phase 4: cluster splats fill the far-LOD gap left
-                    by the atom mesh's sub-pixel cull. Built off the
-                    main thread after streaming completes; renders
-                    nothing until then (clusters === null). */}
-                <AtomClusters
-                  clusters={clusters}
-                  fadeNear={clusterFadeNear}
-                  fadeFar={clusterFadeFar}
-                />
-                <Bonds
-                    frame={interpolatedFrame ?? currentFrame}
-                    nextFrame={interpolatedNextFrame}
-                    interpolationFactor={interpolationFactor}
-                    maxBondLength={effectiveBondCutoff}
-                    tolerance={bondTolerance}
-                    colormap={colormap}
-                    colorMode={colorMode}
-                    colorProperty={colorProperty ?? undefined}
-                    uniformColor={uniformAtomColor}
-                    elementColorOverrides={elementColorOverrides}
-                    radius={0.12}
-                    opacity={0.85}
-                    materialPreset={materialPreset}
-                    materialIntensity={materialIntensity}
-                    rimLightIntensity={rimLightIntensity}
-                    surfaceRoughness={surfaceRoughness}
-                    surfacePolish={surfacePolish}
-                    surfaceClearcoat={surfaceClearcoat}
-                    fillLightColor={fillLightColor}
-                    rimLightColor={rimLightColor}
-                    fillLightAzimuth={fillLightAzimuth}
-                    fillLightElevation={fillLightElevation}
-                    rimLightAzimuth={rimLightAzimuth}
-                    rimLightElevation={rimLightElevation}
-                    // Suppress bond detection while atoms are still
-                    // streaming in to prevent phantom bonds at origin.
-                    visible={showBonds && loadedAtomCount >= (interpolatedFrame ?? currentFrame).natoms}
-                    bondColorMode={bondColorMode}
-                    useGpu={useGpuBonds}
-                    atomColorSource={atomColorSource}
-                    onBondsUpdate={(info) => useStore.getState().reportBondsUpdate(info.source, info.count)}
-                    onGpuStatusChange={(status) => useStore.getState().setGpuBondsStatus(status)}
-                  />
-                {showCell && (
-                  <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />
-                )}
-
-                {/* Floor contact shadow under the molecule (when no shell is
-                    active — with a shell, MoleculeShadow lands on the shell
-                    instead). Sized to box-bounds diagonal so the soft falloff
-                    catches edge atoms. Disabled in 'diagram' preset (flat,
-                    figure-faithful) where any shadow would mislead. */}
-                {!(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
-                  const b = currentFrame.boxBounds;
-                  const cx = (b[0] + b[1]) / 2;
-                  const cy = b[2]; // floor = min Y of the cell
-                  const cz = (b[4] + b[5]) / 2;
-                  const dx = b[1] - b[0];
-                  const dz = b[5] - b[4];
-                  const planeSize = Math.max(dx, dz) * 1.6;
-                  return (
-                    <ContactShadows
-                      position={[cx, cy - 0.05, cz]}
-                      scale={planeSize}
-                      blur={2.4}
-                      far={Math.max(20, dx * 0.6)}
-                      opacity={postprocessPreset === 'cinematic' ? 0.55 : 0.32}
-                      resolution={1024}
-                      color="#04060c"
-                    />
-                  );
-                })()}
-
-                {/* Pinned text annotations. The same annotation list renders
-                    in one of four visual styles (tag/glyph/halo/etched) chosen
-                    in the Visuals panel — same data, very different presentations. */}
-                <AnnotationsLayer
-                  frame={currentFrame}
-                  annotations={annotations}
-                  style={labelStyle}
-                  onDismiss={(id) => useStore.getState().removeAnnotation(id)}
-                />
-
-                {/* Auto-generated semantic labels from the loaded asset metadata
-                    (e.g. Lupine Wiki sphere names and key node names). Rendered
-                    independently of user annotations so gallery curation can
-                    surface exact knowledge-graph semantics on top of the view. */}
-                <KnowledgeLabelsLayer
-                  labels={knowledgeLabels}
-                  visibleKinds={knowledgeLabelKinds}
-                  visible={showKnowledgeLabels}
-                />
-
-                {/* Click an atom to inspect it, mark it, and focus the camera.
-                    Shift-click keeps the lightweight annotation workflow. */}
-                <SelectionMarkers
-                  frame={currentFrame}
-                  selectedAtoms={selectedAtoms}
-                  hoveredAtom={hoveredAtom}
-                  typeRadii={TYPE_RADII}
-                  highlightedNeighbors={highlightedNeighbors}
-                  dimNonNeighbors={dimNonNeighbors}
-                />
-                <AtomInfoHUD
-                  frame={currentFrame}
-                  selectedAtoms={selectedAtoms}
-                  activeProperty={colorProperty ?? undefined}
-                  onDismissCard={(atomIndex) => useStore.getState().setSelectedAtoms(
-                    (prev) => prev.filter(idx => idx !== atomIndex),
-                  )}
-                />
-                <CameraFocus
-                  frame={currentFrame}
-                  enabled={!flythroughPreview}
-                />
-
-
-                {/* Worldline trails for annotated atoms.
-                    Scoped to bound memory at 1M-atom scenes; samples one new
-                    position per playback frame change so the trail length is
-                    in simulation time. Diffusion + dynamics get visual memory. */}
-                <AtomTrails
-                  frame={currentFrame}
-                  frameKey={interpolatedFrameKey}
-                  atomIndices={trackedAtomIndices}
-                />
-
-                {/* Click-to-inspect: AtomPicker owns the raycast and sends the
-                    selected atom into the store. */}
-                {spatialHash && (
-                  <AtomPicker
-                    frame={currentFrame}
-                    spatialHash={spatialHash}
-                    enabled
-                    onClick={(atomIndex) => {
-                      if (atomIndex == null) return;
-                      // Read the modifier from the latest mouse event via a
-                      // synthetic check on the document — drei doesn't pass
-                      // the original event through. Cheap workaround.
-                      const isAnnotate = (window as any).__atlasShiftHeld === true;
-                      if (isAnnotate) {
-                        const text = window.prompt('Annotation text', `atom #${atomIndex}`);
-                        if (text && text.trim()) {
-                          useStore.getState().addAnnotation(atomIndex, text.trim());
-                        }
-                      }
-                    }}
-                    onHover={(atomIndex) => useStore.getState().setHoveredAtom(atomIndex)}
-                    onSelect={(indices) => useStore.getState().setSelectedAtoms(indices)}
-                  />
-                )}
-
-              </SpatialAnchor>
-            )}
-
-            {showAxes && (
-              <GizmoHelper alignment="bottom-left" margin={[72, 72]}>
-                <GizmoViewport axisColors={['#ff4060', '#40ff80', '#4080ff']} labelColor="white" />
-              </GizmoHelper>
-            )}
-
-
-            <ScenePostprocessing />
           </ViewerCanvas>
 
           {import.meta.env.DEV && showDebugHud && <StateInspector />}
-
-          {/* Non-blocking renderer warning (e.g. WebGPU bond accelerator
-              unavailable/timed out → CPU fallback). The scene still renders;
-              this is informational and dismissible. */}
           <RendererWarningToast />
 
-          {/* (removed: GPU-unlock overlay, micro-effects layer, header shimmer) */}
-
-          {/* Scale bar for publication figures */}
-          {file && currentFrame && showScaleBar && (
+          {file && currentFrame && (
             <ScaleBar
               frame={currentFrame}
               cameraDistance={cameraDistance}
@@ -1875,93 +443,16 @@ export default function App() {
             />
           )}
 
-          {file && currentFrame && studyLensOpen && (
-            <StudyLensPanel
-              compact={isMobile}
-              onClose={() => setStudyLensOpen(false)}
-            />
+          {file && currentFrame && studyLensOpen && !isMobile && (
+            <StudyLensPanel compact={false} onClose={() => useStore.getState().setStudyLensOpen(false)} />
           )}
 
-          {/* Simple stats overlay */}
           {file && totalFrames > 1 && (
-            <div style={{
-              position: 'absolute', top: 16, left: 16,
-              pointerEvents: 'none',
-            }}>
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'baseline',
-                gap: 7,
-                background: 'linear-gradient(180deg, rgba(15,23,42,0.76), rgba(3,7,18,0.58))',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 8,
-                padding: '7px 10px',
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#f8fafc',
-                fontVariantNumeric: 'tabular-nums',
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
-                boxShadow: '0 12px 32px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.08)',
-              }}>
-                <span style={{ color: 'rgba(203,213,225,0.56)', fontSize: 10, textTransform: 'uppercase' }}>Frame</span>
-                {frame + 1} / {totalFrames}
-                {streamingFrameStatus && (
-                  <span
-                    role="status"
-                    aria-live="polite"
-                    aria-busy={streamingFrameStatus.tone === 'buffering'}
-                    data-testid="streaming-frame-status"
-                    data-state={streamingFrameStatus.tone}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      marginLeft: 2,
-                      padding: '3px 6px',
-                      borderRadius: 6,
-                      border: streamingFrameStatus.tone === 'buffering'
-                        ? '1px solid rgba(251,191,36,0.36)'
-                        : '1px solid rgba(45,212,191,0.30)',
-                      background: streamingFrameStatus.tone === 'buffering'
-                        ? 'rgba(146,64,14,0.34)'
-                        : 'rgba(15,118,110,0.26)',
-                      color: streamingFrameStatus.tone === 'buffering' ? '#fde68a' : '#99f6e4',
-                      fontSize: 9,
-                      fontWeight: 800,
-                      lineHeight: 1,
-                      textTransform: 'uppercase',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: 5,
-                        height: 5,
-                        borderRadius: 999,
-                        background: streamingFrameStatus.tone === 'buffering' ? '#f59e0b' : '#2dd4bf',
-                        boxShadow: streamingFrameStatus.tone === 'buffering'
-                          ? '0 0 8px rgba(245,158,11,0.72)'
-                          : '0 0 8px rgba(45,212,191,0.54)',
-                      }}
-                    />
-                    {streamingFrameStatus.label}
-                    <span style={{ color: 'rgba(248,250,252,0.72)', fontWeight: 700 }}>
-                      {streamingFrameStatus.detail}
-                    </span>
-                  </span>
-                )}
-              </div>
-            </div>
+            <PlaybackStatus frame={frame} totalFrames={totalFrames} />
           )}
 
           {showDebugHud && <TelemetryHUD />}
           <LabelPerfHUD />
-
-          {/* Colormap legend — appears when atoms are colored by a per-atom
-              scalar or a vector field is drawn, so the mapping is readable
-              as a measurement, not just a look. */}
           <PropertyLegendHUD
             frame={currentFrame}
             colorMode={colorMode}
@@ -1972,322 +463,30 @@ export default function App() {
             bottomOffset={isMobile ? 96 : 44}
           />
 
-
-          {/* Camera view selector — desktop only. On mobile these tools live in
-              the bottom tool bar so they're thumb-reachable, not floating. */}
-          {file && !isMobile && (
-            <div style={{
-              position: 'absolute',
-              top: 88,
-              left: 18,
-              display: 'grid',
-              flexDirection: 'column',
-              alignItems: 'start',
-              gap: 6,
-              padding: 5,
-              border: '1px solid rgba(255,255,255,0.10)',
-              borderRadius: 8,
-              background: 'linear-gradient(180deg, rgba(15,23,42,0.70), rgba(3,7,18,0.56))',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              boxShadow: '0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)',
-              zIndex: mobilePanelOpen ? 80 : 150,
-              opacity: mobilePanelOpen ? 0.5 : 1,
-              pointerEvents: mobilePanelOpen ? 'none' : undefined,
-              transition: 'opacity 160ms ease-out',
-            }}>
-              <button
-                onClick={() => {
-                  setViewMenuOpen(open => !open);
-                  setStudioDeck(null);
-                }}
-                title={`Camera view: ${cameraPresetName}`}
-                aria-label={`Camera view: ${cameraPresetName}`}
-                aria-expanded={viewMenuOpen}
-                className={`lupine-btn compact icon-only ${viewMenuOpen ? 'active' : ''}`}
-                style={{
-                  width: 48,
-                  height: 36,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  fontWeight: 820,
-                }}
-              >
-                {cameraPresetLabel}
-              </button>
-              {viewMenuOpen && (
-                <div
-                  className="lupine-glass lupine-glass--menu animate-menu-in"
-                  role="menu"
-                  aria-label="Camera presets"
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr',
-                    minWidth: 206,
-                    gap: 5,
-                  }}
-                >
-                  <CameraPresetOption code="XY" label="Top" detail="XY plane" active={cameraPreset === 'top'} onClick={() => { setCameraPreset('top'); setViewMenuOpen(false); }} />
-                  <CameraPresetOption code="XZ" label="Side" detail="XZ plane" active={cameraPreset === 'side'} onClick={() => { setCameraPreset('side'); setViewMenuOpen(false); }} />
-                  <CameraPresetOption code="YZ" label="Front" detail="YZ plane" active={cameraPreset === 'front'} onClick={() => { setCameraPreset('front'); setViewMenuOpen(false); }} />
-                  <CameraPresetOption code="ISO" label="Isometric" detail="3D angle" active={cameraPreset === 'iso'} onClick={() => { setCameraPreset('iso'); setViewMenuOpen(false); }} />
-                </div>
-              )}
-              <button
-                type="button"
-                data-testid="study-lens-toggle"
-                onClick={() => {
-                  setViewMenuOpen(false);
-                  setStudyLensOpen(open => !open);
-                }}
-                title="Study lens"
-                aria-label="Study lens"
-                aria-pressed={studyLensOpen}
-                className={`lupine-btn compact ${studyLensOpen ? 'active' : ''}`}
-                style={{
-                  width: 48,
-                  height: 36,
-                  padding: 0,
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <IconStudy />
-              </button>
-            </div>
-          )}
-
-          {/* Top-right scene tool rail — desktop only. On mobile the
-              persistent bottom tab bar owns the Controls entry, so showing
-              this too would duplicate it. */}
-          {file && !isMobile && (
-            <div style={{
-              position: 'absolute',
-              top: file ? 88 : 72,
-              right: 18,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: 6,
-              padding: 5,
-              border: '1px solid rgba(255,255,255,0.10)',
-              borderRadius: 8,
-              background: 'linear-gradient(180deg, rgba(15,23,42,0.70), rgba(3,7,18,0.56))',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              boxShadow: '0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)',
-              zIndex: 150,
-            }} role="toolbar" aria-label="Viewer tools" data-testid="viewer-tool-rail">
-              <ToolRailButton
-                label="Controls"
-                compact={isMobile}
-                shortLabel="Tune"
-                icon={<IconControls />}
-                active={activePanel === 'studio' && (studioDeck ?? 'molecule') !== 'export'}
-                onClick={toggleControlsPanel}
-              />
-              <ToolRailButton
-                label="Export"
-                compact={isMobile}
-                shortLabel="Export"
-                icon={<IconExport />}
-                active={activePanel === 'studio' && studioDeck === 'export'}
-                onClick={() => openStudioDeck('export')}
-              />
-              <ToolRailButton
-                label="Flythrough"
-                compact={isMobile}
-                shortLabel="Path"
-                icon={<IconFlythrough />}
-                active={activePanel === 'flythrough'}
-                onClick={() => openUtilityPanel('flythrough')}
-              />
-              <ToolRailButton
-                label="Data"
-                compact={isMobile}
-                shortLabel="Data"
-                icon={<IconTelemetryTool />}
-                active={activePanel === 'telemetry'}
-                onClick={() => openUtilityPanel('telemetry')}
-              />
-            </div>
-          )}
-
-          {/* AR/VR session entry — renders nothing when WebXR is
-              unsupported, so desktop browsers never see it. Mounted
-              outside the desktop-only cluster because headset browsers
-              (Quest) report as mobile. */}
+          {file && !isMobile && <CameraPresetRail />}
+          {file && !isMobile && <ToolRail isMobile={isMobile} />}
           {file && (
-            <div style={{
-              position: 'absolute',
-              top: isMobile ? 72 : 140,
-              right: 18,
-              zIndex: 149,
-            }}>
+            <div style={{ position: 'absolute', top: isMobile ? 72 : 140, right: 18, zIndex: 149 }}>
               <XREntryButton store={xrStore} />
             </div>
           )}
-
         </div>
 
-        {/* ─── Side panel / dockable windows ─── */}
-        {/* Mobile tab bar — persistent thumb-reachable navigation. Stays mounted
-            whenever a molecule is on screen (even with a panel open) so the
-            active surface is always one tap away, with a clear active state and
-            tap-to-toggle. */}
-        {isMobile && file && (
-          <nav
-            aria-label="Viewer navigation"
-            style={{
-              position: 'fixed',
-              bottom: mobileTabBarBottom,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 130,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              maxWidth: 'calc(100vw - 16px)',
-              background: 'linear-gradient(180deg, rgba(17,19,27,0.96), rgba(8,9,14,0.96))',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 999,
-              padding: '5px 6px',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              boxShadow: '0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
-            }}>
-            {viewMenuOpen && (
-              <div
-                className="lupine-glass lupine-glass--menu animate-menu-in"
-                style={{
-                  position: 'absolute',
-                  bottom: 'calc(100% + 8px)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                  minWidth: 132,
-                  gap: 5,
-                }}
-              >
-                <CameraPresetButton label="XY" active={cameraPreset === 'top'} onClick={() => { setCameraPreset('top'); setViewMenuOpen(false); }} title="Top view (XY plane)" />
-                <CameraPresetButton label="XZ" active={cameraPreset === 'side'} onClick={() => { setCameraPreset('side'); setViewMenuOpen(false); }} title="Side view (XZ plane)" />
-                <CameraPresetButton label="YZ" active={cameraPreset === 'front'} onClick={() => { setCameraPreset('front'); setViewMenuOpen(false); }} title="Front view (YZ plane)" />
-                <CameraPresetButton label="ISO" active={cameraPreset === 'iso'} onClick={() => { setCameraPreset('iso'); setViewMenuOpen(false); }} title="Isometric view" />
-              </div>
-            )}
-            <MobileTabButton
-              onClick={() => {
-                setViewMenuOpen(false);
-                if (activePanel === 'studio') { setActivePanel(null); return; }
-                setStudioDeck('molecule');
-                setActivePanel('studio');
-              }}
-              ariaLabel="Toggle controls panel"
-              active={activePanel === 'studio'}
-            >
-              CONTROLS
-            </MobileTabButton>
-            <MobileTabButton
-              onClick={() => setViewMenuOpen(open => !open)}
-              ariaLabel="Camera view"
-              active={viewMenuOpen}
-            >
-              {cameraPresetLabel}
-            </MobileTabButton>
-            <MobileTabButton
-              onClick={() => { setViewMenuOpen(false); setStudyLensOpen(open => !open); }}
-              ariaLabel="Study lens"
-              active={studyLensOpen}
-            >
-              STUDY
-            </MobileTabButton>
-          </nav>
-        )}
+        {isMobile && <MobileShell />}
 
-        {/* Mobile: dimming scrim behind the bottom sheet. Tapping the dimmed
-            scene closes the panel — a familiar bottom-sheet gesture. */}
-        {activePanel && file && isMobile && (
-          <div
-            aria-hidden="true"
-            onClick={() => setActivePanel(null)}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(2,4,10,0.42)',
-              zIndex: 90,
-              animation: 'fadeIn 200ms ease-out',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          />
-        )}
-
-        {/* Mobile: bottom sheet — docks above the persistent tab bar */}
-        {activePanel && file && isMobile && (
-          <div style={{
-            position: 'absolute',
-            top: 'auto',
-            right: 8,
-            bottom: mobileSheetBottom,
-            left: 8,
-            width: 'auto',
-            height: activeMobilePanelHeight,
-            maxHeight: activeMobilePanelHeight,
-            boxSizing: 'border-box',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 18,
-            background: 'var(--bg-glass)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflowY: activePanel === 'export' || activePanel === 'studio' ? 'hidden' : 'auto',
-            paddingBottom: 8,
-            paddingTop: 6,
-            boxShadow: '0 -2px 0 rgba(255,255,255,0.05) inset, 0 24px 64px rgba(0,0,0,0.55)',
-            zIndex: 100,
-            animation: 'slideInUp 240ms cubic-bezier(0.22, 1, 0.36, 1)',
-            WebkitOverflowScrolling: 'touch',
-          }}>
-            {/* Drag handle + close */}
-            <div
-              role="presentation"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 12px 8px', position: 'relative' }}
-            >
-              <div
-                aria-hidden="true"
-                style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.28)' }}
-              />
-              <button
-                onClick={() => setActivePanel(null)}
-                style={{ position: 'absolute', right: 10, top: 0, background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: 16, lineHeight: 1, padding: 8, minWidth: 40, minHeight: 40, touchAction: 'manipulation' }}
-                aria-label="Close panel"
-              >
-                ✕
-              </button>
-            </div>
-            <ErrorBoundary>
-              <ViewerPanelBody
-                activePanel={activePanel}
-                studioDeck={studioDeck}
-                onModeChange={openStudioDeck}
-                showChrome
-              />
-            </ErrorBoundary>
-          </div>
-        )}
-
-        {/* Desktop: dockable floating panels */}
         {!isMobile && file && (
           <PanelHost
             activePanel={activePanel}
             studioDeck={studioDeck}
-            onOpenStudioDeck={openStudioDeck}
+            onOpenStudioDeck={(mode) => {
+              useStore.getState().setViewMenuOpen(false);
+              useStore.getState().setStudioDeck(mode);
+              if (activePanel !== 'studio') setActivePanel('studio');
+            }}
             onClose={() => setActivePanel(null)}
           />
         )}
 
-        {/* Landing page (hero, featured, drop zone, gallery) */}
         {!file && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>
             {isMlipFlywheelRoute
@@ -2303,14 +502,15 @@ export default function App() {
         )}
       </div>
 
-      {/* ─── Batch Asset Generator overlay ─── */}
       {isBatchExport && <BatchAssetGenerator />}
 
-      {/* ─── Timeline ─── */}
       {file && totalFrames > 1 && (
         <div style={{
-          height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60, flexShrink: 0,
-          display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16,
+          height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: isMobile ? 8 : 16,
           padding: isMobile ? '8px 12px calc(env(safe-area-inset-bottom) + 8px)' : '0 20px',
           borderTop: '1px solid #1f2937',
           background: 'rgba(10,10,12,0.96)',
@@ -2319,49 +519,19 @@ export default function App() {
           zIndex: 120,
           scrollbarWidth: 'none',
         }}>
-          {/* Transport controls */}
           <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
-            <TransportButton
-              onClick={() => useStore.getState().setFrame(0)}
-              title="First frame"
-              icon={<IconFirst />}
-            />
-            <TransportButton
-              onClick={() => useStore.getState().prevFrame()}
-              title="Previous [←]"
-              icon={<IconPrev />}
-            />
-            <TransportButton
-              onClick={togglePlay}
-              title="Play/Pause [Space]"
-              icon={playing ? <IconPause /> : <IconPlay />}
-              active={playing}
-              width={40}
-            />
-            <TransportButton
-              onClick={nextFrame}
-              title="Next [→]"
-              icon={<IconNext />}
-            />
-            <TransportButton
-              onClick={() => useStore.getState().setFrame(totalFrames - 1)}
-              title="Last frame"
-              icon={<IconLast />}
-            />
+            <TransportButton onClick={() => useStore.getState().setFrame(0)} title="First frame" icon={<IconFirst />} />
+            <TransportButton onClick={() => useStore.getState().prevFrame()} title="Previous [←]" icon={<IconPrev />} />
+            <TransportButton onClick={togglePlay} title="Play/Pause [Space]" icon={playing ? <IconPause /> : <IconPlay />} active={playing} width={40} />
+            <TransportButton onClick={nextFrame} title="Next [→]" icon={<IconNext />} />
+            <TransportButton onClick={() => useStore.getState().setFrame(totalFrames - 1)} title="Last frame" icon={<IconLast />} />
           </div>
-
-          {/* Scrubber */}
           <ThermoMinimap
             thermo={file?.thermo ?? null}
             totalFrames={totalFrames}
             currentFrame={frame}
-            onFrameChange={(f) => {
-              if (playing) togglePlay();
-              setFrame(f);
-            }}
+            onFrameChange={(f) => { if (playing) togglePlay(); setFrame(f); }}
           />
-
-          {/* Frame counter */}
           <div style={{
             fontSize: '11px',
             fontFamily: 'var(--font-mono)',
@@ -2374,8 +544,6 @@ export default function App() {
             <span style={{ color: '#f8fafc', fontWeight: 500 }}>{Math.floor(frame) + 1}</span>
             <span style={{ color: '#475569' }}> / {totalFrames}</span>
           </div>
-
-          {/* Speed selector */}
           <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
             {[0.25, 0.5, 1, 2, 4].map(speed => (
               <button
@@ -2402,7 +570,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Command palette — global quick navigation */}
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
@@ -2432,14 +599,22 @@ export default function App() {
               group: 'Panels',
               shortcut: 'V',
               disabled: !file,
-              onSelect: () => openStudioDeck('molecule'),
+              onSelect: () => {
+                useStore.getState().setViewMenuOpen(false);
+                useStore.getState().setStudioDeck('molecule');
+                useStore.getState().setActivePanel('studio');
+              },
             },
             {
               id: 'controls-scene',
               label: 'Open Scene controls',
               group: 'Panels',
               disabled: !file,
-              onSelect: () => openStudioDeck('scene'),
+              onSelect: () => {
+                useStore.getState().setViewMenuOpen(false);
+                useStore.getState().setStudioDeck('scene');
+                useStore.getState().setActivePanel('studio');
+              },
             },
             {
               id: 'export-panel',
@@ -2447,18 +622,14 @@ export default function App() {
               group: 'Panels',
               shortcut: 'X',
               disabled: !file,
-              onSelect: () => {
-                setActivePanel('export');
-              },
+              onSelect: () => setActivePanel('export'),
             },
             {
               id: 'study-lens',
               label: 'Toggle study lens',
               group: 'Panels',
               disabled: !file,
-              onSelect: () => {
-                setStudyLensOpen(open => !open);
-              },
+              onSelect: () => useStore.getState().toggleStudyLens(),
             },
             {
               id: 'telemetry-panel',
@@ -2466,46 +637,42 @@ export default function App() {
               group: 'Panels',
               shortcut: 'T',
               disabled: !file,
-              onSelect: () => {
-                setActivePanel('telemetry');
-              },
+              onSelect: () => setActivePanel('telemetry'),
             },
             {
               id: 'flythrough-panel',
               label: 'Open flythrough',
               group: 'Panels',
               disabled: !file,
-              onSelect: () => {
-                setActivePanel('flythrough');
-              },
+              onSelect: () => setActivePanel('flythrough'),
             },
             {
               id: 'camera-top',
               label: 'Camera top view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => setCameraPreset('top'),
+              onSelect: () => useStore.getState().setCameraPreset('top'),
             },
             {
               id: 'camera-side',
               label: 'Camera side view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => setCameraPreset('side'),
+              onSelect: () => useStore.getState().setCameraPreset('side'),
             },
             {
               id: 'camera-front',
               label: 'Camera front view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => setCameraPreset('front'),
+              onSelect: () => useStore.getState().setCameraPreset('front'),
             },
             {
               id: 'camera-iso',
               label: 'Camera isometric view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => setCameraPreset('iso'),
+              onSelect: () => useStore.getState().setCameraPreset('iso'),
             },
             {
               id: 'toggle-bonds',
@@ -2537,301 +704,8 @@ export default function App() {
             },
           ];
           return list;
-        }, [file, activePanel, totalFrames, studyLensOpen, clearLoadedFile])}
+        }, [file, activePanel, totalFrames, clearLoadedFile])}
       />
     </div>
   );
 }
-
-// ─── Helper components ────────────────────────────────────────────────
-
-function CameraPresetOption({
-  code,
-  label,
-  detail,
-  active,
-  onClick,
-}: {
-  code: string;
-  label: string;
-  detail: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitemradio"
-      aria-checked={active}
-      onClick={onClick}
-      className={`lupine-menu-item ${active ? 'active' : ''}`}
-      style={{
-        minHeight: 38,
-        display: 'grid',
-        gridTemplateColumns: '42px 1fr',
-        gap: 8,
-        alignItems: 'center',
-        padding: '7px 9px',
-      }}
-    >
-      <span style={{
-        display: 'grid',
-        placeItems: 'center',
-        height: 26,
-        borderRadius: 6,
-        border: '1px solid rgba(255,255,255,0.10)',
-        background: active ? 'rgba(30,220,224,0.14)' : 'rgba(15,23,42,0.62)',
-        color: active ? '#99f6e4' : 'rgba(226,232,240,0.72)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        fontWeight: 820,
-        lineHeight: 1,
-      }}>
-        {code}
-      </span>
-      <span style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-        <span style={{ fontSize: 12, fontWeight: 780, color: active ? '#eaffff' : 'var(--text-primary)', lineHeight: 1 }}>
-          {label}
-        </span>
-        <span style={{ fontSize: 10, color: 'rgba(203,213,225,0.54)', lineHeight: 1 }}>
-          {detail}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function ToolRailButton({
-  label,
-  compact,
-  shortLabel,
-  icon,
-  active,
-  onClick,
-}: {
-  label: string;
-  compact: boolean;
-  shortLabel?: string;
-  icon: React.ReactNode;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const visibleLabel = compact ? (shortLabel ?? label) : label;
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={active}
-      title={label}
-      onClick={onClick}
-      className={`lupine-btn compact ${active ? 'active' : ''}`}
-      style={{
-        flexShrink: 0,
-        width: compact ? 50 : 'auto',
-        minWidth: compact ? 50 : 94,
-        height: compact ? 44 : 38,
-        padding: compact ? '4px 3px' : '0 12px',
-        gap: compact ? 2 : 7,
-        flexDirection: compact ? 'column' : 'row',
-        fontSize: compact ? 9 : 12,
-        fontWeight: 780,
-        letterSpacing: 0,
-        lineHeight: 1,
-      }}
-    >
-      <span style={{
-        display: 'flex',
-        width: compact ? 17 : 19,
-        height: compact ? 17 : 19,
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: active ? '#1edce0' : 'rgba(226,232,240,0.74)',
-        filter: active ? 'drop-shadow(0 0 7px rgba(30,220,224,0.50))' : 'none',
-      }}>
-        {icon}
-      </span>
-      <span style={{
-        minWidth: 0,
-        maxWidth: '100%',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      }}>
-        {visibleLabel}
-      </span>
-    </button>
-  );
-}
-
-/** Non-blocking, dismissible toast for renderer warnings (WebGPU accelerator
- *  unavailable/timed out → CPU fallback). role="status" so it's announced
- *  politely without stealing focus. The scene keeps rendering underneath. */
-function RendererWarningToast() {
-  const rendererWarning = useStore(s => s.rendererWarning);
-  const isCompact = useMediaQuery('(max-width: 640px)');
-  const [detailsOpen, setDetailsOpen] = useState(false);
-
-  useEffect(() => {
-    setDetailsOpen(false);
-  }, [rendererWarning, isCompact]);
-
-  if (!rendererWarning) return null;
-  const isCpuFallback = /GPU bond acceleration|CPU path/i.test(rendererWarning);
-  const severity = isCpuFallback ? 'notice' : 'warning';
-  const isNotice = severity === 'notice';
-  const isQuietNotice = isCompact && severity === 'notice';
-  const isExpanded = !isQuietNotice || detailsOpen;
-  const visibleWarning = isQuietNotice && !isExpanded ? 'CPU bond path active' : rendererWarning;
-  const announceWarning = isQuietNotice ? rendererWarning : undefined;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-label={announceWarning}
-      title={isQuietNotice ? rendererWarning : undefined}
-      style={{
-        position: 'absolute',
-        top: isCompact ? 10 : 16,
-        right: isCompact ? 10 : 16,
-        maxWidth: isCompact ? (isExpanded ? 'min(280px, calc(100vw - 20px))' : 'min(188px, calc(100vw - 20px))') : 280,
-        display: 'flex',
-        alignItems: isExpanded ? 'flex-start' : 'center',
-        gap: isCompact ? 6 : 8,
-        padding: isCompact ? '6px 8px' : '10px 12px',
-        background: isQuietNotice
-          ? (isExpanded ? 'rgba(12,16,24,0.86)' : 'rgba(12,16,24,0.58)')
-          : 'rgba(20,24,33,0.92)',
-        border: isNotice
-          ? '1px solid rgba(148,163,184,0.14)'
-          : '1px solid rgba(245,158,11,0.22)',
-        borderRadius: isQuietNotice && !isExpanded ? 999 : 'var(--radius-sm, 8px)',
-        backdropFilter: 'blur(10px)',
-        fontSize: isCompact ? 11 : 12,
-        lineHeight: 1.35,
-        color: isNotice && isCompact ? 'rgba(226,232,240,0.78)' : 'var(--text-muted, #9aa7bd)',
-        zIndex: 160,
-      }}
-    >
-      {isQuietNotice ? (
-        <button
-          type="button"
-          onClick={() => setDetailsOpen(open => !open)}
-          aria-expanded={detailsOpen}
-          aria-label={detailsOpen ? 'Collapse renderer warning details' : `Expand renderer warning details: ${rendererWarning}`}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: isExpanded ? 'normal' : 'nowrap',
-            background: 'transparent',
-            border: 'none',
-            color: 'inherit',
-            cursor: 'pointer',
-            font: 'inherit',
-            lineHeight: 'inherit',
-            padding: 0,
-            textAlign: 'left',
-          }}
-        >
-          {visibleWarning}
-        </button>
-      ) : (
-        <span style={{
-          flex: 1,
-          minWidth: 0,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: isCompact && isNotice ? 'nowrap' : 'normal',
-        }}>
-          {visibleWarning}
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={() => useStore.getState().setRendererWarning(null)}
-        aria-label="Dismiss warning"
-        title="Dismiss"
-        style={{
-          flexShrink: 0,
-          width: isCompact ? 20 : 18,
-          height: isCompact ? 20 : 18,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'transparent',
-          border: 'none',
-          color: 'var(--text-dim, #6b7688)',
-          cursor: 'pointer',
-          padding: 0,
-        }}
-      >
-        <IconClose />
-      </button>
-    </div>
-  );
-}
-
-/** Inline tab strip rendered at the top of a consolidated drawer. Switches
- *  the active panel without closing the drawer; currently used for the
- *  Export figure/path split. Each tab id corresponds to a panel id in
- *  activePanel. */
-function SubTabStrip({
-  active,
-  tabs,
-  children,
-}: {
-  active: string;
-  tabs: Array<{ id: string; label: string }>;
-  children: React.ReactNode;
-}) {
-  const setActivePanel = useStore(s => s.setActivePanel);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{
-        display: 'flex',
-        gap: 4,
-        padding: '8px 12px 0 12px',
-        borderBottom: '1px solid var(--border-subtle)',
-        flexShrink: 0,
-      }}>
-        {tabs.map(tab => {
-          const isActive = active === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActivePanel(tab.id as any)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                fontSize: 12,
-                fontWeight: isActive ? 600 : 500,
-                padding: '8px 14px',
-                cursor: 'pointer',
-                borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-                marginBottom: -1,
-                transition: 'color 150ms',
-              }}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto' }}>{children}</div>
-    </div>
-  );
-}
-
-const kbdStyle: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '2px 6px',
-  fontSize: '9px',
-  fontFamily: 'var(--font-mono)',
-  color: '#94a3b8',
-  background: '#121418',
-  border: '1px solid #334155',
-  borderRadius: 0,
-  marginRight: 4,
-};

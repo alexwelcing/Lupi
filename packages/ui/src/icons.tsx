@@ -73,3 +73,83 @@ export function IconControls() {
     </LupiGlyph>
   );
 }
+
+// ─── Transport arrows ─────────────────────────────────────────────────
+export function IconFirst({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M6 4v16M10 12l8-6v12l-8-6z" />
+    </svg>
+  );
+}
+
+export function IconPrev({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M19 20L9 12l10-8v16z" />
+    </svg>
+  );
+}
+
+export function IconNext({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M5 4l10 8-10 8V4z" />
+    </svg>
+  );
+}
+
+export function IconLast({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M18 4v16M14 12L6 6v12l8-6z" />
+    </svg>
+  );
+}
+
+// ─── Tool-rail glyphs ─────────────────────────────────────────────────
+export function IconStudy() {
+  return (
+    <LupiGlyph>
+      <path d="M7.2 7.4h4.2c1.1 0 2 .9 2 2v7.2H9.2c-1.1 0-2-.9-2-2V7.4Z" />
+      <path d="M13.4 9.4c.38-.32.88-.5 1.42-.5h2v7.2h-2c-.54 0-1.04.18-1.42.5" opacity="0.72" />
+      <path d="M9.1 10.2h2.1" opacity="0.7" />
+      <path d="M9.1 12.7h2.1" opacity="0.52" />
+    </LupiGlyph>
+  );
+}
+
+export function IconFlythrough() {
+  return (
+    <LupiGlyph>
+      <path d="M7.1 15.8c1.92-3.9 5.25-6.42 9.8-7.6" />
+      <path d="M12.4 7.2h4.5v4.5" />
+      <circle cx="7.35" cy="15.85" r="1.35" />
+      <circle cx="16.9" cy="8.2" r="1.35" />
+      <path d="M9.2 13.1c1.6.82 3.22.7 4.86-.36" opacity="0.56" />
+    </LupiGlyph>
+  );
+}
+
+export function IconTelemetryTool() {
+  return (
+    <LupiGlyph>
+      <path d="M7 15.9h10" opacity="0.54" />
+      <path d="M7.5 14.1l2.1-3 2.15 1.85 2.6-4.45 2.15 2.8" />
+      <path d="M7 7.4h2.2" opacity="0.54" />
+      <path d="M14.8 17.2H17" opacity="0.54" />
+    </LupiGlyph>
+  );
+}
+
+export function IconExport() {
+  return (
+    <LupiGlyph>
+      <path d="M7.1 8.3h6.3c1.28 0 2.32 1.04 2.32 2.32v4.58H7.1V8.3Z" />
+      <path d="M9.1 8.3 10.2 6h3.1l1.1 2.3" opacity="0.7" />
+      <circle cx="11.45" cy="12.05" r="1.45" />
+      <path d="M15.4 6.6h2.5v2.5" />
+      <path d="m17.9 6.6-4.2 4.2" />
+    </LupiGlyph>
+  );
+}

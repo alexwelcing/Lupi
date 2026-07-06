@@ -585,3 +585,199 @@ button:focus:not(:focus-visible) {
   animation: menu-in var(--duration-normal) var(--ease-out) forwards;
   transform-origin: top center;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   App Shell Primitives — shared layout & surface utilities
+   Extracted during the App.tsx streaming-UX refactor. No new styling
+   dependencies; everything is composed from existing design tokens.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Glass panels ─── */
+.lupine-glass-panel {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.74), rgba(3, 7, 18, 0.62)),
+    rgba(10, 10, 12, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32);
+}
+.lupine-glass-panel--compact {
+  padding: var(--sp-sm);
+}
+
+/* ─── Overlays ─── */
+.lupine-overlay {
+  position: absolute;
+  pointer-events: auto;
+  z-index: var(--z-overlay, 10);
+}
+.lupine-overlay--bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+.lupine-overlay--top-right {
+  top: var(--app-header-height, 72px);
+  right: 18px;
+}
+.lupine-overlay--top-left {
+  top: var(--app-header-height, 72px);
+  left: 18px;
+}
+
+/* ─── Flex primitives ─── */
+.lupine-flex-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.lupine-flex-col {
+  display: flex;
+  flex-direction: column;
+}
+.lupine-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Text truncation ─── */
+.lupine-truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Badges ─── */
+.lupine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.lupine-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.lupine-badge--buffering {
+  border: 1px solid rgba(251, 191, 36, 0.36);
+  background: rgba(146, 64, 14, 0.34);
+  color: #fde68a;
+}
+.lupine-badge--buffering::before {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.72);
+}
+.lupine-badge--warming {
+  border: 1px solid rgba(45, 212, 191, 0.30);
+  background: rgba(15, 118, 110, 0.26);
+  color: #99f6e4;
+}
+.lupine-badge--warming::before {
+  background: #2dd4bf;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.54);
+}
+.lupine-badge--warning {
+  border: 1px solid rgba(245, 158, 11, 0.40);
+  background: rgba(146, 64, 14, 0.40);
+  color: #fde68a;
+}
+.lupine-badge--warning::before {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.72);
+}
+
+/* ─── Rails (floating tool clusters) ─── */
+.lupine-rail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.70), rgba(3, 7, 18, 0.56));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.lupine-rail--row {
+  flex-direction: row;
+}
+.lupine-rail--col {
+  flex-direction: column;
+}
+
+/* ─── Mobile bottom sheet ─── */
+.lupine-sheet {
+  position: absolute;
+  right: 8px;
+  bottom: var(--app-mobile-sheet-bottom, 66px);
+  left: 8px;
+  height: var(--app-mobile-panel-height, clamp(240px, 34dvh, 320px));
+  max-height: var(--app-mobile-panel-height, clamp(240px, 34dvh, 320px));
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 6px 0 8px;
+  box-shadow:
+    0 -2px 0 rgba(255, 255, 255, 0.05) inset,
+    0 24px 64px rgba(0, 0, 0, 0.55);
+  z-index: 100;
+  animation: slideInUp 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-overflow-scrolling: touch;
+}
+.lupine-sheet--tall {
+  --app-mobile-panel-height: clamp(340px, 54dvh, 520px);
+}
+.lupine-sheet--handle {
+  width: 44px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ─── App root layout variables ─── */
+.lupine-app-root {
+  --app-header-height: 56px;
+  --app-mobile-tab-bar-bottom: calc(env(safe-area-inset-bottom) + 10px);
+  --app-mobile-sheet-bottom: calc(env(safe-area-inset-bottom) + 66px);
+  --app-mobile-panel-height: clamp(240px, 34dvh, 320px);
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.lupine-app-root[data-mobile='true'][data-file='true'] {
+  --app-header-height: calc(64px + env(safe-area-inset-top));
+}
+.lupine-app-root[data-mobile='true'][data-file='false'] {
+  --app-header-height: calc(48px + env(safe-area-inset-top));
+}
+.lupine-app-root[data-mobile='true'][data-timeline='true'] {
+  --app-mobile-tab-bar-bottom: calc(env(safe-area-inset-bottom) + 78px);
+  --app-mobile-sheet-bottom: 88px;
+}

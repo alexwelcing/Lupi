@@ -10,7 +10,8 @@
  * file/frame/thermo from the store itself.
  */
 import { useStore, type AppState } from './store';
-import { ViewerControlsDrawer, type ViewerControlMode } from './ViewerControlsDrawer';
+import { ViewerControlsDrawer } from './ViewerControlsDrawer';
+import { type ViewerControlMode } from './store';
 import { FigureExportPanel } from './panels/FigureExportPanel';
 import { FlythroughPanel } from './panels/FlythroughPanel';
 import { TelemetryPanel } from './panels/TelemetryPanel';

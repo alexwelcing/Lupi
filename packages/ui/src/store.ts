@@ -65,6 +65,7 @@ export type FilterShellShape = 'off' | 'sphere' | 'cube';
 export type FilterShellPreset = 'haze' | 'cryo' | 'prism' | 'graphite';
 export type BackgroundBackdropShape = 'dome' | 'sphere' | 'cube';
 export type BackgroundBackdropPattern = 'image' | 'plain' | 'grid';
+export type ViewerControlMode = 'molecule' | 'scene' | 'export';
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -397,6 +398,12 @@ export interface AppState {
   /** Sign-in callout visibility. Defaults CLOSED — the app never auto-prompts
    *  anonymous visitors to sign up; opened only by an explicit user action. */
   authPromptOpen: boolean;
+  /** Active studio deck inside the studio panel (molecule/scene/export). */
+  studioDeck: ViewerControlMode | null;
+  /** Camera preset popover open state. */
+  viewMenuOpen: boolean;
+  /** Study-lens overlay open state. */
+  studyLensOpen: boolean;
   /** Landing-page molecule configurator state for the on-page MCP demo. */
   configuratorOpen: boolean;
   configuratorSeed: string | null;
@@ -620,7 +627,13 @@ export interface AppState {
   setFillLightColor: (val: string) => void;
   setRimLightColor: (val: string) => void;
   setActivePanel: (panel: AppState['activePanel']) => void;
+  setStudioDeck: (studioDeck: ViewerControlMode | null) => void;
+  setViewMenuOpen: (viewMenuOpen: boolean) => void;
+  setStudyLensOpen: (studyLensOpen: boolean) => void;
+  toggleViewMenu: () => void;
+  toggleStudyLens: () => void;
   setAuthPromptOpen: (open: boolean) => void;
+  fitCameraView: () => void;
   openConfigurator: (seed?: string) => void;
   closeConfigurator: () => void;
   setEquilibriumSolve: (state: EquilibriumSolveState | null) => void;
@@ -758,6 +771,9 @@ const DEFAULTS = {
   colorblindMode: false,
   activePanel: null,
   authPromptOpen: false,
+  studioDeck: null,
+  viewMenuOpen: false,
+  studyLensOpen: false,
   configuratorOpen: false,
   configuratorSeed: null,
   activeProfile: null,
@@ -903,6 +919,10 @@ export const useStore = create<AppState>()(
         // path overrides via setLoadedAtomCount during the load.
         loadedAtomCount: atomCount,
       });
+      // Fit the camera to the newly-loaded bounds immediately. URL-state
+      // restore (decodeFromURL) may override this in a subsequent tick, but
+      // the default fit must happen first so bare file loads frame the scene.
+      get().fitCameraView();
     },
 
     setGhostFile: (ghostFile) => set({ ghostFile }),
@@ -1135,6 +1155,9 @@ export const useStore = create<AppState>()(
       activeCardId: null,
       error: null,
       activePanel: null,
+      studioDeck: null,
+      viewMenuOpen: false,
+      studyLensOpen: false,
       hoveredAtom: null,
       selectedAtoms: [],
       exportRequest: { type: null },
@@ -1274,6 +1297,23 @@ export const useStore = create<AppState>()(
 
     setCameraState: (position, target) => set({ cameraPosition: position, cameraTarget: target }),
 
+    fitCameraView: () => {
+      const state = get();
+      if (!state.file) return;
+      const { min, max } = state.file.trajectory.globalBounds;
+      const center: [number, number, number] = [
+        (min[0] + max[0]) / 2,
+        (min[1] + max[1]) / 2,
+        (min[2] + max[2]) / 2,
+      ];
+      const dx = max[0] - min[0], dy = max[1] - min[1], dz = max[2] - min[2];
+      const distance = Math.hypot(dx, dy, dz) * 1.4;
+      set({
+        cameraPosition: [center[0], center[1], center[2] + distance],
+        cameraTarget: center,
+      });
+    },
+
     setCameraPreset: (cameraPreset) => {
       const state = get();
       if (!state.file) return;
@@ -1315,6 +1355,12 @@ export const useStore = create<AppState>()(
       set({ cameraPreset, cameraPosition: position, cameraTarget: center });
     },
     setShowScaleBar: (showScaleBar) => set({ showScaleBar }),
+
+    setStudioDeck: (studioDeck) => set({ studioDeck }),
+    setViewMenuOpen: (viewMenuOpen) => set({ viewMenuOpen }),
+    setStudyLensOpen: (studyLensOpen) => set({ studyLensOpen }),
+    toggleViewMenu: () => set(s => ({ viewMenuOpen: !s.viewMenuOpen })),
+    toggleStudyLens: () => set(s => ({ studyLensOpen: !s.studyLensOpen })),
     setColorblindMode: (colorblindMode) => {
       // Auto-switch to a colorblind-friendly palette
       if (colorblindMode) {
