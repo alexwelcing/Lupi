@@ -69,6 +69,7 @@ import { SavedViewButton } from './SavedViewButton';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
 import { openRandomOmol25Molecule } from './molecules/randomOmol';
 import { loadSavedMolecularView } from './savedViews';
+import { requestStreamingFrame } from './streamingFrameCoordinator';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
 import { detectRenderCapability } from './renderCapability';
@@ -135,6 +136,32 @@ const IconStudy = () => (
     <path d="M13.4 9.4c.38-.32.88-.5 1.42-.5h2v7.2h-2c-.54 0-1.04.18-1.42.5" opacity="0.72" />
     <path d="M9.1 10.2h2.1" opacity="0.7" />
     <path d="M9.1 12.7h2.1" opacity="0.52" />
+  </LupiGlyph>
+);
+const IconFlythrough = () => (
+  <LupiGlyph>
+    <path d="M7.1 15.8c1.92-3.9 5.25-6.42 9.8-7.6" />
+    <path d="M12.4 7.2h4.5v4.5" />
+    <circle cx="7.35" cy="15.85" r="1.35" />
+    <circle cx="16.9" cy="8.2" r="1.35" />
+    <path d="M9.2 13.1c1.6.82 3.22.7 4.86-.36" opacity="0.56" />
+  </LupiGlyph>
+);
+const IconTelemetryTool = () => (
+  <LupiGlyph>
+    <path d="M7 15.9h10" opacity="0.54" />
+    <path d="M7.5 14.1l2.1-3 2.15 1.85 2.6-4.45 2.15 2.8" />
+    <path d="M7 7.4h2.2" opacity="0.54" />
+    <path d="M14.8 17.2H17" opacity="0.54" />
+  </LupiGlyph>
+);
+const IconExport = () => (
+  <LupiGlyph>
+    <path d="M7.1 8.3h6.3c1.28 0 2.32 1.04 2.32 2.32v4.58H7.1V8.3Z" />
+    <path d="M9.1 8.3 10.2 6h3.1l1.1 2.3" opacity="0.7" />
+    <circle cx="11.45" cy="12.05" r="1.45" />
+    <path d="M15.4 6.6h2.5v2.5" />
+    <path d="m17.9 6.6-4.2 4.2" />
   </LupiGlyph>
 );
 // ─── Background presets ───────────────────────────────────────────────
@@ -807,6 +834,11 @@ export default function App() {
     cameraPreset === 'side' ? 'XZ' :
     cameraPreset === 'front' ? 'YZ' :
     cameraPreset === 'iso' ? 'ISO' : 'View';
+  const cameraPresetName =
+    cameraPreset === 'top' ? 'Top' :
+    cameraPreset === 'side' ? 'Side' :
+    cameraPreset === 'front' ? 'Front' :
+    cameraPreset === 'iso' ? 'Iso' : 'Free';
 
   const openStudioDeck = useCallback((mode: ViewerControlMode) => {
     setViewMenuOpen(false);
@@ -816,8 +848,18 @@ export default function App() {
 
   const toggleControlsPanel = useCallback(() => {
     setViewMenuOpen(false);
-    setStudioDeck(current => current ?? 'molecule');
-    setActivePanel('studio');
+    if (activePanel === 'studio' && (studioDeck ?? 'molecule') !== 'export') {
+      setActivePanel(null);
+      return;
+    }
+    setStudioDeck(current => current === 'export' ? 'molecule' : current ?? 'molecule');
+    if (activePanel !== 'studio') setActivePanel('studio');
+  }, [activePanel, setActivePanel, studioDeck]);
+
+  const openUtilityPanel = useCallback((panel: 'flythrough' | 'telemetry') => {
+    setViewMenuOpen(false);
+    setStudioDeck(null);
+    setActivePanel(panel);
   }, [setActivePanel]);
 
   useEffect(() => {
@@ -862,6 +904,48 @@ export default function App() {
   }, [useGpuBonds, gpuBondsStatus]);
   const playbackFrameRate = file?.playbackFrameRate ?? 30;
   const highFidelityPlayback = Boolean(file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000);
+  const totalFrames = file?.trajectory.totalFrames ?? 0;
+  const frameIsBuffered = Boolean(file?.trajectory.frames[frame]);
+  const bufferedFrameCount = useMemo(() => (
+    file?.trajectory.frames.reduce((count, candidate) => count + (candidate ? 1 : 0), 0) ?? 0
+  ), [file]);
+  const streamingFrameStatus = useMemo(() => {
+    if (!file || totalFrames <= 1 || bufferedFrameCount >= totalFrames) return null;
+    if (!frameIsBuffered) {
+      return {
+        tone: 'buffering',
+        label: 'Buffering',
+        detail: `${Math.floor(frame) + 1}/${totalFrames}`,
+      };
+    }
+    return {
+      tone: 'warming',
+      label: 'Buffered',
+      detail: `${bufferedFrameCount}/${totalFrames}`,
+    };
+  }, [bufferedFrameCount, file, frame, frameIsBuffered, totalFrames]);
+  const displayFrameIndex = useMemo(() => {
+    if (!file || totalFrames <= 0) return 0;
+    const frames = file.trajectory.frames;
+    const requested = Math.max(0, Math.min(frame, totalFrames - 1));
+    if (frames[requested]) return requested;
+    for (let i = requested - 1; i >= 0; i -= 1) {
+      if (frames[i]) return i;
+    }
+    for (let i = requested + 1; i < totalFrames; i += 1) {
+      if (frames[i]) return i;
+    }
+    return 0;
+  }, [file, frame, totalFrames]);
+  const isFrameReady = useCallback((frameIndex: number) => {
+    const frames = useStore.getState().file?.trajectory.frames;
+    return Boolean(frames?.[frameIndex]);
+  }, []);
+  const requestBufferedFrame = useCallback((frameIndex: number) => {
+    const current = useStore.getState().frame;
+    const direction = frameIndex >= current ? 1 : -1;
+    requestStreamingFrame(frameIndex, direction, 12);
+  }, []);
 
   // Playback timer (replaced with smooth 60fps interpolator)
   const { currentState: interpState, setFrame: setSmoothFrame } = useSmoothFramePlayback(playing, {
@@ -870,9 +954,15 @@ export default function App() {
     targetFPS: highFidelityPlayback ? 120 : 60,
     mdFrameRate: playbackFrameRate,
     stateSyncFPS: highFidelityPlayback ? 120 : 15,
+    isFrameReady,
+    onFrameNeeded: requestBufferedFrame,
     onFrame: (state) => {
       // Sync UI timeline without forcing expensive React renders unnecessarily
       // Only sync when playing. When paused, the store (user scrubbing) drives the hook.
+      if (!isFrameReady(state.frameIndex)) {
+        requestBufferedFrame(state.frameIndex);
+        return;
+      }
       if (useStore.getState().playing && state.frameIndex !== useStore.getState().frame) {
         useStore.getState().setFrame(state.frameIndex);
       }
@@ -884,10 +974,12 @@ export default function App() {
 
   // Sync external frame updates (like timeline scrubber manually dragging) back to the hook when NOT playing
   useEffect(() => {
-    if (!playing && interpState.effectiveFrame !== frame) {
+    if (!playing && frameIsBuffered && interpState.effectiveFrame !== frame) {
       setSmoothFrame(frame);
+    } else if (!playing && !frameIsBuffered) {
+      requestBufferedFrame(frame);
     }
-  }, [frame, playing, setSmoothFrame, interpState.effectiveFrame]);
+  }, [frame, frameIsBuffered, playing, requestBufferedFrame, setSmoothFrame, interpState.effectiveFrame]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1010,7 +1102,14 @@ export default function App() {
   }
   if (rawCurrentFrame) lastResidentRef.current.frame = rawCurrentFrame;
   const currentFrame = file ? (rawCurrentFrame ?? lastResidentRef.current.frame) : undefined;
-  const totalFrames = file?.trajectory.totalFrames ?? 0;
+  const interpolatedFrame = file?.trajectory.frames[interpState.frameIndex] ?? file?.trajectory.frames[displayFrameIndex];
+  const interpolatedNextFrame = interpState.isInterpolating
+    ? file?.trajectory.frames[interpState.nextFrameIndex]
+    : undefined;
+  const interpolationFactor = interpolatedNextFrame ? interpState.interpolationFactor : 0;
+  const interpolatedFrameKey = interpolatedFrame === file?.trajectory.frames[interpState.frameIndex]
+    ? interpState.frameIndex
+    : displayFrameIndex;
 
   // Vector fields available on the loaded data (velocity/force triplets in
   // frame.properties). Detected once per file — column sets don't change
@@ -1151,7 +1250,7 @@ export default function App() {
   // Content-heavy editors (studio controls, the flythrough sequencer, the export
   // surface) get a taller sheet so they're usable on a phone; quick panels stay
   // compact.
-  const tallMobilePanel = activePanel === 'studio' || activePanel === 'flythrough' || activePanel === 'export';
+  const tallMobilePanel = activePanel === 'studio' || activePanel === 'flythrough' || activePanel === 'export' || activePanel === 'telemetry';
   const activeMobilePanelHeight = tallMobilePanel ? 'clamp(340px, 54dvh, 520px)' : mobilePanelHeight;
   const mobileLoadedHeader = isMobile && !!file;
   const headerHeight = isMobile
@@ -1540,9 +1639,9 @@ export default function App() {
                   />
                 )}
                 <AtomsOptimized
-                  frame={file!.trajectory.frames[interpState.frameIndex] ?? currentFrame!}
-                  nextFrame={interpState.isInterpolating ? file!.trajectory.frames[interpState.nextFrameIndex] : undefined}
-                  interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
+                  frame={interpolatedFrame ?? currentFrame!}
+                  nextFrame={interpolatedNextFrame}
+                  interpolationFactor={interpolationFactor}
                   colorMode={colorMode}
                   colorProperty={colorProperty ?? undefined}
                   colormap={colormap}
@@ -1581,9 +1680,9 @@ export default function App() {
                     atoms exactly during playback. */}
                 {activeVectorField && (
                   <VectorGlyphs
-                    frame={file!.trajectory.frames[interpState.frameIndex] ?? currentFrame!}
-                    nextFrame={interpState.isInterpolating ? file!.trajectory.frames[interpState.nextFrameIndex] : undefined}
-                    interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
+                    frame={interpolatedFrame ?? currentFrame!}
+                    nextFrame={interpolatedNextFrame}
+                    interpolationFactor={interpolationFactor}
                     field={activeVectorField}
                     scale={vectorScale}
                     density={vectorDensity}
@@ -1602,9 +1701,9 @@ export default function App() {
                   fadeFar={clusterFadeFar}
                 />
                 <Bonds
-                    frame={currentFrame}
-                    nextFrame={interpState.isInterpolating ? file!.trajectory.frames[interpState.nextFrameIndex] : undefined}
-                    interpolationFactor={interpState.isInterpolating ? interpState.interpolationFactor : 0}
+                    frame={interpolatedFrame ?? currentFrame}
+                    nextFrame={interpolatedNextFrame}
+                    interpolationFactor={interpolationFactor}
                     maxBondLength={effectiveBondCutoff}
                     tolerance={bondTolerance}
                     colormap={colormap}
@@ -1628,7 +1727,7 @@ export default function App() {
                     rimLightElevation={rimLightElevation}
                     // Suppress bond detection while atoms are still
                     // streaming in to prevent phantom bonds at origin.
-                    visible={showBonds && loadedAtomCount >= currentFrame.natoms}
+                    visible={showBonds && loadedAtomCount >= (interpolatedFrame ?? currentFrame).natoms}
                     bondColorMode={bondColorMode}
                     useGpu={useGpuBonds}
                     atomColorSource={atomColorSource}
@@ -1715,7 +1814,7 @@ export default function App() {
                     in simulation time. Diffusion + dynamics get visual memory. */}
                 <AtomTrails
                   frame={currentFrame}
-                  frameKey={interpState.frameIndex}
+                  frameKey={interpolatedFrameKey}
                   atomIndices={trackedAtomIndices}
                 />
 
@@ -1807,6 +1906,52 @@ export default function App() {
               }}>
                 <span style={{ color: 'rgba(203,213,225,0.56)', fontSize: 10, textTransform: 'uppercase' }}>Frame</span>
                 {frame + 1} / {totalFrames}
+                {streamingFrameStatus && (
+                  <span
+                    role="status"
+                    aria-live="polite"
+                    aria-busy={streamingFrameStatus.tone === 'buffering'}
+                    data-testid="streaming-frame-status"
+                    data-state={streamingFrameStatus.tone}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      marginLeft: 2,
+                      padding: '3px 6px',
+                      borderRadius: 6,
+                      border: streamingFrameStatus.tone === 'buffering'
+                        ? '1px solid rgba(251,191,36,0.36)'
+                        : '1px solid rgba(45,212,191,0.30)',
+                      background: streamingFrameStatus.tone === 'buffering'
+                        ? 'rgba(146,64,14,0.34)'
+                        : 'rgba(15,118,110,0.26)',
+                      color: streamingFrameStatus.tone === 'buffering' ? '#fde68a' : '#99f6e4',
+                      fontSize: 9,
+                      fontWeight: 800,
+                      lineHeight: 1,
+                      textTransform: 'uppercase',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: 999,
+                        background: streamingFrameStatus.tone === 'buffering' ? '#f59e0b' : '#2dd4bf',
+                        boxShadow: streamingFrameStatus.tone === 'buffering'
+                          ? '0 0 8px rgba(245,158,11,0.72)'
+                          : '0 0 8px rgba(45,212,191,0.54)',
+                      }}
+                    />
+                    {streamingFrameStatus.label}
+                    <span style={{ color: 'rgba(248,250,252,0.72)', fontWeight: 700 }}>
+                      {streamingFrameStatus.detail}
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -1856,8 +2001,8 @@ export default function App() {
                   setViewMenuOpen(open => !open);
                   setStudioDeck(null);
                 }}
-                title="Camera view"
-                aria-label="Camera view"
+                title={`Camera view: ${cameraPresetName}`}
+                aria-label={`Camera view: ${cameraPresetName}`}
                 aria-expanded={viewMenuOpen}
                 className={`lupine-btn compact icon-only ${viewMenuOpen ? 'active' : ''}`}
                 style={{
@@ -1873,17 +2018,19 @@ export default function App() {
               {viewMenuOpen && (
                 <div
                   className="lupine-glass lupine-glass--menu animate-menu-in"
+                  role="menu"
+                  aria-label="Camera presets"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                    minWidth: 102,
+                    gridTemplateColumns: '1fr',
+                    minWidth: 206,
                     gap: 5,
                   }}
                 >
-                  <CameraPresetButton label="XY" active={cameraPreset === 'top'} onClick={() => { setCameraPreset('top'); setViewMenuOpen(false); }} title="Top view (XY plane)" />
-                  <CameraPresetButton label="XZ" active={cameraPreset === 'side'} onClick={() => { setCameraPreset('side'); setViewMenuOpen(false); }} title="Side view (XZ plane)" />
-                  <CameraPresetButton label="YZ" active={cameraPreset === 'front'} onClick={() => { setCameraPreset('front'); setViewMenuOpen(false); }} title="Front view (YZ plane)" />
-                  <CameraPresetButton label="ISO" active={cameraPreset === 'iso'} onClick={() => { setCameraPreset('iso'); setViewMenuOpen(false); }} title="Isometric view" />
+                  <CameraPresetOption code="XY" label="Top" detail="XY plane" active={cameraPreset === 'top'} onClick={() => { setCameraPreset('top'); setViewMenuOpen(false); }} />
+                  <CameraPresetOption code="XZ" label="Side" detail="XZ plane" active={cameraPreset === 'side'} onClick={() => { setCameraPreset('side'); setViewMenuOpen(false); }} />
+                  <CameraPresetOption code="YZ" label="Front" detail="YZ plane" active={cameraPreset === 'front'} onClick={() => { setCameraPreset('front'); setViewMenuOpen(false); }} />
+                  <CameraPresetOption code="ISO" label="Isometric" detail="3D angle" active={cameraPreset === 'iso'} onClick={() => { setCameraPreset('iso'); setViewMenuOpen(false); }} />
                 </div>
               )}
               <button
@@ -1910,7 +2057,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Top-right controls launcher — desktop only. On mobile the
+          {/* Top-right scene tool rail — desktop only. On mobile the
               persistent bottom tab bar owns the Controls entry, so showing
               this too would duplicate it. */}
           {file && !isMobile && (
@@ -1919,8 +2066,9 @@ export default function App() {
               top: file ? 88 : 72,
               right: 18,
               display: 'flex',
+              alignItems: 'center',
               justifyContent: 'flex-end',
-              gap: 8,
+              gap: 6,
               padding: 5,
               border: '1px solid rgba(255,255,255,0.10)',
               borderRadius: 8,
@@ -1929,28 +2077,39 @@ export default function App() {
               WebkitBackdropFilter: 'blur(16px)',
               boxShadow: '0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)',
               zIndex: 150,
-            }}>
-              <button
-                type="button"
-                aria-label="Controls"
-                aria-expanded={activePanel === 'studio'}
-                title="Controls"
+            }} role="toolbar" aria-label="Viewer tools" data-testid="viewer-tool-rail">
+              <ToolRailButton
+                label="Controls"
+                compact={isMobile}
+                shortLabel="Tune"
+                icon={<IconControls />}
+                active={activePanel === 'studio' && (studioDeck ?? 'molecule') !== 'export'}
                 onClick={toggleControlsPanel}
-                className={`lupine-btn ${activePanel === 'studio' ? 'active' : ''}`}
-                style={{
-                  minWidth: 118,
-                  height: 38,
-                  gap: 8,
-                  padding: '0 14px',
-                  fontSize: 13,
-                  fontWeight: 760,
-                  letterSpacing: 0,
-                  touchAction: 'manipulation',
-                }}
-              >
-                <IconControls />
-                <span>Controls</span>
-              </button>
+              />
+              <ToolRailButton
+                label="Export"
+                compact={isMobile}
+                shortLabel="Export"
+                icon={<IconExport />}
+                active={activePanel === 'studio' && studioDeck === 'export'}
+                onClick={() => openStudioDeck('export')}
+              />
+              <ToolRailButton
+                label="Flythrough"
+                compact={isMobile}
+                shortLabel="Path"
+                icon={<IconFlythrough />}
+                active={activePanel === 'flythrough'}
+                onClick={() => openUtilityPanel('flythrough')}
+              />
+              <ToolRailButton
+                label="Data"
+                compact={isMobile}
+                shortLabel="Data"
+                icon={<IconTelemetryTool />}
+                active={activePanel === 'telemetry'}
+                onClick={() => openUtilityPanel('telemetry')}
+              />
             </div>
           )}
 
@@ -2385,6 +2544,124 @@ export default function App() {
 }
 
 // ─── Helper components ────────────────────────────────────────────────
+
+function CameraPresetOption({
+  code,
+  label,
+  detail,
+  active,
+  onClick,
+}: {
+  code: string;
+  label: string;
+  detail: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={active}
+      onClick={onClick}
+      className={`lupine-menu-item ${active ? 'active' : ''}`}
+      style={{
+        minHeight: 38,
+        display: 'grid',
+        gridTemplateColumns: '42px 1fr',
+        gap: 8,
+        alignItems: 'center',
+        padding: '7px 9px',
+      }}
+    >
+      <span style={{
+        display: 'grid',
+        placeItems: 'center',
+        height: 26,
+        borderRadius: 6,
+        border: '1px solid rgba(255,255,255,0.10)',
+        background: active ? 'rgba(30,220,224,0.14)' : 'rgba(15,23,42,0.62)',
+        color: active ? '#99f6e4' : 'rgba(226,232,240,0.72)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        fontWeight: 820,
+        lineHeight: 1,
+      }}>
+        {code}
+      </span>
+      <span style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+        <span style={{ fontSize: 12, fontWeight: 780, color: active ? '#eaffff' : 'var(--text-primary)', lineHeight: 1 }}>
+          {label}
+        </span>
+        <span style={{ fontSize: 10, color: 'rgba(203,213,225,0.54)', lineHeight: 1 }}>
+          {detail}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ToolRailButton({
+  label,
+  compact,
+  shortLabel,
+  icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  compact: boolean;
+  shortLabel?: string;
+  icon: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const visibleLabel = compact ? (shortLabel ?? label) : label;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      onClick={onClick}
+      className={`lupine-btn compact ${active ? 'active' : ''}`}
+      style={{
+        flexShrink: 0,
+        width: compact ? 50 : 'auto',
+        minWidth: compact ? 50 : 94,
+        height: compact ? 44 : 38,
+        padding: compact ? '4px 3px' : '0 12px',
+        gap: compact ? 2 : 7,
+        flexDirection: compact ? 'column' : 'row',
+        fontSize: compact ? 9 : 12,
+        fontWeight: 780,
+        letterSpacing: 0,
+        lineHeight: 1,
+      }}
+    >
+      <span style={{
+        display: 'flex',
+        width: compact ? 17 : 19,
+        height: compact ? 17 : 19,
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: active ? '#1edce0' : 'rgba(226,232,240,0.74)',
+        filter: active ? 'drop-shadow(0 0 7px rgba(30,220,224,0.50))' : 'none',
+      }}>
+        {icon}
+      </span>
+      <span style={{
+        minWidth: 0,
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
+        {visibleLabel}
+      </span>
+    </button>
+  );
+}
 
 /** Non-blocking, dismissible toast for renderer warnings (WebGPU accelerator
  *  unavailable/timed out → CPU fallback). role="status" so it's announced

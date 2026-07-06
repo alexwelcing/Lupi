@@ -17,6 +17,10 @@ import {
   allPairStyles,
 } from '@atlas/nist';
 import { getElementSpecBySymbol } from '@atlas/core';
+import {
+  clearStreamingFrameCoordinator,
+  installStreamingFrameCoordinator,
+} from '../streamingFrameCoordinator';
 
 // Base for NIST catalog + demo trajectories. Defaults to the bundled
 // public/nist/ path (catalog JSON is small — fine to ship). Heavy demo
@@ -197,10 +201,7 @@ export function PotentialBrowser() {
     const demoUrl = `${NIST_BASE}/${entry.demo_path}`;
 
     // Clean up any previous streaming session
-    if ((window as any).__atlasStreamingCleanup) {
-      (window as any).__atlasStreamingCleanup();
-      delete (window as any).__atlasStreamingCleanup;
-    }
+    clearStreamingFrameCoordinator();
 
     const { isGlimbinUrl } = await import('@atlas/parsers/StreamingLoader');
     if (!isGlimbinUrl(demoUrl)) {
@@ -243,31 +244,12 @@ export function PotentialBrowser() {
         sourceUrl: demoUrl,
       });
 
-      const unsubFrameWatch = useStore.subscribe(
-        (s) => s.frame,
-        async (frameIndex) => {
-          const currentFile = useStore.getState().file;
-          if (!currentFile) return;
-          if (currentFile.trajectory.frames[frameIndex]) return;
-          try {
-            const frame = await loader.fetchFrame(frameIndex);
-            const file = useStore.getState().file;
-            if (file) {
-              file.trajectory.frames[frameIndex] = frame;
-              useStore.setState({ file: { ...file } });
-            }
-            const isPlaying = useStore.getState().playing;
-            loader.prefetch(frameIndex, isPlaying ? 1 : 0, isPlaying ? 8 : 3);
-          } catch (err: any) {
-            console.warn(`[streaming] Frame ${frameIndex} fetch failed:`, err.message);
-          }
-        }
-      );
-
-      (window as any).__atlasStreamingCleanup = () => {
-        unsubFrameWatch();
-        loader.dispose();
-      };
+      installStreamingFrameCoordinator(loader, {
+        label: 'nist-streaming',
+        sourceUrl: demoUrl,
+        initialLookahead: 12,
+        playbackLookahead: 14,
+      });
 
       store.setLoading(false, 1);
     } catch (err: any) {

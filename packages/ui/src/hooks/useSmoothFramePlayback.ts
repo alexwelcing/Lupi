@@ -30,6 +30,10 @@ interface SmoothPlaybackOptions {
   stateSyncFPS?: number;
   /** Playback mode */
   loopMode?: 'loop' | 'bounce' | 'once';
+  /** Return false for streamed frames that are not resident yet. */
+  isFrameReady?: (frameIndex: number) => boolean;
+  /** Called when playback reaches a streamed frame that needs buffering. */
+  onFrameNeeded?: (frameIndex: number) => void;
   /** Called with interpolated frame data */
   onFrame: (state: InterpolatedFrameState) => void;
   /** Optional stats callback */
@@ -69,6 +73,8 @@ export function useSmoothFramePlayback(
     loopMode = 'loop',
     onFrame,
     onStats,
+    isFrameReady,
+    onFrameNeeded,
     stateSyncFPS = 15,
   } = options;
 
@@ -134,6 +140,33 @@ export function useSmoothFramePlayback(
       const interpolationFactor = newEffectiveFrame - frameIndex;
       const nextFrameIndex = Math.min(frameIndex + 1, totalFrames - 1);
 
+      const frameReady = isFrameReady?.(frameIndex) ?? true;
+      const nextReady = interpolationFactor > 0
+        ? (isFrameReady?.(nextFrameIndex) ?? true)
+        : true;
+
+      if (!frameReady || !nextReady) {
+        onFrameNeeded?.(!frameReady ? frameIndex : nextFrameIndex);
+        const heldIndex = Math.max(0, Math.min(prev.frameIndex, totalFrames - 1));
+        const heldState: InterpolatedFrameState = {
+          frameIndex: heldIndex,
+          nextFrameIndex: heldIndex,
+          interpolationFactor: 0,
+          isInterpolating: false,
+          effectiveFrame: heldIndex,
+        };
+        stateRef.current = heldState;
+
+        const stateSyncInterval = 1000 / Math.max(1, stateSyncFPS);
+        if (time - lastUISyncRef.current >= stateSyncInterval) {
+          setCurrentState(heldState);
+          lastUISyncRef.current = time;
+        }
+        totalInterpolationTimeRef.current += performance.now() - start;
+        rafIdRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
       const state: InterpolatedFrameState = {
         frameIndex,
         nextFrameIndex,
@@ -169,7 +202,7 @@ export function useSmoothFramePlayback(
     }
 
     rafIdRef.current = requestAnimationFrame(loop);
-  }, [frames.length, speed, targetFPS, loopMode, onFrame, onStats, stateSyncFPS, mdFrameTime]);
+  }, [frames.length, speed, targetFPS, loopMode, onFrame, onStats, isFrameReady, onFrameNeeded, stateSyncFPS, mdFrameTime]);
 
   // Start/stop playback
   useEffect(() => {
@@ -197,6 +230,10 @@ export function useSmoothFramePlayback(
     const intFrame = Math.floor(clamped);
     const interp = clamped - intFrame;
     const isInterp = interp > 0 && interp < 1;
+    if (isFrameReady && !isFrameReady(intFrame)) {
+      onFrameNeeded?.(intFrame);
+      return;
+    }
     
     const state: InterpolatedFrameState = {
       frameIndex: intFrame,
@@ -208,7 +245,7 @@ export function useSmoothFramePlayback(
     stateRef.current = state;
     setCurrentState(state);
     onFrame(state);
-  }, [frames.length, onFrame]);
+  }, [frames.length, onFrame, isFrameReady, onFrameNeeded]);
 
   const nextFrame = useCallback(() => {
     const prev = stateRef.current;

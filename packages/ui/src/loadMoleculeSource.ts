@@ -9,6 +9,10 @@ import {
   sourceFileId,
   OPFS_LIBRARY_DIR,
 } from './trajectoryLibrary';
+import {
+  clearStreamingFrameCoordinator,
+  installStreamingFrameCoordinator,
+} from './streamingFrameCoordinator';
 
 /** Trajectories at or above this many frames are worth moving onto the
  *  streaming substrate: the in-memory store would otherwise pin every
@@ -17,9 +21,7 @@ import {
 const STREAMING_FRAME_THRESHOLD = 12;
 
 function clearPreviousStreaming(): void {
-  const previousCleanup = (window as { __atlasStreamingCleanup?: () => void }).__atlasStreamingCleanup;
-  if (typeof previousCleanup === 'function') previousCleanup();
-  delete (window as { __atlasStreamingCleanup?: () => void }).__atlasStreamingCleanup;
+  clearStreamingFrameCoordinator();
 }
 
 /** Coarse, non-PII source classifier so the funnel can compare entry paths. */
@@ -91,33 +93,12 @@ export async function loadMoleculeSource(loadUrl: string): Promise<void> {
         sourceUrl: loadUrl,
       });
 
-      const unsubFrameWatch = useStore.subscribe(
-        (s) => s.frame,
-        async (frameIndex) => {
-          const currentFile = useStore.getState().file;
-          if (!currentFile) return;
-          if (currentFile.trajectory.frames[frameIndex]) return;
-
-          try {
-            const frame = await loader.fetchFrame(frameIndex);
-            const file = useStore.getState().file;
-            if (file) {
-              file.trajectory.frames[frameIndex] = frame;
-              useStore.setState({ file: { ...file } });
-            }
-            const isPlaying = useStore.getState().playing;
-            loader.prefetch(frameIndex, isPlaying ? 1 : 0, isPlaying ? 8 : 3);
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.warn(`[streaming] Frame ${frameIndex} fetch failed:`, message);
-          }
-        }
-      );
-
-      (window as { __atlasStreamingCleanup?: () => void }).__atlasStreamingCleanup = () => {
-        unsubFrameWatch();
-        loader.dispose();
-      };
+      installStreamingFrameCoordinator(loader, {
+        label: 'streaming',
+        sourceUrl: loadUrl,
+        initialLookahead: 12,
+        playbackLookahead: 14,
+      });
 
       // Activation: viewable molecule loaded (streaming path).
       track(ANALYTICS_EVENTS.MOLECULE_LOADED, {
@@ -234,32 +215,13 @@ export async function openLocalTrajectoryBlob(
     });
   }
 
-  const fetchAndSplice = async (frameIndex: number) => {
-    const currentFile = useStore.getState().file;
-    if (!currentFile || currentFile.trajectory.frames[frameIndex]) return;
-    try {
-      const frame = await source.fetchFrame(frameIndex);
-      const file = useStore.getState().file;
-      if (file) {
-        file.trajectory.frames[frameIndex] = frame;
-        useStore.setState({ file: { ...file } });
-      }
-      const isPlaying = useStore.getState().playing;
-      source.prefetch(frameIndex, isPlaying ? 1 : 0, isPlaying ? 8 : 3);
-    } catch (err) {
-      console.warn(`[local-streaming] frame ${frameIndex} failed:`, err);
-    }
-  };
-
-  const unsubFrameWatch = useStore.subscribe((s) => s.frame, fetchAndSplice);
-  // The subscription only fires on *change* — if the user already scrubbed
-  // to a frame that wasn't available during the transcode, backfill it now.
-  void fetchAndSplice(useStore.getState().frame);
-
-  (window as { __atlasStreamingCleanup?: () => void }).__atlasStreamingCleanup = () => {
-    unsubFrameWatch();
-    source.dispose();
-  };
+  installStreamingFrameCoordinator(source, {
+    label: 'local-streaming',
+    sourceUrl,
+    name,
+    initialLookahead: 12,
+    playbackLookahead: 14,
+  });
 
   track(ANALYTICS_EVENTS.MOLECULE_LOADED, { source: 'local-streaming', frames: meta.totalFrames });
 }

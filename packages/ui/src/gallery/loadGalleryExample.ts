@@ -1,6 +1,10 @@
 import { artifactToLoadedFile } from '../MlipArtifactLoader';
 import { useStore, type KnowledgeLabel } from '../store';
 import {
+  clearStreamingFrameCoordinator,
+  installStreamingFrameCoordinator,
+} from '../streamingFrameCoordinator';
+import {
   formatAtomCount,
   getDeviceProfile,
   parseAtomCountLabel,
@@ -8,11 +12,7 @@ import {
 import type { ViewerOpenResult } from '../viewer/openTypes';
 import { resolveExampleUrl, type GalleryExample, publicAssetUrl } from './catalog';
 
-function clearPreviousStreaming(): void {
-  const previousCleanup = (window as { __atlasStreamingCleanup?: () => void }).__atlasStreamingCleanup;
-  if (typeof previousCleanup === 'function') previousCleanup();
-  delete (window as { __atlasStreamingCleanup?: () => void }).__atlasStreamingCleanup;
-}
+// (previous streaming lifecycle is managed by streamingFrameCoordinator)
 
 function oversizeMessage(title: string, atomCount: number, ceiling: number, suffix: string) {
   return `"${title}" has ${suffix}${formatAtomCount(atomCount)} atoms, ` +
@@ -154,7 +154,7 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
   const store = useStore.getState();
   store.setLoading(true, 0);
   store.setActiveCardId(example.id);
-  clearPreviousStreaming();
+  clearStreamingFrameCoordinator();
   store.clearKnowledgeLabels();
 
   try {
@@ -216,32 +216,12 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
         sourceUrl: url,
       });
 
-      const unsubFrameWatch = useStore.subscribe(
-        (s) => s.frame,
-        async (frameIndex) => {
-          const currentFile = useStore.getState().file;
-          if (!currentFile) return;
-          if (currentFile.trajectory.frames[frameIndex]) return;
-          try {
-            const frame = await loader.fetchFrame(frameIndex);
-            const file = useStore.getState().file;
-            if (file) {
-              file.trajectory.frames[frameIndex] = frame;
-              useStore.setState({ file: { ...file } });
-            }
-            const isPlaying = useStore.getState().playing;
-            loader.prefetch(frameIndex, isPlaying ? 1 : 0, isPlaying ? 8 : 3);
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.warn(`[streaming] Frame ${frameIndex} fetch failed:`, message);
-          }
-        },
-      );
-
-      (window as { __atlasStreamingCleanup?: () => void }).__atlasStreamingCleanup = () => {
-        unsubFrameWatch();
-        loader.dispose();
-      };
+      installStreamingFrameCoordinator(loader, {
+        label: 'gallery-streaming',
+        sourceUrl: url,
+        initialLookahead: 12,
+        playbackLookahead: 14,
+      });
 
       if (example.autoPlay && meta.totalFrames > 1) {
         useStore.setState({ playing: true });

@@ -113,6 +113,8 @@ export function ThermoMinimap({
             cursor: 'pointer',
           }}
           className="amped-slider"
+          aria-label="Frame scrubber"
+          data-testid="frame-scrubber"
         />
         <style>{`
           .amped-slider::-webkit-slider-thumb {
@@ -214,6 +216,7 @@ export function ThermoMinimap({
           margin: 0,
         }}
         aria-label="Frame scrubber"
+        data-testid="frame-scrubber"
       />
     </div>
   );
