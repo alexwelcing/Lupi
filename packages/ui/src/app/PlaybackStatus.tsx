@@ -24,7 +24,7 @@ export function PlaybackStatus({ frame, totalFrames }: { frame: number; totalFra
 
   return (
     <div
-      className="lupine-overlay--top-left"
+      className="lupine-overlay lupine-overlay--top-left"
       style={{ top: 16, left: 16, pointerEvents: 'none' }}
     >
       <div className="lupine-glass-panel" style={{

@@ -781,3 +781,9 @@ button:focus:not(:focus-visible) {
   --app-mobile-tab-bar-bottom: calc(env(safe-area-inset-bottom) + 78px);
   --app-mobile-sheet-bottom: 88px;
 }
+
+/* Main WebGL viewport — ensure the r3f canvas fills the absolute/fixed shell. */
+.lupine-main-viewport canvas {
+  width: 100% !important;
+  height: 100% !important;
+}

@@ -170,7 +170,6 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
         ...loaded,
         name: example.title,
       });
-      nextStore.fitCameraView();
       nextStore.setFrame(0);
       nextStore.setColorScheme('element');
       nextStore.setColorProperty(null);
@@ -216,7 +215,6 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
         thermo: null,
         sourceUrl: url,
       });
-      useStore.getState().fitCameraView();
 
       installStreamingFrameCoordinator(loader, {
         label: 'gallery-streaming',
@@ -277,7 +275,6 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
               thermo: null,
               sourceUrl: url,
             });
-            streamingStore.fitCameraView();
             streamingStore.setLoadedAtomCount(0);
           } else if (event.type === 'progress') {
             streamingStore.setLoadedAtomCount(event.loadedAtoms);
@@ -318,7 +315,6 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
       thermo: result.thermo ?? null,
       sourceUrl: url,
     });
-    parsedStore.fitCameraView();
     if (example.colorBy && result.trajectory.frames[0]?.properties?.has(example.colorBy)) {
       parsedStore.setColorScheme('property');
       parsedStore.setColorProperty(example.colorBy);

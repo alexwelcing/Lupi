@@ -1,5 +1,6 @@
 import { useStore } from '../store';
 import { Rail } from '../primitives/AppShell';
+import { IconStudy } from '../icons';
 
 function CameraPresetOption({
   code,
@@ -64,6 +65,8 @@ export function CameraPresetRail() {
   const setViewMenuOpen = useStore(s => s.setViewMenuOpen);
   const toggleViewMenu = useStore(s => s.toggleViewMenu);
   const setStudioDeck = useStore(s => s.setStudioDeck);
+  const studyLensOpen = useStore(s => s.studyLensOpen);
+  const toggleStudyLens = useStore(s => s.toggleStudyLens);
 
   const cameraPresetLabel =
     cameraPreset === 'top' ? 'XY' :
@@ -78,9 +81,9 @@ export function CameraPresetRail() {
 
   return (
     <Rail
-      direction="row"
-      className="lupine-overlay--top-left"
-      style={{ top: 88 }}
+      direction="col"
+      className="lupine-overlay lupine-overlay--top-left"
+      style={{ top: 88, alignItems: 'flex-start' }}
     >
       <button
         type="button"
@@ -123,6 +126,27 @@ export function CameraPresetRail() {
           <CameraPresetOption code="ISO" label="Isometric" detail="3D angle" active={cameraPreset === 'iso'} onClick={() => { setCameraPreset('iso'); setViewMenuOpen(false); }} />
         </div>
       )}
+      <button
+        type="button"
+        data-testid="study-lens-toggle"
+        onClick={() => {
+          setViewMenuOpen(false);
+          toggleStudyLens();
+        }}
+        title="Study lens"
+        aria-label="Study lens"
+        aria-pressed={studyLensOpen}
+        className={`lupine-btn compact icon-only ${studyLensOpen ? 'active' : ''}`}
+        style={{
+          width: 48,
+          height: 36,
+          padding: 0,
+          display: 'grid',
+          placeItems: 'center',
+        }}
+      >
+        <IconStudy />
+      </button>
     </Rail>
   );
 }

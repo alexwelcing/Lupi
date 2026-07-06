@@ -171,6 +171,7 @@ export default function App() {
   const colorMode = useStore(s => s.colorMode);
   const colorProperty = useStore(s => s.colorProperty);
   const colormap = useStore(s => s.colormap);
+  const vectorField = useStore(s => s.vectorField);
 
   const isMobile = useMediaQuery('(max-width: 768px)');
   const showDebugHud = useMemo(() => {
@@ -307,8 +308,8 @@ export default function App() {
     return f0 ? detectFrameVectorFields(f0) : [];
   }, [file]);
   const activeVectorField = useMemo(
-    () => (useStore.getState().vectorField ? vectorFieldSpecs.find((s) => s.id === useStore.getState().vectorField) ?? null : null),
-    [vectorFieldSpecs],
+    () => (vectorField ? vectorFieldSpecs.find((s) => s.id === vectorField) ?? null : null),
+    [vectorField, vectorFieldSpecs],
   );
 
   const {
@@ -383,7 +384,7 @@ export default function App() {
           zIndex: 0,
         }}>
           <style>{`
-            .lupi-main-viewport canvas {
+            .lupine-main-viewport canvas {
               width: 100% !important;
               height: 100% !important;
             }

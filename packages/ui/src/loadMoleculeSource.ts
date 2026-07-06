@@ -92,7 +92,6 @@ export async function loadMoleculeSource(loadUrl: string): Promise<void> {
         thermo: null,
         sourceUrl: loadUrl,
       });
-      useStore.getState().fitCameraView();
 
       installStreamingFrameCoordinator(loader, {
         label: 'streaming',
@@ -145,7 +144,6 @@ async function loadParsedFile(fileObj: File, sourceUrl: string): Promise<void> {
     thermo: result.thermo ?? null,
     sourceUrl,
   });
-  useStore.getState().fitCameraView();
 
   // Activation: viewable molecule loaded (parsed/inline/remote path).
   track(ANALYTICS_EVENTS.MOLECULE_LOADED, {

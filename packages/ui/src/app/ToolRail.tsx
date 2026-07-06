@@ -94,7 +94,7 @@ export function ToolRail({ isMobile }: { isMobile: boolean }) {
       role="toolbar"
       aria-label="Viewer tools"
       data-testid="viewer-tool-rail"
-      className="lupine-overlay--top-right"
+      className="lupine-overlay lupine-overlay--top-right"
       style={{ top: 88 }}
     >
       <ToolRailButton
