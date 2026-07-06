@@ -10,6 +10,9 @@ import { MOLECULE_PROVIDERS, searchMolecules, type MoleculeHit, type MoleculeQue
 import { MoleculeSearch } from './molecules/MoleculeSearch';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { openMolecule } from './viewer/openMolecule';
+import { LUPI_MCP_TOOL_MAP, listLupiMcpTools } from './mcp/tools';
+import { createMcpCommandBus } from './mcp/commandBus';
+import { createLupiMcpDriver } from './mcp/driver';
 import {
   LUPI_VIEWER_MCP_VERSION,
   MAX_PERSISTED_EXPORT_CHARS,
@@ -142,6 +145,16 @@ interface LupiMcpResponsePayload {
   type: 'lupi:mcp:response';
 }
 
+interface LupiMcpStatus {
+  ready: true;
+  version: string;
+  toolCount: number;
+  moleculeLoaded: boolean;
+  atomCount: number;
+  frame: number;
+  playing: boolean;
+}
+
 interface LupiMcpDriver {
   ready: true;
   version: string;
@@ -149,6 +162,8 @@ interface LupiMcpDriver {
   executeBatch: (requests: LupiMcpRequest[]) => Promise<LupiMcpResponse[]>;
   parseCommand: (command: string) => LupiMcpRequest[];
   state: () => ReturnType<typeof readViewerState>;
+  status: () => LupiMcpStatus;
+  tools: () => ReturnType<typeof listLupiMcpTools>;
 }
 
 declare global {
@@ -404,14 +419,15 @@ const MAX_VISIBLE_RESPONSE_LOG = 12;
 
 export function McpViewerBridge() {
   useEffect(() => {
-    const driver: LupiMcpDriver = {
-      ready: true,
+    const driver = createLupiMcpDriver({
       version: LUPI_VIEWER_MCP_VERSION,
-      execute: executeLupiViewerMcpRequest,
-      executeBatch: executeLupiViewerMcpBatch,
-      parseCommand: parseViewerAgentCommand,
+      execute: executeLupiViewerMcpRequest as never,
+      executeBatch: executeLupiViewerMcpBatch as never,
+      parseCommand: parseViewerAgentCommand as never,
       state: readViewerState,
-    };
+      status: readMcpStatus,
+      tools: listLupiMcpTools,
+    }) as unknown as LupiMcpDriver;
     window.__lupiViewerMcp = driver;
     window.__lupiViewerMcpReady = true;
     window.__lupiViewerMcpResponses ??= readStoredMcpResponses();
@@ -1138,6 +1154,14 @@ async function executeLupiViewerMcpBatch(requests: LupiMcpRequest[]): Promise<Lu
 async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<LupiMcpResponse> {
   const transcript = [`received ${request.tool}`];
   try {
+    const registryTool = LUPI_MCP_TOOL_MAP.get(request.tool);
+    if (registryTool) {
+      const bus = createMcpCommandBus({ readState: readViewerState });
+      const result = await bus.dispatch(registryTool.handler, request as never);
+      transcript.push(`executed ${request.tool} via AI-control registry`);
+      return okResponse(request, transcript, result);
+    }
+
     if (request.tool === 'lupi.viewer_state') {
       return okResponse(request, transcript, { viewer: readViewerState() });
     }
@@ -1762,6 +1786,7 @@ function readViewerState() {
     atomScale: state.atomScale,
     showCell: state.showCell,
     showAxes: state.showAxes,
+    playbackSpeed: state.playbackSpeed,
     backgroundPreset: state.backgroundPreset,
     postprocessPreset: state.postprocessPreset,
     colorScheme: state.colorScheme,
@@ -1769,6 +1794,20 @@ function readViewerState() {
     colorProperty: state.colorProperty,
     colormap: state.colormap,
     cameraPreset: state.cameraPreset,
+  };
+}
+
+function readMcpStatus(): LupiMcpStatus {
+  const state = useStore.getState();
+  const frame = state.file?.trajectory.frames[state.frame];
+  return {
+    ready: true,
+    version: LUPI_VIEWER_MCP_VERSION,
+    toolCount: listLupiMcpTools().length,
+    moleculeLoaded: Boolean(state.file),
+    atomCount: frame?.natoms ?? 0,
+    frame: state.frame,
+    playing: state.playing,
   };
 }
 

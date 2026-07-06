@@ -1,0 +1,429 @@
+{
+  "schemaVersion": "0.3.0",
+  "generatedAt": "2026-07-06T17:24:08.350Z",
+  "tools": [
+    {
+      "name": "lupi.status",
+      "description": "Report MCP bridge readiness and viewer health.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "lupi.set_frame",
+      "description": "Jump to a specific trajectory frame.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "frame"
+        ],
+        "properties": {
+          "frame": {
+            "type": "number",
+            "description": "Zero-based trajectory frame index."
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.play",
+      "description": "Start trajectory playback.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "lupi.pause",
+      "description": "Pause trajectory playback.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "lupi.set_playback_speed",
+      "description": "Set playback speed multiplier.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "speed"
+        ],
+        "properties": {
+          "speed": {
+            "type": "number",
+            "minimum": 0.0625,
+            "maximum": 16,
+            "description": "Playback speed multiplier."
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_camera_preset",
+      "description": "Apply a named camera preset (top, side, front, iso, free).",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "preset"
+        ],
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "top",
+              "side",
+              "front",
+              "iso",
+              "free"
+            ],
+            "description": "Named camera preset."
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_camera",
+      "description": "Set camera position, target, and/or FOV directly.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Camera world position [x, y, z]."
+          },
+          "target": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Camera look-at target [x, y, z]."
+          },
+          "fov": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 120,
+            "description": "Vertical field of view in degrees."
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.fit_camera",
+      "description": "Fit the camera to the loaded molecule bounds.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "lupi.set_background",
+      "description": "Set background preset, style, motion, and adjustments.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "description": "Background environment preset id."
+          },
+          "style": {
+            "type": "string",
+            "description": "Background style variant."
+          },
+          "motionPaused": {
+            "type": "boolean"
+          },
+          "motionSpeed": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "brightness": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "saturation": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "contrast": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "yaw": {
+            "type": "number"
+          },
+          "pitch": {
+            "type": "number"
+          },
+          "shape": {
+            "type": "string",
+            "enum": [
+              "dome",
+              "sphere",
+              "cube"
+            ]
+          },
+          "pattern": {
+            "type": "string",
+            "enum": [
+              "image",
+              "plain",
+              "grid"
+            ]
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 0.25,
+            "maximum": 5
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_postprocess",
+      "description": "Set the postprocess preset and intensity.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "description": "Postprocess preset id."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_material",
+      "description": "Set material preset, scene, intensity, and atom texture.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "description": "Material preset id."
+          },
+          "scene": {
+            "type": "string",
+            "description": "Material scene id."
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "texture": {
+            "type": "string",
+            "enum": [
+              "none",
+              "scratched",
+              "noise"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_lighting",
+      "description": "Set lighting intensities, angles, and colors.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ambient": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "dir": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "rim": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "keyAzimuth": {
+            "type": "number"
+          },
+          "keyElevation": {
+            "type": "number"
+          },
+          "fillAzimuth": {
+            "type": "number"
+          },
+          "fillElevation": {
+            "type": "number"
+          },
+          "rimAzimuth": {
+            "type": "number"
+          },
+          "rimElevation": {
+            "type": "number"
+          },
+          "fillColor": {
+            "type": "string"
+          },
+          "rimColor": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_filter_shell",
+      "description": "Set the filter shell shape, preset, opacity, and radius.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "shape": {
+            "type": "string",
+            "enum": [
+              "off",
+              "sphere",
+              "cube"
+            ]
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "haze",
+              "cryo",
+              "prism",
+              "graphite"
+            ]
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 4
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_vector_field",
+      "description": "Set the active vector field glyph layer.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fieldId": {
+            "type": "string",
+            "description": "Vector field layer id or null to clear."
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 10
+          },
+          "density": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.set_atom_visibility",
+      "description": "Hide atom types or scale per-type radii.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "hiddenAtomTypes": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "atomTypeScales": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.add_annotation",
+      "description": "Add an etched annotation to a specific atom.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "atomIndex",
+          "text"
+        ],
+        "properties": {
+          "atomIndex": {
+            "type": "number",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.remove_annotation",
+      "description": "Remove an annotation by id.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.encode_view_url",
+      "description": "Serialize the current viewer state to a shareable URL.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "lupi.reset_viewer",
+      "description": "Reset the viewer to default state.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+# AGENTS.md — Operating Lupi via the Browser MCP Bridge
+
+> This file is for autonomous agents (Claude, Cursor, Kimi, etc.) that need to inspect, drive, or debug the Lupi molecular viewer at `lupi.live` without clicking the UI.
+
+## Quick Start
+
+1. Start the dev server:
+   ```bash
+   pnpm dev
+   # or
+   pnpm --filter @atlas/web dev
+   ```
+2. Open the viewer in a headless browser (Playwright, Puppeteer, etc.) at the root URL, e.g. `http://localhost:5173/` or `http://localhost:5173/#/mcp`.
+3. Wait until the bridge is ready:
+   ```js
+   await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true);
+   ```
+4. Execute a tool:
+   ```js
+   const result = await page.evaluate(() =>
+     window.__lupiViewerMcp.execute({
+       id: 'demo-1',
+       tool: 'lupi.set_camera_preset',
+       arguments: { preset: 'iso' }
+     })
+   );
+   ```
+
+## Bridge API
+
+When the viewer loads, the page exposes a global object:
+
+```ts
+window.__lupiViewerMcp: {
+  ready: true;
+  version: string;
+  execute(request: LupiMcpRequest): Promise<LupiMcpResponse>;
+  executeBatch(requests: LupiMcpRequest[]): Promise<LupiMcpResponse[]>;
+  parseCommand(command: string): LupiMcpRequest[];
+  state(): LupiMcpViewerState;
+  status(): LupiMcpStatus;
+  tools(): Array<{ name: string; description: string; parameters?: unknown }>;
+}
+```
+
+### Request shape
+
+```ts
+interface LupiMcpRequest {
+  id: string;      // any unique string
+  tool: string;    // one of the 19 lupi.* tools
+  arguments: Record<string, unknown>;
+}
+```
+
+### Response shape
+
+```ts
+interface LupiMcpResponse {
+  id: string;
+  tool: string;
+  ok: boolean;
+  result?: Record<string, unknown>;
+  error?: { code: string; message: string };
+  transcript: string[];
+}
+```
+
+## Status / Health
+
+Call `status()` to check readiness without executing a command:
+
+```js
+const status = await page.evaluate(() => window.__lupiViewerMcp.status());
+console.log(status);
+// {
+//   ready: true,
+//   version: '0.3.0',
+//   toolCount: 19,
+//   moleculeLoaded: true,
+//   atomCount: 250000,
+//   frame: 0,
+//   playing: false
+// }
+```
+
+Poll until `ready === true` and `toolCount > 0` before sending commands.
+
+## Tool Manifest
+
+A static JSON manifest is available at:
+
+```
+/mcp-manifest.json
+```
+
+Fetch it to discover tool names, descriptions, and JSON Schemas without loading the page. It is generated from the same source files as the runtime tool registry, so it cannot drift.
+
+```js
+const manifest = await page.evaluate(() =>
+  fetch('/mcp-manifest.json').then(r => r.json())
+);
+```
+
+## Tool Reference (19 tools)
+
+| Tool | Description | Example arguments |
+|------|-------------|-------------------|
+| `lupi.status` | Report bridge readiness and viewer health. | `{}` |
+| `lupi.set_frame` | Jump to a trajectory frame. | `{ frame: 0 }` |
+| `lupi.play` | Start playback. | `{}` |
+| `lupi.pause` | Pause playback. | `{}` |
+| `lupi.set_playback_speed` | Set speed multiplier (0.0625–16). | `{ speed: 1.5 }` |
+| `lupi.set_camera_preset` | Apply top, side, front, iso, or free. | `{ preset: 'iso' }` |
+| `lupi.set_camera` | Set camera position/target/FOV. | `{ position: [10,10,10], target: [0,0,0], fov: 45 }` |
+| `lupi.fit_camera` | Fit camera to molecule bounds. | `{}` |
+| `lupi.set_background` | Set background preset, style, motion, etc. | `{ preset: 'blueprint', postprocessPreset: 'diagram' }` |
+| `lupi.set_postprocess` | Set postprocess preset/intensity. | `{ preset: 'studio', intensity: 0.8 }` |
+| `lupi.set_material` | Set material preset/scene/intensity/texture. | `{ preset: 'metallic', scene: 'studio', intensity: 1.0 }` |
+| `lupi.set_lighting` | Adjust ambient/dir/rim lights and angles. | `{ ambient: 0.6, dir: 0.8, rim: 0.4 }` |
+| `lupi.set_filter_shell` | Set filter shell shape/preset/opacity/radius. | `{ shape: 'sphere', preset: 'haze', opacity: 0.3 }` |
+| `lupi.set_vector_field` | Set vector field layer/scale/density. | `{ fieldId: 'velocity', scale: 1.0, density: 0.5 }` |
+| `lupi.set_atom_visibility` | Hide atom types or scale per-type radii. | `{ hiddenAtomTypes: [1], atomTypeScales: { '29': 1.2 } }` |
+| `lupi.add_annotation` | Add an etched label to an atom. | `{ atomIndex: 10, text: 'active site' }` |
+| `lupi.remove_annotation` | Remove an annotation by id. | `{ id: 'abc-123' }` |
+| `lupi.encode_view_url` | Serialize current state to a shareable URL. | `{}` |
+| `lupi.reset_viewer` | Reset viewer to defaults. | `{}` |
+
+## Natural-Language / URL API
+
+For a fuller model-facing handoff, including UI critique and recommended integration loop, see:
+
+```
+docs/mcp-model-integration-brief.md
+```
+
+You can trigger a run without writing JSON:
+
+- Console: `window.__lupiViewerMcp.parseCommand('generate 100k copper fcc atoms, hide bonds, show cell, iso camera')`
+- URL: `http://localhost:5173/?mcpCommand=generate+100k+copper+fcc+atoms`
+- URL: `http://localhost:5173/#/mcp?mcpCommand=generate+100k+copper+fcc+atoms`
+
+Common recognized keywords:
+- `generate 100k copper fcc atoms` — procedural lattice
+- `hide bonds`, `show bonds`, `show cell`, `show axes`
+- `studio`, `paper`, `editorial`, `cinematic`, `diagram` — postprocess presets
+- `iso`, `top`, `side`, `front`, `free` — camera presets
+
+## Verification Harness
+
+Run the Playwright-based smoke test against the built-in dev server:
+
+```bash
+pnpm run verify:mcp-bridge
+```
+
+Or point it at an already-running dev server:
+
+```bash
+node tools/verify-mcp-bridge.mjs --url=http://127.0.0.1:5173/#/mcp --json
+```
+
+The `--json` flag emits a machine-readable report to stdout. Non-zero exit code indicates failure.
+
+## Common Failures
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `window.__lupiViewerMcp` is `undefined` | Viewer not on a route that mounts the bridge. | Navigate to `/#/mcp` or wait for the route guard. |
+| `ready` is `false` | Store not hydrated or route guard is `false`. | Check `window.__lupiViewerMcpVersion` exists; wait a tick. |
+| `No molecule is loaded` | Tool needs a file but none is loaded. | Run `lupi.generate_molecule` via `parseCommand` first, or load via URL. |
+| `Unsupported Lupi viewer MCP tool` | Tool name typo or old manifest. | Compare against `/mcp-manifest.json`. |
+| PubChem fetch fails | Network or CORS. | Use a local template or SMILES that matches `TEMPLATE_MOLECULES`. |
+
+## Security Notes
+
+- The bridge accepts commands only from the same origin and `localhost` origins.
+- It does not execute arbitrary JavaScript passed as arguments; arguments are parsed as typed tool inputs.
+- The `lupi.generate_molecule` tool may call external APIs (PubChem) from the browser.
+
+## Regenerating the Manifest
+
+After changing tool definitions or schemas, regenerate the manifest before testing:
+
+```bash
+pnpm run generate:mcp-manifest
+```
+
+## Full CI Checklist
+
+```bash
+pnpm install
+pnpm run generate:mcp-manifest
+pnpm --filter @atlas/ui build
+pnpm --filter @atlas/ui test
+pnpm run lint
+pnpm run verify:mcp-bridge
+```
