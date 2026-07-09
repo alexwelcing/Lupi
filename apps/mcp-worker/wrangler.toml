@@ -3,6 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2026-07-09"
 workers_dev = true
 preview_urls = true
+keep_vars = true
+
+[[routes]]
+pattern = "lupi.live/*"
+zone_name = "lupi.live"
+
+[[routes]]
+pattern = "www.lupi.live/*"
+zone_name = "lupi.live"
 
 [assets]
 directory = "../web/dist"
