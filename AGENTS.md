@@ -1,6 +1,46 @@
-# AGENTS.md — Operating Lupi via the Browser MCP Bridge
+# AGENTS.md — Operating Lupi via MCP
 
-> This file is for autonomous agents (Claude, Cursor, Kimi, etc.) that need to inspect, drive, or debug the Lupi molecular viewer at `lupi.live` without clicking the UI.
+> This file is for autonomous agents (Claude, Cursor, Kimi, etc.) that need to request molecule assets or inspect/debug the Lupi molecular viewer without clicking the UI.
+
+## Preferred Path: Cloudflare Edge
+
+For app and agent-native workflows, use the Cloudflare edge Worker instead of
+launching a browser. The Worker lives in `apps/mcp-worker` and serves both the
+web app and MCP JSON-RPC over HTTP:
+
+```bash
+pnpm cloudflare:build
+pnpm cloudflare:test
+pnpm cloudflare:dev
+```
+
+Core endpoints:
+
+- `GET /` — built Lupi web app from Workers static assets
+- `GET /view/:slug` — saved-view social/share HTML
+- `POST /collectAnalytics` — first-party analytics edge collector
+- `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
+- `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
+- `GET /health` — service and binding readiness
+- `GET /mcp-manifest.json` — Cloudflare MCP tool manifest
+- `GET /browser-mcp-manifest.json` — browser bridge manifest compatibility path
+- `POST /v1/render` — REST shortcut for `lupi.render_molecule_asset`
+- `GET /v1/jobs/:jobId` — render job status
+- `GET /assets/:assetId.:ext` — R2 asset delivery once rendering is configured
+
+The Worker is intentionally browser-free. It validates render requests,
+computes deterministic cache/job IDs, reads/writes R2/D1 when configured, and
+hands work to a queue or renderer backend. Without a renderer binding, render
+requests return `awaiting_renderer` instead of pretending to produce pixels.
+
+See `docs/cloudflare-migration.md` for the whole-app cutover and
+`docs/cloudflare-mcp.md` for MCP setup, bindings, example `curl`, and renderer
+backend contract.
+
+## Browser Bridge Fallback
+
+Use the browser bridge when you need visual QA, local viewer debugging, or to
+compare Cloudflare outputs against the live WebGL/WebGPU viewer.
 
 ## Quick Start
 

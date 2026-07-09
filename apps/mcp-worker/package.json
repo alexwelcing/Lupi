@@ -1,0 +1,19 @@
+{
+  "name": "@atlas/mcp-worker",
+  "version": "0.1.0",
+  "description": "Cloudflare edge Worker for the Lupi web app and MCP control plane",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "pnpm --filter @atlas/web build && npx wrangler dev --local",
+    "dev:worker": "npx wrangler dev --local",
+    "deploy": "pnpm --filter @atlas/web build && npx wrangler deploy",
+    "deploy:worker": "npx wrangler deploy",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}

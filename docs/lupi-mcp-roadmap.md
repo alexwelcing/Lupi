@@ -6,6 +6,7 @@ Make Lupi MCP a secure, agent-usable molecular viewer service that Codex, Claude
 
 ## Current Baseline
 
+- `apps/mcp-worker` is the new browser-free Cloudflare MCP control plane. It exposes MCP JSON-RPC over `POST /mcp`, health/manifest endpoints, deterministic render job IDs, optional R2/D1/Queue bindings, and a renderer-backend handoff contract.
 - `/#/mcp` runs the real Atlas viewer bridge, not the old marketing/studio mock.
 - Firebase Auth is wired into the viewer header and MCP harness.
 - The `shed-489901` Firebase project has Google sign-in enabled and authorizes local dev return domains.

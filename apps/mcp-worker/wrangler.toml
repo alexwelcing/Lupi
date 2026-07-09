@@ -1,0 +1,38 @@
+name = "lupi-edge"
+main = "src/index.ts"
+compatibility_date = "2026-07-09"
+
+[assets]
+directory = "../web/dist"
+binding = "WEB_ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[vars]
+ASSET_BASE_URL = "https://assets.lupi.live"
+LUPI_LARGE_ASSET_BASE_URL = "https://assets.lupi.live"
+FIREBASE_AUTH_PROXY_HOST = "shed-489901.firebaseapp.com"
+FIREBASE_PROJECT_ID = "shed-489901"
+LUPI_PUBLIC_ORIGIN = "https://lupi.live"
+CORS_ORIGINS = "https://lupi.live,http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:8787"
+
+# Production bindings are intentionally documented but not enabled here. Create
+# them per account/environment before deploy:
+#
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "lupi-assets"
+#
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "lupi-mcp"
+# database_id = "<cloudflare-d1-database-id>"
+#
+# [[queues.producers]]
+# binding = "RENDER_QUEUE"
+# queue = "lupi-render-jobs"
+
+# Optional secrets:
+# - FIREBASE_WEB_API_KEY        optional public Firebase web key, only if Firestore REST rules ever require it
+# - LUPI_MCP_SHARED_SECRET     bearer secret for protected MCP render/job tools
+# - RENDERER_TOKEN             bearer token sent to RENDERER_ENDPOINT

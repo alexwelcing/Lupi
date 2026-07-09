@@ -1,6 +1,8 @@
 # Lupi MCP Model Integration Brief
 
-This document is a handoff for a model or agent that needs to integrate with the live Lupi molecular viewer quickly and reliably. It is intentionally practical: use the browser-native MCP bridge at `https://lupi.live`, not the visible MCP control panel, as the primary integration surface.
+This document is a handoff for a model or agent that needs to integrate with Lupi quickly and reliably. The browser-native bridge remains useful for visual QA and local viewer debugging, but the preferred production path is the Cloudflare MCP control plane in `apps/mcp-worker`; see `docs/cloudflare-mcp.md`.
+
+The browser route at `https://lupi.live/#/mcp` is still the compatibility fallback when you need to drive the real WebGL/WebGPU viewer.
 
 ## Current judgment
 
@@ -16,12 +18,10 @@ The panel currently has too much density and too little hierarchy:
 
 Recommended integration stance:
 
-1. Treat the browser bridge as the source of truth.
-2. Use `/mcp-manifest.json` to discover tools and argument schemas.
-3. Use `window.__lupiViewerMcp.status()` as the readiness/health gate.
-4. Use `execute()` / `executeBatch()` for action.
-5. Use `state()` and `lupi.encode_view_url` for verification and shareable outputs.
-6. Keep Playwright (or another deterministic browser controller) as the automation layer; avoid LLM/browser-click tools for this deterministic path.
+1. Prefer the Cloudflare MCP endpoint for agent-native asset requests.
+2. Use the browser bridge only when you need live viewer visual QA or a fallback before the Cloudflare renderer is fully wired.
+3. Use `/mcp-manifest.json` to discover tool schemas in either surface.
+4. Do not wait for browser `networkidle`; wait for explicit MCP readiness/status checks.
 
 ## Fast path for model integration
 

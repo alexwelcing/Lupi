@@ -1,8 +1,8 @@
 # Deploy Cutover
 
-The standalone `lupi.live` repo owns production deploys for the viewer. Its
-deploy path builds only the extracted viewer output and does not call the old
-monorepo research-site pipeline.
+The standalone `lupi.live` repo owns production deploys for the viewer. The
+active migration target is Cloudflare: one edge Worker serves the built viewer,
+compatibility auth routes, edge analytics, saved-view share HTML, and MCP.
 
 ## Current State
 
@@ -10,11 +10,13 @@ The repo has:
 
 - standalone CI in `.github/workflows/ci.yml`
 - production viewer deploy in `.github/workflows/deploy-viewer.yml`
+- manual Cloudflare deploy in `.github/workflows/deploy-cloudflare.yml`
 - a root `start` script that serves `apps/web/dist`
+- Cloudflare edge runtime in `apps/mcp-worker`
 - local build verification passing from this extracted copy
 
-The old deploy placeholder was removed only after adding a viewer-only Cloud Run
-bundle and disabling the monorepo viewer auto-deploy.
+Cloud Run remains the existing production path until Cloudflare preview smoke
+tests pass and DNS is cut over.
 
 ## Cutover Requirements
 
@@ -24,50 +26,57 @@ The production deploy must continue to satisfy these constraints:
 2. Do not call the old `atlas/deploy_slim.py` path.
 3. Do not build or upload retired research-site output.
 4. Package only files needed by the viewer runtime.
-5. Deploy to the intended Cloud Run viewer service.
-6. Move traffic to latest revision only after smoke checks pass.
-7. Deploy Firebase functions, rules, and indexes only when those files change.
-8. Report deploy status to `glim-think` `/ops/report`.
+5. Deploy to the intended Cloudflare Worker (`lupi-edge`).
+6. Move `lupi.live` traffic only after Cloudflare preview smoke checks pass.
+7. Keep Firebase functions/rules/indexes deploys separate until those backends are fully replaced.
+8. Report deploy status to `glim-think` `/ops/report` once the Cloudflare workflow is promoted to production.
 
 ## Proposed Runtime Shape
 
 ```text
 pnpm install --frozen-lockfile
-pnpm build
-node tools/serve-web.mjs
+pnpm cloudflare:build
+pnpm cloudflare:test
+pnpm cloudflare:deploy
 ```
 
-The container should serve:
+The Worker should serve:
 
 ```text
 apps/web/dist/
 ```
 
-It should not depend on the science/control-plane repo at runtime.
+It should also handle `/mcp`, `/collectAnalytics`, `/view/:slug`, and Firebase
+reserved auth paths from the same origin. It should not depend on the
+science/control-plane repo at runtime.
 
 ## Required Secrets
 
-Viewer deploy secrets only:
+Cloudflare deploy secrets:
 
-- `GCP_PROJECT_ID`
-- `GCP_REGION`
-- `GCP_WORKLOAD_IDENTITY_PROVIDER`
-- `GCP_SERVICE_ACCOUNT`
-- `GCP_SERVICE_NAME_VIEWER`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+- `LUPI_FIREBASE_WEB_API_KEY`
 
-Firebase deploy secrets/config only when deploying viewer backend changes.
+Optional Cloudflare/MCP secrets:
+
+- `LUPI_MCP_SHARED_SECRET`
+- `LUPI_RENDERER_TOKEN`
+
+Firebase deploy secrets/config remain necessary only when deploying legacy
+Firebase Functions, rules, and indexes.
 
 Do not add:
 
-- Cloudflare Worker tokens for `glim-think`
 - MLIP runner credentials
 - Phoenix keys unrelated to viewer telemetry
 - Library or landing-site deploy secrets
 
 ## Candidate First
 
-The deploy workflow publishes each revision with no production traffic first,
-smokes the tagged candidate URL, and only then routes traffic to that revision.
+The Cloudflare deploy workflow is manual during migration. Deploy a candidate,
+smoke the Worker URL, then cut `lupi.live` DNS/route to Cloudflare only after
+verification.
 For manual pre-release checks against any preview URL, run:
 
 ```bash
@@ -85,23 +94,20 @@ Then verify manually:
 - export drawer renders expected options
 - public metadata and social preview are current
 
-## Deploy Workflow
+## Cloudflare Deploy Workflow
 
-The deploy workflow:
+The Cloudflare deploy workflow:
 
 1. Installs pnpm dependencies from this repo.
-2. Builds the viewer with the production Vite environment.
-3. Runs a browser controls verifier.
-4. Packages `apps/web/dist` with `tools/serve-web.mjs`.
-5. Smokes the local bundle.
-6. Deploys a tagged Cloud Run candidate with no traffic.
-7. Smokes the candidate URL.
-8. Routes production traffic to the candidate revision.
-9. Smokes `https://lupi.live/`.
-10. Reports deploy status to `glim-think` `/ops/report`.
+2. Builds the viewer with Cloudflare same-origin environment values.
+3. Typechecks and tests the edge Worker.
+4. Uploads required Worker secrets.
+5. Deploys `apps/mcp-worker` through Wrangler.
+6. Smokes the deployed Worker URL manually before DNS cutover.
+7. After cutover, smokes `https://lupi.live/`, `/mcp`, `/view/:slug`, and Firebase sign-in.
 
 ## Done State
 
 Cutover is complete only when a fresh clone of this repo can build, verify, and
-deploy the viewer without the science/control-plane repo, and
-`https://lupi.live` is proven live against the new service.
+deploy the viewer to Cloudflare without the science/control-plane repo, and
+`https://lupi.live` is proven live against the Cloudflare Worker.

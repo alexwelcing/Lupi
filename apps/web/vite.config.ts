@@ -91,37 +91,41 @@ function galleryAssetUploadPlugin() {
 }
 
 /**
- * GCS-Hosted Asset Pruning Plugin
+ * External-Hosted Asset Pruning Plugin
  *
- * Some open-data trajectories are large (>50 MB) and live in
- * gs://shed-489901-atlas-artifacts/atlas/open_data/ at runtime. The dev
- * server still serves them from /public/ (offline dev), but the production
- * build must not ship them in dist — gallery-data.json sourceUrl points
- * at the bucket and the Gallery loader picks GCS in prod automatically.
+ * Some trajectory payloads are too large for Workers static assets (25 MiB per
+ * file) or are intended to live in object storage. The dev server still serves
+ * them from /public/ for offline work, but production builds must not ship them
+ * in dist. The Cloudflare Worker proxies these paths from object storage.
  *
- * The list lives in a single JSON next to public/ so the bundle script
- * stays in sync with the gallery entries.
+ * The explicit Cloudflare list lives next to this config so Wrangler dry-runs
+ * stay deployable without removing local development fixtures.
  */
-function pruneGcsHostedAssets() {
-  const STASH_LIST = path.resolve(__dirname, 'public/gallery/open_data/.gcs-hosted.json');
+function pruneExternalHostedAssets() {
+  const STASH_LISTS = [
+    path.resolve(__dirname, 'public/gallery/open_data/.gcs-hosted.json'),
+    path.resolve(__dirname, 'cloudflare-assets-exclude.json'),
+  ];
   return {
-    name: 'prune-gcs-hosted-assets',
+    name: 'prune-external-hosted-assets',
     apply: 'build' as const,
     closeBundle() {
-      if (!fs.existsSync(STASH_LIST)) return;
-      const list: string[] = JSON.parse(fs.readFileSync(STASH_LIST, 'utf-8'));
       const distDir = path.resolve(__dirname, 'dist');
       let removed = 0;
-      for (const rel of list) {
-        const p = path.join(distDir, rel);
-        if (fs.existsSync(p)) {
-          fs.unlinkSync(p);
-          removed++;
+      for (const listPath of STASH_LISTS) {
+        if (!fs.existsSync(listPath)) continue;
+        const list: string[] = JSON.parse(fs.readFileSync(listPath, 'utf-8'));
+        for (const rel of list) {
+          const p = path.join(distDir, rel);
+          if (fs.existsSync(p)) {
+            fs.unlinkSync(p);
+            removed++;
+          }
         }
       }
       if (removed > 0) {
         // eslint-disable-next-line no-console
-        console.log(`[prune-gcs-hosted-assets] excluded ${removed} files from dist (served from GCS at runtime)`);
+        console.log(`[prune-external-hosted-assets] excluded ${removed} files from dist (served from object storage at runtime)`);
       }
     },
   };
@@ -160,7 +164,7 @@ export default defineConfig({
   plugins: [
     react(),
     galleryAssetUploadPlugin(),
-    pruneGcsHostedAssets(),
+    pruneExternalHostedAssets(),
   ],
   // The WASM parsers live ONLY inside web workers (parse/transcode workers),
   // and vite-plugin-wasm needs top-level-await for the wasm glue. Scoping both
