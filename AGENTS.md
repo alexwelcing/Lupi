@@ -171,6 +171,33 @@ node tools/verify-mcp-bridge.mjs --url=http://127.0.0.1:5173/#/mcp --json
 
 The `--json` flag emits a machine-readable report to stdout. Non-zero exit code indicates failure.
 
+## Asset Quality Verification
+
+For visual / structural verification of `lupi.export_asset`, drive a real
+browser, render PNG/JPEG/WebP/GLB, and inspect the bytes:
+
+```bash
+pnpm run verify:asset-quality
+# or, against an existing dev server:
+node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/#/mcp
+```
+
+The verifier exports Caffeine and a 5,000-atom FCC Cu lattice in every
+supported format and asserts:
+
+- declared `byteLength` matches the file written to disk
+- the binary header is well-formed (PNG IHDR, JPEG SOF, WebP VP8/VP8L/VP8X,
+  glTF magic + chunk length)
+- `dataUrl` MIME prefix matches the response `mimeType`
+- the on-disk file matches the round-tripped base64
+
+Artifacts (real PNGs/JPGs/WebPs/GLBs plus a viewer screenshot) are written
+under `.verify-artifacts/asset-quality/<run>/` so a human can inspect them.
+Add `--skip-glb` to skip the GLB tier when iterating on image formats.
+
+Use `node tools/inspect-glb.mjs <file.glb>` to dump scene/mesh contents of
+an exported GLB without a browser.
+
 ## Common Failures
 
 | Symptom | Likely cause | Fix |
@@ -204,4 +231,5 @@ pnpm --filter @atlas/ui build
 pnpm --filter @atlas/ui test
 pnpm run lint
 pnpm run verify:mcp-bridge
+pnpm run verify:asset-quality
 ```

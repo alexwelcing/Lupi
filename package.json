@@ -31,6 +31,7 @@
     "verify:exports": "node tools/verify-exports.mjs",
     "verify:streaming-ux": "node tools/verify-streaming-ux.mjs",
     "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
+    "verify:asset-quality": "node tools/verify-asset-quality.mjs",
     "atomize:media": "node tools/atomize-media.mjs",
     "generate:sphere-grid": "node tools/generate-sphere-grid-gallery.mjs",
     "generate:sphere-grid:assets": "node tools/generate-sphere-grid-gallery.mjs --no-snapshot",

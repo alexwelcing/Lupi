@@ -209,6 +209,24 @@ try {
     `ok=${loadResult.ok} atoms=${loadResult.result?.molecule?.atomCount ?? 0}`,
   );
 
+  const assetResult = await page.evaluate(async () => {
+    const driver = window.__lupiViewerMcp;
+    return driver.execute({
+      id: 'verify-export-asset',
+      tool: 'lupi.export_asset',
+      arguments: { format: 'png', width: 256, height: 256, timeoutMs: 20000 },
+    });
+  });
+  check(
+    'export_asset returns inline PNG bytes',
+    assetResult.ok === true &&
+      assetResult.result?.asset?.format === 'png' &&
+      assetResult.result?.asset?.mimeType === 'image/png' &&
+      typeof assetResult.result?.asset?.dataBase64 === 'string' &&
+      assetResult.result.asset.dataBase64.length > 100,
+    `ok=${assetResult.ok} bytes=${assetResult.result?.asset?.byteLength ?? 0}`,
+  );
+
   // Exercise the new AI-control tools via executeBatch.
   // Apply the material scene first; it resets background/postprocess to the
   // scene defaults, so the explicit background/postprocess calls must follow.
