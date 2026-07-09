@@ -6,7 +6,7 @@
  * visuals, and state serialization.
  */
 
-import { useStore, type BackgroundBackdropShape, type BackgroundBackdropPattern } from '../store';
+import { useStore, type BackgroundBackdropShape, type BackgroundBackdropPattern, type ExportRequest } from '../store';
 import type { LupiMcpRequest, LupiMcpResponseResult, LupiMcpToolDefinition } from './types';
 import { MCP_TOOL_DEFINITIONS } from './toolManifest';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
@@ -20,6 +20,10 @@ function readNumber(value: unknown): number | undefined {
     if (!Number.isNaN(parsed)) return parsed;
   }
   return undefined;
+}
+
+function readRaw(value: unknown): unknown {
+  return value;
 }
 
 function readBoolean(value: unknown): boolean | undefined {
@@ -50,6 +54,105 @@ function readTuple3(value: unknown): [number, number, number] | undefined {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function clampInt(value: number, min: number, max: number) {
+  return Math.round(clamp(value, min, max));
+}
+
+type ExportAssetFormat = 'png' | 'jpeg' | 'webp' | 'glb' | 'usdz';
+
+const DEFAULT_IMAGE_SIZE = 1024;
+const MAX_IMAGE_SIZE = 4096;
+const DEFAULT_INLINE_ASSET_BYTES = 32 * 1024 * 1024;
+const MAX_INLINE_ASSET_BYTES = 128 * 1024 * 1024;
+
+function readExportAssetFormat(value: unknown): ExportAssetFormat | undefined {
+  const raw = readString(value)?.toLowerCase();
+  if (!raw) return undefined;
+  if (raw === 'jpg') return 'jpeg';
+  return raw === 'png' || raw === 'jpeg' || raw === 'webp' || raw === 'glb' || raw === 'usdz'
+    ? raw
+    : undefined;
+}
+
+function mimeForExportAsset(format: ExportAssetFormat) {
+  switch (format) {
+    case 'png': return 'image/png';
+    case 'jpeg': return 'image/jpeg';
+    case 'webp': return 'image/webp';
+    case 'glb': return 'model/gltf-binary';
+    case 'usdz': return 'model/vnd.usdz+zip';
+  }
+}
+
+function extensionForExportAsset(format: ExportAssetFormat) {
+  return format === 'jpeg' ? 'jpg' : format;
+}
+
+function safeBaseName(value: string) {
+  return value
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-z0-9._-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'lupi-asset';
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+interface StoreExportResult {
+  blob: Blob;
+  filename: string;
+  progress: Array<{ phase: string; done: number; total: number }>;
+}
+
+function runStoreExport(request: Partial<ExportRequest>, timeoutMs: number): Promise<StoreExportResult> {
+  const state = useStore.getState();
+  if (state.exportRequest?.type) {
+    throw new Error('An export is already in progress. Wait for it to finish before calling lupi.export_asset again.');
+  }
+
+  const progress: StoreExportResult['progress'] = [];
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      useStore.getState().clearExportRequest();
+      reject(new Error(`Timed out waiting for viewer export after ${timeoutMs} ms. Ensure the 3D viewer route is mounted.`));
+    }, timeoutMs);
+
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      callback();
+    };
+
+    state.triggerExport({
+      ...request,
+      onProgress: (phase, done, total) => {
+        progress.push({ phase, done, total });
+      },
+      onComplete: (success, blob, filename) => {
+        finish(() => {
+          if (!success || !blob || !filename) {
+            reject(new Error('Viewer export failed before producing an asset blob.'));
+            return;
+          }
+          resolve({ blob, filename, progress });
+        });
+      },
+    });
+  });
 }
 
 /* ─── Tool handlers ─── */
@@ -302,13 +405,102 @@ async function handleResetViewer(): Promise<LupiMcpResponseResult> {
   return { reset: true };
 }
 
+async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpResponseResult> {
+  const state = useStore.getState();
+  if (!state.file) throw new Error('No molecule is loaded. Call lupi.generate_molecule or lupi.load_molecule_url first.');
+
+  const args = request.arguments;
+  const format = readExportAssetFormat(args.format ?? args.type) ?? 'png';
+  const image = format === 'png' || format === 'jpeg' || format === 'webp';
+  const resolution = args.resolution && typeof args.resolution === 'object' && !Array.isArray(args.resolution)
+    ? args.resolution as Record<string, unknown>
+    : {};
+  const width = clampInt(readNumber(args.width ?? resolution.width) ?? DEFAULT_IMAGE_SIZE, 64, MAX_IMAGE_SIZE);
+  const height = clampInt(readNumber(args.height ?? resolution.height) ?? width, 64, MAX_IMAGE_SIZE);
+  const transparent = readBoolean(args.transparent) ?? false;
+  const baseName = safeBaseName(readString(args.baseName) ?? `Lupi-${format}-${state.file.name}`);
+  const requestedTimeout = readNumber(args.timeoutMs)
+    ?? (readNumber(args.timeoutSeconds) !== undefined ? readNumber(args.timeoutSeconds)! * 1000 : undefined);
+  const timeoutMs = clampInt(requestedTimeout ?? (image ? 30_000 : 180_000), 1000, 600_000);
+  const maxInlineBytes = clampInt(
+    readNumber(args.maxInlineBytes ?? args.maxBytes) ?? DEFAULT_INLINE_ASSET_BYTES,
+    1024,
+    MAX_INLINE_ASSET_BYTES,
+  );
+
+  const exportRequest: Partial<ExportRequest> = image
+    ? {
+      type: 'image',
+      format: format as 'png' | 'jpeg' | 'webp',
+      resolution: { width, height },
+      transparent,
+      baseName,
+    }
+    : {
+      type: format as 'glb' | 'usdz',
+      format: format as 'glb' | 'usdz',
+      baseName,
+    };
+
+  if (image) {
+    const natoms = state.file.trajectory.frames[0].natoms;
+    const desiredFit = readBoolean(readRaw(args.fitCamera));
+    const shouldFit = desiredFit ?? natoms < 5000;
+    if (shouldFit) state.fitCameraView();
+    const desiredScale = readNumber(readRaw(args.atomScale));
+    let adjustedScale = false;
+    if (desiredScale !== undefined) {
+      state.setAtomScale(clamp(desiredScale, 0.1, 8));
+      adjustedScale = true;
+    } else if (natoms < 200) {
+      // Always boost small molecules so the asset fills the frame.
+      state.setAtomScale(clamp(1.8, 0.1, 8));
+      adjustedScale = true;
+    }
+
+    // R3F runs on a demand frameloop, so the store update alone won't flush
+    // the next render before the export pipeline snapshots the canvas. Tick
+    // the Canvas onto the next animation frame so Atoms/camera pick up the
+    // bump. We still take the snapshot below — that path routes through
+    // ExportManager which calls gl.render() itself.
+    if (shouldFit || adjustedScale) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  }
+
+  const result = await runStoreExport(exportRequest, timeoutMs);
+  if (result.blob.size > maxInlineBytes) {
+    throw new Error(
+      `Exported ${format.toUpperCase()} is ${result.blob.size.toLocaleString()} bytes, above maxInlineBytes ${maxInlineBytes.toLocaleString()}. ` +
+      'Retry with a smaller molecule/view or a larger maxInlineBytes value.',
+    );
+  }
+
+  const mimeType = result.blob.type || mimeForExportAsset(format);
+  const dataBase64 = await blobToBase64(result.blob);
+  return {
+    asset: {
+      format,
+      filename: result.filename || `${baseName}-frame${state.frame + 1}.${extensionForExportAsset(format)}`,
+      mimeType,
+      byteLength: result.blob.size,
+      width: image ? width : undefined,
+      height: image ? height : undefined,
+      dataBase64,
+      dataUrl: `data:${mimeType};base64,${dataBase64}`,
+    },
+    progress: result.progress,
+  };
+}
+
 async function handleStatus(): Promise<LupiMcpResponseResult> {
   const state = useStore.getState();
   const frame = state.file?.trajectory.frames[state.frame];
   return {
     ready: true,
     version: LUPI_VIEWER_MCP_VERSION,
-    toolCount: LUPI_MCP_TOOLS.length,
+    toolCount: MCP_TOOL_DEFINITIONS.length,
     moleculeLoaded: Boolean(state.file),
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
@@ -337,11 +529,12 @@ export const LUPI_MCP_TOOLS: LupiMcpToolDefinition[] = [
   { name: 'lupi.add_annotation', description: 'Add an etched annotation to a specific atom.', handler: handleAddAnnotation },
   { name: 'lupi.remove_annotation', description: 'Remove an annotation by id.', handler: handleRemoveAnnotation },
   { name: 'lupi.encode_view_url', description: 'Serialize the current viewer state to a shareable URL.', handler: handleEncodeViewUrl },
+  { name: 'lupi.export_asset', description: 'Render the active viewer as an inline PNG/JPEG/WebP image or GLB/USDZ model asset.', handler: handleExportAsset },
   { name: 'lupi.reset_viewer', description: 'Reset the viewer to default state.', handler: handleResetViewer },
 ];
 
 export const LUPI_MCP_TOOL_MAP = new Map(LUPI_MCP_TOOLS.map((t) => [t.name, t]));
 
 export function listLupiMcpTools() {
-  return LUPI_MCP_TOOLS.map((t) => ({ name: t.name, description: t.description }));
+  return MCP_TOOL_DEFINITIONS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
 }

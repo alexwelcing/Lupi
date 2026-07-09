@@ -15,6 +15,51 @@ export interface McpToolManifestEntry {
 
 export const MCP_TOOL_DEFINITIONS: McpToolManifestEntry[] = [
   {
+    name: 'lupi.generate_molecule',
+    description: 'Load or procedurally generate a molecule into the viewer from a name, template, SMILES, XYZ, URL-derived payload, or lattice request.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.generate_molecule'],
+  },
+  {
+    name: 'lupi.load_molecule_url',
+    description: 'Load a molecule or trajectory from a URL into the viewer.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.load_molecule_url'],
+  },
+  {
+    name: 'lupi.open_saved_view',
+    description: 'Open a saved Lupi view by slug.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.open_saved_view'],
+  },
+  {
+    name: 'lupi.search_molecules',
+    description: 'Search known molecule/catalog providers and return load specs agents can execute.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.search_molecules'],
+  },
+  {
+    name: 'lupi.set_viewer',
+    description: 'Apply a broad viewer patch for common display, coloring, camera, and style settings.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.set_viewer'],
+  },
+  {
+    name: 'lupi.export_xyz',
+    description: 'Serialize the active molecule frame as XYZ text.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.export_xyz'],
+  },
+  {
+    name: 'lupi.export_asset',
+    description: 'Render the active viewer as an inline PNG/JPEG/WebP image or GLB/USDZ model asset.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.export_asset'],
+  },
+  {
+    name: 'lupi.viewer_state',
+    description: 'Return the current viewer state summary.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.viewer_state'],
+  },
+  {
+    name: 'lupi.knowledge_graph',
+    description: 'Query the currently loaded knowledge-graph labels in the viewer.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.knowledge_graph'],
+  },
+  {
     name: 'lupi.status',
     description: 'Report MCP bridge readiness and viewer health.',
     parameters: LUPI_MCP_SCHEMAS['lupi.status'],

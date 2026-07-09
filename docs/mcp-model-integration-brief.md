@@ -45,7 +45,7 @@ const status = await page.evaluate(() => window.__lupiViewerMcp.status());
 // {
 //   ready: true,
 //   version: string,
-//   toolCount: 19,
+//   toolCount: 28,
 //   moleculeLoaded: boolean,
 //   atomCount: number,
 //   frame: number,
@@ -84,6 +84,40 @@ const responses = await page.evaluate(() =>
     { id: 'style-1', tool: 'lupi.set_postprocess', arguments: { preset: 'diagram', intensity: 0.8 } },
   ])
 );
+```
+
+Render a molecule asset for a model:
+
+```js
+const [load, asset] = await page.evaluate(() =>
+  window.__lupiViewerMcp.executeBatch([
+    {
+      id: 'load-caffeine',
+      tool: 'lupi.generate_molecule',
+      arguments: {
+        inputType: 'template',
+        input: 'Caffeine',
+        viewer: { showBonds: true, cameraPreset: 'iso', postprocessPreset: 'studio' },
+      },
+    },
+    {
+      id: 'render-caffeine-png',
+      tool: 'lupi.export_asset',
+      arguments: { format: 'png', width: 1024, height: 1024 },
+    },
+  ])
+);
+
+// asset.result.asset.dataBase64 is the PNG bytes; dataUrl is also provided.
+```
+
+Natural-language shortcut:
+
+```js
+const requests = await page.evaluate(() =>
+  window.__lupiViewerMcp.parseCommand('render caffeine png 1024x1024 with bonds on camera iso')
+);
+// => lupi.generate_molecule, then lupi.export_asset
 ```
 
 Verify state after actions:
@@ -160,7 +194,19 @@ interface LupiMcpStatus {
 
 ## Tool inventory
 
-There are currently 19 `lupi.*` tools. Always prefer `/mcp-manifest.json` for live schemas.
+There are currently 28 `lupi.*` tools. Always prefer `/mcp-manifest.json` for live schemas.
+
+Molecule and asset tools:
+
+- `lupi.generate_molecule` — load/generate by template, name, SMILES, XYZ, description, or procedural lattice.
+- `lupi.load_molecule_url` — load a molecule or trajectory URL.
+- `lupi.open_saved_view` — open a saved Lupi view slug.
+- `lupi.search_molecules` — search molecule/catalog providers and return load specs.
+- `lupi.set_viewer` — broad viewer patch for common style/camera settings.
+- `lupi.export_xyz` — return active frame XYZ text.
+- `lupi.export_asset` — return active view as inline PNG/JPEG/WebP or GLB/USDZ with `dataBase64`, `dataUrl`, `mimeType`, `filename`, and `byteLength`.
+- `lupi.viewer_state` — return current viewer state.
+- `lupi.knowledge_graph` — query active knowledge-graph labels.
 
 Core health:
 
@@ -196,7 +242,7 @@ Annotations:
 - `lupi.add_annotation`
 - `lupi.remove_annotation`
 
-Legacy/natural-language bridge tools are still available through the same executor for molecule generation/search/opening/export flows, including `lupi.generate_molecule` and command parsing via `parseCommand(...)`.
+For PNG/GLB output, prefer `executeBatch([generate/load/style..., export_asset])` so the response contains the binary asset directly instead of requiring a UI download.
 
 ## Recommended model loop
 
@@ -210,7 +256,7 @@ A robust model integration loop should be:
 6. Call `executeBatch()` when multiple actions form one view change.
 7. Assert every response has `ok === true`.
 8. Read `state()` after the batch.
-9. If a shareable artifact is needed, call `lupi.encode_view_url`.
+9. If a binary artifact is needed, call `lupi.export_asset`; if a shareable view is needed, call `lupi.encode_view_url`.
 10. If a tool fails, inspect `response.error.message` and `response.transcript`; do not retry blindly.
 
 Example Playwright helper:

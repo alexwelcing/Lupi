@@ -16,6 +16,7 @@ import { createLupiMcpDriver } from './mcp/driver';
 import {
   LUPI_VIEWER_MCP_VERSION,
   MAX_PERSISTED_EXPORT_CHARS,
+  MAX_PERSISTED_ASSET_BASE64_CHARS,
   MAX_PERSISTED_RESPONSE_LOG,
   MCP_RESPONSE_EVENT,
   MCP_RESPONSE_STORAGE_KEY,
@@ -28,6 +29,7 @@ type LupiMcpToolName =
   | 'lupi.search_molecules'
   | 'lupi.set_viewer'
   | 'lupi.export_xyz'
+  | 'lupi.export_asset'
   | 'lupi.viewer_state'
   | 'lupi.knowledge_graph';
 
@@ -97,6 +99,17 @@ interface LupiMcpResponse {
       filename: string;
       contents: string;
     };
+    asset?: {
+      format: 'png' | 'jpeg' | 'webp' | 'glb' | 'usdz';
+      filename: string;
+      mimeType: string;
+      byteLength: number;
+      width?: number;
+      height?: number;
+      dataBase64: string;
+      dataUrl: string;
+    };
+    progress?: Array<{ phase: string; done: number; total: number }>;
     molecules?: Array<{
       id: string;
       source: MoleculeSourceId;
@@ -252,6 +265,7 @@ const TEMPLATE_MOLECULES: Array<{
 
 const MAX_PROCEDURAL_ATOMS = 1_000_000;
 const MAX_XYZ_EXPORT_ATOMS = 100_000;
+type AssetExportFormat = 'png' | 'jpeg' | 'webp' | 'glb' | 'usdz';
 
 const LATTICE_BASIS: Record<string, Array<[number, number, number]>> = {
   sc: [[0, 0, 0]],
@@ -539,21 +553,42 @@ function sanitizeMcpPayloadForStorage(entry: LupiMcpResponsePayload): LupiMcpRes
     requests: entry.requests ? cloneMcpRequests(entry.requests) : undefined,
     responses: entry.responses.map((response) => {
       const exportResult = response.result?.export;
-      if (!exportResult || exportResult.contents.length <= MAX_PERSISTED_EXPORT_CHARS) return response;
-      return {
-        ...response,
-        result: {
-          ...response.result,
-          export: {
-            ...exportResult,
-            contents: '',
+      const assetResult = response.result?.asset;
+      let next = response;
+      if (exportResult && exportResult.contents.length > MAX_PERSISTED_EXPORT_CHARS) {
+        next = {
+          ...response,
+          result: {
+            ...response.result,
+            export: {
+              ...exportResult,
+              contents: '',
+            },
           },
-        },
-        transcript: [
-          ...response.transcript,
-          `persistent ledger omitted ${formatCount(exportResult.contents.length)} XYZ characters; rerun entry to download`,
-        ],
-      };
+          transcript: [
+            ...response.transcript,
+            `persistent ledger omitted ${formatCount(exportResult.contents.length)} XYZ characters; rerun entry to download`,
+          ],
+        };
+      }
+      if (assetResult && assetResult.dataBase64.length > MAX_PERSISTED_ASSET_BASE64_CHARS) {
+        next = {
+          ...next,
+          result: {
+            ...next.result,
+            asset: {
+              ...assetResult,
+              dataBase64: '',
+              dataUrl: '',
+            },
+          },
+          transcript: [
+            ...next.transcript,
+            `persistent ledger omitted ${formatCount(assetResult.dataBase64.length)} base64 asset characters; rerun entry to regenerate`,
+          ],
+        };
+      }
+      return next;
     }),
   };
 }
@@ -1341,12 +1376,18 @@ function parseViewerAgentCommand(command: string): LupiMcpRequest[] {
 
   const viewer = extractViewerPatch(trimmed);
   const molecule = extractMoleculeArgs(trimmed);
+  const assetExport = extractAssetExportArgs(trimmed);
   if (molecule) {
-    return [makeRequest('lupi.generate_molecule', { ...molecule, viewer: { ...viewer } })];
+    const requests = [makeRequest('lupi.generate_molecule', { ...molecule, viewer: { ...viewer } })];
+    if (assetExport) requests.push(makeRequest('lupi.export_asset', assetExport));
+    return requests;
   }
   if (Object.keys(viewer).length > 0) {
-    return [makeRequest('lupi.set_viewer', { ...viewer })];
+    const requests = [makeRequest('lupi.set_viewer', { ...viewer })];
+    if (assetExport) requests.push(makeRequest('lupi.export_asset', assetExport));
+    return requests;
   }
+  if (assetExport) return [makeRequest('lupi.export_asset', assetExport)];
   return [makeRequest('lupi.generate_molecule', { inputType: 'description', input: trimmed })];
 }
 
@@ -1375,7 +1416,9 @@ function readMcpUrlRequestsFromParams(params: URLSearchParams): LupiMcpRequest[]
   const proceduralCount = params.get('atomCount') ?? params.get('atoms') ?? params.get('count') ?? params.get('molecules');
   const hasProceduralParams = proceduralCount !== null || params.get('kind') === 'scale-test' || params.get('lattice') !== null;
   const tool = params.get('tool');
+  const exportFormat = readAssetExportFormat(params.get('export') ?? params.get('format'));
   const wantsExport = tool === 'lupi.export_xyz' || params.get('export')?.toLowerCase() === 'xyz';
+  const wantsAssetExport = tool === 'lupi.export_asset' || Boolean(exportFormat);
   const wantsState = tool === 'lupi.viewer_state' || params.get('state') === '1';
 
   if (moleculeInput || hasProceduralParams) {
@@ -1396,6 +1439,9 @@ function readMcpUrlRequestsFromParams(params: URLSearchParams): LupiMcpRequest[]
 
   if (wantsExport) {
     requests.push(makeRequest('lupi.export_xyz', {}));
+  }
+  if (wantsAssetExport) {
+    requests.push(makeRequest('lupi.export_asset', assetExportArgsFromUrlParams(params, exportFormat)));
   }
   if (wantsState) {
     requests.push(makeRequest('lupi.viewer_state', {}));
@@ -1500,6 +1546,28 @@ function numberFromUrlParam(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function readAssetExportFormat(value: string | null | undefined): AssetExportFormat | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === 'xyz') return undefined;
+  if (normalized === 'jpg') return 'jpeg';
+  return normalized === 'png' || normalized === 'jpeg' || normalized === 'webp' || normalized === 'glb' || normalized === 'usdz'
+    ? normalized
+    : undefined;
+}
+
+function assetExportArgsFromUrlParams(params: URLSearchParams, format?: AssetExportFormat): Record<string, unknown> {
+  const width = numberFromUrlParam(params.get('width')) ?? numberFromUrlParam(params.get('assetWidth'));
+  const height = numberFromUrlParam(params.get('height')) ?? numberFromUrlParam(params.get('assetHeight'));
+  const transparent = booleanFromUrlParam(params.get('transparent'));
+  return {
+    format: format ?? readAssetExportFormat(params.get('format')) ?? 'png',
+    width,
+    height,
+    transparent,
+    baseName: params.get('baseName') ?? params.get('filename') ?? undefined,
+  };
 }
 
 function emitLupiMcpResponse(
@@ -1942,6 +2010,29 @@ function extractMoleculeArgs(command: string): Record<string, unknown> | null {
   return cleaned ? { inputType: 'name', input: cleaned } : null;
 }
 
+function extractAssetExportArgs(command: string): Record<string, unknown> | null {
+  const normalized = command.toLowerCase();
+  const format =
+    /\busdz\b/.test(normalized) ? 'usdz'
+    : /\bglb\b|\bgltf\b|\b3d\s+model\b/.test(normalized) ? 'glb'
+    : /\bwebp\b/.test(normalized) ? 'webp'
+    : /\b(?:jpe?g|jpg)\b/.test(normalized) ? 'jpeg'
+    : /\bpng\b|\bscreenshot\b|\bimage\b/.test(normalized) ? 'png'
+    : null;
+  if (!format) return null;
+
+  const sizeMatch = command.match(/\b(\d{2,4})\s*x\s*(\d{2,4})\b/i);
+  const squareMatch = command.match(/\b(\d{3,4})\s*(?:px|pixel|pixels|square)\b/i);
+  const width = sizeMatch?.[1] ? Number(sizeMatch[1]) : squareMatch?.[1] ? Number(squareMatch[1]) : undefined;
+  const height = sizeMatch?.[2] ? Number(sizeMatch[2]) : squareMatch?.[1] ? Number(squareMatch[1]) : undefined;
+  return {
+    format,
+    width,
+    height,
+    transparent: /\btransparent\b/.test(normalized) ? true : undefined,
+  };
+}
+
 function extractProceduralArgs(command: string): Record<string, unknown> | null {
   const normalized = command.toLowerCase();
   const atomCount = parseScaleAtomCount(command);
@@ -1980,6 +2071,8 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\bcolorway\b/.test(normalized) || /\bfamily\b/.test(normalized)) patch.colorScheme = 'colorway';
   if (/\belement\b/.test(normalized)) patch.colorScheme = 'element';
   if (/\buniform\b/.test(normalized)) patch.colorScheme = 'uniform';
+  const cameraPresetMatch = normalized.match(/\b(?:camera\s+)?(iso|top|side|front|free)\b/);
+  if (cameraPresetMatch?.[1]) patch.cameraPreset = cameraPresetMatch[1] as CameraPreset;
 
   const scaleMatch = command.match(/\b(?:atom\s+scale|scale(?:\s+atoms?)?)\s*(?:to|=|:)?\s*(\d+(?:\.\d+)?)/i);
   if (scaleMatch?.[1]) patch.atomScale = Number(scaleMatch[1]);

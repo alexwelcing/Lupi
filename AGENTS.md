@@ -76,7 +76,7 @@ console.log(status);
 // {
 //   ready: true,
 //   version: '0.3.0',
-//   toolCount: 19,
+//   toolCount: 28,
 //   moleculeLoaded: true,
 //   atomCount: 250000,
 //   frame: 0,
@@ -102,10 +102,19 @@ const manifest = await page.evaluate(() =>
 );
 ```
 
-## Tool Reference (19 tools)
+## Tool Reference (28 tools)
 
 | Tool | Description | Example arguments |
 |------|-------------|-------------------|
+| `lupi.generate_molecule` | Load/generate a molecule by template, name, SMILES, XYZ, description, or procedural lattice. | `{ inputType: 'template', input: 'Caffeine' }` |
+| `lupi.load_molecule_url` | Load a molecule or trajectory URL. | `{ url: 'https://example.com/molecule.xyz' }` |
+| `lupi.open_saved_view` | Open a saved Lupi view by slug. | `{ slug: 'abc123' }` |
+| `lupi.search_molecules` | Search molecule/catalog providers. | `{ query: 'aspirin', limit: 5 }` |
+| `lupi.set_viewer` | Apply common viewer display/style settings. | `{ showBonds: true, cameraPreset: 'iso' }` |
+| `lupi.export_xyz` | Return active frame XYZ text. | `{}` |
+| `lupi.export_asset` | Return active view as inline PNG/JPEG/WebP or GLB/USDZ. | `{ format: 'png', width: 1024, height: 1024 }` |
+| `lupi.viewer_state` | Return current viewer state. | `{}` |
+| `lupi.knowledge_graph` | Query active knowledge-graph labels. | `{ query: 'force', limit: 20 }` |
 | `lupi.status` | Report bridge readiness and viewer health. | `{}` |
 | `lupi.set_frame` | Jump to a trajectory frame. | `{ frame: 0 }` |
 | `lupi.play` | Start playback. | `{}` |

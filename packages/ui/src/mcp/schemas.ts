@@ -7,6 +7,118 @@
  */
 
 export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
+  'lupi.generate_molecule': {
+    type: 'object',
+    properties: {
+      inputType: { type: 'string', enum: ['name', 'template', 'smiles', 'xyz', 'description', 'procedural'] },
+      input: { type: 'string', description: 'Molecule name, template id, SMILES, XYZ text, or natural-language description.' },
+      name: { type: 'string' },
+      smiles: { type: 'string' },
+      xyz: { type: 'string' },
+      atomCount: { type: ['number', 'string'], description: 'Procedural lattice atom count.' },
+      element: { type: 'string', description: 'Procedural lattice element symbol.' },
+      elements: {
+        oneOf: [
+          { type: 'string', description: 'Comma-separated procedural element symbols.' },
+          { type: 'array', items: { type: 'string' } },
+        ],
+      },
+      lattice: { type: 'string', enum: ['sc', 'bcc', 'fcc'] },
+      spacing: { type: ['number', 'string'] },
+      viewer: { type: 'object', description: 'Optional viewer patch applied after loading.' },
+    },
+  },
+
+  'lupi.load_molecule_url': {
+    type: 'object',
+    required: ['url'],
+    properties: {
+      url: { type: 'string', format: 'uri', description: 'URL to a molecule, trajectory, or saved Lupi payload.' },
+    },
+  },
+
+  'lupi.open_saved_view': {
+    type: 'object',
+    required: ['slug'],
+    properties: {
+      slug: { type: 'string', minLength: 1, description: 'Saved Lupi view slug.' },
+    },
+  },
+
+  'lupi.search_molecules': {
+    type: 'object',
+    properties: {
+      query: { type: 'string' },
+      text: { type: 'string' },
+      elements: { type: 'array', items: { type: 'string' } },
+      sources: { type: 'array', items: { type: 'string' } },
+      limit: { type: 'number', minimum: 1, maximum: 50 },
+    },
+  },
+
+  'lupi.set_viewer': {
+    type: 'object',
+    properties: {
+      showBonds: { type: 'boolean' },
+      atomScale: { type: 'number' },
+      showCell: { type: 'boolean' },
+      showAxes: { type: 'boolean' },
+      backgroundPreset: { type: 'string' },
+      postprocessPreset: { type: 'string' },
+      colorScheme: { type: 'string' },
+      colorMode: { type: 'string' },
+      colorProperty: { type: 'string' },
+      colormap: { type: 'string' },
+      cameraPreset: { type: 'string', enum: ['top', 'side', 'front', 'iso', 'free'] },
+      bondTolerance: { type: 'number' },
+      bondColorMode: { type: 'string' },
+    },
+  },
+
+  'lupi.export_xyz': {
+    type: 'object',
+    properties: {},
+  },
+
+  'lupi.export_asset': {
+    type: 'object',
+    properties: {
+      format: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb', 'usdz'], description: 'Asset format to render from the active viewer.' },
+      type: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb', 'usdz'], description: 'Alias for format.' },
+      width: { type: 'number', minimum: 64, maximum: 4096, description: 'Image width in pixels.' },
+      height: { type: 'number', minimum: 64, maximum: 4096, description: 'Image height in pixels.' },
+      resolution: {
+        type: 'object',
+        properties: {
+          width: { type: 'number', minimum: 64, maximum: 4096 },
+          height: { type: 'number', minimum: 64, maximum: 4096 },
+        },
+      },
+      transparent: { type: 'boolean', description: 'Use transparent background for image exports.' },
+      baseName: { type: 'string', description: 'Base filename without extension/frame suffix.' },
+      fitCamera: { type: 'boolean', description: 'Refit the camera to the active frame before rendering. Defaults to true for small structures (under ~5000 atoms) and false otherwise.' },
+      atomScale: { type: 'number', minimum: 0.1, maximum: 8, description: 'Override the viewer atom scale before rendering. Small molecules auto-boost to 1.8 if not specified.' },
+      timeoutMs: { type: 'number', minimum: 1000, maximum: 600000 },
+      timeoutSeconds: { type: 'number', minimum: 1, maximum: 600 },
+      maxInlineBytes: { type: 'number', minimum: 1024, maximum: 134217728, description: 'Maximum blob size to inline as base64 in the MCP response.' },
+    },
+  },
+
+  'lupi.viewer_state': {
+    type: 'object',
+    properties: {},
+  },
+
+  'lupi.knowledge_graph': {
+    type: 'object',
+    properties: {
+      query: { type: 'string' },
+      kind: { type: 'string' },
+      sphereId: { type: 'string' },
+      limit: { type: 'number', minimum: 1, maximum: 500 },
+    },
+  },
+
   'lupi.status': {
     type: 'object',
     properties: {},

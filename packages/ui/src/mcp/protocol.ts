@@ -1,4 +1,4 @@
-export const LUPI_VIEWER_MCP_VERSION = '2026-07-06.ai-control-bus';
+export const LUPI_VIEWER_MCP_VERSION = '2026-07-07.asset-export';
 export const MCP_RESPONSE_STORAGE_KEY = 'lupi.viewer.mcp.responses.v1';
 export const MCP_RESPONSE_EVENT = 'lupi:mcp:response';
 export const MCP_REQUEST_EVENT = 'lupi:mcp:request';
@@ -7,3 +7,4 @@ export const MCP_ERROR_EVENT = 'lupi:mcp:error';
 export const MCP_PROGRESS_EVENT = 'lupi:mcp:progress';
 export const MAX_PERSISTED_RESPONSE_LOG = 24;
 export const MAX_PERSISTED_EXPORT_CHARS = 20_000;
+export const MAX_PERSISTED_ASSET_BASE64_CHARS = 20_000;

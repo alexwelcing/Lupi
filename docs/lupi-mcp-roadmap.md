@@ -26,6 +26,7 @@ Make Lupi MCP a secure, agent-usable molecular viewer service that Codex, Claude
 ## Milestone 2: Stable Agent Contract
 
 - Freeze the first supported tool set around viewer control, structure loading, style changes, camera control, screenshots, and export.
+- Expose creative asset export through `lupi.export_asset`, returning inline PNG/JPEG/WebP and GLB/USDZ artifacts for model consumption.
 - Publish JSON schemas for every request and response.
 - Add an MCP command for `lupi.save_view` that writes the same Firestore saved-view document as the browser button.
 - Add deterministic request IDs, transcript entries, and replayable command logs.
