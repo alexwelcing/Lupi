@@ -1,0 +1,73 @@
+{
+  "version": "2026-07-10",
+  "source": "Derived from lupi.live molecule color selection (gallery registry + viewer color system, MCP v2026-07-07.asset-export) and Gooten merch inventory colors committed in lupi-shopify-products.csv (Black / Navy / White garments).",
+  "existing_colorways": ["blueprint", "bone_matte", "classic", "neon", "noir_gold"],
+  "render": {
+    "colorSource": "element",
+    "cameraPreset": "iso",
+    "master": { "size": 4096, "transparent": true, "postprocess_apparel": "studio", "postprocess_poster": "editorial" },
+    "note": "Apparel/DTG masters use Studio postprocess (no bloom -> no semi-transparent halos). Poster renditions composited onto exact-hex backgrounds at Gooten 300-DPI pixel sizes."
+  },
+  "colorways": [
+    {
+      "id": "ion",
+      "label": "Ion",
+      "story": "The lupi.live house look - the viewer's own teal on deep space.",
+      "from": ["uniformAtomColor #1edce0", "site theme #06080d", "social QR palette #111827/#1edce0/#ffffff"],
+      "elements": { "C": "#1edce0", "N": "#7de9ff", "O": "#f59e0b", "H": "#f8fafc", "S": "#facc15", "P": "#fb923c", "default": "#94a3b8" },
+      "poster_bg": "#06080d",
+      "garments": ["Black", "Navy"],
+      "poster_text": "#f8fafc"
+    },
+    {
+      "id": "ultraviolet",
+      "label": "Ultraviolet",
+      "story": "Altered-states violet - from the LSD / psilocybin gallery palettes.",
+      "from": ["lsd #7c3aed/#22d3ee", "psilocybin #0ea5e9/#a855f7"],
+      "elements": { "C": "#7c3aed", "N": "#22d3ee", "O": "#f472b6", "H": "#e2e8f0", "S": "#facc15", "P": "#a855f7", "default": "#94a3b8" },
+      "poster_bg": "#0d1117",
+      "garments": ["Black", "Navy"],
+      "poster_text": "#e2e8f0"
+    },
+    {
+      "id": "ember",
+      "label": "Ember",
+      "story": "Warm ritual - caffeine orange and serotonin amber on charcoal.",
+      "from": ["caffeine accent #f97316", "serotonin #f59e0b", "aspirin #fb7185"],
+      "elements": { "C": "#f97316", "N": "#f59e0b", "O": "#fb7185", "H": "#f8fafc", "S": "#facc15", "P": "#fb923c", "default": "#94a3b8" },
+      "poster_bg": "#111827",
+      "garments": ["Black", "Navy"],
+      "poster_text": "#f8fafc"
+    },
+    {
+      "id": "verdant",
+      "label": "Verdant",
+      "story": "Botanical greens - THC and cholesterol gallery palettes.",
+      "from": ["thc #16a34a", "cholesterol #22c55e/#facc15", "cyclohexanone lime #a3e635"],
+      "elements": { "C": "#16a34a", "N": "#a3e635", "O": "#facc15", "H": "#f8fafc", "S": "#fde047", "P": "#4ade80", "default": "#94a3b8" },
+      "poster_bg": "#0d1117",
+      "garments": ["Black", "Navy"],
+      "poster_text": "#f8fafc"
+    },
+    {
+      "id": "roseline",
+      "label": "Roseline",
+      "story": "Light-mode rose - the aspirin palette, dark-on-light for white garments and bright rooms.",
+      "from": ["aspirin #f43f5e/#f97316/#f8fafc"],
+      "elements": { "C": "#f43f5e", "N": "#fb7185", "O": "#f59e0b", "H": "#94a3b8", "S": "#f97316", "P": "#e11d48", "default": "#64748b" },
+      "poster_bg": "#f8fafc",
+      "garments": ["White"],
+      "poster_text": "#111827"
+    },
+    {
+      "id": "lab",
+      "label": "Lab",
+      "story": "The missing house theme - clean white + teal, serotonin family.",
+      "from": ["brand-system Lab theme", "serotonin #14b8a6/#f59e0b", "caffeine sky #38bdf8"],
+      "elements": { "C": "#14b8a6", "N": "#38bdf8", "O": "#f59e0b", "H": "#94a3b8", "S": "#facc15", "P": "#0ea5e9", "default": "#64748b" },
+      "poster_bg": "#f8fafc",
+      "garments": ["White"],
+      "poster_text": "#0f172a"
+    }
+  ]
+}
