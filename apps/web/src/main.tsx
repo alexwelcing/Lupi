@@ -113,6 +113,16 @@ async function mountViewer() {
   }
 }
 
+async function mountShop() {
+  root.render(<Splash />);
+  try {
+    const mod = await import('@atlas/ui/shop/ShopPage');
+    root.render(withProviders(<mod.default />));
+  } catch (err) {
+    renderError('Shop import', err);
+  }
+}
+
 async function mountCompare() {
   root.render(<Splash />);
   try {
@@ -139,7 +149,11 @@ async function mountLanding() {
   }
 }
 
-if (isCompare) {
+const isShopRoute = normalizedPathRoute(currentPathRoute()) === '/shop';
+
+if (isShopRoute) {
+  void mountShop();
+} else if (isCompare) {
   void mountCompare();
 } else if (wantsViewerImmediately()) {
   void mountViewer();
