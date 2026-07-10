@@ -51,7 +51,10 @@ async function renderWorkerContract(payload) {
   const molecule = req.molecule || { inputType: 'name', input: 'caffeine' };
   const asset = req.asset || {};
   const viewer = req.viewer || {};
-  const size = Math.min(4096, Math.max(64, asset.width || 2160));
+  // Gooten print boxes are rectangular (e.g. 1205x2020), so honor width AND height.
+  const clamp = (n) => Math.min(4096, Math.max(64, Math.round(n)));
+  const width = clamp(asset.width || 2160);
+  const height = clamp(asset.height || asset.width || 2160);
   const cwId = viewer.lupiColorway;
   const cw = cwId ? COLORWAYS[cwId] : null;
   if (cwId && !cw) throw new Error(`unknown colorway: ${cwId}`);
@@ -59,14 +62,19 @@ async function renderWorkerContract(payload) {
   await loadMolecule(molecule);
   if (cw) await applyColorway(cw);
 
-  let png;
-  if (asset.transparent) {
-    png = await renderTransparentMaster(size);
-  } else {
-    // opaque render composited onto the colorway poster background (or deep default)
-    const master = await renderTransparentMaster(size);
-    png = await composeProduct(master, { px: [size, size], background: cw ? 'colorway' : '#06080d', contentWidthFraction: 0.78 }, cw || { poster_bg: '#06080d' });
-  }
+  // The viewer only exports square frames; render the master at the long edge, then
+  // composite it into the exact print box (transparent for DTG, colorway bg otherwise).
+  const master = await renderTransparentMaster(clamp(Math.max(width, height)));
+  const png = await composeProduct(
+    master,
+    {
+      px: [width, height],
+      transparent: !!asset.transparent,
+      background: cw ? 'colorway' : '#06080d',
+      contentWidthFraction: asset.transparent ? 0.92 : 0.78,
+    },
+    cw || { poster_bg: '#06080d' },
+  );
   const sha256 = createHash('sha256').update(png).digest('hex');
   return {
     jobId: payload.jobId,
