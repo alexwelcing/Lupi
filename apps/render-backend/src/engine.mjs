@@ -32,7 +32,12 @@ async function ensurePage() {
       args: ['--no-sandbox', '--disable-dev-shm-usage', '--renderer-process-limit=1', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-webgpu', '--ignore-gpu-blocklist'],
     });
   }
-  const ctx = await browser.newContext({ viewport: { width: 840, height: 840 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 840, height: 840 },
+    // A default headless UA trips bot protection in front of production lupi.live.
+    // Harmless for the in-container localhost viewer; required for VIEWER_URL=https://lupi.live.
+    userAgent: process.env.RENDER_USER_AGENT || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  });
   page = await ctx.newPage();
   controlsOpen = false;
   plateCache.clear();
