@@ -1,0 +1,50 @@
+{
+  "_comment": "Shopify variant -> Gooten catalog variant. `match` tokens must resolve to EXACTLY ONE variant in gooten-catalog.json (run scripts/gooten-catalog.mjs first); wire-gooten.mjs fails loudly and prints candidates rather than guessing, because Gooten SKU strings are long and near-identical and a silent mismatch prints the wrong garment. Print pixel sizes are NOT declared here — they come from Gooten's own producttemplates response at wire time. Start with one family (--only LUPI-CAF-POST), confirm the sample print, then extend.",
+  "products": [
+    {
+      "name": "Caffeine Molecule Poster",
+      "shopifySkuPrefix": "LUPI-CAF-POST",
+      "molecule": "caffeine",
+      "colorway": "ion",
+      "transparent": false,
+      "description": "Caffeine — C8H10N4O2 — rendered from real 3D geometry by the LUPI viewer.",
+      "variants": [
+        { "suffix": "11x14", "match": ["poster", "11x14"] },
+        { "suffix": "12x18", "match": ["poster", "12x18"] },
+        { "suffix": "16x20", "match": ["poster", "16x20"] },
+        { "suffix": "18x24", "match": ["poster", "18x24"] },
+        { "suffix": "24x36", "match": ["poster", "24x36"] }
+      ]
+    },
+    {
+      "name": "Caffeine Molecule T-Shirt",
+      "shopifySkuPrefix": "LUPI-CAF-TEE",
+      "molecule": "caffeine",
+      "colorway": "ion",
+      "transparent": true,
+      "description": "Caffeine — C8H10N4O2 — DTG printed from a transparent master.",
+      "variants": [
+        { "suffix": "S-BLK", "match": ["tshirt", "-s-", "black"] },
+        { "suffix": "M-BLK", "match": ["tshirt", "-m-", "black"] },
+        { "suffix": "L-BLK", "match": ["tshirt", "-l-", "black"] },
+        { "suffix": "XL-BLK", "match": ["tshirt", "-xl-", "black"] },
+        { "suffix": "S-WHT", "match": ["tshirt", "-s-", "white"] },
+        { "suffix": "M-WHT", "match": ["tshirt", "-m-", "white"] },
+        { "suffix": "L-WHT", "match": ["tshirt", "-l-", "white"] },
+        { "suffix": "XL-WHT", "match": ["tshirt", "-xl-", "white"] }
+      ]
+    },
+    {
+      "name": "Caffeine Molecule Mug",
+      "shopifySkuPrefix": "LUPI-CAF-MUG",
+      "molecule": "caffeine",
+      "colorway": "ion",
+      "transparent": false,
+      "description": "Caffeine — C8H10N4O2 — sublimated wrap.",
+      "variants": [
+        { "suffix": "11oz", "match": ["mug", "11oz"] },
+        { "suffix": "15oz", "match": ["mug", "15oz"] }
+      ]
+    }
+  ]
+}
