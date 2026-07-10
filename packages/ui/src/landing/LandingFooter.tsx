@@ -133,6 +133,10 @@ export function LandingFooter() {
               <a href="https://lupine.science/investor-relations" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Investor Brief</a>
             </div>
             <div style={columnStyle}>
+              <span style={headerStyle}>Store</span>
+              <a href="/shop" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Molecule Merch</a>
+            </div>
+            <div style={columnStyle}>
               <span style={headerStyle}>Open work</span>
               <a href="https://github.com/alexwelcing/lupine" target="_blank" rel="noopener noreferrer" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>GitHub</a>
               <a href="https://lupine.science/live" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Live Lab</a>
