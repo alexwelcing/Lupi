@@ -1,3 +1,7 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+  # render-backend is a standalone deployable container, not part of the viewer build:
+  # its Docker stage installs with npm (--no-workspaces) and pulls native binaries
+  # (sharp, playwright-core) that don't belong in the viewer lockfile or CI install.
+  - '!apps/render-backend'
