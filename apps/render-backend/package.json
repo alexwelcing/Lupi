@@ -1,0 +1,16 @@
+{
+  "name": "@atlas/render-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lupi renderer backend - fulfills the mcp-worker renderer handoff contract and a merch design API (molecule x colorway x product template).",
+  "main": "src/server.mjs",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0",
+    "sharp": "^0.33.5"
+  }
+}
