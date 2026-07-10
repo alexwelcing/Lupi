@@ -1,0 +1,14 @@
+{
+  "_comment": "Gooten-aligned print templates. px = exact output pixels. Poster sizes at 300 DPI per Gooten baseline; apparel DTG at 150 DPI over a 12x16in max area (transparent PNG, no semi-transparency); mug wrap uses the common 11oz full-wrap template - ALWAYS verify against the specific Gooten product template before a live order. background: 'colorway' uses the colorway poster_bg hex.",
+  "master": { "master": true, "note": "trimmed transparent master, print-agnostic" },
+  "poster-11x14": { "px": [3300, 4200], "dpi": 300, "background": "colorway", "contentWidthFraction": 0.72, "contentTopFraction": 0.46 },
+  "poster-12x18": { "px": [3600, 5400], "dpi": 300, "background": "colorway", "contentWidthFraction": 0.72, "contentTopFraction": 0.44 },
+  "poster-16x20": { "px": [4800, 6000], "dpi": 300, "background": "colorway", "contentWidthFraction": 0.72, "contentTopFraction": 0.46 },
+  "poster-18x24": { "px": [5400, 7200], "dpi": 300, "background": "colorway", "contentWidthFraction": 0.72, "contentTopFraction": 0.45 },
+  "poster-24x36": { "px": [7200, 10800], "dpi": 300, "background": "colorway", "contentWidthFraction": 0.70, "contentTopFraction": 0.44 },
+  "tee-dtg": { "px": [1800, 2400], "dpi": 150, "transparent": true, "contentWidthFraction": 0.92, "contentTopFraction": 0.38 },
+  "hoodie-dtg": { "px": [1800, 2100], "dpi": 150, "transparent": true, "contentWidthFraction": 0.88, "contentTopFraction": 0.42 },
+  "tote-dtg": { "px": [1800, 1800], "dpi": 150, "transparent": true, "contentWidthFraction": 0.85, "contentTopFraction": 0.5 },
+  "mug-11oz-wrap": { "px": [2475, 1155], "dpi": 300, "background": "colorway", "contentWidthFraction": 0.30, "contentTopFraction": 0.5 },
+  "square-social": { "px": [2160, 2160], "dpi": null, "background": "colorway", "contentWidthFraction": 0.78, "contentTopFraction": 0.5 }
+}
