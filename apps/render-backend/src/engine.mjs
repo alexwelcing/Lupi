@@ -236,13 +236,19 @@ export async function composeProduct(masterPng, product, colorway) {
   const [W, H] = product.px;
   const bgHex = product.background === 'colorway' ? colorway.poster_bg : (product.background || '#00000000');
   const transparentBg = product.transparent === true;
+  // Fit the art inside BOTH dimensions. Scaling only by width overflows short/wide print
+  // boxes (e.g. a 2475x1155 mug wrap) and sharp rejects the negative composite offset.
   const contentFrac = product.contentWidthFraction ?? 0.72;
-  const targetW = Math.round(W * contentFrac);
-  const master = sharp(masterPng).resize({ width: targetW, height: targetW, fit: 'inside', kernel: 'lanczos3' });
-  const masterBuf = await master.png().toBuffer();
+  const maxW = Math.round(W * contentFrac);
+  const maxH = Math.round(H * (product.contentHeightFraction ?? contentFrac));
+  const masterBuf = await sharp(masterPng)
+    .resize({ width: maxW, height: maxH, fit: 'inside', kernel: 'lanczos3' })
+    .png()
+    .toBuffer();
   const meta = await sharp(masterBuf).metadata();
-  const left = Math.round((W - meta.width) / 2);
-  const top = Math.round(H * (product.contentTopFraction ?? 0.5) - meta.height / 2);
+  const clamp = (v, hi) => Math.max(0, Math.min(v, hi));
+  const left = clamp(Math.round((W - meta.width) / 2), W - meta.width);
+  const top = clamp(Math.round(H * (product.contentTopFraction ?? 0.5) - meta.height / 2), H - meta.height);
   const base = transparentBg
     ? sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     : sharp({ create: { width: W, height: H, channels: 4, background: hexToRgba(bgHex) } });
