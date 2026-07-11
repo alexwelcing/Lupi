@@ -2,6 +2,8 @@ name: LUPI CI
 
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: '17 8 * * *'
   pull_request:
     paths:
       - 'apps/**'
@@ -45,13 +47,26 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm build
 
       - name: Test
         run: pnpm test
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test Cloudflare Worker
+        run: pnpm cloudflare:test
+
+      - name: Verify MCP bridge
+        run: pnpm verify:mcp-bridge
+
+      - name: Verify asset quality
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        run: pnpm verify:asset-quality
 
       # Cloud Functions are a standalone npm package (own lockfile, separate
       # Firebase deploy), so they're not in the pnpm/turbo workspace. Gate their
@@ -62,9 +77,22 @@ jobs:
           npm ci
           npm test
 
+      - name: Regenerate MCP manifest and fail on drift
+        run: |
+          pnpm generate:mcp-manifest
+          if ! git -C "$GITHUB_WORKSPACE" diff --quiet -- apps/web/public/mcp-manifest.json; then
+            echo "::error::Committed MCP manifest is stale. Run 'pnpm generate:mcp-manifest' and commit the result."
+            git -C "$GITHUB_WORKSPACE" diff -- apps/web/public/mcp-manifest.json
+            exit 1
+          fi
+          echo "MCP manifest is in sync with tool definitions."
+
+      - name: Verify operational contract documentation
+        run: pnpm verify:operational-contract
+
       - name: Rebuild catalog and fail on drift
         run: |
-          npm run nist:build
+          pnpm nist:build
           if ! git -C "$GITHUB_WORKSPACE" diff --quiet -- apps/web/public/nist; then
             echo "::error::Committed NIST catalog is stale. Run 'npm run nist:build' and commit the result."
             git -C "$GITHUB_WORKSPACE" diff -- apps/web/public/nist

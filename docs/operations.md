@@ -1,6 +1,6 @@
 # Operations
 
-`lupi.live` is a pnpm/turbo workspace for the LUPI molecular viewer.
+`lupi.live` is a pnpm/turbo workspace for the LUPI molecular viewer and the canonical Cloudflare Worker production runtime (`lupi-edge`).
 
 ## Local Setup
 
@@ -73,25 +73,30 @@ Workflow:
 
 Current CI does:
 
-- install pnpm 9
-- install dependencies
+- install pnpm 9 with `pnpm install --frozen-lockfile`
 - build the workspace
 - run tests
-- fail if regenerated NIST catalog output drifts
-- run streaming and gallery smoke tests as non-blocking jobs
+- run lint
+- run Cloudflare Worker tests
+- verify browser MCP bridge workflows
+- verify export/asset quality
+- regenerate MCP manifests and the NIST catalog, then fail on drift
+- verify operational documentation references only package.json scripts and the `lupi-edge` production runtime
 
 ## Deploy
 
-Production viewer deploy is owned by this repo:
+Production is Cloudflare Worker `lupi-edge`:
 
 ```text
-.github/workflows/deploy-viewer.yml
+.github/workflows/deploy-cloudflare.yml
+apps/mcp-worker/wrangler.toml
 ```
 
-The workflow builds `apps/web/dist`, packages only the static viewer runtime
-with `tools/serve-web.mjs`, deploys a no-traffic Cloud Run candidate, smokes it,
-then routes production traffic to the proven revision. See
-[deploy-cutover.md](deploy-cutover.md).
+The Cloudflare workflow builds `apps/web`, builds/tests `apps/mcp-worker`, then
+deploys the Worker that serves the static viewer, MCP JSON-RPC, health and
+manifest endpoints, saved-view HTML, analytics collection, Firebase auth proxy
+paths, render job intake, and asset delivery. The Cloud Run workflow is manual
+only and exists as an explicitly triggered fallback/rollback path.
 
 ## Live Checks After Cutover
 
@@ -99,7 +104,8 @@ Keep these truths separate:
 
 - CI result
 - build artifact contents
-- Cloud Run revision and traffic
+- Cloudflare Worker version/route for `lupi-edge`
+- Cloud Run revision and traffic only when the manual fallback workflow is used
 - Firebase functions/rules deploy state
 - live `https://lupi.live` behavior
 - deploy telemetry in `glim-think`
@@ -117,14 +123,10 @@ Expected live smoke:
 
 ## Rollback
 
-After production deploy exists, prefer service rollback over source edits:
-
-```bash
-gcloud run revisions list --service=SERVICE --region=REGION
-gcloud run services update-traffic SERVICE \
-  --region=REGION \
-  --to-revisions=REVISION=100
-```
-
-Verify the public domain after rollback. Cloud Run success alone is not proof
-that `https://lupi.live` is serving the intended revision.
+Preferred rollback is Cloudflare-first: redeploy the last known-good commit with
+`pnpm cloudflare:build`, `pnpm cloudflare:test`, and `pnpm cloudflare:deploy`, or
+use the Cloudflare dashboard/API rollback for Worker `lupi-edge` after recording
+the target version. If Cloudflare is unavailable, manually trigger
+`.github/workflows/deploy-viewer.yml` as the Cloud Run fallback and verify the
+public domain before declaring recovery. Cloud Run success alone is not proof
+that `https://lupi.live` is serving the intended runtime.

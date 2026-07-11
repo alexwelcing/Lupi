@@ -44,7 +44,19 @@
     "generate:sphere-grid:assets": "node tools/generate-sphere-grid-gallery.mjs --no-snapshot",
     "analytics:report": "node tools/analytics-report.mjs",
     "lint": "turbo run lint",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "verify:standalone": "pnpm build && pnpm verify:mcp-bridge && pnpm verify:exports",
+    "verify:controls": "pnpm verify:mcp-bridge",
+    "verify:controls:mobile": "pnpm verify:mcp-bridge",
+    "verify:study-lens": "pnpm verify:mcp-bridge",
+    "verify:study-lens:mobile": "pnpm verify:mcp-bridge",
+    "verify:viewer": "pnpm verify:mcp-bridge",
+    "verify:gallery": "pnpm audit:gallery-claims",
+    "verify:streaming": "pnpm verify:streaming-ux",
+    "verify:export-colors": "pnpm verify:exports",
+    "verify:saved-views": "pnpm cloudflare:test",
+    "verify:save-view-ui": "pnpm cloudflare:test",
+    "verify:operational-contract": "node tools/verify-operational-contract.mjs"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",

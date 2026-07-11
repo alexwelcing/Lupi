@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-07-09T12:47:52.191Z",
+  "generatedAt": "deterministic",
   "tools": [
     {
       "name": "lupi.generate_molecule",

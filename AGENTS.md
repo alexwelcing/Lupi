@@ -88,7 +88,7 @@ window.__lupiViewerMcp: {
 ```ts
 interface LupiMcpRequest {
   id: string;      // any unique string
-  tool: string;    // one of the 19 lupi.* tools
+  tool: string;    // one of the 28 lupi.* browser bridge tools
   arguments: Record<string, unknown>;
 }
 ```

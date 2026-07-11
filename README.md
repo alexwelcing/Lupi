@@ -1,11 +1,11 @@
 # lupi.live
 
-Standalone LUPI molecular viewer repo.
+Standalone LUPI molecular viewer and Cloudflare edge MCP repo.
 
-This repo owns the browser-native molecular viewer at `lupi.live`: the WebGPU
-viewer app, shared viewer packages, parser/runtime packages, viewer verification
-tools, Firebase viewer support, saved views, API-key auth, and the agent/MCP
-surface for loading and inspecting molecules.
+This repo owns the production `lupi.live` runtime on Cloudflare Worker
+`lupi-edge`: the WebGPU viewer app, shared viewer packages, parser/runtime
+packages, viewer verification tools, Firebase viewer support, saved views,
+API-key auth, and the agent/MCP surface for loading and inspecting molecules.
 
 It does not own the Lupine research corpus, public landing page, Lean proofs,
 MLIP distillation policy, or experiment execution. Those stay in the science
@@ -18,7 +18,8 @@ Owns:
 - `apps/web`: public LUPI viewer
 - `packages/core`, `packages/parsers`, `packages/renderer`, `packages/scene`,
   `packages/ui`, `packages/ui-core`
-- `functions`: viewer Firebase functions
+- `apps/mcp-worker`: canonical Cloudflare Worker (`lupi-edge`) serving the app, MCP JSON-RPC, render jobs, health, manifests, analytics, and auth proxy endpoints
+- `functions`: legacy/support Firebase functions
 - `firestore.rules`, `firestore.indexes.json`, `firebase.json`
 - `tools`: viewer smoke tests, gallery checks, export checks, MCP checks, asset tools
 - `popular_molecules`, public gallery assets, and viewer-owned manifests
@@ -78,15 +79,19 @@ Some visual verifiers launch Chromium and write artifacts under
 
 ## Deploy Status
 
-Production deploy is owned by this standalone repo:
+Production deploy authority is the Cloudflare Worker named `lupi-edge` in
+`apps/mcp-worker`, deployed by the manual Cloudflare workflow:
 
 ```text
-.github/workflows/deploy-viewer.yml
+.github/workflows/deploy-cloudflare.yml
 ```
 
-The workflow builds only the viewer, packages `apps/web/dist` with the local
-static server, deploys a no-traffic Cloud Run candidate, smokes it, and then
-routes `lupi.live` traffic to the proven revision. See
+Cloud Run is preserved only as an explicitly triggered fallback workflow; it is
+not an automatic production path. The Cloudflare Worker serves the built web app,
+MCP JSON-RPC, health/versioned manifests, saved-view share HTML, analytics, auth
+proxy paths, render job intake, and asset delivery. See
+[docs/cloudflare-migration.md](docs/cloudflare-migration.md),
+[docs/cloudflare-mcp.md](docs/cloudflare-mcp.md), and
 [docs/deploy-cutover.md](docs/deploy-cutover.md).
 
 ## Docs

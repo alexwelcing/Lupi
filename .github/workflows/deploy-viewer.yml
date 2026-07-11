@@ -1,19 +1,7 @@
 name: Deploy LUPI viewer to Cloud Run
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/**'
-      - 'packages/**'
-      - 'scripts/**'
-      - 'tools/build-cloud-run-bundle.mjs'
-      - 'tools/serve-web.mjs'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'turbo.json'
-      - '.github/workflows/deploy-viewer.yml'
+  # Manual fallback only. Cloudflare Worker `lupi-edge` is the canonical production runtime.
   workflow_dispatch: {}
 
 concurrency:

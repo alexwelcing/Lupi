@@ -7,7 +7,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const manifestPath = resolve(repoRoot, 'apps/web/public/mcp-manifest.json');
 const manifest = {
   schemaVersion: '0.3.0',
-  generatedAt: new Date().toISOString(),
+  generatedAt: 'deterministic',
   tools: MCP_TOOL_DEFINITIONS,
 };
 
