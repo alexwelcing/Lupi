@@ -55,7 +55,7 @@ export function StudyLensPanel({
   return (
     <aside
       data-testid="study-lens-panel"
-      aria-label="Study lens"
+      aria-label="Study Guide"
       style={{
         ...panelStyle,
         top: compact ? 176 : 180,
@@ -67,14 +67,14 @@ export function StudyLensPanel({
     >
       <header style={headerStyle}>
         <div style={{ minWidth: 0 }}>
-          <div style={eyebrowStyle}>Study Lens</div>
+          <div style={eyebrowStyle}>Study Guide</div>
           <h2 style={titleStyle}>{facts.title}</h2>
           <p style={cueStyle}>{facts.studyCue}</p>
         </div>
         <button
           type="button"
-          aria-label="Close study lens"
-          title="Close study lens"
+          aria-label="Close Study Guide"
+          title="Close Study Guide"
           onClick={onClose}
           style={closeButtonStyle}
         >

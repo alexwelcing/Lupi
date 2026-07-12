@@ -4,29 +4,22 @@
  * Always renders inside the Controls drawer (the desktop dock and the mobile
  * sheet both mount it via ViewerControlsDrawer). It owns only the chrome: the
  * shared <style> block both bodies' CSS classes resolve against, and a compact
- * live-status line. The bodies themselves are composed in — MoleculeControls
+ * guidance line. The bodies themselves are composed in — MoleculeControls
  * and SceneControls each own their own store wiring.
  *
  * The mode name isn't repeated here: the drawer's mode tabs sit directly above
- * and already show which surface is active, so the status line carries the
- * live detail (grade · color, or the active world) instead.
+ * and already show which surface is active, so the guidance line explains the
+ * simplest next step instead of repeating the mode name.
  */
-import { useStore } from './store';
-import { BG_PRESETS } from './backgroundPresets';
 import { MoleculeControls } from './studio/MoleculeControls';
 import { SceneControls } from './studio/SceneControls';
 
 export type StudioDeckMode = 'molecule' | 'scene';
 
 export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
-  const postprocessPreset = useStore(s => s.postprocessPreset);
-  const colorScheme = useStore(s => s.colorScheme);
-  const backgroundPreset = useStore(s => s.backgroundPreset);
-  const activeBackgroundPreset = BG_PRESETS[backgroundPreset];
-
-  const status = mode === 'molecule'
-    ? `${postprocessPreset} grade · ${colorScheme} color`
-    : (activeBackgroundPreset?.label ?? backgroundPreset);
+  const guidance = mode === 'molecule'
+    ? 'Choose a quick view, then fine-tune only if needed.'
+    : 'Choose a clear background; environments and lighting are under Advanced.';
 
   return (
     <div
@@ -137,7 +130,7 @@ export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
           whiteSpace: 'nowrap',
           fontVariantNumeric: 'tabular-nums',
         }}>
-          {status}
+          {guidance}
         </div>
       </div>
 

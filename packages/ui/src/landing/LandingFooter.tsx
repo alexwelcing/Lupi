@@ -134,7 +134,7 @@ export function LandingFooter() {
             </div>
             <div style={columnStyle}>
               <span style={headerStyle}>Open work</span>
-              <a href="https://github.com/alexwelcing/lupine" target="_blank" rel="noopener noreferrer" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>GitHub</a>
+              <a href="https://github.com/alexWelcing/lupi" target="_blank" rel="noopener noreferrer" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>GitHub</a>
               <a href="https://lupine.science/live" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Live Lab</a>
               <a href="https://lupine.science/console" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Console</a>
               <a href="/llms.txt" style={linkStyle} onMouseEnter={(e) => e.currentTarget.style.color = '#1edce0'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)'}>Agents</a>
@@ -158,7 +158,7 @@ export function LandingFooter() {
             &copy; {new Date().getFullYear()} LUPI by Lupine Science. Molecular &amp; materials visualization in the browser.
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: 'rgba(255, 255, 255, 0.4)' }}>
-            Apache 2.0 Licensed
+            AGPL-3.0-or-later
           </div>
         </div>
       </div>

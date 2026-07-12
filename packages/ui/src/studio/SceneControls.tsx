@@ -1,8 +1,7 @@
 /**
- * SceneControls — the Scene tab body: the space around the molecule (world
- * backdrop, presence/brightness, lighting direction, framing guides, motion
- * loop) with the finicky controls behind an Advanced disclosure. Owns its own
- * store wiring; the deck shell just mounts it.
+ * SceneControls — the Background tab body. Simple backgrounds and reference
+ * guides stay on the easy path; immersive environments, lighting, projection,
+ * and atmosphere live behind one Advanced disclosure.
  */
 import { useMemo } from 'react';
 import { useStore, type BackgroundBackdropPattern, type BackgroundBackdropShape, type FilterShellPreset, type FilterShellShape } from '../store';
@@ -112,8 +111,7 @@ export function SceneControls() {
     { label: 'Publication', presets: publicationPresets },
     { label: 'Math Fields', presets: mathPresets },
     { label: 'Signature', presets: signaturePresets },
-    { label: 'Base', presets: gradientPresets },
-  ], [gradientPresets, mathPresets, publicationPresets, signaturePresets, worldPresets]);
+  ], [mathPresets, publicationPresets, signaturePresets, worldPresets]);
   const activeBackgroundPreset = BG_PRESETS[backgroundPreset];
   const activeBackgroundPresetWithId = activeBackgroundPreset ? { id: backgroundPreset, ...activeBackgroundPreset } : undefined;
   const activeBackgroundIsVideo = useMemo(
@@ -140,24 +138,24 @@ export function SceneControls() {
 
   return (
     <div className="lupi-deck-grid">
-      {/* Easy path: pick a world, set how present it is, toggle framing
-          guides, control any motion loop. Everything finicky lives under
-          "Advanced" below so the common path stays clear. */}
-      <ControlGroup title="World" wide>
-        <p style={schemeHintStyle}>The space around your molecule — backdrop, lighting, and framing.</p>
-        <WorldBackdropBrowser
-          value={backgroundPreset}
-          activePreset={activeBackgroundPresetWithId}
-          groups={worldLibraryGroups}
-          onChange={setBackgroundPreset}
-          onRandomWorld={handleRandomWorld}
-          onRandomLoop={handleRandomVideo}
-        />
+      <ControlGroup title="Background" wide>
+        <p style={schemeHintStyle}>Choose a clear canvas first. Immersive environments are available under Advanced.</p>
+        <div className="lupi-studio-segments">
+          {gradientPresets.map(preset => (
+            <SegmentButton
+              key={preset.id}
+              label={preset.label}
+              active={backgroundPreset === preset.id}
+              accent={preset.id === 'white' ? '#e5e7eb' : preset.id === 'warm' ? '#f59e0b' : '#7de9ff'}
+              onClick={() => setBackgroundPreset(preset.id)}
+            />
+          ))}
+        </div>
       </ControlGroup>
 
-      <ControlGroup title="Adjust">
+      <ControlGroup title="Background adjustments">
         <CompactSlider
-          label="Presence"
+          label="Visibility"
           value={backgroundOpacity}
           min={0.15}
           max={1}
@@ -177,27 +175,18 @@ export function SceneControls() {
         <SegmentButton label="Reset" active={false} accent="#94a3b8" onClick={resetBackgroundAdjustments} />
       </ControlGroup>
 
-      <ControlGroup title="Lighting">
-        <p style={schemeHintStyle}>Spin the dials to move the key light around the molecule.</p>
-        <div className="lupi-studio-slider-grid">
-          <RiveKnob label="Angle" value={keyLightAzimuth} min={-180} max={180} step={5} onChange={setKeyLightAzimuth} format={value => `${Math.round(value)}°`} />
-          <RiveKnob label="Height" value={keyLightElevation} min={5} max={89} step={1} onChange={setKeyLightElevation} format={value => `${Math.round(value)}°`} />
-        </div>
-        <CompactSlider label="Key light" value={dirLightIntensity} min={0} max={4} step={0.1} onChange={setDirLightIntensity} format={value => value.toFixed(1)} />
-      </ControlGroup>
-
-      <ControlGroup title="Guides">
+      <ControlGroup title="Reference guides">
         <div className="lupi-studio-segments">
-          <SegmentButton label={showCell ? 'Cell on' : 'Cell off'} active={showCell} accent="#7de9ff" onClick={toggleCell} />
-          <SegmentButton label={showAxes ? 'Axes on' : 'Axes off'} active={showAxes} accent="#a7f3d0" onClick={toggleAxes} />
+          <SegmentButton label="Unit cell" active={showCell} accent="#7de9ff" onClick={toggleCell} />
+          <SegmentButton label="Axes" active={showAxes} accent="#a7f3d0" onClick={toggleAxes} />
         </div>
       </ControlGroup>
 
       {activeBackgroundIsVideo && (
-        <ControlGroup title="Motion loop">
+        <ControlGroup title="Background motion">
           <div className="lupi-studio-segments">
             <SegmentButton
-              label={backgroundMotionPaused ? 'Play' : 'Pause'}
+              label="Motion"
               active={!backgroundMotionPaused}
               accent="#1edce0"
               onClick={() => setBackgroundMotionPaused(!backgroundMotionPaused)}
@@ -216,8 +205,29 @@ export function SceneControls() {
         </ControlGroup>
       )}
 
-      <AdvancedSection title="Advanced scene">
-        <ControlGroup title="Backdrop geometry">
+      <AdvancedSection title="Environments & lighting">
+        <ControlGroup title="Immersive backgrounds" wide>
+          <p style={schemeHintStyle}>Browse 360° environments, publication settings, mathematical fields, and motion backgrounds.</p>
+          <WorldBackdropBrowser
+            value={backgroundPreset}
+            activePreset={activeBackgroundPresetWithId}
+            groups={worldLibraryGroups}
+            onChange={setBackgroundPreset}
+            onRandomWorld={handleRandomWorld}
+            onRandomLoop={handleRandomVideo}
+          />
+        </ControlGroup>
+
+        <ControlGroup title="Lighting">
+          <p style={schemeHintStyle}>Move the main light around the structure and set its strength.</p>
+          <div className="lupi-studio-slider-grid">
+            <RiveKnob label="Angle" value={keyLightAzimuth} min={-180} max={180} step={5} onChange={setKeyLightAzimuth} format={value => `${Math.round(value)}°`} />
+            <RiveKnob label="Height" value={keyLightElevation} min={5} max={89} step={1} onChange={setKeyLightElevation} format={value => `${Math.round(value)}°`} />
+          </div>
+          <CompactSlider label="Key light" value={dirLightIntensity} min={0} max={4} step={0.1} onChange={setDirLightIntensity} format={value => value.toFixed(1)} />
+        </ControlGroup>
+
+        <ControlGroup title="Projection shape">
           <div className="lupi-studio-segments">
             {BACKDROP_SHAPES.map(option => (
               <SegmentButton
@@ -244,14 +254,14 @@ export function SceneControls() {
           </div>
         </ControlGroup>
 
-        <ControlGroup title="Orientation & grade">
+        <ControlGroup title="Position & color">
           <CompactSlider label="Yaw" value={backgroundYawDegrees} min={-180} max={180} step={1} onChange={setBackgroundYawDegrees} format={value => `${Math.round(value)} deg`} />
           <CompactSlider label="Pitch" value={backgroundPitchDegrees} min={-45} max={45} step={1} onChange={setBackgroundPitchDegrees} format={value => `${Math.round(value)} deg`} />
           <CompactSlider label="Saturate" value={backgroundSaturation} min={0} max={2} step={0.01} onChange={setBackgroundSaturation} format={value => value.toFixed(2)} />
           <CompactSlider label="Contrast" value={backgroundContrast} min={0.5} max={1.8} step={0.01} onChange={setBackgroundContrast} format={value => value.toFixed(2)} />
         </ControlGroup>
 
-        <ControlGroup title="Filter shell">
+        <ControlGroup title="Atmosphere">
           <div className="lupi-studio-segments">
             {FILTER_SHELL_SHAPES.map(option => (
               <SegmentButton

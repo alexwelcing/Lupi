@@ -13,7 +13,7 @@
  * body is entered. Motion is glacial and freezes under prefers-reduced-motion.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ALL_EXAMPLES, publicAssetUrl, type GalleryExample } from '../shared';
 import { openMolecule } from '../../viewer/openMolecule';
 import { MatterPlanet } from './MatterPlanet';
@@ -34,6 +34,13 @@ const COLLECTION_IDS = [
   'aspirin',
   'lupine_sphere_grid',
   'graphene_ribbon',
+];
+
+const HERO_EXAMPLE_IDS = [
+  'caffeine',
+  'water',
+  'mlip_lifepo4_li_channel',
+  'diamond_crystal',
 ];
 
 const FIELD_ORDER = [
@@ -112,7 +119,8 @@ export function MelancholiaLanding() {
   const toCollection = useCallback(() => {
     document.getElementById('mel-part-one')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
-  const toIndex = useCallback(() => {
+  const toIndex = useCallback((domain?: string) => {
+    window.dispatchEvent(new CustomEvent('lupi:gallery-domain', { detail: domain ?? 'All' }));
     document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
   const toMatter = useCallback(() => {
@@ -127,13 +135,19 @@ export function MelancholiaLanding() {
 
       {/* ── Overture ── */}
       <Overture
-        onApproach={approachBillion}
         onCollection={toCollection}
         onMatter={toMatter}
+        onOpen={openBody}
       />
 
       {/* ── Part One — The Collection ── */}
       <Collection bodies={collection} onOpen={openBody} />
+
+      <ScaleProof
+        total={totalBodies}
+        fieldCount={fieldCount}
+        onApproach={approachBillion}
+      />
 
       {/* ── The field index ── */}
       <FieldIndex fields={fields} total={totalBodies} fieldCount={fieldCount} onBrowse={toIndex} />
@@ -143,9 +157,14 @@ export function MelancholiaLanding() {
 
 // ─── Overture ─────────────────────────────────────────────────────────
 function Overture({
-  onApproach, onCollection, onMatter,
-}: { onApproach: () => void; onCollection: () => void; onMatter: () => void }) {
+  onCollection, onMatter, onOpen,
+}: {
+  onCollection: () => void;
+  onMatter: () => void;
+  onOpen: (example: GalleryExample) => void;
+}) {
   const [ref, shown] = useReveal<HTMLDivElement>();
+  const [query, setQuery] = useState('');
   // Faint vertical drift on the planet — the approach.
   const [drift, setDrift] = useState(0);
   useEffect(() => {
@@ -160,9 +179,56 @@ function Overture({
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  const examples = useMemo(
+    () => HERO_EXAMPLE_IDS
+      .map((id) => ALL_EXAMPLES.find((example) => example.id === id))
+      .filter(Boolean) as GalleryExample[],
+    [],
+  );
+  const matches = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return [];
+    return ALL_EXAMPLES
+      .filter((example) => example.available !== false)
+      .map((example) => {
+        const title = example.title.toLowerCase();
+        const searchable = [
+          example.title,
+          example.subtitle,
+          example.domain,
+          ...Object.values(example.metadata ?? {}),
+        ].join(' ').toLowerCase();
+        const score = title === normalized ? 20
+          : title.startsWith(normalized) ? 12
+            : title.includes(normalized) ? 8
+              : searchable.includes(normalized) ? 3
+                : 0;
+        return { example, score };
+      })
+      .filter((match) => match.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map((match) => match.example);
+  }, [query]);
+
+  const searchLibrary = useCallback(() => {
+    const normalized = query.trim();
+    if (normalized) {
+      window.dispatchEvent(new CustomEvent('lupi:gallery-search', { detail: normalized }));
+    } else {
+      window.dispatchEvent(new CustomEvent('lupi:gallery-domain', { detail: 'All' }));
+    }
+    document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [query]);
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    searchLibrary();
+  };
+
   return (
-    <section className="mel-overture" aria-label="Lupi — an archive of matter">
-      <MatterField className="mel-field" />
+    <section className="mel-overture" aria-label="Lupi 3D molecule and materials viewer">
+      <MatterField className="mel-field-canvas" />
       <div
         className="mel-planet-frame"
         style={{ transform: `translateY(${drift}px)` }}
@@ -173,38 +239,100 @@ function Overture({
       </div>
 
       <div ref={ref} className={`mel-overture-copy${shown ? ' is-shown' : ''}`}>
-        <div className="mel-eyebrow">Lupi &mdash; an archive of matter</div>
-        <h1 className="mel-title">
-          Look closely<br />at the matter.
+        <div className="mel-eyebrow">Free 3D molecule &amp; materials viewer</div>
+        <h1 className="mel-title" aria-label="Explore matter in 3D.">
+          Explore matter<br />in 3D.
         </h1>
         <p className="mel-lede">
-          Every structure here is a small body of matter &mdash; a molecule you
-          could hold, a crystal, a fluid caught mid-motion. Open one from the
-          archive, or drop your own, and turn it in real time: its bonds, its
-          forces, its energy, its motion.
+          Search a molecule, open a simulation, or bring your own research data.
+          Rotate it, inspect atoms and bonds, reveal properties, and export a
+          figure &mdash; directly in your browser.
         </p>
+
+        <div className="mel-search-shell">
+          <form className="mel-search" role="search" onSubmit={submitSearch}>
+            <label htmlFor="mel-home-search">Search molecules and materials</label>
+            <div className="mel-search-row">
+              <span className="mel-search-icon" aria-hidden="true">⌕</span>
+              <input
+                id="mel-home-search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.currentTarget.value)}
+                placeholder="Try caffeine, graphene, LiFePO₄…"
+                autoComplete="off"
+                aria-controls={query.trim() ? 'mel-search-results' : undefined}
+              />
+              <button type="submit">Search</button>
+            </div>
+          </form>
+
+          {query.trim() && (
+            <div id="mel-search-results" className="mel-search-results" role="region" aria-label="Matching examples">
+              {matches.length > 0 ? matches.map((example) => (
+                <button key={example.id} type="button" onClick={() => onOpen(example)}>
+                  <span>{example.title}</span>
+                  <small>{example.domain} · {example.atoms} atoms</small>
+                </button>
+              )) : (
+                <button type="button" onClick={searchLibrary}>
+                  <span>Search the full library for “{query.trim()}”</span>
+                  <small>Browse all available sources</small>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mel-examples" aria-label="Start with an example">
+          <span>Try an example</span>
+          {examples.map((example) => (
+            <button key={example.id} type="button" onClick={() => onOpen(example)}>{example.title}</button>
+          ))}
+        </div>
+
         <div className="mel-actions">
-          <button type="button" className="mel-btn mel-btn--primary" onClick={onCollection}>
-            Enter the collection <span aria-hidden="true">&rarr;</span>
+          <button type="button" className="mel-btn" onClick={onCollection}>
+            Browse examples
           </button>
           <button type="button" className="mel-btn" onClick={onMatter}>
-            Bring your own matter
+            Open your data
           </button>
         </div>
-        <button type="button" className="mel-quiet" onClick={onApproach}>
-          &mdash; or approach the largest body in the field &rarr;
-        </button>
-
-        <dl className="mel-readout" aria-label="The instrument">
-          <div><dt>archive</dt><dd>100 bodies &middot; 11 fields of matter</dd></div>
-          <div><dt>formats</dt><dd>LAMMPS &middot; XYZ &middot; trajectories &middot; profiles</dd></div>
-          <div><dt>opens in</dt><dd>a live instrument, in the browser</dd></div>
-        </dl>
       </div>
 
       <div className="mel-scrollcue" aria-hidden="true">
         <span>the collection</span>
         <div className="mel-scrollcue-line" />
+      </div>
+    </section>
+  );
+}
+
+// ─── Scale proof ──────────────────────────────────────────────────────
+function ScaleProof({
+  total, fieldCount, onApproach,
+}: {
+  total: number;
+  fieldCount: number;
+  onApproach: () => void;
+}) {
+  const [ref, shown] = useReveal<HTMLDivElement>();
+  return (
+    <section className="mel-scale" aria-labelledby="mel-scale-title">
+      <div ref={ref} className={`mel-scale-inner${shown ? ' is-shown' : ''}`}>
+        <div>
+          <span className="mel-part-mark">Built for teaching and research</span>
+          <h2 id="mel-scale-title" className="mel-part-title">From three atoms to one billion.</h2>
+          <p className="mel-part-sub">
+            Start with {nf(total)} ready-to-open structures across {fieldCount} fields,
+            or bring LAMMPS and XYZ data from your own work. Lupi keeps sources,
+            properties, citations, and export close to the view.
+          </p>
+        </div>
+        <button type="button" className="mel-btn mel-btn--primary" onClick={onApproach}>
+          Open the billion-atom demo <span aria-hidden="true">&rarr;</span>
+        </button>
       </div>
     </section>
   );
@@ -216,11 +344,11 @@ function Collection({ bodies, onOpen }: { bodies: GalleryExample[]; onOpen: (ex:
   return (
     <section className="mel-part" aria-labelledby="mel-part-one">
       <div ref={ref} className={`mel-part-head${shown ? ' is-shown' : ''}`}>
-        <span className="mel-part-mark">Part One</span>
-        <h2 id="mel-part-one" className="mel-part-title">The Collection</h2>
+        <span className="mel-part-mark">Start here</span>
+        <h2 id="mel-part-one" className="mel-part-title">Choose a way into the science.</h2>
         <p className="mel-part-sub">
-          {bodies.length} bodies drawn from the archive. Each opens into the same
-          instrument &mdash; turn it, cut through it, colour it by force or energy.
+          Open a familiar molecule, a working material, or a live trajectory.
+          Every example opens in the same viewer, ready to rotate and inspect.
         </p>
       </div>
 
@@ -272,7 +400,7 @@ function CollectionBody({ ex, index, onOpen }: { ex: GalleryExample; index: numb
         </span>
       </span>
 
-      <span className="mel-body-enter" aria-hidden="true">{hovered ? 'approach →' : ''}</span>
+      <span className="mel-body-enter" aria-hidden="true">{hovered ? 'Open in viewer →' : 'Open →'}</span>
     </button>
   );
 }
@@ -280,26 +408,26 @@ function CollectionBody({ ex, index, onOpen }: { ex: GalleryExample; index: numb
 // ─── The field index ──────────────────────────────────────────────────
 function FieldIndex({
   fields, total, fieldCount, onBrowse,
-}: { fields: { domain: string; count: number }[]; total: number; fieldCount: number; onBrowse: () => void }) {
+}: { fields: { domain: string; count: number }[]; total: number; fieldCount: number; onBrowse: (domain?: string) => void }) {
   const [ref, shown] = useReveal<HTMLDivElement>();
   return (
     <section className="mel-index" aria-labelledby="mel-index-title">
       <div ref={ref} className={`mel-index-inner${shown ? ' is-shown' : ''}`}>
         <div className="mel-index-head">
-          <span className="mel-part-mark">The complete index</span>
+          <span className="mel-part-mark">Browse by field</span>
           <h2 id="mel-index-title" className="mel-part-title">
             {nf(total)} bodies, across {fieldCount} fields.
           </h2>
           <p className="mel-part-sub">
-            The whole archive lies below &mdash; search every source, or narrow to
-            a single field of matter.
+            Choose a field to open the library with that filter already applied,
+            or continue to search every available structure.
           </p>
         </div>
 
         <ul className="mel-fields">
           {fields.map(({ domain, count }) => (
             <li key={domain}>
-              <button type="button" className="mel-field" style={{ ['--tone' as any]: FIELD_TONE[domain] ?? '#9fb0c8' }} onClick={onBrowse}>
+              <button type="button" className="mel-field" style={{ ['--tone' as any]: FIELD_TONE[domain] ?? '#9fb0c8' }} onClick={() => onBrowse(domain)}>
                 <span className="mel-field-mark" aria-hidden="true" />
                 <span className="mel-field-name">{domain}</span>
                 <span className="mel-field-count">{count}</span>
@@ -308,8 +436,8 @@ function FieldIndex({
           ))}
         </ul>
 
-        <button type="button" className="mel-btn mel-index-cta" onClick={onBrowse}>
-          Open the full index <span aria-hidden="true">&darr;</span>
+        <button type="button" className="mel-btn mel-index-cta" onClick={() => onBrowse()}>
+          Browse all structures <span aria-hidden="true">&darr;</span>
         </button>
       </div>
     </section>
@@ -359,7 +487,7 @@ const MEL_CSS = `
   padding: clamp(28px, 6vw, 96px);
   box-sizing: border-box;
 }
-.mel-field {
+.mel-field-canvas {
   position: absolute; inset: 0; z-index: 0;
   width: 100%; height: 100%;
   pointer-events: none;
@@ -381,7 +509,7 @@ const MEL_CSS = `
 }
 .mel-overture-copy {
   position: relative; z-index: 2;
-  max-width: 620px;
+  max-width: 680px;
   opacity: 0; transform: translateY(26px);
   transition: opacity 1.4s cubic-bezier(0.2,0.7,0.2,1), transform 1.4s cubic-bezier(0.2,0.7,0.2,1);
 }
@@ -398,12 +526,65 @@ const MEL_CSS = `
   text-shadow: 0 2px 34px rgba(4, 6, 11, 0.8), 0 0 2px rgba(4, 6, 11, 0.5);
 }
 .mel-lede {
-  font-size: clamp(15px, 1.5vw, 18px); line-height: 1.72; max-width: 46ch;
-  color: var(--ink-dim); margin: 0 0 34px; font-weight: 380;
+  font-size: clamp(15px, 1.5vw, 18px); line-height: 1.68; max-width: 50ch;
+  color: var(--ink-dim); margin: 0 0 24px; font-weight: 380;
   text-shadow: 0 1px 16px rgba(4, 6, 11, 0.92);
 }
-.mel-eyebrow, .mel-readout dt, .mel-readout dd { text-shadow: 0 1px 12px rgba(4, 6, 11, 0.85); }
-.mel-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
+.mel-eyebrow { text-shadow: 0 1px 12px rgba(4, 6, 11, 0.85); }
+.mel-search-shell { position: relative; max-width: 580px; z-index: 12; }
+.mel-search { display: grid; gap: 8px; }
+.mel-search label {
+  font-family: var(--mono); font-size: 10px; font-weight: 650;
+  letter-spacing: 0.16em; text-transform: uppercase; color: rgba(205,214,228,0.72);
+}
+.mel-search-row {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center;
+  min-height: 52px; padding: 5px 5px 5px 14px;
+  border: 1px solid rgba(216,184,120,0.34); border-radius: 4px;
+  background: rgba(5,8,14,0.82); box-shadow: 0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.mel-search-row:focus-within {
+  border-color: #e6c98c;
+  box-shadow: 0 0 0 3px rgba(216,184,120,0.2), 0 18px 50px rgba(0,0,0,0.24);
+}
+.mel-search-icon { color: var(--gold); font-size: 22px; line-height: 1; transform: rotate(-12deg); }
+.mel-search input {
+  width: 100%; min-width: 0; border: 0; outline: 0; background: transparent;
+  color: #f3f6fb; font: 500 15px/1.2 var(--mono); letter-spacing: 0;
+}
+.mel-search input::placeholder { color: rgba(174,186,204,0.48); }
+.mel-search-row > button {
+  min-height: 42px; padding: 0 18px; border: 0; border-radius: 2px;
+  color: #11151d; background: var(--gold); cursor: pointer;
+  font: 700 12px/1 var(--mono); letter-spacing: 0.04em;
+}
+.mel-search-row > button:hover { background: #e6c98c; }
+.mel-search-results {
+  position: absolute; top: calc(100% + 7px); left: 0; right: 0; z-index: 20;
+  display: grid; padding: 6px; border: 1px solid rgba(216,184,120,0.28); border-radius: 5px;
+  background: rgba(7,10,17,0.97); box-shadow: 0 24px 64px rgba(0,0,0,0.56);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+}
+.mel-search-results button {
+  display: grid; gap: 3px; min-height: 48px; padding: 8px 10px;
+  border: 0; border-radius: 3px; background: transparent; color: #edf2f9;
+  cursor: pointer; text-align: left;
+}
+.mel-search-results button:hover, .mel-search-results button:focus-visible { background: rgba(216,184,120,0.1); outline: 1px solid rgba(216,184,120,0.35); }
+.mel-search-results span { font: 650 13px/1.2 var(--mono); }
+.mel-search-results small { color: var(--ink-dim); font: 500 10.5px/1.2 var(--mono); }
+.mel-examples {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 11px;
+  color: var(--ink-faint); font: 600 10px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em;
+}
+.mel-examples button {
+  min-height: 30px; padding: 5px 9px; border: 1px solid rgba(200,214,236,0.12); border-radius: 999px;
+  background: rgba(200,214,236,0.025); color: rgba(218,226,238,0.72); cursor: pointer;
+  font: 600 10.5px/1 var(--mono); text-transform: none; letter-spacing: 0;
+}
+.mel-examples button:hover, .mel-examples button:focus-visible { color: #f2ead8; border-color: rgba(216,184,120,0.48); outline: none; }
+.mel-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 14px; }
 .mel-btn {
   appearance: none; cursor: pointer;
   font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em;
@@ -418,22 +599,6 @@ const MEL_CSS = `
   border-color: var(--gold); font-weight: 600;
 }
 .mel-btn--primary:hover { background: #e6c98c; color: #0c0f16; }
-.mel-quiet {
-  appearance: none; background: none; border: none; cursor: pointer;
-  font-family: var(--serif); font-style: italic; font-size: 15px;
-  color: var(--ink-faint); padding: 6px 0; transition: color 0.5s ease;
-}
-.mel-quiet:hover { color: var(--ink-dim); }
-.mel-readout {
-  margin: 40px 0 0; display: grid; gap: 9px; max-width: 40ch;
-  border-top: 1px solid rgba(200,214,236,0.1); padding-top: 22px;
-}
-.mel-readout div { display: grid; grid-template-columns: 92px 1fr; gap: 14px; align-items: baseline; }
-.mel-readout dt {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em;
-  text-transform: uppercase; color: var(--ink-faint);
-}
-.mel-readout dd { margin: 0; font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); }
 .mel-scrollcue {
   position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
   display: grid; justify-items: center; gap: 10px; z-index: 2;
@@ -460,6 +625,21 @@ const MEL_CSS = `
   color: #eef2f8; margin: 16px 0 18px; text-wrap: balance;
 }
 .mel-part-sub { font-size: 16px; line-height: 1.7; color: var(--ink-dim); margin: 0 auto; max-width: 54ch; font-weight: 380; }
+
+/* Proof follows the examples instead of competing with the first decision. */
+.mel-scale { position: relative; z-index: 1; padding: 0 clamp(24px, 6vw, 96px) clamp(64px, 10vw, 150px); }
+.mel-scale-inner {
+  max-width: 980px; margin: 0 auto; padding: clamp(28px, 4vw, 48px);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 36px; align-items: center;
+  border: 1px solid rgba(216,184,120,0.18); border-radius: 8px;
+  background: linear-gradient(135deg, rgba(216,184,120,0.07), rgba(7,10,18,0.82));
+  box-shadow: 0 28px 72px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035);
+  opacity: 0; transform: translateY(22px); transition: opacity 1.2s ease, transform 1.2s ease;
+}
+.mel-scale-inner.is-shown { opacity: 1; transform: none; }
+.mel-scale .mel-part-title { margin-bottom: 14px; }
+.mel-scale .mel-part-sub { margin-left: 0; }
+.mel-scale .mel-btn { white-space: nowrap; }
 
 /* Collection bodies */
 .mel-bodies {
@@ -569,10 +749,14 @@ const MEL_CSS = `
   .mel-loop { width: 440px; height: 440px; }
   .mel-overture { align-items: start; padding-top: 84px; padding-bottom: 60px; }
   .mel-scrollcue { display: none; }
-  .mel-readout div { grid-template-columns: 78px 1fr; }
+  .mel-search-row { grid-template-columns: 24px minmax(0, 1fr) auto; padding-left: 10px; }
+  .mel-search-row > button { padding: 0 13px; }
+  .mel-actions .mel-btn { flex: 1 1 calc(50% - 5px); padding-inline: 12px; }
+  .mel-scale-inner { grid-template-columns: 1fr; gap: 24px; }
+  .mel-scale .mel-btn { width: 100%; white-space: normal; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mel-overture-copy, .mel-part-head, .mel-index-inner { transition: none; opacity: 1; transform: none; }
+  .mel-overture-copy, .mel-part-head, .mel-index-inner, .mel-scale-inner { transition: none; opacity: 1; transform: none; }
   .mel-bodies .mel-body { animation: none; opacity: 1; transform: none; }
   .mel-scrollcue-line { animation: none; }
   .mel-planet-frame { transform: none !important; }

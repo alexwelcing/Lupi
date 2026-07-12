@@ -43,9 +43,9 @@ export function ViewerControlsDrawer({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, minHeight: 20 }}>
             <span style={{ color: 'rgba(30,220,224,0.82)', display: 'flex', flexShrink: 0, transform: 'scale(0.9)' }}><IconControls /></span>
-            <span style={{ color: 'var(--text-primary)', fontSize: 12, fontWeight: 820, letterSpacing: 0, lineHeight: 1 }}>Controls</span>
+            <span style={{ color: 'var(--text-primary)', fontSize: 12, fontWeight: 820, letterSpacing: 0, lineHeight: 1 }}>Viewer settings</span>
           </div>
-          <ModeTabs activeMode={activeMode} onModeChange={onModeChange} />
+          <ModeTabs activeMode={activeMode} onModeChange={onModeChange} showExport />
         </div>
       )}
 
@@ -56,7 +56,7 @@ export function ViewerControlsDrawer({
           borderBottom: '1px solid rgba(255,255,255,0.08)',
           background: 'linear-gradient(180deg, rgba(15,23,42,0.42), rgba(3,7,18,0.08))',
         }}>
-          <ModeTabs activeMode={activeMode} onModeChange={onModeChange} />
+          <ModeTabs activeMode={activeMode} onModeChange={onModeChange} showExport={false} />
         </div>
       )}
 
@@ -71,14 +71,22 @@ export function ViewerControlsDrawer({
   );
 }
 
-function ModeTabs({ activeMode, onModeChange }: { activeMode: ViewerControlMode; onModeChange: (mode: ViewerControlMode) => void }) {
+function ModeTabs({
+  activeMode,
+  onModeChange,
+  showExport,
+}: {
+  activeMode: ViewerControlMode;
+  onModeChange: (mode: ViewerControlMode) => void;
+  showExport: boolean;
+}) {
   return (
     <div
       role="group"
       aria-label="Viewer control modes"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        gridTemplateColumns: `repeat(${showExport ? 3 : 2}, minmax(0, 1fr))`,
         gap: 5,
         padding: 4,
         border: '1px solid rgba(255,255,255,0.07)',
@@ -86,9 +94,11 @@ function ModeTabs({ activeMode, onModeChange }: { activeMode: ViewerControlMode;
         background: 'rgba(2,6,23,0.5)',
       }}
     >
-      <ControlModeTab icon={<IconSurface />} label="Molecule" active={activeMode === 'molecule'} onClick={() => onModeChange('molecule')} />
-      <ControlModeTab icon={<IconWorld />} label="Scene" active={activeMode === 'scene'} onClick={() => onModeChange('scene')} />
-      <ControlModeTab icon={<IconExport />} label="Export" active={activeMode === 'export'} onClick={() => onModeChange('export')} />
+      <ControlModeTab icon={<IconSurface />} label="Structure" active={activeMode === 'molecule'} onClick={() => onModeChange('molecule')} />
+      <ControlModeTab icon={<IconWorld />} label="Background" active={activeMode === 'scene'} onClick={() => onModeChange('scene')} />
+      {showExport && (
+        <ControlModeTab icon={<IconExport />} label="Export" active={activeMode === 'export'} onClick={() => onModeChange('export')} />
+      )}
     </div>
   );
 }

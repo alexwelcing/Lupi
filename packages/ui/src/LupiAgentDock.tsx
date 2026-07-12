@@ -59,7 +59,7 @@ function iconKey() {
 }
 
 function shortName(user: ReturnType<typeof useFirebaseAuth>['user']) {
-  if (!user) return 'Sign in';
+  if (!user) return 'Account';
   if (user.displayName) return user.displayName.split(/\s+/)[0] || user.displayName;
   if (user.email) return user.email.split('@')[0] ?? user.email;
   return 'Lupi ID';
@@ -131,6 +131,17 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
   const [recentViews, setRecentViews] = useState<SavedMolecularView[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
 
+  const developerMode = useMemo(() => {
+    if (import.meta.env.DEV) return true;
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has('dev') || params.has('mcp');
+  }, []);
+  const dockTabs = useMemo<AgentDockTab[]>(
+    () => developerMode ? ['view', 'mcp', 'id'] : ['view', 'id'],
+    [developerMode],
+  );
+
   const defaultTitle = useMemo(() => defaultSavedViewTitle(file), [file?.name]);
   const cleanSlug = slugifySavedViewTitle(slug || title || defaultTitle);
   const urlPreview = makeSavedViewUrl(cleanSlug);
@@ -161,6 +172,7 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
   }, []);
 
   useEffect(() => {
+    if (!developerMode) return;
     const check = () => setMcpReady(Boolean(window.__lupiViewerMcp?.ready));
     check();
     window.addEventListener('lupi:mcp:ready', check);
@@ -169,7 +181,7 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
       window.removeEventListener('lupi:mcp:ready', check);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [developerMode]);
 
   const recentViewsQuery = useQuery({
     queryKey: ['recentSavedViews', user?.uid],
@@ -300,20 +312,24 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
     if (contents) await navigator.clipboard.writeText(contents).catch(() => undefined);
   };
 
-  const statusTone = user ? (isOverride ? '#f2aa45' : '#60d394') : '#f2aa45';
+  const statusTone = loading ? '#94a3b8' : user ? (isOverride ? '#f2aa45' : '#60d394') : '#f2aa45';
 
   return (
     <div ref={ref} style={{ position: 'relative', zIndex: 700 }}>
       <button
         type="button"
         data-testid="lupi-agent-dock-button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen((current) => {
+          const next = !current;
+          if (next && !user) setTab('id');
+          return next;
+        })}
         style={triggerStyle(Boolean(user) || open, compact, statusTone)}
-        title="Lupi session"
+        title="Account"
       >
         <span style={triggerGlyphStyle}>{user?.photoURL ? <img alt="" src={user.photoURL} style={avatarStyle} /> : iconUser()}</span>
         {!compact && <span style={triggerLabelStyle}>{loading && user ? 'Checking' : shortName(user)}</span>}
-        <span style={{ ...statusDotStyle, background: mcpReady ? '#46e4d4' : '#f2aa45' }} />
+        <span style={{ ...statusDotStyle, background: statusTone }} />
       </button>
 
       {open && (
@@ -331,8 +347,8 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
 
-          <div style={tabGridStyle}>
-            {(['view', 'mcp', 'id'] as AgentDockTab[]).map((item) => (
+          <div style={{ ...tabGridStyle, gridTemplateColumns: `repeat(${dockTabs.length}, minmax(0, 1fr))` }}>
+            {dockTabs.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -340,7 +356,7 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
                 onClick={() => setTab(item)}
                 style={tabButtonStyle(tab === item)}
               >
-                {item.toUpperCase()}
+                {item === 'view' ? 'SAVED VIEW' : item === 'id' ? 'ACCOUNT' : 'MCP'}
               </button>
             ))}
           </div>
@@ -390,7 +406,7 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
             </div>
           )}
 
-          {tab === 'mcp' && (
+          {developerMode && tab === 'mcp' && (
             <div data-testid="lupi-agent-dock-mcp" style={bodyStyle}>
               <div style={metricGridStyle}>
                 <Metric label="Bridge" value={mcpReady ? 'ready' : 'booting'} />
@@ -430,37 +446,50 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
               <div style={statusStripStyle}>
                 <StatusChip label={user ? 'signed in' : 'signed out'} tone={user ? 'green' : 'amber'} />
                 <StatusChip label={provider} tone={user ? 'cyan' : 'amber'} />
-                <StatusChip label={idToken ? 'token' : 'no token'} tone={idToken ? 'green' : 'amber'} />
-                <StatusChip label={authHint ? 'cookie' : 'no cookie'} tone={authHint ? 'green' : 'amber'} />
+                {developerMode && <StatusChip label={idToken ? 'token' : 'no token'} tone={idToken ? 'green' : 'amber'} />}
+                {developerMode && <StatusChip label={authHint ? 'cookie' : 'no cookie'} tone={authHint ? 'green' : 'amber'} />}
               </div>
 
               {authError && <Notice tone="bad">{authError}</Notice>}
               {error && <Notice tone="bad">{error}</Notice>}
               {status && <Notice>{status}</Notice>}
-              {!firebaseConfigured && <Notice tone="bad">{`Missing Firebase config: ${firebaseMissingKeys.join(', ') || 'unknown'}`}</Notice>}
-              {isOverride && <Notice>Codex local ID is active for UI and MCP simulation.</Notice>}
+              {!firebaseConfigured && (
+                <Notice tone="bad">
+                  {developerMode
+                    ? `Missing Firebase config: ${firebaseMissingKeys.join(', ') || 'unknown'}`
+                    : 'Account sign-in is not configured yet.'}
+                </Notice>
+              )}
+              {developerMode && isOverride && <Notice>Codex local ID is active for UI and MCP simulation.</Notice>}
 
               {user ? (
                 <>
                   <div style={sessionGridStyle}>
-                    <Metric label="UID" value={user.uid} />
-                    <Metric label="Project" value={firebaseProjectId ?? 'none'} />
-                    <Metric label="Auth" value={firebaseAuthDomain ?? 'none'} />
-                    <Metric label="MCP" value={lupiMcpEndpoint} />
-                    <Metric label="Token" value={maskToken(idToken)} />
+                    <Metric label="Provider" value={provider} />
                     <Metric label="Saved links" value={recentViews.length} />
+                    {developerMode && <Metric label="UID" value={user.uid} />}
+                    {developerMode && <Metric label="Project" value={firebaseProjectId ?? 'none'} />}
+                    {developerMode && <Metric label="Auth" value={firebaseAuthDomain ?? 'none'} />}
+                    {developerMode && <Metric label="MCP" value={lupiMcpEndpoint} />}
+                    {developerMode && <Metric label="Token" value={maskToken(idToken)} />}
                   </div>
 
                   <div style={actionGridStyle}>
-                    <button type="button" onClick={() => void handleRefreshToken()} disabled={busy} style={secondaryActionStyle}>
-                      Refresh token
-                    </button>
-                    <button type="button" onClick={() => void copyText('token', idToken)} disabled={!idToken} style={secondaryActionStyle}>
-                      {copied === 'token' ? 'Copied' : 'Copy token'}
-                    </button>
-                    <button type="button" onClick={() => void copyText('bearer', idToken ? `Bearer ${idToken}` : null)} disabled={!idToken} style={secondaryActionStyle}>
-                      {copied === 'bearer' ? 'Copied' : 'Copy bearer'}
-                    </button>
+                    {developerMode && (
+                      <button type="button" onClick={() => void handleRefreshToken()} disabled={busy} style={secondaryActionStyle}>
+                        Refresh token
+                      </button>
+                    )}
+                    {developerMode && (
+                      <button type="button" onClick={() => void copyText('token', idToken)} disabled={!idToken} style={secondaryActionStyle}>
+                        {copied === 'token' ? 'Copied' : 'Copy token'}
+                      </button>
+                    )}
+                    {developerMode && (
+                      <button type="button" onClick={() => void copyText('bearer', idToken ? `Bearer ${idToken}` : null)} disabled={!idToken} style={secondaryActionStyle}>
+                        {copied === 'bearer' ? 'Copied' : 'Copy bearer'}
+                      </button>
+                    )}
                     <button type="button" onClick={() => void handleSignOut()} disabled={busy} style={dangerActionStyle}>
                       Sign out
                     </button>
@@ -489,19 +518,21 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
                     <button type="button" onClick={() => void handleSignIn('github')} disabled={!firebaseConfigured || busy || loading} style={providerButtonStyle('github')}>
                       <span>GitHub</span>
                     </button>
-                    {authOverrideAvailable && (
+                    {developerMode && authOverrideAvailable && (
                       <button type="button" onClick={() => void signInWithOverride()} style={providerButtonStyle('codex')}>
                         <span>Codex test</span>
                       </button>
                     )}
                   </div>
 
-                  <div style={sessionGridStyle}>
-                    <Metric label="Project" value={firebaseProjectId ?? 'none'} />
-                    <Metric label="Auth" value={firebaseAuthDomain ?? 'none'} />
-                    <Metric label="MCP" value={lupiMcpEndpoint} />
-                    <Metric label="Cookie" value={authHint ? 'present' : 'none'} />
-                  </div>
+                  {developerMode && (
+                    <div style={sessionGridStyle}>
+                      <Metric label="Project" value={firebaseProjectId ?? 'none'} />
+                      <Metric label="Auth" value={firebaseAuthDomain ?? 'none'} />
+                      <Metric label="MCP" value={lupiMcpEndpoint} />
+                      <Metric label="Cookie" value={authHint ? 'present' : 'none'} />
+                    </div>
+                  )}
                 </>
               )}
             </div>

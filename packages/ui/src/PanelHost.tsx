@@ -20,10 +20,10 @@ interface PanelHostProps {
 }
 
 const TITLES: Record<NonNullable<PanelHostProps['activePanel']>, string> = {
-  studio: 'Controls',
-  export: 'Export Figure',
-  flythrough: 'Flythrough',
-  telemetry: 'Telemetry',
+  studio: 'Structure',
+  export: 'Export',
+  flythrough: 'Camera Path',
+  telemetry: 'Analyze Data',
   equilibrium: 'Equilibrium Solve',
   mlipLongRun: 'MLIP Long Run',
 };
@@ -42,10 +42,18 @@ export function PanelHost({ activePanel, studioDeck, onOpenStudioDeck, onClose }
 
   if (!activePanel || !file) return null;
 
+  const title = activePanel === 'studio'
+    ? studioDeck === 'scene'
+      ? 'Background'
+      : studioDeck === 'export'
+        ? 'Export'
+        : 'Structure'
+    : TITLES[activePanel];
+
   return (
     <DockableWindow
       key={activePanel}
-      title={TITLES[activePanel]}
+      title={title}
       onClose={onClose}
       initial={INITIALS[activePanel]}
       minW={320}

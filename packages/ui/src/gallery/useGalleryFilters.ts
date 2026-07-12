@@ -18,8 +18,8 @@ import {
   type SourceFilter,
 } from './catalog';
 
-export function useGalleryFilters() {
-  const [filter, setFilter] = useState<Domain | 'All'>('All');
+export function useGalleryFilters(initialFilter: Domain | 'All' = 'All') {
+  const [filter, setFilter] = useState<Domain | 'All'>(initialFilter);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('All Sources');
   const [functionalGroupFilter, setFunctionalGroupFilter] = useState<FunctionalGroupId | 'All'>('All');
   const [search, setSearch] = useState('');

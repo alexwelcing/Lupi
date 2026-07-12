@@ -1,8 +1,7 @@
 /**
- * WorldBackdropBrowser — the Scene tab's world picker: a hero preview of the
- * active backdrop, an "active asset" metric strip, and horizontally-scrolling
- * rails of backdrop tiles grouped by category. Pure presentation driven by
- * props; the Scene controls own the store wiring.
+ * WorldBackdropBrowser — the advanced immersive-background picker. It keeps
+ * the active environment understandable without exposing asset-pipeline
+ * terminology or projection abbreviations to ordinary users.
  */
 import type { CSSProperties } from 'react';
 import { BG_PRESETS, getBgBadge, getBgPoster, type BgPresetWithId } from '../backgroundPresets';
@@ -68,7 +67,7 @@ export function WorldBackdropBrowser({
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}>
-                  {activePreset?.label ?? 'Select World'}
+                  {activePreset?.label ?? 'Select a background'}
                 </div>
                 <div style={{
                   maxWidth: 520,
@@ -78,7 +77,7 @@ export function WorldBackdropBrowser({
                   lineHeight: 1.35,
                   textShadow: '0 1px 8px rgba(0,0,0,0.5)',
                 }}>
-                  {activePreset?.context ?? 'Choose a 360 environment for the molecular scene.'}
+                  {activePreset?.context ?? 'Choose an immersive setting for the molecular scene.'}
                 </div>
               </div>
               {badge && (
@@ -99,8 +98,8 @@ export function WorldBackdropBrowser({
               )}
             </div>
             <div className="lupi-studio-segments" style={{ maxWidth: 360 }}>
-              <SegmentButton label="Surprise world" active={false} accent="#7de9ff" onClick={onRandomWorld} />
-              <SegmentButton label="Surprise loop" active={false} accent="#f59e0b" onClick={onRandomLoop} />
+              <SegmentButton label="Random 360 world" active={false} accent="#7de9ff" onClick={onRandomWorld} />
+              <SegmentButton label="Random motion" active={false} accent="#f59e0b" onClick={onRandomLoop} />
             </div>
           </div>
         </div>
@@ -115,13 +114,13 @@ export function WorldBackdropBrowser({
           background: 'linear-gradient(180deg, rgba(15,23,42,0.54), rgba(3,7,18,0.34))',
         }}>
           <div style={{ color: '#94a3b8', fontSize: 10, fontWeight: 820, textTransform: 'uppercase', lineHeight: 1 }}>
-            Active Asset
+            Current background
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            <MetricPill label="Preset" value={value.replace(/^world-/, '')} />
+            <MetricPill label="Name" value={activePreset?.label ?? value.replace(/^world-/, '')} />
             <MetricPill label="Type" value={badge ?? 'BASE'} />
-            <MetricPill label="Tone" value={activePreset?.intensity ?? 'balanced'} />
-            <MetricPill label="Mode" value={getBgPoster(activePreset ?? BG_PRESETS.deep) ? 'ERP' : 'SKY'} />
+            <MetricPill label="Energy" value={activePreset?.intensity ?? 'balanced'} />
+            <MetricPill label="Format" value={getBgPoster(activePreset ?? BG_PRESETS.deep) ? '360°' : 'Gradient'} />
           </div>
         </div>
       </div>

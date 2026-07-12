@@ -133,8 +133,8 @@ export function CameraPresetRail() {
           setViewMenuOpen(false);
           toggleStudyLens();
         }}
-        title="Study lens"
-        aria-label="Study lens"
+        title="Study Guide"
+        aria-label="Study Guide"
         aria-pressed={studyLensOpen}
         className={`lupine-btn compact icon-only ${studyLensOpen ? 'active' : ''}`}
         style={{
