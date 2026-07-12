@@ -5,13 +5,9 @@ workers_dev = true
 preview_urls = true
 keep_vars = true
 
-[[routes]]
-pattern = "lupi.live/*"
-zone_name = "lupi.live"
-
-[[routes]]
-pattern = "www.lupi.live/*"
-zone_name = "lupi.live"
+# The lupi.live/* and www.lupi.live/* routes are provisioned once in the
+# Cloudflare dashboard. Routine code deploys intentionally leave them in place;
+# the CI token can update this Worker without zone-route mutation permissions.
 
 [assets]
 directory = "../web/dist"
