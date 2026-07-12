@@ -10,7 +10,7 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/*.yml'
   push:
     branches: [main]
     paths:
@@ -20,7 +20,7 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/*.yml'
 
 concurrency:
   group: lupi-live-ci-${{ github.ref }}
