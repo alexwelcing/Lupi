@@ -74,15 +74,14 @@ Do not add:
 
 ## Candidate First
 
-The Cloudflare deploy workflow is manual during migration. Deploy a candidate,
-smoke the Worker URL, then cut `lupi.live` DNS/route to Cloudflare only after
-verification.
-For manual pre-release checks against any preview URL, run:
+Pushes to `main` deploy through the Cloudflare workflow. The workflow validates
+the direct `workers.dev` deployment with Playwright before reporting success;
+the public `lupi.live` WAF is intentionally outside that release gate. For
+manual pre-release checks against any preview URL, run:
 
 ```bash
-VERIFY_URL=https://PREVIEW_URL pnpm verify:controls --no-screenshot
-VERIFY_URL=https://PREVIEW_URL pnpm verify:study-lens --no-screenshot
-VERIFY_URL=https://PREVIEW_URL pnpm verify:mcp-bridge
+pnpm exec playwright install --with-deps chromium
+UI_TEST_URL=https://PREVIEW_URL pnpm test:ui:deployed
 ```
 
 Then verify manually:
@@ -103,8 +102,8 @@ The Cloudflare deploy workflow:
 3. Typechecks and tests the edge Worker.
 4. Uploads required Worker secrets.
 5. Deploys `apps/mcp-worker` through Wrangler.
-6. Smokes the deployed Worker URL manually before DNS cutover.
-7. After cutover, smokes `https://lupi.live/`, `/mcp`, `/view/:slug`, and Firebase sign-in.
+6. Checks structured `/health` readiness and runs the homepage-to-viewer UI journeys against the direct Worker URL.
+7. Uploads Playwright traces and screenshots when the deployed UI gate fails.
 
 ## Done State
 

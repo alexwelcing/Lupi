@@ -19,38 +19,32 @@ The Vite app runs at `http://localhost:5173` by default.
 
 ```bash
 pnpm build
-pnpm verify:controls --no-screenshot
-pnpm verify:study-lens --no-screenshot
+pnpm exec playwright install --with-deps chromium
+pnpm test:ui
 ```
 
-`verify:controls` and `verify:study-lens` start a portless Vite server
-themselves unless `VERIFY_URL` is set.
-
-Fresh-clone check:
+`pnpm test:ui` starts `tools/serve-web.mjs` against `apps/web/dist` and checks
+the production build. For a deployed preview or direct Worker URL, run only
+the deployment-safe browser journeys:
 
 ```bash
-pnpm verify:standalone
+UI_TEST_URL=https://PREVIEW_URL pnpm test:ui:deployed
 ```
 
 ## Broader Viewer Checks
 
 ```bash
-pnpm verify:viewer
-pnpm verify:controls
-pnpm verify:controls:mobile
-pnpm verify:study-lens
-pnpm verify:study-lens:mobile
+pnpm test
+pnpm test:ui
 pnpm verify:mcp-bridge
-pnpm verify:gallery
-pnpm verify:streaming
+pnpm verify:streaming-ux
 pnpm verify:exports
-pnpm verify:export-colors
-pnpm verify:saved-views
-pnpm verify:save-view-ui
+pnpm verify:asset-quality
 ```
 
-Some checks require Playwright Chromium. Some checks write screenshots and JSON
-reports under `.verify-artifacts/`.
+The UI suite writes failure traces, screenshots, and reports under
+`test-results/` and `playwright-report/`. Focused legacy verifiers use
+`.verify-artifacts/`.
 
 ## Parser And Data Checks
 
@@ -77,21 +71,23 @@ Current CI does:
 - install dependencies
 - build the workspace
 - run tests
+- install Chromium and run the production Playwright UI suite
+- run the standalone Cloud Functions tests
 - fail if regenerated NIST catalog output drifts
-- run streaming and gallery smoke tests as non-blocking jobs
 
 ## Deploy
 
-Production viewer deploy is owned by this repo:
+The primary production deploy is:
 
 ```text
-.github/workflows/deploy-viewer.yml
+.github/workflows/deploy-cloudflare.yml
 ```
 
-The workflow builds `apps/web/dist`, packages only the static viewer runtime
-with `tools/serve-web.mjs`, deploys a no-traffic Cloud Run candidate, smokes it,
-then routes production traffic to the proven revision. See
-[deploy-cutover.md](deploy-cutover.md).
+It builds the app and edge Worker, deploys through Wrangler, validates Worker
+readiness, and exercises the live homepage and viewer with Playwright against
+the direct `workers.dev` deployment URL. `.github/workflows/deploy-viewer.yml`
+is the manual Cloud Run fallback and runs the same UI gate before routing
+traffic. See [deploy-cutover.md](deploy-cutover.md).
 
 ## Live Checks After Cutover
 
@@ -117,7 +113,7 @@ Expected live smoke:
 
 ## Rollback
 
-After production deploy exists, prefer service rollback over source edits:
+For the Cloud Run fallback, prefer revision rollback over source edits:
 
 ```bash
 gcloud run revisions list --service=SERVICE --region=REGION

@@ -9,6 +9,8 @@ on:
       - 'packages/**'
       - 'scripts/**'
       - 'tools/**'
+      - 'tests/**'
+      - 'playwright.config.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -63,6 +65,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Validate Cloudflare deploy configuration
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
@@ -112,41 +117,19 @@ jobs:
             printf '%s' "$RENDERER_TOKEN" | npx wrangler@4.110.0 secret put RENDERER_TOKEN
           fi
 
-      - name: Smoke deployed Cloudflare Worker
-        shell: bash
+      - name: Test deployed Cloudflare UI
         env:
-          WORKER_URL: ${{ steps.deploy_worker.outputs.deployment-url }}
-        run: |
-          case "$WORKER_URL" in
-            https://*.workers.dev | https://*.workers.dev/)
-              WORKER_URL="${WORKER_URL%/}"
-              ;;
-            *)
-              echo "::error::Cloudflare deploy did not return a direct workers.dev URL"
-              exit 1
-              ;;
-          esac
+          UI_TEST_URL: ${{ steps.deploy_worker.outputs.deployment-url }}
+          UI_TEST_EXPECT_HEALTH: 'true'
+        run: pnpm test:ui:deployed
 
-          health_file="$RUNNER_TEMP/lupi-health.json"
-          root_file="$RUNNER_TEMP/lupi-root.html"
-
-          for i in $(seq 1 12); do
-            if curl -fsS "$WORKER_URL/health" -o "$health_file" \
-              && curl -fsS "$WORKER_URL/" -o "$root_file" \
-              && HEALTH_FILE="$health_file" ROOT_FILE="$root_file" node -e '
-                const fs = require("node:fs");
-                const health = JSON.parse(fs.readFileSync(process.env.HEALTH_FILE, "utf8"));
-                const root = fs.readFileSync(process.env.ROOT_FILE, "utf8");
-                if (health.ready !== true || health.bindings?.webAssets !== true || !root.includes("id=\"root\"")) {
-                  process.exit(1);
-                }
-              '
-            then
-              echo "Cloudflare Worker smoke passed: $WORKER_URL"
-              exit 0
-            fi
-            sleep 10
-          done
-
-          echo "::error::Cloudflare Worker smoke failed: $WORKER_URL"
-          exit 1
+      - name: Upload Playwright diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-cloudflare-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -79,7 +79,7 @@ scenarios reuse.
   `glimbin` block (bytes, frames, atoms/frame) for the gallery card.
 - Upload `name.glimbin` + `name.manifest.json` to the
   `shed-489901-nist-demos` GCS bucket under `sims/`. Two hard
-  requirements, both enforced: Range support (`npm run verify:streaming`
+  requirements, both enforced: Range support (`pnpm verify:streaming-ux`
   checks it end to end) and CORS (`access-control-allow-origin: *` —
   the legacy `glim-datasets` bucket has no CORS policy, which is why
   `gallery-data.test.ts` rejects it for browser-streamed entries).
@@ -203,7 +203,7 @@ promotion ladder again.
 
 **Failure modes worth designing for, per scenario:**
 - ❶ CDN edge without Range support → loader appears to work but
-  downloads whole files; `verify:streaming` exists precisely to catch
+  downloads whole files; `verify:streaming-ux` exists precisely to catch
   this.
 - ❷ OPFS eviction between sessions → library entry with no bytes:
   detect on open, mark the record, offer re-import (or re-download if

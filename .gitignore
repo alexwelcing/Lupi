@@ -6,6 +6,8 @@ dist/
 deploy_bundle/
 .turbo/
 .verify-artifacts/
+playwright-report/
+test-results/
 *.log
 
 # NIST demo trajectories are large glimbin blobs — hosted on GCS in prod
