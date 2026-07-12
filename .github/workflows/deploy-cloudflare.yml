@@ -42,6 +42,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment: prod
 
     steps:
       - name: Checkout code
