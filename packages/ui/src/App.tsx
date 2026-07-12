@@ -67,6 +67,7 @@ import { ToolRail } from './app/ToolRail';
 import { CameraPresetRail } from './app/CameraPresetRail';
 import { PlaybackStatus } from './app/PlaybackStatus';
 import { MobileShell } from './app/MobileShell';
+import { ViewerGestureHint } from './app/ViewerGestureHint';
 import { RendererWarningToast } from './app/RendererWarningToast';
 import { GlobalShortcuts } from './app/GlobalShortcuts';
 import { useSavedViewQuerySync } from './app/useSavedViewQuerySync';
@@ -466,6 +467,7 @@ export default function App() {
 
           {file && !isMobile && <CameraPresetRail />}
           {file && !isMobile && <ToolRail isMobile={isMobile} />}
+          {file && <ViewerGestureHint isMobile={isMobile} />}
           {file && (
             <div style={{ position: 'absolute', top: isMobile ? 72 : 140, right: 18, zIndex: 149 }}>
               <XREntryButton store={xrStore} />
@@ -627,7 +629,7 @@ export default function App() {
             },
             {
               id: 'study-lens',
-              label: 'Toggle study lens',
+              label: 'Toggle Study Guide',
               group: 'Panels',
               disabled: !file,
               onSelect: () => useStore.getState().toggleStudyLens(),

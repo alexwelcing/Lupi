@@ -18,6 +18,7 @@ import {
   isOpenDataExample,
   parseFrameCountLabel,
   resolveExampleUrl,
+  type Domain,
   type GalleryExample,
 } from './gallery/catalog';
 import {
@@ -1116,7 +1117,7 @@ const sVisuallyHidden: React.CSSProperties = {
 
 // ─── Gallery ────────────────────────────────────────────────────────────
 
-export function Gallery() {
+export function Gallery({ initialDomain = 'All' }: { initialDomain?: Domain | 'All' } = {}) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string>(() => {
     const firstPlayable = EXAMPLES.find((ex) => ex.available && parseFrameCountLabel(ex.frames) > 1);
@@ -1139,7 +1140,14 @@ export function Gallery() {
     setSearch,
     setSourceFilter,
     sourceFilter,
-  } = useGalleryFilters();
+  } = useGalleryFilters(initialDomain);
+
+  useEffect(() => {
+    setSearch('');
+    setSourceFilter('All Sources');
+    setFunctionalGroupFilter('All');
+    setFilter(initialDomain);
+  }, [initialDomain, setFilter, setFunctionalGroupFilter, setSearch, setSourceFilter]);
 
   const selectedExample = useMemo(() => {
     return filteredExamples.find((ex) => ex.id === selectedId)

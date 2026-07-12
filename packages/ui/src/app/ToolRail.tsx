@@ -98,9 +98,9 @@ export function ToolRail({ isMobile }: { isMobile: boolean }) {
       style={{ top: 88 }}
     >
       <ToolRailButton
-        label="Controls"
+        label="Style"
         compact={isMobile}
-        shortLabel="Tune"
+        shortLabel="Style"
         icon={<IconControls />}
         active={activePanel === 'studio' && (studioDeck ?? 'molecule') !== 'export'}
         onClick={toggleControlsPanel}
@@ -114,7 +114,7 @@ export function ToolRail({ isMobile }: { isMobile: boolean }) {
         onClick={() => openStudioDeck('export')}
       />
       <ToolRailButton
-        label="Flythrough"
+        label="Camera path"
         compact={isMobile}
         shortLabel="Path"
         icon={<IconFlythrough />}
@@ -122,9 +122,9 @@ export function ToolRail({ isMobile }: { isMobile: boolean }) {
         onClick={() => openUtilityPanel('flythrough')}
       />
       <ToolRailButton
-        label="Data"
+        label="Analyze"
         compact={isMobile}
-        shortLabel="Data"
+        shortLabel="Analyze"
         icon={<IconTelemetryTool />}
         active={activePanel === 'telemetry'}
         onClick={() => openUtilityPanel('telemetry')}

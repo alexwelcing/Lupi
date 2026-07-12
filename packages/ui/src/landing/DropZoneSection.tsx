@@ -29,9 +29,13 @@ export function DropZoneSection() {
   }, [setLoading]);
 
   const handleFiles = useCallback(async (files: FileList) => {
-    if (files.length === 0) return;
+    // Snapshot the live FileList before the input is reset. Some browsers keep
+    // FileList tied to the input, so reading it after the first await can lose
+    // the selected files entirely.
+    const selectedFiles = Array.from(files);
+    if (selectedFiles.length === 0) return;
     const { detectFileType, parseFile, readDumpHead, analyzeDumpHead } = await import('@atlas/parsers');
-    const sorted = Array.from(files).sort((a, b) => {
+    const sorted = selectedFiles.sort((a, b) => {
       const ta = detectFileType(a.name);
       const tb = detectFileType(b.name);
       if (ta === 'dump' && tb !== 'dump') return -1;
@@ -127,22 +131,6 @@ export function DropZoneSection() {
     );
   }
 
-  if (error) {
-    return (
-      <section id="dropzone" style={{ padding: '100px 24px', textAlign: 'center' }}>
-        <div style={{ width: 72, height: 72, borderRadius: 20, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: '#ef4444' }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-        </div>
-        <div style={{ fontSize: 18, color: '#ef4444', marginBottom: 8 }}>{error}</div>
-        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>Click or drag to try another file</div>
-      </section>
-    );
-  }
-
   return (
     <section
       id="dropzone"
@@ -169,24 +157,33 @@ export function DropZoneSection() {
           type="file"
           accept=".lammpstrj,.dump,.gz,.log,.data,.lmp,.xyz,.txt,.profile,text/plain"
           multiple
-          onChange={(e) => e.target.files && handleFiles(e.target.files)}
+          onChange={(event) => {
+            if (event.currentTarget.files) void handleFiles(event.currentTarget.files);
+            // Let a researcher retry the same file after a parse error.
+            event.currentTarget.value = '';
+          }}
           style={{ display: 'none' }}
         />
 
-        <div
+        <button
+          type="button"
+          aria-label={error ? 'Choose another molecular data file' : 'Choose molecular data files'}
           onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onClick={() => inputRef.current?.click()}
           style={{
             position: 'relative',
-            padding: '72px 48px',
+            width: '100%',
+            padding: 'clamp(36px, 7vw, 72px) clamp(20px, 5vw, 48px)',
             borderRadius: 28,
-            border: `1.5px dashed ${dragOver ? '#d8b878' : 'rgba(200,214,236,0.14)'}`,
-            background: dragOver ? 'rgba(216,184,120,0.06)' : 'rgba(255,255,255,0.015)',
+            border: `1.5px dashed ${error ? 'rgba(239,68,68,0.5)' : dragOver ? '#d8b878' : 'rgba(200,214,236,0.14)'}`,
+            background: error ? 'rgba(239,68,68,0.035)' : dragOver ? 'rgba(216,184,120,0.06)' : 'rgba(255,255,255,0.015)',
             cursor: 'pointer',
             transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
             animation: dragOver ? 'pulseGlow 2s ease-in-out infinite' : 'none',
+            font: 'inherit',
+            color: 'inherit',
           }}
         >
           {/* Animated SVG border on drag */}
@@ -196,31 +193,39 @@ export function DropZoneSection() {
             </svg>
           )}
 
-          <div style={{
+          <span style={{
             width: 72, height: 72,
             borderRadius: 24,
-            background: dragOver ? 'linear-gradient(135deg, #d8b878, #b98cae)' : 'rgba(255,255,255,0.04)',
-            border: `1px solid ${dragOver ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
+            background: error ? 'rgba(239,68,68,0.1)' : dragOver ? 'linear-gradient(135deg, #d8b878, #b98cae)' : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${error ? 'rgba(239,68,68,0.24)' : dragOver ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 24px',
             transition: 'all 0.4s ease',
             transform: dragOver ? 'scale(1.1)' : 'scale(1)',
           }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-          </div>
+            {error ? (
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round">
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                <path d="M12 9v4M12 17h.01" />
+              </svg>
+            ) : (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            )}
+          </span>
 
-          <div style={{ fontSize: 20, fontWeight: 600, color: '#f8fafc', marginBottom: 8 }}>
-            {dragOver ? 'Drop it here' : 'Drag & drop your files'}
-          </div>
-          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 24 }}>
-            or click to browse — supports .lammpstrj, .dump, .xyz, .log
-          </div>
+          <span style={{ display: 'block', fontSize: 20, fontWeight: 600, color: '#f8fafc', marginBottom: 8 }}>
+            {error ? 'That file could not be opened' : dragOver ? 'Drop it here' : 'Open your research data'}
+          </span>
+          <span role={error ? 'alert' : undefined} style={{ display: 'block', fontSize: 14, color: error ? 'rgba(248,113,113,0.9)' : 'rgba(255,255,255,0.48)', marginBottom: 24, lineHeight: 1.5 }}>
+            {error || 'Drag files here or choose from your device — LAMMPS, XYZ, trajectories, logs, and profiles.'}
+            {error && <span style={{ display: 'block', color: 'rgba(255,255,255,0.56)', marginTop: 7 }}>Choose or drop another file to try again.</span>}
+          </span>
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
             {['LAMMPS', 'Data', 'XYZ', 'GZip', 'Log', 'Profiles'].map((tag) => (
               <span key={tag} style={{
                 fontSize: 11,
@@ -234,8 +239,8 @@ export function DropZoneSection() {
                 {tag}
               </span>
             ))}
-          </div>
-        </div>
+          </span>
+        </button>
       </div>
     </section>
   );

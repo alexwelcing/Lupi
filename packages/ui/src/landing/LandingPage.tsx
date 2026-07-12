@@ -24,16 +24,16 @@ export function LandingPage() {
       <div style={{ width: '100%', minHeight: '100vh', background: '#05060b' }}>
         <MelancholiaLanding />
 
-        {/* Part Two — bring your own matter */}
+        {/* Open research data in the same restrained visual register. */}
         <div className="mel">
           <section className="mel-part mel-part--tight" aria-labelledby="mel-part-two">
             <div className="mel-part-head is-shown">
-              <span className="mel-part-mark">Part Two</span>
-              <h2 id="mel-part-two" className="mel-part-title">Bring your own matter.</h2>
+              <span className="mel-part-mark">Open your data</span>
+              <h2 id="mel-part-two" className="mel-part-title">Bring your own research data.</h2>
               <p className="mel-part-sub">
-                Drop a LAMMPS dump, a data file, a trajectory, an ave/chunk
-                profile. It becomes a body you can turn in your hands &mdash; its
-                forces, its energy, its motion, replayed.
+                Drop a LAMMPS dump, data file, XYZ structure, trajectory, or
+                profile. Lupi opens it locally so you can inspect its structure,
+                forces, properties, and motion in the same viewer.
               </p>
             </div>
           </section>
@@ -47,9 +47,9 @@ export function LandingPage() {
           <section className="mel-colophon" aria-label="Colophon">
             <p className="mel-colophon-line">The light that reaches you left long ago.</p>
             <p className="mel-colophon-sub">
-              Lupi is a browser-native instrument for molecular matter &mdash;
-              open data, verified, and cited. Nothing here is a picture of a
-              structure; it is the structure, turned in real time.
+              Lupi is a browser-native viewer for molecules and materials &mdash;
+              open data, inspect properties, preserve sources, and export the
+              result. Every example is a live structure, not a static picture.
             </p>
           </section>
         </div>

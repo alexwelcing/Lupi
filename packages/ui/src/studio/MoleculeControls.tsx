@@ -11,6 +11,7 @@ import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from '../coloring';
 import { POSTPROCESS_PRESETS } from '../postprocess/presets';
 import { useStore } from '../store';
 import {
+  AdvancedSection,
   ControlGroup,
   SegmentButton,
   CompactSlider,
@@ -22,15 +23,47 @@ import {
   schemeHintStyle,
 } from './primitives';
 
+type QuickViewId = 'balanced' | 'bonds' | 'space' | 'property';
+
+const QUICK_VIEW_COPY: Record<QuickViewId, { label: string; description: string; accent: string }> = {
+  balanced: {
+    label: 'Balanced',
+    description: 'A clear default for exploring structure.',
+    accent: '#1edce0',
+  },
+  bonds: {
+    label: 'Inferred bonds',
+    description: 'Show distance-inferred connections between nearby atoms.',
+    accent: '#7de9ff',
+  },
+  space: {
+    label: 'Occupied space',
+    description: 'Emphasize atomic volume and packing.',
+    accent: '#f59e0b',
+  },
+  property: {
+    label: 'Property map',
+    description: 'Color atoms using per-atom data.',
+    accent: '#c084fc',
+  },
+};
+
+const COLOR_LABELS: Record<ColorSchemeId, string> = {
+  element: 'Element colors',
+  colorway: 'Palette',
+  property: 'Color by data',
+  uniform: 'One color',
+};
+
 // Ordered flat → dramatic so the row reads as a spectrum: Diagram (no
 // effects) on the left, Cinematic (full depth-of-field + bloom) on the right.
 // The selected look's plain-language description shows below the row, so a
 // grade is never a mystery.
 const LOOK_OPTIONS = [
-  { id: 'diagram', label: 'Diagram', accent: '#a7f3d0' },
-  { id: 'paper', label: 'Paper', accent: '#e5e7eb' },
-  { id: 'studio', label: 'Studio', accent: '#1edce0' },
-  { id: 'editorial', label: 'Editorial', accent: '#38bdf8' },
+  { id: 'diagram', label: 'Schematic', accent: '#a7f3d0' },
+  { id: 'paper', label: 'Journal', accent: '#e5e7eb' },
+  { id: 'studio', label: 'Balanced', accent: '#1edce0' },
+  { id: 'editorial', label: 'Presentation', accent: '#38bdf8' },
   { id: 'cinematic', label: 'Cinematic', accent: '#f59e0b' },
 ] as const;
 
@@ -148,6 +181,12 @@ export function MoleculeControls() {
     }
     return names;
   }, [residentFrame, vectorSpecs]);
+  const atomCount = residentFrame?.natoms ?? 0;
+  const bondsAreSafe = atomCount > 0 && atomCount < 25_000;
+  const requiresDiagram = atomCount >= 200_000;
+  const validColorProperty = colorProperty && availableProperties.includes(colorProperty)
+    ? colorProperty
+    : (availableProperties[0] ?? null);
   const presentElements = useMemo(() => {
     const types = residentFrame?.types;
     if (!types) return [];
@@ -186,10 +225,11 @@ export function MoleculeControls() {
   };
 
   const applyColorScheme = (scheme: ColorSchemeId) => {
-    setColorScheme(scheme);
-    if (scheme === 'property' && !colorProperty && availableProperties.length > 0) {
-      setColorProperty(availableProperties[0]);
+    if (scheme === 'property') {
+      if (!validColorProperty) return;
+      setColorProperty(validColorProperty);
     }
+    setColorScheme(scheme);
   };
 
   const applyUniformAtomColor = (color: string) => {
@@ -211,45 +251,144 @@ export function MoleculeControls() {
 
   const activeRecipe = materialScenes.find(scene => scene.id === materialScene);
 
+  const setBondsVisible = (visible: boolean) => {
+    if (showBonds !== visible) toggleBonds();
+  };
+
+  const safePreset = (preferred: 'studio' | 'paper') => requiresDiagram ? 'diagram' : preferred;
+  const balancedPreset = safePreset(atomCount >= 25_000 ? 'paper' : 'studio');
+  const balancedIntensity = atomCount >= 25_000 && !requiresDiagram ? 0.85 : 1;
+  const balancedAtomScale = requiresDiagram ? 0.72 : 1;
+
+  const applyQuickView = (view: QuickViewId) => {
+    // Quick views intentionally touch only the structure presentation. They
+    // never change the selected background, environment, or lighting setup.
+    setVectorField(null);
+
+    if (view === 'balanced') {
+      setPostprocessPreset(balancedPreset);
+      setPostprocessIntensity(balancedIntensity);
+      setColorScheme('element');
+      setAtomScale(balancedAtomScale);
+      setBondsVisible(bondsAreSafe);
+      return;
+    }
+
+    if (view === 'bonds') {
+      if (!bondsAreSafe) return;
+      setPostprocessPreset(safePreset('studio'));
+      setPostprocessIntensity(1);
+      setColorScheme('element');
+      setAtomScale(0.72);
+      setBondColorMode('type');
+      setBondsVisible(true);
+      return;
+    }
+
+    if (view === 'space') {
+      if (requiresDiagram) return;
+      setPostprocessPreset(safePreset('studio'));
+      setPostprocessIntensity(1);
+      setColorScheme('element');
+      setAtomScale(1.35);
+      setBondsVisible(false);
+      return;
+    }
+
+    if (!validColorProperty) return;
+    setPostprocessPreset(safePreset('paper'));
+    setPostprocessIntensity(requiresDiagram ? 1 : 0.9);
+    setColorProperty(validColorProperty);
+    setColorScheme('property');
+    setColormap('viridis');
+    setAtomScale(0.9);
+    setBondsVisible(false);
+  };
+
+  const activeQuickView: QuickViewId | null = (() => {
+    if (
+      postprocessPreset === balancedPreset
+      && postprocessIntensity === balancedIntensity
+      && colorScheme === 'element'
+      && atomScale === balancedAtomScale
+      && showBonds === bondsAreSafe
+      && vectorField === null
+    ) return 'balanced';
+    if (
+      bondsAreSafe
+      && postprocessPreset === safePreset('studio')
+      && postprocessIntensity === 1
+      && colorScheme === 'element'
+      && atomScale === 0.72
+      && showBonds
+      && bondColorMode === 'type'
+      && vectorField === null
+    ) return 'bonds';
+    if (
+      postprocessPreset === safePreset('studio')
+      && postprocessIntensity === 1
+      && colorScheme === 'element'
+      && atomScale === 1.35
+      && !showBonds
+      && vectorField === null
+    ) return 'space';
+    if (
+      validColorProperty
+      && postprocessPreset === safePreset('paper')
+      && postprocessIntensity === (requiresDiagram ? 1 : 0.9)
+      && colorScheme === 'property'
+      && colorProperty === validColorProperty
+      && colormap === 'viridis'
+      && atomScale === 0.9
+      && !showBonds
+      && vectorField === null
+    ) return 'property';
+    return null;
+  })();
+
   return (
     <div className="lupi-deck-grid">
-      <ControlGroup title="Grade">
-        <div className="lupi-studio-segments">
-          {LOOK_OPTIONS.map(option => (
-            <SegmentButton
-              key={option.id}
-              label={option.label}
-              active={postprocessPreset === option.id}
-              accent={option.accent}
-              onClick={() => setPostprocessPreset(option.id)}
-            />
-          ))}
+      <ControlGroup title="Quick views" wide>
+        <p style={schemeHintStyle}>Start with the result you want. Switch views at any time.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }}>
+          {(Object.keys(QUICK_VIEW_COPY) as QuickViewId[]).map(view => {
+            const disabled = (view === 'bonds' && !bondsAreSafe)
+              || (view === 'property' && !validColorProperty)
+              || (view === 'space' && requiresDiagram);
+            const disabledReason = view === 'bonds'
+              ? `Bond inference is available below 25,000 atoms. This structure has ${atomCount.toLocaleString()}.`
+              : view === 'space'
+                ? 'Occupied space is unavailable at 200,000 atoms and above to avoid excessive overdraw.'
+                : 'This structure has no per-atom data.';
+            return (
+              <QuickViewButton
+                key={view}
+                view={view}
+                active={activeQuickView === view}
+                disabled={disabled}
+                disabledReason={disabled ? disabledReason : undefined}
+                onClick={() => applyQuickView(view)}
+              />
+            );
+          })}
         </div>
-        <p style={schemeHintStyle}>{POSTPROCESS_PRESETS[postprocessPreset].tagline}</p>
-        <CompactSlider
-          label="Effect"
-          value={postprocessIntensity}
-          min={0}
-          max={2}
-          step={0.05}
-          onChange={setPostprocessIntensity}
-          format={value => `${Math.round(value * 100)}%`}
-        />
+        {requiresDiagram && (
+          <p role="status" style={schemeHintStyle}>
+            Diagram rendering stays on for this {atomCount.toLocaleString()}-atom structure to keep interaction responsive.
+          </p>
+        )}
       </ControlGroup>
 
-      {/* Color — one group. Pick a scheme, then tune the single control
-          that scheme actually uses. The scheme decides everything else
-          (atom color mode + palette source) via setColorScheme, so there
-          is no second "Elements/Color/Palette" group to keep in sync and
-          no colormap rail shown for schemes that ignore the colormap. */}
-      <ControlGroup title="Color">
+      {/* Color stays on the easy path because identifying elements or mapping
+          measured values is a primary scientific task, not an expert tweak. */}
+      <ControlGroup title="Color by" wide>
         <div className="lupi-studio-segments">
           {SCHEME_ORDER.map(schemeId => {
             const scheme = COLOR_SCHEMES[schemeId];
             return (
               <SegmentButton
                 key={scheme.id}
-                label={scheme.label}
+                label={COLOR_LABELS[scheme.id]}
                 active={colorScheme === scheme.id}
                 accent={SCHEME_ACCENTS[scheme.id]}
                 onClick={() => applyColorScheme(scheme.id)}
@@ -292,7 +431,7 @@ export function MoleculeControls() {
           availableProperties.length > 0 ? (
             <CompactSelect
               label="Property"
-              value={colorProperty ?? ''}
+              value={validColorProperty ?? ''}
               onChange={(value) => {
                 setColorProperty(value || null);
                 if (value) setColorScheme('property');
@@ -301,14 +440,14 @@ export function MoleculeControls() {
               placeholder="Property"
             />
           ) : (
-            <p style={schemeHintStyle}>No per-atom properties in this dataset.</p>
+            <p style={schemeHintStyle}>No per-atom data is available in this structure.</p>
           )
         )}
 
         {(colorScheme === 'colorway' || colorScheme === 'property') && (
           <div style={{ display: 'grid', gap: 5 }}>
             <span style={{ color: '#94a3b8', fontSize: 10, fontWeight: 820, textTransform: 'uppercase', lineHeight: 1 }}>
-              Colorway
+              Palette
             </span>
             <div style={paletteRailStyle}>
               {PALETTE_OPTIONS.map(option => (
@@ -325,38 +464,10 @@ export function MoleculeControls() {
         )}
       </ControlGroup>
 
-      {/* Material is a single clear choice — pick a recipe, read what it
-          does. The recipe sets finish/lighting/texture together, so the
-          old Mix/Rough/Polish/Coat sliders are gone; only atom size (a
-          geometry control no recipe owns) stays exposed. */}
-      <ControlGroup title="Material">
-        <CompactSelect
-          label="Recipe"
-          value={materialScene}
-          onChange={(value) => {
-            const scene = materialScenes.find(item => item.id === value);
-            if (scene) applyMoleculeRecipe(scene);
-          }}
-          options={materialScenes.map(scene => ({ value: scene.id, label: scene.label }))}
-        />
-        {activeRecipe && <p style={schemeHintStyle}>{activeRecipe.description}</p>}
-        <CompactSlider label="Atom size" value={atomScale} min={0.1} max={2} step={0.05} onChange={setAtomScale} format={value => value.toFixed(2)} />
-      </ControlGroup>
-
-      <ControlGroup title="Bonds">
-        <div className="lupi-studio-segments">
-          <SegmentButton label={showBonds ? 'Bonds on' : 'Bonds off'} active={showBonds} accent="#1edce0" onClick={toggleBonds} />
-          <SegmentButton label="By type" active={bondColorMode === 'type'} accent="#7de9ff" onClick={() => setBondColorMode('type')} />
-          <SegmentButton label="By length" active={bondColorMode === 'length'} accent="#f59e0b" onClick={() => setBondColorMode('length')} />
-        </div>
-        <CompactSlider label="Tolerance" value={bondTolerance} min={0} max={1.2} step={0.02} onChange={setBondTolerance} format={value => value.toFixed(2)} />
-      </ControlGroup>
-
-      {/* Vectors — per-atom force/velocity arrows. Only shown when the
-          loaded data actually carries a vector triplet (vx/vy/vz, fx/fy/fz,
-          or a compute output), which is what real research dumps provide. */}
+      {/* Vectors are only offered when the loaded data actually contains a
+          complete force, velocity, or other vector triplet. */}
       {vectorSpecs.length > 0 && (
-        <ControlGroup title="Vectors">
+        <ControlGroup title="Data arrows" wide>
           <div className="lupi-studio-segments">
             <SegmentButton
               label="Off"
@@ -379,12 +490,118 @@ export function MoleculeControls() {
               <CompactSlider label="Length" value={vectorScale} min={0.2} max={4} step={0.1} onChange={setVectorScale} format={value => `${value.toFixed(1)}×`} />
               <CompactSlider label="Density" value={vectorDensity} min={0.05} max={1} step={0.05} onChange={setVectorDensity} format={value => `${Math.round(value * 100)}%`} />
               <p style={schemeHintStyle}>
-                Arrows colored by magnitude. Tip: Color → Property → {vectorSpecs.find(s => s.id === vectorField)?.magnitudeProperty ?? '|v|'} paints atoms with the same scale.
+                Arrows are colored by magnitude. Property map can paint atoms with the same scale.
               </p>
             </>
           )}
         </ControlGroup>
       )}
+
+      <AdvancedSection title="Fine-tune structure">
+        <ControlGroup title="Visual style">
+        <div className="lupi-studio-segments">
+          {LOOK_OPTIONS.map(option => (
+            <SegmentButton
+              key={option.id}
+              label={option.label}
+              active={postprocessPreset === option.id}
+              accent={option.accent}
+              onClick={() => setPostprocessPreset(option.id)}
+            />
+          ))}
+        </div>
+        <p style={schemeHintStyle}>{POSTPROCESS_PRESETS[postprocessPreset].tagline}</p>
+        <CompactSlider
+          label="Style strength"
+          value={postprocessIntensity}
+          min={0}
+          max={2}
+          step={0.05}
+          onChange={setPostprocessIntensity}
+          format={value => `${Math.round(value * 100)}%`}
+        />
+      </ControlGroup>
+
+      {/* Material is a single clear choice — pick a recipe, read what it
+          does. The recipe sets finish/lighting/texture together, so the
+          old Mix/Rough/Polish/Coat sliders are gone; only atom size (a
+          geometry control no recipe owns) stays exposed. */}
+      <ControlGroup title="Atom appearance">
+        <CompactSelect
+          label="Appearance preset"
+          value={materialScene}
+          onChange={(value) => {
+            const scene = materialScenes.find(item => item.id === value);
+            if (scene) applyMoleculeRecipe(scene);
+          }}
+          options={materialScenes.map(scene => ({ value: scene.id, label: scene.label }))}
+        />
+        {activeRecipe && <p style={schemeHintStyle}>{activeRecipe.description}</p>}
+        <CompactSlider label="Atom size" value={atomScale} min={0.1} max={2} step={0.05} onChange={setAtomScale} format={value => value.toFixed(2)} />
+      </ControlGroup>
+
+      <ControlGroup title="Bond detection">
+        <p style={schemeHintStyle}>Lupi can infer visual bonds from distance. Adjust sensitivity only when the default misses or adds connections.</p>
+        <div className="lupi-studio-segments">
+          <SegmentButton label="Bonds" active={showBonds} accent="#1edce0" onClick={() => { if (bondsAreSafe) toggleBonds(); }} />
+          <SegmentButton label="By element" active={bondColorMode === 'type'} accent="#7de9ff" onClick={() => setBondColorMode('type')} />
+          <SegmentButton label="By length" active={bondColorMode === 'length'} accent="#f59e0b" onClick={() => setBondColorMode('length')} />
+        </div>
+        {!bondsAreSafe && (
+          <p style={schemeHintStyle}>Bond inference is disabled at 25,000 atoms and above to protect interaction speed.</p>
+        )}
+        <CompactSlider label="Bond sensitivity" value={bondTolerance} min={0} max={1.2} step={0.02} onChange={setBondTolerance} format={value => value.toFixed(2)} />
+      </ControlGroup>
+      </AdvancedSection>
     </div>
+  );
+}
+
+function QuickViewButton({
+  view,
+  active,
+  disabled,
+  disabledReason,
+  onClick,
+}: {
+  view: QuickViewId;
+  active: boolean;
+  disabled: boolean;
+  disabledReason?: string;
+  onClick: () => void;
+}) {
+  const option = QUICK_VIEW_COPY[view];
+  return (
+    <button
+      type="button"
+      data-testid={`quick-view-${view}`}
+      aria-pressed={active}
+      disabled={disabled}
+      title={disabledReason ?? option.description}
+      onClick={onClick}
+      style={{
+        minWidth: 0,
+        minHeight: 68,
+        display: 'grid',
+        gap: 4,
+        alignContent: 'center',
+        padding: '10px 11px',
+        textAlign: 'left',
+        borderRadius: 8,
+        border: active ? `1px solid ${option.accent}` : '1px solid rgba(148,163,184,0.18)',
+        background: active
+          ? `linear-gradient(135deg, ${option.accent}2b, rgba(9,14,22,0.92))`
+          : 'linear-gradient(135deg, rgba(15,23,42,0.74), rgba(3,7,18,0.62))',
+        color: disabled ? '#64748b' : '#f8fafc',
+        opacity: disabled ? 0.62 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        touchAction: 'manipulation',
+      }}
+    >
+      <span style={{ fontSize: 11, fontWeight: 840, lineHeight: 1.15 }}>{option.label}</span>
+      <span style={{ color: disabled ? '#64748b' : '#94a3b8', fontSize: 9, fontWeight: 650, lineHeight: 1.3 }}>
+        {disabledReason ?? option.description}
+      </span>
+    </button>
   );
 }

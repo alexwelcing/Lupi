@@ -6,6 +6,7 @@ import { MoleculeBrowser } from '../molecules/MoleculeBrowser';
 import { type MoleculeSourceId } from '../molecules';
 import { PotentialBrowser } from '../panels/PotentialBrowser';
 import { useStore } from '../store';
+import { ALL_DOMAINS, type Domain } from '../gallery/catalog';
 
 // One browse surface, two doors: "Explore" is the curated showcase (the
 // pedagogically rich Gallery), "Search" is the federated faceted search over
@@ -24,6 +25,10 @@ export function GallerySection() {
   // When a deep link lands on Search, preselect the source facet it asked for
   // (e.g. ?tab=omol25 opens Search filtered to Meta OMol25).
   const [searchSource, setSearchSource] = useState<MoleculeSourceId | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchIntentRevision, setSearchIntentRevision] = useState(0);
+  const [catalogDomain, setCatalogDomain] = useState<Domain | 'All'>('All');
+  const [catalogIntentRevision, setCatalogIntentRevision] = useState(0);
   const sectionRef = useRef<HTMLDivElement>(null);
   const backgroundPreset = useStore((state) => state.backgroundPreset);
 
@@ -55,6 +60,35 @@ export function GallerySection() {
     }
   }, []);
 
+  // Own homepage-to-library intent at the surface that controls which catalog
+  // is mounted. This prevents events from being lost when a different tab is
+  // active and lets unmatched hero queries reach the federated search.
+  useEffect(() => {
+    const handleSearchIntent = (event: Event) => {
+      const query = (event as CustomEvent<string>).detail?.trim();
+      if (!query) return;
+      setSearchSource(null);
+      setSearchQuery(query);
+      setSearchIntentRevision((revision) => revision + 1);
+      setView('search');
+    };
+    const handleDomainIntent = (event: Event) => {
+      const requested = (event as CustomEvent<string>).detail;
+      const domain = requested === 'All' || ALL_DOMAINS.includes(requested as Domain)
+        ? requested as Domain | 'All'
+        : 'All';
+      setCatalogDomain(domain);
+      setCatalogIntentRevision((revision) => revision + 1);
+      setView('explore');
+    };
+    window.addEventListener('lupi:gallery-search', handleSearchIntent);
+    window.addEventListener('lupi:gallery-domain', handleDomainIntent);
+    return () => {
+      window.removeEventListener('lupi:gallery-search', handleSearchIntent);
+      window.removeEventListener('lupi:gallery-domain', handleDomainIntent);
+    };
+  }, []);
+
   return (
     <section
       id="gallery"
@@ -75,10 +109,10 @@ export function GallerySection() {
       <div className="lupi-gallery-section__shell">
         <div className="lupi-gallery-section__intro">
           <div>
-            <p>The complete index</p>
-            <h2>Every body in the archive. Search, or narrow to a field of matter.</h2>
+            <p>Explore the library</p>
+            <h2>Search every molecule, material, and simulation.</h2>
           </div>
-          <a href="#dropzone">Bring your own matter</a>
+          <a href="#dropzone">Open your data</a>
         </div>
 
         <div style={sTabBar} role="tablist" aria-label="Browse molecules">
@@ -89,7 +123,7 @@ export function GallerySection() {
             style={sTab(view === 'explore', '#d8b878')}
             onClick={() => setView('explore')}
           >
-            Explore
+            Explore examples
           </button>
           <button
             role="tab"
@@ -98,31 +132,31 @@ export function GallerySection() {
             style={sTab(view === 'search', '#8fb0d4')}
             onClick={() => setView('search')}
           >
-            Search all molecules
+            Search all sources
           </button>
         </div>
 
         <div style={sToolsRow} aria-label="Advanced tools">
-          <span style={sToolsLabel}>Tools</span>
+          <span style={sToolsLabel}>Research tools</span>
           <button
             data-testid="tool-potentials"
             style={sToolBtn(view === 'potentials')}
             onClick={() => setView('potentials')}
           >
-            NIST Potentials
+            NIST potentials
           </button>
           <button
             data-testid="tool-equilibrium"
             style={sToolBtn(view === 'equilibrium')}
             onClick={() => setView('equilibrium')}
           >
-            Equilibrium Solve
+            Equilibrium solver
           </button>
         </div>
 
         <div className="lupi-gallery-section__panel">
-          {view === 'explore' && <Gallery />}
-          {view === 'search' && <MoleculeBrowser initialSource={searchSource} />}
+          {view === 'explore' && <Gallery key={`catalog-${catalogIntentRevision}`} initialDomain={catalogDomain} />}
+          {view === 'search' && <MoleculeBrowser key={`search-${searchIntentRevision}`} initialSource={searchSource} initialQuery={searchQuery} />}
           {view === 'potentials' && <PotentialBrowser />}
           {view === 'equilibrium' && <EquilibriumSolveWorkbench embedded />}
         </div>

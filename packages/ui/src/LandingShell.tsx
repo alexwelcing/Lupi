@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useStore } from './store';
 import { LandingPage } from './LandingPage';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
@@ -64,8 +64,23 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
     );
   }, [onEnterViewer]);
 
+  const scrollToSection = (id: 'gallery' | 'dropzone') => (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    event.preventDefault();
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div style={{ width: '100%', minHeight: '100vh', background: '#020204', display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        @media (min-width: 769px) and (max-width: 1050px) {
+          .lupi-home-descriptor,
+          .lupi-home-nav {
+            display: none !important;
+          }
+        }
+      `}</style>
       {/* Landing header — kept in the Melancholia register: transparent over the
           twilight sky, a serif wordmark, gold-outlined actions. No filled blue. */}
       <header
@@ -95,35 +110,25 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
             Lupi
           </span>
           {!isMobile && (
-            <span style={{
+            <span className="lupi-home-descriptor" style={{
               fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
               fontSize: 10, letterSpacing: '0.28em', textTransform: 'uppercase',
               color: 'rgba(216,184,120,0.72)',
             }}>
-              archive of matter
+              molecules &amp; materials in 3D
             </span>
           )}
         </a>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: isMobile ? 8 : 14, minWidth: 0 }}>
-          <a
-            href="#gallery"
-            onClick={(e) => {
-              const el = document.getElementById('gallery');
-              if (el) {
-                e.preventDefault();
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }
-            }}
-            style={{
-              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-              fontSize: isMobile ? 11 : 12, letterSpacing: '0.06em',
-              color: 'rgba(205,214,228,0.72)', textDecoration: 'none',
-              padding: '8px 4px',
-            }}
-          >
-            The index
-          </a>
+          {!isMobile && (
+            <nav className="lupi-home-nav" aria-label="Primary" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <a href="#gallery" onClick={scrollToSection('gallery')} style={navLinkStyle}>Explore</a>
+              <a href="/study/organic-functional-groups" style={navLinkStyle}>Learn</a>
+              <a href="https://lupine.science/research" style={navLinkStyle}>Research</a>
+              <a href="#dropzone" onClick={scrollToSection('dropzone')} style={navLinkStyle}>Upload</a>
+            </nav>
+          )}
           <button
             type="button"
             onClick={() => void openRandomOmol25Molecule()}
@@ -135,7 +140,7 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
               border: '1px solid rgba(216,184,120,0.4)',
             }}
           >
-            {isMobile ? 'At random' : 'A body at random'}
+            {isMobile ? 'Surprise' : 'Surprise me'}
           </button>
           <LupiAgentDock compact={isMobile} />
         </div>
@@ -151,5 +156,14 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
     </div>
   );
 }
+
+const navLinkStyle = {
+  fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+  fontSize: 12,
+  letterSpacing: '0.04em',
+  color: 'rgba(205,214,228,0.76)',
+  textDecoration: 'none',
+  padding: '8px 2px',
+};
 
 export default LandingShell;

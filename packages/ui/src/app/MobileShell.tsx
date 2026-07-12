@@ -4,7 +4,6 @@ import { Sheet } from '../primitives/AppShell';
 import { CameraPresetButton, MobileTabButton } from '../controls';
 import { ViewerPanelBody } from '../ViewerPanelBody';
 import { StudyLensPanel } from '../StudyLensPanel';
-import { IconStudy } from '../icons';
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: string | null }> {
   state = { error: null as string | null };
@@ -54,8 +53,11 @@ export function MobileShell() {
     cameraPreset === 'front' ? 'YZ' :
     cameraPreset === 'iso' ? 'ISO' : 'View';
 
+  const structurePanelActive = activePanel === 'studio' && studioDeck !== 'export';
+
   const openStudioDeck = (mode: ViewerControlMode) => {
     setViewMenuOpen(false);
+    setStudyLensOpen(false);
     setStudioDeck(mode);
     if (activePanel !== 'studio') setActivePanel('studio');
   };
@@ -106,28 +108,37 @@ export function MobileShell() {
         <MobileTabButton
           onClick={() => {
             setViewMenuOpen(false);
-            if (activePanel === 'studio') { setActivePanel(null); return; }
+            setStudyLensOpen(false);
+            if (structurePanelActive) { setActivePanel(null); return; }
             setStudioDeck('molecule');
-            setActivePanel('studio');
+            if (activePanel !== 'studio') setActivePanel('studio');
           }}
-          ariaLabel="Toggle controls panel"
-          active={activePanel === 'studio'}
+          ariaLabel="Style controls"
+          active={structurePanelActive}
         >
-          CONTROLS
+          STYLE
         </MobileTabButton>
         <MobileTabButton
-          onClick={() => toggleViewMenu()}
+          onClick={() => {
+            setStudyLensOpen(false);
+            if (activePanel) setActivePanel(null);
+            toggleViewMenu();
+          }}
           ariaLabel="Camera view"
           active={viewMenuOpen}
         >
           {cameraPresetLabel}
         </MobileTabButton>
         <MobileTabButton
-          onClick={() => { setViewMenuOpen(false); toggleStudyLens(); }}
-          ariaLabel="Study lens"
+          onClick={() => {
+            setViewMenuOpen(false);
+            if (activePanel) setActivePanel(null);
+            toggleStudyLens();
+          }}
+          ariaLabel="Study Guide"
           active={studyLensOpen}
         >
-          STUDY
+          LEARN
         </MobileTabButton>
       </nav>
 

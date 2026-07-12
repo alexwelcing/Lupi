@@ -59,15 +59,27 @@ const SOURCE_LABEL: Record<MoleculeSourceId, string> = {
 
 const PER_SOURCE_LIMIT = 24;
 
-export function MoleculeBrowser({ initialSource = null }: { initialSource?: MoleculeSourceId | null } = {}) {
-  const [text, setText] = useState('');
-  const [debounced, setDebounced] = useState('');
+export function MoleculeBrowser({
+  initialSource = null,
+  initialQuery = '',
+}: {
+  initialSource?: MoleculeSourceId | null;
+  initialQuery?: string;
+} = {}) {
+  const [text, setText] = useState(initialQuery);
+  const [debounced, setDebounced] = useState(initialQuery);
   const [source, setSource] = useState<MoleculeSourceId | null>(initialSource);
   const [elements, setElements] = useState<string[]>([]);
   const [hits, setHits] = useState<MoleculeHit[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const reqId = useRef(0);
+
+  useEffect(() => {
+    setText(initialQuery);
+    setDebounced(initialQuery);
+  }, [initialQuery]);
+  useEffect(() => setSource(initialSource), [initialSource]);
 
   // Debounce the free-text query so each keystroke doesn't fan out a search.
   useEffect(() => {

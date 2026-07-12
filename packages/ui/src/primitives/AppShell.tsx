@@ -134,6 +134,7 @@ export function Rail({ children, direction = 'row', className, role, 'aria-label
       role={role}
       aria-label={ariaLabel}
       data-testid={testId}
+      style={style}
     >
       {children}
     </div>
