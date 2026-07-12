@@ -1,6 +1,19 @@
 name: Deploy LUPI to Cloudflare
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'apps/mcp-worker/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/deploy-cloudflare.yml'
   workflow_dispatch: {}
 
 concurrency:
@@ -73,11 +86,14 @@ jobs:
         run: pnpm cloudflare:test
 
       - name: Deploy Cloudflare edge Worker
-        working-directory: apps/mcp-worker
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy
+        id: deploy_worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/mcp-worker
+          wranglerVersion: '4.110.0'
+          command: deploy
 
       - name: Upload Cloudflare secrets
         working-directory: apps/mcp-worker
@@ -88,8 +104,47 @@ jobs:
           RENDERER_TOKEN: ${{ secrets.LUPI_RENDERER_TOKEN }}
         run: |
           if [ -n "$LUPI_MCP_SHARED_SECRET" ]; then
-            printf '%s' "$LUPI_MCP_SHARED_SECRET" | npx wrangler secret put LUPI_MCP_SHARED_SECRET
+            printf '%s' "$LUPI_MCP_SHARED_SECRET" | npx wrangler@4.110.0 secret put LUPI_MCP_SHARED_SECRET
           fi
           if [ -n "$RENDERER_TOKEN" ]; then
-            printf '%s' "$RENDERER_TOKEN" | npx wrangler secret put RENDERER_TOKEN
+            printf '%s' "$RENDERER_TOKEN" | npx wrangler@4.110.0 secret put RENDERER_TOKEN
           fi
+
+      - name: Smoke deployed Cloudflare Worker
+        shell: bash
+        env:
+          WORKER_URL: ${{ steps.deploy_worker.outputs.deployment-url }}
+        run: |
+          case "$WORKER_URL" in
+            https://*.workers.dev | https://*.workers.dev/)
+              WORKER_URL="${WORKER_URL%/}"
+              ;;
+            *)
+              echo "::error::Cloudflare deploy did not return a direct workers.dev URL"
+              exit 1
+              ;;
+          esac
+
+          health_file="$RUNNER_TEMP/lupi-health.json"
+          root_file="$RUNNER_TEMP/lupi-root.html"
+
+          for i in $(seq 1 12); do
+            if curl -fsS "$WORKER_URL/health" -o "$health_file" \
+              && curl -fsS "$WORKER_URL/" -o "$root_file" \
+              && HEALTH_FILE="$health_file" ROOT_FILE="$root_file" node -e '
+                const fs = require("node:fs");
+                const health = JSON.parse(fs.readFileSync(process.env.HEALTH_FILE, "utf8"));
+                const root = fs.readFileSync(process.env.ROOT_FILE, "utf8");
+                if (health.ready !== true || health.bindings?.webAssets !== true || !root.includes("id=\"root\"")) {
+                  process.exit(1);
+                }
+              '
+            then
+              echo "Cloudflare Worker smoke passed: $WORKER_URL"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::Cloudflare Worker smoke failed: $WORKER_URL"
+          exit 1
