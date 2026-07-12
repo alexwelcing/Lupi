@@ -94,6 +94,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/mcp-worker
           wranglerVersion: '4.110.0'
+          packageManager: pnpm
           command: deploy
 
       - name: Upload Cloudflare secrets
