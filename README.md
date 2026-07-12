@@ -49,20 +49,22 @@ Open `http://localhost:5173`.
 
 ```bash
 pnpm build
-pnpm verify:controls --no-screenshot
-pnpm verify:study-lens --no-screenshot
+pnpm exec playwright install --with-deps chromium
+pnpm test:ui
 pnpm verify:mcp-bridge
 pnpm verify:exports
 ```
 
-For a fresh-clone confidence pass:
+`pnpm test:ui` serves the production build and exercises homepage discovery,
+the real molecule viewer and settings, and the mobile controls. To run the
+deployment-safe subset against a public preview or Worker URL:
 
 ```bash
-pnpm verify:standalone
+UI_TEST_URL=https://PREVIEW_URL pnpm test:ui:deployed
 ```
 
-Some visual verifiers launch Chromium and write artifacts under
-`.verify-artifacts/`.
+Playwright writes failure diagnostics under `playwright-report/` and
+`test-results/`. The focused legacy verifiers write under `.verify-artifacts/`.
 
 ## App Map
 
@@ -78,16 +80,11 @@ Some visual verifiers launch Chromium and write artifacts under
 
 ## Deploy Status
 
-Production deploy is owned by this standalone repo:
-
-```text
-.github/workflows/deploy-viewer.yml
-```
-
-The workflow builds only the viewer, packages `apps/web/dist` with the local
-static server, deploys a no-traffic Cloud Run candidate, smokes it, and then
-routes `lupi.live` traffic to the proven revision. See
-[docs/deploy-cutover.md](docs/deploy-cutover.md).
+Production deploy is owned by this standalone repo. The primary workflow is
+`.github/workflows/deploy-cloudflare.yml`.
+It builds and tests the app and edge Worker, deploys through Wrangler, then
+runs the deployed Playwright UI gate against the direct `workers.dev` URL.
+`.github/workflows/deploy-viewer.yml` remains the manual Cloud Run fallback.
 
 ## Docs
 

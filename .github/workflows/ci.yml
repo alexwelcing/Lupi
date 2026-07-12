@@ -7,9 +7,11 @@ on:
       - 'apps/**'
       - 'packages/**'
       - 'tools/**'
+      - 'tests/**'
       - 'scripts/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'playwright.config.mjs'
       - '.github/workflows/*.yml'
   push:
     branches: [main]
@@ -17,9 +19,11 @@ on:
       - 'apps/**'
       - 'packages/**'
       - 'tools/**'
+      - 'tests/**'
       - 'scripts/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'playwright.config.mjs'
       - '.github/workflows/*.yml'
 
 concurrency:
@@ -71,3 +75,20 @@ jobs:
             exit 1
           fi
           echo "NIST catalog is in sync with committed source."
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test production UI
+        run: pnpm test:ui
+
+      - name: Upload Playwright diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7

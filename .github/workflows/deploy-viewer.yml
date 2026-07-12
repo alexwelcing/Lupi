@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Validate deploy configuration
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
@@ -124,17 +127,19 @@ jobs:
           echo "Candidate revision: $revision"
           echo "Candidate URL: $candidate_url"
 
-      - name: Smoke deployed candidate
-        run: |
-          for i in $(seq 1 12); do
-            if curl -fsS "$CANDIDATE_URL" | grep -q 'id="root"'; then
-              echo "Candidate smoke passed"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "::error::Candidate smoke failed: $CANDIDATE_URL"
-          exit 1
+      - name: Test deployed candidate UI
+        run: UI_TEST_URL="$CANDIDATE_URL" pnpm test:ui:deployed
+
+      - name: Upload Playwright diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-cloud-run-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Route production traffic
         env:

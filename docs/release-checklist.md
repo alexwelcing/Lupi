@@ -13,13 +13,14 @@ Use this before promoting the standalone viewer or cutting over `lupi.live`.
 ## Viewer Verification
 
 ```bash
-pnpm verify:standalone
+pnpm test
+pnpm test:ui
 pnpm verify:mcp-bridge
 pnpm verify:exports
 ```
 
-- [ ] Controls smoke passes.
-- [ ] Study Lens smoke passes.
+- [ ] Homepage-to-viewer and desktop settings journeys pass.
+- [ ] Mobile viewer settings journey passes.
 - [ ] MCP bridge reports expected auth state.
 - [ ] Export controls expose expected formats.
 - [ ] Gallery/search behavior is checked.
@@ -35,12 +36,12 @@ pnpm verify:exports
 
 ## Deploy
 
-- [ ] `deploy-viewer.yml` is rooted in this repo and packages only viewer assets.
-- [ ] Deploy workflow builds only viewer output.
+- [ ] `deploy-cloudflare.yml` builds the web app and edge Worker from this repo.
+- [ ] Cloudflare secrets are available through the protected `prod` environment.
 - [ ] Old `atlas/deploy_slim.py` coupling is gone.
-- [ ] Cloud Run service and region are correct.
-- [ ] Traffic moves to the latest revision after smoke.
-- [ ] Deploy telemetry posts to `glim-think` `/ops/report`.
+- [ ] Wrangler returns a direct `workers.dev` deployment URL.
+- [ ] Structured Worker readiness and deployed Playwright UI checks pass.
+- [ ] The manual Cloud Run fallback still tests its candidate before routing traffic.
 
 ## Live Verification
 

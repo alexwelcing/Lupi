@@ -19,6 +19,8 @@
     "build:wasm": "cd packages/parsers/wasm && wasm-pack build --target web --out-dir ../pkg",
     "nist:build": "npx -y tsx scripts/build-nist-catalog.ts",
     "test": "turbo run test --concurrency=1",
+    "test:ui": "playwright test",
+    "test:ui:deployed": "node tools/require-deployed-ui-url.mjs && playwright test --grep @deployed-smoke",
     "test:rust": "cd packages/parsers/wasm && cargo test",
     "audit:nomenclature": "node tools/audit-gallery-nomenclature.mjs",
     "audit:gallery-claims": "node tools/audit-gallery-claims.mjs",
