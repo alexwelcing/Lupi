@@ -35,6 +35,7 @@
     "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
     "verify:asset-quality": "node tools/verify-asset-quality.mjs",
     "verify:product-contract": "node tools/verify-product-contract.mjs",
+    "verify:release-authority-freeze": "node tools/verify-release-authority-freeze.mjs",
     "cloudflare:build": "pnpm --filter @atlas/web build && pnpm --filter @atlas/mcp-worker build",
     "cloudflare:dev": "pnpm --filter @atlas/mcp-worker dev",
     "cloudflare:deploy": "pnpm --filter @atlas/mcp-worker deploy",
