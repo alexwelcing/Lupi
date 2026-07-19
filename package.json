@@ -34,6 +34,7 @@
     "verify:streaming-ux": "node tools/verify-streaming-ux.mjs",
     "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
     "verify:asset-quality": "node tools/verify-asset-quality.mjs",
+    "verify:product-contract": "node tools/verify-product-contract.mjs",
     "cloudflare:build": "pnpm --filter @atlas/web build && pnpm --filter @atlas/mcp-worker build",
     "cloudflare:dev": "pnpm --filter @atlas/mcp-worker dev",
     "cloudflare:deploy": "pnpm --filter @atlas/mcp-worker deploy",

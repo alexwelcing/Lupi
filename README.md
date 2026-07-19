@@ -4,12 +4,18 @@ Standalone LUPI molecular viewer repo.
 
 This repo owns the browser-native molecular viewer at `lupi.live`: the WebGPU
 viewer app, shared viewer packages, parser/runtime packages, viewer verification
-tools, Firebase viewer support, saved views, API-key auth, and the agent/MCP
-surface for loading and inspecting molecules.
+tools, Firebase viewer support, saved views, authentication contracts, and the
+agent/MCP surface for loading and inspecting molecules.
 
-It does not own the Lupine research corpus, public landing page, Lean proofs,
-MLIP distillation policy, or experiment execution. Those stay in the science
-control-plane and Library repos.
+The normative boundary is the
+[Lupi product ownership contract](docs/product-ownership-contract.md). It wins
+when an older roadmap, campaign plan, branch, or overview conflicts with it.
+
+It owns the lightweight `lupi.live` discovery/landing shell that opens the
+viewer. It does not own the Lupine editorial/public-science front door at
+`lupine.science`, the research corpus, Lean proofs, MLIP distillation policy, or
+experiment execution. Those stay in the science control-plane and Library
+repos.
 
 ## Boundary
 
@@ -44,6 +50,19 @@ pnpm dev
 ```
 
 Open `http://localhost:5173`.
+
+## Terminal Authentication (planned—not yet shipped)
+
+The tracked repository does not currently ship a tested `lupi:auth` package
+script or a verified API-key management panel in the active Account shell. Do
+not direct users or agents to a terminal login flow yet.
+
+The existing Functions/data model and intended HTTP exchange are retained as
+implementation inventory in [docs/api-keys.md](docs/api-keys.md). The operator's
+authenticated-agent golden-path work (operator Plan 026) owns reconciling
+the local helper, replacing broad identity exchange with the scoped agent
+contract, testing the UI/client, and proving the live flow before this section
+may become user instructions.
 
 ## Focused Verification
 
@@ -85,12 +104,18 @@ Production deploy is owned by this standalone repo. The primary workflow is
 It builds and tests the app and edge Worker, deploys through Wrangler, then
 runs the deployed Playwright UI gate against the direct `workers.dev` URL.
 `.github/workflows/deploy-viewer.yml` remains the manual Cloud Run fallback.
+That job is partial evidence against a mutable direct `workers.dev` endpoint;
+it does not record immutable Worker Version identity and is not proof of the
+custom domain or public product. See the
+[release truth contract](docs/release-truth-contract.md).
 
 ## Docs
 
 - [LUPINE.md](LUPINE.md): how this repo fits the Lupine constellation
+- [docs/product-ownership-contract.md](docs/product-ownership-contract.md): normative product boundary
+- [docs/release-truth-contract.md](docs/release-truth-contract.md): five-lane evidence contract
 - [docs/extraction-packet.md](docs/extraction-packet.md): original split plan
-- [docs/api-keys.md](docs/api-keys.md): agent API-key auth flow
+- [docs/api-keys.md](docs/api-keys.md): legacy API-key backend inventory and Plan 026 target
 - [docs/lupi-mcp-roadmap.md](docs/lupi-mcp-roadmap.md): agent/MCP roadmap
 - [docs/operations.md](docs/operations.md): local, CI, deploy, and live checks
 - [docs/deploy-cutover.md](docs/deploy-cutover.md): production deploy split

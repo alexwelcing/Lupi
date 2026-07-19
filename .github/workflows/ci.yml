@@ -6,11 +6,23 @@ on:
     paths:
       - 'apps/**'
       - 'packages/**'
+      - 'functions/**'
+      - 'docs/**'
       - 'tools/**'
       - 'tests/**'
       - 'scripts/**'
+      - 'LUPINE.md'
+      - 'README.md'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - 'tsconfig*.json'
+      - 'vitest.workspace.*'
+      - 'eslint.config.*'
       - 'playwright.config.mjs'
       - '.github/workflows/*.yml'
   push:
@@ -18,11 +30,23 @@ on:
     paths:
       - 'apps/**'
       - 'packages/**'
+      - 'functions/**'
+      - 'docs/**'
       - 'tools/**'
       - 'tests/**'
       - 'scripts/**'
+      - 'LUPINE.md'
+      - 'README.md'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - 'tsconfig*.json'
+      - 'vitest.workspace.*'
+      - 'eslint.config.*'
       - 'playwright.config.mjs'
       - '.github/workflows/*.yml'
 
@@ -49,7 +73,13 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test product contract verifier
+        run: node --test tools/verify-product-contract.test.mjs
+
+      - name: Verify product contract
+        run: pnpm verify:product-contract
 
       - name: Build
         run: pnpm build
