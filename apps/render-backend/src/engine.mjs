@@ -308,6 +308,14 @@ async function renderOnLane(job, deadlineAt) {
   await executeBridgeTool(
     viewerPage,
     job.jobId,
+    'viewer',
+    'lupi.set_viewer',
+    { showBonds: false, showCell: false, showAxes: false },
+    deadlineAt,
+  );
+  await executeBridgeTool(
+    viewerPage,
+    job.jobId,
     'background',
     'lupi.set_background',
     { preset: BROWSER_BACKGROUND_PRESET, motionPaused: true, opacity: 1 },
