@@ -254,7 +254,9 @@ export async function importParsedTrajectory(args: {
   persist?: boolean;
 }): Promise<{ persistedId: string | null }> {
   const { name, trajectory, thermo = null, size, persist = true } = args;
-  const frames = trajectory.frames.filter(Boolean);
+  const frames = trajectory.frames.filter(
+    (frame): frame is import('@atlas/core/types').Frame => frame !== undefined,
+  );
 
   const { canEncodeGlimbin, assembleGlimbinBlob } = await import('@atlas/core/glimbin');
   const shouldStream =

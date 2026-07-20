@@ -7,12 +7,12 @@
 // @ts-nocheck
 
 import init, {
-  parseDump,
-  countDumpFrames,
   parseLog,
   parseDataFile,
   parseXyzFile,
 } from 'atlas-parsers';
+import { parseDumpBlobCanonical, parseDumpFramesCanonical } from '../dumpStreamParser';
+import { extractFrameProperties } from './frameTransfer';
 
 let wasmReady = false;
 
@@ -54,44 +54,20 @@ async function readFileAsText(file: File): Promise<string> {
   return text;
 }
 
-function extractFrameProperties(f: any, transferables: Transferable[]) {
-  const propertyNames =
-    typeof f.propertyNames === 'function'
-      ? f.propertyNames()
-      : Array.isArray(f.propertyNames)
-        ? f.propertyNames
-        : null;
-
-  if (propertyNames && f.getProperty) {
-    return propertyNames.map((name: string) => {
-      const data = f.getProperty(name);
-      if (data && data.buffer) transferables.push(data.buffer);
-      return { name, data };
-    });
-  }
-
-  return f.properties ? f.properties.map(([name, data]: [string, any]) => {
-    if (data && data.buffer) transferables.push(data.buffer);
-    return { name, data };
-  }) : [];
-}
-
 self.onmessage = async (e: MessageEvent) => {
   const { type, payload, id } = e.data;
 
   try {
-    await ensureWasm();
-
     if (type === 'parse-dump') {
       const file = payload as File;
-      const content = typeof file === 'string' ? file : await readFileAsText(file);
-
-      // Quick count for progress
-      const totalFrames = countDumpFrames(content);
-      self.postMessage({ type: 'progress', id, total: totalFrames, parsed: 0 });
-
-      // Parse all frames
-      const frames = parseDump(content);
+      self.postMessage({ type: 'progress', id, total: 0, parsed: 0 });
+      const onFrameDecoded = (parsed: number) => {
+        self.postMessage({ type: 'progress', id, total: 0, parsed });
+      };
+      const frames = typeof file === 'string'
+        ? await parseDumpFramesCanonical(file, { onFrameDecoded })
+        : await parseDumpBlobCanonical(file, { onFrameDecoded });
+      const totalFrames = frames.length;
 
       // Transform WASM output to transferable typed arrays
       const transferables: Transferable[] = [];
@@ -126,6 +102,7 @@ self.onmessage = async (e: MessageEvent) => {
       self.postMessage({ type: 'frames', id, frames: result }, transferables);
 
     } else if (type === 'parse-data') {
+      await ensureWasm();
       const file = payload as File;
       const content = typeof file === 'string' ? file : await readFileAsText(file);
       const f = parseDataFile(content);
@@ -157,6 +134,7 @@ self.onmessage = async (e: MessageEvent) => {
       }]}, transferables);
 
     } else if (type === 'parse-xyz') {
+      await ensureWasm();
       const file = payload as File;
       const content = typeof file === 'string' ? file : await readFileAsText(file);
       const frames = parseXyzFile(content);
@@ -192,6 +170,7 @@ self.onmessage = async (e: MessageEvent) => {
       self.postMessage({ type: 'frames', id, frames: result }, transferables);
 
     } else if (type === 'parse-log') {
+      await ensureWasm();
       const file = payload as File;
       const content = typeof file === 'string' ? file : await readFileAsText(file);
       const thermo = parseLog(content);

@@ -404,8 +404,8 @@ export async function* parseDumpFileStreamingFromFile(
   }
 }
 
-/** Re-export so callers can decide streaming vs. WASM up-front without
- *  digging into the implementation module. */
+/** Re-export the executable dump compatibility contract. Every accepted dump
+ *  route now resolves to the canonical byte decoder. */
 export { canStreamDump } from './dumpStreamParser';
 export {
   analyzeDumpHead,
@@ -519,9 +519,11 @@ export async function parseDumpFileRest(file: File): Promise<{
   const trajectory = await parseDumpFile(file);
   // Cache for Phase 2
   _cachedFullParse = { file, trajectory };
+  const restFrame = trajectory.frames[0];
+  if (!restFrame) throw new Error('LAMMPS dump did not contain a resident first frame.');
 
   return {
-    restFrame: trajectory.frames[0],
+    restFrame,
     totalFrames: trajectory.totalFrames,
     atomTypes: trajectory.atomTypes,
     globalBounds: trajectory.globalBounds as { min: [number, number, number]; max: [number, number, number] },
@@ -544,7 +546,7 @@ export async function streamDumpFrames(
   }
 
   const { trajectory } = _cachedFullParse;
-  const allFrames = trajectory.frames;
+  const allFrames = trajectory.frames.filter((frame): frame is Frame => frame !== undefined);
   const total = allFrames.length;
 
   if (total <= 1) {

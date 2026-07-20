@@ -48,9 +48,20 @@ export interface Frame {
 }
 
 /** A loaded trajectory (multiple frames) */
+export type TrajectoryResidency =
+  | { mode: 'complete' }
+  | { mode: 'sparse'; maxResidentFrames: number };
+
 export interface Trajectory {
-  frames: Frame[];
+  /**
+   * Slots are indexed by source-frame index. Streaming trajectories leave
+   * non-resident slots undefined; use `totalFrames` for navigation and ask
+   * the active frame source to reload a missing slot.
+   */
+  frames: Array<Frame | undefined>;
   totalFrames: number;
+  /** Omitted on legacy fully-resident trajectories (equivalent to complete). */
+  residency?: TrajectoryResidency;
   /** Unique atom types across all frames */
   atomTypes: number[];
   /** Global bounding box encompassing all frames */

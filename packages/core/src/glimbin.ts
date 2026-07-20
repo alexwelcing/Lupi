@@ -705,7 +705,7 @@ export function assembleGlimbinBlob(
   trajectory: Trajectory,
   opts: { unitStyle?: number } = {},
 ): GlimbinEncodeResult {
-  const frames = trajectory.frames.filter(Boolean);
+  const frames = trajectory.frames.filter((frame): frame is Frame => frame !== undefined);
   if (frames.length === 0) throw new Error('assembleGlimbinBlob: trajectory has no frames');
 
   const writer = new GlimbinStreamWriter({

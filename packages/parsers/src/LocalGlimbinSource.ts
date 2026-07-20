@@ -59,6 +59,10 @@ class FrameCache {
   has(i: number): boolean {
     return this.cache.has(i);
   }
+  delete(i: number): void {
+    this.cache.delete(i);
+    this.order = this.order.filter((x) => x !== i);
+  }
   clear(): void {
     this.cache.clear();
     this.order = [];
@@ -119,7 +123,8 @@ export class LocalGlimbinSource {
     }
   }
 
-  async fetchFrame(frameIndex: number): Promise<Frame> {
+  async fetchFrame(frameIndex: number, signal?: AbortSignal): Promise<Frame> {
+    if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
     const cached = this.cache.get(frameIndex);
     if (cached) return cached;
 
@@ -135,7 +140,7 @@ export class LocalGlimbinSource {
       );
     }
 
-    const promise = this.doFetchFrame(frameIndex);
+    const promise = this.doFetchFrame(frameIndex, signal);
     this.inflight.set(frameIndex, promise);
     try {
       return await promise;
@@ -144,11 +149,12 @@ export class LocalGlimbinSource {
     }
   }
 
-  private async doFetchFrame(frameIndex: number): Promise<Frame> {
+  private async doFetchFrame(frameIndex: number, signal?: AbortSignal): Promise<Frame> {
     try {
       const entry = this.index!.entries[frameIndex];
       const start = Number(entry.offset);
       let buffer = await this.readBytes(start, start + entry.compressedSize);
+      if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 
       if (this.header!.compressed) {
         buffer = await decompressGlimbinFrame(buffer, entry.rawSize);
@@ -172,11 +178,13 @@ export class LocalGlimbinSource {
         properties: parsed.properties,
       };
 
+      if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
       this.cache.set(frameIndex, frame);
       this.events.onFrame?.(frameIndex, frame);
       return frame;
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
+      if (signal?.aborted || normalized.name === 'AbortError') throw normalized;
       this.events.onError?.(normalized);
       throw normalized;
     }
@@ -219,6 +227,11 @@ export class LocalGlimbinSource {
 
   isCached(frameIndex: number): boolean {
     return this.cache.has(frameIndex);
+  }
+
+  /** Release a UI-evicted frame so the source cache cannot retain it too. */
+  releaseFrame(frameIndex: number): void {
+    this.cache.delete(frameIndex);
   }
 
   dispose(): void {

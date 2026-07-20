@@ -55,7 +55,7 @@ function makeFrame(opts: {
   };
 }
 
-function makeTrajectory(frames: Frame[]): Trajectory {
+function makeTrajectory(frames: Frame[]): Trajectory & { frames: Frame[] } {
   return {
     frames,
     totalFrames: frames.length,

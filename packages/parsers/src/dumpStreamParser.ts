@@ -521,11 +521,26 @@ async function* parseDumpStreamCore(
       }
     }
 
+    const truncateFrameToCompleteRows = (count: number) => {
+      if (count >= frame.natoms) return;
+      frame.natoms = count;
+      frame.ids = frame.ids.slice(0, count);
+      frame.types = frame.types.slice(0, count);
+      frame.positions = frame.positions.slice(0, count * 3);
+      for (const [name, values] of frame.properties) {
+        frame.properties.set(name, values.slice(0, count));
+      }
+    };
+
     if (frameIndex === 0) {
       frame0Loaded = i;
+      // LAMMPS newline-terminates complete rows. If the final frame was
+      // torn, keep only complete source rows instead of presenting the
+      // zero-filled tail as atoms.
+      truncateFrameToCompleteRows(i);
     } else if (i > 0) {
       // A truncated final frame reports the atoms it actually has.
-      frame.natoms = i;
+      truncateFrameToCompleteRows(i);
       yield { type: 'frame', frameIndex, frame };
     } else {
       frameIndex--; // empty trailing frame — drop it
@@ -568,6 +583,76 @@ export async function* parseDumpStreamFromBytes(
     const r = await iter.next();
     return r.done ? null : r.value;
   }, opts);
+}
+
+type CanonicalDumpDecodeOptions = {
+  onFrameDecoded?: (decodedFrames: number) => void;
+};
+
+async function collectCanonicalDumpFrames(
+  events: AsyncGenerator<DumpStreamEvent>,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  const frames: Frame[] = [];
+  let reportedFrames = 0;
+  const reportCompletedFrames = () => {
+    while (reportedFrames < frames.length) {
+      reportedFrames += 1;
+      options.onFrameDecoded?.(reportedFrames);
+    }
+  };
+  for await (const event of events) {
+    if (event.type === 'header') {
+      frames.push(event.frame);
+    } else if (event.type === 'frame') {
+      frames.push(event.frame);
+      reportCompletedFrames();
+    } else if (event.type === 'complete' && frames.length > 0) {
+      reportCompletedFrames();
+    }
+  }
+  if (frames.length === 0) throw new Error('No frames parsed; possibly wrong format.');
+  return frames;
+}
+
+/** Decode buffered text through the same byte parser used by streaming. */
+export function parseDumpFramesCanonical(
+  text: string,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  return collectCanonicalDumpFrames(parseDumpStream(text, { multiFrame: true }), options);
+}
+
+/** Decode a chunked source through the canonical LAMMPS dump implementation. */
+export function parseDumpFramesFromBytesCanonical(
+  source: AsyncIterable<Uint8Array>,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  return collectCanonicalDumpFrames(
+    parseDumpStreamFromBytes(source, { multiFrame: true }),
+    options,
+  );
+}
+
+/**
+ * Decode a local dump Blob/File without selecting scientific behavior by
+ * size or compression. Gzip is transport only and is detected by magic.
+ */
+export async function parseDumpBlobCanonical(
+  blob: Blob,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  let stream = blob.stream() as ReadableStream<Uint8Array>;
+  const magic = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  if (magic.length === 2 && magic[0] === 0x1f && magic[1] === 0x8b) {
+    if (typeof DecompressionStream === 'undefined') {
+      throw new Error('Cannot decode gzip LAMMPS dump: DecompressionStream is unavailable.');
+    }
+    stream = stream.pipeThrough(
+      new DecompressionStream('gzip') as unknown as TransformStream<Uint8Array, Uint8Array>,
+    );
+  }
+  return parseDumpFramesFromBytesCanonical(readableStreamToAsyncIterable(stream), options);
 }
 
 /** Adapt a `ReadableStream<Uint8Array>` to an `AsyncIterable<Uint8Array>`. */

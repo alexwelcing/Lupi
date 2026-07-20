@@ -29,7 +29,7 @@ function makeFrame(timestep: number, natoms: number, base: number): Frame {
   };
 }
 
-function makeTrajectory(): Trajectory {
+function makeTrajectory(): Trajectory & { frames: Frame[] } {
   const frames = [makeFrame(0, 6, 0), makeFrame(10, 6, 1), makeFrame(20, 6, 2), makeFrame(30, 6, 3)];
   return {
     frames,

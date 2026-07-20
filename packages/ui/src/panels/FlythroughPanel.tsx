@@ -236,6 +236,7 @@ export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: 
     seq.keyframes[0].easing = 'ease-in-out'; // Smooth start
 
     const frame = file.trajectory.frames[0];
+    if (!frame) return;
     const natoms = frame.natoms;
     
     // Create 4 more random interesting points

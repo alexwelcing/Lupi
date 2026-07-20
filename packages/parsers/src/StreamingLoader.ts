@@ -21,8 +21,8 @@ import {
   parseFrameData,
   type GlimbinHeader,
   type GlimbinIndex,
-  type FrameIndexEntry,
   type DatasetMeta,
+  FLAG_HAS_BONDS,
 } from '@atlas/core/glimbin';
 import { decompressGlimbinFrame } from './decompressGlimbinFrame';
 
@@ -67,6 +67,11 @@ class FrameCache {
     return this.cache.has(frameIndex);
   }
 
+  delete(frameIndex: number): void {
+    this.cache.delete(frameIndex);
+    this.accessOrder = this.accessOrder.filter(i => i !== frameIndex);
+  }
+
   clear(): void {
     this.cache.clear();
     this.accessOrder = [];
@@ -94,6 +99,8 @@ export interface StreamingLoaderEvents {
 
 export type StreamingLoaderFetchOptions = Pick<RequestInit, 'redirect'>;
 
+export const DEFAULT_MAX_NON_RANGE_FALLBACK_BYTES = 64 * 1024 * 1024;
+
 export class StreamingLoader {
   private url: string;
   private header: GlimbinHeader | null = null;
@@ -119,17 +126,23 @@ export class StreamingLoader {
   private cacheMisses = 0;
 
   private fetchOptions: StreamingLoaderFetchOptions;
+  private maxNonRangeFallbackBytes: number;
 
   constructor(
     url: string,
     events: StreamingLoaderEvents = {},
     maxCachedFrames = 20,
     fetchOptions: StreamingLoaderFetchOptions = {},
+    maxNonRangeFallbackBytes = DEFAULT_MAX_NON_RANGE_FALLBACK_BYTES,
   ) {
     this.url = url;
     this.events = events;
     this.frameCache = new FrameCache(maxCachedFrames);
     this.fetchOptions = fetchOptions;
+    if (!Number.isSafeInteger(maxNonRangeFallbackBytes) || maxNonRangeFallbackBytes < HEADER_SIZE) {
+      throw new Error(`Invalid non-Range fallback byte budget: ${maxNonRangeFallbackBytes}`);
+    }
+    this.maxNonRangeFallbackBytes = maxNonRangeFallbackBytes;
   }
 
   private emitTelemetry() {
@@ -161,12 +174,43 @@ export class StreamingLoader {
       throw new Error(`Failed to fetch glimbin bytes ${start}-${end}: ${resp.status} ${resp.statusText}`);
     }
 
-    const buffer = await resp.arrayBuffer();
-    this.totalBytesTransferred += buffer.byteLength;
-
-    if (resp.status === 206 || buffer.byteLength === expectedLength) {
+    if (resp.status === 206) {
+      const buffer = await resp.arrayBuffer();
+      this.totalBytesTransferred += buffer.byteLength;
+      if (buffer.byteLength !== expectedLength) {
+        throw new Error(
+          `Failed to fetch glimbin bytes ${start}-${end}: HTTP 206 returned ${buffer.byteLength} bytes; expected ${expectedLength}.`,
+        );
+      }
       return buffer;
     }
+
+    const contentLengthText = resp.headers?.get?.('Content-Length');
+    const parsedContentLength = contentLengthText === null || contentLengthText === undefined
+      ? null
+      : Number(contentLengthText);
+    const contentLength = parsedContentLength !== null &&
+      Number.isFinite(parsedContentLength) && parsedContentLength >= 0
+      ? parsedContentLength
+      : null;
+    const acceptRanges = resp.headers?.get?.('Accept-Ranges') ?? 'missing';
+    if (
+      resp.status === 200 &&
+      contentLength !== null &&
+      contentLength > this.maxNonRangeFallbackBytes
+    ) {
+      throw new Error(this.nonRangeBudgetError(contentLength, acceptRanges));
+    }
+
+    const buffer = await this.readBoundedResponse(
+      resp,
+      this.maxNonRangeFallbackBytes,
+      contentLength,
+      acceptRanges,
+    );
+    this.totalBytesTransferred += buffer.byteLength;
+
+    if (buffer.byteLength === expectedLength) return buffer;
 
     // Some local/static hosts ignore Range and return 200 + full file. Treat
     // that as a non-streaming fallback instead of parsing/decompressing the
@@ -180,6 +224,62 @@ export class StreamingLoader {
     throw new Error(
       `Failed to fetch glimbin bytes ${start}-${end}: received ${buffer.byteLength} bytes`,
     );
+  }
+
+  private nonRangeBudgetError(receivedBytes: number | null, acceptRanges: string): string {
+    const received = receivedBytes === null
+      ? 'more than the configured budget'
+      : `${receivedBytes} bytes`;
+    return (
+      `Remote GLIMBIN hosting returned HTTP 200 without a usable byte range ` +
+      `(Content-Length=${received}; Accept-Ranges=${acceptRanges}). ` +
+      `The non-Range fallback is capped at ${this.maxNonRangeFallbackBytes} bytes. ` +
+      `Enable HTTP Range requests or host an object no larger than that cap.`
+    );
+  }
+
+  private async readBoundedResponse(
+    resp: Response,
+    maxBytes: number,
+    contentLength: number | null,
+    acceptRanges: string,
+  ): Promise<ArrayBuffer> {
+    if (!resp.body) {
+      if (contentLength === null) {
+        throw new Error(this.nonRangeBudgetError(null, acceptRanges));
+      }
+      const buffer = await resp.arrayBuffer();
+      if (buffer.byteLength > maxBytes) {
+        throw new Error(this.nonRangeBudgetError(buffer.byteLength, acceptRanges));
+      }
+      return buffer;
+    }
+
+    const reader = resp.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          try { await reader.cancel(); } catch { /* best effort */ }
+          throw new Error(this.nonRangeBudgetError(total, acceptRanges));
+        }
+        chunks.push(value);
+      }
+    } finally {
+      try { reader.releaseLock(); } catch { /* already released */ }
+    }
+
+    const joined = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      joined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return joined.buffer;
   }
 
   // ── Phase 1: Header ─────────────────────────────────────────────
@@ -307,17 +407,20 @@ export class StreamingLoader {
       const frame: Frame = {
         timestep: entry.timestep,
         natoms: entry.natoms,
-        boxBounds: this.header!.boxBounds,
-        boxTilt: this.header!.boxTilt,
-        triclinic: this.header!.triclinic,
-        columns: ['id', 'type', 'x', 'y', 'z'],
+        // v2 records carry their own box (exact for NPT/deforming cells).
+        // Legacy records fall back to the file-level frame-0 box.
+        boxBounds: parsed.boxBounds ?? this.header!.boxBounds,
+        boxTilt: parsed.boxTilt ?? this.header!.boxTilt,
+        triclinic: parsed.triclinic ?? this.header!.triclinic,
+        columns: ['id', 'type', 'x', 'y', 'z', ...parsed.properties.keys()],
         ids: parsed.ids,
         types: new Int32Array(parsed.types),
         positions: parsed.positions,
-        bonds: parsed.bonds,
+        bonds: (this.header!.flags & FLAG_HAS_BONDS) !== 0 ? parsed.bonds : new Int32Array(0),
         properties: parsed.properties,
       };
 
+      if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
       this.frameCache.set(frameIndex, frame);
       this.events.onFrame?.(frameIndex, frame);
       return frame;
@@ -407,6 +510,11 @@ export class StreamingLoader {
   /** Get all cached frame indices */
   getCachedFrames(): number[] {
     return this.frameCache.keys();
+  }
+
+  /** Release a UI-evicted frame so source and resident-window ownership align. */
+  releaseFrame(frameIndex: number): void {
+    this.frameCache.delete(frameIndex);
   }
 
   /** Clear all cached frames and cancel in-flight requests */

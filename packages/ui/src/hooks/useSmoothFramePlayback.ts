@@ -20,7 +20,7 @@ export type PlaybackDirection = 1 | -1;
 
 interface SmoothPlaybackOptions {
   /** Array of MD frames */
-  frames: Frame[];
+  frames: Array<Frame | undefined>;
   /** Initial playback speed (1.0 = real-time) */
   speed?: number;
   /** Target display rate (fps) */
