@@ -22,8 +22,8 @@ Core endpoints:
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
 - `GET /health` — service and binding readiness
-- `GET /mcp-manifest.json` — Cloudflare MCP tool manifest
-- `GET /browser-mcp-manifest.json` — browser bridge manifest compatibility path
+- `GET /mcp-manifest.json` — six-tool Cloudflare edge control-plane manifest
+- `GET /browser-mcp-manifest.json` — 28-tool browser viewer manifest
 - `POST /v1/render` — REST shortcut for `lupi.render_molecule_asset`
 - `GET /v1/jobs/:jobId` — render job status
 - `GET /assets/:assetId.:ext` — R2 asset delivery once rendering is configured
@@ -128,17 +128,17 @@ Poll until `ready === true` and `toolCount > 0` before sending commands.
 
 ## Tool Manifest
 
-A static JSON manifest is available at:
+A static browser-viewer JSON manifest is available at:
 
 ```
-/mcp-manifest.json
+/browser-mcp-manifest.json
 ```
 
 Fetch it to discover tool names, descriptions, and JSON Schemas without loading the page. It is generated from the same source files as the runtime tool registry, so it cannot drift.
 
 ```js
 const manifest = await page.evaluate(() =>
-  fetch('/mcp-manifest.json').then(r => r.json())
+  fetch('/browser-mcp-manifest.json').then(r => r.json())
 );
 ```
 
@@ -245,7 +245,7 @@ an exported GLB without a browser.
 | `window.__lupiViewerMcp` is `undefined` | Viewer not on a route that mounts the bridge. | Navigate to `/#/mcp` or wait for the route guard. |
 | `ready` is `false` | Store not hydrated or route guard is `false`. | Check `window.__lupiViewerMcpVersion` exists; wait a tick. |
 | `No molecule is loaded` | Tool needs a file but none is loaded. | Run `lupi.generate_molecule` via `parseCommand` first, or load via URL. |
-| `Unsupported Lupi viewer MCP tool` | Tool name typo or old manifest. | Compare against `/mcp-manifest.json`. |
+| `Unsupported Lupi viewer MCP tool` | Tool name typo or old manifest. | Compare against `/browser-mcp-manifest.json`; `/mcp-manifest.json` is the smaller edge-runtime contract. |
 | PubChem fetch fails | Network or CORS. | Use a local template or SMILES that matches `TEMPLATE_MOLECULES`. |
 
 ## Security Notes

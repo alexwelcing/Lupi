@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleRequest } from './index';
+import externalAssetPaths from '../../web/cloudflare-assets-exclude.json';
+import browserManifest from '../../web/public/browser-mcp-manifest.json';
+import { handleRequest, validateExternalAssetPaths } from './index';
 
 function req(path: string, init: RequestInit = {}) {
   return new Request(`https://mcp.lupi.live${path}`, init);
@@ -26,6 +28,26 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(body.toolCount).toBeGreaterThanOrEqual(6);
     expect(body.renderExecution).toBe(false);
     expect(body).not.toHaveProperty('release');
+    expect(res.headers.get('x-lupi-edge-executed')).toBe('1');
+  });
+
+  it('returns health headers without a body for HEAD', async () => {
+    const get = await handleRequest(req('/health'));
+    const head = await handleRequest(req('/health', { method: 'HEAD' }));
+
+    expect(head.status).toBe(get.status);
+    expect(head.headers.get('content-type')).toBe(get.headers.get('content-type'));
+    expect(head.headers.get('access-control-allow-methods')).toBe(get.headers.get('access-control-allow-methods'));
+    expect(head.headers.get('x-lupi-edge-executed')).toBe('1');
+    expect(await head.text()).toBe('');
+  });
+
+  it('returns a bodyless edge manifest for HEAD', async () => {
+    const head = await handleRequest(req('/mcp-manifest.json', { method: 'HEAD' }));
+    expect(head.status).toBe(200);
+    expect(head.headers.get('content-type')).toMatch(/^application\/json/);
+    expect(head.headers.get('x-lupi-edge-executed')).toBe('1');
+    expect(await head.text()).toBe('');
   });
 
   it('reports only Cloudflare-supplied release identity and execution posture', async () => {
@@ -143,9 +165,35 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(await res.text()).toBe('cdef');
   });
 
-  it('collects analytics events on the Cloudflare edge endpoint', async () => {
+  it.each(externalAssetPaths)('routes the shared external-asset allowlist through R2: %s', async (assetPath) => {
+    let requestedKey = '';
+    const res = await handleRequest(req(`/${assetPath}`), {
+      ASSETS: {
+        head: async (key) => {
+          requestedKey = key;
+          return { size: 2, httpMetadata: { contentType: 'application/octet-stream' } };
+        },
+        get: async () => ({ size: 2, arrayBuffer: async () => new Uint8Array([1, 2]).buffer }),
+        put: async () => undefined,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(requestedKey).toBe(assetPath);
+    expect(res.headers.get('x-lupi-asset-source')).toBe('r2');
+  });
+
+  it('rejects unsafe, empty, and duplicate external-asset configuration', () => {
+    expect(() => validateExternalAssetPaths([])).toThrow(/at least one path/);
+    expect(() => validateExternalAssetPaths(['/gallery/file.glimbin'])).toThrow(/Invalid external asset path/);
+    expect(() => validateExternalAssetPaths(['gallery/../secret'])).toThrow(/Invalid external asset path/);
+    expect(() => validateExternalAssetPaths(['gallery\\secret'])).toThrow(/Invalid external asset path/);
+    expect(() => validateExternalAssetPaths(['gallery/file', 'gallery/file'])).toThrow(/duplicate paths/);
+  });
+
+  it.each(['/collectAnalytics', '/api/analytics'])('collects analytics events on the Cloudflare edge endpoint: %s', async (path) => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const res = await handleRequest(req('/collectAnalytics', {
+    const res = await handleRequest(req(path, {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body: JSON.stringify({ event: 'app_landed', sid: 'session-1', ts: 1, props: { atoms: 42 } }),
@@ -153,6 +201,13 @@ describe('lupi Cloudflare MCP worker', () => {
 
     expect(res.status).toBe(204);
     expect(log).toHaveBeenCalledWith(expect.stringContaining('app_landed'));
+  });
+
+  it.each(['/__/auth/handler?apiKey=test', '/__/firebase/init.json'])('proxies every Firebase reserved namespace: %s', async (path) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(String(input))));
+    const res = await handleRequest(req(path), { FIREBASE_AUTH_PROXY_HOST: 'shed-489901.firebaseapp.com' });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(`https://shed-489901.firebaseapp.com${path}`);
   });
 
   it('renders saved-view share HTML from Firestore REST when configured', async () => {
@@ -195,20 +250,17 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(body.result.tools.map((tool) => tool.name)).toContain('lupi.render_molecule_asset');
   });
 
-  it('serves the Cloudflare MCP manifest and preserves browser manifest access', async () => {
+  it('keeps the edge and generated browser manifests distinct', async () => {
     const cloudflare = await handleRequest(req('/mcp-manifest.json'));
     const cloudflareBody = await cloudflare.json() as { endpoint: string; browserBridgeManifest: string; tools: Array<{ name: string }> };
     expect(cloudflareBody.endpoint).toBe('/mcp');
     expect(cloudflareBody.browserBridgeManifest).toBe('/browser-mcp-manifest.json');
     expect(cloudflareBody.tools.map((tool) => tool.name)).toContain('lupi.render_molecule_asset');
+    expect(cloudflareBody.tools.map((tool) => tool.name)).not.toContain('lupi.set_frame');
 
-    const browser = await handleRequest(req('/browser-mcp-manifest.json'), {
-      WEB_ASSETS: {
-        fetch: async () => new Response('{"schemaVersion":"0.3.0","tools":[]}'),
-      },
-    });
-    const browserBody = await browser.json() as { schemaVersion: string };
-    expect(browserBody.schemaVersion).toBe('0.3.0');
+    expect(browserManifest.schemaVersion).toBe('0.3.0');
+    expect(browserManifest.tools.map((tool) => tool.name)).toContain('lupi.set_frame');
+    expect(browserManifest.tools.map((tool) => tool.name)).toContain('lupi.export_asset');
   });
 
   it('returns a JSON-RPC parse error for invalid JSON', async () => {
@@ -266,6 +318,97 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(content.status).toBe('awaiting_renderer');
     expect(content.renderer).toMatchObject({ mode: 'unconfigured', configured: false });
     expect(content.asset).toMatchObject({ format: 'png', mimeType: 'image/png' });
+  });
+
+  it('keeps REST render, job, and deterministic asset paths in the Worker runtime', async () => {
+    const render = await handleRequest(req('/v1/render', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ molecule: { inputType: 'template', input: 'Caffeine' } }),
+    }));
+    expect(render.status).toBe(200);
+    expect((await render.json() as { status: string }).status).toBe('awaiting_renderer');
+
+    const job = await handleRequest(req('/v1/jobs/job-1'));
+    expect(job.status).toBe(200);
+    expect(await job.json()).toMatchObject({ jobId: 'job-1', status: 'unknown' });
+
+    const assetId = `sha256-${'a'.repeat(64)}`;
+    const asset = await handleRequest(req(`/assets/${assetId}.png`));
+    expect(asset.status).toBe(404);
+    expect(await asset.json()).toMatchObject({ error: 'Asset not found', assetId });
+  });
+
+  it('serves deterministic asset HEAD from metadata without reading object bytes', async () => {
+    const assetId = `sha256-${'b'.repeat(64)}`;
+    let headCalls = 0;
+    let getCalls = 0;
+    let arrayBufferCalls = 0;
+    const res = await handleRequest(req(`/assets/${assetId}.png`, { method: 'HEAD' }), {
+      ASSETS: {
+        head: async () => {
+          headCalls += 1;
+          return {
+            size: 321,
+            httpMetadata: { contentType: 'image/png' },
+            customMetadata: { sha256: 'c'.repeat(64) },
+            arrayBuffer: async () => {
+              arrayBufferCalls += 1;
+              return new ArrayBuffer(321);
+            },
+          };
+        },
+        get: async () => {
+          getCalls += 1;
+          return null;
+        },
+        put: async () => undefined,
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    expect(res.headers.get('content-length')).toBe('321');
+    expect(res.headers.get('cache-control')).toContain('immutable');
+    expect((await res.arrayBuffer()).byteLength).toBe(0);
+    expect({ headCalls, getCalls, arrayBufferCalls }).toEqual({ headCalls: 1, getCalls: 0, arrayBufferCalls: 0 });
+  });
+
+  it.each([
+    ['/health', 'POST', 'GET, HEAD'],
+    ['/mcp', 'GET', 'POST'],
+    ['/mcp-manifest.json', 'POST', 'GET, HEAD'],
+    ['/v1/render', 'GET', 'POST'],
+    ['/v1/jobs/job-1', 'POST', 'GET'],
+    [`/assets/sha256-${'a'.repeat(64)}.png`, 'POST', 'GET, HEAD'],
+  ])('fails closed on unsupported reserved-route methods: %s %s', async (path, method, allow) => {
+    const res = await handleRequest(req(path, { method }));
+    expect(res.status).toBe(405);
+    expect(res.headers.get('content-type')).toMatch(/^application\/json/);
+    expect(res.headers.get('allow')).toBe(allow);
+    expect(res.headers.get('x-lupi-edge-executed')).toBe('1');
+    expect(await res.json()).toMatchObject({ error: 'Method not allowed' });
+  });
+
+  it.each([
+    '/v1',
+    '/v1/unknown',
+    `/assets/sha256-${'a'.repeat(63)}.png`,
+    '/gallery/curated/lupine_genesis.unknown',
+    '/gallery/research/hfc/not-allowlisted.glimbin',
+  ])('returns structured 404 instead of SPA HTML for reserved namespaces: %s', async (path) => {
+    let staticFallbackCalled = false;
+    const res = await handleRequest(req(path), {
+      WEB_ASSETS: {
+        fetch: async () => {
+          staticFallbackCalled = true;
+          return new Response('<div id="root"></div>', { headers: { 'content-type': 'text/html' } });
+        },
+      },
+    });
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toMatch(/^application\/json/);
+    expect(res.headers.get('x-lupi-edge-executed')).toBe('1');
+    expect(staticFallbackCalled).toBe(false);
   });
 
   it('sends queued render jobs when waitUntil is unavailable', async () => {

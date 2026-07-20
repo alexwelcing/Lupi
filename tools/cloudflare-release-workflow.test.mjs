@@ -15,6 +15,21 @@ const READ_TOKEN = 'LUPI_CLOUDFLARE_READ_TOKEN_V2';
 const SHARED_CONCURRENCY_GROUP = 'lupi-cloudflare-production';
 const WRANGLER_VERSION = '4.110.0';
 const WRANGLER_LOCK_SHA256 = '036615b8e80663617f476cd3a9f7d2f7dc7d858be7b38777b75ca1b9f0f5e9b0';
+const WORKER_FIRST_ROUTES = [
+  '/health',
+  '/mcp',
+  '/mcp-manifest.json',
+  '/v1',
+  '/v1/*',
+  '/assets/sha256-*',
+  '/collectAnalytics',
+  '/api/analytics',
+  '/__/auth/*',
+  '/__/firebase/*',
+  '/view/*',
+  '/gallery/curated/lupine_genesis.*',
+  '/gallery/research/hfc/*',
+];
 
 const CONTROLLERS = Object.freeze({
   'deploy-cloudflare.yml': {
@@ -85,6 +100,75 @@ test('credential-bearing Wrangler runtime is fully lockfile-pinned', async () =>
     assert.match(value.resolved ?? '', /^https:\/\/registry\.npmjs\.org\//, `${path} must use the npm registry archive`);
     assert.match(value.integrity ?? '', /^sha512-/, `${path} must carry an archive integrity`);
   }
+});
+
+test('static assets use a closed selective Worker-first route contract', async () => {
+  const config = await readFile(resolve(ROOT, 'apps', 'mcp-worker', 'wrangler.toml'), 'utf8');
+  const staticHeaders = await readFile(resolve(ROOT, 'apps', 'web', 'public', '_headers'), 'utf8');
+  const match = /run_worker_first\s*=\s*\[([\s\S]*?)\]/.exec(config);
+  assert.ok(match, 'wrangler.toml must declare a run_worker_first route array');
+  const routes = [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
+  assert.deepEqual(routes, WORKER_FIRST_ROUTES);
+  assert.ok(!routes.includes('/assets/*'), 'broad /assets/* would intercept hashed Vite bundles');
+  assert.equal(matchesAnyWorkerRoute('/assets/index-example.js', routes), false);
+  assert.equal(matchesAnyWorkerRoute('/fonts/lupi.woff2', routes), false);
+  assert.equal(matchesAnyWorkerRoute('/materials/clean-energy', routes), false);
+  assert.equal(matchesAnyWorkerRoute('/browser-mcp-manifest.json', routes), false);
+  assert.equal(matchesAnyWorkerRoute('/v1', routes), true, 'bare /v1 must remain Worker-first');
+  assert.match(staticHeaders, /\/assets\/\*\s+Cache-Control: public, max-age=31536000, immutable/,
+    'hashed assets must retain an immutable browser-cache policy');
+  assert.match(staticHeaders, /\/browser-mcp-manifest\.json\s+Access-Control-Allow-Origin: \*/,
+    'the asset-first browser manifest must remain publicly fetchable cross-origin');
+
+  const externalPaths = JSON.parse(await readFile(resolve(ROOT, 'apps', 'web', 'cloudflare-assets-exclude.json'), 'utf8'));
+  assert.ok(Array.isArray(externalPaths) && externalPaths.length > 0);
+  for (const path of externalPaths) {
+    assert.equal(matchesAnyWorkerRoute(`/${path}`, routes), true, `${path} is missing a Worker-first route`);
+  }
+});
+
+test('current-source proofs require selective routing while historical-source proofs negotiate capability', async () => {
+  const { workflows } = await loadFixture();
+  for (const [workflowName, jobId] of [
+    ['deploy-cloudflare.yml', 'candidate-verify'],
+    ['deploy-cloudflare.yml', 'public-verify'],
+  ]) {
+    const job = workflows[workflowName].jobs[jobId];
+    const liveStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('verify:cloudflare-live'));
+    assert.ok(liveStep, `${workflowName}/${jobId} is missing live verification`);
+    const run = String(liveStep.run);
+    assert.doesNotMatch(run, /pnpm verify:cloudflare-live --(?:\s|\\)/,
+      `${workflowName}/${jobId} must use pnpm 9-compatible argument forwarding`);
+    assert.match(run, /--expect-selective-routing=true\b/,
+      `${workflowName}/${jobId} must require selective routing`);
+  }
+
+  for (const jobId of ['reanchor-reconstruct', 'reconcile-ui-verify']) {
+    const job = workflows['reconcile-cloudflare-deploy.yml'].jobs[jobId];
+    const liveStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('verify:cloudflare-live'));
+    assert.ok(liveStep, `reconcile-cloudflare-deploy.yml/${jobId} is missing live verification`);
+    const run = String(liveStep.run);
+    assert.match(run, /selective_routing_args=\(\)/,
+      `${jobId} must initialize a compatibility argument array`);
+    assert.doesNotMatch(run, /pnpm verify:cloudflare-live --(?:\s|\\)/,
+      `${jobId} must use pnpm 9-compatible argument forwarding`);
+    assert.match(run, /verify:cloudflare-live --help \| grep -q -- '--expect-selective-routing'/,
+      `${jobId} must probe the historical verifier contract`);
+    assert.match(run, /selective_routing_args\+=\(--expect-selective-routing=true\)/,
+      `${jobId} must enable selective proof when the checked-out verifier supports it`);
+    assert.match(run, /"\$\{selective_routing_args\[@\]\}"/,
+      `${jobId} must pass only capability-compatible arguments`);
+    assert.doesNotMatch(run, /^\s*--expect-selective-routing=true\s*\\?\s*$/m,
+      `${jobId} must not unconditionally pass a new flag to historical source`);
+  }
+
+  const boundedRollback = workflows['deploy-cloudflare.yml'].jobs['rollback-ui-verify'];
+  const rollbackStep = (boundedRollback.steps ?? []).find((step) => String(step.run ?? '').includes('verify:cloudflare-live'));
+  assert.ok(rollbackStep, 'bounded rollback is missing predecessor verification');
+  assert.doesNotMatch(String(rollbackStep.run), /pnpm verify:cloudflare-live --(?:\s|\\)/,
+    'bounded rollback must use pnpm 9-compatible argument forwarding');
+  assert.doesNotMatch(String(rollbackStep.run), /--expect-selective-routing=/,
+    'bounded rollback must use the predecessor checkout verifier contract');
 });
 
 test('the authority scanner rejects mutated trigger, dependency, action, and token boundaries', async () => {
@@ -745,6 +829,16 @@ function assertStepOrder(job, predicates, message) {
   assert.ok(indexes.every((index) => index >= 0), `${message}: missing step`);
   assert.deepEqual(indexes, [...indexes].sort((a, b) => a - b), message);
   assert.equal(new Set(indexes).size, indexes.length, message);
+}
+
+function matchesAnyWorkerRoute(path, routes) {
+  return routes.some((pattern) => {
+    const expression = pattern
+      .split('*')
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*');
+    return new RegExp(`^${expression}$`).test(path);
+  });
 }
 
 function cloudflareMutationPattern() {

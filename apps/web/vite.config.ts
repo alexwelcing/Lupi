@@ -114,9 +114,24 @@ function pruneExternalHostedAssets() {
       let removed = 0;
       for (const listPath of STASH_LISTS) {
         if (!fs.existsSync(listPath)) continue;
-        const list: string[] = JSON.parse(fs.readFileSync(listPath, 'utf-8'));
+        const parsed: unknown = JSON.parse(fs.readFileSync(listPath, 'utf-8'));
+        if (!Array.isArray(parsed) || !parsed.every((entry) => typeof entry === 'string')) {
+          throw new Error(`${listPath} must contain an array of relative asset paths`);
+        }
+        const list = [...new Set(parsed)];
+        if (list.length !== parsed.length) throw new Error(`${listPath} contains duplicate asset paths`);
         for (const rel of list) {
-          const p = path.join(distDir, rel);
+          if (
+            rel.length === 0 || path.isAbsolute(rel) || rel.includes('\\') || rel.includes('?') || rel.includes('#') ||
+            rel.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+          ) {
+            throw new Error(`${listPath} contains unsafe asset path: ${rel}`);
+          }
+          const p = path.resolve(distDir, ...rel.split('/'));
+          const relativeToDist = path.relative(distDir, p);
+          if (relativeToDist.startsWith('..') || path.isAbsolute(relativeToDist)) {
+            throw new Error(`${listPath} asset path escapes dist: ${rel}`);
+          }
           if (fs.existsSync(p)) {
             fs.unlinkSync(p);
             removed++;

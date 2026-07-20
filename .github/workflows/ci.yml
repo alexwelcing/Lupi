@@ -130,6 +130,14 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Validate selective routing with the release-pinned Wrangler
+        run: |
+          npm ci --ignore-scripts --omit=dev --prefix .github/wrangler-runtime
+          node .github/wrangler-runtime/node_modules/wrangler/bin/wrangler.js versions upload \
+            --dry-run \
+            --outdir .verify-artifacts/ci-worker-dry-run \
+            --config apps/mcp-worker/wrangler.toml
+
       - name: Test
         run: pnpm test
 

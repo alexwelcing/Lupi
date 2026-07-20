@@ -40,7 +40,7 @@ keep_vars = true
 directory = "web-assets"
 binding = "WEB_ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = true
+run_worker_first = ["/health", "/api/*"]
 
 [version_metadata]
 binding = "CF_VERSION_METADATA"
@@ -82,6 +82,7 @@ test('build emits a closed, validator-compatible, fully inventoried data-only pa
   const uploadConfig = parseClosedWranglerToml(uploadToml);
   assert.equal(uploadConfig.main, 'worker/index.js');
   assert.equal(uploadConfig.assets.directory, 'assets');
+  assert.deepEqual(uploadConfig.assets.run_worker_first, ['/health', '/api/*']);
   assert.deepEqual(uploadConfig.r2_buckets, [{ binding: 'ASSETS', bucket_name: 'lupi-assets' }]);
 
   const savedManifest = JSON.parse(await readFile(path.join(fixture.output, 'release-package.json'), 'utf8'));
@@ -138,6 +139,26 @@ test('build rejects worker-entry traversal and executable Wrangler configuration
     /unsupported Wrangler table \[build\]/,
   );
   await assert.rejects(readdir(executableConfig.output), { code: 'ENOENT' });
+});
+
+test('build rejects global or unsafe Worker-first routing', async (t) => {
+  const globalWorker = await createFixture(t, {
+    config: SOURCE_CONFIG.replace('run_worker_first = ["/health", "/api/*"]', 'run_worker_first = true'),
+  });
+  await assert.rejects(buildReleasePackage(buildOptions(globalWorker)), /non-empty route array/);
+  await assert.rejects(readdir(globalWorker.output), { code: 'ENOENT' });
+
+  const globalArray = await createFixture(t, {
+    config: SOURCE_CONFIG.replace('run_worker_first = ["/health", "/api/*"]', 'run_worker_first = ["/*"]'),
+  });
+  await assert.rejects(buildReleasePackage(buildOptions(globalArray)), /root or global Worker-first routes/);
+  await assert.rejects(readdir(globalArray.output), { code: 'ENOENT' });
+
+  const unsafeRoute = await createFixture(t, {
+    config: SOURCE_CONFIG.replace('run_worker_first = ["/health", "/api/*"]', 'run_worker_first = ["/health", "/../secret"]'),
+  });
+  await assert.rejects(buildReleasePackage(buildOptions(unsafeRoute)), /unsafe syntax/);
+  await assert.rejects(readdir(unsafeRoute.output), { code: 'ENOENT' });
 });
 
 test('build rejects an assets/config mismatch and cross-platform unsafe payload paths', async (t) => {

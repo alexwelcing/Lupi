@@ -1,3 +1,5 @@
+import externalAssetPathConfig from '../../web/cloudflare-assets-exclude.json';
+
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 interface R2ObjectLike {
@@ -134,12 +136,7 @@ const DEFAULT_FIREBASE_AUTH_PROXY_HOST = 'shed-489901.firebaseapp.com';
 const DEFAULT_PUBLIC_ORIGIN = 'https://lupi.live';
 const DEFAULT_SOCIAL_IMAGE = '/og-lupi.png';
 const MAX_ANALYTICS_BODY_BYTES = 16 * 1024;
-const EXTERNAL_ASSET_PATHS = new Set([
-  'gallery/curated/lupine_genesis.lammpstrj',
-  'gallery/curated/lupine_genesis.glimbin',
-  'gallery/research/hfc/r32_nvt_273K.glimbin',
-  'gallery/research/hfc/r125_nvt_273K.glimbin',
-]);
+const EXTERNAL_ASSET_PATHS = new Set(validateExternalAssetPaths(externalAssetPathConfig));
 const ANALYTICS_EVENTS = new Set([
   'app_landed',
   'molecule_loaded',
@@ -264,8 +261,10 @@ export async function handleRequest(
   }
 
   try {
-    if (request.method === 'GET' && url.pathname === '/health') {
-      return json(statusPayload(env), { headers: cors });
+    if (url.pathname === '/health') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return methodNotAllowed(cors, ['GET', 'HEAD']);
+      const response = json(statusPayload(env), { headers: cors });
+      return getOrHeadResponse(request, response);
     }
 
     if (isFirebaseReservedPath(url.pathname)) {
@@ -284,16 +283,17 @@ export async function handleRequest(
       return withCors(await proxyExternalAsset(request, env), cors);
     }
 
-    if (request.method === 'GET' && url.pathname === '/browser-mcp-manifest.json' && env.WEB_ASSETS) {
-      const assetUrl = new URL('/mcp-manifest.json', url);
-      return withCors(await env.WEB_ASSETS.fetch(new Request(assetUrl, request)), cors);
+    if (isExternalAssetNamespace(url.pathname)) {
+      return json({ error: 'External asset not found', path: url.pathname }, { status: 404, headers: cors });
     }
 
-    if (request.method === 'GET' && url.pathname === '/mcp-manifest.json') {
-      return json(manifestPayload(), { headers: cors });
+    if (url.pathname === '/mcp-manifest.json') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return methodNotAllowed(cors, ['GET', 'HEAD']);
+      return getOrHeadResponse(request, json(manifestPayload(), { headers: cors }));
     }
 
-    if (request.method === 'POST' && url.pathname === '/mcp') {
+    if (url.pathname === '/mcp') {
+      if (request.method !== 'POST') return methodNotAllowed(cors, ['POST']);
       let body: unknown;
       try {
         body = await request.json();
@@ -305,22 +305,38 @@ export async function handleRequest(
       return json(result, { headers: cors });
     }
 
-    if (request.method === 'POST' && url.pathname === '/v1/render') {
+    if (url.pathname === '/v1/render') {
+      if (request.method !== 'POST') return methodNotAllowed(cors, ['POST']);
       await assertAuthorized(request, env);
       const args = await request.json() as RenderMoleculeAssetArgs;
       return json(await renderMoleculeAsset(args, env, ctx), { headers: cors });
     }
 
     const jobMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)$/);
-    if (request.method === 'GET' && jobMatch) {
+    if (jobMatch) {
+      if (request.method !== 'GET') return methodNotAllowed(cors, ['GET']);
       await assertAuthorized(request, env);
       return json(await readJob(jobMatch[1], env), { headers: cors });
     }
 
     const assetMatch = url.pathname.match(/^\/assets\/(sha256-[a-f0-9]{64})\.(png|jpe?g|webp|glb|usdz)$/i);
-    if (request.method === 'GET' && assetMatch) {
-      const response = await readAssetResponse(assetMatch[1], assetMatch[2] as AssetFormat | undefined, env);
-      return withCors(response, cors);
+    if (assetMatch) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return methodNotAllowed(cors, ['GET', 'HEAD']);
+      const response = await readAssetResponse(
+        assetMatch[1],
+        assetMatch[2] as AssetFormat | undefined,
+        env,
+        request.method === 'HEAD',
+      );
+      return withCors(getOrHeadResponse(request, response), cors);
+    }
+
+    if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) {
+      return json({ error: 'API route not found', path: url.pathname }, { status: 404, headers: cors });
+    }
+
+    if (url.pathname.startsWith('/assets/sha256-')) {
+      return json({ error: 'Asset route not found', path: url.pathname }, { status: 404, headers: cors });
     }
 
     if (env.WEB_ASSETS && (request.method === 'GET' || request.method === 'HEAD')) {
@@ -664,16 +680,26 @@ async function readAssetMetadata(assetId: string, format: Exclude<AssetFormat, '
   };
 }
 
-async function readAssetResponse(assetId: string, rawFormat: AssetFormat | undefined, env: Env) {
+async function readAssetResponse(
+  assetId: string,
+  rawFormat: AssetFormat | undefined,
+  env: Env,
+  headOnly = false,
+) {
   const format = normalizeFormat(rawFormat) ?? 'png';
   const key = assetObjectKey(assetId, format);
-  const object = env.ASSETS ? await env.ASSETS.get(key) : null;
+  const object = env.ASSETS
+    ? headOnly ? await env.ASSETS.head(key) : await env.ASSETS.get(key)
+    : null;
   if (!object) return json({ error: 'Asset not found', assetId, format }, { status: 404 });
   const headers = new Headers();
   object.writeHttpMetadata?.(headers);
+  headers.set('content-type', headers.get('content-type') || object.httpMetadata?.contentType || mimeForFormat(format));
+  if (object.size !== undefined) headers.set('content-length', String(object.size));
   headers.set('etag', object.customMetadata?.sha256 ?? assetId);
   headers.set('cache-control', 'public, max-age=31536000, immutable');
-  return new Response(await object.arrayBuffer?.(), { headers });
+  const body = headOnly ? null : object.body ?? await object.arrayBuffer?.();
+  return new Response(body, { headers });
 }
 
 async function upsertJob(env: Env, job: Record<string, unknown>) {
@@ -787,15 +813,28 @@ function withCors(response: Response, cors: Headers) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+function getOrHeadResponse(request: Request, response: Response) {
+  return request.method === 'HEAD'
+    ? new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers })
+    : response;
+}
+
+function methodNotAllowed(cors: Headers, methods: string[]) {
+  const headers = new Headers(cors);
+  headers.set('allow', methods.join(', '));
+  return json({ error: 'Method not allowed', allowedMethods: methods }, { status: 405, headers });
+}
+
 function corsHeaders(request: Request, env: Env) {
   const headers = new Headers();
   const origin = request.headers.get('origin') ?? '*';
   const allowed = env.CORS_ORIGINS?.split(',').map((entry) => entry.trim()).filter(Boolean);
   headers.set('access-control-allow-origin', !allowed?.length || allowed.includes(origin) ? origin : allowed[0]);
   headers.set('vary', 'origin');
-  headers.set('access-control-allow-methods', 'GET,POST,OPTIONS');
+  headers.set('access-control-allow-methods', 'GET,HEAD,POST,OPTIONS');
   headers.set('access-control-allow-headers', 'content-type,authorization,mcp-session-id');
-  headers.set('access-control-expose-headers', 'content-type,etag');
+  headers.set('access-control-expose-headers', 'content-type,etag,x-lupi-edge-executed');
+  headers.set('x-lupi-edge-executed', '1');
   return headers;
 }
 
@@ -837,8 +876,28 @@ function isFirebaseReservedPath(pathname: string) {
   return pathname.startsWith('/__/auth/') || pathname.startsWith('/__/firebase/');
 }
 
+export function validateExternalAssetPaths(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error('cloudflare-assets-exclude.json must contain at least one path.');
+  }
+  const paths = value.map((entry, index) => {
+    if (typeof entry !== 'string' || !entry.startsWith('gallery/') || entry.includes('..') || entry.includes('\\')) {
+      throw new Error(`Invalid external asset path at index ${index}.`);
+    }
+    return entry;
+  });
+  if (new Set(paths).size !== paths.length) {
+    throw new Error('cloudflare-assets-exclude.json contains duplicate paths.');
+  }
+  return paths;
+}
+
 function isExternalAssetPath(pathname: string) {
   return EXTERNAL_ASSET_PATHS.has(pathname.replace(/^\/+/, ''));
+}
+
+function isExternalAssetNamespace(pathname: string) {
+  return pathname.startsWith('/gallery/curated/lupine_genesis.') || pathname.startsWith('/gallery/research/hfc/');
 }
 
 async function proxyExternalAsset(request: Request, env: Env) {

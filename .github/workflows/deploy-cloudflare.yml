@@ -626,7 +626,7 @@ jobs:
 
       - name: Verify immutable candidate API identity and posture
         run: |
-          pnpm verify:cloudflare-live -- \
+          pnpm verify:cloudflare-live \
             --url=${{ needs.version-upload.outputs.candidate_preview_origin }} \
             --label=prepromotion-candidate \
             --expect-build-sha=${{ inputs.target_sha }} \
@@ -636,6 +636,7 @@ jobs:
             --expect-d1=false \
             --expect-queue=false \
             --expect-renderer-endpoint=false \
+            --expect-selective-routing=true \
             --expect-firebase-project=true \
             --expect-large-asset-proxy=true \
             --expect-auth-required=false \
@@ -973,7 +974,7 @@ jobs:
       - name: Verify custom-domain API identity separately
         run: |
           mkdir -p public
-          pnpm verify:cloudflare-live -- \
+          pnpm verify:cloudflare-live \
             --url=https://lupi.live \
             --label=postpromotion-custom-domain \
             --require-custom-domain \
@@ -985,6 +986,7 @@ jobs:
             --expect-d1=false \
             --expect-queue=false \
             --expect-renderer-endpoint=false \
+            --expect-selective-routing=true \
             --expect-firebase-project=true \
             --expect-large-asset-proxy=true \
             --expect-auth-required=false \
@@ -1287,7 +1289,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           mkdir -p rollback-ui
-          pnpm verify:cloudflare-live -- \
+          pnpm verify:cloudflare-live \
             --url=https://lupi.live \
             --label=bounded-rollback-public \
             --require-custom-domain \

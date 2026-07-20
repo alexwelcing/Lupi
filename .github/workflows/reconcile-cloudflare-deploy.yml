@@ -694,7 +694,11 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
           mkdir -p reanchor
-          pnpm verify:cloudflare-live -- \
+          selective_routing_args=()
+          if pnpm verify:cloudflare-live --help | grep -q -- '--expect-selective-routing'; then
+            selective_routing_args+=(--expect-selective-routing=true)
+          fi
+          pnpm verify:cloudflare-live \
             --url=https://lupi.live \
             --label=reanchor-public \
             --require-custom-domain \
@@ -706,6 +710,7 @@ jobs:
             --expect-d1=false \
             --expect-queue=false \
             --expect-renderer-endpoint=false \
+            "${selective_routing_args[@]}" \
             --expect-firebase-project=true \
             --expect-large-asset-proxy=true \
             --expect-auth-required=false \
@@ -1090,7 +1095,11 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           mkdir -p ui-proof
-          pnpm verify:cloudflare-live -- \
+          selective_routing_args=()
+          if pnpm verify:cloudflare-live --help | grep -q -- '--expect-selective-routing'; then
+            selective_routing_args+=(--expect-selective-routing=true)
+          fi
+          pnpm verify:cloudflare-live \
             --url=https://lupi.live \
             --label=reconciliation-public \
             --require-custom-domain \
@@ -1101,6 +1110,7 @@ jobs:
             --expect-d1=false \
             --expect-queue=false \
             --expect-renderer-endpoint=false \
+            "${selective_routing_args[@]}" \
             --expect-firebase-project=true \
             --expect-large-asset-proxy=true \
             --expect-auth-required=false \

@@ -17,7 +17,9 @@ Routes owned by the Worker:
 - `/__/auth/*` and `/__/firebase/*` — proxied to Firebase Hosting reserved auth paths so popup auth still works with `authDomain=lupi.live`.
 - `/view/:slug` — social-preview HTML for saved views, backed by Firestore REST during the transition.
 - `/collectAnalytics` and `/api/analytics` — first-party analytics collector at the edge.
-- `/mcp`, `/v1/render`, `/v1/jobs/:jobId`, `/mcp-manifest.json`, `/health` — agent-native MCP/control-plane endpoints.
+- `/mcp`, `/v1/render`, `/v1/jobs/:jobId`, `/mcp-manifest.json`, `/health` — agent-native MCP/control-plane endpoints that execute Worker code first.
+- `/browser-mcp-manifest.json` — the static 28-tool browser-viewer manifest;
+  it remains asset-first with the SPA and fingerprinted web bundles.
 
 ## Build And Run
 

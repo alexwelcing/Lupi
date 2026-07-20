@@ -25,10 +25,11 @@ export function usage() {
   return `verify-cloudflare-live.mjs
 
 Usage:
-  pnpm verify:cloudflare-live -- --url=https://lupi.live --label=postpromotion-custom-domain \\
+  pnpm verify:cloudflare-live --url=https://lupi.live --label=postpromotion-custom-domain \\
     --require-custom-domain --expect-web-assets=true --expect-r2=true \\
     --expect-d1=false --expect-queue=false --expect-renderer-endpoint=false \\
     --expect-firebase-project=true --expect-large-asset-proxy=true \\
+    --expect-selective-routing=true \\
     --expect-auth-required=false --expect-render-execution=false \\
     --expect-build-sha=<40-hex-sha> --expect-worker-version-id=<version-id>
 
@@ -50,6 +51,7 @@ Options:
   --expect-renderer-endpoint=<true|false> Required binding posture.
   --expect-firebase-project=<true|false>  Required binding posture.
   --expect-large-asset-proxy=<true|false> Required binding posture.
+  --expect-selective-routing=<true|false> Require dynamic Worker markers and asset-first static routes.
   --expect-auth-required=<true|false>     Required public auth posture.
   --expect-render-execution=<true|false>  Required render-execution posture.
   --capture-prior-baseline               Emit a normal prior baseline in the JSON report.
@@ -85,6 +87,7 @@ export function parseCommandLine(argv, env = process.env) {
     expectWorkerVersionId: optionalString(raw['expect-worker-version-id']),
     expectAuthRequired: requiredBoolean(raw['expect-auth-required'], 'expect-auth-required'),
     expectRenderExecution: requiredBoolean(raw['expect-render-execution'], 'expect-render-execution'),
+    expectSelectiveRouting: requiredBoolean(raw['expect-selective-routing'], 'expect-selective-routing'),
     expectedBindings: Object.fromEntries(POSTURE_KEYS.map((key) => {
       const cliKey = camelToKebab(key);
       return [key, requiredBoolean(raw[`expect-${cliKey}`], `expect-${cliKey}`)];
@@ -109,15 +112,15 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
   const now = dependencies.now ?? (() => new Date());
   const sleep = dependencies.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const readFileImpl = dependencies.readFile ?? readFile;
+  const monotonicNow = dependencies.monotonicNow ?? (() => performance.now());
   const checks = [];
-  const observations = {};
+  const observations = { routing: {} };
   const baseUrl = normalizeOrigin(options.url, 'url');
 
   async function request(target, init = {}) {
     const url = target instanceof URL ? target : new URL(target, baseUrl);
     const response = await fetchImpl(url, {
       ...init,
-      cache: 'no-store',
       redirect: 'manual',
       signal: AbortSignal.timeout(options.timeout),
     });
@@ -144,8 +147,16 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
   await check('health', async () => {
     const response = await request('/health');
     assert.equal(response.status, 200, `expected HTTP 200, got ${response.status}`);
+    observations.routing.healthGet = routeMarker(response);
+    assertRouteExecution(response, true, options, 'GET /health');
     const health = await response.json();
     observations.health = projectAndValidateHealth(health, options);
+    const head = await request('/health', { method: 'HEAD' });
+    assert.equal(head.status, response.status, `HEAD /health expected HTTP ${response.status}, got ${head.status}`);
+    assert.equal(head.headers.get('content-type'), response.headers.get('content-type'), 'HEAD /health content type drifted');
+    assert.equal((await head.arrayBuffer()).byteLength, 0, 'HEAD /health must not return a body');
+    observations.routing.healthHead = routeMarker(head);
+    assertRouteExecution(head, true, options, 'HEAD /health');
     return {
       toolCount: observations.health.toolCount,
       release: observations.health.release ?? null,
@@ -154,21 +165,50 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
   });
 
   await check('root-entry', async () => {
-    observations.entry = await readEntry(baseUrl, request);
+    observations.entry = await readEntry(baseUrl, request, monotonicNow, options);
     return observations.entry;
+  });
+
+  await check('spa-route', async () => {
+    const response = await request('/materials/clean-energy');
+    assert.equal(response.status, 200, `SPA route expected HTTP 200, got ${response.status}`);
+    assert.match(response.headers.get('content-type') ?? '', /^text\/html\b/i, 'SPA route is not HTML');
+    assertRouteExecution(response, false, options, 'SPA route');
+    const html = await response.text();
+    assert.match(html, /\bid=["']root["']/i, 'SPA route HTML does not contain id="root"');
+    observations.spa = { path: '/materials/clean-energy', edgeExecuted: routeMarker(response) };
+    return observations.spa;
+  });
+
+  await check('reserved-api-namespace', async () => {
+    const response = await request('/v1');
+    assert.equal(response.status, 404, `bare /v1 expected HTTP 404, got ${response.status}`);
+    assertRouteExecution(response, true, options, 'bare /v1');
+    assert.match(response.headers.get('content-type') ?? '', /^application\/json\b/i,
+      'bare /v1 must return structured JSON');
+    const body = await response.json();
+    assert.equal(body.error, 'API route not found', 'bare /v1 returned an unexpected error contract');
+    observations.routing.reservedApiNamespace = routeMarker(response);
+    return { status: response.status, edgeExecuted: routeMarker(response) };
   });
 
   await check('edge-manifest', async () => {
     const response = await request('/mcp-manifest.json');
     assert.equal(response.status, 200, `expected HTTP 200, got ${response.status}`);
+    observations.routing.edgeManifest = routeMarker(response);
+    assertRouteExecution(response, true, options, 'edge manifest');
     observations.edgeTools = manifestToolNames(await response.json(), EDGE_TOOL_COUNT);
     assert.ok(observations.edgeTools.includes('lupi.render_molecule_asset'), 'lupi.render_molecule_asset is missing');
+    assert.ok(!observations.edgeTools.includes('lupi.set_frame'), 'edge manifest must not expose browser camera tools');
+    assert.ok(!observations.edgeTools.includes('lupi.export_asset'), 'edge manifest must not expose browser export tools');
     return { count: observations.edgeTools.length };
   });
 
   await check('browser-manifest', async () => {
     const response = await request('/browser-mcp-manifest.json');
     assert.equal(response.status, 200, `expected HTTP 200, got ${response.status}`);
+    observations.routing.browserManifest = routeMarker(response);
+    assertRouteExecution(response, false, options, 'browser manifest');
     observations.browserTools = manifestToolNames(await response.json(), BROWSER_TOOL_COUNT);
     assert.ok(observations.browserTools.includes('lupi.export_asset'), 'lupi.export_asset is missing');
     assert.ok(observations.browserTools.includes('lupi.set_frame'), 'lupi.set_frame is missing');
@@ -190,6 +230,8 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
         },
       }),
     });
+    observations.routing.mcpInitialize = routeMarker(initialize);
+    assertRouteExecution(initialize, true, options, 'MCP initialize');
     if (options.expectAuthRequired) {
       assert.ok(initialize.status === 401 || initialize.status === 403,
         `expected credential-free 401/403, got ${initialize.status}`);
@@ -204,6 +246,7 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 'lupi-live-tools', method: 'tools/list', params: {} }),
     });
+    assertRouteExecution(list, true, options, 'MCP tools/list');
     assert.equal(list.status, 200, `tools/list expected HTTP 200, got ${list.status}`);
     const body = await list.json();
     assertJsonRpcSuccess(body, 'lupi-live-tools');
@@ -216,6 +259,8 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
   await check('range-delivery', async () => {
     const response = await request(RANGE_PATH, { headers: { range: 'bytes=0-15' } });
     assert.equal(response.status, 206, `expected HTTP 206, got ${response.status}`);
+    observations.routing.rangeDelivery = routeMarker(response);
+    assertRouteExecution(response, true, options, 'R2 range delivery');
     const bytes = new Uint8Array(await response.arrayBuffer());
     assert.equal(bytes.byteLength, 16, `expected 16 bytes, got ${bytes.byteLength}`);
     const contentRange = response.headers.get('content-range');
@@ -245,6 +290,7 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
     await check('saved-view', async () => {
       const response = await request(`/view/${encodeURIComponent(options.viewSlug)}`);
       assert.equal(response.status, 200, `expected HTTP 200, got ${response.status}`);
+      assertRouteExecution(response, true, options, 'saved-view share route');
       assert.match(response.headers.get('content-type') ?? '', /^text\/html\b/i, 'saved view is not HTML');
       const html = await response.text();
       assert.match(html, /<!doctype html|<html\b/i, 'saved-view response body is not HTML');
@@ -267,8 +313,8 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
           `comparison redirect is not allowed: HTTP ${response.status}`);
         return response;
       };
-      const comparison = await readEntry(comparisonBase, comparisonRequest);
-      assert.deepEqual(observations.entry, comparison,
+      const comparison = await readEntry(comparisonBase, comparisonRequest, monotonicNow, options);
+      assert.deepEqual(entryFingerprint(observations.entry), entryFingerprint(comparison),
         `entry mismatch: ${JSON.stringify({ actual: observations.entry, expected: comparison })}`);
       return { origin: comparisonBase.origin, ...comparison };
     });
@@ -340,6 +386,7 @@ function validateOptions(options, { allowTestBaselineOrigin = false } = {}) {
   positiveInteger(options.timeout, 'timeout');
   assert.equal(typeof options.expectAuthRequired, 'boolean', 'expect-auth-required must be explicit');
   assert.equal(typeof options.expectRenderExecution, 'boolean', 'expect-render-execution must be explicit');
+  assert.equal(typeof options.expectSelectiveRouting, 'boolean', 'expect-selective-routing must be explicit');
   assert.deepEqual(Object.keys(options.expectedBindings ?? {}).sort(), [...POSTURE_KEYS].sort(),
     'every expected binding posture must be explicit');
   for (const key of POSTURE_KEYS) assert.equal(typeof options.expectedBindings[key], 'boolean', `expectedBindings.${key} must be boolean`);
@@ -425,17 +472,75 @@ function projectAndValidateHealth(value, options) {
   };
 }
 
-async function readEntry(baseUrl, request) {
+async function readEntry(baseUrl, request, monotonicNow, options) {
+  const rootStartedAt = monotonicNow();
   const root = await request('/');
+  const rootDurationMs = elapsedMilliseconds(rootStartedAt, monotonicNow());
   assert.equal(root.status, 200, `root expected HTTP 200, got ${root.status}`);
+  assertRouteExecution(root, false, options, 'root HTML');
   const html = await root.text();
   assert.match(html, /\bid=["']root["']/i, 'root HTML does not contain id="root"');
   const path = entryPath(html, baseUrl);
+  const assetStartedAt = monotonicNow();
   const entry = await request(path);
+  const assetDurationMs = elapsedMilliseconds(assetStartedAt, monotonicNow());
   assert.equal(entry.status, 200, `entry expected HTTP 200, got ${entry.status}`);
+  assertRouteExecution(entry, false, options, 'hashed entry asset');
+  const contentType = entry.headers.get('content-type');
+  const cacheControl = entry.headers.get('cache-control');
+  const etag = entry.headers.get('etag');
+  const cfCacheStatus = entry.headers.get('cf-cache-status');
+  assert.match(contentType ?? '', /(?:java|ecma)script/i, 'entry asset is not JavaScript');
+  assert.match(cacheControl ?? '', /(?:^|,)\s*public\b/i, 'entry Cache-Control must permit shared static caching');
+  assert.doesNotMatch(cacheControl ?? '', /(?:^|,)\s*(?:private|no-store)\b/i,
+    'entry Cache-Control must not disable shared static caching');
+  if (options.expectSelectiveRouting) {
+    const maxAge = /(?:^|,)\s*max-age=(\d+)\b/i.exec(cacheControl ?? '');
+    assert.ok(maxAge && Number(maxAge[1]) >= 31_536_000,
+      'hashed entry Cache-Control must retain at least one year');
+    assert.match(cacheControl ?? '', /(?:^|,)\s*immutable\b/i,
+      'hashed entry Cache-Control must be immutable');
+    assert.match(cfCacheStatus ?? '', /^(?:HIT|MISS|EXPIRED|REVALIDATED|UPDATING|STALE)$/i,
+      'hashed entry CF-Cache-Status must prove Cloudflare static-asset cache handling');
+  }
+  assert.ok(nonEmptyString(etag), 'entry asset must expose an ETag');
+  if (!options.expectSelectiveRouting && cfCacheStatus !== null) {
+    assert.doesNotMatch(cfCacheStatus, /^(?:BYPASS|DYNAMIC)$/i,
+      'entry asset must not bypass Cloudflare static caching');
+  }
   const bytes = new Uint8Array(await entry.arrayBuffer());
   assert.ok(bytes.byteLength > 0, 'entry asset is empty');
-  return { path, sha256: createHash('sha256').update(bytes).digest('hex') };
+  return {
+    path,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    contentType,
+    cacheControl,
+    etag,
+    cfCacheStatus,
+    edgeExecuted: routeMarker(entry),
+    rootEdgeExecuted: routeMarker(root),
+    timingMs: { root: rootDurationMs, asset: assetDurationMs },
+  };
+}
+
+function routeMarker(response) {
+  return response.headers.get('x-lupi-edge-executed');
+}
+
+function assertRouteExecution(response, expectedWorker, options, label) {
+  if (!options.expectSelectiveRouting) return;
+  assert.equal(routeMarker(response), expectedWorker ? '1' : null,
+    `${label} ${expectedWorker ? 'must execute Worker code' : 'must remain asset-first'}`);
+}
+
+function elapsedMilliseconds(start, end) {
+  const elapsed = end - start;
+  assert.ok(Number.isFinite(elapsed) && elapsed >= 0, 'request timing must be finite and non-negative');
+  return Math.round(elapsed * 1000) / 1000;
+}
+
+function entryFingerprint(entry) {
+  return { path: entry.path, sha256: entry.sha256 };
 }
 
 function entryPath(html, baseUrl) {
@@ -479,7 +584,7 @@ function createProjection(observations) {
     browserTools: observations.browserTools,
     mcp: observations.mcp,
     asset: observations.asset,
-    entry: observations.entry,
+    entry: entryFingerprint(observations.entry),
   };
 }
 
@@ -544,6 +649,7 @@ function parseArgs(argv) {
     'help', 'h', 'url', 'label', 'retries', 'retry-delay', 'timeout', 'json',
     'require-custom-domain', 'view-slug', 'expect-entry-from', 'expect-build-sha',
     'expect-worker-version-id', 'expect-auth-required', 'expect-render-execution',
+    'expect-selective-routing',
     'capture-prior-baseline', 'capture-legacy-prior-baseline',
     'legacy-prior-version-id', 'expect-prior-baseline',
     'allow-legacy-prior-metadata-absence',

@@ -22,7 +22,44 @@ test('complete normal verification passes without an external request', async ()
   assert.equal(report.ok, true);
   assert.equal(report.observations.health.release.id, VERSION_ID);
   assert.equal(report.observations.asset.r2DeliveryProven, true);
+  assert.equal(report.observations.entry.cacheControl, 'public, max-age=31536000, immutable');
+  assert.equal(report.observations.entry.cfCacheStatus, 'HIT');
+  assert.equal(report.observations.entry.edgeExecuted, null);
+  assert.equal(report.observations.routing.healthGet, '1');
+  assert.equal(report.observations.routing.browserManifest, null);
+  assert.equal(typeof report.observations.entry.timingMs.root, 'number');
+  assert.equal(typeof report.observations.entry.timingMs.asset, 'number');
   assert.deepEqual([...fixture.hosts], ['127.0.0.1']);
+});
+
+test('hashed entry must be publicly cacheable and expose an ETag', async () => {
+  const fixture = await createFixture({ entryCacheControl: 'private, no-store', entryEtag: null });
+  const report = await verifyCloudflareLive(normalOptions(fixture.origin));
+  assert.equal(report.ok, false);
+  assert.match(failed(report, 'root-entry'), /shared static caching|ETag/);
+});
+
+test('Cloudflare static-asset cache evidence is mandatory for the hashed entry', async () => {
+  for (const entryCfCacheStatus of [null, 'BYPASS', 'DYNAMIC']) {
+    const fixture = await createFixture({ entryCfCacheStatus });
+    const report = await verifyCloudflareLive(normalOptions(fixture.origin));
+    assert.equal(report.ok, false);
+    assert.match(failed(report, 'root-entry'), /CF-Cache-Status|static-asset delivery/);
+    await closeFixture(fixture);
+  }
+});
+
+test('selective routing requires Worker markers only on dynamic routes', async () => {
+  const missingDynamic = await createFixture({ dynamicMarker: null });
+  const missingReport = await verifyCloudflareLive(normalOptions(missingDynamic.origin));
+  assert.equal(missingReport.ok, false);
+  assert.match(failed(missingReport, 'health'), /must execute Worker code/);
+  await closeFixture(missingDynamic);
+
+  const markedStatic = await createFixture({ staticMarker: '1' });
+  const markedReport = await verifyCloudflareLive(normalOptions(markedStatic.origin));
+  assert.equal(markedReport.ok, false);
+  assert.match(failed(markedReport, 'root-entry'), /must remain asset-first/);
 });
 
 test('bad health and binding drift fail closed', async () => {
@@ -259,6 +296,7 @@ function normalOptions(origin, overrides = {}) {
     expectWorkerVersionId: VERSION_ID,
     expectAuthRequired: false,
     expectRenderExecution: false,
+    expectSelectiveRouting: true,
     expectedBindings: expectedBindings(),
     capturePriorBaseline: false,
     captureLegacyPriorBaseline: false,
@@ -287,6 +325,7 @@ function postureArgs() {
     '--expect-queue=false', '--expect-renderer-endpoint=false',
     '--expect-firebase-project=true', '--expect-large-asset-proxy=true',
     '--expect-auth-required=false', '--expect-render-execution=false',
+    '--expect-selective-routing=true',
     `--expect-build-sha=${BUILD_SHA}`, `--expect-worker-version-id=${VERSION_ID}`,
   ];
 }
@@ -321,6 +360,17 @@ async function createFixture(overrides = {}) {
   const server = createServer(async (request, response) => {
     hosts.add(request.headers.host?.split(':')[0] ?? '');
     const url = new URL(request.url, 'http://fixture.invalid');
+    const dynamicRoute = url.pathname === '/health' || url.pathname === '/mcp-manifest.json' ||
+      url.pathname === '/mcp' || url.pathname === '/gallery/curated/lupine_genesis.glimbin' ||
+      url.pathname === '/v1' || url.pathname.startsWith('/view/');
+    const staticRoute = url.pathname === '/' || url.pathname === entryPath ||
+      url.pathname === '/browser-mcp-manifest.json' || url.pathname === '/materials/clean-energy';
+    if (dynamicRoute && overrides.dynamicMarker !== null) {
+      response.setHeader('x-lupi-edge-executed', overrides.dynamicMarker ?? '1');
+    }
+    if (staticRoute && overrides.staticMarker !== undefined && overrides.staticMarker !== null) {
+      response.setHeader('x-lupi-edge-executed', overrides.staticMarker);
+    }
     if (url.pathname === '/health') {
       const base = {
         ready: true,
@@ -358,8 +408,20 @@ async function createFixture(overrides = {}) {
     }
     if (url.pathname === entryPath) {
       response.setHeader('content-type', 'text/javascript');
+      response.setHeader('cache-control', overrides.entryCacheControl ?? 'public, max-age=31536000, immutable');
+      if (overrides.entryEtag !== null) response.setHeader('etag', overrides.entryEtag ?? '"fixture-entry"');
+      if (overrides.entryCfCacheStatus !== null) response.setHeader('cf-cache-status', overrides.entryCfCacheStatus ?? 'HIT');
       response.end(overrides.entryBytes ?? 'console.log("fixture")');
       return;
+    }
+    if (url.pathname === '/materials/clean-energy') {
+      response.setHeader('content-type', 'text/html');
+      response.end('<!doctype html><div id="root"></div>');
+      return;
+    }
+    if (url.pathname === '/v1') {
+      response.statusCode = 404;
+      return json(response, { error: 'API route not found', path: '/v1' });
     }
     if (url.pathname === '/mcp-manifest.json') return json(response, { tools: edgeTools });
     if (url.pathname === '/browser-mcp-manifest.json') return json(response, { tools: browserTools });

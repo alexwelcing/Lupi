@@ -164,18 +164,18 @@ try {
       const res = await fetch(manifestUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
-    }, `${baseUrl}mcp-manifest.json`);
+    }, `${baseUrl}browser-mcp-manifest.json`);
     const liveToolNames = new Set(tools.map((t) => t.name));
     const manifestToolNames = new Set((manifest?.tools ?? []).map((t) => t.name));
     const missing = [...liveToolNames].filter((n) => !manifestToolNames.has(n));
     const extra = [...manifestToolNames].filter((n) => !liveToolNames.has(n));
     check(
-      'manifest matches live tool registry',
+      'browser manifest matches live tool registry',
       missing.length === 0 && extra.length === 0,
       `${manifest?.tools?.length ?? 0} manifest tools; ${tools.length} live tools`,
     );
   } catch (manifestErr) {
-    check('manifest fetch and parse', false, manifestErr?.message ?? String(manifestErr));
+    check('browser manifest fetch and parse', false, manifestErr?.message ?? String(manifestErr));
   }
 
   // Error shape check: unsupported tool should return a typed error

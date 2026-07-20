@@ -17,8 +17,10 @@ It provides:
 - Saved-view social HTML at `/view/:slug`.
 - `POST /mcp` — MCP JSON-RPC over HTTP (`initialize`, `tools/list`, `tools/call`).
 - `GET /health` — readiness and binding status.
-- `GET /mcp-manifest.json` — Cloudflare MCP tool manifest.
-- `GET /browser-mcp-manifest.json` — compatibility copy of the browser bridge manifest.
+- `GET /mcp-manifest.json` — six-tool edge control-plane manifest for the
+  browser-free Worker runtime.
+- `GET /browser-mcp-manifest.json` — 28-tool browser viewer manifest served
+  from the built web assets for browser-bridge clients and verification.
 - `POST /v1/render` — REST shortcut for `lupi.render_molecule_asset`.
 - `GET /v1/jobs/:jobId` — render job status.
 - `GET /assets/:assetId.:ext` — R2 asset delivery when `ASSETS` is bound.
@@ -26,6 +28,19 @@ It provides:
 The worker does not pretend Cloudflare can render WebGL by itself. It owns the
 control plane: validation, deterministic cache keys, R2/D1/Queue contracts, and
 optional renderer-backend handoff.
+
+The two MCP manifests are intentionally different. Do not compare the browser
+bridge's viewer registry with `/mcp-manifest.json`; browser clients use
+`/browser-mcp-manifest.json`, while edge clients use `/mcp-manifest.json`.
+
+Static web assets and SPA navigation are asset-first. Worker code runs first
+only for the explicit dynamic route patterns in `wrangler.toml`: health, MCP,
+render/job/asset APIs, analytics, Firebase reserved paths, saved-view share
+HTML, and the R2-backed gallery allowlist. Hashed Vite `/assets/index-*` files
+must never be covered by a broad `/assets/*` Worker-first rule.
+Dynamic responses carry `x-lupi-edge-executed: 1`; the browser manifest, SPA
+HTML, and fingerprinted Vite assets must not. Fingerprinted `/assets/*` files
+receive a one-year immutable browser-cache policy from `apps/web/public/_headers`.
 
 ## Run Locally
 

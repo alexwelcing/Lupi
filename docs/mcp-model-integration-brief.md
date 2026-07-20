@@ -20,7 +20,8 @@ Recommended integration stance:
 
 1. Prefer the Cloudflare MCP endpoint for agent-native asset requests.
 2. Use the browser bridge only when you need live viewer visual QA or a fallback before the Cloudflare renderer is fully wired.
-3. Use `/mcp-manifest.json` to discover tool schemas in either surface.
+3. Use `/mcp-manifest.json` for the six-tool edge runtime and
+   `/browser-mcp-manifest.json` for the 28-tool browser viewer runtime.
 4. Do not wait for browser `networkidle`; wait for explicit MCP readiness/status checks.
 
 ## Fast path for model integration
@@ -57,7 +58,7 @@ Discover tools:
 
 ```js
 const tools = await page.evaluate(() => window.__lupiViewerMcp.tools());
-const manifest = await page.evaluate(() => fetch('/mcp-manifest.json').then((r) => r.json()));
+const manifest = await page.evaluate(() => fetch('/browser-mcp-manifest.json').then((r) => r.json()));
 ```
 
 Execute a single tool:
@@ -194,7 +195,8 @@ interface LupiMcpStatus {
 
 ## Tool inventory
 
-There are currently 28 `lupi.*` tools. Always prefer `/mcp-manifest.json` for live schemas.
+There are currently 28 browser-viewer `lupi.*` tools. Always prefer
+`/browser-mcp-manifest.json` for their live schemas.
 
 Molecule and asset tools:
 
@@ -251,7 +253,7 @@ A robust model integration loop should be:
 1. Navigate to `/#/mcp`.
 2. Wait for `window.__lupiViewerMcp.ready === true`.
 3. Call `status()`.
-4. Fetch `/mcp-manifest.json`.
+4. Fetch `/browser-mcp-manifest.json`.
 5. Choose tool calls from the manifest, not from guesses.
 6. Call `executeBatch()` when multiple actions form one view change.
 7. Assert every response has `ok === true`.
@@ -312,7 +314,7 @@ A compact sticky status strip should always show:
 
 ### 4. Make tools manifest-driven
 
-The tool list should be generated from `/mcp-manifest.json`, not hand-maintained UI code. For each tool:
+The browser tool list should be generated from `/browser-mcp-manifest.json`, not hand-maintained UI code. For each tool:
 
 - name
 - description
@@ -335,7 +337,7 @@ Add a copyable block in the UI:
 ```txt
 Open https://lupi.live/#/mcp
 Wait for window.__lupiViewerMcp.ready === true
-Fetch /mcp-manifest.json
+Fetch /browser-mcp-manifest.json
 Call window.__lupiViewerMcp.status()
 Use execute()/executeBatch() for lupi.* tools
 Verify with state() and encode with lupi.encode_view_url
@@ -371,9 +373,9 @@ pnpm run test
 As of this brief, the Playwright MCP smoke verifies:
 
 - driver ready on `window`
-- 19 live tools
+- 28 live tools
 - `status()` reports ready and matching `toolCount`
-- `/mcp-manifest.json` matches the live registry
+- `/browser-mcp-manifest.json` matches the live registry
 - unsupported tools return structured errors
 - legacy molecule generation works
 - AI-control batch tools execute successfully
@@ -384,4 +386,6 @@ As of this brief, the Playwright MCP smoke verifies:
 
 Do not teach a model to click the MCP panel unless the task is explicitly UI QA. Teach it to use the browser bridge.
 
-The UI can be improved, but the integration contract is already good: `status()`, `tools()`, `/mcp-manifest.json`, `execute()`, `executeBatch()`, and `state()` are the path of least resistance.
+The UI can be improved, but the browser integration contract is already good:
+`status()`, `tools()`, `/browser-mcp-manifest.json`, `execute()`,
+`executeBatch()`, and `state()` are the path of least resistance.

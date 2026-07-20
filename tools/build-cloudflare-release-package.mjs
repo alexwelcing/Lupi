@@ -374,7 +374,22 @@ function validateAssets(value, closed) {
   assert.equal(typeof value.directory, 'string', 'assets directory must be a string');
   if (closed) assert.equal(value.directory, 'assets', 'closed upload assets directory must be assets');
   assert.ok(['single-page-application', '404-page', 'none'].includes(value.not_found_handling), 'assets not_found_handling is invalid');
-  assert.equal(typeof value.run_worker_first, 'boolean', 'assets run_worker_first must be boolean');
+  assert.ok(Array.isArray(value.run_worker_first) && value.run_worker_first.length > 0,
+    'assets run_worker_first must be a non-empty route array');
+  let positiveRouteCount = 0;
+  for (const route of value.run_worker_first) {
+    assert.ok(isNonEmptyString(route) && route.length <= 256, 'assets run_worker_first route is invalid');
+    assert.match(route, /^!?\//, 'assets run_worker_first route must begin with / or !/');
+    assert.doesNotMatch(route, /(?:\.\.|\\|[?#\u0000-\u001f])/, 'assets run_worker_first route contains unsafe syntax');
+    if (!route.startsWith('!')) {
+      positiveRouteCount += 1;
+      assert.ok(route !== '/' && !/^\/\*+$/.test(route),
+        'assets run_worker_first must not include root or global Worker-first routes');
+    }
+  }
+  assert.ok(positiveRouteCount > 0, 'assets run_worker_first must contain a positive route');
+  assert.equal(new Set(value.run_worker_first).size, value.run_worker_first.length,
+    'assets run_worker_first routes must be unique');
 }
 
 function validateVersionMetadata(value) {
