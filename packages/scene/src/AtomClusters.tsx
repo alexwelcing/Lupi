@@ -219,11 +219,11 @@ export function AtomClusters({
     material.uniforms.uFadeFar.value = fadeFar;
   }, [material, fadeNear, fadeFar]);
 
-  // Cleanup on unmount.
-  useEffect(() => () => {
-    geometry.dispose();
-    material.dispose();
-  }, [geometry, material]);
+  // Geometry changes per cluster build; material is stable for the component
+  // lifetime. Dispose them independently so replacing geometry never leaves
+  // the live mesh holding a disposed shader material.
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
 
   // Render-time noop — useFrame stays wired so the framework knows
   // about us, in case we add per-frame uniform updates later (e.g.

@@ -16,10 +16,17 @@
  * All video modes support 360° orbit around the structure centroid.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
-import { useStore } from './store';
-import { getElementSpec } from '@atlas/core';
+import { useStore, type ExportRequest } from './store';
+import {
+  canInferCovalentBonds,
+  getElementSpec,
+  hexToRgb,
+  resolveAtomicNumber,
+  resolveTypeColor as resolveSemanticTypeColor,
+  resolveTypeDisplayRadius,
+} from '@atlas/core';
 import * as THREE from 'three';
 import { sampleFlythrough, getSequenceDuration } from './flythrough';
 import { restoreInstancedMeshes } from './export/USDZExportPipeline';
@@ -29,7 +36,31 @@ import {
   computeUsdzFraming,
   disposeExportScene,
   MAX_EXPORT_BONDS,
+  ModelExportBudgetError,
+  ModelExportLayerIncompleteError,
+  ModelExportSourceTopologyError,
+  assertCompleteExportBondLayer,
 } from './export/exportSceneBuilder';
+import {
+  assertBrowserImageExportIntent,
+  beginImageCaptureTransaction,
+  claimFiberFrameCapture,
+  claimFiberFrameWarmup,
+  completeImageCaptureCallback,
+  createFiberFrameCaptureBarrier,
+  drawExportAxesOverlayV1,
+  markFiberFrameCaptureApplied,
+  type PreparedImageCaptureTransaction,
+} from './export/renderCaptureState';
+import {
+  createGradientEquirectTexture,
+  type BackgroundGradientStyle,
+} from './equirectTexture';
+import { assertSceneEnvironmentReady } from './sceneEnvironment';
+import {
+  inspectArtifactAtomSceneReadiness,
+  inspectArtifactVectorGlyphSceneReadiness,
+} from './export/artifactSceneReadiness';
 
 const SINGLE_TYPE_NORM_VALUE = 0.5;
 const MIN_NUMERIC_RANGE = 1e-6;
@@ -150,10 +181,278 @@ function VideoCaptureLoop({
 
   return null;
 }
-
 // ─── ExportManager component ─────────────────────────────────────
+let nextImageCaptureRevision = 1;
+
+function ImageCaptureFrame({
+  request,
+  frameIndex,
+}: {
+  request: ExportRequest;
+  frameIndex: number;
+}) {
+  const [frameLifecycleActive, setFrameLifecycleActive] = useState(true);
+  return frameLifecycleActive ? (
+    <ImageCaptureFrameLifecycle
+      request={request}
+      frameIndex={frameIndex}
+      onFrameCaptured={() => setFrameLifecycleActive(false)}
+    />
+  ) : null;
+}
+
+/**
+ * Transient two-phase Fiber subscriber for deterministic raster capture.
+ * Priority -0.5 runs after drei OrbitControls (-1) and before ordinary scene
+ * hooks (0), re-applying the finalized camera. Priority 100 reads pixels after
+ * atom/environment/interpolation uniforms have observed that camera.
+ */
+function ImageCaptureFrameLifecycle({
+  request,
+  frameIndex,
+  onFrameCaptured,
+}: {
+  request: ExportRequest;
+  frameIndex: number;
+  onFrameCaptured: () => void;
+}) {
+  const { gl, scene, camera, size, invalidate } = useThree();
+  const revisionRef = useRef(nextImageCaptureRevision++);
+  const barrierRef = useRef(createFiberFrameCaptureBarrier(revisionRef.current));
+  const transactionRef = useRef<PreparedImageCaptureTransaction | null>(null);
+  const backgroundTextureRef = useRef<THREE.Texture | null>(null);
+
+  const clearActiveRequest = useCallback(() => {
+    if (useStore.getState().exportRequest === request) {
+      useStore.getState().clearExportRequest();
+    }
+  }, [request]);
+
+  const restoreCaptureState = useCallback(() => {
+    transactionRef.current?.restore();
+    transactionRef.current = null;
+    backgroundTextureRef.current?.dispose();
+    backgroundTextureRef.current = null;
+  }, []);
+
+  const failCapture = useCallback((error: unknown) => {
+    console.error('[ExportManager] Image export failed:', error);
+    restoreCaptureState();
+    completeImageCaptureCallback(
+      () => request.onComplete?.(false),
+      clearActiveRequest,
+      (deliveryError) => console.error('[ExportManager] Image export failure callback failed:', deliveryError),
+    );
+  }, [clearActiveRequest, request, restoreCaptureState]);
+
+  useLayoutEffect(() => {
+    try {
+      request.onStart?.();
+      if (request.artifactSpec && request.artifactSpec.frame !== frameIndex) {
+        throw new Error(
+          `Artifact frame ${request.artifactSpec.frame} no longer matches active frame ${frameIndex}.`,
+        );
+      }
+      if (
+        request.artifactSpec
+        && !useStore.getState().file?.trajectory.frames[request.artifactSpec.frame]
+      ) {
+        throw new Error(`Artifact frame ${request.artifactSpec.frame} is no longer resident.`);
+      }
+      const format = request.format === 'jpeg' || request.format === 'webp'
+        ? request.format
+        : 'png';
+      assertBrowserImageExportIntent(format, Boolean(request.transparent));
+
+      const canonicalCamera = request.artifactSpec?.view.camera as {
+        position?: unknown;
+        target?: unknown;
+        fov?: unknown;
+        near?: unknown;
+        far?: unknown;
+      } | undefined;
+      const appliedCamera = canonicalCamera
+        && isFiniteTuple3(canonicalCamera.position)
+        && isFiniteTuple3(canonicalCamera.target)
+        && typeof canonicalCamera.fov === 'number'
+        && Number.isFinite(canonicalCamera.fov)
+        && typeof canonicalCamera.near === 'number'
+        && Number.isFinite(canonicalCamera.near)
+        && canonicalCamera.near > 0
+        && typeof canonicalCamera.far === 'number'
+        && Number.isFinite(canonicalCamera.far)
+        && canonicalCamera.far > canonicalCamera.near
+        ? {
+          position: canonicalCamera.position,
+          target: canonicalCamera.target,
+          fov: canonicalCamera.fov,
+          near: canonicalCamera.near,
+          far: canonicalCamera.far,
+        }
+        : undefined;
+
+      const canonicalBackground = !request.transparent && request.artifactSpec?.layers.background
+        ? readCanonicalGradientBackgroundV1(request.artifactSpec.view.background)
+        : undefined;
+      if (canonicalBackground) {
+        backgroundTextureRef.current = createGradientEquirectTexture(
+          canonicalBackground.top,
+          canonicalBackground.bottom,
+          gl,
+          1024,
+          canonicalBackground.style,
+        );
+      }
+
+      const targetWidth = request.resolution?.width || size.width;
+      const targetHeight = request.resolution?.height || size.height;
+      transactionRef.current = beginImageCaptureTransaction({
+        renderer: gl,
+        scene,
+        camera,
+        viewportWidth: size.width,
+        viewportHeight: size.height,
+        targetWidth,
+        targetHeight,
+        transparent: Boolean(request.transparent),
+        appliedCamera,
+        ...(backgroundTextureRef.current && canonicalBackground ? {
+          appliedBackground: {
+            texture: backgroundTextureRef.current,
+            fogColor: canonicalBackground.bottom,
+            fogDensity: 0.0015,
+          },
+        } : {}),
+      });
+      invalidate();
+    } catch (error) {
+      failCapture(error);
+    }
+
+    return restoreCaptureState;
+  }, [camera, failCapture, frameIndex, gl, invalidate, request, restoreCaptureState, scene, size.height, size.width]);
+
+  useFrame(() => {
+    const transaction = transactionRef.current;
+    if (!transaction) return;
+    try {
+      if (request.artifactSpec) {
+        const lighting = request.artifactSpec.view.lighting as Record<string, unknown> | undefined;
+        assertSceneEnvironmentReady(scene.environment, lighting?.environment);
+      }
+      transaction.applyCanonicalState();
+      markFiberFrameCaptureApplied(barrierRef.current, revisionRef.current);
+    } catch (error) {
+      onFrameCaptured();
+      failCapture(error);
+    }
+  }, -0.5);
+
+  useFrame(() => {
+    const transaction = transactionRef.current;
+    if (!transaction) return;
+
+    try {
+      if (request.artifactSpec?.layers.atoms) {
+        if (!request.specId) throw new Error('Artifact atom capture is missing its render spec revision.');
+        const atomReadiness = inspectArtifactAtomSceneReadiness(scene, request.specId);
+        if (!atomReadiness.ready) {
+          // React/store intent can precede the Three scene commit. Keep the
+          // owned demand loop alive until every tagged atom mesh carries the
+          // exact artifact revision; the export timeout remains the fail-closed
+          // bound if the scene can never apply it.
+          invalidate();
+          return;
+        }
+      }
+      if (request.artifactSpec?.layers.vectorGlyphs) {
+        if (!request.specId) throw new Error('Artifact vector-glyph capture is missing its render spec revision.');
+        const vectorReadiness = inspectArtifactVectorGlyphSceneReadiness(scene, request.specId);
+        if (!vectorReadiness.ready) {
+          // Vector glyphs own a separate ShaderMaterial, colormap texture, and
+          // four instanced buffers. Their exact applied revision must be proven
+          // independently of the atom layer before immutable readback.
+          invalidate();
+          return;
+        }
+      }
+
+      if (claimFiberFrameWarmup(barrierRef.current, revisionRef.current)) {
+        // R3F state and Three resources committed in the same update as the
+        // export request need one owned draw before readback. This is an
+        // explicit GPU-application barrier: the warm-up uploads new palette
+        // DataTextures and compiles the active ShaderMaterial program, then the
+        // next Fiber frame re-applies camera-space uniforms before capture.
+        transaction.clear();
+        gl.render(scene, camera);
+        invalidate();
+        return;
+      }
+      if (!claimFiberFrameCapture(barrierRef.current, revisionRef.current)) return;
+
+      transaction.clear();
+      gl.render(scene, camera);
+
+      const targetWidth = request.resolution?.width || size.width;
+      const targetHeight = request.resolution?.height || size.height;
+      const captureCanvas = document.createElement('canvas');
+      captureCanvas.width = targetWidth;
+      captureCanvas.height = targetHeight;
+      const captureContext = captureCanvas.getContext('2d');
+      if (!captureContext) throw new Error('Image export could not create a 2D capture context.');
+      captureContext.drawImage(gl.domElement, 0, 0, targetWidth, targetHeight);
+      const contractAxes = request.artifactSpec?.layers.axes;
+      if (contractAxes ?? useStore.getState().showAxes) {
+        drawExportAxesOverlayV1(captureContext, camera, targetWidth, targetHeight);
+      }
+
+      // Readback is complete; release renderer/Fiber ownership before the
+      // browser's asynchronous canvas encoder starts.
+      restoreCaptureState();
+      // Present the restored live scene immediately when Plan 028 moves the
+      // Canvas to demand mode; otherwise the export-sized frame can remain on
+      // screen until an unrelated interaction invalidates Fiber.
+      invalidate();
+      onFrameCaptured();
+
+      const format = request.format === 'jpeg' || request.format === 'webp'
+        ? request.format
+        : 'png';
+      const mime = `image/${format}`;
+      const quality = format === 'png' ? undefined : 1.0;
+      const ext = format === 'jpeg' ? 'jpg' : format;
+      const filename = `${request.baseName || 'LUPI-export'}-frame${frameIndex + 1}.${ext}`;
+
+      captureCanvas.toBlob(
+        (blob) => {
+          completeImageCaptureCallback(
+            () => {
+              if (blob) {
+                if (request.onComplete) request.onComplete(true, blob, filename);
+                else downloadBlob(blob, filename);
+              } else {
+                console.error('[ExportManager] toBlob returned null — canvas may be tainted or context lost');
+                request.onComplete?.(false);
+              }
+            },
+            clearActiveRequest,
+            (error) => console.error('[ExportManager] Image export delivery failed:', error),
+          );
+        },
+        mime,
+        quality,
+      );
+    } catch (error) {
+      onFrameCaptured();
+      failCapture(error);
+    }
+  }, 100);
+
+  return null;
+}
+
 export function ExportManager() {
-  const { gl, scene, camera, size, setSize, setDpr, setFrameloop, invalidate } = useThree();
+  const { gl, camera, size, frameloop, setSize, setDpr, setFrameloop, invalidate } = useThree();
   const exportRequest = useStore(s => s.exportRequest);
   const clearExportRequest = useStore(s => s.clearExportRequest);
   const file = useStore(s => s.file);
@@ -179,6 +478,7 @@ export function ExportManager() {
   const originalCameraFov = useRef<number | null>(null);
   const originalSize = useRef<{ width: number; height: number; aspect: number } | null>(null);
   const originalStoreState = useRef<{ bondTolerance: number; atomScale: number; frame: number } | null>(null);
+  const originalFrameloop = useRef<'always' | 'demand' | 'never' | null>(null);
 
   // Shared scene/camera/size/store restore after a video export. Reused for both
   // the success and failure paths of the MediaRecorder capture.
@@ -210,8 +510,13 @@ export function ExportManager() {
       useStore.getState().setFrame(originalStoreState.current.frame);
       originalStoreState.current = null;
     }
-    // Hand rendering back to the perf-friendly demand loop now that export is done.
-    setFrameloop('demand');
+    // Restore the exact mode in effect before export. Canvas defaults to
+    // "always" unless configured otherwise, and export must not silently
+    // change application scheduling for the rest of the session.
+    if (originalFrameloop.current) {
+      setFrameloop(originalFrameloop.current);
+      originalFrameloop.current = null;
+    }
     clearExportRequest();
   }, [camera, file, setSize, setDpr, setFrameloop, clearExportRequest]);
 
@@ -220,83 +525,6 @@ export function ExportManager() {
   restoreAfterVideoRef.current = restoreAfterVideo;
 
   // ─── Image Export ─────────────────────────────────────────────
-  const handleImageExport = useCallback(() => {
-    const req = exportRequest;
-    if (!req) return;
-
-    const oldWidth = size.width;
-    const oldHeight = size.height;
-    const targetWidth = req.resolution?.width || oldWidth;
-    const targetHeight = req.resolution?.height || oldHeight;
-    const format = req.format || 'png';
-
-    const originalAspect = (camera as THREE.PerspectiveCamera).aspect;
-    const originalPixelRatio = gl.getPixelRatio();
-    const originalClearColor = new THREE.Color();
-    gl.getClearColor(originalClearColor);
-    const originalClearAlpha = gl.getClearAlpha();
-
-    gl.setPixelRatio(1);
-    gl.setSize(targetWidth, targetHeight, false);
-    if (camera instanceof THREE.PerspectiveCamera) {
-      camera.aspect = targetWidth / targetHeight;
-      camera.updateProjectionMatrix();
-    }
-
-    if (!req.transparent) {
-      gl.setClearColor(new THREE.Color('#10131a'), 1);
-    } else {
-      gl.setClearColor(0x000000, 0);
-    }
-
-    const originalRenderTarget = gl.getRenderTarget();
-    gl.setRenderTarget(null);
-    gl.render(scene, camera);
-
-    const captureCanvas = document.createElement('canvas');
-    captureCanvas.width = targetWidth;
-    captureCanvas.height = targetHeight;
-    const captureContext = captureCanvas.getContext('2d')!;
-    captureContext.drawImage(gl.domElement, 0, 0, targetWidth, targetHeight);
-
-    const mime = `image/${format}`;
-    const quality = format === 'png' ? undefined : 1.0;
-    const ext = format === 'jpeg' ? 'jpg' : format;
-    const filename = `${req.baseName || 'LUPI-export'}-frame${frame + 1}.${ext}`;
-
-    // Use toBlob for reliable downloads with correct file extensions.
-    // toDataURL + link.click() fails in modern Chrome when the <a> isn't in the DOM,
-    // causing missing/wrong file extensions.
-    // Note: toBlob captures pixels synchronously per spec — the callback is just for
-    // delivering the encoded blob. Safe to restore renderer state immediately after.
-    captureCanvas.toBlob(
-      (blob) => {
-        if (blob) {
-          if (req.onComplete) {
-            req.onComplete(true, blob, filename);
-          } else {
-            downloadBlob(blob, filename);
-          }
-        } else {
-          console.error('[ExportManager] toBlob returned null — canvas may be tainted or context lost');
-          if (req.onComplete) req.onComplete(false);
-        }
-        clearExportRequest();
-      },
-      mime,
-      quality,
-    );
-
-    // Restore renderer state immediately — pixels already captured above
-    gl.setRenderTarget(originalRenderTarget);
-    gl.setPixelRatio(originalPixelRatio);
-    gl.setSize(oldWidth, oldHeight, false);
-    if (camera instanceof THREE.PerspectiveCamera) {
-      camera.aspect = originalAspect;
-      camera.updateProjectionMatrix();
-    }
-    gl.setClearColor(originalClearColor, originalClearAlpha);
-  }, [exportRequest, gl, scene, camera, size, clearExportRequest, frame]);
 
   // ─── 3D Model Export (GLB / USDZ) ─────────────────────
   // Scene construction (instancing, LOD, chunked bond detection, progress)
@@ -306,9 +534,11 @@ export function ExportManager() {
   const handle3DExport = useCallback(async () => {
     const req = exportRequest;
     if (!req) return;
+    let exportScene: THREE.Scene | null = null;
 
     try {
-      const { TYPE_COLORS, TYPE_RADII, DEFAULT_TYPE_COLOR, COLORMAPS } = await import('@atlas/scene');
+      req.onStart?.();
+      const { COLORMAPS } = await import('@atlas/scene');
 
       const state = useStore.getState();
       const currentFile = state.file;
@@ -328,6 +558,18 @@ export function ExportManager() {
       }
 
       const isUsdZ = req.type === 'usdz';
+      if (req.artifactSpec && !req.artifactDelivery) {
+        throw new ModelExportLayerIncompleteError(
+          'Immutable model export is missing its transport policy.',
+          { format: isUsdZ ? 'usdz' : 'glb', reason: 'missing-artifact-delivery' },
+        );
+      }
+      if (req.artifactSpec && isUsdZ) {
+        throw new ModelExportLayerIncompleteError(
+          'USDZ is not available through the immutable artifact-key lane because Three\'s exporter embeds process-global allocation ids.',
+          { format: 'usdz', reason: 'process-global-exporter-identifiers' },
+        );
+      }
 
       const mapFn = COLORMAPS[state.colormap] ?? COLORMAPS.viridis;
       const typeSet = new Set<number>();
@@ -343,14 +585,22 @@ export function ExportManager() {
         );
       }
 
+      const resolvedTypeColors = new Map<number, [number, number, number]>();
       const resolveTypeColor = (typeId: number): [number, number, number] => {
+        const cached = resolvedTypeColors.get(typeId);
+        if (cached) return cached;
+        let resolved: [number, number, number];
         if (state.atomColorSource === 'element') {
           const override = state.elementColorOverrides[typeId];
-          if (override) return new THREE.Color(override).toArray() as [number, number, number];
-          return TYPE_COLORS[typeId] ?? DEFAULT_TYPE_COLOR;
+          resolved = override
+            ? hexToRgb(override)
+            : hexToRgb(resolveSemanticTypeColor(currentFrame, typeId));
+        } else {
+          const t = typeToNorm.get(typeId) ?? SINGLE_TYPE_NORM_VALUE;
+          resolved = mapFn(t);
         }
-        const t = typeToNorm.get(typeId) ?? SINGLE_TYPE_NORM_VALUE;
-        return mapFn(t);
+        resolvedTypeColors.set(typeId, resolved);
+        return resolved;
       };
 
       const propertyData = state.colorMode === 'property' && state.colorProperty
@@ -368,6 +618,7 @@ export function ExportManager() {
         }
       }
       const propertyRange = Math.max(propertyMax - propertyMin, MIN_NUMERIC_RANGE);
+      const uniformDisplayColor = hexToRgb(state.uniformAtomColor);
 
       const resolveAtomColor = (atomIndex: number, atomType: number): [number, number, number] => {
         if (state.colorMode === 'property' && propertyData) {
@@ -375,7 +626,7 @@ export function ExportManager() {
           return mapFn(t);
         }
         if (state.colorMode === 'uniform') {
-          return new THREE.Color(state.uniformAtomColor).toArray() as [number, number, number];
+          return uniformDisplayColor;
         }
         return resolveTypeColor(atomType);
       };
@@ -384,34 +635,74 @@ export function ExportManager() {
       //   d ≤ r_cov(A) + r_cov(B) + tolerance
       // using the same tolerance the slider controls, so the export matches
       // the on-screen bond set.
-      let maxTypeId = 0;
-      for (const t of typeSet) if (t > maxTypeId) maxTypeId = t;
-      const covalentRadii = new Float32Array(maxTypeId + 1);
-      for (const t of typeSet) covalentRadii[t] = getElementSpec(t).radius;
+      const hasSourceBonds = (currentFrame.bonds?.length ?? 0) > 0;
+      const mayInferBonds = state.showBonds
+        && !hasSourceBonds
+        && canInferCovalentBonds(currentFrame);
+      if (state.showBonds && req.artifactSpec && !hasSourceBonds && !mayInferBonds) {
+        throw new ModelExportLayerIncompleteError(
+          'The requested bond layer has neither authoritative source pairs nor proven element and distance semantics.',
+          { format: isUsdZ ? 'usdz' : 'glb', reason: 'unproven-bond-semantics' },
+        );
+      }
+      if (state.showBonds && !req.artifactSpec && !hasSourceBonds && !mayInferBonds) {
+        state.setRendererWarning(
+          'Bonds were omitted because this frame does not prove element identities and Angstrom distance units.',
+        );
+      }
+
+      let covalentRadii: Float32Array | undefined;
+      let bondTypes: Int32Array | undefined;
+      if (mayInferBonds) {
+        covalentRadii = new Float32Array(119);
+        bondTypes = new Int32Array(currentFrame.natoms);
+        for (let i = 0; i < currentFrame.natoms; i++) {
+          const atomicNumber = resolveAtomicNumber(currentFrame, currentFrame.types[i])!;
+          bondTypes[i] = atomicNumber;
+          covalentRadii[atomicNumber] = getElementSpec(atomicNumber).radius;
+        }
+      }
 
       const framing = isUsdZ
         ? computeUsdzFraming(currentFrame, state.hiddenAtomTypes)
         : { center: [0, 0, 0] as [number, number, number], arScale: 1 };
 
-      const { scene: exportScene, bondsCapped } = await buildExportScene(currentFrame, {
+      const builtExport = await buildExportScene(currentFrame, {
         format: isUsdZ ? 'usdz' : 'glb',
+        delivery: req.artifactDelivery?.inline
+          ? {
+            mode: 'inline-base64',
+            maxInlineBytes: req.artifactDelivery.maxInlineBytes,
+          }
+          : { mode: 'blob' },
         hiddenTypes: state.hiddenAtomTypes,
         displayRadiusForType: (typeId) =>
-          (TYPE_RADII[typeId] ?? 1.0) * (state.atomScale ?? 1.0) * (state.atomTypeScales[typeId] ?? 1.0),
+          resolveTypeDisplayRadius(currentFrame, typeId)
+            * (state.atomScale ?? 1.0)
+            * (state.atomTypeScales[typeId] ?? 1.0),
         resolveAtomColor,
         materialPreset: state.materialPreset,
         surfacePolish: state.surfacePolish || 0.0,
         surfaceRoughness: state.surfaceRoughness || 0.0,
-        showBonds: state.showBonds,
+        showBonds: state.showBonds && (hasSourceBonds || mayInferBonds),
         bondTolerance: state.bondTolerance ?? 0.45,
         covalentRadii,
+        bondTypes,
         center: framing.center,
         arScale: framing.arScale,
         onProgress: req.onProgress,
       });
-      exportScene.name = currentFile.name || 'LUPI-export';
+      exportScene = builtExport.scene;
+      const { bondsCapped } = builtExport;
+      // Source filenames/URLs are delivery provenance, not semantic render
+      // identity. Embedding them in GLB/USDZ bytes would let two identical
+      // decoded molecules produce different bytes behind one artifactKey.
+      exportScene.name = 'LUPI-render-artifact-v1';
 
       if (bondsCapped) {
+        if (req.artifactSpec) {
+          assertCompleteExportBondLayer({ capped: true, topology: builtExport.bondTopology });
+        }
         state.setRendererWarning(
           `3D export bond count exceeded ${MAX_EXPORT_BONDS.toLocaleString()} — extra bonds were dropped.`,
         );
@@ -457,20 +748,67 @@ export function ExportManager() {
         downloadBlob(blob, filename);
       }
 
-      disposeExportScene(exportScene);
-
     } catch (err) {
       console.error('[3D Export] Failed:', err);
-      if (req.onComplete) req.onComplete(false);
+      if (err instanceof ModelExportBudgetError) {
+        useStore.getState().setRendererWarning(err.message);
+        req.onComplete?.(false, undefined, undefined, {
+          code: err.code,
+          message: err.message,
+          details: {
+            format: err.estimate.format,
+            atomCount: err.estimate.atomCount,
+            bondCount: err.estimate.bondCount,
+            estimatedTriangles: err.estimate.estimatedTriangles,
+            estimatedSceneBytes: err.estimate.estimatedSceneBytes,
+            estimatedEncoderOutputBytes: err.estimate.estimatedEncoderOutputBytes,
+            estimatedDeliveryBytes: err.estimate.estimatedDeliveryBytes,
+            estimatedAllocationBytes: err.estimate.estimatedAllocationBytes,
+            allocationBudgetBytes: err.estimate.allocationBudgetBytes,
+            deliveryMode: err.estimate.deliveryMode,
+            ...(err.estimate.maxInlineBytes === undefined
+              ? {}
+              : { maxInlineBytes: err.estimate.maxInlineBytes }),
+          },
+        });
+      } else if (err instanceof ModelExportSourceTopologyError) {
+        useStore.getState().setRendererWarning(err.message);
+        req.onComplete?.(false, undefined, undefined, {
+          code: err.code,
+          message: err.message,
+          details: { ...err.details },
+        });
+      } else if (err instanceof ModelExportLayerIncompleteError) {
+        useStore.getState().setRendererWarning(err.message);
+        req.onComplete?.(false, undefined, undefined, {
+          code: err.code,
+          message: err.message,
+          details: { ...err.details },
+        });
+      } else {
+        req.onComplete?.(false);
+      }
+    } finally {
+      if (exportScene) disposeExportScene(exportScene);
+      clearExportRequest();
     }
-
-    clearExportRequest();
   }, [exportRequest, clearExportRequest]);
 
   // ─── Start Video Recording (MediaRecorder — native, off-thread) ───────
   const startVideoRecording = useCallback(async () => {
     const req = exportRequest;
     if (!req || isRecording.current) return;
+    try {
+      req.onStart?.();
+    } catch (error) {
+      console.error('[ExportManager] Video export could not claim its request:', error);
+      try {
+        req.onComplete?.(false);
+      } finally {
+        if (useStore.getState().exportRequest === req) clearExportRequest();
+      }
+      return;
+    }
 
     // Keep even dimensions (some encoders/players dislike odd dims).
     const width = (req.resolution?.width || 1920) & ~1;
@@ -519,10 +857,9 @@ export function ExportManager() {
       camera.updateProjectionMatrix();
     }
 
-    // The app runs a demand frameloop (renders only on interaction) for perf, but
-    // the capture loop needs a frame EVERY tick. Force 'always' for the duration of
-    // the export; restoreAfterVideo() hands it back to 'demand'. This is the real
-    // fix for exports stalling when the canvas is otherwise idle.
+    // Capture needs a frame every tick. Record the actual Fiber mode first;
+    // restoreAfterVideo returns to that exact value on every exit path.
+    originalFrameloop.current = frameloop;
     setFrameloop('always');
 
     // ── MediaRecorder (single durable path) ───────────────────────────
@@ -610,13 +947,11 @@ export function ExportManager() {
     // Kick the render loop: switching demand→always doesn't restart rAF on its own,
     // so without this the capture loop can stall before its first tick.
     invalidate();
-  }, [exportRequest, camera, gl, size, clearExportRequest, setSize, setDpr, setFrameloop, invalidate, restoreAfterVideo]);
+  }, [exportRequest, camera, gl, size, frameloop, clearExportRequest, setSize, setDpr, setFrameloop, invalidate, restoreAfterVideo]);
 
   // ─── Effect: Dispatch export actions ──────────────────────────
   // IMPORTANT: Only depend on exportRequest. We use refs for the handlers
   // to break the React dependency cycle that causes "Maximum update depth exceeded".
-  const handleImageExportRef = useRef(handleImageExport);
-  handleImageExportRef.current = handleImageExport;
   const startVideoRecordingRef = useRef(startVideoRecording);
   startVideoRecordingRef.current = startVideoRecording;
   const handle3DExportRef = useRef(handle3DExport);
@@ -625,9 +960,8 @@ export function ExportManager() {
   useEffect(() => {
     if (!exportRequest || !exportRequest.type) return;
 
-    if (exportRequest.type === 'image') {
-      handleImageExportRef.current();
-    }
+    // Raster export is dispatched by the transient Fiber lifecycle rendered
+    // below; it must not run from a React effect or bypass scene useFrame hooks.
     if (exportRequest.type === 'video') {
       startVideoRecordingRef.current();
     }
@@ -637,22 +971,64 @@ export function ExportManager() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportRequest]);
 
-  return isCapturing ? (
-    <VideoCaptureLoop
-      requestRef={requestRef}
-      totalFrames={totalFrames}
-      originalCameraPosition={originalCameraPosition}
-      file={file}
-      isRecording={isRecording}
-      setIsCapturing={setIsCapturing}
-      recorderRef={recorderRef}
-      recorderStoppedRef={recorderStoppedRef}
-      captureStartRef={captureStartRef}
-    />
-  ) : null;
+  return (
+    <>
+      {exportRequest.type === 'image' && (
+        <ImageCaptureFrame request={exportRequest} frameIndex={frame} />
+      )}
+      {isCapturing && (
+        <VideoCaptureLoop
+          requestRef={requestRef}
+          totalFrames={totalFrames}
+          originalCameraPosition={originalCameraPosition}
+          file={file}
+          isRecording={isRecording}
+          setIsCapturing={setIsCapturing}
+          recorderRef={recorderRef}
+          recorderStoppedRef={recorderStoppedRef}
+          captureStartRef={captureStartRef}
+        />
+      )}
+    </>
+  );
 }
 
 // ─── Utility ─────────────────────────────────────────────────────
+function readCanonicalGradientBackgroundV1(value: unknown): {
+  top: string;
+  bottom: string;
+  style: BackgroundGradientStyle;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('The finalized artifact spec is missing its canonical background state.');
+  }
+  const background = value as Record<string, unknown>;
+  const media = background.media;
+  const style = background.style;
+  if (
+    typeof background.top !== 'string'
+    || typeof background.bottom !== 'string'
+    || !media
+    || typeof media !== 'object'
+    || Array.isArray(media)
+    || (media as Record<string, unknown>).kind !== 'gradient'
+    || (media as Record<string, unknown>).projection !== 'equirectangular'
+    || background.projectionMode !== 'scene-background'
+    || (style !== 'linear' && style !== 'radial' && style !== 'spotlight')
+  ) {
+    throw new Error(
+      'The V1 browser capture can only apply a canonical equirectangular gradient scene background.',
+    );
+  }
+  return { top: background.top, bottom: background.bottom, style };
+}
+
+function isFiniteTuple3(value: unknown): value is [number, number, number] {
+  return Array.isArray(value)
+    && value.length === 3
+    && value.every((entry) => typeof entry === 'number' && Number.isFinite(entry));
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

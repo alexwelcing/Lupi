@@ -75,7 +75,12 @@ function EasingPreview({ easing }: { easing: EasingType }) {
 
 // ─── Main Panel ───────────────────────────────────────────────────────
 export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: boolean } = {}) {
-  const { setActivePanel, flythrough, cameraPosition, cameraTarget, cameraFov, triggerExport } = useStore();
+  const setActivePanel = useStore((state) => state.setActivePanel);
+  const flythrough = useStore((state) => state.flythrough);
+  const cameraPosition = useStore((state) => state.cameraPosition);
+  const cameraTarget = useStore((state) => state.cameraTarget);
+  const cameraFov = useStore((state) => state.cameraFov);
+  const triggerExport = useStore((state) => state.triggerExport);
   const setFlythrough = useStore(s => s.setFlythrough);
   const addFlythroughKeyframe = useStore(s => s.addFlythroughKeyframe);
   const removeFlythroughKeyframe = useStore(s => s.removeFlythroughKeyframe);
@@ -231,6 +236,7 @@ export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: 
     seq.keyframes[0].easing = 'ease-in-out'; // Smooth start
 
     const frame = file.trajectory.frames[0];
+    if (!frame) return;
     const natoms = frame.natoms;
     
     // Create 4 more random interesting points

@@ -358,11 +358,6 @@ function extractFrustumPlanes(m: Float32Array): Float32Array[] {
  *  safe and far better than a frozen init. */
 export const WEBGPU_INIT_TIMEOUT_MS = 5000;
 
-/** Resolve to `null` after `ms` so a hung handshake can't outlive the budget. */
-function initTimeout(ms: number): Promise<null> {
-  return new Promise((resolve) => setTimeout(() => resolve(null), ms));
-}
-
 /**
  * Initialize the optional WebGPU compute device. Returns `null` (never throws)
  * when WebGPU is unavailable, no adapter/device can be acquired, OR the whole
@@ -376,6 +371,15 @@ export async function initWebGPU(
     console.warn('WebGPU not supported — falling back');
     return null;
   }
+
+  let timedOut = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      resolve(null);
+    }, Math.max(0, timeoutMs));
+  });
 
   const handshake = (async (): Promise<{ device: GPUDevice; format: GPUTextureFormat } | null> => {
     try {
@@ -407,6 +411,14 @@ export async function initWebGPU(
         device = await adapter.requestDevice();
       }
 
+      // The timeout owns the return value, but the handshake still owns any
+      // device that arrives later. Reclaim it here before it becomes
+      // unreachable; the caller never sees this device and cannot clean it up.
+      if (timedOut) {
+        device.destroy();
+        return null;
+      }
+
       device.lost.then((info: any) => {
         console.error('[WebGPU] device lost:', info.message);
       });
@@ -419,9 +431,8 @@ export async function initWebGPU(
     }
   })();
 
-  // Promise.race the real handshake against a timeout. If the timeout wins we
-  // return null; a late-resolving device is harmless (it just gets GC'd).
-  const result = await Promise.race([handshake, initTimeout(timeoutMs)]);
+  const result = await Promise.race([handshake, timeout]);
+  if (!timedOut && timeoutId !== undefined) clearTimeout(timeoutId);
   if (!result) {
     console.warn(`WebGPU init exceeded ${timeoutMs}ms or failed — falling back to CPU bonds`);
   }

@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
+  DumpParseError,
+  deserializeDumpParseError,
   parseDumpStream,
   parseDumpStreamFromBytes,
+  serializeDumpParseError,
   canStreamDump,
 } from './dumpStreamParser';
 
@@ -26,6 +29,53 @@ async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
 }
 
 describe('parseDumpStream (text transport)', () => {
+  it('round-trips typed parse errors through structured-clone-safe worker metadata', () => {
+    const original = new DumpParseError(
+      'DUPLICATE_ATOM_ID',
+      'duplicate 7',
+      { frameIndex: 2, timestep: 50, atomRow: 4, atomId: 7 },
+    );
+    const revived = deserializeDumpParseError(structuredClone(serializeDumpParseError(original)));
+    expect(revived).toBeInstanceOf(DumpParseError);
+    expect(revived).toMatchObject({
+      code: 'DUPLICATE_ATOM_ID',
+      frameIndex: 2,
+      timestep: 50,
+      atomRow: 4,
+      atomId: 7,
+    });
+
+    const invalidType = new DumpParseError(
+      'INVALID_ATOM_TYPE',
+      'invalid type 0',
+      { frameIndex: 1, timestep: 25, atomRow: 8, value: 0 },
+    );
+    expect(deserializeDumpParseError(structuredClone(serializeDumpParseError(invalidType))))
+      .toMatchObject({
+        name: 'DumpParseError',
+        code: 'INVALID_ATOM_TYPE',
+        frameIndex: 1,
+        timestep: 25,
+        atomRow: 8,
+        value: 0,
+      });
+
+    const invalidCoordinate = new DumpParseError(
+      'INVALID_ATOM_COORDINATE',
+      'invalid coordinate 1e',
+      { frameIndex: 3, timestep: 75, atomRow: 2, value: '1e' },
+    );
+    expect(deserializeDumpParseError(structuredClone(serializeDumpParseError(invalidCoordinate))))
+      .toMatchObject({
+        name: 'DumpParseError',
+        code: 'INVALID_ATOM_COORDINATE',
+        frameIndex: 3,
+        timestep: 75,
+        atomRow: 2,
+        value: '1e',
+      });
+  });
+
   it('emits header + complete for a small dump', async () => {
     const events = await collect(parseDumpStream(SIMPLE_3_ATOMS));
     expect(events[0].type).toBe('header');
@@ -36,6 +86,15 @@ describe('parseDumpStream (text transport)', () => {
       expect(Array.from(events[0].frame.boxBounds)).toEqual([0, 10, 0, 10, 0, 10]);
       expect(Array.from(events[0].frame.types)).toEqual([1, 2, 1]);
       expect(Array.from(events[0].frame.positions)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect(events[0].frame.identity).toEqual({ kind: 'source-id', unique: true });
+      expect(events[0].frame.typeSemantics).toEqual({
+        kind: 'opaque',
+        provenance: 'lammps-type-id',
+      });
+      expect(events[0].frame.distanceSemantics).toEqual({
+        kind: 'unknown',
+        provenance: 'lammps-dump',
+      });
     }
   });
 
@@ -65,6 +124,74 @@ describe('parseDumpStream (text transport)', () => {
       expect(last.loadedAtoms).toBe(3);
       expect(last.hasMoreFrames).toBe(true);
     }
+  });
+
+  it('never upgrades progressive source identity when a later duplicate fails validation', async () => {
+    const duplicate = SIMPLE_3_ATOMS.replace('3 1 7.0 8.0 9.0', '2 1 7.0 8.0 9.0');
+    const events = parseDumpStream(duplicate);
+    const first = await events.next();
+    expect(first.done).toBe(false);
+    if (!first.done && first.value.type === 'header') {
+      expect(first.value.frame.identity).toEqual({ kind: 'source-id', unique: false });
+      let failure: unknown;
+      try {
+        while (!(await events.next()).done) { /* consume */ }
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(DumpParseError);
+      expect(failure).toMatchObject({ code: 'DUPLICATE_ATOM_ID', atomRow: 3, atomId: 2 });
+      expect(first.value.frame.identity).toEqual({ kind: 'source-id', unique: false });
+    }
+  });
+
+  it('rejects integer tokens with trailing junk instead of shifting later columns', async () => {
+    const badId = SIMPLE_3_ATOMS.replace('1 1 1.0 2.0 3.0', '1abc 1 1.0 2.0 3.0');
+    await expect(collect(parseDumpStream(badId))).rejects.toMatchObject({
+      code: 'INVALID_ATOM_ID',
+      atomRow: 1,
+    });
+
+    const badType = SIMPLE_3_ATOMS.replace('1 1 1.0 2.0 3.0', '1 1abc 1.0 2.0 3.0');
+    await expect(collect(parseDumpStream(badType))).rejects.toMatchObject({
+      code: 'INVALID_ATOM_TYPE',
+      atomRow: 1,
+      value: '1abc',
+    });
+  });
+
+  it.each(['1abc', '1e'])(
+    'rejects malformed required coordinate token %s instead of accepting its numeric prefix',
+    async (invalidCoordinate) => {
+      const malformed = SIMPLE_3_ATOMS.replace(
+        '1 1 1.0 2.0 3.0',
+        `1 1 ${invalidCoordinate} 2.0 3.0`,
+      );
+      await expect(collect(parseDumpStream(malformed))).rejects.toMatchObject({
+        code: 'INVALID_ATOM_COORDINATE',
+        frameIndex: 0,
+        timestep: 1,
+        atomRow: 1,
+        value: invalidCoordinate,
+      });
+    },
+  );
+
+  it('publishes opaque type and unknown distance semantics in the progressive header', async () => {
+    const events = parseDumpStream(SIMPLE_3_ATOMS);
+    const first = await events.next();
+    expect(first.done).toBe(false);
+    if (!first.done && first.value.type === 'header') {
+      expect(first.value.frame.typeSemantics).toEqual({
+        kind: 'opaque',
+        provenance: 'lammps-type-id',
+      });
+      expect(first.value.frame.distanceSemantics).toEqual({
+        kind: 'unknown',
+        provenance: 'lammps-dump',
+      });
+    }
+    await events.return(undefined);
   });
 });
 
@@ -221,6 +348,20 @@ describe('canStreamDump', () => {
 });
 
 describe('dialect support in the streaming core', () => {
+  it('uses deterministic row IDs without claiming cross-frame stability when id is absent', async () => {
+    const noId = SIMPLE_3_ATOMS
+      .replace('ITEM: ATOMS id type x y z', 'ITEM: ATOMS type x y z')
+      .replace('1 1 1.0 2.0 3.0', '1 1.0 2.0 3.0')
+      .replace('2 2 4.0 5.0 6.0', '2 4.0 5.0 6.0')
+      .replace('3 1 7.0 8.0 9.0', '1 7.0 8.0 9.0');
+    const events = await collect(parseDumpStream(noId));
+    const header = events.find((e) => e.type === 'header');
+    if (header?.type === 'header') {
+      expect(Array.from(header.frame.ids)).toEqual([1, 2, 3]);
+      expect(header.frame.identity).toEqual({ kind: 'synthetic-row', unique: true });
+    }
+  });
+
   it('parses a triclinic box, carrying tilt factors', async () => {
     const triclinic = SIMPLE_3_ATOMS
       .replace('BOX BOUNDS pp pp pp', 'BOX BOUNDS xy xz yz pp pp pp')
@@ -291,4 +432,37 @@ describe('dialect support in the streaming core', () => {
       expect(Array.from(header.frame.positions)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     }
   });
+
+  it.each(['1abc', '1e'])(
+    'skips an optional property whose first token is malformed numeric text (%s)',
+    async (invalidProperty) => {
+      const malformed = SIMPLE_3_ATOMS
+        .replace('id type x y z', 'id type x y z c_bad')
+        .replace('1 1 1.0 2.0 3.0', `1 1 1.0 2.0 3.0 ${invalidProperty}`)
+        .replace('2 2 4.0 5.0 6.0', '2 2 4.0 5.0 6.0 2.5')
+        .replace('3 1 7.0 8.0 9.0', '3 1 7.0 8.0 9.0 3.5');
+      const events = await collect(parseDumpStream(malformed));
+      const header = events.find((event) => event.type === 'header');
+      if (header?.type === 'header') {
+        expect(header.frame.properties.has('c_bad')).toBe(false);
+        expect(Array.from(header.frame.positions)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      }
+    },
+  );
+
+  it.each(['2abc', '2e'])(
+    'records a malformed later numeric property token (%s) as missing, not as its prefix',
+    async (invalidProperty) => {
+      const malformed = SIMPLE_3_ATOMS
+        .replace('id type x y z', 'id type x y z c_mixed')
+        .replace('1 1 1.0 2.0 3.0', '1 1 1.0 2.0 3.0 1.5')
+        .replace('2 2 4.0 5.0 6.0', `2 2 4.0 5.0 6.0 ${invalidProperty}`)
+        .replace('3 1 7.0 8.0 9.0', '3 1 7.0 8.0 9.0 3.5');
+      const events = await collect(parseDumpStream(malformed));
+      const header = events.find((event) => event.type === 'header');
+      if (header?.type === 'header') {
+        expect(Array.from(header.frame.properties.get('c_mixed') ?? [])).toEqual([1.5, NaN, 3.5]);
+      }
+    },
+  );
 });

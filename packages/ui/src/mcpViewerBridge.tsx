@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { ColorMode, ColormapName, Frame, Trajectory } from '@atlas/core/types';
-import { getAtomicNumberBySymbol, getElementSpec, getElementSpecBySymbol } from '@atlas/core';
+import {
+  ELEMENT_DATA,
+  canInferCovalentBonds,
+  getAtomicNumberBySymbol,
+  getElementSpecBySymbol,
+  hasAngstromDistances,
+  hasCompleteElementMapping,
+  normalizeAtomTypeSemantics,
+  normalizeDistanceSemantics,
+  resolveAtomicNumber,
+} from '@atlas/core';
+import { validateSourceBondTopology } from '@atlas/scene';
 import type { NistCatalogEntry, NistSummary } from '@atlas/nist';
 import { filterCatalog, loadNistCatalog, summarize } from '@atlas/nist';
 import { useStore, type LoadedFile } from './store';
@@ -9,6 +20,7 @@ import { useFirebaseAuth } from './auth/useFirebaseAuth';
 import { MOLECULE_PROVIDERS, searchMolecules, type MoleculeHit, type MoleculeQuery, type MoleculeSourceId } from './molecules';
 import { MoleculeSearch } from './molecules/MoleculeSearch';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
+import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { openMolecule } from './viewer/openMolecule';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
@@ -166,6 +178,8 @@ interface LupiMcpStatus {
   atomCount: number;
   frame: number;
   playing: boolean;
+  bondTopology: 'source' | 'inferred' | 'unavailable';
+  showBondsEffective: boolean;
 }
 
 interface LupiMcpDriver {
@@ -449,7 +463,18 @@ export function McpViewerBridge() {
     window.dispatchEvent(new CustomEvent('lupi:mcp:ready', { detail: driver.state() }));
 
     const runUrlRequests = () => {
-      const requests = readMcpUrlRequests();
+      if (!isDevelopmentMcpUrlAutorunEnabled()) return;
+      let requests: LupiMcpRequest[];
+      try {
+        requests = readMcpUrlRequests();
+      } catch (error) {
+        emitLupiMcpResponse(
+          [errorResponse('url-bootstrap', 'lupi.load_molecule_url', error)],
+          'url-bootstrap',
+          { source: 'url' },
+        );
+        return;
+      }
       if (requests.length === 0) return;
       const runKey = window.location.href;
       if (window.__lupiViewerMcpUrlRunKey === runKey) return;
@@ -1204,9 +1229,10 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
     if (request.tool === 'lupi.load_molecule_url') {
       const url = readString(request.arguments.url);
       if (!url) throw new Error('lupi.load_molecule_url requires a URL.');
-      const result = await openMolecule({ kind: 'url', url, history: 'none' });
+      const allowed = assertAllowedRemoteMoleculeUrl(url, 'mcp', window.location.origin);
+      const result = await openMolecule({ kind: 'url', url: allowed.url, history: 'none', strictRemote: true });
       if (!result.ok) throw new Error(result.message);
-      transcript.push(`loaded molecule URL: ${url}`);
+      transcript.push(`loaded molecule URL: ${allowed.url}`);
       return okResponse(request, transcript, { viewer: readViewerState() });
     }
 
@@ -1350,7 +1376,12 @@ function parseViewerAgentCommand(command: string): LupiMcpRequest[] {
 
   const recognizedUrl = recognizeLupiUrlPayload(trimmed, typeof window !== 'undefined' ? window.location.href : undefined);
   if (recognizedUrl?.kind === 'loadUrl') {
-    return [makeRequest('lupi.load_molecule_url', { url: recognizedUrl.url })];
+    const allowed = assertAllowedRemoteMoleculeUrl(
+      recognizedUrl.url,
+      'mcp',
+      typeof window === 'undefined' ? 'https://lupi.live' : window.location.origin,
+    );
+    return [makeRequest('lupi.load_molecule_url', { url: allowed.url })];
   }
   if (recognizedUrl?.kind === 'savedView') {
     return [makeRequest('lupi.open_saved_view', { slug: recognizedUrl.slug })];
@@ -1392,7 +1423,20 @@ function parseViewerAgentCommand(command: string): LupiMcpRequest[] {
 }
 
 function hasMcpUrlRequests() {
-  return readMcpUrlRequests().length > 0;
+  try {
+    return readMcpUrlRequests().length > 0;
+  } catch {
+    // An unsafe staged URL must neither execute nor crash the visible harness.
+    // Treat it as present so the harness does not silently substitute Benzene.
+    return true;
+  }
+}
+
+function isDevelopmentMcpUrlAutorunEnabled(): boolean {
+  if (!import.meta.env.DEV || import.meta.env.VITE_MCP_URL_AUTORUN !== 'true' || typeof window === 'undefined') return false;
+  return window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+    || window.location.hostname === '[::1]';
 }
 
 function readMcpUrlRequests(): LupiMcpRequest[] {
@@ -1742,7 +1786,10 @@ function resolveProceduralMolecule(
     triclinic: false,
     columns: ['id', 'type', 'x', 'y', 'z', 'radial', 'height', 'grain'],
     ids,
+    identity: { kind: 'synthetic-row', unique: true },
     types,
+    typeSemantics: { kind: 'atomic-number', provenance: 'procedural-symbol' },
+    distanceSemantics: { kind: 'angstrom', provenance: 'procedural' },
     positions,
     bonds: new Int32Array(0),
     properties: new Map([
@@ -1786,7 +1833,12 @@ async function fetchPubChemMolecule(path: string, name: string, inputType: Molec
 }
 
 function makeLoadedFile(molecule: ResolvedMolecule): LoadedFile {
-  const frame = molecule.frame ?? makeFrame(requireAtoms(molecule));
+  const frame = molecule.frame ?? makeFrame(
+    requireAtoms(molecule),
+    molecule.source === 'manual' && molecule.inputType === 'xyz'
+      ? 'format-convention'
+      : 'source-declared',
+  );
   const trajectory: Trajectory = {
     frames: [frame],
     totalFrames: 1,
@@ -1801,7 +1853,10 @@ function makeLoadedFile(molecule: ResolvedMolecule): LoadedFile {
   };
 }
 
-function makeFrame(atoms: MoleculeAtom[]): Frame {
+function makeFrame(
+  atoms: MoleculeAtom[],
+  distanceProvenance: 'source-declared' | 'format-convention',
+): Frame {
   const natoms = atoms.length;
   const ids = new Int32Array(natoms);
   const types = new Int32Array(natoms);
@@ -1835,7 +1890,10 @@ function makeFrame(atoms: MoleculeAtom[]): Frame {
     triclinic: false,
     columns: ['id', 'type', 'x', 'y', 'z'],
     ids,
+    identity: { kind: 'synthetic-row', unique: true },
     types,
+    typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+    distanceSemantics: { kind: 'angstrom', provenance: distanceProvenance },
     positions,
     bonds: new Int32Array(0),
     properties: new Map(),
@@ -1851,6 +1909,10 @@ function readViewerState() {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     showBonds: state.showBonds,
+    showBondsEffective: state.showBonds && effectiveBondTopology(frame) !== 'unavailable',
+    bondTopology: effectiveBondTopology(frame),
+    typeSemantics: frame ? normalizeAtomTypeSemantics(frame.typeSemantics) : null,
+    distanceSemantics: frame ? normalizeDistanceSemantics(frame.distanceSemantics) : null,
     atomScale: state.atomScale,
     showCell: state.showCell,
     showAxes: state.showAxes,
@@ -1876,13 +1938,34 @@ function readMcpStatus(): LupiMcpStatus {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     playing: state.playing,
+    bondTopology: effectiveBondTopology(frame),
+    showBondsEffective: state.showBonds && effectiveBondTopology(frame) !== 'unavailable',
   };
+}
+
+function effectiveBondTopology(frame: Frame | undefined): 'source' | 'inferred' | 'unavailable' {
+  if (!frame) return 'unavailable';
+  if (frame.bonds.length > 0) {
+    return validateSourceBondTopology(frame).valid ? 'source' : 'unavailable';
+  }
+  return canInferCovalentBonds(frame) ? 'inferred' : 'unavailable';
 }
 
 function applyViewerPatch(patch: ViewerPatch, transcript: string[]) {
   const next: Partial<ReturnType<typeof useStore.getState>> = {};
   const applied: Record<string, unknown> = {};
   const state = useStore.getState();
+  const frame = state.file?.trajectory.frames[state.frame];
+  if (patch.showBonds === true && effectiveBondTopology(frame) === 'unavailable') {
+    throw new Error(
+      'Bonds cannot be shown for this frame: no valid source topology is present, and covalent inference requires complete element identity plus angstrom distance semantics.',
+    );
+  }
+  if (patch.colorScheme === 'element' && (!frame || !hasCompleteElementMapping(frame))) {
+    throw new Error(
+      'Element coloring requires a complete element mapping for every active atom type. Use a categorical colorway or provide an element map.',
+    );
+  }
   if (patch.colorScheme !== undefined) {
     state.setColorScheme(patch.colorScheme);
     applied.colorScheme = patch.colorScheme;
@@ -1976,6 +2059,16 @@ function moleculeFromActiveViewer(): ResolvedMolecule | null {
   if (!state.file || !frame) return null;
   if (frame.natoms > MAX_XYZ_EXPORT_ATOMS) {
     throw new Error(`XYZ export is limited to ${formatCount(MAX_XYZ_EXPORT_ATOMS)} atoms from the browser MCP bridge; active frame has ${formatCount(frame.natoms)} atoms.`);
+  }
+  if (!hasCompleteElementMapping(frame)) {
+    throw new Error(
+      'XYZ export requires a complete element mapping for every active atom type. Add or load an element map, or export GLB/USDZ to preserve opaque type IDs without inventing chemical symbols.',
+    );
+  }
+  if (!hasAngstromDistances(frame)) {
+    throw new Error(
+      'XYZ export requires coordinates known to be in angstroms. This frame uses unknown source units; use GLB/USDZ or reload it with explicit unit metadata so XYZ reopen cannot silently reinterpret the coordinates.',
+    );
   }
   const name = state.file.name.replace(/^MCP:\s*/, '');
   return {
@@ -2148,9 +2241,11 @@ function formulaForAtoms(atoms: MoleculeAtom[]): string {
 }
 
 function formulaForFrame(frame: Frame): string {
+  if (!hasCompleteElementMapping(frame)) return '';
   const counts = new Map<string, number>();
   for (let i = 0; i < frame.natoms; i += 1) {
-    const element = symbolFromAtomicNumber(frame.types[i]);
+    const atomicNumber = resolveAtomicNumber(frame, frame.types[i])!;
+    const element = ELEMENT_DATA[atomicNumber].symbol;
     counts.set(element, (counts.get(element) ?? 0) + 1);
   }
   return formulaForCounts(counts);
@@ -2180,9 +2275,18 @@ function atomsToXYZ(name: string, atoms: MoleculeAtom[]): string {
 }
 
 function frameToXYZ(name: string, frame: Frame): string {
+  if (!hasCompleteElementMapping(frame)) {
+    throw new Error(
+      'XYZ serialization requires a complete element mapping for every atom type.',
+    );
+  }
+  if (!hasAngstromDistances(frame)) {
+    throw new Error('XYZ serialization requires coordinates known to be in angstroms.');
+  }
   const lines = [String(frame.natoms), name];
   for (let i = 0; i < frame.natoms; i += 1) {
-    const element = symbolFromAtomicNumber(frame.types[i]);
+    const atomicNumber = resolveAtomicNumber(frame, frame.types[i])!;
+    const element = ELEMENT_DATA[atomicNumber].symbol;
     lines.push(
       `${element.padEnd(3)} ${frame.positions[i * 3].toFixed(6).padStart(12)} ${frame.positions[i * 3 + 1].toFixed(6).padStart(12)} ${frame.positions[i * 3 + 2].toFixed(6).padStart(12)}`
     );
@@ -2500,10 +2604,6 @@ function positiveModulo(value: number, divisor: number): number {
 function isAllowedMessageOrigin(origin: string): boolean {
   if (!origin || origin === window.location.origin) return true;
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-}
-
-function symbolFromAtomicNumber(atomicNumber: number): string {
-  return getElementSpec(atomicNumber).symbol;
 }
 
 function catalogEntryToGenerateArgs(entry: NistCatalogEntry): Record<string, unknown> {

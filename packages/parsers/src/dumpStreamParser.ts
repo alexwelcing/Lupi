@@ -37,6 +37,138 @@
 import type { Frame } from '@atlas/core/types';
 import { analyzeDumpHead } from './dumpContract';
 
+export type DumpParseErrorCode =
+  | 'INVALID_ATOM_ID'
+  | 'DUPLICATE_ATOM_ID'
+  | 'INVALID_ATOM_TYPE'
+  | 'INVALID_ATOM_COORDINATE'
+  | 'GLIMBIN_ATOM_TYPE_OUT_OF_RANGE';
+
+export interface DumpParseErrorPayload {
+  message: string;
+  code: DumpParseErrorCode;
+  frameIndex: number;
+  timestep: number;
+  atomRow: number;
+  atomId?: number;
+  value?: number | string;
+}
+
+/**
+ * Actionable scientific-data error raised when a required LAMMPS atom token
+ * cannot be represented truthfully. Consumers may branch on `code` without
+ * scraping the message while people still get exact frame and row context.
+ */
+export class DumpParseError extends Error {
+  readonly code: DumpParseErrorCode;
+  readonly frameIndex: number;
+  readonly timestep: number;
+  readonly atomRow: number;
+  readonly atomId?: number;
+  readonly value?: number | string;
+
+  constructor(
+    code: DumpParseErrorCode,
+    message: string,
+    context: {
+      frameIndex: number;
+      timestep: number;
+      atomRow: number;
+      atomId?: number;
+      value?: number | string;
+    },
+  ) {
+    super(message);
+    this.name = 'DumpParseError';
+    this.code = code;
+    this.frameIndex = context.frameIndex;
+    this.timestep = context.timestep;
+    this.atomRow = context.atomRow;
+    this.atomId = context.atomId;
+    this.value = context.value;
+  }
+}
+
+/** Structured-clone-safe typed error metadata for parser workers. */
+export function serializeDumpParseError(error: unknown): DumpParseErrorPayload | null {
+  if (!(error instanceof DumpParseError)) return null;
+  return {
+    message: error.message,
+    code: error.code,
+    frameIndex: error.frameIndex,
+    timestep: error.timestep,
+    atomRow: error.atomRow,
+    ...(error.atomId === undefined ? {} : { atomId: error.atomId }),
+    ...(error.value === undefined ? {} : { value: error.value }),
+  };
+}
+
+/** Restore typed parser failures on the main thread; generic worker failures
+ * stay generic Errors and cannot accidentally acquire scientific semantics. */
+export function deserializeDumpParseError(payload: unknown): Error {
+  const p = payload as Partial<DumpParseErrorPayload> | null;
+  const message = typeof p?.message === 'string' ? p.message : 'Parser worker failed';
+  if (
+    (
+      p?.code === 'INVALID_ATOM_ID' ||
+      p?.code === 'DUPLICATE_ATOM_ID' ||
+      p?.code === 'INVALID_ATOM_TYPE' ||
+      p?.code === 'INVALID_ATOM_COORDINATE' ||
+      p?.code === 'GLIMBIN_ATOM_TYPE_OUT_OF_RANGE'
+    ) &&
+    Number.isInteger(p.frameIndex) &&
+    Number.isInteger(p.timestep) &&
+    Number.isInteger(p.atomRow)
+  ) {
+    return new DumpParseError(p.code, message, {
+      frameIndex: p.frameIndex!,
+      timestep: p.timestep!,
+      atomRow: p.atomRow!,
+      ...(typeof p.atomId === 'number' ? { atomId: p.atomId } : {}),
+      ...(
+        typeof p.value === 'number' || typeof p.value === 'string'
+          ? { value: p.value }
+          : {}
+      ),
+    });
+  }
+  return new Error(message);
+}
+
+/**
+ * Allocation-bounded uniqueness check for the Int32 identity domain. A
+ * JavaScript Set costs several boxed allocations per atom; this open-addressed
+ * table uses one Int32 slot per hash bucket and reserves zero as the empty
+ * sentinel (LAMMPS atom IDs are required to be positive).
+ */
+class Int32IdSet {
+  private readonly keys: Int32Array;
+  private readonly mask: number;
+
+  constructor(expectedSize: number) {
+    let capacity = 2;
+    while (capacity < expectedSize * 2) capacity *= 2;
+    this.keys = new Int32Array(capacity);
+    this.mask = capacity - 1;
+  }
+
+  add(value: number): boolean {
+    let hash = value | 0;
+    hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+    hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+    let slot = (hash ^ (hash >>> 16)) & this.mask;
+    while (true) {
+      const existing = this.keys[slot];
+      if (existing === 0) {
+        this.keys[slot] = value;
+        return true;
+      }
+      if (existing === value) return false;
+      slot = (slot + 1) & this.mask;
+    }
+  }
+}
+
 /** Yield-after-this-many-atoms granularity. Sized so each chunk fits
  *  comfortably in a single animation frame's parse budget on a phone
  *  so the renderer keeps painting between chunks. */
@@ -103,20 +235,22 @@ export interface DumpStreamOptions {
 }
 
 // ─── Fast ASCII number scanning (on bytes) ───────────────────────────
-// `scanEnd` is a module-level cursor-out so the scanner returns a value
-// without allocating a tuple.
-
-let scanEnd = 0;
-
 const POW10 = new Float64Array(23);
 for (let i = 0; i < 23; i++) POW10[i] = Math.pow(10, i);
 
+const EXACT_DECIMAL_FLOAT = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+function isExactFiniteFloatText(token: string): boolean {
+  return EXACT_DECIMAL_FLOAT.test(token) && Number.isFinite(Number(token));
+}
+
 /** Parse a float starting at `i`. Handles sign, decimals, and e-notation
  *  (LAMMPS writes both `1.73148` and `2.169e+01` styles). Non-numeric
- *  tokens (e.g. an `element` column) yield NaN, with the cursor advanced
- *  past the token either way. Caller guarantees a terminator byte
- *  (newline) exists at or before `end`. Within float32 precision — where
- *  every parsed coordinate/property lands — results match parseFloat. */
+ *  tokens (e.g. an `element` column) yield NaN. Caller passes the lexical
+ *  token boundary and guarantees a terminator byte
+ *  (newline) exists at or before `end`. For valid decimal tokens, results
+ *  match parseFloat within the float32 precision used by coordinates and
+ *  properties. Unlike parseFloat, numeric prefixes do not count as tokens. */
 function scanFloat(b: Uint8Array, i: number, end: number): number {
   let c = b[i];
   let neg = false;
@@ -146,7 +280,6 @@ function scanFloat(b: Uint8Array, i: number, end: number): number {
   if (!any) {
     // Not a number — skip the rest of the token so the caller stays in sync.
     while (i < end && c !== 32 && c !== 9 && c !== 13 && c !== 10) c = b[++i];
-    scanEnd = i;
     return NaN;
   }
   if (c === 101 || c === 69 /* e E */) {
@@ -159,18 +292,44 @@ function scanFloat(b: Uint8Array, i: number, end: number): number {
       c = b[++i];
     }
     let e = 0;
+    let exponentHasDigit = false;
     while (c >= 48 && c <= 57) {
       e = e * 10 + (c - 48);
+      exponentHasDigit = true;
       c = b[++i];
     }
+    if (!exponentHasDigit) return NaN;
     exp10 += eneg ? -e : e;
   }
-  scanEnd = i;
+  // parseFloat-style prefix acceptance is unsafe for columnar trajectory
+  // data: `1abc` and `1e` are one malformed token, never the number 1.
+  if (i !== end) return NaN;
   let v: number;
   if (exp10 === 0) v = mant;
   else if (exp10 > 0) v = exp10 <= 22 ? mant * POW10[exp10] : mant * Math.pow(10, exp10);
   else v = exp10 >= -22 ? mant / POW10[-exp10] : mant * Math.pow(10, exp10);
   return neg ? -v : v;
+}
+
+/** Parse an exact positive base-10 integer token into the storage domain used
+ * by Frame.ids. Decimal/exponent spellings are rejected even when IEEE-754
+ * rounding would make their numeric value look integral. */
+function scanPositiveInt32Token(b: Uint8Array, start: number, tokenEnd: number): number | undefined {
+  let i = start;
+  if (b[i] === 43 /* + */) {
+    i++;
+  }
+  if (i >= tokenEnd) return undefined;
+
+  let value = 0;
+  const limit = 2147483647;
+  for (; i < tokenEnd; i++) {
+    const digit = b[i] - 48;
+    if (digit < 0 || digit > 9) return undefined;
+    if (value > Math.floor((limit - digit) / 10)) return undefined;
+    value = value * 10 + digit;
+  }
+  return value > 0 ? value : undefined;
 }
 
 // Per-column write targets for the row loop. Small ints dispatch faster
@@ -378,6 +537,17 @@ async function* parseDumpStreamCore(
       positions: new Float32Array(natoms * 3),
       bonds: new Int32Array(0),
       properties: new Map(),
+      // A numeric LAMMPS `type` is a simulation-specific label until an
+      // explicit element map is supplied. Dump coordinates likewise carry no
+      // unit style on their own, so distance must remain unknown.
+      typeSemantics: { kind: 'opaque', provenance: 'lammps-type-id' },
+      distanceSemantics: { kind: 'unknown', provenance: 'lammps-dump' },
+      // Source IDs cannot be called unique until every row has been scanned.
+      // The same Frame object is upgraded after validation below; progressive
+      // consumers therefore never observe an unverified stable-identity claim.
+      identity: idIdx >= 0
+        ? { kind: 'source-id', unique: false }
+        : { kind: 'synthetic-row', unique: true },
     };
     const propArrays: Float32Array[] = [];
 
@@ -393,7 +563,7 @@ async function* parseDumpStreamCore(
       if (probeNl > cursor) {
         const probe = headerDecoder.decode(buf.subarray(cursor, probeNl)).trim().split(/\s+/);
         for (const c of extraCols) {
-          if (c < probe.length && Number.isFinite(parseFloat(probe[c]))) {
+          if (c < probe.length && isExactFiniteFloatText(probe[c])) {
             const arr = new Float32Array(natoms);
             frame.properties.set(columns[c], arr);
             propSlot[c] = propArrays.length;
@@ -412,6 +582,7 @@ async function* parseDumpStreamCore(
     const positions = frame.positions;
     const types = frame.types;
     const ids = frame.ids;
+    const seenSourceIds = idIdx >= 0 ? new Int32IdSet(natoms) : null;
 
     let i = 0;
     let lastYieldAt = 0;
@@ -448,21 +619,106 @@ async function* parseDumpStreamCore(
       // the guaranteed terminator for every numeric scan.
       let p = cursor;
       let rx = 0, ry = 0, rz = 0;
+      let rowHasSourceId = false;
+      let rowHasType = false;
       for (let c = 0; c < ncols && p < lineEnd; c++) {
         let ch = buf[p];
         while (p < lineEnd && (ch === 32 || ch === 9 || ch === 13)) ch = buf[++p];
         if (p >= lineEnd) break;
-        const v = scanFloat(buf, p, lineEnd);
-        p = scanEnd;
+        const tokenStart = p;
+        let tokenEnd = p;
+        while (
+          tokenEnd < lineEnd &&
+          buf[tokenEnd] !== 32 &&
+          buf[tokenEnd] !== 9 &&
+          buf[tokenEnd] !== 13
+        ) tokenEnd++;
+        const v = scanFloat(buf, p, tokenEnd);
+        // Advance by the lexical token, not by the numeric prefix consumed by
+        // scanFloat. This prevents malformed values such as `1abc` from being
+        // split into two apparent columns and poisoning every field after it.
+        p = tokenEnd;
         switch (targets[c]) {
-          case T_ID: ids[i] = v | 0; break;
-          case T_TYPE: types[i] = v | 0; break;
-          case T_X: rx = v; break;
-          case T_Y: ry = v; break;
-          case T_Z: rz = v; break;
+          case T_ID: {
+            const exactId = scanPositiveInt32Token(buf, tokenStart, tokenEnd);
+            if (exactId === undefined) {
+              throw new DumpParseError(
+                'INVALID_ATOM_ID',
+                `LAMMPS atom ID must be a positive integer in the Int32 range 1..2147483647; frame ${frameIndex} ` +
+                  `(timestep ${timestep}), row ${i + 1} contains ${String(v)}. ` +
+                  'Export a unique integer `id` column or omit it to use frame-local row identity.',
+                { frameIndex, timestep, atomRow: i + 1, atomId: v },
+              );
+            }
+            if (!seenSourceIds!.add(exactId)) {
+              throw new DumpParseError(
+                'DUPLICATE_ATOM_ID',
+                `Duplicate LAMMPS atom ID ${exactId} in frame ${frameIndex} (timestep ${timestep}), ` +
+                  `row ${i + 1}. Atom IDs must be unique within every frame before ` +
+                  'cross-frame atom tracking is safe.',
+                { frameIndex, timestep, atomRow: i + 1, atomId: exactId },
+              );
+            }
+            ids[i] = exactId;
+            rowHasSourceId = true;
+            break;
+          }
+          case T_TYPE: {
+            const exactType = scanPositiveInt32Token(buf, tokenStart, tokenEnd);
+            if (exactType === undefined) {
+              const rawType = headerDecoder.decode(buf.subarray(tokenStart, tokenEnd));
+              throw new DumpParseError(
+                'INVALID_ATOM_TYPE',
+                `LAMMPS atom type must be a positive integer in the Int32 range 1..2147483647; ` +
+                  `frame ${frameIndex} (timestep ${timestep}), row ${i + 1} contains ${rawType}. ` +
+                  'Export an exact positive integer `type` column; type values are opaque LAMMPS IDs, not elements.',
+                { frameIndex, timestep, atomRow: i + 1, value: rawType },
+              );
+            }
+            types[i] = exactType;
+            rowHasType = true;
+            break;
+          }
+          case T_X:
+          case T_Y:
+          case T_Z: {
+            if (!Number.isFinite(v)) {
+              const rawCoordinate = headerDecoder.decode(buf.subarray(tokenStart, tokenEnd));
+              throw new DumpParseError(
+                'INVALID_ATOM_COORDINATE',
+                `LAMMPS coordinate ${columns[c]} must be a finite decimal number; frame ${frameIndex} ` +
+                  `(timestep ${timestep}), row ${i + 1} contains ${rawCoordinate}.`,
+                { frameIndex, timestep, atomRow: i + 1, value: rawCoordinate },
+              );
+            }
+            if (targets[c] === T_X) rx = v;
+            else if (targets[c] === T_Y) ry = v;
+            else rz = v;
+            break;
+          }
           case T_PROP: propArrays[propSlot[c]][i] = v; break;
         }
       }
+
+      if (idIdx >= 0 && !rowHasSourceId) {
+        throw new DumpParseError(
+          'INVALID_ATOM_ID',
+          `LAMMPS atom ID is missing in frame ${frameIndex} (timestep ${timestep}), ` +
+            `row ${i + 1}. Every row must contain a unique integer ID, or the ` +
+            '`id` column must be omitted to use frame-local row identity.',
+          { frameIndex, timestep, atomRow: i + 1 },
+        );
+      }
+      if (!rowHasType) {
+        throw new DumpParseError(
+          'INVALID_ATOM_TYPE',
+          `LAMMPS atom type is missing in frame ${frameIndex} (timestep ${timestep}), ` +
+            `row ${i + 1}. Every atom row must contain an exact positive integer ` +
+            '`type` value in the Int32 range 1..2147483647.',
+          { frameIndex, timestep, atomRow: i + 1 },
+        );
+      }
+      if (idIdx < 0) ids[i] = i + 1;
 
       const pi = i * 3;
       if (scaled) {
@@ -490,6 +746,11 @@ async function* parseDumpStreamCore(
     // write from a killed run — LAMMPS newline-terminates every row it
     // completes — so it is deliberately dropped rather than parsed as
     // potentially half-written numbers.
+
+    // Reaching the end of the parsed rows without DumpParseError proves that
+    // every present source ID was an Int32 integer and unique within this
+    // frame. Upgrade only now, after the evidence exists.
+    if (idIdx >= 0) frame.identity = { kind: 'source-id', unique: true };
 
     // Filled the frame cleanly — look just past it for the next frame's
     // `ITEM:` so trajectories whose frames align exactly are recognized.
@@ -521,11 +782,26 @@ async function* parseDumpStreamCore(
       }
     }
 
+    const truncateFrameToCompleteRows = (count: number) => {
+      if (count >= frame.natoms) return;
+      frame.natoms = count;
+      frame.ids = frame.ids.slice(0, count);
+      frame.types = frame.types.slice(0, count);
+      frame.positions = frame.positions.slice(0, count * 3);
+      for (const [name, values] of frame.properties) {
+        frame.properties.set(name, values.slice(0, count));
+      }
+    };
+
     if (frameIndex === 0) {
       frame0Loaded = i;
+      // LAMMPS newline-terminates complete rows. If the final frame was
+      // torn, keep only complete source rows instead of presenting the
+      // zero-filled tail as atoms.
+      truncateFrameToCompleteRows(i);
     } else if (i > 0) {
       // A truncated final frame reports the atoms it actually has.
-      frame.natoms = i;
+      truncateFrameToCompleteRows(i);
       yield { type: 'frame', frameIndex, frame };
     } else {
       frameIndex--; // empty trailing frame — drop it
@@ -568,6 +844,76 @@ export async function* parseDumpStreamFromBytes(
     const r = await iter.next();
     return r.done ? null : r.value;
   }, opts);
+}
+
+type CanonicalDumpDecodeOptions = {
+  onFrameDecoded?: (decodedFrames: number) => void;
+};
+
+async function collectCanonicalDumpFrames(
+  events: AsyncGenerator<DumpStreamEvent>,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  const frames: Frame[] = [];
+  let reportedFrames = 0;
+  const reportCompletedFrames = () => {
+    while (reportedFrames < frames.length) {
+      reportedFrames += 1;
+      options.onFrameDecoded?.(reportedFrames);
+    }
+  };
+  for await (const event of events) {
+    if (event.type === 'header') {
+      frames.push(event.frame);
+    } else if (event.type === 'frame') {
+      frames.push(event.frame);
+      reportCompletedFrames();
+    } else if (event.type === 'complete' && frames.length > 0) {
+      reportCompletedFrames();
+    }
+  }
+  if (frames.length === 0) throw new Error('No frames parsed; possibly wrong format.');
+  return frames;
+}
+
+/** Decode buffered text through the same byte parser used by streaming. */
+export function parseDumpFramesCanonical(
+  text: string,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  return collectCanonicalDumpFrames(parseDumpStream(text, { multiFrame: true }), options);
+}
+
+/** Decode a chunked source through the canonical LAMMPS dump implementation. */
+export function parseDumpFramesFromBytesCanonical(
+  source: AsyncIterable<Uint8Array>,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  return collectCanonicalDumpFrames(
+    parseDumpStreamFromBytes(source, { multiFrame: true }),
+    options,
+  );
+}
+
+/**
+ * Decode a local dump Blob/File without selecting scientific behavior by
+ * size or compression. Gzip is transport only and is detected by magic.
+ */
+export async function parseDumpBlobCanonical(
+  blob: Blob,
+  options: CanonicalDumpDecodeOptions = {},
+): Promise<Frame[]> {
+  let stream = blob.stream() as ReadableStream<Uint8Array>;
+  const magic = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  if (magic.length === 2 && magic[0] === 0x1f && magic[1] === 0x8b) {
+    if (typeof DecompressionStream === 'undefined') {
+      throw new Error('Cannot decode gzip LAMMPS dump: DecompressionStream is unavailable.');
+    }
+    stream = stream.pipeThrough(
+      new DecompressionStream('gzip') as unknown as TransformStream<Uint8Array, Uint8Array>,
+    );
+  }
+  return parseDumpFramesFromBytesCanonical(readableStreamToAsyncIterable(stream), options);
 }
 
 /** Adapt a `ReadableStream<Uint8Array>` to an `AsyncIterable<Uint8Array>`. */

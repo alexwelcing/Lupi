@@ -11,11 +11,21 @@ import {
   collection,
   type Timestamp,
 } from 'firebase/firestore';
-import { getElementSpec } from '@atlas/core';
+import {
+  ELEMENT_DATA,
+  hasAngstromDistances,
+  hasCompleteElementMapping,
+  resolveAtomicNumber,
+} from '@atlas/core';
 import type { Frame } from '@atlas/core/types';
 import { firebaseDb } from './auth/firebase';
 import { loadInlineMolecule, loadMoleculeSource } from './loadMoleculeSource';
+import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { useStore, type AppState, type LoadedFile } from './store';
+import {
+  measurementForInlineSnapshot,
+  sanitizeMolecularMeasurement,
+} from './measurements';
 
 export const SAVED_VIEW_SCHEMA_VERSION = 1;
 const VIEW_COLLECTION = 'lupiViews';
@@ -122,6 +132,10 @@ export interface CanonicalMolecularView {
   camera: Pick<AppState, 'cameraPosition' | 'cameraTarget' | 'cameraFov' | 'cameraPreset'>;
   publication: Pick<AppState, 'showScaleBar' | 'colorblindMode' | 'viewportMode'>;
   annotations: Pick<AppState, 'annotations' | 'labelStyle'>;
+  /** Derived measurement definition only. Numeric results are recomputed from
+   * the reloaded frame so a saved view never upgrades a display calculation
+   * into source evidence. Optional for schema-v1 backwards compatibility. */
+  analysis?: Pick<AppState, 'measurement'>;
   knowledgeLabels: Pick<AppState, 'knowledgeLabelSearchQuery' | 'knowledgeLabelSearchFilter' | 'pinnedKnowledgeLabelIds'>;
   atomVisibility: {
     hiddenAtomTypes: number[];
@@ -182,14 +196,31 @@ export async function saveCurrentMolecularView({
   const ref = doc(firebaseDb, VIEW_COLLECTION, cleanSlug);
   const current = await getDoc(ref);
 
+  const molecule = readMoleculeSource();
+  let canonicalView = captureCanonicalView();
+  if (molecule.kind === 'inline-xyz') {
+    const state = useStore.getState();
+    const snapshotFrame = state.file?.trajectory.frames[state.frame]
+      ?? state.file?.trajectory.frames[0];
+    canonicalView = {
+      ...canonicalView,
+      frame: 0,
+      analysis: {
+        measurement: snapshotFrame
+          ? measurementForInlineSnapshot(snapshotFrame, state.frame, state.measurement)
+          : null,
+      },
+    };
+  }
+
   const view: SavedMolecularView = {
     schemaVersion: SAVED_VIEW_SCHEMA_VERSION,
     slug: cleanSlug,
     title: title.trim() || defaultSavedViewTitle(useStore.getState().file),
     ownerId: user.uid,
     visibility: 'public',
-    molecule: readMoleculeSource(),
-    view: captureCanonicalView(),
+    molecule,
+    view: canonicalView,
     exportDefaults: {
       baseName: cleanSlug,
       canonicalSlug: cleanSlug,
@@ -239,7 +270,7 @@ export async function listUserSavedViews(uid: string): Promise<SavedMolecularVie
   return snaps.docs.map((viewDoc) => viewDoc.data() as SavedMolecularView);
 }
 
-function readMoleculeSource(): SavedMoleculeSource {
+export function readMoleculeSource(): SavedMoleculeSource {
   const file = useStore.getState().file;
   const frameIndex = useStore.getState().frame;
   const frame = file?.trajectory.frames[frameIndex] ?? file?.trajectory.frames[0];
@@ -247,24 +278,40 @@ function readMoleculeSource(): SavedMoleculeSource {
 
   const atomCount = frame.natoms;
   const totalFrames = file.trajectory.totalFrames;
-  if (file.sourceUrl && isReloadableSource(file.sourceUrl)) {
-    return {
-      kind: 'url',
-      name: file.name,
-      url: file.sourceUrl,
-      size: file.size,
-      atomCount,
-      totalFrames,
-    };
+  if (file.sourceUrl && file.sourceUrl !== 'procedural') {
+    try {
+      const allowed = assertAllowedRemoteMoleculeUrl(file.sourceUrl, 'saved-view', currentOrigin());
+      return {
+        kind: 'url',
+        name: file.name,
+        url: allowed.url,
+        size: file.size,
+        atomCount,
+        totalFrames,
+      };
+    } catch {
+      // Public saved views must never republish an untrusted automatic URL.
+      // Small structures use the already-loaded frame as a safe inline fallback.
+    }
   }
 
   if (atomCount <= INLINE_XYZ_ATOM_LIMIT) {
+    if (!hasCompleteElementMapping(frame)) {
+      throw new Error(
+        'This view cannot use an inline XYZ fallback because its atom types do not have a complete element mapping. Provide an allowlisted reloadable source or map every type to an element before saving.',
+      );
+    }
+    if (!hasAngstromDistances(frame)) {
+      throw new Error(
+        'This view cannot use an inline XYZ fallback because its coordinate units are unknown. Provide an allowlisted reloadable source or explicit angstrom metadata before saving.',
+      );
+    }
     return {
       kind: 'inline-xyz',
       name: `${file.name.replace(/\.[a-z0-9]+$/i, '') || 'lupi-view'}.xyz`,
       xyz: frameToXyz(file.name, frame),
       atomCount,
-      totalFrames,
+      totalFrames: 1,
     };
   }
 
@@ -344,6 +391,7 @@ function captureCanonicalView(): CanonicalMolecularView {
     camera: pick(s, ['cameraPosition', 'cameraTarget', 'cameraFov', 'cameraPreset']),
     publication: pick(s, ['showScaleBar', 'colorblindMode', 'viewportMode']),
     annotations: pick(s, ['annotations', 'labelStyle']),
+    analysis: pick(s, ['measurement']),
     knowledgeLabels: pick(s, ['knowledgeLabelSearchQuery', 'knowledgeLabelSearchFilter', 'pinnedKnowledgeLabelIds']),
     atomVisibility: {
       hiddenAtomTypes: Array.from(s.hiddenAtomTypes),
@@ -356,6 +404,9 @@ function captureCanonicalView(): CanonicalMolecularView {
 function applyCanonicalView(view: CanonicalMolecularView) {
   const file = useStore.getState().file;
   const maxFrame = Math.max(0, (file?.trajectory.totalFrames ?? 1) - 1);
+  const requestedFrame = Number.isSafeInteger(view.frame) ? view.frame : 0;
+  const frame = Math.max(0, Math.min(requestedFrame, maxFrame));
+  const measurement = sanitizeMolecularMeasurement(view.analysis?.measurement);
   const atomVisibility = view.atomVisibility ?? { hiddenAtomTypes: [], atomTypeScales: {} };
   const knowledgeLabels = view.knowledgeLabels ?? {};
   useStore.setState({
@@ -369,33 +420,44 @@ function applyCanonicalView(view: CanonicalMolecularView) {
     ...(view.publication ?? {}),
     ...(view.annotations ?? {}),
     ...(knowledgeLabels ?? {}),
+    measurement,
+    measurementTool: null,
+    selectedAtoms: [],
     flythrough: view.flythrough ?? null,
     hiddenAtomTypes: new Set(atomVisibility.hiddenAtomTypes ?? []),
     atomTypeScales: atomVisibility.atomTypeScales ?? {},
-    frame: Math.max(0, Math.min(view.frame, maxFrame)),
+    frame,
     playing: false,
     activePanel: null,
   });
 }
 
-async function loadSavedMolecule(molecule: SavedMoleculeSource): Promise<void> {
+export async function loadSavedMolecule(molecule: SavedMoleculeSource): Promise<void> {
   if (molecule.kind === 'url') {
-    await loadMoleculeSource(molecule.url);
+    const allowed = assertAllowedRemoteMoleculeUrl(molecule.url, 'saved-view', currentOrigin());
+    await loadMoleculeSource(allowed.url, { strictRemote: true });
     return;
   }
   await loadInlineMolecule(molecule.name, molecule.xyz, `lupi-view://${molecule.name}`);
 }
 
-function isReloadableSource(sourceUrl: string): boolean {
-  if (sourceUrl === 'procedural') return false;
-  if (/^[a-z]+:\/\//i.test(sourceUrl)) return sourceUrl.startsWith('http://') || sourceUrl.startsWith('https://');
-  return true;
+function currentOrigin(): string {
+  return typeof window === 'undefined' ? 'https://lupi.live' : window.location.origin;
 }
 
 function frameToXyz(name: string, frame: Frame): string {
+  if (!hasCompleteElementMapping(frame)) {
+    throw new Error(
+      'Inline XYZ serialization requires a complete element mapping for every atom type.',
+    );
+  }
+  if (!hasAngstromDistances(frame)) {
+    throw new Error('Inline XYZ serialization requires coordinates known to be in angstroms.');
+  }
   const lines = [String(frame.natoms), name];
   for (let i = 0; i < frame.natoms; i += 1) {
-    const element = getElementSpec(frame.types[i]).symbol;
+    const atomicNumber = resolveAtomicNumber(frame, frame.types[i])!;
+    const element = ELEMENT_DATA[atomicNumber].symbol;
     const x = frame.positions[i * 3] ?? 0;
     const y = frame.positions[i * 3 + 1] ?? 0;
     const z = frame.positions[i * 3 + 2] ?? 0;

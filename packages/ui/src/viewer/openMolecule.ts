@@ -65,7 +65,7 @@ export async function openMolecule(request: ViewerOpenRequest): Promise<ViewerOp
     syncHistory(request);
     useStore.getState().setActiveCardId(null);
     try {
-      await loadMoleculeSource(request.url);
+      await loadMoleculeSource(request.url, { strictRemote: request.strictRemote === true });
       if (request.title) {
         const file = useStore.getState().file;
         if (file) useStore.setState({ file: { ...file, name: request.title } });

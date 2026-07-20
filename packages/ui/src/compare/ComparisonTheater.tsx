@@ -33,6 +33,8 @@ function Pane({ variant, frameIndex, nextIndex, interp, tUI, isMobileLayout }: {
   isMobileLayout: boolean;
 }) {
   const frames = variant.trajectory.frames;
+  const currentFrame = frames[frameIndex];
+  if (!currentFrame) return null;
   const residualPct = variant.decay(tUI) * 100;
   const converged = tUI >= variant.convergeAt && variant.convergeAt < 0.999;
 
@@ -50,7 +52,7 @@ function Pane({ variant, frameIndex, nextIndex, interp, tUI, isMobileLayout }: {
       >
         <CameraRig />
         <AtomsOptimized
-          frame={frames[frameIndex]}
+          frame={currentFrame}
           nextFrame={frames[nextIndex]}
           interpolationFactor={interp}
           colorMode="property"

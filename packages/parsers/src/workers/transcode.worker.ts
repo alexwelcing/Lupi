@@ -17,9 +17,10 @@
  * Protocol (one-shot; the orchestrator spawns one worker per import):
  *   in : { type: 'transcode-dump', file: File,
  *          opfs: { dir: string, name: string } | null }
- *   out: { type: 'frame0-header', natoms, timestep, boxBounds, columns }
+ *   out: { type: 'frame0-header', natoms, timestep, boxBounds, columns,
+ *          identity, typeSemantics, distanceSemantics }
  *        { type: 'frame0-chunk', start, count, positions, types, ids }   (transferred)
- *        { type: 'frame0-complete', loadedAtoms }
+ *        { type: 'frame0-complete', loadedAtoms, identity }
  *        { type: 'progress', framesParsed, bytesWritten }                (throttled)
  *        { type: 'done', kind: 'single' }
  *        { type: 'done', kind: 'multi', storage: 'opfs' | 'blob',
@@ -32,7 +33,12 @@
 
 import type { Frame } from '@atlas/core/types';
 import { GlimbinStreamWriter, HEADER_SIZE } from '@atlas/core/glimbin';
-import { parseDumpStreamFromBytes, readableStreamToAsyncIterable } from '../dumpStreamParser';
+import {
+  parseDumpStreamFromBytes,
+  readableStreamToAsyncIterable,
+  serializeDumpParseError,
+} from '../dumpStreamParser';
+import { writeGlimbinFrameChecked } from '../transcodeTypeGuard';
 
 /** Minimal typing for the worker-only OPFS sync-access handle (absent
  *  from the DOM lib this repo compiles against). */
@@ -150,9 +156,7 @@ self.onmessage = async (e: MessageEvent) => {
     };
 
     const writeFrame = (frame: Frame) => {
-      const at = writer.bytesWritten;
-      const record = writer.addFrame(frame);
-      sink!.write(record, at);
+      writeGlimbinFrameChecked(frame, writer.frameCount, writer, sink!);
     };
 
     for await (const event of parseDumpStreamFromBytes(byteIter, { multiFrame: true })) {
@@ -164,6 +168,9 @@ self.onmessage = async (e: MessageEvent) => {
           timestep: frame0.timestep,
           boxBounds: Float64Array.from(frame0.boxBounds),
           columns: frame0.columns,
+          identity: frame0.identity,
+          typeSemantics: frame0.typeSemantics,
+          distanceSemantics: frame0.distanceSemantics,
         });
       } else if (event.type === 'progress') {
         sendFrame0Slab(event.loadedAtoms);
@@ -172,7 +179,11 @@ self.onmessage = async (e: MessageEvent) => {
         // the viewer and write it as record 0 before this one.
         if (!frame0Written && frame0) {
           sendFrame0Slab(frame0.natoms);
-          self.postMessage({ type: 'frame0-complete', loadedAtoms: frame0.natoms });
+          self.postMessage({
+            type: 'frame0-complete',
+            loadedAtoms: frame0.natoms,
+            identity: frame0.identity,
+          });
           writeFrame(frame0);
           frame0Written = true;
         }
@@ -192,7 +203,11 @@ self.onmessage = async (e: MessageEvent) => {
           // Single structure — nothing to transcode or persist. The main
           // thread already holds the full frame from the slabs.
           sendFrame0Slab(event.loadedAtoms);
-          self.postMessage({ type: 'frame0-complete', loadedAtoms: event.loadedAtoms });
+          self.postMessage({
+            type: 'frame0-complete',
+            loadedAtoms: event.loadedAtoms,
+            identity: frame0.identity,
+          });
           await sink.abort();
           self.postMessage({ type: 'done', kind: 'single' });
           return;
@@ -212,9 +227,11 @@ self.onmessage = async (e: MessageEvent) => {
     throw new Error('transcode: parser ended without a complete event');
   } catch (err) {
     try { await sink?.abort(); } catch { /* best effort */ }
+    const typed = serializeDumpParseError(err);
     self.postMessage({
       type: 'error',
       message: err instanceof Error ? err.message : String(err),
+      ...(typed ?? {}),
     });
   }
 };

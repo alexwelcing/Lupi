@@ -83,8 +83,8 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
   'lupi.export_asset': {
     type: 'object',
     properties: {
-      format: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb', 'usdz'], description: 'Asset format to render from the active viewer.' },
-      type: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb', 'usdz'], description: 'Alias for format.' },
+      format: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb'], description: 'Deterministic asset format to render from the active viewer.' },
+      type: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb'], description: 'Alias for format.' },
       width: { type: 'number', minimum: 64, maximum: 4096, description: 'Image width in pixels.' },
       height: { type: 'number', minimum: 64, maximum: 4096, description: 'Image height in pixels.' },
       resolution: {

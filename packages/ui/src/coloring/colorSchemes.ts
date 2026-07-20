@@ -49,7 +49,7 @@ export const COLOR_SCHEMES: Record<ColorSchemeId, SchemeProfile> = {
   colorway: {
     id: 'colorway',
     label: 'Colorway',
-    tagline: 'Spread a colorway across the atoms — one hue per element.',
+    tagline: 'Spread a colorway across the atoms — one hue per atom type.',
     atomColorMode: 'type',
     atomColorSource: 'colormap',
   },
@@ -73,15 +73,16 @@ export const SCHEME_ORDER: ColorSchemeId[] = ['element', 'colorway', 'property',
 
 /**
  * Pick the default scheme for a freshly-loaded file. Property data is often
- * diagnostic, but the viewer's first read should be molecular identity.
- * Users can still switch to Colorway or Property explicitly from Molecule Color.
+ * diagnostic, but the viewer's first read should be truthful type identity.
+ * Element colors are used only when every used type maps to a known element.
  *
- *   - Element is the default for all molecular loads.
- *   - Colorway, Property, and Uniform are opt-in looks.
+ *   - Element is the default for chemically identified molecular loads.
+ *   - Colorway is the fail-closed default for opaque type IDs.
  */
-export function pickInitialScheme(_opts: {
+export function pickInitialScheme(opts: {
   hasProperty: boolean;
   uniqueTypes: number;
+  hasElementIdentity: boolean;
 }): ColorSchemeId {
-  return 'element';
+  return opts.hasElementIdentity ? 'element' : 'colorway';
 }

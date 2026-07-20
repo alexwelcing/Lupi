@@ -21,9 +21,10 @@ import {
   parseFrameData,
   type GlimbinHeader,
   type GlimbinIndex,
-  type FrameIndexEntry,
   type DatasetMeta,
+  FLAG_HAS_BONDS,
 } from '@atlas/core/glimbin';
+import { decompressGlimbinFrame } from './decompressGlimbinFrame';
 
 // ─── Cache & state ──────────────────────────────────────────────────
 
@@ -66,6 +67,11 @@ class FrameCache {
     return this.cache.has(frameIndex);
   }
 
+  delete(frameIndex: number): void {
+    this.cache.delete(frameIndex);
+    this.accessOrder = this.accessOrder.filter(i => i !== frameIndex);
+  }
+
   clear(): void {
     this.cache.clear();
     this.accessOrder = [];
@@ -91,6 +97,10 @@ export interface StreamingLoaderEvents {
   onTelemetry?: (stats: { bytesTransferred: number; cacheHits: number; cacheMisses: number; cacheSize: number }) => void;
 }
 
+export type StreamingLoaderFetchOptions = Pick<RequestInit, 'redirect'>;
+
+export const DEFAULT_MAX_NON_RANGE_FALLBACK_BYTES = 64 * 1024 * 1024;
+
 export class StreamingLoader {
   private url: string;
   private header: GlimbinHeader | null = null;
@@ -115,10 +125,24 @@ export class StreamingLoader {
   private cacheHits = 0;
   private cacheMisses = 0;
 
-  constructor(url: string, events: StreamingLoaderEvents = {}, maxCachedFrames = 20) {
+  private fetchOptions: StreamingLoaderFetchOptions;
+  private maxNonRangeFallbackBytes: number;
+
+  constructor(
+    url: string,
+    events: StreamingLoaderEvents = {},
+    maxCachedFrames = 20,
+    fetchOptions: StreamingLoaderFetchOptions = {},
+    maxNonRangeFallbackBytes = DEFAULT_MAX_NON_RANGE_FALLBACK_BYTES,
+  ) {
     this.url = url;
     this.events = events;
     this.frameCache = new FrameCache(maxCachedFrames);
+    this.fetchOptions = fetchOptions;
+    if (!Number.isSafeInteger(maxNonRangeFallbackBytes) || maxNonRangeFallbackBytes < HEADER_SIZE) {
+      throw new Error(`Invalid non-Range fallback byte budget: ${maxNonRangeFallbackBytes}`);
+    }
+    this.maxNonRangeFallbackBytes = maxNonRangeFallbackBytes;
   }
 
   private emitTelemetry() {
@@ -139,18 +163,54 @@ export class StreamingLoader {
     const resp = await fetch(this.url, {
       headers: { Range: `bytes=${start}-${end}` },
       signal,
+      ...this.fetchOptions,
     });
+
+    if (this.fetchOptions.redirect === 'error' && resp.redirected) {
+      throw new Error('Remote molecule redirects are not allowed.');
+    }
 
     if (!resp.ok && resp.status !== 206) {
       throw new Error(`Failed to fetch glimbin bytes ${start}-${end}: ${resp.status} ${resp.statusText}`);
     }
 
-    const buffer = await resp.arrayBuffer();
-    this.totalBytesTransferred += buffer.byteLength;
-
-    if (resp.status === 206 || buffer.byteLength === expectedLength) {
+    if (resp.status === 206) {
+      const buffer = await resp.arrayBuffer();
+      this.totalBytesTransferred += buffer.byteLength;
+      if (buffer.byteLength !== expectedLength) {
+        throw new Error(
+          `Failed to fetch glimbin bytes ${start}-${end}: HTTP 206 returned ${buffer.byteLength} bytes; expected ${expectedLength}.`,
+        );
+      }
       return buffer;
     }
+
+    const contentLengthText = resp.headers?.get?.('Content-Length');
+    const parsedContentLength = contentLengthText === null || contentLengthText === undefined
+      ? null
+      : Number(contentLengthText);
+    const contentLength = parsedContentLength !== null &&
+      Number.isFinite(parsedContentLength) && parsedContentLength >= 0
+      ? parsedContentLength
+      : null;
+    const acceptRanges = resp.headers?.get?.('Accept-Ranges') ?? 'missing';
+    if (
+      resp.status === 200 &&
+      contentLength !== null &&
+      contentLength > this.maxNonRangeFallbackBytes
+    ) {
+      throw new Error(this.nonRangeBudgetError(contentLength, acceptRanges));
+    }
+
+    const buffer = await this.readBoundedResponse(
+      resp,
+      this.maxNonRangeFallbackBytes,
+      contentLength,
+      acceptRanges,
+    );
+    this.totalBytesTransferred += buffer.byteLength;
+
+    if (buffer.byteLength === expectedLength) return buffer;
 
     // Some local/static hosts ignore Range and return 200 + full file. Treat
     // that as a non-streaming fallback instead of parsing/decompressing the
@@ -166,6 +226,62 @@ export class StreamingLoader {
     );
   }
 
+  private nonRangeBudgetError(receivedBytes: number | null, acceptRanges: string): string {
+    const received = receivedBytes === null
+      ? 'more than the configured budget'
+      : `${receivedBytes} bytes`;
+    return (
+      `Remote GLIMBIN hosting returned HTTP 200 without a usable byte range ` +
+      `(Content-Length=${received}; Accept-Ranges=${acceptRanges}). ` +
+      `The non-Range fallback is capped at ${this.maxNonRangeFallbackBytes} bytes. ` +
+      `Enable HTTP Range requests or host an object no larger than that cap.`
+    );
+  }
+
+  private async readBoundedResponse(
+    resp: Response,
+    maxBytes: number,
+    contentLength: number | null,
+    acceptRanges: string,
+  ): Promise<ArrayBuffer> {
+    if (!resp.body) {
+      if (contentLength === null) {
+        throw new Error(this.nonRangeBudgetError(null, acceptRanges));
+      }
+      const buffer = await resp.arrayBuffer();
+      if (buffer.byteLength > maxBytes) {
+        throw new Error(this.nonRangeBudgetError(buffer.byteLength, acceptRanges));
+      }
+      return buffer;
+    }
+
+    const reader = resp.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          try { await reader.cancel(); } catch { /* best effort */ }
+          throw new Error(this.nonRangeBudgetError(total, acceptRanges));
+        }
+        chunks.push(value);
+      }
+    } finally {
+      try { reader.releaseLock(); } catch { /* already released */ }
+    }
+
+    const joined = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      joined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return joined.buffer;
+  }
+
   // ── Phase 1: Header ─────────────────────────────────────────────
 
   /**
@@ -177,10 +293,14 @@ export class StreamingLoader {
 
     // Also get file size from HEAD
     try {
-      const headResp = await fetch(this.url, { method: 'HEAD' });
+      const headResp = await fetch(this.url, { method: 'HEAD', ...this.fetchOptions });
+      if (this.fetchOptions.redirect === 'error' && headResp.redirected) {
+        throw new Error('Remote molecule redirects are not allowed.');
+      }
       const contentLength = headResp.headers.get('Content-Length');
       if (contentLength) this.fileSize = parseInt(contentLength, 10);
-    } catch {
+    } catch (error) {
+      if (this.fetchOptions.redirect === 'error') throw error;
       // Non-fatal: we can work without knowing file size
     }
 
@@ -267,78 +387,55 @@ export class StreamingLoader {
   }
 
   private async _doFetchFrame(frameIndex: number, signal?: AbortSignal): Promise<Frame> {
-    const entry = this.index!.entries[frameIndex];
-    const start = Number(entry.offset);
-    const end = start + entry.compressedSize - 1;
-
-    this.events.onProgress?.('frame', frameIndex / this.index!.entries.length);
-
-    let buffer = await this.fetchByteRange(start, end, signal);
-    this.emitTelemetry();
-
-    // Decompress if needed
-    if (this.header!.compressed && entry.compressedSize !== entry.rawSize) {
-      buffer = await this._decompress(buffer);
-    }
-
-    // Parse frame data into typed arrays
-    const parsed = parseFrameData(buffer, entry.natoms, this.header!.flags);
-
-    // Build Frame object compatible with existing rendering pipeline
-    const frame: Frame = {
-      timestep: entry.timestep,
-      natoms: entry.natoms,
-      boxBounds: this.header!.boxBounds,
-      boxTilt: this.header!.boxTilt,
-      triclinic: this.header!.triclinic,
-      columns: ['id', 'type', 'x', 'y', 'z'],
-      ids: parsed.ids,
-      // Expand Uint8 types to Int32 for compatibility with existing renderer
-      types: new Int32Array(parsed.types),
-      positions: parsed.positions,
-      bonds: parsed.bonds,
-      properties: parsed.properties,
-    };
-
-    // Cache and emit
-    this.frameCache.set(frameIndex, frame);
-    this.events.onFrame?.(frameIndex, frame);
-
-    return frame;
-  }
-
-  /** Decompress a buffer (zstd or gzip fallback via DecompressionStream) */
-  private async _decompress(buffer: ArrayBuffer): Promise<ArrayBuffer> {
-    // Try native DecompressionStream (available in modern browsers)
-    // Note: DecompressionStream supports 'gzip' and 'deflate' natively.
-    // For zstd, we'd need a WASM decoder. For now, fall back to gzip.
     try {
-      const ds = new DecompressionStream('gzip');
-      const writer = ds.writable.getWriter();
-      const reader = ds.readable.getReader();
+      const entry = this.index!.entries[frameIndex];
+      const start = Number(entry.offset);
+      const end = start + entry.compressedSize - 1;
 
-      writer.write(new Uint8Array(buffer));
-      writer.close();
+      this.events.onProgress?.('frame', frameIndex / this.index!.entries.length);
 
-      const chunks: Uint8Array[] = [];
-      let totalLen = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        totalLen += value.length;
+      let buffer = await this.fetchByteRange(start, end, signal);
+      this.emitTelemetry();
+
+      // The header declares compression. Equal encoded/raw lengths do not
+      // prove that the record is already raw and must not bypass decoding.
+      if (this.header!.compressed) {
+        buffer = await decompressGlimbinFrame(buffer, entry.rawSize);
       }
 
-      const result = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const chunk of chunks) {
-        result.set(chunk, offset);
-        offset += chunk.length;
-      }
-      return result.buffer;
-    } catch {
-      // If decompression fails, assume data was uncompressed
-      return buffer;
+      const parsed = parseFrameData(buffer, entry.natoms, this.header!.flags);
+      const frame: Frame = {
+        timestep: entry.timestep,
+        natoms: entry.natoms,
+        // v2 records carry their own box (exact for NPT/deforming cells).
+        // Legacy records fall back to the file-level frame-0 box.
+        boxBounds: parsed.boxBounds ?? this.header!.boxBounds,
+        boxTilt: parsed.boxTilt ?? this.header!.boxTilt,
+        triclinic: parsed.triclinic ?? this.header!.triclinic,
+        columns: ['id', 'type', 'x', 'y', 'z', ...parsed.properties.keys()],
+        ids: parsed.ids,
+        types: new Int32Array(parsed.types),
+        positions: parsed.positions,
+        bonds: (this.header!.flags & FLAG_HAS_BONDS) !== 0 ? parsed.bonds : new Int32Array(0),
+        properties: parsed.properties,
+        identity: parsed.identity,
+        // GLIMBIN v2 has no type/unit semantics block. Never infer chemistry
+        // or Angstrom units from the numeric buffers at the hydration seam.
+        typeSemantics: { kind: 'opaque', provenance: 'legacy-unknown' },
+        distanceSemantics: { kind: 'unknown', provenance: 'legacy-unknown' },
+      };
+
+      if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
+      this.frameCache.set(frameIndex, frame);
+      this.events.onFrame?.(frameIndex, frame);
+      return frame;
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      // Abort is caller intent, not corrupt input. Preserve cancellation and
+      // keep it off the data-error channel.
+      if (signal?.aborted || normalized.name === 'AbortError') throw normalized;
+      this.events.onError?.(normalized);
+      throw normalized;
     }
   }
 
@@ -420,6 +517,11 @@ export class StreamingLoader {
     return this.frameCache.keys();
   }
 
+  /** Release a UI-evicted frame so source and resident-window ownership align. */
+  releaseFrame(frameIndex: number): void {
+    this.frameCache.delete(frameIndex);
+  }
+
   /** Clear all cached frames and cancel in-flight requests */
   dispose(): void {
     this.prefetchController?.abort();
@@ -458,7 +560,10 @@ export function isKnownLegacyMoleculeUrl(url: string): boolean {
  * Auto-detect whether a URL is a .glimbin (streaming) or a raw text file
  * (legacy monolithic parse). Returns the appropriate loader.
  */
-export async function autoDetectLoader(url: string): Promise<'streaming' | 'legacy'> {
+export async function autoDetectLoader(
+  url: string,
+  fetchOptions: StreamingLoaderFetchOptions = {},
+): Promise<'streaming' | 'legacy'> {
   if (isGlimbinUrl(url)) return 'streaming';
   if (isKnownLegacyMoleculeUrl(url)) return 'legacy';
 
@@ -466,7 +571,11 @@ export async function autoDetectLoader(url: string): Promise<'streaming' | 'lega
   try {
     const resp = await fetch(url, {
       headers: { Range: 'bytes=0-3' },
+      ...fetchOptions,
     });
+    if (fetchOptions.redirect === 'error' && resp.redirected) {
+      throw new Error('Remote molecule redirects are not allowed.');
+    }
     if (resp.ok || resp.status === 206) {
       const buffer = await resp.arrayBuffer();
       const magic = new Uint8Array(buffer);
@@ -474,7 +583,8 @@ export async function autoDetectLoader(url: string): Promise<'streaming' | 'lega
         return 'streaming';
       }
     }
-  } catch {
+  } catch (error) {
+    if (fetchOptions.redirect === 'error') throw error;
     // Can't probe — fall back to legacy
   }
 

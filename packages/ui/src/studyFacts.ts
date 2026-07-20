@@ -1,4 +1,12 @@
-import { getElementSpec } from '@atlas/core';
+import {
+  ELEMENT_DATA,
+  canInferCovalentBonds,
+  hasAngstromDistances,
+  hasCompleteElementMapping,
+  resolveAtomicNumber,
+  resolveTypeColor,
+  resolveTypeLabel,
+} from '@atlas/core';
 import type { Frame } from '@atlas/core/types';
 import type { LoadedFile } from './store';
 import { ALL_EXAMPLES, publicAssetUrl, type GalleryExample } from './landing/shared';
@@ -8,9 +16,17 @@ import {
   buildMaterialsScienceCompanion,
   type MaterialsScienceCompanion,
 } from './materialsScienceCompanion';
+import {
+  measurementValueLabel,
+  resolveMolecularMeasurement,
+  type MolecularMeasurement,
+  type ResolvedMolecularMeasurement,
+} from './measurements';
 
 export interface ElementStudyFact {
   atomicNumber: number;
+  rawType: number;
+  isElement: boolean;
   symbol: string;
   name: string;
   role: string;
@@ -59,6 +75,8 @@ export interface MoleculeStudyFacts {
   title: string;
   fileName: string;
   formula: string;
+  hasElementIdentity: boolean;
+  distanceUnitLabel: 'Å' | 'source units';
   atomCount: number;
   frameIndex: number;
   frameCount: number;
@@ -70,6 +88,7 @@ export interface MoleculeStudyFacts {
   functionalGroups: FunctionalGroupConcept[];
   propertyStats: PropertyStudyFact[];
   selectedAtoms: SelectedAtomStudyFact[];
+  measurement: ResolvedMolecularMeasurement | null;
   bounds: {
     x: number;
     y: number;
@@ -95,6 +114,7 @@ export function buildMoleculeStudyFacts({
   selectedAtoms = [],
   lastBondCount = 0,
   showBonds = false,
+  measurement = null,
   shareUrl,
 }: {
   file: LoadedFile | null;
@@ -102,6 +122,7 @@ export function buildMoleculeStudyFacts({
   selectedAtoms?: number[];
   lastBondCount?: number;
   showBonds?: boolean;
+  measurement?: MolecularMeasurement | null;
   shareUrl?: string;
 }): MoleculeStudyFacts | null {
   if (!file) return null;
@@ -110,17 +131,26 @@ export function buildMoleculeStudyFacts({
 
   const galleryExample = findGalleryExample(file);
   const title = galleryExample?.title ?? stripExtension(file.name);
-  const functionalGroups = galleryExample ? functionalGroupsForMolecule(galleryExample.id) : [];
+  const hasElementIdentity = hasCompleteElementMapping(frame);
+  const functionalGroups = hasElementIdentity && galleryExample
+    ? functionalGroupsForMolecule(galleryExample.id)
+    : [];
   const composition = summarizeComposition(frame);
   const propertyStats = summarizeProperties(frame);
   const bondInfo = summarizeBonds(frame, lastBondCount, showBonds);
   const sourceLabel = inferSourceLabel(file, galleryExample);
   const bounds = summarizeBounds(frame);
+  const resolvedMeasurement = resolveMolecularMeasurement(frame, frameIndex, measurement);
+  const inspectedAtoms = resolvedMeasurement?.atoms.length
+    ? resolvedMeasurement.atoms.map((atom) => atom.index)
+    : selectedAtoms;
 
   return {
     title,
     fileName: file.name,
-    formula: formatFormula(composition),
+    formula: hasElementIdentity ? formatFormula(composition) : '',
+    hasElementIdentity,
+    distanceUnitLabel: hasAngstromDistances(frame) ? 'Å' : 'source units',
     atomCount: frame.natoms,
     frameIndex,
     frameCount: file.trajectory.totalFrames,
@@ -131,7 +161,8 @@ export function buildMoleculeStudyFacts({
     composition,
     functionalGroups,
     propertyStats,
-    selectedAtoms: summarizeSelectedAtoms(frame, selectedAtoms),
+    selectedAtoms: summarizeSelectedAtoms(frame, inspectedAtoms),
+    measurement: resolvedMeasurement,
     bounds,
     bondSummary: bondInfo.summary,
     bondInfo,
@@ -269,6 +300,10 @@ export function renderStudySheetHtml(facts: MoleculeStudyFacts, options: StudySh
     ['Coordinates', facts.dataProvenance.coordinates],
     ['Bonds', facts.dataProvenance.bonds],
     ['Properties', facts.dataProvenance.properties],
+    ...(facts.measurement ? [[
+      'Measurement',
+      `${facts.measurement.message} ${facts.measurement.coordinateProvenance} ${facts.measurement.identityLabel} Periodic minimum-image and trajectory unwrapping were not applied.`,
+    ]] : []),
     ['Curriculum', facts.dataProvenance.curriculum],
   ].map(([label, copy]) => `
     <article class="provenance-card">
@@ -324,6 +359,81 @@ export function renderStudySheetHtml(facts: MoleculeStudyFacts, options: StudySh
       </tr>
     `).join('')
     : '<tr><td colspan="4" class="muted">No atom selection was pinned when this sheet was generated.</td></tr>';
+
+  const measurementSection = facts.measurement
+    ? `
+    <section>
+      <h2>Coordinate Measurement</h2>
+      <div class="course-intro">
+        <strong>${escapeHtml(facts.measurement.kind === 'distance' ? 'Distance A–B' : 'Angle A–B–C')}</strong>
+        <p>${escapeHtml(measurementValueLabel(facts.measurement))}</p>
+        <p>${escapeHtml(facts.measurement.message)}</p>
+        <p class="muted">${escapeHtml(facts.measurement.coordinateProvenance)} ${escapeHtml(facts.measurement.identityLabel)} Periodic minimum-image and trajectory unwrapping were not applied.</p>
+      </div>
+    </section>`
+    : '';
+
+  const chemistrySections = facts.hasElementIdentity
+    ? `
+    <section>
+      <h2>University Ochem Frame</h2>
+      <div class="course">
+        <div class="course-intro">
+          <strong>${escapeHtml(companion.courseUnit)}</strong>
+          <p>${escapeHtml(companion.instructorFrame)}</p>
+        </div>
+        <div class="steps">${reasoningRows}</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Mechanism Priorities</h2>
+      <div class="priorities">${priorityRows}</div>
+    </section>
+
+    <section>
+      <h2>Learning Loop</h2>
+      <div class="learning-grid">${learningRows}</div>
+    </section>
+
+    <section>
+      <h2>Practice Checks</h2>
+      <div class="practice-grid">${practiceRows}</div>
+    </section>
+
+    <section>
+      <h2>Common Traps</h2>
+      <div class="trap-grid">${trapRows}</div>
+    </section>
+
+    <section>
+      <h2>Functional Groups</h2>
+      <div class="groups">${groupRows}</div>
+    </section>
+
+    <section>
+      <h2>Spectroscopy Checks</h2>
+      <table>
+        <thead><tr><th>Signal</th><th>Why it matters</th></tr></thead>
+        <tbody>${spectroscopyRows}</tbody>
+      </table>
+    </section>
+
+    <section class="question-grid">
+      <div>
+        <h2>Exam Prompts</h2>
+        <ul>${examRows}</ul>
+      </div>
+      <div>
+        <h2>Compare</h2>
+        <ul>${compareRows}</ul>
+      </div>
+    </section>`
+    : `
+    <section>
+      <h2>Chemical interpretation unavailable</h2>
+      <p class="muted">This frame contains opaque atom type IDs without a complete element mapping. Lupi therefore withholds formulas, element roles, functional groups, mechanisms, and spectroscopy cues.</p>
+    </section>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -424,13 +534,17 @@ export function renderStudySheetHtml(facts: MoleculeStudyFacts, options: StudySh
     </header>
 
     <section class="summary" aria-label="Molecule summary">
-      <div class="metric"><span>Formula</span><strong>${escapeHtml(facts.formula || 'Unknown')}</strong></div>
+      ${facts.hasElementIdentity
+        ? `<div class="metric"><span>Formula</span><strong>${escapeHtml(facts.formula || 'Unknown')}</strong></div>`
+        : `<div class="metric"><span>Atom types</span><strong>${facts.composition.length.toLocaleString()} opaque</strong></div>`}
       <div class="metric"><span>Atoms</span><strong>${facts.atomCount.toLocaleString()}</strong></div>
       <div class="metric"><span>Frame</span><strong>${facts.frameIndex + 1} / ${facts.frameCount}</strong></div>
       <div class="metric"><span>Bonds</span><strong>${escapeHtml(facts.bondSummary)}</strong></div>
     </section>
 
     ${visualSnapshot}
+
+    ${measurementSection}
 
     <section>
       <h2>Data Provenance</h2>
@@ -461,65 +575,12 @@ export function renderStudySheetHtml(facts: MoleculeStudyFacts, options: StudySh
       <div class="practice-grid">${materialsPracticeRows}</div>
     </section>
 
-    <section>
-      <h2>University Ochem Frame</h2>
-      <div class="course">
-        <div class="course-intro">
-          <strong>${escapeHtml(companion.courseUnit)}</strong>
-          <p>${escapeHtml(companion.instructorFrame)}</p>
-        </div>
-        <div class="steps">${reasoningRows}</div>
-      </div>
-    </section>
+    ${chemistrySections}
 
     <section>
-      <h2>Mechanism Priorities</h2>
-      <div class="priorities">${priorityRows}</div>
-    </section>
-
-    <section>
-      <h2>Learning Loop</h2>
-      <div class="learning-grid">${learningRows}</div>
-    </section>
-
-    <section>
-      <h2>Practice Checks</h2>
-      <div class="practice-grid">${practiceRows}</div>
-    </section>
-
-    <section>
-      <h2>Common Traps</h2>
-      <div class="trap-grid">${trapRows}</div>
-    </section>
-
-    <section>
-      <h2>Functional Groups</h2>
-      <div class="groups">${groupRows}</div>
-    </section>
-
-    <section>
-      <h2>Spectroscopy Checks</h2>
+      <h2>${facts.hasElementIdentity ? 'Composition' : 'Atom Types'}</h2>
       <table>
-        <thead><tr><th>Signal</th><th>Why it matters</th></tr></thead>
-        <tbody>${spectroscopyRows}</tbody>
-      </table>
-    </section>
-
-    <section class="question-grid">
-      <div>
-        <h2>Exam Prompts</h2>
-        <ul>${examRows}</ul>
-      </div>
-      <div>
-        <h2>Compare</h2>
-        <ul>${compareRows}</ul>
-      </div>
-    </section>
-
-    <section>
-      <h2>Composition</h2>
-      <table>
-        <thead><tr><th>Element</th><th>Name</th><th>Count</th><th>Share</th></tr></thead>
+        <thead><tr><th>${facts.hasElementIdentity ? 'Element' : 'Raw type'}</th><th>${facts.hasElementIdentity ? 'Name' : 'Interpretation'}</th><th>Count</th><th>Share</th></tr></thead>
         <tbody>${compositionRows}</tbody>
       </table>
     </section>
@@ -527,7 +588,7 @@ export function renderStudySheetHtml(facts: MoleculeStudyFacts, options: StudySh
     <section>
       <h2>Selected Atoms</h2>
       <table>
-        <thead><tr><th>Atom</th><th>Element</th><th>XYZ Angstrom</th><th>Properties</th></tr></thead>
+        <thead><tr><th>Atom</th><th>${facts.hasElementIdentity ? 'Element' : 'Raw type'}</th><th>XYZ (${escapeHtml(facts.distanceUnitLabel)})</th><th>Properties</th></tr></thead>
         <tbody>${selectedRows}</tbody>
       </table>
     </section>
@@ -554,26 +615,37 @@ export function studySheetFileName(facts: MoleculeStudyFacts, extension = 'html'
 }
 
 function summarizeComposition(frame: Frame): ElementStudyFact[] {
-  const counts = new Map<number, number>();
+  const hasElementIdentity = hasCompleteElementMapping(frame);
+  const counts = new Map<number, { count: number; rawType: number; atomicNumber?: number }>();
   for (let i = 0; i < frame.natoms; i++) {
-    const atomicNumber = frame.types[i];
-    counts.set(atomicNumber, (counts.get(atomicNumber) ?? 0) + 1);
+    const rawType = frame.types[i];
+    const atomicNumber = hasElementIdentity ? resolveAtomicNumber(frame, rawType) : undefined;
+    const key = atomicNumber ?? rawType;
+    const existing = counts.get(key);
+    counts.set(key, {
+      count: (existing?.count ?? 0) + 1,
+      rawType: existing?.rawType ?? rawType,
+      atomicNumber,
+    });
   }
 
   return Array.from(counts.entries())
-    .map(([atomicNumber, count]) => {
-      const spec = safeElementSpec(atomicNumber);
+    .map(([key, entry]) => {
+      const element = entry.atomicNumber === undefined ? undefined : ELEMENT_DATA[entry.atomicNumber];
       return {
-        atomicNumber,
-        symbol: spec.symbol,
-        name: spec.name,
-        role: spec.role,
-        color: spec.color,
-        count,
-        percent: frame.natoms > 0 ? (count / frame.natoms) * 100 : 0,
+        atomicNumber: entry.atomicNumber ?? key,
+        rawType: entry.rawType,
+        isElement: Boolean(element),
+        symbol: element?.symbol ?? resolveTypeLabel(frame, entry.rawType),
+        name: element?.name ?? 'Opaque atom type',
+        role: element?.role ?? '',
+        color: element?.color ?? resolveTypeColor(frame, entry.rawType),
+        count: entry.count,
+        percent: frame.natoms > 0 ? (entry.count / frame.natoms) * 100 : 0,
       };
     })
     .sort((a, b) => {
+      if (!hasElementIdentity) return a.rawType - b.rawType;
       if (a.atomicNumber === 6) return -1;
       if (b.atomicNumber === 6) return 1;
       if (a.atomicNumber === 1 && b.atomicNumber !== 6) return -1;
@@ -622,7 +694,8 @@ function summarizeSelectedAtoms(frame: Frame, selectedAtoms: number[]): Selected
     .slice(0, 4)
     .map(index => {
       const type = frame.types[index];
-      const spec = safeElementSpec(type);
+      const atomicNumber = resolveAtomicNumber(frame, type);
+      const element = atomicNumber === undefined ? undefined : ELEMENT_DATA[atomicNumber];
       const properties: Array<{ name: string; value: number }> = [];
       frame.properties.forEach((values, name) => {
         if (values && values.length > index && properties.length < 4) {
@@ -633,8 +706,8 @@ function summarizeSelectedAtoms(frame: Frame, selectedAtoms: number[]): Selected
         index,
         id: frame.ids[index] ?? index,
         type,
-        symbol: spec.symbol,
-        name: spec.name,
+        symbol: element?.symbol ?? resolveTypeLabel(frame, type),
+        name: element?.name ?? 'Opaque atom type',
         xyz: [
           frame.positions[index * 3],
           frame.positions[index * 3 + 1],
@@ -671,6 +744,15 @@ function summarizeBonds(frame: Frame, lastBondCount: number, showBonds: boolean)
       summary: 'Not shown',
       detail: 'The source frame does not provide explicit bond pairs, and bond rendering is currently off.',
       source: 'not-shown',
+      count: null,
+      isScientific: false,
+    };
+  }
+  if (!canInferCovalentBonds(frame)) {
+    return {
+      summary: 'Inference unavailable',
+      detail: 'The source frame has no explicit bond table, and Lupi cannot apply covalent-radius inference without a complete element mapping and Ångström coordinates.',
+      source: 'missing',
       count: null,
       isScientific: false,
     };
@@ -735,27 +817,15 @@ function buildDataProvenance({
   const coordinateColumns = frame.columns?.length ? ` Columns: ${frame.columns.slice(0, 8).join(', ')}${frame.columns.length > 8 ? ', ...' : ''}.` : '';
   const propertyNames = propertyStats.map(prop => prop.name);
   return {
-    coordinates: `${frame.natoms.toLocaleString()} atom positions are loaded from ${sourceLabel} (${file.name}).${coordinateColumns}`,
+    coordinates: `${frame.natoms.toLocaleString()} atom positions are loaded from ${sourceLabel} (${file.name}); distance units are ${hasAngstromDistances(frame) ? 'declared as Ångström' : 'not established by the current frame metadata'}.${coordinateColumns}`,
     bonds: bondInfo.detail,
     properties: propertyNames.length
       ? `Scalar statistics are computed only from loaded source columns: ${propertyNames.join(', ')}. Lupi does not fabricate charges, forces, stress, band gaps, or energies when those columns are absent.`
       : 'No source scalar property columns were found in this frame. Lupi does not fabricate charges, forces, stress, band gaps, or energies.',
-    curriculum: 'Organic chemistry and materials-science prompts are teaching lenses derived from composition, gallery metadata, and source columns; they are not new simulation measurements.',
+    curriculum: hasCompleteElementMapping(frame)
+      ? 'Organic chemistry and materials-science prompts are teaching lenses derived from mapped element composition, gallery metadata, and source columns; they are not new simulation measurements.'
+      : 'Element-specific and organic-chemistry prompts are withheld because the raw atom types do not have a complete element mapping. Generic materials prompts use geometry and source columns only.',
   };
-}
-
-function safeElementSpec(atomicNumber: number) {
-  try {
-    return getElementSpec(atomicNumber);
-  } catch {
-    return {
-      symbol: `T${atomicNumber}`,
-      name: `Type ${atomicNumber}`,
-      radius: 1.5,
-      role: 'Atom type',
-      color: '#94a3b8',
-    };
-  }
 }
 
 function normalizePathLike(value: string): string {

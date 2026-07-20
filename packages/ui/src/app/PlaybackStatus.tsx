@@ -1,18 +1,26 @@
 import { useStore } from '../store';
 import { Badge } from '../primitives/AppShell';
 
-export function PlaybackStatus({ frame, totalFrames }: { frame: number; totalFrames: number }) {
-  const streamingFrameStatus = useStore(s => {
-    const file = s.file;
+export function PlaybackStatus({
+  frame,
+  totalFrames,
+  showFrame = true,
+}: {
+  frame: number;
+  totalFrames: number;
+  showFrame?: boolean;
+}) {
+  const file = useStore(s => s.file);
+  const streamingFrameStatus = (() => {
     if (!file || file.trajectory.totalFrames <= 1) return null;
     const bufferedFrameCount = file.trajectory.frames.reduce((count, candidate) => count + (candidate ? 1 : 0), 0);
     if (bufferedFrameCount >= file.trajectory.totalFrames) return null;
-    const frameIsBuffered = Boolean(file.trajectory.frames[s.frame]);
+    const frameIsBuffered = Boolean(file.trajectory.frames[frame]);
     if (!frameIsBuffered) {
       return {
         tone: 'buffering' as const,
         label: 'Buffering',
-        detail: `${Math.floor(s.frame) + 1}/${file.trajectory.totalFrames}`,
+        detail: `${Math.floor(frame) + 1}/${file.trajectory.totalFrames}`,
       };
     }
     return {
@@ -20,11 +28,16 @@ export function PlaybackStatus({ frame, totalFrames }: { frame: number; totalFra
       label: 'Buffered',
       detail: `${bufferedFrameCount}/${file.trajectory.totalFrames}`,
     };
-  });
+  })();
+
+  // On mobile the transport already owns the frame readout. If the whole
+  // trajectory is resident there is no streaming state left to communicate.
+  if (!showFrame && !streamingFrameStatus) return null;
 
   return (
     <div
       className="lupine-overlay lupine-overlay--top-left"
+      data-testid="playback-status"
       style={{ top: 16, left: 16, pointerEvents: 'none' }}
     >
       <div className="lupine-glass-panel" style={{
@@ -37,8 +50,12 @@ export function PlaybackStatus({ frame, totalFrames }: { frame: number; totalFra
         color: '#f8fafc',
         fontVariantNumeric: 'tabular-nums',
       }}>
-        <span style={{ color: 'rgba(203,213,225,0.56)', fontSize: 10, textTransform: 'uppercase' }}>Frame</span>
-        {frame + 1} / {totalFrames}
+        {showFrame && (
+          <>
+            <span style={{ color: 'rgba(203,213,225,0.56)', fontSize: 10, textTransform: 'uppercase' }}>Frame</span>
+            {frame + 1} / {totalFrames}
+          </>
+        )}
         {streamingFrameStatus && (
           <Badge
             tone={streamingFrameStatus.tone}

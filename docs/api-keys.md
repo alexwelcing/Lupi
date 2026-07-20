@@ -1,19 +1,32 @@
-# Lupi API Keys (agent auth without OAuth)
+# Lupi API-key auth inventory
 
-A signed-in user can mint long-lived **API keys** so an AI agent (Claude Code,
-Codex, a CLI) can authenticate as that user **without doing Google OAuth**. The
-key is exchanged for a Firebase custom token, the agent signs in with it, and
-then drives the viewer / MCP exactly as a signed-in user would.
+> **Status: planned—not yet shipped as a supported user flow.** The tracked
+> repository contains backend implementation inventory, but it does not contain
+> a tested `lupi:auth` package script and the active Account shell does not expose
+> a verified API-key panel. Do not treat the steps below as currently available
+> product instructions. The authenticated-agent golden-path gate (operator
+> Plan 026) owns the scoped replacement, UI/client reconciliation,
+> deployment, and live proof.
 
-This implements roadmap Milestone 1's "MCP server auth middleware" piece.
+The existing backend design allows a signed-in user to mint long-lived **API
+keys** so an agent can exchange a key for a Firebase custom token. That exchange
+grants broad user identity and is implementation history, not the ratified
+target agent-security model.
 
-## User: create a key
+The target of that gate is a short-lived, render-scoped credential with explicit
+ownership, limits, revocation bounds, and fail-closed paid execution.
 
-Open the user menu (top-right) while signed in → **API keys** → name it → **Create**.
-The raw key (`lupi_pk_…`) is shown **once** — copy it immediately; only its
-SHA-256 hash is stored. Revoke any key from the same panel.
+## Intended user flow (unavailable until the authenticated-agent gate passes)
 
-## Agent: use a key (pure HTTP, no Firebase SDK)
+The intended UI lets a signed-in user create, metadata-list, and revoke a key,
+showing the raw value exactly once. That panel is not present in the tracked
+Account shell on the current release base.
+
+## Implementation inventory: broad Firebase exchange
+
+The raw HTTP sequence below documents the existing backend seam for migration
+and testing. It is not an endorsed production login recipe and must not be
+advertised as the final scoped agent flow.
 
 ```bash
 KEY="lupi_pk_…"                       # the key the user gave you
@@ -30,13 +43,14 @@ ID_TOKEN=$(curl -s -X POST \
   -H 'Referer: https://lupi.live/' \
   -d "{\"token\":\"$CUSTOM\",\"returnSecureToken\":true}" | jq -r .idToken)
 
-# 3) use $ID_TOKEN as the Firebase identity to drive the viewer / MCP
+# 3) historical behavior: use $ID_TOKEN as broad Firebase identity
 ```
 
-The ID token is a normal short-lived Firebase token; re-run step 1–2 (or use the
-returned `refreshToken`) when it expires. Treat the API key like a password.
+The resulting Firebase session can be renewable and broadly authorized. That is
+the central reason this inventory cannot be called the shipped agent contract.
+Treat any existing API key like a password and keep paid rendering disabled.
 
-## Endpoints (Cloud Functions, project `shed-489901`)
+## Existing endpoints (migration inventory)
 
 | Function | Type | Auth | Returns |
 |---|---|---|---|
@@ -44,7 +58,7 @@ returned `refreshToken`) when it expires. Treat the API key like a password.
 | `revokeApiKey` | callable | signed-in user | `{ keyId, revoked: true }` |
 | `exchangeApiKey` | HTTPS POST | the key itself | `{ customToken }` |
 
-## Operational requirements
+## Historical operational requirements
 
 - The Firebase web API key is public but must stay browser-restricted to
   production, preview, Cloud Run, and local development origins. REST smoke tests
@@ -63,15 +77,23 @@ returned `refreshToken`) when it expires. Treat the API key like a password.
   stored or logged.
 - **Writes**: only the Cloud Functions admin SDK writes `apiKeys`; clients can
   read only their own keys (`firestore.rules`). `allow write: if false`.
-- **Scope**: an API key grants the user's **full identity** (Firebase has no
-  capability-scoped tokens). The custom token carries an informational
+- **Scope limitation**: the current exchange grants the user's **full
+  identity** (Firebase has no capability-scoped tokens). The custom token
+  carries an informational
   `viaApiKey: true` claim for audit / future scoping — it is not yet an
   access-control gate.
-- **Abuse / cost**: `exchangeApiKey` is public and capped with `maxInstances` to
-  bound denial-of-wallet. **Before relying on it in production, put a rate limit
-  in front of it** (Cloud Armor at the load balancer, or Firebase App Check for
-  browser callers). 256-bit keys are not guessable, but the endpoint costs money
-  per request.
+- **Abuse / cost stopgap**: `exchangeApiKey` is public, capped at
+  `maxInstances: 10`, and calls a Firestore fixed-window limiter configured for
+  roughly 10 exchanges per reported client IP per minute. The limiter fails
+  open on Firestore errors and trusts the left-most `X-Forwarded-For` value
+  without live trusted-proxy evidence. It is tested implementation inventory,
+  not an accepted production or paid-execution boundary.
 - **Deferred hardening** (see the security review): move `keyHash` to a
-  client-unreadable sub-doc, add per-IP rate limiting, and a dormant-key
-  expiry/alert job.
+  client-unreadable sub-doc, prove the platform client-address boundary, enforce
+  a fail-closed edge limit or equivalent Cloud Armor/App Check control, and add
+  dormant-key expiry/alerting.
+
+These limitations are not accepted release exceptions. The
+[product ownership contract](product-ownership-contract.md) treats auth as a
+supporting capability, and the [release truth contract](release-truth-contract.md)
+requires paid work to fail closed until per-user scope and limits are proven.

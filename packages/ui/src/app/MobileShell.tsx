@@ -109,6 +109,18 @@ export function MobileShell() {
           onClick={() => {
             setViewMenuOpen(false);
             setStudyLensOpen(false);
+            setStudioDeck(null);
+            setActivePanel('telemetry');
+          }}
+          ariaLabel="Analyze and measure"
+          active={activePanel === 'telemetry'}
+        >
+          ANALYZE
+        </MobileTabButton>
+        <MobileTabButton
+          onClick={() => {
+            setViewMenuOpen(false);
+            setStudyLensOpen(false);
             if (structurePanelActive) { setActivePanel(null); return; }
             setStudioDeck('molecule');
             if (activePanel !== 'studio') setActivePanel('studio');

@@ -1,135 +1,1438 @@
-name: Deploy LUPI to Cloudflare
+name: Cloudflare production
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/web/**'
-      - 'apps/mcp-worker/**'
-      - 'packages/**'
-      - 'scripts/**'
-      - 'tools/**'
-      - 'tests/**'
-      - 'playwright.config.mjs'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'turbo.json'
-      - '.github/workflows/deploy-cloudflare.yml'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Exact current main commit to release
+        required: true
+        type: string
+      confirmation:
+        description: DEPLOY <target_sha> WITH BOUNDED ROLLBACK
+        required: true
+        type: string
+      checkpoint_run_id:
+        description: Trusted run containing the current self-contained checkpoint
+        required: true
+        type: string
+      checkpoint_artifact:
+        description: Exact trusted checkpoint artifact name
+        required: true
+        type: string
+      checkpoint_sha256:
+        description: SHA-256 of the trusted checkpoint JSON
+        required: true
+        type: string
+      cutover_receipt_sha256:
+        description: SHA-256 of the separately authorized v2 cutover receipt
+        required: true
+        type: string
 
 concurrency:
-  group: lupi-cloudflare-deploy-${{ github.ref }}
-  cancel-in-progress: true
+  group: lupi-cloudflare-production
+  queue: max
+  cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  VITE_FIREBASE_AUTH_DOMAIN: lupi.live
-  VITE_FIREBASE_PROJECT_ID: shed-489901
-  VITE_FIREBASE_APP_ID: 1:350452481649:web:c12dea9ce6f6ae045065d0
-  VITE_FIREBASE_STORAGE_BUCKET: shed-489901.firebasestorage.app
-  VITE_FIREBASE_MESSAGING_SENDER_ID: '350452481649'
-  VITE_FIREBASE_MEASUREMENT_ID: G-BDBRM73QVJ
-  VITE_FIREBASE_ANALYTICS_ENABLED: 'false'
-  VITE_FIREBASE_ANALYTICS_CONSENT: denied
-  VITE_LUPI_MCP_ENDPOINT: /mcp
-  VITE_LUPI_AUTH_FLOW: popup
-  VITE_NIST_BASE_URL: https://storage.googleapis.com/shed-489901-nist-demos/nist
-  VITE_LUPI_ANALYTICS_URL: /collectAnalytics
+  LUPI_REPOSITORY: alexwelcing/Lupi
+  LUPI_WORKER_NAME: lupi-edge
+  LUPI_WRANGLER_VERSION: 4.110.0
+  LUPI_WRANGLER_INTEGRITY: sha512-xZeXKYi7hxQRF5anL+v77RkufJNpF9f3Eqeyqq2QBsETpLZgh0Agj0jJ6JPtkbgn6ukZdh8OK5egsGPWIditgg==
+  LUPI_WRANGLER_LOCK_SHA256: 036615b8e80663617f476cd3a9f7d2f7dc7d858be7b38777b75ca1b9f0f5e9b0
 
 jobs:
-  deploy:
+  authority-scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    environment: prod
-
+    timeout-minutes: 15
+    outputs:
+      projection_sha256: ${{ steps.scan.outputs.projection_sha256 }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Validate exact owner dispatch and current main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          CUTOVER_RECEIPT_SHA256: ${{ inputs.cutover_receipt_sha256 }}
+          EXPECTED_CUTOVER_RECEIPT_SHA256: ${{ vars.LUPI_RELEASE_CUTOVER_RECEIPT_SHA256 }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const target = process.env.TARGET_SHA ?? '';
+          assert.equal(process.env.GITHUB_ACTOR, 'alexwelcing', 'only the repository owner may release');
+          assert.equal(process.env.GITHUB_EVENT_NAME, 'workflow_dispatch');
+          assert.equal(process.env.GITHUB_REF, 'refs/heads/main');
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT, '1', 'reruns are forbidden; dispatch a fresh release');
+          assert.match(target, /^[a-f0-9]{40}$/i, 'target_sha must be a full Git SHA');
+          assert.equal(target, process.env.GITHUB_SHA, 'target_sha must equal the immutable workflow SHA');
+          assert.equal(process.env.CONFIRMATION, `DEPLOY ${target} WITH BOUNDED ROLLBACK`);
+          assert.match(process.env.CUTOVER_RECEIPT_SHA256 ?? '', /^[a-f0-9]{64}$/i);
+          assert.equal(
+            process.env.CUTOVER_RECEIPT_SHA256,
+            process.env.EXPECTED_CUTOVER_RECEIPT_SHA256,
+            'v2 cutover receipt is absent or does not match the protected repository variable',
+          );
+          const response = await fetch('https://api.github.com/repos/alexwelcing/Lupi/branches/main', {
+            headers: {
+              accept: 'application/vnd.github+json',
+              authorization: `Bearer ${process.env.GH_TOKEN}`,
+              'x-github-api-version': '2022-11-28',
+            },
+          });
+          assert.equal(response.status, 200, `main lookup returned HTTP ${response.status}`);
+          const body = await response.json();
+          assert.equal(body?.commit?.sha, target, 'queued release target is no longer current main');
+          NODE
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          version: 9
+          ref: ${{ inputs.target_sha }}
+          persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Validate Cloudflare deploy configuration
+      - name: Closed-world current and historical authority scan
+        id: scan
         env:
-          VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
         run: |
-          missing=0
-          for name in VITE_FIREBASE_API_KEY CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
-            if [ -z "${!name}" ]; then
-              echo "::error::MISSING SECRET: ${name}"
-              missing=1
-            fi
-          done
-          exit "$missing"
+          mkdir -p .release/authority/controller
+          node tools/cloudflare-release-authority.mjs \
+            --root=. \
+            --repo=alexwelcing/Lupi \
+            --workflow=deploy-cloudflare.yml \
+            --target-sha=${{ inputs.target_sha }} \
+            --run-id=${{ github.run_id }} \
+            --run-attempt=${{ github.run_attempt }} \
+            --live-history=true > .release/authority/authority.json
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { copyFile, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
+          const report = JSON.parse(await readFile('.release/authority/authority.json', 'utf8'));
+          assert.equal(report.ok, true, JSON.stringify(report, null, 2));
+          const projection = report.current.projectionSha256;
+          assert.match(projection, /^[a-f0-9]{64}$/);
+          await copyFile('tools/cloudflare-release-receipt.mjs', '.release/authority/controller/cloudflare-release-receipt.mjs');
+          await mkdir('.release/authority/controller/wrangler-runtime', { recursive: true });
+          await copyFile('.github/wrangler-runtime/package.json', '.release/authority/controller/wrangler-runtime/package.json');
+          await copyFile('.github/wrangler-runtime/package-lock.json', '.release/authority/controller/wrangler-runtime/package-lock.json');
+          const controller = await readFile('.release/authority/controller/cloudflare-release-receipt.mjs');
+          const wranglerLock = await readFile('.release/authority/controller/wrangler-runtime/package-lock.json');
+          const workflow = await readFile('.github/workflows/deploy-cloudflare.yml');
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          const manifest = {
+            schemaVersion: 'lupi-authority-controller-bundle-v1',
+            targetSha: process.env.GITHUB_SHA,
+            projectionSha256: projection,
+            receiptParserSha256: createHash('sha256').update(controller).digest('hex'),
+            wranglerRuntimeLockSha256: createHash('sha256').update(wranglerLock).digest('hex'),
+          };
+          await writeFile('.release/authority/controller-manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
+          await writeFile('.release/authority/authorization.json', `${JSON.stringify({
+            workflow: 'deploy-cloudflare.yml',
+            workflowSha256: digest(workflow),
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+            targetSha: process.env.TARGET_SHA,
+            ref: process.env.GITHUB_REF,
+            actor: process.env.GITHUB_ACTOR,
+            event: process.env.GITHUB_EVENT_NAME,
+            confirmationMode: 'deploy-with-bounded-rollback-v1',
+            confirmationHash: digest(process.env.CONFIRMATION),
+            currentMainProofSha256: digest(JSON.stringify({ repository: 'alexwelcing/Lupi', targetSha: process.env.TARGET_SHA })),
+          }, null, 2)}\n`);
+          await appendFile(process.env.GITHUB_OUTPUT, `projection_sha256=${projection}\n`);
+          NODE
 
-      - name: Build web app and edge Worker
-        env:
-          VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
-        run: pnpm cloudflare:build
-
-      - name: Test edge Worker
-        run: pnpm cloudflare:test
-
-      - name: Deploy Cloudflare edge Worker
-        id: deploy_worker
-        uses: cloudflare/wrangler-action@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/mcp-worker
-          wranglerVersion: '4.110.0'
-          packageManager: pnpm
-          command: deploy
+          name: release-authority-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release/authority
+          if-no-files-found: error
+          retention-days: 90
 
-      - name: Upload Cloudflare secrets
+  release-package:
+    needs: authority-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap checksum-pinned actionlint
+        run: |
+          version='1.7.12'
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          expected='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+          root="$RUNNER_TEMP/actionlint"
+          mkdir -p "$root"
+          curl --fail --location --retry 3 \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}" \
+            --output "$root/$archive"
+          echo "$expected  $root/$archive" | sha256sum --check --strict
+          tar -xzf "$root/$archive" -C "$root" actionlint
+          echo "$root" >> "$GITHUB_PATH"
+
+      - name: Run every source-side release gate
+        env:
+          VITE_LUPI_BUILD_SHA: ${{ inputs.target_sha }}
+        run: |
+          pnpm verify:product-contract
+          pnpm lint
+          pnpm verify:workflows
+          pnpm audit --prod --audit-level high
+          node --test tools/verify-cloudflare-live.test.mjs
+          node --test tools/cloudflare-release-receipt.test.mjs
+          node --test tools/cloudflare-release-authority.test.mjs
+          node --test tools/cloudflare-release-workflow.test.mjs
+          node --test tools/build-cloudflare-release-package.test.mjs
+          pnpm build
+          pnpm test
+          pnpm cloudflare:test
+          npm ci --prefix functions
+          npm audit --prefix functions --omit=dev --audit-level=high
+          npm run build --prefix functions
+          npm test --prefix functions
+
+      - name: Verify pinned Wrangler registry integrity
+        run: |
+          actual="$(npm view wrangler@4.110.0 dist.integrity)"
+          test "$actual" = "$LUPI_WRANGLER_INTEGRITY"
+
+      - name: Materialize tested Worker output without a credential
         working-directory: apps/mcp-worker
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          LUPI_MCP_SHARED_SECRET: ${{ secrets.LUPI_MCP_SHARED_SECRET }}
-          RENDERER_TOKEN: ${{ secrets.LUPI_RENDERER_TOKEN }}
         run: |
-          if [ -n "$LUPI_MCP_SHARED_SECRET" ]; then
-            printf '%s' "$LUPI_MCP_SHARED_SECRET" | npx wrangler@4.110.0 secret put LUPI_MCP_SHARED_SECRET
-          fi
-          if [ -n "$RENDERER_TOKEN" ]; then
-            printf '%s' "$RENDERER_TOKEN" | npx wrangler@4.110.0 secret put RENDERER_TOKEN
-          fi
+          mkdir -p ../../.release/worker
+          pnpm dlx wrangler@4.110.0 versions upload \
+            --dry-run \
+            --outdir ../../.release/worker \
+            --config wrangler.toml
 
-      - name: Test deployed Cloudflare UI
-        env:
-          UI_TEST_URL: ${{ steps.deploy_worker.outputs.deployment-url }}
-          UI_TEST_EXPECT_HEALTH: 'true'
-        run: pnpm test:ui:deployed
+      - name: Build closed data-only release package
+        run: |
+          node tools/build-cloudflare-release-package.mjs build \
+            --worker-outdir=.release/worker \
+            --assets-dir=apps/web/dist \
+            --output-dir=.release/package \
+            --repository=alexwelcing/Lupi \
+            --workflow=deploy-cloudflare.yml \
+            --run-id=${{ github.run_id }} \
+            --run-attempt=${{ github.run_attempt }} \
+            --target-sha=${{ inputs.target_sha }} \
+            --wrangler-integrity="$LUPI_WRANGLER_INTEGRITY"
+          node tools/build-cloudflare-release-package.mjs verify \
+            --package-dir=.release/package
 
-      - name: Upload Playwright diagnostics
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+      - name: Rehearse the exact no-bundle upload projection
+        run: |
+          pnpm dlx wrangler@4.110.0 versions upload \
+            --dry-run \
+            --no-bundle \
+            --config .release/package/wrangler.toml
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: playwright-report-cloudflare-${{ github.run_id }}-${{ github.run_attempt }}
+          name: release-package-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release/package
+          if-no-files-found: error
+          retention-days: 90
+
+  release-admission:
+    needs: authority-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: lupi-production-read-v2
+    outputs:
+      prior_version_id: ${{ steps.admission.outputs.prior_version_id }}
+      prior_rank: ${{ steps.admission.outputs.prior_rank }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-authority-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authority
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.checkpoint_artifact }}
+          run-id: ${{ inputs.checkpoint_run_id }}
+          repository: alexwelcing/Lupi
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: checkpoint
+
+      - name: Validate authority and checkpoint data before reading Cloudflare
+        env:
+          EXPECTED_PROJECTION: ${{ needs.authority-scan.outputs.projection_sha256 }}
+          EXPECTED_CHECKPOINT_SHA256: ${{ inputs.checkpoint_sha256 }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFile, readdir } from 'node:fs/promises';
+          import { validateCheckpoint } from './authority/controller/cloudflare-release-receipt.mjs';
+          const authority = JSON.parse(await readFile('authority/authority.json', 'utf8'));
+          assert.equal(authority.ok, true);
+          assert.equal(authority.current.projectionSha256, process.env.EXPECTED_PROJECTION);
+          const files = (await readdir('checkpoint', { recursive: true })).filter((name) => name.endsWith('.json'));
+          assert.equal(files.length, 1, 'checkpoint artifact must contain exactly one JSON file');
+          const bytes = await readFile(`checkpoint/${files[0]}`);
+          assert.equal(createHash('sha256').update(bytes).digest('hex'), process.env.EXPECTED_CHECKPOINT_SHA256);
+          const value = JSON.parse(bytes);
+          validateCheckpoint(value);
+          NODE
+
+      - name: Read active deployment and complete version inventory
+        id: admission
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.LUPI_CLOUDFLARE_READ_TOKEN_V2 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          mkdir -p admission
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { appendFile, writeFile } from 'node:fs/promises';
+          const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/lupi-edge`;
+          const headers = { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` };
+          const get = async (url) => {
+            const response = await fetch(url, { headers });
+            assert.equal(response.status, 200, `${url} returned HTTP ${response.status}`);
+            const body = await response.json();
+            assert.equal(body.success, true, JSON.stringify(body.errors ?? []));
+            return body;
+          };
+          const deployments = await get(`${base}/deployments`);
+          const newest = deployments.result?.deployments?.[0];
+          const versions = newest?.versions ?? [];
+          assert.equal(versions.length, 1, 'production must have one active version');
+          const prior = versions[0].version_id ?? versions[0].id;
+          assert.match(prior ?? '', /^[A-Za-z0-9][A-Za-z0-9._:-]{5,}$/);
+          assert.equal(Number(versions[0].percentage), 100);
+          const ids = [];
+          let page = 1;
+          const perPage = 100;
+          for (;;) {
+            const body = await get(`${base}/versions?per_page=${perPage}&page=${page}`);
+            const items = body.result?.items;
+            assert.ok(Array.isArray(items), 'versions response must contain result.items');
+            for (const version of items) ids.push(version.id);
+            if (items.length < perPage) break;
+            page += 1;
+            assert.ok(page <= 100, 'version pagination exceeded safety bound');
+          }
+          assert.equal(new Set(ids).size, ids.length, 'duplicate version IDs');
+          const rank = ids.indexOf(prior) + 1;
+          assert.ok(rank >= 1 && rank <= 99, `prior version rank ${rank} is not safe for one upload`);
+          const inventory = {
+            schemaVersion: 'lupi-version-inventory-v1',
+            fetchedAt: new Date().toISOString(),
+            complete: true,
+            versionIds: ids,
+          };
+          await writeFile('admission/active.json', `${JSON.stringify({ versions }, null, 2)}\n`);
+          await writeFile('admission/pre-upload-inventory.json', `${JSON.stringify(inventory, null, 2)}\n`);
+          await appendFile(process.env.GITHUB_OUTPUT, `prior_version_id=${prior}\nprior_rank=${rank}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-admission-v1-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            playwright-report/
-            test-results/
-          if-no-files-found: ignore
-          retention-days: 7
+            admission
+            checkpoint
+          if-no-files-found: error
+          retention-days: 90
+
+  prior-rollback-verify:
+    needs: [authority-scan, release-admission]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-admission-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: prior
+
+      - name: Resolve exact predecessor source and rollback contract
+        id: prior
+        env:
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { appendFile, readFile, readdir } from 'node:fs/promises';
+          const names = await readdir('prior/checkpoint', { recursive: true });
+          const file = names.find((name) => name.endsWith('.json'));
+          assert.ok(file, 'checkpoint JSON missing');
+          const checkpoint = JSON.parse(await readFile(`prior/checkpoint/${file}`, 'utf8'));
+          const root = checkpoint.activeRollbackBundle;
+          assert.equal(root.activeVersionId, process.env.PRIOR_VERSION_ID);
+          assert.match(root.targetSha ?? '', /^[a-f0-9]{40}$/i);
+          assert.ok(root.rollbackContract);
+          await appendFile(process.env.GITHUB_OUTPUT, `prior_sha=${root.targetSha}\n`);
+          NODE
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ steps.prior.outputs.prior_sha }}
+          persist-credentials: false
+          path: predecessor
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: predecessor/pnpm-lock.yaml
+
+      - name: Reproduce predecessor rollback suite against current public traffic
+        working-directory: predecessor
+        env:
+          UI_TEST_URL: https://lupi.live
+          UI_TEST_EXPECT_HEALTH: 'true'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:ui
+
+      - name: Record predecessor replay proof
+        run: |
+          mkdir -p prior-proof
+          git -C predecessor rev-parse HEAD > prior-proof/source-sha.txt
+          sha256sum predecessor/pnpm-lock.yaml > prior-proof/lock.sha256
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: prior-rollback-proof-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: prior-proof
+          if-no-files-found: error
+          retention-days: 90
+
+  version-upload:
+    needs: [authority-scan, release-package, release-admission, prior-rollback-verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: lupi-production-write-v2
+    outputs:
+      candidate_version_id: ${{ steps.upload.outputs.candidate_version_id }}
+      candidate_preview_origin: ${{ steps.upload.outputs.candidate_preview_origin }}
+      post_upload_inventory_sha256: ${{ steps.upload.outputs.post_upload_inventory_sha256 }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-authority-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authority
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-package-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-package
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-admission-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-admission
+
+      - name: Validate the data-only payload without executing it
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { lstat, readFile } from 'node:fs/promises';
+          const manifest = JSON.parse(await readFile('release-package/release-package.json', 'utf8'));
+          assert.equal(manifest.schemaVersion, 'lupi-release-package-v1');
+          assert.equal(manifest.repository, 'alexwelcing/Lupi');
+          assert.equal(manifest.targetSha, process.env.TARGET_SHA);
+          assert.equal(Number(manifest.runAttempt), 1);
+          assert.equal(manifest.wranglerIntegrity, process.env.LUPI_WRANGLER_INTEGRITY);
+          for (const file of manifest.files) {
+            assert.match(file.path, /^(?:worker|assets)\/[A-Za-z0-9._/-]+$|^wrangler\.toml$/);
+            assert.ok(!file.path.includes('..'));
+            const path = `release-package/${file.path}`;
+            assert.equal((await lstat(path)).isSymbolicLink(), false);
+            const bytes = await readFile(path);
+            assert.equal(bytes.length, file.size);
+            assert.equal(createHash('sha256').update(bytes).digest('hex'), file.sha256);
+          }
+          const config = await readFile('release-package/wrangler.toml', 'utf8');
+          assert.ok(!/^\s*\[build\]/m.test(config));
+          assert.ok(!/\bcommand\s*=/m.test(config));
+          assert.match(config, /^main\s*=\s*"worker\/index\.js"/m);
+          assert.match(config, /^directory\s*=\s*"assets"/m);
+          NODE
+
+      - name: Bootstrap integrity-pinned Wrangler
+        run: |
+          expected='036615b8e80663617f476cd3a9f7d2f7dc7d858be7b38777b75ca1b9f0f5e9b0'
+          root="$RUNNER_TEMP/lupi-wrangler"
+          mkdir -p "$root/runtime"
+          cp authority/controller/wrangler-runtime/package.json "$root/runtime/package.json"
+          cp authority/controller/wrangler-runtime/package-lock.json "$root/runtime/package-lock.json"
+          echo "$expected  $root/runtime/package-lock.json" | sha256sum --check --strict
+          npm ci --ignore-scripts --omit=dev --prefix "$root/runtime"
+          test "$(node -p "require('$root/runtime/node_modules/wrangler/package.json').version")" = 4.110.0
+
+      - name: Run Wrangler versions upload
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.LUPI_CLOUDFLARE_WRITE_TOKEN_V2 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+        run: |
+          export WRANGLER_OUTPUT_FILE_PATH="$RUNNER_TEMP/version-upload.ndjson"
+          "$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" versions upload \
+            --no-bundle \
+            --strict \
+            --tag="$TARGET_SHA" \
+            --config "$GITHUB_WORKSPACE/release-package/wrangler.toml"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { appendFile, readFile, writeFile } from 'node:fs/promises';
+          const text = await readFile(`${process.env.RUNNER_TEMP}/version-upload.ndjson`, 'utf8');
+          const records = text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+          const flattened = JSON.stringify(records);
+          const versionId = records.flatMap((record) => [
+            record.version_id, record.versionId, record.version?.id,
+          ]).find(Boolean);
+          const preview = records.flatMap((record) => [
+            record.preview_url, record.previewUrl, record.version?.preview_url,
+          ]).find(Boolean);
+          assert.match(versionId ?? '', /^[A-Za-z0-9][A-Za-z0-9._:-]{5,}$/);
+          assert.match(preview ?? '', /^https:\/\//);
+          assert.notEqual(versionId, process.env.PRIOR_VERSION_ID);
+          assert.ok(flattened.includes(process.env.TARGET_SHA), 'upload output is not bound to the target SHA tag');
+          const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/lupi-edge`;
+          const ids = [];
+          let page = 1;
+          const perPage = 100;
+          for (;;) {
+            const response = await fetch(`${base}/versions?per_page=${perPage}&page=${page}`, {
+              headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+            });
+            assert.equal(response.status, 200, `post-upload inventory page ${page} failed`);
+            const body = await response.json();
+            assert.equal(body.success, true);
+            const items = body.result?.items;
+            assert.ok(Array.isArray(items), 'versions response must contain result.items');
+            for (const version of items) ids.push(version.id);
+            if (items.length < perPage) break;
+            page += 1;
+            assert.ok(page <= 100, 'post-upload pagination exceeded safety bound');
+          }
+          assert.equal(new Set(ids).size, ids.length, 'post-upload inventory contains duplicate version IDs');
+          assert.ok(ids.includes(versionId), 'uploaded candidate is absent from the complete post-upload inventory');
+          const priorRank = ids.indexOf(process.env.PRIOR_VERSION_ID) + 1;
+          assert.ok(priorRank >= 1 && priorRank <= 100, `prior version rank ${priorRank} is no longer rollback-eligible`);
+          const inventory = {
+            schemaVersion: 'lupi-version-inventory-v1',
+            fetchedAt: new Date().toISOString(),
+            complete: true,
+            versionIds: ids,
+          };
+          const inventorySha256 = createHash('sha256').update(JSON.stringify(inventory)).digest('hex');
+          await writeFile('candidate-upload.json', `${JSON.stringify({
+            schemaVersion: 'lupi-candidate-upload-v1',
+            versionId,
+            previewOrigin: new URL(preview).origin,
+            targetSha: process.env.TARGET_SHA,
+            postUploadInventory: inventory,
+            priorRank,
+          }, null, 2)}\n`);
+          await appendFile(
+            process.env.GITHUB_OUTPUT,
+            `candidate_version_id=${versionId}\ncandidate_preview_origin=${new URL(preview).origin}\npost_upload_inventory_sha256=${inventorySha256}\n`,
+          );
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-upload-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-upload.json
+          if-no-files-found: error
+          retention-days: 90
+
+  candidate-verify:
+    needs: [authority-scan, version-upload]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: candidate-upload-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: uploaded-candidate
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Record candidate identity from the clean upload job
+        run: |
+          mkdir -p candidate
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { copyFile, readFile } from 'node:fs/promises';
+          const bytes = await readFile('uploaded-candidate/candidate-upload.json');
+          const value = JSON.parse(bytes);
+          assert.equal(value.schemaVersion, 'lupi-candidate-upload-v1');
+          assert.equal(value.versionId, process.env.CANDIDATE_VERSION_ID);
+          assert.equal(value.previewOrigin, process.env.CANDIDATE_PREVIEW_ORIGIN);
+          assert.equal(value.targetSha, process.env.GITHUB_SHA);
+          assert.ok(Array.isArray(value.postUploadInventory?.versionIds));
+          const inventorySha256 = createHash('sha256').update(JSON.stringify(value.postUploadInventory)).digest('hex');
+          assert.equal(inventorySha256, process.env.POST_UPLOAD_INVENTORY_SHA256);
+          await copyFile('uploaded-candidate/candidate-upload.json', 'candidate/candidate-upload.json');
+          NODE
+        env:
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+          CANDIDATE_PREVIEW_ORIGIN: ${{ needs.version-upload.outputs.candidate_preview_origin }}
+          POST_UPLOAD_INVENTORY_SHA256: ${{ needs.version-upload.outputs.post_upload_inventory_sha256 }}
+
+      - name: Verify immutable candidate API identity and posture
+        run: |
+          pnpm verify:cloudflare-live \
+            --url=${{ needs.version-upload.outputs.candidate_preview_origin }} \
+            --label=prepromotion-candidate \
+            --expect-build-sha=${{ inputs.target_sha }} \
+            --expect-worker-version-id=${{ needs.version-upload.outputs.candidate_version_id }} \
+            --expect-web-assets=true \
+            --expect-r2=true \
+            --expect-d1=false \
+            --expect-queue=false \
+            --expect-renderer-endpoint=false \
+            --expect-selective-routing=true \
+            --expect-firebase-project=true \
+            --expect-large-asset-proxy=true \
+            --expect-auth-required=false \
+            --expect-render-execution=false \
+            --json > candidate/live-api.json
+
+      - name: Run complete UI suite against immutable candidate
+        env:
+          UI_TEST_URL: ${{ needs.version-upload.outputs.candidate_preview_origin }}
+          UI_TEST_EXPECT_HEALTH: 'true'
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:ui
+
+      - name: Build candidate rollback contract
+        env:
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const sha = async (path) => createHash('sha256').update(await readFile(path)).digest('hex');
+          const sourceManifest = {
+            schemaVersion: 'lupi-source-manifest-v1',
+            targetSha: process.env.GITHUB_SHA,
+            files: [
+              { path: 'pnpm-lock.yaml', sha256: await sha('pnpm-lock.yaml') },
+              { path: 'playwright.config.mjs', sha256: await sha('playwright.config.mjs') },
+              { path: 'tests/ui/lupi.spec.ts', sha256: await sha('tests/ui/lupi.spec.ts') },
+            ],
+          };
+          const sourceManifestBytes = Buffer.from(`${JSON.stringify(sourceManifest, null, 2)}\n`);
+          await writeFile('candidate/source-manifest.json', sourceManifestBytes);
+          const contract = {
+            schemaVersion: 'lupi-rollback-contract-v1',
+            repository: 'alexwelcing/Lupi',
+            targetSha: process.env.GITHUB_SHA,
+            workerVersionId: process.env.CANDIDATE_VERSION_ID,
+            commandMode: 'full-ui-v1',
+            nodeVersion: process.version,
+            pnpmVersion: '9',
+            lockSha256: await sha('pnpm-lock.yaml'),
+            sourceManifestSha256: createHash('sha256').update(sourceManifestBytes).digest('hex'),
+            configFiles: [{ path: 'playwright.config.mjs', sha256: await sha('playwright.config.mjs') }],
+            testFiles: [{ path: 'tests/ui/lupi.spec.ts', sha256: await sha('tests/ui/lupi.spec.ts') }],
+            environmentNames: ['UI_TEST_URL', 'UI_TEST_EXPECT_HEALTH'],
+            expectedTestNames: ['full-ui-v1'],
+            preMutationReport: { result: 'pass', sha256: await sha('candidate/live-api.json') },
+          };
+          await writeFile('candidate/rollback-contract.json', `${JSON.stringify(contract, null, 2)}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-verification-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate
+          if-no-files-found: error
+          retention-days: 90
+
+  receipt-collation:
+    needs: [authority-scan, release-package, release-admission, prior-rollback-verify, version-upload, candidate-verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-package-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/package
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-admission-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/admission
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: candidate-verification-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/candidate
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: candidate-upload-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/upload
+
+      - name: Collate and validate durable pre-mutation intent
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+          PRIOR_RANK: ${{ needs.release-admission.outputs.prior_rank }}
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+          CANDIDATE_PREVIEW_ORIGIN: ${{ needs.version-upload.outputs.candidate_preview_origin }}
+          POST_UPLOAD_INVENTORY_SHA256: ${{ needs.version-upload.outputs.post_upload_inventory_sha256 }}
+        run: |
+          mkdir -p intent
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, readdir, writeFile } from 'node:fs/promises';
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          const sortValue = (value) => Array.isArray(value)
+            ? value.map(sortValue)
+            : value && typeof value === 'object'
+              ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortValue(value[key])]))
+              : value;
+          const canonicalDigest = (value) => digest(JSON.stringify(sortValue(value)));
+          const files = await readdir('evidence', { recursive: true });
+          const find = (suffix) => {
+            const path = files.find((name) => name.endsWith(suffix));
+            if (!path) throw new Error(`missing ${suffix}`);
+            return `evidence/${path}`;
+          };
+          const packageManifest = JSON.parse(await readFile(find('release-package.json'), 'utf8'));
+          const contractBytes = await readFile(find('rollback-contract.json'));
+          const candidateUpload = JSON.parse(await readFile(find('candidate-upload.json'), 'utf8'));
+          const preInventoryBytes = await readFile(find('pre-upload-inventory.json'));
+          const checkpointName = files.find((name) => name.endsWith('.json') && name.includes('checkpoint'));
+          if (!checkpointName) throw new Error('checkpoint JSON missing from release admission evidence');
+          const checkpointBytes = await readFile(`evidence/${checkpointName}`);
+          const checkpoint = JSON.parse(checkpointBytes);
+          const priorRoot = checkpoint.activeRollbackBundle;
+          const postUploadInventorySha256 = digest(JSON.stringify(candidateUpload.postUploadInventory));
+          if (postUploadInventorySha256 !== process.env.POST_UPLOAD_INVENTORY_SHA256) {
+            throw new Error('post-upload inventory digest does not match retained candidate-upload evidence');
+          }
+          if (candidateUpload.versionId !== process.env.CANDIDATE_VERSION_ID) {
+            throw new Error('candidate-upload evidence is not bound to the candidate version');
+          }
+          const expectedPosture = {
+            webAssets: true, r2: true, d1: false, queue: false,
+            rendererEndpoint: false, firebaseProject: true,
+            largeAssetProxy: true, authRequired: false, renderExecution: false,
+          };
+          const intent = {
+            schemaVersion: 'lupi-release-intent-v1',
+            repository: 'alexwelcing/Lupi',
+            workflow: 'deploy-cloudflare.yml',
+            event: 'workflow_dispatch',
+            actor: 'alexwelcing',
+            ref: 'refs/heads/main',
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+            targetSha: process.env.TARGET_SHA,
+            confirmationMode: 'deploy-with-bounded-rollback-v1',
+            confirmationHash: digest(process.env.CONFIRMATION),
+            boundedRollbackAuthorized: true,
+            workerName: 'lupi-edge',
+            priorVersionId: process.env.PRIOR_VERSION_ID,
+            priorBaselineSha256: canonicalDigest(priorRoot.baseline),
+            priorContractSha256: canonicalDigest(priorRoot.rollbackContract),
+            priorEligibilityRank: Number(process.env.PRIOR_RANK),
+            candidateVersionId: process.env.CANDIDATE_VERSION_ID,
+            candidatePreviewOrigin: process.env.CANDIDATE_PREVIEW_ORIGIN,
+            candidateContractSha256: digest(contractBytes),
+            packageSha256: packageManifest.packageSha256,
+            preUploadInventorySha256: digest(preInventoryBytes),
+            postUploadInventorySha256,
+            expectedPostureSha256: digest(JSON.stringify(expectedPosture)),
+            wranglerVersion: '4.110.0',
+            createdAt: new Date().toISOString(),
+          };
+          await writeFile('intent/release-intent.json', `${JSON.stringify(intent, null, 2)}\n`);
+          await writeFile('intent/candidate-rollback-contract.json', contractBytes);
+          NODE
+          node tools/cloudflare-release-receipt.mjs validate-intent intent/release-intent.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-intent-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: intent
+          if-no-files-found: error
+          retention-days: 90
+
+  promote:
+    needs: [authority-scan, release-admission, version-upload, receipt-collation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: lupi-production-write-v2
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-authority-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authority
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-intent-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-intent
+
+      - name: Validate immutable release intent
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          const intent = JSON.parse(await readFile('release-intent/release-intent.json', 'utf8'));
+          assert.equal(intent.schemaVersion, 'lupi-release-intent-v1');
+          assert.equal(intent.targetSha, process.env.TARGET_SHA);
+          assert.equal(intent.priorVersionId, process.env.PRIOR_VERSION_ID);
+          assert.equal(intent.candidateVersionId, process.env.CANDIDATE_VERSION_ID);
+          assert.equal(intent.boundedRollbackAuthorized, true);
+          assert.equal(intent.runAttempt, 1);
+          NODE
+
+      - name: Bootstrap integrity-pinned Wrangler
+        run: |
+          expected='036615b8e80663617f476cd3a9f7d2f7dc7d858be7b38777b75ca1b9f0f5e9b0'
+          root="$RUNNER_TEMP/lupi-wrangler"
+          mkdir -p "$root/runtime"
+          cp authority/controller/wrangler-runtime/package.json "$root/runtime/package.json"
+          cp authority/controller/wrangler-runtime/package-lock.json "$root/runtime/package-lock.json"
+          echo "$expected  $root/runtime/package-lock.json" | sha256sum --check --strict
+          npm ci --ignore-scripts --omit=dev --prefix "$root/runtime"
+          test "$(node -p "require('$root/runtime/node_modules/wrangler/package.json').version")" = 4.110.0
+
+      - name: Run Wrangler versions deploy after final state re-read
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.LUPI_CLOUDFLARE_WRITE_TOKEN_V2 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+        run: |
+          before="$("$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" deployments status --name lupi-edge --json)"
+          node --input-type=module - "$before" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { writeFile } from 'node:fs/promises';
+          const value = JSON.parse(process.argv[2]);
+          const deployment = Array.isArray(value) ? value[0] : value;
+          const versions = deployment.versions ?? [];
+          assert.equal(versions.length, 1);
+          assert.equal(versions[0].version_id ?? versions[0].id, process.env.PRIOR_VERSION_ID);
+          assert.equal(Number(versions[0].percentage), 100);
+          const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/lupi-edge`;
+          const ids = [];
+          const perPage = 100;
+          for (let page = 1; page <= 100; page += 1) {
+            const response = await fetch(`${base}/versions?per_page=${perPage}&page=${page}`, {
+              headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+            });
+            assert.equal(response.status, 200, `pre-promotion inventory page ${page} failed`);
+            const body = await response.json();
+            assert.equal(body.success, true);
+            const items = body.result?.items;
+            assert.ok(Array.isArray(items), 'versions response must contain result.items');
+            for (const version of items) ids.push(version.id);
+            if (items.length < perPage) break;
+            assert.notEqual(page, 100, 'pre-promotion pagination exceeded safety bound');
+          }
+          assert.equal(new Set(ids).size, ids.length, 'pre-promotion inventory contains duplicate version IDs');
+          assert.ok(ids.includes(process.env.CANDIDATE_VERSION_ID), 'candidate is absent immediately before promotion');
+          const priorRank = ids.indexOf(process.env.PRIOR_VERSION_ID) + 1;
+          assert.ok(priorRank >= 1 && priorRank <= 100, `prior version rank ${priorRank} is not rollback-eligible immediately before promotion`);
+          const inventory = {
+            schemaVersion: 'lupi-version-inventory-v1',
+            fetchedAt: new Date().toISOString(),
+            complete: true,
+            versionIds: ids,
+          };
+          await writeFile('pre-promotion-inventory.json', `${JSON.stringify(inventory, null, 2)}\n`);
+          NODE
+          "$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" versions deploy \
+            "${CANDIDATE_VERSION_ID}@100%" \
+            --name lupi-edge \
+            --message "Lupi release ${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
+            -y
+          after="$("$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" deployments status --name lupi-edge --json)"
+          node --input-type=module - "$before" "$after" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const before = JSON.parse(process.argv[2]);
+          const value = JSON.parse(process.argv[3]);
+          const deployment = Array.isArray(value) ? value[0] : value;
+          const versions = deployment.versions ?? [];
+          assert.equal(versions.length, 1);
+          assert.equal(versions[0].version_id ?? versions[0].id, process.env.CANDIDATE_VERSION_ID);
+          assert.equal(Number(versions[0].percentage), 100);
+          const inventoryBytes = await readFile('pre-promotion-inventory.json');
+          await writeFile('promotion-control.json', `${JSON.stringify({
+            schemaVersion: 'lupi-promotion-control-v1',
+            priorDeployment: Array.isArray(before) ? before[0] : before,
+            candidateDeployment: deployment,
+            priorVersionId: process.env.PRIOR_VERSION_ID,
+            candidateVersionId: process.env.CANDIDATE_VERSION_ID,
+            prePromotionInventorySha256: createHash('sha256').update(inventoryBytes).digest('hex'),
+            prePromotionInventory: JSON.parse(inventoryBytes),
+            controllerRunId: process.env.GITHUB_RUN_ID,
+            controllerRunAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+          }, null, 2)}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: promotion-control-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: promotion-control.json
+          if-no-files-found: error
+          retention-days: 90
+
+  public-verify:
+    needs: [authority-scan, version-upload, receipt-collation, promote]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-intent-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-intent
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: promotion-control-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: promotion-control
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify custom-domain API identity separately
+        run: |
+          mkdir -p public
+          pnpm verify:cloudflare-live \
+            --url=https://lupi.live \
+            --label=postpromotion-custom-domain \
+            --require-custom-domain \
+            --expect-entry-from=${{ needs.version-upload.outputs.candidate_preview_origin }} \
+            --expect-build-sha=${{ inputs.target_sha }} \
+            --expect-worker-version-id=${{ needs.version-upload.outputs.candidate_version_id }} \
+            --expect-web-assets=true \
+            --expect-r2=true \
+            --expect-d1=false \
+            --expect-queue=false \
+            --expect-renderer-endpoint=false \
+            --expect-selective-routing=true \
+            --expect-firebase-project=true \
+            --expect-large-asset-proxy=true \
+            --expect-auth-required=false \
+            --expect-render-execution=false \
+            --json > public/live-api.json
+
+      - name: Run complete UI suite against custom domain
+        env:
+          UI_TEST_URL: https://lupi.live
+          UI_TEST_EXPECT_HEALTH: 'true'
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:ui
+
+      - name: Record public UI and source evidence
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          const sha = async (path) => digest(await readFile(path));
+          const sourceManifest = {
+            schemaVersion: 'lupi-source-manifest-v1',
+            targetSha: process.env.GITHUB_SHA,
+            files: [
+              { path: 'pnpm-lock.yaml', sha256: await sha('pnpm-lock.yaml') },
+              { path: 'playwright.config.mjs', sha256: await sha('playwright.config.mjs') },
+              { path: 'tests/ui/lupi.spec.ts', sha256: await sha('tests/ui/lupi.spec.ts') },
+            ],
+          };
+          const uiProof = {
+            schemaVersion: 'lupi-ui-proof-v1',
+            targetSha: process.env.GITHUB_SHA,
+            suite: 'full-ui-v1',
+            result: 'pass',
+            testFileSha256: await sha('tests/ui/lupi.spec.ts'),
+            configFileSha256: await sha('playwright.config.mjs'),
+          };
+          await writeFile('public/source-manifest.json', `${JSON.stringify(sourceManifest, null, 2)}\n`);
+          await writeFile('public/ui-proof.json', `${JSON.stringify(uiProof, null, 2)}\n`);
+          NODE
+
+      - name: Close successful release chain
+        env:
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          const sortValue = (value) => Array.isArray(value)
+            ? value.map(sortValue)
+            : value && typeof value === 'object'
+              ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortValue(value[key])]))
+              : value;
+          const canonicalDigest = (value) => digest(JSON.stringify(sortValue(value)));
+          const intentBytes = await readFile('release-intent/release-intent.json');
+          const intent = JSON.parse(intentBytes);
+          const contract = JSON.parse(await readFile('release-intent/candidate-rollback-contract.json', 'utf8'));
+          const report = await readFile('public/live-api.json');
+          const controlPlane = await readFile('promotion-control/promotion-control.json');
+          const uiProof = await readFile('public/ui-proof.json');
+          const sourceManifest = JSON.parse(await readFile('public/source-manifest.json', 'utf8'));
+          const projected = {
+            schemaVersion: 'lupi-release-outcome-v1',
+            repository: 'alexwelcing/Lupi',
+            targetSha: process.env.GITHUB_SHA,
+            activeVersionId: process.env.CANDIDATE_VERSION_ID,
+            completedAt: new Date().toISOString(),
+            apiReportSha256: digest(report),
+            controlPlaneSha256: digest(controlPlane),
+            rollbackUiReportSha256: digest(uiProof),
+            baseline: JSON.parse(report),
+            rollbackContract: contract,
+            sourceManifest,
+            intentSha256: digest(intentBytes),
+            packageSha256: intent.packageSha256,
+          };
+          const outcome = { ...projected, bundleSha256: canonicalDigest(projected) };
+          await writeFile('public/release-outcome.json', `${JSON.stringify(outcome, null, 2)}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-outcome-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: public
+          if-no-files-found: error
+          retention-days: 90
+
+  release-rollback:
+    if: ${{ always() && (needs.promote.result == 'success' || needs.promote.result == 'failure') && needs.public-verify.result != 'success' }}
+    needs: [authority-scan, release-admission, version-upload, receipt-collation, promote, public-verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: lupi-production-write-v2
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-authority-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authority
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-intent-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-intent
+
+      - name: Validate bounded rollback authorization
+        env:
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          const intent = JSON.parse(await readFile('release-intent/release-intent.json', 'utf8'));
+          assert.equal(intent.boundedRollbackAuthorized, true);
+          assert.equal(intent.confirmationMode, 'deploy-with-bounded-rollback-v1');
+          assert.equal(intent.priorVersionId, process.env.PRIOR_VERSION_ID);
+          assert.equal(intent.candidateVersionId, process.env.CANDIDATE_VERSION_ID);
+          NODE
+
+      - name: Bootstrap integrity-pinned Wrangler
+        run: |
+          expected='036615b8e80663617f476cd3a9f7d2f7dc7d858be7b38777b75ca1b9f0f5e9b0'
+          root="$RUNNER_TEMP/lupi-wrangler"
+          mkdir -p "$root/runtime"
+          cp authority/controller/wrangler-runtime/package.json "$root/runtime/package.json"
+          cp authority/controller/wrangler-runtime/package-lock.json "$root/runtime/package-lock.json"
+          echo "$expected  $root/runtime/package-lock.json" | sha256sum --check --strict
+          npm ci --ignore-scripts --omit=dev --prefix "$root/runtime"
+          test "$(node -p "require('$root/runtime/node_modules/wrangler/package.json').version")" = 4.110.0
+
+      - name: Reassign traffic to the retained prior version after final state and inventory reads
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.LUPI_CLOUDFLARE_WRITE_TOKEN_V2 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+          CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
+        run: |
+          current="$("$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" deployments status --name lupi-edge --json)"
+          node --input-type=module - "$current" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { writeFile } from 'node:fs/promises';
+          const value = JSON.parse(process.argv[2]);
+          const deployment = Array.isArray(value) ? value[0] : value;
+          const versions = deployment.versions ?? [];
+          assert.equal(versions.length, 1, 'split/third state forbids automatic rollback');
+          assert.equal(versions[0].version_id ?? versions[0].id, process.env.CANDIDATE_VERSION_ID);
+          assert.equal(Number(versions[0].percentage), 100);
+          const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/lupi-edge`;
+          const ids = [];
+          const perPage = 100;
+          for (let page = 1; page <= 100; page += 1) {
+            const response = await fetch(`${base}/versions?per_page=${perPage}&page=${page}`, {
+              headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+            });
+            assert.equal(response.status, 200, `pre-rollback inventory page ${page} failed`);
+            const body = await response.json();
+            assert.equal(body.success, true);
+            const items = body.result?.items;
+            assert.ok(Array.isArray(items), 'versions response must contain result.items');
+            for (const version of items) ids.push(version.id);
+            if (items.length < perPage) break;
+            assert.notEqual(page, 100, 'pre-rollback pagination exceeded safety bound');
+          }
+          assert.equal(new Set(ids).size, ids.length, 'pre-rollback inventory contains duplicate version IDs');
+          assert.ok(ids.includes(process.env.CANDIDATE_VERSION_ID), 'active candidate is absent from version inventory');
+          const priorRank = ids.indexOf(process.env.PRIOR_VERSION_ID) + 1;
+          assert.ok(priorRank >= 1 && priorRank <= 100, `prior version rank ${priorRank} is not rollback-eligible`);
+          await writeFile('pre-rollback-inventory.json', `${JSON.stringify({
+            schemaVersion: 'lupi-version-inventory-v1',
+            fetchedAt: new Date().toISOString(),
+            complete: true,
+            versionIds: ids,
+          }, null, 2)}\n`);
+          NODE
+          "$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" versions deploy \
+            "${PRIOR_VERSION_ID}@100%" \
+            --name lupi-edge \
+            --message "Bounded traffic rollback for ${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
+            -y
+          restored="$("$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" deployments status --name lupi-edge --json)"
+          node --input-type=module - "$current" "$restored" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const beforeValue = JSON.parse(process.argv[2]);
+          const afterValue = JSON.parse(process.argv[3]);
+          const before = Array.isArray(beforeValue) ? beforeValue[0] : beforeValue;
+          const after = Array.isArray(afterValue) ? afterValue[0] : afterValue;
+          const versions = after.versions ?? [];
+          assert.equal(versions.length, 1);
+          assert.equal(versions[0].version_id ?? versions[0].id, process.env.PRIOR_VERSION_ID);
+          assert.equal(Number(versions[0].percentage), 100);
+          const inventory = JSON.parse(await readFile('pre-rollback-inventory.json', 'utf8'));
+          await writeFile('rollback-command.json', `${JSON.stringify({
+            schemaVersion: 'lupi-bounded-release-rollback-command-v1',
+            controllerRunId: process.env.GITHUB_RUN_ID,
+            controllerRunAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+            beforeDeployment: before,
+            afterDeployment: after,
+            candidateVersionId: process.env.CANDIDATE_VERSION_ID,
+            rollbackVersionId: process.env.PRIOR_VERSION_ID,
+            preRollbackInventory: inventory,
+            result: 'traffic-reassigned',
+          }, null, 2)}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bounded-rollback-command-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: rollback-command.json
+          if-no-files-found: error
+          retention-days: 90
+
+  rollback-control-verify:
+    if: ${{ always() && needs.release-rollback.result == 'success' }}
+    needs: [authority-scan, release-admission, release-rollback]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: lupi-production-read-v2
+    steps:
+      - name: Verify restored control-plane identity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.LUPI_CLOUDFLARE_READ_TOKEN_V2 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+        run: |
+          mkdir -p rollback-control
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { writeFile } from 'node:fs/promises';
+          const url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/lupi-edge/deployments`;
+          const response = await fetch(url, { headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } });
+          assert.equal(response.status, 200);
+          const body = await response.json();
+          assert.equal(body.success, true);
+          const versions = body.result?.deployments?.[0]?.versions ?? [];
+          assert.equal(versions.length, 1);
+          assert.equal(versions[0].version_id ?? versions[0].id, process.env.PRIOR_VERSION_ID);
+          assert.equal(Number(versions[0].percentage), 100);
+          await writeFile('rollback-control/rollback-control.json', `${JSON.stringify({
+            schemaVersion: 'lupi-bounded-rollback-control-v1',
+            verifiedAt: new Date().toISOString(),
+            activeVersionId: process.env.PRIOR_VERSION_ID,
+            deployment: body.result.deployments[0],
+          }, null, 2)}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bounded-rollback-control-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: rollback-control
+          if-no-files-found: error
+          retention-days: 90
+
+  rollback-ui-verify:
+    if: ${{ always() && needs.rollback-control-verify.result == 'success' }}
+    needs: [authority-scan, release-admission, rollback-control-verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-admission-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: prior
+
+      - name: Extract exact rollback source
+        id: source
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { appendFile, readFile, readdir } from 'node:fs/promises';
+          const files = await readdir('prior/checkpoint', { recursive: true });
+          const name = files.find((value) => value.endsWith('.json'));
+          assert.ok(name, 'checkpoint JSON missing');
+          const checkpoint = JSON.parse(await readFile(`prior/checkpoint/${name}`, 'utf8'));
+          const sha = checkpoint.activeRollbackBundle?.targetSha;
+          assert.match(sha ?? '', /^[a-f0-9]{40}$/i);
+          await appendFile(process.env.GITHUB_OUTPUT, `sha=${sha}\n`);
+          NODE
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Verify restored predecessor with its own frozen suite
+        env:
+          UI_TEST_URL: https://lupi.live
+          UI_TEST_EXPECT_HEALTH: 'true'
+          PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          pnpm install --frozen-lockfile
+          mkdir -p rollback-ui
+          pnpm verify:cloudflare-live \
+            --url=https://lupi.live \
+            --label=bounded-rollback-public \
+            --require-custom-domain \
+            --expect-build-sha="$SOURCE_SHA" \
+            --expect-worker-version-id="$PRIOR_VERSION_ID" \
+            --expect-web-assets=true \
+            --expect-r2=true \
+            --expect-d1=false \
+            --expect-queue=false \
+            --expect-renderer-endpoint=false \
+            --expect-firebase-project=true \
+            --expect-large-asset-proxy=true \
+            --expect-auth-required=false \
+            --expect-render-execution=false \
+            --json > rollback-ui/live-api.json
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:ui
+          sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/lupi.spec.ts > rollback-ui/source-manifest.sha256
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          await writeFile('rollback-ui/ui-proof.json', `${JSON.stringify({
+            schemaVersion: 'lupi-ui-proof-v1',
+            targetSha: process.env.SOURCE_SHA,
+            activeVersionId: process.env.PRIOR_VERSION_ID,
+            suite: 'full-ui-v1',
+            result: 'pass',
+            liveApiSha256: digest(await readFile('rollback-ui/live-api.json')),
+            sourceManifestSha256: digest(await readFile('rollback-ui/source-manifest.sha256')),
+          }, null, 2)}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bounded-rollback-ui-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: rollback-ui
+          if-no-files-found: error
+          retention-days: 90
+
+  rollback-resolution:
+    if: ${{ always() && needs.release-rollback.result == 'success' && needs.rollback-control-verify.result == 'success' && needs.rollback-ui-verify.result == 'success' }}
+    needs: [authority-scan, release-admission, version-upload, release-rollback, rollback-control-verify, rollback-ui-verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-authority-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authority
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-intent-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: intent
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-admission-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: prior
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bounded-rollback-command-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: command
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bounded-rollback-control-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: control
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bounded-rollback-ui-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ui
+
+      - name: Close the failed release with a durable bounded-rollback resolution
+        run: |
+          mkdir -p resolution
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFile, readdir, writeFile } from 'node:fs/promises';
+          import { canonicalSha256, validateAuthorization, validateCheckpoint, validateReleaseIntent, validateResolution } from './authority/controller/cloudflare-release-receipt.mjs';
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          const intentBytes = await readFile('intent/release-intent.json');
+          const intent = JSON.parse(intentBytes);
+          validateReleaseIntent(intent);
+          const authorization = JSON.parse(await readFile('authority/authorization.json', 'utf8'));
+          validateAuthorization(authorization, 'release');
+          assert.equal(String(authorization.runId), String(intent.runId));
+          assert.equal(Number(authorization.runAttempt), Number(intent.runAttempt));
+          assert.equal(authorization.targetSha, intent.targetSha);
+          assert.equal(authorization.confirmationHash, intent.confirmationHash);
+          const checkpointFiles = await readdir('prior/checkpoint', { recursive: true });
+          const checkpointName = checkpointFiles.find((name) => name.endsWith('.json'));
+          assert.ok(checkpointName, 'prior checkpoint is missing');
+          const checkpoint = JSON.parse(await readFile(`prior/checkpoint/${checkpointName}`, 'utf8'));
+          validateCheckpoint(checkpoint);
+          const priorRoot = checkpoint.activeRollbackBundle;
+          assert.equal(priorRoot.activeVersionId, intent.priorVersionId);
+          assert.equal(canonicalSha256(priorRoot.baseline), intent.priorBaselineSha256);
+          assert.equal(canonicalSha256(priorRoot.rollbackContract), intent.priorContractSha256);
+          const commandBytes = await readFile('command/rollback-command.json');
+          const command = JSON.parse(commandBytes);
+          assert.equal(command.candidateVersionId, intent.candidateVersionId);
+          assert.equal(command.rollbackVersionId, intent.priorVersionId);
+          const controlBytes = await readFile('control/rollback-control.json');
+          const control = JSON.parse(controlBytes);
+          assert.equal(control.activeVersionId, intent.priorVersionId);
+          const apiBytes = await readFile('ui/live-api.json');
+          const uiBytes = await readFile('ui/ui-proof.json');
+          const ui = JSON.parse(uiBytes);
+          assert.equal(ui.targetSha, priorRoot.targetSha);
+          assert.equal(ui.activeVersionId, intent.priorVersionId);
+          const resolution = {
+            schemaVersion: 'lupi-release-resolution-v1',
+            repository: 'alexwelcing/Lupi',
+            targetSha: intent.targetSha,
+            sourceRunId: intent.runId,
+            sourceRunAttempt: intent.runAttempt,
+            resolutionMode: 'bounded-release-rollback-v1',
+            intentSha256: digest(intentBytes),
+            incidentSha256: null,
+            authorization,
+            beforeStateSha256: canonicalSha256(command.beforeDeployment),
+            commandResultSha256: digest(commandBytes),
+            afterStateSha256: digest(controlBytes),
+            priorContractSha256: intent.priorContractSha256,
+            controlPlaneReportSha256: digest(controlBytes),
+            apiReportSha256: digest(apiBytes),
+            rollbackUiReportSha256: digest(uiBytes),
+            completedAt: new Date().toISOString(),
+          };
+          validateResolution(resolution);
+          await writeFile('resolution/release-resolution.json', `${JSON.stringify(resolution, null, 2)}\n`);
+          NODE
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-resolution-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: resolution
+          if-no-files-found: error
+          retention-days: 90

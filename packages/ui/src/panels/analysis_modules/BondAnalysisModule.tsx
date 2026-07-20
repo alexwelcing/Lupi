@@ -22,24 +22,27 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
 }
 
 export function BondAnalysisModule() {
-  const {
-    bondStats,
-    bondCutoff,
-    setBondCutoff,
-    bondColorMode,
-    setBondColorMode,
-    bondThresholdMode,
-    setBondThresholdMode,
-    bondPercentileRange,
-    setBondPercentileRange,
-    applyPercentileCutoff,
-    filamentMode,
-    toggleFilamentMode,
-    meamScreening,
-    toggleMeamScreening,
-    grDrivenCutoff,
-    toggleGrDrivenCutoff,
-  } = useStore();
+  const bondStats = useStore((state) => state.bondStats);
+  const bondCutoff = useStore((state) => state.bondCutoff);
+  const setBondCutoff = useStore((state) => state.setBondCutoff);
+  const bondColorMode = useStore((state) => state.bondColorMode);
+  const setBondColorMode = useStore((state) => state.setBondColorMode);
+  const bondThresholdMode = useStore((state) => state.bondThresholdMode);
+  const setBondThresholdMode = useStore((state) => state.setBondThresholdMode);
+  const bondPercentileRange = useStore((state) => state.bondPercentileRange);
+  const setBondPercentileRange = useStore((state) => state.setBondPercentileRange);
+  const applyPercentileCutoff = useStore((state) => state.applyPercentileCutoff);
+  const filamentMode = useStore((state) => state.filamentMode);
+  const toggleFilamentMode = useStore((state) => state.toggleFilamentMode);
+  const meamScreening = useStore((state) => state.meamScreening);
+  const toggleMeamScreening = useStore((state) => state.toggleMeamScreening);
+  const grDrivenCutoff = useStore((state) => state.grDrivenCutoff);
+  const toggleGrDrivenCutoff = useStore((state) => state.toggleGrDrivenCutoff);
+  const file = useStore((state) => state.file);
+  const frameIndex = useStore((state) => state.frame);
+  const activeFrame = file?.trajectory.frames[frameIndex];
+  const distanceUnit = activeFrame?.distanceSemantics?.kind === 'angstrom' ? 'Å' : 'source units';
+  const topologyLabel = activeFrame?.bonds.length ? 'source bonds' : 'inferred proximity links';
 
   const [hoveredBin, setHoveredBin] = useState<number | null>(null);
 
@@ -70,7 +73,7 @@ export function BondAnalysisModule() {
           <div style={{ fontSize: 11, color: 'var(--slate-400)' }}>
             {bondStats ? (
               <span>
-                <strong style={{ color: 'var(--slate-200)' }}>{bondStats.count.toLocaleString()}</strong> proximity links detected
+                <strong style={{ color: 'var(--slate-200)' }}>{bondStats.count.toLocaleString()}</strong> {topologyLabel}
               </span>
             ) : (
               'No bond data yet'
@@ -89,12 +92,12 @@ export function BondAnalysisModule() {
         {/* ─── Stats Cards ─── */}
         {bondStats && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-            <StatCard label="Min" value={formatNumber(bondStats.minLength, 2)} unit="Å" />
-            <StatCard label="Mean" value={formatNumber(bondStats.meanLength, 2)} unit="Å" />
-            <StatCard label="Median" value={formatNumber(bondStats.medianLength, 2)} unit="Å" />
-            <StatCard label="Max" value={formatNumber(bondStats.maxLength, 2)} unit="Å" />
-            <StatCard label="Std Dev" value={formatNumber(bondStats.stdDev, 3)} unit="Å" />
-            <StatCard label="95th %ile" value={formatNumber(bondStats.percentiles['p95'] ?? 0, 2)} unit="Å" />
+            <StatCard label="Min" value={formatNumber(bondStats.minLength, 2)} unit={distanceUnit} />
+            <StatCard label="Mean" value={formatNumber(bondStats.meanLength, 2)} unit={distanceUnit} />
+            <StatCard label="Median" value={formatNumber(bondStats.medianLength, 2)} unit={distanceUnit} />
+            <StatCard label="Max" value={formatNumber(bondStats.maxLength, 2)} unit={distanceUnit} />
+            <StatCard label="Std Dev" value={formatNumber(bondStats.stdDev, 3)} unit={distanceUnit} />
+            <StatCard label="95th %ile" value={formatNumber(bondStats.percentiles['p95'] ?? 0, 2)} unit={distanceUnit} />
           </div>
         )}
 
@@ -182,14 +185,14 @@ export function BondAnalysisModule() {
                 whiteSpace: 'nowrap',
                 zIndex: 10,
               }}>
-                {formatNumber(histogram.binEdges[hoveredBin], 2)}–{formatNumber(histogram.binEdges[hoveredBin + 1], 2)} Å:
+                {formatNumber(histogram.binEdges[hoveredBin], 2)}–{formatNumber(histogram.binEdges[hoveredBin + 1], 2)} {distanceUnit}:
                 {' '}<strong>{histogram.bins[hoveredBin].toLocaleString()}</strong> links
               </div>
             )}
             {/* Axis labels */}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--slate-500)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
-              <span>{bondStats ? formatNumber(bondStats.minLength, 1) : '0'} Å</span>
-              <span>{bondStats ? formatNumber(bondStats.maxLength, 1) : '4'} Å</span>
+              <span>{bondStats ? formatNumber(bondStats.minLength, 1) : '0'} {distanceUnit}</span>
+              <span>{bondStats ? formatNumber(bondStats.maxLength, 1) : '4'} {distanceUnit}</span>
             </div>
           </div>
         )}
@@ -204,7 +207,7 @@ export function BondAnalysisModule() {
           {grDrivenCutoff && bondStats && (
             <div style={{ fontSize: 10, color: 'var(--slate-400)', padding: '4px 0' }}>
               {bondStats.bondLengthHistogramFirstMinimum != null
-                ? <>Histogram minimum: <strong style={{ color: 'var(--lupine-300)' }}>{formatNumber(bondStats.bondLengthHistogramFirstMinimum, 2)} Å</strong></>
+                ? <>Histogram minimum: <strong style={{ color: 'var(--lupine-300)' }}>{formatNumber(bondStats.bondLengthHistogramFirstMinimum, 2)} {distanceUnit}</strong></>
                 : 'Analyzing histogram for first minimum...'}
             </div>
           )}
@@ -239,14 +242,14 @@ export function BondAnalysisModule() {
               </button>
               {bondStats && (
                 <div style={{ fontSize: 10, color: 'var(--slate-400)', textAlign: 'center' }}>
-                  Cutoff would be <strong style={{ color: 'var(--lupine-300)' }}>{formatNumber(bondStats.percentiles[`p${bondPercentileRange[1]}` as keyof typeof bondStats.percentiles] as number, 2)} Å</strong>
+                  Cutoff would be <strong style={{ color: 'var(--lupine-300)' }}>{formatNumber(bondStats.percentiles[`p${bondPercentileRange[1]}` as keyof typeof bondStats.percentiles] as number, 2)} {distanceUnit}</strong>
                 </div>
               )}
             </>
           ) : (
             bondStats && (
               <div style={{ fontSize: 10, color: 'var(--slate-400)', padding: '6px 0' }}>
-                Detected range: <strong style={{ color: 'var(--slate-200)' }}>{formatNumber(bondStats.minLength, 2)} – {formatNumber(bondStats.maxLength, 2)} Å</strong>
+                Detected range: <strong style={{ color: 'var(--slate-200)' }}>{formatNumber(bondStats.minLength, 2)} – {formatNumber(bondStats.maxLength, 2)} {distanceUnit}</strong>
               </div>
             )
           )}

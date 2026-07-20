@@ -11,6 +11,10 @@ research machinery.
 It owns molecule inspection, trajectories, visual controls, saved views,
 exports, Firebase viewer support, and agent-driven viewer workflows.
 
+The normative product boundary is the
+[Lupi product ownership contract](docs/product-ownership-contract.md). It wins
+when an older roadmap, campaign plan, branch, or overview conflicts with it.
+
 ## Sibling Repos
 
 - **Lupine Science**: `https://github.com/alexwelcing/lupine-science`
@@ -26,7 +30,9 @@ exports, Firebase viewer support, and agent-driven viewer workflows.
 
 Lupi should be beautiful to clone on its own. It may consume public molecule,
 evidence, search, or MCP contracts from Rhizo, but it should not require the
-science workbench to build or run.
+science workbench to build or run. It presents versioned external research
+results and provenance; it does not execute research or decide scientific
+claims.
 
 Historical development lives in `https://github.com/alexwelcing/lupine` during
 the transition.

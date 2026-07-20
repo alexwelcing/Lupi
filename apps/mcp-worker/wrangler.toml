@@ -13,7 +13,10 @@ keep_vars = true
 directory = "../web/dist"
 binding = "WEB_ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = true
+run_worker_first = ["/health", "/mcp", "/mcp-manifest.json", "/v1", "/v1/*", "/assets/sha256-*", "/collectAnalytics", "/api/analytics", "/__/auth/*", "/__/firebase/*", "/view/*", "/gallery/curated/lupine_genesis.*", "/gallery/research/hfc/*"]
+
+[version_metadata]
+binding = "CF_VERSION_METADATA"
 
 [vars]
 ASSET_BASE_URL = "https://assets.lupi.live"
@@ -23,13 +26,21 @@ FIREBASE_PROJECT_ID = "shed-489901"
 LUPI_PUBLIC_ORIGIN = "https://lupi.live"
 CORS_ORIGINS = "https://lupi.live,http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:8787"
 
-# Production bindings are intentionally documented but not enabled here. Create
-# them per account/environment before deploy:
-#
+# Public/gallery assets and private renderer artifacts deliberately use
+# different buckets. RENDER_ASSETS must not have an r2.dev or public custom
+# domain: authenticated Worker routes are the only supported read path.
 [[r2_buckets]]
 binding = "ASSETS"
 bucket_name = "lupi-assets"
+
+[[r2_buckets]]
+binding = "RENDER_ASSETS"
+bucket_name = "lupi-render-artifacts"
+preview_bucket_name = "lupi-render-artifacts-preview"
 #
+# D1 and Queue remain reserved for a later asynchronous execution profile. The
+# first executable legacy-v0 lane uses synchronous HTTP rendering and stores
+# job receipts, provenance, and immutable artifacts in RENDER_ASSETS.
 # [[d1_databases]]
 # binding = "DB"
 # database_name = "lupi-mcp"
@@ -39,7 +50,10 @@ bucket_name = "lupi-assets"
 # binding = "RENDER_QUEUE"
 # queue = "lupi-render-jobs"
 
-# Optional secrets:
+# Required before enabling the authenticated legacy-v0 execution lane:
+# - RENDERER_ENDPOINT          non-secret HTTPS endpoint for the co-built renderer
+# - LUPI_MCP_SHARED_SECRET     caller bearer secret for render/job/artifact routes
+# - RENDERER_TOKEN             independent bearer secret sent only to RENDERER_ENDPOINT
+#
+# Optional:
 # - FIREBASE_WEB_API_KEY        optional public Firebase web key, only if Firestore REST rules ever require it
-# - LUPI_MCP_SHARED_SECRET     bearer secret for protected MCP render/job tools
-# - RENDERER_TOKEN             bearer token sent to RENDERER_ENDPOINT

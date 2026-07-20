@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { getElementSpec } from '@atlas/core';
+import { ELEMENT_DATA, hasCompleteElementMapping, resolveAtomicNumber } from '@atlas/core';
 import { IconClose } from '../icons';
 import { createKeyframe, type FlythroughSequence } from '../flythrough';
 import { useStore } from '../store';
@@ -189,6 +189,7 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
   const cameraPosition = useStore(s => s.cameraPosition);
   const cameraTarget = useStore(s => s.cameraTarget);
   const selectedAtoms = useStore(s => s.selectedAtoms);
+  const measurement = useStore(s => s.measurement);
   const lastBondCount = useStore(s => s.lastBondCount);
   const showBonds = useStore(s => s.showBonds);
   const [status, setStatus] = useState<ExportStatus>({ kind: 'idle', label: 'Ready' });
@@ -209,13 +210,16 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
   const systemInfo = useMemo(() => {
     if (!file || !currentFrame) return null;
     const counts = new Map<number, number>();
-    for (let i = 0; i < currentFrame.natoms; i++) {
-      const type = currentFrame.types[i];
-      counts.set(type, (counts.get(type) ?? 0) + 1);
+    const hasElementIdentity = hasCompleteElementMapping(currentFrame);
+    if (hasElementIdentity) {
+      for (let i = 0; i < currentFrame.natoms; i++) {
+        const atomicNumber = resolveAtomicNumber(currentFrame, currentFrame.types[i])!;
+        counts.set(atomicNumber, (counts.get(atomicNumber) ?? 0) + 1);
+      }
     }
     const formula = Array.from(counts.entries())
       .sort(([a], [b]) => sortFormulaTypes(a, b))
-      .map(([type, count]) => `${getElementSpec(type).symbol}${count > 1 ? count : ''}`)
+      .map(([atomicNumber, count]) => `${ELEMENT_DATA[atomicNumber].symbol}${count > 1 ? count : ''}`)
       .join('');
 
     return {
@@ -247,12 +251,14 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
 
   const runStudySheetExport = useCallback(() => {
     if (!file || !currentFrame) return;
+    useStore.setState({ playing: false });
     const facts = buildMoleculeStudyFacts({
       file,
       frameIndex: frame,
       selectedAtoms,
       lastBondCount,
       showBonds,
+      measurement,
       shareUrl: typeof window === 'undefined' ? undefined : window.location.href,
     });
     if (!facts) {
@@ -288,7 +294,7 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
         }
       },
     });
-  }, [currentFrame, file, frame, lastBondCount, selectedAtoms, showBonds, triggerExport]);
+  }, [currentFrame, file, frame, lastBondCount, measurement, selectedAtoms, showBonds, triggerExport]);
 
   const runUsdExport = useCallback(() => {
     if (!file) return;

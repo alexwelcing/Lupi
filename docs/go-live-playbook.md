@@ -1,5 +1,12 @@
 # LUPI Go-Live Playbook
 
+> **Historical campaign plan — not current product authority.** This document is
+> preserved for provenance, and its time-relative statuses may be stale. The
+> [Lupi product ownership contract](product-ownership-contract.md) wins wherever
+> this playbook conflicts with current ownership. Paid acquisition, lifecycle
+> email, web push, RFM segmentation, retention prompts, and campaign operations
+> require a separately commissioned owner and cannot redefine viewer core.
+
 > The single doc the team executes from before the $10k ad spend.
 > It melds the **pre-spend retention audit** (the HOLD verdict + path to GO)
 > with the **LUPI winning playbook** (North Star, activation aha, growth loops,

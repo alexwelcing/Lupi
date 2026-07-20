@@ -20,6 +20,8 @@ interface AtomPickerProps {
   onClick?: (atomIndex: number | null) => void;
   onSelect?: (indices: number[]) => void; // Multi-select
   selectionMode?: 'single' | 'add' | 'remove' | 'measure';
+  maxMeasureAtoms?: number;
+  hiddenAtomTypes?: ReadonlySet<number>;
 }
 
 export interface PickedAtom {
@@ -37,11 +39,19 @@ export function AtomPicker({
   onClick,
   onSelect,
   selectionMode = 'single',
+  maxMeasureAtoms = 4,
+  hiddenAtomTypes = new Set<number>(),
 }: AtomPickerProps) {
   const { camera, scene, get, gl } = useThree();
   const [hoveredAtom, setHoveredAtom] = useState<number | null>(null);
   const [selectedAtoms, setSelectedAtoms] = useState<Set<number>>(new Set());
   const measureAtomsRef = useRef<number[]>([]); // For measurement mode
+  const hiddenAtomTypesKey = Array.from(hiddenAtomTypes).sort((a, b) => a - b).join(',');
+  const hiddenTypes = useMemo(
+    () => new Set(hiddenAtomTypes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hiddenAtomTypesKey],
+  );
 
   // Pick atom at screen position
   const pickAtom = useCallback((): PickedAtom | null => {
@@ -68,6 +78,7 @@ export function AtomPicker({
         let currentSliceSolid: { index: number; distToRay: number } | null = null;
         
         for (const { index } of nearby) {
+          if (hiddenTypes.has(frame.types[index])) continue;
           const atomX = frame.positions[index * 3];
           const atomY = frame.positions[index * 3 + 1];
           const atomZ = frame.positions[index * 3 + 2];
@@ -128,7 +139,7 @@ export function AtomPicker({
     }
 
     return null;
-  }, [camera, frame.positions, radius, gl, spatialHash]);
+  }, [camera, frame.positions, frame.types, hiddenTypes, radius, gl, spatialHash]);
 
   // Mouse move handler
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -183,9 +194,14 @@ export function AtomPicker({
             next.delete(index);
             break;
           case 'measure':
-            // Collect up to 4 atoms for measurement
+            // Repeated clicks do not create zero-length segments. Once the
+            // requested arity is full, the oldest endpoint rolls off so the
+            // user can refine a measurement without clearing the tool.
+            if (measureAtomsRef.current.includes(index)) {
+              return new Set(measureAtomsRef.current);
+            }
             measureAtomsRef.current.push(index);
-            if (measureAtomsRef.current.length > 4) {
+            if (measureAtomsRef.current.length > maxMeasureAtoms) {
                measureAtomsRef.current.shift();
             }
             onSelect?.(measureAtomsRef.current);
@@ -203,7 +219,12 @@ export function AtomPicker({
         onSelect?.([]);
       }
     }
-  }, [enabled, onClick, onSelect, pickAtom, selectionMode]);
+  }, [enabled, maxMeasureAtoms, onClick, onSelect, pickAtom, selectionMode]);
+
+  useEffect(() => {
+    measureAtomsRef.current = [];
+    setSelectedAtoms(new Set());
+  }, [frame, selectionMode]);
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {

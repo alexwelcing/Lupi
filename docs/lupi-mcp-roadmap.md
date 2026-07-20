@@ -6,7 +6,10 @@ Make Lupi MCP a secure, agent-usable molecular viewer service that Codex, Claude
 
 ## Current Baseline
 
-- `apps/mcp-worker` is the new browser-free Cloudflare MCP control plane. It exposes MCP JSON-RPC over `POST /mcp`, health/manifest endpoints, deterministic render job IDs, optional R2/D1/Queue bindings, and a renderer-backend handoff contract.
+- `apps/mcp-worker` is the browser-free Cloudflare MCP control plane. It exposes MCP JSON-RPC over `POST /mcp`, health/manifest endpoints, and two deliberately different render profiles: `RenderRequestV1` validation-only and an owner-approved authenticated `legacy-v0` synchronous opaque-PNG executor.
+- The bounded legacy profile accepts template or procedural molecules only, has no viewer overrides, delegates through a separately authenticated `apps/render-backend`, validates the returned PNG independently, and stores job receipts, per-job provenance, and immutable artifacts in private `RENDER_ASSETS` production/preview buckets.
+- The legacy implementation exists in source but is not production-active merely by being merged. It still requires private bucket provisioning, `RENDERER_ENDPOINT`, distinct caller and renderer secrets, an authorized deployment, and candidate/custom-domain live proof. D1 and Queue remain reserved for a later asynchronous profile.
+- The human viewer now has a source-aware distance/angle workflow with exact-frame provenance and save/reopen persistence. It explicitly labels unknown source units and discloses that minimum-image/PBC treatment is not applied. Dihedral, multiple-measurement history/export, and PBC-aware measurement remain future work.
 - `/#/mcp` runs the real Atlas viewer bridge, not the old marketing/studio mock.
 - Firebase Auth is wired into the viewer header and MCP harness.
 - The `shed-489901` Firebase project has Google sign-in enabled and authorizes local dev return domains.
@@ -27,7 +30,7 @@ Make Lupi MCP a secure, agent-usable molecular viewer service that Codex, Claude
 ## Milestone 2: Stable Agent Contract
 
 - Freeze the first supported tool set around viewer control, structure loading, style changes, camera control, screenshots, and export.
-- Expose creative asset export through `lupi.export_asset`, returning inline PNG/JPEG/WebP and GLB/USDZ artifacts for model consumption.
+- Expose creative asset export through `lupi.export_asset`, returning inline PNG/JPEG/WebP and deterministic GLB artifacts for model consumption; restore USDZ only after byte-stable serialization is proven.
 - Publish JSON schemas for every request and response.
 - Add an MCP command for `lupi.save_view` that writes the same Firestore saved-view document as the browser button.
 - Add deterministic request IDs, transcript entries, and replayable command logs.
@@ -37,7 +40,12 @@ Make Lupi MCP a secure, agent-usable molecular viewer service that Codex, Claude
 
 - Add durable scene/session IDs so agents can reopen or share a generated view.
 - Stream large molecule loads and return progress events instead of blocking.
-- Add screenshot/export artifact storage with authenticated download URLs.
+- Activate the bounded owner-operated legacy PNG lane only after its private
+  buckets, backend, distinct secrets, deployment, and authenticated live
+  render/job/provenance/artifact readback are proven.
+- Keep `RenderRequestV1` validation-only until source resolution, exact spec
+  application, an activated renderer fingerprint, V1 sidecars, and immutable
+  cache-conflict behavior are implemented and proven as one contract.
 - Gate expensive operations by user/project quotas.
 
 ## Milestone 4: Security And Admin
@@ -49,6 +57,9 @@ Make Lupi MCP a secure, agent-usable molecular viewer service that Codex, Claude
 
 ## Milestone 5: Verification
 
+- At the end of the current development slice, verify the distance/angle
+  inspect-save-reopen loop and the authenticated legacy render/retrieve loop;
+  report Local, CI, Deploy, Live API, and Public site independently.
 - Add unit coverage for auth state, request token attachment, and schema validation.
 - Add browser smoke tests for `/#/mcp`: signed-out state, redirect sign-in launch, token-present state, and authenticated command execution.
 - Add server tests with valid, expired, malformed, and missing Firebase tokens.

@@ -52,14 +52,20 @@ async function assertLooksLikeMoleculeData(blob: Blob, url: string): Promise<voi
   }
 }
 
-export async function loadMoleculeSource(loadUrl: string): Promise<void> {
+export interface LoadMoleculeSourceOptions {
+  /** Deny every network redirect at each HEAD, range, and full-fetch seam. */
+  strictRemote?: boolean;
+}
+
+export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeSourceOptions = {}): Promise<void> {
   clearPreviousStreaming();
 
   useStore.getState().setLoading(true, 0);
 
   try {
     const { isGlimbinUrl, autoDetectLoader } = await import('@atlas/parsers/StreamingLoader');
-    const loaderType = isGlimbinUrl(loadUrl) ? 'streaming' : await autoDetectLoader(loadUrl);
+    const fetchOptions: Pick<RequestInit, 'redirect'> = options.strictRemote ? { redirect: 'error' } : {};
+    const loaderType = isGlimbinUrl(loadUrl) ? 'streaming' : await autoDetectLoader(loadUrl, fetchOptions);
 
     if (loaderType === 'streaming') {
       const { StreamingLoader } = await import('@atlas/parsers/StreamingLoader');
@@ -70,7 +76,7 @@ export async function loadMoleculeSource(loadUrl: string): Promise<void> {
         onTelemetry: (stats) => {
           useStore.getState().setStreamingTelemetry(stats);
         },
-      });
+      }, 20, fetchOptions);
 
       await loader.fetchHeader();
       await loader.fetchIndex();
@@ -108,7 +114,8 @@ export async function loadMoleculeSource(loadUrl: string): Promise<void> {
       return;
     }
 
-    const resp = await fetch(loadUrl);
+    const resp = await fetch(loadUrl, fetchOptions);
+    if (options.strictRemote && resp.redirected) throw new Error('Remote molecule redirects are not allowed.');
     if (!resp.ok) throw new Error(`Failed to fetch ${loadUrl}: ${resp.status}`);
     const blob = await resp.blob();
     await assertLooksLikeMoleculeData(blob, loadUrl);
@@ -247,7 +254,9 @@ export async function importParsedTrajectory(args: {
   persist?: boolean;
 }): Promise<{ persistedId: string | null }> {
   const { name, trajectory, thermo = null, size, persist = true } = args;
-  const frames = trajectory.frames.filter(Boolean);
+  const frames = trajectory.frames.filter(
+    (frame): frame is import('@atlas/core/types').Frame => frame !== undefined,
+  );
 
   const { canEncodeGlimbin, assembleGlimbinBlob } = await import('@atlas/core/glimbin');
   const shouldStream =
@@ -342,6 +351,12 @@ export async function importDumpFileStreaming(file: File): Promise<{
           triclinic: false,
           columns: h.columns,
           ids: new Int32Array(h.natoms),
+          // Progressive slabs may paint before the full frame validates. Keep
+          // the worker's unverified descriptor until frame0-complete upgrades
+          // it; never infer stability from partially filled numeric IDs.
+          identity: h.identity,
+          typeSemantics: h.typeSemantics,
+          distanceSemantics: h.distanceSemantics,
           types: new Int32Array(h.natoms),
           positions: new Float32Array(h.natoms * 3),
           bonds: new Int32Array(0),
@@ -357,7 +372,14 @@ export async function importDumpFileStreaming(file: File): Promise<{
         ensureFrame0Mounted();
         useStore.getState().setLoadedAtomCount(Math.min(c.start + c.count, headerNatoms));
       },
-      onFrame0Complete: (loaded) => {
+      onFrame0Complete: (loaded, identity) => {
+        if (frame0) {
+          frame0.identity = identity;
+          const mounted = useStore.getState().file;
+          if (mounted?.trajectory.frames[0] === frame0) {
+            useStore.setState({ file: { ...mounted } });
+          }
+        }
         useStore.getState().setLoadedAtomCount(loaded);
       },
       onProgress: ({ framesParsed }) => {

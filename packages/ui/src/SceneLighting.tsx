@@ -15,10 +15,17 @@
  *     owns scene.environment with the live reflection map and the two must not
  *     fight over it.
  */
-import { Environment } from '@react-three/drei';
+import { useLayoutEffect } from 'react';
+import { useEnvironment } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import { useXR } from '@react-three/xr';
+import * as THREE from 'three';
 import { useStore } from './store';
-import { resolveSceneEnvironment } from './sceneEnvironment';
+import {
+  installSceneEnvironmentPmrem,
+  resolveSceneEnvironment,
+  type DreiEnvironmentPreset,
+} from './sceneEnvironment';
 
 // Lighting rig radius (meters) — matches the legacy inline placement in App.
 const RIG_RADIUS = 11.18;
@@ -29,6 +36,25 @@ const DEG = Math.PI / 180;
 // extremely dark; the light probe + reflections carry the rest.
 const AR_AMBIENT_FACTOR = 0.15;
 const AR_KEY_FACTOR = 0.1;
+
+/**
+ * Load the exact Drei preset asset, prefilter it explicitly for the custom atom
+ * BRDF, and tag the resulting CubeUV texture with its immutable asset identity.
+ * Suspense controls loading; the tag controls correctness. Export never treats
+ * an untagged/old environment as capture-ready.
+ */
+function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
+  const source = useEnvironment({ preset });
+  const { gl, scene } = useThree();
+  useLayoutEffect(() => installSceneEnvironmentPmrem(
+    scene,
+    source,
+    preset,
+    () => new THREE.PMREMGenerator(gl),
+  ), [gl, preset, scene, source]);
+
+  return null;
+}
 
 function polarToCartesian(azimuthDeg: number, elevationDeg: number) {
   const az = azimuthDeg * DEG;
@@ -84,7 +110,7 @@ export function SceneLighting() {
           <directionalLight position={[rx, ry, rz]} intensity={key * 0.15} color={rimLightColor} />
         </>
       )}
-      {!isAR && finalEnv && <Environment preset={finalEnv as any} />}
+      {!isAR && finalEnv && <LupiEnvironment preset={finalEnv} />}
     </>
   );
 }

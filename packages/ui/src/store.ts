@@ -7,12 +7,29 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Frame, Trajectory, ThermoData, ColormapName, ColorMode, BondStats } from '@atlas/core/types';
+import type {
+  Frame,
+  Trajectory,
+  ThermoData,
+  ColormapName,
+  ColorMode,
+  BondStats,
+  RenderArtifactKeyV1,
+  RenderArtifactSpecV1,
+  RenderDeliveryV1,
+  RendererFingerprintV1,
+  RenderSpecIdV1,
+} from '@atlas/core';
 import type { NistCatalogEntry } from '@atlas/nist';
 import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
+import type { MolecularMeasurement, MeasurementTool } from './measurements';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
 import { MATERIAL_SCENES, getScene, DEFAULT_SCENE_ID } from '@atlas/scene/materials';
-import { getElementSpec } from '@atlas/core';
+import {
+  canInferCovalentBonds,
+  hasCompleteElementMapping,
+  resolveTypeDisplayRadius,
+} from '@atlas/core';
 
 /** A pinned text annotation tied to a specific atom by index in the
  *  current frame. Persists across frame changes; if the atom moves, the
@@ -148,9 +165,72 @@ function sanitizeEnvironmentPreset(value: unknown): AppState['environmentPreset'
 }
 
 function sanitizeNumberRange(value: unknown, fallback: number, min: number, max: number): number {
-  const numeric = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(min, Math.min(max, numeric));
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) return fallback;
+  return value;
+}
+
+function sanitizeIntegerRange(value: unknown, fallback: number, min: number, max: number): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max
+    ? value
+    : fallback;
+}
+
+function sanitizeBinaryFlag(value: unknown, fallback: boolean): boolean {
+  if (value === 0) return false;
+  if (value === 1) return true;
+  return fallback;
+}
+
+/** Prevent attacker-controlled URL coordinates from entering camera math. */
+const URL_STATE_COORDINATE_CEILING = 1_000_000;
+const URL_STATE_MAX_ENCODED_LENGTH = 65_536;
+
+function sanitizeVec3(value: unknown, fallback: [number, number, number]): [number, number, number] {
+  if (!Array.isArray(value) || value.length !== 3) return fallback;
+  if (!value.every(component => typeof component === 'number'
+    && Number.isFinite(component)
+    && Math.abs(component) <= URL_STATE_COORDINATE_CEILING)) return fallback;
+  return [value[0], value[1], value[2]];
+}
+
+function sanitizeString(value: unknown, fallback: string, maxLength = 128): string {
+  return typeof value === 'string' && value.length <= maxLength ? value : fallback;
+}
+
+const URL_COLORMAPS = new Set<ColormapName>([
+  'viridis', 'inferno', 'coolwarm', 'plasma', 'magma', 'cividis', 'neon', 'sunset',
+  'vaporwave', 'ocean', 'fire', 'ice', 'forest', 'cyberpunk', 'autumn', 'grayscale', 'turbo',
+]);
+
+function sanitizeColormap(value: unknown): ColormapName {
+  return typeof value === 'string' && URL_COLORMAPS.has(value as ColormapName)
+    ? value as ColormapName
+    : 'viridis';
+}
+
+function sanitizeBackgroundStyle(value: unknown): AppState['backgroundStyle'] {
+  return value === 'linear' || value === 'radial' || value === 'spotlight'
+    ? value
+    : DEFAULTS.backgroundStyle;
+}
+
+function sanitizeToneMapping(value: unknown): AppState['toneMapping'] {
+  return value === 'none' || value === 'aces' || value === 'reinhard' ? value : 'aces';
+}
+
+function sanitizeAtomTexture(value: unknown): AppState['atomTexture'] {
+  return value === 'none' || value === 'scratched' || value === 'noise' ? value : 'none';
+}
+
+function sanitizeKnowledgeFilter(value: unknown): AppState['knowledgeLabelSearchFilter'] {
+  return value === 'all' || value === 'text' || value === 'nodeId' || value === 'nodeKind' || value === 'sphereId'
+    ? value
+    : 'all';
+}
+
+function sanitizeStringArray(value: unknown, maxItems = 100, maxLength = 128): string[] {
+  if (!Array.isArray(value) || value.length > maxItems) return [];
+  return value.every(item => typeof item === 'string' && item.length <= maxLength) ? value : [];
 }
 
 export interface BondDataset {
@@ -174,12 +254,32 @@ export interface ExportRequest {
   orbit?: boolean;
   cinematic?: boolean;
   baseName?: string;
+  /** Finalized semantic render intent and identities for agent/browser exports. */
+  artifactSpec?: RenderArtifactSpecV1;
+  /** Transport policy is carried beside, and never folded into, artifact identity. */
+  artifactDelivery?: RenderDeliveryV1;
+  specId?: RenderSpecIdV1;
+  rendererFingerprint?: RendererFingerprintV1;
+  artifactKey?: RenderArtifactKeyV1;
   fileStream?: FileSystemWritableFileStream;
-  onComplete?: (success: boolean, blob?: Blob, filename?: string) => void;
+  /** Internal ownership signal: the mounted exporter has begun consuming this request. */
+  onStart?: () => void;
+  onComplete?: (
+    success: boolean,
+    blob?: Blob,
+    filename?: string,
+    failure?: ExportFailure,
+  ) => void;
   /** Progress reporting for long exports (large 3D scenes). `phase` is a
    *  short human label ("bonds", "geometry", "encode"); done/total are
    *  phase-relative. Exporters may call this from any thread cadence. */
   onProgress?: (phase: string, done: number, total: number) => void;
+}
+
+export interface ExportFailure {
+  code: string;
+  message: string;
+  details?: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface LoadedFile {
@@ -419,6 +519,16 @@ export interface AppState {
   // ─── Hover ───
   hoveredAtom: number | null;
   selectedAtoms: number[];
+
+  // ─── Coordinate measurements ───
+  /** Active click tool. The completed measurement remains visible when the
+   * tool is turned off so inspection does not destroy evidence. */
+  measurementTool: MeasurementTool;
+  /** Atom references plus capture-frame provenance. Values are recomputed
+   * from the active frame; measured numbers are never stored as source data. */
+  measurement: MolecularMeasurement | null;
+  setMeasurementTool: (tool: MeasurementTool) => void;
+  setMeasurement: (measurement: MolecularMeasurement | null) => void;
 
   // ─── Annotations ───
   // Pinned text labels anchored to specific atom indices. The user can
@@ -784,6 +894,8 @@ const DEFAULTS = {
   showThermo: true,
   hoveredAtom: null as number | null,
   selectedAtoms: [] as number[],
+  measurementTool: null as MeasurementTool,
+  measurement: null as MolecularMeasurement | null,
   annotations: [] as Annotation[],
   labelStyle: 'tag' as LabelStyle,
   knowledgeLabels: [] as KnowledgeLabel[],
@@ -822,6 +934,11 @@ export const useStore = create<AppState>()(
     setFile: (file) => {
       const firstFrame = file?.trajectory?.frames?.[0];
       const atomCount = firstFrame?.positions?.length ? firstFrame.positions.length / 3 : 0;
+      const hasElementIdentity = firstFrame ? hasCompleteElementMapping(firstFrame) : false;
+      const hasSourceBonds = Boolean(firstFrame?.bonds && firstFrame.bonds.length > 0);
+      const canShowBondsByDefault = firstFrame
+        ? hasSourceBonds || canInferCovalentBonds(firstFrame)
+        : false;
 
       // Drive a sensible first-frame look based on system content. The user
       // can change anything after, but they should never see "should I enable
@@ -835,7 +952,7 @@ export const useStore = create<AppState>()(
       const uniqueTypes = firstFrame?.types
         ? new Set(firstFrame.types).size
         : 0;
-      const schemeId = pickInitialScheme({ hasProperty, uniqueTypes });
+      const schemeId = pickInitialScheme({ hasProperty, uniqueTypes, hasElementIdentity });
       const scheme = COLOR_SCHEMES[schemeId];
 
       // Heuristic for sparse knowledge-graph style datasets: if the bounding
@@ -853,10 +970,10 @@ export const useStore = create<AppState>()(
         let totalRadius = 0;
         let typeCount = 0;
         for (const t of seenTypes) {
-          totalRadius += getElementSpec(t).radius;
+          totalRadius += resolveTypeDisplayRadius(firstFrame!, t);
           typeCount += 1;
         }
-        const avgRadius = typeCount > 0 ? totalRadius / typeCount : 1.4;
+        const avgRadius = typeCount > 0 ? totalRadius / typeCount : 0.5;
         if (diagonal / avgRadius > 150) {
           sparseAtomScale = Math.min(5, Math.max(2, diagonal / 200));
           sparseBackgroundPreset = 'deep';
@@ -871,7 +988,7 @@ export const useStore = create<AppState>()(
         error: null,
         loading: false,
         loadProgress: 1,
-        showBonds: sceneDirective.showBonds,
+        showBonds: sceneDirective.showBonds && canShowBondsByDefault,
         showCell: sceneDirective.showCell,
         showAxes: sceneDirective.showAxes,
         postprocessPreset: sceneDirective.preset,
@@ -914,6 +1031,8 @@ export const useStore = create<AppState>()(
         autoDepthOfField: sceneDirective.preset === 'cinematic',
         hoveredAtom: null,
         selectedAtoms: [],
+        measurementTool: null,
+        measurement: null,
         // Default-fill loadedAtomCount to atomCount so non-streaming
         // consumers don't need to special-case this field. The streaming
         // path overrides via setLoadedAtomCount during the load.
@@ -957,8 +1076,13 @@ export const useStore = create<AppState>()(
       const { file, frame, loopMode } = get();
       if (!file) return;
       const max = file.trajectory.totalFrames - 1;
+      if (max <= 0) {
+        set({ frame: 0, ...(loopMode === 'once' ? { playing: false } : {}) });
+        return;
+      }
       if (frame >= max) {
         if (loopMode === 'loop') set({ frame: 0 });
+        else if (loopMode === 'bounce') set({ frame: max - 1 });
         else if (loopMode === 'once') set({ playing: false });
       } else {
         set({ frame: frame + 1 });
@@ -966,10 +1090,20 @@ export const useStore = create<AppState>()(
     },
 
     prevFrame: () => {
-      const { file, frame } = get();
+      const { file, frame, loopMode } = get();
       if (!file) return;
       const max = file.trajectory.totalFrames - 1;
-      set({ frame: frame <= 0 ? max : frame - 1 });
+      if (max <= 0) {
+        set({ frame: 0 });
+        return;
+      }
+      if (frame <= 0) {
+        if (loopMode === 'loop') set({ frame: max });
+        else if (loopMode === 'bounce') set({ frame: 1 });
+        else set({ frame: 0 });
+      } else {
+        set({ frame: frame - 1 });
+      }
     },
 
     togglePlay: () => set(s => ({ playing: !s.playing })),
@@ -1160,6 +1294,8 @@ export const useStore = create<AppState>()(
       studyLensOpen: false,
       hoveredAtom: null,
       selectedAtoms: [],
+      measurementTool: null,
+      measurement: null,
       exportRequest: { type: null },
       loadedAtomCount: 0,
       streamingProgress: 0,
@@ -1216,6 +1352,8 @@ export const useStore = create<AppState>()(
         ? nextSelectedAtoms(s.selectedAtoms)
         : nextSelectedAtoms,
     })),
+    setMeasurementTool: (measurementTool) => set({ measurementTool }),
+    setMeasurement: (measurement) => set({ measurement }),
 
     addAnnotation: (atomIndex, text) => set((s) => ({
       annotations: [
@@ -1507,39 +1645,46 @@ export const useStore = create<AppState>()(
 
     decodeFromURL: (params) => {
       try {
+        if (params.length > URL_STATE_MAX_ENCODED_LENGTH) {
+          throw new Error('URL state exceeds the supported size.');
+        }
         // Restore URL-safe base64 back to standard base64
         let b64 = params.replace(/-/g, '+').replace(/_/g, '/');
         // Re-pad if needed
         while (b64.length % 4) b64 += '=';
 
-        const s = JSON.parse(atob(b64));
+        const parsed: unknown = JSON.parse(atob(b64));
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('URL state must be an object.');
+        }
+        const s = parsed as Record<string, unknown>;
         const colorScheme = resolveUrlColorScheme(s.cs, s);
         const scheme = COLOR_SCHEMES[colorScheme];
         // Merge delta onto defaults — missing keys stay at their default values
         set({
-          frame: s.f ?? 0,
+          frame: sanitizeIntegerRange(s.f, 0, 0, 10_000_000),
           colorScheme,
           atomColorSource: sanitizeAtomColorSource(s.acs, scheme.atomColorSource),
           colorMode: sanitizeColorMode(s.cm, scheme.atomColorMode),
-          colorProperty: s.cp ?? null,
-          colormap: s.cmap ?? 'viridis',
-          uniformAtomColor: sanitizeHexColor(s.uac ?? '#1edce0'),
+          colorProperty: typeof s.cp === 'string' && s.cp.length <= 64 ? s.cp : null,
+          colormap: sanitizeColormap(s.cmap),
+          uniformAtomColor: sanitizeHexColor(typeof s.uac === 'string' ? s.uac : '#1edce0'),
           elementColorOverrides: sanitizeElementColorOverrides(s.eco),
           vectorField: typeof s.vf === 'string' && s.vf.length <= 64 ? s.vf : null,
           vectorScale: sanitizeNumberRange(s.vsc, DEFAULTS.vectorScale, 0.1, 10),
           vectorDensity: sanitizeNumberRange(s.vd, DEFAULTS.vectorDensity, 0.01, 1),
           postprocessPreset: sanitizePostprocessPreset(s.pp),
-          postprocessIntensity: Math.max(0, Math.min(2, s.pi ?? DEFAULTS.postprocessIntensity)),
-          propertyEmissionStrength: Math.max(0, Math.min(1, s.pe ?? DEFAULTS.propertyEmissionStrength)),
-          ssao: s.ssao !== 0,
-          bloom: s.bloom !== 0,
-          dof: s.dof === 1,
-          showCell: s.cell !== 0,
-          showAxes: s.axes !== 0,
-          atomScale: s.as ?? 1.0,
-          backgroundPreset: s.bg ?? DEFAULTS.backgroundPreset,
-          backgroundStyle: s.bgs ?? DEFAULTS.backgroundStyle,
-          backgroundMotionPaused: s.bmp === 1,
+          postprocessIntensity: sanitizeNumberRange(s.pi, DEFAULTS.postprocessIntensity, 0, 2),
+          propertyEmissionStrength: sanitizeNumberRange(s.pe, DEFAULTS.propertyEmissionStrength, 0, 1),
+          ssao: sanitizeBinaryFlag(s.ssao, true),
+          bloom: sanitizeBinaryFlag(s.bloom, true),
+          dof: sanitizeBinaryFlag(s.dof, false),
+          showCell: sanitizeBinaryFlag(s.cell, true),
+          showAxes: sanitizeBinaryFlag(s.axes, true),
+          atomScale: sanitizeNumberRange(s.as, 1.0, 0.05, 20),
+          backgroundPreset: sanitizeString(s.bg, DEFAULTS.backgroundPreset, 64),
+          backgroundStyle: sanitizeBackgroundStyle(s.bgs),
+          backgroundMotionPaused: sanitizeBinaryFlag(s.bmp, false),
           backgroundMotionSpeed: sanitizeNumberRange(s.bms, DEFAULTS.backgroundMotionSpeed, 0.05, 2),
           backgroundOpacity: sanitizeNumberRange(s.bo, DEFAULTS.backgroundOpacity, 0.15, 1),
           backgroundBrightness: sanitizeNumberRange(s.bb, DEFAULTS.backgroundBrightness, 0.35, 1.8),
@@ -1552,41 +1697,41 @@ export const useStore = create<AppState>()(
           backgroundBackdropRadius: sanitizeNumberRange(s.bdr, DEFAULTS.backgroundBackdropRadius, 0.25, 5),
           filterShellShape: sanitizeFilterShellShape(s.fss),
           filterShellPreset: sanitizeFilterShellPreset(s.fsp),
-          filterShellOpacity: Math.max(0, Math.min(0.65, s.fso ?? 0.24)),
-          filterShellRadius: Math.max(0.75, Math.min(4, s.fsr ?? 1.08)),
-          cameraPosition: s.cp3 ?? [0, 0, 50],
-          cameraTarget: s.ct ?? [0, 0, 0],
-          cameraFov: s.fov ?? 50,
-          playbackSpeed: s.spd ?? 1.0,
-          ssaoIntensity: s.si ?? DEFAULTS.ssaoIntensity,
-          bloomIntensity: s.bi ?? DEFAULTS.bloomIntensity,
-          dofFocus: s.df ?? 50,
-          toneMapping: s.tm ?? 'aces',
-          showBonds: s.bonds === 1,
-          bondCutoff: s.bc ?? 3.2,
-          bondTolerance: s.bt ?? 0.45,
+          filterShellOpacity: sanitizeNumberRange(s.fso, 0.24, 0, 0.65),
+          filterShellRadius: sanitizeNumberRange(s.fsr, 1.08, 0.75, 4),
+          cameraPosition: sanitizeVec3(s.cp3, [0, 0, 50]),
+          cameraTarget: sanitizeVec3(s.ct, [0, 0, 0]),
+          cameraFov: sanitizeNumberRange(s.fov, 50, 1, 179),
+          playbackSpeed: sanitizeNumberRange(s.spd, 1.0, 0.0625, 16),
+          ssaoIntensity: sanitizeNumberRange(s.si, DEFAULTS.ssaoIntensity, 0, 4),
+          bloomIntensity: sanitizeNumberRange(s.bi, DEFAULTS.bloomIntensity, 0, 4),
+          dofFocus: sanitizeNumberRange(s.df, 50, 0, 10_000),
+          toneMapping: sanitizeToneMapping(s.tm),
+          showBonds: sanitizeBinaryFlag(s.bonds, false),
+          bondCutoff: sanitizeNumberRange(s.bc, 3.2, 0.01, 100),
+          bondTolerance: sanitizeNumberRange(s.bt, 0.45, 0, 1.5),
           materialScene: sanitizeMaterialScene(s.ms),
           materialPreset: sanitizeMaterialPreset(s.mp),
-          materialIntensity: Math.max(0, Math.min(1, s.mi ?? DEFAULTS.materialIntensity)),
+          materialIntensity: sanitizeNumberRange(s.mi, DEFAULTS.materialIntensity, 0, 1),
           environmentPreset: sanitizeEnvironmentPreset(s.env),
-          ambientLightIntensity: s.ali ?? DEFAULTS.ambientLightIntensity,
-          dirLightIntensity: s.dli ?? DEFAULTS.dirLightIntensity,
-          rimLightIntensity: Math.max(0, Math.min(2, s.rli ?? DEFAULTS.rimLightIntensity)),
-          atomTexture: s.at ?? 'none',
-          surfaceRoughness: s.sr ?? 0.0,
-          surfacePolish: s.sp ?? 0.0,
-          surfaceClearcoat: s.scc ?? 0.0,
-          keyLightAzimuth: s.kla ?? 40,
-          keyLightElevation: s.kle ?? 45,
-          fillLightAzimuth: s.fla ?? -120,
-          fillLightElevation: s.fle ?? 10,
-          rimLightAzimuth: s.rla ?? 160,
-          rimLightElevation: s.rle ?? 30,
-          fillLightColor: s.flc ?? DEFAULTS.fillLightColor,
-          rimLightColor: s.rlc ?? DEFAULTS.rimLightColor,
-          knowledgeLabelSearchQuery: s.ksq ?? '',
-          knowledgeLabelSearchFilter: (s.ksf as any) ?? 'all',
-          pinnedKnowledgeLabelIds: new Set((s.kpl as string[]) ?? []),
+          ambientLightIntensity: sanitizeNumberRange(s.ali, DEFAULTS.ambientLightIntensity, 0, 4),
+          dirLightIntensity: sanitizeNumberRange(s.dli, DEFAULTS.dirLightIntensity, 0, 4),
+          rimLightIntensity: sanitizeNumberRange(s.rli, DEFAULTS.rimLightIntensity, 0, 4),
+          atomTexture: sanitizeAtomTexture(s.at),
+          surfaceRoughness: sanitizeNumberRange(s.sr, 0.0, -1, 1),
+          surfacePolish: sanitizeNumberRange(s.sp, 0.0, -1, 1),
+          surfaceClearcoat: sanitizeNumberRange(s.scc, 0.0, 0, 1),
+          keyLightAzimuth: sanitizeNumberRange(s.kla, 40, -360, 360),
+          keyLightElevation: sanitizeNumberRange(s.kle, 45, -90, 90),
+          fillLightAzimuth: sanitizeNumberRange(s.fla, -120, -360, 360),
+          fillLightElevation: sanitizeNumberRange(s.fle, 10, -90, 90),
+          rimLightAzimuth: sanitizeNumberRange(s.rla, 160, -360, 360),
+          rimLightElevation: sanitizeNumberRange(s.rle, 30, -90, 90),
+          fillLightColor: sanitizeHexColor(typeof s.flc === 'string' ? s.flc : DEFAULTS.fillLightColor),
+          rimLightColor: sanitizeHexColor(typeof s.rlc === 'string' ? s.rlc : DEFAULTS.rimLightColor),
+          knowledgeLabelSearchQuery: sanitizeString(s.ksq, '', 256),
+          knowledgeLabelSearchFilter: sanitizeKnowledgeFilter(s.ksf),
+          pinnedKnowledgeLabelIds: new Set(sanitizeStringArray(s.kpl)),
         });
       } catch {
         console.warn('Failed to decode URL state');

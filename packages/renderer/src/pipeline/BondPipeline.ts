@@ -86,6 +86,7 @@ export class BondPipeline {
   // Origin currently active in the GPU config — derived from updatePositions.
   // updateConfig will use this unless an explicit origin is passed.
   private currentOrigin: [number, number, number] = [0, 0, 0];
+  private destroyed = false;
 
   // Cached last successful readback — returned when all staging slots are
   // busy so callers always get a valid result. Invariant: the cache reflects
@@ -109,51 +110,67 @@ export class BondPipeline {
     this.positionScratch = new Float32Array(this.maxAtoms * 4);
     this.positionScratchI32 = new Int32Array(this.positionScratch.buffer);
 
-    this.initBuffers();
-    this.initPipelines();
+    const allocations: GPUBuffer[] = [];
+    try {
+      this.initBuffers(allocations);
+      this.initPipelines();
+    } catch (error) {
+      // Construction is transactional: until every pipeline/bind group has
+      // been created, the local ledger owns every destroyable allocation.
+      for (let index = allocations.length - 1; index >= 0; index--) {
+        allocations[index].destroy();
+      }
+      this.stagingPool.length = 0;
+      throw error;
+    }
   }
 
-  private initBuffers() {
+  private initBuffers(allocations: GPUBuffer[]) {
     const { device, maxAtoms, maxBonds, gridDimX, gridDimY, gridDimZ, maxAtomsPerCell } = this;
     const numCells = gridDimX * gridDimY * gridDimZ;
+    const createBuffer = (descriptor: GPUBufferDescriptor): GPUBuffer => {
+      const buffer = device.createBuffer(descriptor);
+      allocations.push(buffer);
+      return buffer;
+    };
 
-    this.positionBuffer = device.createBuffer({
+    this.positionBuffer = createBuffer({
       size: maxAtoms * 16,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       label: 'Atom Positions',
     });
 
-    this.elementRadiiBuffer = device.createBuffer({
+    this.elementRadiiBuffer = createBuffer({
       size: 128 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       label: 'Element Covalent Radii',
     });
 
-    this.bondOutBuffer = device.createBuffer({
+    this.bondOutBuffer = createBuffer({
       size: maxBonds * 16,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_SRC,
       label: 'Bond Output Array',
     });
 
-    this.indirectBuffer = device.createBuffer({
+    this.indirectBuffer = createBuffer({
       size: 5 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
       label: 'Indirect Draw Buffer',
     });
 
-    this.configBuffer = device.createBuffer({
+    this.configBuffer = createBuffer({
       size: CONFIG_BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       label: 'Config Uniform',
     });
 
-    this.cellCountsBuffer = device.createBuffer({
+    this.cellCountsBuffer = createBuffer({
       size: numCells * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       label: 'Grid Cell Counts',
     });
 
-    this.cellAtomsBuffer = device.createBuffer({
+    this.cellAtomsBuffer = createBuffer({
       size: numCells * maxAtomsPerCell * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       label: 'Grid Cell Atoms',
@@ -161,12 +178,12 @@ export class BondPipeline {
 
     for (let i = 0; i < this.stagingPoolDepth; i++) {
       this.stagingPool.push({
-        indirect: device.createBuffer({
+        indirect: createBuffer({
           size: 5 * 4,
           usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
           label: `Staging Indirect [${i}]`,
         }),
-        bonds: device.createBuffer({
+        bonds: createBuffer({
           size: maxBonds * 16,
           usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
           label: `Staging Bonds [${i}]`,
@@ -433,6 +450,8 @@ export class BondPipeline {
    * (e.g. component unmount).
    */
   public destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.positionBuffer.destroy();
     this.elementRadiiBuffer.destroy();
     this.bondOutBuffer.destroy();

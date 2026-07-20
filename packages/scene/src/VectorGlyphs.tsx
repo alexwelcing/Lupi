@@ -17,7 +17,7 @@
  *   per-arrow length cap at 3× that reference
  */
 
-import { useMemo, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
@@ -25,10 +25,15 @@ import type { VectorFieldSpec } from '@atlas/core';
 import {
   getVectorComponents,
   ensureVectorMagnitude,
+  framesShareAtomOrder,
   magnitudePercentile,
 } from '@atlas/core';
 import { wrapDelta } from './interpolation';
 import { COLORMAPS } from './constants';
+import {
+  LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
+  LUPI_ARTIFACT_LAYER_KEY,
+} from './AtomsOptimized';
 
 export interface VectorGlyphStats {
   /** p95 magnitude used as the color/scale reference. */
@@ -60,6 +65,8 @@ interface VectorGlyphsProps {
   liveStateRef?: { readonly current: { readonly effectiveFrame: number } | null };
   /** Reports magnitude range/reference for HUD legends. */
   onStats?: (stats: VectorGlyphStats) => void;
+  /** Artifact revision this mesh has applied to buffers and material state. */
+  artifactSpecId?: string;
 }
 
 const VERTEX = /* glsl */ `
@@ -128,10 +135,13 @@ const FRAGMENT = /* glsl */ `
     // Cheap shading: darken toward the ribbon edge for a rounded read.
     float edge = 1.0 - 0.35 * smoothstep(0.0, 1.0, ax / max(headHalf, 0.22));
     gl_FragColor = vec4(vColor * edge, 1.0);
+    #include <colorspace_fragment>
   }
 `;
 
 const MIN_CAPACITY = 1024;
+
+export const LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER = 'vectorGlyphs';
 
 export function VectorGlyphs({
   frame,
@@ -146,8 +156,13 @@ export function VectorGlyphs({
   frameIndex,
   liveStateRef,
   onStats,
+  artifactSpecId,
 }: VectorGlyphsProps) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const canInterpolateToNextFrame = useMemo(
+    () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
+    [frame, nextFrame],
+  );
 
   // Grow-only capacity, mirroring AtomsOptimized.
   const capacityRef = useRef(Math.max(MIN_CAPACITY, Math.ceil(frame.natoms * 1.2)));
@@ -179,6 +194,7 @@ export function VectorGlyphs({
 
   const material = useMemo(() => {
     const colormapTex = new THREE.DataTexture(new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat);
+    colormapTex.colorSpace = THREE.SRGBColorSpace;
     colormapTex.needsUpdate = true;
     return new THREE.ShaderMaterial({
       vertexShader: VERTEX,
@@ -207,7 +223,10 @@ export function VectorGlyphs({
   }, [material]);
 
   // ─── Colormap texture (256×1, instant to rebuild) ──────────────────
-  useEffect(() => {
+  // Colormap pixels participate in immutable raster identity. Apply the
+  // DataTexture during the React commit phase so a capture request committed
+  // in the same update cannot reach Fiber with the previous colormap bytes.
+  useLayoutEffect(() => {
     const mapFn = COLORMAPS[colormap] ?? COLORMAPS.viridis;
     const tex = material.uniforms.uColormap.value as THREE.DataTexture;
     const data = tex.image.data as Uint8Array;
@@ -253,9 +272,8 @@ export function VectorGlyphs({
     material.uniforms.uWidth.value = targetLen * 0.14;
     material.uniforms.uMagRange.value.set(0, ref > 0 ? ref : 1);
 
-    const hasNext = !!(nextFrame && nextFrame.natoms === frame.natoms);
-    const nextComps = hasNext ? getVectorComponents(nextFrame!, field) : null;
-    const nextPos = hasNext ? nextFrame!.positions : null;
+    const nextComps = canInterpolateToNextFrame ? getVectorComponents(nextFrame!, field) : null;
+    const nextPos = canInterpolateToNextFrame ? nextFrame!.positions : null;
 
     let bsx = 0, bsy = 0, bsz = 0;
     if (frame.boxBounds) {
@@ -319,18 +337,32 @@ export function VectorGlyphs({
       magMax: magMax === -Infinity ? 0 : magMax,
       shownCount: shown,
     });
-  }, [frame, nextFrame, field, scale, density, hiddenAtomTypes, capacity, geometry, material, onStats]);
+  }, [frame, nextFrame, canInterpolateToNextFrame, field, scale, density, hiddenAtomTypes, capacity, geometry, material, onStats]);
 
-  useEffect(() => {
+  // Positions, vectors, density, visibility, and scale are all addressed by
+  // the artifact spec/source digest. Upload them during the commit phase; a
+  // passive effect can lose a race with the next browser animation frame.
+  useLayoutEffect(() => {
     uploadGlyphs();
   }, [uploadGlyphs]);
+
+  // This receipt is intentionally installed after both layout effects above.
+  // ExportManager may capture only when the tagged Three mesh carries the exact
+  // spec revision whose vector buffers and colormap are now applied. A zero
+  // instance result is still exact when visibility intentionally hides all.
+  useLayoutEffect(() => {
+    material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY] =
+      artifactSpecId ?? null;
+  }, [artifactSpecId, geometry, material, uploadGlyphs, colormap]);
 
   // Live interpolation progress — identical contract to AtomsOptimized.
   useFrame(() => {
     const live = liveStateRef?.current;
-    const prog = (live && frameIndex != null)
+    const prog = canInterpolateToNextFrame && live && frameIndex != null
       ? live.effectiveFrame - frameIndex
-      : interpolationFactor;
+      : canInterpolateToNextFrame
+        ? interpolationFactor
+        : 0;
     material.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
   });
 
@@ -341,6 +373,7 @@ export function VectorGlyphs({
       material={material}
       frustumCulled={false}
       renderOrder={1}
+      userData={{ [LUPI_ARTIFACT_LAYER_KEY]: LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER }}
     />
   );
 }

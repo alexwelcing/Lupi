@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { Frame, Trajectory } from '@atlas/core/types';
+import { getAtomicNumberBySymbol } from '@atlas/core';
 import { useStore, type LoadedFile } from './store';
 import { Slider } from './controls';
 
@@ -360,6 +361,7 @@ function entryQualityScore(entry: EquilibriumCatalogEntry) {
 
 function buildEquilibriumSolve(entry: EquilibriumCatalogEntry, config: OffsetConfig): GeneratedSolve {
   const material = entry.material;
+  const atomicNumber = getAtomicNumberBySymbol(material);
   const referenceA = entry.reference.lattice_a_angstrom ?? 4;
   const targetA = entry.predicted.lattice_a_angstrom ?? referenceA;
   const startA = referenceA * (1 + config.strainPercent / 100);
@@ -467,7 +469,14 @@ function buildEquilibriumSolve(entry: EquilibriumCatalogEntry, config: OffsetCon
       triclinic: false,
       columns: ['id', 'type', 'x', 'y', 'z', 'offset_error', 'solve_closeness'],
       ids: Int32Array.from(atoms.map((_, idx) => idx + 1)),
-      types: Int32Array.from(atoms.map(() => 1)),
+      identity: { kind: 'synthetic-row', unique: true },
+      types: Int32Array.from(atoms.map(() => atomicNumber ?? 1)),
+      typeSemantics: atomicNumber
+        ? { kind: 'atomic-number', provenance: 'mlip-symbol' }
+        : { kind: 'opaque', provenance: 'legacy-unknown' },
+      distanceSemantics: typeof entry.reference.lattice_a_angstrom === 'number'
+        ? { kind: 'angstrom', provenance: 'source-declared' }
+        : { kind: 'unknown', provenance: 'legacy-unknown' },
       positions,
       bonds: new Int32Array(0),
       properties: new Map([
@@ -495,7 +504,7 @@ function buildEquilibriumSolve(entry: EquilibriumCatalogEntry, config: OffsetCon
   const trajectory: Trajectory = {
     frames,
     totalFrames: frames.length,
-    atomTypes: [1],
+    atomTypes: Array.from(new Set(frames.flatMap((frame) => Array.from(frame.types)))),
     globalBounds: boundsForFrames(frames),
   };
   const report = {

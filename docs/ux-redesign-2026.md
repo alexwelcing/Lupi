@@ -1,10 +1,18 @@
 # Lupi 2026 experience redesign
 
+This experience brief implements the normative
+[Lupi product ownership contract](product-ownership-contract.md). If an older
+phase or success measure conflicts with that contract, the contract wins.
+
 ## Product outcome
 
 A first-time visitor should be able to open a useful 3D structure, rotate it,
 understand what its colors mean, and find the next relevant action without
 documentation or a guided tour.
+
+The complete owned outcome continues through inspect, measure/analyze with
+units and provenance, save/reopen, and export/share. A visually successful first
+viewport is only the entry to that loop.
 
 Lupi remains visually distinctive: matter, light, scale, and the cinematic
 archive are the brand layer. Navigation and controls use literal language so a
@@ -18,7 +26,10 @@ Use these verbs consistently across navigation, headings, analytics, and help:
 - **Search** — all connected structure sources.
 - **Learn** — guided activities and the adaptive Study Guide.
 - **Upload** — a researcher's files, URL, or pasted data.
-- **Research** — potentials, equilibrium, properties, provenance, and advanced tools.
+- **Research** — hand off to the separately owned `lupine.science` research
+  surface. Viewer-attached external evidence and provenance appear under Learn
+  or Analyze; Lupi does not run experiments, choose MLIP policy, adjudicate
+  claims, or generate synthetic evidence.
 
 Inside the viewer:
 
@@ -97,10 +108,11 @@ Help is ambient and dismissible:
 
 ### P0 — scientific comprehension
 
-- A default atom click identifies and focuses the atom, then opens a compact
-  fact card with element, index, coordinates, and available properties.
+- Preserve and harden the existing atom selection/fact HUD so element, stable
+  identity, coordinates, and available properties remain the shared foundation
+  for canvas and keyboard inspection.
 - Add measurement actions for distance and angle without requiring a separate
-  selection mode.
+  selection mode, with explicit unit and provenance semantics.
 - Add a clear **Reset view** and **Reset appearance** action; introduce undo for
   reversible visual changes.
 - Separate supplied bonds/properties from visually inferred bonds in both labels
@@ -129,6 +141,11 @@ Help is ambient and dismissible:
   alternative to the canvas.
 
 ## Success measures
+
+These are product targets, not release evidence. They require a named analytics
+owner, a documented denominator, and validated instrumentation before they may
+be reported as measured results. Release status follows the
+[release truth contract](release-truth-contract.md).
 
 - Median time to first live structure: under 10 seconds.
 - At least 80% of first-time visitors open a structure without help.

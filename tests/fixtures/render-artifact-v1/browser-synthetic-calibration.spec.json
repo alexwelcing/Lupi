@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "lupi.render-parity-browser-spec.v1",
+  "id": "browser-synthetic-calibration-transparent-320-v1",
+  "purpose": "Pinned browser-render candidate for transparent geometry and element-palette parity. The XYZ point set is synthetic and is not a chemical structure.",
+  "route": "#/mcp",
+  "viewport": {
+    "width": 1280,
+    "height": 800,
+    "deviceScaleFactor": 1
+  },
+  "renderer": {
+    "browser": "playwright-chromium",
+    "graphics": "SwiftShader WebGL",
+    "launchArguments": [
+      "--disable-webgpu",
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--force-device-scale-factor=1"
+    ]
+  },
+  "setup": [
+    {
+      "tool": "lupi.generate_molecule",
+      "arguments": {
+        "inputType": "xyz",
+        "input": "15\nSynthetic render-parity color and geometry calibration point set; intentionally not a chemical structure.\nC -2.40 -0.60 0.10\nN -1.80 0.90 -0.30\nO -0.80 1.65 0.40\nS 0.35 1.45 -0.60\nH 1.55 0.95 0.30\nC 2.45 -0.10 -0.20\nN 1.70 -1.20 0.50\nO 0.55 -1.65 -0.40\nH -0.80 -1.55 0.60\nC -1.85 -1.10 -0.50\nH -0.35 0.20 1.10\nO 0.80 0.20 1.00\nN 0.05 0.55 -1.20\nH 2.50 1.45 -0.90\nS -2.60 1.70 0.90",
+        "viewer": {
+          "showBonds": false,
+          "atomScale": 1.35,
+          "showCell": false,
+          "showAxes": false,
+          "cameraPreset": "iso"
+        }
+      }
+    },
+    {
+      "tool": "lupi.set_viewer",
+      "arguments": {
+        "showBonds": false,
+        "atomScale": 1.35,
+        "showCell": false,
+        "showAxes": false,
+        "colorScheme": "element",
+        "cameraPreset": "iso"
+      }
+    },
+    {
+      "tool": "lupi.set_background",
+      "arguments": {
+        "preset": "slate",
+        "motionPaused": true,
+        "opacity": 1,
+        "brightness": 1,
+        "saturation": 1,
+        "contrast": 1
+      }
+    },
+    {
+      "tool": "lupi.set_postprocess",
+      "arguments": {
+        "preset": "diagram",
+        "intensity": 0.65
+      }
+    },
+    {
+      "tool": "lupi.set_material",
+      "arguments": {
+        "preset": "matte",
+        "intensity": 0.7,
+        "texture": "none"
+      }
+    },
+    {
+      "tool": "lupi.set_lighting",
+      "arguments": {
+        "ambient": 0.7,
+        "dir": 1,
+        "rim": 0.25,
+        "keyAzimuth": 35,
+        "keyElevation": 45,
+        "rimAzimuth": -55,
+        "rimElevation": 30,
+        "fillColor": "#8aa8c8",
+        "rimColor": "#ffffff"
+      }
+    },
+    {
+      "tool": "lupi.set_camera_preset",
+      "arguments": {
+        "preset": "iso"
+      }
+    },
+    {
+      "tool": "lupi.fit_camera",
+      "arguments": {}
+    }
+  ],
+  "export": {
+    "tool": "lupi.export_asset",
+    "arguments": {
+      "format": "png",
+      "width": 320,
+      "height": 320,
+      "transparent": true,
+      "fitCamera": true,
+      "atomScale": 1.35,
+      "maxInlineBytes": 8388608,
+      "baseName": "render-parity-synthetic-calibration"
+    }
+  },
+  "expectedAtomCount": 15,
+  "repeatCountMinimum": 10,
+  "candidateFile": "browser-synthetic-calibration.candidate.png",
+  "metricsFile": "browser-synthetic-calibration.metrics.json",
+  "approval": {
+    "status": "owner-approved",
+    "humanApproved": true,
+    "approvedBy": "repository-owner",
+    "approvedAt": "2026-07-20T16:09:23.111Z",
+    "note": "The repository owner explicitly approved this visual candidate in the Plan 024 Codex task. Automated derivation never constitutes approval."
+  }
+}

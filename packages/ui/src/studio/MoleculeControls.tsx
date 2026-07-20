@@ -4,7 +4,13 @@
  * shell just mounts it.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { getElementSpec, detectVectorFields } from '@atlas/core';
+import {
+  canInferCovalentBonds,
+  detectVectorFields,
+  hasCompleteElementMapping,
+  resolveTypeColor,
+  resolveTypeLabel,
+} from '@atlas/core';
 import type { ColormapName } from '@atlas/core/types';
 import { MATERIAL_SCENES, type MaterialScene } from '@atlas/scene/materials';
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from '../coloring';
@@ -147,7 +153,7 @@ export function MoleculeControls() {
   const setBondColorMode = useStore(s => s.setBondColorMode);
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
-  const [selectedAtomicNumber, setSelectedAtomicNumber] = useState<number | null>(null);
+  const [selectedType, setSelectedType] = useState<number | null>(null);
 
   const materialScenes = useMemo(
     () => MATERIAL_SCENES.filter(scene => FEATURED_SCENE_IDS.includes(scene.id)),
@@ -182,36 +188,45 @@ export function MoleculeControls() {
     return names;
   }, [residentFrame, vectorSpecs]);
   const atomCount = residentFrame?.natoms ?? 0;
-  const bondsAreSafe = atomCount > 0 && atomCount < 25_000;
+  const hasElementIdentity = residentFrame ? hasCompleteElementMapping(residentFrame) : false;
+  const hasSourceBonds = Boolean(residentFrame?.bonds && residentFrame.bonds.length > 0);
+  const canInferBonds = residentFrame ? canInferCovalentBonds(residentFrame) : false;
+  const bondsAreSafe = atomCount > 0
+    && atomCount < 25_000
+    && (hasSourceBonds || canInferBonds);
   const requiresDiagram = atomCount >= 200_000;
   const validColorProperty = colorProperty && availableProperties.includes(colorProperty)
     ? colorProperty
     : (availableProperties[0] ?? null);
-  const presentElements = useMemo(() => {
+  const presentTypes = useMemo(() => {
     const types = residentFrame?.types;
-    if (!types) return [];
-    const atomicNumbers = new Set<number>();
-    for (let i = 0; i < types.length; i++) atomicNumbers.add(types[i]);
-    return Array.from(atomicNumbers)
+    if (!types || !residentFrame) return [];
+    const rawTypes = new Set<number>();
+    for (let i = 0; i < residentFrame.natoms; i++) rawTypes.add(types[i]);
+    return Array.from(rawTypes)
       .sort((a, b) => a - b)
-      .map(atomicNumber => ({ atomicNumber, spec: getElementSpec(atomicNumber) }));
+      .map(rawType => ({
+        rawType,
+        label: resolveTypeLabel(residentFrame, rawType),
+        color: resolveTypeColor(residentFrame, rawType),
+      }));
   }, [residentFrame]);
-  const activeElement = presentElements.find(element => element.atomicNumber === selectedAtomicNumber) ?? presentElements[0] ?? null;
-  const activeElementColor = activeElement
-    ? elementColorOverrides[activeElement.atomicNumber] ?? activeElement.spec.color
+  const activeType = presentTypes.find(type => type.rawType === selectedType) ?? presentTypes[0] ?? null;
+  const activeTypeColor = activeType
+    ? elementColorOverrides[activeType.rawType] ?? activeType.color
     : uniformAtomColor;
-  const activeElementHasOverride = activeElement
-    ? Boolean(elementColorOverrides[activeElement.atomicNumber])
+  const activeTypeHasOverride = activeType
+    ? Boolean(elementColorOverrides[activeType.rawType])
     : false;
   useEffect(() => {
-    if (presentElements.length === 0) {
-      if (selectedAtomicNumber !== null) setSelectedAtomicNumber(null);
+    if (presentTypes.length === 0) {
+      if (selectedType !== null) setSelectedType(null);
       return;
     }
-    if (!presentElements.some(element => element.atomicNumber === selectedAtomicNumber)) {
-      setSelectedAtomicNumber(presentElements[0].atomicNumber);
+    if (!presentTypes.some(type => type.rawType === selectedType)) {
+      setSelectedType(presentTypes[0].rawType);
     }
-  }, [presentElements, selectedAtomicNumber]);
+  }, [presentTypes, selectedType]);
 
   const applyMoleculeRecipe = (scene: MaterialScene) => {
     setMaterialScene(scene.id);
@@ -225,6 +240,7 @@ export function MoleculeControls() {
   };
 
   const applyColorScheme = (scheme: ColorSchemeId) => {
+    if (scheme === 'element' && !hasElementIdentity) return;
     if (scheme === 'property') {
       if (!validColorProperty) return;
       setColorProperty(validColorProperty);
@@ -237,8 +253,8 @@ export function MoleculeControls() {
     setColorScheme('uniform');
   };
 
-  const applyElementColor = (atomicNumber: number, color: string) => {
-    setElementColorOverride(atomicNumber, color);
+  const applyElementColor = (rawType: number, color: string) => {
+    setElementColorOverride(rawType, color);
     setColorScheme('element');
   };
 
@@ -259,6 +275,7 @@ export function MoleculeControls() {
   const balancedPreset = safePreset(atomCount >= 25_000 ? 'paper' : 'studio');
   const balancedIntensity = atomCount >= 25_000 && !requiresDiagram ? 0.85 : 1;
   const balancedAtomScale = requiresDiagram ? 0.72 : 1;
+  const identityColorScheme: ColorSchemeId = hasElementIdentity ? 'element' : 'colorway';
 
   const applyQuickView = (view: QuickViewId) => {
     // Quick views intentionally touch only the structure presentation. They
@@ -268,7 +285,7 @@ export function MoleculeControls() {
     if (view === 'balanced') {
       setPostprocessPreset(balancedPreset);
       setPostprocessIntensity(balancedIntensity);
-      setColorScheme('element');
+      setColorScheme(identityColorScheme);
       setAtomScale(balancedAtomScale);
       setBondsVisible(bondsAreSafe);
       return;
@@ -278,7 +295,7 @@ export function MoleculeControls() {
       if (!bondsAreSafe) return;
       setPostprocessPreset(safePreset('studio'));
       setPostprocessIntensity(1);
-      setColorScheme('element');
+      setColorScheme(identityColorScheme);
       setAtomScale(0.72);
       setBondColorMode('type');
       setBondsVisible(true);
@@ -289,7 +306,7 @@ export function MoleculeControls() {
       if (requiresDiagram) return;
       setPostprocessPreset(safePreset('studio'));
       setPostprocessIntensity(1);
-      setColorScheme('element');
+      setColorScheme(identityColorScheme);
       setAtomScale(1.35);
       setBondsVisible(false);
       return;
@@ -309,7 +326,7 @@ export function MoleculeControls() {
     if (
       postprocessPreset === balancedPreset
       && postprocessIntensity === balancedIntensity
-      && colorScheme === 'element'
+      && colorScheme === identityColorScheme
       && atomScale === balancedAtomScale
       && showBonds === bondsAreSafe
       && vectorField === null
@@ -318,7 +335,7 @@ export function MoleculeControls() {
       bondsAreSafe
       && postprocessPreset === safePreset('studio')
       && postprocessIntensity === 1
-      && colorScheme === 'element'
+      && colorScheme === identityColorScheme
       && atomScale === 0.72
       && showBonds
       && bondColorMode === 'type'
@@ -327,7 +344,7 @@ export function MoleculeControls() {
     if (
       postprocessPreset === safePreset('studio')
       && postprocessIntensity === 1
-      && colorScheme === 'element'
+      && colorScheme === identityColorScheme
       && atomScale === 1.35
       && !showBonds
       && vectorField === null
@@ -356,7 +373,9 @@ export function MoleculeControls() {
               || (view === 'property' && !validColorProperty)
               || (view === 'space' && requiresDiagram);
             const disabledReason = view === 'bonds'
-              ? `Bond inference is available below 25,000 atoms. This structure has ${atomCount.toLocaleString()}.`
+              ? atomCount >= 25_000
+                ? `Bond display is available below 25,000 atoms. This structure has ${atomCount.toLocaleString()}.`
+                : 'No source bonds are present, and covalent inference requires complete element and Ångström provenance.'
               : view === 'space'
                 ? 'Occupied space is unavailable at 200,000 atoms and above to avoid excessive overdraw.'
                 : 'This structure has no per-atom data.';
@@ -383,7 +402,7 @@ export function MoleculeControls() {
           measured values is a primary scientific task, not an expert tweak. */}
       <ControlGroup title="Color by" wide>
         <div className="lupi-studio-segments">
-          {SCHEME_ORDER.map(schemeId => {
+          {SCHEME_ORDER.filter(schemeId => schemeId !== 'element' || hasElementIdentity).map(schemeId => {
             const scheme = COLOR_SCHEMES[schemeId];
             return (
               <SegmentButton
@@ -408,20 +427,20 @@ export function MoleculeControls() {
           />
         )}
 
-        {colorScheme === 'element' && activeElement && (
+        {colorScheme === 'element' && hasElementIdentity && activeType && (
           <ElementColorPicker
-            active={colorScheme === 'element' || activeElementHasOverride}
-            atomicNumber={activeElement.atomicNumber}
-            value={activeElementColor}
-            options={presentElements.map(element => ({
-              value: element.atomicNumber,
-              label: `${element.spec.symbol} ${element.atomicNumber}`,
+            active={colorScheme === 'element' || activeTypeHasOverride}
+            rawType={activeType.rawType}
+            value={activeTypeColor}
+            options={presentTypes.map(type => ({
+              value: type.rawType,
+              label: `${type.label} / source type ${type.rawType}`,
             }))}
-            overridden={activeElementHasOverride}
-            onSelect={setSelectedAtomicNumber}
-            onChange={(color) => applyElementColor(activeElement.atomicNumber, color)}
+            overridden={activeTypeHasOverride}
+            onSelect={setSelectedType}
+            onChange={(color) => applyElementColor(activeType.rawType, color)}
             onReset={() => {
-              resetElementColorOverride(activeElement.atomicNumber);
+              resetElementColorOverride(activeType.rawType);
               setColorScheme('element');
             }}
           />
@@ -541,14 +560,23 @@ export function MoleculeControls() {
       </ControlGroup>
 
       <ControlGroup title="Bond detection">
-        <p style={schemeHintStyle}>Lupi can infer visual bonds from distance. Adjust sensitivity only when the default misses or adds connections.</p>
+        <p style={schemeHintStyle}>
+          {hasSourceBonds
+            ? 'This frame carries source bond pairs. Adjust presentation without changing their topology.'
+            : canInferBonds
+              ? 'Lupi can infer visual bonds because element identity and Ångström distance are known. Adjust sensitivity only when needed.'
+              : 'Distance-inferred bonds require a complete element mapping and Ångström coordinates.'}
+        </p>
         <div className="lupi-studio-segments">
           <SegmentButton label="Bonds" active={showBonds} accent="#1edce0" onClick={() => { if (bondsAreSafe) toggleBonds(); }} />
-          <SegmentButton label="By element" active={bondColorMode === 'type'} accent="#7de9ff" onClick={() => setBondColorMode('type')} />
+          <SegmentButton label={hasElementIdentity ? 'By element' : 'By type'} active={bondColorMode === 'type'} accent="#7de9ff" onClick={() => setBondColorMode('type')} />
           <SegmentButton label="By length" active={bondColorMode === 'length'} accent="#f59e0b" onClick={() => setBondColorMode('length')} />
         </div>
-        {!bondsAreSafe && (
-          <p style={schemeHintStyle}>Bond inference is disabled at 25,000 atoms and above to protect interaction speed.</p>
+        {!bondsAreSafe && atomCount >= 25_000 && (
+          <p style={schemeHintStyle}>Bond display is disabled at 25,000 atoms and above to protect interaction speed.</p>
+        )}
+        {!bondsAreSafe && atomCount > 0 && atomCount < 25_000 && !hasSourceBonds && !canInferBonds && (
+          <p role="status" style={schemeHintStyle}>No source bonds are present, and this frame does not carry enough chemistry/unit provenance for covalent inference.</p>
         )}
         <CompactSlider label="Bond sensitivity" value={bondTolerance} min={0} max={1.2} step={0.02} onChange={setBondTolerance} format={value => value.toFixed(2)} />
       </ControlGroup>

@@ -29,6 +29,7 @@ export function StudyLensPanel({
   const selectedAtoms = useStore(s => s.selectedAtoms);
   const lastBondCount = useStore(s => s.lastBondCount);
   const showBonds = useStore(s => s.showBonds);
+  const measurement = useStore(s => s.measurement);
   const [practiceIndex, setPracticeIndex] = useState(0);
   const [practiceRevealed, setPracticeRevealed] = useState(false);
 
@@ -38,8 +39,9 @@ export function StudyLensPanel({
     selectedAtoms,
     lastBondCount,
     showBonds,
+    measurement,
     shareUrl: typeof window === 'undefined' ? undefined : window.location.href,
-  }), [file, frame, lastBondCount, selectedAtoms, showBonds]);
+  }), [file, frame, lastBondCount, measurement, selectedAtoms, showBonds]);
 
   if (!facts) return null;
   const practiceCards = facts.ochemCompanion.practiceCards;
@@ -108,6 +110,22 @@ export function StudyLensPanel({
           <TruthRow label="Properties" value={facts.dataProvenance.properties} />
         </div>
       </section>
+
+      {facts.measurement && (
+        <section style={truthSectionStyle}>
+          <SectionTitle
+            label="Coordinate measurement"
+            detail={facts.measurement.kind === 'distance' ? 'A–B' : 'A–B–C'}
+          />
+          <div style={truthListStyle}>
+            <TruthRow label="Value" value={facts.measurement.value === null
+              ? facts.measurement.message
+              : `${facts.measurement.value.toFixed(3)} ${facts.measurement.unitLabel}`} />
+            <TruthRow label="Identity" value={facts.measurement.identityLabel} />
+            <TruthRow label="Boundary" value="Displayed Cartesian coordinates; no periodic minimum-image or trajectory unwrapping." />
+          </div>
+        </section>
+      )}
 
       <section style={materialsSectionStyle}>
         <SectionTitle label="Materials lens" detail={facts.materialsCompanion.courseUnit} />
@@ -241,7 +259,7 @@ export function StudyLensPanel({
                   <strong>{atom.symbol}</strong>
                   <span>#{atom.index} / id {atom.id}</span>
                 </div>
-                <p style={atomCopyStyle}>{atom.name} at {atom.xyz.map(value => value.toFixed(2)).join(', ')} Angstrom</p>
+                <p style={atomCopyStyle}>{atom.name} at {atom.xyz.map(value => value.toFixed(2)).join(', ')} {facts.distanceUnitLabel}</p>
                 {atom.properties.length > 0 && (
                   <p style={atomPropStyle}>
                     {atom.properties.slice(0, 3).map(prop => `${prop.name} ${formatValue(prop.value)}`).join(' / ')}
@@ -256,7 +274,7 @@ export function StudyLensPanel({
       </section>
 
       <section style={sectionStyle}>
-        <SectionTitle label="Frame notes" detail={`${formatSpan(facts.bounds.x)} x ${formatSpan(facts.bounds.y)} x ${formatSpan(facts.bounds.z)} Angstrom`} />
+        <SectionTitle label="Frame notes" detail={`${formatSpan(facts.bounds.x)} x ${formatSpan(facts.bounds.y)} x ${formatSpan(facts.bounds.z)} ${facts.distanceUnitLabel}`} />
         {facts.propertyStats.length > 0 ? (
           <div style={propertyListStyle}>
             {facts.propertyStats.slice(0, 4).map(prop => (

@@ -6,7 +6,12 @@ export function DropZoneSection() {
   const [dragOver, setDragOver] = useState(false);
   const [visible, setVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
-  const { loading, loadProgress, error, setFile, setLoading, setError } = useStore();
+  const loading = useStore((state) => state.loading);
+  const loadProgress = useStore((state) => state.loadProgress);
+  const error = useStore((state) => state.error);
+  const setFile = useStore((state) => state.setFile);
+  const setLoading = useStore((state) => state.setLoading);
+  const setError = useStore((state) => state.setError);
 
   useEffect(() => {
     const el = sectionRef.current;

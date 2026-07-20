@@ -1,0 +1,8 @@
+.git
+.github
+.turbo
+.verify-artifacts
+**/node_modules
+**/dist
+**/.DS_Store
+**/*.log

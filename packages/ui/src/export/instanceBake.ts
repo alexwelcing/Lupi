@@ -28,6 +28,15 @@ export type InstancedSwap = {
   replacement: THREE.Object3D;
 };
 
+/** Encode Three's Linear-sRGB working value into one sRGB texture byte. */
+export function linearChannelToSrgbByte(value: number): number {
+  const linear = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  const srgb = linear <= 0.0031308
+    ? linear * 12.92
+    : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
+  return Math.max(0, Math.min(255, Math.round(srgb * 255)));
+}
+
 export function toExportSafeMaterial(
   src: THREE.Material,
   paletteTexture?: THREE.Texture,
@@ -87,8 +96,10 @@ export function buildPaletteFromColors(
 
   for (let i = 0; i < instanceCount; i++) {
     const off = i * 3;
-    const r = instanceColors[off], g = instanceColors[off + 1], b = instanceColors[off + 2];
-    const key = (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
+    const r = linearChannelToSrgbByte(instanceColors[off]);
+    const g = linearChannelToSrgbByte(instanceColors[off + 1]);
+    const b = linearChannelToSrgbByte(instanceColors[off + 2]);
+    const key = (r << 16) | (g << 8) | b;
 
     let idx = uniqueMap.get(key);
     if (idx === undefined) {
@@ -288,6 +299,41 @@ export function bakeInstancedMesh(im: THREE.InstancedMesh): THREE.Mesh {
   return result.value;
 }
 
+/** Dispose resources uniquely owned by one merged bake. */
+function disposeBakedReplacement(
+  original: THREE.InstancedMesh,
+  replacement: THREE.Object3D,
+): void {
+  const mesh = replacement as THREE.Mesh;
+  if (!(mesh as unknown as { isMesh?: boolean }).isMesh) return;
+
+  if (mesh.geometry && mesh.geometry !== original.geometry) {
+    mesh.geometry.dispose();
+  }
+
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const disposedTextures = new Set<THREE.Texture>();
+  for (const material of materials) {
+    // bakeInstancedMeshSteps creates this palette map for the replacement.
+    // Other map slots can reference source-owned textures and must survive.
+    const paletteTexture = (material as THREE.MeshStandardMaterial).map;
+    if (paletteTexture && !disposedTextures.has(paletteTexture)) {
+      disposedTextures.add(paletteTexture);
+      paletteTexture.dispose();
+    }
+    material.dispose();
+  }
+}
+
+function rollbackBakedSwaps(swaps: InstancedSwap[]): void {
+  for (let index = swaps.length - 1; index >= 0; index--) {
+    const swap = swaps[index];
+    if (swap.original.parent !== swap.parent) swap.parent.add(swap.original);
+    if (swap.replacement.parent === swap.parent) swap.parent.remove(swap.replacement);
+    disposeBakedReplacement(swap.original, swap.replacement);
+  }
+}
+
 /**
  * Replace every InstancedMesh under `root` with its merged bake, yielding to
  * the event loop between chunks so a 100k+ atom bake never freezes the tab.
@@ -312,24 +358,45 @@ export async function bakeInstancedMeshesForExport(
   let bakedInstances = 0;
 
   const swaps: InstancedSwap[] = [];
-  for (const im of targets) {
-    if (!im.parent) continue;
+  let pendingReplacement: { original: THREE.InstancedMesh; replacement: THREE.Object3D } | null = null;
 
-    const steps = bakeInstancedMeshSteps(im, opts.stepEvery);
-    let result = steps.next();
-    while (!result.done) {
-      opts.onProgress?.(bakedInstances + result.value.done, totalInstances);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      result = steps.next();
+  try {
+    for (const im of targets) {
+      const parent = im.parent;
+      if (!parent) continue;
+
+      const steps = bakeInstancedMeshSteps(im, opts.stepEvery);
+      let result = steps.next();
+      while (!result.done) {
+        opts.onProgress?.(bakedInstances + result.value.done, totalInstances);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        result = steps.next();
+      }
+
+      // The merged mesh already owns GPU resources here. Track it before the
+      // final progress callback, which is user code and may throw.
+      pendingReplacement = { original: im, replacement: result.value };
+      bakedInstances += im.count;
+      opts.onProgress?.(bakedInstances, totalInstances);
+
+      const swap = { parent, original: im, replacement: result.value };
+      swaps.push(swap);
+      pendingReplacement = null;
+      swap.parent.add(swap.replacement);
+      swap.parent.remove(swap.original);
     }
-    bakedInstances += im.count;
-    opts.onProgress?.(bakedInstances, totalInstances);
 
-    swaps.push({ parent: im.parent, original: im, replacement: result.value });
-    im.parent.add(result.value);
-    im.parent.remove(im);
+    root.updateMatrixWorld(true);
+    return swaps;
+  } catch (error) {
+    if (pendingReplacement) {
+      disposeBakedReplacement(
+        pendingReplacement.original,
+        pendingReplacement.replacement,
+      );
+    }
+    rollbackBakedSwaps(swaps);
+    root.updateMatrixWorld(true);
+    throw error;
   }
-
-  root.updateMatrixWorld(true);
-  return swaps;
 }

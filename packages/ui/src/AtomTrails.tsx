@@ -12,11 +12,11 @@
  * dynamics studies become legible — atoms gain "memory" the eye can read.
  */
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
-import { TYPE_COLORS, DEFAULT_TYPE_COLOR } from '@atlas/scene';
+import { hasStableAtomIdentity, resolveTypeColor } from '@atlas/core';
 
 interface AtomTrailsProps {
   frame: Frame;
@@ -24,6 +24,8 @@ interface AtomTrailsProps {
    *  trail samples one new point per change of this value. Use the
    *  trajectory frame index, not the timer. */
   frameKey: number;
+  /** Owning trajectory identity. Changing datasets clears every history. */
+  historyKey: object;
   /** Atoms to follow. Typically annotation atom indices. */
   atomIndices: number[];
   /** Max history length per atom (samples). Default 60 ≈ 1s at 60fps
@@ -40,18 +42,51 @@ interface AtomHistory {
   lastFrameKey: number;
 }
 
+export function trackedAtomOrderIsStable(
+  previous: Frame,
+  current: Frame,
+  atomIndices: readonly number[],
+): boolean {
+  if (previous === current || atomIndices.length === 0) return true;
+  if (
+    previous.natoms !== current.natoms ||
+    !hasStableAtomIdentity(previous) ||
+    !hasStableAtomIdentity(current)
+  ) return false;
+  return atomIndices.every((index) => (
+    index >= 0 &&
+    index < current.natoms &&
+    previous.ids[index] === current.ids[index]
+  ));
+}
+
 export function AtomTrails({
   frame,
   frameKey,
+  historyKey,
   atomIndices,
   maxLength = 60,
   visible = true,
 }: AtomTrailsProps) {
   const historyRef = useRef<Map<number, AtomHistory>>(new Map());
+  const previousFrameRef = useRef(frame);
+  const previousHistoryKeyRef = useRef(historyKey);
+
+  useLayoutEffect(() => {
+    const sourceChanged = previousHistoryKeyRef.current !== historyKey;
+    const orderChanged = !trackedAtomOrderIsStable(
+      previousFrameRef.current,
+      frame,
+      atomIndices,
+    );
+    if (sourceChanged || orderChanged) historyRef.current.clear();
+    previousHistoryKeyRef.current = historyKey;
+    previousFrameRef.current = frame;
+  }, [atomIndices, frame, historyKey]);
 
   // Drop tracked atoms that are no longer in the watch set so memory
   // doesn't grow as the user clicks around.
-  useMemo(() => {
+  useEffect(() => {
     const wantSet = new Set(atomIndices);
     for (const key of historyRef.current.keys()) {
       if (!wantSet.has(key)) historyRef.current.delete(key);
@@ -113,11 +148,10 @@ function TrailLine({
   // Color per atom — use the existing element color so trails match the
   // sphere they came from (visually obvious "this trail belongs to that atom").
   const baseColor = useMemo(() => {
-    if (atomIndex < 0 || atomIndex >= frame.natoms) return new THREE.Color(...DEFAULT_TYPE_COLOR);
+    if (atomIndex < 0 || atomIndex >= frame.natoms) return new THREE.Color('#999999');
     const t = frame.types[atomIndex];
-    const c = (TYPE_COLORS as any)[t] ?? DEFAULT_TYPE_COLOR;
-    return new THREE.Color(c[0], c[1], c[2]);
-  }, [atomIndex, frame.natoms, frame.types]);
+    return new THREE.Color(resolveTypeColor(frame, t));
+  }, [atomIndex, frame]);
 
   // Pre-allocate position + color buffers sized to max history. We mutate
   // them in-place each frame and adjust the draw range to match the

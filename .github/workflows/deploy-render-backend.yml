@@ -1,0 +1,195 @@
+name: Deploy Lupi render backend
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+    paths:
+      - apps/render-backend/**
+      - apps/mcp-worker/**
+      - .github/workflows/deploy-render-backend.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - apps/web/**
+      - packages/core/**
+      - packages/parsers/**
+      - packages/renderer/**
+      - packages/scene/**
+      - packages/ui/**
+
+concurrency:
+  group: lupi-render-backend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  GCP_ARTIFACT_REPOSITORY: cloud-run-source-deploy
+  GCP_RENDERER_SECRET: lupi-renderer-token
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate deployment configuration
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SERVICE_NAME_RENDERER: ${{ secrets.GCP_SERVICE_NAME_RENDERER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in \
+            GCP_PROJECT_ID \
+            GCP_REGION \
+            GCP_SERVICE_NAME_RENDERER \
+            GCP_SERVICE_ACCOUNT \
+            GCP_WORKLOAD_IDENTITY_PROVIDER
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve image and deployment inputs
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SERVICE_NAME_RENDERER: ${{ secrets.GCP_SERVICE_NAME_RENDERER }}
+        run: |
+          set -euo pipefail
+          image_uri="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${GCP_SERVICE_NAME_RENDERER}:${GITHUB_SHA}"
+          echo "IMAGE_URI=${image_uri}" >> "$GITHUB_ENV"
+
+          gcloud artifacts repositories describe "$GCP_ARTIFACT_REPOSITORY" \
+            --project="$GCP_PROJECT_ID" \
+            --location="$GCP_REGION" \
+            --format='value(name)' > /dev/null
+
+      - name: Build immutable-revision renderer image
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          set -euo pipefail
+          gcloud builds submit . \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --config=apps/render-backend/cloudbuild.yaml \
+            --substitutions="_IMAGE_URI=${IMAGE_URI},_LUPI_BUILD_SHA=${GITHUB_SHA}" \
+            --quiet
+
+      - name: Deploy candidate without traffic
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SERVICE_NAME_RENDERER: ${{ secrets.GCP_SERVICE_NAME_RENDERER }}
+        run: |
+          set -euo pipefail
+          # Cloud Run IAM must admit the Cloudflare Worker, which has no Google
+          # identity token. POST /render remains protected by RENDERER_TOKEN in
+          # the application; --allow-unauthenticated does not bypass that check.
+          gcloud run deploy "$GCP_SERVICE_NAME_RENDERER" \
+            --image="$IMAGE_URI" \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --platform=managed \
+            --execution-environment=gen2 \
+            --allow-unauthenticated \
+            --no-traffic \
+            --tag=candidate \
+            --concurrency=1 \
+            --timeout=90s \
+            --cpu=2 \
+            --memory=4Gi \
+            --min-instances=0 \
+            --max-instances=2 \
+            --set-env-vars=RENDER_DEADLINE_MS=85000 \
+            --set-secrets="RENDERER_TOKEN=${GCP_RENDERER_SECRET}:latest" \
+            --labels="component=lupi-render-backend,managed-by=github-actions,git-sha=${GITHUB_SHA}" \
+            --quiet
+
+          service_json="$(gcloud run services describe "$GCP_SERVICE_NAME_RENDERER" \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --format=json)"
+          revision="$(printf '%s' "$service_json" | node -e "let value=''; process.stdin.on('data', chunk => value += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(value).status?.latestCreatedRevisionName || ''));")"
+          tagged_revision="$(printf '%s' "$service_json" | node -e "let value=''; process.stdin.on('data', chunk => value += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(value).status?.traffic?.find(item => item.tag === 'candidate')?.revisionName || ''));")"
+          candidate_url="$(printf '%s' "$service_json" | node -e "let value=''; process.stdin.on('data', chunk => value += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(value).status?.traffic?.find(item => item.tag === 'candidate')?.url || ''));")"
+
+          if [ -z "$revision" ] || [ -z "$candidate_url" ] || [ "$tagged_revision" != "$revision" ]; then
+            echo "::error::Could not resolve the no-traffic candidate revision and URL"
+            exit 1
+          fi
+
+          echo "CANDIDATE_REVISION=${revision}" >> "$GITHUB_ENV"
+          echo "CANDIDATE_URL=${candidate_url}" >> "$GITHUB_ENV"
+          echo "Candidate revision: ${revision}"
+          echo "Candidate URL: ${candidate_url}"
+
+      - name: Verify unauthenticated candidate health only
+        run: |
+          set -euo pipefail
+          health_file="$RUNNER_TEMP/render-backend-health.json"
+          # Deliberately send no Authorization header and do not exercise
+          # /render here. The only public application route is GET /health.
+          curl --fail --silent --show-error \
+            --retry 10 \
+            --retry-all-errors \
+            --retry-delay 3 \
+            --max-time 20 \
+            --output "$health_file" \
+            "$CANDIDATE_URL/health"
+
+          node --input-type=module - "$health_file" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          const health = JSON.parse(await readFile(process.argv[2], 'utf8'));
+          assert.equal(health.ok, true);
+          assert.equal(health.service, 'lupi-render-backend');
+          assert.equal(health.requestProtocol, 'lupi.renderer-request.legacy-v0.1');
+          assert.equal(health.responseProtocol, 'lupi.renderer-response.legacy-v0.1');
+          assert.deepEqual(health.profile?.moleculeInputs, ['template', 'procedural']);
+          assert.equal(health.profile?.format, 'png');
+          assert.equal(health.profile?.alpha, 'opaque');
+          NODE
+
+      - name: Route production traffic to candidate
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_SERVICE_NAME_RENDERER: ${{ secrets.GCP_SERVICE_NAME_RENDERER }}
+        run: |
+          set -euo pipefail
+          gcloud run services update-traffic "$GCP_SERVICE_NAME_RENDERER" \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --to-revisions="$CANDIDATE_REVISION=100" \
+            --quiet
+
+          echo "Renderer revision ${CANDIDATE_REVISION} now receives 100% traffic."

@@ -26,10 +26,11 @@ function makeFrame(timestep: number, natoms: number, base: number): Frame {
     positions,
     bonds: new Int32Array(0),
     properties: new Map(),
+    identity: { kind: 'synthetic-row', unique: true },
   };
 }
 
-function makeTrajectory(): Trajectory {
+function makeTrajectory(): Trajectory & { frames: Frame[] } {
   const frames = [makeFrame(0, 6, 0), makeFrame(10, 6, 1), makeFrame(20, 6, 2), makeFrame(30, 6, 3)];
   return {
     frames,
@@ -61,6 +62,9 @@ describe('LocalGlimbinSource', () => {
       expect(frame.timestep).toBe(traj.frames[fi].timestep);
       expect(Array.from(frame.positions)).toEqual(Array.from(traj.frames[fi].positions));
       expect(Array.from(frame.types)).toEqual(Array.from(traj.frames[fi].types));
+      expect(frame.identity).toEqual({ kind: 'synthetic-row', unique: true });
+      expect(frame.typeSemantics).toEqual({ kind: 'opaque', provenance: 'legacy-unknown' });
+      expect(frame.distanceSemantics).toEqual({ kind: 'unknown', provenance: 'legacy-unknown' });
     }
     source.dispose();
   });

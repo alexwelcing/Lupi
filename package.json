@@ -34,6 +34,11 @@
     "verify:streaming-ux": "node tools/verify-streaming-ux.mjs",
     "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
     "verify:asset-quality": "node tools/verify-asset-quality.mjs",
+    "verify:render-parity": "node tools/verify-render-parity.mjs",
+    "verify:cloudflare-live": "node tools/verify-cloudflare-live.mjs",
+    "verify:workflows": "node tools/run-actionlint.mjs",
+    "verify:product-contract": "node tools/verify-product-contract.mjs",
+    "verify:release-authority-freeze": "node tools/verify-release-authority-freeze.mjs",
     "cloudflare:build": "pnpm --filter @atlas/web build && pnpm --filter @atlas/mcp-worker build",
     "cloudflare:dev": "pnpm --filter @atlas/mcp-worker dev",
     "cloudflare:deploy": "pnpm --filter @atlas/mcp-worker deploy",
@@ -45,7 +50,7 @@
     "generate:sphere-grid": "node tools/generate-sphere-grid-gallery.mjs",
     "generate:sphere-grid:assets": "node tools/generate-sphere-grid-gallery.mjs --no-snapshot",
     "analytics:report": "node tools/analytics-report.mjs",
-    "lint": "turbo run lint",
+    "lint": "node scripts/run-lint.mjs",
     "clean": "turbo run clean"
   },
   "devDependencies": {
@@ -56,6 +61,10 @@
     "@testing-library/react": "^16.3.2",
     "@webgpu/types": "^0.1.69",
     "canvas": "^3.2.3",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.5.0",
     "jsdom": "^29.1.1",
     "jsqr": "^1.4.0",
     "playwright": "^1.59.1",
@@ -63,7 +72,9 @@
     "three": "^0.184.0",
     "turbo": "^2.3.0",
     "typescript": "^5.6.0",
-    "vitest": "^4.1.5"
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^4.1.5",
+    "yaml": "^2.9.0"
   },
   "packageManager": "pnpm@9.0.0",
   "engines": {
@@ -71,10 +82,15 @@
   },
   "dependencies": {
     "@types/node": "^22.0.0",
-    "leva": "^0.10.1",
-    "serve": "^14.2.6"
+    "leva": "^0.10.1"
   },
   "pnpm": {
+    "overrides": {
+      "fast-uri@3.1.0": "3.1.2",
+      "postcss@8.5.8": "8.5.20",
+      "protobufjs@7.6.1": "7.6.3",
+      "websocket-driver@0.7.4": "0.7.5"
+    },
     "packageExtensions": {
       "@iwer/devui": {
         "dependencies": {

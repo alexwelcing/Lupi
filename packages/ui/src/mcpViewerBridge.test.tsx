@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderWithStore, resetStore, getStoreState } from './test-utils';
 import { McpViewerBridge, type LupiMcpDriver } from './mcpViewerBridge';
+import { useStore } from './store';
 import {
   MCP_ERROR_EVENT,
   MCP_REQUEST_EVENT,
@@ -10,6 +11,7 @@ import {
 describe('MCP viewer bridge', () => {
   beforeEach(() => {
     resetStore();
+    window.history.replaceState({}, '', '/');
     delete (window as Window & { __lupiViewerMcp?: LupiMcpDriver }).__lupiViewerMcp;
     delete (window as Window & { __lupiViewerMcpReady?: unknown }).__lupiViewerMcpReady;
   });
@@ -48,6 +50,161 @@ describe('MCP viewer bridge', () => {
     const driver = mountBridge();
     await loadBenzene(driver);
     expect(getStoreState().showBonds).toBe(true);
+    expect(getStoreState().file?.trajectory.frames[0]).toMatchObject({
+      identity: { kind: 'synthetic-row', unique: true },
+      typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'source-declared' },
+    });
+  });
+
+  it('marks manual XYZ coordinates as atomic-number data using the XYZ format convention', async () => {
+    const driver = mountBridge();
+    const response = await driver.execute({
+      id: 'manual-xyz',
+      tool: 'lupi.generate_molecule',
+      arguments: {
+        inputType: 'xyz',
+        input: '2\nmanual\nC 0 0 0\nO 1.2 0 0',
+      },
+    });
+
+    expect(response.ok).toBe(true);
+    expect(getStoreState().file?.trajectory.frames[0]).toMatchObject({
+      typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'format-convention' },
+    });
+  });
+
+  it('marks procedural lattices with procedural element and Ångström provenance', async () => {
+    const driver = mountBridge();
+    const response = await driver.execute({
+      id: 'procedural-cu',
+      tool: 'lupi.generate_molecule',
+      arguments: { inputType: 'procedural', atomCount: 8, elements: ['Cu'], lattice: 'fcc' },
+    });
+
+    expect(response.ok).toBe(true);
+    expect(getStoreState().file?.trajectory.frames[0]).toMatchObject({
+      typeSemantics: { kind: 'atomic-number', provenance: 'procedural-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'procedural' },
+    });
+  });
+
+  it('fails XYZ export actionably for opaque types while preserving model-export guidance', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const frame = getStoreState().file!.trajectory.frames[0]!;
+    frame.typeSemantics = { kind: 'opaque', provenance: 'legacy-unknown' };
+
+    const response = await driver.execute({ id: 'opaque-xyz', tool: 'lupi.export_xyz', arguments: {} });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/complete element mapping/i);
+    expect(response.error?.message).toMatch(/GLB\/USDZ/);
+  });
+
+  it('exports XYZ when every raw type has known element semantics', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+
+    const response = await driver.execute({ id: 'benzene-xyz', tool: 'lupi.export_xyz', arguments: {} });
+
+    expect(response.ok).toBe(true);
+    expect(response.result?.export?.contents).toMatch(/^12\nBenzene\n/m);
+  });
+
+  it('reports scientific semantics and effective bond topology', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+
+    expect(driver.state()).toMatchObject({
+      bondTopology: 'inferred',
+      showBonds: true,
+      showBondsEffective: true,
+      typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'source-declared' },
+    });
+    expect(driver.status()).toMatchObject({ bondTopology: 'inferred', showBondsEffective: true });
+  });
+
+  it('declines impossible bond and element settings instead of reporting requested-only state', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const frame = getStoreState().file!.trajectory.frames[0]!;
+    frame.typeSemantics = { kind: 'opaque', provenance: 'lammps-type-id' };
+    frame.distanceSemantics = { kind: 'unknown', provenance: 'lammps-dump' };
+    useStore.setState({ showBonds: false });
+
+    const bonds = await driver.execute({
+      id: 'impossible-bonds',
+      tool: 'lupi.set_viewer',
+      arguments: { showBonds: true },
+    });
+    const elements = await driver.execute({
+      id: 'impossible-elements',
+      tool: 'lupi.set_viewer',
+      arguments: { colorScheme: 'element' },
+    });
+
+    expect(bonds.ok).toBe(false);
+    expect(bonds.error?.message).toMatch(/requires complete element identity/i);
+    expect(elements.ok).toBe(false);
+    expect(elements.error?.message).toMatch(/complete element mapping/i);
+    expect(driver.state()).toMatchObject({
+      bondTopology: 'unavailable',
+      showBonds: false,
+      showBondsEffective: false,
+    });
+  });
+
+  it('refuses to promote unknown source distances to angstroms through XYZ', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const frame = getStoreState().file!.trajectory.frames[0]!;
+    frame.distanceSemantics = { kind: 'unknown', provenance: 'lammps-dump' };
+
+    const response = await driver.execute({ id: 'unknown-unit-xyz', tool: 'lupi.export_xyz', arguments: {} });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/known to be in angstroms/i);
+    expect(response.error?.message).toMatch(/GLB\/USDZ/);
+  });
+
+  it('rejects transparent JPEG before creating a browser export request', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+
+    const response = await driver.execute({
+      id: 'transparent-jpeg',
+      tool: 'lupi.export_asset',
+      arguments: { format: 'jpeg', transparent: true, width: 256, height: 256, timeoutMs: 1000 },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/JPEG export does not support transparent output/);
+    expect(getStoreState().exportRequest.type).toBeNull();
+  });
+
+  it('rejects unsnapshotable raster bonds without mutating fit or atom scale', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const before = getStoreState();
+    const beforePosition = [...before.cameraPosition];
+    const beforeTarget = [...before.cameraTarget];
+    const beforeScale = before.atomScale;
+
+    const response = await driver.execute({
+      id: 'bonds-raster-no-side-effects',
+      tool: 'lupi.export_asset',
+      arguments: { format: 'png', width: 256, height: 256, timeoutMs: 1000 },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/Hide bonds before deterministic raster export/);
+    expect(getStoreState().cameraPosition).toEqual(beforePosition);
+    expect(getStoreState().cameraTarget).toEqual(beforeTarget);
+    expect(getStoreState().atomScale).toBe(beforeScale);
+    expect(getStoreState().exportRequest.type).toBeNull();
   });
 
   it('parses molecule asset requests into load plus export steps', () => {
@@ -58,6 +215,49 @@ describe('MCP viewer bridge', () => {
     expect(requests[0].arguments.viewer).toMatchObject({ showBonds: true, cameraPreset: 'iso' });
     expect(requests[1].tool).toBe('lupi.export_asset');
     expect(requests[1].arguments).toMatchObject({ format: 'png', width: 512, height: 384 });
+  });
+
+  it('does not auto-execute production-shaped URL commands, but permits explicit execution', async () => {
+    const command = JSON.stringify({
+      id: 'url-caffeine',
+      tool: 'lupi.generate_molecule',
+      arguments: { inputType: 'template', input: 'Caffeine' },
+    });
+    window.history.replaceState({}, '', `/?mcpCommand=${encodeURIComponent(command)}#/mcp`);
+    const driver = mountBridge();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(getStoreState().file).toBeNull();
+
+    const requests = driver.parseCommand(command);
+    const responses = await driver.executeBatch(requests);
+    expect(responses[0].ok).toBe(true);
+    expect(getStoreState().file?.name).toMatch(/caffeine/i);
+  });
+
+  it('enforces the remote URL policy again in the MCP handler before any fetch', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const driver = mountBridge();
+      const response = await driver.execute({
+        id: 'unsafe-url',
+        tool: 'lupi.load_molecule_url',
+        arguments: { url: 'https://169.254.169.254/latest/meta-data.xyz' },
+      });
+      expect(response.ok).toBe(false);
+      expect(response.error?.message).toMatch(/not allowed/i);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('parses only allowlisted remote molecule URLs into MCP load requests', () => {
+    const driver = mountBridge();
+    expect(driver.parseCommand('https://lupi.live/gallery/curated/caffeine.xyz')[0]).toMatchObject({
+      tool: 'lupi.load_molecule_url',
+      arguments: { url: 'https://lupi.live/gallery/curated/caffeine.xyz' },
+    });
+    expect(() => driver.parseCommand('https://lupi.live.evil.example/gallery/caffeine.xyz')).toThrow(/not allowed/i);
   });
 
   it('lists new AI-control tools', () => {

@@ -27,6 +27,7 @@ import {
   type GlimbinIndex,
   type DatasetMeta,
 } from '@atlas/core/glimbin';
+import { decompressGlimbinFrame } from './decompressGlimbinFrame';
 
 /** LRU frame cache — bounds resident frames to `maxSize` regardless of
  *  trajectory length. Identical contract to StreamingLoader's internal
@@ -57,6 +58,10 @@ class FrameCache {
   }
   has(i: number): boolean {
     return this.cache.has(i);
+  }
+  delete(i: number): void {
+    this.cache.delete(i);
+    this.order = this.order.filter((x) => x !== i);
   }
   clear(): void {
     this.cache.clear();
@@ -118,7 +123,8 @@ export class LocalGlimbinSource {
     }
   }
 
-  async fetchFrame(frameIndex: number): Promise<Frame> {
+  async fetchFrame(frameIndex: number, signal?: AbortSignal): Promise<Frame> {
+    if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
     const cached = this.cache.get(frameIndex);
     if (cached) return cached;
 
@@ -134,7 +140,7 @@ export class LocalGlimbinSource {
       );
     }
 
-    const promise = this.doFetchFrame(frameIndex);
+    const promise = this.doFetchFrame(frameIndex, signal);
     this.inflight.set(frameIndex, promise);
     try {
       return await promise;
@@ -143,36 +149,50 @@ export class LocalGlimbinSource {
     }
   }
 
-  private async doFetchFrame(frameIndex: number): Promise<Frame> {
-    const entry = this.index!.entries[frameIndex];
-    const start = Number(entry.offset);
-    let buffer = await this.readBytes(start, start + entry.compressedSize);
+  private async doFetchFrame(frameIndex: number, signal?: AbortSignal): Promise<Frame> {
+    try {
+      const entry = this.index!.entries[frameIndex];
+      const start = Number(entry.offset);
+      let buffer = await this.readBytes(start, start + entry.compressedSize);
+      if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
 
-    if (this.header!.compressed && entry.compressedSize !== entry.rawSize) {
-      buffer = await decompressGzip(buffer);
+      if (this.header!.compressed) {
+        buffer = await decompressGlimbinFrame(buffer, entry.rawSize);
+      }
+
+      const parsed = parseFrameData(buffer, entry.natoms, this.header!.flags);
+      const columns = ['id', 'type', 'x', 'y', 'z', ...parsed.properties.keys()];
+      const frame: Frame = {
+        timestep: entry.timestep,
+        natoms: entry.natoms,
+        // v2 records carry their own box (exact for NPT / deforming cells);
+        // v1 falls back to the file-level box from the header.
+        boxBounds: parsed.boxBounds ?? this.header!.boxBounds,
+        boxTilt: parsed.boxTilt ?? this.header!.boxTilt,
+        triclinic: parsed.triclinic ?? this.header!.triclinic,
+        columns,
+        ids: parsed.ids,
+        types: new Int32Array(parsed.types),
+        positions: parsed.positions,
+        bonds: (this.header!.flags & FLAG_HAS_BONDS) !== 0 ? parsed.bonds : new Int32Array(0),
+        properties: parsed.properties,
+        identity: parsed.identity,
+        // GLIMBIN v2 predates scientific type/unit metadata. Stored numeric
+        // values survive, but their element and distance meanings are unknown.
+        typeSemantics: { kind: 'opaque', provenance: 'legacy-unknown' },
+        distanceSemantics: { kind: 'unknown', provenance: 'legacy-unknown' },
+      };
+
+      if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
+      this.cache.set(frameIndex, frame);
+      this.events.onFrame?.(frameIndex, frame);
+      return frame;
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      if (signal?.aborted || normalized.name === 'AbortError') throw normalized;
+      this.events.onError?.(normalized);
+      throw normalized;
     }
-
-    const parsed = parseFrameData(buffer, entry.natoms, this.header!.flags);
-    const columns = ['id', 'type', 'x', 'y', 'z', ...parsed.properties.keys()];
-    const frame: Frame = {
-      timestep: entry.timestep,
-      natoms: entry.natoms,
-      // v2 records carry their own box (exact for NPT / deforming cells);
-      // v1 falls back to the file-level box from the header.
-      boxBounds: parsed.boxBounds ?? this.header!.boxBounds,
-      boxTilt: parsed.boxTilt ?? this.header!.boxTilt,
-      triclinic: parsed.triclinic ?? this.header!.triclinic,
-      columns,
-      ids: parsed.ids,
-      types: new Int32Array(parsed.types),
-      positions: parsed.positions,
-      bonds: (this.header!.flags & FLAG_HAS_BONDS) !== 0 ? parsed.bonds : new Int32Array(0),
-      properties: parsed.properties,
-    };
-
-    this.cache.set(frameIndex, frame);
-    this.events.onFrame?.(frameIndex, frame);
-    return frame;
   }
 
   /** Warm the LRU around the playhead so scrubbing/playback stays smooth.
@@ -214,6 +234,11 @@ export class LocalGlimbinSource {
     return this.cache.has(frameIndex);
   }
 
+  /** Release a UI-evicted frame so the source cache cannot retain it too. */
+  releaseFrame(frameIndex: number): void {
+    this.cache.delete(frameIndex);
+  }
+
   dispose(): void {
     this.prefetchController?.abort();
     this.cache.clear();
@@ -228,15 +253,4 @@ export async function isGlimbinBlob(blob: Blob): Promise<boolean> {
   if (blob.size < 4) return false;
   const magic = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
   return magic[0] === 0x47 && magic[1] === 0x4c && magic[2] === 0x49 && magic[3] === 0x4d;
-}
-
-async function decompressGzip(buffer: ArrayBuffer): Promise<ArrayBuffer> {
-  try {
-    const ds = new DecompressionStream('gzip');
-    const stream = new Blob([buffer]).stream().pipeThrough(ds);
-    return await new Response(stream).arrayBuffer();
-  } catch {
-    // Not actually gzip-framed — assume the bytes were already raw.
-    return buffer;
-  }
 }

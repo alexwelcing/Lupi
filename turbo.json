@@ -4,6 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["VITE_LUPI_BUILD_SHA"],
       "outputs": ["dist/**", "pkg/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
@@ -22,8 +23,7 @@
       "dependsOn": ["build"]
     },
     "lint": {
-      "outputs": [],
-      "dependsOn": ["^build"]
+      "outputs": []
     },
     "clean": {
       "cache": false

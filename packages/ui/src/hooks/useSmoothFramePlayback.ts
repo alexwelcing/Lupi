@@ -15,9 +15,12 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { Frame } from '@atlas/core/types';
 
+export type PlaybackLoopMode = 'loop' | 'bounce' | 'once';
+export type PlaybackDirection = 1 | -1;
+
 interface SmoothPlaybackOptions {
   /** Array of MD frames */
-  frames: Frame[];
+  frames: Array<Frame | undefined>;
   /** Initial playback speed (1.0 = real-time) */
   speed?: number;
   /** Target display rate (fps) */
@@ -29,7 +32,7 @@ interface SmoothPlaybackOptions {
    *  generated subframe is part of the story. */
   stateSyncFPS?: number;
   /** Playback mode */
-  loopMode?: 'loop' | 'bounce' | 'once';
+  loopMode?: PlaybackLoopMode;
   /** Return false for streamed frames that are not resident yet. */
   isFrameReady?: (frameIndex: number) => boolean;
   /** Called when playback reaches a streamed frame that needs buffering. */
@@ -38,6 +41,8 @@ interface SmoothPlaybackOptions {
   onFrame: (state: InterpolatedFrameState) => void;
   /** Optional stats callback */
   onStats?: (stats: PlaybackStats) => void;
+  /** Called exactly once when `once` playback reaches its terminal frame. */
+  onPlaybackEnd?: () => void;
 }
 
 export interface InterpolatedFrameState {
@@ -62,6 +67,105 @@ export interface PlaybackStats {
   interpolationTime: number;
 }
 
+export interface PlaybackAdvance {
+  effectiveFrame: number;
+  direction: PlaybackDirection;
+  ended: boolean;
+}
+
+function positiveModulo(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus;
+}
+
+/**
+ * Advance a fractional trajectory playhead without losing overshoot.
+ * Bounce is evaluated as a triangle wave, so one large delayed RAF tick has
+ * the same result as many small ticks across any number of boundaries.
+ */
+export function advancePlaybackFrame(
+  current: number,
+  delta: number,
+  mode: PlaybackLoopMode,
+  direction: PlaybackDirection,
+  totalFrames: number,
+): PlaybackAdvance {
+  const count = Number.isFinite(totalFrames) ? Math.max(0, Math.floor(totalFrames)) : 0;
+  if (count <= 1) {
+    return { effectiveFrame: 0, direction: 1, ended: mode === 'once' };
+  }
+
+  const safeCurrent = Number.isFinite(current) ? current : 0;
+  const distance = Number.isFinite(delta) ? Math.max(0, delta) : 0;
+  const lastIndex = count - 1;
+
+  if (mode === 'loop') {
+    return {
+      effectiveFrame: positiveModulo(safeCurrent + distance, count),
+      direction: 1,
+      ended: false,
+    };
+  }
+
+  if (mode === 'once') {
+    const effectiveFrame = Math.min(lastIndex, Math.max(0, safeCurrent) + distance);
+    return { effectiveFrame, direction: 1, ended: effectiveFrame >= lastIndex };
+  }
+
+  const period = 2 * lastIndex;
+  const clampedCurrent = Math.max(0, Math.min(lastIndex, safeCurrent));
+  const phase = direction === 1 ? clampedCurrent : period - clampedCurrent;
+  const phaseInPeriod = positiveModulo(phase + distance, period);
+  const effectiveFrame = lastIndex - Math.abs(phaseInPeriod - lastIndex);
+  const nextDirection: PlaybackDirection = phaseInPeriod === 0 || phaseInPeriod < lastIndex ? 1 : -1;
+  return { effectiveFrame, direction: nextDirection, ended: false };
+}
+
+function stateForEffectiveFrame(effectiveFrame: number, totalFrames: number): InterpolatedFrameState {
+  if (totalFrames <= 1) {
+    return {
+      frameIndex: 0,
+      nextFrameIndex: 0,
+      interpolationFactor: 0,
+      isInterpolating: false,
+      effectiveFrame: 0,
+    };
+  }
+
+  const lastIndex = totalFrames - 1;
+  const safeEffective = Math.max(0, Math.min(totalFrames, effectiveFrame));
+  const frameIndex = Math.min(lastIndex, Math.floor(safeEffective));
+  const nextFrameIndex = Math.min(frameIndex + 1, lastIndex);
+  const interpolationFactor = nextFrameIndex === frameIndex ? 0 : safeEffective - frameIndex;
+  return {
+    frameIndex,
+    nextFrameIndex,
+    interpolationFactor,
+    isInterpolating: nextFrameIndex !== frameIndex && interpolationFactor > 0,
+    effectiveFrame: safeEffective,
+  };
+}
+
+function manualStep(
+  currentFrame: number,
+  step: PlaybackDirection,
+  mode: PlaybackLoopMode,
+  totalFrames: number,
+): number {
+  if (totalFrames <= 1) return 0;
+  const lastIndex = totalFrames - 1;
+  const current = Math.max(0, Math.min(lastIndex, Math.floor(currentFrame)));
+  if (step === 1) {
+    if (current < lastIndex) return current + 1;
+    if (mode === 'loop') return 0;
+    if (mode === 'bounce') return Math.max(0, lastIndex - 1);
+    return lastIndex;
+  }
+  if (current > 0) return current - 1;
+  if (mode === 'bounce') return Math.min(lastIndex, 1);
+  if (mode === 'loop') return lastIndex;
+  return 0;
+}
+
 export function useSmoothFramePlayback(
   isPlaying: boolean,
   options: SmoothPlaybackOptions
@@ -69,29 +173,28 @@ export function useSmoothFramePlayback(
   const {
     frames,
     speed = 1.0,
-    targetFPS = 60,
     loopMode = 'loop',
     onFrame,
     onStats,
+    onPlaybackEnd,
     isFrameReady,
     onFrameNeeded,
     stateSyncFPS = 15,
   } = options;
 
   // Playback state — use ref for hot path, state only for UI sync
-  const stateRef = useRef<InterpolatedFrameState>({
-    frameIndex: 0,
-    nextFrameIndex: 1,
-    interpolationFactor: 0,
-    isInterpolating: false,
-    effectiveFrame: 0,
-  });
+  const stateRef = useRef<InterpolatedFrameState>(stateForEffectiveFrame(0, frames.length));
   const [currentState, setCurrentState] = useState<InterpolatedFrameState>(stateRef.current);
+  const directionRef = useRef<PlaybackDirection>(1);
 
   // RAF refs
   const rafIdRef = useRef<number | undefined>(undefined);
   const lastTimeRef = useRef<number | undefined>(undefined);
-  const accumulatorRef = useRef(0);
+  const wasPlayingRef = useRef(false);
+  const previousFramesRef = useRef(frames);
+  const previousFrameCountRef = useRef(frames.length);
+  const previousLoopModeRef = useRef(loopMode);
+  const completionNotifiedRef = useRef(false);
 
   // Stats refs
   const frameCountRef = useRef(0);
@@ -103,7 +206,6 @@ export function useSmoothFramePlayback(
 
   // Frame timing based on MD data
   // Assume frames are evenly spaced in simulation time
-  const frameInterval = 1000 / targetFPS; // ms per display frame
   const mdFrameTime = 1000 / (options.mdFrameRate ?? 30); // ms per MD frame
 
   const loop = useCallback((time: number) => {
@@ -122,31 +224,23 @@ export function useSmoothFramePlayback(
 
       // PERF: Update ref directly — no React setState in the hot loop
       const prev = stateRef.current;
-      let newEffectiveFrame = prev.effectiveFrame + effectiveDeltaFrames;
       const totalFrames = frames.length;
+      const advanced = advancePlaybackFrame(
+        prev.effectiveFrame,
+        effectiveDeltaFrames,
+        loopMode,
+        directionRef.current,
+        totalFrames,
+      );
+      const state = stateForEffectiveFrame(advanced.effectiveFrame, totalFrames);
 
-      // Handle loop modes
-      if (newEffectiveFrame >= totalFrames - 1) {
-        if (loopMode === 'loop') {
-          newEffectiveFrame = newEffectiveFrame % (totalFrames - 1);
-        } else if (loopMode === 'bounce') {
-          newEffectiveFrame = totalFrames - 1;
-        } else {
-          newEffectiveFrame = totalFrames - 1;
-        }
-      }
-
-      const frameIndex = Math.floor(newEffectiveFrame);
-      const interpolationFactor = newEffectiveFrame - frameIndex;
-      const nextFrameIndex = Math.min(frameIndex + 1, totalFrames - 1);
-
-      const frameReady = isFrameReady?.(frameIndex) ?? true;
-      const nextReady = interpolationFactor > 0
-        ? (isFrameReady?.(nextFrameIndex) ?? true)
+      const frameReady = isFrameReady?.(state.frameIndex) ?? true;
+      const nextReady = state.isInterpolating
+        ? (isFrameReady?.(state.nextFrameIndex) ?? true)
         : true;
 
       if (!frameReady || !nextReady) {
-        onFrameNeeded?.(!frameReady ? frameIndex : nextFrameIndex);
+        onFrameNeeded?.(!frameReady ? state.frameIndex : state.nextFrameIndex);
         const heldIndex = Math.max(0, Math.min(prev.frameIndex, totalFrames - 1));
         const heldState: InterpolatedFrameState = {
           frameIndex: heldIndex,
@@ -167,25 +261,27 @@ export function useSmoothFramePlayback(
         return;
       }
 
-      const state: InterpolatedFrameState = {
-        frameIndex,
-        nextFrameIndex,
-        interpolationFactor,
-        isInterpolating: interpolationFactor > 0 && interpolationFactor < 1,
-        effectiveFrame: newEffectiveFrame,
-      };
-
+      directionRef.current = advanced.direction;
       stateRef.current = state;
       onFrame(state);
 
       const stateSyncInterval = 1000 / Math.max(1, stateSyncFPS);
-      if (time - lastUISyncRef.current >= stateSyncInterval) {
+      if (advanced.ended || time - lastUISyncRef.current >= stateSyncInterval) {
         setCurrentState(state);
         lastUISyncRef.current = time;
       }
 
       totalInterpolationTimeRef.current += performance.now() - start;
       frameCountRef.current++;
+
+      if (advanced.ended) {
+        rafIdRef.current = undefined;
+        if (!completionNotifiedRef.current) {
+          completionNotifiedRef.current = true;
+          onPlaybackEnd?.();
+        }
+        return;
+      }
     }
 
     // Stats reporting
@@ -202,80 +298,115 @@ export function useSmoothFramePlayback(
     }
 
     rafIdRef.current = requestAnimationFrame(loop);
-  }, [frames.length, speed, targetFPS, loopMode, onFrame, onStats, isFrameReady, onFrameNeeded, stateSyncFPS, mdFrameTime]);
+  }, [frames.length, speed, loopMode, onFrame, onStats, onPlaybackEnd, isFrameReady, onFrameNeeded, stateSyncFPS, mdFrameTime]);
+
+  // A new trajectory cannot inherit a reverse bounce direction from the old
+  // one. Clamp the old playhead if the replacement is shorter.
+  useEffect(() => {
+    const identityChanged = previousFramesRef.current !== frames;
+    const lengthChanged = previousFrameCountRef.current !== frames.length;
+    previousFramesRef.current = frames;
+    previousFrameCountRef.current = frames.length;
+    if (!identityChanged && !lengthChanged) return;
+
+    directionRef.current = 1;
+    const maxFrame = Math.max(0, frames.length - 1);
+    const nextState = stateForEffectiveFrame(
+      Math.min(stateRef.current.effectiveFrame, maxFrame),
+      frames.length,
+    );
+    stateRef.current = nextState;
+    setCurrentState(nextState);
+  }, [frames, frames.length]);
+
+  useEffect(() => {
+    if (previousLoopModeRef.current === 'bounce' && loopMode !== 'bounce') {
+      directionRef.current = 1;
+    }
+    previousLoopModeRef.current = loopMode;
+  }, [loopMode]);
 
   // Start/stop playback
   useEffect(() => {
-    if (!isPlaying || frames.length < 2) {
+    if (!isPlaying) {
       if (rafIdRef.current !== undefined) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = undefined;
       }
       lastTimeRef.current = undefined;
+      wasPlayingRef.current = false;
+      completionNotifiedRef.current = false;
       return;
     }
 
+    if (frames.length < 2) {
+      if (rafIdRef.current !== undefined) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = undefined;
+      }
+      lastTimeRef.current = undefined;
+      wasPlayingRef.current = true;
+      if (loopMode === 'once' && !completionNotifiedRef.current) {
+        completionNotifiedRef.current = true;
+        onPlaybackEnd?.();
+      }
+      return;
+    }
+
+    if (!wasPlayingRef.current) {
+      directionRef.current = 1;
+      completionNotifiedRef.current = false;
+    }
+    wasPlayingRef.current = true;
     rafIdRef.current = requestAnimationFrame(loop);
 
     return () => {
       if (rafIdRef.current !== undefined) {
         cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = undefined;
       }
     };
-  }, [isPlaying, frames.length, loop]);
+  }, [isPlaying, frames.length, loopMode, loop, onPlaybackEnd]);
 
   // Control functions
   const setFrame = useCallback((frameIndex: number) => {
-    const clamped = Math.max(0, Math.min(frames.length - 1, frameIndex));
-    const intFrame = Math.floor(clamped);
-    const interp = clamped - intFrame;
-    const isInterp = interp > 0 && interp < 1;
-    if (isFrameReady && !isFrameReady(intFrame)) {
-      onFrameNeeded?.(intFrame);
+    directionRef.current = 1;
+    if (frames.length === 0) {
+      const emptyState = stateForEffectiveFrame(0, 0);
+      stateRef.current = emptyState;
+      setCurrentState(emptyState);
       return;
     }
-    
-    const state: InterpolatedFrameState = {
-      frameIndex: intFrame,
-      nextFrameIndex: Math.min(intFrame + 1, frames.length - 1),
-      interpolationFactor: interp,
-      isInterpolating: isInterp,
-      effectiveFrame: clamped,
-    };
+    const clamped = Math.max(0, Math.min(frames.length - 1, frameIndex));
+    const state = stateForEffectiveFrame(clamped, frames.length);
+    if (isFrameReady && !isFrameReady(state.frameIndex)) {
+      onFrameNeeded?.(state.frameIndex);
+      return;
+    }
     stateRef.current = state;
     setCurrentState(state);
     onFrame(state);
   }, [frames.length, onFrame, isFrameReady, onFrameNeeded]);
 
   const nextFrame = useCallback(() => {
-    const prev = stateRef.current;
-    const newIndex = Math.min(prev.frameIndex + 1, frames.length - 1);
-    const state: InterpolatedFrameState = {
-      frameIndex: newIndex,
-      nextFrameIndex: Math.min(newIndex + 1, frames.length - 1),
-      interpolationFactor: 0,
-      isInterpolating: false,
-      effectiveFrame: newIndex,
-    };
+    directionRef.current = 1;
+    if (frames.length === 0) return;
+    const newIndex = manualStep(stateRef.current.frameIndex, 1, loopMode, frames.length);
+    const state = stateForEffectiveFrame(newIndex, frames.length);
     stateRef.current = state;
     setCurrentState(state);
     onFrame(state);
-  }, [frames.length, onFrame]);
+  }, [frames.length, loopMode, onFrame]);
 
   const prevFrame = useCallback(() => {
-    const prev = stateRef.current;
-    const newIndex = Math.max(prev.frameIndex - 1, 0);
-    const state: InterpolatedFrameState = {
-      frameIndex: newIndex,
-      nextFrameIndex: Math.min(newIndex + 1, frames.length - 1),
-      interpolationFactor: 0,
-      isInterpolating: false,
-      effectiveFrame: newIndex,
-    };
+    directionRef.current = 1;
+    if (frames.length === 0) return;
+    const newIndex = manualStep(stateRef.current.frameIndex, -1, loopMode, frames.length);
+    const state = stateForEffectiveFrame(newIndex, frames.length);
     stateRef.current = state;
     setCurrentState(state);
     onFrame(state);
-  }, [frames.length, onFrame]);
+  }, [frames.length, loopMode, onFrame]);
 
   return {
     currentState,

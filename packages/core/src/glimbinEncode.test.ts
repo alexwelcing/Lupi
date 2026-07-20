@@ -12,9 +12,11 @@ import {
   FRAME_ENTRY_SIZE,
   FLAG_HAS_BONDS,
   FLAG_HAS_PROPERTIES,
+  FLAG_FRAME_IDENTITY,
+  FLAG_LITTLE_ENDIAN,
   FLAG_VARIABLE_ATOMS,
 } from './glimbin';
-import type { Frame, Trajectory } from './types';
+import type { Frame, FrameIdentity, Trajectory } from './types';
 
 function makeFrame(opts: {
   timestep: number;
@@ -22,8 +24,16 @@ function makeFrame(opts: {
   base?: number;
   withProps?: boolean;
   withBonds?: boolean;
+  identity?: FrameIdentity;
 }): Frame {
-  const { timestep, natoms, base = 0, withProps = false, withBonds = false } = opts;
+  const {
+    timestep,
+    natoms,
+    base = 0,
+    withProps = false,
+    withBonds = false,
+    identity,
+  } = opts;
   const ids = new Int32Array(natoms);
   const types = new Int32Array(natoms);
   const positions = new Float32Array(natoms * 3);
@@ -48,6 +58,7 @@ function makeFrame(opts: {
     triclinic: false,
     columns: ['id', 'type', 'x', 'y', 'z'],
     ids,
+    identity,
     types,
     positions,
     bonds: withBonds ? new Int32Array([0, 1, 1, 2]) : new Int32Array(0),
@@ -55,7 +66,7 @@ function makeFrame(opts: {
   };
 }
 
-function makeTrajectory(frames: Frame[]): Trajectory {
+function makeTrajectory(frames: Frame[]): Trajectory & { frames: Frame[] } {
   return {
     frames,
     totalFrames: frames.length,
@@ -121,6 +132,83 @@ describe('glimbin encoder round-trip', () => {
     expect(Array.from(frames[1].properties.get('energy')!)).toEqual(
       Array.from(traj.frames[1].properties.get('energy')!),
     );
+  });
+
+  it('round-trips per-frame source-ID provenance without promoting synthetic rows', async () => {
+    const traj = makeTrajectory([
+      makeFrame({
+        timestep: 0,
+        natoms: 4,
+        identity: { kind: 'source-id', unique: true },
+      }),
+      makeFrame({
+        timestep: 1,
+        natoms: 4,
+        identity: { kind: 'synthetic-row', unique: true },
+      }),
+      makeFrame({
+        timestep: 2,
+        natoms: 4,
+        identity: { kind: 'source-order', unique: true },
+      }),
+      makeFrame({
+        timestep: 3,
+        natoms: 4,
+        identity: { kind: 'unknown', unique: true },
+      }),
+      makeFrame({ timestep: 4, natoms: 4 }),
+    ]);
+
+    const { blob } = assembleGlimbinBlob(traj);
+    const { header, frames } = await decodeAllFrames(blob);
+
+    expect(header.hasFrameIdentity).toBe(true);
+    expect(header.flags & FLAG_FRAME_IDENTITY).toBeTruthy();
+    expect(frames.map((frame) => frame.identity)).toEqual([
+      { kind: 'source-id', unique: true },
+      { kind: 'synthetic-row', unique: true },
+      { kind: 'source-order', unique: true },
+      { kind: 'unknown', unique: true },
+      { kind: 'unknown', unique: false },
+    ]);
+  });
+
+  it('leaves legacy ID provenance absent even when stored IDs look unique', () => {
+    const frame = makeFrame({
+      timestep: 0,
+      natoms: 3,
+      identity: { kind: 'source-id', unique: true },
+    });
+    const legacyFlags = FLAG_LITTLE_ENDIAN;
+    const decoded = parseFrameData(writeFrameData(frame, legacyFlags), frame.natoms, legacyFlags);
+
+    expect(Array.from(decoded.ids)).toEqual([1, 2, 3]);
+    expect(decoded.identity).toBeUndefined();
+  });
+
+  it('keeps the established frame payload readable by identity-unaware readers', () => {
+    const frame = makeFrame({
+      timestep: 0,
+      natoms: 3,
+      withProps: true,
+      withBonds: true,
+      identity: { kind: 'source-id', unique: true },
+    });
+    const currentFlags = computeGlimbinFlags([frame]);
+    const encoded = writeFrameData(frame, currentFlags);
+
+    // A pre-identity reader ignores the unknown header flag and stops after
+    // the established payload; the provenance block is deliberately trailing.
+    const legacyReaderFlags = currentFlags & ~FLAG_FRAME_IDENTITY;
+    const decoded = parseFrameData(encoded, frame.natoms, legacyReaderFlags);
+    expect(Array.from(decoded.ids)).toEqual(Array.from(frame.ids));
+    expect(Array.from(decoded.types)).toEqual(Array.from(frame.types));
+    expect(Array.from(decoded.positions)).toEqual(Array.from(frame.positions));
+    expect(Array.from(decoded.bonds)).toEqual(Array.from(frame.bonds));
+    expect(Array.from(decoded.properties.get('energy')!)).toEqual(
+      Array.from(frame.properties.get('energy')!),
+    );
+    expect(decoded.identity).toBeUndefined();
   });
 
   it('flags variable atom counts and indexes per-frame natoms', async () => {

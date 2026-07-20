@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "remotion studio",
     "build": "echo 'Skipping automatic trailer build during pnpm build. Run npm run render manually.'",
+    "lint": "eslint .",
     "render": "remotion render src/index.tsx AtlasTrailer out/trailer.mp4",
     "render:extended": "remotion render src/index.tsx AtlasTrailerExtended out/trailer-60s.mp4",
     "render:twitter": "remotion render src/index.tsx AtlasTrailerTwitter out/trailer-twitter.mp4",
@@ -16,11 +17,11 @@
     "upgrade": "remotion upgrade"
   },
   "dependencies": {
-    "remotion": "^4.0.0",
-    "@remotion/cli": "^4.0.0",
-    "@remotion/player": "^4.0.0",
-    "@remotion/transitions": "^4.0.0",
-    "@remotion/animation-utils": "^4.0.0",
+    "remotion": "4.0.494",
+    "@remotion/cli": "4.0.494",
+    "@remotion/player": "4.0.494",
+    "@remotion/transitions": "4.0.494",
+    "@remotion/animation-utils": "4.0.494",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

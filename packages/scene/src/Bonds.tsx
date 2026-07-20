@@ -17,8 +17,14 @@ import { useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
-import { getElementSpec, hexToRgb } from '@atlas/core';
-import { DEFAULT_TYPE_COLOR, getTypeColorFromColormap, COLORMAPS } from './constants';
+import {
+  framesShareAtomOrder,
+  getElementSpec,
+  hexToRgb,
+  resolveAtomicNumber,
+  resolveTypeColor,
+} from '@atlas/core';
+import { DEFAULT_TYPE_COLOR, COLORMAPS } from './constants';
 import { useBondGpuPipeline } from './useBondGpuPipeline';
 // Vite ?worker import: produces a real bundled .js worker module in prod.
 // The plain `new URL('./bondWorker.ts', import.meta.url)` form does NOT
@@ -27,6 +33,8 @@ import { useBondGpuPipeline } from './useBondGpuPipeline';
 // `?worker` module declaration from vite-env.d.ts so this resolves both
 // in @atlas/scene's own tsc run and in any consumer (e.g. @atlas/ui).
 import BondWorkerCtor from './bondWorker.ts?worker';
+import { resolveBondTopologyMode, shouldUseGpuBondInference } from './bondTopology';
+import { writeDisplayRgbAsLinear } from './bondColor';
 
 /**
  * Content-equality check for bond-pair Int32Arrays. Used by the bond-
@@ -72,6 +80,38 @@ function bondPairsContentEqual(a: Int32Array, b: Int32Array): boolean {
   return true;
 }
 
+function atomTypesContentEqual(a: Int32Array, b: Int32Array): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+export function filterHiddenTypeBonds(
+  frame: Frame,
+  pairs: Int32Array,
+  distances: Float32Array,
+  hiddenAtomTypes: ReadonlySet<number>,
+): { pairs: Int32Array; distances: Float32Array } {
+  if (hiddenAtomTypes.size === 0 || pairs.length === 0) return { pairs, distances };
+  const keptPairs: number[] = [];
+  const keptDistances: number[] = [];
+  for (let pairIndex = 0; pairIndex < pairs.length / 2; pairIndex += 1) {
+    const atomA = pairs[pairIndex * 2];
+    const atomB = pairs[pairIndex * 2 + 1];
+    if (atomA < 0 || atomA >= frame.natoms || atomB < 0 || atomB >= frame.natoms) continue;
+    if (hiddenAtomTypes.has(frame.types[atomA]) || hiddenAtomTypes.has(frame.types[atomB])) continue;
+    keptPairs.push(atomA, atomB);
+    keptDistances.push(distances[pairIndex] ?? 0);
+  }
+  return {
+    pairs: Int32Array.from(keptPairs),
+    distances: Float32Array.from(keptDistances),
+  };
+}
+
 interface BondsProps {
   frame: Frame;
   nextFrame?: Frame;
@@ -109,9 +149,14 @@ interface BondsProps {
   /** Route bond detection through the WebGPU compute pipeline instead of
    *  the CPU worker. Falls back transparently if WebGPU init fails. */
   useGpu?: boolean;
+  /** Precomputed by the owner scene to avoid rescanning large type buffers.
+   * Source pairs still take precedence. */
+  inferenceAllowed?: boolean;
   /** Source of per-type atom colors used as gradient endpoints. Should
    *  match the value passed to AtomsOptimized so bonds and atoms agree. */
   atomColorSource?: 'colormap' | 'element';
+  /** Raw types hidden by the owner viewer. Bonds touching them are removed. */
+  hiddenAtomTypes?: ReadonlySet<number>;
   /** Telemetry hook — fires after every bond detection completes, with the
    *  backend that produced the result and the count. Used by the dev HUD
    *  to verify state-flow; safe to omit. */
@@ -152,12 +197,18 @@ export function Bonds({
   visible = true,
   bondColorMode = 'type',
   useGpu = false,
+  inferenceAllowed: precomputedInferenceAllowed,
   atomColorSource = 'colormap',
+  hiddenAtomTypes = new Set<number>(),
   onBondsUpdate,
   onGpuStatusChange,
 }: BondsProps) {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const canInterpolateToNextFrame = useMemo(
+    () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
+    [frame, nextFrame],
+  );
   const workerRef = useRef<Worker | null>(null);
   const workerBusyRef = useRef<boolean>(false);
   const pendingMsgRef = useRef<{ msg: Record<string, any>, transferList: ArrayBuffer[], requestId: number } | null>(null);
@@ -169,8 +220,18 @@ export function Bonds({
   // OOM the worker thread. The GPU pipeline scans them in milliseconds.
   // Threshold tuned to where CPU spatial-hash detection starts taking >1s.
   const FORCE_GPU_ATOM_THRESHOLD = 200_000;
-  const forceGpu = (frame?.natoms ?? 0) > FORCE_GPU_ATOM_THRESHOLD;
-  const wantGpu = useGpu || forceGpu;
+  const topologyMode = resolveBondTopologyMode(frame, precomputedInferenceAllowed);
+  const typeSemanticsKey = JSON.stringify(frame.typeSemantics ?? null);
+  const hiddenAtomTypesKey = Array.from(hiddenAtomTypes).sort((a, b) => a - b).join(',');
+  const hasSourceTopology = topologyMode === 'source';
+  const inferenceAllowed = topologyMode === 'infer';
+  const forceGpu = !hasSourceTopology && inferenceAllowed && (frame?.natoms ?? 0) > FORCE_GPU_ATOM_THRESHOLD;
+  const wantGpu = inferenceAllowed && shouldUseGpuBondInference(
+    frame?.natoms ?? 0,
+    frame?.bonds,
+    useGpu,
+    FORCE_GPU_ATOM_THRESHOLD,
+  );
 
   // GPU bond pipeline. Initializes lazily; falls back via `unsupported`.
   // Destructure so dep arrays aren't churned by the hook returning a fresh
@@ -181,7 +242,7 @@ export function Bonds({
   // EXCEPT when forceGpu is true and gpu is unsupported — in that case we
   // simply skip bond detection entirely rather than crash the worker.
   const gpuActive = wantGpu && !gpuUnsupported;
-  const skipDetection = forceGpu && gpuUnsupported;
+  const skipDetection = (!hasSourceTopology && !inferenceAllowed) || (forceGpu && gpuUnsupported);
 
   // Telemetry: report status changes upward.
   useEffect(() => {
@@ -193,8 +254,14 @@ export function Bonds({
   }, [useGpu, gpuReady, gpuUnsupported, onGpuStatusChange]);
 
   // Bond pair data from the worker
-  const [bondPairs, setBondPairs] = useState<Int32Array>(EMPTY_BOND_PAIRS);
-  const [bondDistances, setBondDistances] = useState<Float32Array>(EMPTY_BOND_DISTANCES);
+  const [detectedBondPairs, setBondPairs] = useState<Int32Array>(EMPTY_BOND_PAIRS);
+  const [detectedBondDistances, setBondDistances] = useState<Float32Array>(EMPTY_BOND_DISTANCES);
+  const { pairs: bondPairs, distances: bondDistances } = useMemo(
+    () => filterHiddenTypeBonds(frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypes),
+    // The key binds contents even if the store reuses its hidden-types array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypesKey],
+  );
   const bondCount = bondPairs.length / 2;
   const halfCount = bondCount * 2; // Each bond → 2 half-cylinders
 
@@ -258,6 +325,8 @@ export function Bonds({
   // (sub-threshold motion) — bond topology doesn't change for ~0.05 Å
   // moves, so we keep the cached bondPairs and avoid the recompute.
   const lastDispatchPositionsRef = useRef<Float32Array | null>(null);
+  const lastDispatchTypesRef = useRef<Int32Array | null>(null);
+  const lastDispatchTypeSemanticsKeyRef = useRef<string>('');
   // Snapshot of the tolerance + max-bond-length we last dispatched on. The
   // motion-skip path must NOT fire when the user has slid the tolerance
   // knob; topology changes immediately even if atoms haven't moved.
@@ -314,16 +383,18 @@ export function Bonds({
     // different TypedArray (covers same-size molecules). A trajectory's
     // frames share their positions buffer during playback, but a gallery
     // load always allocates fresh arrays.
-    const isMoleculeSwitch =
-      frame.natoms !== prevNatomsRef.current ||
-      (lastDispatchPositionsRef.current !== null &&
-       frame.positions.buffer !== lastDispatchPositionsRef.current.buffer &&
-       frame.positions.length !== lastDispatchPositionsRef.current.length);
+    const typeInterpretationChanged = lastDispatchTypesRef.current !== null && (
+      !atomTypesContentEqual(frame.types, lastDispatchTypesRef.current) ||
+      typeSemanticsKey !== lastDispatchTypeSemanticsKeyRef.current
+    );
+    const isMoleculeSwitch = frame.natoms !== prevNatomsRef.current || typeInterpretationChanged;
     prevNatomsRef.current = frame.natoms;
     if (isMoleculeSwitch) {
       lastDispatchPositionsRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
+      lastDispatchTypesRef.current = null;
+      lastDispatchTypeSemanticsKeyRef.current = '';
     }
 
     // Motion polish: if this is a frame change but atoms have barely moved
@@ -335,7 +406,7 @@ export function Bonds({
     const cpuParamsUnchanged =
       lastDispatchToleranceRef.current === tolerance &&
       lastDispatchMaxBondLengthRef.current === maxBondLength;
-    if (!isMoleculeSwitch && isFrameChange && cpuParamsUnchanged && lastDispatchPositionsRef.current && frame.positions.length === lastDispatchPositionsRef.current.length) {
+    if (!hasSourceTopology && !isMoleculeSwitch && isFrameChange && cpuParamsUnchanged && lastDispatchPositionsRef.current && frame.positions.length === lastDispatchPositionsRef.current.length) {
       const maxDisp = subsampledMaxDisplacement(frame.positions, lastDispatchPositionsRef.current);
       if (maxDisp < BOND_RECOMPUTE_DISP_THRESHOLD) {
         return;
@@ -357,20 +428,25 @@ export function Bonds({
       // Send data to worker — positions and types are transferred (zero-copy)
       // We make copies since the originals are shared with the renderer
       const posCopy = new Float32Array(frame.positions);
-      const typesCopy = new Int32Array(frame.types);
+      const typesCopy = new Int32Array(frame.natoms);
+      const sourceBondCopy = hasSourceTopology ? new Int32Array(frame.bonds) : null;
 
       // Build per-type covalent radii lookup from ELEMENT_DATA
       // This enables scientific bond detection: d(A,B) < r_cov(A) + r_cov(B) + tolerance
-      const typesArray = frame.types || new Int32Array(frame.natoms);
-      const uniqueTypes = new Set(typesArray);
-      const maxType = Math.max(...uniqueTypes, 0) + 1;
-      const covalentRadii = new Float32Array(maxType);
-      for (const t of uniqueTypes) {
-        const spec = getElementSpec(t);
-        covalentRadii[t] = spec.radius; // covalent radius in Å
+      const covalentRadii = hasSourceTopology ? new Float32Array(0) : new Float32Array(119);
+      if (hasSourceTopology) {
+        typesCopy.set(frame.types);
+      } else {
+        for (let atomIndex = 0; atomIndex < frame.natoms; atomIndex += 1) {
+          const atomicNumber = resolveAtomicNumber(frame, frame.types[atomIndex]);
+          if (atomicNumber === undefined) return;
+          typesCopy[atomIndex] = atomicNumber;
+          covalentRadii[atomicNumber] = getElementSpec(atomicNumber).radius;
+        }
       }
 
       const transferList: ArrayBuffer[] = [posCopy.buffer, typesCopy.buffer];
+      if (sourceBondCopy) transferList.push(sourceBondCopy.buffer);
       const msg: Record<string, any> = {
         requestId,
         positions: posCopy,
@@ -379,7 +455,7 @@ export function Bonds({
         maxBondLength,
         covalentRadii,
         tolerance,
-        bonds: frame.bonds && frame.bonds.length > 0 ? new Int32Array(frame.bonds) : null,
+        bonds: sourceBondCopy,
         computeStats: !isFrameChange, // Skip expensive stats/sorting during rapid playback
       };
 
@@ -387,6 +463,8 @@ export function Bonds({
       // change can compare against them for motion-skip. Make our own copy
       // because posCopy is about to be transferred and detached.
       lastDispatchPositionsRef.current = new Float32Array(frame.positions);
+      lastDispatchTypesRef.current = new Int32Array(frame.types);
+      lastDispatchTypeSemanticsKeyRef.current = typeSemanticsKey;
       lastDispatchToleranceRef.current = tolerance;
       lastDispatchMaxBondLengthRef.current = maxBondLength;
 
@@ -404,7 +482,7 @@ export function Bonds({
         debounceRef.current = null;
       }
     };
-  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState]);
+  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, typeSemanticsKey]);
 
   // ─── GPU dispatch ──────────────────────────────────────────────────
   // Runs only when gpuActive is true. Mirrors the worker effect's contract:
@@ -442,16 +520,18 @@ export function Bonds({
 
     // Detect molecule switch in GPU mode too — natoms change OR a different
     // positions buffer means a new system was loaded.
-    const gpuMoleculeSwitch =
-      frame.natoms !== prevNatomsRef.current ||
-      (lastDispatchPositionsRef.current !== null &&
-       frame.positions.buffer !== lastDispatchPositionsRef.current.buffer &&
-       frame.positions.length !== lastDispatchPositionsRef.current.length);
+    const gpuTypeInterpretationChanged = lastDispatchTypesRef.current !== null && (
+      !atomTypesContentEqual(frame.types, lastDispatchTypesRef.current) ||
+      typeSemanticsKey !== lastDispatchTypeSemanticsKeyRef.current
+    );
+    const gpuMoleculeSwitch = frame.natoms !== prevNatomsRef.current || gpuTypeInterpretationChanged;
     prevNatomsRef.current = frame.natoms;
     if (gpuMoleculeSwitch) {
       lastDispatchPositionsRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
+      lastDispatchTypesRef.current = null;
+      lastDispatchTypeSemanticsKeyRef.current = '';
     }
 
     // Motion polish — same skip rule as the CPU path. Atoms that haven't
@@ -471,17 +551,19 @@ export function Bonds({
       }
     }
     lastDispatchPositionsRef.current = new Float32Array(frame.positions);
+    lastDispatchTypesRef.current = new Int32Array(frame.types);
+    lastDispatchTypeSemanticsKeyRef.current = typeSemanticsKey;
     lastDispatchToleranceRef.current = tolerance;
     lastDispatchMaxBondLengthRef.current = maxBondLength;
 
     // Build covalent radii table sized for the largest type seen.
-    const typesArray = frame.types || new Int32Array(frame.natoms);
-    const uniqueTypes = new Set(typesArray);
-    const maxType = Math.max(...uniqueTypes, 0) + 1;
-    const covalentRadii = new Float32Array(maxType);
-    for (const t of uniqueTypes) {
-      const spec = getElementSpec(t);
-      covalentRadii[t] = spec.radius;
+    const typesArray = new Int32Array(frame.natoms);
+    const covalentRadii = new Float32Array(119);
+    for (let atomIndex = 0; atomIndex < frame.natoms; atomIndex += 1) {
+      const atomicNumber = resolveAtomicNumber(frame, frame.types[atomIndex]);
+      if (atomicNumber === undefined) return;
+      typesArray[atomIndex] = atomicNumber;
+      covalentRadii[atomicNumber] = getElementSpec(atomicNumber).radius;
     }
 
     // Sim-box extent — used to coarsen the GPU spatial grid for sparse systems.
@@ -527,7 +609,7 @@ export function Bonds({
 
     // No cleanup needed — staleness is tracked via gpuDispatchGenRef, not a
     // boolean that races with React's synchronous effect teardown.
-  }, [gpuActive, frame, maxBondLength, tolerance, gpuCompute, onBondsUpdate, visible, clearBondState]);
+  }, [gpuActive, frame, maxBondLength, tolerance, gpuCompute, onBondsUpdate, visible, clearBondState, typeSemanticsKey]);
 
   // ─── Capacity management ───────────────────────────────────────────
   // Grow on demand (with headroom), shrink when sustainably under-utilized.
@@ -822,9 +904,9 @@ export function Bonds({
     if (!mesh.instanceMatrix) return;
 
     const drawCount = Math.min(halfCount, capacity);
-    const t = interpolationFactor ?? 0;
+    const t = canInterpolateToNextFrame ? (interpolationFactor ?? 0) : 0;
     const positions = frame.positions;
-    const nextPos = nextFrame?.positions;
+    const nextPos = canInterpolateToNextFrame ? nextFrame!.positions : undefined;
     const pbcBox = frame.boxBounds ?? cellBounds;
 
     for (let i = 0; i < drawCount / 2; i++) {
@@ -837,7 +919,7 @@ export function Bonds({
       let by = positions[b * 3 + 1];
       let bz = positions[b * 3 + 2];
 
-      const canInterpolate = nextFrame && t > 0 && nextPos && nextPos.length >= positions.length;
+      const canInterpolate = t > 0 && nextPos && nextPos.length >= positions.length;
       if (canInterpolate) {
         let d_ax = nextPos[a * 3] - ax;
         let d_ay = nextPos[a * 3 + 1] - ay;
@@ -931,7 +1013,7 @@ export function Bonds({
     mesh.count = totalBonds;
     mesh.instanceMatrix.needsUpdate = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, halfCount, capacity, frame, nextFrame, interpolationFactor, periodic, cellBounds]);
+  }, [bondPairs, halfCount, capacity, frame, nextFrame, canInterpolateToNextFrame, interpolationFactor, periodic, cellBounds]);
 
   /** Compute per-bond COLORS and RADII. Writes cpuColorBArray +
    *  cpuRadiusBTArray and uploads instanceColor + radiusBT. Runs on
@@ -972,6 +1054,9 @@ export function Bonds({
       radius,
       propRange?.[0] ?? 'auto',
       propRange?.[1] ?? 'auto',
+      uniformColor,
+      JSON.stringify(elementColorOverrides),
+      JSON.stringify(frame.typeSemantics ?? null),
       capacity,
     ].join('|');
 
@@ -987,10 +1072,11 @@ export function Bonds({
     }
 
     const drawCount = Math.min(halfCount, capacity);
-    const t = interpolationFactor ?? 0;
-    const hasPropInterpolation = isPropMode && nextFrame && t > 0 && nextFrame.properties && nextFrame.properties.has(colorProperty!);
+    const t = canInterpolateToNextFrame ? (interpolationFactor ?? 0) : 0;
+    const hasPropInterpolation = isPropMode && canInterpolateToNextFrame && nextFrame && t > 0 && nextFrame.properties && nextFrame.properties.has(colorProperty!);
     const nextPropData = hasPropInterpolation ? nextFrame.properties!.get(colorProperty!) : null;
     const mapFn = COLORMAPS[colormap] || COLORMAPS.viridis;
+    const linearColorScratch = new THREE.Color();
 
     // Build type normalization map to match AtomsOptimized.tsx
     const typeSet = new Set<number>();
@@ -1064,15 +1150,15 @@ export function Bonds({
         const tcLen = mapFn(normDist);
         const offA = (i * 2) * 3;
         const offB = (i * 2 + 1) * 3;
-        cpuColorBArray[offA] = tcLen[0]; cpuColorBArray[offA + 1] = tcLen[1]; cpuColorBArray[offA + 2] = tcLen[2];
-        cpuColorBArray[offB] = tcLen[0]; cpuColorBArray[offB + 1] = tcLen[1]; cpuColorBArray[offB + 2] = tcLen[2];
+        writeDisplayRgbAsLinear(cpuColorBArray, offA, tcLen, linearColorScratch);
+        writeDisplayRgbAsLinear(cpuColorBArray, offB, tcLen, linearColorScratch);
       } else {
         // Endpoint colors must match what AtomsOptimized used for the same
         // type, otherwise the bond gradient terminates in colors that don't
         // exist on the atoms it connects. Mirror that branch structure here.
         const colorForType = (typeId: number): [number, number, number] => {
           if (atomColorSource === 'element') {
-            return hexToRgb(elementColorOverrides[typeId] ?? getElementSpec(typeId).color);
+            return hexToRgb(elementColorOverrides[typeId] ?? resolveTypeColor(frame, typeId));
           }
           // 'colormap'
           return mapFn(typeToNorm.get(typeId) ?? 0.5);
@@ -1101,10 +1187,10 @@ export function Bonds({
         // convention. Material (metalness/roughness) comes uniformly from
         // the active material preset; no per-bond gradient.
         const offA = (i * 2) * 3;
-        cpuColorBArray[offA] = tcA[0]; cpuColorBArray[offA + 1] = tcA[1]; cpuColorBArray[offA + 2] = tcA[2];
+        writeDisplayRgbAsLinear(cpuColorBArray, offA, tcA, linearColorScratch);
 
         const offB = (i * 2 + 1) * 3;
-        cpuColorBArray[offB] = tcB[0]; cpuColorBArray[offB + 1] = tcB[1]; cpuColorBArray[offB + 2] = tcB[2];
+        writeDisplayRgbAsLinear(cpuColorBArray, offB, tcB, linearColorScratch);
       }
     }
 
@@ -1125,8 +1211,12 @@ export function Bonds({
     dstRadiusBTArr.set(cpuRadiusBTArray.subarray(0, totalBonds * 2));
 
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    (tubeGeo.attributes.radiusBT as any).needsUpdate = true;
-    (tubeGeo.attributes.radiusBT as any).updateRange = { offset: 0, count: totalBonds * 2 };
+    const radiusBTAttribute = tubeGeo.attributes.radiusBT as THREE.InstancedBufferAttribute;
+    radiusBTAttribute.clearUpdateRanges();
+    if (totalBonds > 0) {
+      radiusBTAttribute.addUpdateRange(0, totalBonds * 2);
+      radiusBTAttribute.needsUpdate = true;
+    }
 
     // Cache the bondPairs we just uploaded for the next stability check.
     lastAttrBondPairsRef.current = bondPairs;
@@ -1139,7 +1229,7 @@ export function Bonds({
     // frame for property coloring. In static modes (type/element/uniform),
     // propData is null and frame changes don't refire this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, interpolationFactor, colorProperty]);
+  }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.typeSemantics, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, canInterpolateToNextFrame, interpolationFactor, colorProperty]);
 
   // Matrix upload runs in the rAF loop, NOT in a useEffect. This bypasses
   // React's commit cycle so per-frame matrix updates flow at native rAF
