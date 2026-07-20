@@ -160,6 +160,14 @@ test('contract mutations fail closed across CI, release ordering, evidence, and 
       },
     },
     {
+      name: 'single pnpm version authority',
+      pattern: /pnpm setup must defer to packageManager/,
+      mutate(value) {
+        const step = value['ci.yml'].jobs['build-test'].steps.find((candidate) => actionName(candidate.uses) === 'pnpm/action-setup');
+        step.with = { version: 9 };
+      },
+    },
+    {
       name: 'shared queue-max concurrency',
       pattern: /shared queue-max concurrency/,
       mutate(value) { value['deploy-cloudflare.yml'].concurrency.group = 'drifted-controller'; },
@@ -345,6 +353,7 @@ function assertCiContract(workflow) {
     assert.equal(step.if, undefined, `CI gate cannot be conditional: ${command}`);
   }
   assertFullShaActions('ci.yml', workflow);
+  assertManifestPnpmAuthority('ci.yml', workflow);
 }
 
 function assertControllerContract(name, workflow, contract) {
@@ -369,11 +378,19 @@ function assertControllerContract(name, workflow, contract) {
   }
 
   assertFullShaActions(name, workflow);
+  assertManifestPnpmAuthority(name, workflow);
   const uploads = actionSteps(workflow).filter((entry) => actionName(entry.step.uses) === 'actions/upload-artifact');
   assert.ok(uploads.length > 0, `${name} must retain chain artifacts`);
   for (const { step } of uploads) {
     assert.equal(step.with?.['retention-days'], 90, `${name} controller artifacts must be retained for 90 days`);
     assert.equal(step.with?.['if-no-files-found'], 'error', `${name} chain artifact upload must fail when evidence is absent`);
+  }
+}
+
+function assertManifestPnpmAuthority(workflowName, workflow) {
+  const setupSteps = actionSteps(workflow).filter((entry) => actionName(entry.step.uses) === 'pnpm/action-setup');
+  for (const { step } of setupSteps) {
+    assert.equal(step.with?.version, undefined, `${workflowName} pnpm setup must defer to packageManager`);
   }
 }
 
