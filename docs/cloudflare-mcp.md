@@ -188,11 +188,11 @@ actions activates `RenderRequestV1`.
 
 | Truth lane  | Current status                                                                                                                                  |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local       | **PASS** - the bounded Plan 024 local matrix passed and the repository owner approved the pinned browser golden; exact-SHA CI remains separate |
-| CI          | **NOT CHECKED** - no exact-SHA Plan 024 CI receipt is recorded                                                                                  |
-| Deploy      | **NOT CHECKED** - the private render binding is named in source, but bucket provisioning, secrets, renderer deployment, and the exact Worker release are not proven |
-| Live API    | **NOT CHECKED** - neither the authenticated legacy render/retrieve loop nor V1 execution has been proven live                                   |
-| Public site | **NOT CHECKED** - no exact-revision or `https://lupi.live` Plan 024 browser receipt was recorded                                                |
+| Local       | **PASS** - pinned golden, consolidated workspaces, browser MCP, asset-quality, render-parity, and a direct backend render receipt; see [the production receipt](plan-024-production-receipt.md) |
+| CI          | **PASS** - exact-release [run 29783685616](https://github.com/alexwelcing/Lupi/actions/runs/29783685616) passed for `f94c8049db4fea5a1a84815e44d2a9564f740700` |
+| Deploy      | **PASS** - Worker `27994724-5625-46a7-acb8-a150aab5cdd5` and Cloud Run `lupi-render-backend-00006-kow` receive 100% traffic with private R2 and distinct credentials |
+| Live API    | **PASS (legacy-v0 only)** - authenticated render/job/provenance/artifact retrieval passed; credential-free render returned 401; V1 execution remains false |
+| Public site | **PASS** - exact-release Chromium proved a mounted R3F canvas, 28 browser tools, and a three-atom Water load |
 
 These lanes never imply one another. Source presence or a local Worker test is
 not deployment evidence; a configured legacy renderer is not V1 execution.

@@ -399,11 +399,11 @@ release. Current evidence lanes are deliberately independent:
 
 | Truth lane  | Status          | Evidence or missing proof                                                                                                                                                     |
 | ----------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local       | **PASS / NOT CHECKED** | The Plan 024 browser matrix passed and the repository owner approved its pinned golden. The new authenticated legacy render loop has not yet received its end-of-development local receipt. |
-| CI          | **NOT CHECKED** | No exact-SHA GitHub Actions result has been recorded for this Plan 024 candidate.                                                                                             |
-| Deploy      | **NOT CHECKED** | Private production/preview bucket names exist in source, but bucket provisioning, secrets, renderer deployment, and the exact Worker release are unproven.                     |
-| Live API    | **NOT CHECKED** | Neither the authenticated legacy render/retrieve loop nor V1 execution has been proven live; edge V1 remains validation-only.                                                  |
-| Public site | **NOT CHECKED** | No exact-revision or `https://lupi.live` browser conformance receipt has been recorded for this candidate.                                                                    |
+| Local       | **PASS** | The pinned Plan 024 golden, consolidated workspace pass, browser MCP, asset-quality, render-parity, and direct backend Water/64x64 receipt are recorded in [the production receipt](plan-024-production-receipt.md). |
+| CI          | **PASS** | Exact-release CI [run 29783685616](https://github.com/alexwelcing/Lupi/actions/runs/29783685616) passed for `f94c8049db4fea5a1a84815e44d2a9564f740700`. |
+| Deploy      | **PASS** | Worker version `27994724-5625-46a7-acb8-a150aab5cdd5` and Cloud Run revision `lupi-render-backend-00006-kow` both receive 100% traffic for the release target; private R2 and distinct credentials are active. |
+| Live API    | **PASS (legacy-v0 only)** | The authenticated Water render, private job/provenance/artifact retrieval, byte digest, ETag, and cache/security headers passed on `https://lupi.live`; credential-free render returned 401. V1 execution remains false. |
+| Public site | **PASS** | Exact-release Chromium proved the public R3F canvas, 28-tool bridge, and three-atom Water load; release metadata matched the deployed Worker. |
 
 These statuses remain independent. Source presence, a passing unit test, a
 renderer upload, or plausible bytes in one lane never establishes another lane.
