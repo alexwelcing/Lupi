@@ -80,6 +80,10 @@ async function ensurePage(deadlineAt) {
       '--disable-dev-shm-usage',
       '--disable-gpu-sandbox',
       '--renderer-process-limit=1',
+      // Headless WebGPU can render interactively but does not provide a
+      // dependable canvas readback for export_asset. The immutable PNG lane
+      // deliberately uses the proven WebGL/SwiftShader capture path.
+      '--disable-webgpu',
       '--use-gl=angle',
       '--use-angle=swiftshader',
       '--ignore-gpu-blocklist',
@@ -311,6 +315,17 @@ async function renderOnLane(job, deadlineAt) {
     'viewer',
     'lupi.set_viewer',
     { showBonds: false, showCell: false, showAxes: false },
+    deadlineAt,
+  );
+  await executeBridgeTool(
+    viewerPage,
+    job.jobId,
+    'material',
+    'lupi.set_material',
+    // Blueprint is the deterministic no-HDRI scene. The default specimen
+    // scene otherwise waits on a remote environment map that this sandbox
+    // correctly refuses to fetch.
+    { scene: 'blueprint' },
     deadlineAt,
   );
   await executeBridgeTool(
