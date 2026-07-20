@@ -355,6 +355,8 @@ export async function importDumpFileStreaming(file: File): Promise<{
           // the worker's unverified descriptor until frame0-complete upgrades
           // it; never infer stability from partially filled numeric IDs.
           identity: h.identity,
+          typeSemantics: h.typeSemantics,
+          distanceSemantics: h.distanceSemantics,
           types: new Int32Array(h.natoms),
           positions: new Float32Array(h.natoms * 3),
           bonds: new Int32Array(0),

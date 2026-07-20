@@ -119,6 +119,7 @@ export function XRControlPanel() {
   const toggleBonds = useStore(s => s.toggleBonds);
   const lastBondCount = useStore(s => s.lastBondCount);
   const selectedAtoms = useStore(s => s.selectedAtoms);
+  const measurement = useStore(s => s.measurement);
   const showCell = useStore(s => s.showCell);
   const toggleCell = useStore(s => s.toggleCell);
   const showAxes = useStore(s => s.showAxes);
@@ -211,7 +212,8 @@ export function XRControlPanel() {
     selectedAtoms,
     lastBondCount,
     showBonds,
-  }), [file, frameIndex, lastBondCount, selectedAtoms, showBonds]);
+    measurement,
+  }), [file, frameIndex, lastBondCount, measurement, selectedAtoms, showBonds]);
   const studySummary = useMemo(
     () => studyFacts ? buildXRStudySummary(studyFacts, studyStepIndex) : null,
     [studyFacts, studyStepIndex],

@@ -33,21 +33,57 @@ export const THERMO_QUANTITIES: Record<string, string> = {
 // ─── Frame data ─────────────────────────────────────────────────────
 
 /** A single frame of atomic data (returned from WASM parser) */
-export type FrameIdentityKind = 'source-id' | 'synthetic-row' | 'unknown';
+export type FrameIdentityKind = 'source-id' | 'source-order' | 'synthetic-row' | 'unknown';
 
 /**
  * Provenance for the values in `Frame.ids`.
  *
  * `source-id` means the source format supplied the identifiers;
- * `synthetic-row` means Lupi generated them from row order; and `unknown`
- * means the origin cannot be established. `unique` records whether the
- * producer verified uniqueness within this frame. Missing descriptors on
- * legacy frames are interpreted as unknown, never as source identity.
+ * `source-order` means the source format explicitly guarantees stable row
+ * order across its trajectory and Lupi materialized that order as row IDs;
+ * `synthetic-row` means Lupi generated IDs from an order the source did not
+ * guarantee; and `unknown` means the origin cannot be established. `unique`
+ * records whether the producer verified uniqueness within this frame. Missing
+ * descriptors on legacy frames are interpreted as unknown, never as source
+ * identity.
  */
 export interface FrameIdentity {
   kind: FrameIdentityKind;
   unique: boolean;
 }
+
+/** Meaning of the integer values in `Frame.types`. */
+export type AtomTypeSemantics =
+  | {
+      kind: 'atomic-number';
+      provenance:
+        | 'source-element-symbol'
+        | 'xyz-element-token'
+        | 'lammps-masses-inferred'
+        | 'procedural-symbol'
+        | 'mlip-symbol'
+        | 'mlip-material-id-inferred';
+    }
+  | {
+      kind: 'explicit-element-map';
+      provenance: 'lammps-element-column' | 'user-type-map';
+      elementMap: Readonly<Record<number, number>>;
+    }
+  | {
+      kind: 'opaque';
+      provenance: 'lammps-type-id' | 'legacy-unknown';
+    };
+
+/** Physical interpretation of the coordinate values in `Frame.positions`. */
+export type DistanceSemantics =
+  | {
+      kind: 'angstrom';
+      provenance: 'source-declared' | 'format-convention' | 'procedural';
+    }
+  | {
+      kind: 'unknown';
+      provenance: 'lammps-dump' | 'lammps-data' | 'legacy-unknown';
+    };
 
 export interface Frame {
   timestep: number;
@@ -59,6 +95,8 @@ export interface Frame {
   ids: Int32Array;
   identity?: FrameIdentity;
   types: Int32Array;
+  typeSemantics?: AtomTypeSemantics;
+  distanceSemantics?: DistanceSemantics;
   positions: Float32Array;  // Flat: [x0,y0,z0, x1,y1,z1, ...]
   bonds: Int32Array;        // Flat: [a1,b1, a2,b2, ...]
   properties: Map<string, Float32Array>;

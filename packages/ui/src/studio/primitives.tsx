@@ -467,7 +467,7 @@ export function ColorPicker({
 
 export function ElementColorPicker({
   active,
-  atomicNumber,
+  rawType,
   value,
   options,
   overridden,
@@ -476,11 +476,11 @@ export function ElementColorPicker({
   onReset,
 }: {
   active?: boolean;
-  atomicNumber: number;
+  rawType: number;
   value: string;
   options: Array<{ value: number; label: string }>;
   overridden?: boolean;
-  onSelect: (atomicNumber: number) => void;
+  onSelect: (rawType: number) => void;
   onChange: (value: string) => void;
   onReset: () => void;
 }) {
@@ -503,8 +503,8 @@ export function ElementColorPicker({
         className="lupi-native-color"
         type="color"
         value={value}
-        title={`Atomic number ${atomicNumber}`}
-        aria-label={`Atomic number ${atomicNumber} color`}
+        title={`Source atom type ${rawType}`}
+        aria-label={`Source atom type ${rawType} color`}
         onChange={(event) => onChange(event.currentTarget.value)}
         style={{
           width: 30,
@@ -517,9 +517,9 @@ export function ElementColorPicker({
         }}
       />
       <label style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-        <span style={compactFieldLabelStyle}>Element</span>
+        <span style={compactFieldLabelStyle}>Atom type</span>
         <select
-          value={atomicNumber}
+          value={rawType}
           onChange={(event) => onSelect(Number(event.currentTarget.value))}
           style={{ ...compactSelectStyle, height: 20, padding: '0 4px' }}
         >

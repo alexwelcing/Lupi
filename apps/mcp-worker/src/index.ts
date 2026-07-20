@@ -13,6 +13,7 @@ import {
   RenderArtifactValidationError,
   computeRenderRequestKeyV1,
   computeRenderSpecIdV1,
+  getElementSpecBySymbol,
   validateRenderCapabilityV1,
   validateRenderRequestV1,
   type RenderCapabilityV1,
@@ -40,8 +41,12 @@ interface R2BucketLike {
   put(
     key: string,
     value: ArrayBuffer | ArrayBufferView | string,
-    options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> },
-  ): Promise<unknown>;
+    options?: {
+      httpMetadata?: { contentType?: string };
+      customMetadata?: Record<string, string>;
+      onlyIf?: { etagDoesNotMatch?: string };
+    },
+  ): Promise<unknown | null>;
 }
 
 interface FetcherLike {
@@ -71,6 +76,9 @@ interface WorkerVersionMetadata {
 export interface Env {
   WEB_ASSETS?: FetcherLike;
   ASSETS?: R2BucketLike;
+  /** Private, bearer-gated render receipts and bytes. Never bind this bucket
+   * to a public custom domain. */
+  RENDER_ASSETS?: R2BucketLike;
   DB?: D1DatabaseLike;
   RENDER_QUEUE?: QueueLike<LegacyRenderQueueMessage>;
   ASSET_BASE_URL?: string;
@@ -148,9 +156,22 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
-const SERVER_VERSION = '2026-07-19.cloudflare-control-plane.1';
+const SERVER_VERSION = '2026-07-20.authenticated-render.1';
 const LEGACY_RENDERER_VERSION = 'lupi-render-contract@2026-07-09';
 const LEGACY_DEFAULT_MAX_INLINE_BYTES = 8 * 1024 * 1024;
+const PRIVATE_RENDER_REQUEST_PROTOCOL = 'lupi.renderer-request.legacy-v0.1';
+const PRIVATE_RENDER_RESPONSE_PROTOCOL = 'lupi.renderer-response.legacy-v0.1';
+const PRIVATE_RENDER_JOB_PREFIX = 'render-v0/jobs/';
+const PRIVATE_RENDER_ASSET_PREFIX = 'render-v0/assets/';
+const PRIVATE_RENDER_MAX_DIMENSION = 2048;
+const PRIVATE_RENDER_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+const PRIVATE_RENDER_DEADLINE_MS = 90_000;
+const PRIVATE_RENDER_JOB_ID_PATTERN = /^job-v0-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PRIVATE_RENDER_TEMPLATES = new Map([
+  ['water', 'Water'],
+  ['benzene', 'Benzene'],
+  ['caffeine', 'Caffeine'],
+]);
 const DEFAULT_FIREBASE_AUTH_PROXY_HOST = 'shed-489901.firebaseapp.com';
 const DEFAULT_PUBLIC_ORIGIN = 'https://lupi.live';
 const DEFAULT_SOCIAL_IMAGE = '/og-lupi.png';
@@ -170,10 +191,27 @@ const ANALYTICS_EVENTS = new Set([
   'render_fallback_shown',
 ]);
 
+class RenderServiceConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RenderServiceConfigurationError';
+  }
+}
+
+class RendererProtocolError extends Error {
+  jobId?: string;
+
+  constructor(message: string, jobId?: string) {
+    super(message);
+    this.name = 'RendererProtocolError';
+    this.jobId = jobId;
+  }
+}
+
 /**
  * Submission capability for the pre-renderer edge seam. It intentionally
- * accepts only bounded opaque PNG atom renders; Plan 026 owns widening this
- * after a renderer proves additional formats, alpha modes, or layers.
+ * accepts only bounded opaque PNG atom renders. A future activated V1
+ * renderer may widen formats, alpha modes, or layers only after proving them.
  */
 export const EDGE_RENDER_CAPABILITY_V1: RenderCapabilityV1 = validateRenderCapabilityV1({
   version: RENDER_CAPABILITY_VERSION_V1,
@@ -423,36 +461,38 @@ const RENDER_REQUEST_V1_INPUT_SCHEMA: JsonValue = {
 
 const LEGACY_RENDER_REQUEST_INPUT_SCHEMA: JsonValue = {
   type: 'object',
+  additionalProperties: false,
   required: ['molecule'],
   properties: {
     molecule: {
       type: 'object',
+      additionalProperties: false,
+      required: ['inputType'],
+      anyOf: [{ required: ['input'] }, { required: ['name'] }],
       properties: {
-        inputType: { type: 'string', enum: ['name', 'template', 'smiles', 'xyz', 'description', 'procedural'] },
-        input: { type: 'string' },
-        name: { type: 'string' },
-        smiles: { type: 'string' },
-        xyz: { type: 'string' },
-        atomCount: { type: ['number', 'string'] },
-        element: { type: 'string' },
-        elements: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] },
+        inputType: { type: 'string', enum: ['template', 'procedural'] },
+        input: { type: 'string', minLength: 1, maxLength: 160 },
+        name: { type: 'string', minLength: 1, maxLength: 160 },
+        atomCount: { type: 'integer', minimum: 1, maximum: 100000 },
+        element: { type: 'string', pattern: '^[A-Z][a-z]?$' },
         lattice: { type: 'string', enum: ['sc', 'bcc', 'fcc'] },
-        spacing: { type: ['number', 'string'] },
+        spacing: { type: 'number', minimum: 0.1, maximum: 20 },
       },
     },
     asset: {
       type: 'object',
+      additionalProperties: false,
       properties: {
-        format: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb', 'usdz'] },
-        width: { type: 'number', minimum: 64, maximum: 4096 },
-        height: { type: 'number', minimum: 64, maximum: 4096 },
-        transparent: { type: 'boolean' },
+        format: { const: 'png' },
+        width: { type: 'integer', minimum: 64, maximum: PRIVATE_RENDER_MAX_DIMENSION },
+        height: { type: 'integer', minimum: 64, maximum: PRIVATE_RENDER_MAX_DIMENSION },
+        transparent: { const: false },
         inline: { type: 'boolean' },
-        maxInlineBytes: { type: 'number', minimum: 1024, maximum: 67108864 },
+        maxInlineBytes: { type: 'integer', minimum: 1024, maximum: PRIVATE_RENDER_MAX_RESPONSE_BYTES },
       },
     },
-    viewer: { type: 'object' },
-    sync: { type: 'boolean' },
+    viewer: { type: 'object', maxProperties: 0 },
+    sync: { const: true },
   },
 };
 
@@ -479,12 +519,12 @@ export const MCP_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'lupi.render_molecule_asset',
-    description: 'Submit a legacy molecule render job, or validate a bounded RenderRequestV1 profile without launching a browser.',
+    description: 'Execute the authenticated legacy-v0 opaque-PNG profile, or validate a bounded RenderRequestV1 profile without claiming execution.',
     inputSchema: RENDER_REQUEST_INPUT_SCHEMA,
   },
   {
     name: 'lupi.get_render_job',
-    description: 'Read render-job status from the D1 job ledger.',
+    description: 'Read authenticated render-job status from the private R2 receipt ledger, with legacy D1 compatibility.',
     inputSchema: {
       type: 'object',
       required: ['jobId'],
@@ -493,7 +533,7 @@ export const MCP_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'lupi.get_asset',
-    description: 'Read cached asset metadata and URL from R2 by assetId.',
+    description: 'Read bearer-gated asset metadata and a protected retrieval path by content-addressed assetId.',
     inputSchema: {
       type: 'object',
       required: ['assetId'],
@@ -512,7 +552,6 @@ export const MCP_TOOLS: ToolDefinition[] = [
 
 const TEMPLATE_INDEX = [
   { id: 'caffeine', name: 'Caffeine', formula: 'C8H10N4O2', tags: ['template', 'organic', 'alkaloid'] },
-  { id: 'aspirin', name: 'Aspirin', formula: 'C9H8O4', tags: ['template', 'organic', 'pharmaceutical'] },
   { id: 'benzene', name: 'Benzene', formula: 'C6H6', tags: ['template', 'organic', 'aromatic'] },
   { id: 'water', name: 'Water', formula: 'H2O', tags: ['template', 'small', 'solvent'] },
   { id: 'copper-fcc', name: '5,000 Cu FCC lattice', formula: 'Cu5000', tags: ['procedural', 'materials', 'fcc'] },
@@ -572,7 +611,7 @@ export async function handleRequest(
       if (request.method !== 'POST') return methodNotAllowed(cors, ['POST']);
       let body: unknown;
       try {
-        body = await request.json();
+        body = await readJsonRequestBody(request, 256 * 1024);
       } catch {
         return json(rpcError(null, -32700, 'Parse error'), { headers: cors });
       }
@@ -583,8 +622,19 @@ export async function handleRequest(
 
     if (url.pathname === '/v1/render') {
       if (request.method !== 'POST') return methodNotAllowed(cors, ['POST']);
+      if ((request.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
+        return json({ error: 'Content-Type must be application/json.' }, { status: 415, headers: cors });
+      }
       await assertAuthorized(request, env);
-      return json(await renderMoleculeAsset(await request.json(), env, ctx), { headers: cors });
+      return json(await renderMoleculeAsset(await readJsonRequestBody(request, 256 * 1024), env, ctx), { headers: cors });
+    }
+
+    const provenanceMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)\/provenance$/);
+    if (provenanceMatch) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return methodNotAllowed(cors, ['GET', 'HEAD']);
+      await assertAuthorized(request, env);
+      const response = await readPrivateRenderProvenanceResponse(provenanceMatch[1], env, request.method === 'HEAD');
+      return withCors(getOrHeadResponse(request, response), cors);
     }
 
     const jobMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)$/);
@@ -594,9 +644,22 @@ export async function handleRequest(
       return json(await readJob(jobMatch[1], env), { headers: cors });
     }
 
+    const privateArtifactMatch = url.pathname.match(/^\/v1\/artifacts\/(sha256-[a-f0-9]{64})\.png$/i);
+    if (privateArtifactMatch) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return methodNotAllowed(cors, ['GET', 'HEAD']);
+      await assertAuthorized(request, env);
+      const response = await readPrivateRenderAssetResponse(
+        privateArtifactMatch[1].toLowerCase(),
+        env,
+        request.method === 'HEAD',
+      );
+      return withCors(getOrHeadResponse(request, response), cors);
+    }
+
     const assetMatch = url.pathname.match(/^\/assets\/(sha256-[a-f0-9]{64})\.(png|jpe?g|webp|glb|usdz)$/i);
     if (assetMatch) {
       if (request.method !== 'GET' && request.method !== 'HEAD') return methodNotAllowed(cors, ['GET', 'HEAD']);
+      await assertAuthorized(request, env);
       const response = await readAssetResponse(
         assetMatch[1],
         assetMatch[2] as AssetFormat | undefined,
@@ -627,8 +690,13 @@ export async function handleRequest(
     const message = error instanceof Error ? error.message : String(error);
     const status = message === 'Unauthorized'
       ? 401
-      : error instanceof RenderArtifactValidationError ? 400 : 500;
-    return json({ error: message }, { status, headers: cors });
+      : error instanceof RenderServiceConfigurationError ? 503
+        : error instanceof RendererProtocolError ? 502
+          : error instanceof RenderArtifactValidationError ? 400 : 500;
+    return json({
+      error: message,
+      ...(error instanceof RendererProtocolError && error.jobId ? { jobId: error.jobId } : {}),
+    }, { status, headers: cors });
   }
 }
 
@@ -692,8 +760,14 @@ async function handleSingleJsonRpc(
     const message = error instanceof Error ? error.message : String(error);
     const code = message === 'Unauthorized'
       ? -32001
-      : error instanceof RenderArtifactValidationError ? -32602 : -32000;
-    return hasId ? rpcError(id, code, message) : null;
+      : error instanceof RenderServiceConfigurationError ? -32002
+        : error instanceof RenderArtifactValidationError ? -32602 : -32000;
+    return hasId ? rpcError(
+      id,
+      code,
+      message,
+      error instanceof RendererProtocolError && error.jobId ? { jobId: error.jobId } : undefined,
+    ) : null;
   }
 }
 
@@ -729,7 +803,7 @@ async function renderMoleculeAsset(
   if (isRecord(input) && input.version === RENDER_REQUEST_VERSION_V1) {
     return renderArtifactRequestV1(input);
   }
-  return renderLegacyMoleculeAsset(input as LegacyRenderMoleculeAssetArgs, env, ctx);
+  return renderPrivateLegacyMoleculeAsset(input as LegacyRenderMoleculeAssetArgs, env);
 }
 
 async function renderArtifactRequestV1(
@@ -762,6 +836,692 @@ async function renderArtifactRequestV1(
         : 'The spec is finalized, but no activated renderer fingerprint exists; artifactKey, job, cache, and asset identities are intentionally withheld.',
     },
   };
+}
+
+async function renderPrivateLegacyMoleculeAsset(
+  args: LegacyRenderMoleculeAssetArgs,
+  env: Env,
+) {
+  assertPrivateRenderConfigured(env);
+  const normalized = normalizePrivateLegacyRenderRequest(args);
+  const requestHash = await sha256Hex(canonicalJson(normalizeJson(normalized)!));
+  const jobId = `job-v0-${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const baseJob = {
+    version: 'lupi.render-job.legacy-v0.1',
+    jobId,
+    profile: 'legacy-v0-authenticated-png',
+    requestKey: `legacy-request-sha256:${requestHash}`,
+    status: 'rendering',
+    request: normalized,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await writePrivateRenderJob(env, baseJob);
+
+  try {
+    const rendererPayload = await callPrivateRenderer(env, jobId, normalized);
+    const bytes = rendererPayload.bytes;
+    const artifactHex = await sha256Hex(bytes);
+    const artifactDigest = `sha256:${artifactHex}`;
+    const assetId = `sha256-${artifactHex}`;
+    const assetKey = privateRenderAssetKey(assetId);
+    const existing = await env.RENDER_ASSETS!.head(assetKey);
+    let cached = Boolean(existing);
+
+    if (existing) {
+      const existingDigest = existing.customMetadata?.sha256;
+      if (existingDigest && existingDigest !== artifactDigest) {
+        throw new RendererProtocolError('Private render asset identity conflict.', jobId);
+      }
+    } else {
+      const stored = await env.RENDER_ASSETS!.put(assetKey, bytes, {
+        httpMetadata: { contentType: 'image/png' },
+        customMetadata: {
+          sha256: artifactDigest,
+          byteLength: String(bytes.byteLength),
+          width: String(rendererPayload.width),
+          height: String(rendererPayload.height),
+          jobId,
+          profile: 'legacy-v0-authenticated-png',
+        },
+        onlyIf: { etagDoesNotMatch: '*' },
+      });
+      if (stored === null) cached = true;
+    }
+
+    const readback = await readPrivateRenderAssetBytes(assetId, env);
+    const readbackDigest = `sha256:${await sha256Hex(readback)}`;
+    if (readback.byteLength !== bytes.byteLength || readbackDigest !== artifactDigest) {
+      throw new RendererProtocolError('Private R2 readback did not match the validated renderer bytes.', jobId);
+    }
+
+    const sidecarBase = {
+      version: 'lupi.render-provenance.legacy-v0.1',
+      profile: 'legacy-v0-authenticated-png',
+      jobId,
+      requestKey: baseJob.requestKey,
+      assetId,
+      artifactDigest,
+      format: 'png',
+      mimeType: 'image/png',
+      byteLength: bytes.byteLength,
+      width: rendererPayload.width,
+      height: rendererPayload.height,
+      request: normalized,
+      renderer: {
+        protocol: PRIVATE_RENDER_RESPONSE_PROTOCOL,
+        browserReceipt: rendererPayload.browserReceipt,
+        browserReceiptScope: 'pre-rgb-reencode-provenance-only',
+      },
+      validations: {
+        canonicalBase64: true,
+        pngSignature: true,
+        pngCrc: true,
+        dimensions: true,
+        opaqueRgb8: true,
+        mimeType: true,
+        byteLength: true,
+        artifactDigest: true,
+        privateR2Readback: true,
+      },
+      createdAt: now,
+      owner: 'authenticated-edge-service-principal',
+    };
+    const sidecarJson = canonicalJson(normalizeJson(sidecarBase)!);
+    const sidecarDigest = `sha256:${await sha256Hex(sidecarJson)}`;
+    const sidecarPut = await env.RENDER_ASSETS!.put(privateRenderSidecarKey(jobId), sidecarJson, {
+      httpMetadata: { contentType: 'application/json' },
+      customMetadata: { sidecarDigest, assetId, artifactDigest },
+      onlyIf: { etagDoesNotMatch: '*' },
+    });
+    if (sidecarPut === null) {
+      throw new RendererProtocolError('Private render provenance identity conflict.', jobId);
+    }
+    const storedSidecar = await env.RENDER_ASSETS!.get(privateRenderSidecarKey(jobId));
+    if (!storedSidecar) {
+      throw new RendererProtocolError('Private render provenance was not readable after persistence.', jobId);
+    }
+    const storedSidecarBytes = await r2ObjectBytes(storedSidecar, 512 * 1024);
+    const storedSidecarDigest = `sha256:${await sha256Hex(storedSidecarBytes)}`;
+    if (storedSidecarDigest !== sidecarDigest) {
+      throw new RendererProtocolError('Private render provenance readback did not match the persisted statement.', jobId);
+    }
+
+    const result = {
+      ...baseJob,
+      status: 'complete',
+      updatedAt: new Date().toISOString(),
+      cached,
+      renderer: { mode: 'http', configured: true, protocol: PRIVATE_RENDER_RESPONSE_PROTOCOL },
+      asset: {
+        assetId,
+        format: 'png',
+        mimeType: 'image/png',
+        byteLength: bytes.byteLength,
+        width: rendererPayload.width,
+        height: rendererPayload.height,
+        sha256: artifactDigest,
+        url: `/v1/artifacts/${assetId}.png`,
+        sidecarUrl: `/v1/jobs/${jobId}/provenance`,
+        dataBase64: normalized.asset.inline && bytes.byteLength <= normalized.asset.maxInlineBytes
+          ? rendererPayload.dataBase64
+          : undefined,
+      },
+      provenance: {
+        sidecarDigest,
+        browserReceiptScope: 'pre-rgb-reencode-provenance-only',
+      },
+    };
+    await writePrivateRenderJob(env, result);
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await writePrivateRenderJob(env, {
+      ...baseJob,
+      status: 'failed',
+      error: message.slice(0, 500),
+      updatedAt: new Date().toISOString(),
+    }).catch(() => undefined);
+    if (error instanceof RendererProtocolError) {
+      if (!error.jobId) error.jobId = jobId;
+      throw error;
+    }
+    throw new RendererProtocolError(message, jobId);
+  }
+}
+
+function normalizePrivateLegacyRenderRequest(
+  args: LegacyRenderMoleculeAssetArgs,
+): LegacyNormalizedRenderRequest {
+  if (!args || !isRecord(args)) {
+    throw new RenderArtifactValidationError('$', 'legacy render request must be an object');
+  }
+  requireOnlyKeys(args, ['molecule', 'asset', 'viewer', 'sync'], '$');
+  if (!isRecord(args.molecule)) {
+    throw new RenderArtifactValidationError('$.molecule', 'must be an object');
+  }
+  requireOnlyKeys(
+    args.molecule,
+    ['inputType', 'input', 'name', 'atomCount', 'element', 'lattice', 'spacing'],
+    '$.molecule',
+  );
+  const inputType = args.molecule.inputType;
+  if (inputType !== 'template' && inputType !== 'procedural') {
+    throw new RenderArtifactValidationError(
+      '$.molecule.inputType',
+      'the authenticated legacy-v0 lane supports only template or procedural inputs',
+    );
+  }
+  let input = readString(args.molecule.input) ?? readString(args.molecule.name);
+  if (!input || input.length > 160) {
+    throw new RenderArtifactValidationError('$.molecule.input', 'must contain 1 through 160 characters');
+  }
+  if (inputType === 'template' && (
+    args.molecule.atomCount !== undefined
+    || args.molecule.element !== undefined
+    || args.molecule.lattice !== undefined
+    || args.molecule.spacing !== undefined
+  )) {
+    throw new RenderArtifactValidationError('$.molecule', 'template inputs cannot declare procedural fields');
+  }
+  if (inputType === 'template') {
+    const canonicalTemplate = PRIVATE_RENDER_TEMPLATES.get(input.toLowerCase());
+    if (!canonicalTemplate) {
+      throw new RenderArtifactValidationError(
+        '$.molecule.input',
+        `must be one of the local templates: ${Array.from(PRIVATE_RENDER_TEMPLATES.values()).join(', ')}`,
+      );
+    }
+    input = canonicalTemplate;
+  }
+
+  let atomCount: number | undefined;
+  let spacing: number | undefined;
+  if (inputType === 'procedural') {
+    atomCount = strictInteger(args.molecule.atomCount ?? 5_000, 1, 100_000, '$.molecule.atomCount');
+    const lattice = args.molecule.lattice;
+    if (lattice !== undefined && lattice !== 'sc' && lattice !== 'bcc' && lattice !== 'fcc') {
+      throw new RenderArtifactValidationError('$.molecule.lattice', 'must be sc, bcc, or fcc');
+    }
+    const element = args.molecule.element;
+    if (
+      element !== undefined
+      && (typeof element !== 'string' || !/^[A-Z][a-z]?$/.test(element) || !getElementSpecBySymbol(element))
+    ) {
+      throw new RenderArtifactValidationError('$.molecule.element', 'must be a recognized element symbol');
+    }
+    if (args.molecule.spacing !== undefined) {
+      spacing = strictNumber(args.molecule.spacing, 0.1, 20, '$.molecule.spacing');
+    }
+  }
+
+  const asset = args.asset ?? {};
+  if (!isRecord(asset)) throw new RenderArtifactValidationError('$.asset', 'must be an object');
+  requireOnlyKeys(asset, ['format', 'width', 'height', 'transparent', 'inline', 'maxInlineBytes'], '$.asset');
+  const format = asset.format ?? 'png';
+  if (format !== 'png') {
+    throw new RenderArtifactValidationError('$.asset.format', 'the authenticated legacy-v0 lane supports opaque PNG only');
+  }
+  if (asset.transparent === true) {
+    throw new RenderArtifactValidationError('$.asset.transparent', 'transparent output is unsupported');
+  }
+  if (asset.inline !== undefined && typeof asset.inline !== 'boolean') {
+    throw new RenderArtifactValidationError('$.asset.inline', 'must be a boolean');
+  }
+  const width = strictInteger(asset.width ?? 1024, 64, PRIVATE_RENDER_MAX_DIMENSION, '$.asset.width');
+  const height = strictInteger(asset.height ?? width, 64, PRIVATE_RENDER_MAX_DIMENSION, '$.asset.height');
+  const maxInlineBytes = strictInteger(
+    asset.maxInlineBytes ?? LEGACY_DEFAULT_MAX_INLINE_BYTES,
+    1024,
+    PRIVATE_RENDER_MAX_RESPONSE_BYTES,
+    '$.asset.maxInlineBytes',
+  );
+  if (args.sync === false) {
+    throw new RenderArtifactValidationError('$.sync', 'the first authenticated renderer lane is synchronous only');
+  }
+  if (args.sync !== undefined && typeof args.sync !== 'boolean') {
+    throw new RenderArtifactValidationError('$.sync', 'must be a boolean');
+  }
+  if (args.viewer !== undefined && (!isRecord(args.viewer) || Object.keys(args.viewer).length > 0)) {
+    throw new RenderArtifactValidationError('$.viewer', 'viewer overrides are not supported by this bounded profile');
+  }
+
+  return {
+    molecule: compactRecord({
+      inputType,
+      input,
+      ...(inputType === 'procedural' ? {
+        atomCount,
+        element: args.molecule.element,
+        lattice: args.molecule.lattice,
+        spacing,
+      } : {}),
+    }) as LegacyNormalizedRenderRequest['molecule'],
+    asset: {
+      format: 'png',
+      width,
+      height,
+      transparent: false,
+      inline: asset.inline === true,
+      maxInlineBytes,
+    },
+    viewer: {},
+    rendererVersion: 'lupi-authenticated-png@2026-07-20',
+  };
+}
+
+async function callPrivateRenderer(
+  env: Env,
+  jobId: string,
+  request: LegacyNormalizedRenderRequest,
+): Promise<{
+  bytes: Uint8Array;
+  dataBase64: string;
+  width: number;
+  height: number;
+  browserReceipt: Record<string, JsonValue>;
+}> {
+  const endpoint = requirePrivateRendererEndpoint(env.RENDERER_ENDPOINT);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort('renderer deadline exceeded'), PRIVATE_RENDER_DEADLINE_MS);
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      redirect: 'error',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${env.RENDERER_TOKEN}`,
+      },
+      body: JSON.stringify({
+        protocol: PRIVATE_RENDER_REQUEST_PROTOCOL,
+        jobId,
+        request,
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new RendererProtocolError(`Renderer request failed: ${message}`, jobId);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    throw new RendererProtocolError(`Renderer HTTP ${response.status}.`, jobId);
+  }
+  if ((response.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
+    throw new RendererProtocolError('Renderer response Content-Type must be application/json.', jobId);
+  }
+  const payload = await readJsonResponseBody(response, PRIVATE_RENDER_MAX_RESPONSE_BYTES);
+  if (!isRecord(payload)) throw new RendererProtocolError('Renderer response must be an object.', jobId);
+  try {
+    requireOnlyKeys(payload, ['protocol', 'jobId', 'asset', 'browserReceipt'], '$renderer');
+    if (payload.protocol !== PRIVATE_RENDER_RESPONSE_PROTOCOL) {
+      throw new RendererProtocolError('Renderer response protocol mismatch.', jobId);
+    }
+    if (payload.jobId !== jobId) throw new RendererProtocolError('Renderer jobId mismatch.', jobId);
+    if (!isRecord(payload.asset)) throw new RendererProtocolError('Renderer asset receipt is missing.', jobId);
+    requireOnlyKeys(payload.asset, ['mimeType', 'width', 'height', 'byteLength', 'dataBase64'], '$renderer.asset');
+    if (payload.asset.mimeType !== 'image/png') throw new RendererProtocolError('Renderer MIME must be image/png.', jobId);
+    const width = strictInteger(payload.asset.width, 64, PRIVATE_RENDER_MAX_DIMENSION, '$renderer.asset.width');
+    const height = strictInteger(payload.asset.height, 64, PRIVATE_RENDER_MAX_DIMENSION, '$renderer.asset.height');
+    if (width !== request.asset.width || height !== request.asset.height) {
+      throw new RendererProtocolError('Renderer dimensions do not match the request.', jobId);
+    }
+    if (typeof payload.asset.dataBase64 !== 'string') {
+      throw new RendererProtocolError('Renderer dataBase64 is missing.', jobId);
+    }
+    const bytes = decodeCanonicalBase64(payload.asset.dataBase64, PRIVATE_RENDER_MAX_RESPONSE_BYTES);
+    if (payload.asset.byteLength !== bytes.byteLength) {
+      throw new RendererProtocolError('Renderer byteLength does not match decoded bytes.', jobId);
+    }
+    validateOpaqueRgbPng(bytes, width, height);
+    const browserReceipt = sanitizeRendererBrowserReceipt(payload.browserReceipt);
+    return { bytes, dataBase64: payload.asset.dataBase64, width, height, browserReceipt };
+  } catch (error) {
+    if (error instanceof RendererProtocolError) {
+      if (!error.jobId) error.jobId = jobId;
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new RendererProtocolError(`Renderer response validation failed: ${message}`, jobId);
+  }
+}
+
+function assertPrivateRenderConfigured(env: Env): void {
+  if (!env.LUPI_MCP_SHARED_SECRET) {
+    throw new RenderServiceConfigurationError('Protected render authentication is not configured.');
+  }
+  if (!env.RENDERER_ENDPOINT || !env.RENDERER_TOKEN || !env.RENDER_ASSETS) {
+    throw new RenderServiceConfigurationError(
+      'Authenticated PNG execution requires RENDERER_ENDPOINT, RENDERER_TOKEN, and private RENDER_ASSETS.',
+    );
+  }
+}
+
+function privateRenderConfigured(env: Env): boolean {
+  return Boolean(
+    env.LUPI_MCP_SHARED_SECRET
+    && env.RENDERER_ENDPOINT
+    && env.RENDERER_TOKEN
+    && env.RENDER_ASSETS,
+  );
+}
+
+function requirePrivateRendererEndpoint(value: string | undefined): string {
+  if (!value) throw new RenderServiceConfigurationError('RENDERER_ENDPOINT is not configured.');
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new RenderServiceConfigurationError('RENDERER_ENDPOINT is invalid.');
+  }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+  if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) {
+    throw new RenderServiceConfigurationError('RENDERER_ENDPOINT must use HTTPS outside localhost.');
+  }
+  if (url.username || url.password || url.hash || url.search) {
+    throw new RenderServiceConfigurationError('RENDERER_ENDPOINT must not contain credentials, a query, or a fragment.');
+  }
+  if (url.pathname !== '/render') {
+    throw new RenderServiceConfigurationError('RENDERER_ENDPOINT must target the renderer /render route.');
+  }
+  return url.toString();
+}
+
+async function writePrivateRenderJob(env: Env, job: Record<string, unknown>): Promise<void> {
+  if (!env.RENDER_ASSETS) throw new RenderServiceConfigurationError('Private render job storage is not configured.');
+  await env.RENDER_ASSETS.put(privateRenderJobKey(String(job.jobId)), JSON.stringify(job), {
+    httpMetadata: { contentType: 'application/json' },
+    customMetadata: {
+      jobId: String(job.jobId),
+      status: String(job.status ?? 'unknown'),
+      profile: 'legacy-v0-authenticated-png',
+    },
+  });
+}
+
+async function readPrivateRenderJob(jobId: string, env: Env): Promise<Record<string, unknown>> {
+  if (!PRIVATE_RENDER_JOB_ID_PATTERN.test(jobId)) {
+    throw new RenderArtifactValidationError('$.jobId', 'invalid private render job id');
+  }
+  if (!env.RENDER_ASSETS) throw new RenderServiceConfigurationError('Private render job storage is not configured.');
+  const object = await env.RENDER_ASSETS.get(privateRenderJobKey(jobId));
+  if (!object) return { jobId, status: 'not_found' };
+  const bytes = await r2ObjectBytes(object, 512 * 1024);
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    return isRecord(parsed) ? parsed : { jobId, status: 'invalid_receipt' };
+  } catch {
+    return { jobId, status: 'invalid_receipt' };
+  }
+}
+
+async function readPrivateRenderAssetBytes(assetId: string, env: Env): Promise<Uint8Array> {
+  if (!env.RENDER_ASSETS) throw new RenderServiceConfigurationError('Private render asset storage is not configured.');
+  const object = await env.RENDER_ASSETS.get(privateRenderAssetKey(assetId));
+  if (!object) throw new RendererProtocolError('Validated private render asset was not readable after persistence.');
+  return r2ObjectBytes(object, PRIVATE_RENDER_MAX_RESPONSE_BYTES);
+}
+
+async function readPrivateRenderAssetResponse(assetId: string, env: Env, headOnly = false): Promise<Response> {
+  if (!/^sha256-[a-f0-9]{64}$/.test(assetId)) {
+    throw new RenderArtifactValidationError('$.assetId', 'invalid private render asset id');
+  }
+  if (!env.RENDER_ASSETS) throw new RenderServiceConfigurationError('Private render asset storage is not configured.');
+  const object = headOnly
+    ? await env.RENDER_ASSETS.head(privateRenderAssetKey(assetId))
+    : await env.RENDER_ASSETS.get(privateRenderAssetKey(assetId));
+  if (!object) return json({ error: 'Asset not found', assetId }, { status: 404 });
+  const headers = privateRenderHeaders(object, assetId, 'image/png');
+  const body = headOnly ? null : object.body ?? await object.arrayBuffer?.();
+  return new Response(body, { headers });
+}
+
+async function readPrivateRenderProvenanceResponse(jobId: string, env: Env, headOnly = false): Promise<Response> {
+  if (!PRIVATE_RENDER_JOB_ID_PATTERN.test(jobId)) {
+    throw new RenderArtifactValidationError('$.jobId', 'invalid private render job id');
+  }
+  if (!env.RENDER_ASSETS) throw new RenderServiceConfigurationError('Private render provenance storage is not configured.');
+  const object = headOnly
+    ? await env.RENDER_ASSETS.head(privateRenderSidecarKey(jobId))
+    : await env.RENDER_ASSETS.get(privateRenderSidecarKey(jobId));
+  if (!object) return json({ error: 'Provenance not found', jobId }, { status: 404 });
+  const headers = privateRenderHeaders(object, object.customMetadata?.sidecarDigest ?? jobId, 'application/json');
+  const body = headOnly ? null : object.body ?? await object.arrayBuffer?.();
+  return new Response(body, { headers });
+}
+
+function privateRenderHeaders(object: R2ObjectLike, etag: string, contentType: string): Headers {
+  const headers = new Headers();
+  object.writeHttpMetadata?.(headers);
+  headers.set('content-type', headers.get('content-type') || object.httpMetadata?.contentType || contentType);
+  if (object.size !== undefined) headers.set('content-length', String(object.size));
+  headers.set('etag', `"${etag}"`);
+  headers.set('cache-control', 'private, no-store');
+  headers.set('x-content-type-options', 'nosniff');
+  return headers;
+}
+
+function privateRenderJobKey(jobId: string): string {
+  return `${PRIVATE_RENDER_JOB_PREFIX}${jobId}.json`;
+}
+
+function privateRenderAssetKey(assetId: string): string {
+  return `${PRIVATE_RENDER_ASSET_PREFIX}${assetId}.png`;
+}
+
+function privateRenderSidecarKey(jobId: string): string {
+  return `${PRIVATE_RENDER_JOB_PREFIX}${jobId}.provenance.json`;
+}
+
+function sanitizeRendererBrowserReceipt(value: unknown): Record<string, JsonValue> {
+  if (!isRecord(value)) return {};
+  const allowed = [
+    'format', 'filename', 'mimeType', 'byteLength', 'width', 'height',
+    'contractVersion', 'sourceContentDigest', 'specId', 'rendererFingerprint',
+    'artifactKey', 'artifactDigest',
+  ];
+  return compactRecord(Object.fromEntries(
+    allowed.filter((key) => Object.prototype.hasOwnProperty.call(value, key)).map((key) => [key, value[key]]),
+  ));
+}
+
+function validateOpaqueRgbPng(bytes: Uint8Array, expectedWidth: number, expectedHeight: number): void {
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (bytes.byteLength < 45 || signature.some((byte, index) => bytes[index] !== byte)) {
+    throw new RendererProtocolError('Renderer bytes are not a PNG.');
+  }
+  let offset = 8;
+  let sawIhdr = false;
+  let sawIend = false;
+  let idatBytes = 0;
+  while (offset + 12 <= bytes.byteLength) {
+    const length = readUint32Be(bytes, offset);
+    const chunkEnd = offset + 12 + length;
+    if (chunkEnd > bytes.byteLength) throw new RendererProtocolError('PNG chunk exceeds the response length.');
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    const expectedCrc = readUint32Be(bytes, offset + 8 + length);
+    const actualCrc = crc32(bytes.subarray(offset + 4, offset + 8 + length));
+    if (actualCrc !== expectedCrc) throw new RendererProtocolError(`PNG ${type} CRC mismatch.`);
+    if (!sawIhdr) {
+      if (type !== 'IHDR' || length !== 13) throw new RendererProtocolError('PNG must begin with a 13-byte IHDR.');
+      const width = readUint32Be(bytes, offset + 8);
+      const height = readUint32Be(bytes, offset + 12);
+      const bitDepth = bytes[offset + 16];
+      const colorType = bytes[offset + 17];
+      const compression = bytes[offset + 18];
+      const filter = bytes[offset + 19];
+      const interlace = bytes[offset + 20];
+      if (width !== expectedWidth || height !== expectedHeight) {
+        throw new RendererProtocolError('PNG IHDR dimensions do not match the request.');
+      }
+      if (bitDepth !== 8 || colorType !== 2 || compression !== 0 || filter !== 0 || interlace !== 0) {
+        throw new RendererProtocolError('PNG must be non-interlaced 8-bit RGB with no alpha channel.');
+      }
+      sawIhdr = true;
+    } else if (type === 'IHDR') {
+      throw new RendererProtocolError('PNG contains more than one IHDR.');
+    }
+    if (type === 'IDAT') idatBytes += length;
+    if (type === 'tRNS') throw new RendererProtocolError('Opaque PNG must not contain transparency metadata.');
+    offset = chunkEnd;
+    if (type === 'IEND') {
+      if (length !== 0 || offset !== bytes.byteLength) throw new RendererProtocolError('PNG IEND is malformed.');
+      sawIend = true;
+      break;
+    }
+  }
+  if (!sawIhdr || !sawIend || idatBytes === 0) {
+    throw new RendererProtocolError('PNG is missing required IHDR, image-data, or terminal chunks.');
+  }
+}
+
+function readUint32Be(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset] * 0x1000000
+    + (bytes[offset + 1] << 16)
+    + (bytes[offset + 2] << 8)
+    + bytes[offset + 3]
+  ) >>> 0;
+}
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function decodeCanonicalBase64(value: string, maxBytes: number): Uint8Array {
+  if (value.length === 0 || value.length > Math.ceil(maxBytes / 3) * 4 + 4) {
+    throw new RendererProtocolError('Renderer base64 payload exceeds the configured limit.');
+  }
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new RendererProtocolError('Renderer dataBase64 is not canonical base64.');
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = base64ToUint8Array(value);
+  } catch {
+    throw new RendererProtocolError('Renderer dataBase64 could not be decoded.');
+  }
+  if (bytes.byteLength > maxBytes) throw new RendererProtocolError('Decoded renderer bytes exceed the configured limit.');
+  if (uint8ArrayToBase64(bytes) !== value) throw new RendererProtocolError('Renderer dataBase64 is not canonical.');
+  return bytes;
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+    const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.byteLength));
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function r2ObjectBytes(object: R2ObjectLike, maxBytes: number): Promise<Uint8Array> {
+  if (object.size !== undefined && object.size > maxBytes) {
+    throw new RendererProtocolError('Stored render object exceeds the configured limit.');
+  }
+  const buffer = object.arrayBuffer
+    ? await object.arrayBuffer()
+    : object.body ? await new Response(object.body).arrayBuffer() : null;
+  if (!buffer) throw new RendererProtocolError('Stored render object has no readable body.');
+  if (buffer.byteLength > maxBytes) throw new RendererProtocolError('Stored render object exceeds the configured limit.');
+  return new Uint8Array(buffer);
+}
+
+async function readJsonRequestBody(request: Request, maxBytes: number): Promise<unknown> {
+  const length = Number(request.headers.get('content-length') ?? 0);
+  if (Number.isFinite(length) && length > maxBytes) {
+    throw new RenderArtifactValidationError('$', 'request body exceeds the configured limit');
+  }
+  if (!request.body) return {};
+  const bytes = await readStreamBounded(
+    request.body,
+    maxBytes,
+    () => new RenderArtifactValidationError('$', 'request body exceeds the configured limit'),
+  );
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new RenderArtifactValidationError('$', 'request body is not valid JSON');
+  }
+}
+
+async function readJsonResponseBody(response: Response, maxBytes: number): Promise<unknown> {
+  const length = Number(response.headers.get('content-length') ?? 0);
+  if (Number.isFinite(length) && length > maxBytes) {
+    throw new RendererProtocolError('Renderer response exceeds the configured limit.');
+  }
+  if (!response.body) throw new RendererProtocolError('Renderer response body is empty.');
+  const bytes = await readStreamBounded(
+    response.body,
+    maxBytes,
+    () => new RendererProtocolError('Renderer response exceeds the configured limit.'),
+  );
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new RendererProtocolError('Renderer response is not valid JSON.');
+  }
+}
+
+async function readStreamBounded(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  limitError: () => Error,
+): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) throw limitError();
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+function requireOnlyKeys(value: Record<string, unknown>, allowed: readonly string[], path: string): void {
+  const allowedSet = new Set(allowed);
+  const unknown = Object.keys(value).filter((key) => !allowedSet.has(key)).sort();
+  if (unknown.length > 0) throw new RenderArtifactValidationError(path, `contains unsupported field ${unknown[0]}`);
+}
+
+function strictInteger(value: unknown, min: number, max: number, path: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new RenderArtifactValidationError(path, `must be an integer from ${min} through ${max}`);
+  }
+  return value;
+}
+
+function strictNumber(value: unknown, min: number, max: number, path: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+    throw new RenderArtifactValidationError(path, `must be a finite number from ${min} through ${max}`);
+  }
+  return value;
 }
 
 async function renderLegacyMoleculeAsset(
@@ -1047,6 +1807,7 @@ function searchMolecules(args: Record<string, unknown>) {
 
 async function readJob(jobId: string, env: Env) {
   if (!jobId) throw new Error('jobId is required.');
+  if (jobId.startsWith('job-v0-')) return readPrivateRenderJob(jobId, env);
   if (!env.DB) return { jobId, status: 'unknown', message: 'D1 binding DB is not configured.' };
   const row = await env.DB.prepare('SELECT * FROM render_jobs WHERE id = ?').bind(jobId).first<Record<string, unknown>>();
   return row ?? { jobId, status: 'not_found' };
@@ -1055,13 +1816,32 @@ async function readJob(jobId: string, env: Env) {
 async function readAssetMetadata(assetId: string, format: Exclude<AssetFormat, 'jpg'> | undefined, env: Env) {
   if (!assetId) throw new Error('assetId is required.');
   const safeFormat = format ?? 'png';
+  if (/^sha256-[a-f0-9]{64}$/.test(assetId) && safeFormat === 'png' && env.RENDER_ASSETS) {
+    const privateObject = await env.RENDER_ASSETS.head(privateRenderAssetKey(assetId));
+    if (privateObject) {
+      return {
+        assetId,
+        format: 'png',
+        status: 'available',
+        url: `/v1/artifacts/${assetId}.png`,
+        authRequired: true,
+        cacheControl: 'private, no-store',
+        byteLength: privateObject.size ?? null,
+        width: privateObject.customMetadata?.width ? Number(privateObject.customMetadata.width) : null,
+        height: privateObject.customMetadata?.height ? Number(privateObject.customMetadata.height) : null,
+        mimeType: 'image/png',
+        sha256: privateObject.customMetadata?.sha256 ?? assetId.replace('sha256-', 'sha256:'),
+      };
+    }
+  }
   const key = assetObjectKey(assetId, safeFormat);
   const object = env.ASSETS ? await env.ASSETS.head(key) : null;
   return {
     assetId,
     format: safeFormat,
     status: object ? 'available' : 'missing',
-    url: object ? publicAssetUrl(assetId, safeFormat, env) : null,
+    url: object ? `/assets/${assetId}.${safeFormat}` : null,
+    authRequired: true,
     byteLength: object?.size ?? null,
     mimeType: object?.httpMetadata?.contentType ?? mimeForFormat(safeFormat),
     sha256: object?.customMetadata?.sha256 ?? null,
@@ -1084,8 +1864,9 @@ async function readAssetResponse(
   object.writeHttpMetadata?.(headers);
   headers.set('content-type', headers.get('content-type') || object.httpMetadata?.contentType || mimeForFormat(format));
   if (object.size !== undefined) headers.set('content-length', String(object.size));
-  headers.set('etag', object.customMetadata?.sha256 ?? assetId);
-  headers.set('cache-control', 'public, max-age=31536000, immutable');
+  headers.set('etag', `"${object.customMetadata?.sha256 ?? assetId}"`);
+  headers.set('cache-control', 'private, no-store');
+  headers.set('x-content-type-options', 'nosniff');
   const body = headOnly ? null : object.body ?? await object.arrayBuffer?.();
   return new Response(body, { headers });
 }
@@ -1135,11 +1916,16 @@ function statusPayload(env: Env) {
     toolCount: MCP_TOOLS.length,
     agentNative: true,
     browserRequired: false,
-    renderExecution: Boolean(env.RENDER_QUEUE || env.RENDERER_ENDPOINT),
+    callerBrowserRequired: false,
+    rendererBackendBrowserRequired: true,
+    renderExecution: privateRenderConfigured(env),
     renderProfiles: {
       legacyV0: {
-        execution: Boolean(env.RENDER_QUEUE || env.RENDERER_ENDPOINT),
-        compatibilityOnly: true,
+        execution: privateRenderConfigured(env),
+        profile: 'legacy-v0-authenticated-png',
+        authenticationRequired: true,
+        moleculeInputs: ['template', 'procedural'],
+        formats: ['png'],
       },
       renderRequestV1: {
         execution: false,
@@ -1157,12 +1943,15 @@ function statusPayload(env: Env) {
     bindings: {
       webAssets: Boolean(env.WEB_ASSETS),
       r2: Boolean(env.ASSETS),
+      privateRenderAssets: Boolean(env.RENDER_ASSETS),
       d1: Boolean(env.DB),
       queue: Boolean(env.RENDER_QUEUE),
       rendererEndpoint: Boolean(env.RENDERER_ENDPOINT),
+      rendererToken: Boolean(env.RENDERER_TOKEN),
       firebaseProject: Boolean(env.FIREBASE_PROJECT_ID),
       largeAssetProxy: Boolean(env.LUPI_LARGE_ASSET_BASE_URL || env.ASSET_BASE_URL),
-      authRequired: Boolean(env.LUPI_MCP_SHARED_SECRET),
+      authRequired: true,
+      authConfigured: Boolean(env.LUPI_MCP_SHARED_SECRET),
     },
   };
 }
@@ -1175,7 +1964,19 @@ function manifestPayload() {
     protocol: 'MCP JSON-RPC over HTTP',
     browserBridgeManifest: '/browser-mcp-manifest.json',
     renderProfiles: {
-      legacyV0: { compatibilityOnly: true },
+      legacyV0: {
+        profile: 'legacy-v0-authenticated-png',
+        authenticationRequired: true,
+        executionConditionalOnBindings: true,
+        moleculeInputs: ['template', 'procedural'],
+        formats: ['png'],
+        alphaModes: ['opaque'],
+        retrieval: {
+          job: '/v1/jobs/:jobId',
+          provenance: '/v1/jobs/:jobId/provenance',
+          artifact: '/v1/artifacts/:assetId.png',
+        },
+      },
       renderRequestV1: { validationOnly: true },
     },
     renderRequestCapability: EDGE_RENDER_CAPABILITY_V1,
@@ -1192,17 +1993,33 @@ function toolContent(value: unknown) {
 
 async function assertAuthorized(request: Request, env: Env) {
   const secret = env.LUPI_MCP_SHARED_SECRET;
-  if (!secret) return;
+  if (!secret) throw new RenderServiceConfigurationError('Protected MCP authentication is not configured.');
   const auth = request.headers.get('authorization') ?? '';
-  if (auth !== `Bearer ${secret}`) throw new Error('Unauthorized');
+  const presented = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!presented || !(await constantTimeSecretEqual(presented, secret))) throw new Error('Unauthorized');
+}
+
+async function constantTimeSecretEqual(left: string, right: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [leftDigest, rightDigest] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(left)),
+    crypto.subtle.digest('SHA-256', encoder.encode(right)),
+  ]);
+  const leftBytes = new Uint8Array(leftDigest);
+  const rightBytes = new Uint8Array(rightDigest);
+  let difference = 0;
+  for (let index = 0; index < leftBytes.length; index += 1) {
+    difference |= leftBytes[index] ^ rightBytes[index];
+  }
+  return difference === 0;
 }
 
 function rpcResult(id: string | number | null, result: unknown) {
   return { jsonrpc: '2.0', id, result };
 }
 
-function rpcError(id: string | number | null, code: number, message: string) {
-  return { jsonrpc: '2.0', id, error: { code, message } };
+function rpcError(id: string | number | null, code: number, message: string, data?: Record<string, unknown>) {
+  return { jsonrpc: '2.0', id, error: { code, message, ...(data ? { data } : {}) } };
 }
 
 function json(value: unknown, init: ResponseInit & { headers?: HeadersInit } = {}) {

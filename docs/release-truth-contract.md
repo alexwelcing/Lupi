@@ -22,7 +22,7 @@ different truths. Never collapse them into one green status.
 | Local | Exact Git SHA, clean integration worktree, frozen install, `pnpm verify:product-contract`, real `pnpm lint`, production dependency audits, build, unit tests, Worker tests, release-controller tests, and relevant Playwright results. A script name without its command receipt is not evidence. |
 | CI | GitHub Actions run URL and conclusion for the exact SHA, with every required job and required/non-advisory gate named. A local result is not CI evidence. |
 | Deploy | Separately authorized owner dispatch, exact candidate version and immutable preview origin, validated prior rollback target, durable pre-mutation intent, traffic-promotion result, and terminal outcome or rollback resolution. Source presence, merge state, package creation, or candidate upload alone is not deployment proof. |
-| Live API | Separate candidate-preview and custom-domain reports for the same Git SHA and Worker version, including `/health` identity/bindings, distinct edge and browser manifests, expected authentication posture, entry-byte parity, and relevant render/job/asset behavior. Candidate-preview evidence is not custom-domain evidence. |
+| Live API | Separate candidate-preview and custom-domain reports for the same Git SHA and Worker version, including `/health` identity/bindings, distinct edge and browser manifests, expected authentication posture, entry-byte parity, and relevant authenticated render/job/provenance/artifact behavior. Candidate-preview evidence is not custom-domain evidence. |
 | Public site | Root discovery, a real molecule loaded with a canvas present, mobile core controls, saved-view success and recoverable error behavior, and retrieved export bytes wherever the release changes export behavior. A plausible screenshot is not functional proof. |
 
 The release receipt records every lane independently for one exact SHA.
@@ -100,6 +100,11 @@ Every release must preserve these invariants:
    do not make storefront or fulfillment behavior part of viewer core.
 8. Rollback evidence names what was serving before mutation and proves what is
    serving after rollback; rollback source code alone is not rollback proof.
+9. The approved `legacy-v0` opaque-PNG lane fails closed unless caller auth,
+   the private render bucket, renderer endpoint, and independent renderer auth
+   are all configured. Its operational receipts are never relabeled as
+   `RenderRequestV1`; V1 remains validation-only until a separately reviewed
+   executor and identity migration is implemented and proven.
 
 ## Production controller contract
 
@@ -215,13 +220,27 @@ replace behavioral evidence.
 
 ## Current program status
 
-Ratifying this contract does not make the application release-ready. Four
-capability gates remain: the correctness/security/lint baseline, truthful
-render/artifact behavior, the complete human
-inspect-measure-provenance-save/reopen loop, and the authenticated agent
-render/retrieve path. The operator planning workspace labels these waves
-023 through 026; those numbers are execution references, not the normative
-definition of readiness.
+Ratifying this contract, or implementing a capability in source, does not make
+the application release-ready. The current candidate now contains two bounded
+vertical slices that were previously missing:
+
+- a human distance/angle workflow that retains source-aware atom references,
+  states coordinate units and the absence of minimum-image treatment, and
+  preserves the measurement definition through save/reopen; and
+- an owner-approved authenticated `legacy-v0` template/procedural opaque-PNG
+  render, job, provenance, and private-artifact retrieval path.
+
+Neither slice has production evidence merely because its code is present.
+Local and CI integration receipts are **NOT CHECKED** until the
+end-of-development verification pass. The renderer additionally remains
+inactive in production
+until the private production/preview buckets, backend endpoint, distinct
+secrets, authorized deployment, and candidate/custom-domain readback are
+proven. `RenderRequestV1` remains validation-only. Dihedrals, multiple pinned
+measurement history/export, and minimum-image/triclinic PBC measurement are
+deferred capabilities and are not claimed by the current distance/angle slice.
+The correctness/security/lint baseline and every applicable truth lane above
+still determine release readiness.
 
 The operational use of this contract is documented in [operations](operations.md)
 and the [release checklist](release-checklist.md).

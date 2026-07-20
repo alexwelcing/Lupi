@@ -296,8 +296,10 @@ export function yieldToEventLoop(): Promise<void> {
 export interface ExportBondOptions {
   /** Element-aware slack: cutoff = r_cov(A) + r_cov(B) + tolerance. */
   tolerance: number;
-  /** Covalent radius (Å) indexed by type id. */
+  /** Covalent radius (Å) indexed by the supplied inference type id. */
   covalentRadii: Float32Array;
+  /** Per-source-atom visibility mask. Hidden endpoints never emit a bond. */
+  atomVisibility?: Uint8Array;
   /** Hard ceiling on emitted bonds (default MAX_EXPORT_BONDS). */
   cap?: number;
   /** Atoms per detection slab before yielding (default 50k). */
@@ -395,6 +397,40 @@ export function validateSourceExportBonds(
   return { pairs, count, capped: false, topology: 'source' };
 }
 
+function filterSourceExportBonds(
+  frame: ExportFrameData,
+  source: ExportBondResult,
+  atomVisibility: Uint8Array | undefined,
+  cap: number,
+): ExportBondResult {
+  if (!atomVisibility) {
+    if (source.count > cap) {
+      throw new ModelExportSourceTopologyError(
+        `Source bond topology contains ${source.count.toLocaleString()} bonds, exceeding the exact export cap of ${cap.toLocaleString()}.`,
+        { natoms: frame.natoms, sourceValueCount: source.pairs.length, cap },
+      );
+    }
+    return source;
+  }
+  const pairs = new Int32Array(Math.min(source.count, cap) * 2);
+  let count = 0;
+  for (let pairIndex = 0; pairIndex < source.count; pairIndex += 1) {
+    const atomA = source.pairs[pairIndex * 2];
+    const atomB = source.pairs[pairIndex * 2 + 1];
+    if (atomVisibility[atomA] === 0 || atomVisibility[atomB] === 0) continue;
+    if (count >= cap) {
+      throw new ModelExportSourceTopologyError(
+        `Visible source bond topology exceeds the exact export cap of ${cap.toLocaleString()} bonds.`,
+        { natoms: frame.natoms, sourceValueCount: source.pairs.length, cap },
+      );
+    }
+    pairs[count * 2] = atomA;
+    pairs[count * 2 + 1] = atomB;
+    count += 1;
+  }
+  return { pairs: pairs.subarray(0, count * 2), count, capped: false, topology: 'source' };
+}
+
 function maxCovalentRadius(frame: ExportFrameData, covalentRadii: Float32Array): number {
   let maxR = 0;
   for (let i = 0; i < frame.natoms; i++) {
@@ -440,9 +476,27 @@ export async function detectExportBonds(
 
   if (natoms <= chunkAtoms) {
     const out = detectBondsCpu({ positions, types, natoms, maxBondLength, covalentRadii, tolerance });
-    const capped = out.count > cap;
-    const count = Math.min(out.count, cap);
-    return finish(out.bondPairs.subarray(0, count * 2).slice(), count, capped);
+    if (!opts.atomVisibility) {
+      const capped = out.count > cap;
+      const count = Math.min(out.count, cap);
+      return finish(out.bondPairs.subarray(0, count * 2).slice(), count, capped);
+    }
+    const kept = new Int32Array(Math.min(out.count, cap) * 2);
+    let count = 0;
+    let capped = false;
+    for (let pairIndex = 0; pairIndex < out.count; pairIndex += 1) {
+      const atomA = out.bondPairs[pairIndex * 2];
+      const atomB = out.bondPairs[pairIndex * 2 + 1];
+      if (opts.atomVisibility[atomA] === 0 || opts.atomVisibility[atomB] === 0) continue;
+      if (count >= cap) {
+        capped = true;
+        break;
+      }
+      kept[count * 2] = atomA;
+      kept[count * 2 + 1] = atomB;
+      count += 1;
+    }
+    return finish(kept.subarray(0, count * 2), count, capped);
   }
 
   // Sort atom indices by x once; slabs are consecutive runs of the order.
@@ -494,9 +548,12 @@ export async function detectExportBonds(
     for (let p = 0; p < out.count; p++) {
       const a = out.bondPairs[p * 2];
       if (a >= coreCount) continue;
-      if (total + k >= cap) { capped = true; break; }
       const ga = order[coreStart + a];
       const gb = order[coreStart + out.bondPairs[p * 2 + 1]];
+      if (opts.atomVisibility && (opts.atomVisibility[ga] === 0 || opts.atomVisibility[gb] === 0)) {
+        continue;
+      }
+      if (total + k >= cap) { capped = true; break; }
       kept[k * 2] = Math.min(ga, gb);
       kept[k * 2 + 1] = Math.max(ga, gb);
       k++;
@@ -618,8 +675,10 @@ export interface ExportSceneOptions {
   surfaceRoughness?: number;
   showBonds?: boolean;
   bondTolerance?: number;
-  /** Covalent radius (Å) indexed by type id; required when showBonds. */
+  /** Covalent radius (Å) indexed by the inference type buffer. */
   covalentRadii?: Float32Array;
+  /** Atomic numbers used only for bond inference; atom rendering keeps raw type ids. */
+  bondTypes?: Int32Array;
   bondCap?: number;
   center?: [number, number, number];
   arScale?: number;
@@ -658,9 +717,13 @@ export async function buildExportScene(
   // Reject atom-only cases that cannot possibly fit before allocating grouping
   // arrays, bond buffers, InstancedMesh attributes, or USDZ bake geometry.
   let visibleAtoms = 0;
+  const atomVisibility = opts.hiddenTypes && opts.hiddenTypes.size > 0
+    ? new Uint8Array(frame.natoms)
+    : undefined;
   for (let i = 0; i < frame.natoms; i++) {
     const typeId = frame.types[i];
     if (opts.hiddenTypes?.has(typeId)) continue;
+    if (atomVisibility) atomVisibility[i] = 1;
     visibleAtoms++;
   }
   const atomOnlyLod = opts.sphereLod ?? selectBudgetedSphereLod(
@@ -699,15 +762,29 @@ export async function buildExportScene(
     topology: 'none',
   };
   if (opts.showBonds) {
-    const sourceBonds = validateSourceExportBonds(frame, opts.bondCap ?? MAX_EXPORT_BONDS);
+    const bondCap = opts.bondCap ?? MAX_EXPORT_BONDS;
+    const validatedSourceBonds = validateSourceExportBonds(frame, Number.MAX_SAFE_INTEGER);
+    const sourceBonds = validatedSourceBonds
+      ? filterSourceExportBonds(frame, validatedSourceBonds, atomVisibility, bondCap)
+      : null;
     if (sourceBonds) {
       bonds = sourceBonds;
       onProgress?.('bonds (source)', bonds.count, bonds.count);
     } else if (opts.covalentRadii) {
-      bonds = await detectExportBonds(frame, {
+      if (opts.bondTypes && opts.bondTypes.length < frame.natoms) {
+        throw new ModelExportSourceTopologyError(
+          'Bond inference type mapping is shorter than the exported frame.',
+          { natoms: frame.natoms, sourceValueCount: opts.bondTypes.length },
+        );
+      }
+      const inferenceFrame = opts.bondTypes
+        ? { ...frame, types: opts.bondTypes }
+        : frame;
+      bonds = await detectExportBonds(inferenceFrame, {
         tolerance: opts.bondTolerance ?? 0.45,
         covalentRadii: opts.covalentRadii,
-        cap: opts.bondCap ?? MAX_EXPORT_BONDS,
+        atomVisibility,
+        cap: bondCap,
         chunkAtoms: opts.bondChunkAtoms,
         onProgress,
       });

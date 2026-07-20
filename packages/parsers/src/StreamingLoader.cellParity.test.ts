@@ -78,6 +78,10 @@ function expectSameScientificFrame(remote: Frame, local: Frame) {
   expect(Array.from(remote.positions)).toEqual(Array.from(local.positions));
   expect(Array.from(remote.bonds)).toEqual(Array.from(local.bonds));
   expect(remote.identity).toEqual(local.identity);
+  expect(remote.typeSemantics).toEqual({ kind: 'opaque', provenance: 'legacy-unknown' });
+  expect(local.typeSemantics).toEqual({ kind: 'opaque', provenance: 'legacy-unknown' });
+  expect(remote.distanceSemantics).toEqual({ kind: 'unknown', provenance: 'legacy-unknown' });
+  expect(local.distanceSemantics).toEqual({ kind: 'unknown', provenance: 'legacy-unknown' });
   expect(Array.from(remote.properties.keys())).toEqual(Array.from(local.properties.keys()));
   for (const [name, values] of local.properties) {
     expect(Array.from(remote.properties.get(name) ?? [])).toEqual(Array.from(values));

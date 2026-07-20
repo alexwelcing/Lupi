@@ -9,7 +9,11 @@
  */
 
 import type { DatasetMeta } from '@atlas/core/glimbin';
-import type { FrameIdentity } from '@atlas/core/types';
+import type {
+  AtomTypeSemantics,
+  DistanceSemantics,
+  FrameIdentity,
+} from '@atlas/core/types';
 import { deserializeDumpParseError } from './dumpStreamParser';
 
 export interface TranscodeFrame0Header {
@@ -18,6 +22,8 @@ export interface TranscodeFrame0Header {
   boxBounds: Float64Array;
   columns: string[];
   identity: FrameIdentity;
+  typeSemantics: AtomTypeSemantics;
+  distanceSemantics: DistanceSemantics;
 }
 
 export interface TranscodeFrame0Chunk {

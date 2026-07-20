@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderWithStore, resetStore, getStoreState } from './test-utils';
 import { McpViewerBridge, type LupiMcpDriver } from './mcpViewerBridge';
+import { useStore } from './store';
 import {
   MCP_ERROR_EVENT,
   MCP_REQUEST_EVENT,
@@ -49,6 +50,124 @@ describe('MCP viewer bridge', () => {
     const driver = mountBridge();
     await loadBenzene(driver);
     expect(getStoreState().showBonds).toBe(true);
+    expect(getStoreState().file?.trajectory.frames[0]).toMatchObject({
+      identity: { kind: 'synthetic-row', unique: true },
+      typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'source-declared' },
+    });
+  });
+
+  it('marks manual XYZ coordinates as atomic-number data using the XYZ format convention', async () => {
+    const driver = mountBridge();
+    const response = await driver.execute({
+      id: 'manual-xyz',
+      tool: 'lupi.generate_molecule',
+      arguments: {
+        inputType: 'xyz',
+        input: '2\nmanual\nC 0 0 0\nO 1.2 0 0',
+      },
+    });
+
+    expect(response.ok).toBe(true);
+    expect(getStoreState().file?.trajectory.frames[0]).toMatchObject({
+      typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'format-convention' },
+    });
+  });
+
+  it('marks procedural lattices with procedural element and Ångström provenance', async () => {
+    const driver = mountBridge();
+    const response = await driver.execute({
+      id: 'procedural-cu',
+      tool: 'lupi.generate_molecule',
+      arguments: { inputType: 'procedural', atomCount: 8, elements: ['Cu'], lattice: 'fcc' },
+    });
+
+    expect(response.ok).toBe(true);
+    expect(getStoreState().file?.trajectory.frames[0]).toMatchObject({
+      typeSemantics: { kind: 'atomic-number', provenance: 'procedural-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'procedural' },
+    });
+  });
+
+  it('fails XYZ export actionably for opaque types while preserving model-export guidance', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const frame = getStoreState().file!.trajectory.frames[0]!;
+    frame.typeSemantics = { kind: 'opaque', provenance: 'legacy-unknown' };
+
+    const response = await driver.execute({ id: 'opaque-xyz', tool: 'lupi.export_xyz', arguments: {} });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/complete element mapping/i);
+    expect(response.error?.message).toMatch(/GLB\/USDZ/);
+  });
+
+  it('exports XYZ when every raw type has known element semantics', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+
+    const response = await driver.execute({ id: 'benzene-xyz', tool: 'lupi.export_xyz', arguments: {} });
+
+    expect(response.ok).toBe(true);
+    expect(response.result?.export?.contents).toMatch(/^12\nBenzene\n/m);
+  });
+
+  it('reports scientific semantics and effective bond topology', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+
+    expect(driver.state()).toMatchObject({
+      bondTopology: 'inferred',
+      showBonds: true,
+      showBondsEffective: true,
+      typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+      distanceSemantics: { kind: 'angstrom', provenance: 'source-declared' },
+    });
+    expect(driver.status()).toMatchObject({ bondTopology: 'inferred', showBondsEffective: true });
+  });
+
+  it('declines impossible bond and element settings instead of reporting requested-only state', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const frame = getStoreState().file!.trajectory.frames[0]!;
+    frame.typeSemantics = { kind: 'opaque', provenance: 'lammps-type-id' };
+    frame.distanceSemantics = { kind: 'unknown', provenance: 'lammps-dump' };
+    useStore.setState({ showBonds: false });
+
+    const bonds = await driver.execute({
+      id: 'impossible-bonds',
+      tool: 'lupi.set_viewer',
+      arguments: { showBonds: true },
+    });
+    const elements = await driver.execute({
+      id: 'impossible-elements',
+      tool: 'lupi.set_viewer',
+      arguments: { colorScheme: 'element' },
+    });
+
+    expect(bonds.ok).toBe(false);
+    expect(bonds.error?.message).toMatch(/requires complete element identity/i);
+    expect(elements.ok).toBe(false);
+    expect(elements.error?.message).toMatch(/complete element mapping/i);
+    expect(driver.state()).toMatchObject({
+      bondTopology: 'unavailable',
+      showBonds: false,
+      showBondsEffective: false,
+    });
+  });
+
+  it('refuses to promote unknown source distances to angstroms through XYZ', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const frame = getStoreState().file!.trajectory.frames[0]!;
+    frame.distanceSemantics = { kind: 'unknown', provenance: 'lammps-dump' };
+
+    const response = await driver.execute({ id: 'unknown-unit-xyz', tool: 'lupi.export_xyz', arguments: {} });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/known to be in angstroms/i);
+    expect(response.error?.message).toMatch(/GLB\/USDZ/);
   });
 
   it('rejects transparent JPEG before creating a browser export request', async () => {

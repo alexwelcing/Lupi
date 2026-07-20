@@ -16,7 +16,14 @@ import {
   parseDumpFramesCanonical,
   serializeDumpParseError,
 } from '../dumpStreamParser';
-import { extractFrameIdentity, extractFrameProperties } from './frameTransfer';
+import {
+  extractFrameDistanceSemantics,
+  extractFrameIdentity,
+  extractFrameProperties,
+  extractFrameTypeSemantics,
+  lammpsDataSemantics,
+  xyzFrameMetadata,
+} from './frameTransfer';
 
 let wasmReady = false;
 
@@ -101,6 +108,8 @@ self.onmessage = async (e: MessageEvent) => {
           bonds,
           properties,
           identity: extractFrameIdentity(f),
+          typeSemantics: extractFrameTypeSemantics(f),
+          distanceSemantics: extractFrameDistanceSemantics(f),
         };
       });
 
@@ -118,6 +127,8 @@ self.onmessage = async (e: MessageEvent) => {
       const types = f.types;
       const bonds = f.bonds;
       const properties = extractFrameProperties(f, transferables);
+      const hasCompleteMassMapping = properties.some((property) => property.name === 'type_id');
+      const semantics = lammpsDataSemantics(hasCompleteMassMapping);
 
       if (positions && positions.buffer) transferables.push(positions.buffer);
       if (ids && ids.buffer) transferables.push(ids.buffer);
@@ -137,6 +148,7 @@ self.onmessage = async (e: MessageEvent) => {
           bonds,
           properties,
           identity: extractFrameIdentity(f),
+          ...semantics,
       }]}, transferables);
 
     } else if (type === 'parse-xyz') {
@@ -144,6 +156,7 @@ self.onmessage = async (e: MessageEvent) => {
       const file = payload as File;
       const content = typeof file === 'string' ? file : await readFileAsText(file);
       const frames = parseXyzFile(content);
+      const metadata = xyzFrameMetadata();
 
       const transferables: Transferable[] = [];
       const result = frames.map((f: any) => {
@@ -170,7 +183,7 @@ self.onmessage = async (e: MessageEvent) => {
           positions,
           bonds,
           properties,
-          identity: extractFrameIdentity(f),
+          ...metadata,
         };
       });
 

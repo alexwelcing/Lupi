@@ -149,9 +149,14 @@ describe('glimbin encoder round-trip', () => {
       makeFrame({
         timestep: 2,
         natoms: 4,
+        identity: { kind: 'source-order', unique: true },
+      }),
+      makeFrame({
+        timestep: 3,
+        natoms: 4,
         identity: { kind: 'unknown', unique: true },
       }),
-      makeFrame({ timestep: 3, natoms: 4 }),
+      makeFrame({ timestep: 4, natoms: 4 }),
     ]);
 
     const { blob } = assembleGlimbinBlob(traj);
@@ -162,6 +167,7 @@ describe('glimbin encoder round-trip', () => {
     expect(frames.map((frame) => frame.identity)).toEqual([
       { kind: 'source-id', unique: true },
       { kind: 'synthetic-row', unique: true },
+      { kind: 'source-order', unique: true },
       { kind: 'unknown', unique: true },
       { kind: 'unknown', unique: false },
     ]);

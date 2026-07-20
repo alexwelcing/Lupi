@@ -8,9 +8,15 @@ import { AtomsOptimized } from '@atlas/scene/AtomsOptimized';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
 import { buildClusters, type Clusters } from '@atlas/scene/ClusterBuilder';
 import { Bonds } from '@atlas/scene/Bonds';
+import { validateSourceBondTopology } from '@atlas/scene';
 import { SimulationCell } from '@atlas/scene/SimulationCell';
-import { TYPE_RADII, VectorGlyphs, type VectorGlyphStats } from '@atlas/scene';
-import { ensureVectorMagnitude, getElementSpec, detectFrameVectorFields } from '@atlas/core';
+import { VectorGlyphs, type VectorGlyphStats } from '@atlas/scene';
+import {
+  detectFrameVectorFields,
+  ensureVectorMagnitude,
+  getElementSpec,
+  resolveAtomicNumber,
+} from '@atlas/core';
 import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
 import { GhostAtoms } from '../GhostAtoms';
 import { AtomPicker } from '@atlas/scene/AtomPicker';
@@ -18,6 +24,11 @@ import { AnnotationsLayer } from '../AnnotationsLayer';
 import { KnowledgeLabelsLayer } from '../KnowledgeLabelsLayer';
 import { SelectionMarkers } from '../SelectionMarkers';
 import { AtomInfoHUD } from '../AtomInfoHUD';
+import { MeasurementLayer } from '../MeasurementLayer';
+import {
+  captureMeasurement,
+  requiredMeasurementAtoms,
+} from '../measurements';
 import { CameraFocus } from '../CameraFocus';
 import { AtomTrails } from '../AtomTrails';
 import { MoleculeFilterShell } from '../MoleculeFilterShell';
@@ -130,6 +141,9 @@ export function ViewerScene({
   const showKnowledgeLabels = useStore(s => s.showKnowledgeLabels);
   const hoveredAtom = useStore(s => s.hoveredAtom);
   const selectedAtoms = useStore(s => s.selectedAtoms);
+  const frameIndex = useStore(s => s.frame);
+  const measurementTool = useStore(s => s.measurementTool);
+  const measurement = useStore(s => s.measurement);
   const highlightedNeighbors = useStore(s => s.highlightedNeighbors);
   const dimNonNeighbors = useStore(s => s.showNeighbors);
   const ssao = useStore(s => s.ssao);
@@ -139,6 +153,7 @@ export function ViewerScene({
   const showCell = useStore(s => s.showCell);
   const showAxes = useStore(s => s.showAxes);
   const flythroughPreview = useStore(s => s.flythroughPreview);
+  const playing = useStore(s => s.playing);
   const showBonds = useStore(s => s.showBonds);
   const bondTolerance = useStore(s => s.bondTolerance);
   const useGpuBonds = useStore(s => s.useGpuBonds);
@@ -155,21 +170,48 @@ export function ViewerScene({
   const artifactSpecId = useStore(s => (
     s.exportRequest.type === 'image' ? s.exportRequest.specId : undefined
   ));
+  const measurementFrame = file?.trajectory.frames[frameIndex];
 
+  const hiddenAtomTypesKey = Array.from(hiddenAtomTypes).sort((a, b) => a - b).join(',');
+  const hiddenTypeSet = useMemo(
+    () => new Set(hiddenAtomTypes),
+    // The key binds contents even if the store reuses the array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hiddenAtomTypesKey],
+  );
+  const atomIsVisible = (frame: Frame | undefined, atomIndex: number): boolean => (
+    Boolean(frame) && atomIndex >= 0 && atomIndex < frame!.natoms && !hiddenTypeSet.has(frame!.types[atomIndex])
+  );
+  const visibleAnnotations = useMemo(
+    () => annotations.filter((annotation) => atomIsVisible(currentFrame, annotation.atomIndex)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [annotations, currentFrame, hiddenAtomTypesKey],
+  );
   const trackedAtomIndices = useMemo(() => {
     const set = new Set<number>();
-    for (const ann of annotations) set.add(ann.atomIndex);
+    for (const ann of visibleAnnotations) set.add(ann.atomIndex);
     return Array.from(set);
-  }, [annotations]);
+  }, [visibleAnnotations]);
+  const visibleSelectedAtoms = useMemo(
+    () => selectedAtoms.filter((atomIndex) => atomIsVisible(currentFrame, atomIndex)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedAtoms, currentFrame, hiddenAtomTypesKey],
+  );
+  const visibleHoveredAtom = atomIsVisible(currentFrame, hoveredAtom ?? -1) ? hoveredAtom : null;
+  const visibleHighlightedNeighbors = useMemo(
+    () => new Set(Array.from(highlightedNeighbors).filter((atomIndex) => atomIsVisible(currentFrame, atomIndex))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [highlightedNeighbors, currentFrame, hiddenAtomTypesKey],
+  );
 
   const { etchTexture, etchAtomId } = useMemo<{
     etchTexture: THREE.CanvasTexture | null;
     etchAtomId: number | null;
   }>(() => {
-    if (labelStyle !== 'etched' || annotations.length === 0) {
+    if (labelStyle !== 'etched' || visibleAnnotations.length === 0) {
       return { etchTexture: null, etchAtomId: null };
     }
-    const newest = annotations[annotations.length - 1];
+    const newest = visibleAnnotations[visibleAnnotations.length - 1];
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
@@ -185,7 +227,7 @@ export function ViewerScene({
     tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
     return { etchTexture: tex, etchAtomId: newest.atomIndex };
-  }, [labelStyle, annotations]);
+  }, [labelStyle, visibleAnnotations]);
   useEffect(() => () => { etchTexture?.dispose(); }, [etchTexture]);
 
   useMemo(() => {
@@ -197,29 +239,66 @@ export function ViewerScene({
     }
   }, [colorProperty, file, activeVectorField]);
 
-  const effectiveBondCutoff = useMemo(() => {
-    if (!currentFrame || !currentFrame.types || currentFrame.natoms === 0) {
-      return Math.min(6, 2 * 1.4 + bondTolerance);
+  const renderedFrame = interpolatedFrame ?? currentFrame;
+  const bondRenderPlan = useMemo<{
+    available: boolean;
+    inferenceAllowed: boolean;
+    cutoff: number;
+    warning?: string;
+  }>(() => {
+    const fallbackCutoff = Math.min(6, 2 * 1.4 + bondTolerance);
+    if (!showBonds || !renderedFrame) {
+      return { available: false, inferenceAllowed: false, cutoff: fallbackCutoff };
+    }
+    if (renderedFrame.bonds.length > 0) {
+      const validation = validateSourceBondTopology(renderedFrame);
+      if (!validation.valid) {
+        return {
+          available: false,
+          inferenceAllowed: false,
+          cutoff: fallbackCutoff,
+          warning: validation.reason,
+        };
+      }
+      return { available: true, inferenceAllowed: false, cutoff: fallbackCutoff };
+    }
+    if (renderedFrame.distanceSemantics?.kind !== 'angstrom') {
+      return { available: false, inferenceAllowed: false, cutoff: fallbackCutoff };
     }
     const seen = new Set<number>();
     let maxR = 0;
-    for (let i = 0; i < currentFrame.natoms; i++) {
-      const t = currentFrame.types[i];
+    for (let i = 0; i < renderedFrame.natoms; i++) {
+      const t = renderedFrame.types[i];
       if (seen.has(t)) continue;
       seen.add(t);
-      const r = getElementSpec(t).radius;
+      const atomicNumber = resolveAtomicNumber(renderedFrame, t);
+      if (atomicNumber === undefined) {
+        return { available: false, inferenceAllowed: false, cutoff: fallbackCutoff };
+      }
+      const r = getElementSpec(atomicNumber).radius;
       if (r > maxR) maxR = r;
     }
     if (maxR === 0) maxR = 1.4;
-    return Math.min(6, 2 * maxR + bondTolerance + 0.5);
-  }, [currentFrame, bondTolerance]);
+    return {
+      available: true,
+      inferenceAllowed: true,
+      cutoff: Math.min(6, 2 * maxR + bondTolerance + 0.5),
+    };
+  }, [bondTolerance, renderedFrame, showBonds]);
+
+  useEffect(() => {
+    if (bondRenderPlan.warning) {
+      console.warn(`[Bonds] Refusing malformed source topology: ${bondRenderPlan.warning}.`);
+    }
+  }, [bondRenderPlan.warning]);
 
   const [clusters, setClusters] = useState<Clusters | null>(null);
+  const clusterSourceFrame = playing ? undefined : currentFrame;
   useEffect(() => {
     setClusters(null);
-    if (!currentFrame) return;
-    if (currentFrame.natoms < 50_000) return;
-    if (loadedAtomCount < currentFrame.natoms) return;
+    if (!clusterSourceFrame) return;
+    if (clusterSourceFrame.natoms < 50_000) return;
+    if (loadedAtomCount < clusterSourceFrame.natoms) return;
     let cancelled = false;
     const idleCb = (typeof requestIdleCallback !== 'undefined')
       ? requestIdleCallback
@@ -229,11 +308,14 @@ export function ViewerScene({
       : clearTimeout;
     const handle = idleCb(() => {
       if (cancelled) return;
-      const built = buildClusters(currentFrame, { mobile: deviceQualityTier === 0 });
+      const built = buildClusters(clusterSourceFrame, {
+        mobile: deviceQualityTier === 0,
+        hiddenAtomTypes,
+      });
       if (!cancelled) setClusters(built);
     });
     return () => { cancelled = true; cancelIdle(handle as any); };
-  }, [currentFrame, loadedAtomCount, deviceQualityTier]);
+  }, [clusterSourceFrame, loadedAtomCount, deviceQualityTier, hiddenAtomTypesKey]);
 
   const clusterFadeNear = useMemo(() => {
     if (!file) return 300;
@@ -341,12 +423,12 @@ export function ViewerScene({
               artifactSpecId={artifactSpecId}
             />
           )}
-          <AtomClusters clusters={clusters} fadeNear={clusterFadeNear} fadeFar={clusterFadeFar} />
-          <Bonds
-            frame={interpolatedFrame ?? currentFrame}
+          <AtomClusters clusters={clusters} visible={!playing} fadeNear={clusterFadeNear} fadeFar={clusterFadeFar} />
+          {bondRenderPlan.available && renderedFrame && loadedAtomCount >= renderedFrame.natoms && <Bonds
+            frame={renderedFrame}
             nextFrame={interpolatedNextFrame}
             interpolationFactor={interpolationFactor}
-            maxBondLength={effectiveBondCutoff}
+            maxBondLength={bondRenderPlan.cutoff}
             tolerance={bondTolerance}
             colormap={colormap}
             colorMode={colorMode}
@@ -367,13 +449,15 @@ export function ViewerScene({
             fillLightElevation={fillLightElevation}
             rimLightAzimuth={rimLightAzimuth}
             rimLightElevation={rimLightElevation}
-            visible={showBonds && loadedAtomCount >= (interpolatedFrame ?? currentFrame).natoms}
+            visible
             bondColorMode={bondColorMode}
             useGpu={useGpuBonds}
+            inferenceAllowed={bondRenderPlan.inferenceAllowed}
             atomColorSource={atomColorSource}
+            hiddenAtomTypes={hiddenAtomTypes}
             onBondsUpdate={(info) => useStore.getState().reportBondsUpdate(info.source, info.count)}
             onGpuStatusChange={(status) => useStore.getState().setGpuBondsStatus(status)}
-          />
+          />}
           {showCell && <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />}
 
           {!(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
@@ -399,7 +483,7 @@ export function ViewerScene({
 
           <AnnotationsLayer
             frame={currentFrame}
-            annotations={annotations}
+            annotations={visibleAnnotations}
             style={labelStyle}
             onDismiss={(id) => useStore.getState().removeAnnotation(id)}
           />
@@ -410,31 +494,43 @@ export function ViewerScene({
           />
           <SelectionMarkers
             frame={currentFrame}
-            selectedAtoms={selectedAtoms}
-            hoveredAtom={hoveredAtom}
-            typeRadii={TYPE_RADII}
-            highlightedNeighbors={highlightedNeighbors}
+            selectedAtoms={visibleSelectedAtoms}
+            hoveredAtom={visibleHoveredAtom}
+            highlightedNeighbors={visibleHighlightedNeighbors}
             dimNonNeighbors={dimNonNeighbors}
           />
+          {measurementFrame && <MeasurementLayer
+            frame={measurementFrame}
+            frameIndex={frameIndex}
+            measurement={measurement}
+            hiddenAtomTypes={hiddenTypeSet}
+            playing={playing}
+          />}
           <AtomInfoHUD
             frame={currentFrame}
-            selectedAtoms={selectedAtoms}
+            selectedAtoms={visibleSelectedAtoms}
             activeProperty={colorProperty ?? undefined}
             onDismissCard={(atomIndex) => useStore.getState().setSelectedAtoms(
               (prev) => prev.filter(idx => idx !== atomIndex),
             )}
           />
           <CameraFocus frame={currentFrame} enabled={!flythroughPreview} />
-          <AtomTrails frame={currentFrame} frameKey={interpolatedFrameKey} atomIndices={trackedAtomIndices} />
+          <AtomTrails
+            frame={currentFrame}
+            frameKey={interpolatedFrameKey}
+            historyKey={file?.trajectory ?? currentFrame}
+            atomIndices={trackedAtomIndices}
+          />
 
           {spatialHash && (
             <AtomPicker
               frame={currentFrame}
               spatialHash={spatialHash}
-              enabled
+              hiddenAtomTypes={hiddenAtomTypes}
+              enabled={!measurementTool || Boolean(measurementFrame)}
               onClick={(atomIndex) => {
                 if (atomIndex == null) return;
-                const isAnnotate = (window as any).__atlasShiftHeld === true;
+                const isAnnotate = !measurementTool && (window as any).__atlasShiftHeld === true;
                 if (isAnnotate) {
                   const text = window.prompt('Annotation text', `atom #${atomIndex}`);
                   if (text && text.trim()) {
@@ -443,7 +539,30 @@ export function ViewerScene({
                 }
               }}
               onHover={(atomIndex) => useStore.getState().setHoveredAtom(atomIndex)}
-              onSelect={(indices) => useStore.getState().setSelectedAtoms(indices)}
+              selectionMode={measurementTool ? 'measure' : 'single'}
+              maxMeasureAtoms={measurementTool ? requiredMeasurementAtoms(measurementTool) : 4}
+              onSelect={(indices) => {
+                const state = useStore.getState();
+                if (!measurementTool) {
+                  state.setSelectedAtoms(indices);
+                  return;
+                }
+                const required = requiredMeasurementAtoms(measurementTool);
+                const selected = indices.slice(-required);
+                const nextMeasurement = captureMeasurement(
+                  currentFrame,
+                  frameIndex,
+                  measurementTool,
+                  selected,
+                );
+                state.setMeasurement(nextMeasurement);
+                if (nextMeasurement.atoms.length === required) {
+                  state.setSelectedAtoms([]);
+                  state.setMeasurementTool(null);
+                } else {
+                  state.setSelectedAtoms(selected);
+                }
+              }}
             />
           )}
         </SpatialAnchor>

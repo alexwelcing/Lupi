@@ -444,11 +444,13 @@ const FRAME_IDENTITY_KIND_CODE: Record<FrameIdentityKind, number> = {
   unknown: 0,
   'source-id': 1,
   'synthetic-row': 2,
+  'source-order': 3,
 };
 
 function decodeFrameIdentityKind(code: number): FrameIdentityKind {
   if (code === FRAME_IDENTITY_KIND_CODE['source-id']) return 'source-id';
   if (code === FRAME_IDENTITY_KIND_CODE['synthetic-row']) return 'synthetic-row';
+  if (code === FRAME_IDENTITY_KIND_CODE['source-order']) return 'source-order';
   return 'unknown';
 }
 

@@ -2,98 +2,35 @@ use crate::types::Frame;
 use serde_wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
-/// Map common element symbols to atom types.
-/// Falls back to parsing as integer if not in table.
-fn element_to_type(symbol: &str) -> i32 {
-    match symbol.trim() {
-        "H" => 1,
-        "He" => 2,
-        "Li" => 3,
-        "Be" => 4,
-        "B" => 5,
-        "C" => 6,
-        "N" => 7,
-        "O" => 8,
-        "F" => 9,
-        "Ne" => 10,
-        "Na" => 11,
-        "Mg" => 12,
-        "Al" => 13,
-        "Si" => 14,
-        "P" => 15,
-        "S" => 16,
-        "Cl" => 17,
-        "Ar" => 18,
-        "K" => 19,
-        "Ca" => 20,
-        "Sc" => 21,
-        "Ti" => 22,
-        "V" => 23,
-        "Cr" => 24,
-        "Mn" => 25,
-        "Fe" => 26,
-        "Co" => 27,
-        "Ni" => 28,
-        "Cu" => 29,
-        "Zn" => 30,
-        "Ga" => 31,
-        "Ge" => 32,
-        "As" => 33,
-        "Se" => 34,
-        "Br" => 35,
-        "Kr" => 36,
-        "Rb" => 37,
-        "Sr" => 38,
-        "Y" => 39,
-        "Zr" => 40,
-        "Nb" => 41,
-        "Mo" => 42,
-        "Tc" => 43,
-        "Ru" => 44,
-        "Rh" => 45,
-        "Pd" => 46,
-        "Ag" => 47,
-        "Cd" => 48,
-        "In" => 49,
-        "Sn" => 50,
-        "Sb" => 51,
-        "Te" => 52,
-        "I" => 53,
-        "Xe" => 54,
-        "Cs" => 55,
-        "Ba" => 56,
-        "La" => 57,
-        "Ce" => 58,
-        "Pr" => 59,
-        "Nd" => 60,
-        "Pm" => 61,
-        "Sm" => 62,
-        "Eu" => 63,
-        "Gd" => 64,
-        "Tb" => 65,
-        "Dy" => 66,
-        "Ho" => 67,
-        "Er" => 68,
-        "Tm" => 69,
-        "Yb" => 70,
-        "Lu" => 71,
-        "Hf" => 72,
-        "Ta" => 73,
-        "W" => 74,
-        "Re" => 75,
-        "Os" => 76,
-        "Ir" => 77,
-        "Pt" => 78,
-        "Au" => 79,
-        "Hg" => 80,
-        "Tl" => 81,
-        "Pb" => 82,
-        "Bi" => 83,
-        "Po" => 84,
-        "At" => 85,
-        "Rn" => 86,
-        _ => symbol.trim().parse::<i32>().unwrap_or(1),
+const ELEMENT_SYMBOLS: [&str; 119] = [
+    "", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al",
+    "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co",
+    "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb",
+    "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs",
+    "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm",
+    "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi",
+    "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk",
+    "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg",
+    "Cn", "Nh", "Fl", "Mc", "Lv", "Ts", "Og",
+];
+
+/// Decode an XYZ element token without inventing chemistry. Canonical symbols
+/// (case-insensitive) and explicit atomic numbers 1..118 are supported;
+/// unknown tokens fail the frame rather than silently becoming hydrogen.
+fn element_to_type(token: &str) -> Result<i32, String> {
+    let token = token.trim();
+    if let Ok(atomic_number) = token.parse::<i32>() {
+        if (1..ELEMENT_SYMBOLS.len() as i32).contains(&atomic_number) {
+            return Ok(atomic_number);
+        }
+        return Err(format!("atomic number {atomic_number} is outside 1..118"));
     }
+
+    ELEMENT_SYMBOLS
+        .iter()
+        .position(|symbol| !symbol.is_empty() && symbol.eq_ignore_ascii_case(token))
+        .map(|atomic_number| atomic_number as i32)
+        .ok_or_else(|| format!("unknown element token '{token}'"))
 }
 
 #[wasm_bindgen(js_name = "parseXyzFile")]
@@ -151,7 +88,9 @@ fn parse_xyz_internal(content: &str) -> Result<Vec<Frame>, String> {
                 ));
             }
 
-            let atom_type = element_to_type(parts[0]);
+            let atom_type = element_to_type(parts[0]).map_err(|reason| {
+                format!("Invalid XYZ element at line {}: {}", idx + 1, reason)
+            })?;
             let x: f32 = parts[1].parse().map_err(|_| format!("Invalid x coordinate at line {}", idx + 1))?;
             let y: f32 = parts[2].parse().map_err(|_| format!("Invalid y coordinate at line {}", idx + 1))?;
             let z: f32 = parts[3].parse().map_err(|_| format!("Invalid z coordinate at line {}", idx + 1))?;
@@ -205,4 +144,24 @@ fn parse_xyz_internal(content: &str) -> Result<Vec<Frame>, String> {
     }
 
     Ok(frames)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{element_to_type, parse_xyz_internal};
+
+    #[test]
+    fn resolves_the_full_periodic_table_and_numeric_atomic_numbers() {
+        assert_eq!(element_to_type("Og"), Ok(118));
+        assert_eq!(element_to_type("cu"), Ok(29));
+        assert_eq!(element_to_type("79"), Ok(79));
+    }
+
+    #[test]
+    fn rejects_unknown_or_out_of_range_tokens_instead_of_inventing_hydrogen() {
+        assert!(element_to_type("Xx").is_err());
+        assert!(element_to_type("0").is_err());
+        assert!(element_to_type("119").is_err());
+        assert!(parse_xyz_internal("1\nunknown\nXx 0 0 0\n").is_err());
+    }
 }

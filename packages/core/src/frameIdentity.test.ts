@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { framesShareAtomOrder, hasUsableSourceIds } from './frameIdentity';
+import { framesShareAtomOrder, hasStableAtomIdentity, hasUsableSourceIds } from './frameIdentity';
 import type { Frame, FrameIdentity } from './types';
 
 function makeFrame(
@@ -38,6 +38,14 @@ describe('frame identity contract', () => {
     expect(framesShareAtomOrder(makeFrame([9, 4, 7], identity), makeFrame([9, 4, 7], identity))).toBe(true);
     expect(framesShareAtomOrder(makeFrame([9, 4, 7], identity), makeFrame([4, 9, 7], identity))).toBe(false);
     expect(framesShareAtomOrder(makeFrame([9, 4, 7], identity), makeFrame([9, 4], identity))).toBe(false);
+  });
+
+  it('accepts a source-order contract for cross-frame matching without calling it a source ID', () => {
+    const identity: FrameIdentity = { kind: 'source-order', unique: true };
+    expect(hasUsableSourceIds(makeFrame([1, 2], identity))).toBe(false);
+    expect(hasStableAtomIdentity(makeFrame([1, 2], identity))).toBe(true);
+    expect(framesShareAtomOrder(makeFrame([1, 2], identity), makeFrame([1, 2], identity))).toBe(true);
+    expect(framesShareAtomOrder(makeFrame([1, 2], identity), makeFrame([2, 1], identity))).toBe(false);
   });
 
   it('does not reinterpret matching legacy or synthetic rows as shared atom order', () => {

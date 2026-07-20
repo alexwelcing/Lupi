@@ -2,15 +2,21 @@ import {
   computeRenderArtifactDigestV1,
   detectFrameVectorFields,
   getVectorComponents,
+  normalizeAtomTypeSemantics,
+  normalizeDistanceSemantics,
+  type AtomTypeSemantics,
+  type DistanceSemantics,
   type Frame,
   type Sha256DigestV1,
 } from '@atlas/core';
 
 export const DECODED_RENDER_FRAME_MEDIA_TYPE_V1 = 'application/vnd.lupi.decoded-frame.v1';
 export const DECODED_RENDER_FRAME_MEDIA_TYPE_V2 = 'application/vnd.lupi.decoded-frame.v2';
+export const DECODED_RENDER_FRAME_MEDIA_TYPE_V3 = 'application/vnd.lupi.decoded-frame.v3';
 
 const CANONICAL_FRAME_VERSION_V1 = 'lupi.decoded-render-frame.v1';
 const CANONICAL_FRAME_VERSION_V2 = 'lupi.decoded-render-frame.v2';
+const CANONICAL_FRAME_VERSION_V3 = 'lupi.decoded-render-frame.v3';
 const textEncoder = new TextEncoder();
 
 /**
@@ -55,10 +61,8 @@ export function canonicalDecodedRenderFrameBytesV1(frame: Frame): Uint8Array {
 }
 
 /**
- * V2 binds decoded bytes to their atom-identity meaning. The nested V1 body
- * preserves the already-ratified numeric encoding while the V2 prefix makes a
- * source-ID frame distinct from identical integers that are merely synthetic
- * row labels or legacy/unknown identity.
+ * V2 binds decoded bytes to atom identity. This published layout is immutable;
+ * scientific type and distance semantics were added in V3.
  */
 export function canonicalDecodedRenderFrameBytesV2(frame: Frame): Uint8Array {
   const identity = normalizedFrameIdentity(frame);
@@ -67,6 +71,32 @@ export function canonicalDecodedRenderFrameBytesV2(frame: Frame): Uint8Array {
   writer.string(identity.kind);
   writer.bool(identity.unique);
   writer.bytes(canonicalDecodedRenderFrameBytesV1(frame));
+  return writer.finish();
+}
+
+/**
+ * V3 binds the immutable V2 body to atom-type interpretation and coordinate
+ * distance meaning, preventing numerically identical frames with different
+ * scientific semantics from sharing a content digest.
+ */
+export function canonicalDecodedRenderFrameBytesV3(frame: Frame): Uint8Array {
+  const typeSemantics = normalizedAtomTypeSemantics(frame);
+  const distanceSemantics = normalizedDistanceSemantics(frame);
+  const writer = new CanonicalFrameWriter();
+  writer.string(CANONICAL_FRAME_VERSION_V3);
+  writer.string(typeSemantics.kind);
+  writer.string(typeSemantics.provenance);
+  const elementMap = typeSemantics.kind === 'explicit-element-map'
+    ? sortedElementMap(typeSemantics.elementMap)
+    : [];
+  writer.u32(elementMap.length);
+  for (const [rawType, atomicNumber] of elementMap) {
+    writer.i32(rawType, '$.frame.typeSemantics.elementMap key');
+    writer.i32(atomicNumber, `$.frame.typeSemantics.elementMap.${rawType}`);
+  }
+  writer.string(distanceSemantics.kind);
+  writer.string(distanceSemantics.provenance);
+  writer.bytes(canonicalDecodedRenderFrameBytesV2(frame));
   return writer.finish();
 }
 
@@ -105,11 +135,16 @@ export async function computeDecodedRenderFrameDigestV2(frame: Frame): Promise<S
   return computeRenderArtifactDigestV1(canonicalDecodedRenderFrameBytesV2(frame));
 }
 
-function normalizedFrameIdentity(frame: Frame): { kind: 'source-id' | 'synthetic-row' | 'unknown'; unique: boolean } {
+export async function computeDecodedRenderFrameDigestV3(frame: Frame): Promise<Sha256DigestV1> {
+  return computeRenderArtifactDigestV1(canonicalDecodedRenderFrameBytesV3(frame));
+}
+
+function normalizedFrameIdentity(frame: Frame): { kind: 'source-id' | 'source-order' | 'synthetic-row' | 'unknown'; unique: boolean } {
   const identity = frame.identity;
   if (!identity) return { kind: 'unknown', unique: false };
   if (
     identity.kind !== 'source-id'
+    && identity.kind !== 'source-order'
     && identity.kind !== 'synthetic-row'
     && identity.kind !== 'unknown'
   ) {
@@ -119,6 +154,72 @@ function normalizedFrameIdentity(frame: Frame): { kind: 'source-id' | 'synthetic
     throw new Error('$.frame.identity.unique: must be a boolean');
   }
   return { kind: identity.kind, unique: identity.unique };
+}
+
+function normalizedAtomTypeSemantics(frame: Frame): AtomTypeSemantics {
+  const semantics = normalizeAtomTypeSemantics(frame.typeSemantics);
+  if (semantics.kind === 'atomic-number') {
+    if (![
+      'source-element-symbol',
+      'xyz-element-token',
+      'lammps-masses-inferred',
+      'procedural-symbol',
+      'mlip-symbol',
+      'mlip-material-id-inferred',
+    ].includes(semantics.provenance)) {
+      throw new Error('$.frame.typeSemantics.provenance: unsupported atomic-number provenance');
+    }
+    return semantics;
+  }
+  if (semantics.kind === 'explicit-element-map') {
+    if (!['lammps-element-column', 'user-type-map'].includes(semantics.provenance)) {
+      throw new Error('$.frame.typeSemantics.provenance: unsupported element-map provenance');
+    }
+    return semantics;
+  }
+  if (semantics.kind === 'opaque') {
+    if (!['lammps-type-id', 'legacy-unknown'].includes(semantics.provenance)) {
+      throw new Error('$.frame.typeSemantics.provenance: unsupported opaque provenance');
+    }
+    return semantics;
+  }
+  throw new Error('$.frame.typeSemantics.kind: unsupported atom-type semantics');
+}
+
+function normalizedDistanceSemantics(frame: Frame): DistanceSemantics {
+  const semantics = normalizeDistanceSemantics(frame.distanceSemantics);
+  if (semantics.kind === 'angstrom') {
+    if (!['source-declared', 'format-convention', 'procedural'].includes(semantics.provenance)) {
+      throw new Error('$.frame.distanceSemantics.provenance: unsupported angstrom provenance');
+    }
+    return semantics;
+  }
+  if (semantics.kind === 'unknown') {
+    if (!['lammps-dump', 'lammps-data', 'legacy-unknown'].includes(semantics.provenance)) {
+      throw new Error('$.frame.distanceSemantics.provenance: unsupported unknown provenance');
+    }
+    return semantics;
+  }
+  throw new Error('$.frame.distanceSemantics.kind: unsupported distance semantics');
+}
+
+function sortedElementMap(
+  elementMap: Readonly<Record<number, number>>,
+): Array<readonly [number, number]> {
+  if (!elementMap || typeof elementMap !== 'object' || Array.isArray(elementMap)) {
+    throw new Error('$.frame.typeSemantics.elementMap: must be an integer map');
+  }
+  const entries = Object.entries(elementMap).map(([rawTypeText, atomicNumber]) => {
+    const rawType = Number(rawTypeText);
+    if (String(rawType) !== rawTypeText) {
+      throw new Error('$.frame.typeSemantics.elementMap: keys must be canonical integers');
+    }
+    assertI32(rawType, '$.frame.typeSemantics.elementMap key');
+    assertI32(atomicNumber, `$.frame.typeSemantics.elementMap.${rawTypeText}`);
+    return [rawType, atomicNumber] as const;
+  });
+  entries.sort(([left], [right]) => left - right);
+  return entries;
 }
 
 function validateFrame(frame: Frame): void {
@@ -214,6 +315,13 @@ class CanonicalFrameWriter {
     this.push(bytes);
   }
 
+  i32(value: number, path: string): void {
+    assertI32(value, path);
+    const bytes = new Uint8Array(4);
+    new DataView(bytes.buffer).setInt32(0, value, true);
+    this.push(bytes);
+  }
+
   bytes(values: Uint8Array): void {
     this.u32(values.byteLength);
     this.push(values);
@@ -237,6 +345,12 @@ class CanonicalFrameWriter {
 
 function assertFinite(value: number, path: string): void {
   if (!Number.isFinite(value)) throw new Error(`${path}: must be finite`);
+}
+
+function assertI32(value: number, path: string): void {
+  if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
+    throw new Error(`${path}: must be a signed 32-bit integer`);
+  }
 }
 
 function normalizeZero(value: number): number {

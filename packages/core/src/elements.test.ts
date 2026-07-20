@@ -35,13 +35,13 @@ describe('getElementSpec', () => {
     }
   });
 
-  it('covers the periodic table through Rn (1-86) so bond detection is not silently degraded', () => {
+  it('covers the full periodic table (1-118) so valid chemistry is not silently degraded', () => {
     // The pre-2026-05-08 table only covered ~30 elements, leaving common
     // materials (LLZO's La, garnet/perovskite/fluorite phases, lanthanide
     // dopants) to fall through to the unknown-isotope fallback. That gave
     // every heavy atom a stub covalent radius of 1.0 Å and missed real
     // bonds (La–O at 2.6 Å rejected because the cutoff collapsed to 2.11).
-    for (let z = 1; z <= 86; z++) {
+    for (let z = 1; z <= 118; z++) {
       expect(ELEMENT_DATA[z], `missing element Z=${z}`).toBeDefined();
       expect(ELEMENT_DATA[z].radius).toBeGreaterThan(0);
       expect(ELEMENT_DATA[z].displayRadius).toBeGreaterThan(0);

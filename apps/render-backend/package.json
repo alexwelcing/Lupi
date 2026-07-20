@@ -1,0 +1,21 @@
+{
+  "name": "@atlas/render-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "Bounded localhost-browser executor for Lupi's legacy PNG renderer handoff.",
+  "main": "src/supervisor.mjs",
+  "scripts": {
+    "lint": "eslint .",
+    "start": "node src/supervisor.mjs",
+    "test": "node --test src/protocol.test.mjs src/server.test.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "playwright-core": "1.59.1",
+    "sharp": "0.33.5"
+  }
+}

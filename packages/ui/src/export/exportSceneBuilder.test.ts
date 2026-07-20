@@ -236,6 +236,24 @@ describe('detectExportBonds', () => {
     expect(result.capped).toBe(true);
     expect(result.count).toBe(3);
   });
+
+  it('does not report a chunked export as capped when only hidden pairs remain', async () => {
+    const result = await detectExportBonds({
+      natoms: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 10, 0, 0, 11, 0, 0]),
+      types: new Int32Array([1, 1, 1, 1]),
+    }, {
+      tolerance: 0.45,
+      covalentRadii: COVALENT_RADII,
+      atomVisibility: new Uint8Array([1, 1, 0, 0]),
+      chunkAtoms: 2,
+      cap: 1,
+    });
+
+    expect(result.count).toBe(1);
+    expect(result.capped).toBe(false);
+    expect(Array.from(result.pairs)).toEqual([0, 1]);
+  });
 });
 
 describe('buildExportScene', () => {
@@ -390,6 +408,85 @@ describe('buildExportScene', () => {
     expect(result.bondTopology).toBe('source');
     expect(result.bondCount).toBe(1);
     expect((result.scene.getObjectByName('bonds') as THREE.InstancedMesh).count).toBe(1);
+    disposeExportScene(result.scene);
+  });
+
+  it('uses a compact atomic-number projection for inference without rewriting raw render types', async () => {
+    const result = await buildExportScene({
+      natoms: 2,
+      positions: new Float32Array([0, 0, 0, 1.2, 0, 0]),
+      types: new Int32Array([300, 300]),
+    }, {
+      format: 'glb',
+      displayRadiusForType: () => 0.5,
+      resolveAtomColor: () => [0.5, 0.5, 0.5],
+      showBonds: true,
+      covalentRadii: COVALENT_RADII,
+      bondTypes: new Int32Array([6, 6]),
+    });
+
+    expect(result.bondTopology).toBe('inferred');
+    expect(result.bondCount).toBe(1);
+    expect(result.scene.getObjectByName('atoms-type-300')).toBeTruthy();
+    disposeExportScene(result.scene);
+  });
+
+  it('renders authoritative source pairs for high raw type ids without an inference table', async () => {
+    const result = await buildExportScene({
+      natoms: 2,
+      positions: new Float32Array([0, 0, 0, 20, 0, 0]),
+      types: new Int32Array([300, 301]),
+      bonds: new Int32Array([0, 1]),
+    }, {
+      format: 'glb',
+      displayRadiusForType: () => 0.5,
+      resolveAtomColor: () => [0.5, 0.5, 0.5],
+      showBonds: true,
+    });
+
+    expect(result.bondTopology).toBe('source');
+    expect(result.bondCount).toBe(1);
+    disposeExportScene(result.scene);
+  });
+
+  it('removes source bonds whose endpoints are hidden raw types', async () => {
+    const result = await buildExportScene({
+      natoms: 3,
+      positions: new Float32Array([0, 0, 0, 20, 0, 0, 1.5, 0, 0]),
+      types: new Int32Array([300, 301, 300]),
+      bonds: new Int32Array([0, 1, 0, 2]),
+    }, {
+      format: 'glb',
+      hiddenTypes: new Set([301]),
+      displayRadiusForType: () => 0.5,
+      resolveAtomColor: () => [0.5, 0.5, 0.5],
+      showBonds: true,
+    });
+
+    expect(result.atomCount).toBe(2);
+    expect(result.bondTopology).toBe('source');
+    expect(result.bondCount).toBe(1);
+    disposeExportScene(result.scene);
+  });
+
+  it('removes inferred bonds whose endpoints are hidden raw types', async () => {
+    const result = await buildExportScene({
+      natoms: 3,
+      positions: new Float32Array([0, 0, 0, 1.2, 0, 0, 1.5, 0, 0]),
+      types: new Int32Array([300, 301, 300]),
+    }, {
+      format: 'glb',
+      hiddenTypes: new Set([301]),
+      displayRadiusForType: () => 0.5,
+      resolveAtomColor: () => [0.5, 0.5, 0.5],
+      showBonds: true,
+      covalentRadii: COVALENT_RADII,
+      bondTypes: new Int32Array([6, 6, 6]),
+    });
+
+    expect(result.atomCount).toBe(2);
+    expect(result.bondTopology).toBe('inferred');
+    expect(result.bondCount).toBe(1);
     disposeExportScene(result.scene);
   });
 

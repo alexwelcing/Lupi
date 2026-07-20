@@ -22,9 +22,14 @@ import type {
 } from '@atlas/core';
 import type { NistCatalogEntry } from '@atlas/nist';
 import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
+import type { MolecularMeasurement, MeasurementTool } from './measurements';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
 import { MATERIAL_SCENES, getScene, DEFAULT_SCENE_ID } from '@atlas/scene/materials';
-import { getElementSpec } from '@atlas/core';
+import {
+  canInferCovalentBonds,
+  hasCompleteElementMapping,
+  resolveTypeDisplayRadius,
+} from '@atlas/core';
 
 /** A pinned text annotation tied to a specific atom by index in the
  *  current frame. Persists across frame changes; if the atom moves, the
@@ -515,6 +520,16 @@ export interface AppState {
   hoveredAtom: number | null;
   selectedAtoms: number[];
 
+  // ─── Coordinate measurements ───
+  /** Active click tool. The completed measurement remains visible when the
+   * tool is turned off so inspection does not destroy evidence. */
+  measurementTool: MeasurementTool;
+  /** Atom references plus capture-frame provenance. Values are recomputed
+   * from the active frame; measured numbers are never stored as source data. */
+  measurement: MolecularMeasurement | null;
+  setMeasurementTool: (tool: MeasurementTool) => void;
+  setMeasurement: (measurement: MolecularMeasurement | null) => void;
+
   // ─── Annotations ───
   // Pinned text labels anchored to specific atom indices. The user can
   // create them by clicking an atom + adding text; multiple distinct
@@ -879,6 +894,8 @@ const DEFAULTS = {
   showThermo: true,
   hoveredAtom: null as number | null,
   selectedAtoms: [] as number[],
+  measurementTool: null as MeasurementTool,
+  measurement: null as MolecularMeasurement | null,
   annotations: [] as Annotation[],
   labelStyle: 'tag' as LabelStyle,
   knowledgeLabels: [] as KnowledgeLabel[],
@@ -917,6 +934,11 @@ export const useStore = create<AppState>()(
     setFile: (file) => {
       const firstFrame = file?.trajectory?.frames?.[0];
       const atomCount = firstFrame?.positions?.length ? firstFrame.positions.length / 3 : 0;
+      const hasElementIdentity = firstFrame ? hasCompleteElementMapping(firstFrame) : false;
+      const hasSourceBonds = Boolean(firstFrame?.bonds && firstFrame.bonds.length > 0);
+      const canShowBondsByDefault = firstFrame
+        ? hasSourceBonds || canInferCovalentBonds(firstFrame)
+        : false;
 
       // Drive a sensible first-frame look based on system content. The user
       // can change anything after, but they should never see "should I enable
@@ -930,7 +952,7 @@ export const useStore = create<AppState>()(
       const uniqueTypes = firstFrame?.types
         ? new Set(firstFrame.types).size
         : 0;
-      const schemeId = pickInitialScheme({ hasProperty, uniqueTypes });
+      const schemeId = pickInitialScheme({ hasProperty, uniqueTypes, hasElementIdentity });
       const scheme = COLOR_SCHEMES[schemeId];
 
       // Heuristic for sparse knowledge-graph style datasets: if the bounding
@@ -948,10 +970,10 @@ export const useStore = create<AppState>()(
         let totalRadius = 0;
         let typeCount = 0;
         for (const t of seenTypes) {
-          totalRadius += getElementSpec(t).radius;
+          totalRadius += resolveTypeDisplayRadius(firstFrame!, t);
           typeCount += 1;
         }
-        const avgRadius = typeCount > 0 ? totalRadius / typeCount : 1.4;
+        const avgRadius = typeCount > 0 ? totalRadius / typeCount : 0.5;
         if (diagonal / avgRadius > 150) {
           sparseAtomScale = Math.min(5, Math.max(2, diagonal / 200));
           sparseBackgroundPreset = 'deep';
@@ -966,7 +988,7 @@ export const useStore = create<AppState>()(
         error: null,
         loading: false,
         loadProgress: 1,
-        showBonds: sceneDirective.showBonds,
+        showBonds: sceneDirective.showBonds && canShowBondsByDefault,
         showCell: sceneDirective.showCell,
         showAxes: sceneDirective.showAxes,
         postprocessPreset: sceneDirective.preset,
@@ -1009,6 +1031,8 @@ export const useStore = create<AppState>()(
         autoDepthOfField: sceneDirective.preset === 'cinematic',
         hoveredAtom: null,
         selectedAtoms: [],
+        measurementTool: null,
+        measurement: null,
         // Default-fill loadedAtomCount to atomCount so non-streaming
         // consumers don't need to special-case this field. The streaming
         // path overrides via setLoadedAtomCount during the load.
@@ -1270,6 +1294,8 @@ export const useStore = create<AppState>()(
       studyLensOpen: false,
       hoveredAtom: null,
       selectedAtoms: [],
+      measurementTool: null,
+      measurement: null,
       exportRequest: { type: null },
       loadedAtomCount: 0,
       streamingProgress: 0,
@@ -1326,6 +1352,8 @@ export const useStore = create<AppState>()(
         ? nextSelectedAtoms(s.selectedAtoms)
         : nextSelectedAtoms,
     })),
+    setMeasurementTool: (measurementTool) => set({ measurementTool }),
+    setMeasurement: (measurement) => set({ measurement }),
 
     addAnnotation: (atomIndex, text) => set((s) => ({
       annotations: [

@@ -1,6 +1,6 @@
 # Historical recovery inventory
 
-Snapshot date: 2026-07-19
+Snapshot date: 2026-07-20
 
 This inventory compares the extracted `alexwelcing/Lupi` repository with all
 fetched `origin/*` branches and the 61 branch heads from the original
@@ -11,13 +11,18 @@ work path-selectively against the current architecture and prove its behavior.
 The current recovery baseline deliberately excludes the active Plan 022 and
 Plan 023 changes from the historical candidate list.
 
+## Recovered in the current candidate
+
+| Capability | Historical lineage | Current source implementation | Remaining boundary or proof |
+|---|---|---|---|
+| Truthful distance and angle measurement | `7e26da85` introduced live distance/angle/dihedral visualization; `e66fa866` added pinned measurements; `44657022` removed both measurement surfaces during the visual/export overhaul. The older `ea22fa1c` panel also carried history and CSV export. | Rebuilt against the current R3F/Three.js picker, scene, and store. The current slice measures distance or angle on an exact resident source frame, tracks atoms by source ID or guaranteed source order when available, falls back honestly to capture-frame row identity, labels Å only when source semantics prove it, states that minimum-image/PBC treatment is absent, renders the geometry in-scene, and saves/reopens the measurement definition rather than treating a derived number as source evidence. | End-of-development local/CI evidence is still pending. Dihedrals, multiple pinned measurements/history, CSV export, minimum-image/triclinic PBC treatment, and source-content drift detection are deferred rather than implied. |
+| Authenticated legacy PNG executor | `origin/shop-route`, especially `apps/render-backend` at `17bc7d00` and `eb2ca630`, supplied architectural lessons but was not imported wholesale. | A new bounded `apps/render-backend` and Worker path implement authenticated synchronous template/procedural opaque-PNG execution, independent response validation, private R2 job/provenance/artifact persistence, and authenticated retrieval. The profile remains visibly `legacy-v0`; `RenderRequestV1` remains validation-only. | Production activation requires private production/preview buckets, the backend endpoint, distinct caller/renderer secrets, authorized deployment, and candidate/custom-domain live proof. No source-state statement is a deployment receipt. |
+
 ## Recover next
 
 | Priority | Capability | Historical evidence | Current gap | Recovery contract |
 |---|---|---|---|---|
-| P0 | Live distance, angle, and dihedral measurement | `7e26da85`, `e66fa866`; the older panel at `ea22fa1c` also had history and CSV export | Current Lupi has no measurement component even though current UX and trailer documentation promise measurement | Reimplement on the current selection/store architecture. Add pure geometry tests, explicit units, source/frame provenance, pinning, and a defined saved-view policy. Do not transplant the obsolete panel wholesale. |
-| P0 | Real render executor | `origin/shop-route`, especially `apps/render-backend` at `17bc7d00` and `eb2ca630` | The edge Worker exposes a `RENDERER_ENDPOINT` contract but no configured executor | Port the backend as PNG-only first. Require its bearer token, cap and validate request bodies, validate input state, and verify the returned byte signature and MIME type before storage. Add formats only when each format is truly implemented. |
-| P0 | API-key account UI and caller-owned render/retrieve | `979b1298` added `ApiKeyManager.tsx` and `apiKeys.ts`; `4839079b` deleted the unwired UI. `advisor/013` contains a useful Firebase verification primitive, not a complete edge-auth design. | Functions, rules, and key documentation remain, but users cannot manage keys in the current UI. The Worker still has an optional global shared secret and public asset retrieval. | Integrate only the key client/manager into the existing `LupiAgentDock` account surface. Then add edge-verifiable caller identity, owner IDs on jobs/assets, and authenticated or signed retrieval. Do not restore the duplicate historical settings shell or claim Functions-only verification secures the Worker. |
+| P0 | API-key account UI and caller-owned render/retrieve | `979b1298` added `ApiKeyManager.tsx` and `apiKeys.ts`; `4839079b` deleted the unwired UI. `advisor/013` contains a useful Firebase verification primitive, not a complete edge-auth design. | The owner-operated legacy lane now fails closed behind one global caller secret and private retrieval, but users still cannot manage scoped keys, jobs/assets have no per-user ownership contract, and paid or multi-user execution remains dark. | Integrate only the key client/manager into the existing `LupiAgentDock` account surface. Then replace the operator secret for user traffic with edge-verifiable scoped caller identity, owner IDs on jobs/assets, limits, revocation, and authenticated or signed retrieval. Do not restore the duplicate historical settings shell or claim Functions-only verification secures the Worker. |
 | P1 | Save/reopen ownership proof | Feature code from `871e734c` is already present. Lost verifiers are in `afce92dd`, `e967e4d7`, and `b6bb6a77`. | The product can save and reopen, but the extracted repository lost authenticated end-to-end proof, ownership rejection, and cleanup verification. | Adapt the latest historical verifier to current routes and UI. Keep it opt-in for staging/release credentials and prove save, reopen, unauthorized rejection, and cleanup. Recover the tests, not duplicate feature code. |
 | P1 | Inspect and provenance proof | Study Lens remains current; `tools/verify-study-lens.mjs` evolved from `04b76cf7` through `4a184dc1`. | Visible source-versus-rendered bond truth and printable provenance no longer have end-to-end coverage. | Port the verifier into the current Playwright harness and retain both source-truth and visible-output assertions. |
 | P2 | Adaptive viewer performance | Original tip `6a67f870` added adaptive device DPR and computed atom bounds for frustum culling. | Current `ViewerCanvas.tsx` has no adaptive DPR cap and `AtomsOptimized.tsx` disables frustum culling. | Port DPR and bounds as separate changes with desktop/mobile performance measurements and visual snapshots. Review historical tone-mapping changes independently for image parity. |
@@ -40,11 +45,14 @@ Plan 023 changes from the historical candidate list.
 - Do not restore the historical RDF, MSD, Voronoi, phonon, or GNN "analysis"
   panels. They toggled property names without implementing the computations
   their labels claimed.
-- Do not merge an original repository branch or the render backend wholesale.
-  The backend currently returns PNG bytes for requests labeled as JPEG, WebP,
-  GLB, or USDZ, treats its token as optional, accepts unbounded bodies, and
-  ignores most viewer state. The current Worker trusts the returned MIME type,
-  so that implementation could persist mislabeled bytes.
+- Do not merge an original repository branch or its historical render backend
+  wholesale. That historical backend returned PNG bytes for requests labeled
+  as JPEG, WebP, GLB, or USDZ, treated its token as optional, accepted unbounded
+  bodies, and ignored most viewer state; its paired Worker trusted the returned
+  MIME type. The current candidate instead uses a newly bounded opaque-PNG-only
+  backend and independently validates the renderer response before private
+  persistence. That selective recovery does not make the rejected historical
+  implementation safe to merge.
 - Do not restore the duplicate historical Firebase settings UI. Integrate the
   useful key-management primitive into the current account surface.
 

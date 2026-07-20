@@ -17,7 +17,8 @@
  * Protocol (one-shot; the orchestrator spawns one worker per import):
  *   in : { type: 'transcode-dump', file: File,
  *          opfs: { dir: string, name: string } | null }
- *   out: { type: 'frame0-header', natoms, timestep, boxBounds, columns, identity }
+ *   out: { type: 'frame0-header', natoms, timestep, boxBounds, columns,
+ *          identity, typeSemantics, distanceSemantics }
  *        { type: 'frame0-chunk', start, count, positions, types, ids }   (transferred)
  *        { type: 'frame0-complete', loadedAtoms, identity }
  *        { type: 'progress', framesParsed, bytesWritten }                (throttled)
@@ -37,6 +38,7 @@ import {
   readableStreamToAsyncIterable,
   serializeDumpParseError,
 } from '../dumpStreamParser';
+import { writeGlimbinFrameChecked } from '../transcodeTypeGuard';
 
 /** Minimal typing for the worker-only OPFS sync-access handle (absent
  *  from the DOM lib this repo compiles against). */
@@ -154,9 +156,7 @@ self.onmessage = async (e: MessageEvent) => {
     };
 
     const writeFrame = (frame: Frame) => {
-      const at = writer.bytesWritten;
-      const record = writer.addFrame(frame);
-      sink!.write(record, at);
+      writeGlimbinFrameChecked(frame, writer.frameCount, writer, sink!);
     };
 
     for await (const event of parseDumpStreamFromBytes(byteIter, { multiFrame: true })) {
@@ -169,6 +169,8 @@ self.onmessage = async (e: MessageEvent) => {
           boxBounds: Float64Array.from(frame0.boxBounds),
           columns: frame0.columns,
           identity: frame0.identity,
+          typeSemantics: frame0.typeSemantics,
+          distanceSemantics: frame0.distanceSemantics,
         });
       } else if (event.type === 'progress') {
         sendFrame0Slab(event.loadedAtoms);

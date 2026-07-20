@@ -1257,6 +1257,11 @@ async function verifyEdgeSchemaConformance(sourceDigest) {
   const edgeFixture = readJson(EDGE_FIXTURE_PATH);
   const renderRequest = structuredClone(edgeFixture.request);
   renderRequest.spec.source.contentDigest = sourceDigest;
+  // RenderRequestV1 remains contract-only, but it still travels through the
+  // protected render tool. Exercise the production auth boundary with an
+  // isolated verifier credential instead of weakening the Worker for a local
+  // conformance check.
+  const sharedSecret = 'render-parity-local-conformance-secret';
   const transformServer = await createViteServer({
     root: REPO_ROOT,
     configFile: false,
@@ -1270,7 +1275,10 @@ async function verifyEdgeSchemaConformance(sourceDigest) {
     const workerModule = await transformServer.ssrLoadModule(`/@fs/${workerModulePath}`);
     const request = new Request('https://render-parity.invalid/mcp', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${sharedSecret}`,
+      },
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 'edge-render-schema-conformance',
@@ -1281,7 +1289,11 @@ async function verifyEdgeSchemaConformance(sourceDigest) {
         },
       }),
     });
-    const response = await workerModule.default.fetch(request, {}, {});
+    const response = await workerModule.default.fetch(
+      request,
+      { LUPI_MCP_SHARED_SECRET: sharedSecret },
+      {},
+    );
     const body = await response.json();
     const structured = body?.result?.structuredContent;
     const ok = response.status === 200

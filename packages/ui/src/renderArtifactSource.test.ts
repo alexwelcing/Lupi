@@ -3,8 +3,10 @@ import { detectFrameVectorFields, ensureVectorMagnitude, type Frame } from '@atl
 import {
   canonicalDecodedRenderFrameBytesV1,
   canonicalDecodedRenderFrameBytesV2,
+  canonicalDecodedRenderFrameBytesV3,
   computeDecodedRenderFrameDigestV1,
   computeDecodedRenderFrameDigestV2,
+  computeDecodedRenderFrameDigestV3,
 } from './renderArtifactSource';
 
 function frame(overrides: Partial<Frame> = {}): Frame {
@@ -62,6 +64,7 @@ describe('decoded render frame identity', () => {
 
   it('V2 distinguishes source IDs from identical synthetic or unknown row labels', async () => {
     const source = frame({ identity: { kind: 'source-id', unique: true } });
+    const sourceOrder = frame({ identity: { kind: 'source-order', unique: true } });
     const synthetic = frame({ identity: { kind: 'synthetic-row', unique: true } });
     const unknown = frame({ identity: { kind: 'unknown', unique: false } });
     const legacyMissing = frame({ identity: undefined });
@@ -72,11 +75,119 @@ describe('decoded render frame identity', () => {
     expect(await computeDecodedRenderFrameDigestV2(source)).not.toBe(
       await computeDecodedRenderFrameDigestV2(synthetic),
     );
+    expect(await computeDecodedRenderFrameDigestV2(source)).not.toBe(
+      await computeDecodedRenderFrameDigestV2(sourceOrder),
+    );
     expect(await computeDecodedRenderFrameDigestV2(synthetic)).not.toBe(
       await computeDecodedRenderFrameDigestV2(unknown),
     );
     expect(canonicalDecodedRenderFrameBytesV2(legacyMissing)).toEqual(
       canonicalDecodedRenderFrameBytesV2(unknown),
+    );
+  });
+
+  it('keeps V2 immutable while V3 binds atom-type kind and provenance', async () => {
+    const sourceSymbols = frame({
+      typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
+    });
+    const proceduralSymbols = frame({
+      typeSemantics: { kind: 'atomic-number', provenance: 'procedural-symbol' },
+    });
+    const mapped = frame({
+      typeSemantics: {
+        kind: 'explicit-element-map',
+        provenance: 'user-type-map',
+        elementMap: { 6: 6, 8: 8 },
+      },
+    });
+
+    expect(canonicalDecodedRenderFrameBytesV1(sourceSymbols)).toEqual(
+      canonicalDecodedRenderFrameBytesV1(proceduralSymbols),
+    );
+    expect(await computeDecodedRenderFrameDigestV2(sourceSymbols)).toBe(
+      await computeDecodedRenderFrameDigestV2(proceduralSymbols),
+    );
+    expect(await computeDecodedRenderFrameDigestV3(sourceSymbols)).not.toBe(
+      await computeDecodedRenderFrameDigestV3(proceduralSymbols),
+    );
+    expect(await computeDecodedRenderFrameDigestV3(sourceSymbols)).not.toBe(
+      await computeDecodedRenderFrameDigestV3(mapped),
+    );
+  });
+
+  it('sorts explicit element maps and hashes their declared mapping', async () => {
+    const left = frame({
+      typeSemantics: {
+        kind: 'explicit-element-map',
+        provenance: 'user-type-map',
+        elementMap: Object.fromEntries([[10, 6], [-2, 8]]),
+      },
+    });
+    const reordered = frame({
+      typeSemantics: {
+        kind: 'explicit-element-map',
+        provenance: 'user-type-map',
+        elementMap: Object.fromEntries([[-2, 8], [10, 6]]),
+      },
+    });
+    const changed = frame({
+      typeSemantics: {
+        kind: 'explicit-element-map',
+        provenance: 'user-type-map',
+        elementMap: Object.fromEntries([[-2, 7], [10, 6]]),
+      },
+    });
+
+    expect(canonicalDecodedRenderFrameBytesV3(left)).toEqual(
+      canonicalDecodedRenderFrameBytesV3(reordered),
+    );
+    expect(await computeDecodedRenderFrameDigestV3(left)).not.toBe(
+      await computeDecodedRenderFrameDigestV3(changed),
+    );
+  });
+
+  it('V3 binds distance kind and provenance', async () => {
+    const declared = frame({
+      distanceSemantics: { kind: 'angstrom', provenance: 'source-declared' },
+    });
+    const conventional = frame({
+      distanceSemantics: { kind: 'angstrom', provenance: 'format-convention' },
+    });
+    const unknown = frame({
+      distanceSemantics: { kind: 'unknown', provenance: 'lammps-dump' },
+    });
+
+    expect(canonicalDecodedRenderFrameBytesV1(declared)).toEqual(
+      canonicalDecodedRenderFrameBytesV1(unknown),
+    );
+    expect(await computeDecodedRenderFrameDigestV2(declared)).toBe(
+      await computeDecodedRenderFrameDigestV2(conventional),
+    );
+    expect(await computeDecodedRenderFrameDigestV3(declared)).not.toBe(
+      await computeDecodedRenderFrameDigestV3(conventional),
+    );
+    expect(await computeDecodedRenderFrameDigestV3(declared)).not.toBe(
+      await computeDecodedRenderFrameDigestV3(unknown),
+    );
+  });
+
+  it('normalizes missing semantics exactly to explicit legacy opaque and unknown', async () => {
+    const missing = frame({
+      identity: { kind: 'source-id', unique: true },
+      typeSemantics: undefined,
+      distanceSemantics: undefined,
+    });
+    const explicitLegacy = frame({
+      identity: { kind: 'source-id', unique: true },
+      typeSemantics: { kind: 'opaque', provenance: 'legacy-unknown' },
+      distanceSemantics: { kind: 'unknown', provenance: 'legacy-unknown' },
+    });
+
+    expect(canonicalDecodedRenderFrameBytesV3(missing)).toEqual(
+      canonicalDecodedRenderFrameBytesV3(explicitLegacy),
+    );
+    expect(await computeDecodedRenderFrameDigestV3(missing)).toBe(
+      await computeDecodedRenderFrameDigestV3(explicitLegacy),
     );
   });
 

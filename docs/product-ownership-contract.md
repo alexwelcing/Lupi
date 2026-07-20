@@ -122,6 +122,15 @@ Generic rendering mechanics may be extracted from a commerce branch when they
 meet Lupi's artifact contract. Shopify, Gooten, storefront, product-catalog, and
 fulfillment behavior may not be merged into viewer core.
 
+The decision owner has approved one bounded operator-controlled execution
+profile: authenticated `legacy-v0` template/procedural opaque-PNG rendering,
+with private job, provenance, and artifact retrieval. That source-side approval
+does not create a public or per-user render product, does not activate
+`RenderRequestV1`, and does not prove production readiness. Production
+activation remains conditional on a named render operator and cost owner,
+private bucket/backend/secret provisioning, an authorized deployment, and live
+readback under the [release truth contract](release-truth-contract.md).
+
 ## Current nonconformities
 
 Ratification records known contradictions; it does not erase them. These items
@@ -160,7 +169,7 @@ name is not an accountable owner.
 | Product boundary and core viewer experience | Lupi product decision owner |
 | `lupi.live`, Cloudflare Worker, routes, bindings, and rollback | Lupi release operator |
 | Firebase auth, Functions, rules, and saved-view records | Lupi identity/data operator |
-| Render jobs, queues, artifacts, quotas, and spend | Named render operator and cost owner; execution stays dark until assigned |
+| Render jobs, artifacts, quotas, and spend | The decision owner approved the bounded authenticated `legacy-v0` source implementation. The release receipt must still name the render operator and cost owner; production execution stays dark until private infrastructure, deployment, and live readback are proven. |
 | Viewer-owned gallery and explanatory content | Lupi content steward |
 | External evidence or research-result manifest | Publishing source owns the claim; Lupi content steward owns faithful display and provenance |
 | Commerce adapter, catalog, orders, and fulfillment | Separate commerce owner; unassigned inside viewer core |

@@ -13,7 +13,11 @@ import {
   parseDumpStreamFromBytes,
   readableStreamToAsyncIterable,
 } from './dumpStreamParser';
-import { extractFrameIdentity } from './workers/frameTransfer';
+import {
+  extractFrameDistanceSemantics,
+  extractFrameIdentity,
+  extractFrameTypeSemantics,
+} from './workers/frameTransfer';
 
 let worker: Worker | null = null;
 let messageId = 0;
@@ -73,6 +77,8 @@ export function hydrateWorkerFrame(f: any): Frame {
       f.properties.map((p: any) => [p.name, new Float32Array(p.data)]),
     ),
     identity: extractFrameIdentity(f),
+    typeSemantics: extractFrameTypeSemantics(f),
+    distanceSemantics: extractFrameDistanceSemantics(f),
   };
 }
 

@@ -81,10 +81,14 @@ describe('saved molecule source policy', () => {
   });
 
   function setLoadedSource(sourceUrl: string, atomCount = 2) {
+    const trajectory = createMockTrajectory(1, atomCount);
+    const frame = trajectory.frames[0]!;
+    frame.typeSemantics = { kind: 'atomic-number', provenance: 'source-element-symbol' };
+    frame.distanceSemantics = { kind: 'angstrom', provenance: 'format-convention' };
     useStore.getState().setFile({
       name: 'source.xyz',
       size: 123,
-      trajectory: createMockTrajectory(1, atomCount),
+      trajectory,
       thermo: null,
       sourceUrl,
     });
@@ -113,6 +117,22 @@ describe('saved molecule source policy', () => {
     const source = readMoleculeSource();
     expect(source.kind).toBe('inline-xyz');
     if (source.kind === 'inline-xyz') expect(source.xyz).toMatch(/^2\nsource\.xyz\n/m);
+  });
+
+  it('rejects an inline XYZ fallback when raw types lack an element map', () => {
+    setLoadedSource('https://untrusted.example/molecule.xyz');
+    const frame = useStore.getState().file!.trajectory.frames[0]!;
+    frame.typeSemantics = { kind: 'opaque', provenance: 'legacy-unknown' };
+
+    expect(() => readMoleculeSource()).toThrow(/complete element mapping/i);
+  });
+
+  it('rejects an inline XYZ fallback when coordinate units are unknown', () => {
+    setLoadedSource('https://untrusted.example/molecule.xyz');
+    const frame = useStore.getState().file!.trajectory.frames[0]!;
+    frame.distanceSemantics = { kind: 'unknown', provenance: 'lammps-dump' };
+
+    expect(() => readMoleculeSource()).toThrow(/coordinate units are unknown/i);
   });
 
   it('loads allowlisted saved URLs with strict redirect denial', async () => {

@@ -63,6 +63,8 @@ function canonicalFrame(frame: Frame) {
     bonds: Array.from(frame.bonds),
     properties: Array.from(frame.properties, ([name, values]) => [name, Array.from(values)]),
     identity: frame.identity,
+    typeSemantics: frame.typeSemantics,
+    distanceSemantics: frame.distanceSemantics,
   };
 }
 
@@ -90,6 +92,14 @@ describe('canonical LAMMPS dump route parity', () => {
     const { routes, progress } = await decodeEveryRoute(text);
     for (const route of routes.slice(1)) expect(route).toEqual(routes[0]);
     expect(progress).toEqual([1]);
+    expect(routes[0][0].typeSemantics).toEqual({
+      kind: 'opaque',
+      provenance: 'lammps-type-id',
+    });
+    expect(routes[0][0].distanceSemantics).toEqual({
+      kind: 'unknown',
+      provenance: 'lammps-dump',
+    });
   });
 
   it('uses the official restricted-triclinic bound correction and fractional transform', async () => {
@@ -152,6 +162,16 @@ describe('canonical LAMMPS dump route parity', () => {
     expect(routes[0][0].identity).toEqual({ kind: 'synthetic-row', unique: true });
   });
 
+  it('retains positive Int32 LAMMPS types above GLIMBIN u8 storage on every dump route', async () => {
+    const largeType = ORTHOGONAL.replace(
+      '4 1 4 5 6 -0.25 -3.1',
+      '4 2147483647 4 5 6 -0.25 -3.1',
+    );
+    const { routes } = await decodeEveryRoute(largeType);
+    for (const route of routes.slice(1)) expect(route).toEqual(routes[0]);
+    expect(routes[0][0].types).toEqual([2, 2147483647]);
+  });
+
   it('fails every transport route closed on duplicate source IDs with typed context', async () => {
     const duplicate = ORTHOGONAL.replace('4 1 4 5 6 -0.25 -3.1', '9 1 4 5 6 -0.25 -3.1');
     const routes = [
@@ -183,4 +203,46 @@ describe('canonical LAMMPS dump route parity', () => {
       } satisfies Partial<DumpParseError>);
     },
   );
+
+  it.each(['-1', '0', '4.5', '1e0', 'NaN', '2147483648'])(
+    'rejects invalid LAMMPS type %s on every transport route without truncation',
+    async (invalidType) => {
+      const invalid = ORTHOGONAL.replace(
+        '4 1 4 5 6 -0.25 -3.1',
+        `4 ${invalidType} 4 5 6 -0.25 -3.1`,
+      );
+      const routes = [
+        () => parseDumpFramesCanonical(invalid),
+        () => parseDumpFramesFromBytesCanonical(bytesInChunks(invalid, 5)),
+        () => parseDumpBlobCanonical(new Blob([invalid])),
+        () => parseDumpBlobCanonical(new Blob([gzipSync(invalid)])),
+      ];
+      for (const decode of routes) {
+        await expect(decode()).rejects.toMatchObject({
+          name: 'DumpParseError',
+          code: 'INVALID_ATOM_TYPE',
+          frameIndex: 0,
+          timestep: 10,
+          atomRow: 2,
+          value: invalidType,
+        } satisfies Partial<DumpParseError>);
+      }
+    },
+  );
+
+  it('rejects a missing type token with typed row context', async () => {
+    const missing = ORTHOGONAL.replace(
+      'ITEM: ATOMS id type xu yu zu vx c_pe',
+      'ITEM: ATOMS id xu yu zu vx c_pe type',
+    )
+      .replace('9 2 1.25e0 -2.5e-1 3e2 0.5 -3.2', '9 1.25e0 -2.5e-1 3e2 0.5 -3.2 2')
+      .replace('4 1 4 5 6 -0.25 -3.1', '4 4 5 6 -0.25 -3.1');
+    await expect(parseDumpFramesCanonical(missing)).rejects.toMatchObject({
+      name: 'DumpParseError',
+      code: 'INVALID_ATOM_TYPE',
+      frameIndex: 0,
+      timestep: 10,
+      atomRow: 2,
+    });
+  });
 });

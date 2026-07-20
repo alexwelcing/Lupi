@@ -48,8 +48,11 @@ Candidate recovery status: Plan 024 reimplemented the relevant PR 242 behavior
 against the current renderer (explicit bounded DPR/sRGB/no-tone configuration,
 clearcoat synchronization, replacement disposal, and conservative dynamic atom
 bounds) without importing the historical commit or its competing ACES owner.
-No `shop-route` commerce/backend code was imported; only its executor lessons
-inform the future Plan 026 boundary. These are source-state statements, not a
+The authenticated legacy executor recovers only the `shop-route` architectural
+shape as a new bounded implementation under `apps/render-backend`: one co-built
+viewer, one typed bridge, one serialized browser lane, and opaque PNG output.
+No shop route, commerce integration, print composition, colorway system, or
+historical backend file is imported. These are source-state statements, not a
 merge, deploy, or public-release claim.
 
 ## Browser and edge capabilities
@@ -66,12 +69,39 @@ The browser and edge manifests are intentionally different contracts.
 | Applied raster pipeline | Raw Three.js scene, pixel ratio 1, sRGB output, no renderer tone mapping or interactive postprocess, plus the versioned canvas axes overlay when enabled                                | Declared in the accepted V1 spec, but not executed                                                                         |
 | Backgrounds             | Opaque raster requires a canonical gradient that capture applies directly; image, video, procedural, and backdrop-mesh backgrounds fail closed. Transparent raster disables background. | Background layer is unsupported in the initial V1 profile                                                                  |
 | Bonds                   | Model export may use the synchronous CPU export path. Deterministic raster bonds fail closed because the live asynchronous bond result is not snapshot-addressable.                     | Unsupported                                                                                                                |
-| Delivery                | Inline base64/data URL or user download; no durable ownership is implied                                                                                                                | V1 has no job/storage/retrieval path until Plan 026; legacy-v0 compatibility may still use existing queue/HTTP/R2/D1 paths |
+| Delivery                | Inline base64/data URL or user download; no durable ownership is implied                                                                                                                | V1 remains validation-only. A separately named authenticated legacy-v0 lane may use synchronous HTTP plus private R2 job/provenance/artifact routes |
 
 Browser support does not automatically confer edge support. Edge support does
 not exist because a format appears in a schema. The selected executor must
 advertise the exact format, alpha, layer, color, and tone policies it implements,
 and the edge must reject a mismatch before enqueueing work.
+
+### Authenticated legacy operational lane
+
+The first remote execution path is an operational compatibility profile, not a
+partial V1 implementation. Its accepted request surface is closed:
+
+- template or procedural molecule input only;
+- procedural atom count from 1 through 100,000, `sc`, `bcc`, or `fcc` lattice,
+  an element symbol, and optional spacing from 0.1 through 20 source units;
+- synchronous opaque PNG from 64 through 2048 pixels per dimension;
+- no viewer overrides, transparent output, other formats, URL/SMILES/XYZ input,
+  or asynchronous queue fallback.
+
+Caller-to-edge and edge-to-renderer bearer credentials are distinct. Jobs,
+per-job provenance, and PNG bytes live in a private R2 binding with no public
+bucket domain. The only read surfaces are authenticated Worker routes:
+
+- `GET /v1/jobs/:jobId`;
+- `GET|HEAD /v1/jobs/:jobId/provenance`;
+- `GET|HEAD /v1/artifacts/:assetId.png`.
+
+The receiver bounds the envelope and response, checks renderer/job identity,
+validates canonical base64 and opaque RGB8 PNG structure including dimensions
+and chunk integrity, recomputes the byte digest, uses create-only artifact
+storage, and verifies private R2 readback before completion. The resulting
+`legacy-v0` provenance is useful operational evidence but lacks a V1 finalized
+spec, activated renderer fingerprint, and `artifactKey`.
 
 ## Contract objects
 
@@ -173,9 +203,12 @@ development build without that value uses the explicit
 local candidates and must not seed a durable cross-release cache or a release
 provenance claim.
 
-The legacy edge `assetId` is a hash of its own normalized compatibility request.
-It is neither a V1 `specId` nor proof of `artifactDigest`; it must remain visibly
-namespaced as `legacy-v0` rather than being upgraded by relabeling.
+The authenticated legacy edge derives `requestKey` from its normalized
+compatibility request and derives `assetId` from the validated output bytes.
+Those identifiers answer useful operational questions, but they are not V1
+`specId`, `rendererFingerprint`, `artifactKey`, or `artifactDigest` fields and
+must remain visibly namespaced as `legacy-v0` rather than being upgraded by
+relabeling.
 
 ## Format and byte-validation rules
 
@@ -274,12 +307,14 @@ specification has been compiled.
 
 ## Provenance sidecar
 
-This is the required durable target, not a claim about the current browser or
-edge implementation. Plan 024 browser responses expose the four artifact
-identities with bytes; Plan 020/026 still own a persisted immutable JSON
-sidecar, storage readback, authenticated retrieval, and cache-conflict proof.
-No current V1 edge request produces or stores a sidecar. A future sidecar must
-contain no bearer token, API key, signed URL, email address, or delivery secret.
+This is the required durable V1 target, not a claim about the current browser or
+edge V1 implementation. Plan 024 browser responses expose the four artifact
+identities with bytes. The authenticated legacy lane persists a narrower,
+per-job provenance receipt covering its request, renderer protocol, byte
+validation, digest, and private R2 readback. That receipt is explicitly
+`lupi.render-provenance.legacy-v0.1`; no current V1 edge request produces or
+stores a V1 sidecar. A future V1 sidecar must contain no bearer token, API key,
+signed URL, email address, or delivery secret.
 
 Required sidecar fields are:
 
@@ -320,10 +355,12 @@ source evidence; it must never copy secrets into a public artifact.
 - Immutable artifacts and sidecars are never rewritten during migration. New
   behavior creates a new specification and new artifact. Retention or deletion
   is a separately documented storage policy keyed by digest.
-- The existing `legacy-v0` edge queue/HTTP/R2/D1 flow remains a compatibility
-  profile during adoption. Its normalized request hash and `assetId` are not V1
-  `specId`, `artifactKey`, or `artifactDigest`; no legacy completion may be
-  described as V1-conforming.
+- The authenticated `legacy-v0` synchronous HTTP/private-R2 flow remains a
+  compatibility profile during adoption. Its request key, byte-derived
+  `assetId`, and per-job provenance are not V1 `specId`,
+  `rendererFingerprint`, `artifactKey`, or `artifactDigest`; no legacy
+  completion may be described as V1-conforming. D1 and Queue remain reserved
+  for a separately designed asynchronous profile.
 
 ## Consumer boundaries
 
@@ -350,15 +387,22 @@ immutable persistence, storage readback, provenance verification, authorized
 retrieval, and deterministic cache hit for the same
 `(specId, rendererFingerprint)`.
 
+The authenticated legacy-v0 lane has a deliberately smaller acceptance claim:
+authenticated bounded request, authenticated executor handoff, independently
+validated opaque PNG, private create-only persistence, private readback,
+per-job provenance, and authenticated job/provenance/artifact retrieval. Passing
+that loop proves a real operational renderer; it does not satisfy or weaken any
+V1 requirement above.
+
 This document does not authorize infrastructure changes or a production
 release. Current evidence lanes are deliberately independent:
 
 | Truth lane  | Status          | Evidence or missing proof                                                                                                                                                     |
 | ----------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local       | **PASS**        | The Plan 024 worktree passed the full bounded local matrix and the repository owner approved the pinned browser golden; clean exact-SHA CI derivation remains a separate pending lane. |
+| Local       | **PASS / NOT CHECKED** | The Plan 024 browser matrix passed and the repository owner approved its pinned golden. The new authenticated legacy render loop has not yet received its end-of-development local receipt. |
 | CI          | **NOT CHECKED** | No exact-SHA GitHub Actions result has been recorded for this Plan 024 candidate.                                                                                             |
-| Deploy      | **NOT CHECKED** | No Plan 024 Worker/viewer revision, renderer, binding, secret, queue, bucket, or database change was deployed.                                                                |
-| Live API    | **NOT CHECKED** | No deployed V1 render execution, retrieval, provenance, or immutable cache-hit path exists; edge V1 remains validation-only.                                                  |
+| Deploy      | **NOT CHECKED** | Private production/preview bucket names exist in source, but bucket provisioning, secrets, renderer deployment, and the exact Worker release are unproven.                     |
+| Live API    | **NOT CHECKED** | Neither the authenticated legacy render/retrieve loop nor V1 execution has been proven live; edge V1 remains validation-only.                                                  |
 | Public site | **NOT CHECKED** | No exact-revision or `https://lupi.live` browser conformance receipt has been recorded for this candidate.                                                                    |
 
 These statuses remain independent. Source presence, a passing unit test, a

@@ -4,10 +4,15 @@ import { createMockTrajectory } from '@atlas/core/test-utils';
 import { getStoreState, resetStore } from '../test-utils';
 import { MoleculeControls } from './MoleculeControls';
 
-function loadStructure(atomCount: number, properties: string[] = []) {
+function loadStructure(atomCount: number, properties: string[] = [], chemical = true) {
   const trajectory = createMockTrajectory(1, atomCount);
+  const frame = trajectory.frames[0]!;
+  if (chemical) {
+    frame.typeSemantics = { kind: 'atomic-number', provenance: 'source-element-symbol' };
+    frame.distanceSemantics = { kind: 'angstrom', provenance: 'format-convention' };
+  }
   for (const property of properties) {
-    trajectory.frames[0].properties.set(property, new Float32Array(atomCount));
+    frame.properties.set(property, new Float32Array(atomCount));
   }
   getStoreState().setFile({
     name: `structure-${atomCount}.xyz`,
@@ -96,5 +101,15 @@ describe('MoleculeControls quick views', () => {
     expect(getStoreState().showBonds).toBe(false);
     expect(getStoreState().postprocessPreset).toBe('diagram');
     expect(screen.getByRole('status').textContent).toContain('Diagram rendering stays on');
+  });
+
+  it('uses type colorway and disables inferred bonds for opaque coordinates', () => {
+    loadStructure(24, [], false);
+    render(<MoleculeControls />);
+
+    expect(getStoreState().colorScheme).toBe('colorway');
+    expect(screen.queryByRole('button', { name: 'Element colors' })).toBeNull();
+    expect((screen.getByTestId('quick-view-bonds') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('quick-view-bonds').getAttribute('title')).toMatch(/element and Ångström provenance/i);
   });
 });

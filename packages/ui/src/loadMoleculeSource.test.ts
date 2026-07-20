@@ -93,6 +93,8 @@ describe('loadMoleculeSource strict remote mode', () => {
     seams.detectFileType.mockReturnValue('dump');
     let headerIdentity: unknown;
     let completedIdentity: unknown;
+    let mountedTypeSemantics: unknown;
+    let mountedDistanceSemantics: unknown;
     seams.transcodeDumpFile.mockImplementation(async (
       _file: File,
       _opfs: unknown,
@@ -108,8 +110,12 @@ describe('loadMoleculeSource strict remote mode', () => {
         boxBounds: new Float64Array([0, 1, 0, 1, 0, 1]),
         columns: ['id', 'type', 'x', 'y', 'z'],
         identity: { kind: 'source-id', unique: false },
+        typeSemantics: { kind: 'opaque', provenance: 'lammps-type-id' },
+        distanceSemantics: { kind: 'unknown', provenance: 'lammps-dump' },
       });
       headerIdentity = getStoreState().file?.trajectory.frames[0]?.identity;
+      mountedTypeSemantics = getStoreState().file?.trajectory.frames[0]?.typeSemantics;
+      mountedDistanceSemantics = getStoreState().file?.trajectory.frames[0]?.distanceSemantics;
       callbacks.onFrame0Chunk?.({
         start: 0,
         count: 2,
@@ -127,6 +133,8 @@ describe('loadMoleculeSource strict remote mode', () => {
     expect(result).toEqual({ handled: true, persistedId: null });
     expect(headerIdentity).toEqual({ kind: 'source-id', unique: false });
     expect(completedIdentity).toEqual({ kind: 'source-id', unique: true });
+    expect(mountedTypeSemantics).toEqual({ kind: 'opaque', provenance: 'lammps-type-id' });
+    expect(mountedDistanceSemantics).toEqual({ kind: 'unknown', provenance: 'lammps-dump' });
     expect(getStoreState().file?.trajectory.frames[0]?.identity)
       .toEqual({ kind: 'source-id', unique: true });
   });

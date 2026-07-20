@@ -49,6 +49,10 @@ describe('AtomsOptimized material resource policy', () => {
     expect(palette.colorSpace).toBe(THREE.SRGBColorSpace);
     expect(colormap.colorSpace).toBe(THREE.SRGBColorSpace);
     expect(material.colorSpace).toBe(THREE.NoColorSpace);
+    // Carbon roughness is authored as 0.7. Preserve the historical
+    // Float32-to-byte path (178, not the double-precision half-step 179) so
+    // an element-slot remap cannot silently invalidate approved pixels.
+    expect((material.image.data as Uint8Array)[6 * 4 + 1]).toBe(178);
     expect(IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = vec4(color, 1.0);')).toBeGreaterThan(-1);
     expect(IMPOSTOR_FRAGMENT.indexOf('#include <colorspace_fragment>')).toBeGreaterThan(
       IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = vec4(color, 1.0);'),

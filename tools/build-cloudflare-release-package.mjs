@@ -309,7 +309,7 @@ export function serializeClosedWranglerToml(value) {
   }
   for (const bucket of value.r2_buckets ?? []) {
     lines.push('', '[[r2_buckets]]');
-    for (const key of ['binding', 'bucket_name', 'jurisdiction']) {
+    for (const key of ['binding', 'bucket_name', 'preview_bucket_name', 'jurisdiction']) {
       if (bucket[key] !== undefined) lines.push(`${key} = ${tomlLiteral(bucket[key])}`);
     }
   }
@@ -412,10 +412,16 @@ function validateR2Buckets(value) {
   for (const bucket of value) {
     assertPlainObject(bucket, 'r2 bucket');
     const keys = Object.keys(bucket);
-    assert.ok(keys.every((key) => ['binding', 'bucket_name', 'jurisdiction'].includes(key)), 'r2 bucket contains unsupported fields');
+    assert.ok(
+      keys.every((key) => ['binding', 'bucket_name', 'preview_bucket_name', 'jurisdiction'].includes(key)),
+      'r2 bucket contains unsupported fields',
+    );
     assert.ok(keys.includes('binding') && keys.includes('bucket_name'), 'r2 bucket needs binding and bucket_name');
     assertBinding(bucket.binding, 'r2 binding');
     assertNonEmpty(bucket.bucket_name, 'r2 bucket_name');
+    if (bucket.preview_bucket_name !== undefined) {
+      assertNonEmpty(bucket.preview_bucket_name, 'r2 preview_bucket_name');
+    }
     if (bucket.jurisdiction !== undefined) assertNonEmpty(bucket.jurisdiction, 'r2 jurisdiction');
   }
 }

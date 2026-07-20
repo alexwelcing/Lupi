@@ -14,6 +14,15 @@ function encodeRawStateJson(json: string) {
   return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function markChemicalTrajectory(trajectory: ReturnType<typeof createMockTrajectory>) {
+  for (const frame of trajectory.frames) {
+    if (!frame) continue;
+    frame.typeSemantics = { kind: 'atomic-number', provenance: 'source-element-symbol' };
+    frame.distanceSemantics = { kind: 'angstrom', provenance: 'format-convention' };
+  }
+  return trajectory;
+}
+
 describe('Store — Display Toggles', () => {
   beforeEach(() => {
     resetStore();
@@ -403,8 +412,8 @@ describe('Store — File Loading', () => {
   });
 
   it('defaults fresh molecule loads to element coloring even with properties', () => {
-    const traj = createMockTrajectory(1, 10);
-    traj.frames[0].properties.set('energy', new Float32Array(10));
+    const traj = markChemicalTrajectory(createMockTrajectory(1, 10));
+    traj.frames[0]!.properties.set('energy', new Float32Array(10));
     getStoreState().setColorProperty('energy');
     const file = { name: 'property-rich.lmp', size: 2048, trajectory: traj, thermo: null };
 
@@ -418,7 +427,7 @@ describe('Store — File Loading', () => {
   });
 
   it('opens small molecules with the high-contrast polished visual default', () => {
-    const traj = createMockTrajectory(1, 61);
+    const traj = markChemicalTrajectory(createMockTrajectory(1, 61));
     const file = { name: 'showcase.xyz', size: 4096, trajectory: traj, thermo: null };
 
     getStoreState().setFile(file);
@@ -432,6 +441,18 @@ describe('Store — File Loading', () => {
     expect(s.rimLightColor).toBe('#7de9ff');
     expect(s.surfacePolish).toBeGreaterThan(0);
     expect(s.surfaceClearcoat).toBeGreaterThan(0);
+  });
+
+  it('defaults opaque legacy types to colorway with inferred bonds off', () => {
+    const traj = createMockTrajectory(1, 61);
+    const file = { name: 'opaque.dump', size: 4096, trajectory: traj, thermo: null };
+
+    getStoreState().setFile(file);
+    const s = getStoreState();
+
+    expect(s.colorScheme).toBe('colorway');
+    expect(s.atomColorSource).toBe('colormap');
+    expect(s.showBonds).toBe(false);
   });
 
   it('disables effects for massive systems', () => {

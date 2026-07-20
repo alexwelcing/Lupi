@@ -12,6 +12,7 @@ import type { ThermoData, ThermoRun, Frame } from '@atlas/core/types';
 import type { AppState } from '../store';
 import { useStore } from '../store';
 import { ProfileReplaySection } from './ProfileReplaySection';
+import { MeasurementWorkbench } from '../MeasurementWorkbench';
 import heatmapData from './heatmap_data.json';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -552,6 +553,8 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
           </svg>
         </button>
       </div>
+
+      <MeasurementWorkbench frame={currentFrame} frameIndex={frame} />
 
       {/* Streaming Telemetry */}
       {streamingTelemetry && (

@@ -5,7 +5,14 @@
 import { useEffect } from 'react';
 import { Html } from '@react-three/drei';
 import type { Frame } from '@atlas/core/types';
-import { getElementSpec } from '@atlas/core';
+import {
+  ELEMENT_DATA,
+  hasAngstromDistances,
+  resolveAtomicNumber,
+  resolveTypeColor,
+  resolveTypeDisplayRadius,
+  resolveTypeLabel,
+} from '@atlas/core';
 import { useStore, type KnowledgeLabel } from './store';
 
 const MAX_PROPERTY_ROWS = 4;
@@ -51,7 +58,12 @@ export function AtomInfoHUD({
   const z = frame.positions[atomIndex * 3 + 2];
   const type = frame.types[atomIndex];
   const id = frame.ids[atomIndex] ?? atomIndex;
-  const spec = getElementSpec(type);
+  const atomicNumber = resolveAtomicNumber(frame, type);
+  const element = atomicNumber === undefined ? undefined : ELEMENT_DATA[atomicNumber];
+  const typeLabel = resolveTypeLabel(frame, type);
+  const typeColor = resolveTypeColor(frame, type);
+  const displayRadius = resolveTypeDisplayRadius(frame, type);
+  const coordinateUnit = hasAngstromDistances(frame) ? 'Å' : 'source units';
   const properties = getPropertyRows(frame, atomIndex, activeProperty);
   const knowledge = getKnowledgeRows(knowledgeLabels, frame, atomIndex);
   const subtitle = nodeLabel?.nodeId
@@ -59,7 +71,7 @@ export function AtomInfoHUD({
     : `atom #${atomIndex} / id ${id} / type ${type}`;
   return (
     <Html
-      position={[x, y + spec.displayRadius * 1.75 + 0.45, z]}
+      position={[x, y + displayRadius * 1.75 + 0.45, z]}
       center
       distanceFactor={11}
       style={{ pointerEvents: 'auto' }}
@@ -93,18 +105,18 @@ export function AtomInfoHUD({
               flex: '0 0 auto',
               borderRadius: 8,
               color: '#06111c',
-              background: spec.color,
+              background: typeColor,
               fontWeight: 800,
               fontSize: 15,
-              boxShadow: `0 0 18px ${spec.color}66`,
+              boxShadow: `0 0 18px ${typeColor}66`,
             }}
           >
-            {spec.symbol}
+            {element?.symbol ?? `T${type}`}
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <div style={{ fontWeight: 750, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {spec.name}
+                {element?.name ?? typeLabel}
               </div>
               {onDismissCard && (
                 <button
@@ -153,8 +165,8 @@ export function AtomInfoHUD({
             color: 'rgba(205, 225, 244, 0.9)',
           }}
         >
-          <DetailRow label="role" value={spec.role} />
-          <DetailRow label="xyz" value={`${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)} A`} />
+          {element && <DetailRow label="role" value={element.role} />}
+          <DetailRow label="xyz" value={`${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)} ${coordinateUnit}`} />
           {properties.map(({ name, value }) => (
             <DetailRow key={name} label={name} value={formatPropertyValue(value)} strong={name === activeProperty} />
           ))}

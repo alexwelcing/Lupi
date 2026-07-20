@@ -53,6 +53,8 @@ describe('transcodeDumpFile façade', () => {
       boxBounds: new Float64Array(6),
       columns: ['id'],
       identity: { kind: 'source-id', unique: false },
+      typeSemantics: { kind: 'opaque', provenance: 'lammps-type-id' },
+      distanceSemantics: { kind: 'unknown', provenance: 'lammps-dump' },
     });
     w.emit({ type: 'frame0-chunk', start: 0, count: 3, positions: new Float32Array(9), types: new Int32Array(3), ids: new Int32Array(3) });
     w.emit({
@@ -67,6 +69,8 @@ describe('transcodeDumpFile façade', () => {
     expect(onFrame0Header).toHaveBeenCalledOnce();
     expect(onFrame0Header).toHaveBeenCalledWith(expect.objectContaining({
       identity: { kind: 'source-id', unique: false },
+      typeSemantics: { kind: 'opaque', provenance: 'lammps-type-id' },
+      distanceSemantics: { kind: 'unknown', provenance: 'lammps-dump' },
     }));
     expect(onFrame0Chunk).toHaveBeenCalledOnce();
     expect(onFrame0Complete).toHaveBeenCalledWith(3, { kind: 'source-id', unique: true });
@@ -122,6 +126,52 @@ describe('transcodeDumpFile façade', () => {
       timestep: 10,
       atomRow: 2,
       atomId: 9,
+    });
+  });
+
+  it('restores typed invalid-type failures reported through the worker', async () => {
+    const { transcodeDumpFile } = await importFacade();
+    const promise = transcodeDumpFile(file, null, {});
+    const w = FakeWorker.instances[0];
+    w.emit({
+      type: 'error',
+      message: 'LAMMPS atom type must be a positive integer',
+      code: 'INVALID_ATOM_TYPE',
+      frameIndex: 0,
+      timestep: 10,
+      atomRow: 2,
+      value: 0,
+    });
+    await expect(promise).rejects.toMatchObject({
+      name: 'DumpParseError',
+      code: 'INVALID_ATOM_TYPE',
+      frameIndex: 0,
+      timestep: 10,
+      atomRow: 2,
+      value: 0,
+    });
+  });
+
+  it('restores typed GLIMBIN storage-limit failures reported through the worker', async () => {
+    const { transcodeDumpFile } = await importFacade();
+    const promise = transcodeDumpFile(file, null, {});
+    const w = FakeWorker.instances[0];
+    w.emit({
+      type: 'error',
+      message: 'type 256 cannot be stored by current streaming GLIMBIN',
+      code: 'GLIMBIN_ATOM_TYPE_OUT_OF_RANGE',
+      frameIndex: 3,
+      timestep: 50,
+      atomRow: 1,
+      value: 256,
+    });
+    await expect(promise).rejects.toMatchObject({
+      name: 'DumpParseError',
+      code: 'GLIMBIN_ATOM_TYPE_OUT_OF_RANGE',
+      frameIndex: 3,
+      timestep: 50,
+      atomRow: 1,
+      value: 256,
     });
   });
 });

@@ -63,6 +63,8 @@ describe('LocalGlimbinSource', () => {
       expect(Array.from(frame.positions)).toEqual(Array.from(traj.frames[fi].positions));
       expect(Array.from(frame.types)).toEqual(Array.from(traj.frames[fi].types));
       expect(frame.identity).toEqual({ kind: 'synthetic-row', unique: true });
+      expect(frame.typeSemantics).toEqual({ kind: 'opaque', provenance: 'legacy-unknown' });
+      expect(frame.distanceSemantics).toEqual({ kind: 'unknown', provenance: 'legacy-unknown' });
     }
     source.dispose();
   });

@@ -1,0 +1,17 @@
+# Submit this config from the repository root so the co-built viewer and all of
+# its workspace dependencies are available to apps/render-backend/Dockerfile.
+steps:
+  - id: build-render-backend
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=apps/render-backend/Dockerfile
+      - --build-arg=LUPI_BUILD_SHA=${_LUPI_BUILD_SHA}
+      - --label=org.opencontainers.image.revision=${_LUPI_BUILD_SHA}
+      - --tag=${_IMAGE_URI}
+      - .
+
+images:
+  - ${_IMAGE_URI}
+
+timeout: 2400s

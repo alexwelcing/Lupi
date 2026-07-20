@@ -7,6 +7,8 @@ export type {
   Frame,
   FrameIdentity,
   FrameIdentityKind,
+  AtomTypeSemantics,
+  DistanceSemantics,
   Trajectory,
   TrajectoryResidency,
   ThermoRun,
@@ -23,7 +25,23 @@ export type {
   BondDivergence,
 } from './types';
 
-export { hasUsableSourceIds, framesShareAtomOrder } from './frameIdentity';
+export { hasUsableSourceIds, hasStableAtomIdentity, framesShareAtomOrder } from './frameIdentity';
+
+export {
+  LEGACY_ATOM_TYPE_SEMANTICS,
+  LEGACY_DISTANCE_SEMANTICS,
+  NEUTRAL_TYPE_DISPLAY_RADIUS,
+  normalizeAtomTypeSemantics,
+  normalizeDistanceSemantics,
+  resolveAtomicNumber,
+  hasCompleteElementMapping,
+  stableCategoricalColor,
+  resolveTypeLabel,
+  resolveTypeColor,
+  resolveTypeDisplayRadius,
+  hasAngstromDistances,
+  canInferCovalentBonds,
+} from './frameSemantics';
 
 export {
   UNIT_LABELS,

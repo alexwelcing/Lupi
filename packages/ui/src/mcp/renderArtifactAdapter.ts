@@ -31,8 +31,8 @@ import { environmentAssetIdentity } from '../sceneEnvironment';
 import { REVISION as THREE_REVISION } from 'three';
 import type { AppState } from '../store';
 import {
-  DECODED_RENDER_FRAME_MEDIA_TYPE_V2,
-  computeDecodedRenderFrameDigestV2,
+  DECODED_RENDER_FRAME_MEDIA_TYPE_V3,
+  computeDecodedRenderFrameDigestV3,
 } from '../renderArtifactSource';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
 
@@ -205,7 +205,7 @@ export async function createBrowserRenderArtifactPlanV1(
     throw new Error(`${options.format.toUpperCase()} does not accept the raster transparent field.`);
   }
   const alpha = raster ? (options.transparent ? 'transparent' : 'opaque') : 'not-applicable';
-  const contentDigest = await computeDecodedRenderFrameDigestV2(frame);
+  const contentDigest = await computeDecodedRenderFrameDigestV3(frame);
   const layers: Record<RenderLayerIdV1, boolean> = { ...createRenderLayerStateV1() };
   const view: Record<string, RenderJsonValueV1> = {};
   if (raster) {
@@ -341,8 +341,8 @@ export async function createBrowserRenderArtifactPlanV1(
 
   const selected = [...state.selectedAtoms].sort((a, b) => a - b);
   const neighbors = [...state.highlightedNeighbors].sort((a, b) => a - b);
-  if (raster && (selected.length > 0 || state.hoveredAtom !== null || neighbors.length > 0)) {
-    throw new Error('Clear animated selection, hover, and neighbor markers before deterministic export.');
+  if (raster && (selected.length > 0 || state.hoveredAtom !== null || neighbors.length > 0 || state.measurement !== null)) {
+    throw new Error('Clear coordinate measurements, selection, hover, and neighbor markers before deterministic export.');
   }
 
   if (raster && state.showAxes) {
@@ -363,7 +363,7 @@ export async function createBrowserRenderArtifactPlanV1(
     version: RENDER_ARTIFACT_SPEC_VERSION_V1,
     source: {
       kind: 'content' as const,
-      mediaType: DECODED_RENDER_FRAME_MEDIA_TYPE_V2,
+      mediaType: DECODED_RENDER_FRAME_MEDIA_TYPE_V3,
       contentDigest,
     },
     format: options.format,

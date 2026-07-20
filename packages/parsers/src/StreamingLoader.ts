@@ -419,6 +419,10 @@ export class StreamingLoader {
         bonds: (this.header!.flags & FLAG_HAS_BONDS) !== 0 ? parsed.bonds : new Int32Array(0),
         properties: parsed.properties,
         identity: parsed.identity,
+        // GLIMBIN v2 has no type/unit semantics block. Never infer chemistry
+        // or Angstrom units from the numeric buffers at the hydration seam.
+        typeSemantics: { kind: 'opaque', provenance: 'legacy-unknown' },
+        distanceSemantics: { kind: 'unknown', provenance: 'legacy-unknown' },
       };
 
       if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');

@@ -35,7 +35,7 @@
  */
 
 import type { Frame } from '@atlas/core/types';
-import { TYPE_COLORS, TYPE_RADII, DEFAULT_TYPE_COLOR } from './constants';
+import { hexToRgb, resolveTypeColor, resolveTypeDisplayRadius } from '@atlas/core';
 
 export interface Clusters {
   /** Cell-centered position [x0, y0, z0, x1, y1, z1, …]. Length = count × 3. */
@@ -71,7 +71,10 @@ const TARGET_ATOMS_PER_CELL = 32;
  *  natoms) — running it on a partial frame would aggregate
  *  uninitialized zero-positions and produce a giant fake cluster at
  *  the origin. */
-export function buildClusters(frame: Frame, qualityHint?: { mobile?: boolean }): Clusters {
+export function buildClusters(
+  frame: Frame,
+  qualityHint?: { mobile?: boolean; hiddenAtomTypes?: ReadonlySet<number> },
+): Clusters {
   if (!frame.boxBounds || frame.natoms === 0) {
     return emptyClusters();
   }
@@ -115,8 +118,11 @@ export function buildClusters(frame: Frame, qualityHint?: { mobile?: boolean }):
   // Walk every atom, increment its cell's accumulator.
   const positions = frame.positions;
   const types = frame.types;
+  const hiddenTypes = qualityHint?.hiddenAtomTypes ?? new Set<number>();
+  const typeStyles = new Map<number, { color: [number, number, number]; radius: number }>();
   let maxAtomRadius = 0;
   for (let i = 0; i < frame.natoms; i++) {
+    if (hiddenTypes.has(types[i])) continue;
     const x = positions[i * 3];
     const y = positions[i * 3 + 1];
     const z = positions[i * 3 + 2];
@@ -133,18 +139,23 @@ export function buildClusters(frame: Frame, qualityHint?: { mobile?: boolean }):
     sumY[cellIdx] += y;
     sumZ[cellIdx] += z;
 
-    // Per-type color from CPK / element data. Fall back to grey for
-    // unknown types so empty colors don't poison the average.
     const typeId = types[i];
-    const color = TYPE_COLORS[typeId] ?? DEFAULT_TYPE_COLOR;
+    let style = typeStyles.get(typeId);
+    if (!style) {
+      style = {
+        color: hexToRgb(resolveTypeColor(frame, typeId)),
+        radius: resolveTypeDisplayRadius(frame, typeId),
+      };
+      typeStyles.set(typeId, style);
+    }
+    const color = style.color;
     sumR[cellIdx] += color[0];
     sumG[cellIdx] += color[1];
     sumB[cellIdx] += color[2];
 
     counts[cellIdx]++;
 
-    const r = TYPE_RADII[typeId];
-    if (r !== undefined && r > maxAtomRadius) maxAtomRadius = r;
+    if (style.radius > maxAtomRadius) maxAtomRadius = style.radius;
   }
 
   // Compact: skip empty cells. Walk all cells once; emit centroid +

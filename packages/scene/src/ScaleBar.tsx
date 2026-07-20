@@ -6,6 +6,7 @@
  */
 
 import { useMemo } from 'react';
+import { hasAngstromDistances } from '@atlas/core';
 import type { Frame } from '@atlas/core/types';
 
 interface ScaleBarProps {
@@ -16,8 +17,13 @@ interface ScaleBarProps {
   color?: string;
 }
 
-// Nice round numbers for scale bars (in Angstroms)
+// Nice round numbers in the frame's declared coordinate units.
 const NICE_NUMBERS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+
+export function formatScaleBarLabel(length: number, angstrom: boolean): string {
+  if (!angstrom) return `${length} source units`;
+  return length >= 1000 ? `${(length / 1000).toFixed(1)} nm` : `${length} \u00c5`;
+}
 
 export function ScaleBar({
   frame,
@@ -26,6 +32,7 @@ export function ScaleBar({
   position = 'bottom-left',
   color = 'white',
 }: ScaleBarProps) {
+  const usesAngstrom = hasAngstromDistances(frame);
   const { length, label } = useMemo(() => {
     // Estimate the visible width at the center plane
     const fov = 50; // degrees - matches default camera
@@ -41,18 +48,8 @@ export function ScaleBar({
       else break;
     }
     
-    // Format label with appropriate units
-    let displayLabel: string;
-    if (bestLength >= 1000) {
-      displayLabel = `${(bestLength / 1000).toFixed(1)} nm`;
-    } else if (bestLength >= 10) {
-      displayLabel = `${bestLength} Å`;
-    } else {
-      displayLabel = `${bestLength} Å`;
-    }
-    
-    return { length: bestLength, label: displayLabel };
-  }, [cameraDistance]);
+    return { length: bestLength, label: formatScaleBarLabel(bestLength, usesAngstrom) };
+  }, [cameraDistance, usesAngstrom]);
 
   if (!visible) return null;
 
@@ -66,7 +63,6 @@ export function ScaleBar({
 
   const barHeight = 4;
   const fontSize = 12;
-  const padding = 8;
   const minWidth = 60;
   
   // Calculate pixel width of the bar (approximate based on screen)

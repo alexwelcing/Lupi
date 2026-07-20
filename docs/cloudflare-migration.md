@@ -51,18 +51,26 @@ Required GitHub secrets:
 - `CLOUDFLARE_API_TOKEN`
 - `LUPI_FIREBASE_WEB_API_KEY`
 
-Optional GitHub secrets:
+Required deployment secrets when enabling authenticated legacy rendering:
 
 - `LUPI_MCP_SHARED_SECRET`
 - `LUPI_RENDERER_TOKEN`
+
+The renderer URL is a non-secret deployment variable mapped to
+`RENDERER_ENDPOINT`. These values are not required while render execution stays
+disabled.
 
 Required Cloudflare resources before production cutover:
 
 - Worker: `lupi-edge`
 - Workers static assets binding: `WEB_ASSETS` from `apps/web/dist`
-- R2 bucket: `lupi-assets` bound as `ASSETS` for pruned gallery payloads and rendered assets
-- Optional D1 database: `lupi-mcp` bound as `DB`
-- Optional Queue: `lupi-render-jobs` bound as `RENDER_QUEUE`
+- Public R2 bucket: `lupi-assets` bound as `ASSETS` for pruned gallery payloads
+- Private R2 buckets: `lupi-render-artifacts` in production and
+  `lupi-render-artifacts-preview` in preview, bound as `RENDER_ASSETS`; neither
+  may have an `r2.dev` endpoint or public custom domain
+- D1 database `lupi-mcp` and Queue `lupi-render-jobs` remain reserved for a
+  future asynchronous profile and are not required by the first synchronous
+  authenticated renderer lane
 
 Large gallery payloads listed in `apps/web/cloudflare-assets-exclude.json` are
 pruned from Workers static assets and served from the `lupi-assets` R2 bucket via
@@ -90,6 +98,8 @@ services while we avoid a risky all-at-once rewrite:
 2. Verify `https://<worker-preview>/health` reports `webAssets: true`.
 3. Smoke `https://<worker-preview>/`, `/materials/clean-energy`, `/view/<known-public-slug>`, `/collectAnalytics`, and `/mcp`.
 4. Confirm Firebase popup sign-in works through `/__/auth/handler` on the Cloudflare hostname.
-5. Bind R2/D1/Queue for render assets, or keep MCP render requests in `awaiting_renderer` mode.
+5. To enable the bounded legacy renderer, bind private `RENDER_ASSETS`, configure
+   `RENDERER_ENDPOINT`, and set distinct caller and renderer bearer secrets.
+   Otherwise keep execution disabled. This does not activate RenderRequestV1.
 6. Point `lupi.live` DNS/route to the Cloudflare Worker.
 7. After successful production smoke tests, disable the Cloud Run push deploy workflow or keep it as an explicit manual rollback path only.

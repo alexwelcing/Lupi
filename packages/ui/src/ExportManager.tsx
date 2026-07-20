@@ -19,7 +19,14 @@
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { useStore, type ExportRequest } from './store';
-import { getElementSpec, hexToRgb } from '@atlas/core';
+import {
+  canInferCovalentBonds,
+  getElementSpec,
+  hexToRgb,
+  resolveAtomicNumber,
+  resolveTypeColor as resolveSemanticTypeColor,
+  resolveTypeDisplayRadius,
+} from '@atlas/core';
 import * as THREE from 'three';
 import { sampleFlythrough, getSequenceDuration } from './flythrough';
 import { restoreInstancedMeshes } from './export/USDZExportPipeline';
@@ -531,7 +538,7 @@ export function ExportManager() {
 
     try {
       req.onStart?.();
-      const { TYPE_COLORS, TYPE_RADII, DEFAULT_TYPE_COLOR, COLORMAPS } = await import('@atlas/scene');
+      const { COLORMAPS } = await import('@atlas/scene');
 
       const state = useStore.getState();
       const currentFile = state.file;
@@ -585,7 +592,9 @@ export function ExportManager() {
         let resolved: [number, number, number];
         if (state.atomColorSource === 'element') {
           const override = state.elementColorOverrides[typeId];
-          resolved = override ? hexToRgb(override) : (TYPE_COLORS[typeId] ?? DEFAULT_TYPE_COLOR);
+          resolved = override
+            ? hexToRgb(override)
+            : hexToRgb(resolveSemanticTypeColor(currentFrame, typeId));
         } else {
           const t = typeToNorm.get(typeId) ?? SINGLE_TYPE_NORM_VALUE;
           resolved = mapFn(t);
@@ -626,10 +635,33 @@ export function ExportManager() {
       //   d ≤ r_cov(A) + r_cov(B) + tolerance
       // using the same tolerance the slider controls, so the export matches
       // the on-screen bond set.
-      let maxTypeId = 0;
-      for (const t of typeSet) if (t > maxTypeId) maxTypeId = t;
-      const covalentRadii = new Float32Array(maxTypeId + 1);
-      for (const t of typeSet) covalentRadii[t] = getElementSpec(t).radius;
+      const hasSourceBonds = (currentFrame.bonds?.length ?? 0) > 0;
+      const mayInferBonds = state.showBonds
+        && !hasSourceBonds
+        && canInferCovalentBonds(currentFrame);
+      if (state.showBonds && req.artifactSpec && !hasSourceBonds && !mayInferBonds) {
+        throw new ModelExportLayerIncompleteError(
+          'The requested bond layer has neither authoritative source pairs nor proven element and distance semantics.',
+          { format: isUsdZ ? 'usdz' : 'glb', reason: 'unproven-bond-semantics' },
+        );
+      }
+      if (state.showBonds && !req.artifactSpec && !hasSourceBonds && !mayInferBonds) {
+        state.setRendererWarning(
+          'Bonds were omitted because this frame does not prove element identities and Angstrom distance units.',
+        );
+      }
+
+      let covalentRadii: Float32Array | undefined;
+      let bondTypes: Int32Array | undefined;
+      if (mayInferBonds) {
+        covalentRadii = new Float32Array(119);
+        bondTypes = new Int32Array(currentFrame.natoms);
+        for (let i = 0; i < currentFrame.natoms; i++) {
+          const atomicNumber = resolveAtomicNumber(currentFrame, currentFrame.types[i])!;
+          bondTypes[i] = atomicNumber;
+          covalentRadii[atomicNumber] = getElementSpec(atomicNumber).radius;
+        }
+      }
 
       const framing = isUsdZ
         ? computeUsdzFraming(currentFrame, state.hiddenAtomTypes)
@@ -645,14 +677,17 @@ export function ExportManager() {
           : { mode: 'blob' },
         hiddenTypes: state.hiddenAtomTypes,
         displayRadiusForType: (typeId) =>
-          (TYPE_RADII[typeId] ?? 1.0) * (state.atomScale ?? 1.0) * (state.atomTypeScales[typeId] ?? 1.0),
+          resolveTypeDisplayRadius(currentFrame, typeId)
+            * (state.atomScale ?? 1.0)
+            * (state.atomTypeScales[typeId] ?? 1.0),
         resolveAtomColor,
         materialPreset: state.materialPreset,
         surfacePolish: state.surfacePolish || 0.0,
         surfaceRoughness: state.surfaceRoughness || 0.0,
-        showBonds: state.showBonds,
+        showBonds: state.showBonds && (hasSourceBonds || mayInferBonds),
         bondTolerance: state.bondTolerance ?? 0.45,
         covalentRadii,
+        bondTypes,
         center: framing.center,
         arScale: framing.arScale,
         onProgress: req.onProgress,

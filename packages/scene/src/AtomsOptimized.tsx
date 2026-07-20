@@ -23,9 +23,10 @@ import type { Frame, ColormapName } from '@atlas/core/types';
 import { SpatialHash3D } from './SpatialHash';
 import { useGlobalTimer } from './useTimer';
 
-import { TYPE_COLORS, TYPE_RADII, COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
-import { buildMaterialPaletteData } from './materials';
-import { framesShareAtomOrder, getElementSpec, hexToRgb } from '@atlas/core';
+import { COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
+import { DEFAULT_PROFILE, getElementProfile } from './materials';
+import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
+import { buildTypeRenderTable } from './typeRenderTable';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface AtomsOptimizedProps {
@@ -760,11 +761,30 @@ export function buildPaletteTexture(
  * Reads the entire periodic table from `materials/elementProfiles.ts`,
  * so adding a new element override there immediately reflects here.
  */
-export function buildMaterialPaletteTexture(): THREE.DataTexture {
-  const floats = buildMaterialPaletteData(); // length 256 * 2 * 4
+export function buildMaterialPaletteTexture(
+  atomicNumberForSlot?: (slot: number) => number | undefined,
+): THREE.DataTexture {
   const data = new Uint8Array(256 * 2 * 4);
-  for (let i = 0; i < data.length; i++) {
-    data[i] = Math.max(0, Math.min(255, Math.round(floats[i] * 255)));
+  const resolveSlot = atomicNumberForSlot ?? ((slot: number) => slot);
+  for (let slot = 0; slot < 256; slot += 1) {
+    const atomicNumber = resolveSlot(slot);
+    const profile = atomicNumber === undefined ? DEFAULT_PROFILE : getElementProfile(atomicNumber);
+    const materialBase = slot * 4;
+    // Preserve the byte-identical quantization of the original
+    // buildMaterialPaletteData() path. That implementation staged authored
+    // coefficients through Float32Array before converting them to bytes; doing
+    // the multiplication directly in double precision changes half-step values
+    // such as 0.7 * 255 by one byte and invalidates an otherwise identical
+    // owner-approved render golden.
+    data[materialBase] = materialPaletteByte(profile.metalness);
+    data[materialBase + 1] = materialPaletteByte(profile.roughness);
+    data[materialBase + 2] = materialPaletteByte(profile.anisotropy);
+    data[materialBase + 3] = materialPaletteByte(profile.subsurface);
+    const emissionBase = 256 * 4 + slot * 4;
+    data[emissionBase] = materialPaletteByte(profile.emission[0]);
+    data[emissionBase + 1] = materialPaletteByte(profile.emission[1]);
+    data[emissionBase + 2] = materialPaletteByte(profile.emission[2]);
+    data[emissionBase + 3] = materialPaletteByte(profile.emissionIntensity);
   }
   const tex = new THREE.DataTexture(data, 256, 2, THREE.RGBAFormat);
   // Packed material coefficients and authored emission intensities are linear
@@ -774,6 +794,10 @@ export function buildMaterialPaletteTexture(): THREE.DataTexture {
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
   return tex;
+}
+
+function materialPaletteByte(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(Math.fround(value) * 255)));
 }
 
 /** Build a 256×1 RGBA DataTexture sampling a colormap over [0,1] */
@@ -852,6 +876,11 @@ export function AtomsOptimized({
   const canInterpolateToNextFrame = useMemo(
     () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
     [frame, nextFrame],
+  );
+  const renderAtomCount = resolveLoadedAtomCount(frame.natoms, loadedAtomCount);
+  const typeRenderTable = useMemo(
+    () => buildTypeRenderTable(frame, renderAtomCount),
+    [frame, renderAtomCount],
   );
 
   // Capacity — grow-only, never shrink
@@ -1050,27 +1079,30 @@ export function AtomsOptimized({
       // Element-natural colors from the periodic table data. Cu is warm, Au
       // is gold, O is red — no colormap mediation. Pairs with the per-element
       // material identity for a chemically-honest read.
-      uniforms.uPalette.value = buildPaletteTexture((typeId) => {
-        const spec = getElementSpec(typeId);
-        return hexToRgb(elementColorOverrides[typeId] ?? spec.color);
+      uniforms.uPalette.value = buildPaletteTexture((slot) => {
+        const entry = typeRenderTable.entries[slot];
+        if (!entry) return DEFAULT_TYPE_COLOR;
+        const override = elementColorOverrides[entry.rawType];
+        return override ? hexToRgb(override) : entry.color;
       });
     } else {
       // 'colormap' — types mapped through the active colormap by rank.
       // Generic, abstract; fine when chemistry isn't the point.
-      const typeSet = new Set<number>();
-      for (let i = 0; i < frame.natoms; i++) typeSet.add(frame.types[i]);
-      const sortedTypes = Array.from(typeSet).sort((a, b) => a - b);
-      const typeToNorm = new Map<number, number>();
-      for (let j = 0; j < sortedTypes.length; j++) {
-        typeToNorm.set(sortedTypes[j], sortedTypes.length > 1 ? j / (sortedTypes.length - 1) : 0.5);
-      }
-      uniforms.uPalette.value = buildPaletteTexture((typeId) => {
-        const t = typeToNorm.get(typeId) ?? 0.5;
+      uniforms.uPalette.value = buildPaletteTexture((slot) => {
+        const t = typeRenderTable.entries.length > 1
+          ? slot / (typeRenderTable.entries.length - 1)
+          : 0.5;
         return mapFn(t);
       });
     }
 
     oldPalette.dispose();
+
+    const oldMaterialPalette = uniforms.uMaterialPalette.value as THREE.DataTexture;
+    uniforms.uMaterialPalette.value = buildMaterialPaletteTexture(
+      (slot) => typeRenderTable.entries[slot]?.atomicNumber,
+    );
+    oldMaterialPalette.dispose();
 
     // Rebuild the 256×1 colormap texture (768 bytes, instant)
     const oldColormap = uniforms.uColormap.value as THREE.DataTexture;
@@ -1078,7 +1110,7 @@ export function AtomsOptimized({
     oldColormap.dispose();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, material, frame.types, frame.natoms, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor]);
+  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, material, typeRenderTable, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor]);
 
   // ─── PMREM env sync and dynamic lighting ───────────────────────────────────────────────
   // SceneLighting owns an explicit PMREM CubeUV target. Never hand the custom
@@ -1159,19 +1191,6 @@ export function AtomsOptimized({
       bsz = frame.boxBounds![5] - frame.boxBounds![4];
     }
 
-    // Pre-compute radii lookups
-    const MAX_TYPES = 256;
-    const radiiLookup = new Float32Array(MAX_TYPES).fill(1.2);
-    const hiddenLookup = new Uint8Array(MAX_TYPES);
-    const scaleOverrideLookup = new Float32Array(MAX_TYPES).fill(1.0);
-
-    for (let typeId = 0; typeId < MAX_TYPES; typeId++) {
-      radiiLookup[typeId] = TYPE_RADII[typeId] ?? 1.2;
-      if (hiddenAtomTypes?.has(typeId)) hiddenLookup[typeId] = 1;
-      if (atomTypeScales?.[typeId] !== undefined) scaleOverrideLookup[typeId] = atomTypeScales[typeId];
-    }
-
-
     // Get instance attribute arrays directly
     const posArr = (geometry.attributes.instancePosition as THREE.InstancedBufferAttribute).array as Float32Array;
     const tgtArr = (geometry.attributes.instanceTargetPosition as THREE.InstancedBufferAttribute).array as Float32Array;
@@ -1187,11 +1206,15 @@ export function AtomsOptimized({
     let boundsAreFinite = true;
 
     // When streaming, only render atoms that have been received
-    const effectiveAtomCount = resolveLoadedAtomCount(frame.natoms, loadedAtomCount);
+    const effectiveAtomCount = renderAtomCount;
 
     for (let i = 0; i < effectiveAtomCount; i++) {
-      const typeId = types[i] < MAX_TYPES ? types[i] : 0;
-      const radius = hiddenLookup[typeId] ? 0 : radiiLookup[typeId] * scale * scaleOverrideLookup[typeId];
+      const rawType = types[i];
+      const renderType = typeRenderTable.byRawType.get(rawType);
+      if (!renderType) continue;
+      const radius = hiddenAtomTypes?.has(rawType)
+        ? 0
+        : renderType.displayRadius * scale * (atomTypeScales?.[rawType] ?? 1);
       if (radius === 0) continue;
       if (visibleCount >= capacity) break;
 
@@ -1245,7 +1268,7 @@ export function AtomsOptimized({
       }
 
       radArr[visibleCount] = radius;
-      typeArr[visibleCount] = typeId;
+      typeArr[visibleCount] = renderType.slot;
 
       // Normalized property value (current frame). Temporal color interpolation
       // was dropped with the CPU position lerp — a negligible visual effect that
@@ -1298,7 +1321,7 @@ export function AtomsOptimized({
   }, [
     frame, nextFrame, canInterpolateToNextFrame, scale, propData, pMin, pMax,
     hiddenAtomTypes, atomTypeScales, loadedAtomCount,
-    onSpatialHash, capacity, colorProperty, geometry,
+    onSpatialHash, capacity, colorProperty, geometry, renderAtomCount, typeRenderTable,
   ]);
 
   useLayoutEffect(() => {

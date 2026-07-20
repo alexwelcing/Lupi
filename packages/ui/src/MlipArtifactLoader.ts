@@ -1,4 +1,5 @@
-import type { Frame, Trajectory } from '@atlas/core/types';
+import { getAtomicNumberBySymbol } from '@atlas/core';
+import type { AtomTypeSemantics, Frame, Trajectory } from '@atlas/core/types';
 import type { LoadedFile } from './store';
 
 const MLIP_MEASURED_FRAME_RATE = 1;
@@ -47,18 +48,6 @@ interface ViewerFrame {
   symbols?: string[];
 }
 
-const TYPE_BY_ELEMENT: Record<string, number> = {
-  H: 1,
-  Li: 3,
-  C: 6,
-  O: 8,
-  Mg: 12,
-  Al: 13,
-  P: 15,
-  Fe: 26,
-  Ni: 28,
-};
-
 export function artifactToLoadedFile(payload: MlipArtifactPayload, sourceUrl: string): LoadedFile {
   if (payload.schema === 'lupine.distill.equilibrium_solve_score.v1') {
     return equilibriumScoreToLoadedFile(payload, sourceUrl);
@@ -96,12 +85,20 @@ function mdTrajectoryToLoadedFile(payload: MdTrajectoryArtifact, sourceUrl: stri
 function viewerFramesToFrames(viewerFrames: ViewerFrame[], materialId: string): Frame[] {
   if (!viewerFrames.length) throw new Error('Measured artifact has no frames.');
   const finalPositions = lastPositions(viewerFrames);
-  return viewerFrames.map((viewerFrame) => {
+  const typings = viewerFrames.map((viewerFrame, frameIndex) => {
+    const natoms = viewerFrame.positions_angstrom?.length ?? 0;
+    return resolveMlipTyping(viewerFrame, materialId, natoms, frameIndex);
+  });
+  const stableSourceOrder = typings.every((typing, frameIndex) => (
+    frameIndex === 0 || sameAtomicNumberOrder(typings[0].types, typing.types)
+  ));
+
+  return viewerFrames.map((viewerFrame, frameIndex) => {
     const positionsList = viewerFrame.positions_angstrom;
     if (!positionsList?.length) throw new Error('Measured viewer frame is missing positions_angstrom.');
     const natoms = positionsList.length;
+    const typing = typings[frameIndex];
     const positions = new Float32Array(natoms * 3);
-    const types = new Int32Array(natoms);
     const distanceToFinal = new Float32Array(natoms);
     const solveCloseness = new Float32Array(natoms);
     const forceNorm = new Float32Array(natoms);
@@ -114,12 +111,14 @@ function viewerFramesToFrames(viewerFrames: ViewerFrame[], materialId: string): 
       : 0;
 
     for (let idx = 0; idx < natoms; idx += 1) {
-      const pos = positionsList[idx] ?? [0, 0, 0];
-      positions[idx * 3] = Number(pos[0]) || 0;
-      positions[idx * 3 + 1] = Number(pos[1]) || 0;
-      positions[idx * 3 + 2] = Number(pos[2]) || 0;
+      const pos = positionsList[idx];
+      if (!pos || pos.length < 3 || !pos.slice(0, 3).every(Number.isFinite)) {
+        throw new Error(`Measured viewer frame ${frameIndex} has an invalid position at atom ${idx}.`);
+      }
+      positions[idx * 3] = pos[0];
+      positions[idx * 3 + 1] = pos[1];
+      positions[idx * 3 + 2] = pos[2];
       const final = finalPositions[idx] ?? pos;
-      types[idx] = elementTypeForFrame(viewerFrame, idx, materialId);
       distanceToFinal[idx] = distance3(pos, final);
       solveCloseness[idx] = closeness;
       forceNorm[idx] = maxForce;
@@ -134,7 +133,12 @@ function viewerFramesToFrames(viewerFrames: ViewerFrame[], materialId: string): 
       triclinic: bounds.triclinic,
       columns: ['id', 'type', 'x', 'y', 'z', 'distance_to_final', 'solve_closeness', 'force_norm'],
       ids: Int32Array.from({ length: natoms }, (_, idx) => idx + 1),
-      types,
+      identity: stableSourceOrder
+        ? { kind: 'source-order', unique: true }
+        : { kind: 'synthetic-row', unique: true },
+      types: typing.types,
+      typeSemantics: typing.semantics,
+      distanceSemantics: { kind: 'angstrom', provenance: 'source-declared' },
       positions,
       bonds: new Int32Array(0),
       properties: new Map([
@@ -242,14 +246,65 @@ function finiteBounds(bounds: ReturnType<typeof emptyBounds>) {
   return bounds;
 }
 
-function elementType(materialId: string) {
-  const match = materialId.match(/[A-Z][a-z]?/);
-  return TYPE_BY_ELEMENT[match?.[0] ?? ''] ?? 1;
+function resolveMlipTyping(
+  frame: ViewerFrame,
+  materialId: string,
+  natoms: number,
+  frameIndex: number,
+): { types: Int32Array; semantics: AtomTypeSemantics } {
+  if (natoms < 1) {
+    throw new Error(`Measured viewer frame ${frameIndex} is missing positions_angstrom.`);
+  }
+
+  if (frame.symbols !== undefined) {
+    if (frame.symbols.length !== natoms) {
+      throw new Error(
+        `Measured viewer frame ${frameIndex} has ${frame.symbols.length} symbols for ${natoms} atoms.`,
+      );
+    }
+    const types = Int32Array.from(frame.symbols.map((symbol, atomIndex) => {
+      const atomicNumber = getAtomicNumberBySymbol(symbol);
+      if (atomicNumber === undefined) {
+        throw new Error(
+          `Measured viewer frame ${frameIndex} has unsupported element symbol "${symbol}" at atom ${atomIndex}.`,
+        );
+      }
+      return atomicNumber;
+    }));
+    return {
+      types,
+      semantics: { kind: 'atomic-number', provenance: 'mlip-symbol' },
+    };
+  }
+
+  const inferredAtomicNumber = singleElementAtomicNumber(materialId);
+  if (inferredAtomicNumber === undefined) {
+    throw new Error(
+      `Measured viewer frame ${frameIndex} is missing per-atom symbols and material_id "${materialId}" is not an unambiguous single element.`,
+    );
+  }
+  return {
+    types: new Int32Array(natoms).fill(inferredAtomicNumber),
+    semantics: { kind: 'atomic-number', provenance: 'mlip-material-id-inferred' },
+  };
 }
 
-function elementTypeForFrame(frame: ViewerFrame, atomIndex: number, materialId: string) {
-  const symbol = frame.symbols?.[atomIndex];
-  return TYPE_BY_ELEMENT[symbol ?? ''] ?? elementType(materialId);
+function singleElementAtomicNumber(materialId: string): number | undefined {
+  const symbols = materialId.match(/[A-Z][a-z]?/g) ?? [];
+  const atomicNumbers = new Set<number>();
+  for (const symbol of symbols) {
+    const atomicNumber = getAtomicNumberBySymbol(symbol);
+    if (atomicNumber !== undefined) atomicNumbers.add(atomicNumber);
+  }
+  return atomicNumbers.size === 1 ? atomicNumbers.values().next().value : undefined;
+}
+
+function sameAtomicNumberOrder(left: Int32Array, right: Int32Array): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 function vectorLength(value: number[] | undefined) {

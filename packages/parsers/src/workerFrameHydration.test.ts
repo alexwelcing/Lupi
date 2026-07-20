@@ -24,14 +24,20 @@ describe('parser worker frame hydration', () => {
     const hydrated = hydrateWorkerFrame({
       ...frame([9, 4], [0, 1], { kind: 'synthetic-row', unique: true }),
       properties: [],
+      typeSemantics: { kind: 'opaque', provenance: 'lammps-type-id' },
+      distanceSemantics: { kind: 'unknown', provenance: 'lammps-dump' },
     });
     expect(hydrated.identity).toEqual({ kind: 'synthetic-row', unique: true });
+    expect(hydrated.typeSemantics).toEqual({ kind: 'opaque', provenance: 'lammps-type-id' });
+    expect(hydrated.distanceSemantics).toEqual({ kind: 'unknown', provenance: 'lammps-dump' });
 
     const legacy = hydrateWorkerFrame({
       ...frame([9, 4], [0, 1], undefined),
       properties: [],
     });
     expect(legacy.identity).toEqual({ kind: 'unknown', unique: false });
+    expect(legacy.typeSemantics).toEqual({ kind: 'opaque', provenance: 'legacy-unknown' });
+    expect(legacy.distanceSemantics).toEqual({ kind: 'unknown', provenance: 'legacy-unknown' });
   });
 
   it('joins shuffled source IDs when deriving displacement', () => {

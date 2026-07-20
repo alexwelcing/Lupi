@@ -7,15 +7,15 @@ import { useFrame } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
+import { resolveTypeDisplayRadius } from '@atlas/core';
 
 interface SelectionMarkersProps {
   frame: Frame;
   selectedAtoms: number[];
   hoveredAtom: number | null;
-  /** Per-type radius lookup (atom_type -> radius in Angstrom). */
+  /** Optional raw-type display override. Core provenance resolution is used
+   * when no explicit override exists. */
   typeRadii?: Record<number, number>;
-  /** Default radius if a type isn't in the lookup. */
-  defaultRadius?: number;
   /** Atom indices to highlight as neighbors (dim everything else). */
   highlightedNeighbors?: Set<number>;
   /** Whether to dim non-neighbor atoms when a node is selected/hovered. */
@@ -27,15 +27,14 @@ export function SelectionMarkers({
   selectedAtoms,
   hoveredAtom,
   typeRadii,
-  defaultRadius = 1.2,
   highlightedNeighbors = new Set(),
   dimNonNeighbors = false,
 }: SelectionMarkersProps) {
   const radiusFor = (atomIndex: number): number => {
-    if (atomIndex < 0 || atomIndex >= frame.natoms) return defaultRadius;
+    if (atomIndex < 0 || atomIndex >= frame.natoms) return 0.5;
     const t = frame.types[atomIndex];
     if (typeRadii && typeRadii[t] != null) return typeRadii[t];
-    return defaultRadius;
+    return resolveTypeDisplayRadius(frame, t);
   };
 
   const positionOf = (atomIndex: number): [number, number, number] | null => {

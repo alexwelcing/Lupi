@@ -177,6 +177,10 @@ export class LocalGlimbinSource {
         bonds: (this.header!.flags & FLAG_HAS_BONDS) !== 0 ? parsed.bonds : new Int32Array(0),
         properties: parsed.properties,
         identity: parsed.identity,
+        // GLIMBIN v2 predates scientific type/unit metadata. Stored numeric
+        // values survive, but their element and distance meanings are unknown.
+        typeSemantics: { kind: 'opaque', provenance: 'legacy-unknown' },
+        distanceSemantics: { kind: 'unknown', provenance: 'legacy-unknown' },
       };
 
       if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
