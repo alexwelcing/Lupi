@@ -1,6 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
-import { defaultSavedViewTitle, makeSavedViewUrl, slugifySavedViewTitle } from './savedViews';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockTrajectory } from '@atlas/core/test-utils';
+import {
+  defaultSavedViewTitle,
+  loadSavedMolecule,
+  makeSavedViewUrl,
+  readMoleculeSource,
+  slugifySavedViewTitle,
+  type SavedMoleculeSource,
+} from './savedViews';
 import type { LoadedFile } from './store';
+import { useStore } from './store';
+import { resetStore } from './test-utils';
+
+const loaderSeams = vi.hoisted(() => ({
+  loadMoleculeSource: vi.fn(),
+  loadInlineMolecule: vi.fn(),
+}));
+
+vi.mock('./loadMoleculeSource', () => loaderSeams);
 
 describe('slugifySavedViewTitle', () => {
   it('lowercases, trims, and replaces non-alphanumeric runs with hyphens', () => {
@@ -52,5 +69,79 @@ describe('makeSavedViewUrl', () => {
     delete globalThis.window;
     expect(makeSavedViewUrl('my-view')).toBe('/view/my-view');
     globalThis.window = savedWindow;
+  });
+});
+
+describe('saved molecule source policy', () => {
+  beforeEach(() => {
+    resetStore();
+    loaderSeams.loadMoleculeSource.mockReset();
+    loaderSeams.loadInlineMolecule.mockReset();
+    window.history.replaceState({}, '', '/');
+  });
+
+  function setLoadedSource(sourceUrl: string, atomCount = 2) {
+    useStore.getState().setFile({
+      name: 'source.xyz',
+      size: 123,
+      trajectory: createMockTrajectory(1, atomCount),
+      thermo: null,
+      sourceUrl,
+    });
+  }
+
+  function urlSource(url: string): SavedMoleculeSource {
+    return { kind: 'url', name: 'saved.xyz', url, size: 123, atomCount: 2, totalFrames: 1 };
+  }
+
+  it('persists allowlisted absolute and portable root-relative gallery URLs', () => {
+    setLoadedSource('https://lupi.live/gallery/curated/source.xyz');
+    expect(readMoleculeSource()).toMatchObject({
+      kind: 'url',
+      url: 'https://lupi.live/gallery/curated/source.xyz',
+    });
+
+    setLoadedSource('/gallery/curated/./portable.xyz');
+    expect(readMoleculeSource()).toMatchObject({
+      kind: 'url',
+      url: '/gallery/curated/portable.xyz',
+    });
+  });
+
+  it('saves a disallowed human-opened remote source as inline XYZ', () => {
+    setLoadedSource('https://untrusted.example/molecule.xyz');
+    const source = readMoleculeSource();
+    expect(source.kind).toBe('inline-xyz');
+    if (source.kind === 'inline-xyz') expect(source.xyz).toMatch(/^2\nsource\.xyz\n/m);
+  });
+
+  it('loads allowlisted saved URLs with strict redirect denial', async () => {
+    loaderSeams.loadMoleculeSource.mockResolvedValue(undefined);
+    await loadSavedMolecule(urlSource('https://storage.googleapis.com/shed-489901-omol25/demo.xyz'));
+    expect(loaderSeams.loadMoleculeSource).toHaveBeenCalledWith(
+      'https://storage.googleapis.com/shed-489901-omol25/demo.xyz',
+      { strictRemote: true },
+    );
+  });
+
+  it.each([
+    'https://user:password@lupi.live/gallery/a.xyz',
+    'http://lupi.live/gallery/a.xyz',
+    'https://127.0.0.1/a.xyz',
+    'https://10.0.0.1/a.xyz',
+    'https://169.254.169.254/a.xyz',
+    'https://molecule.local/a.xyz',
+    'https://unknown.example/a.xyz',
+    'https://lupi.live.evil.example/gallery/a.xyz',
+    'https://lupi.live/gallery/not-data?file=a.xyz',
+  ])('rejects an unsafe public document URL before the loader: %s', async (url) => {
+    await expect(loadSavedMolecule(urlSource(url))).rejects.toThrow();
+    expect(loaderSeams.loadMoleculeSource).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a redirect failure inside the saved-view loader', async () => {
+    loaderSeams.loadMoleculeSource.mockRejectedValue(new TypeError('redirect mode is set to error'));
+    await expect(loadSavedMolecule(urlSource('https://lupi.live/gallery/redirect.xyz'))).rejects.toThrow(/redirect/i);
+    expect(loaderSeams.loadMoleculeSource).toHaveBeenCalledTimes(1);
   });
 });

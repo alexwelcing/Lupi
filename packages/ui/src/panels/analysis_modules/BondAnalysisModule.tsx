@@ -22,24 +22,22 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
 }
 
 export function BondAnalysisModule() {
-  const {
-    bondStats,
-    bondCutoff,
-    setBondCutoff,
-    bondColorMode,
-    setBondColorMode,
-    bondThresholdMode,
-    setBondThresholdMode,
-    bondPercentileRange,
-    setBondPercentileRange,
-    applyPercentileCutoff,
-    filamentMode,
-    toggleFilamentMode,
-    meamScreening,
-    toggleMeamScreening,
-    grDrivenCutoff,
-    toggleGrDrivenCutoff,
-  } = useStore();
+  const bondStats = useStore((state) => state.bondStats);
+  const bondCutoff = useStore((state) => state.bondCutoff);
+  const setBondCutoff = useStore((state) => state.setBondCutoff);
+  const bondColorMode = useStore((state) => state.bondColorMode);
+  const setBondColorMode = useStore((state) => state.setBondColorMode);
+  const bondThresholdMode = useStore((state) => state.bondThresholdMode);
+  const setBondThresholdMode = useStore((state) => state.setBondThresholdMode);
+  const bondPercentileRange = useStore((state) => state.bondPercentileRange);
+  const setBondPercentileRange = useStore((state) => state.setBondPercentileRange);
+  const applyPercentileCutoff = useStore((state) => state.applyPercentileCutoff);
+  const filamentMode = useStore((state) => state.filamentMode);
+  const toggleFilamentMode = useStore((state) => state.toggleFilamentMode);
+  const meamScreening = useStore((state) => state.meamScreening);
+  const toggleMeamScreening = useStore((state) => state.toggleMeamScreening);
+  const grDrivenCutoff = useStore((state) => state.grDrivenCutoff);
+  const toggleGrDrivenCutoff = useStore((state) => state.toggleGrDrivenCutoff);
 
   const [hoveredBin, setHoveredBin] = useState<number | null>(null);
 

@@ -9,6 +9,7 @@ import { useFirebaseAuth } from './auth/useFirebaseAuth';
 import { MOLECULE_PROVIDERS, searchMolecules, type MoleculeHit, type MoleculeQuery, type MoleculeSourceId } from './molecules';
 import { MoleculeSearch } from './molecules/MoleculeSearch';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
+import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { openMolecule } from './viewer/openMolecule';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
@@ -449,7 +450,18 @@ export function McpViewerBridge() {
     window.dispatchEvent(new CustomEvent('lupi:mcp:ready', { detail: driver.state() }));
 
     const runUrlRequests = () => {
-      const requests = readMcpUrlRequests();
+      if (!isDevelopmentMcpUrlAutorunEnabled()) return;
+      let requests: LupiMcpRequest[];
+      try {
+        requests = readMcpUrlRequests();
+      } catch (error) {
+        emitLupiMcpResponse(
+          [errorResponse('url-bootstrap', 'lupi.load_molecule_url', error)],
+          'url-bootstrap',
+          { source: 'url' },
+        );
+        return;
+      }
       if (requests.length === 0) return;
       const runKey = window.location.href;
       if (window.__lupiViewerMcpUrlRunKey === runKey) return;
@@ -1204,9 +1216,10 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
     if (request.tool === 'lupi.load_molecule_url') {
       const url = readString(request.arguments.url);
       if (!url) throw new Error('lupi.load_molecule_url requires a URL.');
-      const result = await openMolecule({ kind: 'url', url, history: 'none' });
+      const allowed = assertAllowedRemoteMoleculeUrl(url, 'mcp', window.location.origin);
+      const result = await openMolecule({ kind: 'url', url: allowed.url, history: 'none', strictRemote: true });
       if (!result.ok) throw new Error(result.message);
-      transcript.push(`loaded molecule URL: ${url}`);
+      transcript.push(`loaded molecule URL: ${allowed.url}`);
       return okResponse(request, transcript, { viewer: readViewerState() });
     }
 
@@ -1350,7 +1363,12 @@ function parseViewerAgentCommand(command: string): LupiMcpRequest[] {
 
   const recognizedUrl = recognizeLupiUrlPayload(trimmed, typeof window !== 'undefined' ? window.location.href : undefined);
   if (recognizedUrl?.kind === 'loadUrl') {
-    return [makeRequest('lupi.load_molecule_url', { url: recognizedUrl.url })];
+    const allowed = assertAllowedRemoteMoleculeUrl(
+      recognizedUrl.url,
+      'mcp',
+      typeof window === 'undefined' ? 'https://lupi.live' : window.location.origin,
+    );
+    return [makeRequest('lupi.load_molecule_url', { url: allowed.url })];
   }
   if (recognizedUrl?.kind === 'savedView') {
     return [makeRequest('lupi.open_saved_view', { slug: recognizedUrl.slug })];
@@ -1392,7 +1410,20 @@ function parseViewerAgentCommand(command: string): LupiMcpRequest[] {
 }
 
 function hasMcpUrlRequests() {
-  return readMcpUrlRequests().length > 0;
+  try {
+    return readMcpUrlRequests().length > 0;
+  } catch {
+    // An unsafe staged URL must neither execute nor crash the visible harness.
+    // Treat it as present so the harness does not silently substitute Benzene.
+    return true;
+  }
+}
+
+function isDevelopmentMcpUrlAutorunEnabled(): boolean {
+  if (!import.meta.env.DEV || import.meta.env.VITE_MCP_URL_AUTORUN !== 'true' || typeof window === 'undefined') return false;
+  return window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+    || window.location.hostname === '[::1]';
 }
 
 function readMcpUrlRequests(): LupiMcpRequest[] {

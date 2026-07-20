@@ -10,6 +10,7 @@
     "dev:worker": "npx wrangler dev --local",
     "deploy": "pnpm --filter @atlas/web build && npx wrangler deploy",
     "deploy:worker": "npx wrangler deploy",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "devDependencies": {

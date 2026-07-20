@@ -14,10 +14,40 @@ describe('lupi Cloudflare MCP worker', () => {
   it('reports health without a browser dependency', async () => {
     const res = await handleRequest(req('/health'));
     expect(res.status).toBe(200);
-    const body = await res.json() as { ready: boolean; browserRequired: boolean; toolCount: number };
+    const body = await res.json() as {
+      ready: boolean;
+      browserRequired: boolean;
+      toolCount: number;
+      renderExecution: boolean;
+      release?: unknown;
+    };
     expect(body.ready).toBe(true);
     expect(body.browserRequired).toBe(false);
     expect(body.toolCount).toBeGreaterThanOrEqual(6);
+    expect(body.renderExecution).toBe(false);
+    expect(body).not.toHaveProperty('release');
+  });
+
+  it('reports only Cloudflare-supplied release identity and execution posture', async () => {
+    const res = await handleRequest(req('/health'), {
+      CF_VERSION_METADATA: {
+        id: '4f94c8c7-0fef-4d7f-ae75-430c44e84542',
+        tag: '0123456789abcdef0123456789abcdef01234567',
+        timestamp: '2026-07-19T20:30:00.000Z',
+      },
+      RENDERER_ENDPOINT: 'https://renderer.invalid',
+    });
+    const body = await res.json() as {
+      renderExecution: boolean;
+      release: { id: string; tag: string; timestamp: string };
+    };
+
+    expect(body.renderExecution).toBe(true);
+    expect(body.release).toEqual({
+      id: '4f94c8c7-0fef-4d7f-ae75-430c44e84542',
+      tag: '0123456789abcdef0123456789abcdef01234567',
+      timestamp: '2026-07-19T20:30:00.000Z',
+    });
   });
 
   it('serves the built web app through the static asset binding', async () => {
@@ -77,6 +107,7 @@ describe('lupi Cloudflare MCP worker', () => {
     const body = await res.json() as { url: string; range: string };
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('x-lupi-asset-source')).toBe('external-proxy');
     expect(body).toMatchObject({
       url: 'https://assets.lupi.live/gallery/research/hfc/r32_nvt_273K.glimbin',
       range: 'bytes=0-4095',
@@ -108,6 +139,7 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(requestedKey).toBe('gallery/research/hfc/r32_nvt_273K.glimbin');
     expect(requestedRange).toEqual({ offset: 2, length: 4 });
     expect(res.headers.get('content-range')).toBe('bytes 2-5/10');
+    expect(res.headers.get('x-lupi-asset-source')).toBe('r2');
     expect(await res.text()).toBe('cdef');
   });
 

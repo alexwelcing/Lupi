@@ -24,6 +24,7 @@ import {
   type FrameIndexEntry,
   type DatasetMeta,
 } from '@atlas/core/glimbin';
+import { decompressGlimbinFrame } from './decompressGlimbinFrame';
 
 // ─── Cache & state ──────────────────────────────────────────────────
 
@@ -91,6 +92,8 @@ export interface StreamingLoaderEvents {
   onTelemetry?: (stats: { bytesTransferred: number; cacheHits: number; cacheMisses: number; cacheSize: number }) => void;
 }
 
+export type StreamingLoaderFetchOptions = Pick<RequestInit, 'redirect'>;
+
 export class StreamingLoader {
   private url: string;
   private header: GlimbinHeader | null = null;
@@ -115,10 +118,18 @@ export class StreamingLoader {
   private cacheHits = 0;
   private cacheMisses = 0;
 
-  constructor(url: string, events: StreamingLoaderEvents = {}, maxCachedFrames = 20) {
+  private fetchOptions: StreamingLoaderFetchOptions;
+
+  constructor(
+    url: string,
+    events: StreamingLoaderEvents = {},
+    maxCachedFrames = 20,
+    fetchOptions: StreamingLoaderFetchOptions = {},
+  ) {
     this.url = url;
     this.events = events;
     this.frameCache = new FrameCache(maxCachedFrames);
+    this.fetchOptions = fetchOptions;
   }
 
   private emitTelemetry() {
@@ -139,7 +150,12 @@ export class StreamingLoader {
     const resp = await fetch(this.url, {
       headers: { Range: `bytes=${start}-${end}` },
       signal,
+      ...this.fetchOptions,
     });
+
+    if (this.fetchOptions.redirect === 'error' && resp.redirected) {
+      throw new Error('Remote molecule redirects are not allowed.');
+    }
 
     if (!resp.ok && resp.status !== 206) {
       throw new Error(`Failed to fetch glimbin bytes ${start}-${end}: ${resp.status} ${resp.statusText}`);
@@ -177,10 +193,14 @@ export class StreamingLoader {
 
     // Also get file size from HEAD
     try {
-      const headResp = await fetch(this.url, { method: 'HEAD' });
+      const headResp = await fetch(this.url, { method: 'HEAD', ...this.fetchOptions });
+      if (this.fetchOptions.redirect === 'error' && headResp.redirected) {
+        throw new Error('Remote molecule redirects are not allowed.');
+      }
       const contentLength = headResp.headers.get('Content-Length');
       if (contentLength) this.fileSize = parseInt(contentLength, 10);
-    } catch {
+    } catch (error) {
+      if (this.fetchOptions.redirect === 'error') throw error;
       // Non-fatal: we can work without knowing file size
     }
 
@@ -267,78 +287,47 @@ export class StreamingLoader {
   }
 
   private async _doFetchFrame(frameIndex: number, signal?: AbortSignal): Promise<Frame> {
-    const entry = this.index!.entries[frameIndex];
-    const start = Number(entry.offset);
-    const end = start + entry.compressedSize - 1;
-
-    this.events.onProgress?.('frame', frameIndex / this.index!.entries.length);
-
-    let buffer = await this.fetchByteRange(start, end, signal);
-    this.emitTelemetry();
-
-    // Decompress if needed
-    if (this.header!.compressed && entry.compressedSize !== entry.rawSize) {
-      buffer = await this._decompress(buffer);
-    }
-
-    // Parse frame data into typed arrays
-    const parsed = parseFrameData(buffer, entry.natoms, this.header!.flags);
-
-    // Build Frame object compatible with existing rendering pipeline
-    const frame: Frame = {
-      timestep: entry.timestep,
-      natoms: entry.natoms,
-      boxBounds: this.header!.boxBounds,
-      boxTilt: this.header!.boxTilt,
-      triclinic: this.header!.triclinic,
-      columns: ['id', 'type', 'x', 'y', 'z'],
-      ids: parsed.ids,
-      // Expand Uint8 types to Int32 for compatibility with existing renderer
-      types: new Int32Array(parsed.types),
-      positions: parsed.positions,
-      bonds: parsed.bonds,
-      properties: parsed.properties,
-    };
-
-    // Cache and emit
-    this.frameCache.set(frameIndex, frame);
-    this.events.onFrame?.(frameIndex, frame);
-
-    return frame;
-  }
-
-  /** Decompress a buffer (zstd or gzip fallback via DecompressionStream) */
-  private async _decompress(buffer: ArrayBuffer): Promise<ArrayBuffer> {
-    // Try native DecompressionStream (available in modern browsers)
-    // Note: DecompressionStream supports 'gzip' and 'deflate' natively.
-    // For zstd, we'd need a WASM decoder. For now, fall back to gzip.
     try {
-      const ds = new DecompressionStream('gzip');
-      const writer = ds.writable.getWriter();
-      const reader = ds.readable.getReader();
+      const entry = this.index!.entries[frameIndex];
+      const start = Number(entry.offset);
+      const end = start + entry.compressedSize - 1;
 
-      writer.write(new Uint8Array(buffer));
-      writer.close();
+      this.events.onProgress?.('frame', frameIndex / this.index!.entries.length);
 
-      const chunks: Uint8Array[] = [];
-      let totalLen = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        totalLen += value.length;
+      let buffer = await this.fetchByteRange(start, end, signal);
+      this.emitTelemetry();
+
+      // The header declares compression. Equal encoded/raw lengths do not
+      // prove that the record is already raw and must not bypass decoding.
+      if (this.header!.compressed) {
+        buffer = await decompressGlimbinFrame(buffer, entry.rawSize);
       }
 
-      const result = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const chunk of chunks) {
-        result.set(chunk, offset);
-        offset += chunk.length;
-      }
-      return result.buffer;
-    } catch {
-      // If decompression fails, assume data was uncompressed
-      return buffer;
+      const parsed = parseFrameData(buffer, entry.natoms, this.header!.flags);
+      const frame: Frame = {
+        timestep: entry.timestep,
+        natoms: entry.natoms,
+        boxBounds: this.header!.boxBounds,
+        boxTilt: this.header!.boxTilt,
+        triclinic: this.header!.triclinic,
+        columns: ['id', 'type', 'x', 'y', 'z'],
+        ids: parsed.ids,
+        types: new Int32Array(parsed.types),
+        positions: parsed.positions,
+        bonds: parsed.bonds,
+        properties: parsed.properties,
+      };
+
+      this.frameCache.set(frameIndex, frame);
+      this.events.onFrame?.(frameIndex, frame);
+      return frame;
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      // Abort is caller intent, not corrupt input. Preserve cancellation and
+      // keep it off the data-error channel.
+      if (signal?.aborted || normalized.name === 'AbortError') throw normalized;
+      this.events.onError?.(normalized);
+      throw normalized;
     }
   }
 
@@ -458,7 +447,10 @@ export function isKnownLegacyMoleculeUrl(url: string): boolean {
  * Auto-detect whether a URL is a .glimbin (streaming) or a raw text file
  * (legacy monolithic parse). Returns the appropriate loader.
  */
-export async function autoDetectLoader(url: string): Promise<'streaming' | 'legacy'> {
+export async function autoDetectLoader(
+  url: string,
+  fetchOptions: StreamingLoaderFetchOptions = {},
+): Promise<'streaming' | 'legacy'> {
   if (isGlimbinUrl(url)) return 'streaming';
   if (isKnownLegacyMoleculeUrl(url)) return 'legacy';
 
@@ -466,7 +458,11 @@ export async function autoDetectLoader(url: string): Promise<'streaming' | 'lega
   try {
     const resp = await fetch(url, {
       headers: { Range: 'bytes=0-3' },
+      ...fetchOptions,
     });
+    if (fetchOptions.redirect === 'error' && resp.redirected) {
+      throw new Error('Remote molecule redirects are not allowed.');
+    }
     if (resp.ok || resp.status === 206) {
       const buffer = await resp.arrayBuffer();
       const magic = new Uint8Array(buffer);
@@ -474,7 +470,8 @@ export async function autoDetectLoader(url: string): Promise<'streaming' | 'lega
         return 'streaming';
       }
     }
-  } catch {
+  } catch (error) {
+    if (fetchOptions.redirect === 'error') throw error;
     // Can't probe — fall back to legacy
   }
 

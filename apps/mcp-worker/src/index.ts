@@ -41,6 +41,12 @@ interface QueueLike<T> {
   send(message: T): Promise<void>;
 }
 
+interface WorkerVersionMetadata {
+  id: string;
+  tag: string;
+  timestamp: string;
+}
+
 export interface Env {
   WEB_ASSETS?: FetcherLike;
   ASSETS?: R2BucketLike;
@@ -56,6 +62,7 @@ export interface Env {
   LUPI_MCP_SHARED_SECRET?: string;
   RENDERER_ENDPOINT?: string;
   RENDERER_TOKEN?: string;
+  CF_VERSION_METADATA?: WorkerVersionMetadata;
 }
 
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
@@ -706,6 +713,7 @@ async function updateJobStatus(env: Env, jobId: string, status: string, error?: 
 }
 
 function statusPayload(env: Env) {
+  const release = env.CF_VERSION_METADATA;
   return {
     ready: true,
     name: 'lupi-cloudflare-edge',
@@ -713,6 +721,14 @@ function statusPayload(env: Env) {
     toolCount: MCP_TOOLS.length,
     agentNative: true,
     browserRequired: false,
+    renderExecution: Boolean(env.RENDER_QUEUE || env.RENDERER_ENDPOINT),
+    ...(release ? {
+      release: {
+        id: release.id,
+        tag: release.tag,
+        timestamp: release.timestamp,
+      },
+    } : {}),
     bindings: {
       webAssets: Boolean(env.WEB_ASSETS),
       r2: Boolean(env.ASSETS),
@@ -846,6 +862,7 @@ async function proxyExternalAsset(request: Request, env: Env) {
   const response = await fetch(target, { method: request.method, headers });
   const out = new Headers(response.headers);
   out.set('cache-control', response.ok ? 'public, max-age=31536000, immutable' : 'no-cache');
+  out.set('x-lupi-asset-source', 'external-proxy');
   return new Response(request.method === 'HEAD' ? null : response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -863,6 +880,7 @@ async function readLargeAssetFromR2(objectPath: string, request: Request, env: E
   headers.set('accept-ranges', 'bytes');
   headers.set('cache-control', 'public, max-age=31536000, immutable');
   headers.set('content-type', headers.get('content-type') || contentTypeForObjectPath(objectPath));
+  headers.set('x-lupi-asset-source', 'r2');
 
   const size = head.size ?? Number(head.customMetadata?.byteLength ?? 0);
   const range = parseSingleByteRange(request.headers.get('range'), size);

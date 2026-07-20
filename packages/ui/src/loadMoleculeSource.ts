@@ -52,14 +52,20 @@ async function assertLooksLikeMoleculeData(blob: Blob, url: string): Promise<voi
   }
 }
 
-export async function loadMoleculeSource(loadUrl: string): Promise<void> {
+export interface LoadMoleculeSourceOptions {
+  /** Deny every network redirect at each HEAD, range, and full-fetch seam. */
+  strictRemote?: boolean;
+}
+
+export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeSourceOptions = {}): Promise<void> {
   clearPreviousStreaming();
 
   useStore.getState().setLoading(true, 0);
 
   try {
     const { isGlimbinUrl, autoDetectLoader } = await import('@atlas/parsers/StreamingLoader');
-    const loaderType = isGlimbinUrl(loadUrl) ? 'streaming' : await autoDetectLoader(loadUrl);
+    const fetchOptions: Pick<RequestInit, 'redirect'> = options.strictRemote ? { redirect: 'error' } : {};
+    const loaderType = isGlimbinUrl(loadUrl) ? 'streaming' : await autoDetectLoader(loadUrl, fetchOptions);
 
     if (loaderType === 'streaming') {
       const { StreamingLoader } = await import('@atlas/parsers/StreamingLoader');
@@ -70,7 +76,7 @@ export async function loadMoleculeSource(loadUrl: string): Promise<void> {
         onTelemetry: (stats) => {
           useStore.getState().setStreamingTelemetry(stats);
         },
-      });
+      }, 20, fetchOptions);
 
       await loader.fetchHeader();
       await loader.fetchIndex();
@@ -108,7 +114,8 @@ export async function loadMoleculeSource(loadUrl: string): Promise<void> {
       return;
     }
 
-    const resp = await fetch(loadUrl);
+    const resp = await fetch(loadUrl, fetchOptions);
+    if (options.strictRemote && resp.redirected) throw new Error('Remote molecule redirects are not allowed.');
     if (!resp.ok) throw new Error(`Failed to fetch ${loadUrl}: ${resp.status}`);
     const blob = await resp.blob();
     await assertLooksLikeMoleculeData(blob, loadUrl);

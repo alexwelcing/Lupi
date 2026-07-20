@@ -15,6 +15,7 @@ import { getElementSpec } from '@atlas/core';
 import type { Frame } from '@atlas/core/types';
 import { firebaseDb } from './auth/firebase';
 import { loadInlineMolecule, loadMoleculeSource } from './loadMoleculeSource';
+import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { useStore, type AppState, type LoadedFile } from './store';
 
 export const SAVED_VIEW_SCHEMA_VERSION = 1;
@@ -239,7 +240,7 @@ export async function listUserSavedViews(uid: string): Promise<SavedMolecularVie
   return snaps.docs.map((viewDoc) => viewDoc.data() as SavedMolecularView);
 }
 
-function readMoleculeSource(): SavedMoleculeSource {
+export function readMoleculeSource(): SavedMoleculeSource {
   const file = useStore.getState().file;
   const frameIndex = useStore.getState().frame;
   const frame = file?.trajectory.frames[frameIndex] ?? file?.trajectory.frames[0];
@@ -247,15 +248,21 @@ function readMoleculeSource(): SavedMoleculeSource {
 
   const atomCount = frame.natoms;
   const totalFrames = file.trajectory.totalFrames;
-  if (file.sourceUrl && isReloadableSource(file.sourceUrl)) {
-    return {
-      kind: 'url',
-      name: file.name,
-      url: file.sourceUrl,
-      size: file.size,
-      atomCount,
-      totalFrames,
-    };
+  if (file.sourceUrl && file.sourceUrl !== 'procedural') {
+    try {
+      const allowed = assertAllowedRemoteMoleculeUrl(file.sourceUrl, 'saved-view', currentOrigin());
+      return {
+        kind: 'url',
+        name: file.name,
+        url: allowed.url,
+        size: file.size,
+        atomCount,
+        totalFrames,
+      };
+    } catch {
+      // Public saved views must never republish an untrusted automatic URL.
+      // Small structures use the already-loaded frame as a safe inline fallback.
+    }
   }
 
   if (atomCount <= INLINE_XYZ_ATOM_LIMIT) {
@@ -378,18 +385,17 @@ function applyCanonicalView(view: CanonicalMolecularView) {
   });
 }
 
-async function loadSavedMolecule(molecule: SavedMoleculeSource): Promise<void> {
+export async function loadSavedMolecule(molecule: SavedMoleculeSource): Promise<void> {
   if (molecule.kind === 'url') {
-    await loadMoleculeSource(molecule.url);
+    const allowed = assertAllowedRemoteMoleculeUrl(molecule.url, 'saved-view', currentOrigin());
+    await loadMoleculeSource(allowed.url, { strictRemote: true });
     return;
   }
   await loadInlineMolecule(molecule.name, molecule.xyz, `lupi-view://${molecule.name}`);
 }
 
-function isReloadableSource(sourceUrl: string): boolean {
-  if (sourceUrl === 'procedural') return false;
-  if (/^[a-z]+:\/\//i.test(sourceUrl)) return sourceUrl.startsWith('http://') || sourceUrl.startsWith('https://');
-  return true;
+function currentOrigin(): string {
+  return typeof window === 'undefined' ? 'https://lupi.live' : window.location.origin;
 }
 
 function frameToXyz(name: string, frame: Frame): string {

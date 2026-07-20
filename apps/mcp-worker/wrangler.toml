@@ -15,6 +15,9 @@ binding = "WEB_ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = true
 
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [vars]
 ASSET_BASE_URL = "https://assets.lupi.live"
 LUPI_LARGE_ASSET_BASE_URL = "https://assets.lupi.live"
@@ -23,9 +26,9 @@ FIREBASE_PROJECT_ID = "shed-489901"
 LUPI_PUBLIC_ORIGIN = "https://lupi.live"
 CORS_ORIGINS = "https://lupi.live,http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:8787"
 
-# Production bindings are intentionally documented but not enabled here. Create
-# them per account/environment before deploy:
-#
+# The production R2 asset binding is enabled here. Other optional execution and
+# persistence bindings remain documented below and must be provisioned
+# deliberately before enabling them.
 [[r2_buckets]]
 binding = "ASSETS"
 bucket_name = "lupi-assets"

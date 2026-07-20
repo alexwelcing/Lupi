@@ -25,6 +25,8 @@ on:
       - 'eslint.config.*'
       - 'playwright.config.mjs'
       - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+      - '.github/wrangler-runtime/**'
   push:
     branches: [main]
     paths:
@@ -49,37 +51,83 @@ on:
       - 'eslint.config.*'
       - 'playwright.config.mjs'
       - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+      - '.github/wrangler-runtime/**'
 
 concurrency:
   group: lupi-live-ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 9
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Bootstrap checksum-pinned actionlint
+        run: |
+          version='1.7.12'
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          expected='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+          root="$RUNNER_TEMP/actionlint"
+          mkdir -p "$root"
+          curl --fail --location --retry 3 \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}" \
+            --output "$root/$archive"
+          echo "$expected  $root/$archive" | sha256sum --check --strict
+          tar -xzf "$root/$archive" -C "$root" actionlint
+          echo "$root" >> "$GITHUB_PATH"
+
+      - name: Validate GitHub workflow schemas
+        run: pnpm verify:workflows
+
+      - name: Test actionlint compatibility filter
+        run: node --test tools/run-actionlint.test.mjs
+
       - name: Test product contract verifier
         run: node --test tools/verify-product-contract.test.mjs
 
       - name: Verify product contract
         run: pnpm verify:product-contract
+
+      - name: Lint all workspaces and repository tooling
+        run: pnpm lint
+
+      - name: Gate root production dependencies
+        run: pnpm audit --prod --audit-level high
+
+      - name: Test Cloudflare live verifier
+        run: node --test tools/verify-cloudflare-live.test.mjs
+
+      - name: Test Cloudflare release receipts
+        run: node --test tools/cloudflare-release-receipt.test.mjs
+
+      - name: Test Cloudflare release authority
+        run: node --test tools/cloudflare-release-authority.test.mjs
+
+      - name: Test Cloudflare workflow contract
+        run: node --test tools/cloudflare-release-workflow.test.mjs
+
+      - name: Test Cloudflare release package builder
+        run: node --test tools/build-cloudflare-release-package.test.mjs
 
       - name: Build
         run: pnpm build
@@ -90,11 +138,24 @@ jobs:
       # Cloud Functions are a standalone npm package (own lockfile, separate
       # Firebase deploy), so they're not in the pnpm/turbo workspace. Gate their
       # security-adjacent tests (keygen, rate limiting, social meta) in isolation.
+      - name: Install Cloud Functions dependencies
+        working-directory: functions
+        run: npm ci
+
+      - name: Gate Cloud Functions production dependencies
+        working-directory: functions
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build Cloud Functions
+        working-directory: functions
+        run: npm run build
+
       - name: Test Cloud Functions
         working-directory: functions
-        run: |
-          npm ci
-          npm test
+        run: npm test
+
+      - name: Test Cloudflare Worker
+        run: pnpm cloudflare:test
 
       - name: Rebuild catalog and fail on drift
         run: |
@@ -114,7 +175,7 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: |

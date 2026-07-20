@@ -18,9 +18,9 @@ evidence is sufficient.
 |---|---|---|
 | Local | NOT CHECKED | clean worktree, exact SHA, install/build/real lint/tests/Worker/Playwright results |
 | CI | NOT CHECKED | exact-SHA GitHub run URL, conclusion, and required jobs |
-| Deploy | NOT CHECKED | run URL, immutable revision/version, bindings/config, previous rollback target |
-| Live API | NOT CHECKED | custom-domain health/version/bindings, distinct manifests, auth and relevant render/job/asset behavior |
-| Public site | NOT CHECKED | discovery, loaded molecule/canvas, mobile controls, saved-view success/error, and relevant exported bytes |
+| Deploy | BLOCKED | v2 cutover authority plus run URL, immutable revision/version, bindings/config, and previous rollback target |
+| Live API | BLOCKED | authorized promotion plus custom-domain health/version/bindings, distinct manifests, auth and relevant render/job/asset behavior |
+| Public site | BLOCKED | authorized promotion plus discovery, loaded molecule/canvas, mobile controls, saved-view success/error, and relevant exported bytes |
 
 Direct `workers.dev` evidence and `https://lupi.live` evidence are separate.
 Source presence and screenshots are not deployment or functional proof.
@@ -33,8 +33,8 @@ Source presence and screenshots are not deployment or functional proof.
 - [ ] `pnpm-lock.yaml` matches `package.json`.
 - [ ] CI uses pnpm 9, matching `packageManager`.
 - [ ] No retired `apps/lupi-studio` or nested research-site app is present.
-- [ ] A real, non-vacuous lint gate exists and passes; the root script name
-      alone is not accepted as lint evidence.
+- [ ] The real `pnpm lint` gate and both production dependency audits run and
+      pass for this exact SHA; their source definitions alone are not evidence.
 
 ## Viewer Verification
 
@@ -67,16 +67,86 @@ pnpm verify:exports
 
 ## Deploy
 
-- [ ] `deploy-cloudflare.yml` builds the web app and edge Worker from this repo.
-- [ ] Cloudflare secrets are available through the protected `prod` environment.
-- [ ] Old `atlas/deploy_slim.py` coupling is gone.
-- [ ] Wrangler returns a direct `workers.dev` deployment URL.
-- [ ] Exact Worker/Git version, prior rollback target, structured readiness, and
-      deployed Playwright checks pass.
-- [ ] The manual Cloud Run fallback still tests its candidate before routing traffic.
+The v2 controller source does not authorize its own cutover. Mark Deploy, Live
+API, and Public site **BLOCKED** until every cutover item and a separately
+authorized production run are proven. Do not mark them NOT CHECKED when the
+known authority prerequisite is absent.
+
+### Cutover authority
+
+- [ ] The Plan 022 freeze is freshly revalidated: the old workflow remains
+      disabled, the legacy token is revoked, the legacy secret name is absent,
+      and every still-rerunnable historical snapshot is unable to reach fresh
+      authority.
+- [ ] `lupi-production-read-v2`, `lupi-production-write-v2`, and
+      `lupi-production-reanchor-v2` exist with reviewed protection rules and the
+      exact job mapping asserted by the authority scanner.
+- [ ] `LUPI_CLOUDFLARE_READ_TOKEN_V2` and
+      `LUPI_CLOUDFLARE_WRITE_TOKEN_V2` are separately scoped to their literal
+      environments; evidence records identifiers and scopes, never values.
+- [ ] Protected `main`, its required-check ruleset, the active integrated
+      workflow content/state, the closed-world current/historical authority
+      scan, and the protected `LUPI_RELEASE_CUTOVER_RECEIPT_SHA256` value all
+      match one separately approved non-secret cutover receipt.
+- [ ] The reconciliation workflow is `active`, its newest self-contained
+      checkpoint is no older than 30 days with at least seven days remaining,
+      and its complete embedded rollback bundle validates.
+
+### Owner dispatch and package boundary
+
+- [ ] Production entry is a fresh first-attempt `workflow_dispatch` by exact
+      owner `alexwelcing` from `refs/heads/main`.
+- [ ] `target_sha` equals the workflow SHA and the repository API's current
+      `main`; confirmation is exactly
+      `DEPLOY <target_sha> WITH BOUNDED ROLLBACK`.
+- [ ] The no-secret release-package job passes product-contract, lint, audit,
+      build, unit, Worker, Functions, and controller gates and emits a closed
+      digest-bound data-only package.
+- [ ] Every write job starts clean: no checkout, project install/build/test,
+      candidate execution, broad/dynamic secret access, or mutable tool. The
+      write token appears only in the final closed Wrangler mutation step.
+
+### Candidate, promotion, and durable receipts
+
+- [ ] A full-SHA-tagged no-traffic version upload records the exact candidate
+      version ID and immutable preview origin.
+- [ ] Candidate-preview Live API verification and the complete UI suite pass
+      before promotion. This is not custom-domain or Public site PASS.
+- [ ] A validated `lupi-release-intent-v1` records the prior/candidate versions,
+      package and rollback-contract hashes, expected posture, and bounded
+      rollback authorization before traffic changes.
+- [ ] Immediately before promotion, the prior version is still the only active
+      version and remains an eligible rollback target; immediately afterward,
+      the candidate alone is active at 100%.
+- [ ] Custom-domain Live API verification and the complete UI suite pass after
+      promotion for the same Worker version/Git SHA and matching entry bytes.
+- [ ] A validated `lupi-release-outcome-v1` closes success, or a linked rollback
+      resolution proves the prior version and its exact-source UI contract were
+      restored. A rolled-back run remains a failed release.
+
+### Reconciliation and operating discipline
+
+- [ ] Release and reconciliation use the same queue-max, non-cancelling
+      single-writer group; no older unresolved intent remains ahead of this run.
+- [ ] Automatic weekly and `workflow_run` reconciliation paths are read-only.
+      A rollback, refresh, or re-anchor uses a fresh exact-owner/current-main
+      manual dispatch with its exact mode-specific confirmation.
+- [ ] During repository inactivity, the owner checks reconciliation workflow
+      state and checkpoint age at least every 30 days. If GitHub auto-disabled
+      the weekly schedule, releases stop until the inspected workflow is
+      explicitly re-enabled and an owner-only refresh succeeds.
+- [ ] The receipt records the accepted single-owner residual risk: the controls
+      cannot independently contain compromise of the one account that controls
+      source and production authority.
+- [ ] No routine Cloudflare dashboard/CLI deploy, traffic change, or secret
+      change occurred. Break-glass work, including any use of the Cloud Run
+      fallback, held both controllers and has separate authorization and proof.
 
 ## Live Verification
 
+- [ ] The immutable candidate-preview report and post-promotion
+      `https://lupi.live` report are retained separately and identify the same
+      exact Git SHA and Worker version; preview PASS is not public PASS.
 - [ ] `https://lupi.live` loads the intended revision.
 - [ ] A built-in molecule opens.
 - [ ] Gallery search works.

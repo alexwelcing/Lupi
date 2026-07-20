@@ -25,9 +25,27 @@ export function AtomInfoHUD({
   onDismissCard,
 }: AtomInfoHUDProps) {
   const atomIndex = selectedAtoms[0];
-  if (atomIndex == null || atomIndex < 0 || atomIndex >= frame.natoms) return null;
-
   const knowledgeLabels = useStore(s => s.knowledgeLabels);
+  const showNeighbors = useStore(s => s.showNeighbors);
+  const setShowNeighbors = useStore(s => s.setShowNeighbors);
+  const setHighlightedNeighbors = useStore(s => s.setHighlightedNeighbors);
+  const validAtomIndex = atomIndex != null && atomIndex >= 0 && atomIndex < frame.natoms;
+  const nodeLabel = validAtomIndex
+    ? knowledgeLabels.find((l) => l.kind === 'node' && l.atomIndex === atomIndex)
+    : undefined;
+
+  // Auto-populate neighbors when a node is selected and showNeighbors is on.
+  // The guard keeps every hook unconditional without changing the empty-card path.
+  useEffect(() => {
+    if (validAtomIndex && showNeighbors && nodeLabel?.neighbors) {
+      setHighlightedNeighbors(new Set(nodeLabel.neighbors));
+    } else {
+      setHighlightedNeighbors(new Set());
+    }
+  }, [validAtomIndex, showNeighbors, nodeLabel, setHighlightedNeighbors]);
+
+  if (!validAtomIndex) return null;
+
   const x = frame.positions[atomIndex * 3];
   const y = frame.positions[atomIndex * 3 + 1];
   const z = frame.positions[atomIndex * 3 + 2];
@@ -36,23 +54,9 @@ export function AtomInfoHUD({
   const spec = getElementSpec(type);
   const properties = getPropertyRows(frame, atomIndex, activeProperty);
   const knowledge = getKnowledgeRows(knowledgeLabels, frame, atomIndex);
-  const nodeLabel = knowledgeLabels.find((l) => l.kind === 'node' && l.atomIndex === atomIndex);
   const subtitle = nodeLabel?.nodeId
     ? formatNodePath(nodeLabel.nodeId)
     : `atom #${atomIndex} / id ${id} / type ${type}`;
-  const showNeighbors = useStore(s => s.showNeighbors);
-  const setShowNeighbors = useStore(s => s.setShowNeighbors);
-  const setHighlightedNeighbors = useStore(s => s.setHighlightedNeighbors);
-
-  // Auto-populate neighbors when a node is selected and showNeighbors is on
-  useEffect(() => {
-    if (showNeighbors && nodeLabel?.neighbors) {
-      setHighlightedNeighbors(new Set(nodeLabel.neighbors));
-    } else {
-      setHighlightedNeighbors(new Set());
-    }
-  }, [showNeighbors, nodeLabel, setHighlightedNeighbors]);
-
   return (
     <Html
       position={[x, y + spec.displayRadius * 1.75 + 0.45, z]}

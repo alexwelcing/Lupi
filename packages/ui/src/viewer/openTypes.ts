@@ -1,6 +1,6 @@
 export type ViewerOpenRequest =
   | { kind: 'gallery'; id: string; history?: 'push' | 'replace' | 'none' }
-  | { kind: 'url'; url: string; title?: string; history?: 'push' | 'replace' | 'none' }
+  | { kind: 'url'; url: string; title?: string; history?: 'push' | 'replace' | 'none'; strictRemote?: boolean }
   | { kind: 'saved-view'; slug: string };
 
 export type ViewerOpenResult =

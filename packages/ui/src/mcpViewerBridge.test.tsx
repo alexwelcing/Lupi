@@ -10,6 +10,7 @@ import {
 describe('MCP viewer bridge', () => {
   beforeEach(() => {
     resetStore();
+    window.history.replaceState({}, '', '/');
     delete (window as Window & { __lupiViewerMcp?: LupiMcpDriver }).__lupiViewerMcp;
     delete (window as Window & { __lupiViewerMcpReady?: unknown }).__lupiViewerMcpReady;
   });
@@ -58,6 +59,49 @@ describe('MCP viewer bridge', () => {
     expect(requests[0].arguments.viewer).toMatchObject({ showBonds: true, cameraPreset: 'iso' });
     expect(requests[1].tool).toBe('lupi.export_asset');
     expect(requests[1].arguments).toMatchObject({ format: 'png', width: 512, height: 384 });
+  });
+
+  it('does not auto-execute production-shaped URL commands, but permits explicit execution', async () => {
+    const command = JSON.stringify({
+      id: 'url-caffeine',
+      tool: 'lupi.generate_molecule',
+      arguments: { inputType: 'template', input: 'Caffeine' },
+    });
+    window.history.replaceState({}, '', `/?mcpCommand=${encodeURIComponent(command)}#/mcp`);
+    const driver = mountBridge();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(getStoreState().file).toBeNull();
+
+    const requests = driver.parseCommand(command);
+    const responses = await driver.executeBatch(requests);
+    expect(responses[0].ok).toBe(true);
+    expect(getStoreState().file?.name).toMatch(/caffeine/i);
+  });
+
+  it('enforces the remote URL policy again in the MCP handler before any fetch', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const driver = mountBridge();
+      const response = await driver.execute({
+        id: 'unsafe-url',
+        tool: 'lupi.load_molecule_url',
+        arguments: { url: 'https://169.254.169.254/latest/meta-data.xyz' },
+      });
+      expect(response.ok).toBe(false);
+      expect(response.error?.message).toMatch(/not allowed/i);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('parses only allowlisted remote molecule URLs into MCP load requests', () => {
+    const driver = mountBridge();
+    expect(driver.parseCommand('https://lupi.live/gallery/curated/caffeine.xyz')[0]).toMatchObject({
+      tool: 'lupi.load_molecule_url',
+      arguments: { url: 'https://lupi.live/gallery/curated/caffeine.xyz' },
+    });
+    expect(() => driver.parseCommand('https://lupi.live.evil.example/gallery/caffeine.xyz')).toThrow(/not allowed/i);
   });
 
   it('lists new AI-control tools', () => {

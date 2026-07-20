@@ -19,15 +19,15 @@ different truths. Never collapse them into one green status.
 
 | Truth lane | Minimum evidence |
 |---|---|
-| Local | Exact Git SHA, clean integration worktree, frozen install, `pnpm verify:product-contract`, build, real lint, unit tests, Worker tests, and relevant Playwright results. Until a non-vacuous lint gate exists, local release evidence is incomplete. |
+| Local | Exact Git SHA, clean integration worktree, frozen install, `pnpm verify:product-contract`, real `pnpm lint`, production dependency audits, build, unit tests, Worker tests, release-controller tests, and relevant Playwright results. A script name without its command receipt is not evidence. |
 | CI | GitHub Actions run URL and conclusion for the exact SHA, with every required job and required/non-advisory gate named. A local result is not CI evidence. |
-| Deploy | Authorized deployment run, exact candidate/revision URL and version, bindings/configuration validation, and the previously serving rollback target. Source presence or merge state is not deployment proof. |
-| Live API | Custom-domain `/health` version and bindings, distinct edge and browser manifests, expected authentication posture, and relevant render/job/asset behavior. Direct `workers.dev` evidence is recorded separately from custom-domain evidence. |
+| Deploy | Separately authorized owner dispatch, exact candidate version and immutable preview origin, validated prior rollback target, durable pre-mutation intent, traffic-promotion result, and terminal outcome or rollback resolution. Source presence, merge state, package creation, or candidate upload alone is not deployment proof. |
+| Live API | Separate candidate-preview and custom-domain reports for the same Git SHA and Worker version, including `/health` identity/bindings, distinct edge and browser manifests, expected authentication posture, entry-byte parity, and relevant render/job/asset behavior. Candidate-preview evidence is not custom-domain evidence. |
 | Public site | Root discovery, a real molecule loaded with a canvas present, mobile core controls, saved-view success and recoverable error behavior, and retrieved export bytes wherever the release changes export behavior. A plausible screenshot is not functional proof. |
 
-The release receipt records every lane independently for one exact SHA. Direct
-revision evidence and custom-domain evidence must not be substituted for one
-another.
+The release receipt records every lane independently for one exact SHA.
+`workers.dev` candidate-preview evidence is separate from custom-domain
+evidence.
 
 ## Attestation ownership
 
@@ -84,9 +84,9 @@ Every release must preserve these invariants:
 
 1. `pnpm verify:product-contract` passes and the canonical ownership boundary is
    discoverable.
-2. A real, blocking lint gate exists before release evidence may claim lint
-   success; the current root `pnpm lint` script is not sufficient evidence by
-   its name alone.
+2. The real, blocking lint and production dependency-audit gates run for the
+   exact release SHA. Their source definitions or script names are not command
+   receipts.
 3. No critical owned or reachable production vulnerability is knowingly
    shipped. Any accepted lower-severity risk names reachability, owner, and
    follow-up.
@@ -100,6 +100,102 @@ Every release must preserve these invariants:
    do not make storefront or fulfillment behavior part of viewer core.
 8. Rollback evidence names what was serving before mutation and proves what is
    serving after rollback; rollback source code alone is not rollback proof.
+
+## Production controller contract
+
+The repository now contains a source-side v2 production design in
+`.github/workflows/deploy-cloudflare.yml` and
+`.github/workflows/reconcile-cloudflare-deploy.yml`. This section defines how
+that design may be operated; it does not attest that the workflows or their
+external authority are configured or active.
+
+### Release admission and write isolation
+
+- Production release entry is manual `workflow_dispatch` only. It must be run
+  by the exact repository owner `alexwelcing`, from `refs/heads/main`, on the
+  first attempt, with `target_sha` equal to both the workflow SHA and the
+  repository API's current `main` SHA. The confirmation must be exactly
+  `DEPLOY <target_sha> WITH BOUNDED ROLLBACK`.
+- A no-Cloudflare-secret job runs the source, build, unit, audit, and controller
+  gates and builds a closed, digest-bound, data-only release package.
+  Credentialed write jobs start clean:
+  they do not check out repository source, install project dependencies, build,
+  test, execute candidate code, or receive broad/dynamic secrets. They validate
+  downloaded data, bootstrap integrity-pinned Wrangler without the token, and
+  expose `LUPI_CLOUDFLARE_WRITE_TOKEN_V2` only to the final closed mutation
+  step in `lupi-production-write-v2`.
+- Read jobs use only `LUPI_CLOUDFLARE_READ_TOKEN_V2` in
+  `lupi-production-read-v2`. Manual chain reconstruction uses the read token in
+  the separately named `lupi-production-reanchor-v2` environment. No other
+  workflow, job, dynamic environment, inherited secret, or computed secret name
+  may reach v2 Cloudflare authority.
+- Upload is a no-traffic Worker version upload. The immutable candidate preview
+  must pass the live verifier and the complete UI suite before a durable
+  `lupi-release-intent-v1` is written and before the fixed 100% promotion step.
+  After promotion, `https://lupi.live` is verified separately for exact
+  Worker/Git identity and entry bytes. Only then may a validated
+  `lupi-release-outcome-v1` close the successful chain.
+
+### Durable recovery chain
+
+Release intent records the prior and candidate versions, package and rollback-
+contract hashes, expected posture, owner confirmation, and bounded rollback
+authorization before traffic changes. A successful outcome carries the exact
+candidate identity, custom-domain report, source/package identity, and rollback
+bundle. A failed post-promotion verification remains a failed release even if
+the authorized bounded rollback restores the prior version.
+
+The reconciliation controller serializes with release through the same
+non-cancelling queue. Its automatic `workflow_run` and weekly
+`17 7 * * 1` paths are read-only: they may verify a no-op, refresh a complete
+`lupi-release-checkpoint-v1`, or emit a rollback-required incident, but they may
+not change traffic. An independent rollback, refresh, or re-anchor requires a
+fresh exact-owner, current-`main`, first-attempt manual dispatch and its
+mode-specific typed confirmation. A third or split active deployment is a STOP,
+not an inferred rollback target.
+
+Every retained checkpoint must be self-contained, no older than 30 days, have
+at least seven days before expiry, and embed the complete active rollback
+bundle rather than only linking to an artifact that can expire. GitHub may
+automatically disable scheduled workflows in an inactive public repository, so
+the weekly cron is best-effort. During repository inactivity the owner checks
+the reconciliation workflow's API state and checkpoint age at least every 30
+days. If the workflow is not `active`, releases are BLOCKED until the exact
+integrated workflow is inspected, separately re-enabled, and an owner-only
+refresh succeeds; an invalid history requires the full re-anchor path.
+
+### Single-owner authority and cutover interlock
+
+This repository intentionally uses a single-owner model rather than a
+two-person approval requirement. Exact actor/current-main checks, typed
+confirmations, isolated credentials, immutable receipts, and reconciliation
+reduce mistakes and stale-writer risk. They cannot independently contain
+compromise of the `alexwelcing` account, because that one account controls both
+source and production authorization. Every release receipt records that
+residual risk without describing it as dual control.
+
+The v2 workflow source is not production authority. Deploy, Live API, and
+Public site remain **BLOCKED** until a separately authorized cutover proves all
+of the following together:
+
+- the pre-v2 workflow/token freeze remains valid and no still-rerunnable
+  historical workflow can reach a current credential;
+- literal `lupi-production-read-v2`, `lupi-production-write-v2`, and
+  `lupi-production-reanchor-v2` environments have the intended protection and
+  exact read/write token mapping, with identifiers recorded but no values;
+- protected `main` and its required-check ruleset are active;
+- the integrated workflow content and state, closed-world authority scan,
+  protected cutover-receipt digest, reconciliation state, and fresh checkpoint
+  all pass; and
+- an authorized run produces separate Deploy, candidate-preview, custom-domain,
+  and Public site evidence for one exact version.
+
+Routine Cloudflare dashboard/CLI deploys, traffic changes, or secret changes are
+prohibited because they bypass the durable chain. A necessary break-glass
+change first holds both controllers and receives separate authorization and
+post-change verification. Source merge is never permission to create/rotate
+tokens, configure environments/rulesets, enable a workflow, upload a version,
+or change traffic.
 
 ## Required report shape
 

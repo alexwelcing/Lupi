@@ -11,7 +11,8 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "lint": "eslint ."
   },
   "dependencies": {
     "react": "^19.0.0"

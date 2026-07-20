@@ -28,7 +28,9 @@ export const FRAME_BOX_BLOCK_SIZE = 76;
 
 // ─── Flags ──────────────────────────────────────────────────────────
 
-export const FLAG_COMPRESSED   = 0x0001; // Frame data is zstd-compressed
+// The flag declares compression but the format does not yet encode a codec.
+// Existing compressed fixtures use gzip; readers must reject unknown framing.
+export const FLAG_COMPRESSED   = 0x0001;
 export const FLAG_LITTLE_ENDIAN = 0x0002; // Data is little-endian (default)
 export const FLAG_VARIABLE_ATOMS = 0x0004; // Atom count varies per frame
 export const FLAG_HAS_BONDS    = 0x0008; // Frames include bond data

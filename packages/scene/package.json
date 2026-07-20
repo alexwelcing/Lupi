@@ -17,10 +17,12 @@
   "scripts": {
     "build": "tsc --noEmit",
     "clean": "rm -rf dist",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
     "@atlas/core": "workspace:*",
+    "@atlas/renderer": "workspace:*",
     "@react-three/fiber": "^9.6.0",
     "react": "^19.0.0",
     "three": "^0.184.0"

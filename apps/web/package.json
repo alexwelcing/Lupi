@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node ../../tools/generate-sphere-grid-gallery.mjs --no-snapshot --use-existing && npx tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs",
+    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1,0 +1,10 @@
+{
+  "name": "lupi-release-wrangler-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Fully locked credential-bearing Wrangler runtime for Lupi release jobs",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "wrangler": "4.110.0"
+  }
+}

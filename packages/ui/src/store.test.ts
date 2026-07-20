@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { resetStore, getStoreState } from './test-utils';
+import { resetStore, getStoreState, setStoreState } from './test-utils';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 import { DEFAULT_SCENE_ID } from '@atlas/scene/materials';
 
@@ -8,6 +8,10 @@ function encodeStateDelta(delta: Record<string, unknown>) {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
+}
+
+function encodeRawStateJson(json: string) {
+  return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 describe('Store — Display Toggles', () => {
@@ -241,6 +245,119 @@ describe('Store — URL Serialization', () => {
     resetStore();
     getStoreState().decodeFromURL(encodeStateDelta({ cs: 'family' }));
     expect(getStoreState().colorScheme).toBe('colorway');
+  });
+
+  it('rejects wrong types, nulls, non-finite values, and out-of-range numbers', () => {
+    const before = getStoreState();
+    const defaults = {
+      frame: before.frame,
+      atomScale: before.atomScale,
+      playbackSpeed: before.playbackSpeed,
+      cameraFov: before.cameraFov,
+      postprocessIntensity: before.postprocessIntensity,
+      ssaoIntensity: before.ssaoIntensity,
+      bloomIntensity: before.bloomIntensity,
+      dofFocus: before.dofFocus,
+      filterShellOpacity: before.filterShellOpacity,
+      filterShellRadius: before.filterShellRadius,
+      bondCutoff: before.bondCutoff,
+      bondTolerance: before.bondTolerance,
+      materialIntensity: before.materialIntensity,
+      ambientLightIntensity: before.ambientLightIntensity,
+      dirLightIntensity: before.dirLightIntensity,
+      rimLightIntensity: before.rimLightIntensity,
+      surfaceRoughness: before.surfaceRoughness,
+      surfacePolish: before.surfacePolish,
+      surfaceClearcoat: before.surfaceClearcoat,
+      keyLightAzimuth: before.keyLightAzimuth,
+      keyLightElevation: before.keyLightElevation,
+      ssao: before.ssao,
+      bloom: before.bloom,
+      dof: before.dof,
+      showCell: before.showCell,
+      showAxes: before.showAxes,
+      showBonds: before.showBonds,
+      backgroundMotionPaused: before.backgroundMotionPaused,
+    };
+
+    getStoreState().decodeFromURL(encodeStateDelta({
+      f: 1.5, as: '2', spd: null, fov: true, pi: '', si: 5, bi: -1, df: 10_001,
+      fso: Number.NaN, fsr: Number.POSITIVE_INFINITY, bc: -2, bt: 4, mi: '0.5',
+      ali: -1, dli: 5, rli: 5, sr: 2, sp: -2, scc: 2, kla: 361, kle: -91,
+      ssao: '0', bloom: null, dof: '1', cell: false, axes: '0', bonds: true, bmp: '1',
+    }));
+
+    expect(getStoreState()).toMatchObject(defaults);
+  });
+
+  it('rejects malformed, non-finite, and huge camera vectors', () => {
+    getStoreState().decodeFromURL(encodeStateDelta({ cp3: [1, 2], ct: [0, 0, 1_000_001] }));
+    expect(getStoreState().cameraPosition).toEqual([0, 0, 50]);
+    expect(getStoreState().cameraTarget).toEqual([0, 0, 0]);
+
+    getStoreState().decodeFromURL(encodeRawStateJson('{"cp3":[0,1e309,0],"ct":[0,0,0]}'));
+    expect(getStoreState().cameraPosition).toEqual([0, 0, 50]);
+    expect(getStoreState().cameraTarget).toEqual([0, 0, 0]);
+  });
+
+  it('rejects oversized encoded URL state without changing viewer state', () => {
+    getStoreState().setAtomScale(1.75);
+    getStoreState().decodeFromURL('A'.repeat(65_537));
+    expect(getStoreState().atomScale).toBe(1.75);
+  });
+
+  it('accepts documented numeric boundaries and preserves negative material values', () => {
+    getStoreState().decodeFromURL(encodeStateDelta({
+      f: 10_000_000, as: 20, spd: 0.0625, fov: 179, si: 4, bi: 0, df: 10_000,
+      fso: 0.65, fsr: 4, mi: 1, ali: 4, dli: 0, rli: 4, sr: -1, sp: -1,
+      scc: 1, kla: -360, kle: 90, cp3: [-1_000_000, 0, 1_000_000], ct: [1, 2, 3],
+    }));
+    expect(getStoreState()).toMatchObject({
+      frame: 10_000_000, atomScale: 20, playbackSpeed: 0.0625, cameraFov: 179,
+      ssaoIntensity: 4, bloomIntensity: 0, dofFocus: 10_000, filterShellOpacity: 0.65,
+      filterShellRadius: 4, materialIntensity: 1, ambientLightIntensity: 4,
+      dirLightIntensity: 0, rimLightIntensity: 4, surfaceRoughness: -1,
+      surfacePolish: -1, surfaceClearcoat: 1, keyLightAzimuth: -360,
+      keyLightElevation: 90, cameraPosition: [-1_000_000, 0, 1_000_000],
+      cameraTarget: [1, 2, 3],
+    });
+  });
+
+  it('applies loop, bounce, and once boundaries to explicit stepping', () => {
+    const trajectory = createMockTrajectory(5, 2);
+    getStoreState().setFile({ name: 'steps.xyz', size: 1, trajectory });
+
+    setStoreState({ loopMode: 'loop', frame: 4 });
+    getStoreState().nextFrame();
+    expect(getStoreState().frame).toBe(0);
+    getStoreState().prevFrame();
+    expect(getStoreState().frame).toBe(4);
+
+    setStoreState({ loopMode: 'bounce', frame: 4, playing: true });
+    getStoreState().nextFrame();
+    expect(getStoreState().frame).toBe(3);
+    expect(getStoreState().playing).toBe(true);
+    setStoreState({ frame: 0 });
+    getStoreState().prevFrame();
+    expect(getStoreState().frame).toBe(1);
+
+    setStoreState({ loopMode: 'once', frame: 4, playing: true });
+    getStoreState().nextFrame();
+    expect(getStoreState().frame).toBe(4);
+    expect(getStoreState().playing).toBe(false);
+    setStoreState({ frame: 0 });
+    getStoreState().prevFrame();
+    expect(getStoreState().frame).toBe(0);
+  });
+
+  it('pins zero/one-frame stepping to frame zero', () => {
+    const oneFrame = createMockTrajectory(1, 2);
+    getStoreState().setFile({ name: 'single.xyz', size: 1, trajectory: oneFrame });
+    setStoreState({ loopMode: 'bounce', frame: 0 });
+    getStoreState().nextFrame();
+    expect(getStoreState().frame).toBe(0);
+    getStoreState().prevFrame();
+    expect(getStoreState().frame).toBe(0);
   });
 });
 
