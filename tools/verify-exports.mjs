@@ -11,7 +11,9 @@
  *
  *   GLB  @ 10k / 100k / 500k atoms — full build + GLTFExporter binary encode.
  *        Asserts 10k < 10 s, 100k < 60 s, 500k completes without throwing.
- *   USDZ @ 100k atoms — build + merged instance bake. Asserts completion.
+ *   USDZ @ 10k bonded atoms — full build + budget-selected LOD + merged
+ *        instance bake. Asserts every InstancedMesh becomes one baked Mesh.
+ *   USDZ @ 100k atoms — asserts refusal before per-atom geometry allocation.
  *        (three's USDZExporter itself needs DOM canvas for its texture
  *        pipeline, so the encode step is exercised in-browser only.)
  *
@@ -94,7 +96,7 @@ function makeProgressLogger(label) {
   };
 }
 
-function buildOptions(format, label) {
+function buildOptions(format, label, overrides = {}) {
   return {
     format,
     displayRadiusForType: (typeId) => COVALENT_RADII[typeId] ?? 0.7,
@@ -103,6 +105,7 @@ function buildOptions(format, label) {
     bondTolerance: 0.45,
     covalentRadii: COVALENT_RADII,
     onProgress: makeProgressLogger(label),
+    ...overrides,
   };
 }
 
@@ -158,7 +161,7 @@ async function runGlbTier(natoms, maxSeconds) {
 }
 
 async function runUsdzBakeTier(natoms) {
-  const label = `usdz ${natoms / 1000}k`;
+  const label = `usdz ${natoms / 1000}k bonded`;
   console.log(`\n  USDZ bake tier: ${natoms.toLocaleString()} atoms`);
   const frame = makeFrame(natoms);
 
@@ -197,6 +200,31 @@ async function runUsdzBakeTier(natoms) {
   disposeExportScene(result.scene);
 }
 
+async function runUsdzBudgetRefusalTier(natoms) {
+  const label = `usdz ${natoms / 1000}k refusal`;
+  console.log(`\n  USDZ budget-refusal tier: ${natoms.toLocaleString()} atoms`);
+  const frame = makeFrame(natoms);
+  let colorCalls = 0;
+  let refusal = null;
+  try {
+    await buildExportScene(frame, buildOptions('usdz', label, {
+      showBonds: false,
+      resolveAtomColor: () => {
+        colorCalls++;
+        return [1, 1, 1];
+      },
+    }));
+  } catch (error) {
+    refusal = error;
+  }
+
+  check(
+    refusal?.code === 'MODEL_EXPORT_BUDGET_EXCEEDED',
+    `${label}: returns MODEL_EXPORT_BUDGET_EXCEEDED`,
+  );
+  check(colorCalls === 0, `${label}: refuses before per-atom geometry allocation`);
+}
+
 const skip500k = process.argv.includes('--skip-500k');
 
 console.log('verify-exports — headless 3D export benchmark');
@@ -209,7 +237,8 @@ if (skip500k) {
 } else {
   await runGlbTier(500_000, null);
 }
-await runUsdzBakeTier(100_000);
+await runUsdzBakeTier(10_000);
+await runUsdzBudgetRefusalTier(100_000);
 
 if (failures.length > 0) {
   console.error(`\n${failures.length} check(s) failed:`);

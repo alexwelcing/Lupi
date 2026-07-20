@@ -9,6 +9,10 @@ import { useEquirectMediaTexture } from '../hooks/useEquirectMediaTexture';
 import type { BackgroundGradientStyle } from '../equirectTexture';
 import { ProceduralBackground, ProceduralMathField } from '../ProceduralBackground';
 import type { BackgroundBackdropPattern, BackgroundBackdropShape } from '../store';
+import {
+  LUPI_EXPORT_BACKGROUND_LAYER,
+  LUPI_EXPORT_LAYER_KEY,
+} from '../export/renderCaptureState';
 
 export type BackgroundAssetAdjustments = {
   yawDegrees: number;
@@ -172,10 +176,10 @@ export function AppBackground({
   if (procedural) {
     const visible = !isImmersiveAR;
     return (
-      <>
+      <group userData={{ [LUPI_EXPORT_LAYER_KEY]: LUPI_EXPORT_BACKGROUND_LAYER }}>
         <ProceduralBackground variant={procedural} top={top} bottom={bottom} visible={visible} />
         <ProceduralMathField variant={procedural} center={center} radius={distance * 1.46} visible={visible} />
-      </>
+      </group>
     );
   }
 
@@ -285,7 +289,13 @@ function BackdropVolume({
   });
 
   return (
-    <mesh ref={meshRef} geometry={geometry} frustumCulled={false} renderOrder={-1000}>
+    <mesh
+      ref={meshRef}
+      geometry={geometry}
+      frustumCulled={false}
+      renderOrder={-1000}
+      userData={{ [LUPI_EXPORT_LAYER_KEY]: LUPI_EXPORT_BACKGROUND_LAYER }}
+    >
       <primitive object={material} attach="material" />
     </mesh>
   );

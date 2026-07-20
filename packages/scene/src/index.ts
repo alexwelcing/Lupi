@@ -1,5 +1,10 @@
 // Scene components
-export { AtomsOptimized } from './AtomsOptimized';
+export {
+  AtomsOptimized,
+  LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
+  LUPI_ARTIFACT_ATOMS_LAYER,
+  LUPI_ARTIFACT_LAYER_KEY,
+} from './AtomsOptimized';
 export { AtomClusters } from './AtomClusters';
 export { buildClusters, MAX_GRID_DIM, clusterCellRadius } from './ClusterBuilder';
 export type { Clusters } from './ClusterBuilder';
@@ -10,7 +15,7 @@ export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
 export { AtomPicker } from './AtomPicker';
 export { SpatialHash3D } from './SpatialHash';
-export { VectorGlyphs } from './VectorGlyphs';
+export { VectorGlyphs, LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER } from './VectorGlyphs';
 export type { VectorGlyphStats } from './VectorGlyphs';
 export {
   BillionAtomBlock,

@@ -199,6 +199,8 @@ jobs:
           echo "$root" >> "$GITHUB_PATH"
 
       - name: Run every source-side release gate
+        env:
+          VITE_LUPI_BUILD_SHA: ${{ inputs.target_sha }}
         run: |
           pnpm verify:product-contract
           pnpm lint

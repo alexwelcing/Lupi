@@ -27,6 +27,8 @@ export interface ExportFrameData {
   natoms: number;
   positions: Float32Array;
   types: Int32Array;
+  /** Authoritative source topology as flat atom-index pairs, when supplied. */
+  bonds?: Int32Array;
 }
 
 export interface SphereLod {
@@ -41,6 +43,16 @@ export const MAX_EXPORT_BONDS = 2_000_000;
 /** USDZ bakes every sphere's vertices, so the real budget is triangles ×
  *  atoms. ~3M triangles keeps Quick Look loadable on phones. */
 export const USDZ_TRIANGLE_BUDGET = 3_000_000;
+export const USDZ_BAKE_MEMORY_BUDGET_BYTES = 256 * 1024 * 1024;
+export const GLB_INSTANCE_MEMORY_BUDGET_BYTES = 256 * 1024 * 1024;
+
+export type ModelExportDeliveryMode = 'blob' | 'inline-base64';
+
+export interface ModelExportDeliveryBudget {
+  mode: ModelExportDeliveryMode;
+  /** Binary payload ceiling. It deliberately excludes base64 expansion. */
+  maxInlineBytes?: number;
+}
 
 /** Segment tiers, coarsest last. GLB picks purely by atom count (instancing
  *  means geometry is written once); USDZ walks down tiers until the merged
@@ -52,9 +64,165 @@ const SPHERE_LOD_TIERS: SphereLod[] = [
 ];
 const USDZ_FALLBACK_LOD: SphereLod = { widthSegments: 5, heightSegments: 4 };
 
+export interface ModelExportBudgetEstimate {
+  format: 'glb' | 'usdz';
+  atomCount: number;
+  bondCount: number;
+  sphereLod: SphereLod;
+  deliveryMode: ModelExportDeliveryMode;
+  estimatedTriangles: number;
+  estimatedSceneBytes: number;
+  estimatedEncoderOutputBytes: number;
+  estimatedDeliveryBytes: number;
+  /** Conservative simultaneous peak across scene, encoder, Blob/base64 delivery. */
+  estimatedAllocationBytes: number;
+  triangleBudget?: number;
+  allocationBudgetBytes: number;
+  maxInlineBytes?: number;
+}
+
+export class ModelExportBudgetError extends Error {
+  readonly code = 'MODEL_EXPORT_BUDGET_EXCEEDED';
+  readonly estimate: ModelExportBudgetEstimate;
+
+  constructor(estimate: ModelExportBudgetEstimate) {
+    const triangleFailure = estimate.triangleBudget !== undefined
+      && estimate.estimatedTriangles > estimate.triangleBudget;
+    const memoryFailure = estimate.estimatedAllocationBytes > estimate.allocationBudgetBytes;
+    const inlinePayloadFailure = estimate.deliveryMode === 'inline-base64'
+      && estimate.maxInlineBytes !== undefined
+      && estimate.estimatedEncoderOutputBytes > estimate.maxInlineBytes;
+    const reasons = [
+      ...(triangleFailure
+        ? [`${estimate.estimatedTriangles.toLocaleString()} triangles exceeds ${estimate.triangleBudget!.toLocaleString()}`]
+        : []),
+      ...(memoryFailure
+        ? [`${estimate.estimatedAllocationBytes.toLocaleString()} estimated bytes exceeds ${estimate.allocationBudgetBytes.toLocaleString()}`]
+        : []),
+      ...(inlinePayloadFailure
+        ? [`${estimate.estimatedEncoderOutputBytes.toLocaleString()} estimated output bytes exceeds inline limit ${estimate.maxInlineBytes!.toLocaleString()}`]
+        : []),
+    ];
+    const recovery = estimate.format === 'usdz'
+      ? 'Reduce visible atoms/bonds or use GLB for instanced large-model delivery.'
+      : estimate.deliveryMode === 'inline-base64'
+        ? 'Reduce visible atoms/bonds, raise the bounded inline limit, or use file/blob delivery.'
+        : 'Reduce visible atoms/bonds before retrying the GLB export.';
+    super(
+      `${estimate.format.toUpperCase()} export exceeds its pre-allocation resource budget: ${reasons.join('; ')}. `
+      + recovery,
+    );
+    this.name = 'ModelExportBudgetError';
+    this.estimate = estimate;
+  }
+}
+
 export function sphereTriangleCount(lod: SphereLod): number {
   // Pole rows are single-triangle fans; every other row is a quad strip.
   return 2 * lod.widthSegments * (lod.heightSegments - 1);
+}
+
+export function sphereVertexCount(lod: SphereLod): number {
+  return (lod.widthSegments + 1) * (lod.heightSegments + 1);
+}
+
+/**
+ * Estimate the simultaneous browser peak made by scene construction, encoder
+ * output, and the selected delivery path. USDZ's bake materializes position +
+ * normal + UV + 32-bit indices per instance. GLB preserves instancing. Inline
+ * MCP delivery additionally keeps the Blob and UTF-16 base64 string resident;
+ * an ordinary file/blob export does not pay that base64 cost. These are
+ * conservative bounds so oversized work is rejected before scene allocation.
+ */
+export function estimateModelExportBudget(
+  format: 'glb' | 'usdz',
+  atomCount: number,
+  bondCount: number,
+  sphereLod: SphereLod,
+  delivery: ModelExportDeliveryBudget = { mode: 'blob' },
+): ModelExportBudgetEstimate {
+  const radialSegments = bondRadialSegments(format, bondCount);
+  const sphereTriangles = sphereTriangleCount(sphereLod);
+  const bondTrianglesPerInstance = radialSegments * 4;
+  const estimatedTriangles = atomCount * sphereTriangles + bondCount * bondTrianglesPerInstance;
+
+  let estimatedSceneBytes: number;
+  let estimatedEncoderOutputBytes: number;
+  let estimatedGeometryWorkingBytes = 0;
+  let allocationBudgetBytes: number;
+  if (format === 'usdz') {
+    const sphereVertices = sphereVertexCount(sphereLod);
+    const sphereIndices = sphereTriangles * 3;
+    // CylinderGeometry(radialSegments, heightSegments=1, closed): torso plus
+    // two caps. This is the exact topology emitted by Three for our builder.
+    const cylinderVertices = radialSegments * 6 + 4;
+    const cylinderIndices = bondTrianglesPerInstance * 3;
+    const bakedSphereBytes = sphereVertices * (12 + 12 + 8) + sphereIndices * 4 + 16;
+    const bakedBondBytes = cylinderVertices * (12 + 12 + 8) + cylinderIndices * 4 + 16;
+    const bakedBytes = atomCount * bakedSphereBytes + bondCount * bakedBondBytes;
+    estimatedGeometryWorkingBytes = bakedBytes;
+    // The live instanced scene remains resident while its merged bake exists.
+    estimatedSceneBytes = (atomCount + bondCount) * (16 * 4 + 3 * 4) + 1024 * 1024;
+    // USDZExporter builds ASCII USDA and then a ZIP ArrayBuffer. Use twice the
+    // binary bake as a conservative output/working-set approximation.
+    estimatedEncoderOutputBytes = bakedBytes * 2;
+    allocationBudgetBytes = USDZ_BAKE_MEMORY_BUDGET_BYTES;
+  } else {
+    // InstancedMesh uploads one mat4 and one RGB color per instance. Include a
+    // small shared-geometry/material reserve without pretending GLB expands it.
+    estimatedSceneBytes = (atomCount + bondCount) * (16 * 4 + 3 * 4) + 1024 * 1024;
+    // EXT_mesh_gpu_instancing writes translation/quaternion/scale/color data,
+    // plus shared geometry and container overhead.
+    estimatedEncoderOutputBytes = (atomCount + bondCount) * (13 * 4) + 2 * 1024 * 1024;
+    allocationBudgetBytes = GLB_INSTANCE_MEMORY_BUDGET_BYTES;
+  }
+
+  // Both paths conservatively include a final Blob/ArrayBuffer alongside the
+  // encoder output. Inline MCP delivery additionally materializes a base64
+  // string whose UTF-16 storage is ~8/3 the binary byte length.
+  const estimatedDeliveryBytes = delivery.mode === 'inline-base64'
+    ? estimatedEncoderOutputBytes * (1 + 8 / 3)
+    : estimatedEncoderOutputBytes;
+  const estimatedAllocationBytes = estimatedSceneBytes
+    + estimatedGeometryWorkingBytes
+    + estimatedEncoderOutputBytes
+    + estimatedDeliveryBytes;
+
+  return {
+    format,
+    atomCount,
+    bondCount,
+    sphereLod,
+    deliveryMode: delivery.mode,
+    estimatedTriangles,
+    estimatedSceneBytes,
+    estimatedEncoderOutputBytes,
+    estimatedDeliveryBytes,
+    estimatedAllocationBytes,
+    ...(format === 'usdz' ? { triangleBudget: USDZ_TRIANGLE_BUDGET } : {}),
+    allocationBudgetBytes,
+    ...(delivery.mode === 'inline-base64' && delivery.maxInlineBytes !== undefined
+      ? { maxInlineBytes: delivery.maxInlineBytes }
+      : {}),
+  };
+}
+
+export function modelExportBudgetFits(estimate: ModelExportBudgetEstimate): boolean {
+  return !(
+    (estimate.triangleBudget !== undefined && estimate.estimatedTriangles > estimate.triangleBudget)
+    || estimate.estimatedAllocationBytes > estimate.allocationBudgetBytes
+    || (
+      estimate.deliveryMode === 'inline-base64'
+      && estimate.maxInlineBytes !== undefined
+      && estimate.estimatedEncoderOutputBytes > estimate.maxInlineBytes
+    )
+  );
+}
+
+export function assertModelExportBudget(estimate: ModelExportBudgetEstimate): void {
+  if (!modelExportBudgetFits(estimate)) {
+    throw new ModelExportBudgetError(estimate);
+  }
 }
 
 /**
@@ -72,12 +240,44 @@ export function selectSphereLod(
   const byCountIndex = natoms <= 50_000 ? 0 : natoms <= 250_000 ? 1 : 2;
   if (format !== 'usdz') return SPHERE_LOD_TIERS[byCountIndex];
 
-  const budget = Math.max(USDZ_TRIANGLE_BUDGET - reservedTriangles, USDZ_TRIANGLE_BUDGET / 4);
+  const budget = Math.max(0, USDZ_TRIANGLE_BUDGET - reservedTriangles);
   for (let i = byCountIndex; i < SPHERE_LOD_TIERS.length; i++) {
     if (natoms * sphereTriangleCount(SPHERE_LOD_TIERS[i]) <= budget) {
       return SPHERE_LOD_TIERS[i];
     }
   }
+  return USDZ_FALLBACK_LOD;
+}
+
+/**
+ * Choose the highest-detail count tier that satisfies both USDZ's topology
+ * ceiling and the selected browser delivery allocation budget. Triangle-only
+ * selection can reject a model even when the next coarser sphere is safe.
+ * Explicit caller LODs remain fail-closed in `buildExportScene`.
+ */
+export function selectBudgetedSphereLod(
+  natoms: number,
+  format: 'glb' | 'usdz',
+  bondCount: number,
+  delivery: ModelExportDeliveryBudget = { mode: 'blob' },
+): SphereLod {
+  if (format === 'glb') return selectSphereLod(natoms, format);
+
+  const byCountIndex = natoms <= 50_000 ? 0 : natoms <= 250_000 ? 1 : 2;
+  const candidates = [
+    ...SPHERE_LOD_TIERS.slice(byCountIndex),
+    USDZ_FALLBACK_LOD,
+  ];
+  for (const lod of candidates) {
+    if (modelExportBudgetFits(
+      estimateModelExportBudget(format, natoms, bondCount, lod, delivery),
+    )) {
+      return lod;
+    }
+  }
+
+  // Return the cheapest topology so the shared assertion emits the complete,
+  // structured refusal estimate without allocating geometry.
   return USDZ_FALLBACK_LOD;
 }
 
@@ -106,10 +306,93 @@ export interface ExportBondOptions {
 }
 
 export interface ExportBondResult {
-  /** Canonical pairs [a0,b0, a1,b1, ...] with a < b, each at most once. */
+  /** Source-order pairs, or canonical inferred pairs with a < b. */
   pairs: Int32Array;
   count: number;
   capped: boolean;
+  topology: 'none' | 'source' | 'inferred';
+}
+
+export class ModelExportLayerIncompleteError extends Error {
+  readonly code = 'ARTIFACT_LAYER_INCOMPLETE';
+  readonly details: Readonly<Record<string, string | number | boolean>>;
+
+  constructor(message: string, details: Readonly<Record<string, string | number | boolean>>) {
+    super(message);
+    this.name = 'ModelExportLayerIncompleteError';
+    this.details = details;
+  }
+}
+
+/** The immutable artifact profile never treats bond truncation as success. */
+export function assertCompleteExportBondLayer(
+  result: Pick<ExportBondResult, 'capped' | 'topology'>,
+  limit = MAX_EXPORT_BONDS,
+): void {
+  if (!result.capped) return;
+  throw new ModelExportLayerIncompleteError(
+    `The requested bonds layer exceeds the complete-export limit of ${limit.toLocaleString()} bonds.`,
+    {
+      layer: 'bonds',
+      topology: result.topology,
+      limit,
+      reason: 'topology-truncated',
+    },
+  );
+}
+
+export interface ModelExportSourceTopologyDetails {
+  natoms: number;
+  sourceValueCount: number;
+  pairIndex?: number;
+  atomA?: number;
+  atomB?: number;
+  cap?: number;
+}
+
+/** Source topology is an input claim, so invalid/truncated pairs fail closed. */
+export class ModelExportSourceTopologyError extends Error {
+  readonly code = 'MODEL_EXPORT_SOURCE_TOPOLOGY_INVALID';
+  readonly details: ModelExportSourceTopologyDetails;
+
+  constructor(message: string, details: ModelExportSourceTopologyDetails) {
+    super(message);
+    this.name = 'ModelExportSourceTopologyError';
+    this.details = details;
+  }
+}
+
+export function validateSourceExportBonds(
+  frame: ExportFrameData,
+  cap = MAX_EXPORT_BONDS,
+): ExportBondResult | null {
+  const pairs = frame.bonds;
+  if (!pairs || pairs.length === 0) return null;
+  const baseDetails = { natoms: frame.natoms, sourceValueCount: pairs.length };
+  if (pairs.length % 2 !== 0) {
+    throw new ModelExportSourceTopologyError(
+      'Source bond topology must contain complete atom-index pairs.',
+      baseDetails,
+    );
+  }
+  const count = pairs.length / 2;
+  if (count > cap) {
+    throw new ModelExportSourceTopologyError(
+      `Source bond topology contains ${count.toLocaleString()} bonds, exceeding the exact export cap of ${cap.toLocaleString()}.`,
+      { ...baseDetails, cap },
+    );
+  }
+  for (let pairIndex = 0; pairIndex < count; pairIndex += 1) {
+    const atomA = pairs[pairIndex * 2];
+    const atomB = pairs[pairIndex * 2 + 1];
+    if (atomA < 0 || atomA >= frame.natoms || atomB < 0 || atomB >= frame.natoms || atomA === atomB) {
+      throw new ModelExportSourceTopologyError(
+        `Source bond ${pairIndex} contains invalid atom indices (${atomA}, ${atomB}) for ${frame.natoms} atoms.`,
+        { ...baseDetails, pairIndex, atomA, atomB },
+      );
+    }
+  }
+  return { pairs, count, capped: false, topology: 'source' };
 }
 
 function maxCovalentRadius(frame: ExportFrameData, covalentRadii: Float32Array): number {
@@ -150,7 +433,7 @@ export async function detectExportBonds(
     } else {
       opts.onProgress?.('bonds', natoms, natoms);
     }
-    return { pairs, count, capped };
+    return { pairs, count, capped, topology: 'inferred' };
   };
 
   if (natoms < 2) return finish(new Int32Array(0), 0, false);
@@ -323,8 +606,11 @@ export function computeUsdzFraming(
 
 export interface ExportSceneOptions {
   format: 'glb' | 'usdz';
+  /** Blob/download by default; agent responses must opt into base64 accounting. */
+  delivery?: ModelExportDeliveryBudget;
   /** Sphere world radius (Å) per type — atom scale/type overrides applied by the caller. */
   displayRadiusForType: (typeId: number) => number;
+  /** Display-sRGB tuple; the builder linearizes it for Three/glTF vertex colors. */
   resolveAtomColor: (atomIndex: number, typeId: number) => [number, number, number];
   hiddenTypes?: ReadonlySet<number>;
   materialPreset?: ExportMaterialPreset;
@@ -350,6 +636,7 @@ export interface ExportSceneResult {
   atomCount: number;
   bondCount: number;
   bondsCapped: boolean;
+  bondTopology: ExportBondResult['topology'];
   sphereLod: SphereLod;
 }
 
@@ -368,11 +655,30 @@ export async function buildExportScene(
   const centerZ = opts.center?.[2] ?? 0;
   const arScale = opts.arScale ?? 1;
 
-  const scene = new THREE.Scene();
+  // Reject atom-only cases that cannot possibly fit before allocating grouping
+  // arrays, bond buffers, InstancedMesh attributes, or USDZ bake geometry.
+  let visibleAtoms = 0;
+  for (let i = 0; i < frame.natoms; i++) {
+    const typeId = frame.types[i];
+    if (opts.hiddenTypes?.has(typeId)) continue;
+    visibleAtoms++;
+  }
+  const atomOnlyLod = opts.sphereLod ?? selectBudgetedSphereLod(
+    visibleAtoms,
+    opts.format,
+    0,
+    opts.delivery,
+  );
+  assertModelExportBudget(estimateModelExportBudget(
+    opts.format,
+    visibleAtoms,
+    0,
+    atomOnlyLod,
+    opts.delivery,
+  ));
 
   // Group atoms by type for instanced rendering efficiency in downstream tools
   const atomsByType = new Map<number, number[]>();
-  let visibleAtoms = 0;
   for (let i = 0; i < frame.natoms; i++) {
     const typeId = frame.types[i];
     if (opts.hiddenTypes?.has(typeId)) continue;
@@ -382,20 +688,35 @@ export async function buildExportScene(
       atomsByType.set(typeId, bucket);
     }
     bucket.push(i);
-    visibleAtoms++;
   }
 
   // ── Bonds first: detection is the long pole, so the progress stream
   //    runs bonds → geometry → encode in a stable order.
-  let bonds: ExportBondResult = { pairs: new Int32Array(0), count: 0, capped: false };
-  if (opts.showBonds && opts.covalentRadii) {
-    bonds = await detectExportBonds(frame, {
-      tolerance: opts.bondTolerance ?? 0.45,
-      covalentRadii: opts.covalentRadii,
-      cap: opts.bondCap ?? MAX_EXPORT_BONDS,
-      chunkAtoms: opts.bondChunkAtoms,
-      onProgress,
-    });
+  let bonds: ExportBondResult = {
+    pairs: new Int32Array(0),
+    count: 0,
+    capped: false,
+    topology: 'none',
+  };
+  if (opts.showBonds) {
+    const sourceBonds = validateSourceExportBonds(frame, opts.bondCap ?? MAX_EXPORT_BONDS);
+    if (sourceBonds) {
+      bonds = sourceBonds;
+      onProgress?.('bonds (source)', bonds.count, bonds.count);
+    } else if (opts.covalentRadii) {
+      bonds = await detectExportBonds(frame, {
+        tolerance: opts.bondTolerance ?? 0.45,
+        covalentRadii: opts.covalentRadii,
+        cap: opts.bondCap ?? MAX_EXPORT_BONDS,
+        chunkAtoms: opts.bondChunkAtoms,
+        onProgress,
+      });
+    } else {
+      throw new ModelExportSourceTopologyError(
+        'Bond export requires authoritative source pairs or covalent radii for explicit inference.',
+        { natoms: frame.natoms, sourceValueCount: 0 },
+      );
+    }
   }
 
   const geometryTotal = visibleAtoms + bonds.count;
@@ -414,9 +735,22 @@ export async function buildExportScene(
   // ── Atom meshes: one InstancedMesh per type sharing a single LOD'd sphere.
   // Bond cylinders are vertex-baked in USDZ too, so their triangles come out
   // of the same budget before the sphere tier is chosen.
-  const bondTriangles = bonds.count * bondRadialSegments(opts.format, bonds.count) * 4;
-  const sphereLod = opts.sphereLod ?? selectSphereLod(visibleAtoms, opts.format, bondTriangles);
-  const sphereGeo = new THREE.SphereGeometry(1, sphereLod.widthSegments, sphereLod.heightSegments);
+  const sphereLod = opts.sphereLod ?? selectBudgetedSphereLod(
+    visibleAtoms,
+    opts.format,
+    bonds.count,
+    opts.delivery,
+  );
+  assertModelExportBudget(
+    estimateModelExportBudget(opts.format, visibleAtoms, bonds.count, sphereLod, opts.delivery),
+  );
+  const scene = new THREE.Scene();
+  const ownedGeometries = new Set<THREE.BufferGeometry>();
+  const ownedMaterials = new Set<THREE.Material>();
+
+  try {
+    const sphereGeo = new THREE.SphereGeometry(1, sphereLod.widthSegments, sphereLod.heightSegments);
+    ownedGeometries.add(sphereGeo);
 
   // Hoisted scratch — the previous per-atom `new Vector3/Quaternion` churn
   // was pure GC garbage at large atom counts.
@@ -429,6 +763,7 @@ export async function buildExportScene(
   for (const [typeId, indices] of atomsByType) {
     const radius = opts.displayRadiusForType(typeId) * arScale;
     const material = createExportMaterial(preset, surfacePolish, surfaceRoughness, isUsdZ);
+    ownedMaterials.add(material);
     const mesh = new THREE.InstancedMesh(sphereGeo, material, indices.length);
     mesh.name = `atoms-type-${typeId}`;
 
@@ -441,7 +776,7 @@ export async function buildExportScene(
         (frame.positions[idx * 3 + 2] - centerZ) * arScale,
       );
       const [r, g, b] = opts.resolveAtomColor(idx, typeId);
-      scratchColor.setRGB(r, g, b);
+      scratchColor.setRGB(r, g, b, THREE.SRGBColorSpace);
       mesh.setColorAt(j, scratchColor);
       scratchMat.compose(scratchPos, scratchQuat, scratchScale);
       mesh.setMatrixAt(j, scratchMat);
@@ -460,7 +795,9 @@ export async function buildExportScene(
     // bond count alone would blow the triangle budget.
     const radialSegments = bondRadialSegments(opts.format, bonds.count);
     const cylGeo = new THREE.CylinderGeometry(bondRadius, bondRadius, 1, radialSegments, 1);
+    ownedGeometries.add(cylGeo);
     const bondMat = createExportMaterial(preset, surfacePolish, surfaceRoughness, isUsdZ);
+    ownedMaterials.add(bondMat);
     const bondMesh = new THREE.InstancedMesh(cylGeo, bondMat, bonds.count);
     bondMesh.name = 'bonds';
 
@@ -489,8 +826,8 @@ export async function buildExportScene(
 
       const [ar, ag, ab] = opts.resolveAtomColor(ai, frame.types[ai]);
       const [br, bg, bb] = opts.resolveAtomColor(aj, frame.types[aj]);
-      colorA.setRGB(ar, ag, ab);
-      colorB.setRGB(br, bg, bb);
+      colorA.setRGB(ar, ag, ab, THREE.SRGBColorSpace);
+      colorB.setRGB(br, bg, bb, THREE.SRGBColorSpace);
       // Keep bond color visually tied to both connected atoms.
       scratchColor.copy(colorA).lerp(colorB, 0.5);
       bondMesh.setColorAt(b, scratchColor);
@@ -504,13 +841,21 @@ export async function buildExportScene(
 
   onProgress?.('geometry', geometryTotal, geometryTotal);
 
-  return {
-    scene,
-    atomCount: visibleAtoms,
-    bondCount: bonds.count,
-    bondsCapped: bonds.capped,
-    sphereLod,
-  };
+    return {
+      scene,
+      atomCount: visibleAtoms,
+      bondCount: bonds.count,
+      bondsCapped: bonds.capped,
+      bondTopology: bonds.topology,
+      sphereLod,
+    };
+  } catch (error) {
+    // Until this function returns, no caller can reach the partially built
+    // scene. Dispose every resource at the construction boundary, including
+    // geometries/materials that were allocated before their mesh was added.
+    disposeExportResources(ownedGeometries, ownedMaterials);
+    throw error;
+  }
 }
 
 /** Dispose everything buildExportScene allocated (geometries are shared
@@ -525,6 +870,13 @@ export function disposeExportScene(scene: THREE.Scene) {
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const m of mats) if (m) materials.add(m);
   });
+  disposeExportResources(geometries, materials);
+}
+
+function disposeExportResources(
+  geometries: ReadonlySet<THREE.BufferGeometry>,
+  materials: ReadonlySet<THREE.Material>,
+) {
   for (const g of geometries) g.dispose();
   for (const m of materials) {
     const std = m as THREE.MeshStandardMaterial;

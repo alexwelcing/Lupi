@@ -690,6 +690,7 @@ jobs:
           ACTIVE_VERSION_ID: ${{ needs.reanchor-control.outputs.active_version_id }}
           ACTIVE_BUILD_SHA: ${{ needs.reanchor-control.outputs.active_build_sha }}
           ACTIVE_FINGERPRINT_SHA256: ${{ inputs.active_fingerprint_sha256 }}
+          VITE_LUPI_BUILD_SHA: ${{ needs.reanchor-control.outputs.active_build_sha }}
         run: |
           pnpm install --frozen-lockfile
           pnpm build

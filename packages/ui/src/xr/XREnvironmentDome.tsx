@@ -18,6 +18,10 @@ import { useXR } from '@react-three/xr';
 import type { BgMedia } from '../backgroundPresets';
 import type { BackgroundGradientStyle } from '../equirectTexture';
 import { useEquirectMediaTexture } from '../hooks/useEquirectMediaTexture';
+import {
+  LUPI_EXPORT_BACKGROUND_LAYER,
+  LUPI_EXPORT_LAYER_KEY,
+} from '../export/renderCaptureState';
 
 // Dome radius in meters — large enough to surround the molecule
 // but small enough to stay inside the near/far clip range.
@@ -137,7 +141,12 @@ export function XREnvironmentDome({
   });
 
   return (
-    <mesh ref={meshRef} geometry={geometry} renderOrder={-1000}>
+    <mesh
+      ref={meshRef}
+      geometry={geometry}
+      renderOrder={-1000}
+      userData={{ [LUPI_EXPORT_LAYER_KEY]: LUPI_EXPORT_BACKGROUND_LAYER }}
+    >
       <meshBasicMaterial
         ref={matRef}
         map={activeTexture}

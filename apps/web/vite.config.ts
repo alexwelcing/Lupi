@@ -5,6 +5,51 @@ import topLevelAwait from 'vite-plugin-top-level-await';
 import path from 'path';
 import fs from 'fs';
 import http from 'http';
+import { execFileSync } from 'node:child_process';
+
+const FULL_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
+
+function repositoryHeadSha(): string | undefined {
+  try {
+    return execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim().toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Resolve the exact identity Vite will compile into browser renderer code. */
+export function resolveLupiBrowserBuildSha(
+  command: 'build' | 'serve',
+  environment: NodeJS.ProcessEnv = process.env,
+  readHead: () => string | undefined = repositoryHeadSha,
+): string | undefined {
+  const requested = environment.VITE_LUPI_BUILD_SHA?.trim().toLowerCase();
+  if (requested && !FULL_GIT_SHA_PATTERN.test(requested)) {
+    throw new Error('VITE_LUPI_BUILD_SHA must be an exact 40-hex Git SHA.');
+  }
+  if (command === 'serve') return requested || undefined;
+
+  const head = readHead()?.trim().toLowerCase();
+  if (head && !FULL_GIT_SHA_PATTERN.test(head)) {
+    throw new Error('git rev-parse HEAD did not return an exact 40-hex Git SHA.');
+  }
+  if (requested && head && requested !== head) {
+    throw new Error(
+      `VITE_LUPI_BUILD_SHA ${requested} does not match the checked-out Git HEAD ${head}.`,
+    );
+  }
+  const resolved = requested || head;
+  if (!resolved) {
+    throw new Error(
+      'Production web builds require VITE_LUPI_BUILD_SHA or a readable exact Git HEAD.',
+    );
+  }
+  return resolved;
+}
 
 /**
  * Gallery Asset Upload Plugin
@@ -172,7 +217,14 @@ function parseMultipart(buffer: Buffer, boundary: string): any[] {
   return parts;
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  define: {
+    // Never let an unpinned production bundle fall back to a mutable module
+    // URL. Development intentionally receives an empty value unless pinned.
+    'import.meta.env.VITE_LUPI_BUILD_SHA': JSON.stringify(
+      resolveLupiBrowserBuildSha(command) ?? '',
+    ),
+  },
   // Clean public routes like /scenes/1m-copper-lattice need bundle assets to
   // resolve from the site root after the server falls back to index.html.
   base: '/',
@@ -272,4 +324,4 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
     },
   },
-});
+}));

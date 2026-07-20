@@ -7,7 +7,19 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Frame, Trajectory, ThermoData, ColormapName, ColorMode, BondStats } from '@atlas/core/types';
+import type {
+  Frame,
+  Trajectory,
+  ThermoData,
+  ColormapName,
+  ColorMode,
+  BondStats,
+  RenderArtifactKeyV1,
+  RenderArtifactSpecV1,
+  RenderDeliveryV1,
+  RendererFingerprintV1,
+  RenderSpecIdV1,
+} from '@atlas/core';
 import type { NistCatalogEntry } from '@atlas/nist';
 import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
@@ -237,12 +249,32 @@ export interface ExportRequest {
   orbit?: boolean;
   cinematic?: boolean;
   baseName?: string;
+  /** Finalized semantic render intent and identities for agent/browser exports. */
+  artifactSpec?: RenderArtifactSpecV1;
+  /** Transport policy is carried beside, and never folded into, artifact identity. */
+  artifactDelivery?: RenderDeliveryV1;
+  specId?: RenderSpecIdV1;
+  rendererFingerprint?: RendererFingerprintV1;
+  artifactKey?: RenderArtifactKeyV1;
   fileStream?: FileSystemWritableFileStream;
-  onComplete?: (success: boolean, blob?: Blob, filename?: string) => void;
+  /** Internal ownership signal: the mounted exporter has begun consuming this request. */
+  onStart?: () => void;
+  onComplete?: (
+    success: boolean,
+    blob?: Blob,
+    filename?: string,
+    failure?: ExportFailure,
+  ) => void;
   /** Progress reporting for long exports (large 3D scenes). `phase` is a
    *  short human label ("bonds", "geometry", "encode"); done/total are
    *  phase-relative. Exporters may call this from any thread cadence. */
   onProgress?: (phase: string, done: number, total: number) => void;
+}
+
+export interface ExportFailure {
+  code: string;
+  message: string;
+  details?: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface LoadedFile {

@@ -51,6 +51,43 @@ describe('MCP viewer bridge', () => {
     expect(getStoreState().showBonds).toBe(true);
   });
 
+  it('rejects transparent JPEG before creating a browser export request', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+
+    const response = await driver.execute({
+      id: 'transparent-jpeg',
+      tool: 'lupi.export_asset',
+      arguments: { format: 'jpeg', transparent: true, width: 256, height: 256, timeoutMs: 1000 },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/JPEG export does not support transparent output/);
+    expect(getStoreState().exportRequest.type).toBeNull();
+  });
+
+  it('rejects unsnapshotable raster bonds without mutating fit or atom scale', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const before = getStoreState();
+    const beforePosition = [...before.cameraPosition];
+    const beforeTarget = [...before.cameraTarget];
+    const beforeScale = before.atomScale;
+
+    const response = await driver.execute({
+      id: 'bonds-raster-no-side-effects',
+      tool: 'lupi.export_asset',
+      arguments: { format: 'png', width: 256, height: 256, timeoutMs: 1000 },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toMatch(/Hide bonds before deterministic raster export/);
+    expect(getStoreState().cameraPosition).toEqual(beforePosition);
+    expect(getStoreState().cameraTarget).toEqual(beforeTarget);
+    expect(getStoreState().atomScale).toBe(beforeScale);
+    expect(getStoreState().exportRequest.type).toBeNull();
+  });
+
   it('parses molecule asset requests into load plus export steps', () => {
     const driver = mountBridge();
     const requests = driver.parseCommand('render caffeine png 512x384 with bonds on camera iso');

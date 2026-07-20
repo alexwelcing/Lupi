@@ -81,6 +81,7 @@ jobs:
       - name: Build viewer
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
+          VITE_LUPI_BUILD_SHA: ${{ github.sha }}
         run: pnpm build
 
       - name: Build Cloud Run source bundle

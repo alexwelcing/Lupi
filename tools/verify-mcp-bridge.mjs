@@ -209,6 +209,25 @@ try {
     `ok=${loadResult.ok} atoms=${loadResult.result?.molecule?.atomCount ?? 0}`,
   );
 
+  // The legacy load above intentionally exercises live asynchronous bonds.
+  // A content-addressed raster must not claim those mutable worker results as
+  // snapshot truth, so make the visible layer set deterministic before export.
+  const deterministicRasterState = await page.evaluate(async () => {
+    const driver = window.__lupiViewerMcp;
+    return driver.execute({
+      id: 'verify-raster-state',
+      tool: 'lupi.set_viewer',
+      arguments: { showBonds: false },
+    });
+  });
+  check(
+    'viewer can enter deterministic raster state',
+    deterministicRasterState.ok === true,
+    deterministicRasterState.ok
+      ? 'showBonds=false'
+      : `ok=false error=${deterministicRasterState.error?.message ?? 'unknown'}`,
+  );
+
   const assetResult = await page.evaluate(async () => {
     const driver = window.__lupiViewerMcp;
     return driver.execute({
@@ -224,7 +243,9 @@ try {
       assetResult.result?.asset?.mimeType === 'image/png' &&
       typeof assetResult.result?.asset?.dataBase64 === 'string' &&
       assetResult.result.asset.dataBase64.length > 100,
-    `ok=${assetResult.ok} bytes=${assetResult.result?.asset?.byteLength ?? 0}`,
+    assetResult.ok
+      ? `ok=true bytes=${assetResult.result?.asset?.byteLength ?? 0}`
+      : `ok=false error=${assetResult.error?.message ?? 'unknown'}`,
   );
 
   // Exercise the new AI-control tools via executeBatch.

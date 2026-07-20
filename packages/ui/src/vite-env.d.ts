@@ -24,6 +24,7 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_ANALYTICS_CONSENT?: 'granted' | 'denied' | string;
   readonly VITE_LUPI_MCP_ENDPOINT?: string;
   readonly VITE_LUPI_MCP_ALLOWED_ORIGINS?: string;
+  readonly VITE_LUPI_BUILD_SHA?: string;
   /** Vendor-neutral analytics sink. When set, track() POSTs funnel events
    *  here (sendBeacon/fetch). Unset ⇒ no-op + console.debug in dev. */
   readonly VITE_LUPI_ANALYTICS_URL?: string;

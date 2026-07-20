@@ -46,7 +46,7 @@ export const MCP_TOOL_DEFINITIONS: McpToolManifestEntry[] = [
   },
   {
     name: 'lupi.export_asset',
-    description: 'Render the active viewer as an inline PNG/JPEG/WebP image or GLB/USDZ model asset.',
+    description: 'Render the active viewer as an inline PNG/JPEG/WebP image or deterministic GLB model asset.',
     parameters: LUPI_MCP_SCHEMAS['lupi.export_asset'],
   },
   {

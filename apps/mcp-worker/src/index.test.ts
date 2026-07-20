@@ -1,11 +1,114 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  RENDER_ARTIFACT_SPEC_VERSION_V1,
+  RENDER_DELIVERY_VERSION_V1,
+  RENDER_REQUEST_VERSION_V1,
+  createRenderLayerStateV1,
+  type RenderDeliveryV1,
+  type RenderFormatV1,
+  type RenderJsonObjectV1,
+  type RenderLayerStateV1,
+  type RenderRequestSpecV1,
+  type RenderRequestV1,
+} from '@atlas/core';
 import externalAssetPaths from '../../web/cloudflare-assets-exclude.json';
 import browserManifest from '../../web/public/browser-mcp-manifest.json';
-import { handleRequest, validateExternalAssetPaths } from './index';
+import {
+  EDGE_RENDER_CAPABILITY_V1,
+  MCP_TOOLS,
+  handleRequest,
+  validateExternalAssetPaths,
+} from './index';
 
 function req(path: string, init: RequestInit = {}) {
   return new Request(`https://mcp.lupi.live${path}`, init);
 }
+
+const EDGE_ATOMS_VIEW: RenderJsonObjectV1 = {
+  camera: { position: [10, 10, 10], target: [0, 0, 0], fov: 45, near: 0.1, far: 10_000 },
+  lighting: {
+    ambient: 0.6,
+    directional: 0.8,
+    rim: 0.4,
+    keyAzimuth: 45,
+    keyElevation: 35,
+    fillAzimuth: -45,
+    fillElevation: 20,
+    rimAzimuth: 135,
+    rimElevation: 45,
+    fillColor: '#ffffff',
+    rimColor: '#ffffff',
+    environment: { preset: 'none' },
+  },
+  postprocess: {
+    pipeline: 'raw-scene',
+    toneMapping: 'none',
+    multisampling: 0,
+    outputColorSpace: 'srgb',
+  },
+  atoms: {
+    scale: 1,
+    hiddenTypes: [],
+    typeScales: {},
+    colorSource: 'element',
+    colorMode: 'type',
+    colorProperty: null,
+    colormap: 'viridis',
+    uniformColor: '#ffffff',
+    elementColorOverrides: {},
+    materialPreset: 'matte',
+    roughness: 0.6,
+    polish: 0,
+    propertyRange: [0, 1],
+    propertyEmissionStrength: 0,
+    materialIntensity: 1,
+    texture: 'none',
+    clearcoat: 0,
+  },
+};
+
+function renderRequest(overrides: {
+  source?: RenderRequestSpecV1['source'];
+  format?: RenderFormatV1;
+  width?: number;
+  height?: number;
+  alpha?: RenderRequestSpecV1['alpha'];
+  layers?: RenderLayerStateV1;
+  view?: RenderJsonObjectV1;
+  delivery?: Partial<RenderDeliveryV1>;
+} = {}): RenderRequestV1 {
+  return {
+    version: RENDER_REQUEST_VERSION_V1,
+    spec: {
+      version: RENDER_ARTIFACT_SPEC_VERSION_V1,
+      source: overrides.source ?? {
+        kind: 'reference',
+        uri: 'lupi:template/caffeine',
+        revision: 'builtin-v1',
+      },
+      format: overrides.format ?? 'png',
+      width: overrides.width ?? 1024,
+      height: overrides.height ?? 1024,
+      alpha: overrides.alpha ?? 'opaque',
+      frame: 0,
+      layers: overrides.layers ?? createRenderLayerStateV1(['atoms']),
+      view: overrides.view ?? EDGE_ATOMS_VIEW,
+    },
+    delivery: {
+      version: RENDER_DELIVERY_VERSION_V1,
+      inline: false,
+      maxInlineBytes: 8 * 1024 * 1024,
+      sync: false,
+      ...overrides.delivery,
+    },
+  };
+}
+
+const CONTENT_SOURCE = {
+  kind: 'content',
+  mediaType: 'chemical/x-xyz',
+  contentDigest: `sha256:${'a'.repeat(64)}`,
+} as const;
 
 describe('lupi Cloudflare MCP worker', () => {
   afterEach(() => {
@@ -21,12 +124,15 @@ describe('lupi Cloudflare MCP worker', () => {
       browserRequired: boolean;
       toolCount: number;
       renderExecution: boolean;
+      renderRequestCapability: unknown;
       release?: unknown;
     };
     expect(body.ready).toBe(true);
     expect(body.browserRequired).toBe(false);
-    expect(body.toolCount).toBeGreaterThanOrEqual(6);
+    expect(body.toolCount).toBe(6);
     expect(body.renderExecution).toBe(false);
+    expect(body.renderRequestCapability).toEqual(EDGE_RENDER_CAPABILITY_V1);
+    expect(MCP_TOOLS).toHaveLength(6);
     expect(body).not.toHaveProperty('release');
     expect(res.headers.get('x-lupi-edge-executed')).toBe('1');
   });
@@ -61,10 +167,18 @@ describe('lupi Cloudflare MCP worker', () => {
     });
     const body = await res.json() as {
       renderExecution: boolean;
+      renderProfiles: {
+        legacyV0: { execution: boolean; compatibilityOnly: boolean };
+        renderRequestV1: { execution: boolean; validationOnly: boolean };
+      };
       release: { id: string; tag: string; timestamp: string };
     };
 
     expect(body.renderExecution).toBe(true);
+    expect(body.renderProfiles).toEqual({
+      legacyV0: { execution: true, compatibilityOnly: true },
+      renderRequestV1: { execution: false, validationOnly: true },
+    });
     expect(body.release).toEqual({
       id: '4f94c8c7-0fef-4d7f-ae75-430c44e84542',
       tag: '0123456789abcdef0123456789abcdef01234567',
@@ -252,11 +366,18 @@ describe('lupi Cloudflare MCP worker', () => {
 
   it('keeps the edge and generated browser manifests distinct', async () => {
     const cloudflare = await handleRequest(req('/mcp-manifest.json'));
-    const cloudflareBody = await cloudflare.json() as { endpoint: string; browserBridgeManifest: string; tools: Array<{ name: string }> };
+    const cloudflareBody = await cloudflare.json() as {
+      endpoint: string;
+      browserBridgeManifest: string;
+      renderRequestCapability: unknown;
+      tools: Array<{ name: string }>;
+    };
     expect(cloudflareBody.endpoint).toBe('/mcp');
     expect(cloudflareBody.browserBridgeManifest).toBe('/browser-mcp-manifest.json');
     expect(cloudflareBody.tools.map((tool) => tool.name)).toContain('lupi.render_molecule_asset');
     expect(cloudflareBody.tools.map((tool) => tool.name)).not.toContain('lupi.set_frame');
+    expect(cloudflareBody.tools).toHaveLength(6);
+    expect(cloudflareBody.renderRequestCapability).toEqual(EDGE_RENDER_CAPABILITY_V1);
 
     expect(browserManifest.schemaVersion).toBe('0.3.0');
     expect(browserManifest.tools.map((tool) => tool.name)).toContain('lupi.set_frame');
@@ -282,13 +403,8 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(res.status).toBe(204);
   });
 
-  it('returns a deterministic queued render contract when no renderer is configured', async () => {
-    const request = {
-      molecule: { inputType: 'template', input: 'Caffeine' },
-      asset: { format: 'png', width: 1024, height: 1024 },
-      viewer: { cameraPreset: 'iso', showBonds: true },
-    };
-    const call = async () => {
+  it('uses canonical request identity while keeping delivery out of that identity', async () => {
+    const call = async (request: RenderRequestV1) => {
       const res = await handleRequest(req('/mcp', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -302,32 +418,48 @@ describe('lupi Cloudflare MCP worker', () => {
       return await res.json() as {
         result: {
           structuredContent: {
-            assetId: string;
+            requestKey: string;
             status: string;
             renderer: { mode: string; configured: boolean };
-            asset: { format: string; mimeType: string; url: string };
+            output: { format: string; mimeType: string };
           };
         };
       };
     };
 
-    const first = await call();
-    const second = await call();
+    const first = await call(renderRequest());
+    const deliveryOnly = await call(renderRequest({
+      delivery: {
+        inline: true,
+        maxInlineBytes: 1024,
+        sync: true,
+        filename: 'renamed.png',
+      },
+    }));
+    const changedOutput = await call(renderRequest({ width: 1025 }));
     const content = first.result.structuredContent;
-    expect(content.assetId).toBe(second.result.structuredContent.assetId);
+    expect(content.requestKey).toMatch(/^request-sha256:[0-9a-f]{64}$/);
+    expect(content.requestKey).toBe(deliveryOnly.result.structuredContent.requestKey);
+    expect(content.requestKey).not.toBe(changedOutput.result.structuredContent.requestKey);
     expect(content.status).toBe('awaiting_renderer');
-    expect(content.renderer).toMatchObject({ mode: 'unconfigured', configured: false });
-    expect(content.asset).toMatchObject({ format: 'png', mimeType: 'image/png' });
+    expect(content.renderer).toMatchObject({ mode: 'contract-only', configured: false });
+    expect(content.output).toMatchObject({ format: 'png', mimeType: 'image/png' });
+    expect(content).not.toHaveProperty('specId');
+    expect(content).not.toHaveProperty('artifactKey');
+    expect(content).not.toHaveProperty('assetId');
   });
 
   it('keeps REST render, job, and deterministic asset paths in the Worker runtime', async () => {
     const render = await handleRequest(req('/v1/render', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ molecule: { inputType: 'template', input: 'Caffeine' } }),
+      body: JSON.stringify(renderRequest()),
     }));
     expect(render.status).toBe(200);
-    expect((await render.json() as { status: string }).status).toBe('awaiting_renderer');
+    expect(await render.json()).toMatchObject({
+      status: 'awaiting_renderer',
+      requestKey: expect.stringMatching(/^request-sha256:[0-9a-f]{64}$/),
+    });
 
     const job = await handleRequest(req('/v1/jobs/job-1'));
     expect(job.status).toBe(200);
@@ -337,6 +469,168 @@ describe('lupi Cloudflare MCP worker', () => {
     const asset = await handleRequest(req(`/assets/${assetId}.png`));
     expect(asset.status).toBe(404);
     expect(await asset.json()).toMatchObject({ error: 'Asset not found', assetId });
+  });
+
+  it('preserves the legacy molecule request and queue execution profile', async () => {
+    const sent: unknown[] = [];
+    const legacyRequest = {
+      molecule: { inputType: 'template', input: 'Water' },
+      asset: { format: 'png', width: 320, height: 240 },
+    };
+    const res = await handleRequest(req('/v1/render', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(legacyRequest),
+    }), {
+      RENDER_QUEUE: { send: async (message) => { sent.push(message); } },
+    });
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      profile: 'legacy-v0',
+      status: 'queued',
+      jobId: expect.stringMatching(/^job-[0-9a-f]{24}$/),
+      assetId: expect.stringMatching(/^sha256-[0-9a-f]{64}$/),
+      renderer: { mode: 'queue', configured: true },
+    });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      jobId: body.jobId,
+      assetId: body.assetId,
+      request: { molecule: { inputType: 'template', input: 'Water' } },
+    });
+  });
+
+  it('preserves the legacy synchronous renderer and R2 write path', async () => {
+    const put = vi.fn(async () => undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      asset: { dataBase64: 'b2s=', mimeType: 'image/png' },
+    }), { headers: { 'content-type': 'application/json' } })));
+    const res = await handleRequest(req('/v1/render', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        molecule: { inputType: 'template', input: 'Water' },
+        asset: { format: 'png', inline: true },
+        sync: true,
+      }),
+    }), {
+      RENDERER_ENDPOINT: 'https://renderer.lupi.test/render',
+      ASSETS: {
+        head: async () => null,
+        get: async () => null,
+        put,
+      },
+    });
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      profile: 'legacy-v0',
+      status: 'complete',
+      asset: { dataBase64: 'b2s=', mimeType: 'image/png', byteLength: 2 },
+    });
+    expect(put).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['format', renderRequest({ format: 'webp' }), /webp is unsupported/],
+    ['alpha', renderRequest({ alpha: 'transparent' }), /transparent is unsupported/],
+    [
+      'layer',
+      renderRequest({
+        layers: createRenderLayerStateV1(['atoms', 'bonds']),
+        view: {
+          ...EDGE_ATOMS_VIEW,
+          bonds: {
+            tolerance: 0.45,
+            colorMode: 'type',
+            atomColorSource: 'element',
+            atomColorMode: 'type',
+            colorProperty: null,
+            colormap: 'viridis',
+            uniformColor: '#ffffff',
+            elementColorOverrides: {},
+            materialPreset: 'matte',
+            roughness: 0.6,
+            polish: 0,
+            execution: 'cpu-snapshot-v1',
+            materialIntensity: 1,
+            clearcoat: 0,
+            appliedCount: 0,
+          },
+        },
+      }),
+      /enabled layer bonds is unsupported/,
+    ],
+  ])('rejects unsupported edge %s combinations', async (_kind, request, expected) => {
+    const res = await handleRequest(req('/v1/render', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    }));
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toMatch(expected as RegExp);
+  });
+
+  it('reports unsupported MCP render combinations as invalid tool arguments', async () => {
+    const res = await handleRequest(req('/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'unsupported-format',
+        method: 'tools/call',
+        params: {
+          name: 'lupi.render_molecule_asset',
+          arguments: renderRequest({ format: 'webp' }),
+        },
+      }),
+    }));
+
+    expect(await res.json()).toMatchObject({
+      error: { code: -32602, message: expect.stringMatching(/webp is unsupported/) },
+    });
+  });
+
+  it('gives content-addressed input a specId but never invents an artifactKey', async () => {
+    const res = await handleRequest(req('/v1/render', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(renderRequest({ source: CONTENT_SOURCE })),
+    }));
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      status: 'awaiting_renderer',
+      requestKey: expect.stringMatching(/^request-sha256:[0-9a-f]{64}$/),
+      specId: expect.stringMatching(/^spec-sha256:[0-9a-f]{64}$/),
+    });
+    expect(body).not.toHaveProperty('artifactKey');
+  });
+
+  it('never dispatches an unresolved reference source', async () => {
+    const sent: unknown[] = [];
+    const rendererFetch = vi.fn(async () => new Response('{}'));
+    vi.stubGlobal('fetch', rendererFetch);
+    const res = await handleRequest(req('/v1/render', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(renderRequest({ delivery: { sync: true } })),
+    }), {
+      RENDERER_ENDPOINT: 'https://renderer.lupi.test/render',
+      RENDER_QUEUE: { send: async (message) => { sent.push(message); } },
+    });
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(body).toMatchObject({ status: 'awaiting_renderer' });
+    expect(body).not.toHaveProperty('specId');
+    expect(body).not.toHaveProperty('artifactKey');
+    expect(body).not.toHaveProperty('assetId');
+    expect(sent).toHaveLength(0);
+    expect(rendererFetch).not.toHaveBeenCalled();
   });
 
   it('serves deterministic asset HEAD from metadata without reading object bytes', async () => {
@@ -411,49 +705,26 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(staticFallbackCalled).toBe(false);
   });
 
-  it('sends queued render jobs when waitUntil is unavailable', async () => {
+  it('does not dispatch or invent artifact identity before a renderer is activated', async () => {
     const sent: unknown[] = [];
-    const res = await handleRequest(req('/mcp', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'render-queue',
-        method: 'tools/call',
-        params: {
-          name: 'lupi.render_molecule_asset',
-          arguments: { molecule: { inputType: 'template', input: 'Caffeine' } },
-        },
-      }),
-    }), {
-      RENDER_QUEUE: {
-        send: async (message) => {
-          sent.push(message);
-        },
-      },
-    });
-
-    const body = await res.json() as { result: { structuredContent: { status: string; renderer: { mode: string } } } };
-    expect(body.result.structuredContent).toMatchObject({ status: 'queued', renderer: { mode: 'queue' } });
-    expect(sent).toHaveLength(1);
-  });
-
-  it('does not enqueue duplicate work when a sync renderer is used', async () => {
-    const sent: unknown[] = [];
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    const rendererFetch = vi.fn(async () => new Response(JSON.stringify({
       asset: { dataBase64: 'b2s=', mimeType: 'image/png' },
-    }), { headers: { 'content-type': 'application/json' } })));
+    }), { headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', rendererFetch);
 
     const res = await handleRequest(req('/mcp', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: 'render-sync',
+        id: 'render-contract-only',
         method: 'tools/call',
         params: {
           name: 'lupi.render_molecule_asset',
-          arguments: { molecule: { inputType: 'template', input: 'Caffeine' } },
+          arguments: renderRequest({
+            source: CONTENT_SOURCE,
+            delivery: { sync: true },
+          }),
         },
       }),
     }), {
@@ -465,9 +736,19 @@ describe('lupi Cloudflare MCP worker', () => {
       },
     });
 
-    const body = await res.json() as { result: { structuredContent: { status: string; renderer?: { mode: string } } } };
-    expect(body.result.structuredContent.status).toBe('complete');
+    const body = await res.json() as {
+      result: { structuredContent: Record<string, unknown> & { renderer?: { mode: string; configured: boolean } } };
+    };
+    expect(body.result.structuredContent).toMatchObject({
+      status: 'awaiting_renderer',
+      specId: expect.stringMatching(/^spec-sha256:[0-9a-f]{64}$/),
+      renderer: { mode: 'contract-only', configured: false },
+    });
+    expect(body.result.structuredContent).not.toHaveProperty('artifactKey');
+    expect(body.result.structuredContent).not.toHaveProperty('assetId');
+    expect(body.result.structuredContent).not.toHaveProperty('jobId');
     expect(sent).toHaveLength(0);
+    expect(rendererFetch).not.toHaveBeenCalled();
   });
 
   it('requires bearer auth for protected tools when a secret is configured', async () => {
@@ -477,7 +758,7 @@ describe('lupi Cloudflare MCP worker', () => {
       method: 'tools/call',
       params: {
         name: 'lupi.render_molecule_asset',
-        arguments: { molecule: { inputType: 'template', input: 'Caffeine' } },
+        arguments: renderRequest(),
       },
     });
 

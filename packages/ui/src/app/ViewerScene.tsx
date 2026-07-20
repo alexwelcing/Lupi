@@ -152,6 +152,9 @@ export function ViewerScene({
   const atomTexture = useStore(s => s.atomTexture);
   const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
   const atomTypeScales = useStore(s => s.atomTypeScales);
+  const artifactSpecId = useStore(s => (
+    s.exportRequest.type === 'image' ? s.exportRequest.specId : undefined
+  ));
 
   const trackedAtomIndices = useMemo(() => {
     const set = new Set<number>();
@@ -322,6 +325,7 @@ export function ViewerScene({
             propertyEmissionStrength={propertyEmissionStrength}
             etchTexture={etchTexture}
             etchAtomId={etchAtomId}
+            artifactSpecId={artifactSpecId}
           />
           {activeVectorField && (
             <VectorGlyphs
@@ -334,6 +338,7 @@ export function ViewerScene({
               colormap={colormap}
               hiddenAtomTypes={hiddenAtomTypes}
               onStats={setVectorStats}
+              artifactSpecId={artifactSpecId}
             />
           )}
           <AtomClusters clusters={clusters} fadeNear={clusterFadeNear} fadeFar={clusterFadeFar} />

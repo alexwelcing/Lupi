@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "lupi.render-parity-edge-conformance-fixture.v1",
+  "purpose": "Schema-only edge submission fixture. It does not claim an edge-rendered artifact exists.",
+  "request": {
+    "version": "lupi.render-request.v1",
+    "spec": {
+      "version": "lupi.render-artifact-spec.v1",
+      "source": {
+        "kind": "content",
+        "mediaType": "application/vnd.lupi.decoded-frame.v1",
+        "contentDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "format": "png",
+      "width": 320,
+      "height": 320,
+      "alpha": "opaque",
+      "frame": 0,
+      "layers": {
+        "background": false,
+        "atoms": true,
+        "vectorGlyphs": false,
+        "atomClusters": false,
+        "bonds": false,
+        "simulationCell": false,
+        "filterShell": false,
+        "moleculeShadow": false,
+        "contactShadows": false,
+        "ghostAtoms": false,
+        "annotations": false,
+        "knowledgeLabels": false,
+        "selectionMarkers": false,
+        "atomTrails": false,
+        "axes": false,
+        "scaleBar": false
+      },
+      "view": {
+        "camera": {
+          "position": [10, 10, 10],
+          "target": [0, 0, 0],
+          "fov": 45,
+          "near": 0.1,
+          "far": 10000
+        },
+        "lighting": {
+          "ambient": 0.6,
+          "directional": 0.8,
+          "rim": 0.4,
+          "keyAzimuth": 45,
+          "keyElevation": 35,
+          "fillAzimuth": -45,
+          "fillElevation": 20,
+          "rimAzimuth": 135,
+          "rimElevation": 45,
+          "fillColor": "#ffffff",
+          "rimColor": "#ffffff",
+          "environment": {
+            "preset": "none"
+          }
+        },
+        "postprocess": {
+          "pipeline": "raw-scene",
+          "toneMapping": "none",
+          "multisampling": 0,
+          "outputColorSpace": "srgb"
+        },
+        "atoms": {
+          "scale": 1,
+          "hiddenTypes": [],
+          "typeScales": {},
+          "colorSource": "element",
+          "colorMode": "type",
+          "colorProperty": null,
+          "colormap": "viridis",
+          "uniformColor": "#ffffff",
+          "elementColorOverrides": {},
+          "materialPreset": "matte",
+          "roughness": 0.6,
+          "polish": 0,
+          "propertyRange": [0, 1],
+          "propertyEmissionStrength": 0,
+          "materialIntensity": 1,
+          "texture": "none",
+          "clearcoat": 0
+        }
+      }
+    },
+    "delivery": {
+      "version": "lupi.render-delivery.v1",
+      "inline": true,
+      "maxInlineBytes": 8388608,
+      "sync": true,
+      "filename": "edge-schema-conformance.png"
+    }
+  },
+  "expected": {
+    "status": "awaiting_renderer",
+    "rendererMode": "contract-only",
+    "artifactKeyPresent": false,
+    "artifactParity": "NOT_CHECKED"
+  }
+}

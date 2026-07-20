@@ -71,3 +71,6 @@ export {
   getAtlasCdnBase,
   cdnUrl,
 } from './cdn';
+
+// --- Stable render artifact contract ---------------------------------------
+export * from './renderArtifact';

@@ -31,6 +31,7 @@ import {
 import { openMolecule } from './viewer/openMolecule';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
 import { ViewerCanvas } from './viewer/ViewerCanvas';
+import { selectViewerFrames } from './viewer/artifactFrameSelection';
 import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
 import { xrStore } from './viewer/xrStore';
 
@@ -161,6 +162,7 @@ export function ViewerApp() {
   const colorProperty = useStore(s => s.colorProperty);
   const colormap = useStore(s => s.colormap);
   const vectorField = useStore(s => s.vectorField);
+  const exportRequest = useStore(s => s.exportRequest);
 
   const isMobile = useMediaQuery('(max-width: 768px)');
   const showDebugHud = useMemo(() => {
@@ -307,14 +309,23 @@ export function ViewerApp() {
   }
   if (rawCurrentFrame) lastResidentRef.current.frame = rawCurrentFrame;
   const currentFrame = file ? (rawCurrentFrame ?? lastResidentRef.current.frame) : undefined;
-  const interpolatedFrame = file?.trajectory.frames[interpState.frameIndex] ?? file?.trajectory.frames[displayFrameIndex];
-  const interpolatedNextFrame = interpState.isInterpolating
-    ? file?.trajectory.frames[interpState.nextFrameIndex]
-    : undefined;
-  const interpolationFactor = interpolatedNextFrame ? interpState.interpolationFactor : 0;
-  const interpolatedFrameKey = interpolatedFrame === file?.trajectory.frames[interpState.frameIndex]
-    ? interpState.frameIndex
-    : displayFrameIndex;
+  // An immutable raster artifact always draws its addressed integer source
+  // frame. This render-time override closes the pause->export race where the
+  // playback hook's RAF ref/passive synchronization can still describe a
+  // fractional frame even though the store is already paused.
+  const artifactCaptureFrameIndex = exportRequest.type === 'image' && exportRequest.artifactSpec
+    ? exportRequest.artifactSpec.frame
+    : null;
+  const renderedFrames = selectViewerFrames(
+    file?.trajectory.frames ?? [],
+    displayFrameIndex,
+    interpState,
+    artifactCaptureFrameIndex,
+  );
+  const interpolatedFrame = renderedFrames.frame;
+  const interpolatedNextFrame = renderedFrames.nextFrame;
+  const interpolationFactor = renderedFrames.interpolationFactor;
+  const interpolatedFrameKey = renderedFrames.frameKey;
 
   const vectorFieldSpecs = useMemo(() => {
     const f0 = file?.trajectory.frames[0];

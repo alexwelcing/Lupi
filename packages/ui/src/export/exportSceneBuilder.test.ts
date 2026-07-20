@@ -3,11 +3,17 @@ import * as THREE from 'three';
 import { detectBondsCpu } from '@atlas/scene/bondDetectCpu';
 import {
   selectSphereLod,
+  selectBudgetedSphereLod,
   sphereTriangleCount,
   detectExportBonds,
   buildExportScene,
   computeUsdzFraming,
   disposeExportScene,
+  estimateModelExportBudget,
+  assertModelExportBudget,
+  assertCompleteExportBondLayer,
+  GLB_INSTANCE_MEMORY_BUDGET_BYTES,
+  USDZ_BAKE_MEMORY_BUDGET_BYTES,
   USDZ_TRIANGLE_BUDGET,
   type ExportFrameData,
 } from './exportSceneBuilder';
@@ -78,9 +84,91 @@ describe('selectSphereLod', () => {
       geo.dispose();
     }
   });
+
+  it('coarsens USDZ spheres until bonded geometry fits the browser peak budget', () => {
+    expect(selectBudgetedSphereLod(5_000, 'usdz', 3_410, { mode: 'blob' }))
+      .toEqual({ widthSegments: 10, heightSegments: 8 });
+    const lod = selectBudgetedSphereLod(10_000, 'usdz', 6_753, { mode: 'blob' });
+    expect(lod).toEqual({ widthSegments: 6, heightSegments: 5 });
+    expect(() => assertModelExportBudget(
+      estimateModelExportBudget('usdz', 10_000, 6_753, lod, { mode: 'blob' }),
+    )).not.toThrow();
+  });
+
+  it('preserves GLB count tiers and returns a structured USDZ refusal tier', () => {
+    expect(selectBudgetedSphereLod(250_001, 'glb', 100_000, {
+      mode: 'inline-base64',
+      maxInlineBytes: 32 * 1024 * 1024,
+    })).toEqual({ widthSegments: 6, heightSegments: 5 });
+
+    const refusalLod = selectBudgetedSphereLod(100_000, 'usdz', 68_209, { mode: 'blob' });
+    expect(refusalLod).toEqual({ widthSegments: 5, heightSegments: 4 });
+    expect(() => assertModelExportBudget(
+      estimateModelExportBudget('usdz', 100_000, 68_209, refusalLod, { mode: 'blob' }),
+    )).toThrowError(/pre-allocation resource budget/);
+  });
+
+  it('estimates the merged USDZ typed-array allocation, not just triangle count', () => {
+    const estimate = estimateModelExportBudget(
+      'usdz',
+      250_000,
+      0,
+      { widthSegments: 5, heightSegments: 4 },
+    );
+    expect(estimate.estimatedTriangles).toBe(7_500_000);
+    expect(estimate.estimatedAllocationBytes).toBeGreaterThan(USDZ_BAKE_MEMORY_BUDGET_BYTES);
+  });
+
+  it('includes GLB encoder and inline-delivery peaks while the scene stays resident', () => {
+    const estimate = estimateModelExportBudget(
+      'glb',
+      250_000,
+      0,
+      { widthSegments: 10, heightSegments: 8 },
+      { mode: 'inline-base64', maxInlineBytes: 32 * 1024 * 1024 },
+    );
+    expect(estimate.estimatedEncoderOutputBytes).toBeGreaterThan(0);
+    expect(estimate.estimatedDeliveryBytes).toBeGreaterThan(estimate.estimatedEncoderOutputBytes);
+    expect(estimate.estimatedAllocationBytes).toBe(
+      estimate.estimatedSceneBytes
+        + estimate.estimatedEncoderOutputBytes
+        + estimate.estimatedDeliveryBytes,
+    );
+  });
+
+  it('budgets a 500k GLB file separately from an oversized inline response', () => {
+    const args = [
+      'glb',
+      500_000,
+      343_366,
+      { widthSegments: 6, heightSegments: 5 },
+    ] as const;
+    const blob = estimateModelExportBudget(...args, { mode: 'blob' });
+    const inline = estimateModelExportBudget(...args, {
+      mode: 'inline-base64',
+      maxInlineBytes: 32 * 1024 * 1024,
+    });
+
+    expect(blob.estimatedAllocationBytes).toBeLessThan(GLB_INSTANCE_MEMORY_BUDGET_BYTES);
+    expect(() => assertModelExportBudget(blob)).not.toThrow();
+    expect(inline.estimatedAllocationBytes).toBeGreaterThan(blob.estimatedAllocationBytes);
+    expect(inline.estimatedEncoderOutputBytes).toBeGreaterThan(inline.maxInlineBytes!);
+    expect(() => assertModelExportBudget(inline)).toThrowError(/inline limit/);
+  });
 });
 
 describe('detectExportBonds', () => {
+  it('fails the immutable layer contract when inferred topology reaches its cap', () => {
+    expect(() => assertCompleteExportBondLayer({
+      capped: true,
+      topology: 'inferred',
+    }, 123)).toThrow(/complete-export limit of 123 bonds/);
+    expect(() => assertCompleteExportBondLayer({
+      capped: false,
+      topology: 'inferred',
+    }, 123)).not.toThrow();
+  });
+
   it('chunked detection matches a whole-frame detectBondsCpu run exactly', async () => {
     const frame = makeRandomFrame(3_000, 28);
     const tolerance = 0.45;
@@ -209,6 +297,27 @@ describe('buildExportScene', () => {
     disposeExportScene(result.scene);
   });
 
+  it('linearizes display-sRGB tuples before writing GLB instance colors', async () => {
+    const result = await buildExportScene({
+      natoms: 1,
+      positions: new Float32Array([0, 0, 0]),
+      types: new Int32Array([1]),
+    }, {
+      format: 'glb',
+      displayRadiusForType: () => 1,
+      resolveAtomColor: () => [0.5, 0.25, 0.75],
+      showBonds: false,
+    });
+    const mesh = result.scene.getObjectByName('atoms-type-1') as THREE.InstancedMesh;
+    const actual = new THREE.Color();
+    const expected = new THREE.Color().setRGB(0.5, 0.25, 0.75, THREE.SRGBColorSpace);
+    mesh.getColorAt(0, actual);
+    expect(actual.r).toBeCloseTo(expected.r);
+    expect(actual.g).toBeCloseTo(expected.g);
+    expect(actual.b).toBeCloseTo(expected.b);
+    disposeExportScene(result.scene);
+  });
+
   it('builds bonds from the spatial-hash detector with midpoint colors', async () => {
     const result = await buildExportScene(tinyFrame, baseOptions);
 
@@ -264,6 +373,83 @@ describe('buildExportScene', () => {
     expect(pos.x).toBeCloseTo(-5.6 * framing.arScale);
 
     disposeExportScene(result.scene);
+  });
+
+  it('prefers validated source topology even when inference would reject the pair', async () => {
+    const sourceFrame: ExportFrameData = {
+      natoms: 2,
+      positions: new Float32Array([0, 0, 0, 20, 0, 0]),
+      types: new Int32Array([1, 2]),
+      bonds: new Int32Array([1, 0]),
+    };
+    const result = await buildExportScene(sourceFrame, {
+      ...baseOptions,
+      hiddenTypes: undefined,
+    });
+
+    expect(result.bondTopology).toBe('source');
+    expect(result.bondCount).toBe(1);
+    expect((result.scene.getObjectByName('bonds') as THREE.InstancedMesh).count).toBe(1);
+    disposeExportScene(result.scene);
+  });
+
+  it('fails closed on invalid source topology instead of silently inferring', async () => {
+    await expect(buildExportScene({
+      ...tinyFrame,
+      bonds: new Int32Array([0, 99]),
+    }, baseOptions)).rejects.toMatchObject({
+      code: 'MODEL_EXPORT_SOURCE_TOPOLOGY_INVALID',
+      details: { pairIndex: 0, atomA: 0, atomB: 99 },
+    });
+  });
+
+  it('rejects a 250k-atom USDZ before geometry or per-instance bake allocation', async () => {
+    const frame: ExportFrameData = {
+      natoms: 250_000,
+      positions: new Float32Array(250_000 * 3),
+      types: new Int32Array(250_000).fill(6),
+    };
+    const resolveAtomColor = vi.fn(() => [0.5, 0.5, 0.5] as [number, number, number]);
+
+    await expect(buildExportScene(frame, {
+      format: 'usdz',
+      displayRadiusForType: () => 1,
+      resolveAtomColor,
+      showBonds: false,
+    })).rejects.toMatchObject({
+      name: 'ModelExportBudgetError',
+      code: 'MODEL_EXPORT_BUDGET_EXCEEDED',
+      estimate: {
+        atomCount: 250_000,
+        bondCount: 0,
+      },
+    });
+    expect(resolveAtomColor).not.toHaveBeenCalled();
+  });
+
+  it('disposes partially constructed Three resources when scene construction throws', async () => {
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose');
+    const materialDispose = vi.spyOn(THREE.Material.prototype, 'dispose');
+    try {
+      await expect(buildExportScene({
+        natoms: 1,
+        positions: new Float32Array([0, 0, 0]),
+        types: new Int32Array([6]),
+      }, {
+        format: 'glb',
+        displayRadiusForType: () => 1,
+        resolveAtomColor: () => {
+          throw new Error('synthetic color resolver failure');
+        },
+        showBonds: false,
+      })).rejects.toThrow('synthetic color resolver failure');
+
+      expect(geometryDispose).toHaveBeenCalledTimes(1);
+      expect(materialDispose).toHaveBeenCalledTimes(1);
+    } finally {
+      geometryDispose.mockRestore();
+      materialDispose.mockRestore();
+    }
   });
 });
 

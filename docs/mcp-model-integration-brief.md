@@ -206,7 +206,7 @@ Molecule and asset tools:
 - `lupi.search_molecules` — search molecule/catalog providers and return load specs.
 - `lupi.set_viewer` — broad viewer patch for common style/camera settings.
 - `lupi.export_xyz` — return active frame XYZ text.
-- `lupi.export_asset` — return active view as inline PNG/JPEG/WebP or GLB/USDZ with `dataBase64`, `dataUrl`, `mimeType`, `filename`, and `byteLength`.
+- `lupi.export_asset` — return the active deterministic view as inline PNG/JPEG/WebP or GLB with `dataBase64`, `dataUrl`, `mimeType`, `filename`, and `byteLength`. USDZ stays outside the immutable-key lane until its serializer is byte-stable.
 - `lupi.viewer_state` — return current viewer state.
 - `lupi.knowledge_graph` — query active knowledge-graph labels.
 

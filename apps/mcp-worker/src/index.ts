@@ -1,4 +1,23 @@
 import externalAssetPathConfig from '../../web/cloudflare-assets-exclude.json';
+import {
+  MAX_INLINE_BYTES_V1,
+  MAX_RASTER_DIMENSION_V1,
+  MIN_INLINE_BYTES_V1,
+  MIN_RASTER_DIMENSION_V1,
+  RENDER_ARTIFACT_SPEC_VERSION_V1,
+  RENDER_CAPABILITY_VERSION_V1,
+  RENDER_DELIVERY_VERSION_V1,
+  RENDER_FORMAT_RULES_V1,
+  RENDER_LAYER_REGISTRY_V1,
+  RENDER_REQUEST_VERSION_V1,
+  RenderArtifactValidationError,
+  computeRenderRequestKeyV1,
+  computeRenderSpecIdV1,
+  validateRenderCapabilityV1,
+  validateRenderRequestV1,
+  type RenderCapabilityV1,
+  type RenderRequestSpecV1,
+} from '@atlas/core';
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -53,7 +72,7 @@ export interface Env {
   WEB_ASSETS?: FetcherLike;
   ASSETS?: R2BucketLike;
   DB?: D1DatabaseLike;
-  RENDER_QUEUE?: QueueLike<RenderQueueMessage>;
+  RENDER_QUEUE?: QueueLike<LegacyRenderQueueMessage>;
   ASSET_BASE_URL?: string;
   CORS_ORIGINS?: string;
   FIREBASE_AUTH_PROXY_HOST?: string;
@@ -70,7 +89,7 @@ export interface Env {
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
 type AssetFormat = 'png' | 'jpeg' | 'jpg' | 'webp' | 'glb' | 'usdz';
 
-interface RenderMoleculeAssetArgs {
+interface LegacyRenderMoleculeAssetArgs {
   molecule: {
     inputType?: MoleculeInputType;
     input?: string;
@@ -95,15 +114,8 @@ interface RenderMoleculeAssetArgs {
   sync?: boolean;
 }
 
-interface RenderQueueMessage {
-  jobId: string;
-  assetId: string;
-  cacheKey: string;
-  request: NormalizedRenderRequest;
-}
-
-interface NormalizedRenderRequest {
-  molecule: Required<Pick<RenderMoleculeAssetArgs['molecule'], 'inputType' | 'input'>> & Record<string, JsonValue>;
+interface LegacyNormalizedRenderRequest {
+  molecule: Required<Pick<LegacyRenderMoleculeAssetArgs['molecule'], 'inputType' | 'input'>> & Record<string, JsonValue>;
   asset: {
     format: Exclude<AssetFormat, 'jpg'>;
     width?: number;
@@ -114,6 +126,13 @@ interface NormalizedRenderRequest {
   };
   viewer: Record<string, JsonValue>;
   rendererVersion: string;
+}
+
+interface LegacyRenderQueueMessage {
+  jobId: string;
+  assetId: string;
+  cacheKey: string;
+  request: LegacyNormalizedRenderRequest;
 }
 
 interface ToolDefinition {
@@ -129,9 +148,9 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
-const SERVER_VERSION = '2026-07-09.cloudflare-control-plane.0';
-const RENDERER_VERSION = 'lupi-render-contract@2026-07-09';
-const DEFAULT_MAX_INLINE_BYTES = 8 * 1024 * 1024;
+const SERVER_VERSION = '2026-07-19.cloudflare-control-plane.1';
+const LEGACY_RENDERER_VERSION = 'lupi-render-contract@2026-07-09';
+const LEGACY_DEFAULT_MAX_INLINE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_FIREBASE_AUTH_PROXY_HOST = 'shed-489901.firebaseapp.com';
 const DEFAULT_PUBLIC_ORIGIN = 'https://lupi.live';
 const DEFAULT_SOCIAL_IMAGE = '/og-lupi.png';
@@ -150,6 +169,296 @@ const ANALYTICS_EVENTS = new Set([
   'render_failed',
   'render_fallback_shown',
 ]);
+
+/**
+ * Submission capability for the pre-renderer edge seam. It intentionally
+ * accepts only bounded opaque PNG atom renders; Plan 026 owns widening this
+ * after a renderer proves additional formats, alpha modes, or layers.
+ */
+export const EDGE_RENDER_CAPABILITY_V1: RenderCapabilityV1 = validateRenderCapabilityV1({
+  version: RENDER_CAPABILITY_VERSION_V1,
+  formats: {
+    png: {
+      enabled: true,
+      alphaModes: ['opaque'],
+      maxWidth: MAX_RASTER_DIMENSION_V1,
+      maxHeight: MAX_RASTER_DIMENSION_V1,
+    },
+    jpeg: { enabled: false, alphaModes: [] },
+    webp: { enabled: false, alphaModes: [] },
+    glb: { enabled: false, alphaModes: [] },
+    usdz: { enabled: false, alphaModes: [] },
+  },
+  layers: {
+    background: false,
+    atoms: true,
+    vectorGlyphs: false,
+    atomClusters: false,
+    bonds: false,
+    simulationCell: false,
+    filterShell: false,
+    moleculeShadow: false,
+    contactShadows: false,
+    ghostAtoms: false,
+    annotations: false,
+    knowledgeLabels: false,
+    selectionMarkers: false,
+    atomTrails: false,
+    axes: false,
+    scaleBar: false,
+  },
+});
+
+const EDGE_RENDER_LAYER_IDS = Object.keys(RENDER_LAYER_REGISTRY_V1);
+const EDGE_RENDER_LAYER_SCHEMA = Object.fromEntries(
+  EDGE_RENDER_LAYER_IDS.map((layer): [string, JsonValue] => [
+    layer,
+    (layer === 'atoms'
+      ? { const: true }
+      : { const: false }) as JsonValue,
+  ]),
+);
+
+const NUMBER_SCHEMA: JsonValue = { type: 'number' };
+const TUPLE3_SCHEMA: JsonValue = {
+  type: 'array',
+  minItems: 3,
+  maxItems: 3,
+  items: NUMBER_SCHEMA,
+};
+
+const EDGE_RENDER_VIEW_SCHEMA_V1: JsonValue = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['camera', 'lighting', 'postprocess', 'atoms'],
+  properties: {
+    camera: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['position', 'target', 'fov'],
+      properties: {
+        position: TUPLE3_SCHEMA,
+        target: TUPLE3_SCHEMA,
+        fov: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 180 },
+      },
+    },
+    lighting: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'ambient', 'directional', 'rim', 'keyAzimuth', 'keyElevation',
+        'fillAzimuth', 'fillElevation', 'rimAzimuth', 'rimElevation',
+        'fillColor', 'rimColor', 'environment',
+      ],
+      properties: {
+        ambient: { type: 'number', minimum: 0, maximum: 4 },
+        directional: { type: 'number', minimum: 0, maximum: 4 },
+        rim: { type: 'number', minimum: 0, maximum: 4 },
+        keyAzimuth: { type: 'number', minimum: -360, maximum: 360 },
+        keyElevation: { type: 'number', minimum: -90, maximum: 90 },
+        fillAzimuth: { type: 'number', minimum: -360, maximum: 360 },
+        fillElevation: { type: 'number', minimum: -90, maximum: 90 },
+        rimAzimuth: { type: 'number', minimum: -360, maximum: 360 },
+        rimElevation: { type: 'number', minimum: -90, maximum: 90 },
+        fillColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        rimColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        environment: {
+          oneOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['preset'],
+              properties: { preset: { const: 'none' } },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['preset', 'assetRevision', 'file', 'colorSpace'],
+              properties: {
+                preset: { enum: ['city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'apartment', 'park'] },
+                assetRevision: { type: 'string', pattern: '^[0-9a-f]{40,64}$' },
+                file: { type: 'string', minLength: 1 },
+                colorSpace: { const: 'srgb-linear' },
+              },
+            },
+          ],
+        },
+      },
+    },
+    postprocess: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['pipeline', 'toneMapping', 'multisampling', 'outputColorSpace'],
+      properties: {
+        pipeline: { const: 'raw-scene' },
+        toneMapping: { const: 'none' },
+        multisampling: { const: 0 },
+        outputColorSpace: { const: 'srgb' },
+      },
+    },
+    atoms: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'scale', 'hiddenTypes', 'typeScales', 'colorSource', 'colorMode',
+        'colorProperty', 'colormap', 'uniformColor', 'elementColorOverrides',
+        'materialPreset', 'roughness', 'polish', 'propertyRange', 'propertyEmissionStrength',
+        'materialIntensity', 'texture', 'clearcoat',
+      ],
+      properties: {
+        scale: { type: 'number', minimum: 0.1, maximum: 8 },
+        hiddenTypes: {
+          type: 'array',
+          uniqueItems: true,
+          items: { type: 'integer', minimum: 1, maximum: 255 },
+        },
+        typeScales: {
+          type: 'object',
+          propertyNames: { pattern: '^(?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$' },
+          additionalProperties: { type: 'number', minimum: 0.1, maximum: 8 },
+        },
+        colorSource: { enum: ['colormap', 'element'] },
+        colorMode: { enum: ['type', 'property', 'uniform'] },
+        colorProperty: {
+          oneOf: [
+            { type: 'string', minLength: 1, maxLength: 64 },
+            { type: 'null' },
+          ],
+        },
+        colormap: {
+          enum: [
+            'viridis', 'inferno', 'coolwarm', 'plasma', 'magma', 'cividis', 'neon',
+            'sunset', 'vaporwave', 'ocean', 'fire', 'ice', 'forest', 'cyberpunk',
+            'autumn', 'grayscale', 'turbo',
+          ],
+        },
+        uniformColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        elementColorOverrides: {
+          type: 'object',
+          propertyNames: { pattern: '^(?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$' },
+          additionalProperties: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        },
+        materialPreset: { enum: ['default', 'matte', 'metallic', 'glass', 'plastic'] },
+        roughness: { type: 'number', minimum: -1, maximum: 1 },
+        polish: { type: 'number', minimum: -1, maximum: 1 },
+        propertyRange: {
+          type: 'array',
+          minItems: 2,
+          maxItems: 2,
+          items: NUMBER_SCHEMA,
+        },
+        propertyEmissionStrength: { type: 'number', minimum: 0, maximum: 1 },
+        materialIntensity: { type: 'number', minimum: 0, maximum: 1 },
+        texture: { enum: ['none', 'scratched', 'noise'] },
+        clearcoat: { type: 'number', minimum: 0, maximum: 1 },
+      },
+    },
+  },
+};
+
+const RENDER_REQUEST_V1_INPUT_SCHEMA: JsonValue = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['version', 'spec', 'delivery'],
+  properties: {
+    version: { const: RENDER_REQUEST_VERSION_V1 },
+    spec: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['version', 'source', 'format', 'width', 'height', 'alpha', 'frame', 'layers', 'view'],
+      properties: {
+        version: { const: RENDER_ARTIFACT_SPEC_VERSION_V1 },
+        source: {
+          oneOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['kind', 'mediaType', 'contentDigest'],
+              properties: {
+                kind: { const: 'content' },
+                mediaType: { type: 'string' },
+                contentDigest: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['kind', 'uri'],
+              properties: {
+                kind: { const: 'reference' },
+                uri: { type: 'string' },
+                revision: { type: 'string' },
+              },
+            },
+          ],
+        },
+        format: { type: 'string', enum: ['png'] },
+        width: { type: 'integer', minimum: MIN_RASTER_DIMENSION_V1, maximum: MAX_RASTER_DIMENSION_V1 },
+        height: { type: 'integer', minimum: MIN_RASTER_DIMENSION_V1, maximum: MAX_RASTER_DIMENSION_V1 },
+        alpha: { type: 'string', enum: ['opaque'] },
+        frame: { type: 'integer', minimum: 0 },
+        layers: {
+          type: 'object',
+          additionalProperties: false,
+          required: EDGE_RENDER_LAYER_IDS,
+          properties: EDGE_RENDER_LAYER_SCHEMA,
+        },
+        view: EDGE_RENDER_VIEW_SCHEMA_V1,
+      },
+    },
+    delivery: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['version', 'inline', 'maxInlineBytes', 'sync'],
+      properties: {
+        version: { const: RENDER_DELIVERY_VERSION_V1 },
+        inline: { type: 'boolean' },
+        maxInlineBytes: { type: 'integer', minimum: MIN_INLINE_BYTES_V1, maximum: MAX_INLINE_BYTES_V1 },
+        sync: { type: 'boolean' },
+        filename: { type: 'string' },
+      },
+    },
+  },
+};
+
+const LEGACY_RENDER_REQUEST_INPUT_SCHEMA: JsonValue = {
+  type: 'object',
+  required: ['molecule'],
+  properties: {
+    molecule: {
+      type: 'object',
+      properties: {
+        inputType: { type: 'string', enum: ['name', 'template', 'smiles', 'xyz', 'description', 'procedural'] },
+        input: { type: 'string' },
+        name: { type: 'string' },
+        smiles: { type: 'string' },
+        xyz: { type: 'string' },
+        atomCount: { type: ['number', 'string'] },
+        element: { type: 'string' },
+        elements: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] },
+        lattice: { type: 'string', enum: ['sc', 'bcc', 'fcc'] },
+        spacing: { type: ['number', 'string'] },
+      },
+    },
+    asset: {
+      type: 'object',
+      properties: {
+        format: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb', 'usdz'] },
+        width: { type: 'number', minimum: 64, maximum: 4096 },
+        height: { type: 'number', minimum: 64, maximum: 4096 },
+        transparent: { type: 'boolean' },
+        inline: { type: 'boolean' },
+        maxInlineBytes: { type: 'number', minimum: 1024, maximum: 67108864 },
+      },
+    },
+    viewer: { type: 'object' },
+    sync: { type: 'boolean' },
+  },
+};
+
+const RENDER_REQUEST_INPUT_SCHEMA: JsonValue = {
+  oneOf: [RENDER_REQUEST_V1_INPUT_SCHEMA, LEGACY_RENDER_REQUEST_INPUT_SCHEMA],
+};
 
 export const MCP_TOOLS: ToolDefinition[] = [
   {
@@ -170,41 +479,8 @@ export const MCP_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'lupi.render_molecule_asset',
-    description: 'Create or retrieve a cached molecule asset render job without launching a browser. Returns asset/job metadata and URLs when available.',
-    inputSchema: {
-      type: 'object',
-      required: ['molecule'],
-      properties: {
-        molecule: {
-          type: 'object',
-          properties: {
-            inputType: { type: 'string', enum: ['name', 'template', 'smiles', 'xyz', 'description', 'procedural'] },
-            input: { type: 'string' },
-            name: { type: 'string' },
-            smiles: { type: 'string' },
-            xyz: { type: 'string' },
-            atomCount: { type: ['number', 'string'] },
-            element: { type: 'string' },
-            elements: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] },
-            lattice: { type: 'string', enum: ['sc', 'bcc', 'fcc'] },
-            spacing: { type: ['number', 'string'] },
-          },
-        },
-        asset: {
-          type: 'object',
-          properties: {
-            format: { type: 'string', enum: ['png', 'jpeg', 'jpg', 'webp', 'glb', 'usdz'] },
-            width: { type: 'number', minimum: 64, maximum: 4096 },
-            height: { type: 'number', minimum: 64, maximum: 4096 },
-            transparent: { type: 'boolean' },
-            inline: { type: 'boolean' },
-            maxInlineBytes: { type: 'number', minimum: 1024, maximum: 67108864 },
-          },
-        },
-        viewer: { type: 'object' },
-        sync: { type: 'boolean', description: 'If true and RENDERER_ENDPOINT is configured, try a synchronous backend render.' },
-      },
-    },
+    description: 'Submit a legacy molecule render job, or validate a bounded RenderRequestV1 profile without launching a browser.',
+    inputSchema: RENDER_REQUEST_INPUT_SCHEMA,
   },
   {
     name: 'lupi.get_render_job',
@@ -308,8 +584,7 @@ export async function handleRequest(
     if (url.pathname === '/v1/render') {
       if (request.method !== 'POST') return methodNotAllowed(cors, ['POST']);
       await assertAuthorized(request, env);
-      const args = await request.json() as RenderMoleculeAssetArgs;
-      return json(await renderMoleculeAsset(args, env, ctx), { headers: cors });
+      return json(await renderMoleculeAsset(await request.json(), env, ctx), { headers: cors });
     }
 
     const jobMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)$/);
@@ -350,7 +625,9 @@ export async function handleRequest(
     return json({ error: 'Not found', path: url.pathname }, { status: 404, headers: cors });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = message === 'Unauthorized' ? 401 : 500;
+    const status = message === 'Unauthorized'
+      ? 401
+      : error instanceof RenderArtifactValidationError ? 400 : 500;
     return json({ error: message }, { status, headers: cors });
   }
 }
@@ -413,7 +690,10 @@ async function handleSingleJsonRpc(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return hasId ? rpcError(id, message === 'Unauthorized' ? -32001 : -32000, message) : null;
+    const code = message === 'Unauthorized'
+      ? -32001
+      : error instanceof RenderArtifactValidationError ? -32602 : -32000;
+    return hasId ? rpcError(id, code, message) : null;
   }
 }
 
@@ -429,7 +709,7 @@ async function callTool(
     case 'lupi.search_molecules':
       return searchMolecules(args);
     case 'lupi.render_molecule_asset':
-      return await renderMoleculeAsset(args as unknown as RenderMoleculeAssetArgs, env, ctx);
+      return await renderMoleculeAsset(args, env, ctx);
     case 'lupi.get_render_job':
       return await readJob(String(args.jobId ?? ''), env);
     case 'lupi.get_asset':
@@ -442,11 +722,54 @@ async function callTool(
 }
 
 async function renderMoleculeAsset(
-  args: RenderMoleculeAssetArgs,
+  input: unknown,
   env: Env,
   ctx: { waitUntil?: (promise: Promise<unknown>) => void },
 ) {
-  const normalized = normalizeRenderRequest(args);
+  if (isRecord(input) && input.version === RENDER_REQUEST_VERSION_V1) {
+    return renderArtifactRequestV1(input);
+  }
+  return renderLegacyMoleculeAsset(input as LegacyRenderMoleculeAssetArgs, env, ctx);
+}
+
+async function renderArtifactRequestV1(
+  input: unknown,
+) {
+  const request = validateRenderRequestV1(input);
+  assertEdgeRenderCapability(request.spec);
+  const requestKey = await computeRenderRequestKeyV1(request);
+  const format = request.spec.format;
+  const specId = request.spec.source.kind === 'content'
+    ? await computeRenderSpecIdV1(request.spec)
+    : undefined;
+  return {
+    requestKey,
+    ...(specId ? { specId } : {}),
+    status: 'awaiting_renderer',
+    renderer: {
+      mode: 'contract-only',
+      configured: false,
+    },
+    request,
+    capability: EDGE_RENDER_CAPABILITY_V1,
+    output: {
+      format,
+      mimeType: mimeForFormat(format),
+    },
+    next: {
+      message: request.spec.source.kind === 'reference'
+        ? 'The request is valid, but a renderer must resolve and digest the source before a specId can exist.'
+        : 'The spec is finalized, but no activated renderer fingerprint exists; artifactKey, job, cache, and asset identities are intentionally withheld.',
+    },
+  };
+}
+
+async function renderLegacyMoleculeAsset(
+  args: LegacyRenderMoleculeAssetArgs,
+  env: Env,
+  ctx: { waitUntil?: (promise: Promise<unknown>) => void },
+) {
+  const normalized = normalizeLegacyRenderRequest(args);
   const canonical = canonicalJson(normalizeJson(normalized) ?? {});
   const hash = await sha256Hex(canonical);
   const assetId = `sha256-${hash}`;
@@ -456,23 +779,23 @@ async function renderMoleculeAsset(
   const cached = env.ASSETS ? await env.ASSETS.head(assetKey) : null;
 
   if (cached) {
-    const assetUrl = publicAssetUrl(assetId, normalized.asset.format, env);
     const result = {
       jobId,
       assetId,
       cacheKey,
       status: 'complete',
       cached: true,
+      profile: 'legacy-v0',
       asset: {
         format: normalized.asset.format,
         mimeType: cached.httpMetadata?.contentType ?? mimeForFormat(normalized.asset.format),
         byteLength: cached.size ?? Number(cached.customMetadata?.byteLength ?? 0),
         sha256: cached.customMetadata?.sha256 ?? hash,
-        url: assetUrl,
+        url: publicAssetUrl(assetId, normalized.asset.format, env),
       },
       request: normalized,
     };
-    await upsertJob(env, { ...result, status: 'complete', assetKey });
+    await upsertJob(env, { ...result, assetKey });
     return result;
   }
 
@@ -484,6 +807,7 @@ async function renderMoleculeAsset(
     cacheKey,
     status: rendererMode === 'unconfigured' ? 'awaiting_renderer' : 'queued',
     cached: false,
+    profile: 'legacy-v0',
     renderer: {
       mode: rendererMode,
       configured: rendererMode !== 'unconfigured',
@@ -498,18 +822,18 @@ async function renderMoleculeAsset(
       pollTool: 'lupi.get_render_job',
       pollArguments: { jobId },
       message: rendererMode === 'unconfigured'
-        ? 'Cloudflare MCP control plane accepted the request, but no renderer backend or queue is configured yet.'
-        : 'Render job accepted. Poll lupi.get_render_job or fetch the returned asset URL after completion.',
+        ? 'The legacy control plane accepted the request, but no renderer backend or queue is configured.'
+        : 'Legacy render job accepted. Poll lupi.get_render_job or fetch the returned asset URL after completion.',
     },
   };
 
   await upsertJob(env, { ...created, assetKey });
 
   if (rendererMode === 'queue' && env.RENDER_QUEUE) {
-    const message = { jobId, assetId, cacheKey, request: normalized };
+    const message: LegacyRenderQueueMessage = { jobId, assetId, cacheKey, request: normalized };
     const send = env.RENDER_QUEUE.send(message).catch(async (error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      await updateJobStatus(env, jobId, 'failed', message);
+      const failure = error instanceof Error ? error.message : String(error);
+      await updateJobStatus(env, jobId, 'failed', failure);
       throw error;
     });
     if (ctx.waitUntil) ctx.waitUntil(send);
@@ -517,16 +841,22 @@ async function renderMoleculeAsset(
   }
 
   if (useSyncRenderer) {
-    const rendered = await trySynchronousRenderer(env, { jobId, assetId, cacheKey, request: normalized, assetKey });
+    const rendered = await tryLegacySynchronousRenderer(env, {
+      jobId,
+      assetId,
+      cacheKey,
+      request: normalized,
+      assetKey,
+    });
     if (rendered) return rendered;
   }
 
   return created;
 }
 
-function normalizeRenderRequest(args: RenderMoleculeAssetArgs): NormalizedRenderRequest {
+function normalizeLegacyRenderRequest(args: LegacyRenderMoleculeAssetArgs): LegacyNormalizedRenderRequest {
   if (!args || !isRecord(args) || !isRecord(args.molecule)) {
-    throw new Error('lupi.render_molecule_asset requires a molecule object.');
+    throw new Error('lupi.render_molecule_asset requires a molecule object or a versioned RenderRequestV1.');
   }
   const moleculeArgs = args.molecule;
   const input = readString(moleculeArgs.input)
@@ -552,28 +882,38 @@ function normalizeRenderRequest(args: RenderMoleculeAssetArgs): NormalizedRender
       elements: normalizeElements(moleculeArgs.elements),
       lattice: readString(moleculeArgs.lattice),
       spacing: normalizeJsonScalar(moleculeArgs.spacing),
-    }) as NormalizedRenderRequest['molecule'],
+    }) as LegacyNormalizedRenderRequest['molecule'],
     asset: {
       format,
       width,
       height,
       transparent: Boolean(assetArgs.transparent),
       inline: Boolean(assetArgs.inline),
-      maxInlineBytes: clampInt(readNumber(assetArgs.maxInlineBytes) ?? DEFAULT_MAX_INLINE_BYTES, 1024, 64 * 1024 * 1024),
+      maxInlineBytes: clampInt(
+        readNumber(assetArgs.maxInlineBytes) ?? LEGACY_DEFAULT_MAX_INLINE_BYTES,
+        1024,
+        64 * 1024 * 1024,
+      ),
     },
     viewer: isRecord(args.viewer) ? normalizeRecord(args.viewer) : {},
-    rendererVersion: RENDERER_VERSION,
+    rendererVersion: LEGACY_RENDERER_VERSION,
   };
 }
 
-async function trySynchronousRenderer(
+async function tryLegacySynchronousRenderer(
   env: Env,
-  job: { jobId: string; assetId: string; cacheKey: string; request: NormalizedRenderRequest; assetKey: string },
+  job: {
+    jobId: string;
+    assetId: string;
+    cacheKey: string;
+    request: LegacyNormalizedRenderRequest;
+    assetKey: string;
+  },
 ) {
   if (!env.RENDERER_ENDPOINT) return null;
   let payload: { asset?: { dataBase64?: string; mimeType?: string; sha256?: string; byteLength?: number } };
   try {
-    const res = await fetch(env.RENDERER_ENDPOINT, {
+    const response = await fetch(env.RENDERER_ENDPOINT, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -581,14 +921,14 @@ async function trySynchronousRenderer(
       },
       body: JSON.stringify({ jobId: job.jobId, assetId: job.assetId, request: job.request }),
     });
-    if (!res.ok) return await markRenderFailed(env, job, `Renderer HTTP ${res.status}`);
-    payload = await res.json() as typeof payload;
+    if (!response.ok) return await markLegacyRenderFailed(env, job, `Renderer HTTP ${response.status}`);
+    payload = await response.json() as typeof payload;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return await markRenderFailed(env, job, message);
+    return await markLegacyRenderFailed(env, job, message);
   }
   const dataBase64 = payload.asset?.dataBase64;
-  if (!dataBase64) return await markRenderFailed(env, job, 'Renderer response did not include asset.dataBase64');
+  if (!dataBase64) return await markLegacyRenderFailed(env, job, 'Renderer response did not include asset.dataBase64');
   const bytes = base64ToUint8Array(dataBase64);
   const sha256 = payload.asset?.sha256 ?? await sha256Hex(bytes);
   const mimeType = payload.asset?.mimeType ?? mimeForFormat(job.request.asset.format);
@@ -604,23 +944,32 @@ async function trySynchronousRenderer(
     cacheKey: job.cacheKey,
     status: 'complete',
     cached: false,
+    profile: 'legacy-v0',
     asset: {
       format: job.request.asset.format,
       mimeType,
       byteLength: bytes.byteLength,
       sha256,
       url: publicAssetUrl(job.assetId, job.request.asset.format, env),
-      dataBase64: job.request.asset.inline && bytes.byteLength <= job.request.asset.maxInlineBytes ? dataBase64 : undefined,
+      dataBase64: job.request.asset.inline && bytes.byteLength <= job.request.asset.maxInlineBytes
+        ? dataBase64
+        : undefined,
     },
     request: job.request,
   };
-  await upsertJob(env, { ...result, status: 'complete', assetKey: job.assetKey });
+  await upsertJob(env, { ...result, assetKey: job.assetKey });
   return result;
 }
 
-async function markRenderFailed(
+async function markLegacyRenderFailed(
   env: Env,
-  job: { jobId: string; assetId: string; cacheKey: string; request: NormalizedRenderRequest; assetKey: string },
+  job: {
+    jobId: string;
+    assetId: string;
+    cacheKey: string;
+    request: LegacyNormalizedRenderRequest;
+    assetKey: string;
+  },
   error: string,
 ) {
   const result = {
@@ -629,6 +978,7 @@ async function markRenderFailed(
     cacheKey: job.cacheKey,
     status: 'failed',
     cached: false,
+    profile: 'legacy-v0',
     error,
     renderer: { mode: 'http', configured: true },
     asset: {
@@ -640,6 +990,44 @@ async function markRenderFailed(
   };
   await upsertJob(env, { ...result, assetKey: job.assetKey });
   return result;
+}
+
+function assertEdgeRenderCapability(spec: RenderRequestSpecV1): void {
+  const formatCapability = EDGE_RENDER_CAPABILITY_V1.formats[spec.format];
+  if (!formatCapability.enabled) {
+    throw new RenderArtifactValidationError(
+      '$.spec.format',
+      `${spec.format} is unsupported by the edge request capability`,
+    );
+  }
+  if (!formatCapability.alphaModes.includes(spec.alpha)) {
+    throw new RenderArtifactValidationError(
+      '$.spec.alpha',
+      `${spec.alpha} is unsupported for ${spec.format} by the edge request capability`,
+    );
+  }
+  if (!spec.layers.atoms) {
+    throw new RenderArtifactValidationError(
+      '$.spec.layers.atoms',
+      'the edge RenderRequestV1 validation profile requires the atoms layer',
+    );
+  }
+  if (RENDER_FORMAT_RULES_V1[spec.format].kind === 'raster') {
+    if (spec.width! > formatCapability.maxWidth! || spec.height! > formatCapability.maxHeight!) {
+      throw new RenderArtifactValidationError(
+        '$.spec',
+        `${spec.width}x${spec.height} exceeds the edge request capability`,
+      );
+    }
+  }
+  for (const layer of Object.keys(RENDER_LAYER_REGISTRY_V1) as Array<keyof typeof RENDER_LAYER_REGISTRY_V1>) {
+    if (spec.layers[layer] && !EDGE_RENDER_CAPABILITY_V1.layers[layer]) {
+      throw new RenderArtifactValidationError(
+        `$.spec.layers.${layer}`,
+        `enabled layer ${layer} is unsupported by the edge request capability`,
+      );
+    }
+  }
 }
 
 function searchMolecules(args: Record<string, unknown>) {
@@ -748,6 +1136,17 @@ function statusPayload(env: Env) {
     agentNative: true,
     browserRequired: false,
     renderExecution: Boolean(env.RENDER_QUEUE || env.RENDERER_ENDPOINT),
+    renderProfiles: {
+      legacyV0: {
+        execution: Boolean(env.RENDER_QUEUE || env.RENDERER_ENDPOINT),
+        compatibilityOnly: true,
+      },
+      renderRequestV1: {
+        execution: false,
+        validationOnly: true,
+      },
+    },
+    renderRequestCapability: EDGE_RENDER_CAPABILITY_V1,
     ...(release ? {
       release: {
         id: release.id,
@@ -775,6 +1174,11 @@ function manifestPayload() {
     endpoint: '/mcp',
     protocol: 'MCP JSON-RPC over HTTP',
     browserBridgeManifest: '/browser-mcp-manifest.json',
+    renderProfiles: {
+      legacyV0: { compatibilityOnly: true },
+      renderRequestV1: { validationOnly: true },
+    },
+    renderRequestCapability: EDGE_RENDER_CAPABILITY_V1,
     tools: MCP_TOOLS,
   };
 }
@@ -836,14 +1240,6 @@ function corsHeaders(request: Request, env: Env) {
   headers.set('access-control-expose-headers', 'content-type,etag,x-lupi-edge-executed');
   headers.set('x-lupi-edge-executed', '1');
   return headers;
-}
-
-function readInputType(value: unknown, molecule: Record<string, unknown>): MoleculeInputType | undefined {
-  if (value === 'name' || value === 'template' || value === 'smiles' || value === 'xyz' || value === 'description' || value === 'procedural') return value;
-  if (molecule.atomCount !== undefined || molecule.lattice !== undefined) return 'procedural';
-  if (molecule.smiles !== undefined) return 'smiles';
-  if (molecule.xyz !== undefined) return 'xyz';
-  return undefined;
 }
 
 function normalizeFormat(value: unknown): Exclude<AssetFormat, 'jpg'> | undefined {
@@ -1261,6 +1657,21 @@ function clampInt(value: number, min: number, max: number) {
   return Math.round(Math.max(min, Math.min(max, value)));
 }
 
+function readInputType(value: unknown, molecule: Record<string, unknown>): MoleculeInputType | undefined {
+  if (
+    value === 'name'
+    || value === 'template'
+    || value === 'smiles'
+    || value === 'xyz'
+    || value === 'description'
+    || value === 'procedural'
+  ) return value;
+  if (molecule.atomCount !== undefined || molecule.lattice !== undefined) return 'procedural';
+  if (molecule.smiles !== undefined) return 'smiles';
+  if (molecule.xyz !== undefined) return 'xyz';
+  return undefined;
+}
+
 function normalizeElements(value: unknown): JsonValue | undefined {
   if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === 'string');
   if (typeof value === 'string') return value.split(',').map((entry) => entry.trim()).filter(Boolean);
@@ -1294,10 +1705,6 @@ function normalizeJson(value: unknown): JsonValue | undefined {
   return undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function canonicalJson(value: JsonValue): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -1315,6 +1722,10 @@ async function sha256Hex(value: string | Uint8Array): Promise<string> {
 function base64ToUint8Array(base64: string) {
   const raw = atob(base64);
   const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
+  for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
   return bytes;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

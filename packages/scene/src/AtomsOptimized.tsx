@@ -15,7 +15,7 @@
  * - Changing colormap/colorMode updates only tiny textures, not 1M atoms
  */
 
-import { useRef, useMemo, useEffect, useCallback } from 'react';
+import { useRef, useMemo, useEffect, useLayoutEffect, useCallback } from 'react';
 import { wrapDelta } from './interpolation';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -87,6 +87,129 @@ interface AtomsOptimizedProps {
    *  `effectiveFrame` minus `frameIndex` gives uProgress at 60fps with no React
    *  re-render. Falls back to `interpolationFactor` when absent. */
   liveStateRef?: { readonly current: { readonly effectiveFrame: number } | null };
+  /** Artifact revision this mesh has applied to geometry and material state. */
+  artifactSpecId?: string;
+}
+
+interface ScalarMaterialUniforms {
+  uSurfaceClearcoat: { value: number };
+  uSurfacePolish: { value: number };
+  uSurfaceRoughness: { value: number };
+}
+
+interface SurfaceUniformValues {
+  surfaceClearcoat?: number;
+  surfacePolish?: number;
+  surfaceRoughness?: number;
+}
+
+export function syncSurfaceMaterialUniforms(
+  uniforms: ScalarMaterialUniforms,
+  values: SurfaceUniformValues,
+): void {
+  uniforms.uSurfaceRoughness.value = values.surfaceRoughness ?? 0;
+  uniforms.uSurfacePolish.value = values.surfacePolish ?? 0;
+  uniforms.uSurfaceClearcoat.value = values.surfaceClearcoat ?? 0;
+}
+
+const OWNED_MATERIAL_TEXTURE_UNIFORMS = [
+  'uPalette',
+  'uColormap',
+  'uMaterialPalette',
+] as const;
+
+export function disposeOwnedMaterialTextures(
+  uniforms: Record<string, { value?: { dispose?: () => void } | null }>,
+): void {
+  for (const name of OWNED_MATERIAL_TEXTURE_UNIFORMS) {
+    uniforms[name]?.value?.dispose?.();
+  }
+}
+
+const IMPOSTOR_BOUND_RADIUS_SCALE = 1.3;
+
+export interface AtomInterpolationExtents {
+  count: number;
+  finite: boolean;
+  minX: number;
+  minY: number;
+  minZ: number;
+  maxX: number;
+  maxY: number;
+  maxZ: number;
+  maxInstanceRadius: number;
+}
+
+/**
+ * Build a conservative local-space bound for every position the GPU can draw.
+ * The caller accumulates both interpolation endpoints; linear interpolation
+ * then stays inside their shared AABB for every clamped uProgress value.
+ */
+export function createAtomInterpolationBoundingSphere(
+  extents: AtomInterpolationExtents,
+): THREE.Sphere {
+  if (extents.count <= 0) {
+    return new THREE.Sphere(new THREE.Vector3(), 0);
+  }
+
+  if (!extents.finite || ![
+    extents.minX,
+    extents.minY,
+    extents.minZ,
+    extents.maxX,
+    extents.maxY,
+    extents.maxZ,
+    extents.maxInstanceRadius,
+  ].every(Number.isFinite)) {
+    // Invalid live data must fail open: keep the batch visible instead of
+    // allowing a NaN bound to make an otherwise-valid batch disappear.
+    return new THREE.Sphere(new THREE.Vector3(), Number.POSITIVE_INFINITY);
+  }
+
+  const center = new THREE.Vector3(
+    (extents.minX + extents.maxX) * 0.5,
+    (extents.minY + extents.maxY) * 0.5,
+    (extents.minZ + extents.maxZ) * 0.5,
+  );
+  const halfX = (extents.maxX - extents.minX) * 0.5;
+  const halfY = (extents.maxY - extents.minY) * 0.5;
+  const halfZ = (extents.maxZ - extents.minZ) * 0.5;
+  const radius = Math.hypot(halfX, halfY, halfZ)
+    + Math.abs(extents.maxInstanceRadius) * IMPOSTOR_BOUND_RADIUS_SCALE;
+
+  return Number.isFinite(radius)
+    ? new THREE.Sphere(center, radius)
+    : new THREE.Sphere(new THREE.Vector3(), Number.POSITIVE_INFINITY);
+}
+
+export function resolveLoadedAtomCount(
+  frameAtomCount: number,
+  loadedAtomCount?: number,
+): number {
+  const frameCount = Number.isFinite(frameAtomCount)
+    ? Math.max(0, Math.trunc(frameAtomCount))
+    : 0;
+  if (loadedAtomCount === undefined) return frameCount;
+  if (!Number.isFinite(loadedAtomCount)) return 0;
+  return Math.max(0, Math.min(frameCount, Math.trunc(loadedAtomCount)));
+}
+
+/**
+ * Mark the exact component span written this upload using Three's current
+ * BufferAttribute range API. `updateRange` was removed; stale ranges must be
+ * cleared before adding the next frame's smaller or larger span.
+ */
+export function markInstancedAttributeUpdateRange(
+  attribute: THREE.InstancedBufferAttribute,
+  componentCount: number,
+): void {
+  attribute.clearUpdateRanges();
+  const safeCount = Number.isFinite(componentCount)
+    ? Math.max(0, Math.min(attribute.array.length, Math.trunc(componentCount)))
+    : 0;
+  if (safeCount === 0) return;
+  attribute.addUpdateRange(0, safeCount);
+  attribute.needsUpdate = true;
 }
 
 // ─── GLSL Shaders ────────────────────────────────────────────────────
@@ -168,7 +291,7 @@ const IMPOSTOR_VERTEX = /* glsl */ `
 // scene.environment.
 const CUBE_UV_CHUNK = THREE.ShaderChunk.cube_uv_reflection_fragment;
 
-const IMPOSTOR_FRAGMENT = /* glsl */ `
+export const IMPOSTOR_FRAGMENT = /* glsl */ `
   precision highp float;
 
   varying vec3 vColor;
@@ -223,13 +346,10 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
   uniform int uHasEnv;
   // ENVMAP_TYPE_CUBE_UV gates Three.js's cube_uv_reflection_fragment chunk
   // so its textureCubeUV() definition is visible to us. CUBEUV_TEXEL_*
-  // and CUBEUV_MAX_MIP are sized for PMREMGenerator's default 256-pixel
-  // base resolution (drei's default). The chunk also requires the uniform
+  // and CUBEUV_MAX_MIP are injected from the actual PMREM atlas dimensions.
+  // The chunk also requires the uniform
   // be named "envMap" (not tEnvMap) — alias it.
   #define ENVMAP_TYPE_CUBE_UV
-  #define CUBEUV_TEXEL_WIDTH 0.0009765625
-  #define CUBEUV_TEXEL_HEIGHT 0.001953125
-  #define CUBEUV_MAX_MIP 8.0
   #define envMap tEnvMap
   ${CUBE_UV_CHUNK}
   // Property-driven emission strength. 0 disables; >0 makes atoms glow
@@ -525,13 +645,89 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
     gl_FragDepth = ndcDepth * 0.5 + 0.5;
 
     gl_FragColor = vec4(color, 1.0);
+    #include <colorspace_fragment>
   }
 `;
+
+export interface CubeUvShaderDefines {
+  CUBEUV_TEXEL_WIDTH: number;
+  CUBEUV_TEXEL_HEIGHT: number;
+  CUBEUV_MAX_MIP: number;
+}
+
+export function cubeUvShaderDefinesForAtlas(
+  atlasWidth: number,
+  atlasHeight: number,
+): CubeUvShaderDefines {
+  if (!Number.isFinite(atlasWidth) || atlasWidth <= 0 || !Number.isFinite(atlasHeight) || atlasHeight <= 0) {
+    throw new Error('CubeUV atlas dimensions must be finite and positive.');
+  }
+  const cubeSize = Math.min(atlasWidth / 3, atlasHeight / 4);
+  return {
+    CUBEUV_TEXEL_WIDTH: 1 / atlasWidth,
+    CUBEUV_TEXEL_HEIGHT: 1 / atlasHeight,
+    CUBEUV_MAX_MIP: Math.max(0, Math.floor(Math.log2(cubeSize))),
+  };
+}
+
+export function cubeUvShaderDefinesForTexture(texture: THREE.Texture): CubeUvShaderDefines | null {
+  const image = texture.image as { width?: unknown; height?: unknown } | undefined;
+  const width = typeof image?.width === 'number' ? image.width : Number.NaN;
+  const height = typeof image?.height === 'number' ? image.height : Number.NaN;
+  if (!(width > 0) || !(height > 0)) return null;
+  return cubeUvShaderDefinesForAtlas(width, height);
+}
+
+const EMPTY_CUBE_UV_DEFINES = cubeUvShaderDefinesForAtlas(1, 1);
+
+function glslFloatDefine(value: number): string {
+  const literal = String(value);
+  return /[.eE]/.test(literal) ? literal : `${literal}.0`;
+}
+
+export function materialCubeUvDefines(defines: CubeUvShaderDefines): Record<string, string> {
+  return {
+    // Three injects these values as preprocessor tokens. Integer-looking
+    // JavaScript numbers become GLSL ints, and SwiftShader correctly rejects
+    // `vec2.y *= int`. Serialize every CubeUV constant as a float literal,
+    // including the 1x1 no-environment fallback used on first render.
+    CUBEUV_TEXEL_WIDTH: glslFloatDefine(defines.CUBEUV_TEXEL_WIDTH),
+    CUBEUV_TEXEL_HEIGHT: glslFloatDefine(defines.CUBEUV_TEXEL_HEIGHT),
+    CUBEUV_MAX_MIP: glslFloatDefine(defines.CUBEUV_MAX_MIP),
+  };
+}
+
+/** Sync one exact CubeUV atlas and recompile only when its dimensions change. */
+export function syncCubeUvEnvironment(
+  material: THREE.ShaderMaterial,
+  environment: THREE.Texture | null,
+): void {
+  const validEnvironment = environment?.mapping === THREE.CubeUVReflectionMapping
+    ? environment
+    : null;
+  const nextDefines = validEnvironment
+    ? cubeUvShaderDefinesForTexture(validEnvironment)
+    : EMPTY_CUBE_UV_DEFINES;
+  const usableEnvironment = validEnvironment && nextDefines ? validEnvironment : null;
+  const resolvedDefines = nextDefines ?? EMPTY_CUBE_UV_DEFINES;
+  const materialDefines = materialCubeUvDefines(resolvedDefines);
+  const current = material.defines;
+  if (
+    current.CUBEUV_TEXEL_WIDTH !== materialDefines.CUBEUV_TEXEL_WIDTH
+    || current.CUBEUV_TEXEL_HEIGHT !== materialDefines.CUBEUV_TEXEL_HEIGHT
+    || current.CUBEUV_MAX_MIP !== materialDefines.CUBEUV_MAX_MIP
+  ) {
+    material.defines = { ...material.defines, ...materialDefines };
+    material.needsUpdate = true;
+  }
+  material.uniforms.tEnvMap.value = usableEnvironment;
+  material.uniforms.uHasEnv.value = usableEnvironment ? 1 : 0;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 /** Build a 256×1 RGBA DataTexture from a color lookup function */
-function buildPaletteTexture(
+export function buildPaletteTexture(
   lookupFn: (index: number) => [number, number, number],
 ): THREE.DataTexture {
   const data = new Uint8Array(256 * 4);
@@ -543,6 +739,10 @@ function buildPaletteTexture(
     data[i * 4 + 3] = 255;
   }
   const tex = new THREE.DataTexture(data, 256, 1, THREE.RGBAFormat);
+  // CPK/element palettes and scientific colormaps are authored as display
+  // (sRGB) values. Marking the texture lets Three decode samples into its
+  // Linear-sRGB working space before the BRDF operates on them.
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
@@ -560,13 +760,16 @@ function buildPaletteTexture(
  * Reads the entire periodic table from `materials/elementProfiles.ts`,
  * so adding a new element override there immediately reflects here.
  */
-function buildMaterialPaletteTexture(): THREE.DataTexture {
+export function buildMaterialPaletteTexture(): THREE.DataTexture {
   const floats = buildMaterialPaletteData(); // length 256 * 2 * 4
   const data = new Uint8Array(256 * 2 * 4);
   for (let i = 0; i < data.length; i++) {
     data[i] = Math.max(0, Math.min(255, Math.round(floats[i] * 255)));
   }
   const tex = new THREE.DataTexture(data, 256, 2, THREE.RGBAFormat);
+  // Packed material coefficients and authored emission intensities are linear
+  // data, not display colors. Never apply an sRGB transfer function here.
+  tex.colorSpace = THREE.NoColorSpace;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
@@ -574,7 +777,7 @@ function buildMaterialPaletteTexture(): THREE.DataTexture {
 }
 
 /** Build a 256×1 RGBA DataTexture sampling a colormap over [0,1] */
-function buildColormapTexture(
+export function buildColormapTexture(
   mapFn: (t: number) => [number, number, number],
 ): THREE.DataTexture {
   const data = new Uint8Array(256 * 4);
@@ -587,6 +790,7 @@ function buildColormapTexture(
     data[i * 4 + 3] = 255;
   }
   const tex = new THREE.DataTexture(data, 256, 1, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.needsUpdate = true;
@@ -596,6 +800,10 @@ function buildColormapTexture(
 // ─── Component ───────────────────────────────────────────────────────
 
 const MIN_CAPACITY = 50000;
+
+export const LUPI_ARTIFACT_LAYER_KEY = 'lupiArtifactLayer';
+export const LUPI_ARTIFACT_ATOMS_LAYER = 'atoms';
+export const LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY = 'lupiAppliedArtifactSpecId';
 
 export function AtomsOptimized({
   frame,
@@ -635,6 +843,7 @@ export function AtomsOptimized({
   loadedAtomCount,
   frameIndex,
   liveStateRef,
+  artifactSpecId,
 }: AtomsOptimizedProps) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
@@ -699,6 +908,12 @@ export function AtomsOptimized({
     geo.setAttribute('instanceAtomId', atomIdAttr);
 
     geo.instanceCount = 0;
+    // Until the layout-effect upload installs the first exact bound, fail open
+    // so Three cannot derive a tiny bound from the shared billboard quad.
+    geo.boundingSphere = new THREE.Sphere(
+      new THREE.Vector3(),
+      Number.POSITIVE_INFINITY,
+    );
 
     return geo;
   }, [capacity]);
@@ -713,6 +928,7 @@ export function AtomsOptimized({
     return new THREE.ShaderMaterial({
       vertexShader: IMPOSTOR_VERTEX,
       fragmentShader: IMPOSTOR_FRAGMENT,
+      defines: materialCubeUvDefines(EMPTY_CUBE_UV_DEFINES),
       uniforms: {
         uPalette: { value: paletteTex },
         uColormap: { value: colormapTex },
@@ -772,7 +988,12 @@ export function AtomsOptimized({
   const mapFn = COLORMAPS[colormap] ?? COLORMAPS.viridis;
 
   // ─── Update palette texture (instant — no atom iteration) ─────────
-  useEffect(() => {
+  // This state participates in immutable raster identity. Apply it during the
+  // commit phase so an ExportManager capture scheduled by the same Zustand
+  // update cannot reach the next Fiber frame with the previous palette or
+  // material uniforms. A passive effect races the browser's rAF and allowed
+  // one artifactKey to produce stale grey pixels on its first export.
+  useLayoutEffect(() => {
     const uniforms = material.uniforms;
 
     // Update color mode uniform
@@ -792,8 +1013,11 @@ export function AtomsOptimized({
     uniforms.uMaterialPreset.value = matMode;
     uniforms.uMaterialIntensity.value = materialIntensity ?? 0.0;
     uniforms.uRimLight.value = rimLightIntensity ?? 0.0;
-    uniforms.uSurfaceRoughness.value = surfaceRoughness ?? 0.0;
-    uniforms.uSurfacePolish.value = surfacePolish ?? 0.0;
+    syncSurfaceMaterialUniforms(uniforms as unknown as ScalarMaterialUniforms, {
+      surfaceRoughness,
+      surfacePolish,
+      surfaceClearcoat,
+    });
 
     uniforms.uPropEmission.value = propertyEmissionStrength;
 
@@ -853,11 +1077,9 @@ export function AtomsOptimized({
   }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, material, frame.types, frame.natoms, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor]);
 
   // ─── PMREM env sync and dynamic lighting ───────────────────────────────────────────────
-  // scene.environment is set by drei's <Environment> in App.tsx; it can
-  // change asynchronously when the active postprocess preset's HDRI swaps.
-  // useFrame keeps the material uniform pointing at whatever's current,
-  // and recomputes the mip count when the texture identity changes (the
-  // PMREM mip count is texture.mipmaps.length - 1, or derived from size).
+  // SceneLighting owns an explicit PMREM CubeUV target. Never hand the custom
+  // textureCubeUV shader a raw equirectangular texture: Three's built-in
+  // materials can prefilter one internally, but ShaderMaterial cannot.
   // Light WORLD directions depend only on the azimuth/elevation props, so build
   // them once per angle change (not per frame). Only the view-space transform is
   // camera-dependent and stays in useFrame, reusing a single scratch vector — so
@@ -881,12 +1103,9 @@ export function AtomsOptimized({
   const lightScratch = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(({ camera }) => {
-    const env = (scene as any).environment as THREE.Texture | null;
+    const sceneEnvironment = (scene as any).environment as THREE.Texture | null;
     const u = material.uniforms;
-    if (env !== u.tEnvMap.value) {
-      u.tEnvMap.value = env;
-      u.uHasEnv.value = env ? 1 : 0;
-    }
+    syncCubeUvEnvironment(material, sceneEnvironment);
 
     // Transform the precomputed world dirs into view space (camera-relative) for
     // the impostor shader. One scratch vector, reused — no per-frame allocation.
@@ -957,9 +1176,13 @@ export function AtomsOptimized({
     const atomIdArr = (geometry.attributes.instanceAtomId as THREE.InstancedBufferAttribute).array as Float32Array;
 
     let visibleCount = 0;
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let maxInstanceRadius = 0;
+    let boundsAreFinite = true;
 
     // When streaming, only render atoms that have been received
-    const effectiveAtomCount = loadedAtomCount ?? frame.natoms;
+    const effectiveAtomCount = resolveLoadedAtomCount(frame.natoms, loadedAtomCount);
 
     for (let i = 0; i < effectiveAtomCount; i++) {
       const typeId = types[i] < MAX_TYPES ? types[i] : 0;
@@ -979,20 +1202,41 @@ export function AtomsOptimized({
       posArr[pi + 1] = y;
       posArr[pi + 2] = z;
 
+      let targetX = x;
+      let targetY = y;
+      let targetZ = z;
       if (nextPos) {
         // PBC-unwrapped target on the SHORT arc across the cell (unit-tested in
         // interpolation.test.ts). hasBounds === false -> boxSize 0 -> raw delta.
         const bx = hasBounds ? bsx : 0;
         const by = hasBounds ? bsy : 0;
         const bz = hasBounds ? bsz : 0;
-        tgtArr[pi]     = x + wrapDelta(nextPos[i * 3] - x, bx);
-        tgtArr[pi + 1] = y + wrapDelta(nextPos[i * 3 + 1] - y, by);
-        tgtArr[pi + 2] = z + wrapDelta(nextPos[i * 3 + 2] - z, bz);
+        targetX = x + wrapDelta(nextPos[i * 3] - x, bx);
+        targetY = y + wrapDelta(nextPos[i * 3 + 1] - y, by);
+        targetZ = z + wrapDelta(nextPos[i * 3 + 2] - z, bz);
+      }
+      // No next frame leaves target == current, so mix() is a no-op.
+      tgtArr[pi] = targetX;
+      tgtArr[pi + 1] = targetY;
+      tgtArr[pi + 2] = targetZ;
+
+      // Bound both GPU interpolation endpoints in the same pass as upload.
+      // This includes PBC-unwrapped targets, per-type visibility, and the final
+      // globally/per-type scaled radius without a second O(n) memory scan.
+      if (
+        Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+        && Number.isFinite(targetX) && Number.isFinite(targetY) && Number.isFinite(targetZ)
+        && Number.isFinite(radius)
+      ) {
+        minX = Math.min(minX, x, targetX);
+        minY = Math.min(minY, y, targetY);
+        minZ = Math.min(minZ, z, targetZ);
+        maxX = Math.max(maxX, x, targetX);
+        maxY = Math.max(maxY, y, targetY);
+        maxZ = Math.max(maxZ, z, targetZ);
+        maxInstanceRadius = Math.max(maxInstanceRadius, Math.abs(radius));
       } else {
-        // No next frame: target == current, so mix() is a no-op for any uProgress.
-        tgtArr[pi]     = x;
-        tgtArr[pi + 1] = y;
-        tgtArr[pi + 2] = z;
+        boundsAreFinite = false;
       }
 
       radArr[visibleCount] = radius;
@@ -1018,6 +1262,17 @@ export function AtomsOptimized({
 
     atomCountRef.current = visibleCount;
     geometry.instanceCount = visibleCount;
+    geometry.boundingSphere = createAtomInterpolationBoundingSphere({
+      count: visibleCount,
+      finite: boundsAreFinite,
+      minX,
+      minY,
+      minZ,
+      maxX,
+      maxY,
+      maxZ,
+      maxInstanceRadius,
+    });
 
     // Mark attributes for GPU upload
     const posAttr = geometry.attributes.instancePosition as THREE.InstancedBufferAttribute;
@@ -1027,48 +1282,57 @@ export function AtomsOptimized({
     const propAttr = geometry.attributes.instancePropValue as THREE.InstancedBufferAttribute;
 
     const atomIdAttr = geometry.attributes.instanceAtomId as THREE.InstancedBufferAttribute;
-    posAttr.needsUpdate = true;
-    tgtAttr.needsUpdate = true;
-    radAttr.needsUpdate = true;
-    typeAttr.needsUpdate = true;
-    propAttr.needsUpdate = true;
-    atomIdAttr.needsUpdate = true;
-
-    (posAttr as any).updateRange = { offset: 0, count: visibleCount * 3 };
-    (tgtAttr as any).updateRange = { offset: 0, count: visibleCount * 3 };
-    (radAttr as any).updateRange = { offset: 0, count: visibleCount };
-    (typeAttr as any).updateRange = { offset: 0, count: visibleCount };
-    (propAttr as any).updateRange = { offset: 0, count: visibleCount };
-    (atomIdAttr as any).updateRange = { offset: 0, count: visibleCount };
+    markInstancedAttributeUpdateRange(posAttr, visibleCount * 3);
+    markInstancedAttributeUpdateRange(tgtAttr, visibleCount * 3);
+    markInstancedAttributeUpdateRange(radAttr, visibleCount);
+    markInstancedAttributeUpdateRange(typeAttr, visibleCount);
+    markInstancedAttributeUpdateRange(propAttr, visibleCount);
+    markInstancedAttributeUpdateRange(atomIdAttr, visibleCount);
 
     return cleanupIdle;
   }, [
     frame, nextFrame, scale, propData, pMin, pMax,
-    hiddenAtomTypes, atomTypeScales,
+    hiddenAtomTypes, atomTypeScales, loadedAtomCount,
     onSpatialHash, capacity, colorProperty, geometry,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     return uploadFrame();
   }, [uploadFrame]);
 
-  // Cleanup
+  // ExportManager consumes this only after the palette/material layout effect
+  // and instance upload above have both committed. Store truth alone is not a
+  // rendering receipt: the tagged Three mesh is the applied-scene receipt.
+  useLayoutEffect(() => {
+    material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY] =
+      artifactSpecId ?? null;
+  }, [artifactSpecId, geometry, material, uploadFrame]);
+
+  // Geometry is capacity-keyed and can be replaced while the component stays
+  // mounted. Dispose only the retired geometry on a capacity change.
+  useEffect(() => {
+    return () => geometry.dispose();
+  }, [geometry]);
+
+  // Material and its palette textures are component-owned and intentionally
+  // stable across geometry growth. Their cleanup must run only when this
+  // stable material is retired (normally component unmount), never when a
+  // capacity-keyed geometry is replaced.
   useEffect(() => {
     return () => {
-      geometry.dispose();
       material.dispose();
-      if (material.uniforms.uPalette.value) material.uniforms.uPalette.value.dispose();
-      if (material.uniforms.uColormap.value) material.uniforms.uColormap.value.dispose();
+      disposeOwnedMaterialTextures(material.uniforms);
       spatialHashRef.current.clear();
     };
-  }, [geometry, material]);
+  }, [material]);
 
   return (
     <mesh
       ref={meshRef}
       geometry={geometry}
       material={material}
-      frustumCulled={false}
+      frustumCulled
+      userData={{ [LUPI_ARTIFACT_LAYER_KEY]: LUPI_ARTIFACT_ATOMS_LAYER }}
     />
   );
 }

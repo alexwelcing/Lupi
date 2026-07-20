@@ -27,6 +27,7 @@ import { useBondGpuPipeline } from './useBondGpuPipeline';
 // `?worker` module declaration from vite-env.d.ts so this resolves both
 // in @atlas/scene's own tsc run and in any consumer (e.g. @atlas/ui).
 import BondWorkerCtor from './bondWorker.ts?worker';
+import { shouldUseGpuBondInference } from './bondTopology';
 
 /**
  * Content-equality check for bond-pair Int32Arrays. Used by the bond-
@@ -169,8 +170,14 @@ export function Bonds({
   // OOM the worker thread. The GPU pipeline scans them in milliseconds.
   // Threshold tuned to where CPU spatial-hash detection starts taking >1s.
   const FORCE_GPU_ATOM_THRESHOLD = 200_000;
-  const forceGpu = (frame?.natoms ?? 0) > FORCE_GPU_ATOM_THRESHOLD;
-  const wantGpu = useGpu || forceGpu;
+  const hasSourceTopology = Boolean(frame?.bonds?.length);
+  const forceGpu = !hasSourceTopology && (frame?.natoms ?? 0) > FORCE_GPU_ATOM_THRESHOLD;
+  const wantGpu = shouldUseGpuBondInference(
+    frame?.natoms ?? 0,
+    frame?.bonds,
+    useGpu,
+    FORCE_GPU_ATOM_THRESHOLD,
+  );
 
   // GPU bond pipeline. Initializes lazily; falls back via `unsupported`.
   // Destructure so dep arrays aren't churned by the hook returning a fresh
@@ -335,7 +342,7 @@ export function Bonds({
     const cpuParamsUnchanged =
       lastDispatchToleranceRef.current === tolerance &&
       lastDispatchMaxBondLengthRef.current === maxBondLength;
-    if (!isMoleculeSwitch && isFrameChange && cpuParamsUnchanged && lastDispatchPositionsRef.current && frame.positions.length === lastDispatchPositionsRef.current.length) {
+    if (!hasSourceTopology && !isMoleculeSwitch && isFrameChange && cpuParamsUnchanged && lastDispatchPositionsRef.current && frame.positions.length === lastDispatchPositionsRef.current.length) {
       const maxDisp = subsampledMaxDisplacement(frame.positions, lastDispatchPositionsRef.current);
       if (maxDisp < BOND_RECOMPUTE_DISP_THRESHOLD) {
         return;
@@ -358,6 +365,7 @@ export function Bonds({
       // We make copies since the originals are shared with the renderer
       const posCopy = new Float32Array(frame.positions);
       const typesCopy = new Int32Array(frame.types);
+      const sourceBondCopy = hasSourceTopology ? new Int32Array(frame.bonds) : null;
 
       // Build per-type covalent radii lookup from ELEMENT_DATA
       // This enables scientific bond detection: d(A,B) < r_cov(A) + r_cov(B) + tolerance
@@ -371,6 +379,7 @@ export function Bonds({
       }
 
       const transferList: ArrayBuffer[] = [posCopy.buffer, typesCopy.buffer];
+      if (sourceBondCopy) transferList.push(sourceBondCopy.buffer);
       const msg: Record<string, any> = {
         requestId,
         positions: posCopy,
@@ -379,7 +388,7 @@ export function Bonds({
         maxBondLength,
         covalentRadii,
         tolerance,
-        bonds: frame.bonds && frame.bonds.length > 0 ? new Int32Array(frame.bonds) : null,
+        bonds: sourceBondCopy,
         computeStats: !isFrameChange, // Skip expensive stats/sorting during rapid playback
       };
 
@@ -404,7 +413,7 @@ export function Bonds({
         debounceRef.current = null;
       }
     };
-  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState]);
+  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology]);
 
   // ─── GPU dispatch ──────────────────────────────────────────────────
   // Runs only when gpuActive is true. Mirrors the worker effect's contract:
@@ -1125,8 +1134,12 @@ export function Bonds({
     dstRadiusBTArr.set(cpuRadiusBTArray.subarray(0, totalBonds * 2));
 
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    (tubeGeo.attributes.radiusBT as any).needsUpdate = true;
-    (tubeGeo.attributes.radiusBT as any).updateRange = { offset: 0, count: totalBonds * 2 };
+    const radiusBTAttribute = tubeGeo.attributes.radiusBT as THREE.InstancedBufferAttribute;
+    radiusBTAttribute.clearUpdateRanges();
+    if (totalBonds > 0) {
+      radiusBTAttribute.addUpdateRange(0, totalBonds * 2);
+      radiusBTAttribute.needsUpdate = true;
+    }
 
     // Cache the bondPairs we just uploaded for the next stability check.
     lastAttrBondPairsRef.current = bondPairs;
