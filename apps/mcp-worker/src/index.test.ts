@@ -609,6 +609,7 @@ describe('lupi Cloudflare MCP worker', () => {
     const rendererFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const envelope = JSON.parse(String(init?.body)) as { jobId: string; protocol: string };
       expect(init?.headers).toMatchObject({ authorization: 'Bearer renderer-secret' });
+      expect(init?.redirect).toBe('manual');
       expect(envelope.protocol).toBe('lupi.renderer-request.legacy-v0.1');
       expect(envelope.jobId).toMatch(/^job-v0-[0-9a-f-]{36}$/);
       return new Response(JSON.stringify({

@@ -1129,7 +1129,9 @@ async function callPrivateRenderer(
   try {
     response = await fetch(endpoint, {
       method: 'POST',
-      redirect: 'error',
+      // Workers implement manual redirect handling but reject the browser-only
+      // `error` mode. A 3xx remains fail-closed through the !response.ok check.
+      redirect: 'manual',
       signal: controller.signal,
       headers: {
         'content-type': 'application/json',
