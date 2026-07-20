@@ -9,12 +9,15 @@
  */
 
 import type { DatasetMeta } from '@atlas/core/glimbin';
+import type { FrameIdentity } from '@atlas/core/types';
+import { deserializeDumpParseError } from './dumpStreamParser';
 
 export interface TranscodeFrame0Header {
   natoms: number;
   timestep: number;
   boxBounds: Float64Array;
   columns: string[];
+  identity: FrameIdentity;
 }
 
 export interface TranscodeFrame0Chunk {
@@ -38,7 +41,7 @@ export type TranscodeResult =
 export interface TranscodeCallbacks {
   onFrame0Header?: (header: TranscodeFrame0Header) => void;
   onFrame0Chunk?: (chunk: TranscodeFrame0Chunk) => void;
-  onFrame0Complete?: (loadedAtoms: number) => void;
+  onFrame0Complete?: (loadedAtoms: number, identity: FrameIdentity) => void;
   onProgress?: (progress: TranscodeProgress) => void;
 }
 
@@ -78,7 +81,7 @@ export function transcodeDumpFile(
           callbacks.onFrame0Chunk?.(msg);
           break;
         case 'frame0-complete':
-          callbacks.onFrame0Complete?.(msg.loadedAtoms);
+          callbacks.onFrame0Complete?.(msg.loadedAtoms, msg.identity);
           break;
         case 'progress':
           callbacks.onProgress?.(msg);
@@ -89,7 +92,7 @@ export function transcodeDumpFile(
           else done({ kind: 'multi', storage: 'opfs', meta: msg.meta });
           break;
         case 'error':
-          fail(new Error(msg.message));
+          fail(deserializeDumpParseError(msg));
           break;
       }
     };

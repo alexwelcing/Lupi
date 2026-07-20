@@ -25,6 +25,7 @@ import type { VectorFieldSpec } from '@atlas/core';
 import {
   getVectorComponents,
   ensureVectorMagnitude,
+  framesShareAtomOrder,
   magnitudePercentile,
 } from '@atlas/core';
 import { wrapDelta } from './interpolation';
@@ -158,6 +159,10 @@ export function VectorGlyphs({
   artifactSpecId,
 }: VectorGlyphsProps) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const canInterpolateToNextFrame = useMemo(
+    () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
+    [frame, nextFrame],
+  );
 
   // Grow-only capacity, mirroring AtomsOptimized.
   const capacityRef = useRef(Math.max(MIN_CAPACITY, Math.ceil(frame.natoms * 1.2)));
@@ -267,9 +272,8 @@ export function VectorGlyphs({
     material.uniforms.uWidth.value = targetLen * 0.14;
     material.uniforms.uMagRange.value.set(0, ref > 0 ? ref : 1);
 
-    const hasNext = !!(nextFrame && nextFrame.natoms === frame.natoms);
-    const nextComps = hasNext ? getVectorComponents(nextFrame!, field) : null;
-    const nextPos = hasNext ? nextFrame!.positions : null;
+    const nextComps = canInterpolateToNextFrame ? getVectorComponents(nextFrame!, field) : null;
+    const nextPos = canInterpolateToNextFrame ? nextFrame!.positions : null;
 
     let bsx = 0, bsy = 0, bsz = 0;
     if (frame.boxBounds) {
@@ -333,7 +337,7 @@ export function VectorGlyphs({
       magMax: magMax === -Infinity ? 0 : magMax,
       shownCount: shown,
     });
-  }, [frame, nextFrame, field, scale, density, hiddenAtomTypes, capacity, geometry, material, onStats]);
+  }, [frame, nextFrame, canInterpolateToNextFrame, field, scale, density, hiddenAtomTypes, capacity, geometry, material, onStats]);
 
   // Positions, vectors, density, visibility, and scale are all addressed by
   // the artifact spec/source digest. Upload them during the commit phase; a
@@ -354,9 +358,11 @@ export function VectorGlyphs({
   // Live interpolation progress — identical contract to AtomsOptimized.
   useFrame(() => {
     const live = liveStateRef?.current;
-    const prog = (live && frameIndex != null)
+    const prog = canInterpolateToNextFrame && live && frameIndex != null
       ? live.effectiveFrame - frameIndex
-      : interpolationFactor;
+      : canInterpolateToNextFrame
+        ? interpolationFactor
+        : 0;
     material.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
   });
 

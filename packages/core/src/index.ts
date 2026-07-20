@@ -5,7 +5,10 @@
 export type {
   UnitStyle,
   Frame,
+  FrameIdentity,
+  FrameIdentityKind,
   Trajectory,
+  TrajectoryResidency,
   ThermoRun,
   ThermoData,
   ColorMode,
@@ -19,6 +22,8 @@ export type {
   BondStats,
   BondDivergence,
 } from './types';
+
+export { hasUsableSourceIds, framesShareAtomOrder } from './frameIdentity';
 
 export {
   UNIT_LABELS,
@@ -58,6 +63,8 @@ export {
   FLAG_VARIABLE_ATOMS,
   FLAG_HAS_BONDS,
   FLAG_HAS_PROPERTIES,
+  FLAG_FRAME_IDENTITY,
+  FRAME_IDENTITY_BLOCK_SIZE,
   parseHeader,
   parseFrameIndex,
   parseFrameData,

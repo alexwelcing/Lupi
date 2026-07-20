@@ -2,6 +2,7 @@ import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import type { Frame } from '@atlas/core/types';
 import {
+  DumpParseError,
   parseDumpBlobCanonical,
   parseDumpFramesCanonical,
   parseDumpFramesFromBytesCanonical,
@@ -61,6 +62,7 @@ function canonicalFrame(frame: Frame) {
     positions: Array.from(frame.positions),
     bonds: Array.from(frame.bonds),
     properties: Array.from(frame.properties, ([name, values]) => [name, Array.from(values)]),
+    identity: frame.identity,
   };
 }
 
@@ -122,4 +124,63 @@ describe('canonical LAMMPS dump route parity', () => {
     expect(frames).toHaveLength(2);
     expect(progress).toEqual([1, 2]);
   });
+
+  it('preserves shuffled stable source IDs without equating row order with atom identity', async () => {
+    const shuffled = ORTHOGONAL + ORTHOGONAL
+      .replace('TIMESTEP\n10', 'TIMESTEP\n11')
+      .replace(
+        '9 2 1.25e0 -2.5e-1 3e2 0.5 -3.2\n4 1 4 5 6 -0.25 -3.1',
+        '4 1 4.5 5 6 -0.25 -3.1\n9 2 1.5 -2.5e-1 3e2 0.5 -3.2',
+      );
+    const { routes } = await decodeEveryRoute(shuffled);
+    for (const route of routes.slice(1)) expect(route).toEqual(routes[0]);
+    expect(routes[0].map((frame) => frame.ids)).toEqual([[9, 4], [4, 9]]);
+    expect(routes[0].map((frame) => frame.identity)).toEqual([
+      { kind: 'source-id', unique: true },
+      { kind: 'source-id', unique: true },
+    ]);
+  });
+
+  it('generates deterministic one-based row IDs but labels them frame-local when id is absent', async () => {
+    const noIds = ORTHOGONAL
+      .replace('ITEM: ATOMS id type xu yu zu vx c_pe', 'ITEM: ATOMS type xu yu zu vx c_pe')
+      .replace('9 2 1.25e0 -2.5e-1 3e2 0.5 -3.2', '2 1.25e0 -2.5e-1 3e2 0.5 -3.2')
+      .replace('4 1 4 5 6 -0.25 -3.1', '1 4 5 6 -0.25 -3.1');
+    const { routes } = await decodeEveryRoute(noIds);
+    for (const route of routes.slice(1)) expect(route).toEqual(routes[0]);
+    expect(routes[0][0].ids).toEqual([1, 2]);
+    expect(routes[0][0].identity).toEqual({ kind: 'synthetic-row', unique: true });
+  });
+
+  it('fails every transport route closed on duplicate source IDs with typed context', async () => {
+    const duplicate = ORTHOGONAL.replace('4 1 4 5 6 -0.25 -3.1', '9 1 4 5 6 -0.25 -3.1');
+    const routes = [
+      () => parseDumpFramesCanonical(duplicate),
+      () => parseDumpFramesFromBytesCanonical(bytesInChunks(duplicate, 5)),
+      () => parseDumpBlobCanonical(new Blob([duplicate])),
+      () => parseDumpBlobCanonical(new Blob([gzipSync(duplicate)])),
+    ];
+    for (const decode of routes) {
+      await expect(decode()).rejects.toMatchObject({
+        name: 'DumpParseError',
+        code: 'DUPLICATE_ATOM_ID',
+        frameIndex: 0,
+        timestep: 10,
+        atomRow: 2,
+        atomId: 9,
+      } satisfies Partial<DumpParseError>);
+    }
+  });
+
+  it.each(['-1', '0', '4.5', '1e0', 'NaN', '2147483648'])(
+    'rejects invalid integer source ID %s instead of truncating it',
+    async (invalidId) => {
+      const invalid = ORTHOGONAL.replace('4 1 4 5 6 -0.25 -3.1', `${invalidId} 1 4 5 6 -0.25 -3.1`);
+      await expect(parseDumpFramesCanonical(invalid)).rejects.toMatchObject({
+        name: 'DumpParseError',
+        code: 'INVALID_ATOM_ID',
+        atomRow: 2,
+      } satisfies Partial<DumpParseError>);
+    },
+  );
 });

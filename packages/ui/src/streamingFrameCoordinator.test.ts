@@ -7,6 +7,8 @@ import { resetStore } from './test-utils';
 import { useStore } from './store';
 import {
   clearStreamingFrameCoordinator,
+  DEFAULT_STREAMING_RESIDENT_BYTES,
+  estimateFrameResidentBytes,
   installStreamingFrameCoordinator,
   requestStreamingFrame,
 } from './streamingFrameCoordinator';
@@ -175,7 +177,11 @@ describe('streamingFrameCoordinator', () => {
     const trajectory = useStore.getState().file!.trajectory;
     expect(trajectory.frames.filter(Boolean)).toHaveLength(3);
     expect(trajectory.frames[0]).toBe(loaded[0]);
-    expect(trajectory.residency).toEqual({ mode: 'sparse', maxResidentFrames: 3 });
+    expect(trajectory.residency).toEqual({
+      mode: 'sparse',
+      maxResidentFrames: 3,
+      maxResidentBytes: DEFAULT_STREAMING_RESIDENT_BYTES,
+    });
     expect(releaseFrame).toHaveBeenCalledTimes(3);
   });
 
@@ -304,4 +310,95 @@ describe('streamingFrameCoordinator', () => {
     },
     30_000,
   );
+
+  it('enforces a scientific-byte budget independently of the frame-count cap', async () => {
+    const natoms = 250_000;
+    const makeSizedFrame = (timestep: number): Frame => ({
+      timestep,
+      natoms,
+      boxBounds: new Float64Array([0, 100, 0, 100, 0, 100]),
+      boxTilt: new Float64Array(3),
+      triclinic: false,
+      columns: ['id', 'type', 'x', 'y', 'z', 'vx', 'vy', 'vz'],
+      ids: new Int32Array(natoms),
+      types: new Int32Array(natoms),
+      positions: new Float32Array(natoms * 3),
+      bonds: new Int32Array(0),
+      properties: new Map([
+        ['vx', new Float32Array(natoms)],
+        ['vy', new Float32Array(natoms)],
+        ['vz', new Float32Array(natoms)],
+      ]),
+    });
+    const frame0 = makeSizedFrame(0);
+    const perFrameBytes = estimateFrameResidentBytes(frame0);
+    const maxResidentBytes = perFrameBytes * 3;
+    const slots = new Array<Frame | undefined>(10);
+    slots[0] = frame0;
+    useStore.getState().setFile({
+      name: 'byte-budget.glimbin',
+      size: perFrameBytes * slots.length,
+      trajectory: sparseTrajectory(slots),
+      thermo: null,
+      sourceUrl: 'https://example.test/byte-budget.glimbin',
+    });
+
+    const sourceCache = new Map<number, Frame>([[0, frame0]]);
+    installStreamingFrameCoordinator(
+      {
+        fetchFrame: async (frameIndex) => {
+          const frame = makeSizedFrame(frameIndex);
+          sourceCache.set(frameIndex, frame);
+          return frame;
+        },
+        releaseFrame: (frameIndex) => sourceCache.delete(frameIndex),
+      },
+      {
+        label: 'byte-budget',
+        sourceUrl: 'https://example.test/byte-budget.glimbin',
+        initialLookahead: 0,
+        maxResidentFrames: 20,
+        maxResidentBytes,
+      },
+    );
+
+    for (let frameIndex = 1; frameIndex < slots.length; frameIndex += 1) {
+      requestStreamingFrame(frameIndex, 1, 6);
+      await flushAsyncWork();
+      const resident = useStore.getState().file!.trajectory.frames.filter(
+        (frame): frame is Frame => Boolean(frame),
+      );
+      expect(resident.length).toBeLessThanOrEqual(3);
+      expect(resident.reduce(
+        (total, frame) => total + estimateFrameResidentBytes(frame),
+        0,
+      )).toBeLessThanOrEqual(maxResidentBytes);
+      expect(sourceCache.size).toBeLessThanOrEqual(3);
+    }
+
+    expect(useStore.getState().file?.trajectory.residency).toEqual({
+      mode: 'sparse',
+      maxResidentFrames: 20,
+      maxResidentBytes,
+    });
+  }, 30_000);
+
+  it('counts a shared ArrayBuffer once in the resident-byte estimate', () => {
+    const shared = new ArrayBuffer(256);
+    const frame: Frame = {
+      timestep: 0,
+      natoms: 8,
+      boxBounds: new Float64Array(0),
+      boxTilt: new Float64Array(0),
+      triclinic: false,
+      columns: ['id', 'type', 'x', 'y', 'z'],
+      ids: new Int32Array(shared, 0, 8),
+      types: new Int32Array(shared, 32, 8),
+      positions: new Float32Array(shared, 64, 24),
+      bonds: new Int32Array(shared, 160, 0),
+      properties: new Map([['shared', new Float32Array(shared, 160, 24)]]),
+    };
+
+    expect(estimateFrameResidentBytes(frame)).toBe(shared.byteLength);
+  });
 });

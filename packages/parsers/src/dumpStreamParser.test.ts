@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
+  DumpParseError,
+  deserializeDumpParseError,
   parseDumpStream,
   parseDumpStreamFromBytes,
+  serializeDumpParseError,
   canStreamDump,
 } from './dumpStreamParser';
 
@@ -26,6 +29,23 @@ async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
 }
 
 describe('parseDumpStream (text transport)', () => {
+  it('round-trips typed parse errors through structured-clone-safe worker metadata', () => {
+    const original = new DumpParseError(
+      'DUPLICATE_ATOM_ID',
+      'duplicate 7',
+      { frameIndex: 2, timestep: 50, atomRow: 4, atomId: 7 },
+    );
+    const revived = deserializeDumpParseError(structuredClone(serializeDumpParseError(original)));
+    expect(revived).toBeInstanceOf(DumpParseError);
+    expect(revived).toMatchObject({
+      code: 'DUPLICATE_ATOM_ID',
+      frameIndex: 2,
+      timestep: 50,
+      atomRow: 4,
+      atomId: 7,
+    });
+  });
+
   it('emits header + complete for a small dump', async () => {
     const events = await collect(parseDumpStream(SIMPLE_3_ATOMS));
     expect(events[0].type).toBe('header');
@@ -36,6 +56,7 @@ describe('parseDumpStream (text transport)', () => {
       expect(Array.from(events[0].frame.boxBounds)).toEqual([0, 10, 0, 10, 0, 10]);
       expect(Array.from(events[0].frame.types)).toEqual([1, 2, 1]);
       expect(Array.from(events[0].frame.positions)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect(events[0].frame.identity).toEqual({ kind: 'source-id', unique: true });
     }
   });
 
@@ -64,6 +85,25 @@ describe('parseDumpStream (text transport)', () => {
     if (last.type === 'complete') {
       expect(last.loadedAtoms).toBe(3);
       expect(last.hasMoreFrames).toBe(true);
+    }
+  });
+
+  it('never upgrades progressive source identity when a later duplicate fails validation', async () => {
+    const duplicate = SIMPLE_3_ATOMS.replace('3 1 7.0 8.0 9.0', '2 1 7.0 8.0 9.0');
+    const events = parseDumpStream(duplicate);
+    const first = await events.next();
+    expect(first.done).toBe(false);
+    if (!first.done && first.value.type === 'header') {
+      expect(first.value.frame.identity).toEqual({ kind: 'source-id', unique: false });
+      let failure: unknown;
+      try {
+        while (!(await events.next()).done) { /* consume */ }
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(DumpParseError);
+      expect(failure).toMatchObject({ code: 'DUPLICATE_ATOM_ID', atomRow: 3, atomId: 2 });
+      expect(first.value.frame.identity).toEqual({ kind: 'source-id', unique: false });
     }
   });
 });
@@ -221,6 +261,20 @@ describe('canStreamDump', () => {
 });
 
 describe('dialect support in the streaming core', () => {
+  it('uses deterministic row IDs without claiming cross-frame stability when id is absent', async () => {
+    const noId = SIMPLE_3_ATOMS
+      .replace('ITEM: ATOMS id type x y z', 'ITEM: ATOMS type x y z')
+      .replace('1 1 1.0 2.0 3.0', '1 1.0 2.0 3.0')
+      .replace('2 2 4.0 5.0 6.0', '2 4.0 5.0 6.0')
+      .replace('3 1 7.0 8.0 9.0', '1 7.0 8.0 9.0');
+    const events = await collect(parseDumpStream(noId));
+    const header = events.find((e) => e.type === 'header');
+    if (header?.type === 'header') {
+      expect(Array.from(header.frame.ids)).toEqual([1, 2, 3]);
+      expect(header.frame.identity).toEqual({ kind: 'synthetic-row', unique: true });
+    }
+  });
+
   it('parses a triclinic box, carrying tilt factors', async () => {
     const triclinic = SIMPLE_3_ATOMS
       .replace('BOX BOUNDS pp pp pp', 'BOX BOUNDS xy xz yz pp pp pp')

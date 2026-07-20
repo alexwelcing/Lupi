@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractFrameProperties } from './frameTransfer';
+import { extractFrameIdentity, extractFrameProperties } from './frameTransfer';
 
 describe('parser worker frame transfer', () => {
   it('serializes canonical Map properties and transfers their backing buffers', () => {
@@ -20,5 +20,14 @@ describe('parser worker frame transfer', () => {
     expect(extractFrameProperties({ properties: [['q', q]] }, transferables))
       .toEqual([{ name: 'q', data: q }]);
     expect(transferables).toEqual([q.buffer]);
+  });
+
+  it('preserves a declared descriptor and leaves legacy worker frames unknown', () => {
+    expect(extractFrameIdentity({ identity: { kind: 'source-id', unique: true } }))
+      .toEqual({ kind: 'source-id', unique: true });
+    expect(extractFrameIdentity({}))
+      .toEqual({ kind: 'unknown', unique: false });
+    expect(extractFrameIdentity({ identity: { kind: 'source-id' } }))
+      .toEqual({ kind: 'unknown', unique: false });
   });
 });

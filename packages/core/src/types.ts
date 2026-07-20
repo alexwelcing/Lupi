@@ -33,6 +33,22 @@ export const THERMO_QUANTITIES: Record<string, string> = {
 // ─── Frame data ─────────────────────────────────────────────────────
 
 /** A single frame of atomic data (returned from WASM parser) */
+export type FrameIdentityKind = 'source-id' | 'synthetic-row' | 'unknown';
+
+/**
+ * Provenance for the values in `Frame.ids`.
+ *
+ * `source-id` means the source format supplied the identifiers;
+ * `synthetic-row` means Lupi generated them from row order; and `unknown`
+ * means the origin cannot be established. `unique` records whether the
+ * producer verified uniqueness within this frame. Missing descriptors on
+ * legacy frames are interpreted as unknown, never as source identity.
+ */
+export interface FrameIdentity {
+  kind: FrameIdentityKind;
+  unique: boolean;
+}
+
 export interface Frame {
   timestep: number;
   natoms: number;
@@ -41,6 +57,7 @@ export interface Frame {
   triclinic: boolean;
   columns: string[];
   ids: Int32Array;
+  identity?: FrameIdentity;
   types: Int32Array;
   positions: Float32Array;  // Flat: [x0,y0,z0, x1,y1,z1, ...]
   bonds: Int32Array;        // Flat: [a1,b1, a2,b2, ...]
@@ -50,7 +67,7 @@ export interface Frame {
 /** A loaded trajectory (multiple frames) */
 export type TrajectoryResidency =
   | { mode: 'complete' }
-  | { mode: 'sparse'; maxResidentFrames: number };
+  | { mode: 'sparse'; maxResidentFrames: number; maxResidentBytes: number };
 
 export interface Trajectory {
   /**

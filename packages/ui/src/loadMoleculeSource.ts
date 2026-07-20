@@ -351,6 +351,10 @@ export async function importDumpFileStreaming(file: File): Promise<{
           triclinic: false,
           columns: h.columns,
           ids: new Int32Array(h.natoms),
+          // Progressive slabs may paint before the full frame validates. Keep
+          // the worker's unverified descriptor until frame0-complete upgrades
+          // it; never infer stability from partially filled numeric IDs.
+          identity: h.identity,
           types: new Int32Array(h.natoms),
           positions: new Float32Array(h.natoms * 3),
           bonds: new Int32Array(0),
@@ -366,7 +370,14 @@ export async function importDumpFileStreaming(file: File): Promise<{
         ensureFrame0Mounted();
         useStore.getState().setLoadedAtomCount(Math.min(c.start + c.count, headerNatoms));
       },
-      onFrame0Complete: (loaded) => {
+      onFrame0Complete: (loaded, identity) => {
+        if (frame0) {
+          frame0.identity = identity;
+          const mounted = useStore.getState().file;
+          if (mounted?.trajectory.frames[0] === frame0) {
+            useStore.setState({ file: { ...mounted } });
+          }
+        }
         useStore.getState().setLoadedAtomCount(loaded);
       },
       onProgress: ({ framesParsed }) => {

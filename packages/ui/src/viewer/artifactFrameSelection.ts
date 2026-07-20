@@ -1,4 +1,4 @@
-import type { Frame } from '@atlas/core';
+import { framesShareAtomOrder, type Frame } from '@atlas/core';
 import type { InterpolatedFrameState } from '../hooks/useSmoothFramePlayback';
 
 export interface ViewerFrameSelection {
@@ -30,8 +30,11 @@ export function selectViewerFrames(
   }
 
   const frame = frames[interpolation.frameIndex] ?? frames[displayFrameIndex];
-  const nextFrame = interpolation.isInterpolating
+  const candidateNextFrame = interpolation.isInterpolating
     ? frames[interpolation.nextFrameIndex]
+    : undefined;
+  const nextFrame = frame && candidateNextFrame && framesShareAtomOrder(frame, candidateNextFrame)
+    ? candidateNextFrame
     : undefined;
   return {
     frame,

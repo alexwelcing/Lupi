@@ -7,8 +7,10 @@ import {
 } from '@atlas/core';
 
 export const DECODED_RENDER_FRAME_MEDIA_TYPE_V1 = 'application/vnd.lupi.decoded-frame.v1';
+export const DECODED_RENDER_FRAME_MEDIA_TYPE_V2 = 'application/vnd.lupi.decoded-frame.v2';
 
-const CANONICAL_FRAME_VERSION = 'lupi.decoded-render-frame.v1';
+const CANONICAL_FRAME_VERSION_V1 = 'lupi.decoded-render-frame.v1';
+const CANONICAL_FRAME_VERSION_V2 = 'lupi.decoded-render-frame.v2';
 const textEncoder = new TextEncoder();
 
 /**
@@ -23,7 +25,7 @@ export function canonicalDecodedRenderFrameBytesV1(frame: Frame): Uint8Array {
   validateFrame(frame);
 
   const writer = new CanonicalFrameWriter();
-  writer.string(CANONICAL_FRAME_VERSION);
+  writer.string(CANONICAL_FRAME_VERSION_V1);
   writer.u32(frame.natoms);
   writer.f64(frame.timestep, '$.frame.timestep');
   writer.bool(frame.triclinic);
@@ -49,6 +51,22 @@ export function canonicalDecodedRenderFrameBytesV1(frame: Frame): Uint8Array {
     writer.f32Array(values, `$.frame.properties.${name}`);
   }
 
+  return writer.finish();
+}
+
+/**
+ * V2 binds decoded bytes to their atom-identity meaning. The nested V1 body
+ * preserves the already-ratified numeric encoding while the V2 prefix makes a
+ * source-ID frame distinct from identical integers that are merely synthetic
+ * row labels or legacy/unknown identity.
+ */
+export function canonicalDecodedRenderFrameBytesV2(frame: Frame): Uint8Array {
+  const identity = normalizedFrameIdentity(frame);
+  const writer = new CanonicalFrameWriter();
+  writer.string(CANONICAL_FRAME_VERSION_V2);
+  writer.string(identity.kind);
+  writer.bool(identity.unique);
+  writer.bytes(canonicalDecodedRenderFrameBytesV1(frame));
   return writer.finish();
 }
 
@@ -81,6 +99,26 @@ export function deterministicDerivedMagnitudeProperties(frame: Frame): ReadonlyS
 /** SHA-256 of canonical decoded content, never file name, URL, or caller metadata. */
 export async function computeDecodedRenderFrameDigestV1(frame: Frame): Promise<Sha256DigestV1> {
   return computeRenderArtifactDigestV1(canonicalDecodedRenderFrameBytesV1(frame));
+}
+
+export async function computeDecodedRenderFrameDigestV2(frame: Frame): Promise<Sha256DigestV1> {
+  return computeRenderArtifactDigestV1(canonicalDecodedRenderFrameBytesV2(frame));
+}
+
+function normalizedFrameIdentity(frame: Frame): { kind: 'source-id' | 'synthetic-row' | 'unknown'; unique: boolean } {
+  const identity = frame.identity;
+  if (!identity) return { kind: 'unknown', unique: false };
+  if (
+    identity.kind !== 'source-id'
+    && identity.kind !== 'synthetic-row'
+    && identity.kind !== 'unknown'
+  ) {
+    throw new Error('$.frame.identity.kind: unsupported atom identity semantics');
+  }
+  if (typeof identity.unique !== 'boolean') {
+    throw new Error('$.frame.identity.unique: must be a boolean');
+  }
+  return { kind: identity.kind, unique: identity.unique };
 }
 
 function validateFrame(frame: Frame): void {
@@ -174,6 +212,11 @@ class CanonicalFrameWriter {
       view.setFloat64(index * 8, normalizeZero(value), true);
     }
     this.push(bytes);
+  }
+
+  bytes(values: Uint8Array): void {
+    this.u32(values.byteLength);
+    this.push(values);
   }
 
   finish(): Uint8Array {

@@ -25,7 +25,7 @@ import { useGlobalTimer } from './useTimer';
 
 import { TYPE_COLORS, TYPE_RADII, COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
 import { buildMaterialPaletteData } from './materials';
-import { getElementSpec, hexToRgb } from '@atlas/core';
+import { framesShareAtomOrder, getElementSpec, hexToRgb } from '@atlas/core';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface AtomsOptimizedProps {
@@ -849,6 +849,10 @@ export function AtomsOptimized({
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
   const atomCountRef = useRef(0);
   const { scene } = useThree();
+  const canInterpolateToNextFrame = useMemo(
+    () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
+    [frame, nextFrame],
+  );
 
   // Capacity — grow-only, never shrink
   const capacityRef = useRef(Math.max(MIN_CAPACITY, Math.ceil(frame.natoms * 1.2)));
@@ -1119,9 +1123,11 @@ export function AtomsOptimized({
     // clamp to [0,1] so a lagging React buffer reload can't overshoot the loaded
     // current->target pair. Falls back to the (slower) prop when no ref is wired.
     const live = liveStateRef?.current;
-    const prog = (live && frameIndex != null)
+    const prog = canInterpolateToNextFrame && live && frameIndex != null
       ? live.effectiveFrame - frameIndex
-      : (interpolationFactor ?? 0);
+      : canInterpolateToNextFrame
+        ? (interpolationFactor ?? 0)
+        : 0;
     u.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
   });
 
@@ -1143,8 +1149,7 @@ export function AtomsOptimized({
     const positions = frame.positions;
     const types = frame.types;
 
-    const hasNextFrame = nextFrame && nextFrame.natoms === frame.natoms;
-    const nextPos = hasNextFrame ? nextFrame.positions : null;
+    const nextPos = canInterpolateToNextFrame ? nextFrame!.positions : null;
 
     let bsx = 0, bsy = 0, bsz = 0;
     const hasBounds = !!frame.boxBounds;
@@ -1291,7 +1296,7 @@ export function AtomsOptimized({
 
     return cleanupIdle;
   }, [
-    frame, nextFrame, scale, propData, pMin, pMax,
+    frame, nextFrame, canInterpolateToNextFrame, scale, propData, pMin, pMax,
     hiddenAtomTypes, atomTypeScales, loadedAtomCount,
     onSpatialHash, capacity, colorProperty, geometry,
   ]);

@@ -11,8 +11,12 @@ import init, {
   parseDataFile,
   parseXyzFile,
 } from 'atlas-parsers';
-import { parseDumpBlobCanonical, parseDumpFramesCanonical } from '../dumpStreamParser';
-import { extractFrameProperties } from './frameTransfer';
+import {
+  parseDumpBlobCanonical,
+  parseDumpFramesCanonical,
+  serializeDumpParseError,
+} from '../dumpStreamParser';
+import { extractFrameIdentity, extractFrameProperties } from './frameTransfer';
 
 let wasmReady = false;
 
@@ -96,6 +100,7 @@ self.onmessage = async (e: MessageEvent) => {
           positions,
           bonds,
           properties,
+          identity: extractFrameIdentity(f),
         };
       });
 
@@ -131,6 +136,7 @@ self.onmessage = async (e: MessageEvent) => {
           positions,
           bonds,
           properties,
+          identity: extractFrameIdentity(f),
       }]}, transferables);
 
     } else if (type === 'parse-xyz') {
@@ -164,6 +170,7 @@ self.onmessage = async (e: MessageEvent) => {
           positions,
           bonds,
           properties,
+          identity: extractFrameIdentity(f),
         };
       });
 
@@ -190,6 +197,12 @@ self.onmessage = async (e: MessageEvent) => {
       self.postMessage({ type: 'thermo', id, runs });
     }
   } catch (err: any) {
-    self.postMessage({ type: 'error', id, message: err.message || String(err) });
+    const typed = serializeDumpParseError(err);
+    self.postMessage({
+      type: 'error',
+      id,
+      message: err.message || String(err),
+      ...(typed ?? {}),
+    });
   }
 };

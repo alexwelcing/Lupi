@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockFrame, createMockTrajectory } from '@atlas/core/test-utils';
 import { getStoreState, resetStore } from './test-utils';
-import { loadMoleculeSource } from './loadMoleculeSource';
+import { importDumpFileStreaming, loadMoleculeSource } from './loadMoleculeSource';
 
 const seams = vi.hoisted(() => ({
   streaming: false,
   constructorArgs: [] as unknown[][],
   parseFile: vi.fn(),
+  detectFileType: vi.fn(),
+  transcodeDumpFile: vi.fn(),
 }));
 
-vi.mock('@atlas/parsers', () => ({ parseFile: seams.parseFile }));
+vi.mock('@atlas/parsers', () => ({
+  parseFile: seams.parseFile,
+  detectFileType: seams.detectFileType,
+  transcodeDumpFile: seams.transcodeDumpFile,
+}));
 vi.mock('@atlas/parsers/StreamingLoader', () => ({
   isGlimbinUrl: () => seams.streaming,
   autoDetectLoader: async () => seams.streaming ? 'streaming' : 'legacy',
@@ -38,6 +44,8 @@ describe('loadMoleculeSource strict remote mode', () => {
     seams.constructorArgs.length = 0;
     seams.parseFile.mockReset();
     seams.parseFile.mockResolvedValue({ trajectory: createMockTrajectory(1, 1), thermo: null });
+    seams.detectFileType.mockReset();
+    seams.transcodeDumpFile.mockReset();
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
   });
@@ -79,5 +87,47 @@ describe('loadMoleculeSource strict remote mode', () => {
       .rejects.toThrow(/redirects are not allowed/i);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(seams.parseFile).not.toHaveBeenCalled();
+  });
+
+  it('upgrades progressive frame identity only after the worker validates every ID', async () => {
+    seams.detectFileType.mockReturnValue('dump');
+    let headerIdentity: unknown;
+    let completedIdentity: unknown;
+    seams.transcodeDumpFile.mockImplementation(async (
+      _file: File,
+      _opfs: unknown,
+      callbacks: {
+        onFrame0Header?: (header: unknown) => void;
+        onFrame0Chunk?: (chunk: unknown) => void;
+        onFrame0Complete?: (loaded: number, identity: unknown) => void;
+      },
+    ) => {
+      callbacks.onFrame0Header?.({
+        natoms: 2,
+        timestep: 0,
+        boxBounds: new Float64Array([0, 1, 0, 1, 0, 1]),
+        columns: ['id', 'type', 'x', 'y', 'z'],
+        identity: { kind: 'source-id', unique: false },
+      });
+      headerIdentity = getStoreState().file?.trajectory.frames[0]?.identity;
+      callbacks.onFrame0Chunk?.({
+        start: 0,
+        count: 2,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0]),
+        types: new Int32Array([1, 1]),
+        ids: new Int32Array([10, 20]),
+      });
+      callbacks.onFrame0Complete?.(2, { kind: 'source-id', unique: true });
+      completedIdentity = getStoreState().file?.trajectory.frames[0]?.identity;
+      return { kind: 'single' };
+    });
+
+    const result = await importDumpFileStreaming(new File(['dump'], 'identity.dump'));
+
+    expect(result).toEqual({ handled: true, persistedId: null });
+    expect(headerIdentity).toEqual({ kind: 'source-id', unique: false });
+    expect(completedIdentity).toEqual({ kind: 'source-id', unique: true });
+    expect(getStoreState().file?.trajectory.frames[0]?.identity)
+      .toEqual({ kind: 'source-id', unique: true });
   });
 });

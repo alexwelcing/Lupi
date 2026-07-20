@@ -6,14 +6,14 @@
 // trajectory files without loading the entire dataset into memory.
 // ═══════════════════════════════════════════════════════════════════
 
-import type { Frame, Trajectory } from './types';
+import type { Frame, FrameIdentity, FrameIdentityKind, Trajectory } from './types';
 
 /** Magic bytes identifying a .glimbin file */
 export const GLIMBIN_MAGIC = new Uint8Array([0x47, 0x4C, 0x49, 0x4D]); // "GLIM"
 
-/** Current format version. v2 adds the per-frame box block
- *  (FLAG_PER_FRAME_BOX) so NPT / deforming-cell trajectories are exact;
- *  v1 files (the remote gallery fixtures) read unchanged. */
+/** Current format version. v2 adds feature-flagged per-frame box data and
+ *  trailing identity provenance. v1 files (the remote gallery fixtures) and
+ *  earlier v2 records read unchanged. */
 export const GLIMBIN_VERSION = 2;
 
 /** Fixed header size in bytes */
@@ -26,6 +26,11 @@ export const FRAME_ENTRY_SIZE = 24;
  *  6×f64 bounds + 3×f64 tilt + u8 triclinic + 3 pad. */
 export const FRAME_BOX_BLOCK_SIZE = 76;
 
+/** Size of the optional trailing per-frame identity-provenance block:
+ *  u8 kind + u8 unique + 2 reserved bytes. It trails the legacy record so
+ *  readers unaware of the flag still decode all established fields safely. */
+export const FRAME_IDENTITY_BLOCK_SIZE = 4;
+
 // ─── Flags ──────────────────────────────────────────────────────────
 
 // The flag declares compression but the format does not yet encode a codec.
@@ -36,6 +41,7 @@ export const FLAG_VARIABLE_ATOMS = 0x0004; // Atom count varies per frame
 export const FLAG_HAS_BONDS    = 0x0008; // Frames include bond data
 export const FLAG_HAS_PROPERTIES = 0x0010; // Frames include per-atom properties
 export const FLAG_PER_FRAME_BOX = 0x0020; // Each frame record starts with its own box
+export const FLAG_FRAME_IDENTITY = 0x0040; // Each frame record ends with identity provenance
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -63,6 +69,7 @@ export interface GlimbinHeader {
   variableAtoms: boolean;
   hasBonds: boolean;
   hasProperties: boolean;
+  hasFrameIdentity: boolean;
 }
 
 /** A single entry in the frame index */
@@ -200,6 +207,7 @@ export function parseHeader(buffer: ArrayBuffer): GlimbinHeader {
     variableAtoms: (flags & FLAG_VARIABLE_ATOMS) !== 0,
     hasBonds: (flags & FLAG_HAS_BONDS) !== 0,
     hasProperties: (flags & FLAG_HAS_PROPERTIES) !== 0,
+    hasFrameIdentity: (flags & FLAG_FRAME_IDENTITY) !== 0,
   };
 }
 
@@ -258,6 +266,8 @@ export function parseFrameData(
   boxBounds?: Float64Array;
   boxTilt?: Float64Array;
   triclinic?: boolean;
+  /** Absent for legacy records without FLAG_FRAME_IDENTITY. */
+  identity?: FrameIdentity;
 } {
   let offset = 0;
   const view = new DataView(buffer);
@@ -319,7 +329,14 @@ export function parseFrameData(
     }
   }
 
-  return { ids, types, positions, bonds, properties, boxBounds, boxTilt, triclinic };
+  let identity: FrameIdentity | undefined;
+  if (flags & FLAG_FRAME_IDENTITY) {
+    const kind = decodeFrameIdentityKind(view.getUint8(offset));
+    const unique = view.getUint8(offset + 1) === 1;
+    identity = { kind, unique };
+  }
+
+  return { ids, types, positions, bonds, properties, boxBounds, boxTilt, triclinic, identity };
 }
 
 // ─── Header writing (for conversion tools) ──────────────────────────
@@ -327,7 +344,7 @@ export function parseFrameData(
 /**
  * Write a .glimbin header into a 256-byte buffer.
  */
-export function writeHeader(header: Omit<GlimbinHeader, 'magic' | 'compressed' | 'littleEndian' | 'variableAtoms' | 'hasBonds' | 'hasProperties'>): ArrayBuffer {
+export function writeHeader(header: Omit<GlimbinHeader, 'magic' | 'compressed' | 'littleEndian' | 'variableAtoms' | 'hasBonds' | 'hasProperties' | 'hasFrameIdentity'>): ArrayBuffer {
   const buffer = new ArrayBuffer(HEADER_SIZE);
   const view = new DataView(buffer);
   const u8 = new Uint8Array(buffer);
@@ -410,7 +427,10 @@ export function canEncodeGlimbin(frames: Frame[]): boolean {
  *  must include the (possibly empty) block so the reader's fixed walk
  *  stays aligned. */
 export function computeGlimbinFlags(frames: Frame[]): number {
-  let flags = FLAG_LITTLE_ENDIAN;
+  // Every record emitted by the current writer carries an explicit identity
+  // descriptor, including `{ kind: 'unknown', unique: false }`. Legacy files
+  // without this flag remain distinguishable and are never reinterpreted.
+  let flags = FLAG_LITTLE_ENDIAN | FLAG_FRAME_IDENTITY;
   const n0 = frames[0]?.natoms ?? 0;
   if (frames.some((f) => f.natoms !== n0)) flags |= FLAG_VARIABLE_ATOMS;
   if (frames.some((f) => f.bonds && f.bonds.length > 0)) flags |= FLAG_HAS_BONDS;
@@ -420,6 +440,18 @@ export function computeGlimbinFlags(frames: Frame[]): number {
 
 const align4 = (n: number) => (n + 3) & ~3;
 
+const FRAME_IDENTITY_KIND_CODE: Record<FrameIdentityKind, number> = {
+  unknown: 0,
+  'source-id': 1,
+  'synthetic-row': 2,
+};
+
+function decodeFrameIdentityKind(code: number): FrameIdentityKind {
+  if (code === FRAME_IDENTITY_KIND_CODE['source-id']) return 'source-id';
+  if (code === FRAME_IDENTITY_KIND_CODE['synthetic-row']) return 'synthetic-row';
+  return 'unknown';
+}
+
 /** Serialize one frame's atom data to the raw (uncompressed) record that
  *  `parseFrameData` reads. `flags` is the file-level flag word so the
  *  bonds/properties blocks are emitted iff the file declares them. */
@@ -428,6 +460,7 @@ export function writeFrameData(frame: Frame, flags: number): ArrayBuffer {
   const hasBonds = (flags & FLAG_HAS_BONDS) !== 0;
   const hasProps = (flags & FLAG_HAS_PROPERTIES) !== 0;
   const hasBox = (flags & FLAG_PER_FRAME_BOX) !== 0;
+  const hasFrameIdentity = (flags & FLAG_FRAME_IDENTITY) !== 0;
 
   const propEntries: Array<[string, Float32Array, Uint8Array]> = [];
   if (hasProps && frame.properties) {
@@ -451,6 +484,7 @@ export function writeFrameData(frame: Frame, flags: number): ArrayBuffer {
       size += natoms * 4; // f32 data
     }
   }
+  if (hasFrameIdentity) size += FRAME_IDENTITY_BLOCK_SIZE;
 
   const buffer = new ArrayBuffer(size);
   const view = new DataView(buffer);
@@ -499,6 +533,13 @@ export function writeFrameData(frame: Frame, flags: number): ArrayBuffer {
       new Float32Array(buffer, offset, natoms).set(data.subarray(0, natoms));
       offset += natoms * 4;
     }
+  }
+
+  if (hasFrameIdentity) {
+    const identity = frame.identity;
+    const kind = identity?.kind ?? 'unknown';
+    view.setUint8(offset, FRAME_IDENTITY_KIND_CODE[kind]);
+    view.setUint8(offset + 1, identity?.unique === true ? 1 : 0);
   }
 
   return buffer;
@@ -575,7 +616,9 @@ export class GlimbinStreamWriter {
   constructor(opts: GlimbinWriterOptions = {}) {
     // v2 writer policy: every frame record carries its own box, so NPT /
     // deforming-cell trajectories round-trip exactly (76 bytes/frame).
-    this.flags = opts.flags != null ? opts.flags | FLAG_PER_FRAME_BOX : null;
+    this.flags = opts.flags != null
+      ? opts.flags | FLAG_PER_FRAME_BOX | FLAG_FRAME_IDENTITY
+      : null;
     this.unitStyle = opts.unitStyle ?? 0;
     this.boundsOverride = opts.globalBounds;
     this.typesOverride = opts.atomTypes;
@@ -613,7 +656,9 @@ export class GlimbinStreamWriter {
 
     if (this.entries.length === 0) {
       // Lock layout flags and the file-level box from the first frame.
-      if (this.flags === null) this.flags = computeGlimbinFlags([frame]) | FLAG_PER_FRAME_BOX;
+      if (this.flags === null) {
+        this.flags = computeGlimbinFlags([frame]) | FLAG_PER_FRAME_BOX | FLAG_FRAME_IDENTITY;
+      }
       if (frame.boxBounds) this.boxBounds.set(frame.boxBounds.subarray(0, 6));
       if (frame.boxTilt) this.boxTilt.set(frame.boxTilt.subarray(0, 3));
       this.triclinic = frame.triclinic ?? false;

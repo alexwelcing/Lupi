@@ -5,8 +5,15 @@
  * Handles drag-drop, file input, and URL-loaded example files.
  */
 
+import { hasUsableSourceIds } from '@atlas/core';
 import type { Frame, Trajectory, ThermoData } from '@atlas/core/types';
-import { parseDumpStream, parseDumpStreamFromBytes, readableStreamToAsyncIterable } from './dumpStreamParser';
+import {
+  deserializeDumpParseError,
+  parseDumpStream,
+  parseDumpStreamFromBytes,
+  readableStreamToAsyncIterable,
+} from './dumpStreamParser';
+import { extractFrameIdentity } from './workers/frameTransfer';
 
 let worker: Worker | null = null;
 let messageId = 0;
@@ -30,7 +37,7 @@ function getWorker(): Worker {
       const p = pending.get(id);
       if (!p) return;
       if (type === 'error') {
-        p.reject(new Error(e.data.message));
+        p.reject(deserializeDumpParseError(e.data));
       } else {
         p.resolve(e.data);
       }
@@ -48,14 +55,10 @@ function send(type: string, payload: any): Promise<any> {
   });
 }
 
-/** Parse a LAMMPS dump file and return a Trajectory */
-export async function parseDumpFile(file: File): Promise<Trajectory> {
-  const result = await send('parse-dump', file);
-  if (!result.frames || result.frames.length === 0) {
-    throw new Error('No frames parsed; possibly wrong format.');
-  }
-
-  const frames: Frame[] = result.frames.map((f: any) => ({
+/** Rehydrate a structured-cloned parser-worker frame without inferring
+ * provenance from its numeric ID buffer. Exported for route-contract tests. */
+export function hydrateWorkerFrame(f: any): Frame {
+  return {
     timestep: f.timestep,
     natoms: f.natoms,
     boxBounds: new Float64Array(f.boxBounds),
@@ -67,49 +70,68 @@ export async function parseDumpFile(file: File): Promise<Trajectory> {
     positions: new Float32Array(f.positions),
     bonds: new Int32Array(f.bonds),
     properties: new Map(
-      f.properties.map((p: any) => [p.name, new Float32Array(p.data)])
+      f.properties.map((p: any) => [p.name, new Float32Array(p.data)]),
     ),
-  }));
+    identity: extractFrameIdentity(f),
+  };
+}
+
+/** Add displacement only when source-provided unique IDs support a truthful
+ * cross-frame join. Synthetic row IDs and partial atom sets do not produce a
+ * deceptively numeric property. */
+export function addSourceIdDisplacement(frames: Frame[]): void {
+  const f0 = frames[0];
+  if (!f0 || !hasUsableSourceIds(f0)) return;
+
+  const f0IdToIndex = new Map<number, number>();
+  for (let i = 0; i < f0.natoms; i++) f0IdToIndex.set(f0.ids[i], i);
+
+  for (const frame of frames) {
+    // A per-frame scalar named "Displacement" implies a complete join to the
+    // reference population. Do not silently publish a subset when atoms were
+    // added or removed between frames.
+    if (!hasUsableSourceIds(frame) || frame.natoms !== f0.natoms) continue;
+    const displacement = new Float32Array(frame.natoms);
+    let completeJoin = true;
+    for (let i = 0; i < frame.natoms; i++) {
+      const f0Index = f0IdToIndex.get(frame.ids[i]);
+      if (f0Index === undefined) {
+        completeJoin = false;
+        break;
+      }
+      const dx = frame.positions[i * 3] - f0.positions[f0Index * 3];
+      const dy = frame.positions[i * 3 + 1] - f0.positions[f0Index * 3 + 1];
+      const dz = frame.positions[i * 3 + 2] - f0.positions[f0Index * 3 + 2];
+      displacement[i] = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    if (completeJoin) frame.properties.set('Displacement', displacement);
+  }
+}
+
+/** Parse a LAMMPS dump file and return a Trajectory */
+export async function parseDumpFile(file: File): Promise<Trajectory> {
+  const result = await send('parse-dump', file);
+  if (!result.frames || result.frames.length === 0) {
+    throw new Error('No frames parsed; possibly wrong format.');
+  }
+
+  const frames: Frame[] = result.frames.map(hydrateWorkerFrame);
 
   // Compute global bounds and structural properties (e.g. Displacement)
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   const allTypes = new Set<number>();
 
-  // To handle Displacement, we map atom IDs from Frame 0 to their current positions.
-  const f0 = frames[0];
-  const f0IdToIndex = new Map<number, number>();
-  if (f0) {
-    for (let i = 0; i < f0.natoms; i++) {
-      f0IdToIndex.set(f0.ids[i], i);
-    }
-  }
-
   for (const frame of frames) {
-    const displacement = new Float32Array(frame.natoms);
     for (let i = 0; i < frame.natoms; i++) {
       const x = frame.positions[i * 3], y = frame.positions[i * 3 + 1], z = frame.positions[i * 3 + 2];
       if (x < minX) minX = x; if (x > maxX) maxX = x;
       if (y < minY) minY = y; if (y > maxY) maxY = y;
       if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
       allTypes.add(frame.types[i]);
-
-      // Compute Displacement from Frame 0
-      const f0Index = f0IdToIndex.get(frame.ids[i]);
-      if (f0Index !== undefined && f0) {
-        const dx = x - f0.positions[f0Index * 3];
-        const dy = y - f0.positions[f0Index * 3 + 1];
-        const dz = z - f0.positions[f0Index * 3 + 2];
-        displacement[i] = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      } else {
-        displacement[i] = 0;
-      }
     }
-    if (!frame.properties) {
-      frame.properties = new Map();
-    }
-    frame.properties.set('Displacement', displacement);
   }
+  addSourceIdDisplacement(frames);
 
   return {
     frames,
@@ -162,61 +184,23 @@ export async function parseXyzFile(file: File): Promise<Trajectory> {
     throw new Error('No frames parsed; possibly wrong format.');
   }
 
-  const frames: Frame[] = result.frames.map((f: any) => ({
-    timestep: f.timestep,
-    natoms: f.natoms,
-    boxBounds: new Float64Array(f.boxBounds),
-    boxTilt: new Float64Array(f.boxTilt),
-    triclinic: f.triclinic,
-    columns: f.columns,
-    ids: new Int32Array(f.ids),
-    types: new Int32Array(f.types),
-    positions: new Float32Array(f.positions),
-    bonds: new Int32Array(f.bonds),
-    properties: new Map(
-      f.properties.map((p: any) => [p.name, new Float32Array(p.data)])
-    ),
-  }));
+  const frames: Frame[] = result.frames.map(hydrateWorkerFrame);
 
   // Compute global bounds and structural properties (e.g. Displacement)
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   const allTypes = new Set<number>();
 
-  // To handle Displacement, we map atom IDs from Frame 0 to their current positions.
-  const f0 = frames[0];
-  const f0IdToIndex = new Map<number, number>();
-  if (f0) {
-    for (let i = 0; i < f0.natoms; i++) {
-      f0IdToIndex.set(f0.ids[i], i);
-    }
-  }
-
   for (const frame of frames) {
-    const displacement = new Float32Array(frame.natoms);
     for (let i = 0; i < frame.natoms; i++) {
       const x = frame.positions[i * 3], y = frame.positions[i * 3 + 1], z = frame.positions[i * 3 + 2];
       if (x < minX) minX = x; if (x > maxX) maxX = x;
       if (y < minY) minY = y; if (y > maxY) maxY = y;
       if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
       allTypes.add(frame.types[i]);
-
-      // Compute Displacement from Frame 0
-      const f0Index = f0IdToIndex.get(frame.ids[i]);
-      if (f0Index !== undefined && f0) {
-        const dx = x - f0.positions[f0Index * 3];
-        const dy = y - f0.positions[f0Index * 3 + 1];
-        const dz = z - f0.positions[f0Index * 3 + 2];
-        displacement[i] = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      } else {
-        displacement[i] = 0;
-      }
     }
-    if (!frame.properties) {
-      frame.properties = new Map();
-    }
-    frame.properties.set('Displacement', displacement);
   }
+  addSourceIdDisplacement(frames);
 
   return {
     frames,
@@ -233,21 +217,7 @@ export async function parseDataFile(file: File): Promise<Trajectory> {
     throw new Error('No frames parsed; possibly wrong format.');
   }
 
-  const frames: Frame[] = result.frames.map((f: any) => ({
-    timestep: f.timestep,
-    natoms: f.natoms,
-    boxBounds: new Float64Array(f.boxBounds),
-    boxTilt: new Float64Array(f.boxTilt),
-    triclinic: f.triclinic,
-    columns: f.columns,
-    ids: new Int32Array(f.ids),
-    types: new Int32Array(f.types),
-    positions: new Float32Array(f.positions),
-    bonds: new Int32Array(f.bonds),
-    properties: new Map(
-      f.properties.map((p: any) => [p.name, new Float32Array(p.data)])
-    ),
-  }));
+  const frames: Frame[] = result.frames.map(hydrateWorkerFrame);
 
   // Compute global bounds
   let minX = Infinity, minY = Infinity, minZ = Infinity;

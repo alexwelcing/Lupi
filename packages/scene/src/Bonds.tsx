@@ -17,7 +17,7 @@ import { useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
-import { getElementSpec, hexToRgb } from '@atlas/core';
+import { framesShareAtomOrder, getElementSpec, hexToRgb } from '@atlas/core';
 import { DEFAULT_TYPE_COLOR, getTypeColorFromColormap, COLORMAPS } from './constants';
 import { useBondGpuPipeline } from './useBondGpuPipeline';
 // Vite ?worker import: produces a real bundled .js worker module in prod.
@@ -159,6 +159,10 @@ export function Bonds({
 }: BondsProps) {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const canInterpolateToNextFrame = useMemo(
+    () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
+    [frame, nextFrame],
+  );
   const workerRef = useRef<Worker | null>(null);
   const workerBusyRef = useRef<boolean>(false);
   const pendingMsgRef = useRef<{ msg: Record<string, any>, transferList: ArrayBuffer[], requestId: number } | null>(null);
@@ -831,9 +835,9 @@ export function Bonds({
     if (!mesh.instanceMatrix) return;
 
     const drawCount = Math.min(halfCount, capacity);
-    const t = interpolationFactor ?? 0;
+    const t = canInterpolateToNextFrame ? (interpolationFactor ?? 0) : 0;
     const positions = frame.positions;
-    const nextPos = nextFrame?.positions;
+    const nextPos = canInterpolateToNextFrame ? nextFrame!.positions : undefined;
     const pbcBox = frame.boxBounds ?? cellBounds;
 
     for (let i = 0; i < drawCount / 2; i++) {
@@ -846,7 +850,7 @@ export function Bonds({
       let by = positions[b * 3 + 1];
       let bz = positions[b * 3 + 2];
 
-      const canInterpolate = nextFrame && t > 0 && nextPos && nextPos.length >= positions.length;
+      const canInterpolate = t > 0 && nextPos && nextPos.length >= positions.length;
       if (canInterpolate) {
         let d_ax = nextPos[a * 3] - ax;
         let d_ay = nextPos[a * 3 + 1] - ay;
@@ -940,7 +944,7 @@ export function Bonds({
     mesh.count = totalBonds;
     mesh.instanceMatrix.needsUpdate = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, halfCount, capacity, frame, nextFrame, interpolationFactor, periodic, cellBounds]);
+  }, [bondPairs, halfCount, capacity, frame, nextFrame, canInterpolateToNextFrame, interpolationFactor, periodic, cellBounds]);
 
   /** Compute per-bond COLORS and RADII. Writes cpuColorBArray +
    *  cpuRadiusBTArray and uploads instanceColor + radiusBT. Runs on
@@ -996,8 +1000,8 @@ export function Bonds({
     }
 
     const drawCount = Math.min(halfCount, capacity);
-    const t = interpolationFactor ?? 0;
-    const hasPropInterpolation = isPropMode && nextFrame && t > 0 && nextFrame.properties && nextFrame.properties.has(colorProperty!);
+    const t = canInterpolateToNextFrame ? (interpolationFactor ?? 0) : 0;
+    const hasPropInterpolation = isPropMode && canInterpolateToNextFrame && nextFrame && t > 0 && nextFrame.properties && nextFrame.properties.has(colorProperty!);
     const nextPropData = hasPropInterpolation ? nextFrame.properties!.get(colorProperty!) : null;
     const mapFn = COLORMAPS[colormap] || COLORMAPS.viridis;
 
@@ -1152,7 +1156,7 @@ export function Bonds({
     // frame for property coloring. In static modes (type/element/uniform),
     // propData is null and frame changes don't refire this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, interpolationFactor, colorProperty]);
+  }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, canInterpolateToNextFrame, interpolationFactor, colorProperty]);
 
   // Matrix upload runs in the rAF loop, NOT in a useEffect. This bypasses
   // React's commit cycle so per-frame matrix updates flow at native rAF

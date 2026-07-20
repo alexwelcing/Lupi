@@ -31,6 +31,7 @@ function makeFrame(): Frame {
     boxTilt: new Float64Array([0, 0, 0]),
     triclinic: false,
     columns: ['id', 'type', 'x', 'y', 'z'],
+    identity: { kind: 'source-id', unique: true },
     ids: new Int32Array([1, 2]),
     types: new Int32Array([1, 1]),
     positions: new Float32Array([1, 1, 1, 2, 2, 2]),
@@ -229,6 +230,50 @@ describe('AtomsOptimized material resource policy', () => {
       expect(materialPaletteDispose).toHaveBeenCalled();
     } finally {
       if (!didUnmount) await renderer.unmount();
+      reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  });
+});
+
+describe('AtomsOptimized frame identity guard', () => {
+  it.each([
+    {
+      label: 'uploads the next positions when source IDs retain order',
+      ids: [1, 2],
+      expectedTargets: [1.5, 1, 1, 2.5, 2, 2],
+    },
+    {
+      label: 'keeps current positions when the next frame shuffles source IDs',
+      ids: [2, 1],
+      expectedTargets: [1, 1, 1, 2, 2, 2],
+    },
+  ])('$label', async ({ ids, expectedTargets }) => {
+    const current = makeFrame();
+    const next: Frame = {
+      ...makeFrame(),
+      timestep: 1,
+      ids: new Int32Array(ids),
+      positions: new Float32Array([1.5, 1, 1, 2.5, 2, 2]),
+    };
+    const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT;
+    reactGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+    const renderer = await ReactThreeTestRenderer.create(React.createElement(AtomsOptimized, {
+      frame: current,
+      nextFrame: next,
+      interpolationFactor: 0.5,
+      maxAtoms: 2,
+      elementColorOverrides: {},
+    }));
+
+    try {
+      const mesh = renderer.scene.findByType('Mesh')
+        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+      const targetPositions = mesh.geometry.attributes.instanceTargetPosition
+        .array as Float32Array;
+      expect(Array.from(targetPositions.slice(0, 6))).toEqual(expectedTargets);
+    } finally {
+      await renderer.unmount();
       reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
     }
   });

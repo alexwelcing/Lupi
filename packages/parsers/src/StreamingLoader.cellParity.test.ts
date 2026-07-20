@@ -25,6 +25,7 @@ function makeFrame(
     ]),
     bonds: new Int32Array(0),
     properties: new Map([['vx', new Float32Array([positionBase / 10, -positionBase / 10])]]),
+    identity: { kind: 'source-id', unique: true },
   };
 }
 
@@ -76,6 +77,7 @@ function expectSameScientificFrame(remote: Frame, local: Frame) {
   expect(Array.from(remote.types)).toEqual(Array.from(local.types));
   expect(Array.from(remote.positions)).toEqual(Array.from(local.positions));
   expect(Array.from(remote.bonds)).toEqual(Array.from(local.bonds));
+  expect(remote.identity).toEqual(local.identity);
   expect(Array.from(remote.properties.keys())).toEqual(Array.from(local.properties.keys()));
   for (const [name, values] of local.properties) {
     expect(Array.from(remote.properties.get(name) ?? [])).toEqual(Array.from(values));
@@ -101,6 +103,9 @@ describe('remote GLIMBIN per-frame cell parity', () => {
       expectSameScientificFrame(
         await remote.fetchFrame(frameIndex),
         await local.fetchFrame(frameIndex),
+      );
+      expect((await remote.fetchFrame(frameIndex)).identity).toEqual(
+        trajectory.frames[frameIndex].identity,
       );
     }
 

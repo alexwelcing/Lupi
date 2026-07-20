@@ -176,6 +176,7 @@ export class LocalGlimbinSource {
         positions: parsed.positions,
         bonds: (this.header!.flags & FLAG_HAS_BONDS) !== 0 ? parsed.bonds : new Int32Array(0),
         properties: parsed.properties,
+        identity: parsed.identity,
       };
 
       if (signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');

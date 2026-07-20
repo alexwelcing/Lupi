@@ -17,7 +17,7 @@ const FIELD: VectorFieldSpec = {
   magnitudeProperty: '|v|',
 };
 
-function vectorFrame(offset = 0): Frame {
+function vectorFrame(offset = 0, ids: readonly number[] = [1, 2]): Frame {
   return {
     timestep: offset,
     natoms: 2,
@@ -25,7 +25,8 @@ function vectorFrame(offset = 0): Frame {
     boxTilt: new Float64Array(3),
     triclinic: false,
     columns: ['id', 'type', 'x', 'y', 'z', 'vx', 'vy', 'vz'],
-    ids: new Int32Array([1, 2]),
+    identity: { kind: 'source-id', unique: true },
+    ids: new Int32Array(ids),
     types: new Int32Array([1, 1]),
     positions: new Float32Array([offset, 1, 2, 3 + offset, 4, 5]),
     bonds: new Int32Array(),
@@ -103,6 +104,48 @@ describe('VectorGlyphs immutable artifact receipt', () => {
         .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
       expect(hiddenMesh.geometry.instanceCount).toBe(0);
       expect(hiddenMesh.material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY]).toBe('spec-hidden');
+    } finally {
+      await renderer.unmount();
+      reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  });
+});
+
+describe('VectorGlyphs frame identity guard', () => {
+  it.each([
+    {
+      label: 'uploads next-frame positions and vectors when source IDs retain order',
+      ids: [1, 2],
+      expectedPositions: [1, 1, 2, 4, 4, 5],
+      expectedVectors: [2, 0, 0, 0, 3, 0],
+    },
+    {
+      label: 'keeps current positions and vectors when the next frame shuffles source IDs',
+      ids: [2, 1],
+      expectedPositions: [0, 1, 2, 3, 4, 5],
+      expectedVectors: [1, 0, 0, 0, 2, 0],
+    },
+  ])('$label', async ({ ids, expectedPositions, expectedVectors }) => {
+    const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT;
+    reactGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+    const renderer = await ReactThreeTestRenderer.create(React.createElement(VectorGlyphs, {
+      frame: vectorFrame(),
+      nextFrame: vectorFrame(1, ids),
+      interpolationFactor: 0.5,
+      field: FIELD,
+      maxGlyphs: 2,
+    }));
+
+    try {
+      const mesh = renderer.scene.findByType('Mesh')
+        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+      const targetPositions = mesh.geometry.attributes.instanceTargetPosition
+        .array as Float32Array;
+      const targetVectors = mesh.geometry.attributes.instanceTargetVector
+        .array as Float32Array;
+      expect(Array.from(targetPositions.slice(0, 6))).toEqual(expectedPositions);
+      expect(Array.from(targetVectors.slice(0, 6))).toEqual(expectedVectors);
     } finally {
       await renderer.unmount();
       reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;

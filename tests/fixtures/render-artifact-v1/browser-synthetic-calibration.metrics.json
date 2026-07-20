@@ -18,17 +18,17 @@
     "byteLength": 15708,
     "stableIdentities": {
       "contractVersion": "lupi.render-artifact-spec.v1",
-      "sourceContentDigest": "sha256:a47ae2dca8ef2752ce4af0d01749211449e19a14d7fca73024f35d3ce001c9eb",
-      "specId": "spec-sha256:86f910ec1c170ed42681ec504b40a86789d2464f12c2d53651f06a43ee87590e"
+      "sourceContentDigest": "sha256:6f86042f46b0f7520c2c6e3f34fb59b4b89f1816c4061ab0eabe431f27ee7f28",
+      "specId": "spec-sha256:3a7df97e453fac6110b7509568f53baecf21036611ff98e164deeab621a45584"
     },
     "generationIdentities": {
-      "rendererFingerprint": "renderer-sha256:8388fc156722eb3c040225841db1e96ac8d715dcb6819256e718297dcc12134e",
-      "artifactKey": "artifact-sha256:b2f605f420252c500e681d23b8b3883c34ac121494d6806dfab84870fee620bf"
+      "rendererFingerprint": "renderer-sha256:1750970461b3985ccaa42efe5e4a8e72adfc6dcf85f3dd318796f5d93f7c0f71",
+      "artifactKey": "artifact-sha256:f4da2b55a65bc4d3317e2161feb3726bb2cd0ddbfef2e690b49203931770be35"
     }
   },
   "rendererValidity": {
     "scheme": "lupi.renderer-validity-digest.v1",
-    "digest": "sha256:bb9843e556a7fb653913d1ce3c687de7715defc2d12637236cf501af135d387c",
+    "digest": "sha256:08ab6530a6df3d3df2bdcbc3b3b4a901db3cd7f8fa96f6b2447d378510922e8b",
     "input": {
       "schemaVersion": "lupi.renderer-validity-input.v1",
       "sourceNormalization": "utf8-lf-v1",
@@ -59,11 +59,11 @@
         },
         {
           "path": "packages/scene/src/AtomsOptimized.tsx",
-          "sha256": "sha256:19cbe824f98d27d69f966b235a603f43e7ec6c915ca82e273bcd585826f377ae"
+          "sha256": "sha256:063e73123e96b935e2ae189e39d401a5b04f92140bbd98a099121e8a23034440"
         },
         {
           "path": "packages/scene/src/Bonds.tsx",
-          "sha256": "sha256:28571f9dee02a04e8c2c148bc60cd26f1c2237a982b8f293d541b1ac1159bdc3"
+          "sha256": "sha256:ecc96e7cc9ee82c8dbc15f081a4bec155a100e4e0bb0b0a7ed416fd2a8c5ce02"
         },
         {
           "path": "packages/scene/src/ClusterBuilder.ts",
@@ -79,7 +79,7 @@
         },
         {
           "path": "packages/scene/src/VectorGlyphs.tsx",
-          "sha256": "sha256:becfd99da3b9075d6f6c2e9f6a1f5377a6dc6c3493e5da969a97008bacade2da"
+          "sha256": "sha256:2cc24db5c1f3f3d6a19a3b8948992dec44cf1d820c2af58422eaa4cd83f0ba31"
         },
         {
           "path": "packages/scene/src/bondDetectCpu.ts",
@@ -247,7 +247,7 @@
         },
         {
           "path": "packages/ui/src/hooks/useSmoothFramePlayback.ts",
-          "sha256": "sha256:24f976bee5aa688f2ade0fcacd2c4c8d34411a6e3f99e08741a45d1836bbb108"
+          "sha256": "sha256:77ab75b67ac6adb66472bf1b8c9552fdb64f318df79d6f2cb523ff2892f7d1eb"
         },
         {
           "path": "packages/ui/src/mcp/protocol.ts",
@@ -255,7 +255,7 @@
         },
         {
           "path": "packages/ui/src/mcp/renderArtifactAdapter.ts",
-          "sha256": "sha256:4a28617c4f63be74b04d3926b821cf84773f55003edb3e1427e648667275a255"
+          "sha256": "sha256:caddbd2ae15b1ee1aa59cefce5eff007880b7836766bf3cf60c081217935b60e"
         },
         {
           "path": "packages/ui/src/mcp/tools.ts",
@@ -275,7 +275,7 @@
         },
         {
           "path": "packages/ui/src/renderArtifactSource.ts",
-          "sha256": "sha256:780d9285a8eff9e76edb5796d959c5643bf987c23670f8fc1cab7f2d33ec09a4"
+          "sha256": "sha256:d19bda0e28d9e8919c80a7aedd04c8f7564fb2e9cf093fb5cbf967bfdfd33a07"
         },
         {
           "path": "packages/ui/src/renderCapability.ts",
@@ -299,7 +299,7 @@
         },
         {
           "path": "packages/ui/src/viewer/artifactFrameSelection.ts",
-          "sha256": "sha256:93d8f148e658ece425503f9ee6509576f42ebadc4bb775bf372bb4c4b9523891"
+          "sha256": "sha256:6ca935c5c4d970eaeec11af4195acb134abf38cb74d252cb9dbbc9cae25f82e4"
         },
         {
           "path": "packages/ui/src/viewer/useViewerSceneModel.ts",
@@ -703,7 +703,7 @@
     }
   },
   "derivation": {
-    "generatedAt": "2026-07-20T16:22:08.111Z",
+    "generatedAt": "2026-07-20T16:53:22.279Z",
     "repeatCount": 10,
     "medoidRepeat": 1,
     "uniqueByteDigests": [
@@ -839,8 +839,8 @@
     "authority": {
       "status": "dirty-worktree-mechanics-only",
       "reason": "mechanics evidence only; CI is not true; worktree dirty; injected SHA matches HEAD",
-      "injectedBuildSha": "5ffe651e4e9cf6e589048c3876a09d44a1428686",
-      "repositoryHeadSha": "5ffe651e4e9cf6e589048c3876a09d44a1428686",
+      "injectedBuildSha": "d7d4fc5a39b2a93ffc3f965644cfe5f8f159f562",
+      "repositoryHeadSha": "d7d4fc5a39b2a93ffc3f965644cfe5f8f159f562",
       "worktreeClean": false,
       "ci": false,
       "cleanExactShaCiDerivation": "PENDING"

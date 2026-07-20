@@ -31,8 +31,8 @@ import { environmentAssetIdentity } from '../sceneEnvironment';
 import { REVISION as THREE_REVISION } from 'three';
 import type { AppState } from '../store';
 import {
-  DECODED_RENDER_FRAME_MEDIA_TYPE_V1,
-  computeDecodedRenderFrameDigestV1,
+  DECODED_RENDER_FRAME_MEDIA_TYPE_V2,
+  computeDecodedRenderFrameDigestV2,
 } from '../renderArtifactSource';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
 
@@ -205,7 +205,7 @@ export async function createBrowserRenderArtifactPlanV1(
     throw new Error(`${options.format.toUpperCase()} does not accept the raster transparent field.`);
   }
   const alpha = raster ? (options.transparent ? 'transparent' : 'opaque') : 'not-applicable';
-  const contentDigest = await computeDecodedRenderFrameDigestV1(frame);
+  const contentDigest = await computeDecodedRenderFrameDigestV2(frame);
   const layers: Record<RenderLayerIdV1, boolean> = { ...createRenderLayerStateV1() };
   const view: Record<string, RenderJsonValueV1> = {};
   if (raster) {
@@ -363,7 +363,7 @@ export async function createBrowserRenderArtifactPlanV1(
     version: RENDER_ARTIFACT_SPEC_VERSION_V1,
     source: {
       kind: 'content' as const,
-      mediaType: DECODED_RENDER_FRAME_MEDIA_TYPE_V1,
+      mediaType: DECODED_RENDER_FRAME_MEDIA_TYPE_V2,
       contentDigest,
     },
     format: options.format,

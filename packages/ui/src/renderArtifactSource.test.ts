@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { detectFrameVectorFields, ensureVectorMagnitude, type Frame } from '@atlas/core';
 import {
   canonicalDecodedRenderFrameBytesV1,
+  canonicalDecodedRenderFrameBytesV2,
   computeDecodedRenderFrameDigestV1,
+  computeDecodedRenderFrameDigestV2,
 } from './renderArtifactSource';
 
 function frame(overrides: Partial<Frame> = {}): Frame {
@@ -56,6 +58,26 @@ describe('decoded render frame identity', () => {
     for (const variant of variants) {
       expect(await computeDecodedRenderFrameDigestV1(variant)).not.toBe(originalDigest);
     }
+  });
+
+  it('V2 distinguishes source IDs from identical synthetic or unknown row labels', async () => {
+    const source = frame({ identity: { kind: 'source-id', unique: true } });
+    const synthetic = frame({ identity: { kind: 'synthetic-row', unique: true } });
+    const unknown = frame({ identity: { kind: 'unknown', unique: false } });
+    const legacyMissing = frame({ identity: undefined });
+
+    expect(canonicalDecodedRenderFrameBytesV1(source)).toEqual(
+      canonicalDecodedRenderFrameBytesV1(synthetic),
+    );
+    expect(await computeDecodedRenderFrameDigestV2(source)).not.toBe(
+      await computeDecodedRenderFrameDigestV2(synthetic),
+    );
+    expect(await computeDecodedRenderFrameDigestV2(synthetic)).not.toBe(
+      await computeDecodedRenderFrameDigestV2(unknown),
+    );
+    expect(canonicalDecodedRenderFrameBytesV2(legacyMissing)).toEqual(
+      canonicalDecodedRenderFrameBytesV2(unknown),
+    );
   });
 
   it('does not receive mutable LoadedFile name, size, or source URL metadata', async () => {
