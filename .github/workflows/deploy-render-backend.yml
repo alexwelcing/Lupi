@@ -102,6 +102,7 @@ jobs:
             --region="$GCP_REGION" \
             --config=apps/render-backend/cloudbuild.yaml \
             --substitutions="_IMAGE_URI=${IMAGE_URI},_LUPI_BUILD_SHA=${GITHUB_SHA}" \
+            --suppress-logs \
             --quiet
 
       - name: Deploy candidate without traffic
