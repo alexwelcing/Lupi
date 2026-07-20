@@ -13,6 +13,17 @@ on:
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - apps/web/**
+      # The render image needs the viewer code, but not large presentation-only
+      # captures and marketing artwork. Excluding them prevents asset-only
+      # changes from consuming a full Cloud Build and Cloud Run rollout.
+      - '!apps/web/public/backgrounds/**'
+      - '!apps/web/public/brand/**'
+      - '!apps/web/public/gallery/snapshots/**'
+      - '!apps/web/public/generated/atomized/**'
+      - '!apps/web/public/recordings/**'
+      - '!apps/web/public/apple-touch-icon.png'
+      - '!apps/web/public/favicon-32x32.png'
+      - '!apps/web/public/og-lupi.png'
       - packages/core/**
       - packages/parsers/**
       - packages/renderer/**
@@ -97,13 +108,46 @@ jobs:
           GCP_REGION: ${{ secrets.GCP_REGION }}
         run: |
           set -euo pipefail
-          gcloud builds submit . \
+          build_id="$(gcloud builds submit . \
             --project="$GCP_PROJECT_ID" \
             --region="$GCP_REGION" \
             --config=apps/render-backend/cloudbuild.yaml \
             --substitutions="_IMAGE_URI=${IMAGE_URI},_LUPI_BUILD_SHA=${GITHUB_SHA}" \
-            --suppress-logs \
-            --quiet
+            --async \
+            --format='value(id)' \
+            --quiet)"
+
+          if [ -z "$build_id" ]; then
+            echo "::error::Cloud Build submission did not return a build ID"
+            exit 1
+          fi
+
+          echo "Cloud Build submitted: ${build_id}"
+          while true; do
+            status="$(gcloud builds describe "$build_id" \
+              --project="$GCP_PROJECT_ID" \
+              --region="$GCP_REGION" \
+              --format='value(status)')"
+
+            case "$status" in
+              SUCCESS)
+                echo "Cloud Build ${build_id} completed successfully."
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "::error::Cloud Build ${build_id} completed with status ${status}"
+                exit 1
+                ;;
+              QUEUED|PENDING|WORKING)
+                echo "Cloud Build ${build_id}: ${status}"
+                sleep 15
+                ;;
+              *)
+                echo "::error::Cloud Build ${build_id} returned unexpected status ${status:-<empty>}"
+                exit 1
+                ;;
+            esac
+          done
 
       - name: Deploy candidate without traffic
         env:
