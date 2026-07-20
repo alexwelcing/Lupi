@@ -64,8 +64,10 @@ One serialized lane owns one browser page. For each request it executes only:
 
 1. `lupi.reset_viewer`
 2. `lupi.generate_molecule`
-3. `lupi.set_background` with a fixed opaque, motion-paused background
-4. `lupi.export_asset` for exact PNG dimensions
+3. `lupi.set_viewer` with bonds, cell, and axes disabled so deterministic
+   raster capture never depends on asynchronous topology
+4. `lupi.set_background` with a fixed opaque, motion-paused background
+5. `lupi.export_asset` for exact PNG dimensions
 
 The service captures and validates the complete browser export receipt,
 including its byte payload, data URL, dimensions, byte length, and artifact
