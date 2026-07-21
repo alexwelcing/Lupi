@@ -66,14 +66,15 @@ export function ControlGroup({ title, note, children, wide = false }: { title: s
       style={{
         gridColumn: wide ? '1 / -1' : undefined,
         display: 'grid',
-        gap: 7,
+        gap: 8,
         alignContent: 'start',
         minWidth: 0,
-        padding: 8,
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 8,
-        background: 'linear-gradient(180deg, rgba(15,23,42,0.48), rgba(2,6,23,0.22))',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 22px rgba(0,0,0,0.16)',
+        padding: '11px 7px 12px',
+        border: 0,
+        borderTop: '1px solid #1d2934',
+        borderRadius: 0,
+        background: 'transparent',
+        boxShadow: 'none',
       }}
     >
       <div style={{ display: 'grid', gap: 2 }}>

@@ -1,70 +1,59 @@
 /**
- * PanelHost - renders the active viewer tool panel as a dockable window.
+ * PanelHost - deterministic command panel beside the viewer command deck.
  *
- * On desktop this replaces the fixed right-side sheet with a floating,
- * draggable, resizable, snap-to-edge palette. On mobile the caller still
- * renders the bottom sheet; this component renders nothing when invisible.
- *
- * The panel body itself is shared with the mobile sheet via ViewerPanelBody —
- * this component only owns the desktop dock chrome (title, size, position).
+ * The molecular viewport is the primary workspace, so tool surfaces stay on a
+ * known edge instead of opening as draggable windows over unrelated controls.
  */
-import { useStore, type AppState, type ViewerControlMode } from './store';
-import { DockableWindow } from './DockableWindow';
+import { memo } from 'react';
+import { IconClose } from './icons';
+import { useStore, type AppState } from './store';
 import { ViewerPanelBody } from './ViewerPanelBody';
 
-interface PanelHostProps {
-  activePanel: AppState['activePanel'];
-  studioDeck: ViewerControlMode | null;
-  onOpenStudioDeck: (mode: ViewerControlMode) => void;
-  onClose: () => void;
-}
-
-const TITLES: Record<NonNullable<PanelHostProps['activePanel']>, string> = {
-  studio: 'Structure',
-  export: 'Export',
-  flythrough: 'Camera Path',
-  telemetry: 'Analyze Data',
+const PANEL_TITLES: Record<NonNullable<AppState['activePanel']>, string> = {
+  studio: 'Model',
+  export: 'Capture',
+  flythrough: 'Camera',
+  telemetry: 'Analyze',
   equilibrium: 'Equilibrium Solve',
   mlipLongRun: 'MLIP Long Run',
 };
 
-const INITIALS: Record<NonNullable<PanelHostProps['activePanel']>, { x?: number; y?: number; w?: number; h?: number }> = {
-  studio: { x: undefined, y: undefined, w: 400, h: 720 },
-  export: { x: undefined, y: undefined, w: 420, h: 680 },
-  flythrough: { x: undefined, y: undefined, w: 400, h: 620 },
-  telemetry: { x: undefined, y: undefined, w: 400, h: 580 },
-  equilibrium: { x: undefined, y: undefined, w: 460, h: 720 },
-  mlipLongRun: { x: undefined, y: undefined, w: 460, h: 720 },
-};
+export const PanelHost = memo(function PanelHost() {
+  const fileLoaded = useStore(s => Boolean(s.file));
+  const activePanel = useStore(s => s.activePanel);
+  const studioDeck = useStore(s => s.studioDeck);
 
-export function PanelHost({ activePanel, studioDeck, onOpenStudioDeck, onClose }: PanelHostProps) {
-  const file = useStore(s => s.file);
+  if (!activePanel || !fileLoaded) return null;
 
-  if (!activePanel || !file) return null;
-
-  const title = activePanel === 'studio'
-    ? studioDeck === 'scene'
-      ? 'Background'
-      : studioDeck === 'export'
-        ? 'Export'
-        : 'Structure'
-    : TITLES[activePanel];
+  const title = activePanel === 'studio' && studioDeck === 'scene'
+    ? 'World'
+    : PANEL_TITLES[activePanel];
 
   return (
-    <DockableWindow
-      key={activePanel}
-      title={title}
-      onClose={onClose}
-      initial={INITIALS[activePanel]}
-      minW={320}
-      minH={240}
+    <aside
+      id="viewer-command-panel"
+      className="lupine-command-panel"
+      role="region"
+      aria-label={`${title} command panel`}
+      data-panel={activePanel}
+      data-studio-deck={studioDeck ?? undefined}
     >
-      <ViewerPanelBody
-        activePanel={activePanel}
-        studioDeck={studioDeck}
-        onModeChange={onOpenStudioDeck}
-        showChrome={false}
-      />
-    </DockableWindow>
+      <header className="lupine-command-panel__header">
+        <span className="lupine-command-panel__accent" aria-hidden="true" />
+        <span className="lupine-command-panel__title">{title}</span>
+        <button
+          type="button"
+          className="lupine-command-panel__close"
+          aria-label={`Close ${title} panel`}
+          title="Close panel [Esc]"
+          onClick={() => useStore.getState().setActivePanel(null)}
+        >
+          <IconClose size={14} />
+        </button>
+      </header>
+      <div className="lupine-command-panel__body">
+        <ViewerPanelBody activePanel={activePanel} studioDeck={studioDeck} />
+      </div>
+    </aside>
   );
-}
+});

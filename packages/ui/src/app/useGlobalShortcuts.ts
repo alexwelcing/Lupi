@@ -13,7 +13,8 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
 
       if (commandPaletteOpen) return; // palette owns its own keyboard nav
 
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const target = e.target as HTMLElement;
+      if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
 
       const state = useStore.getState();
       const currentFile = state.file;
@@ -25,6 +26,32 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
       if (e.key === 'Escape') {
         state.setActivePanel(null);
         state.setStudioDeck(null);
+        state.setViewMenuOpen(false);
+        state.setStudyLensOpen(false);
+      }
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+        e.preventDefault();
+        state.setViewMenuOpen(false);
+        state.setStudyLensOpen(e.key === '6');
+        if (e.key === '1') {
+          state.setStudioDeck('molecule');
+          if (state.activePanel !== 'studio') state.setActivePanel('studio');
+        } else if (e.key === '2') {
+          state.setStudioDeck('scene');
+          if (state.activePanel !== 'studio') state.setActivePanel('studio');
+        } else if (e.key === '3') {
+          state.setStudioDeck(null);
+          state.setActivePanel('telemetry');
+        } else if (e.key === '4') {
+          state.setStudioDeck(null);
+          state.setActivePanel('flythrough');
+        } else if (e.key === '5') {
+          state.setStudioDeck(null);
+          state.setActivePanel('export');
+        } else {
+          state.setStudioDeck(null);
+          state.setActivePanel(null);
+        }
       }
       if (e.key === 'v' && !e.metaKey && !e.ctrlKey) {
         state.setViewMenuOpen(false);

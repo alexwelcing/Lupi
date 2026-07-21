@@ -139,7 +139,6 @@ export function SceneControls() {
   return (
     <div className="lupi-deck-grid">
       <ControlGroup title="Background" wide>
-        <p style={schemeHintStyle}>Choose a clear canvas first. Immersive environments are available under Advanced.</p>
         <div className="lupi-studio-segments">
           {gradientPresets.map(preset => (
             <SegmentButton

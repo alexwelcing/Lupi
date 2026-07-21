@@ -1,15 +1,8 @@
 /**
  * StudioControlDeck — the shell for the Molecule / Scene control surfaces.
  *
- * Always renders inside the Controls drawer (the desktop dock and the mobile
- * sheet both mount it via ViewerControlsDrawer). It owns only the chrome: the
- * shared <style> block both bodies' CSS classes resolve against, and a compact
- * guidance line. The bodies themselves are composed in — MoleculeControls
- * and SceneControls each own their own store wiring.
- *
- * The mode name isn't repeated here: the drawer's mode tabs sit directly above
- * and already show which surface is active, so the guidance line explains the
- * simplest next step instead of repeating the mode name.
+ * Renders inside the edge-docked command panel. It owns the shared styles used
+ * by both bodies; MoleculeControls and SceneControls own their store wiring.
  */
 import { MoleculeControls } from './studio/MoleculeControls';
 import { SceneControls } from './studio/SceneControls';
@@ -17,10 +10,6 @@ import { SceneControls } from './studio/SceneControls';
 export type StudioDeckMode = 'molecule' | 'scene';
 
 export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
-  const guidance = mode === 'molecule'
-    ? 'Choose a quick view, then fine-tune only if needed.'
-    : 'Choose a clear background; environments and lighting are under Advanced.';
-
   return (
     <div
       data-testid="studio-control-deck"
@@ -31,7 +20,7 @@ export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
         overflowY: 'auto',
         overflowX: 'hidden',
         scrollbarWidth: 'none',
-        padding: '6px 6px 10px',
+        padding: '8px 8px 14px',
       }}
     >
       <style>{`
@@ -57,7 +46,7 @@ export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
         .lupi-deck-grid {
           display: grid;
           grid-template-columns: 1fr;
-          gap: 7px;
+          gap: 0;
           align-items: stretch;
         }
         .lupi-studio-segments {
@@ -99,40 +88,6 @@ export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
           }
         }
       `}</style>
-
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-        padding: '0 2px 1px',
-        minWidth: 0,
-      }}>
-        <div style={{
-          width: 4,
-          height: 18,
-          borderRadius: 3,
-          background: 'linear-gradient(180deg, #1edce0, #f59e0b)',
-          boxShadow: '0 0 16px rgba(30,220,224,0.28)',
-          flexShrink: 0,
-        }} />
-        <div style={{
-          minWidth: 0,
-          color: '#94a3b8',
-          fontSize: 10,
-          fontWeight: 760,
-          fontFamily: 'var(--font-mono)',
-          textTransform: 'uppercase',
-          letterSpacing: 0.3,
-          lineHeight: 1.25,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontVariantNumeric: 'tabular-nums',
-        }}>
-          {guidance}
-        </div>
-      </div>
 
       {mode === 'molecule' ? <MoleculeControls /> : <SceneControls />}
     </div>

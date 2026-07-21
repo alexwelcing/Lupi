@@ -1,17 +1,10 @@
 /**
- * ViewerPanelBody — single source of truth for which component renders for a
- * given `activePanel`.
- *
- * Previously this 7-way switch was copy-pasted in two places: PanelHost (the
- * desktop dockable window) and the mobile bottom sheet in App.tsx. The two
- * copies had already drifted (e.g. the export panel showed a redundant close
- * button on mobile), which is exactly the divergence a shared body prevents.
- * Callers supply only the chrome wrapper + close/mode callbacks; the body reads
- * file/frame/thermo from the store itself.
+ * Active command body. Store subscriptions live inside the surface that needs
+ * them so frame playback does not repaint every closed menu.
  */
-import { useStore, type AppState } from './store';
-import { ViewerControlsDrawer } from './ViewerControlsDrawer';
-import { type ViewerControlMode } from './store';
+import { memo } from 'react';
+import { StudioControlDeck } from './StudioControlDeck';
+import { useStore, type AppState, type ViewerControlMode } from './store';
 import { FigureExportPanel } from './panels/FigureExportPanel';
 import { FlythroughPanel } from './panels/FlythroughPanel';
 import { TelemetryPanel } from './panels/TelemetryPanel';
@@ -21,44 +14,89 @@ import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
 export interface ViewerPanelBodyProps {
   activePanel: AppState['activePanel'];
   studioDeck: ViewerControlMode | null;
-  onModeChange: (mode: ViewerControlMode) => void;
-  /** Studio drawer renders its own header + mode tabs only inside the mobile
-   *  sheet; the desktop dock supplies that chrome via its title bar. */
-  showChrome: boolean;
 }
 
-export function ViewerPanelBody({ activePanel, studioDeck, onModeChange, showChrome }: ViewerPanelBodyProps) {
-  const file = useStore(s => s.file);
-  const frame = useStore(s => s.frame);
+export const ViewerPanelBody = memo(function ViewerPanelBody({ activePanel, studioDeck }: ViewerPanelBodyProps) {
+  if (!activePanel) return null;
+  return renderPanel(activePanel, studioDeck);
+});
 
-  if (!activePanel || !file) return null;
-
+function renderPanel(activePanel: NonNullable<AppState['activePanel']>, studioDeck: ViewerControlMode | null) {
   switch (activePanel) {
     case 'studio':
-      return (
-        <ViewerControlsDrawer
-          activeMode={studioDeck ?? 'molecule'}
-          onModeChange={onModeChange}
-          showChrome={showChrome}
-        />
-      );
+      if (studioDeck === 'export') return <FigureExportPanel showCloseButton={false} />;
+      return <StudioControlDeck mode={studioDeck === 'scene' ? 'scene' : 'molecule'} />;
     case 'export':
       return <FigureExportPanel showCloseButton={false} />;
     case 'flythrough':
-      return <FlythroughPanel showCloseButton={false} />;
+      return <CameraCommandSurface />;
     case 'telemetry':
-      return (
-        <TelemetryPanel
-          thermo={file.thermo ?? null}
-          currentFrame={file.trajectory.frames[frame] ?? undefined}
-          totalFrames={file.trajectory.totalFrames ?? 0}
-        />
-      );
+      return <TelemetryCommandSurface />;
     case 'equilibrium':
       return <EquilibriumSolveWorkbench />;
     case 'mlipLongRun':
       return <MlipLongRunWorkbench />;
-    default:
-      return null;
   }
+}
+
+function CameraCommandSurface() {
+  const cameraPreset = useStore(s => s.cameraPreset);
+  const setCameraPreset = useStore(s => s.setCameraPreset);
+  const fitCameraView = useStore(s => s.fitCameraView);
+
+  const presets = [
+    { id: 'iso' as const, code: 'ISO', label: 'Isometric' },
+    { id: 'top' as const, code: 'XY', label: 'Top' },
+    { id: 'side' as const, code: 'XZ', label: 'Side' },
+    { id: 'front' as const, code: 'YZ', label: 'Front' },
+  ];
+
+  return (
+    <div className="lupine-camera-command">
+      <section className="lupine-camera-command__quick" aria-label="Camera quick views">
+        <div className="lupine-command-section-label">Quick view</div>
+        <div className="lupine-camera-command__presets">
+          {presets.map(preset => (
+            <button
+              key={preset.id}
+              type="button"
+              className="lupine-camera-preset"
+              aria-label={`${preset.label} camera view`}
+              aria-pressed={cameraPreset === preset.id}
+              onClick={() => setCameraPreset(preset.id)}
+            >
+              <span>{preset.code}</span>
+              <small>{preset.label}</small>
+            </button>
+          ))}
+          <button
+            type="button"
+            className="lupine-camera-preset"
+            aria-label="Fit camera to molecule"
+            onClick={fitCameraView}
+          >
+            <span>FIT</span>
+            <small>Recenter</small>
+          </button>
+        </div>
+      </section>
+      <div className="lupine-camera-command__path">
+        <FlythroughPanel showCloseButton={false} />
+      </div>
+    </div>
+  );
+}
+
+function TelemetryCommandSurface() {
+  const file = useStore(s => s.file);
+  const frame = useStore(s => s.frame);
+
+  if (!file) return null;
+  return (
+    <TelemetryPanel
+      thermo={file.thermo ?? null}
+      currentFrame={file.trajectory.frames[frame] ?? undefined}
+      totalFrames={file.trajectory.totalFrames ?? 0}
+    />
+  );
 }

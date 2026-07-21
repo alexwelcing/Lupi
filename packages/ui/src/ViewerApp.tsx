@@ -38,7 +38,6 @@ import { xrStore } from './viewer/xrStore';
 import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
 import { CommandPalette } from './CommandPalette';
-import { LupiAuthCallout } from './LupiAuthCallout';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
 import { openRandomOmol25Molecule } from './molecules/randomOmol';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
@@ -57,11 +56,9 @@ import { requestStreamingFrame } from './streamingFrameCoordinator';
 import { AppHeader } from './app/AppHeader';
 import { resolveBackground, type BackgroundAssetAdjustments } from './app/AppBackground';
 import { CameraManager } from './app/CameraManager';
-import { ToolRail } from './app/ToolRail';
-import { CameraPresetRail } from './app/CameraPresetRail';
+import { ViewerCommandDeck } from './app/ViewerCommandDeck';
 import { PlaybackStatus } from './app/PlaybackStatus';
 import { PlaybackSpeedControl } from './app/PlaybackSpeedControl';
-import { MobileShell } from './app/MobileShell';
 import { ViewerGestureHint } from './app/ViewerGestureHint';
 import { RendererWarningToast } from './app/RendererWarningToast';
 import { GlobalShortcuts } from './app/GlobalShortcuts';
@@ -134,7 +131,7 @@ export function ViewerApp() {
     loadedSavedViewSlugRef.current = savedViewSlug;
   }
 
-  const { file, ghostFile, loading, frame, loadedAtomCount } = useViewerFileState();
+  const { file, ghostFile, frame, loadedAtomCount } = useViewerFileState();
   const { playing, playbackSpeed, setFrame, nextFrame, togglePlay } = useViewerPlaybackState();
   const loopMode = useStore(s => s.loopMode);
   const { activePanel, setActivePanel } = useViewerPanelState();
@@ -156,6 +153,7 @@ export function ViewerApp() {
 
   const useGpuBonds = useStore(s => s.useGpuBonds);
   const gpuBondsStatus = useStore(s => s.gpuBondsStatus);
+  const showBonds = useStore(s => s.showBonds);
   const showScaleBar = useStore(s => s.showScaleBar);
   const studyLensOpen = useStore(s => s.studyLensOpen);
   const colorMode = useStore(s => s.colorMode);
@@ -164,7 +162,10 @@ export function ViewerApp() {
   const vectorField = useStore(s => s.vectorField);
   const exportRequest = useStore(s => s.exportRequest);
 
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  // Treat narrow phones and short landscape viewports as compact. Tablet-size
+  // Codex/browser previews keep the full command-deck layout instead of a
+  // canvas-covering mobile sheet.
+  const isMobile = useMediaQuery('(max-width: 640px), (max-height: 500px) and (max-width: 900px)');
   const showDebugHud = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -188,10 +189,6 @@ export function ViewerApp() {
   const highFidelityPlayback = Boolean(file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000);
   const totalFrames = file?.trajectory.totalFrames ?? 0;
   const frameIsBuffered = Boolean(file?.trajectory.frames[frame]);
-  const bufferedFrameCount = useMemo(() => (
-    file?.trajectory.frames.reduce((count, candidate) => count + (candidate ? 1 : 0), 0) ?? 0
-  ), [file]);
-
   const displayFrameIndex = useMemo(() => {
     if (!file || totalFrames <= 0) return 0;
     const frames = file.trajectory.frames;
@@ -216,12 +213,14 @@ export function ViewerApp() {
     if (state.playing) state.togglePlay();
   }, []);
 
-  const { currentState: interpState, setFrame: setSmoothFrame } = useSmoothFramePlayback(playing, {
+  const { currentState: interpState, setFrame: setSmoothFrame, liveStateRef } = useSmoothFramePlayback(playing, {
     frames: file?.trajectory.frames ?? [],
     speed: playbackSpeed,
     targetFPS: highFidelityPlayback ? 120 : 60,
     mdFrameRate: playbackFrameRate,
-    stateSyncFPS: highFidelityPlayback ? 120 : 15,
+    // Atom and vector shaders read the live RAF ref directly. React now only
+    // synchronizes source-frame uploads (and bond interpolation when enabled).
+    stateSyncFPS: highFidelityPlayback ? (showBonds ? 60 : 30) : 15,
     isFrameReady,
     onFrameNeeded: requestBufferedFrame,
     loopMode,
@@ -377,8 +376,6 @@ export function ViewerApp() {
     setPathRoute(currentPathRoute());
   }, []);
 
-  const studioDeck = useStore(s => s.studioDeck);
-
   return (
     <div
       className="lupine-app-root"
@@ -430,6 +427,7 @@ export function ViewerApp() {
               interpolatedFrameKey={interpolatedFrameKey}
               ghostFile={ghostFile}
               interpState={interpState}
+              liveStateRef={liveStateRef}
               deviceMaxAtoms={deviceMaxAtoms}
               deviceQualityTier={deviceQualityTier}
               loadedAtomCount={loadedAtomCount}
@@ -468,8 +466,10 @@ export function ViewerApp() {
             />
           )}
 
-          {file && currentFrame && studyLensOpen && !isMobile && (
-            <StudyLensPanel compact={false} onClose={() => useStore.getState().setStudyLensOpen(false)} />
+          {file && currentFrame && studyLensOpen && (
+            <div id="viewer-study-panel">
+              <StudyLensPanel compact={isMobile} onClose={() => useStore.getState().setStudyLensOpen(false)} />
+            </div>
           )}
 
           {file && totalFrames > 1 && (
@@ -488,30 +488,16 @@ export function ViewerApp() {
             bottomOffset={isMobile ? 96 : 44}
           />
 
-          {file && !isMobile && <CameraPresetRail />}
-          {file && !isMobile && <ToolRail isMobile={isMobile} />}
           {file && <ViewerGestureHint isMobile={isMobile} />}
           {file && (
-            <div style={{ position: 'absolute', top: isMobile ? 72 : 140, right: 18, zIndex: 149 }}>
+            <div style={{ position: 'absolute', top: isMobile ? 72 : 84, left: 18, zIndex: 149 }}>
               <XREntryButton store={xrStore} />
             </div>
           )}
         </div>
 
-        {isMobile && <MobileShell />}
-
-        {!isMobile && file && (
-          <PanelHost
-            activePanel={activePanel}
-            studioDeck={studioDeck}
-            onOpenStudioDeck={(mode) => {
-              useStore.getState().setViewMenuOpen(false);
-              useStore.getState().setStudioDeck(mode);
-              if (activePanel !== 'studio') setActivePanel('studio');
-            }}
-            onClose={() => setActivePanel(null)}
-          />
-        )}
+        {file && <ViewerCommandDeck compact={isMobile} />}
+        {file && <PanelHost />}
 
         {!file && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>

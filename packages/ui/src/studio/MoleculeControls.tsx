@@ -366,7 +366,6 @@ export function MoleculeControls() {
   return (
     <div className="lupi-deck-grid">
       <ControlGroup title="Quick views" wide>
-        <p style={schemeHintStyle}>Start with the result you want. Switch views at any time.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }}>
           {(Object.keys(QUICK_VIEW_COPY) as QuickViewId[]).map(view => {
             const disabled = (view === 'bonds' && !bondsAreSafe)
@@ -609,17 +608,17 @@ function QuickViewButton({
       onClick={onClick}
       style={{
         minWidth: 0,
-        minHeight: 68,
+        minHeight: 58,
         display: 'grid',
         gap: 4,
         alignContent: 'center',
         padding: '10px 11px',
         textAlign: 'left',
-        borderRadius: 8,
+        borderRadius: 5,
         border: active ? `1px solid ${option.accent}` : '1px solid rgba(148,163,184,0.18)',
         background: active
-          ? `linear-gradient(135deg, ${option.accent}2b, rgba(9,14,22,0.92))`
-          : 'linear-gradient(135deg, rgba(15,23,42,0.74), rgba(3,7,18,0.62))',
+          ? `linear-gradient(90deg, ${option.accent}22, rgba(9,14,22,0.96))`
+          : '#0a1119',
         color: disabled ? '#64748b' : '#f8fafc',
         opacity: disabled ? 0.62 : 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
