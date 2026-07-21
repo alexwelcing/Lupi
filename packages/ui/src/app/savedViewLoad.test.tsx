@@ -82,4 +82,21 @@ describe('useSavedViewQuerySync', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(getStoreState().loading).toBe(false);
   });
+
+  it('reloads molecule state when the same saved-view route is revisited', async () => {
+    mockedLoad.mockResolvedValue({ title: 'Repeat View' } as SavedMolecularView);
+    const { result, rerender } = renderHook(
+      ({ slug }: { slug: string | null }) => useSavedViewQuerySync(slug),
+      { wrapper: wrapper(), initialProps: { slug: 'repeat-view' } },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockedLoad).toHaveBeenCalledTimes(1);
+
+    rerender({ slug: null });
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+    rerender({ slug: 'repeat-view' });
+
+    await waitFor(() => expect(mockedLoad).toHaveBeenCalledTimes(2));
+  });
 });

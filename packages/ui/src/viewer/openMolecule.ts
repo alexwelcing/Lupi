@@ -4,6 +4,10 @@ import { loadMoleculeSource } from '../loadMoleculeSource';
 import { loadSavedMolecularView } from '../savedViews';
 import { useStore } from '../store';
 import type { ViewerOpenRequest, ViewerOpenResult } from './openTypes';
+import {
+  beginViewerLoad,
+  ViewerLoadSupersededError,
+} from './loadGuard';
 
 export type { ViewerOpenRequest, ViewerOpenResult } from './openTypes';
 
@@ -47,6 +51,8 @@ function resultFromCurrentFile(fallbackMessage: string): ViewerOpenResult {
 }
 
 export async function openMolecule(request: ViewerOpenRequest): Promise<ViewerOpenResult> {
+  const isCurrent = beginViewerLoad();
+
   if (request.kind === 'gallery') {
     const example = EXAMPLES.find((item) => item.id === request.id);
     if (!example) {
@@ -56,7 +62,8 @@ export async function openMolecule(request: ViewerOpenRequest): Promise<ViewerOp
     }
 
     syncHistory(request);
-    const result = await loadGalleryExample(example);
+    const result = await loadGalleryExample(example, { isCurrent });
+    if (!isCurrent()) return { ok: false, message: 'Viewer load was superseded by newer navigation.' };
     if (!result.ok && request.history !== 'none') clearFailedGalleryUrl(request.id);
     return result;
   }
@@ -65,13 +72,20 @@ export async function openMolecule(request: ViewerOpenRequest): Promise<ViewerOp
     syncHistory(request);
     useStore.getState().setActiveCardId(null);
     try {
-      await loadMoleculeSource(request.url, { strictRemote: request.strictRemote === true });
+      await loadMoleculeSource(request.url, {
+        strictRemote: request.strictRemote === true,
+        isCurrent,
+      });
+      if (!isCurrent()) return { ok: false, message: 'Viewer load was superseded by newer navigation.' };
       if (request.title) {
         const file = useStore.getState().file;
         if (file) useStore.setState({ file: { ...file, name: request.title } });
       }
       return resultFromCurrentFile(`Loaded ${request.url} but no molecule is active.`);
     } catch (err: unknown) {
+      if (err instanceof ViewerLoadSupersededError || !isCurrent()) {
+        return { ok: false, message: 'Viewer load was superseded by newer navigation.' };
+      }
       const message = err instanceof Error ? err.message : String(err);
       useStore.getState().setError(message);
       return { ok: false, message };
@@ -80,9 +94,13 @@ export async function openMolecule(request: ViewerOpenRequest): Promise<ViewerOp
 
   try {
     useStore.getState().setLoading(true, 0);
-    const saved = await loadSavedMolecularView(request.slug);
+    const saved = await loadSavedMolecularView(request.slug, { isCurrent });
+    if (!isCurrent()) return { ok: false, message: 'Viewer load was superseded by newer navigation.' };
     return resultFromCurrentFile(`Loaded saved view "${saved.slug}" but no molecule is active.`);
   } catch (err: unknown) {
+    if (err instanceof ViewerLoadSupersededError || !isCurrent()) {
+      return { ok: false, message: 'Viewer load was superseded by newer navigation.' };
+    }
     const message = err instanceof Error ? err.message : String(err);
     useStore.getState().setError(message);
     return { ok: false, message };

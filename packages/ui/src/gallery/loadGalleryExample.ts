@@ -11,7 +11,14 @@ import {
   parseAtomCountLabel,
 } from '../deviceCapabilities';
 import type { ViewerOpenResult } from '../viewer/openTypes';
+import type { Frame, Trajectory } from '@atlas/core/types';
 import { resolveExampleUrl, type GalleryExample, publicAssetUrl } from './catalog';
+import {
+  assertViewerLoadCurrent,
+  viewerLoadIsCurrent,
+  ViewerLoadSupersededError,
+  type ViewerLoadGuard,
+} from '../viewer/loadGuard';
 
 // (previous streaming lifecycle is managed by streamingFrameCoordinator)
 
@@ -28,6 +35,30 @@ function resultFromCurrentFile(): ViewerOpenResult {
     ok: true,
     fileName: file.name,
     atomCount: file.trajectory.frames[0]?.natoms ?? 0,
+  };
+}
+
+function applyCatalogFrameSemantics(frame: Frame, example: GalleryExample): Frame {
+  if (!example.atomTypeMap && !example.distanceUnit) return frame;
+  const typeSemantics = example.atomTypeMap && (!frame.typeSemantics || frame.typeSemantics.kind === 'opaque')
+    ? {
+        kind: 'explicit-element-map' as const,
+        provenance: 'catalog-element-map' as const,
+        elementMap: example.atomTypeMap,
+      }
+    : frame.typeSemantics;
+  const distanceSemantics = example.distanceUnit === 'angstrom'
+    && (!frame.distanceSemantics || frame.distanceSemantics.kind === 'unknown')
+    ? { kind: 'angstrom' as const, provenance: 'source-declared' as const }
+    : frame.distanceSemantics;
+  return { ...frame, typeSemantics, distanceSemantics };
+}
+
+function applyCatalogSemantics(trajectory: Trajectory, example: GalleryExample): Trajectory {
+  if (!example.atomTypeMap && !example.distanceUnit) return trajectory;
+  return {
+    ...trajectory,
+    frames: trajectory.frames.map((frame) => frame ? applyCatalogFrameSemantics(frame, example) : frame),
   };
 }
 
@@ -56,9 +87,9 @@ export function parseKnowledgeLabelsPayload(payload: unknown): KnowledgeLabel[] 
     }));
 }
 
-async function loadKnowledgeLabels(example: GalleryExample): Promise<void> {
+async function loadKnowledgeLabels(example: GalleryExample, isCurrent?: ViewerLoadGuard): Promise<void> {
   if (!example.labelsUrl) {
-    useStore.getState().clearKnowledgeLabels();
+    if (viewerLoadIsCurrent(isCurrent)) useStore.getState().clearKnowledgeLabels();
     return;
   }
   const url = example.labelsUrl.startsWith('http://') || example.labelsUrl.startsWith('https://')
@@ -68,15 +99,15 @@ async function loadKnowledgeLabels(example: GalleryExample): Promise<void> {
     const resp = await fetch(url, { cache: 'reload' });
     if (!resp.ok) {
       console.warn(`[knowledge-labels] Failed to fetch ${url}: ${resp.status}`);
-      useStore.getState().clearKnowledgeLabels();
+      if (viewerLoadIsCurrent(isCurrent)) useStore.getState().clearKnowledgeLabels();
       return;
     }
     const labels = parseKnowledgeLabelsPayload(await resp.json());
-    useStore.getState().setKnowledgeLabels(labels);
+    if (viewerLoadIsCurrent(isCurrent)) useStore.getState().setKnowledgeLabels(labels);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn('[knowledge-labels] Load failed:', message);
-    useStore.getState().clearKnowledgeLabels();
+    if (viewerLoadIsCurrent(isCurrent)) useStore.getState().clearKnowledgeLabels();
   }
 }
 
@@ -136,7 +167,11 @@ async function loadOutputSidecars(example: GalleryExample): Promise<void> {
   }
 }
 
-export async function loadGalleryExample(example: GalleryExample): Promise<ViewerOpenResult> {
+export async function loadGalleryExample(
+  example: GalleryExample,
+  options: { isCurrent?: ViewerLoadGuard } = {},
+): Promise<ViewerOpenResult> {
+  assertViewerLoadCurrent(options.isCurrent);
   if (!example.available) {
     return { ok: false, message: `"${example.title}" is not available.` };
   }
@@ -165,12 +200,13 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
       const resp = await fetch(url, { cache: 'reload' });
       if (!resp.ok) throw new Error(`Failed to fetch: ${resp.status}`);
       const payload = await resp.json();
+      assertViewerLoadCurrent(options.isCurrent);
       const loaded = artifactToLoadedFile(payload, url);
       const nextStore = useStore.getState();
       nextStore.setFile({
         ...loaded,
         name: example.title,
-      });
+      }, { initialShowBonds: example.initialShowBonds ?? false });
       nextStore.setFrame(0);
       nextStore.setColorScheme('element');
       nextStore.setColorProperty(null);
@@ -178,10 +214,10 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
       nextStore.setPlaybackSpeed(1);
       useStore.setState({
         atomScale: 1.35,
-        showBonds: false,
         playing: Boolean(example.autoPlay),
       });
-      await loadKnowledgeLabels(example);
+      await loadKnowledgeLabels(example, options.isCurrent);
+      assertViewerLoadCurrent(options.isCurrent);
       return resultFromCurrentFile();
     }
 
@@ -190,19 +226,22 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
       const { StreamingLoader } = await import('@atlas/parsers/StreamingLoader');
       const loader = new StreamingLoader(url, {
         onProgress: (phase, progress) => {
+          if (!viewerLoadIsCurrent(options.isCurrent)) return;
           // Frame events continue for coordinator lookahead and playback.
           // They are telemetry, not a new top-level file load.
           if (phase === 'frame') return;
           useStore.getState().setLoading(true, progress * 0.6);
         },
         onTelemetry: (stats) => {
+          if (!viewerLoadIsCurrent(options.isCurrent)) return;
           useStore.getState().setStreamingTelemetry(stats);
         },
       }, DEFAULT_STREAMING_RESIDENT_FRAMES);
 
       await loader.fetchHeader();
       await loader.fetchIndex();
-      const frame0 = await loader.fetchFrame(0);
+      const frame0 = applyCatalogFrameSemantics(await loader.fetchFrame(0), example);
+      assertViewerLoadCurrent(options.isCurrent, () => loader.dispose());
       const meta = loader.getMetadata()!;
       const placeholderFrames = new Array(meta.totalFrames);
       placeholderFrames[0] = frame0;
@@ -218,9 +257,19 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
         },
         thermo: null,
         sourceUrl: url,
+      }, {
+        initialShowBonds: example.initialShowBonds,
+        preserveStreamingTelemetry: true,
       });
 
-      installStreamingFrameCoordinator(loader, {
+      const streamingSource = example.atomTypeMap || example.distanceUnit ? {
+        fetchFrame: async (frameIndex: number, signal?: AbortSignal) => (
+          applyCatalogFrameSemantics(await loader.fetchFrame(frameIndex, signal), example)
+        ),
+        releaseFrame: (frameIndex: number) => loader.releaseFrame(frameIndex),
+        dispose: () => loader.dispose(),
+      } : loader;
+      installStreamingFrameCoordinator(streamingSource, {
         label: 'gallery-streaming',
         sourceUrl: url,
         initialLookahead: 12,
@@ -230,7 +279,8 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
       if (example.autoPlay && meta.totalFrames > 1) {
         useStore.setState({ playing: true });
       }
-      await loadKnowledgeLabels(example);
+      await loadKnowledgeLabels(example, options.isCurrent);
+      assertViewerLoadCurrent(options.isCurrent);
       void loadOutputSidecars(example);
       return resultFromCurrentFile();
     }
@@ -271,6 +321,7 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
         const { parseDumpResponseStreaming } = await import('@atlas/parsers');
         const streamingStore = useStore.getState();
         for await (const event of parseDumpResponseStreaming(streamResp)) {
+          assertViewerLoadCurrent(options.isCurrent);
           if (event.type === 'header') {
             streamingStore.setFile({
               name: example.title,
@@ -278,7 +329,7 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
               trajectory: event.trajectory,
               thermo: null,
               sourceUrl: url,
-            });
+            }, { initialShowBonds: example.initialShowBonds });
             streamingStore.setLoadedAtomCount(0);
           } else if (event.type === 'progress') {
             streamingStore.setLoadedAtomCount(event.loadedAtoms);
@@ -287,7 +338,8 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
             streamingStore.setLoadedAtomCount(event.loadedAtoms);
           }
         }
-        await loadKnowledgeLabels(example);
+        await loadKnowledgeLabels(example, options.isCurrent);
+        assertViewerLoadCurrent(options.isCurrent);
         void loadOutputSidecars(example);
         return resultFromCurrentFile();
       }
@@ -299,12 +351,14 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
     const fileObj = new File([blob], example.file.split('/').pop() ?? 'file.dump');
     const { parseFile } = await import('@atlas/parsers');
     const result = await parseFile(fileObj);
+    assertViewerLoadCurrent(options.isCurrent);
 
     if (!result.trajectory) {
       throw new Error('No trajectory data found');
     }
 
-    const actualAtoms = result.trajectory.frames[0]?.natoms ?? 0;
+    const trajectory = applyCatalogSemantics(result.trajectory, example);
+    const actualAtoms = trajectory.frames[0]?.natoms ?? 0;
     if (actualAtoms > profile.maxAtoms) {
       const message = oversizeMessage(example.title, actualAtoms, profile.maxAtoms, '');
       useStore.getState().setError(message);
@@ -315,10 +369,10 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
     parsedStore.setFile({
       name: example.title,
       size: blob.size,
-      trajectory: result.trajectory,
+      trajectory,
       thermo: result.thermo ?? null,
       sourceUrl: url,
-    });
+    }, { initialShowBonds: example.initialShowBonds });
     if (example.colorBy && result.trajectory.frames[0]?.properties?.has(example.colorBy)) {
       parsedStore.setColorScheme('property');
       parsedStore.setColorProperty(example.colorBy);
@@ -332,10 +386,14 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
     if (example.autoPlay && result.trajectory.totalFrames > 1) {
       useStore.setState({ playing: true });
     }
-    await loadKnowledgeLabels(example);
+    await loadKnowledgeLabels(example, options.isCurrent);
+    assertViewerLoadCurrent(options.isCurrent);
     void loadOutputSidecars(example);
     return resultFromCurrentFile();
   } catch (err: unknown) {
+    if (err instanceof ViewerLoadSupersededError || !viewerLoadIsCurrent(options.isCurrent)) {
+      return { ok: false, message: 'Viewer load was superseded by newer navigation.' };
+    }
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`Gallery load failed for ${example.id}:`, message);
     const publicMessage = `Could not load "${example.title}" - try dragging the file directly.`;

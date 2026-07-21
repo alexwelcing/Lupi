@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../store';
 import { loadSavedMolecularView } from '../savedViews';
+import {
+  beginViewerLoad,
+} from '../viewer/loadGuard';
 
 export function useSavedViewQuerySync(savedViewSlug: string | null) {
   const setLoading = useStore(s => s.setLoading);
@@ -14,23 +17,30 @@ export function useSavedViewQuerySync(savedViewSlug: string | null) {
   return useQuery({
     queryKey: ['savedView', savedViewSlug],
     queryFn: async () => {
+      const isCurrent = beginViewerLoad();
       // Each attempt, including refetch, gets a clean visible loading state.
       // setError clears loading, so this ordering is intentional.
       setError(null);
       setLoading(true, 0);
       try {
-        const data = await loadSavedMolecularView(savedViewSlug!);
+        const data = await loadSavedMolecularView(savedViewSlug!, { isCurrent });
+        if (!isCurrent()) throw new Error('Saved-view load was superseded by newer navigation.');
         document.title = `${data.title} - Lupi`;
         setLoading(false);
         return data;
       } catch (err) {
+        if (!isCurrent()) throw err;
         setLoading(false);
         setError(safeSavedViewStoreMessage(err, savedViewSlug!));
         throw err;
       }
     },
     enabled: !!savedViewSlug,
-    staleTime: 1000 * 60 * 10,
+    // Loading a saved view restores molecule + viewer state, so a cached data
+    // object alone is insufficient when the user leaves and revisits a slug.
+    // Keep route entry fetchable while avoiding focus-driven scene resets.
+    staleTime: 0,
+    refetchOnWindowFocus: false,
   });
 }
 

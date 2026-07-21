@@ -1180,22 +1180,6 @@ export function Gallery({ initialDomain = 'All' }: { initialDomain?: Domain | 'A
     }
   }, []);
 
-  useEffect(() => {
-    const handleUrlChange = () => {
-      const params = new URLSearchParams(window.location.search);
-      const sim = params.get('sim');
-      if (sim) {
-        const ex = EXAMPLES.find(e => e.id === sim);
-        if (ex && ex.available) handleLoad(ex, true);
-      } else {
-        useStore.getState().clearFile();
-      }
-    };
-    handleUrlChange();
-    window.addEventListener('popstate', handleUrlChange);
-    return () => window.removeEventListener('popstate', handleUrlChange);
-  }, [handleLoad]);
-
   return (
     <div className="lupi-gallery lupi-gallery-fast" data-testid="gallery">
       <style>{GALLERY_STUDIO_CSS}</style>

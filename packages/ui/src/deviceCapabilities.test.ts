@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GLOBAL_BROWSER_ATOM_CEILING,
+  MAX_INTERACTIVE_PICKING_ATOMS,
   getDefaultQualityTier,
   getDeviceProfile,
   getMaxSafeAtomCount,
@@ -51,5 +52,10 @@ describe('device capability policy', () => {
       expect(profile.maxAtoms).toBe(GLOBAL_BROWSER_ATOM_CEILING);
       vi.unstubAllGlobals();
     }
+  });
+
+  it('keeps the picking budget below the render ceiling', () => {
+    expect(MAX_INTERACTIVE_PICKING_ATOMS).toBe(200_000);
+    expect(MAX_INTERACTIVE_PICKING_ATOMS).toBeLessThan(GLOBAL_BROWSER_ATOM_CEILING);
   });
 });

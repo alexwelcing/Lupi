@@ -28,6 +28,7 @@ import {
 
 const params = new URLSearchParams(window.location.search);
 const isCompare = params.get('view') === 'compare';
+const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute())] ?? null;
 
 /**
  * URL-only signals that the viewer (App) should load immediately instead of the
@@ -44,7 +45,6 @@ function wantsViewerImmediately(): boolean {
   const normalizedPath = normalizedPathRoute(currentPathRoute());
   if (savedViewSlugFromRoute(normalizedPath)) return true;
   if (normalizedPath === '/scenes/1m-copper-lattice') return true;
-  if (SEO_EDUCATION_ROUTES[normalizedPath]) return true;
   return false;
 }
 
@@ -147,10 +147,21 @@ async function mountLanding() {
   }
 }
 
+async function mountEducation(kind: NonNullable<typeof educationKind>) {
+  try {
+    const mod = await import('@atlas/ui/landing/SeoEducationShell');
+    root.render(withProviders(<mod.SeoEducationShell kind={kind} />));
+  } catch (err) {
+    renderError('Education page import', err);
+  }
+}
+
 if (isCompare) {
   void mountCompare();
 } else if (wantsViewerImmediately()) {
   void mountViewer();
+} else if (educationKind) {
+  void mountEducation(educationKind);
 } else {
   void mountLanding();
 }

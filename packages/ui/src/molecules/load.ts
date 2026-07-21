@@ -12,9 +12,11 @@ export async function loadMoleculeHit(hit: MoleculeHit): Promise<void> {
   switch (spec.kind) {
     case 'url':
       {
+        useStore.getState().setRendererWarning(null);
         const result = await openMolecule({ kind: 'url', url: spec.url, title: hit.title, history: 'push' });
         if (!result.ok) throw new Error(result.message);
         if (spec.atomTypeMap) applySourceTypeMap(spec.atomTypeMap);
+        if (hit.notice) useStore.getState().setRendererWarning(hit.notice);
       }
       if (hit.source === 'social') {
         const store = useStore.getState();

@@ -11,7 +11,11 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useStore } from './store';
-import { getMaxSafeAtomCount, getDefaultQualityTier } from './deviceCapabilities';
+import {
+  getMaxSafeAtomCount,
+  getDefaultQualityTier,
+  MAX_INTERACTIVE_PICKING_ATOMS,
+} from './deviceCapabilities';
 import { detectFrameVectorFields } from '@atlas/core';
 import type { VectorGlyphStats } from '@atlas/scene';
 
@@ -51,7 +55,7 @@ import { XREntryButton } from './xr/XREntryButton';
 
 import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/useSmoothFramePlayback';
 import { useMediaQuery } from './hooks/useMediaQuery';
-import { requestStreamingFrame } from './streamingFrameCoordinator';
+import { clearStreamingFrameCoordinator, requestStreamingFrame } from './streamingFrameCoordinator';
 
 import { AppHeader } from './app/AppHeader';
 import { resolveBackground, type BackgroundAssetAdjustments } from './app/AppBackground';
@@ -66,6 +70,7 @@ import { useSavedViewQuerySync } from './app/useSavedViewQuerySync';
 import { SavedViewLoadState } from './app/SavedViewLoadState';
 import { RemoteMoleculeLoadError } from './app/RemoteMoleculeLoadError';
 import { ViewerScene } from './app/ViewerScene';
+import { cancelViewerLoad } from './viewer/loadGuard';
 
 import {
   IconFirst,
@@ -273,13 +278,40 @@ export function ViewerApp() {
       }
     }
 
-    // Preserve the raw root-relative ?load= form so preview origins remain
-    // portable without widening the global host allowlist.
-    const loadUrl = params.get('load') ?? (intent?.kind === 'loadUrl' ? intent.url : null);
-    if (loadUrl && !file) {
-      (async () => {
+  }, []);
+
+  // Own molecule URL history in the shell that remains mounted while a scene
+  // is open. Gallery used to own popstate, but Gallery unmounts as soon as a
+  // file loads; browser Back then changed the URL while leaving the old scene,
+  // renderer, and streaming source alive.
+  useEffect(() => {
+    let navigationGeneration = 0;
+    const reconcileMoleculeUrl = async () => {
+      const generation = ++navigationGeneration;
+      const params = new URLSearchParams(window.location.search);
+      const intent = recognizeLupiUrlPayload(window.location.href);
+      const sim = params.get('sim');
+      const loadUrl = params.get('load') ?? (intent?.kind === 'loadUrl' ? intent.url : null);
+      const state = useStore.getState();
+
+      if (sim) {
+        if (state.activeCardId === sim && (state.file || state.loading)) return;
+        setAutomaticLoadFailed(false);
+        const result = await openMolecule({ kind: 'gallery', id: sim, history: 'none' });
+        if (generation !== navigationGeneration) return;
+        if (!result.ok) {
+          useStore.getState().setError(result.message);
+          setAutomaticLoadFailed(true);
+        }
+        return;
+      }
+
+      if (loadUrl) {
+        if (state.file?.sourceUrl === loadUrl && !state.loading) return;
         try {
           setAutomaticLoadFailed(false);
+          // Preserve root-relative local dataset routes while applying the
+          // strict remote policy to absolute network URLs.
           const allowed = assertAllowedRemoteMoleculeUrl(loadUrl, 'human-load', window.location.origin);
           const result = await openMolecule({
             kind: 'url',
@@ -287,16 +319,38 @@ export function ViewerApp() {
             history: 'none',
             strictRemote: true,
           });
+          if (generation !== navigationGeneration) return;
           if (!result.ok) {
             useStore.getState().setError(result.message);
             setAutomaticLoadFailed(true);
           }
         } catch (error) {
+          if (generation !== navigationGeneration) return;
           useStore.getState().setError(error instanceof Error ? error.message : 'This molecule link could not be opened.');
           setAutomaticLoadFailed(true);
         }
-      })();
-    }
+        return;
+      }
+
+      const routeSavedViewSlug = savedViewSlugFromRoute(currentHashRoute())
+        ?? savedViewSlugFromRoute(normalizedPathRoute(currentPathRoute()));
+      if (routeSavedViewSlug) return;
+
+      cancelViewerLoad();
+      if (state.file || state.loading) {
+        clearStreamingFrameCoordinator();
+        useStore.getState().clearFile();
+      }
+    };
+
+    const onPopState = () => { void reconcileMoleculeUrl(); };
+    void reconcileMoleculeUrl();
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      navigationGeneration += 1;
+      cancelViewerLoad();
+      window.removeEventListener('popstate', onPopState);
+    };
   }, []);
 
   // Hold the last resident frame across streaming gaps.
@@ -366,6 +420,12 @@ export function ViewerApp() {
   const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
 
   const clearLoadedFile = useCallback(() => {
+    // A streamed trajectory owns abort controllers, subscriptions, loader
+    // caches, and resident typed arrays outside Zustand. Dispose that source
+    // before dropping the store reference so returning to the library really
+    // releases the scene instead of retaining it behind the landing page.
+    clearStreamingFrameCoordinator();
+    cancelViewerLoad();
     useStore.getState().clearFile();
     const url = new URL(window.location.href);
     url.searchParams.delete('sim');
@@ -397,7 +457,7 @@ export function ViewerApp() {
         <McpViewerBridge />
         {isMcpViewerRoute && <McpViewerHarness />}
 
-        <div className="lupine-main-viewport" style={{
+        {file && <div className="lupine-main-viewport" style={{
           position: file ? 'absolute' : 'fixed',
           top: file ? 0 : 56,
           right: 0,
@@ -489,13 +549,16 @@ export function ViewerApp() {
             bottomOffset={isMobile ? 96 : 44}
           />
 
-          {file && <ViewerGestureHint isMobile={isMobile} />}
+          {file && <ViewerGestureHint
+            isMobile={isMobile}
+            canSelectAtoms={(rawCurrentFrame?.natoms ?? 0) <= MAX_INTERACTIVE_PICKING_ATOMS}
+          />}
           {file && (
             <div style={{ position: 'absolute', top: isMobile ? 72 : 84, left: 18, zIndex: 149 }}>
               <XREntryButton store={xrStore} />
             </div>
           )}
-        </div>
+        </div>}
 
         {file && <ViewerCommandDeck compact={isMobile} />}
         {file && <PanelHost />}
