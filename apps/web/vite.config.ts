@@ -21,6 +21,44 @@ function repositoryHeadSha(): string | undefined {
   }
 }
 
+/**
+ * React 19.2's development build emits a Performance "Components" measure for
+ * every render and includes changed-prop details. Molecular frames contain
+ * large typed arrays, so a playing trajectory can make Chromium clone and
+ * retain hundreds of megabytes of diagnostic detail until the preview fails
+ * with `DataCloneError: ... out of memory`.
+ *
+ * Disable those React-only development tracks before React initializes. The
+ * real in-app telemetry and production bundle are unaffected, and developers
+ * can explicitly opt back into a short profiling session with
+ * `?reactProfile=1`.
+ */
+export function reactPerformanceTrackGuardPlugin() {
+  return {
+    name: 'lupi-react-performance-track-guard',
+    apply: 'serve' as const,
+    transformIndexHtml: {
+      order: 'pre' as const,
+      handler() {
+        return [{
+          tag: 'script',
+          injectTo: 'head-prepend' as const,
+          children: `(() => {
+  if (new URLSearchParams(window.location.search).get('reactProfile') === '1') return;
+  if (typeof console.timeStamp !== 'function') return;
+  Object.defineProperty(console, 'timeStamp', {
+    configurable: true,
+    writable: true,
+    value: undefined,
+  });
+  window.__lupiReactPerformanceTracksDisabled = true;
+})();`,
+        }];
+      },
+    },
+  };
+}
+
 /** Resolve the exact identity Vite will compile into browser renderer code. */
 export function resolveLupiBrowserBuildSha(
   command: 'build' | 'serve',
@@ -229,6 +267,7 @@ export default defineConfig(({ command }) => ({
   // resolve from the site root after the server falls back to index.html.
   base: '/',
   plugins: [
+    reactPerformanceTrackGuardPlugin(),
     react(),
     galleryAssetUploadPlugin(),
     pruneExternalHostedAssets(),
@@ -304,6 +343,14 @@ export default defineConfig(({ command }) => ({
     port: Number(process.env.VITE_DEV_PORT) || 3000,
     strictPort: true,
     proxy: {
+      // The production app serves scientific catalog routes from the same
+      // Cloudflare Worker. During Vite development, forward only that narrow
+      // namespace to a local `wrangler dev` process so the UI exercises the
+      // real edge contract instead of a browser-only mock.
+      '/v1/datasets': {
+        target: process.env.VITE_DATA_EDGE_ORIGIN || 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
       '/__lupi_gcs': {
         target: 'https://storage.googleapis.com',
         changeOrigin: true,

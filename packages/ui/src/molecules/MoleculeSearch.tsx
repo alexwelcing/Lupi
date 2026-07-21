@@ -4,6 +4,7 @@ import { loadMoleculeHit } from './load';
 
 const SOURCE_LABELS: Record<MoleculeSourceId, string> = {
   gallery: 'Gallery',
+  research: 'Research',
   nist: 'NIST',
   saved: 'Saved',
   pubchem: 'PubChem',
@@ -133,6 +134,11 @@ export function MoleculeSearch({ onLoaded, autoFocus = true }: MoleculeSearchPro
             {(h.subtitle || h.formula) && (
               <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {h.subtitle ?? h.formula}
+              </div>
+            )}
+            {h.notice && (
+              <div style={{ fontSize: 10, color: '#fbbf24', lineHeight: 1.35, marginTop: 4 }}>
+                {h.notice}
               </div>
             )}
           </button>

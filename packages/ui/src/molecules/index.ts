@@ -13,6 +13,7 @@ import { omolProvider } from './providers/omol';
 import { savedViewsProvider } from './providers/savedViews';
 import { libraryProvider } from './providers/library';
 import { socialQrProvider } from './providers/socialQr';
+import { researchProvider } from './providers/research';
 
 /** Registry order; providers that aren't available are skipped by searchMolecules(). */
 export const MOLECULE_PROVIDERS: MoleculeProvider[] = [
@@ -20,6 +21,7 @@ export const MOLECULE_PROVIDERS: MoleculeProvider[] = [
   libraryProvider, // curated Lupi library (Firestore) — request #3 ✅
   socialQrProvider, // limited social-link atom/bond QR archive
   galleryProvider, // curated examples
+  researchProvider, // versioned external LAMMPS research files; fetched on demand
   nistProvider, // NIST potentials catalog
   omolProvider, // Meta OMol25 (neutral-validation index on GCS) — request #2 ✅
   pubchemProvider, // external named compounds

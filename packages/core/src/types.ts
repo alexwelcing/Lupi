@@ -66,7 +66,7 @@ export type AtomTypeSemantics =
     }
   | {
       kind: 'explicit-element-map';
-      provenance: 'lammps-element-column' | 'user-type-map';
+      provenance: 'lammps-element-column' | 'user-type-map' | 'catalog-element-map';
       elementMap: Readonly<Record<number, number>>;
     }
   | {

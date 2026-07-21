@@ -2,6 +2,7 @@ import { artifactToLoadedFile } from '../MlipArtifactLoader';
 import { useStore, type KnowledgeLabel } from '../store';
 import {
   clearStreamingFrameCoordinator,
+  DEFAULT_STREAMING_RESIDENT_FRAMES,
   installStreamingFrameCoordinator,
 } from '../streamingFrameCoordinator';
 import {
@@ -188,13 +189,16 @@ export async function loadGalleryExample(example: GalleryExample): Promise<Viewe
     if (isGlimbinUrl(url)) {
       const { StreamingLoader } = await import('@atlas/parsers/StreamingLoader');
       const loader = new StreamingLoader(url, {
-        onProgress: (_phase, progress) => {
+        onProgress: (phase, progress) => {
+          // Frame events continue for coordinator lookahead and playback.
+          // They are telemetry, not a new top-level file load.
+          if (phase === 'frame') return;
           useStore.getState().setLoading(true, progress * 0.6);
         },
         onTelemetry: (stats) => {
           useStore.getState().setStreamingTelemetry(stats);
         },
-      });
+      }, DEFAULT_STREAMING_RESIDENT_FRAMES);
 
       await loader.fetchHeader();
       await loader.fetchIndex();

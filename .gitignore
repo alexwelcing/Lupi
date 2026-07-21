@@ -9,6 +9,7 @@ deploy_bundle/
 playwright-report/
 test-results/
 *.log
+**/.wrangler/
 
 # NIST demo trajectories are large glimbin blobs — hosted on GCS in prod
 # (resolved via VITE_NIST_BASE_URL), symlinked locally for dev. Never commit.

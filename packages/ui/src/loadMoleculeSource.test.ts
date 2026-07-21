@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockFrame, createMockTrajectory } from '@atlas/core/test-utils';
 import { getStoreState, resetStore } from './test-utils';
-import { importDumpFileStreaming, loadMoleculeSource } from './loadMoleculeSource';
+import {
+  importDumpFileStreaming,
+  loadMoleculeSource,
+  MAX_REMOTE_LEGACY_BYTES,
+  readResponseBlobWithinLimit,
+} from './loadMoleculeSource';
 
 const seams = vi.hoisted(() => ({
   streaming: false,
@@ -24,6 +29,8 @@ vi.mock('@atlas/parsers/StreamingLoader', () => ({
     async fetchHeader() { return {}; }
     async fetchIndex() { return {}; }
     async fetchFrame() { return createMockFrame(); }
+    releaseFrame() {}
+    dispose() {}
     getMetadata() {
       return {
         totalFrames: 1,
@@ -55,6 +62,7 @@ describe('loadMoleculeSource strict remote mode', () => {
       ok: true,
       status: 200,
       redirected: false,
+      headers: new Headers(),
       blob: async () => new Blob(['1\nwater\nH 0 0 0\n']),
     });
     await loadMoleculeSource('https://lupi.live/gallery/water.xyz', { strictRemote: true });
@@ -64,6 +72,41 @@ describe('loadMoleculeSource strict remote mode', () => {
       { redirect: 'error' },
     );
     expect(getStoreState().file).toBeTruthy();
+  });
+
+  it('rejects an oversized monolithic remote text file before buffering it', async () => {
+    const blob = vi.fn();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      redirected: false,
+      headers: new Headers({
+        'content-length': String(MAX_REMOTE_LEGACY_BYTES + 1),
+      }),
+      blob,
+    });
+
+    await expect(loadMoleculeSource('https://lupi.live/gallery/oversized.dump', { strictRemote: true }))
+      .rejects.toThrow(/64 MiB.*GLIMBIN/i);
+
+    expect(blob).not.toHaveBeenCalled();
+    expect(seams.parseFile).not.toHaveBeenCalled();
+    expect(getStoreState().file).toBeNull();
+  });
+
+  it('cancels a chunked response as soon as its observed bytes cross the limit', async () => {
+    let cancelled = false;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }));
+
+    await expect(readResponseBlobWithinLimit(response, 4)).rejects.toThrow(/bounded streaming/i);
+    expect(cancelled).toBe(true);
   });
 
   it('passes redirect:error into every StreamingLoader request seam', async () => {
@@ -87,6 +130,35 @@ describe('loadMoleculeSource strict remote mode', () => {
       .rejects.toThrow(/redirects are not allowed/i);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(seams.parseFile).not.toHaveBeenCalled();
+  });
+
+  it('applies catalog element semantics to every frame on a direct research URL load', async () => {
+    const trajectory = createMockTrajectory(2, 4);
+    for (const frame of trajectory.frames) {
+      frame.typeSemantics = { kind: 'opaque', provenance: 'lammps-type-id' };
+    }
+    seams.parseFile.mockResolvedValue({ trajectory, thermo: null });
+    fetchMock.mockResolvedValue(new Response('LAMMPS fixture', {
+      status: 200,
+      headers: { 'content-type': 'text/plain' },
+    }));
+
+    await loadMoleculeSource(
+      '/v1/datasets/research/pyrophosphate-mg-hydrolysis-md/files/r_ppmg.lammpstrj',
+    );
+
+    expect(getStoreState().file?.trajectory.frames.map((frame) => frame?.typeSemantics)).toEqual([
+      {
+        kind: 'explicit-element-map',
+        provenance: 'catalog-element-map',
+        elementMap: { 1: 1, 2: 8, 3: 12, 4: 15 },
+      },
+      {
+        kind: 'explicit-element-map',
+        provenance: 'catalog-element-map',
+        elementMap: { 1: 1, 2: 8, 3: 12, 4: 15 },
+      },
+    ]);
   });
 
   it('upgrades progressive frame identity only after the worker validates every ID', async () => {

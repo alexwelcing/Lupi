@@ -371,6 +371,9 @@ export function ViewerScene({
   const clusterFadeFar = useMemo(() => clusterFadeNear * 3.3, [clusterFadeNear]);
 
   const [spatialHash, setSpatialHash] = useState<SpatialHash3D | null>(null);
+  useEffect(() => {
+    if (playing) setSpatialHash(null);
+  }, [playing]);
   const ghostFrame = ghostFile
     ? ghostFile.trajectory.frames[Math.min(interpState.frameIndex, Math.max(ghostFile.trajectory.totalFrames - 1, 0))]
     : null;
@@ -433,7 +436,7 @@ export function ViewerScene({
             scale={atomScale}
             maxAtoms={deviceMaxAtoms}
             loadedAtomCount={loadedAtomCount}
-            onSpatialHash={setSpatialHash}
+            onSpatialHash={playing ? undefined : setSpatialHash}
             hiddenAtomTypes={hiddenAtomTypes}
             atomTypeScales={atomTypeScales}
             materialPreset={materialPreset}
@@ -575,7 +578,7 @@ export function ViewerScene({
             atomIndices={trackedAtomIndices}
           />
 
-          {spatialHash && (
+          {!playing && spatialHash && (
             <AtomPicker
               frame={currentFrame}
               spatialHash={spatialHash}

@@ -35,6 +35,33 @@ describe('assertAllowedRemoteMoleculeUrl', () => {
     });
   });
 
+  it('accepts an absolute loopback molecule URL only for an interactive local build', () => {
+    const url = 'http://127.0.0.1:8787/v1/datasets/research/gst-phase-change-ace-start/files/GST_config.data';
+    expect(assertAllowedRemoteMoleculeUrl(
+      url,
+      'human-load',
+      'http://localhost:5177',
+    )).toEqual({
+      url,
+      absoluteUrl: url,
+      sameOriginStrict: false,
+    });
+
+    expect(() => assertAllowedRemoteMoleculeUrl(url, 'human-load', ORIGIN)).toThrow();
+    expect(() => assertAllowedRemoteMoleculeUrl(url, 'saved-view', 'http://localhost:5177')).toThrow();
+    expect(() => assertAllowedRemoteMoleculeUrl(url, 'mcp', 'http://localhost:5177')).toThrow(/HTTPS/i);
+  });
+
+  it.each([
+    '/v1/datasets/omol25/neutral-train/structures/34335827.xyz',
+    '/v1/datasets/research/gst-phase-change-ace-start/files/GST_config.data',
+  ])('accepts an exact same-origin scientific catalog asset %s', (url) => {
+    expect(assertAllowedRemoteMoleculeUrl(url, 'human-load', 'http://127.0.0.1:5177')).toMatchObject({
+      url,
+      sameOriginStrict: true,
+    });
+  });
+
   it.each([
     'http://lupi.live/gallery/a.xyz',
     'https://user:pass@lupi.live/gallery/a.xyz',
@@ -54,6 +81,10 @@ describe('assertAllowedRemoteMoleculeUrl', () => {
     '//lupi.live/gallery/a.xyz',
     '/gallery/../private/a.xyz',
     '/gallery/a.xyz\\evil',
+    '/v1/datasets/omol25/not-a-collection/structures/1.xyz',
+    '/v1/datasets/omol25/neutral-train/structures/1.xyz?redirect=https://evil.example',
+    '/v1/datasets/research/not-in-catalog/files/sample.data',
+    '/v1/datasets/research/gst-phase-change-ace-start/files/GST_config.data#other',
   ])('rejects unsafe source %s', (url) => {
     expect(() => assertAllowedRemoteMoleculeUrl(url, 'saved-view', ORIGIN)).toThrow(/remote molecule|supported molecule|not allowed/i);
   });

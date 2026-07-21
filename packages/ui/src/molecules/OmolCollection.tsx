@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { omolFacets, type OmolFacets } from './providers/omol';
-import { searchMolecules, MOLECULE_PROVIDERS, type MoleculeHit } from './index';
+import { omolFacets, searchOmolValidation, type OmolFacets } from './providers/omol';
+import { type MoleculeHit } from './index';
 import { loadMoleculeHit } from './load';
 import { PERIODIC_TABLE, type PeriodicCell } from './periodicTable';
 import { FUNCTIONAL_GROUP_BY_ID, type FunctionalGroupId } from '../organicFunctionalGroups';
+import { RemoteOmolCollection } from './RemoteOmolCollection';
 
 /**
  * OmolCollection — a dataset-respecting home for Meta FAIR's Open Molecules 2025
@@ -25,9 +26,15 @@ import { FUNCTIONAL_GROUP_BY_ID, type FunctionalGroupId } from '../organicFuncti
 const ACCENT = '#34d399'; // OMol25 green (matches the source badge elsewhere)
 const PER_PAGE = 36;
 const PAPER_URL = 'https://arxiv.org/abs/2505.08762';
-const FULL_DATASET_SYSTEMS = '≈83M systems · 83 elements · up to 350 atoms';
 
 export function OmolCollection() {
+  const [mode, setMode] = useState<'remote' | 'faceted'>('remote');
+  return mode === 'remote'
+    ? <RemoteOmolCollection onOpenFacets={() => setMode('faceted')} />
+    : <FacetedOmolCollection onOpenRemote={() => setMode('remote')} />;
+}
+
+function FacetedOmolCollection({ onOpenRemote }: { onOpenRemote: () => void }) {
   const [facets, setFacets] = useState<OmolFacets | null>(null);
   const [facetError, setFacetError] = useState(false);
   const [selected, setSelected] = useState<string[]>([]); // element symbols (AND)
@@ -57,16 +64,12 @@ export function OmolCollection() {
   useEffect(() => {
     const id = ++reqId.current;
     setLoading(true);
-    searchMolecules(
-      {
+    searchOmolValidation({
         text: debounced.trim(),
         elements: selected.length ? selected : undefined,
         functionalGroups: selectedGroups.length ? selectedGroups : undefined,
-        sources: ['omol'],
         limit: PER_PAGE,
-      },
-      MOLECULE_PROVIDERS,
-    )
+      })
       .then((r) => { if (id === reqId.current) setHits(r); })
       .catch(() => { if (id === reqId.current) setHits([]); })
       .finally(() => { if (id === reqId.current) setLoading(false); });
@@ -115,6 +118,7 @@ export function OmolCollection() {
 
   return (
     <div style={wrapStyle}>
+      <button type="button" onClick={onOpenRemote} style={returnButtonStyle}>← Full remote collections</button>
       {/* ─── Masthead ─── */}
       <header style={mastheadStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -123,15 +127,14 @@ export function OmolCollection() {
           <span style={pill}>OMol25</span>
         </div>
         <p style={leadStyle}>
-          High-accuracy quantum chemistry at the <strong style={{ color: '#e2e8f0' }}>ωB97M-V/def2-TZVPD</strong> level
-          of theory. Browse this neutral-validation slice by chemical space and system size, then open any
-          structure with its true DFT geometry. <a href={PAPER_URL} target="_blank" rel="noreferrer" style={linkStyle}>Read the paper →</a>
+          Facet the complete 27,697-structure neutral-validation conversion by elements and Lupi's geometry screen.
+          Each result opens source DFT coordinates; OMol25 does not supply bond topology. <a href={PAPER_URL} target="_blank" rel="noreferrer" style={linkStyle}>Paper →</a>
         </p>
         <div style={statRowStyle}>
           <Stat label="Structures (this slice)" value={facets ? facets.total.toLocaleString() : '…'} />
           <Stat label="Elements present" value={facets ? String(facets.elementCounts.length) : '…'} />
           <Stat label="Atoms / structure" value={facets ? `${facets.natoms.min}–${facets.natoms.max} (med ${facets.natoms.median})` : '…'} />
-          <Stat label="Full dataset" value={FULL_DATASET_SYSTEMS} subtle />
+          <Stat label="Source corpus" value=">100M DFT calculations" subtle />
         </div>
       </header>
 
@@ -335,6 +338,7 @@ function Stat({ label, value, subtle }: { label: string; value: string; subtle?:
 
 // ─── Styles ───
 const wrapStyle: CSSProperties = { maxWidth: 1120, margin: '0 auto', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 26 };
+const returnButtonStyle: CSSProperties = { alignSelf: 'flex-start', padding: '6px 10px', borderRadius: 7, border: '1px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.08)', color: ACCENT, cursor: 'pointer', fontSize: 11, fontWeight: 700 };
 const mastheadStyle: CSSProperties = {
   background: 'linear-gradient(135deg, rgba(52,211,153,0.11), rgba(13,17,23,0.52))',
   border: '1px solid rgba(52,211,153,0.28)', borderRadius: 12, padding: '22px 24px',

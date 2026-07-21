@@ -15,12 +15,18 @@ export type MoleculeSourceId =
   | 'saved' // user-owned saved views (Firestore lupiViews)
   | 'pubchem' // external PubChem name/SMILES lookup
   | 'omol' // Meta / FAIR Open Molecules dataset (scaffolded)
+  | 'research' // versioned external LAMMPS research data
   | 'library' // curated Lupi molecule library (scaffolded)
   | 'social'; // limited social-link QR archive authored as atoms + bonds
 
 /** How to load a hit into the viewer. The UI and agent map this to a loader. */
 export type MoleculeLoadSpec =
-  | { kind: 'url'; url: string } // direct trajectory / structure file (e.g. .glimbin, .xyz)
+  | {
+      kind: 'url';
+      url: string;
+      /** Explicit source-backed mapping for opaque LAMMPS type IDs. */
+      atomTypeMap?: Record<number, number>;
+    }
   | { kind: 'savedView'; slug: string } // loadSavedMolecularView(slug)
   | {
       // resolve via lupi.generate_molecule (the multi-input resolver)
@@ -49,10 +55,20 @@ export interface MoleculeHit {
   functionalGroups?: FunctionalGroupId[];
   /** accent colors for the card, if the source has them */
   colors?: string[];
+  /** Important source or representation limitation shown before loading. */
+  notice?: string;
   /** how to load it into the viewer */
   load: MoleculeLoadSpec;
   /** provider-assigned 0..1 relevance (combined with text match in ranking) */
   score?: number;
+  /** Citation surface for externally maintained scientific records. */
+  provenance?: {
+    sourceUrl: string;
+    doi: string;
+    citation: string;
+    license: string;
+    licenseUrl: string;
+  };
 }
 
 export interface MoleculeQuery {

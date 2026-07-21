@@ -251,6 +251,7 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(head.status).toBe(get.status);
     expect(head.headers.get('content-type')).toBe(get.headers.get('content-type'));
     expect(head.headers.get('access-control-allow-methods')).toBe(get.headers.get('access-control-allow-methods'));
+    expect(head.headers.get('access-control-allow-headers')).toContain('range');
     expect(head.headers.get('x-lupi-edge-executed')).toBe('1');
     expect(await head.text()).toBe('');
   });

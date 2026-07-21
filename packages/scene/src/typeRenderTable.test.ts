@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { AtomTypeSemantics, DistanceSemantics, Frame } from '@atlas/core/types';
 import { ELEMENT_DATA, NEUTRAL_TYPE_DISPLAY_RADIUS, hexToRgb } from '@atlas/core';
-import { MAX_RENDER_TYPE_SLOTS, buildTypeRenderTable } from './typeRenderTable';
+import {
+  MAX_RENDER_TYPE_SLOTS,
+  buildTypeRenderTable,
+  typeRenderTablesEqual,
+} from './typeRenderTable';
 
 function frame(
   types: number[],
@@ -72,5 +76,26 @@ describe('type render table', () => {
   it('fails rather than aliasing more types than the shader palette can represent', () => {
     const types = Array.from({ length: MAX_RENDER_TYPE_SLOTS + 1 }, (_, index) => index + 1);
     expect(() => buildTypeRenderTable(frame(types))).toThrow(/at most 256 distinct types/i);
+  });
+
+  it('keeps palette identity only while render semantics are unchanged', () => {
+    const first = buildTypeRenderTable(frame(
+      [1, 8, 1],
+      { kind: 'atomic-number', provenance: 'xyz-element-token' },
+      { kind: 'angstrom', provenance: 'format-convention' },
+    ));
+    const sameDomain = buildTypeRenderTable(frame(
+      [8, 1, 8],
+      { kind: 'atomic-number', provenance: 'xyz-element-token' },
+      { kind: 'angstrom', provenance: 'format-convention' },
+    ));
+    const changedDomain = buildTypeRenderTable(frame(
+      [1, 6, 8],
+      { kind: 'atomic-number', provenance: 'xyz-element-token' },
+      { kind: 'angstrom', provenance: 'format-convention' },
+    ));
+
+    expect(typeRenderTablesEqual(first, sameDomain)).toBe(true);
+    expect(typeRenderTablesEqual(first, changedDomain)).toBe(false);
   });
 });

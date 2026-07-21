@@ -172,7 +172,7 @@ function normalizedAtomTypeSemantics(frame: Frame): AtomTypeSemantics {
     return semantics;
   }
   if (semantics.kind === 'explicit-element-map') {
-    if (!['lammps-element-column', 'user-type-map'].includes(semantics.provenance)) {
+    if (!['lammps-element-column', 'user-type-map', 'catalog-element-map'].includes(semantics.provenance)) {
       throw new Error('$.frame.typeSemantics.provenance: unsupported element-map provenance');
     }
     return semantics;

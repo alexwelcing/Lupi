@@ -12,12 +12,13 @@ const DEFAULT_PER_SOURCE = 25;
 // Source ordering used only as a stable tie-break (local/curated first).
 const SOURCE_PRIORITY: Record<MoleculeSourceId, number> = {
   gallery: 0,
-  library: 1,
-  saved: 3,
-  nist: 4,
-  omol: 5,
-  social: 2,
-  pubchem: 6,
+  research: 1,
+  library: 2,
+  saved: 4,
+  nist: 5,
+  omol: 6,
+  social: 3,
+  pubchem: 7,
 };
 
 function norm(s: string): string {

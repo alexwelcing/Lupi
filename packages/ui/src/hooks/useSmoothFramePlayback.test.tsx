@@ -107,9 +107,11 @@ describe('useSmoothFramePlayback', () => {
     isPlaying?: boolean;
     frameSet?: Frame[];
     loopMode?: PlaybackLoopMode;
+    isFrameReady?: (frameIndex: number) => boolean;
   } = {}) {
     const onFrame = vi.fn();
     const onPlaybackEnd = vi.fn();
+    const onFrameNeeded = vi.fn();
     const initialProps = {
       isPlaying: initial.isPlaying ?? true,
       frameSet: initial.frameSet ?? frames(5),
@@ -124,10 +126,12 @@ describe('useSmoothFramePlayback', () => {
         loopMode,
         onFrame,
         onPlaybackEnd,
+        isFrameReady: initial.isFrameReady,
+        onFrameNeeded,
       }),
       { initialProps },
     );
-    return { ...hook, onFrame, onPlaybackEnd, props: initialProps };
+    return { ...hook, onFrame, onPlaybackEnd, onFrameNeeded, props: initialProps };
   }
 
   it('ends once playback and schedules no additional RAF', () => {
@@ -145,6 +149,63 @@ describe('useSmoothFramePlayback', () => {
     const { onPlaybackEnd } = setup({ frameSet: frames(1), loopMode: 'once' });
     expect(onPlaybackEnd).toHaveBeenCalledTimes(1);
     expect(callbacks.size).toBe(0);
+  });
+
+  it('requests one absent interpolation endpoint until frame residency changes', () => {
+    const residentFrames = new Set([0]);
+    const { onFrame, onFrameNeeded } = setup({
+      frameSet: frames(3),
+      isFrameReady: (frameIndex) => residentFrames.has(frameIndex),
+    });
+
+    act(() => tick(0));
+    act(() => tick(500));
+    act(() => tick(1000));
+    act(() => tick(1500));
+
+    expect(onFrameNeeded).toHaveBeenCalledTimes(1);
+    expect(onFrameNeeded.mock.calls).toEqual([[1]]);
+    expect(onFrame).not.toHaveBeenCalled();
+
+    residentFrames.add(1);
+    act(() => tick(2000));
+    expect(onFrame).toHaveBeenCalledTimes(1);
+
+    residentFrames.delete(1);
+    act(() => tick(2500));
+    expect(onFrameNeeded).toHaveBeenCalledTimes(2);
+    expect(onFrameNeeded).toHaveBeenLastCalledWith(1);
+  });
+
+  it('drops delayed catch-up and warms only the adjacent unresolved frame', () => {
+    const residentFrames = new Set([0, 1]);
+    const { result, onFrame, onFrameNeeded } = setup({
+      frameSet: frames(10),
+      isFrameReady: (frameIndex) => residentFrames.has(frameIndex),
+    });
+
+    act(() => tick(0));
+    act(() => tick(5000));
+
+    expect(onFrame).toHaveBeenLastCalledWith(expect.objectContaining({
+      frameIndex: 1,
+      effectiveFrame: 1,
+    }));
+    expect(onFrameNeeded).not.toHaveBeenCalled();
+
+    act(() => tick(9000));
+    act(() => tick(15000));
+
+    expect(onFrameNeeded.mock.calls).toEqual([[2]]);
+    expect(result.current.currentState.effectiveFrame).toBe(1);
+
+    residentFrames.add(2);
+    act(() => tick(16000));
+
+    expect(onFrame).toHaveBeenLastCalledWith(expect.objectContaining({
+      frameIndex: 2,
+      effectiveFrame: 2,
+    }));
   });
 
   it('resets direction on explicit frame set and playback restart', () => {

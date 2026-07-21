@@ -1,3 +1,5 @@
+import { EXTERNAL_RESEARCH_DATASETS, externalResearchLoadPath } from '@atlas/core';
+
 export type RemoteMoleculeUrlContext = 'mcp' | 'human-load' | 'saved-view';
 
 export interface AllowedRemoteMoleculeUrl {
@@ -22,6 +24,14 @@ const GCS_PREFIXES = [
   '/shed-489901-nist-demos/',
   '/shed-489901-omol25/',
 ] as const;
+const OMOL_COLLECTION_IDS = new Set([
+  'neutral-train',
+  'neutral-validation',
+  'all-train-preview',
+  'train-4m-preview',
+  'validation-preview',
+]);
+const RESEARCH_DATA_PATHS = new Set(EXTERNAL_RESEARCH_DATASETS.map(externalResearchLoadPath));
 
 /**
  * The sole trust boundary for automatic remote molecule loads.
@@ -46,7 +56,9 @@ export function assertAllowedRemoteMoleculeUrl(
     // bundle in preview/CI; strictRemote still rejects any redirect response.
     assertSafeUrlShape(parsed, isLocalDevelopmentHost(origin.hostname.toLowerCase()));
     assertMoleculePath(parsed.pathname);
-    if (!parsed.pathname.startsWith('/gallery/')) throw new RemoteMoleculeUrlPolicyError();
+    if (!parsed.pathname.startsWith('/gallery/') && !isTrustedScienceDataUrl(parsed)) {
+      throw new RemoteMoleculeUrlPolicyError();
+    }
     return {
       url: `${parsed.pathname}${parsed.search}${parsed.hash}`,
       absoluteUrl: parsed.toString(),
@@ -54,10 +66,13 @@ export function assertAllowedRemoteMoleculeUrl(
     };
   }
 
-  if (input.startsWith('//') || !/^https:\/\//i.test(input)) {
+  if (input.startsWith('//') || !/^https?:\/\//i.test(input)) {
     throw new RemoteMoleculeUrlPolicyError(context === 'mcp'
       ? 'MCP molecule URLs must be absolute HTTPS URLs.'
       : undefined);
+  }
+  if (context === 'mcp' && /^http:\/\//i.test(input)) {
+    throw new RemoteMoleculeUrlPolicyError('MCP molecule URLs must be absolute HTTPS URLs.');
   }
 
   let parsed: URL;
@@ -67,7 +82,7 @@ export function assertAllowedRemoteMoleculeUrl(
     throw new RemoteMoleculeUrlPolicyError();
   }
   const hostname = parsed.hostname.toLowerCase();
-  const localDevelopmentTarget = context !== 'saved-view'
+  const localDevelopmentTarget = context === 'human-load'
     && isLocalDevelopmentHost(hostname)
     && isLocalDevelopmentHost(origin.hostname.toLowerCase())
     && isDevelopmentOrTest();
@@ -81,7 +96,8 @@ export function assertAllowedRemoteMoleculeUrl(
 
   if (isIpLiteral(hostname) || hostname.endsWith('.local')) throw new RemoteMoleculeUrlPolicyError();
 
-  const allowed = (LUPI_HOSTS.has(hostname) && parsed.pathname.startsWith('/gallery/'))
+  const allowed = (LUPI_HOSTS.has(hostname)
+      && (parsed.pathname.startsWith('/gallery/') || isTrustedScienceDataUrl(parsed)))
     || (hostname === 'storage.googleapis.com' && GCS_PREFIXES.some(prefix => parsed.pathname.startsWith(prefix)));
   if (!allowed) throw new RemoteMoleculeUrlPolicyError();
 
@@ -119,4 +135,10 @@ function isLocalDevelopmentHost(hostname: string): boolean {
 
 function isDevelopmentOrTest(): boolean {
   return import.meta.env.DEV || import.meta.env.MODE === 'test';
+}
+
+function isTrustedScienceDataUrl(url: URL): boolean {
+  if (url.search || url.hash) return false;
+  const omol = url.pathname.match(/^\/v1\/datasets\/omol25\/([a-z0-9-]+)\/structures\/\d+\.xyz$/);
+  return Boolean(omol && OMOL_COLLECTION_IDS.has(omol[1])) || RESEARCH_DATA_PATHS.has(url.pathname);
 }

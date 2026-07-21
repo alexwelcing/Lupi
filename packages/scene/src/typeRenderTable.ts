@@ -25,6 +25,29 @@ export interface TypeRenderTable {
 }
 
 /**
+ * Frames in an MD trajectory normally keep the same type domain and element
+ * semantics. Preserve the table identity across those frames so the renderer
+ * does not rebuild and dispose three palette textures for every timestep.
+ */
+export function typeRenderTablesEqual(a: TypeRenderTable, b: TypeRenderTable): boolean {
+  if (a.entries.length !== b.entries.length) return false;
+  for (let index = 0; index < a.entries.length; index += 1) {
+    const left = a.entries[index];
+    const right = b.entries[index];
+    if (
+      left.rawType !== right.rawType ||
+      left.slot !== right.slot ||
+      left.atomicNumber !== right.atomicNumber ||
+      left.displayRadius !== right.displayRadius ||
+      left.color[0] !== right.color[0] ||
+      left.color[1] !== right.color[1] ||
+      left.color[2] !== right.color[2]
+    ) return false;
+  }
+  return true;
+}
+
+/**
  * Resolve the frame's raw type domain once per frame upload. Opaque LAMMPS
  * IDs receive stable categorical styling and a neutral radius; declared
  * elements receive element styling only through the core provenance gate.

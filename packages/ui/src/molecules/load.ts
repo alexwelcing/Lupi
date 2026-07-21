@@ -12,8 +12,9 @@ export async function loadMoleculeHit(hit: MoleculeHit): Promise<void> {
   switch (spec.kind) {
     case 'url':
       {
-        const result = await openMolecule({ kind: 'url', url: spec.url, history: 'push' });
+        const result = await openMolecule({ kind: 'url', url: spec.url, title: hit.title, history: 'push' });
         if (!result.ok) throw new Error(result.message);
+        if (spec.atomTypeMap) applySourceTypeMap(spec.atomTypeMap);
       }
       if (hit.source === 'social') {
         const store = useStore.getState();
@@ -37,4 +38,30 @@ export async function loadMoleculeHit(hit: MoleculeHit): Promise<void> {
       return;
     }
   }
+}
+
+function applySourceTypeMap(elementMap: Record<number, number>): void {
+  const store = useStore.getState();
+  const file = store.file;
+  if (!file) return;
+  let changed = false;
+  const frames = file.trajectory.frames.map((frame) => {
+    if (!frame || frame.typeSemantics?.kind !== 'opaque') return frame;
+    changed = true;
+    return {
+      ...frame,
+      typeSemantics: {
+        kind: 'explicit-element-map' as const,
+        provenance: 'catalog-element-map' as const,
+        elementMap,
+      },
+    };
+  });
+  if (!changed) return;
+  useStore.setState({
+    file: {
+      ...file,
+      trajectory: { ...file.trajectory, frames },
+    },
+  });
 }

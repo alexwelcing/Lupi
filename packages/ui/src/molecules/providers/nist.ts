@@ -1,12 +1,11 @@
 import { filterCatalog, loadNistCatalog, type NistCatalogEntry } from '@atlas/nist';
 import type { MoleculeHit, MoleculeProvider, MoleculeQuery } from '../types';
-
-const CATALOG_URL = '/nist/nist_catalog.json';
+import { nistCatalogUrl, nistDemoUrl } from '../dataEndpoints';
 
 // Load + cache the catalog once. Failure caches [] so we degrade quietly.
 let cache: Promise<NistCatalogEntry[]> | null = null;
 function catalog(): Promise<NistCatalogEntry[]> {
-  if (!cache) cache = loadNistCatalog(CATALOG_URL).catch(() => [] as NistCatalogEntry[]);
+  if (!cache) cache = loadNistCatalog(nistCatalogUrl()).catch(() => [] as NistCatalogEntry[]);
   return cache;
 }
 
@@ -39,7 +38,7 @@ export const nistProvider: MoleculeProvider = {
       // Prefer a pre-generated demo trajectory; otherwise procedurally build a
       // small crystal of the first element via the multi-input resolver.
       load: e.demo_path
-        ? { kind: 'url', url: e.demo_path }
+        ? { kind: 'url', url: nistDemoUrl(e.demo_path) }
         : {
             kind: 'generate',
             inputType: 'procedural',

@@ -26,7 +26,7 @@ import { useGlobalTimer } from './useTimer';
 import { COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
 import { DEFAULT_PROFILE, getElementProfile } from './materials';
 import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
-import { buildTypeRenderTable } from './typeRenderTable';
+import { buildTypeRenderTable, typeRenderTablesEqual } from './typeRenderTable';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface AtomsOptimizedProps {
@@ -878,10 +878,15 @@ export function AtomsOptimized({
     [frame, nextFrame],
   );
   const renderAtomCount = resolveLoadedAtomCount(frame.natoms, loadedAtomCount);
-  const typeRenderTable = useMemo(
+  const candidateTypeRenderTable = useMemo(
     () => buildTypeRenderTable(frame, renderAtomCount),
     [frame, renderAtomCount],
   );
+  const stableTypeRenderTableRef = useRef(candidateTypeRenderTable);
+  if (!typeRenderTablesEqual(stableTypeRenderTableRef.current, candidateTypeRenderTable)) {
+    stableTypeRenderTableRef.current = candidateTypeRenderTable;
+  }
+  const typeRenderTable = stableTypeRenderTableRef.current;
 
   // Capacity — grow-only, never shrink
   const capacityRef = useRef(Math.max(MIN_CAPACITY, Math.ceil(frame.natoms * 1.2)));
@@ -1165,18 +1170,23 @@ export function AtomsOptimized({
 
   // ─── Upload frame data to GPU (runs ONCE per frame change) ────────
   const uploadFrame = useCallback(() => {
-    // Defer spatial hash rebuild to idle time
-    const idleCallback = (typeof requestIdleCallback !== 'undefined')
-      ? requestIdleCallback
-      : (cb: () => void) => setTimeout(cb, 0);
-    const cancelIdle = (typeof cancelIdleCallback !== 'undefined')
-      ? cancelIdleCallback
-      : clearTimeout;
-    const idleId = idleCallback(() => {
-      spatialHashRef.current.build(frame.positions, frame.natoms);
-      onSpatialHash?.(spatialHashRef.current);
-    });
-    const cleanupIdle = () => cancelIdle(idleId as any);
+    // Picking is paused during trajectory playback. Do not spend an O(n) pass
+    // rebuilding a spatial hash for every source frame when there is no
+    // consumer; rebuild once the callback returns on pause.
+    let cleanupIdle = () => {};
+    if (onSpatialHash) {
+      const idleCallback = (typeof requestIdleCallback !== 'undefined')
+        ? requestIdleCallback
+        : (cb: () => void) => setTimeout(cb, 0);
+      const cancelIdle = (typeof cancelIdleCallback !== 'undefined')
+        ? cancelIdleCallback
+        : clearTimeout;
+      const idleId = idleCallback(() => {
+        spatialHashRef.current.build(frame.positions, frame.natoms);
+        onSpatialHash(spatialHashRef.current);
+      });
+      cleanupIdle = () => cancelIdle(idleId as any);
+    }
 
     const positions = frame.positions;
     const types = frame.types;
