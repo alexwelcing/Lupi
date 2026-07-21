@@ -83,6 +83,7 @@ test('build emits a closed, validator-compatible, fully inventoried data-only pa
   assert.equal(uploadConfig.main, 'worker/index.js');
   assert.equal(uploadConfig.assets.directory, 'assets');
   assert.deepEqual(uploadConfig.assets.run_worker_first, ['/health', '/api/*']);
+  assert.equal(uploadConfig.vars.LUPI_BUILD_SHA, TARGET_SHA);
   assert.deepEqual(uploadConfig.r2_buckets, [{ binding: 'ASSETS', bucket_name: 'lupi-assets' }]);
 
   const savedManifest = JSON.parse(await readFile(path.join(fixture.output, 'release-package.json'), 'utf8'));

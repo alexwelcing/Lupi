@@ -264,13 +264,14 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(await head.text()).toBe('');
   });
 
-  it('reports only Cloudflare-supplied release identity and execution posture', async () => {
+  it('combines Cloudflare version identity with the release-packaged build SHA', async () => {
     const res = await handleRequest(req('/health'), {
       CF_VERSION_METADATA: {
         id: '4f94c8c7-0fef-4d7f-ae75-430c44e84542',
-        tag: '0123456789abcdef0123456789abcdef01234567',
+        tag: '',
         timestamp: '2026-07-19T20:30:00.000Z',
       },
+      LUPI_BUILD_SHA: '0123456789abcdef0123456789abcdef01234567',
       LUPI_MCP_SHARED_SECRET: TEST_SHARED_SECRET,
       RENDERER_ENDPOINT: 'https://renderer.invalid/render',
       RENDERER_TOKEN: 'renderer-secret',

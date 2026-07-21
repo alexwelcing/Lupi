@@ -103,7 +103,7 @@ export async function buildReleasePackage(options) {
   const sourceConfig = parseClosedWranglerToml(sourceConfigText.toString('utf8'));
   await assertDeclaredAssetsMatch(sourceConfig, configPath, assetsRoot);
   const workerEntry = selectWorkerEntry(workerFiles, options.workerEntry);
-  const uploadConfig = buildClosedUploadConfig(sourceConfig, workerEntry);
+  const uploadConfig = buildClosedUploadConfig(sourceConfig, workerEntry, options.targetSha);
   validateClosedUploadConfig(uploadConfig);
   const bindingProjection = bindingProjectionFromConfig(uploadConfig);
 
@@ -193,6 +193,11 @@ export async function verifyReleasePackage(packageDir) {
   const uploadConfigBytes = await readAttestedFile(packageRoot, actualDataFiles, UPLOAD_CONFIG_PATH);
   const uploadConfig = parseClosedWranglerToml(uploadConfigBytes.toString('utf8'));
   validateClosedUploadConfig(uploadConfig);
+  assert.equal(
+    uploadConfig.vars?.LUPI_BUILD_SHA,
+    manifest.targetSha,
+    'upload config build SHA must match the release package target',
+  );
   assert.equal(manifest.uploadConfigSha256, sha256(uploadConfigBytes), 'upload config digest mismatch');
   assert.deepEqual(manifest.bindingProjection, bindingProjectionFromConfig(uploadConfig), 'binding projection does not match upload config');
   const entryPath = uploadConfig.main;
@@ -318,7 +323,7 @@ export function serializeClosedWranglerToml(value) {
   return text;
 }
 
-function buildClosedUploadConfig(source, workerEntry) {
+function buildClosedUploadConfig(source, workerEntry, targetSha) {
   const config = {
     name: source.name,
     main: `worker/${workerEntry}`,
@@ -331,6 +336,7 @@ function buildClosedUploadConfig(source, workerEntry) {
   for (const key of ['compatibility_flags', 'version_metadata', 'vars', 'r2_buckets']) {
     if (source[key] !== undefined) config[key] = structuredClone(source[key]);
   }
+  config.vars = { ...config.vars, LUPI_BUILD_SHA: targetSha };
   return config;
 }
 
