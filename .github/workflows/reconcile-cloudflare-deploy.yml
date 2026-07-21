@@ -190,10 +190,12 @@ jobs:
           assert.equal(report.ok, true, JSON.stringify(report, null, 2));
           const projection = report.current.projectionSha256;
           await copyFile('tools/cloudflare-release-receipt.mjs', '.reconcile/authority/controller/cloudflare-release-receipt.mjs');
+          await copyFile('tools/verify-cloudflare-live.mjs', '.reconcile/authority/controller/verify-cloudflare-live.mjs');
           await mkdir('.reconcile/authority/controller/wrangler-runtime', { recursive: true });
           await copyFile('.github/wrangler-runtime/package.json', '.reconcile/authority/controller/wrangler-runtime/package.json');
           await copyFile('.github/wrangler-runtime/package-lock.json', '.reconcile/authority/controller/wrangler-runtime/package-lock.json');
           const parser = await readFile('.reconcile/authority/controller/cloudflare-release-receipt.mjs');
+          const liveVerifier = await readFile('.reconcile/authority/controller/verify-cloudflare-live.mjs');
           const wranglerLock = await readFile('.reconcile/authority/controller/wrangler-runtime/package-lock.json');
           if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
             const modes = {
@@ -222,6 +224,7 @@ jobs:
             targetSha: process.env.GITHUB_SHA,
             projectionSha256: projection,
             receiptParserSha256: createHash('sha256').update(parser).digest('hex'),
+            liveVerifierSha256: createHash('sha256').update(liveVerifier).digest('hex'),
             wranglerRuntimeLockSha256: createHash('sha256').update(wranglerLock).digest('hex'),
           }, null, 2)}\n`);
           await appendFile(process.env.GITHUB_OUTPUT, `projection_sha256=${projection}\n`);
@@ -695,11 +698,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
           mkdir -p reanchor
-          selective_routing_args=()
-          if pnpm verify:cloudflare-live --help | grep -q -- '--expect-selective-routing'; then
-            selective_routing_args+=(--expect-selective-routing=true)
-          fi
-          pnpm verify:cloudflare-live \
+          node authority/controller/verify-cloudflare-live.mjs \
             --url=https://lupi.live \
             --label=reanchor-public \
             --require-custom-domain \
@@ -710,12 +709,12 @@ jobs:
             --expect-r2=true \
             --expect-d1=false \
             --expect-queue=false \
-            --expect-renderer-endpoint=false \
-            "${selective_routing_args[@]}" \
+            --expect-renderer-endpoint=true \
+            --expect-selective-routing=true \
             --expect-firebase-project=true \
             --expect-large-asset-proxy=true \
-            --expect-auth-required=false \
-            --expect-render-execution=false \
+            --expect-auth-required=true \
+            --expect-render-execution=true \
             --json > reanchor/live-api.json
           pnpm exec playwright install --with-deps chromium
           pnpm test:ui
@@ -1080,6 +1079,11 @@ jobs:
           ref: ${{ needs.reconcile-verify.outputs.verified_build_sha }}
           persist-credentials: false
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: reconcile-authority-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: authority
+
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -1096,11 +1100,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           mkdir -p ui-proof
-          selective_routing_args=()
-          if pnpm verify:cloudflare-live --help | grep -q -- '--expect-selective-routing'; then
-            selective_routing_args+=(--expect-selective-routing=true)
-          fi
-          pnpm verify:cloudflare-live \
+          node authority/controller/verify-cloudflare-live.mjs \
             --url=https://lupi.live \
             --label=reconciliation-public \
             --require-custom-domain \
@@ -1110,12 +1110,12 @@ jobs:
             --expect-r2=true \
             --expect-d1=false \
             --expect-queue=false \
-            --expect-renderer-endpoint=false \
-            "${selective_routing_args[@]}" \
+            --expect-renderer-endpoint=true \
+            --expect-selective-routing=true \
             --expect-firebase-project=true \
             --expect-large-asset-proxy=true \
-            --expect-auth-required=false \
-            --expect-render-execution=false \
+            --expect-auth-required=true \
+            --expect-render-execution=true \
             --json > ui-proof/live-api.json
           pnpm exec playwright install --with-deps chromium
           pnpm test:ui

@@ -127,7 +127,7 @@ test('static assets use a closed selective Worker-first route contract', async (
   }
 });
 
-test('current-source proofs require selective routing while historical-source proofs negotiate capability', async () => {
+test('current-source and pinned-controller proofs require selective routing', async () => {
   const { workflows } = await loadFixture();
   for (const [workflowName, jobId] of [
     ['deploy-cloudflare.yml', 'candidate-verify'],
@@ -143,32 +143,75 @@ test('current-source proofs require selective routing while historical-source pr
       `${workflowName}/${jobId} must require selective routing`);
   }
 
-  for (const jobId of ['reanchor-reconstruct', 'reconcile-ui-verify']) {
-    const job = workflows['reconcile-cloudflare-deploy.yml'].jobs[jobId];
-    const liveStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('verify:cloudflare-live'));
-    assert.ok(liveStep, `reconcile-cloudflare-deploy.yml/${jobId} is missing live verification`);
+  for (const [workflowName, jobId] of [
+    ['deploy-cloudflare.yml', 'rollback-ui-verify'],
+    ['reconcile-cloudflare-deploy.yml', 'reanchor-reconstruct'],
+    ['reconcile-cloudflare-deploy.yml', 'reconcile-ui-verify'],
+  ]) {
+    const job = workflows[workflowName].jobs[jobId];
+    const liveStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('verify-cloudflare-live'));
+    assert.ok(liveStep, `${workflowName}/${jobId} is missing live verification`);
     const run = String(liveStep.run);
-    assert.match(run, /selective_routing_args=\(\)/,
-      `${jobId} must initialize a compatibility argument array`);
-    assert.doesNotMatch(run, /pnpm verify:cloudflare-live --(?:\s|\\)/,
-      `${jobId} must use pnpm 9-compatible argument forwarding`);
-    assert.match(run, /verify:cloudflare-live --help \| grep -q -- '--expect-selective-routing'/,
-      `${jobId} must probe the historical verifier contract`);
-    assert.match(run, /selective_routing_args\+=\(--expect-selective-routing=true\)/,
-      `${jobId} must enable selective proof when the checked-out verifier supports it`);
-    assert.match(run, /"\$\{selective_routing_args\[@\]\}"/,
-      `${jobId} must pass only capability-compatible arguments`);
-    assert.doesNotMatch(run, /^\s*--expect-selective-routing=true\s*\\?\s*$/m,
-      `${jobId} must not unconditionally pass a new flag to historical source`);
+    assert.match(run, /node authority\/controller\/verify-cloudflare-live\.mjs\b/,
+      `${workflowName}/${jobId} must use the authority-pinned live verifier`);
+    assert.match(run, /--expect-selective-routing=true\b/,
+      `${workflowName}/${jobId} must require selective routing`);
+    assert.doesNotMatch(run, /pnpm verify:cloudflare-live\b/,
+      `${workflowName}/${jobId} must not execute the historical checkout verifier`);
+    assert.doesNotMatch(run, /selective_routing_args|verify:cloudflare-live --help/,
+      `${workflowName}/${jobId} must not negotiate historical verifier capability`);
   }
 
-  const boundedRollback = workflows['deploy-cloudflare.yml'].jobs['rollback-ui-verify'];
-  const rollbackStep = (boundedRollback.steps ?? []).find((step) => String(step.run ?? '').includes('verify:cloudflare-live'));
-  assert.ok(rollbackStep, 'bounded rollback is missing predecessor verification');
-  assert.doesNotMatch(String(rollbackStep.run), /pnpm verify:cloudflare-live --(?:\s|\\)/,
-    'bounded rollback must use pnpm 9-compatible argument forwarding');
-  assert.doesNotMatch(String(rollbackStep.run), /--expect-selective-routing=/,
-    'bounded rollback must use the predecessor checkout verifier contract');
+  for (const [workflowName, authorityJobId] of [
+    ['deploy-cloudflare.yml', 'authority-scan'],
+    ['reconcile-cloudflare-deploy.yml', 'reconcile-authority-scan'],
+  ]) {
+    const job = workflows[workflowName].jobs[authorityJobId];
+    const bundleStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('controller-manifest.json'));
+    assert.ok(bundleStep, `${workflowName}/${authorityJobId} is missing its controller bundle`);
+    const run = String(bundleStep.run);
+    assert.match(run, /copyFile\('tools\/verify-cloudflare-live\.mjs',\s*'[^']*authority\/controller\/verify-cloudflare-live\.mjs'\)/,
+      `${workflowName}/${authorityJobId} must bundle the current live verifier`);
+    assert.match(run, /const liveVerifier = await readFile\('[^']*authority\/controller\/verify-cloudflare-live\.mjs'\)/,
+      `${workflowName}/${authorityJobId} must read the bundled verifier preimage`);
+    assert.match(run, /liveVerifierSha256:\s*createHash\('sha256'\)\.update\(liveVerifier\)\.digest\('hex'\)/,
+      `${workflowName}/${authorityJobId} must hash the bundled verifier in its manifest`);
+  }
+});
+
+test('release and recovery proofs preserve the authenticated renderer posture', async () => {
+  const { workflows } = await loadFixture();
+  const proofJobs = [
+    ['deploy-cloudflare.yml', 'candidate-verify'],
+    ['deploy-cloudflare.yml', 'public-verify'],
+    ['deploy-cloudflare.yml', 'rollback-ui-verify'],
+    ['reconcile-cloudflare-deploy.yml', 'reanchor-reconstruct'],
+    ['reconcile-cloudflare-deploy.yml', 'reconcile-ui-verify'],
+  ];
+
+  for (const [workflowName, jobId] of proofJobs) {
+    const job = workflows[workflowName].jobs[jobId];
+    const liveStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('cloudflare-live'));
+    assert.ok(liveStep, `${workflowName}/${jobId} is missing live verification`);
+    const run = String(liveStep.run);
+    for (const flag of [
+      '--expect-renderer-endpoint=true',
+      '--expect-auth-required=true',
+      '--expect-render-execution=true',
+    ]) {
+      assert.ok(run.includes(flag), `${workflowName}/${jobId} must preserve ${flag}`);
+    }
+  }
+
+  const collation = String(
+    stepNamed(
+      workflows['deploy-cloudflare.yml'].jobs['receipt-collation'],
+      'Collate and validate durable pre-mutation intent',
+    ).run ?? '',
+  );
+  for (const field of ['rendererEndpoint: true', 'authRequired: true', 'renderExecution: true']) {
+    assert.ok(collation.includes(field), `release intent must preserve ${field}`);
+  }
 });
 
 test('the authority scanner rejects mutated trigger, dependency, action, and token boundaries', async () => {

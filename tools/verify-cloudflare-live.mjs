@@ -27,10 +27,10 @@ export function usage() {
 Usage:
   pnpm verify:cloudflare-live --url=https://lupi.live --label=postpromotion-custom-domain \\
     --require-custom-domain --expect-web-assets=true --expect-r2=true \\
-    --expect-d1=false --expect-queue=false --expect-renderer-endpoint=false \\
+    --expect-d1=false --expect-queue=false --expect-renderer-endpoint=true \\
     --expect-firebase-project=true --expect-large-asset-proxy=true \\
     --expect-selective-routing=true \\
-    --expect-auth-required=false --expect-render-execution=false \\
+    --expect-auth-required=true --expect-render-execution=true \\
     --expect-build-sha=<40-hex-sha> --expect-worker-version-id=<version-id>
 
 Options:
@@ -232,12 +232,6 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
     });
     observations.routing.mcpInitialize = routeMarker(initialize);
     assertRouteExecution(initialize, true, options, 'MCP initialize');
-    if (options.expectAuthRequired) {
-      assert.ok(initialize.status === 401 || initialize.status === 403,
-        `expected credential-free 401/403, got ${initialize.status}`);
-      observations.mcp = { authRequired: true, credentialFreeStatus: initialize.status, toolCount: null };
-      return observations.mcp;
-    }
     assert.equal(initialize.status, 200, `initialize expected HTTP 200, got ${initialize.status}`);
     assertJsonRpcSuccess(await initialize.json(), 'lupi-live-initialize');
 
@@ -252,7 +246,30 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
     assertJsonRpcSuccess(body, 'lupi-live-tools');
     assert.ok(Array.isArray(body.result?.tools), 'tools/list result.tools is not an array');
     assert.equal(body.result.tools.length, EDGE_TOOL_COUNT, `expected ${EDGE_TOOL_COUNT} MCP tools`);
-    observations.mcp = { authRequired: false, credentialFreeStatus: 200, toolCount: body.result.tools.length };
+    let protectedCallCode = null;
+    if (options.expectAuthRequired) {
+      const protectedCall = await request('/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'lupi-live-protected-call',
+          method: 'tools/call',
+          params: { name: 'lupi.render_molecule_asset', arguments: {} },
+        }),
+      });
+      assert.equal(protectedCall.status, 200, `protected tools/call expected HTTP 200, got ${protectedCall.status}`);
+      const protectedBody = await protectedCall.json();
+      assert.equal(protectedBody?.error?.code, -32001, 'protected tools/call must reject missing credentials');
+      assert.equal(protectedBody?.error?.message, 'Unauthorized');
+      protectedCallCode = protectedBody.error.code;
+    }
+    observations.mcp = {
+      authRequired: options.expectAuthRequired,
+      credentialFreeStatus: 200,
+      toolCount: body.result.tools.length,
+      protectedCallCode,
+    };
     return observations.mcp;
   });
 

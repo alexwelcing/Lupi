@@ -86,13 +86,17 @@ test('JSON-RPC initialize or tools/list failure is not a Live API pass', async (
   assert.match(failed(report, 'mcp-auth-and-tools'), /error/);
 });
 
-test('credential-free authenticated posture requires 401 or 403', async () => {
-  const fixture = await createFixture({ authRequired: true });
+test('authenticated posture keeps MCP discovery public and rejects protected calls', async () => {
+  const fixture = await createFixture({ authRequired: true, rendererEndpoint: true, renderExecution: true });
   const report = await verifyCloudflareLive(normalOptions(fixture.origin, {
     expectAuthRequired: true,
+    expectRenderExecution: true,
+    expectedBindings: { ...expectedBindings(), rendererEndpoint: true },
   }));
   assert.equal(report.ok, true);
-  assert.equal(report.observations.mcp.credentialFreeStatus, 401);
+  assert.equal(report.observations.mcp.credentialFreeStatus, 200);
+  assert.equal(report.observations.mcp.toolCount, 6);
+  assert.equal(report.observations.mcp.protectedCallCode, -32001);
 });
 
 test('range response requires 16 bytes, exact metadata, and an R2 source marker', async () => {
@@ -385,7 +389,7 @@ async function createFixture(overrides = {}) {
           r2: true,
           d1: false,
           queue: false,
-          rendererEndpoint: false,
+          rendererEndpoint: overrides.rendererEndpoint ?? false,
           firebaseProject: true,
           largeAssetProxy: true,
           authRequired: overrides.authRequired ?? false,
@@ -426,15 +430,14 @@ async function createFixture(overrides = {}) {
     if (url.pathname === '/mcp-manifest.json') return json(response, { tools: edgeTools });
     if (url.pathname === '/browser-mcp-manifest.json') return json(response, { tools: browserTools });
     if (url.pathname === '/mcp') {
-      if (overrides.authRequired) {
-        response.statusCode = 401;
-        return json(response, { error: 'Unauthorized' });
-      }
       let body = '';
       for await (const chunk of request) body += chunk;
       const rpc = JSON.parse(body);
       if (overrides.rpcFailure) return json(response, { jsonrpc: '2.0', id: rpc.id, error: { code: -32000, message: 'fixture failure' } });
       if (rpc.method === 'tools/list') return json(response, { jsonrpc: '2.0', id: rpc.id, result: { tools: edgeTools } });
+      if (rpc.method === 'tools/call' && overrides.authRequired) {
+        return json(response, { jsonrpc: '2.0', id: rpc.id, error: { code: -32001, message: 'Unauthorized' } });
+      }
       return json(response, { jsonrpc: '2.0', id: rpc.id, result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: {} } });
     }
     if (url.pathname === '/gallery/curated/lupine_genesis.glimbin') {
