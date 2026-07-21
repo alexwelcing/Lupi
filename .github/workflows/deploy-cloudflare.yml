@@ -44,6 +44,18 @@ env:
   LUPI_WRANGLER_VERSION: 4.110.0
   LUPI_WRANGLER_INTEGRITY: sha512-xZeXKYi7hxQRF5anL+v77RkufJNpF9f3Eqeyqq2QBsETpLZgh0Agj0jJ6JPtkbgn6ukZdh8OK5egsGPWIditgg==
   LUPI_WRANGLER_LOCK_SHA256: 036615b8e80663617f476cd3a9f7d2f7dc7d858be7b38777b75ca1b9f0f5e9b0
+  VITE_FIREBASE_AUTH_DOMAIN: lupi.live
+  VITE_FIREBASE_PROJECT_ID: shed-489901
+  VITE_FIREBASE_APP_ID: 1:350452481649:web:c12dea9ce6f6ae045065d0
+  VITE_FIREBASE_STORAGE_BUCKET: shed-489901.firebasestorage.app
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '350452481649'
+  VITE_FIREBASE_MEASUREMENT_ID: G-BDBRM73QVJ
+  VITE_FIREBASE_ANALYTICS_ENABLED: 'false'
+  VITE_FIREBASE_ANALYTICS_CONSENT: denied
+  VITE_LUPI_MCP_ENDPOINT: /mcp
+  VITE_LUPI_ANALYTICS_URL: /collectAnalytics
+  VITE_LUPI_AUTH_FLOW: popup
+  VITE_NIST_BASE_URL: https://storage.googleapis.com/shed-489901-nist-demos/nist
 
 jobs:
   authority-scan:
@@ -203,8 +215,10 @@ jobs:
 
       - name: Run every source-side release gate
         env:
+          LUPI_FIREBASE_WEB_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
           VITE_LUPI_BUILD_SHA: ${{ inputs.target_sha }}
         run: |
+          test -n "$LUPI_FIREBASE_WEB_API_KEY"
           pnpm verify:product-contract
           pnpm lint
           pnpm verify:workflows
@@ -214,13 +228,38 @@ jobs:
           node --test tools/cloudflare-release-authority.test.mjs
           node --test tools/cloudflare-release-workflow.test.mjs
           node --test tools/build-cloudflare-release-package.test.mjs
-          pnpm build
           pnpm test
           pnpm cloudflare:test
           npm ci --prefix functions
           npm audit --prefix functions --omit=dev --audit-level=high
           npm run build --prefix functions
           npm test --prefix functions
+          VITE_FIREBASE_API_KEY="$LUPI_FIREBASE_WEB_API_KEY" pnpm build
+
+      - name: Verify production web configuration was compiled
+        env:
+          LUPI_FIREBASE_WEB_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          const html = await readFile('apps/web/dist/index.html', 'utf8');
+          const entry = html.match(/<script[^>]+src="([^"]+\.js)"/i)?.[1];
+          assert.ok(entry, 'built web entry script was not found');
+          const bundle = await readFile(`apps/web/dist${entry}`, 'utf8');
+          const expected = [
+            ['Firebase API key', process.env.LUPI_FIREBASE_WEB_API_KEY],
+            ['Firebase auth domain', process.env.VITE_FIREBASE_AUTH_DOMAIN],
+            ['Firebase project ID', process.env.VITE_FIREBASE_PROJECT_ID],
+            ['Firebase app ID', process.env.VITE_FIREBASE_APP_ID],
+            ['same-origin MCP endpoint', process.env.VITE_LUPI_MCP_ENDPOINT],
+            ['same-origin analytics endpoint', process.env.VITE_LUPI_ANALYTICS_URL],
+          ];
+          for (const [label, value] of expected) {
+            assert.ok(value, `${label} is not configured for the production build`);
+            assert.ok(bundle.includes(value), `${label} was not compiled into the production bundle`);
+          }
+          NODE
 
       - name: Verify pinned Wrangler registry integrity
         run: |
@@ -395,7 +434,13 @@ jobs:
           assert.equal(root.activeVersionId, process.env.PRIOR_VERSION_ID);
           assert.match(root.targetSha ?? '', /^[a-f0-9]{40}$/i);
           assert.ok(root.rollbackContract);
-          await appendFile(process.env.GITHUB_OUTPUT, `prior_sha=${root.targetSha}\n`);
+          const commandMode = root.rollbackContract.commandMode;
+          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1'].includes(commandMode));
+          const expectHealth = commandMode === 'full-ui-v1' ? 'true' : 'false';
+          await appendFile(
+            process.env.GITHUB_OUTPUT,
+            `prior_sha=${root.targetSha}\nprior_command_mode=${commandMode}\nexpect_health=${expectHealth}\n`,
+          );
           NODE
 
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -416,11 +461,16 @@ jobs:
         working-directory: predecessor
         env:
           UI_TEST_URL: https://lupi.live
-          UI_TEST_EXPECT_HEALTH: 'true'
+          UI_TEST_EXPECT_HEALTH: ${{ steps.prior.outputs.expect_health }}
+          ROLLBACK_COMMAND_MODE: ${{ steps.prior.outputs.prior_command_mode }}
         run: |
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium
-          pnpm test:ui
+          case "$ROLLBACK_COMMAND_MODE" in
+            legacy-deployed-smoke-v1) pnpm test:ui:deployed ;;
+            full-ui-configless-v1|full-ui-v1) pnpm test:ui ;;
+            *) echo "::error::Unsupported rollback command mode"; exit 1 ;;
+          esac
 
       - name: Record predecessor replay proof
         run: |
@@ -1268,9 +1318,16 @@ jobs:
           const name = files.find((value) => value.endsWith('.json'));
           assert.ok(name, 'checkpoint JSON missing');
           const checkpoint = JSON.parse(await readFile(`prior/checkpoint/${name}`, 'utf8'));
-          const sha = checkpoint.activeRollbackBundle?.targetSha;
+          const root = checkpoint.activeRollbackBundle;
+          const sha = root?.targetSha;
           assert.match(sha ?? '', /^[a-f0-9]{40}$/i);
-          await appendFile(process.env.GITHUB_OUTPUT, `sha=${sha}\n`);
+          const commandMode = root?.rollbackContract?.commandMode;
+          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1'].includes(commandMode));
+          const expectHealth = commandMode === 'full-ui-v1' ? 'true' : 'false';
+          await appendFile(
+            process.env.GITHUB_OUTPUT,
+            `sha=${sha}\ncommand_mode=${commandMode}\nexpect_health=${expectHealth}\n`,
+          );
           NODE
 
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1293,9 +1350,10 @@ jobs:
       - name: Verify restored predecessor with its own frozen suite
         env:
           UI_TEST_URL: https://lupi.live
-          UI_TEST_EXPECT_HEALTH: 'true'
+          UI_TEST_EXPECT_HEALTH: ${{ steps.source.outputs.expect_health }}
           PRIOR_VERSION_ID: ${{ needs.release-admission.outputs.prior_version_id }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          ROLLBACK_COMMAND_MODE: ${{ steps.source.outputs.command_mode }}
         run: |
           pnpm install --frozen-lockfile
           mkdir -p rollback-ui
@@ -1317,7 +1375,11 @@ jobs:
             --expect-selective-routing=true \
             --json > rollback-ui/live-api.json
           pnpm exec playwright install --with-deps chromium
-          pnpm test:ui
+          case "$ROLLBACK_COMMAND_MODE" in
+            legacy-deployed-smoke-v1) pnpm test:ui:deployed ;;
+            full-ui-configless-v1|full-ui-v1) pnpm test:ui ;;
+            *) echo "::error::Unsupported rollback command mode"; exit 1 ;;
+          esac
           sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/lupi.spec.ts > rollback-ui/source-manifest.sha256
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
@@ -1327,7 +1389,7 @@ jobs:
             schemaVersion: 'lupi-ui-proof-v1',
             targetSha: process.env.SOURCE_SHA,
             activeVersionId: process.env.PRIOR_VERSION_ID,
-            suite: 'full-ui-v1',
+            suite: process.env.ROLLBACK_COMMAND_MODE,
             result: 'pass',
             liveApiSha256: digest(await readFile('rollback-ui/live-api.json')),
             sourceManifestSha256: digest(await readFile('rollback-ui/source-manifest.sha256')),

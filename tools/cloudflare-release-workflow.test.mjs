@@ -86,6 +86,20 @@ test('CI, deploy, and reconciliation preserve the blocking release contract', as
   assertWorkflowContract(workflows);
 });
 
+test('Turbo forwards the exact Cloudflare web build environment to Vite', async () => {
+  const turbo = JSON.parse(await readFile(resolve(ROOT, 'turbo.json'), 'utf8'));
+  const forwarded = turbo.tasks?.build?.env ?? [];
+  for (const name of [
+    'VITE_FIREBASE_API_KEY',
+    'VITE_FIREBASE_AUTH_DOMAIN',
+    'VITE_FIREBASE_PROJECT_ID',
+    'VITE_FIREBASE_APP_ID',
+    'VITE_LUPI_MCP_ENDPOINT',
+    'VITE_LUPI_ANALYTICS_URL',
+    'VITE_LUPI_BUILD_SHA',
+  ]) assert.ok(forwarded.includes(name), `Turbo build env is missing ${name}`);
+});
+
 test('credential-bearing Wrangler runtime is fully lockfile-pinned', async () => {
   const packageText = await readFile(resolve(ROOT, '.github', 'wrangler-runtime', 'package-lock.json'), 'utf8');
   const repositoryBytes = packageText.replace(/\r\n/g, '\n');
@@ -614,6 +628,7 @@ function assertDeployContract(workflow) {
   assertStepOrder(jobs['release-package'], [
     (step) => step.name === 'Bootstrap checksum-pinned actionlint',
     (step) => runLines(step).includes('pnpm verify:workflows'),
+    (step) => step.name === 'Verify production web configuration was compiled',
     (step) => step.name === 'Build closed data-only release package',
     (step) => actionName(step.uses) === 'actions/upload-artifact' && String(step.with?.name).startsWith('release-package-v1-'),
   ], 'release package must be built before upload as evidence');
@@ -621,6 +636,40 @@ function assertDeployContract(workflow) {
   assert.match(String(actionlintBootstrap.run), /actionlint_\$\{version\}_linux_amd64\.tar\.gz/);
   assert.match(String(actionlintBootstrap.run), /8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8/);
   assert.match(String(actionlintBootstrap.run), /sha256sum --check --strict/);
+  const releaseGate = stepNamed(jobs['release-package'], 'Run every source-side release gate');
+  assert.equal(releaseGate.env?.LUPI_FIREBASE_WEB_API_KEY, '${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}');
+  assert.match(String(releaseGate.run), /VITE_FIREBASE_API_KEY="\$LUPI_FIREBASE_WEB_API_KEY" pnpm build/);
+  const releaseCommands = runLines(releaseGate);
+  assert.ok(
+    releaseCommands.indexOf('pnpm test') < releaseCommands.indexOf('VITE_FIREBASE_API_KEY="$LUPI_FIREBASE_WEB_API_KEY" pnpm build'),
+    'the production-configured web build must run after tests that can rebuild the workspace',
+  );
+  assert.equal(
+    releaseCommands.at(-1),
+    'VITE_FIREBASE_API_KEY="$LUPI_FIREBASE_WEB_API_KEY" pnpm build',
+    'the production-configured build must be the final source-side command before bundle verification',
+  );
+  const compiledConfig = stepNamed(jobs['release-package'], 'Verify production web configuration was compiled');
+  assert.equal(compiledConfig.env?.LUPI_FIREBASE_WEB_API_KEY, '${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}');
+  for (const [name, value] of Object.entries({
+    VITE_FIREBASE_AUTH_DOMAIN: 'lupi.live',
+    VITE_FIREBASE_PROJECT_ID: 'shed-489901',
+    VITE_LUPI_MCP_ENDPOINT: '/mcp',
+    VITE_LUPI_ANALYTICS_URL: '/collectAnalytics',
+  })) assert.equal(workflow.env?.[name], value, `Cloudflare production env is missing ${name}`);
+  assert.match(String(compiledConfig.run), /bundle\.includes\(value\)/);
+
+  const priorReplay = stepNamed(jobs['prior-rollback-verify'], 'Reproduce predecessor rollback suite against current public traffic');
+  assert.equal(priorReplay.env?.UI_TEST_EXPECT_HEALTH, '${{ steps.prior.outputs.expect_health }}');
+  assert.match(String(priorReplay.run), /full-ui-configless-v1\|full-ui-v1\) pnpm test:ui/);
+  const rollbackReplay = stepNamed(jobs['rollback-ui-verify'], 'Verify restored predecessor with its own frozen suite');
+  assert.equal(rollbackReplay.env?.UI_TEST_EXPECT_HEALTH, '${{ steps.source.outputs.expect_health }}');
+  assert.match(String(rollbackReplay.run), /full-ui-configless-v1\|full-ui-v1\) pnpm test:ui/);
+
+  for (const jobId of ['candidate-verify', 'public-verify']) {
+    const step = (jobs[jobId].steps ?? []).find((candidate) => candidate.env?.UI_TEST_EXPECT_HEALTH !== undefined);
+    assert.equal(step?.env?.UI_TEST_EXPECT_HEALTH, 'true', `${jobId} must require healthy saved views`);
+  }
   assertStepOrder(jobs['version-upload'], [
     (step) => actionName(step.uses) === 'actions/download-artifact' && String(step.with?.name).startsWith('release-package-v1-'),
     (step) => step.name === 'Validate the data-only payload without executing it',
@@ -760,6 +809,15 @@ function assertReconcileContract(workflow) {
   assert.match(reanchorText, /release-reanchor-outcome\.json/);
   assert.match(reanchorText, /canonicalSha256\(report\.baseline\.projection\)/, 'reanchor must verify the owner fingerprint');
   assert.match(reanchorText, /validateRootOutcome\(outcome\)/, 'reanchor must emit a parser-valid root');
+  assert.match(reanchorText, /LUPI_CONFIGLESS_PREDECESSOR_SHA/);
+  assert.match(reanchorText, /full-ui-configless-v1/);
+  assert.match(reanchorText, /ROLLBACK_COMMAND_MODE/);
+  const reconciliationUi = stepNamed(jobs['reconcile-ui-verify'], 'Run exact active source UI suite');
+  assert.equal(
+    reconciliationUi.env?.UI_TEST_EXPECT_HEALTH,
+    "${{ needs.reconcile-scan.outputs.rollback_command_mode == 'full-ui-v1' && 'true' || 'false' }}",
+  );
+  assert.match(String(reconciliationUi.run), /full-ui-configless-v1\|full-ui-v1\) pnpm test:ui/);
 
   const authorityText = jobText(jobs['reconcile-authority-scan']);
   for (const [snippet, label] of [

@@ -66,14 +66,23 @@ protected repository variable named `LUPI_RELEASE_CUTOVER_RECEIPT_SHA256` binds
 the separately approved cutover receipt. The legacy `prod` token is removed
 after the v2 environments are populated and verified.
 
+The repository-level `LUPI_FIREBASE_WEB_API_KEY` secret is build-only release
+configuration. The Cloudflare release passes it to Vite together with the
+public values in `apps/web/cloudflare.env.example`; Turbo explicitly forwards
+that closed list. The resulting browser key is intentionally public in the web
+bundle, remains API- and referrer-restricted in Google Cloud, and is not a
+Cloudflare control-plane credential.
+
 Runtime Worker secrets remain attached to the Worker and are preserved by
 `keep_vars = true` during version upload:
 
 - `LUPI_MCP_SHARED_SECRET`
 - `RENDERER_TOKEN`
 
-Firebase deploy secrets/config remain necessary only when deploying legacy
-Firebase Functions, rules, and indexes.
+Firebase administrative deploy credentials remain necessary only when
+deploying legacy Firebase Functions, rules, and indexes. The Firebase web API
+key remains required for browser Auth and Firestore saved views during the
+transition.
 
 Do not add:
 
@@ -109,7 +118,8 @@ Then verify manually:
 The Cloudflare deploy workflow:
 
 1. Installs pnpm dependencies from this repo.
-2. Builds the viewer with Cloudflare same-origin environment values.
+2. Builds the viewer with Cloudflare same-origin and Firebase browser values,
+   then proves those values reached the compiled entry bundle.
 3. Typechecks and tests the edge Worker.
 4. Uses the read environment to validate the active predecessor and rollback target.
 5. Uses the write environment to upload an immutable no-traffic version.

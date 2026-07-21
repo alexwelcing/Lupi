@@ -2,6 +2,7 @@
   "schemaVersion": "lupi-cloudflare-v2-cutover-receipt-v1",
   "repository": "alexwelcing/Lupi",
   "issuedAt": "2026-07-21T16:27:44.4311846Z",
+  "amendedAt": "2026-07-21T17:30:33.9587729Z",
   "decisionOwner": "Alex Welcing (@alexwelcing)",
   "operator": "Codex acting for the repository owner",
   "authorization": {
@@ -10,7 +11,9 @@
       "configure the Cloudflare v2 release authority",
       "establish the initial trusted checkpoint",
       "deploy the exact current main revision",
-      "perform bounded rollback if post-promotion proof fails"
+      "perform bounded rollback if post-promotion proof fails",
+      "repair the Cloudflare browser build configuration and candidate proof lane",
+      "record the known config-less predecessor as an explicit limited rollback contract"
     ],
     "singleOwnerResidualRiskAccepted": true
   },
@@ -117,11 +120,20 @@
       "historyProjectionSha256": "9bcce8d0d888350d176409da1dc43df152c973c105192d720c195c9e23eb1296"
     }
   },
+  "firebaseWebBuild": {
+    "projectId": "shed-489901",
+    "apiKeyId": "0f7d14ea-9e45-4791-9b93-3d1e3393f5ad",
+    "secretName": "LUPI_FIREBASE_WEB_API_KEY",
+    "keyValueIncluded": false,
+    "cloudflarePreviewReferrer": "https://*.aw-ab5.workers.dev/*",
+    "apiRestrictionsPreserved": true
+  },
   "integratedSource": {
-    "deployWorkflowSha256": "5c3f1613629b6d63a505922e1b0ba9df4b56ced50a1774804699c63be26897af",
-    "reconcileWorkflowSha256": "abcfc5c7981df84424c910e814607334302edf50ddb0ee827215836a9fbd13c8",
+    "deployWorkflowSha256": "64138559ff1144167e33852623c2ce06bb795138e96f55591eb5eac12db93ebc",
+    "reconcileWorkflowSha256": "1f459e4d054ece691e3f54e9f4ec2fcfaab6613290818cbcb0f73bd20f3b226a",
     "authorityScannerSha256": "383920b890fef57fd0331c82707bd70139c3b18c8996ba19304c1a32f572fafd",
-    "liveVerifierSha256": "2b72679fa4b6576f8be29079e7573f08f9c95720d419041cc696f187d7e7deb6"
+    "liveVerifierSha256": "2b72679fa4b6576f8be29079e7573f08f9c95720d419041cc696f187d7e7deb6",
+    "receiptParserSha256": "662e38f50adf523b20ec61f74e170d1691202b0fa826c056e896d4e56c0e9201"
   },
   "trustedPredecessor": {
     "buildSha": "f94c8049db4fea5a1a84815e44d2a9564f740700",
