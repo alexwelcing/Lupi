@@ -36,8 +36,8 @@ export function IconPause({ size = 16 }: { size?: number }) {
 
 // ─── Lupi toolbar glyphs ──────────────────────────────────────────────
 // Specimen-frame linework, not emoji or generic app art. The corner ticks
-// are the shared frame; each glyph fills in its own subject. Used by both the
-// desktop dock (ViewerControlsDrawer) and the mobile chrome (App).
+// are the shared frame; each glyph fills in its own subject. Used throughout
+// the viewer command deck and its context panels.
 export function LupiGlyph({ children }: { children: ReactNode }) {
   return (
     <svg

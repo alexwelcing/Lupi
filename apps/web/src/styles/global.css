@@ -376,7 +376,6 @@ button:focus:not(:focus-visible) {
     inset 0 1px 0 rgba(255,255,255,0.08),
     inset 0 -1px 0 rgba(0,0,0,0.34),
     0 10px 24px rgba(0,0,0,0.18);
-  will-change: transform;
 }
 .lupine-btn:hover {
   color: var(--text-primary);
@@ -761,6 +760,308 @@ button:focus:not(:focus-visible) {
 }
 
 /* ─── App root layout variables ─── */
+/* Molecular viewer command HUD. One stable status bar, one command deck and
+   one edge-docked panel; none sample the live WebGL canvas with backdrop blur. */
+.lupine-status-bar {
+  background: linear-gradient(90deg, rgba(11, 18, 26, 0.985), rgba(6, 10, 16, 0.96)), #070b10;
+  border: 1px solid #22303d;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34), inset 3px 0 0 rgba(34, 211, 215, 0.76), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  contain: layout paint;
+}
+
+.lupine-status-bar__readout {
+  color: #6f8397;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.lupine-command-deck {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 220;
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  overflow: hidden;
+  color: #8b9aab;
+  background: linear-gradient(180deg, rgba(12, 19, 28, 0.99), rgba(5, 9, 14, 0.985)), #070b10;
+  border: 1px solid #22303d;
+  border-radius: 9px;
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  contain: layout paint;
+}
+
+.lupine-command-slot {
+  position: relative;
+  width: 52px;
+  min-width: 52px;
+  min-height: 50px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  padding: 5px 3px 4px;
+  overflow: hidden;
+  color: #8b9aab;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 90ms ease-out, background-color 90ms ease-out, border-color 90ms ease-out, transform 90ms ease-out;
+}
+
+.lupine-command-slot::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: transparent;
+}
+
+.lupine-command-slot:hover {
+  color: #d8e3ed;
+  background: #0b121a;
+  border-color: #263746;
+}
+
+.lupine-command-slot:active { transform: scale(0.97); }
+.lupine-command-slot:focus-visible { outline: 2px solid rgba(34, 211, 215, 0.82); outline-offset: -2px; }
+
+.lupine-command-slot[aria-pressed='true'] {
+  color: #dffeff;
+  background: linear-gradient(90deg, rgba(34, 211, 215, 0.14), rgba(34, 211, 215, 0.045));
+  border-color: rgba(34, 211, 215, 0.34);
+}
+
+.lupine-command-slot[aria-pressed='true']::before {
+  background: #22d3d7;
+  box-shadow: 0 0 10px rgba(34, 211, 215, 0.46);
+}
+
+.lupine-command-slot__icon { width: 20px; height: 20px; display: grid; place-items: center; }
+.lupine-command-slot__label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 8px;
+  font-weight: 760;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.lupine-command-slot__key {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  color: #526170;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.lupine-command-panel {
+  position: absolute;
+  top: 12px;
+  right: 84px;
+  bottom: 12px;
+  z-index: 210;
+  width: clamp(336px, 31vw, 388px);
+  max-width: calc(100% - 112px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #e8f0f7;
+  background: linear-gradient(180deg, rgba(10, 16, 24, 0.99), rgba(5, 9, 14, 0.99)), #070b10;
+  border: 1px solid #22303d;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  contain: layout paint;
+  animation: lupi-command-panel-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lupi-command-panel-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.lupine-command-panel__header {
+  position: relative;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 9px 9px 13px;
+  flex-shrink: 0;
+  background: #0a1119;
+  border-bottom: 1px solid #22303d;
+}
+.lupine-command-panel__accent {
+  width: 3px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #22d3d7, #118b9b);
+  box-shadow: 0 0 12px rgba(34, 211, 215, 0.28);
+}
+.lupine-command-section-label {
+  color: #607184;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lupine-command-panel__title { color: #e8f0f7; font-size: 15px; font-weight: 720; line-height: 1; }
+.lupine-command-panel__close {
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #8392a2;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.lupine-command-panel__close:hover { color: #f4f8fb; background: #111b25; border-color: #2b3c4c; }
+.lupine-command-panel__close:focus-visible { outline: 2px solid rgba(34, 211, 215, 0.82); outline-offset: -2px; }
+.lupine-command-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.lupine-command-panel__loading {
+  min-height: 160px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: #718397;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.lupine-command-panel__loading span {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #263746;
+  border-top-color: #22d3d7;
+  border-radius: 50%;
+  animation: lupi-command-loading 700ms linear infinite;
+}
+@keyframes lupi-command-loading { to { transform: rotate(360deg); } }
+
+.lupine-camera-command { min-height: 100%; display: flex; flex-direction: column; }
+.lupine-camera-command__quick {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  flex-shrink: 0;
+  background: #081019;
+  border-bottom: 1px solid #22303d;
+}
+.lupine-camera-command__presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.lupine-camera-preset {
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  place-content: center;
+  gap: 3px;
+  color: #9aa9b9;
+  background: #0b141e;
+  border: 1px solid #263746;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.lupine-camera-preset span { color: inherit; font-family: var(--font-mono); font-size: 10px; font-weight: 800; }
+.lupine-camera-preset small { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.lupine-camera-preset:hover,
+.lupine-camera-preset[aria-pressed='true'] { color: #dffeff; background: rgba(34, 211, 215, 0.1); border-color: rgba(34, 211, 215, 0.46); }
+.lupine-camera-command__path { flex: 1; min-height: 0; overflow: auto; }
+
+.lupine-app-root[data-file='true'] .lupine-glass,
+.lupine-app-root[data-file='true'] .lupine-glass-panel,
+.lupine-app-root[data-file='true'] .lupine-rail,
+.lupine-app-root[data-file='true'] .lupine-sheet {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (max-width: 640px), (max-height: 500px) and (max-width: 900px) {
+  .lupine-command-deck {
+    top: auto;
+    right: 50%;
+    bottom: 8px;
+    width: auto;
+    max-width: calc(100% - 12px);
+    flex-direction: row;
+    gap: 2px;
+    padding: 4px;
+    transform: translateX(50%);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .lupine-command-deck::-webkit-scrollbar { display: none; }
+  .lupine-command-slot__key { display: none; }
+  .lupine-command-slot { width: 50px; min-width: 50px; min-height: 47px; padding: 4px 3px; }
+  .lupine-command-slot::before {
+    top: auto;
+    right: 7px;
+    bottom: 0;
+    left: 7px;
+    width: auto;
+    height: 3px;
+    border-radius: 2px 2px 0 0;
+  }
+  .lupine-command-panel {
+    top: 8px;
+    right: 8px;
+    bottom: 68px;
+    left: 8px;
+    width: auto;
+    max-width: none;
+    border-radius: 10px;
+    animation-name: lupi-command-panel-in-compact;
+  }
+  @keyframes lupi-command-panel-in-compact {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .lupine-camera-command__presets {
+    grid-template-columns: repeat(5, minmax(58px, 1fr));
+    overflow-x: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lupine-command-panel,
+  .lupine-command-panel__loading span,
+  .lupine-command-slot {
+    animation: none;
+    transition: none;
+  }
+}
+
 .lupine-app-root {
   --app-header-height: 56px;
   --app-mobile-tab-bar-bottom: calc(env(safe-area-inset-bottom) + 10px);

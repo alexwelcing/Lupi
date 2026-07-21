@@ -1,5 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react';
-import { useThree } from '@react-three/fiber';
+import { memo, useMemo, useState, useEffect } from 'react';
 import { GizmoHelper, GizmoViewport, ContactShadows, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '../store';
@@ -49,6 +48,54 @@ import type { MutableRefObject } from 'react';
 import type { SpatialHash3D } from '@atlas/scene/SpatialHash';
 import type { BgMedia, BgPreset } from '../backgroundPresets';
 
+const CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT = 5_000;
+const CONTACT_SHADOW_MAX_ATOM_LIMIT = 50_000;
+
+interface BudgetedContactShadowsProps {
+  atomCount: number;
+  centerX: number;
+  centerY: number;
+  centerZ: number;
+  far: number;
+  opacity: number;
+  planeSize: number;
+  playing: boolean;
+}
+
+/**
+ * ContactShadows performs a full scene depth render followed by multiple blur
+ * passes. Keep the authored 1024px result for small, paused molecules, reduce
+ * the one-shot capture for medium scenes, and omit it once the atom layer is
+ * dense enough that the extra scene pass competes with the molecule itself.
+ * During playback `frames={0}` preserves the last captured texture without
+ * continuously re-rendering the shadow map.
+ */
+const BudgetedContactShadows = memo(function BudgetedContactShadows({
+  atomCount,
+  centerX,
+  centerY,
+  centerZ,
+  far,
+  opacity,
+  planeSize,
+  playing,
+}: BudgetedContactShadowsProps) {
+  if (atomCount > CONTACT_SHADOW_MAX_ATOM_LIMIT) return null;
+
+  return (
+    <ContactShadows
+      position={[centerX, centerY - 0.05, centerZ]}
+      scale={planeSize}
+      blur={2.4}
+      far={far}
+      opacity={opacity}
+      resolution={atomCount <= CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT ? 1024 : 512}
+      frames={playing ? 0 : 1}
+      color="#04060c"
+    />
+  );
+});
+
 export function ViewerScene({
   file,
   currentFrame,
@@ -58,6 +105,7 @@ export function ViewerScene({
   interpolatedFrameKey,
   ghostFile,
   interpState,
+  liveStateRef,
   deviceMaxAtoms,
   deviceQualityTier,
   loadedAtomCount,
@@ -88,6 +136,7 @@ export function ViewerScene({
   interpolatedFrameKey: number;
   ghostFile: ReturnType<typeof useStore.getState>['ghostFile'];
   interpState: InterpolatedFrameState;
+  liveStateRef: ReturnType<typeof useSmoothFramePlayback>['liveStateRef'];
   deviceMaxAtoms: number;
   deviceQualityTier: number;
   loadedAtomCount: number;
@@ -146,10 +195,6 @@ export function ViewerScene({
   const measurement = useStore(s => s.measurement);
   const highlightedNeighbors = useStore(s => s.highlightedNeighbors);
   const dimNonNeighbors = useStore(s => s.showNeighbors);
-  const ssao = useStore(s => s.ssao);
-  const bloom = useStore(s => s.bloom);
-  const dof = useStore(s => s.dof);
-  const toneMapping = useStore(s => s.toneMapping);
   const showCell = useStore(s => s.showCell);
   const showAxes = useStore(s => s.showAxes);
   const flythroughPreview = useStore(s => s.flythroughPreview);
@@ -377,6 +422,8 @@ export function ViewerScene({
             frame={interpolatedFrame ?? currentFrame!}
             nextFrame={interpolatedNextFrame}
             interpolationFactor={interpolationFactor}
+            frameIndex={interpolatedFrameKey}
+            liveStateRef={liveStateRef}
             colorMode={colorMode}
             colorProperty={colorProperty ?? undefined}
             colormap={colormap}
@@ -414,6 +461,8 @@ export function ViewerScene({
               frame={interpolatedFrame ?? currentFrame!}
               nextFrame={interpolatedNextFrame}
               interpolationFactor={interpolationFactor}
+              frameIndex={interpolatedFrameKey}
+              liveStateRef={liveStateRef}
               field={activeVectorField}
               scale={vectorScale}
               density={vectorDensity}
@@ -469,14 +518,18 @@ export function ViewerScene({
             const dz = b[5] - b[4];
             const planeSize = Math.max(dx, dz) * 1.6;
             return (
-              <ContactShadows
-                position={[cx, cy - 0.05, cz]}
-                scale={planeSize}
-                blur={2.4}
+              <BudgetedContactShadows
+                key={playing
+                  ? 'contact-shadows-playing'
+                  : `contact-shadows:${interpolatedFrameKey}:${atomScale}:${hiddenAtomTypesKey}`}
+                atomCount={currentFrame.natoms}
+                centerX={cx}
+                centerY={cy}
+                centerZ={cz}
                 far={Math.max(20, dx * 0.6)}
                 opacity={postprocessPreset === 'cinematic' ? 0.55 : 0.32}
-                resolution={1024}
-                color="#04060c"
+                planeSize={planeSize}
+                playing={playing}
               />
             );
           })()}

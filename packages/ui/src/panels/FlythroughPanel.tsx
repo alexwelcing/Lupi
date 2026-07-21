@@ -331,19 +331,9 @@ export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: 
           {/* Empty state */}
           {!flythrough && (
             <div style={{
-              padding: '24px 16px', textAlign: 'center',
+              padding: 12, textAlign: 'center',
               background: '#0d1117', border: '1px solid #1f2937',
             }}>
-              <div style={{
-                fontSize: 13, fontWeight: 600, color: '#e2e8f0',
-                fontFamily: 'Space Grotesk, sans-serif', marginBottom: 8,
-              }}>Create a Camera Flythrough</div>
-              <div style={{
-                fontSize: 11, color: '#64748b', lineHeight: 1.5, marginBottom: 16,
-              }}>
-                Position your camera where you want the first stop,
-                then click below. Add up to 5 keyframes with easing transitions.
-              </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={handleAddKeyframe} style={{ ...btnPrimary, flex: 1 }}>
                   <IconCamera /> Capture First Stop

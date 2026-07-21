@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useStore } from '../store';
 import { FlexRow } from '../primitives/AppShell';
 import { IconClose } from '../icons';
@@ -6,20 +7,30 @@ import { LupiAgentDock } from '../LupiAgentDock';
 import { LupiAuthCallout } from '../LupiAuthCallout';
 import { openRandomOmol25Molecule } from '../molecules/randomOmol';
 
-export function AppHeader({
+const atomCountFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+
+export const AppHeader = memo(function AppHeader({
   isMobile,
   clearLoadedFile,
 }: {
   isMobile: boolean;
   clearLoadedFile: () => void;
 }) {
-  const file = useStore(s => s.file);
-  const mobileLoadedHeader = isMobile && !!file;
+  // Primitive selectors keep streaming-frame inserts from repainting this
+  // stable status bar while a trajectory is playing.
+  const fileLoaded = useStore(s => Boolean(s.file));
+  const fileName = useStore(s => s.file?.name ?? '');
+  const atomCount = useStore(s => s.file?.trajectory.frames.find(Boolean)?.natoms ?? 0);
+  const totalFrames = useStore(s => s.file?.trajectory.totalFrames ?? 0);
+  const mobileLoadedHeader = isMobile && fileLoaded;
+  const statusSummary = atomCount > 0
+    ? `${atomCountFormatter.format(atomCount)} atoms${totalFrames > 1 ? ` · ${totalFrames} frames` : ''}`
+    : totalFrames > 1 ? `${totalFrames} frames` : '';
 
   return (
     <>
       <header
-        className={file ? 'lupine-glass' : ''}
+        className={fileLoaded ? 'lupine-status-bar' : ''}
         style={{
           height: 'var(--app-header-height)',
           minHeight: 'var(--app-header-height)',
@@ -32,13 +43,10 @@ export function AppHeader({
           columnGap: mobileLoadedHeader ? 8 : undefined,
           rowGap: mobileLoadedHeader ? 2 : undefined,
           padding: mobileLoadedHeader ? 'calc(env(safe-area-inset-top) + 10px) 10px 6px' : (isMobile ? 'env(safe-area-inset-top) 8px 0' : '0 16px'),
-          margin: file ? (isMobile ? '0 8px 0' : '14px 16px 0') : 0,
-          borderRadius: file ? 8 : 0,
-          borderBottom: file ? 'none' : '1px solid var(--border-subtle)',
-          background: file ? undefined : 'var(--bg-glass)',
-          backdropFilter: file ? undefined : 'blur(12px)',
-          WebkitBackdropFilter: file ? undefined : 'blur(12px)',
-          boxShadow: file ? '0 18px 48px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
+          margin: fileLoaded ? (isMobile ? '0 8px 0' : '14px 16px 0') : 0,
+          borderRadius: fileLoaded ? 8 : 0,
+          borderBottom: fileLoaded ? 'none' : '1px solid var(--border-subtle)',
+          background: fileLoaded ? undefined : 'var(--bg-glass)',
           zIndex: 200,
         }}
       >
@@ -51,8 +59,8 @@ export function AppHeader({
           }}
         >
           <button
-            onClick={() => { if (file) clearLoadedFile(); }}
-            aria-label={file ? 'Return to Lupi home' : 'Lupi home'}
+            onClick={() => { if (fileLoaded) clearLoadedFile(); }}
+            aria-label={fileLoaded ? 'Return to Lupi home' : 'Lupi home'}
             className="lupine-btn icon-only"
             style={{
               background: 'transparent',
@@ -60,7 +68,7 @@ export function AppHeader({
               boxShadow: 'none',
               padding: isMobile ? '0 2px' : 6,
               gap: 4,
-              cursor: file ? 'pointer' : 'default',
+              cursor: fileLoaded ? 'pointer' : 'default',
               height: isMobile ? 34 : undefined,
               minHeight: isMobile ? 34 : undefined,
               aspectRatio: isMobile ? 'auto' : undefined,
@@ -75,20 +83,10 @@ export function AppHeader({
             </span>
           </button>
 
-          {file && !isMobile && (
+          {fileLoaded && !isMobile && (
             <>
               <div className="lupine-divider" />
               <span style={{ display: 'grid', gap: 1, minWidth: 0, maxWidth: 300 }}>
-                <span style={{
-                  fontSize: 10,
-                  color: 'rgba(203,213,225,0.48)',
-                  fontWeight: 760,
-                  lineHeight: 1,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0,
-                }}>
-                  Loaded
-                </span>
                 <span
                   className="lupine-truncate"
                   style={{
@@ -97,10 +95,11 @@ export function AppHeader({
                     fontWeight: 650,
                     lineHeight: 1.2,
                   }}
-                  title={file.name}
+                  title={fileName}
                 >
-                  {file.name}
+                  {fileName}
                 </span>
+                {statusSummary && <span className="lupine-status-bar__readout">{statusSummary}</span>}
               </span>
               <button
                 onClick={clearLoadedFile}
@@ -115,7 +114,7 @@ export function AppHeader({
           )}
         </FlexRow>
 
-        {file && isMobile && (
+        {fileLoaded && isMobile && (
           <div
             style={{
               display: 'flex',
@@ -127,19 +126,8 @@ export function AppHeader({
               padding: '0 1px',
             }}
           >
-            <span style={{
-              flexShrink: 0,
-              fontSize: 9,
-              color: 'rgba(203,213,225,0.48)',
-              fontWeight: 760,
-              lineHeight: 1,
-              textTransform: 'uppercase',
-              letterSpacing: 0,
-            }}>
-              Loaded
-            </span>
             <span
-              title={file.name}
+              title={fileName}
               className="lupine-truncate"
               style={{
                 flex: '1 1 auto',
@@ -149,8 +137,9 @@ export function AppHeader({
                 lineHeight: 1.15,
               }}
             >
-              {file.name}
+              {fileName}
             </span>
+            {statusSummary && <span className="lupine-status-bar__readout">{statusSummary}</span>}
             <button
               onClick={clearLoadedFile}
               title="Close"
@@ -173,7 +162,7 @@ export function AppHeader({
             justifySelf: mobileLoadedHeader ? 'end' : undefined,
           }}
         >
-          {!file && (
+          {!fileLoaded && (
             <>
               <a
                 href="#gallery"
@@ -206,11 +195,11 @@ export function AppHeader({
               </button>
             </>
           )}
-          {file && <SavedViewButton compact={isMobile} />}
+          {fileLoaded && <SavedViewButton compact={isMobile} />}
           <LupiAgentDock compact={isMobile} />
         </FlexRow>
       </header>
       <LupiAuthCallout compact={isMobile} />
     </>
   );
-}
+});
