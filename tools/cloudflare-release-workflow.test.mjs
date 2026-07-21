@@ -660,6 +660,14 @@ function assertDeployContract(workflow) {
   assert.match(String(compiledConfig.run), /bundle\.includes\(value\)/);
 
   const priorReplay = stepNamed(jobs['prior-rollback-verify'], 'Reproduce predecessor rollback suite against current public traffic');
+  const priorPnpmSetup = (jobs['prior-rollback-verify'].steps ?? []).find(
+    (step) => actionName(step.uses) === 'pnpm/action-setup',
+  );
+  assert.equal(
+    priorPnpmSetup?.with?.package_json_file,
+    'predecessor/package.json',
+    'predecessor replay must resolve pnpm from its nested checkout',
+  );
   assert.equal(priorReplay.env?.UI_TEST_EXPECT_HEALTH, '${{ steps.prior.outputs.expect_health }}');
   assert.match(String(priorReplay.run), /full-ui-configless-v1\|full-ui-v1\) pnpm test:ui/);
   const rollbackReplay = stepNamed(jobs['rollback-ui-verify'], 'Verify restored predecessor with its own frozen suite');
