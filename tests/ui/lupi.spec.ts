@@ -22,7 +22,7 @@ async function preparePage(page: Page) {
 
 async function expectViewerReady(page: Page) {
   await expect(page.getByRole('button', { name: 'Close dataset' })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('viewer-tool-rail')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toBeVisible({ timeout: 30_000 });
 
   const canvas = page.locator('.lupine-main-viewport canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
@@ -85,27 +85,29 @@ test('@deployed-smoke viewer settings are usable and learning tools are discover
   await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
   await expectViewerReady(page);
 
-  const tools = page.getByTestId('viewer-tool-rail');
-  await tools.getByRole('button', { name: 'Style' }).click();
+  const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
+  await commands.getByRole('button', { name: 'Model command' }).click();
 
-  const structurePanel = page.getByRole('region', { name: 'Structure tool panel' });
-  await expect(structurePanel).toBeVisible();
-  await expect(structurePanel.getByTestId('viewer-controls-drawer')).toBeVisible();
+  const modelPanel = page.getByRole('region', { name: 'Model command panel' });
+  await expect(modelPanel).toBeVisible();
 
-  const occupiedSpace = structurePanel.getByTestId('quick-view-space');
+  const occupiedSpace = modelPanel.getByTestId('quick-view-space');
   await occupiedSpace.click();
   await expectPressed(occupiedSpace);
 
-  await structurePanel.getByRole('button', { name: 'Background' }).click();
-  const backgroundPanel = page.getByRole('region', { name: 'Background tool panel' });
-  await expect(backgroundPanel).toBeVisible();
+  await commands.getByRole('button', { name: 'World command' }).click();
+  const worldPanel = page.getByRole('region', { name: 'World command panel' });
+  await expect(worldPanel).toBeVisible();
 
-  const warmBackground = backgroundPanel.getByRole('button', { name: 'Warm' });
+  const warmBackground = worldPanel.getByRole('button', { name: 'Warm' });
   await warmBackground.click();
   await expectPressed(warmBackground);
 
-  await expect(page.getByRole('button', { name: 'Camera view: Free' })).toBeVisible();
-  await expect(page.getByTestId('study-lens-toggle')).toBeVisible();
+  await commands.getByRole('button', { name: 'Camera command' }).click();
+  await expect(page.getByRole('region', { name: 'Camera command panel' })).toBeVisible();
+
+  await commands.getByRole('button', { name: 'Learn command' }).click();
+  await expect(page.getByTestId('study-lens-panel')).toBeVisible();
   await releaseRenderer(page);
 });
 
@@ -217,16 +219,20 @@ test.describe('mobile viewer', () => {
     await preparePage(page);
     await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
 
-    await expect(page.getByRole('navigation', { name: 'Viewer navigation' })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Style controls' }).click();
+    const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
+    await expect(commands).toBeVisible({ timeout: 30_000 });
+    await commands.getByRole('button', { name: 'Model command' }).click();
 
-    const drawer = page.getByTestId('viewer-controls-drawer');
-    await expect(drawer).toBeVisible();
-    await drawer.getByRole('button', { name: 'Background' }).click();
-    await expect(drawer.getByRole('button', { name: 'Warm' })).toBeVisible();
+    const modelPanel = page.getByRole('region', { name: 'Model command panel' });
+    await expect(modelPanel).toBeVisible();
+    await expect(modelPanel.getByTestId('quick-view-space')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Close panel' }).click();
-    await expect(drawer).toBeHidden();
+    await commands.getByRole('button', { name: 'World command' }).click();
+    const worldPanel = page.getByRole('region', { name: 'World command panel' });
+    await expect(worldPanel.getByRole('button', { name: 'Warm' })).toBeVisible();
+
+    await worldPanel.getByRole('button', { name: 'Close World panel' }).click();
+    await expect(worldPanel).toBeHidden();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await releaseRenderer(page);
   });
@@ -235,7 +241,7 @@ test.describe('mobile viewer', () => {
     await preparePage(page);
     await page.goto(`/?sim=${TRAJECTORY_ID}`, { waitUntil: 'commit' });
 
-    await expect(page.getByRole('navigation', { name: 'Viewer navigation' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('transport-frame-readout')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('playback-status')).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByTestId('desktop-playback-speeds')).toHaveCount(0);

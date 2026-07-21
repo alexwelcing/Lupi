@@ -399,9 +399,10 @@ test.describe('mobile render artifact reachability', () => {
     });
     expect(molecule.result?.molecule).toMatchObject({ name: 'Water', formula: 'H2O', atomCount: 3 });
 
-    await expect(page.getByRole('navigation', { name: 'Viewer navigation' })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Style controls' }).click();
-    await expect(page.getByTestId('viewer-controls-drawer')).toBeVisible();
+    const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
+    await expect(commands).toBeVisible({ timeout: 30_000 });
+    await commands.getByRole('button', { name: 'Model command' }).click();
+    await expect(page.getByRole('region', { name: 'Model command panel' })).toBeVisible();
     await expect.poll(() => page.evaluate(() => (
       window.__lupiViewerMcp?.tools().some(tool => tool.name === 'lupi.export_asset') ?? false
     ))).toBe(true);
