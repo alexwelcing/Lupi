@@ -927,6 +927,18 @@ const DEFAULTS = {
   loadedAtomCount: 0,
 };
 
+/**
+ * Keep dense molecular-dynamics vector fields legible on first use. The
+ * sample is deterministic in VectorGlyphs, so reducing density removes visual
+ * occlusion without introducing frame-to-frame flicker or changing the
+ * magnitude reference computed from the full field.
+ */
+export function getDefaultVectorDensity(atomCount: number): number {
+  if (!Number.isFinite(atomCount) || atomCount <= 0) return 1;
+  const targetGlyphs = 300;
+  return Math.max(0.01, Math.min(1, Math.round((targetGlyphs / atomCount) * 100) / 100));
+}
+
 export const useStore = create<AppState>()(
   subscribeWithSelector((set, get) => ({
     ...DEFAULTS,
@@ -1017,7 +1029,7 @@ export const useStore = create<AppState>()(
         // Vector glyphs reset per file — field ids are dataset-specific.
         vectorField: null,
         vectorScale: DEFAULTS.vectorScale,
-        vectorDensity: DEFAULTS.vectorDensity,
+        vectorDensity: getDefaultVectorDensity(atomCount),
         // Legacy mirrors of preset (PresetLegacyBridge re-syncs but writing
         // them here avoids a one-frame flash before the bridge catches up).
         // SSAO follows the same threshold as bond detection / preset

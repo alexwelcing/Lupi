@@ -207,8 +207,13 @@ export function VectorGlyphs({
         uMagRange: { value: new THREE.Vector2(0, 1) },
         uColormap: { value: colormapTex },
       },
-      depthWrite: true,
-      depthTest: true,
+      // Vector fields are an analytical overlay. With depth testing enabled,
+      // arrows begin at atom centers and dense systems hide nearly every
+      // shaft inside the atom cloud. A sparse deterministic sample rendered
+      // above the structure keeps direction and magnitude readable at the
+      // compact viewport sizes used by the Codex preview and mobile viewer.
+      depthWrite: false,
+      depthTest: false,
       transparent: false,
       side: THREE.DoubleSide,
     });

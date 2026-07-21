@@ -69,6 +69,8 @@ describe('VectorGlyphs immutable artifact receipt', () => {
       );
 
       expect(colormapTexture.colorSpace).toBe(THREE.SRGBColorSpace);
+      expect(material.depthTest).toBe(false);
+      expect(material.depthWrite).toBe(false);
       expect(material.fragmentShader).toContain('#include <colorspace_fragment>');
       expect(material.fragmentShader.indexOf('#include <colorspace_fragment>')).toBeGreaterThan(
         material.fragmentShader.indexOf('gl_FragColor = vec4(vColor * edge, 1.0);'),

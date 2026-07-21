@@ -95,7 +95,7 @@ export function PropertyLegendHUD({
   const vectorEntry = useMemo(() => {
     if (!activeVectorField || !vectorStats) return null;
     return {
-      label: `${activeVectorField.label} magnitude`,
+      label: `${activeVectorField.label} magnitude · ${vectorStats.shownCount.toLocaleString()} sampled arrows`,
       min: 0,
       max: vectorStats.refMagnitude,
       overflow: vectorStats.magMax > vectorStats.refMagnitude,

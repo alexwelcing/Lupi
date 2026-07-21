@@ -507,7 +507,7 @@ export function MoleculeControls() {
           {vectorField !== null && (
             <>
               <CompactSlider label="Length" value={vectorScale} min={0.2} max={4} step={0.1} onChange={setVectorScale} format={value => `${value.toFixed(1)}×`} />
-              <CompactSlider label="Density" value={vectorDensity} min={0.05} max={1} step={0.05} onChange={setVectorDensity} format={value => `${Math.round(value * 100)}%`} />
+              <CompactSlider label="Density" value={vectorDensity} min={0.01} max={1} step={0.01} onChange={setVectorDensity} format={value => `${Math.round(value * 100)}%`} />
               <p style={schemeHintStyle}>
                 Arrows are colored by magnitude. Property map can paint atoms with the same scale.
               </p>
