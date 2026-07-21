@@ -10,7 +10,7 @@ import { useStore, type AppState } from './store';
 import { ViewerPanelBody } from './ViewerPanelBody';
 
 const PANEL_TITLES: Record<NonNullable<AppState['activePanel']>, string> = {
-  studio: 'Model',
+  studio: 'Visuals',
   export: 'Capture',
   flythrough: 'Camera',
   telemetry: 'Analyze',
@@ -19,15 +19,14 @@ const PANEL_TITLES: Record<NonNullable<AppState['activePanel']>, string> = {
 };
 
 export const PanelHost = memo(function PanelHost() {
-  const fileLoaded = useStore(s => Boolean(s.file));
+  const file = useStore(s => s.file);
   const activePanel = useStore(s => s.activePanel);
   const studioDeck = useStore(s => s.studioDeck);
 
-  if (!activePanel || !fileLoaded) return null;
+  if (!activePanel || !file) return null;
 
-  const title = activePanel === 'studio' && studioDeck === 'scene'
-    ? 'World'
-    : PANEL_TITLES[activePanel];
+  const title = PANEL_TITLES[activePanel];
+  const autoHeight = activePanel === 'telemetry' && !file.thermo?.runs.length;
 
   return (
     <aside
@@ -37,6 +36,7 @@ export const PanelHost = memo(function PanelHost() {
       aria-label={`${title} command panel`}
       data-panel={activePanel}
       data-studio-deck={studioDeck ?? undefined}
+      data-auto-height={autoHeight || undefined}
     >
       <header className="lupine-command-panel__header">
         <span className="lupine-command-panel__accent" aria-hidden="true" />

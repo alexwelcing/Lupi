@@ -86,20 +86,19 @@ test('@deployed-smoke viewer settings are usable and learning tools are discover
   await expectViewerReady(page);
 
   const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
-  await commands.getByRole('button', { name: 'Model command' }).click();
+  await commands.getByRole('button', { name: 'Visuals command' }).click();
 
-  const modelPanel = page.getByRole('region', { name: 'Model command panel' });
-  await expect(modelPanel).toBeVisible();
+  const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
+  await expect(visualsPanel).toBeVisible();
+  await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
 
-  const occupiedSpace = modelPanel.getByTestId('quick-view-space');
+  const occupiedSpace = visualsPanel.getByTestId('model-preset-space');
   await occupiedSpace.click();
   await expectPressed(occupiedSpace);
 
-  await commands.getByRole('button', { name: 'World command' }).click();
-  const worldPanel = page.getByRole('region', { name: 'World command panel' });
-  await expect(worldPanel).toBeVisible();
+  await visualsPanel.getByRole('button', { name: 'Scene controls' }).click();
 
-  const warmBackground = worldPanel.getByRole('button', { name: 'Warm' });
+  const warmBackground = visualsPanel.getByRole('button', { name: 'Warm' });
   await warmBackground.click();
   await expectPressed(warmBackground);
 
@@ -221,18 +220,18 @@ test.describe('mobile viewer', () => {
 
     const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
     await expect(commands).toBeVisible({ timeout: 30_000 });
-    await commands.getByRole('button', { name: 'Model command' }).click();
+    await commands.getByRole('button', { name: 'Visuals command' }).click();
 
-    const modelPanel = page.getByRole('region', { name: 'Model command panel' });
-    await expect(modelPanel).toBeVisible();
-    await expect(modelPanel.getByTestId('quick-view-space')).toBeVisible();
+    const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
+    await expect(visualsPanel).toBeVisible();
+    await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
+    await expect(visualsPanel.getByTestId('model-preset-space')).toBeVisible();
 
-    await commands.getByRole('button', { name: 'World command' }).click();
-    const worldPanel = page.getByRole('region', { name: 'World command panel' });
-    await expect(worldPanel.getByRole('button', { name: 'Warm' })).toBeVisible();
+    await visualsPanel.getByRole('button', { name: 'Scene controls' }).click();
+    await expect(visualsPanel.getByRole('button', { name: 'Warm' })).toBeVisible();
 
-    await worldPanel.getByRole('button', { name: 'Close World panel' }).click();
-    await expect(worldPanel).toBeHidden();
+    await visualsPanel.getByRole('button', { name: 'Close Visuals panel' }).click();
+    await expect(visualsPanel).toBeHidden();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await releaseRenderer(page);
   });

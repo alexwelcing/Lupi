@@ -29,26 +29,26 @@ import {
   schemeHintStyle,
 } from './primitives';
 
-type QuickViewId = 'balanced' | 'bonds' | 'space' | 'property';
+type ModelPresetId = 'balanced' | 'bonds' | 'space' | 'property';
 
-const QUICK_VIEW_COPY: Record<QuickViewId, { label: string; description: string; accent: string }> = {
+const MODEL_PRESET_COPY: Record<ModelPresetId, { label: string; description: string; accent: string }> = {
   balanced: {
     label: 'Balanced',
     description: 'A clear default for exploring structure.',
     accent: '#1edce0',
   },
   bonds: {
-    label: 'Inferred bonds',
+    label: 'Bonds',
     description: 'Show distance-inferred connections between nearby atoms.',
     accent: '#7de9ff',
   },
   space: {
-    label: 'Occupied space',
+    label: 'Space-fill',
     description: 'Emphasize atomic volume and packing.',
     accent: '#f59e0b',
   },
   property: {
-    label: 'Property map',
+    label: 'Property',
     description: 'Color atoms using per-atom data.',
     accent: '#c084fc',
   },
@@ -154,6 +154,7 @@ export function MoleculeControls() {
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
   const [selectedType, setSelectedType] = useState<number | null>(null);
+  const [focusedPreset, setFocusedPreset] = useState<ModelPresetId | null>(null);
 
   const materialScenes = useMemo(
     () => MATERIAL_SCENES.filter(scene => FEATURED_SCENE_IDS.includes(scene.id)),
@@ -277,8 +278,8 @@ export function MoleculeControls() {
   const balancedAtomScale = requiresDiagram ? 0.72 : 1;
   const identityColorScheme: ColorSchemeId = hasElementIdentity ? 'element' : 'colorway';
 
-  const applyQuickView = (view: QuickViewId) => {
-    // Quick views intentionally touch only the structure presentation. They
+  const applyModelPreset = (view: ModelPresetId) => {
+    // Presets intentionally touch only the structure presentation. They
     // never change the selected background, environment, or lighting setup.
     setVectorField(null);
 
@@ -322,7 +323,7 @@ export function MoleculeControls() {
     setBondsVisible(false);
   };
 
-  const activeQuickView: QuickViewId | null = (() => {
+  const activeModelPreset: ModelPresetId | null = (() => {
     if (
       postprocessPreset === balancedPreset
       && postprocessIntensity === balancedIntensity
@@ -363,33 +364,63 @@ export function MoleculeControls() {
     return null;
   })();
 
+  const modelPresetUnavailableReason = (view: ModelPresetId): string | null => {
+    if (view === 'bonds' && !bondsAreSafe) {
+      return atomCount >= 25_000
+        ? `Bonds are unavailable above 25,000 atoms for performance. Use Balanced or load a smaller structure; this one has ${atomCount.toLocaleString()} atoms.`
+        : 'Bonds need source pairs or mapped elements with Ångström coordinates. Load a chemically mapped XYZ or LAMMPS source.';
+    }
+    if (view === 'space' && requiresDiagram) {
+      return 'Space-fill is unavailable at 200,000 atoms and above to avoid overdraw. Use Balanced or load a smaller structure.';
+    }
+    if (view === 'property' && !validColorProperty) {
+      return 'Property coloring needs per-atom data. Load a trajectory with charge, energy, force magnitude, or another scalar field.';
+    }
+    return null;
+  };
+
+  const focusedPresetMessage = focusedPreset
+    ? modelPresetUnavailableReason(focusedPreset) ?? MODEL_PRESET_COPY[focusedPreset].description
+    : null;
+  const focusedPresetUnavailable = focusedPreset
+    ? Boolean(modelPresetUnavailableReason(focusedPreset))
+    : false;
+
   return (
     <div className="lupi-deck-grid">
-      <ControlGroup title="Quick views" wide>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }}>
-          {(Object.keys(QUICK_VIEW_COPY) as QuickViewId[]).map(view => {
-            const disabled = (view === 'bonds' && !bondsAreSafe)
-              || (view === 'property' && !validColorProperty)
-              || (view === 'space' && requiresDiagram);
-            const disabledReason = view === 'bonds'
-              ? atomCount >= 25_000
-                ? `Bond display is available below 25,000 atoms. This structure has ${atomCount.toLocaleString()}.`
-                : 'No source bonds are present, and covalent inference requires complete element and Ångström provenance.'
-              : view === 'space'
-                ? 'Occupied space is unavailable at 200,000 atoms and above to avoid excessive overdraw.'
-                : 'This structure has no per-atom data.';
+      <ControlGroup title="Presets" wide>
+        <div
+          role="group"
+          aria-label="Model display presets"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 5 }}
+        >
+          {(Object.keys(MODEL_PRESET_COPY) as ModelPresetId[]).map(view => {
+            const disabledReason = modelPresetUnavailableReason(view);
             return (
-              <QuickViewButton
+              <ModelPresetButton
                 key={view}
                 view={view}
-                active={activeQuickView === view}
-                disabled={disabled}
-                disabledReason={disabled ? disabledReason : undefined}
-                onClick={() => applyQuickView(view)}
+                active={activeModelPreset === view}
+                disabledReason={disabledReason ?? undefined}
+                describedBy={focusedPreset === view && focusedPresetMessage ? 'model-preset-help' : undefined}
+                onFocus={() => setFocusedPreset(view)}
+                onBlur={() => setFocusedPreset(current => current === view ? null : current)}
+                onClick={() => {
+                  setFocusedPreset(view);
+                  if (!disabledReason) applyModelPreset(view);
+                }}
               />
             );
           })}
         </div>
+        {focusedPresetMessage && (
+          <p
+            id="model-preset-help"
+            style={{ ...schemeHintStyle, color: focusedPresetUnavailable ? '#fbbf24' : schemeHintStyle.color }}
+          >
+            {focusedPresetMessage}
+          </p>
+        )}
         {requiresDiagram && (
           <p role="status" style={schemeHintStyle}>
             Diagram rendering stays on for this {atomCount.toLocaleString()}-atom structure to keep interaction responsive.
@@ -584,51 +615,66 @@ export function MoleculeControls() {
   );
 }
 
-function QuickViewButton({
+function ModelPresetButton({
   view,
   active,
-  disabled,
   disabledReason,
+  describedBy,
+  onFocus,
+  onBlur,
   onClick,
 }: {
-  view: QuickViewId;
+  view: ModelPresetId;
   active: boolean;
-  disabled: boolean;
   disabledReason?: string;
+  describedBy?: string;
+  onFocus: () => void;
+  onBlur: () => void;
   onClick: () => void;
 }) {
-  const option = QUICK_VIEW_COPY[view];
+  const option = MODEL_PRESET_COPY[view];
+  const unavailable = Boolean(disabledReason);
+  const description = disabledReason ?? option.description;
   return (
     <button
       type="button"
-      data-testid={`quick-view-${view}`}
+      data-testid={`model-preset-${view}`}
       aria-pressed={active}
-      disabled={disabled}
-      title={disabledReason ?? option.description}
+      aria-disabled={unavailable}
+      aria-label={`${option.label} preset. ${unavailable ? `Unavailable. ${description}` : description}`}
+      aria-describedby={describedBy}
+      title={description}
+      onFocus={onFocus}
+      onBlur={onBlur}
       onClick={onClick}
       style={{
+        position: 'relative',
         minWidth: 0,
-        minHeight: 58,
+        minHeight: 40,
         display: 'grid',
-        gap: 4,
-        alignContent: 'center',
-        padding: '10px 11px',
-        textAlign: 'left',
+        placeItems: 'center',
+        padding: '6px 4px',
+        textAlign: 'center',
         borderRadius: 5,
         border: active ? `1px solid ${option.accent}` : '1px solid rgba(148,163,184,0.18)',
         background: active
           ? `linear-gradient(90deg, ${option.accent}22, rgba(9,14,22,0.96))`
           : '#0a1119',
-        color: disabled ? '#64748b' : '#f8fafc',
-        opacity: disabled ? 0.62 : 1,
-        cursor: disabled ? 'not-allowed' : 'pointer',
+        color: unavailable ? '#64748b' : '#f8fafc',
+        opacity: unavailable ? 0.68 : 1,
+        cursor: unavailable ? 'help' : 'pointer',
         touchAction: 'manipulation',
       }}
     >
-      <span style={{ fontSize: 11, fontWeight: 840, lineHeight: 1.15 }}>{option.label}</span>
-      <span style={{ color: disabled ? '#64748b' : '#94a3b8', fontSize: 9, fontWeight: 650, lineHeight: 1.3 }}>
-        {disabledReason ?? option.description}
-      </span>
+      <span style={{ fontSize: 10, fontWeight: 840, lineHeight: 1.1 }}>{option.label}</span>
+      {unavailable && (
+        <span
+          aria-hidden="true"
+          style={{ position: 'absolute', top: 3, right: 4, color: '#fbbf24', fontSize: 8, fontWeight: 900, lineHeight: 1 }}
+        >
+          !
+        </span>
+      )}
     </button>
   );
 }

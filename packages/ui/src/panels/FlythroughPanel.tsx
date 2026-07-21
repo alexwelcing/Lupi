@@ -74,7 +74,13 @@ function EasingPreview({ easing }: { easing: EasingType }) {
 }
 
 // ─── Main Panel ───────────────────────────────────────────────────────
-export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: boolean } = {}) {
+export function FlythroughPanel({
+  showCloseButton = true,
+  embedded = false,
+}: {
+  showCloseButton?: boolean;
+  embedded?: boolean;
+} = {}) {
   const setActivePanel = useStore((state) => state.setActivePanel);
   const flythrough = useStore((state) => state.flythrough);
   const cameraPosition = useStore((state) => state.cameraPosition);
@@ -290,20 +296,22 @@ export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: 
       display: 'flex', flexDirection: 'column', height: '100%',
       background: '#0a0a0c', borderLeft: '1px solid #1f2937',
     }}>
-      {/* Header */}
-      <div style={{
+      {/* Standalone title or compact embedded sequence status. */}
+      {(!embedded || flythrough) && <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 16px', borderBottom: '1px solid #1f2937',
+        padding: embedded ? '8px 12px' : '12px 16px', borderBottom: '1px solid #1f2937',
         background: '#121318', flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 4, height: 14, background: '#f59e0b' }} />
-          <span style={{
-            fontSize: 12, fontWeight: 700,
-            fontFamily: 'Space Grotesk, sans-serif',
-            textTransform: 'uppercase',
-            letterSpacing: '0.15em', color: '#e2e8f0',
-          }}>Flythrough</span>
+          {!embedded && <div style={{ width: 4, height: 14, background: '#f59e0b' }} />}
+          {!embedded && (
+            <span style={{
+              fontSize: 12, fontWeight: 700,
+              fontFamily: 'Space Grotesk, sans-serif',
+              textTransform: 'uppercase',
+              letterSpacing: '0.15em', color: '#e2e8f0',
+            }}>Flythrough</span>
+          )}
           {flythrough && (
             <span style={{
               fontSize: 10, color: '#64748b',
@@ -311,7 +319,7 @@ export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: 
             }}>{keyframes.length} stops · {totalDuration.toFixed(1)}s</span>
           )}
         </div>
-        {showCloseButton && (
+        {showCloseButton && !embedded && (
           <button
             onClick={() => setActivePanel(null)}
             style={{
@@ -322,7 +330,7 @@ export function FlythroughPanel({ showCloseButton = true }: { showCloseButton?: 
             }}
           ><IconClose /></button>
         )}
-      </div>
+      </div>}
 
       {/* Content */}
       <div className="lupine-scroll" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>

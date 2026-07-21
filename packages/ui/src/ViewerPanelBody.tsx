@@ -24,10 +24,10 @@ export const ViewerPanelBody = memo(function ViewerPanelBody({ activePanel, stud
 function renderPanel(activePanel: NonNullable<AppState['activePanel']>, studioDeck: ViewerControlMode | null) {
   switch (activePanel) {
     case 'studio':
-      if (studioDeck === 'export') return <FigureExportPanel showCloseButton={false} />;
+      if (studioDeck === 'export') return <FigureExportPanel showCloseButton={false} embedded />;
       return <StudioControlDeck mode={studioDeck === 'scene' ? 'scene' : 'molecule'} />;
     case 'export':
-      return <FigureExportPanel showCloseButton={false} />;
+      return <FigureExportPanel showCloseButton={false} embedded />;
     case 'flythrough':
       return <CameraCommandSurface />;
     case 'telemetry':
@@ -81,7 +81,7 @@ function CameraCommandSurface() {
         </div>
       </section>
       <div className="lupine-camera-command__path">
-        <FlythroughPanel showCloseButton={false} />
+        <FlythroughPanel showCloseButton={false} embedded />
       </div>
     </div>
   );
@@ -97,6 +97,7 @@ function TelemetryCommandSurface() {
       thermo={file.thermo ?? null}
       currentFrame={file.trajectory.frames[frame] ?? undefined}
       totalFrames={file.trajectory.totalFrames ?? 0}
+      embedded
     />
   );
 }

@@ -9,10 +9,10 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "dev": "pnpm --filter @atlas/web build && npx wrangler dev --local",
-    "dev:worker": "npx wrangler dev --local",
-    "deploy": "pnpm --filter @atlas/web build && npx wrangler deploy",
-    "deploy:worker": "npx wrangler deploy",
+    "dev": "pnpm --filter @atlas/web build && npx -y wrangler@4.110.0 dev --local",
+    "dev:worker": "npx -y wrangler@4.110.0 dev --local",
+    "deploy": "pnpm --filter @atlas/web build && npx -y wrangler@4.110.0 deploy",
+    "deploy:worker": "npx -y wrangler@4.110.0 deploy",
     "lint": "eslint .",
     "test": "vitest run"
   },

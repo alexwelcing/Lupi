@@ -29,23 +29,20 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
         state.setViewMenuOpen(false);
         state.setStudyLensOpen(false);
       }
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
         e.preventDefault();
         state.setViewMenuOpen(false);
-        state.setStudyLensOpen(e.key === '6');
+        state.setStudyLensOpen(e.key === '5');
         if (e.key === '1') {
-          state.setStudioDeck('molecule');
+          state.setStudioDeck(state.studioDeck === 'scene' ? 'scene' : 'molecule');
           if (state.activePanel !== 'studio') state.setActivePanel('studio');
         } else if (e.key === '2') {
-          state.setStudioDeck('scene');
-          if (state.activePanel !== 'studio') state.setActivePanel('studio');
-        } else if (e.key === '3') {
           state.setStudioDeck(null);
           state.setActivePanel('telemetry');
-        } else if (e.key === '4') {
+        } else if (e.key === '3') {
           state.setStudioDeck(null);
           state.setActivePanel('flythrough');
-        } else if (e.key === '5') {
+        } else if (e.key === '4') {
           state.setStudioDeck(null);
           state.setActivePanel('export');
         } else {

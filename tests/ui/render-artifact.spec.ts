@@ -401,8 +401,8 @@ test.describe('mobile render artifact reachability', () => {
 
     const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
     await expect(commands).toBeVisible({ timeout: 30_000 });
-    await commands.getByRole('button', { name: 'Model command' }).click();
-    await expect(page.getByRole('region', { name: 'Model command panel' })).toBeVisible();
+    await commands.getByRole('button', { name: 'Visuals command' }).click();
+    await expect(page.getByRole('region', { name: 'Visuals command panel' })).toBeVisible();
     await expect.poll(() => page.evaluate(() => (
       window.__lupiViewerMcp?.tools().some(tool => tool.name === 'lupi.export_asset') ?? false
     ))).toBe(true);

@@ -8,7 +8,7 @@ import {
   LupiGlyph,
 } from '../icons';
 
-type ViewerCommand = 'model' | 'world' | 'analyze' | 'camera' | 'capture' | 'learn';
+type ViewerCommand = 'visuals' | 'analyze' | 'camera' | 'capture' | 'learn';
 
 const COMMANDS: Array<{
   id: ViewerCommand;
@@ -16,23 +16,20 @@ const COMMANDS: Array<{
   shortcut: string;
   icon: ReactNode;
 }> = [
-  { id: 'model', label: 'Model', shortcut: '1', icon: <IconModel /> },
-  { id: 'world', label: 'World', shortcut: '2', icon: <IconWorld /> },
-  { id: 'analyze', label: 'Analyze', shortcut: '3', icon: <IconTelemetryTool /> },
-  { id: 'camera', label: 'Camera', shortcut: '4', icon: <IconFlythrough /> },
-  { id: 'capture', label: 'Capture', shortcut: '5', icon: <IconExport /> },
-  { id: 'learn', label: 'Learn', shortcut: '6', icon: <IconStudy /> },
+  { id: 'visuals', label: 'Visuals', shortcut: '1', icon: <IconVisuals /> },
+  { id: 'analyze', label: 'Analyze', shortcut: '2', icon: <IconTelemetryTool /> },
+  { id: 'camera', label: 'Camera', shortcut: '3', icon: <IconFlythrough /> },
+  { id: 'capture', label: 'Capture', shortcut: '4', icon: <IconExport /> },
+  { id: 'learn', label: 'Learn', shortcut: '5', icon: <IconStudy /> },
 ];
 
 function commandIsActive(
   command: ViewerCommand,
   activePanel: ReturnType<typeof useStore.getState>['activePanel'],
-  studioDeck: ReturnType<typeof useStore.getState>['studioDeck'],
   studyLensOpen: boolean,
 ) {
   switch (command) {
-    case 'model': return activePanel === 'studio' && (studioDeck ?? 'molecule') === 'molecule';
-    case 'world': return activePanel === 'studio' && studioDeck === 'scene';
+    case 'visuals': return activePanel === 'studio';
     case 'analyze': return activePanel === 'telemetry';
     case 'camera': return activePanel === 'flythrough';
     case 'capture': return activePanel === 'export';
@@ -49,12 +46,11 @@ function commandIsActive(
  */
 export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { compact: boolean }) {
   const activePanel = useStore(s => s.activePanel);
-  const studioDeck = useStore(s => s.studioDeck);
   const studyLensOpen = useStore(s => s.studyLensOpen);
 
   const activate = (command: ViewerCommand) => {
     const state = useStore.getState();
-    const alreadyActive = commandIsActive(command, state.activePanel, state.studioDeck, state.studyLensOpen);
+    const alreadyActive = commandIsActive(command, state.activePanel, state.studyLensOpen);
 
     state.setViewMenuOpen(false);
     if (command === 'learn') {
@@ -71,12 +67,8 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
     }
 
     switch (command) {
-      case 'model':
-        state.setStudioDeck('molecule');
-        if (state.activePanel !== 'studio') state.setActivePanel('studio');
-        break;
-      case 'world':
-        state.setStudioDeck('scene');
+      case 'visuals':
+        state.setStudioDeck(state.studioDeck === 'scene' ? 'scene' : 'molecule');
         if (state.activePanel !== 'studio') state.setActivePanel('studio');
         break;
       case 'analyze':
@@ -102,7 +94,7 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
       aria-label="Viewer commands"
     >
       {COMMANDS.map(command => {
-        const active = commandIsActive(command.id, activePanel, studioDeck, studyLensOpen);
+        const active = commandIsActive(command.id, activePanel, studyLensOpen);
         return (
           <button
             key={command.id}
@@ -127,23 +119,13 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
   );
 });
 
-function IconModel() {
+function IconVisuals() {
   return (
     <LupiGlyph>
       <circle cx="8" cy="12" r="2" />
       <circle cx="15.8" cy="8.2" r="1.7" />
       <circle cx="15.8" cy="16" r="1.7" />
       <path d="m9.8 11 4.3-2.1M9.8 13l4.3 2.1" />
-    </LupiGlyph>
-  );
-}
-
-function IconWorld() {
-  return (
-    <LupiGlyph>
-      <circle cx="12" cy="12" r="5.2" />
-      <path d="M7.2 10.2h9.6M7.2 13.8h9.6" opacity="0.72" />
-      <path d="M12 6.8c1.7 1.45 2.55 3.18 2.55 5.2s-.85 3.75-2.55 5.2M12 6.8C10.3 8.25 9.45 9.98 9.45 12s.85 3.75 2.55 5.2" opacity="0.72" />
     </LupiGlyph>
   );
 }

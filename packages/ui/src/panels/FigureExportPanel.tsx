@@ -179,7 +179,13 @@ function createAutoFlythrough(
   return { loop: false, keyframes };
 }
 
-export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?: boolean }) {
+export function FigureExportPanel({
+  showCloseButton = true,
+  embedded = false,
+}: {
+  showCloseButton?: boolean;
+  embedded?: boolean;
+}) {
   const setActivePanel = useStore(s => s.setActivePanel);
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
@@ -399,23 +405,25 @@ export function FigureExportPanel({ showCloseButton = true }: { showCloseButton?
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 10,
-        padding: compact ? '8px 10px 7px' : '14px 16px 12px',
+        padding: embedded ? '8px 10px' : compact ? '8px 10px 7px' : '14px 16px 12px',
         borderBottom: '1px solid rgba(148, 163, 184, 0.16)',
         flexShrink: 0,
       }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{
-            fontSize: compact ? 10 : 11,
-            fontWeight: 800,
-            letterSpacing: 0,
-            color: '#7dd3fc',
-            textTransform: 'uppercase',
-          }}>
-            Export
-          </div>
+          {!embedded && (
+            <div style={{
+              fontSize: compact ? 10 : 11,
+              fontWeight: 800,
+              letterSpacing: 0,
+              color: '#7dd3fc',
+              textTransform: 'uppercase',
+            }}>
+              Export
+            </div>
+          )}
           {systemInfo && (
             <div style={{
-              marginTop: 4,
+              marginTop: embedded ? 0 : 4,
               color: 'rgba(203, 213, 225, 0.68)',
               fontSize: compact ? 10 : 11,
               fontFamily: 'var(--font-mono), ui-monospace, monospace',
