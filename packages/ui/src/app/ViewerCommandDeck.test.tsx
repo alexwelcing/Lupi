@@ -23,11 +23,18 @@ describe('ViewerCommandDeck', () => {
   it('maps the visible game commands to one canonical surface at a time', () => {
     render(<ViewerCommandDeck compact={false} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Model command' }));
+    expect(screen.getAllByRole('button')).toHaveLength(5);
+
+    const visuals = screen.getByRole('button', { name: 'Visuals command' });
+    fireEvent.click(visuals);
     expect(useStore.getState().activePanel).toBe('studio');
     expect(useStore.getState().studioDeck).toBe('molecule');
 
-    fireEvent.click(screen.getByRole('button', { name: 'World command' }));
+    fireEvent.click(visuals);
+    expect(useStore.getState().activePanel).toBeNull();
+
+    useStore.getState().setStudioDeck('scene');
+    fireEvent.click(visuals);
     expect(useStore.getState().activePanel).toBe('studio');
     expect(useStore.getState().studioDeck).toBe('scene');
 

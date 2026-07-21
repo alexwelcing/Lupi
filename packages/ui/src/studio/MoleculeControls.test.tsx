@@ -22,7 +22,7 @@ function loadStructure(atomCount: number, properties: string[] = [], chemical = 
   });
 }
 
-describe('MoleculeControls quick views', () => {
+describe('MoleculeControls presets', () => {
   beforeEach(() => resetStore());
   afterEach(() => cleanup());
 
@@ -30,8 +30,15 @@ describe('MoleculeControls quick views', () => {
     loadStructure(24);
     render(<MoleculeControls />);
 
-    expect(screen.getByText('Quick views')).toBeTruthy();
-    expect(screen.getByTestId('quick-view-bonds')).toBeTruthy();
+    expect(screen.getByText('Presets')).toBeTruthy();
+    const bondsPreset = screen.getByTestId('model-preset-bonds');
+    expect(bondsPreset.getAttribute('aria-label')).toMatch(/distance-inferred connections/i);
+    expect(screen.queryByText('Show distance-inferred connections between nearby atoms.')).toBeNull();
+
+    fireEvent.focus(bondsPreset);
+    expect(screen.getByText('Show distance-inferred connections between nearby atoms.')).toBeTruthy();
+    fireEvent.blur(bondsPreset);
+    expect(screen.queryByText('Show distance-inferred connections between nearby atoms.')).toBeNull();
     expect(screen.queryByText('Schematic')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Fine-tune structure' }));
@@ -48,7 +55,7 @@ describe('MoleculeControls quick views', () => {
     state.setRimLightIntensity(0.61);
 
     render(<MoleculeControls />);
-    fireEvent.click(screen.getByTestId('quick-view-space'));
+    fireEvent.click(screen.getByTestId('model-preset-space'));
 
     const updated = getStoreState();
     expect(updated.atomScale).toBe(1.35);
@@ -65,10 +72,13 @@ describe('MoleculeControls quick views', () => {
     loadStructure(24);
     render(<MoleculeControls />);
 
-    expect((screen.getByTestId('quick-view-property') as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByTestId('quick-view-property').getAttribute('title')).toBe(
-      'This structure has no per-atom data.',
-    );
+    const propertyPreset = screen.getByTestId('model-preset-property');
+    expect(propertyPreset.getAttribute('aria-disabled')).toBe('true');
+    expect(propertyPreset.getAttribute('title')).toMatch(/needs per-atom data/i);
+
+    fireEvent.click(propertyPreset);
+    expect(screen.getByText(/Load a trajectory with charge, energy, force magnitude/i)).toBeTruthy();
+    expect(getStoreState().colorScheme).not.toBe('property');
   });
 
   it('uses a valid fallback when Property map replaces a stale property selection', () => {
@@ -76,27 +86,27 @@ describe('MoleculeControls quick views', () => {
     getStoreState().setColorProperty('missing-property');
     render(<MoleculeControls />);
 
-    expect((screen.getByTestId('quick-view-property') as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByTestId('quick-view-property'));
+    expect(screen.getByTestId('model-preset-property').getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(screen.getByTestId('model-preset-property'));
 
     const updated = getStoreState();
     expect(updated.colorScheme).toBe('property');
     expect(updated.colorProperty).toBe('energy');
     expect(updated.colormap).toBe('viridis');
-    expect(screen.getByTestId('quick-view-property').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('model-preset-property').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('blocks bond inference at 25k atoms and preserves diagram rendering at 200k', () => {
     loadStructure(25_000);
     render(<MoleculeControls />);
 
-    expect((screen.getByTestId('quick-view-bonds') as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByTestId('quick-view-balanced'));
+    expect(screen.getByTestId('model-preset-bonds').getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(screen.getByTestId('model-preset-balanced'));
     expect(getStoreState().showBonds).toBe(false);
     expect(getStoreState().postprocessPreset).toBe('paper');
 
     act(() => loadStructure(200_000));
-    fireEvent.click(screen.getByTestId('quick-view-space'));
+    fireEvent.click(screen.getByTestId('model-preset-space'));
 
     expect(getStoreState().showBonds).toBe(false);
     expect(getStoreState().postprocessPreset).toBe('diagram');
@@ -109,7 +119,8 @@ describe('MoleculeControls quick views', () => {
 
     expect(getStoreState().colorScheme).toBe('colorway');
     expect(screen.queryByRole('button', { name: 'Element colors' })).toBeNull();
-    expect((screen.getByTestId('quick-view-bonds') as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByTestId('quick-view-bonds').getAttribute('title')).toMatch(/element and Ångström provenance/i);
+    const bondsPreset = screen.getByTestId('model-preset-bonds');
+    expect(bondsPreset.getAttribute('aria-disabled')).toBe('true');
+    expect(bondsPreset.getAttribute('title')).toMatch(/mapped elements with Ångström coordinates/i);
   });
 });

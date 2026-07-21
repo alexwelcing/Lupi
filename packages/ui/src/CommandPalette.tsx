@@ -5,7 +5,7 @@
  * navigation, spring-physics selection, and a glassmorphic floating modal.
  * This is the missing SaaS navigation layer for the viewer.
  */
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type ComponentProps } from 'react';
 
 export interface CommandAction {
   id: string;
@@ -258,4 +258,9 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
       </div>
     </div>
   );
+}
+
+/** Keep the palette's search/grouping work out of the render tree while closed. */
+export function DeferredCommandPalette(props: ComponentProps<typeof CommandPalette>) {
+  return props.open ? <CommandPalette {...props} /> : null;
 }

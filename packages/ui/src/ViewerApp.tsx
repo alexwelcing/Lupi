@@ -41,7 +41,7 @@ import { xrStore } from './viewer/xrStore';
 
 import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
-import { CommandPalette } from './CommandPalette';
+import { DeferredCommandPalette } from './CommandPalette';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
 import { openRandomOmol25Molecule } from './molecules/randomOmol';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
@@ -632,7 +632,7 @@ export function ViewerApp() {
         </div>
       )}
 
-      <CommandPalette
+      <DeferredCommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         actions={useMemo(() => {
@@ -657,7 +657,7 @@ export function ViewerApp() {
             },
             {
               id: 'controls-molecule',
-              label: 'Open Molecule controls',
+              label: 'Open Visuals: Structure',
               group: 'Panels',
               shortcut: 'V',
               disabled: !file,
@@ -669,7 +669,7 @@ export function ViewerApp() {
             },
             {
               id: 'controls-scene',
-              label: 'Open Scene controls',
+              label: 'Open Visuals: Scene',
               group: 'Panels',
               disabled: !file,
               onSelect: () => {
@@ -766,7 +766,7 @@ export function ViewerApp() {
             },
           ];
           return list;
-        }, [file, activePanel, totalFrames, clearLoadedFile])}
+        }, [file, activePanel, totalFrames, clearLoadedFile, setActivePanel, togglePlay])}
       />
     </div>
   );

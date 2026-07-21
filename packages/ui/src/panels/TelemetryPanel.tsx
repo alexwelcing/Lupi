@@ -9,7 +9,6 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ThermoData, ThermoRun, Frame } from '@atlas/core/types';
-import type { AppState } from '../store';
 import { useStore } from '../store';
 import { ProfileReplaySection } from './ProfileReplaySection';
 import { MeasurementWorkbench } from '../MeasurementWorkbench';
@@ -21,6 +20,7 @@ interface TelemetryPanelProps {
   thermo: ThermoData | null;
   currentFrame: Frame | undefined;
   totalFrames: number;
+  embedded?: boolean;
 }
 
 interface PropertyStats {
@@ -34,6 +34,10 @@ interface PropertyStats {
   spikeFrames: number[];
   values: Float64Array;
 }
+
+type PropertySeriesStats = Omit<PropertyStats, 'current' | 'spikeLevel'> & {
+  stdDev: number;
+};
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -65,9 +69,8 @@ const THERMO_PROPERTY_INFO: Record<string, { label: string; unit: string; code: 
 function analyzeProperty(
   run: ThermoRun,
   column: string,
-  currentFrameIdx: number,
   totalFrames: number,
-): PropertyStats | null {
+): PropertySeriesStats | null {
   const data = run.getColumn(column);
   if (!data || data.length === 0) return null;
 
@@ -78,8 +81,6 @@ function analyzeProperty(
     sum += data[i];
   }
   const mean = sum / data.length;
-  const range = max - min || 1;
-
   // Compute standard deviation for spike detection
   let sumSqDiff = 0;
   for (let i = 0; i < data.length; i++) {
@@ -98,7 +99,15 @@ function analyzeProperty(
     }
   }
 
-  // Current value (map frame index to thermo index)
+  return { column, min, max, mean, stdDev, spikeFrames, values: data };
+}
+
+function propertyAtFrame(
+  series: PropertySeriesStats,
+  currentFrameIdx: number,
+  totalFrames: number,
+): PropertyStats {
+  const { values: data, mean, stdDev } = series;
   const thermoIdx = Math.min(
     Math.round((currentFrameIdx / Math.max(1, totalFrames - 1)) * (data.length - 1)),
     data.length - 1,
@@ -111,7 +120,7 @@ function analyzeProperty(
   else if (currentDeviation > 2) spikeLevel = 'spike';
   else if (currentDeviation > 1.5) spikeLevel = 'warning';
 
-  return { column, min, max, mean, current, spikeLevel, spikeFrames, values: data };
+  return { ...series, current, spikeLevel };
 }
 
 // ── Error Heatmap Component ──────────────────────────────────────────────
@@ -340,21 +349,18 @@ function TelemetrySparkline({
 
 // ── Main Panel ─────────────────────────────────────────────────────────
 
-export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryPanelProps) {
+export function TelemetryPanel({ thermo, currentFrame, totalFrames, embedded = false }: TelemetryPanelProps) {
   const frame = useStore(s => s.frame);
   const setFrame = useStore(s => s.setFrame);
   const colorMode = useStore(s => s.colorMode);
   const colorProperty = useStore(s => s.colorProperty);
   const setColorMode = useStore(s => s.setColorMode);
   const setColorProperty = useStore(s => s.setColorProperty);
-  const setColormap = useStore(s => s.setColormap);
-  const colormap = useStore(s => s.colormap);
   const anomalyTracking = useStore(s => s.anomalyTracking);
   const setAnomalyTracking = useStore(s => s.setAnomalyTracking);
   const streamingTelemetry = useStore(s => s.streamingTelemetry);
 
   const [expandedProp, setExpandedProp] = useState<string | null>(null);
-  const [autoJumpSpikes, setAutoJumpSpikes] = useState(false);
 
   // Spatial profile time series (fix ave/chunk outputs) loaded with the file.
   const profiles = useStore(s => s.file?.profiles);
@@ -365,23 +371,29 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
     return Array.from(currentFrame.properties.keys());
   }, [currentFrame]);
 
-  // Analyze all thermo columns
-  const thermoStats = useMemo(() => {
+  // Analyze complete series only when the dataset changes; playback updates
+  // only the O(columns) cursor values below.
+  const thermoSeriesStats = useMemo(() => {
     if (!thermo || thermo.runs.length === 0) return [];
     const run = thermo.runs[0];
-    const stats: PropertyStats[] = [];
+    const stats: PropertySeriesStats[] = [];
     for (const col of run.columns) {
       if (col === 'Step' || col === 'Time') continue;
-      const s = analyzeProperty(run, col, frame, totalFrames);
+      const s = analyzeProperty(run, col, totalFrames);
       if (s) stats.push(s);
     }
     return stats;
-  }, [thermo, frame, totalFrames]);
+  }, [thermo, totalFrames]);
+
+  const thermoStats = useMemo(
+    () => thermoSeriesStats.map(series => propertyAtFrame(series, frame, totalFrames)),
+    [frame, thermoSeriesStats, totalFrames],
+  );
 
   // Total spike count across all properties
   const totalSpikes = useMemo(
-    () => thermoStats.reduce((sum, s) => sum + s.spikeFrames.length, 0),
-    [thermoStats],
+    () => thermoSeriesStats.reduce((sum, s) => sum + s.spikeFrames.length, 0),
+    [thermoSeriesStats],
   );
 
   // Handle applying a per-atom property color mode
@@ -495,19 +507,21 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0, height: '100%', overflow: 'hidden' }}>
       {/* Header stats */}
-      <div style={{
-        padding: '12px 16px',
+      {(thermoStats.length > 0 || isResearch) && <div aria-label="Telemetry summary" style={{
+        padding: embedded ? '8px 12px' : '12px 16px',
         borderBottom: '1px solid var(--border-subtle)',
         display: 'flex', gap: 12, alignItems: 'center',
       }}>
         <div style={{ flex: 1 }}>
-          <div style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
-            color: 'var(--text-dim)', textTransform: 'uppercase',
-            marginBottom: 4,
-          }}>
-            {isResearch ? 'RESEARCH SHOWCASE' : 'TELEMETRY OVERVIEW'}
-          </div>
+          {!embedded && (
+            <div style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+              color: 'var(--text-dim)', textTransform: 'uppercase',
+              marginBottom: 4,
+            }}>
+              {isResearch ? 'RESEARCH SHOWCASE' : 'TELEMETRY OVERVIEW'}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 16 }}>
             <div>
               <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>
@@ -530,29 +544,31 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
             </div>
           </div>
         </div>
-        <button
-          onClick={() => useStore.setState({ activePanel: null })}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-dim)',
-            cursor: 'pointer',
-            padding: 4,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 4,
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dim)'}
-          title="Close Panel"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
+        {!embedded && (
+          <button
+            onClick={() => useStore.setState({ activePanel: null })}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-dim)',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 4,
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dim)'}
+            title="Close Panel"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        )}
+      </div>}
 
       <MeasurementWorkbench frame={currentFrame} frameIndex={frame} />
 
@@ -806,8 +822,9 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
         </div>
       )}
 
-      {/* MANIFOLD HUD OVERLAY */}
-      <div style={{
+      {/* Benchmark-only analysis: avoid presenting fixed error data or mounting
+          its canvases for ordinary molecules and trajectories. */}
+      {isResearch && <div style={{
         padding: '12px 16px',
         borderBottom: '1px solid var(--border-subtle)',
         background: 'var(--bg-elevated)',
@@ -860,22 +877,12 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
         <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 8 }}>
            First principal direction captures 93.0% of error variance.
         </div>
-      </div>
+      </div>}
 
       {/* Thermo channels list */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-        {thermoStats.length === 0 ? (
-          <div style={{
-            padding: 24, textAlign: 'center',
-            color: 'var(--text-dim)', fontSize: 12,
-          }}>
-            <div style={{ marginBottom: 4, fontWeight: 600 }}>No Thermo Data</div>
-            <div style={{ fontSize: 11 }}>
-              Load a LAMMPS log or trajectory with thermo output to view property telemetry.
-            </div>
-          </div>
-        ) : (
-          thermoStats.map(stat => {
+      {thermoStats.length > 0 && (
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+          {thermoStats.map(stat => {
             const info = THERMO_PROPERTY_INFO[stat.column];
             const isExpanded = expandedProp === stat.column;
             const sColor = SPIKE_COLORS[stat.spikeLevel];
@@ -1067,9 +1074,9 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames }: TelemetryP
                 )}
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
       {/* Colormap hint */}
       {colorMode === 'property' && (
