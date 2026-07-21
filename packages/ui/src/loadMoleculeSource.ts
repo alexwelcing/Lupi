@@ -15,6 +15,12 @@ import {
   DEFAULT_STREAMING_RESIDENT_FRAMES,
   installStreamingFrameCoordinator,
 } from './streamingFrameCoordinator';
+import {
+  assertViewerLoadCurrent,
+  viewerLoadIsCurrent,
+  ViewerLoadSupersededError,
+  type ViewerLoadGuard,
+} from './viewer/loadGuard';
 
 /** Trajectories at or above this many frames are worth moving onto the
  *  streaming substrate: the in-memory store would otherwise pin every
@@ -128,9 +134,12 @@ async function assertLooksLikeMoleculeData(blob: Blob, url: string): Promise<voi
 export interface LoadMoleculeSourceOptions {
   /** Deny every network redirect at each HEAD, range, and full-fetch seam. */
   strictRemote?: boolean;
+  /** Optional ownership guard used by route-driven loads. */
+  isCurrent?: ViewerLoadGuard;
 }
 
 export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeSourceOptions = {}): Promise<void> {
+  assertViewerLoadCurrent(options.isCurrent);
   clearPreviousStreaming();
   const catalogTypeMap = atomicTypeMapForExternalResearchLoadUrl(loadUrl);
 
@@ -140,17 +149,20 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
     const { isGlimbinUrl, autoDetectLoader } = await import('@atlas/parsers/StreamingLoader');
     const fetchOptions: Pick<RequestInit, 'redirect'> = options.strictRemote ? { redirect: 'error' } : {};
     const loaderType = isGlimbinUrl(loadUrl) ? 'streaming' : await autoDetectLoader(loadUrl, fetchOptions);
+    assertViewerLoadCurrent(options.isCurrent);
 
     if (loaderType === 'streaming') {
       const { StreamingLoader } = await import('@atlas/parsers/StreamingLoader');
       const loader = new StreamingLoader(loadUrl, {
         onProgress: (phase, progress) => {
+          if (!viewerLoadIsCurrent(options.isCurrent)) return;
           // Background frame residency must not re-open the global loading
           // overlay or re-render the whole viewer after activation.
           if (phase === 'frame') return;
           useStore.getState().setLoading(true, progress * 0.6);
         },
         onTelemetry: (stats) => {
+          if (!viewerLoadIsCurrent(options.isCurrent)) return;
           useStore.getState().setStreamingTelemetry(stats);
         },
       }, DEFAULT_STREAMING_RESIDENT_FRAMES, fetchOptions);
@@ -158,6 +170,7 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
       await loader.fetchHeader();
       await loader.fetchIndex();
       const frame0 = applyCatalogTypeMap(await loader.fetchFrame(0), catalogTypeMap);
+      assertViewerLoadCurrent(options.isCurrent, () => loader.dispose());
       const meta = loader.getMetadata()!;
       const placeholderFrames = new Array(meta.totalFrames);
       placeholderFrames[0] = frame0;
@@ -174,7 +187,7 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
         },
         thermo: null,
         sourceUrl: loadUrl,
-      });
+      }, { preserveStreamingTelemetry: true });
 
       const streamingSource = catalogTypeMap ? {
         fetchFrame: async (frameIndex: number, signal?: AbortSignal) => (
@@ -212,29 +225,43 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
     }
     const blob = await readResponseBlobWithinLimit(resp, MAX_REMOTE_LEGACY_BYTES);
     await assertLooksLikeMoleculeData(blob, loadUrl);
+    assertViewerLoadCurrent(options.isCurrent);
     const name = loadUrl.split('/').pop() ?? 'file.dump';
-    await loadParsedFile(new File([blob], name), loadUrl);
+    await loadParsedFile(new File([blob], name), loadUrl, options.isCurrent);
   } catch (err) {
+    if (err instanceof ViewerLoadSupersededError || !viewerLoadIsCurrent(options.isCurrent)) throw err;
     const message = err instanceof Error ? err.message : String(err);
     useStore.getState().setError(message);
     throw err;
   }
 }
 
-export async function loadInlineMolecule(name: string, contents: string, sourceUrl = 'inline-firestore'): Promise<void> {
+export async function loadInlineMolecule(
+  name: string,
+  contents: string,
+  sourceUrl = 'inline-firestore',
+  options: { isCurrent?: ViewerLoadGuard } = {},
+): Promise<void> {
+  assertViewerLoadCurrent(options.isCurrent);
   useStore.getState().setLoading(true, 0);
   try {
-    await loadParsedFile(new File([contents], name), sourceUrl);
+    await loadParsedFile(new File([contents], name), sourceUrl, options.isCurrent);
   } catch (err) {
+    if (err instanceof ViewerLoadSupersededError || !viewerLoadIsCurrent(options.isCurrent)) throw err;
     const message = err instanceof Error ? err.message : String(err);
     useStore.getState().setError(message);
     throw err;
   }
 }
 
-async function loadParsedFile(fileObj: File, sourceUrl: string): Promise<void> {
+async function loadParsedFile(
+  fileObj: File,
+  sourceUrl: string,
+  isCurrent?: ViewerLoadGuard,
+): Promise<void> {
   const { parseFile } = await import('@atlas/parsers');
   const result = await parseFile(fileObj);
+  assertViewerLoadCurrent(isCurrent);
   if (!result.trajectory) throw new Error('No trajectory data found');
 
   const trajectory = applyCatalogTypeMapToTrajectory(

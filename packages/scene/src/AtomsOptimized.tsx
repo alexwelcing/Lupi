@@ -873,6 +873,13 @@ export function AtomsOptimized({
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
   const atomCountRef = useRef(0);
   const { scene } = useThree();
+
+  // Large-scene callers intentionally remove the picking callback. Release
+  // the previous scene's string-keyed cells and positions immediately rather
+  // than retaining them until the whole R3F atom layer unmounts.
+  useEffect(() => {
+    if (!onSpatialHash) spatialHashRef.current.clear();
+  }, [onSpatialHash]);
   const canInterpolateToNextFrame = useMemo(
     () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
     [frame, nextFrame],

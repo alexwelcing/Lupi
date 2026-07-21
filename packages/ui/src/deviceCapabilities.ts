@@ -27,6 +27,15 @@ export type QualityTier = 0 | 1 | 2;
 
 export const GLOBAL_BROWSER_ATOM_CEILING = 50_000_000;
 
+/**
+ * Atom picking currently relies on a string-keyed spatial hash with one entry
+ * per atom. Building that index is useful for ordinary structures, but at
+ * million-atom scale it duplicates a large O(n) CPU/memory pass after the GPU
+ * upload. Large scenes remain fully navigable and renderable; only per-atom
+ * hover/click inspection is withheld above this budget.
+ */
+export const MAX_INTERACTIVE_PICKING_ATOMS = 200_000;
+
 interface DeviceProfile {
   tier: DeviceTier;
   /** Soft budget for future warnings/auto-tuning. This is not a load gate. */

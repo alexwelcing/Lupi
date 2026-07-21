@@ -26,6 +26,11 @@ import {
   measurementForInlineSnapshot,
   sanitizeMolecularMeasurement,
 } from './measurements';
+import {
+  assertViewerLoadCurrent,
+  viewerLoadIsCurrent,
+  type ViewerLoadGuard,
+} from './viewer/loadGuard';
 
 export const SAVED_VIEW_SCHEMA_VERSION = 1;
 const VIEW_COLLECTION = 'lupiViews';
@@ -250,16 +255,24 @@ export async function saveCurrentMolecularView({
   return { url: makeSavedViewUrl(cleanSlug), view };
 }
 
-export async function loadSavedMolecularView(slug: string): Promise<SavedMolecularView> {
+export async function loadSavedMolecularView(
+  slug: string,
+  options: { isCurrent?: ViewerLoadGuard } = {},
+): Promise<SavedMolecularView> {
+  assertViewerLoadCurrent(options.isCurrent);
   if (!firebaseDb) throw new Error('Firebase database is not configured.');
   const cleanSlug = slugifySavedViewTitle(slug);
   const snap = await getDoc(doc(firebaseDb, VIEW_COLLECTION, cleanSlug));
+  assertViewerLoadCurrent(options.isCurrent);
   if (!snap.exists()) throw new Error(`No Lupi view found for "${cleanSlug}".`);
 
   const saved = snap.data() as SavedMolecularView;
-  await loadSavedMolecule(saved.molecule);
+  await loadSavedMolecule(saved.molecule, options);
+  assertViewerLoadCurrent(options.isCurrent);
   applyCanonicalView(saved.view);
-  window.setTimeout(() => applyCanonicalView(saved.view), 90);
+  window.setTimeout(() => {
+    if (viewerLoadIsCurrent(options.isCurrent)) applyCanonicalView(saved.view);
+  }, 90);
   return saved;
 }
 
@@ -432,13 +445,21 @@ function applyCanonicalView(view: CanonicalMolecularView) {
   });
 }
 
-export async function loadSavedMolecule(molecule: SavedMoleculeSource): Promise<void> {
+export async function loadSavedMolecule(
+  molecule: SavedMoleculeSource,
+  options: { isCurrent?: ViewerLoadGuard } = {},
+): Promise<void> {
   if (molecule.kind === 'url') {
     const allowed = assertAllowedRemoteMoleculeUrl(molecule.url, 'saved-view', currentOrigin());
-    await loadMoleculeSource(allowed.url, { strictRemote: true });
+    await loadMoleculeSource(allowed.url, { strictRemote: true, isCurrent: options.isCurrent });
     return;
   }
-  await loadInlineMolecule(molecule.name, molecule.xyz, `lupi-view://${molecule.name}`);
+  await loadInlineMolecule(
+    molecule.name,
+    molecule.xyz,
+    `lupi-view://${molecule.name}`,
+    { isCurrent: options.isCurrent },
+  );
 }
 
 function currentOrigin(): string {

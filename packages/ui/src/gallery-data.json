@@ -31,6 +31,13 @@
     "autoPlay": true,
     "file": "gallery/research/hfc/r32_nvt_273K.glimbin",
     "available": true,
+    "atomTypeMap": {
+      "1": 1,
+      "6": 6,
+      "9": 9
+    },
+    "distanceUnit": "angstrom",
+    "initialShowBonds": false,
     "colors": [
       "#90e050",
       "#909090",
@@ -64,6 +71,13 @@
     "autoPlay": true,
     "file": "gallery/research/hfc/r125_nvt_273K.glimbin",
     "available": true,
+    "atomTypeMap": {
+      "1": 1,
+      "6": 6,
+      "9": 9
+    },
+    "distanceUnit": "angstrom",
+    "initialShowBonds": false,
     "colors": [
       "#90e050",
       "#909090",
@@ -93,6 +107,11 @@
     "frames": "1",
     "file": "gallery/trajectories/massive_1m.glimbin",
     "available": true,
+    "atomTypeMap": {
+      "29": 29
+    },
+    "distanceUnit": "angstrom",
+    "initialShowBonds": false,
     "colors": [
       "#b87333",
       "#cd853f",
@@ -293,7 +312,7 @@
     "metadata": {
       "method": "CHGNet MD",
       "potential": "CHGNet",
-      "temperature": "300 K",
+      "temperature": "350 K",
       "ensemble": "Molecular dynamics",
       "reference": "Recovered MLIP long-run viewer artifact; 13 CHGNet-measured frames."
     },
@@ -318,7 +337,7 @@
     "metadata": {
       "method": "CHGNet MD",
       "potential": "CHGNet",
-      "temperature": "300 K",
+      "temperature": "450 K",
       "ensemble": "Molecular dynamics",
       "reference": "Recovered MLIP long-run viewer artifact; 9 CHGNet-measured frames."
     },
@@ -582,6 +601,11 @@
     "frames": "101",
     "file": "https://storage.googleapis.com/shed-489901-nist-demos/sims/cu-melt-showcase.glimbin",
     "available": true,
+    "atomTypeMap": {
+      "1": 29
+    },
+    "distanceUnit": "angstrom",
+    "initialShowBonds": false,
     "colors": [
       "#b87333",
       "#ff6b35",
@@ -604,6 +628,11 @@
     "frames": "101",
     "file": "https://storage.googleapis.com/shed-489901-nist-demos/sims/cu-solidify-showcase.glimbin",
     "available": true,
+    "atomTypeMap": {
+      "1": 29
+    },
+    "distanceUnit": "angstrom",
+    "initialShowBonds": false,
     "colors": [
       "#b87333",
       "#5b8dd9",
@@ -626,6 +655,11 @@
     "frames": "101",
     "file": "https://storage.googleapis.com/shed-489901-nist-demos/sims/cu-sinter-showcase.glimbin",
     "available": true,
+    "atomTypeMap": {
+      "1": 29
+    },
+    "distanceUnit": "angstrom",
+    "initialShowBonds": false,
     "colors": [
       "#b87333",
       "#d98e48",
@@ -2098,6 +2132,11 @@
     "available": true,
     "isTrajectory": true,
     "autoPlay": true,
+    "atomTypeMap": {
+      "1": 1,
+      "8": 8
+    },
+    "distanceUnit": "angstrom",
     "colors": [
       "#38bdf8",
       "#e5e7eb",

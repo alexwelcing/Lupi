@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 
 const SESSION_KEY = 'lupi:viewer-gesture-hint-seen';
 
-export function ViewerGestureHint({ isMobile }: { isMobile: boolean }) {
+export function ViewerGestureHint({
+  isMobile,
+  canSelectAtoms = true,
+}: {
+  isMobile: boolean;
+  canSelectAtoms?: boolean;
+}) {
   const [visible, setVisible] = useState(() => {
     try {
       return window.sessionStorage.getItem(SESSION_KEY) !== '1';
@@ -74,7 +80,9 @@ export function ViewerGestureHint({ isMobile }: { isMobile: boolean }) {
     >
       <span aria-hidden="true" style={{ color: '#1edce0', fontSize: 14, flexShrink: 0 }}>◎</span>
       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: isMobile ? 10 : 11, fontWeight: 650 }}>
-        {isMobile ? 'Drag to rotate · Pinch to zoom · Tap an atom' : 'Drag to rotate · Scroll to zoom · Select an atom to inspect'}
+        {isMobile
+          ? `Drag to rotate · Pinch to zoom${canSelectAtoms ? ' · Tap an atom' : ''}`
+          : `Drag to rotate · Scroll to zoom${canSelectAtoms ? ' · Select an atom to inspect' : ''}`}
       </span>
       <button
         type="button"

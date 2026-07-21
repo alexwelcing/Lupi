@@ -47,6 +47,7 @@ import type { Frame } from '@atlas/core/types';
 import type { MutableRefObject } from 'react';
 import type { SpatialHash3D } from '@atlas/scene/SpatialHash';
 import type { BgMedia, BgPreset } from '../backgroundPresets';
+import { MAX_INTERACTIVE_PICKING_ATOMS } from '../deviceCapabilities';
 
 const CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT = 5_000;
 const CONTACT_SHADOW_MAX_ATOM_LIMIT = 50_000;
@@ -371,9 +372,12 @@ export function ViewerScene({
   const clusterFadeFar = useMemo(() => clusterFadeNear * 3.3, [clusterFadeNear]);
 
   const [spatialHash, setSpatialHash] = useState<SpatialHash3D | null>(null);
+  const atomPickingEnabled = Boolean(
+    currentFrame && currentFrame.natoms <= MAX_INTERACTIVE_PICKING_ATOMS,
+  );
   useEffect(() => {
-    if (playing) setSpatialHash(null);
-  }, [playing]);
+    if (playing || !atomPickingEnabled) setSpatialHash(null);
+  }, [playing, atomPickingEnabled]);
   const ghostFrame = ghostFile
     ? ghostFile.trajectory.frames[Math.min(interpState.frameIndex, Math.max(ghostFile.trajectory.totalFrames - 1, 0))]
     : null;
@@ -436,7 +440,7 @@ export function ViewerScene({
             scale={atomScale}
             maxAtoms={deviceMaxAtoms}
             loadedAtomCount={loadedAtomCount}
-            onSpatialHash={playing ? undefined : setSpatialHash}
+            onSpatialHash={!playing && atomPickingEnabled ? setSpatialHash : undefined}
             hiddenAtomTypes={hiddenAtomTypes}
             atomTypeScales={atomTypeScales}
             materialPreset={materialPreset}
@@ -578,7 +582,7 @@ export function ViewerScene({
             atomIndices={trackedAtomIndices}
           />
 
-          {!playing && spatialHash && (
+          {!playing && atomPickingEnabled && spatialHash && (
             <AtomPicker
               frame={currentFrame}
               spatialHash={spatialHash}

@@ -635,7 +635,10 @@ export interface AppState {
   setViewportMode: (mode: AppState['viewportMode']) => void;
 
   // ─── Actions ───
-  setFile: (file: LoadedFile | null) => void;
+  setFile: (file: LoadedFile | null, options?: {
+    initialShowBonds?: boolean;
+    preserveStreamingTelemetry?: boolean;
+  }) => void;
   setGhostFile: (file: LoadedFile | null) => void;
   /** Attach output-file sidecars (thermo tables, ave/chunk profiles) to the
    *  already-loaded file WITHOUT re-running scene directives or resetting
@@ -943,7 +946,7 @@ export const useStore = create<AppState>()(
   subscribeWithSelector((set, get) => ({
     ...DEFAULTS,
 
-    setFile: (file) => {
+    setFile: (file, options) => {
       const firstFrame = file?.trajectory?.frames?.[0];
       const atomCount = firstFrame?.positions?.length ? firstFrame.positions.length / 3 : 0;
       const hasElementIdentity = firstFrame ? hasCompleteElementMapping(firstFrame) : false;
@@ -1000,7 +1003,7 @@ export const useStore = create<AppState>()(
         error: null,
         loading: false,
         loadProgress: 1,
-        showBonds: sceneDirective.showBonds && canShowBondsByDefault,
+        showBonds: options?.initialShowBonds ?? (sceneDirective.showBonds && canShowBondsByDefault),
         showCell: sceneDirective.showCell,
         showAxes: sceneDirective.showAxes,
         postprocessPreset: sceneDirective.preset,
@@ -1045,6 +1048,11 @@ export const useStore = create<AppState>()(
         selectedAtoms: [],
         measurementTool: null,
         measurement: null,
+        rendererWarning: null,
+        ...(options?.preserveStreamingTelemetry ? {} : { streamingTelemetry: null }),
+        gpuBondsStatus: 'idle',
+        bondSource: 'none',
+        lastBondCount: 0,
         // Default-fill loadedAtomCount to atomCount so non-streaming
         // consumers don't need to special-case this field. The streaming
         // path overrides via setLoadedAtomCount during the load.
@@ -1069,7 +1077,13 @@ export const useStore = create<AppState>()(
         },
       };
     }),
-    setLoading: (loading, progress) => set((s) => ({ loading, loadProgress: progress ?? s.loadProgress })),
+    setLoading: (loading, progress) => set((s) => ({
+      loading,
+      loadProgress: progress ?? s.loadProgress,
+      // A new top-level load owns a fresh telemetry receipt. Do this before
+      // GLIMBIN header/index callbacks fire, not in setFile after they fire.
+      ...(loading && progress === 0 ? { streamingTelemetry: null } : {}),
+    })),
     setActiveCardId: (id) => set({ activeCardId: id }),
 
     setError: (error) => set({ error, loading: false }),
@@ -1313,6 +1327,11 @@ export const useStore = create<AppState>()(
       streamingProgress: 0,
       isStreamingFrames: false,
       fullTrajectoryReady: true,
+      streamingTelemetry: null,
+      rendererWarning: null,
+      gpuBondsStatus: 'idle',
+      bondSource: 'none',
+      lastBondCount: 0,
     }),
 
     triggerExport: (req) => set(s => ({ exportRequest: { ...req, type: req.type ?? null } as ExportRequest })),

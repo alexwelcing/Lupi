@@ -22,6 +22,12 @@ export interface GalleryExample {
   frames: string;
   isTrajectory?: boolean;
   autoPlay?: boolean;
+  /** Catalog-declared mapping from raw LAMMPS type IDs to atomic numbers. */
+  atomTypeMap?: Record<number, number>;
+  /** Catalog-declared coordinate unit for sources whose format is ambiguous. */
+  distanceUnit?: 'angstrom';
+  /** Explicit scene override when chemistry is known but dense bond guides are undesirable. */
+  initialShowBonds?: boolean;
   /**
    * Per-atom property this scene is curated to be read through (e.g. 'error'
    * for the NIST potential benchmarks). Element identity is the global

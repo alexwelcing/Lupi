@@ -262,6 +262,12 @@ export default defineConfig(({ command }) => ({
     'import.meta.env.VITE_LUPI_BUILD_SHA': JSON.stringify(
       resolveLupiBrowserBuildSha(command) ?? '',
     ),
+    // URL-authored MCP commands are a localhost preview/debug affordance.
+    // Enable the documented dev workflow without requiring an undiscoverable
+    // shell variable; production builds remain fail-closed.
+    'import.meta.env.VITE_MCP_URL_AUTORUN': JSON.stringify(
+      command === 'serve' ? (process.env.VITE_MCP_URL_AUTORUN ?? 'true') : 'false',
+    ),
   },
   // Clean public routes like /scenes/1m-copper-lattice need bundle assets to
   // resolve from the site root after the server falls back to index.html.

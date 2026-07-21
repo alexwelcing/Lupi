@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { EquilibriumSolveWorkbench } from '../EquilibriumSolveWorkbench';
 import { Gallery } from '../Gallery';
 import { BG_PRESETS, getBgPoster, type BgPresetWithId } from '../backgroundPresets';
@@ -14,11 +14,34 @@ import { ALL_DOMAINS, type Domain } from '../gallery/catalog';
 // LAMMPS catalog can reuse the source-filtered browser.
 type GalleryView = 'explore' | 'search' | 'omol25' | 'research' | 'potentials' | 'equilibrium';
 
+const QUERY_TAB_TO_VIEW: Record<string, GalleryView> = {
+  simulations: 'explore',
+  omol25: 'omol25',
+  research: 'research',
+  browse: 'search',
+  potentials: 'potentials',
+  equilibrium: 'equilibrium',
+};
+
+const VIEW_TO_QUERY_TAB: Record<GalleryView, string> = {
+  explore: 'simulations',
+  search: 'browse',
+  omol25: 'omol25',
+  research: 'research',
+  potentials: 'potentials',
+  equilibrium: 'equilibrium',
+};
+
+function viewFromLocation(): GalleryView {
+  const requested = new URLSearchParams(window.location.search).get('tab');
+  return requested ? QUERY_TAB_TO_VIEW[requested] ?? 'explore' : 'explore';
+}
+
 export function GallerySection() {
   // Start visible immediately so the catalog does not flash or paint hidden
   // while the IntersectionObserver fires.
   const [visible] = useState(true);
-  const [view, setView] = useState<GalleryView>('explore');
+  const [view, setView] = useState<GalleryView>(viewFromLocation);
   // When a deep link lands on Search, preselect the requested source facet.
   const [searchSource, setSearchSource] = useState<MoleculeSourceId | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,26 +57,21 @@ export function GallerySection() {
     return { id: 'deep', ...BG_PRESETS.deep };
   }, [backgroundPreset]);
 
+  const selectView = useCallback((next: GalleryView, history: 'push' | 'replace' = 'push') => {
+    setView(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', VIEW_TO_QUERY_TAB[next]);
+    url.hash = 'gallery';
+    window.history[history === 'push' ? 'pushState' : 'replaceState']({}, '', url);
+  }, []);
+
   useEffect(() => {
-    // Allow deep-linking to catalog views. Legacy ?tab values are mapped onto
-    // the consolidated structure so existing links keep working.
-    const params = new URLSearchParams(window.location.search);
-    const requestedTab = params.get('tab');
-    const mapping: Record<string, GalleryView> = {
-      simulations: 'explore',
-      omol25: 'omol25',
-      research: 'research',
-      browse: 'search',
-      potentials: 'potentials',
-      equilibrium: 'equilibrium',
-    };
-    if (requestedTab && mapping[requestedTab]) {
-      setView(mapping[requestedTab]);
-      params.delete('tab');
-      const url = new URL(window.location.href);
-      url.search = params.toString();
-      window.history.replaceState({}, '', url);
-    }
+    // Keep catalog navigation durable across refresh and browser back/forward.
+    // The previous one-shot deep-link handler deleted ?tab= after consuming it,
+    // so a refresh silently returned researchers to the generic catalog.
+    const syncFromLocation = () => setView(viewFromLocation());
+    window.addEventListener('popstate', syncFromLocation);
+    return () => window.removeEventListener('popstate', syncFromLocation);
   }, []);
 
   // Own homepage-to-library intent at the surface that controls which catalog
@@ -66,7 +84,7 @@ export function GallerySection() {
       setSearchSource(null);
       setSearchQuery(query);
       setSearchIntentRevision((revision) => revision + 1);
-      setView('search');
+      selectView('search', 'replace');
     };
     const handleDomainIntent = (event: Event) => {
       const requested = (event as CustomEvent<string>).detail;
@@ -75,7 +93,7 @@ export function GallerySection() {
         : 'All';
       setCatalogDomain(domain);
       setCatalogIntentRevision((revision) => revision + 1);
-      setView('explore');
+      selectView('explore', 'replace');
     };
     window.addEventListener('lupi:gallery-search', handleSearchIntent);
     window.addEventListener('lupi:gallery-domain', handleDomainIntent);
@@ -83,7 +101,7 @@ export function GallerySection() {
       window.removeEventListener('lupi:gallery-search', handleSearchIntent);
       window.removeEventListener('lupi:gallery-domain', handleDomainIntent);
     };
-  }, []);
+  }, [selectView]);
 
   return (
     <section
@@ -117,7 +135,7 @@ export function GallerySection() {
             aria-selected={view === 'explore'}
             data-testid="tab-explore"
             style={sTab(view === 'explore', '#d8b878')}
-            onClick={() => setView('explore')}
+            onClick={() => selectView('explore')}
           >
             Explore examples
           </button>
@@ -126,7 +144,7 @@ export function GallerySection() {
             aria-selected={view === 'search'}
             data-testid="tab-search"
             style={sTab(view === 'search', '#8fb0d4')}
-            onClick={() => setView('search')}
+            onClick={() => selectView('search')}
           >
             Search all sources
           </button>
@@ -135,7 +153,7 @@ export function GallerySection() {
             aria-selected={view === 'omol25'}
             data-testid="tab-omol25"
             style={sTab(view === 'omol25', '#34d399')}
-            onClick={() => setView('omol25')}
+            onClick={() => selectView('omol25')}
           >
             OMol25 <span aria-hidden="true">·</span> 34.3M
           </button>
@@ -146,21 +164,21 @@ export function GallerySection() {
           <button
             data-testid="tool-research-files"
             style={sToolBtn(view === 'research')}
-            onClick={() => setView('research')}
+            onClick={() => selectView('research')}
           >
             LAMMPS research <span aria-hidden="true">·</span> 8
           </button>
           <button
             data-testid="tool-potentials"
             style={sToolBtn(view === 'potentials')}
-            onClick={() => setView('potentials')}
+            onClick={() => selectView('potentials')}
           >
             NIST potentials
           </button>
           <button
             data-testid="tool-equilibrium"
             style={sToolBtn(view === 'equilibrium')}
-            onClick={() => setView('equilibrium')}
+            onClick={() => selectView('equilibrium')}
           >
             Equilibrium solver
           </button>

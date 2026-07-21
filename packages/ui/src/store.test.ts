@@ -456,6 +456,30 @@ describe('Store — File Loading', () => {
     expect(s.surfaceClearcoat).toBeGreaterThan(0);
   });
 
+  it('applies a catalog bond default before allowing shared URL state to override it', () => {
+    const traj = markChemicalTrajectory(createMockTrajectory(1, 61));
+    const file = { name: 'catalog-default.xyz', size: 4096, trajectory: traj, thermo: null };
+
+    getStoreState().setFile(file, { initialShowBonds: false });
+    expect(getStoreState().showBonds).toBe(false);
+
+    getStoreState().decodeFromURL(encodeStateDelta({ bonds: 1 }));
+    expect(getStoreState().showBonds).toBe(true);
+  });
+
+  it('preserves current-load streaming telemetry at file commit and clears it at the next load start', () => {
+    const telemetry = { bytesTransferred: 1024, cacheHits: 2, cacheMisses: 1, cacheSize: 3 };
+    const file = { name: 'streamed.glimbin', size: 4096, trajectory: createMockTrajectory(1, 61), thermo: null };
+
+    getStoreState().setLoading(true, 0);
+    getStoreState().setStreamingTelemetry(telemetry);
+    getStoreState().setFile(file, { preserveStreamingTelemetry: true });
+    expect(getStoreState().streamingTelemetry).toEqual(telemetry);
+
+    getStoreState().setLoading(true, 0);
+    expect(getStoreState().streamingTelemetry).toBeNull();
+  });
+
   it('defaults opaque legacy types to colorway with inferred bonds off', () => {
     const traj = createMockTrajectory(1, 61);
     const file = { name: 'opaque.dump', size: 4096, trajectory: traj, thermo: null };

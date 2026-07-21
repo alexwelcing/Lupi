@@ -34,4 +34,12 @@ describe('ViewerGestureHint', () => {
     expect(hint.textContent).toContain('Pinch to zoom');
     expect(hint.style.top).toBe('132px');
   });
+
+  it('does not promise per-atom selection when the scene is above the picking budget', () => {
+    render(<ViewerGestureHint isMobile={false} canSelectAtoms={false} />);
+
+    const hint = screen.getByTestId('viewer-gesture-hint');
+    expect(hint.textContent).toContain('Scroll to zoom');
+    expect(hint.textContent).not.toContain('Select an atom');
+  });
 });
