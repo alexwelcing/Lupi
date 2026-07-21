@@ -1,4 +1,4 @@
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { Suspense, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -57,7 +57,15 @@ const queryClient = new QueryClient({
   },
 });
 
-const root = createRoot(document.getElementById('root')!);
+declare global {
+  interface Window {
+    /** Preserve the React root when Vite reloads this entry during live visual work. */
+    __lupiReactRoot?: Root;
+  }
+}
+
+const rootElement = document.getElementById('root')!;
+const root = window.__lupiReactRoot ??= createRoot(rootElement);
 
 function withProviders(node: ReactNode) {
   return (

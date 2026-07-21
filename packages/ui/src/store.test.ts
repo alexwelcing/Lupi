@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { resetStore, getStoreState, setStoreState } from './test-utils';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 import { DEFAULT_SCENE_ID } from '@atlas/scene/materials';
+import { getDefaultVectorDensity } from './store';
 
 function encodeStateDelta(delta: Record<string, unknown>) {
   return btoa(JSON.stringify(delta))
@@ -22,6 +23,18 @@ function markChemicalTrajectory(trajectory: ReturnType<typeof createMockTrajecto
   }
   return trajectory;
 }
+
+describe('Store - vector field defaults', () => {
+  it.each([
+    { atomCount: 60, expected: 1 },
+    { atomCount: 864, expected: 0.35 },
+    { atomCount: 10_000, expected: 0.03 },
+    { atomCount: 953_312, expected: 0.01 },
+    { atomCount: 0, expected: 1 },
+  ])('targets a readable deterministic sample for $atomCount atoms', ({ atomCount, expected }) => {
+    expect(getDefaultVectorDensity(atomCount)).toBe(expected);
+  });
+});
 
 describe('Store — Display Toggles', () => {
   beforeEach(() => {
