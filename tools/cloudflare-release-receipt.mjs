@@ -172,7 +172,11 @@ export function validateRollbackContract(value) {
   assert.equal(value.schemaVersion, 'lupi-rollback-contract-v1', 'unsupported rollback-contract schema');
   assertRepositoryAndSha(value);
   assertVersionId(value.workerVersionId, 'rollback worker version ID');
-  assert.ok(value.commandMode === 'legacy-deployed-smoke-v1' || value.commandMode === 'full-ui-v1', 'rollback commandMode is not closed');
+  assert.ok([
+    'legacy-deployed-smoke-v1',
+    'full-ui-configless-v1',
+    'full-ui-v1',
+  ].includes(value.commandMode), 'rollback commandMode is not closed');
   assertNonEmpty(value.nodeVersion, 'rollback Node version');
   assertNonEmpty(value.pnpmVersion, 'rollback pnpm version');
   assertSha256(value.lockSha256, 'rollback lock SHA-256');

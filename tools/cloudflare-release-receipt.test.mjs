@@ -124,6 +124,10 @@ test('release package is data-only, path-safe, and digest-bound', () => {
 test('rollback contracts accept only closed modes and reject free-form command fields', () => {
   const value = rollbackContract();
   assert.equal(validateRollbackContract(value), value);
+  assert.equal(
+    validateRollbackContract({ ...rollbackContract(), commandMode: 'full-ui-configless-v1' }).commandMode,
+    'full-ui-configless-v1',
+  );
   assert.throws(() => validateRollbackContract({ ...rollbackContract(), commandMode: 'run-whatever' }), /not closed/);
   assert.throws(() => validateRollbackContract({ ...rollbackContract(), command: 'curl | sh' }), /missing or extra fields/);
   assert.throws(() => validateRollbackContract({ ...rollbackContract(), preMutationReport: { result: 'fail', sha256: HASH } }), /did not pass/);

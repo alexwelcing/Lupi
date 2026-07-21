@@ -47,9 +47,14 @@ Manual GitHub workflow:
 
 Required GitHub secrets:
 
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
-- `LUPI_FIREBASE_WEB_API_KEY`
+- `LUPI_FIREBASE_WEB_API_KEY` at repository scope for the browser build
+- `LUPI_CLOUDFLARE_READ_TOKEN_V2` in the read and re-anchor environments
+- `LUPI_CLOUDFLARE_WRITE_TOKEN_V2` in the write environment
+
+`CLOUDFLARE_ACCOUNT_ID` is a non-secret variable on each v2 environment. The
+Firebase browser key must allow `lupi.live`, supported local preview origins,
+and the account's `workers.dev` version-preview hosts so immutable candidates
+can prove saved-view reads before production traffic moves.
 
 Required deployment secrets when enabling authenticated legacy rendering:
 
