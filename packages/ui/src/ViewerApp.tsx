@@ -212,6 +212,15 @@ export function ViewerApp() {
     const state = useStore.getState();
     if (state.playing) state.togglePlay();
   }, []);
+  const handlePlaybackFrame = useCallback((state: InterpolatedFrameState) => {
+    if (!isFrameReady(state.frameIndex)) {
+      requestBufferedFrame(state.frameIndex);
+      return;
+    }
+    if (useStore.getState().playing && state.frameIndex !== useStore.getState().frame) {
+      useStore.getState().setFrame(state.frameIndex);
+    }
+  }, [isFrameReady, requestBufferedFrame]);
 
   const { currentState: interpState, setFrame: setSmoothFrame, liveStateRef } = useSmoothFramePlayback(playing, {
     frames: file?.trajectory.frames ?? [],
@@ -225,15 +234,7 @@ export function ViewerApp() {
     onFrameNeeded: requestBufferedFrame,
     loopMode,
     onPlaybackEnd: stopAtPlaybackEnd,
-    onFrame: (state: InterpolatedFrameState) => {
-      if (!isFrameReady(state.frameIndex)) {
-        requestBufferedFrame(state.frameIndex);
-        return;
-      }
-      if (useStore.getState().playing && state.frameIndex !== useStore.getState().frame) {
-        useStore.getState().setFrame(state.frameIndex);
-      }
-    }
+    onFrame: handlePlaybackFrame,
   });
 
   // Sync external frame updates back to the hook when NOT playing.

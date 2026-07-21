@@ -24,7 +24,8 @@ const ACCENT = '#1edce0';
 // surfaced prominently — it's the headline collection this tab unlocks.
 const SOURCE_CHIPS: { id: MoleculeSourceId | null; label: string; note?: string }[] = [
   { id: null, label: 'All sources' },
-  { id: 'omol', label: 'Meta OMol25', note: '27,697 DFT structures' },
+  { id: 'omol', label: 'Meta OMol25', note: '34.3M streamed neutral structures' },
+  { id: 'research', label: 'Research data', note: '8 cited LAMMPS records' },
   { id: 'gallery', label: 'Gallery' },
   { id: 'nist', label: 'NIST' },
   { id: 'pubchem', label: 'PubChem' },
@@ -40,6 +41,7 @@ const ELEMENT_CHIPS = ['H', 'C', 'N', 'O', 'F', 'S', 'P', 'Si', 'Cl', 'Fe', 'Cu'
 // Per-source accent for the card badge so the provenance reads at a glance.
 const SOURCE_COLOR: Record<MoleculeSourceId, string> = {
   gallery: '#1edce0',
+  research: '#f97316',
   nist: '#c084fc',
   saved: '#f59e0b',
   pubchem: '#38bdf8',
@@ -49,6 +51,7 @@ const SOURCE_COLOR: Record<MoleculeSourceId, string> = {
 };
 const SOURCE_LABEL: Record<MoleculeSourceId, string> = {
   gallery: 'Gallery',
+  research: 'Research',
   nist: 'NIST',
   saved: 'Saved',
   pubchem: 'PubChem',
@@ -213,6 +216,12 @@ export function MoleculeBrowser({
                     {hit.elements.length > 8 && <span style={elementPillStyle}>+{hit.elements.length - 8}</span>}
                   </div>
                 )}
+                {hit.provenance && (
+                  <div style={provenanceStyle} title={hit.provenance.citation}>
+                    Zenodo · {hit.provenance.doi} · {hit.provenance.license}
+                  </div>
+                )}
+                {hit.notice && <div style={noticeStyle}>{hit.notice}</div>}
                 {busy && <div style={busyStyle}>Loading…</div>}
               </button>
             );
@@ -280,6 +289,13 @@ const cardSubtitleStyle: CSSProperties = {
   color: '#64748b', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 };
 const elementsRowStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 };
+const provenanceStyle: CSSProperties = {
+  color: '#fb923c', fontSize: 9, lineHeight: 1.35, marginTop: 3,
+  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+};
+const noticeStyle: CSSProperties = {
+  color: '#fbbf24', fontSize: 10, lineHeight: 1.4, marginTop: 2,
+};
 const elementPillStyle: CSSProperties = {
   fontSize: 9, fontWeight: 700, color: '#94a3b8', padding: '1px 5px', borderRadius: 4,
   background: 'rgba(255,255,255,0.04)', border: '1px solid #1f2937',

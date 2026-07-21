@@ -8,6 +8,7 @@ import { useStore } from './store';
 import {
   clearStreamingFrameCoordinator,
   DEFAULT_STREAMING_RESIDENT_BYTES,
+  DEFAULT_STREAMING_RESIDENT_FRAMES,
   estimateFrameResidentBytes,
   installStreamingFrameCoordinator,
   requestStreamingFrame,
@@ -37,6 +38,46 @@ describe('streamingFrameCoordinator', () => {
 
   afterEach(() => {
     clearStreamingFrameCoordinator();
+  });
+
+  it('keeps a 61-frame trajectory resident after its first bounded pass', async () => {
+    const slots = new Array<Frame | undefined>(61);
+    slots[0] = createMockFrame({ timestep: 0 });
+    useStore.getState().setFile({
+      name: 'r32-sized-loop.glimbin',
+      size: 37_220_992,
+      trajectory: sparseTrajectory(slots),
+      thermo: null,
+      sourceUrl: 'https://example.test/r32-sized-loop.glimbin',
+    });
+    const fetchFrame = vi.fn(async (frameIndex: number) => createMockFrame({ timestep: frameIndex }));
+
+    installStreamingFrameCoordinator(
+      { fetchFrame },
+      {
+        label: 'r32-sized-loop',
+        sourceUrl: 'https://example.test/r32-sized-loop.glimbin',
+        initialLookahead: 0,
+      },
+    );
+
+    for (let frameIndex = 1; frameIndex < slots.length; frameIndex += 1) {
+      requestStreamingFrame(frameIndex, 1, 0);
+      await flushAsyncWork();
+    }
+    for (let frameIndex = 0; frameIndex < slots.length; frameIndex += 1) {
+      requestStreamingFrame(frameIndex, 1, 0);
+      await flushAsyncWork();
+    }
+
+    expect(DEFAULT_STREAMING_RESIDENT_FRAMES).toBeGreaterThanOrEqual(slots.length);
+    expect(fetchFrame).toHaveBeenCalledTimes(slots.length - 1);
+    expect(useStore.getState().file?.trajectory.frames.filter(Boolean)).toHaveLength(slots.length);
+    expect(useStore.getState().file?.trajectory.residency).toEqual({
+      mode: 'sparse',
+      maxResidentFrames: DEFAULT_STREAMING_RESIDENT_FRAMES,
+      maxResidentBytes: DEFAULT_STREAMING_RESIDENT_BYTES,
+    });
   });
 
   it('warms missing startup frames into a sparse trajectory', async () => {
@@ -185,7 +226,94 @@ describe('streamingFrameCoordinator', () => {
     expect(releaseFrame).toHaveBeenCalledTimes(3);
   });
 
-  it('aborts obsolete directional lookahead without reporting it as a data failure', async () => {
+  it('reuses identical and adjacent overlapping request windows without aborting or refetching', async () => {
+    const loaded = Array.from({ length: 8 }, (_, timestep) => createMockFrame({ timestep }));
+    useStore.getState().setFile({
+      name: 'overlap.glimbin',
+      size: 4096,
+      trajectory: sparseTrajectory([loaded[0], ...new Array(7)]),
+      thermo: null,
+      sourceUrl: 'https://example.test/overlap.glimbin',
+    });
+
+    const aborted: number[] = [];
+    const fetchFrame = vi.fn((frameIndex: number, signal?: AbortSignal) => (
+      new Promise<Frame>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          aborted.push(frameIndex);
+          reject(new DOMException('The operation was aborted', 'AbortError'));
+        }, { once: true });
+      })
+    ));
+
+    installStreamingFrameCoordinator(
+      { fetchFrame },
+      {
+        label: 'overlap-reuse',
+        sourceUrl: 'https://example.test/overlap.glimbin',
+        initialLookahead: 0,
+        maxResidentFrames: 8,
+      },
+    );
+
+    requestStreamingFrame(2, 1, 2);
+    requestStreamingFrame(2, 1, 2);
+    requestStreamingFrame(3, 1, 2);
+    await flushAsyncWork();
+
+    expect(aborted).toEqual([]);
+    expect(fetchFrame.mock.calls.map(([frameIndex]) => frameIndex)).toEqual([2, 3, 4, 5]);
+    for (const frameIndex of [2, 3, 4, 5]) {
+      expect(fetchFrame.mock.calls.filter(([index]) => index === frameIndex)).toHaveLength(1);
+    }
+  });
+
+  it('retries a transient same-window failure and splices the recovered frame', async () => {
+    vi.useFakeTimers();
+    const loaded = [
+      createMockFrame({ timestep: 0 }),
+      createMockFrame({ timestep: 1 }),
+    ];
+    useStore.getState().setFile({
+      name: 'retry.glimbin',
+      size: 2048,
+      trajectory: sparseTrajectory([loaded[0], undefined]),
+      thermo: null,
+      sourceUrl: 'https://example.test/retry.glimbin',
+    });
+    const fetchFrame = vi.fn(async (frameIndex: number) => {
+      if (fetchFrame.mock.calls.length === 1) throw new Error('temporary range failure');
+      return loaded[frameIndex]!;
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      installStreamingFrameCoordinator(
+        { fetchFrame },
+        {
+          label: 'retry-once',
+          sourceUrl: 'https://example.test/retry.glimbin',
+          initialLookahead: 0,
+        },
+      );
+
+      requestStreamingFrame(1, 1, 0);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchFrame).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(250);
+
+      expect(fetchFrame).toHaveBeenCalledTimes(2);
+      expect(useStore.getState().file?.trajectory.frames[1]).toBe(loaded[1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      clearStreamingFrameCoordinator();
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('aborts obsolete directional lookahead after a hard jump and direction change', async () => {
     const loaded = Array.from({ length: 8 }, (_, timestep) => createMockFrame({ timestep }));
     useStore.getState().setFile({
       name: 'direction.glimbin',
@@ -197,7 +325,7 @@ describe('streamingFrameCoordinator', () => {
 
     const aborted: number[] = [];
     const fetchFrame = vi.fn((frameIndex: number, signal?: AbortSignal) => {
-      if (frameIndex >= 5) return Promise.resolve(loaded[frameIndex]!);
+      if (frameIndex >= 4) return Promise.resolve(loaded[frameIndex]!);
       return new Promise<Frame>((resolve, reject) => {
         signal?.addEventListener('abort', () => {
           aborted.push(frameIndex);
@@ -217,15 +345,16 @@ describe('streamingFrameCoordinator', () => {
         maxResidentFrames: 5,
       },
     );
-    requestStreamingFrame(5, 1, 1);
+    requestStreamingFrame(5, -1, 1);
     await flushAsyncWork();
     await flushAsyncWork();
 
     expect(aborted.sort((a, b) => a - b)).toEqual([1, 2]);
     expect(useStore.getState().file?.trajectory.frames[1]).toBeUndefined();
     expect(useStore.getState().file?.trajectory.frames[2]).toBeUndefined();
+    expect(useStore.getState().file?.trajectory.frames[4]).toBe(loaded[4]);
     expect(useStore.getState().file?.trajectory.frames[5]).toBe(loaded[5]);
-    expect(useStore.getState().file?.trajectory.frames[6]).toBe(loaded[6]);
+    expect(useStore.getState().file?.trajectory.frames[6]).toBeUndefined();
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });

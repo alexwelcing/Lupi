@@ -19,18 +19,16 @@ import {
 import { getElementSpecBySymbol } from '@atlas/core';
 import {
   clearStreamingFrameCoordinator,
+  DEFAULT_STREAMING_RESIDENT_FRAMES,
   installStreamingFrameCoordinator,
 } from '../streamingFrameCoordinator';
+import { nistCatalogUrl, nistDemoUrl } from '../molecules/dataEndpoints';
 
 // Base for NIST catalog + demo trajectories. Defaults to the bundled
 // public/nist/ path (catalog JSON is small — fine to ship). Heavy demo
 // trajectories belong in object storage: set VITE_NIST_BASE_URL (e.g.
 // https://storage.googleapis.com/<bucket>/nist) at build/deploy and the
 // app loads them from there with zero code change.
-const NIST_BASE = String(
-  import.meta.env.VITE_NIST_BASE_URL ?? '/nist',
-).replace(/\/$/, '');
-
 // ─── Types ──────────────────────────────────────────────────────────────
 
 interface PotentialCardProps {
@@ -145,7 +143,7 @@ export function PotentialBrowser() {
   // Load catalog on first mount
   useEffect(() => {
     if (catalog) return;
-    loadNistCatalog(`${NIST_BASE}/nist_catalog.json`)
+    loadNistCatalog(nistCatalogUrl())
       .then((data) => {
         setCatalog(data);
         setSummary(summarize(data));
@@ -198,7 +196,7 @@ export function PotentialBrowser() {
       return;
     }
 
-    const demoUrl = `${NIST_BASE}/${entry.demo_path}`;
+    const demoUrl = nistDemoUrl(entry.demo_path);
 
     // Clean up any previous streaming session
     clearStreamingFrameCoordinator();
@@ -215,13 +213,14 @@ export function PotentialBrowser() {
     try {
       const { StreamingLoader } = await import('@atlas/parsers/StreamingLoader');
       const loader = new StreamingLoader(demoUrl, {
-        onProgress: (_phase, progress) => {
+        onProgress: (phase, progress) => {
+          if (phase === 'frame') return;
           useStore.getState().setLoading(true, 0.1 + progress * 0.6);
         },
         onTelemetry: (stats) => {
           useStore.getState().setStreamingTelemetry(stats);
         },
-      });
+      }, DEFAULT_STREAMING_RESIDENT_FRAMES);
 
       const header = await loader.fetchHeader();
       await loader.fetchIndex();

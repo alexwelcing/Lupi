@@ -5,6 +5,7 @@
   type FunctionalGroupId,
 } from '../../organicFunctionalGroups';
 import type { MoleculeHit, MoleculeProvider, MoleculeQuery } from '../types';
+import { remoteOmolHit, remoteOmolPage } from '../remoteOmol';
 
 /**
  * Meta / FAIR Open Molecules 2025 (OMol25) â€” request #2.
@@ -161,67 +162,83 @@ export function omolFacets(): Promise<OmolFacets> {
   return facetCache;
 }
 
+/** Search only the compact, facet-enriched neutral-validation index. */
+export async function searchOmolValidation(query: MoleculeQuery): Promise<MoleculeHit[]> {
+  const records = await index();
+  if (records.length === 0) return [];
+  const q = query.text.toLowerCase().trim();
+  const wantElements = query.elements ?? [];
+  const wantGroups = normalizeFunctionalGroups(query.functionalGroups);
+  let hits = records;
+  if (wantElements.length) {
+    hits = hits.filter((record) => wantElements.every((element) => record.elements.includes(element)));
+  }
+  if (wantGroups.length) {
+    hits = hits.filter((record) => {
+      const groups = normalizeFunctionalGroups(record.functionalGroups);
+      return wantGroups.every((groupId) => groups.includes(groupId));
+    });
+  }
+  if (q) {
+    hits = hits.filter(
+      (record) =>
+        record.formula.toLowerCase().includes(q) ||
+        record.elements.some((element) => element.toLowerCase() === q) ||
+        groupSearchText(record.functionalGroups).toLowerCase().includes(q),
+    );
+  }
+  return hits.slice(0, query.limit ?? 25).map((record) => {
+    const concepts = groupConcepts(record.functionalGroups);
+    const groupLabels = concepts.map((group) => group.label);
+    const groupAliases = concepts.flatMap((group) => group.aliases);
+    const functionalGroups = concepts.map((group) => group.id);
+    return {
+      id: record.id,
+      source: 'omol',
+      title: record.formula,
+      subtitle: `${record.natoms} atoms${record.gap != null ? ` · gap ${record.gap.toFixed(2)} eV` : ''}`,
+      formula: record.formula,
+      elements: record.elements,
+      tags: ['omol25', record.src, ...groupLabels, ...groupAliases],
+      functionalGroups: functionalGroups.length ? functionalGroups : undefined,
+      load: { kind: 'url', url: omolStructureUrl(record.id) },
+      score:
+        q && record.formula.toLowerCase() === q
+          ? 0.9
+          : q && groupSearchText(record.functionalGroups).toLowerCase().includes(q)
+            ? 0.82
+            : undefined,
+    } satisfies MoleculeHit;
+  });
+}
+
 export const omolProvider: MoleculeProvider = {
   id: 'omol',
   label: 'Meta OMol25',
   isAvailable: () => typeof fetch === 'function',
   async search(query: MoleculeQuery): Promise<MoleculeHit[]> {
-    const records = await index();
-    if (records.length === 0) return [];
-
-    const q = query.text.toLowerCase().trim();
+    const rawQuery = query.text.trim();
     const wantElements = query.elements ?? [];
     const wantGroups = normalizeFunctionalGroups(query.functionalGroups);
-
-    let hits = records;
-    if (wantElements.length) {
-      hits = hits.filter((r) => wantElements.every((e) => r.elements.includes(e)));
-    }
-    if (wantGroups.length) {
-      hits = hits.filter((r) => {
-        const groups = normalizeFunctionalGroups(r.functionalGroups);
-        return wantGroups.every((groupId) => groups.includes(groupId));
-      });
-    }
-    if (q) {
-      // The internal `src` id is a single opaque constant across the slice, so
-      // it's not a meaningful search target â€” match on formula + elements only.
-      hits = hits.filter(
-        (r) =>
-          r.formula.toLowerCase().includes(q) ||
-          r.elements.some((e) => e.toLowerCase() === q) ||
-          groupSearchText(r.functionalGroups).toLowerCase().includes(q),
-      );
+    // Query-less browse and ordinary text/formula search use the edge-backed
+    // complete neutral training split. Rich element/group facets stay on the
+    // compact validation index, where those derived facets are available.
+    if (wantElements.length === 0 && wantGroups.length === 0) {
+      try {
+        const looksLikeFormula = rawQuery.length > 0 && /^[A-Z][A-Za-z0-9()[\]+.\-]*$/.test(rawQuery);
+        const page = await remoteOmolPage({
+          collection: 'neutral-train',
+          offset: 0,
+          limit: query.limit ?? 25,
+          ...(looksLikeFormula ? { formula: rawQuery } : rawQuery ? { query: rawQuery } : {}),
+        });
+        return page.rows.map(remoteOmolHit);
+      } catch {
+        // The HF search index can briefly warm. Fall through to the small,
+        // always-compatible validation index instead of sinking federation.
+      }
     }
 
-    return hits.slice(0, query.limit ?? 25).map((r) => {
-      const concepts = groupConcepts(r.functionalGroups);
-      const groupLabels = concepts.map((group) => group.label);
-      const groupAliases = concepts.flatMap((group) => group.aliases);
-      const functionalGroups = concepts.map((group) => group.id);
-      return {
-      id: r.id,
-      source: 'omol',
-      title: r.formula,
-      // User-facing subtitle: structure size + (when present) the DFT gap. The
-      // raw `src` id is NOT shown â€” it's an internal provenance string, kept only
-      // as a hidden tag. gap is null across the neutral-validation slice, so it
-      // simply doesn't render here.
-      subtitle: `${r.natoms} atoms${r.gap != null ? ` Â· gap ${r.gap.toFixed(2)} eV` : ''}`,
-      formula: r.formula,
-      elements: r.elements,
-      tags: ['omol25', r.src, ...groupLabels, ...groupAliases],
-      functionalGroups: functionalGroups.length ? functionalGroups : undefined,
-      // Real OMol25 DFT geometry, served as a per-structure .xyz alongside the index.
-      // This load path supplies coordinates, not source bond topology.
-      load: { kind: 'url', url: omolStructureUrl(r.id) },
-      score:
-        q && r.formula.toLowerCase() === q
-          ? 0.9
-          : q && groupSearchText(r.functionalGroups).toLowerCase().includes(q)
-            ? 0.82
-            : undefined,
-      } satisfies MoleculeHit;
-    });
+    return searchOmolValidation(query);
   },
 };

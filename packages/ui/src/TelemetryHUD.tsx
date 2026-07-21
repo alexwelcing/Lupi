@@ -12,7 +12,6 @@ export function TelemetryHUD() {
     : '0.0';
 
   const mbTransferred = (telemetry.bytesTransferred / 1024 / 1024).toFixed(2);
-  const mbCacheSize = (telemetry.cacheSize / 1024 / 1024).toFixed(2);
 
   return (
     <div style={{
@@ -55,16 +54,16 @@ export function TelemetryHUD() {
         <span style={{ opacity: 0.7 }}>Network Egress:</span>
         <span style={{ color: '#0ff', fontWeight: 600 }}>{mbTransferred} MB</span>
         
-        <span style={{ opacity: 0.7 }}>LRU Cache Size:</span>
-        <span style={{ color: '#0ff', fontWeight: 600 }}>{mbCacheSize} MB</span>
+        <span style={{ opacity: 0.7 }}>Resident Frames:</span>
+        <span style={{ color: '#0ff', fontWeight: 600 }}>{telemetry.cacheSize}</span>
         
-        <span style={{ opacity: 0.7 }}>Cache Hits:</span>
+        <span style={{ opacity: 0.7 }}>Loader Cache Hits:</span>
         <span style={{ color: '#0ff', fontWeight: 600 }}>{telemetry.cacheHits}</span>
         
-        <span style={{ opacity: 0.7 }}>Cache Misses:</span>
+        <span style={{ opacity: 0.7 }}>Remote Frame Fetches:</span>
         <span style={{ color: '#0ff', fontWeight: 600 }}>{telemetry.cacheMisses}</span>
         
-        <span style={{ opacity: 0.7 }}>Efficiency:</span>
+        <span style={{ opacity: 0.7 }}>Loader Hit Rate:</span>
         <span style={{ color: '#0ff', fontWeight: 600 }}>{hitRate}%</span>
       </div>
     </div>

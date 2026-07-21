@@ -4,7 +4,6 @@ export function useViewerFileState() {
   return {
     file: useStore(s => s.file),
     ghostFile: useStore(s => s.ghostFile),
-    loading: useStore(s => s.loading),
     frame: useStore(s => s.frame),
     loadedAtomCount: useStore(s => s.loadedAtomCount),
   };

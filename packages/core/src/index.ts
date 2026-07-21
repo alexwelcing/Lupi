@@ -99,3 +99,6 @@ export {
 
 // --- Stable render artifact contract ---------------------------------------
 export * from './renderArtifact';
+
+// --- External scientific-data catalog -------------------------------------
+export * from './scienceDataCatalog';

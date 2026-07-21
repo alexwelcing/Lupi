@@ -19,6 +19,7 @@ import {
   type RenderCapabilityV1,
   type RenderRequestSpecV1,
 } from '@atlas/core';
+import { routeScienceData } from './scienceData';
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -156,7 +157,7 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
-const SERVER_VERSION = '2026-07-20.authenticated-render.1';
+const SERVER_VERSION = '2026-07-20.remote-science-data.1';
 const LEGACY_RENDERER_VERSION = 'lupi-render-contract@2026-07-09';
 const LEGACY_DEFAULT_MAX_INLINE_BYTES = 8 * 1024 * 1024;
 const PRIVATE_RENDER_REQUEST_PROTOCOL = 'lupi.renderer-request.legacy-v0.1';
@@ -619,6 +620,9 @@ export async function handleRequest(
       if (result === null) return new Response(null, { status: 204, headers: cors });
       return json(result, { headers: cors });
     }
+
+    const scienceDataResponse = await routeScienceData(request);
+    if (scienceDataResponse) return withCors(scienceDataResponse, cors);
 
     if (url.pathname === '/v1/render') {
       if (request.method !== 'POST') return methodNotAllowed(cors, ['POST']);
@@ -2055,8 +2059,14 @@ function corsHeaders(request: Request, env: Env) {
   headers.set('access-control-allow-origin', !allowed?.length || allowed.includes(origin) ? origin : allowed[0]);
   headers.set('vary', 'origin');
   headers.set('access-control-allow-methods', 'GET,HEAD,POST,OPTIONS');
-  headers.set('access-control-allow-headers', 'content-type,authorization,mcp-session-id');
-  headers.set('access-control-expose-headers', 'content-type,etag,x-lupi-edge-executed');
+  headers.set('access-control-allow-headers', 'content-type,authorization,mcp-session-id,range');
+  headers.set(
+    'access-control-expose-headers',
+    'content-type,content-length,content-range,accept-ranges,etag,last-modified,' +
+      'x-lupi-edge-executed,x-lupi-data-source,x-lupi-data-license,x-lupi-content-checksum,' +
+      'x-lupi-source-checksum,x-lupi-integrity-verified,x-lupi-coordinate-provenance,' +
+      'x-lupi-bond-topology,x-lupi-research-dataset',
+  );
   headers.set('x-lupi-edge-executed', '1');
   return headers;
 }

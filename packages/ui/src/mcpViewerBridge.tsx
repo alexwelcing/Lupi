@@ -19,6 +19,7 @@ import { COLOR_SCHEMES, type ColorSchemeId } from './coloring';
 import { useFirebaseAuth } from './auth/useFirebaseAuth';
 import { MOLECULE_PROVIDERS, searchMolecules, type MoleculeHit, type MoleculeQuery, type MoleculeSourceId } from './molecules';
 import { MoleculeSearch } from './molecules/MoleculeSearch';
+import { nistCatalogUrl, nistDemoUrl } from './molecules/dataEndpoints';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { openMolecule } from './viewer/openMolecule';
@@ -202,8 +203,6 @@ declare global {
     __lupiViewerMcpVersion?: string;
   }
 }
-
-const NIST_BASE = String(import.meta.env.VITE_NIST_BASE_URL ?? '/nist').replace(/\/$/, '');
 
 const TEMPLATE_MOLECULES: Array<{
   name: string;
@@ -748,7 +747,7 @@ export function McpViewerHarness() {
     if (nistCatalog) return;
     let cancelled = false;
     setCatalogBusy(true);
-    loadNistCatalog(`${NIST_BASE}/nist_catalog.json`)
+    loadNistCatalog(nistCatalogUrl())
       .then((catalog) => {
         if (cancelled) return;
         setNistCatalog(catalog);
@@ -940,7 +939,7 @@ export function McpViewerHarness() {
     setBusy(true);
     setActivePotentialId(entry.id);
     try {
-      const result = await openMolecule({ kind: 'url', url: `${NIST_BASE}/${entry.demo_path}`, history: 'none' });
+      const result = await openMolecule({ kind: 'url', url: nistDemoUrl(entry.demo_path), history: 'none' });
       if (!result.ok) throw new Error(result.message);
       publishResponses([okResponse(
         {

@@ -28,7 +28,13 @@ type InstallOptions = {
   maxResidentBytes?: number;
 };
 
+// Keep common short research trajectories (including the 61-frame R32 run)
+// resident after one pass. The byte budget remains authoritative for larger
+// atom counts, so raising the count ceiling does not make memory unbounded.
+export const DEFAULT_STREAMING_RESIDENT_FRAMES = 64;
 export const DEFAULT_STREAMING_RESIDENT_BYTES = 64 * 1024 * 1024;
+const MAX_SAME_GENERATION_RETRIES = 2;
+const FRAME_RETRY_BASE_DELAY_MS = 250;
 
 /**
  * Counts retained ArrayBuffer payload once even when multiple typed-array
@@ -100,7 +106,7 @@ export function installStreamingFrameCoordinator(
     initialLookahead = 10,
     playbackLookahead = 12,
     idleLookahead = 4,
-    maxResidentFrames = 20,
+    maxResidentFrames = DEFAULT_STREAMING_RESIDENT_FRAMES,
     maxResidentBytes = DEFAULT_STREAMING_RESIDENT_BYTES,
   } = options;
   if (!Number.isSafeInteger(maxResidentFrames) || maxResidentFrames < 2) {
@@ -111,12 +117,32 @@ export function installStreamingFrameCoordinator(
   }
 
   const pending = new Map<number, number>();
+  const retryAttempts = new Map<number, { generation: number; count: number }>();
+  const retryTimers = new Map<number, {
+    generation: number;
+    id: ReturnType<typeof setTimeout>;
+  }>();
   const residentOrder: number[] = [];
   let desiredResident = new Set<number>([0]);
   let pinnedResident = new Set<number>([useStore.getState().frame]);
   let windowController = new AbortController();
   let windowGeneration = 0;
+  let windowTarget = useStore.getState().frame;
+  let windowDirection = 1;
   let disposed = false;
+
+  const clearFrameRetry = (frameIndex: number) => {
+    const scheduled = retryTimers.get(frameIndex);
+    if (scheduled) clearTimeout(scheduled.id);
+    retryTimers.delete(frameIndex);
+    retryAttempts.delete(frameIndex);
+  };
+
+  const clearAllFrameRetries = () => {
+    for (const scheduled of retryTimers.values()) clearTimeout(scheduled.id);
+    retryTimers.clear();
+    retryAttempts.clear();
+  };
 
   const touchResident = (frameIndex: number) => {
     const existing = residentOrder.indexOf(frameIndex);
@@ -174,16 +200,21 @@ export function installStreamingFrameCoordinator(
     signal: AbortSignal,
   ) => {
     if (disposed || signal.aborted) return;
+    const scheduledRetry = retryTimers.get(frameIndex);
+    if (scheduledRetry?.generation === generation) return;
+    if (scheduledRetry) clearFrameRetry(frameIndex);
     const currentFile = useStore.getState().file;
     const totalFrames = currentFile?.trajectory.totalFrames ?? 0;
     if (!currentFile || frameIndex < 0 || frameIndex >= totalFrames) return;
     if (!matchesActiveFile(sourceUrl, name)) return;
     if (currentFile.trajectory.frames[frameIndex]) {
+      clearFrameRetry(frameIndex);
       touchResident(frameIndex);
       return;
     }
     if (pending.has(frameIndex)) return;
 
+    let retryableFailure = false;
     pending.set(frameIndex, generation);
     try {
       const frame = await source.fetchFrame(frameIndex, signal);
@@ -197,6 +228,7 @@ export function installStreamingFrameCoordinator(
         return;
       }
       if (!file.trajectory.frames[frameIndex]) {
+        clearFrameRetry(frameIndex);
         file.trajectory.frames[frameIndex] = frame;
         touchResident(frameIndex);
         evictToBudget(file);
@@ -207,10 +239,48 @@ export function installStreamingFrameCoordinator(
     } catch (err) {
       const normalized = err instanceof Error ? err : new Error(String(err));
       if (normalized.name !== 'AbortError' && !signal.aborted) {
+        retryableFailure = true;
         console.warn(`[${label}] frame ${frameIndex} fetch failed:`, normalized.message);
       }
     } finally {
       if (pending.get(frameIndex) === generation) pending.delete(frameIndex);
+      if (
+        retryableFailure &&
+        !disposed &&
+        !signal.aborted &&
+        generation === windowGeneration &&
+        desiredResident.has(frameIndex) &&
+        !useStore.getState().file?.trajectory.frames[frameIndex] &&
+        !pending.has(frameIndex) &&
+        !retryTimers.has(frameIndex)
+      ) {
+        const previous = retryAttempts.get(frameIndex);
+        const previousCount = previous?.generation === generation ? previous.count : 0;
+        if (previousCount < MAX_SAME_GENERATION_RETRIES) {
+          const nextCount = previousCount + 1;
+          retryAttempts.set(frameIndex, { generation, count: nextCount });
+          const delay = FRAME_RETRY_BASE_DELAY_MS * (2 ** (nextCount - 1));
+          const id = setTimeout(() => {
+            const scheduled = retryTimers.get(frameIndex);
+            if (!scheduled || scheduled.generation !== generation) return;
+            retryTimers.delete(frameIndex);
+            const file = useStore.getState().file;
+            if (file?.trajectory.frames[frameIndex]) {
+              retryAttempts.delete(frameIndex);
+              return;
+            }
+            if (
+              !disposed &&
+              !signal.aborted &&
+              generation === windowGeneration &&
+              desiredResident.has(frameIndex)
+            ) {
+              void fetchAndSplice(frameIndex, generation, signal);
+            }
+          }, delay);
+          retryTimers.set(frameIndex, { generation, id });
+        }
+      }
       if (
         !disposed &&
         generation !== windowGeneration &&
@@ -241,14 +311,33 @@ export function installStreamingFrameCoordinator(
       clampLookaheadForActiveFile(lookahead),
       Math.max(0, effectiveResidentFrames - baseWindowFrames),
     );
-    desiredResident = new Set([0, frameIndex]);
-    pinnedResident = new Set([frameIndex]);
+    const nextDesiredResident = new Set([0, frameIndex]);
     for (let i = 1; i <= safeLookahead; i += 1) {
       const next = frameIndex + step * i;
       if (next < 0 || next >= totalFrames) break;
-      desiredResident.add(next);
+      nextDesiredResident.add(next);
     }
-    const missingDesiredFrames = Array.from(desiredResident).reduce(
+    // Playback advances one source frame at a time, so adjacent windows share
+    // almost every requested frame. Reuse the live AbortController for that
+    // overlap. Aborting the whole batch on every source-frame or animation
+    // request creates a range-fetch livelock where no missing frame can finish.
+    const reuseCurrentWindow = windowGeneration > 0
+      && step === windowDirection
+      && desiredResident.has(frameIndex)
+      && Math.abs(frameIndex - windowTarget) <= Math.max(2, safeLookahead);
+
+    desiredResident = nextDesiredResident;
+    pinnedResident = new Set([frameIndex]);
+    windowTarget = frameIndex;
+    windowDirection = step;
+
+    if (reuseCurrentWindow) {
+      for (const retryFrame of Array.from(retryAttempts.keys())) {
+        if (!nextDesiredResident.has(retryFrame)) clearFrameRetry(retryFrame);
+      }
+    }
+
+    const missingDesiredFrames = Array.from(nextDesiredResident).reduce(
       (count, index) => count + (file.trajectory.frames[index] ? 0 : 1),
       0,
     );
@@ -263,9 +352,13 @@ export function installStreamingFrameCoordinator(
     )) {
       useStore.setState({ file: { ...file } });
     }
-    windowController.abort();
-    windowController = new AbortController();
-    const generation = ++windowGeneration;
+    if (!reuseCurrentWindow) {
+      clearAllFrameRetries();
+      windowController.abort();
+      windowController = new AbortController();
+      windowGeneration += 1;
+    }
+    const generation = windowGeneration;
     const signal = windowController.signal;
     void fetchAndSplice(frameIndex, generation, signal);
     for (let i = 1; i <= safeLookahead; i += 1) {
@@ -301,6 +394,7 @@ export function installStreamingFrameCoordinator(
     disposed = true;
     unsubFrameWatch();
     unsubPlayingWatch();
+    clearAllFrameRetries();
     windowController.abort();
     pending.clear();
     source.dispose?.();

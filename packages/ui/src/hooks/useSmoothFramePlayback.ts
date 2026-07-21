@@ -166,6 +166,23 @@ function manualStep(
   return 0;
 }
 
+/**
+ * Return the next integer source frame reached from a valid playhead without
+ * skipping across an unresolved streaming gap. Fractional forward playback
+ * approaches ceil(effectiveFrame); reverse playback approaches floor(...).
+ */
+function adjacentFrameInDirection(
+  state: InterpolatedFrameState,
+  direction: PlaybackDirection,
+  mode: PlaybackLoopMode,
+  totalFrames: number,
+): number {
+  const currentSourceFrame = direction === 1
+    ? Math.floor(state.effectiveFrame)
+    : Math.ceil(state.effectiveFrame);
+  return manualStep(currentSourceFrame, direction, mode, totalFrames);
+}
+
 export function useSmoothFramePlayback(
   isPlaying: boolean,
   options: SmoothPlaybackOptions
@@ -195,6 +212,10 @@ export function useSmoothFramePlayback(
   const previousFrameCountRef = useRef(frames.length);
   const previousLoopModeRef = useRef(loopMode);
   const completionNotifiedRef = useRef(false);
+  // A streamed endpoint can remain absent across many display frames. Request
+  // it once, then let the coordinator finish instead of restarting the same
+  // range fetch on every RAF tick.
+  const neededFrameRef = useRef<number | null>(null);
 
   // Stats refs
   const frameCountRef = useRef(0);
@@ -240,15 +261,38 @@ export function useSmoothFramePlayback(
         : true;
 
       if (!frameReady || !nextReady) {
-        onFrameNeeded?.(!frameReady ? state.frameIndex : state.nextFrameIndex);
-        const heldIndex = Math.max(0, Math.min(prev.frameIndex, totalFrames - 1));
-        const heldState: InterpolatedFrameState = {
-          frameIndex: heldIndex,
-          nextFrameIndex: heldIndex,
-          interpolationFactor: 0,
-          isInterpolating: false,
-          effectiveFrame: heldIndex,
-        };
+        // A delayed RAF can span many MD frames. If that distant endpoint is
+        // not resident, discard the catch-up delta and warm only the adjacent
+        // source frame. Otherwise repeated long frames choose unrelated
+        // targets and make the streaming coordinator abort/refetch windows.
+        const neededFrame = adjacentFrameInDirection(
+          prev,
+          directionRef.current,
+          loopMode,
+          totalFrames,
+        );
+        const adjacentReady = isFrameReady?.(neededFrame) ?? true;
+        let heldState = prev;
+        if (!adjacentReady && neededFrameRef.current !== neededFrame) {
+          neededFrameRef.current = neededFrame;
+          onFrameNeeded?.(neededFrame);
+        } else if (adjacentReady) {
+          neededFrameRef.current = null;
+          // The adjacent source frame is already resident, so advance by that
+          // one bounded step instead of freezing forever on consistently slow
+          // renderers. Only the excess wall-time catch-up is discarded.
+          heldState = stateForEffectiveFrame(neededFrame, totalFrames);
+          directionRef.current = advancePlaybackFrame(
+            prev.effectiveFrame,
+            1,
+            loopMode,
+            directionRef.current,
+            totalFrames,
+          ).direction;
+          stateRef.current = heldState;
+          onFrame(heldState);
+          frameCountRef.current++;
+        }
         stateRef.current = heldState;
 
         const stateSyncInterval = 1000 / Math.max(1, stateSyncFPS);
@@ -261,6 +305,7 @@ export function useSmoothFramePlayback(
         return;
       }
 
+      neededFrameRef.current = null;
       directionRef.current = advanced.direction;
       stateRef.current = state;
       onFrame(state);
@@ -310,6 +355,7 @@ export function useSmoothFramePlayback(
     if (!identityChanged && !lengthChanged) return;
 
     directionRef.current = 1;
+    neededFrameRef.current = null;
     const maxFrame = Math.max(0, frames.length - 1);
     const nextState = stateForEffectiveFrame(
       Math.min(stateRef.current.effectiveFrame, maxFrame),
@@ -336,6 +382,7 @@ export function useSmoothFramePlayback(
       lastTimeRef.current = undefined;
       wasPlayingRef.current = false;
       completionNotifiedRef.current = false;
+      neededFrameRef.current = null;
       return;
     }
 
@@ -380,9 +427,13 @@ export function useSmoothFramePlayback(
     const clamped = Math.max(0, Math.min(frames.length - 1, frameIndex));
     const state = stateForEffectiveFrame(clamped, frames.length);
     if (isFrameReady && !isFrameReady(state.frameIndex)) {
-      onFrameNeeded?.(state.frameIndex);
+      if (neededFrameRef.current !== state.frameIndex) {
+        neededFrameRef.current = state.frameIndex;
+        onFrameNeeded?.(state.frameIndex);
+      }
       return;
     }
+    neededFrameRef.current = null;
     stateRef.current = state;
     setCurrentState(state);
     onFrame(state);

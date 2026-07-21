@@ -1,4 +1,5 @@
 import type { Frame, Trajectory } from '@atlas/core/types';
+import { atomicTypeMapForExternalResearchLoadUrl } from '@atlas/core';
 import { useStore } from './store';
 import { track, ANALYTICS_EVENTS } from './analytics';
 import {
@@ -11,6 +12,7 @@ import {
 } from './trajectoryLibrary';
 import {
   clearStreamingFrameCoordinator,
+  DEFAULT_STREAMING_RESIDENT_FRAMES,
   installStreamingFrameCoordinator,
 } from './streamingFrameCoordinator';
 
@@ -19,9 +21,80 @@ import {
  *  frame. Single/few-frame structures stay in memory (simpler, and the
  *  per-frame box fidelity of the in-memory path is preserved). */
 const STREAMING_FRAME_THRESHOLD = 12;
+/** Raw text formats are monolithic in the current parser path. Keep remote
+ * loads bounded; larger research trajectories belong in range-streamed
+ * GLIMBIN rather than a browser-resident text Blob. */
+export const MAX_REMOTE_LEGACY_BYTES = 64 * 1024 * 1024;
+
+/** Read a legacy response without ever accepting more than the configured
+ * boundary. This protects the missing/chunked Content-Length case, where
+ * `response.blob()` would otherwise allocate the entire upstream body first. */
+export async function readResponseBlobWithinLimit(response: Response, maxBytes: number): Promise<Blob> {
+  if (!response.body) {
+    const blob = await response.blob();
+    if (blob.size > maxBytes) throw remoteLegacySizeError(maxBytes);
+    return blob;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch { /* best effort */ }
+        throw remoteLegacySizeError(maxBytes);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try { reader.releaseLock(); } catch { /* already released */ }
+  }
+
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Blob([joined], { type: response.headers.get('content-type') ?? '' });
+}
+
+function remoteLegacySizeError(maxBytes: number): Error {
+  return new Error(
+    `Remote text trajectory exceeded Lupi's ${maxBytes / (1024 * 1024)} MiB monolithic load limit. ` +
+    'Convert large trajectories to GLIMBIN for bounded streaming.',
+  );
+}
 
 function clearPreviousStreaming(): void {
   clearStreamingFrameCoordinator();
+}
+
+function applyCatalogTypeMap(frame: Frame, elementMap: Record<number, number> | null): Frame {
+  if (!elementMap || (frame.typeSemantics && frame.typeSemantics.kind !== 'opaque')) return frame;
+  return {
+    ...frame,
+    typeSemantics: {
+      kind: 'explicit-element-map',
+      provenance: 'catalog-element-map',
+      elementMap,
+    },
+  };
+}
+
+function applyCatalogTypeMapToTrajectory(
+  trajectory: Trajectory,
+  elementMap: Record<number, number> | null,
+): Trajectory {
+  if (!elementMap) return trajectory;
+  return {
+    ...trajectory,
+    frames: trajectory.frames.map((frame) => frame ? applyCatalogTypeMap(frame, elementMap) : frame),
+  };
 }
 
 /** Coarse, non-PII source classifier so the funnel can compare entry paths. */
@@ -59,6 +132,7 @@ export interface LoadMoleculeSourceOptions {
 
 export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeSourceOptions = {}): Promise<void> {
   clearPreviousStreaming();
+  const catalogTypeMap = atomicTypeMapForExternalResearchLoadUrl(loadUrl);
 
   useStore.getState().setLoading(true, 0);
 
@@ -70,17 +144,20 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
     if (loaderType === 'streaming') {
       const { StreamingLoader } = await import('@atlas/parsers/StreamingLoader');
       const loader = new StreamingLoader(loadUrl, {
-        onProgress: (_phase, progress) => {
+        onProgress: (phase, progress) => {
+          // Background frame residency must not re-open the global loading
+          // overlay or re-render the whole viewer after activation.
+          if (phase === 'frame') return;
           useStore.getState().setLoading(true, progress * 0.6);
         },
         onTelemetry: (stats) => {
           useStore.getState().setStreamingTelemetry(stats);
         },
-      }, 20, fetchOptions);
+      }, DEFAULT_STREAMING_RESIDENT_FRAMES, fetchOptions);
 
       await loader.fetchHeader();
       await loader.fetchIndex();
-      const frame0 = await loader.fetchFrame(0);
+      const frame0 = applyCatalogTypeMap(await loader.fetchFrame(0), catalogTypeMap);
       const meta = loader.getMetadata()!;
       const placeholderFrames = new Array(meta.totalFrames);
       placeholderFrames[0] = frame0;
@@ -99,7 +176,14 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
         sourceUrl: loadUrl,
       });
 
-      installStreamingFrameCoordinator(loader, {
+      const streamingSource = catalogTypeMap ? {
+        fetchFrame: async (frameIndex: number, signal?: AbortSignal) => (
+          applyCatalogTypeMap(await loader.fetchFrame(frameIndex, signal), catalogTypeMap)
+        ),
+        releaseFrame: (frameIndex: number) => loader.releaseFrame(frameIndex),
+        dispose: () => loader.dispose(),
+      } : loader;
+      installStreamingFrameCoordinator(streamingSource, {
         label: 'streaming',
         sourceUrl: loadUrl,
         initialLookahead: 12,
@@ -117,7 +201,16 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
     const resp = await fetch(loadUrl, fetchOptions);
     if (options.strictRemote && resp.redirected) throw new Error('Remote molecule redirects are not allowed.');
     if (!resp.ok) throw new Error(`Failed to fetch ${loadUrl}: ${resp.status}`);
-    const blob = await resp.blob();
+    const declaredLength = resp.headers.get('content-length');
+    const declaredBytes = declaredLength === null ? null : Number(declaredLength);
+    if (declaredBytes !== null && Number.isFinite(declaredBytes) && declaredBytes > MAX_REMOTE_LEGACY_BYTES) {
+      throw new Error(
+        `Remote text trajectory is ${(declaredBytes / (1024 * 1024)).toFixed(1)} MiB; ` +
+        `Lupi limits monolithic text loads to ${MAX_REMOTE_LEGACY_BYTES / (1024 * 1024)} MiB. ` +
+        'Convert large trajectories to GLIMBIN for bounded streaming.',
+      );
+    }
+    const blob = await readResponseBlobWithinLimit(resp, MAX_REMOTE_LEGACY_BYTES);
     await assertLooksLikeMoleculeData(blob, loadUrl);
     const name = loadUrl.split('/').pop() ?? 'file.dump';
     await loadParsedFile(new File([blob], name), loadUrl);
@@ -144,10 +237,14 @@ async function loadParsedFile(fileObj: File, sourceUrl: string): Promise<void> {
   const result = await parseFile(fileObj);
   if (!result.trajectory) throw new Error('No trajectory data found');
 
+  const trajectory = applyCatalogTypeMapToTrajectory(
+    result.trajectory,
+    atomicTypeMapForExternalResearchLoadUrl(sourceUrl),
+  );
   useStore.getState().setFile({
     name: fileObj.name,
     size: fileObj.size,
-    trajectory: result.trajectory,
+    trajectory,
     thermo: result.thermo ?? null,
     sourceUrl,
   });
@@ -155,7 +252,7 @@ async function loadParsedFile(fileObj: File, sourceUrl: string): Promise<void> {
   // Activation: viewable molecule loaded (parsed/inline/remote path).
   track(ANALYTICS_EVENTS.MOLECULE_LOADED, {
     source: sourceKind(sourceUrl),
-    frames: result.trajectory.totalFrames,
+    frames: trajectory.totalFrames,
   });
 }
 

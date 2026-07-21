@@ -184,7 +184,11 @@ enum AtomStyle {
 /// honoring it beats any token-count guess (charge vs molecular are both six
 /// columns, image flags add three more).
 fn style_from_hint(comment: &str) -> Option<AtomStyle> {
-    match comment.split_whitespace().next()? {
+    // Accelerator suffixes written by LAMMPS (for example `atomic/kk` or
+    // `full/gpu`) do not change the on-disk column layout. Match the base style
+    // before the slash so token-count fallback cannot reinterpret an atomic
+    // accelerator file as a molecular/full layout.
+    match comment.split_whitespace().next()?.split('/').next()? {
         s if s.eq_ignore_ascii_case("full") => Some(AtomStyle::Full),
         s if s.eq_ignore_ascii_case("charge") => Some(AtomStyle::Charge),
         s if s.eq_ignore_ascii_case("molecular") => Some(AtomStyle::Molecular),
@@ -621,6 +625,26 @@ Atoms # charge\n\n1 1 -0.5 1.0 2.0 3.0\n";
         assert_eq!(prop(&f, "q").unwrap(), &vec![-0.5]);
         assert!(prop(&f, "mol").is_none());
         assert!((f.positions[0] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_atomic_accelerator_suffix_uses_atomic_layout() {
+        // LAMMPS accelerator packages preserve the base atom-style layout but
+        // append a suffix to the section hint. The three trailing image flags
+        // make token-count fallback look like `full`, so this fixture catches
+        // the real hBN failure mode rather than merely exercising the hint.
+        let data = "\
+title\n\n2 atoms\n2 atom types\n\n0.0 10.0 xlo xhi\n0.0 10.0 ylo yhi\n-5.0 5.0 zlo zhi\n
+Masses\n\n1 10.811\n2 14.0067\n
+Atoms # atomic/kk\n\n7 2 3.2 2.6 -0.1 0 0 0\n6 1 1.9 3.4 -0.2 0 0 0\n";
+        let f = parse_data_internal(data).unwrap();
+
+        assert_eq!(f.ids, vec![7, 6]);
+        assert_eq!(f.types, vec![7, 5]);
+        assert_eq!(prop(&f, "type_id").unwrap(), &vec![2.0, 1.0]);
+        assert_eq!(f.positions, vec![3.2, 2.6, -0.1, 1.9, 3.4, -0.2]);
+        assert!(prop(&f, "mol").is_none());
+        assert!(prop(&f, "q").is_none());
     }
 
     #[test]

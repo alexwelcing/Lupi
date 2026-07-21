@@ -3,27 +3,23 @@ import { EquilibriumSolveWorkbench } from '../EquilibriumSolveWorkbench';
 import { Gallery } from '../Gallery';
 import { BG_PRESETS, getBgPoster, type BgPresetWithId } from '../backgroundPresets';
 import { MoleculeBrowser } from '../molecules/MoleculeBrowser';
+import { OmolCollection } from '../molecules/OmolCollection';
 import { type MoleculeSourceId } from '../molecules';
 import { PotentialBrowser } from '../panels/PotentialBrowser';
 import { useStore } from '../store';
 import { ALL_DOMAINS, type Domain } from '../gallery/catalog';
 
-// One browse surface, two doors: "Explore" is the curated showcase (the
-// pedagogically rich Gallery), "Search" is the federated faceted search over
-// every source (curated, OMol25, NIST, PubChem, your saved/uploaded views).
-// The old standalone OMol25 tab is gone — it's now a source facet inside
-// Search. NIST Potentials and Equilibrium Solve are power-user tools, demoted
-// out of the primary tab bar into a secondary Tools row so they stop competing
-// with a first-time visitor's path to a render.
-type GalleryView = 'explore' | 'search' | 'potentials' | 'equilibrium';
+// The large research sources need direct doors: a 34.3M-row split cannot be
+// represented honestly as a handful of federated cards, while the fixed
+// LAMMPS catalog can reuse the source-filtered browser.
+type GalleryView = 'explore' | 'search' | 'omol25' | 'research' | 'potentials' | 'equilibrium';
 
 export function GallerySection() {
   // Start visible immediately so the catalog does not flash or paint hidden
   // while the IntersectionObserver fires.
   const [visible] = useState(true);
   const [view, setView] = useState<GalleryView>('explore');
-  // When a deep link lands on Search, preselect the source facet it asked for
-  // (e.g. ?tab=omol25 opens Search filtered to Meta OMol25).
+  // When a deep link lands on Search, preselect the requested source facet.
   const [searchSource, setSearchSource] = useState<MoleculeSourceId | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIntentRevision, setSearchIntentRevision] = useState(0);
@@ -45,14 +41,14 @@ export function GallerySection() {
     const requestedTab = params.get('tab');
     const mapping: Record<string, GalleryView> = {
       simulations: 'explore',
-      omol25: 'search',
+      omol25: 'omol25',
+      research: 'research',
       browse: 'search',
       potentials: 'potentials',
       equilibrium: 'equilibrium',
     };
     if (requestedTab && mapping[requestedTab]) {
       setView(mapping[requestedTab]);
-      if (requestedTab === 'omol25') setSearchSource('omol');
       params.delete('tab');
       const url = new URL(window.location.href);
       url.search = params.toString();
@@ -134,10 +130,26 @@ export function GallerySection() {
           >
             Search all sources
           </button>
+          <button
+            role="tab"
+            aria-selected={view === 'omol25'}
+            data-testid="tab-omol25"
+            style={sTab(view === 'omol25', '#34d399')}
+            onClick={() => setView('omol25')}
+          >
+            OMol25 <span aria-hidden="true">·</span> 34.3M
+          </button>
         </div>
 
         <div style={sToolsRow} aria-label="Advanced tools">
           <span style={sToolsLabel}>Research tools</span>
+          <button
+            data-testid="tool-research-files"
+            style={sToolBtn(view === 'research')}
+            onClick={() => setView('research')}
+          >
+            LAMMPS research <span aria-hidden="true">·</span> 8
+          </button>
           <button
             data-testid="tool-potentials"
             style={sToolBtn(view === 'potentials')}
@@ -157,6 +169,8 @@ export function GallerySection() {
         <div className="lupi-gallery-section__panel">
           {view === 'explore' && <Gallery key={`catalog-${catalogIntentRevision}`} initialDomain={catalogDomain} />}
           {view === 'search' && <MoleculeBrowser key={`search-${searchIntentRevision}`} initialSource={searchSource} initialQuery={searchQuery} />}
+          {view === 'omol25' && <OmolCollection />}
+          {view === 'research' && <MoleculeBrowser initialSource="research" />}
           {view === 'potentials' && <PotentialBrowser />}
           {view === 'equilibrium' && <EquilibriumSolveWorkbench embedded />}
         </div>

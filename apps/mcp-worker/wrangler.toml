@@ -24,7 +24,7 @@ LUPI_LARGE_ASSET_BASE_URL = "https://assets.lupi.live"
 FIREBASE_AUTH_PROXY_HOST = "shed-489901.firebaseapp.com"
 FIREBASE_PROJECT_ID = "shed-489901"
 LUPI_PUBLIC_ORIGIN = "https://lupi.live"
-CORS_ORIGINS = "https://lupi.live,http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:8787"
+CORS_ORIGINS = "https://lupi.live,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5177,http://127.0.0.1:5177,http://127.0.0.1:8787"
 
 # Public/gallery assets and private renderer artifacts deliberately use
 # different buckets. RENDER_ASSETS must not have an r2.dev or public custom
