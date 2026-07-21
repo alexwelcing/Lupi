@@ -9,14 +9,16 @@ compatibility auth routes, edge analytics, saved-view share HTML, and MCP.
 The repo has:
 
 - standalone CI in `.github/workflows/ci.yml`
-- production viewer deploy in `.github/workflows/deploy-viewer.yml`
-- manual Cloudflare deploy in `.github/workflows/deploy-cloudflare.yml`
+- break-glass Cloud Run fallback in `.github/workflows/deploy-viewer.yml`
+- owner-gated Cloudflare release in `.github/workflows/deploy-cloudflare.yml`
+- read-only and owner-recovery controller in
+  `.github/workflows/reconcile-cloudflare-deploy.yml`
 - a root `start` script that serves `apps/web/dist`
 - Cloudflare edge runtime in `apps/mcp-worker`
 - local build verification passing from this extracted copy
 
-Cloud Run remains the existing production path until Cloudflare preview smoke
-tests pass and DNS is cut over.
+Cloudflare is the production path. Cloud Run is retained only as a separately
+authorized break-glass fallback.
 
 ## Cutover Requirements
 
@@ -50,18 +52,25 @@ It should also handle `/mcp`, `/collectAnalytics`, `/view/:slug`, and Firebase
 reserved auth paths from the same origin. It should not depend on the
 science/control-plane repo at runtime.
 
-## Required Secrets
+## Required Release Authority
 
-Cloudflare deploy secrets:
+The v2 controller uses literal GitHub environments and separately scoped
+credentials:
 
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
-- `LUPI_FIREBASE_WEB_API_KEY`
+- `lupi-production-read-v2`: `LUPI_CLOUDFLARE_READ_TOKEN_V2`
+- `lupi-production-write-v2`: `LUPI_CLOUDFLARE_WRITE_TOKEN_V2`
+- `lupi-production-reanchor-v2`: `LUPI_CLOUDFLARE_READ_TOKEN_V2`
 
-Optional Cloudflare/MCP secrets:
+Each environment carries the non-secret `CLOUDFLARE_ACCOUNT_ID` variable. A
+protected repository variable named `LUPI_RELEASE_CUTOVER_RECEIPT_SHA256` binds
+the separately approved cutover receipt. The legacy `prod` token is removed
+after the v2 environments are populated and verified.
+
+Runtime Worker secrets remain attached to the Worker and are preserved by
+`keep_vars = true` during version upload:
 
 - `LUPI_MCP_SHARED_SECRET`
-- `LUPI_RENDERER_TOKEN`
+- `RENDERER_TOKEN`
 
 Firebase deploy secrets/config remain necessary only when deploying legacy
 Firebase Functions, rules, and indexes.
@@ -74,10 +83,12 @@ Do not add:
 
 ## Candidate First
 
-Pushes to `main` deploy through the Cloudflare workflow. The workflow validates
-the direct `workers.dev` deployment with Playwright before reporting success;
-the public `lupi.live` WAF is intentionally outside that release gate. For
-manual pre-release checks against any preview URL, run:
+Production release is manual and owner-only. It requires an exact current-main
+SHA, a fresh self-contained checkpoint, the protected cutover-receipt digest,
+and the typed confirmation documented in `operations.md`. The workflow uploads
+an immutable no-traffic version and validates its direct preview with
+Playwright before promotion. It then verifies `https://lupi.live` separately.
+For manual pre-release checks against any preview URL, run:
 
 ```bash
 pnpm exec playwright install --with-deps chromium
@@ -100,10 +111,11 @@ The Cloudflare deploy workflow:
 1. Installs pnpm dependencies from this repo.
 2. Builds the viewer with Cloudflare same-origin environment values.
 3. Typechecks and tests the edge Worker.
-4. Uploads required Worker secrets.
-5. Deploys `apps/mcp-worker` through Wrangler.
-6. Checks structured `/health` readiness and runs the homepage-to-viewer UI journeys against the direct Worker URL.
-7. Uploads Playwright traces and screenshots when the deployed UI gate fails.
+4. Uses the read environment to validate the active predecessor and rollback target.
+5. Uses the write environment to upload an immutable no-traffic version.
+6. Checks structured `/health` readiness and runs the complete UI suite against the direct preview URL.
+7. Records durable release intent, promotes the candidate, and verifies the custom domain.
+8. Performs bounded rollback when post-promotion proof fails and retains all receipts for reconciliation.
 
 ## Done State
 

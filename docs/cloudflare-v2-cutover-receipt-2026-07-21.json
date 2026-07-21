@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "lupi-cloudflare-v2-cutover-receipt-v1",
+  "repository": "alexwelcing/Lupi",
+  "issuedAt": "2026-07-21T16:27:44.4311846Z",
+  "decisionOwner": "Alex Welcing (@alexwelcing)",
+  "operator": "Codex acting for the repository owner",
+  "authorization": {
+    "source": "explicit approval in Codex task 019f7b4b-5eca-7bc2-ae9e-77bbefbf8801",
+    "scope": [
+      "configure the Cloudflare v2 release authority",
+      "establish the initial trusted checkpoint",
+      "deploy the exact current main revision",
+      "perform bounded rollback if post-promotion proof fails"
+    ],
+    "singleOwnerResidualRiskAccepted": true
+  },
+  "cloudflare": {
+    "accountId": "ab547d0fb51be7294e883ca90a00929c",
+    "workerName": "lupi-edge",
+    "credentials": [
+      {
+        "tokenId": "5b497c20bf4285d569730f26290eb2fc",
+        "name": "lupi-release-read-v2",
+        "scope": "Entire Account",
+        "permission": "Workers Scripts Read",
+        "storedAs": [
+          "lupi-production-read-v2/LUPI_CLOUDFLARE_READ_TOKEN_V2",
+          "lupi-production-reanchor-v2/LUPI_CLOUDFLARE_READ_TOKEN_V2"
+        ]
+      },
+      {
+        "tokenId": "00ad71d4c3250732bd2688dd64985aae",
+        "name": "lupi-release-write-v2",
+        "scope": "Entire Account",
+        "permission": "Workers Scripts Write",
+        "storedAs": [
+          "lupi-production-write-v2/LUPI_CLOUDFLARE_WRITE_TOKEN_V2"
+        ]
+      }
+    ],
+    "legacyAuthorityFreeze": {
+      "revokedTokenId": "0ac0f23d41433f7653b9b42939f1239b",
+      "revokedTokenName": "lupine-automation",
+      "removedGitHubEnvironmentSecrets": [
+        "prod/CLOUDFLARE_API_TOKEN",
+        "prod/CLOUDFLARE_ACCOUNT_ID"
+      ]
+    }
+  },
+  "github": {
+    "ruleset": {
+      "id": 19435162,
+      "name": "Protect main and require LUPI CI",
+      "target": "branch",
+      "enforcement": "active",
+      "include": [
+        "refs/heads/main"
+      ],
+      "requiredStatusCheck": {
+        "context": "build-test",
+        "integrationId": 15368,
+        "strict": true
+      },
+      "deletionBlocked": true,
+      "nonFastForwardBlocked": true
+    },
+    "environments": [
+      {
+        "id": 18510563543,
+        "name": "lupi-production-read-v2",
+        "branchPolicyId": 55234836,
+        "allowedBranch": "main",
+        "accountIdVariablePresent": true,
+        "expectedSecretNames": [
+          "LUPI_CLOUDFLARE_READ_TOKEN_V2"
+        ]
+      },
+      {
+        "id": 18510564620,
+        "name": "lupi-production-write-v2",
+        "branchPolicyId": 55234837,
+        "allowedBranch": "main",
+        "accountIdVariablePresent": true,
+        "expectedSecretNames": [
+          "LUPI_CLOUDFLARE_WRITE_TOKEN_V2"
+        ]
+      },
+      {
+        "id": 18510565718,
+        "name": "lupi-production-reanchor-v2",
+        "branchPolicyId": 55234840,
+        "allowedBranch": "main",
+        "accountIdVariablePresent": true,
+        "expectedSecretNames": [
+          "LUPI_CLOUDFLARE_READ_TOKEN_V2"
+        ]
+      }
+    ],
+    "activeWorkflows": [
+      {
+        "id": 310230685,
+        "name": "Cloudflare production",
+        "path": ".github/workflows/deploy-cloudflare.yml"
+      },
+      {
+        "id": 316996585,
+        "name": "Reconcile Cloudflare production",
+        "path": ".github/workflows/reconcile-cloudflare-deploy.yml"
+      }
+    ],
+    "closedWorldAuthorityScan": {
+      "liveHistory": true,
+      "totalRunsScanned": 221,
+      "rerunnableRunsScanned": 181,
+      "findings": 0,
+      "ok": true,
+      "historyProjectionSha256": "9bcce8d0d888350d176409da1dc43df152c973c105192d720c195c9e23eb1296"
+    }
+  },
+  "integratedSource": {
+    "deployWorkflowSha256": "5c3f1613629b6d63a505922e1b0ba9df4b56ced50a1774804699c63be26897af",
+    "reconcileWorkflowSha256": "abcfc5c7981df84424c910e814607334302edf50ddb0ee827215836a9fbd13c8",
+    "authorityScannerSha256": "383920b890fef57fd0331c82707bd70139c3b18c8996ba19304c1a32f572fafd",
+    "liveVerifierSha256": "2b72679fa4b6576f8be29079e7573f08f9c95720d419041cc696f187d7e7deb6"
+  },
+  "trustedPredecessor": {
+    "buildSha": "f94c8049db4fea5a1a84815e44d2a9564f740700",
+    "workerVersionId": "27994724-5625-46a7-acb8-a150aab5cdd5",
+    "publicFingerprintSha256": "9ad36050de6d13c11909b534655c9029892aaf75c5009e3ee598109e9aded7c0",
+    "entryAssetSha256": "de02eb5fedef87321e0bc10f77f61c86128d495c70287edaba8e46081fb4399f",
+    "rendererEndpoint": true,
+    "authRequired": true,
+    "renderExecution": true,
+    "baselineVerification": "pass"
+  },
+  "secretsIncluded": false
+}
