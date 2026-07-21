@@ -540,6 +540,10 @@ jobs:
           assert.ok(!/\bcommand\s*=/m.test(config));
           assert.match(config, /^main\s*=\s*"worker\/index\.js"/m);
           assert.match(config, /^directory\s*=\s*"assets"/m);
+          assert.ok(
+            config.split(/\r?\n/).includes(`LUPI_BUILD_SHA = "${process.env.TARGET_SHA}"`),
+            'release package must carry the exact build SHA as an immutable Worker variable',
+          );
           NODE
 
       - name: Bootstrap integrity-pinned Wrangler

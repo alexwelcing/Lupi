@@ -88,6 +88,7 @@ export interface Env {
   FIREBASE_PROJECT_ID?: string;
   FIREBASE_WEB_API_KEY?: string;
   LUPI_LARGE_ASSET_BASE_URL?: string;
+  LUPI_BUILD_SHA?: string;
   LUPI_PUBLIC_ORIGIN?: string;
   LUPI_MCP_SHARED_SECRET?: string;
   RENDERER_ENDPOINT?: string;
@@ -1915,6 +1916,7 @@ async function updateJobStatus(env: Env, jobId: string, status: string, error?: 
 
 function statusPayload(env: Env) {
   const release = env.CF_VERSION_METADATA;
+  const buildSha = env.LUPI_BUILD_SHA?.trim() || release?.tag;
   return {
     ready: true,
     name: 'lupi-cloudflare-edge',
@@ -1942,7 +1944,7 @@ function statusPayload(env: Env) {
     ...(release ? {
       release: {
         id: release.id,
-        tag: release.tag,
+        tag: buildSha,
         timestamp: release.timestamp,
       },
     } : {}),

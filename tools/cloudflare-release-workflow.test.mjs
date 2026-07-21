@@ -684,6 +684,9 @@ function assertDeployContract(workflow) {
     (step) => step.name === 'Bootstrap integrity-pinned Wrangler',
     (step) => jobText(step).includes(WRITE_TOKEN),
   ], 'package-before-upload ordering drifted');
+  const uploadPayloadValidation = stepNamed(jobs['version-upload'], 'Validate the data-only payload without executing it');
+  assert.match(String(uploadPayloadValidation.run), /LUPI_BUILD_SHA/,
+    'version upload must reject packages that do not carry the exact build SHA');
 
   const publicText = jobText(jobs['public-verify']);
   assert.match(candidateText, /candidate_preview_origin/);
