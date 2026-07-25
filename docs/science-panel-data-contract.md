@@ -2,7 +2,6 @@
 
 Adopted from the parallel HUD-integration prototype (hermes t_1abe8048, web-integrator + reviewer); the standalone demo panel in this branch follows this mapping.
 
-# VIS-2B science panel data contract
 
 Status: implementation mapping for the Phase 0 prototype  
 Canonical input schema: `lupine.visualization-bundle.v1`  
