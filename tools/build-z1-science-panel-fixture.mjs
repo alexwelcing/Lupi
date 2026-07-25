@@ -255,6 +255,7 @@ for (const pathIndex of GOLDEN_PATH_INDICES) {
       failedModelCount: failedCount,
       modelDenominator: MODELS.length,
       crossEngineErrorMev,
+      crossEngineSignedErrorMev: entry.dense_vs_vasp_signed_error_mev,
       crossEngineLooksAcceptable,
     },
     reactionCoordinate: {

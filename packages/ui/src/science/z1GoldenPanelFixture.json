@@ -53,6 +53,7 @@
     "failedModelCount": 0,
     "modelDenominator": 4,
     "crossEngineErrorMev": 32.72969285660565,
+    "crossEngineSignedErrorMev": 32.72969285660565,
     "crossEngineLooksAcceptable": true
    },
    "reactionCoordinate": {
@@ -516,6 +517,7 @@
     "failedModelCount": 0,
     "modelDenominator": 4,
     "crossEngineErrorMev": 4212.260300449088,
+    "crossEngineSignedErrorMev": 4212.260300449088,
     "crossEngineLooksAcceptable": false
    },
    "reactionCoordinate": {
@@ -1058,6 +1060,7 @@
     "failedModelCount": 4,
     "modelDenominator": 4,
     "crossEngineErrorMev": 4309.0016226240095,
+    "crossEngineSignedErrorMev": 4309.0016226240095,
     "crossEngineLooksAcceptable": false
    },
    "reactionCoordinate": {
@@ -1368,6 +1371,7 @@
     "failedModelCount": 0,
     "modelDenominator": 4,
     "crossEngineErrorMev": 33.400075363033466,
+    "crossEngineSignedErrorMev": -33.400075363033466,
     "crossEngineLooksAcceptable": true
    },
    "reactionCoordinate": {

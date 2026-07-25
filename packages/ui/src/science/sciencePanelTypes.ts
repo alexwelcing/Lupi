@@ -80,6 +80,8 @@ export interface SciencePathData {
     failedModelCount: number;
     modelDenominator: number;
     crossEngineErrorMev: number;
+    /** Dense-GPAW − VASP signed error (direction matters; e.g. path-27 is negative). Optional for backward compatibility. */
+    crossEngineSignedErrorMev?: number;
     crossEngineLooksAcceptable: boolean;
   };
   reactionCoordinate: {

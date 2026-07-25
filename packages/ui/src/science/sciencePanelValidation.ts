@@ -121,6 +121,9 @@ export function validateSciencePanelFixture(input: unknown): FixtureValidation {
       if (!isFiniteNumber(quality.crossEngineErrorMev) || (quality.crossEngineErrorMev as number) < 0) {
         fail(P('.quality.crossEngineErrorMev'), 'expected non-negative finite number');
       }
+      if ('crossEngineSignedErrorMev' in quality && !isFiniteNumber(quality.crossEngineSignedErrorMev)) {
+        fail(P('.quality.crossEngineSignedErrorMev'), 'expected finite number (sign carries direction)');
+      }
     }
 
     // series

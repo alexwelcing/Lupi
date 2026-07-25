@@ -589,6 +589,12 @@ function T1Panel({
         <span style={{ marginLeft: 10, fontFamily: MONO }}>
           driver pair: NEB images {d0} &amp; {d1}
         </span>
+        <span style={{ marginLeft: 10, color: accent, fontFamily: MONO, fontWeight: 600 }}>
+          selected img {currentImage}: offset{' '}
+          {t1.offsets[currentImage]?.offsetMev == null
+            ? 'missing'
+            : `${fmtMev(t1.offsets[currentImage].offsetMev as number, 1)} meV`}
+        </span>
         <span style={{ marginLeft: 10, color: MUTED, fontFamily: MONO }}>
           mean offset {fmtMev(t1.offsetMeanMev, 0)} meV (cell-convention shift; only the wander is gated)
         </span>
@@ -720,7 +726,7 @@ function qualityCopy(data: SciencePathData, fixture: SciencePanelFixture): { tit
     case 'strong-win-contaminated':
       return {
         title: 'STRONG WIN (same-engine) — but cross-engine CONTAMINATED',
-        detail: `cross-engine error ${fmtMev(q.crossEngineErrorMev, 1)} meV looks acceptable (≤ ${fmtMev(win, 0)} meV), ` +
+        detail: `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed) looks acceptable (≤ ${fmtMev(win, 0)} meV), ` +
           `yet T1 wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV gate — the agreement is a convention coincidence`,
         warn: true,
       };
@@ -728,7 +734,7 @@ function qualityCopy(data: SciencePathData, fixture: SciencePanelFixture): { tit
       return {
         title: 'CONTAMINATED — T1 wander gate failed',
         detail: `wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV (drivers: NEB images ${data.t1.driverPair[0]} & ${data.t1.driverPair[1]}); ` +
-          `cross-engine error ${fmtMev(q.crossEngineErrorMev, 1)} meV`,
+          `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed)`,
         warn: true,
       };
     case 'all-guides-failed':
@@ -860,10 +866,13 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
       {/* provenance + contract footer */}
       <footer style={{ marginTop: 20, borderTop: `1px solid ${GRID}`, paddingTop: 10, fontSize: 11.5, color: MUTED }}>
         <p style={{ margin: '0 0 4px' }}>
-          Source vs inferred: every plotted value is a source value from the campaign record, anchor receipts, barrier
-          lock, or model cell results (digests in fixture provenance). No inferred series are drawn. Geometry, bonds,
-          and coordination are out of scope for this panel prototype; when bound, bonds must be labeled source topology
-          vs viewer inference.
+          Source vs derived: raw values come from the campaign record, anchor receipts, barrier lock, and model cell
+          results (digests in fixture provenance). Derived on top: T1 offsets are recomputed per-image differences
+          (E_GPAW − E_VASP); displayed profile energies are source values shifted so each series' own path minimum is
+          zero (absolute values remain in tooltips and the readout); barriers, extrema, anchor sets, wander, and driver
+          pairs are recomputed and cross-checked against the campaign record. No inferred series are drawn; missing
+          values stay missing. Geometry, bonds, and coordination are out of scope for this panel prototype; when bound,
+          bonds must be labeled source topology vs viewer inference.
         </p>
         <p style={{ margin: '0 0 4px' }}>
           Parser warnings: none — the fixture converter recomputed and verified barriers, extrema, anchor sets, T1
