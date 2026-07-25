@@ -983,19 +983,33 @@ jobs:
             authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
             'content-type': 'application/json',
           };
+          // Best-effort purge: the deploy write token lacks Zone Cache Purge
+          // permission (API code 10000 today). Warn and continue — never block a
+          // release. Upgrade to a hard purge when LUPI_CLOUDFLARE_PURGE_TOKEN_V2
+          // (Zone:Cache Purge permission) exists and is wired here.
           const cf = async (path, init) => {
-            const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, { ...init, headers });
-            const body = await res.json().catch(() => null);
-            assert.equal(body?.success, true, `Cloudflare API ${path} failed: ${JSON.stringify(body?.errors ?? res.status)}`);
-            return body.result;
+            try {
+              const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, { ...init, headers });
+              const body = await res.json().catch(() => null);
+              return { ok: res.ok && body?.success === true, status: res.status, errors: body?.errors, result: body?.result };
+            } catch (err) {
+              return { ok: false, status: 0, errors: [{ message: `transport failure: ${err?.message ?? err}` }], result: null };
+            }
           };
-          const zone = (await cf(`/zones?name=lupi.live`))?.[0];
-          assert.ok(zone?.id, 'zone not found');
-          const result = await cf(`/zones/${zone.id}/purge_cache`, {
-            method: 'POST',
-            body: JSON.stringify({ purge_everything: true }),
-          });
-          console.log(JSON.stringify({ zone: 'lupi.live', zoneId: zone.id, purged: 'everything', result }, null, 2));
+          const zone = (await cf(`/zones?name=lupi.live`))?.result?.[0];
+          if (!zone?.id) {
+            console.log(JSON.stringify({ zone: 'lupi.live', purged: false, reason: 'zone lookup failed (token lacks zone read)' }, null, 2));
+          } else {
+            const purge = await cf(`/zones/${zone.id}/purge_cache`, {
+              method: 'POST',
+              body: JSON.stringify({ purge_everything: true }),
+            });
+            console.log(JSON.stringify({
+              zone: 'lupi.live', zoneId: zone.id,
+              purged: purge.ok,
+              reason: purge.ok ? 'purged everything' : `purge rejected (${JSON.stringify(purge.errors ?? purge.status)}) — needs a Cache Purge capable token`,
+            }, null, 2));
+          }
           NODE
           after="$("$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" deployments status --name lupi-edge --json)"
           node --input-type=module - "$before" "$after" <<'NODE'
