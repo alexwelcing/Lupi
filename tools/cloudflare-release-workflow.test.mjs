@@ -148,11 +148,13 @@ test('current-source and pinned-controller proofs require selective routing', as
     ['deploy-cloudflare.yml', 'public-verify'],
   ]) {
     const job = workflows[workflowName].jobs[jobId];
-    const liveStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('verify:cloudflare-live'));
+    const liveStep = (job.steps ?? []).find((step) => String(step.run ?? '').includes('verify-cloudflare-live'));
     assert.ok(liveStep, `${workflowName}/${jobId} is missing live verification`);
     const run = String(liveStep.run);
-    assert.doesNotMatch(run, /pnpm verify:cloudflare-live --(?:\s|\\)/,
-      `${workflowName}/${jobId} must use pnpm 9-compatible argument forwarding`);
+    assert.match(run, /node tools\/verify-cloudflare-live\.mjs\b/,
+      `${workflowName}/${jobId} must write verifier-only JSON without package-manager stdout`);
+    assert.doesNotMatch(run, /pnpm verify:cloudflare-live\b/,
+      `${workflowName}/${jobId} must not contaminate machine-readable JSON with package-manager output`);
     assert.match(run, /--expect-selective-routing=true\b/,
       `${workflowName}/${jobId} must require selective routing`);
   }
@@ -622,6 +624,10 @@ function assertDeployContract(workflow) {
   const collationText = jobText(jobs['receipt-collation']);
   assert.match(candidateText, /postUploadInventory/);
   assert.match(candidateText, /POST_UPLOAD_INVENTORY_SHA256/);
+  assert.match(candidateText, /JSON\.parse\(liveReportBytes\.toString\('utf8'\)\)/,
+    'candidate verification must parse its machine-readable API report before promotion');
+  assert.match(candidateText, /liveReport\.ok, true/,
+    'candidate verification must require a passing API report before promotion');
   assert.match(collationText, /candidate-upload-v1-/);
   assert.match(collationText, /post-upload inventory digest does not match retained candidate-upload evidence/);
 

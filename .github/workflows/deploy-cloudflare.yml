@@ -687,7 +687,7 @@ jobs:
 
       - name: Verify immutable candidate API identity and posture
         run: |
-          pnpm verify:cloudflare-live \
+          node tools/verify-cloudflare-live.mjs \
             --url=${{ needs.version-upload.outputs.candidate_preview_origin }} \
             --label=prepromotion-candidate \
             --expect-build-sha=${{ inputs.target_sha }} \
@@ -717,9 +717,13 @@ jobs:
           CANDIDATE_VERSION_ID: ${{ needs.version-upload.outputs.candidate_version_id }}
         run: |
           node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
           import { createHash } from 'node:crypto';
           import { readFile, writeFile } from 'node:fs/promises';
           const sha = async (path) => createHash('sha256').update(await readFile(path)).digest('hex');
+          const liveReportBytes = await readFile('candidate/live-api.json');
+          const liveReport = JSON.parse(liveReportBytes.toString('utf8'));
+          assert.equal(liveReport.ok, true, 'candidate API report must be valid passing JSON before promotion');
           const sourceManifest = {
             schemaVersion: 'lupi-source-manifest-v1',
             targetSha: process.env.GITHUB_SHA,
@@ -1035,7 +1039,7 @@ jobs:
       - name: Verify custom-domain API identity separately
         run: |
           mkdir -p public
-          pnpm verify:cloudflare-live \
+          node tools/verify-cloudflare-live.mjs \
             --url=https://lupi.live \
             --label=postpromotion-custom-domain \
             --require-custom-domain \
@@ -1108,6 +1112,7 @@ jobs:
           const intent = JSON.parse(intentBytes);
           const contract = JSON.parse(await readFile('release-intent/candidate-rollback-contract.json', 'utf8'));
           const report = await readFile('public/live-api.json');
+          const baseline = JSON.parse(report.toString('utf8'));
           const controlPlane = await readFile('promotion-control/promotion-control.json');
           const uiProof = await readFile('public/ui-proof.json');
           const sourceManifest = JSON.parse(await readFile('public/source-manifest.json', 'utf8'));
@@ -1120,7 +1125,7 @@ jobs:
             apiReportSha256: digest(report),
             controlPlaneSha256: digest(controlPlane),
             rollbackUiReportSha256: digest(uiProof),
-            baseline: JSON.parse(report),
+            baseline,
             rollbackContract: contract,
             sourceManifest,
             intentSha256: digest(intentBytes),
