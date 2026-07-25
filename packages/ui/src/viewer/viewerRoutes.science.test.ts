@@ -33,3 +33,13 @@ describe('science panel normalized routes', () => {
     expect(isScienceDemoRoute('/', '')).toBe(false);
   });
 });
+
+describe('science panel route ↔ tab synchronization', () => {
+  it('round-trips: tab index writes the canonical route and the route parses back', () => {
+    for (const idx of [16, 0, 14, 27]) {
+      const route = `#/science/${idx}`.replace(/^#/, '');
+      expect(sciencePathIndexFromRoute(route)).toBe(idx);
+      expect(isSciencePanelRoute(route)).toBe(true);
+    }
+  });
+});

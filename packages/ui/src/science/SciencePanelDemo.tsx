@@ -84,6 +84,30 @@ export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProp
   const [selectedPath, setSelectedPath] = useState(initialPath);
   const [currentImage, setCurrentImage] = useState(0);
 
+  // Route ↔ tab synchronization: hash changes (landing cards, back/forward)
+  // select the tab; tab clicks write the canonical route.
+  useEffect(() => {
+    if (!validation.ok) return;
+    const fixture = raw as SciencePanelFixture;
+    const onHash = () => {
+      const idx = sciencePathIndexFromRoute(currentHashRoute());
+      if (idx != null && fixture.paths.some((p) => p.pathIndex === idx)) {
+        setSelectedPath(idx);
+        setCurrentImage(0);
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [raw, validation.ok]);
+
+  const selectPath = (index: number) => {
+    setSelectedPath(index);
+    setCurrentImage(0);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#/science/${index}`);
+    }
+  };
+
   useEffect(() => {
     if (!validation.ok) {
       console.error('[science-panel] fixture invalid — failing closed:', validation.errors);
@@ -117,10 +141,7 @@ export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProp
           {fixture.paths.map((p) => (
             <button
               key={p.pathIndex}
-              onClick={() => {
-                setSelectedPath(p.pathIndex);
-                setCurrentImage(0);
-              }}
+              onClick={() => selectPath(p.pathIndex)}
               data-testid={`science-demo-tab-${p.pathIndex}`}
               style={{
                 textAlign: 'left',
