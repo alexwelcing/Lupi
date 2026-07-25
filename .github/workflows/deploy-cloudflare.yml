@@ -974,6 +974,29 @@ jobs:
             --name lupi-edge \
             --message "Lupi release ${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
             -y
+          # Releases must clear, not wait: purge the zone edge cache so the
+          # custom domain serves the freshly promoted build immediately.
+          # Static assets are content-hashed/immutable; only HTML changes.
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const headers = {
+            authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+            'content-type': 'application/json',
+          };
+          const cf = async (path, init) => {
+            const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, { ...init, headers });
+            const body = await res.json().catch(() => null);
+            assert.equal(body?.success, true, `Cloudflare API ${path} failed: ${JSON.stringify(body?.errors ?? res.status)}`);
+            return body.result;
+          };
+          const zone = (await cf(`/zones?name=lupi.live`))?.[0];
+          assert.ok(zone?.id, 'zone not found');
+          const result = await cf(`/zones/${zone.id}/purge_cache`, {
+            method: 'POST',
+            body: JSON.stringify({ purge_everything: true }),
+          });
+          console.log(JSON.stringify({ zone: 'lupi.live', zoneId: zone.id, purged: 'everything', result }, null, 2));
+          NODE
           after="$("$RUNNER_TEMP/lupi-wrangler/runtime/node_modules/.bin/wrangler" deployments status --name lupi-edge --json)"
           node --input-type=module - "$before" "$after" <<'NODE'
           import assert from 'node:assert/strict';
