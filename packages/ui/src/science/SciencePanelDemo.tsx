@@ -2,8 +2,9 @@
  * SciencePanelDemo — isolated demo route for the Z1 science panel prototype.
  *
  * Loads the static golden-set fixture (paths 16, 0, 14, 27) and renders one
- * SciencePathPanel per selected path. Reachable at `?demo=science-panel`
- * (optionally `&path=<16|0|14|27>`) or `#/demo/science-panel`.
+ * SciencePathPanel per selected path. Canonical route: `#/science/<index>`
+ * (normalized like `/view/:slug`); legacy aliases `?demo=science-panel`
+ * (optionally `&path=<16|0|14|27>`) and `#/demo/science-panel` still work.
  *
  * The fixture is validated fail-closed before anything renders: a drifted,
  * mis-regenerated, or corrupted fixture must never become guessed or partial
@@ -18,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { SciencePathPanel } from './SciencePathPanel';
 import type { SciencePanelFixture } from './sciencePanelTypes';
 import { validateSciencePanelFixture } from './sciencePanelValidation';
+import { currentHashRoute, sciencePathIndexFromRoute } from '../viewer/viewerRoutes';
 import fixtureJson from './z1GoldenPanelFixture.json';
 
 const PATH_BLURB: Record<number, string> = {
@@ -74,6 +76,8 @@ export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProp
     if (!validation.ok) return 0;
     const fixture = raw as SciencePanelFixture;
     if (typeof window === 'undefined') return fixture.paths[0].pathIndex;
+    const fromRoute = sciencePathIndexFromRoute(currentHashRoute());
+    if (fromRoute != null && fixture.paths.some((p) => p.pathIndex === fromRoute)) return fromRoute;
     const wanted = Number(new URLSearchParams(window.location.search).get('path'));
     return fixture.paths.some((p) => p.pathIndex === wanted) ? wanted : fixture.paths[0].pathIndex;
   }, [raw, validation.ok]);

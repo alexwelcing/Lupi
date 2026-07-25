@@ -54,5 +54,18 @@ export function isMcpViewerRoute(hashPath: string, search = typeof window === 'u
 
 /** Isolated Z1 science-panel prototype demo: `?demo=science-panel` or `#/demo/science-panel`. */
 export function isScienceDemoRoute(hashRoute = currentHashRoute(), search = typeof window === 'undefined' ? '' : window.location.search) {
-  return new URLSearchParams(search).get('demo') === 'science-panel' || hashRoute.split('?')[0] === '/demo/science-panel';
+  return new URLSearchParams(search).get('demo') === 'science-panel' || hashRoute.split('?')[0] === '/demo/science-panel' || isSciencePanelRoute(hashRoute);
+}
+
+/** Canonical science-panel route: `#/science/<index>` (normalized like `/view/:slug`). */
+export function isSciencePanelRoute(hashRoute: string): boolean {
+  return /^\/science\/\d+$/.test(hashRoute.split('?')[0]);
+}
+
+/** Parse the zero-based path index from `#/science/<index>`; null when absent/invalid. */
+export function sciencePathIndexFromRoute(route: string): number | null {
+  const match = route.split('?')[0].match(/^\/science\/(\d+)$/);
+  if (!match) return null;
+  const index = Number(match[1]);
+  return Number.isInteger(index) && index >= 0 ? index : null;
 }
