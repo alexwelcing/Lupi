@@ -988,9 +988,13 @@ jobs:
           // release. Upgrade to a hard purge when LUPI_CLOUDFLARE_PURGE_TOKEN_V2
           // (Zone:Cache Purge permission) exists and is wired here.
           const cf = async (path, init) => {
-            const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, { ...init, headers });
-            const body = await res.json().catch(() => null);
-            return { ok: res.ok && body?.success === true, status: res.status, errors: body?.errors, result: body?.result };
+            try {
+              const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, { ...init, headers });
+              const body = await res.json().catch(() => null);
+              return { ok: res.ok && body?.success === true, status: res.status, errors: body?.errors, result: body?.result };
+            } catch (err) {
+              return { ok: false, status: 0, errors: [{ message: `transport failure: ${err?.message ?? err}` }], result: null };
+            }
           };
           const zone = (await cf(`/zones?name=lupi.live`))?.result?.[0];
           if (!zone?.id) {
