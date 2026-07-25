@@ -5,17 +5,20 @@
  * SciencePathPanel per selected path. Reachable at `?demo=science-panel`
  * (optionally `&path=<16|0|14|27>`) or `#/demo/science-panel`.
  *
+ * The fixture is validated fail-closed before anything renders: a drifted,
+ * mis-regenerated, or corrupted fixture must never become guessed or partial
+ * science on screen. See sciencePanelValidation.ts.
+ *
  * This route exists so the panel can be reviewed and screenshot-tested
  * without the 3D viewer; production wiring belongs to the manifest-native
  * bundle load path (phase 2), not to this prototype.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SciencePathPanel } from './SciencePathPanel';
 import type { SciencePanelFixture } from './sciencePanelTypes';
+import { validateSciencePanelFixture } from './sciencePanelValidation';
 import fixtureJson from './z1GoldenPanelFixture.json';
-
-const fixture = fixtureJson as unknown as SciencePanelFixture;
 
 const PATH_BLURB: Record<number, string> = {
   16: 'seemingly good cross-engine result that is T1-contaminated',
@@ -24,15 +27,70 @@ const PATH_BLURB: Record<number, string> = {
   27: 'the only T1-clean path',
 };
 
-export function SciencePanelDemo() {
+/** Fail-closed state: never render a partial or guessed panel from bad bytes. */
+export function ScienceFixtureInvalid({ errors }: { errors: string[] }) {
+  return (
+    <div
+      data-testid="science-fixture-invalid"
+      role="alert"
+      style={{
+        maxWidth: 900,
+        margin: '40px auto',
+        padding: '20px 22px',
+        background: '#faf9f6',
+        color: '#16171d',
+        border: '2px solid #b97a1c',
+        borderRadius: 8,
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      }}
+    >
+      <h1 style={{ fontSize: 17, margin: '0 0 6px', color: '#b97a1c' }}>
+        Science fixture invalid — panel withheld
+      </h1>
+      <p style={{ fontSize: 13, margin: '0 0 10px' }}>
+        The Z1 panel fixture failed validation. The panel does not render guessed or partial science from a fixture
+        that drifted, was regenerated incorrectly, or was corrupted. Rebuild the fixture with{' '}
+        <code>tools/build-z1-science-panel-fixture.mjs</code> and verify it before shipping.
+      </p>
+      <ul style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace', margin: 0, paddingLeft: 18 }}>
+        {errors.slice(0, 20).map((e) => (
+          <li key={e}>{e}</li>
+        ))}
+        {errors.length > 20 && <li>… and {errors.length - 20} more</li>}
+      </ul>
+    </div>
+  );
+}
+
+export interface SciencePanelDemoProps {
+  /** Test seam: override the fixture payload (validated before render). Defaults to the shipped JSON. */
+  fixture?: unknown;
+}
+
+export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProps) {
+  const raw = fixtureInput ?? fixtureJson;
+  const validation = useMemo(() => validateSciencePanelFixture(raw), [raw]);
   const initialPath = useMemo(() => {
+    if (!validation.ok) return 0;
+    const fixture = raw as SciencePanelFixture;
     if (typeof window === 'undefined') return fixture.paths[0].pathIndex;
     const wanted = Number(new URLSearchParams(window.location.search).get('path'));
     return fixture.paths.some((p) => p.pathIndex === wanted) ? wanted : fixture.paths[0].pathIndex;
-  }, []);
+  }, [raw, validation.ok]);
   const [selectedPath, setSelectedPath] = useState(initialPath);
   const [currentImage, setCurrentImage] = useState(0);
 
+  useEffect(() => {
+    if (!validation.ok) {
+      console.error('[science-panel] fixture invalid — failing closed:', validation.errors);
+    }
+  }, [validation]);
+
+  if (!validation.ok) {
+    return <ScienceFixtureInvalid errors={validation.errors} />;
+  }
+
+  const fixture = raw as SciencePanelFixture;
   const data = fixture.paths.find((p) => p.pathIndex === selectedPath) ?? fixture.paths[0];
 
   return (
