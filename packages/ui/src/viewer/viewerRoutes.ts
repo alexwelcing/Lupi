@@ -51,3 +51,8 @@ export function isBillionAtomsRoute(search = typeof window === 'undefined' ? '' 
 export function isMcpViewerRoute(hashPath: string, search = typeof window === 'undefined' ? '' : window.location.search) {
   return hashPath === '/mcp' || new URLSearchParams(search).has('mcp');
 }
+
+/** Isolated Z1 science-panel prototype demo: `?demo=science-panel` or `#/demo/science-panel`. */
+export function isScienceDemoRoute(hashRoute = currentHashRoute(), search = typeof window === 'undefined' ? '' : window.location.search) {
+  return new URLSearchParams(search).get('demo') === 'science-panel' || hashRoute.split('?')[0] === '/demo/science-panel';
+}

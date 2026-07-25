@@ -10,6 +10,7 @@ import {
   isTestbedRoute,
   isEmojiRoute,
   isMcpViewerRoute,
+  isScienceDemoRoute,
   SEO_EDUCATION_ROUTES,
 } from '@atlas/ui/viewer/viewerRoutes';
 
@@ -38,6 +39,7 @@ const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute(
 function wantsViewerImmediately(): boolean {
   if (params.has('load') || params.has('sim') || params.has('s') || params.has('fly')) return true;
   if (isTestbedRoute() || isEmojiRoute() || isBillionAtomsRoute()) return true;
+  if (isScienceDemoRoute()) return true;
   const hashPath = currentHashRoute().split('?')[0] || '/';
   if (hashPath === '/system/mlip-flywheel') return true;
   if (isMcpViewerRoute(hashPath)) return true;

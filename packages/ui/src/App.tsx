@@ -1,10 +1,12 @@
 import { Testbed } from './Testbed';
 import EmojiPlayground from './EmojiPlayground';
 import BillionAtomsPage from './BillionAtomsPage';
+import { SciencePanelDemo } from './science/SciencePanelDemo';
 import { ViewerApp } from './ViewerApp';
 import {
   isBillionAtomsRoute,
   isEmojiRoute,
+  isScienceDemoRoute,
   isTestbedRoute,
 } from './viewer/viewerRoutes';
 
@@ -15,5 +17,6 @@ export default function App() {
   if (typeof window !== 'undefined' && isTestbedRoute()) return <Testbed />;
   if (typeof window !== 'undefined' && isEmojiRoute()) return <EmojiPlayground />;
   if (typeof window !== 'undefined' && isBillionAtomsRoute()) return <BillionAtomsPage />;
+  if (typeof window !== 'undefined' && isScienceDemoRoute()) return <SciencePanelDemo />;
   return <ViewerApp />;
 }

@@ -1,0 +1,1821 @@
+{
+ "schema": "lupi.z1-science-panel-fixture.v1",
+ "generatedBy": "tools/build-z1-science-panel-fixture.mjs",
+ "provenance": {
+  "campaignFile": "sha256:af8a02ad5a663de2433b78917569af01f12a10f54ac8d94b33e934cfedc8a3f2",
+  "barrierLockFile": "sha256:192fe54a5579cc421f6644d5d76fb442c6dfb985f014dc4741549e29052efb68",
+  "anchorReceiptDir": "/tmp/z1-union-local/anchors",
+  "modelInputDir": "/tmp/z1-union-local/inputs"
+ },
+ "campaign": {
+  "id": "lupine.z1.union_pilot.campaign.v1",
+  "sha256": "sha256:539ca24f3729b93aed2f6258c606ce888ff7df1c1be88f5fa2dc62f40731c05a",
+  "recordedAt": "2026-07-24T17:07:00.201851+00:00",
+  "preregistration": "docs/plans/2026-07-20-sparse-dft-pilot-preregistration.md",
+  "amendment": "docs/plans/2026-07-21-sparse-dft-pilot-amendment-01.md",
+  "thresholds": {
+   "strongWinMev": 15,
+   "winMev": 40,
+   "t1GateMev": 40,
+   "basis": "same-engine (sparse GPAW vs dense same-engine GPAW profile)"
+  },
+  "gpawParams": {
+   "h": 0.2,
+   "kpts": [
+    1,
+    1,
+    1
+   ],
+   "mode": "fd",
+   "txt": null,
+   "xc": "PBE"
+  },
+  "t1Summary": {
+   "pathsWithOffsets": 23,
+   "pathsContaminated": 22,
+   "maxOffsetWanderMev": 4542.388537592273,
+   "meanOffsetWanderMev": 952.2865166183486
+  },
+  "citation": "Z1 union campaign, lupine-rhizo sha256:539ca24f3729… (recorded 2026-07-24). Reference barriers: LiTraj nebDFT2k (https://github.com/AIRI-Institute/LiTraj @ c3ca5c2), doi:10.1038/s41524-025-01571-z, license MIT; source Materials Project structures CC BY 4.0."
+ },
+ "paths": [
+  {
+   "pathIndex": 16,
+   "pathId": "mp-760344_10_4_0_1_0",
+   "chemicalSystem": "C-Co-Li-Na-O-P",
+   "imageCount": 5,
+   "qualityState": "strong-win-contaminated",
+   "quality": {
+    "state": "strong-win-contaminated",
+    "t1Verdict": "contaminated",
+    "sameEngineStrongWin": true,
+    "guidedModelCount": 4,
+    "failedModelCount": 0,
+    "modelDenominator": 4,
+    "crossEngineErrorMev": 32.72969285660565,
+    "crossEngineLooksAcceptable": true
+   },
+   "reactionCoordinate": {
+    "label": "reaction-path sequence (NEB image index)",
+    "unit": "image",
+    "definition": "zero-based climbing-image NEB image index; an ordering along the reaction path, never elapsed time"
+   },
+   "barriers": {
+    "referenceBarrierEv": 0.5244383300000095,
+    "denseBarrierEv": 0.5571680228566152,
+    "denseVsVaspSignedErrorMev": 32.72969285660565,
+    "vaspSaddleImageIndex": 2
+   },
+   "series": [
+    {
+     "id": "vasp-reference",
+     "label": "VASP reference (nebDFT2k)",
+     "engine": "VASP",
+     "role": "cross-engine reference — secondary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -333.99628918,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -333.82671757,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -333.47185085,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -333.59554192,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -333.83259107,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "gpaw-anchors",
+     "label": "GPAW anchors (fd, h=0.2, PBE)",
+     "engine": "GPAW",
+     "role": "same-engine evidence — primary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -354.96353869322695,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 1,
+       "energyEv": -354.79625436325335,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 2,
+       "energyEv": -354.40637067037034,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 3,
+       "energyEv": -354.4478070347385,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 4,
+       "energyEv": -354.6895384016887,
+       "status": "evaluated",
+       "denseExtension": false
+      }
+     ]
+    },
+    {
+     "id": "model-chgnet",
+     "label": "chgnet profile",
+     "engine": "chgnet",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -358.35399198532104,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -358.3305974006653,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -358.1515145301819,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -358.20034646987915,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -358.2847080230713,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mp-medium",
+     "label": "mace-mp-medium profile",
+     "engine": "mace-mp-medium",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -332.9297159043647,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -332.8505030695865,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -332.6626797836624,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -332.69406076985507,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -332.8454614573576,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mp-small",
+     "label": "mace-mp-small profile",
+     "engine": "mace-mp-small",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -332.978096133113,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -332.9207084622462,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -332.7120753440065,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -332.77754863061546,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -332.9262705098624,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mpa-0-medium",
+     "label": "mace-mpa-0-medium profile",
+     "engine": "mace-mpa-0-medium",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -333.0216062155967,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -332.8782298094834,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -332.61214373143696,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -332.7224624697079,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -332.8811184574448,
+       "status": "source"
+      }
+     ]
+    }
+   ],
+   "extrema": {
+    "vasp-reference": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.5244383300000095,
+     "tieRule": "first-index"
+    },
+    "gpaw-anchors": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.5571680228566152,
+     "tieRule": "first-index"
+    },
+    "model-chgnet": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.20247745513916016,
+     "tieRule": "first-index"
+    },
+    "model-mace-mp-medium": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.26703612070230065,
+     "tieRule": "first-index"
+    },
+    "model-mace-mp-small": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.2660207891065056,
+     "tieRule": "first-index"
+    },
+    "model-mace-mpa-0-medium": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.4094624841597465,
+     "tieRule": "first-index"
+    }
+   },
+   "anchors": {
+    "universe": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "evaluated": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "unionNominated": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "denseExtensionImages": [],
+    "anchorsMissing": [],
+    "perModel": {
+     "chgnet": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.5571680228566152,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 32.72969285660565,
+      "profileAvailable": true
+     },
+     "mace-mp-medium": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.5571680228566152,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 32.72969285660565,
+      "profileAvailable": true
+     },
+     "mace-mp-small": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.5571680228566152,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 32.72969285660565,
+      "profileAvailable": true
+     },
+     "mace-mpa-0-medium": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.5571680228566152,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 32.72969285660565,
+      "profileAvailable": true
+     }
+    }
+   },
+   "dense": {
+    "applied": true,
+    "complete": true,
+    "barrierEv": 0.5571680228566152
+   },
+   "t1": {
+    "unit": "meV",
+    "definition": "E_GPAW(i) − E_VASP(i) per NEB image, at evaluated anchors only",
+    "offsets": [
+     {
+      "image": 0,
+      "offsetMev": -20967.249513226932,
+      "status": "evaluated"
+     },
+     {
+      "image": 1,
+      "offsetMev": -20969.536793253326,
+      "status": "evaluated"
+     },
+     {
+      "image": 2,
+      "offsetMev": -20934.519820370326,
+      "status": "evaluated"
+     },
+     {
+      "image": 3,
+      "offsetMev": -20852.265114738486,
+      "status": "evaluated"
+     },
+     {
+      "image": 4,
+      "offsetMev": -20856.94733168873,
+      "status": "evaluated"
+     }
+    ],
+    "offsetMeanMev": -20916.10371465556,
+    "wanderMev": 117.27167851484046,
+    "thresholdMev": 40,
+    "verdict": "contaminated",
+    "driverPair": [
+     1,
+     3
+    ],
+    "evaluatedImageCount": 5
+   },
+   "guidance": {
+    "misses": [],
+    "subsetTheorem": "exact barrier recovery follows when the evaluated anchor set contains both dense-profile extrema"
+   }
+  },
+  {
+   "pathIndex": 0,
+   "pathId": "mp-761269_2_1_1_-1_0",
+   "chemicalSystem": "Ag-F-Li",
+   "imageCount": 7,
+   "qualityState": "contaminated",
+   "quality": {
+    "state": "contaminated",
+    "t1Verdict": "contaminated",
+    "sameEngineStrongWin": true,
+    "guidedModelCount": 4,
+    "failedModelCount": 0,
+    "modelDenominator": 4,
+    "crossEngineErrorMev": 4212.260300449088,
+    "crossEngineLooksAcceptable": false
+   },
+   "reactionCoordinate": {
+    "label": "reaction-path sequence (NEB image index)",
+    "unit": "image",
+    "definition": "zero-based climbing-image NEB image index; an ordering along the reaction path, never elapsed time"
+   },
+   "barriers": {
+    "referenceBarrierEv": 1.578548240000032,
+    "denseBarrierEv": 5.79080854044912,
+    "denseVsVaspSignedErrorMev": 4212.260300449088,
+    "vaspSaddleImageIndex": 3
+   },
+   "series": [
+    {
+     "id": "vasp-reference",
+     "label": "VASP reference (nebDFT2k)",
+     "engine": "VASP",
+     "role": "cross-engine reference — secondary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -452.63561171,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -452.19772835,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -451.3758854,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -451.05714522,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -451.37898915,
+       "status": "source"
+      },
+      {
+       "image": 5,
+       "energyEv": -452.2009726,
+       "status": "source"
+      },
+      {
+       "image": 6,
+       "energyEv": -452.63569346,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "gpaw-anchors",
+     "label": "GPAW anchors (fd, h=0.2, PBE)",
+     "engine": "GPAW",
+     "role": "same-engine evidence — primary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -498.5088929323373,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 1,
+       "energyEv": -497.1767297966393,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 2,
+       "energyEv": -495.72453984362704,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 3,
+       "energyEv": -492.7180955159977,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 4,
+       "energyEv": -495.7406434894621,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 5,
+       "energyEv": -497.2040417291633,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 6,
+       "energyEv": -498.5089040564468,
+       "status": "evaluated",
+       "denseExtension": false
+      }
+     ]
+    },
+    {
+     "id": "model-chgnet",
+     "label": "chgnet profile",
+     "engine": "chgnet",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -490.1621732711792,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -489.66908740997314,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -489.18801641464233,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -488.93607473373413,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -489.18679904937744,
+       "status": "source"
+      },
+      {
+       "image": 5,
+       "energyEv": -489.66813468933105,
+       "status": "source"
+      },
+      {
+       "image": 6,
+       "energyEv": -490.16212034225464,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mp-medium",
+     "label": "mace-mp-medium profile",
+     "engine": "mace-mp-medium",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -459.84985740456244,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -459.48667131633465,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -458.7987976071138,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -458.50742571998035,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -458.802001534102,
+       "status": "source"
+      },
+      {
+       "image": 5,
+       "energyEv": -459.4892683500827,
+       "status": "source"
+      },
+      {
+       "image": 6,
+       "energyEv": -459.84985740397167,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mp-small",
+     "label": "mace-mp-small profile",
+     "engine": "mace-mp-small",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -459.6377426402298,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -459.22562947203073,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -458.49251024376605,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -458.1341311190633,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -458.4948543751834,
+       "status": "source"
+      },
+      {
+       "image": 5,
+       "energyEv": -459.22724333286374,
+       "status": "source"
+      },
+      {
+       "image": 6,
+       "energyEv": -459.6377426398003,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mpa-0-medium",
+     "label": "mace-mpa-0-medium profile",
+     "engine": "mace-mpa-0-medium",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -459.7875063508733,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -459.2979876050817,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -458.37709107567866,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -457.9784039097869,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -458.37954842426956,
+       "status": "source"
+      },
+      {
+       "image": 5,
+       "energyEv": -459.2992058138609,
+       "status": "source"
+      },
+      {
+       "image": 6,
+       "energyEv": -459.78750635080223,
+       "status": "source"
+      }
+     ]
+    }
+   ],
+   "extrema": {
+    "vasp-reference": {
+     "argmin": 6,
+     "argmax": 3,
+     "barrierEv": 1.578548240000032,
+     "tieRule": "first-index"
+    },
+    "gpaw-anchors": {
+     "argmin": 6,
+     "argmax": 3,
+     "barrierEv": 5.79080854044912,
+     "tieRule": "first-index"
+    },
+    "model-chgnet": {
+     "argmin": 0,
+     "argmax": 3,
+     "barrierEv": 1.2260985374450684,
+     "tieRule": "first-index"
+    },
+    "model-mace-mp-medium": {
+     "argmin": 0,
+     "argmax": 3,
+     "barrierEv": 1.3424316845820954,
+     "tieRule": "first-index"
+    },
+    "model-mace-mp-small": {
+     "argmin": 0,
+     "argmax": 3,
+     "barrierEv": 1.5036115211665333,
+     "tieRule": "first-index"
+    },
+    "model-mace-mpa-0-medium": {
+     "argmin": 0,
+     "argmax": 3,
+     "barrierEv": 1.8091024410863952,
+     "tieRule": "first-index"
+    }
+   },
+   "anchors": {
+    "universe": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "evaluated": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "unionNominated": [
+     0,
+     2,
+     3,
+     4,
+     6
+    ],
+    "denseExtensionImages": [
+     1,
+     5
+    ],
+    "anchorsMissing": [],
+    "perModel": {
+     "chgnet": {
+      "status": "guided",
+      "nominated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "evaluated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "complete": true,
+      "shortPathFallback": false,
+      "window": 1,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 3,
+      "sparseBarrierEv": 5.79080854044912,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 4212.260300449088,
+      "profileAvailable": true
+     },
+     "mace-mp-medium": {
+      "status": "guided",
+      "nominated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "evaluated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "complete": true,
+      "shortPathFallback": false,
+      "window": 1,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 3,
+      "sparseBarrierEv": 5.79080854044912,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 4212.260300449088,
+      "profileAvailable": true
+     },
+     "mace-mp-small": {
+      "status": "guided",
+      "nominated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "evaluated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "complete": true,
+      "shortPathFallback": false,
+      "window": 1,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 3,
+      "sparseBarrierEv": 5.79080854044912,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 4212.260300449088,
+      "profileAvailable": true
+     },
+     "mace-mpa-0-medium": {
+      "status": "guided",
+      "nominated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "evaluated": [
+       0,
+       2,
+       3,
+       4,
+       6
+      ],
+      "complete": true,
+      "shortPathFallback": false,
+      "window": 1,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 3,
+      "sparseBarrierEv": 5.79080854044912,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 4212.260300449088,
+      "profileAvailable": true
+     }
+    }
+   },
+   "dense": {
+    "applied": true,
+    "complete": true,
+    "barrierEv": 5.79080854044912
+   },
+   "t1": {
+    "unit": "meV",
+    "definition": "E_GPAW(i) − E_VASP(i) per NEB image, at evaluated anchors only",
+    "offsets": [
+     {
+      "image": 0,
+      "offsetMev": -45873.28122233731,
+      "status": "evaluated"
+     },
+     {
+      "image": 1,
+      "offsetMev": -44979.001446639304,
+      "status": "evaluated"
+     },
+     {
+      "image": 2,
+      "offsetMev": -44348.65444362703,
+      "status": "evaluated"
+     },
+     {
+      "image": 3,
+      "offsetMev": -41660.95029599768,
+      "status": "evaluated"
+     },
+     {
+      "image": 4,
+      "offsetMev": -44361.65433946212,
+      "status": "evaluated"
+     },
+     {
+      "image": 5,
+      "offsetMev": -45003.06912916329,
+      "status": "evaluated"
+     },
+     {
+      "image": 6,
+      "offsetMev": -45873.21059644677,
+      "status": "evaluated"
+     }
+    ],
+    "offsetMeanMev": -44585.68878195336,
+    "wanderMev": 4212.3309263396295,
+    "thresholdMev": 40,
+    "verdict": "contaminated",
+    "driverPair": [
+     0,
+     3
+    ],
+    "evaluatedImageCount": 7
+   },
+   "guidance": {
+    "misses": [],
+    "subsetTheorem": "exact barrier recovery follows when the evaluated anchor set contains both dense-profile extrema"
+   }
+  },
+  {
+   "pathIndex": 14,
+   "pathId": "mp-756912_1_1_1_0_0",
+   "chemicalSystem": "B-Li-O-Zn",
+   "imageCount": 7,
+   "qualityState": "all-guides-failed",
+   "quality": {
+    "state": "all-guides-failed",
+    "t1Verdict": "contaminated",
+    "sameEngineStrongWin": false,
+    "guidedModelCount": 0,
+    "failedModelCount": 4,
+    "modelDenominator": 4,
+    "crossEngineErrorMev": 4309.0016226240095,
+    "crossEngineLooksAcceptable": false
+   },
+   "reactionCoordinate": {
+    "label": "reaction-path sequence (NEB image index)",
+    "unit": "image",
+    "definition": "zero-based climbing-image NEB image index; an ordering along the reaction path, never elapsed time"
+   },
+   "barriers": {
+    "referenceBarrierEv": 0.5701987899999494,
+    "denseBarrierEv": 4.879200412623959,
+    "denseVsVaspSignedErrorMev": 4309.0016226240095,
+    "vaspSaddleImageIndex": 3
+   },
+   "series": [
+    {
+     "id": "vasp-reference",
+     "label": "VASP reference (nebDFT2k)",
+     "engine": "VASP",
+     "role": "cross-engine reference — secondary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -583.37383606,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -583.43211104,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -583.32814648,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -582.86191225,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -583.0370242,
+       "status": "source"
+      },
+      {
+       "image": 5,
+       "energyEv": -583.12814007,
+       "status": "source"
+      },
+      {
+       "image": 6,
+       "energyEv": -583.37397919,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "gpaw-anchors",
+     "label": "GPAW anchors (fd, h=0.2, PBE)",
+     "engine": "GPAW",
+     "role": "same-engine evidence — primary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -609.5712341412537,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 1,
+       "energyEv": -608.3484139955776,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 2,
+       "energyEv": -607.4599086664483,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 3,
+       "energyEv": -606.8115635966865,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 4,
+       "energyEv": -604.6920337436615,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 5,
+       "energyEv": -608.4581364996012,
+       "status": "evaluated",
+       "denseExtension": true
+      },
+      {
+       "image": 6,
+       "energyEv": -609.5712341562854,
+       "status": "evaluated",
+       "denseExtension": true
+      }
+     ]
+    }
+   ],
+   "extrema": {
+    "vasp-reference": {
+     "argmin": 1,
+     "argmax": 3,
+     "barrierEv": 0.5701987899999494,
+     "tieRule": "first-index"
+    },
+    "gpaw-anchors": {
+     "argmin": 6,
+     "argmax": 4,
+     "barrierEv": 4.879200412623959,
+     "tieRule": "first-index"
+    }
+   },
+   "anchors": {
+    "universe": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "evaluated": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "unionNominated": [],
+    "denseExtensionImages": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "anchorsMissing": [],
+    "perModel": {
+     "chgnet": {
+      "status": "failed",
+      "nominated": [],
+      "evaluated": [],
+      "complete": false,
+      "shortPathFallback": null,
+      "window": null,
+      "modelMinIndex": null,
+      "modelMaxIndex": null,
+      "sparseBarrierEv": null,
+      "sameEngineAbsErrorMev": null,
+      "vaspAbsErrorMev": null,
+      "profileAvailable": false
+     },
+     "mace-mp-medium": {
+      "status": "failed",
+      "nominated": [],
+      "evaluated": [],
+      "complete": false,
+      "shortPathFallback": null,
+      "window": null,
+      "modelMinIndex": null,
+      "modelMaxIndex": null,
+      "sparseBarrierEv": null,
+      "sameEngineAbsErrorMev": null,
+      "vaspAbsErrorMev": null,
+      "profileAvailable": false
+     },
+     "mace-mp-small": {
+      "status": "failed",
+      "nominated": [],
+      "evaluated": [],
+      "complete": false,
+      "shortPathFallback": null,
+      "window": null,
+      "modelMinIndex": null,
+      "modelMaxIndex": null,
+      "sparseBarrierEv": null,
+      "sameEngineAbsErrorMev": null,
+      "vaspAbsErrorMev": null,
+      "profileAvailable": false
+     },
+     "mace-mpa-0-medium": {
+      "status": "failed",
+      "nominated": [],
+      "evaluated": [],
+      "complete": false,
+      "shortPathFallback": null,
+      "window": null,
+      "modelMinIndex": null,
+      "modelMaxIndex": null,
+      "sparseBarrierEv": null,
+      "sameEngineAbsErrorMev": null,
+      "vaspAbsErrorMev": null,
+      "profileAvailable": false
+     }
+    }
+   },
+   "dense": {
+    "applied": true,
+    "complete": true,
+    "barrierEv": 4.879200412623959
+   },
+   "t1": {
+    "unit": "meV",
+    "definition": "E_GPAW(i) − E_VASP(i) per NEB image, at evaluated anchors only",
+    "offsets": [
+     {
+      "image": 0,
+      "offsetMev": -26197.39808125371,
+      "status": "evaluated"
+     },
+     {
+      "image": 1,
+      "offsetMev": -24916.302955577634,
+      "status": "evaluated"
+     },
+     {
+      "image": 2,
+      "offsetMev": -24131.762186448326,
+      "status": "evaluated"
+     },
+     {
+      "image": 3,
+      "offsetMev": -23949.651346686438,
+      "status": "evaluated"
+     },
+     {
+      "image": 4,
+      "offsetMev": -21655.009543661436,
+      "status": "evaluated"
+     },
+     {
+      "image": 5,
+      "offsetMev": -25329.996429601237,
+      "status": "evaluated"
+     },
+     {
+      "image": 6,
+      "offsetMev": -26197.254966285414,
+      "status": "evaluated"
+     }
+    ],
+    "offsetMeanMev": -24625.339358502028,
+    "wanderMev": 4542.388537592273,
+    "thresholdMev": 40,
+    "verdict": "contaminated",
+    "driverPair": [
+     0,
+     4
+    ],
+    "evaluatedImageCount": 7
+   },
+   "guidance": {
+    "misses": [
+     {
+      "model": "chgnet",
+      "kind": "model-failed",
+      "reason": "failed"
+     },
+     {
+      "model": "mace-mp-medium",
+      "kind": "model-failed",
+      "reason": "failed"
+     },
+     {
+      "model": "mace-mp-small",
+      "kind": "model-failed",
+      "reason": "failed"
+     },
+     {
+      "model": "mace-mpa-0-medium",
+      "kind": "model-failed",
+      "reason": "failed"
+     }
+    ],
+    "subsetTheorem": "exact barrier recovery follows when the evaluated anchor set contains both dense-profile extrema"
+   }
+  },
+  {
+   "pathIndex": 27,
+   "pathId": "mp-752552_0_7_0_0_1",
+   "chemicalSystem": "C-Li-O-V",
+   "imageCount": 5,
+   "qualityState": "clean",
+   "quality": {
+    "state": "clean",
+    "t1Verdict": "clean",
+    "sameEngineStrongWin": true,
+    "guidedModelCount": 4,
+    "failedModelCount": 0,
+    "modelDenominator": 4,
+    "crossEngineErrorMev": 33.400075363033466,
+    "crossEngineLooksAcceptable": true
+   },
+   "reactionCoordinate": {
+    "label": "reaction-path sequence (NEB image index)",
+    "unit": "image",
+    "definition": "zero-based climbing-image NEB image index; an ordering along the reaction path, never elapsed time"
+   },
+   "barriers": {
+    "referenceBarrierEv": 0.1127928600000132,
+    "denseBarrierEv": 0.07939278463697974,
+    "denseVsVaspSignedErrorMev": -33.400075363033466,
+    "vaspSaddleImageIndex": 2
+   },
+   "series": [
+    {
+     "id": "vasp-reference",
+     "label": "VASP reference (nebDFT2k)",
+     "engine": "VASP",
+     "role": "cross-engine reference — secondary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -622.21911203,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -622.19936196,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -622.10631917,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -622.20002901,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -622.21871226,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "gpaw-anchors",
+     "label": "GPAW anchors (fd, h=0.2, PBE)",
+     "engine": "GPAW",
+     "role": "same-engine evidence — primary",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -649.0488695036038,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 1,
+       "energyEv": -649.0398037731679,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 2,
+       "energyEv": -648.9695448933774,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 3,
+       "energyEv": -649.0437624878028,
+       "status": "evaluated",
+       "denseExtension": false
+      },
+      {
+       "image": 4,
+       "energyEv": -649.0489376780143,
+       "status": "evaluated",
+       "denseExtension": false
+      }
+     ]
+    },
+    {
+     "id": "model-chgnet",
+     "label": "chgnet profile",
+     "engine": "chgnet",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -671.3809504508972,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -671.349214553833,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -671.2864065170288,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -671.3502516746521,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -671.3836469650269,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mp-medium",
+     "label": "mace-mp-medium profile",
+     "engine": "mace-mp-medium",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -624.7977981311907,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -624.7608722711593,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -624.6848167290759,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -624.7623290102661,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -624.8015623408344,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mp-small",
+     "label": "mace-mp-small profile",
+     "engine": "mace-mp-small",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -625.1618750061242,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -625.1397713427281,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -625.0830726577306,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -625.1413507933689,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -625.1619801965169,
+       "status": "source"
+      }
+     ]
+    },
+    {
+     "id": "model-mace-mpa-0-medium",
+     "label": "mace-mpa-0-medium profile",
+     "engine": "mace-mpa-0-medium",
+     "role": "model profile — guidance only (cross-engine)",
+     "unit": "eV",
+     "zeroConvention": "display zero: each series shifted to its own path minimum; absolute eV values in tooltip/readout",
+     "points": [
+      {
+       "image": 0,
+       "energyEv": -625.0986236004007,
+       "status": "source"
+      },
+      {
+       "image": 1,
+       "energyEv": -625.0506489819994,
+       "status": "source"
+      },
+      {
+       "image": 2,
+       "energyEv": -625.009967597727,
+       "status": "source"
+      },
+      {
+       "image": 3,
+       "energyEv": -625.0528812905662,
+       "status": "source"
+      },
+      {
+       "image": 4,
+       "energyEv": -625.098622479916,
+       "status": "source"
+      }
+     ]
+    }
+   ],
+   "extrema": {
+    "vasp-reference": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.1127928600000132,
+     "tieRule": "first-index"
+    },
+    "gpaw-anchors": {
+     "argmin": 4,
+     "argmax": 2,
+     "barrierEv": 0.07939278463697974,
+     "tieRule": "first-index"
+    },
+    "model-chgnet": {
+     "argmin": 4,
+     "argmax": 2,
+     "barrierEv": 0.09724044799804688,
+     "tieRule": "first-index"
+    },
+    "model-mace-mp-medium": {
+     "argmin": 4,
+     "argmax": 2,
+     "barrierEv": 0.11674561175846065,
+     "tieRule": "first-index"
+    },
+    "model-mace-mp-small": {
+     "argmin": 4,
+     "argmax": 2,
+     "barrierEv": 0.07890753878632495,
+     "tieRule": "first-index"
+    },
+    "model-mace-mpa-0-medium": {
+     "argmin": 0,
+     "argmax": 2,
+     "barrierEv": 0.08865600267370155,
+     "tieRule": "first-index"
+    }
+   },
+   "anchors": {
+    "universe": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "evaluated": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "unionNominated": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "denseExtensionImages": [],
+    "anchorsMissing": [],
+    "perModel": {
+     "chgnet": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 4,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.07939278463697974,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 33.400075363033466,
+      "profileAvailable": true
+     },
+     "mace-mp-medium": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 4,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.07939278463697974,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 33.400075363033466,
+      "profileAvailable": true
+     },
+     "mace-mp-small": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 4,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.07939278463697974,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 33.400075363033466,
+      "profileAvailable": true
+     },
+     "mace-mpa-0-medium": {
+      "status": "guided",
+      "nominated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "evaluated": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "complete": true,
+      "shortPathFallback": true,
+      "window": 2,
+      "modelMinIndex": 0,
+      "modelMaxIndex": 2,
+      "sparseBarrierEv": 0.07939278463697974,
+      "sameEngineAbsErrorMev": 0,
+      "vaspAbsErrorMev": 33.400075363033466,
+      "profileAvailable": true
+     }
+    }
+   },
+   "dense": {
+    "applied": true,
+    "complete": true,
+    "barrierEv": 0.07939278463697974
+   },
+   "t1": {
+    "unit": "meV",
+    "definition": "E_GPAW(i) − E_VASP(i) per NEB image, at evaluated anchors only",
+    "offsets": [
+     {
+      "image": 0,
+      "offsetMev": -26829.757473603764,
+      "status": "evaluated"
+     },
+     {
+      "image": 1,
+      "offsetMev": -26840.441813167898,
+      "status": "evaluated"
+     },
+     {
+      "image": 2,
+      "offsetMev": -26863.225723377356,
+      "status": "evaluated"
+     },
+     {
+      "image": 3,
+      "offsetMev": -26843.733477802856,
+      "status": "evaluated"
+     },
+     {
+      "image": 4,
+      "offsetMev": -26830.22541801438,
+      "status": "evaluated"
+     }
+    ],
+    "offsetMeanMev": -26841.476781193247,
+    "wanderMev": 33.468249773592106,
+    "thresholdMev": 40,
+    "verdict": "clean",
+    "driverPair": [
+     2,
+     0
+    ],
+    "evaluatedImageCount": 5
+   },
+   "guidance": {
+    "misses": [],
+    "subsetTheorem": "exact barrier recovery follows when the evaluated anchor set contains both dense-profile extrema"
+   }
+  }
+ ]
+}
