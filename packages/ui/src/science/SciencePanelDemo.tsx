@@ -2,8 +2,9 @@
  * SciencePanelDemo — isolated demo route for the Z1 science panel prototype.
  *
  * Loads the static golden-set fixture (paths 16, 0, 14, 27) and renders one
- * SciencePathPanel per selected path. Reachable at `?demo=science-panel`
- * (optionally `&path=<16|0|14|27>`) or `#/demo/science-panel`.
+ * SciencePathPanel per selected path. Canonical route: `#/science/<index>`
+ * (normalized like `/view/:slug`); legacy aliases `?demo=science-panel`
+ * (optionally `&path=<16|0|14|27>`) and `#/demo/science-panel` still work.
  *
  * The fixture is validated fail-closed before anything renders: a drifted,
  * mis-regenerated, or corrupted fixture must never become guessed or partial
@@ -18,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { SciencePathPanel } from './SciencePathPanel';
 import type { SciencePanelFixture } from './sciencePanelTypes';
 import { validateSciencePanelFixture } from './sciencePanelValidation';
+import { currentHashRoute, sciencePathIndexFromRoute } from '../viewer/viewerRoutes';
 import fixtureJson from './z1GoldenPanelFixture.json';
 
 const PATH_BLURB: Record<number, string> = {
@@ -74,11 +76,37 @@ export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProp
     if (!validation.ok) return 0;
     const fixture = raw as SciencePanelFixture;
     if (typeof window === 'undefined') return fixture.paths[0].pathIndex;
+    const fromRoute = sciencePathIndexFromRoute(currentHashRoute());
+    if (fromRoute != null && fixture.paths.some((p) => p.pathIndex === fromRoute)) return fromRoute;
     const wanted = Number(new URLSearchParams(window.location.search).get('path'));
     return fixture.paths.some((p) => p.pathIndex === wanted) ? wanted : fixture.paths[0].pathIndex;
   }, [raw, validation.ok]);
   const [selectedPath, setSelectedPath] = useState(initialPath);
   const [currentImage, setCurrentImage] = useState(0);
+
+  // Route ↔ tab synchronization: hash changes (landing cards, back/forward)
+  // select the tab; tab clicks write the canonical route.
+  useEffect(() => {
+    if (!validation.ok) return;
+    const fixture = raw as SciencePanelFixture;
+    const onHash = () => {
+      const idx = sciencePathIndexFromRoute(currentHashRoute());
+      if (idx != null && fixture.paths.some((p) => p.pathIndex === idx)) {
+        setSelectedPath(idx);
+        setCurrentImage(0);
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [raw, validation.ok]);
+
+  const selectPath = (index: number) => {
+    setSelectedPath(index);
+    setCurrentImage(0);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#/science/${index}`);
+    }
+  };
 
   useEffect(() => {
     if (!validation.ok) {
@@ -113,10 +141,7 @@ export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProp
           {fixture.paths.map((p) => (
             <button
               key={p.pathIndex}
-              onClick={() => {
-                setSelectedPath(p.pathIndex);
-                setCurrentImage(0);
-              }}
+              onClick={() => selectPath(p.pathIndex)}
               data-testid={`science-demo-tab-${p.pathIndex}`}
               style={{
                 textAlign: 'left',

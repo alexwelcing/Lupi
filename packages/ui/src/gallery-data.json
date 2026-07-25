@@ -61,6 +61,98 @@
     }
   },
   {
+    "id": "z1_science_path_16",
+    "title": "Z1 Path 16 · Li hop in C-Co-Li-Na-O-P",
+    "subtitle": "The union campaign's flagship: four models guided GPAW to five anchors and recovered the dense barrier within 32.7 meV — strong-win on the same-engine gate, yet T1-contaminated across engines (wander 117 meV > 40 meV gate). Inspect the profile, anchors, and verdict.",
+    "domain": "Energy Materials",
+    "atoms": "51",
+    "frames": "5",
+    "route": "#/science/16",
+    "available": true,
+    "featured": true,
+    "colors": [
+      "#3d4db3",
+      "#16171d",
+      "#faf9f6"
+    ],
+    "metadata": {
+      "campaign": "Z1 union pilot (2026-07-24)",
+      "verdict": "strong_win_t1_contaminated",
+      "same_engine_mae": "0.0 meV",
+      "reference": "LiTraj nebDFT2k · doi:10.1038/s41524-025-01571-z"
+    },
+    "file": ""
+  },
+  {
+    "id": "z1_science_path_0",
+    "title": "Z1 Path 0 · metallic saddle in Ag-F-Li",
+    "subtitle": "The mechanism case: a near-zero-gap (0.018 eV) transition state where GPAW and VASP converge to different electronic descriptions — 4,212 meV of convention wander on exactly the saddle image. The T1 law made visible.",
+    "domain": "Energy Materials",
+    "atoms": "51",
+    "frames": "7",
+    "route": "#/science/0",
+    "available": true,
+    "featured": null,
+    "colors": [
+      "#3d4db3",
+      "#b8a06a",
+      "#faf9f6"
+    ],
+    "metadata": {
+      "campaign": "Z1 union pilot (2026-07-24)",
+      "verdict": "contaminated",
+      "t1_wander": "4,212.3 meV (driver images 0 & 3)",
+      "mechanism": "metallic transition state, gap 0.018 eV"
+    },
+    "file": ""
+  },
+  {
+    "id": "z1_science_path_14",
+    "title": "Z1 Path 14 · all four guides failed",
+    "subtitle": "The failure case that must stay visible: every uMLIP's NEB failed to converge, so no model could nominate an anchor — the dense extension supplied the whole profile anyway. Recorded with its denominator, not dropped from the average.",
+    "domain": "Energy Materials",
+    "atoms": "51",
+    "frames": "7",
+    "route": "#/science/14",
+    "available": true,
+    "featured": null,
+    "colors": [
+      "#b8a06a",
+      "#16171d",
+      "#faf9f6"
+    ],
+    "metadata": {
+      "campaign": "Z1 union pilot (2026-07-24)",
+      "verdict": "all-guides-failed",
+      "guided_models": "0 of 4",
+      "coverage": "dense extension, 7 of 7 images"
+    },
+    "file": ""
+  },
+  {
+    "id": "z1_science_path_27",
+    "title": "Z1 Path 27 · the only T1-clean path",
+    "subtitle": "One path of 23 passed the wander gate outright: 33.5 meV against a 40 meV threshold, same-engine strong win, and a signed cross-engine error of −33.4 meV (direction preserved).",
+    "domain": "Energy Materials",
+    "atoms": "51",
+    "frames": "5",
+    "route": "#/science/27",
+    "available": true,
+    "featured": null,
+    "colors": [
+      "#3d4db3",
+      "#4a7d5e",
+      "#faf9f6"
+    ],
+    "metadata": {
+      "campaign": "Z1 union pilot (2026-07-24)",
+      "verdict": "strong_win_t1_clean",
+      "t1_wander": "33.5 meV ≤ 40 meV gate",
+      "signed_error": "−33.4 meV"
+    },
+    "file": ""
+  },
+  {
     "id": "hfc_r125_research",
     "title": "R125 Refrigerant · Research Payload",
     "subtitle": "1000 pentafluoroethane molecules at 273 K — charmm dihedral chemistry with full force/velocity/energy channels per atom.",
