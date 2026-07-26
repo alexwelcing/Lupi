@@ -52,12 +52,21 @@ export function isMcpViewerRoute(hashPath: string, search = typeof window === 'u
   return hashPath === '/mcp' || new URLSearchParams(search).has('mcp');
 }
 
-/** Isolated Z1 science-panel prototype demo: `?demo=science-panel` or `#/demo/science-panel`. */
+/**
+ * Legacy Z1 science URLs: `?demo=science-panel` or `#/demo/science-panel`.
+ * These redirect into the integrated viewer experience (`#/science/<index>`
+ * with the trajectory loaded and the SCIENCE deck section open) inside
+ * ViewerApp; the standalone demo page no longer exists.
+ */
 export function isScienceDemoRoute(hashRoute = currentHashRoute(), search = typeof window === 'undefined' ? '' : window.location.search) {
   return new URLSearchParams(search).get('demo') === 'science-panel' || hashRoute.split('?')[0] === '/demo/science-panel' || isSciencePanelRoute(hashRoute);
 }
 
-/** Canonical science-panel route: `#/science/<index>` (normalized like `/view/:slug`). */
+/**
+ * Canonical science route: `#/science/<index>` (normalized like `/view/:slug`).
+ * Lands in the viewer: the bound Z1 gallery trajectory loads through the
+ * normal pipeline and the SCIENCE deck section opens.
+ */
 export function isSciencePanelRoute(hashRoute: string): boolean {
   return /^\/science\/\d+$/.test(hashRoute.split('?')[0]);
 }

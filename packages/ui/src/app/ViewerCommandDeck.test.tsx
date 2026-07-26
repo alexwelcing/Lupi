@@ -4,13 +4,15 @@ import { createMockTrajectory } from '@atlas/core/test-utils';
 import { useStore } from '../store';
 import { resetStore } from '../test-utils';
 import { ViewerCommandDeck } from './ViewerCommandDeck';
+import { scienceBundleForPathIndex } from '../science/scienceBundle';
 
-function loadMolecule() {
+function loadMolecule(withScience = false) {
   useStore.getState().setFile({
     name: 'water.xyz',
     size: 128,
     trajectory: createMockTrajectory(3, 3),
     thermo: null,
+    science: withScience ? scienceBundleForPathIndex(16)! : undefined,
   });
 }
 
@@ -62,5 +64,22 @@ describe('ViewerCommandDeck', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Camera command' }));
     expect(useStore.getState().activePanel).toBe('flythrough');
     expect(useStore.getState().studyLensOpen).toBe(false);
+  });
+
+  it('shows the Science command only for science-bound loads and maps it to the science panel', () => {
+    const { unmount } = render(<ViewerCommandDeck compact={false} />);
+    // Ordinary molecule: no Science command.
+    expect(screen.queryByRole('button', { name: 'Science command' })).toBeNull();
+    unmount();
+
+    loadMolecule(true);
+    render(<ViewerCommandDeck compact={false} />);
+    const science = screen.getByRole('button', { name: 'Science command' });
+    fireEvent.click(science);
+    expect(useStore.getState().activePanel).toBe('science');
+    expect(science.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(science);
+    expect(useStore.getState().activePanel).toBeNull();
   });
 });

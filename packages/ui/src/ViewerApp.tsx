@@ -29,10 +29,16 @@ import {
   currentHashRoute,
   currentPathRoute,
   isMcpViewerRoute as isMcpViewerRouteMatch,
+  isSciencePanelRoute,
   normalizedPathRoute,
   savedViewSlugFromRoute,
+  sciencePathIndexFromRoute,
 } from './viewer/viewerRoutes';
 import { openMolecule } from './viewer/openMolecule';
+import {
+  DEFAULT_Z1_SCIENCE_PATH_INDEX,
+  scienceGalleryIdForPathIndex,
+} from './science/scienceBundle';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
 import { ViewerCanvas } from './viewer/ViewerCanvas';
 import { selectViewerFrames } from './viewer/artifactFrameSelection';
@@ -62,6 +68,7 @@ import { resolveBackground, type BackgroundAssetAdjustments } from './app/AppBac
 import { CameraManager } from './app/CameraManager';
 import { ViewerCommandDeck } from './app/ViewerCommandDeck';
 import { PlaybackStatus } from './app/PlaybackStatus';
+import { PlaybackScrubber } from './app/PlaybackScrubber';
 import { PlaybackSpeedControl } from './app/PlaybackSpeedControl';
 import { ViewerGestureHint } from './app/ViewerGestureHint';
 import { RendererWarningToast } from './app/RendererWarningToast';
@@ -81,7 +88,6 @@ import {
   IconLast,
 } from './icons';
 import { TransportButton } from './controls';
-import { ThermoMinimap } from './ThermoMinimap';
 
 import { TelemetryHUD } from './TelemetryHUD';
 import { StateInspector } from './StateInspector';
@@ -193,6 +199,15 @@ export function ViewerApp() {
   const playbackFrameRate = file?.playbackFrameRate ?? 30;
   const highFidelityPlayback = Boolean(file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000);
   const totalFrames = file?.trajectory.totalFrames ?? 0;
+  const hasScience = Boolean(file?.science);
+
+  // A non-science file replacing a science one closes the science panel
+  // (loading a molecule after a Z1 entry must not leave the panel forced open).
+  useEffect(() => {
+    if (file && !file.science && useStore.getState().activePanel === 'science') {
+      useStore.getState().setActivePanel(null);
+    }
+  }, [file]);
   const frameIsBuffered = Boolean(file?.trajectory.frames[frame]);
   const displayFrameIndex = useMemo(() => {
     if (!file || totalFrames <= 0) return 0;
@@ -232,6 +247,8 @@ export function ViewerApp() {
     speed: playbackSpeed,
     targetFPS: highFidelityPlayback ? 120 : 60,
     mdFrameRate: playbackFrameRate,
+    // NEB images are discrete reaction-path states — never interpolate between them.
+    snapToIntegers: hasScience,
     // Atom and vector shaders read the live RAF ref directly. React now only
     // synchronizes source-frame uploads (and bond interpolation when enabled).
     stateSyncFPS: highFidelityPlayback ? (showBonds ? 60 : 30) : 15,
@@ -294,6 +311,11 @@ export function ViewerApp() {
       const loadUrl = params.get('load') ?? (intent?.kind === 'loadUrl' ? intent.url : null);
       const state = useStore.getState();
 
+      // `#/science/<index>` owns its loads (see the science-route effect
+      // below): without this guard the generic path would strip a stale
+      // ?sim= param the science flow already replaced, or clear the scene.
+      if (isSciencePanelRoute(currentHashRoute())) return;
+
       if (sim) {
         if (state.activeCardId === sim && (state.file || state.loading)) return;
         setAutomaticLoadFailed(false);
@@ -350,6 +372,62 @@ export function ViewerApp() {
       navigationGeneration += 1;
       cancelViewerLoad();
       window.removeEventListener('popstate', onPopState);
+    };
+  }, []);
+
+  // Science routes: `#/science/<index>` is a first-class viewer route. It
+  // loads the bound Z1 gallery trajectory through the normal gallery pipeline
+  // (which attaches the validated science bundle and opens the SCIENCE deck
+  // section) — never a separate page. Legacy demo aliases redirect here.
+  useEffect(() => {
+    const reconcileScienceRoute = () => {
+      const params = new URLSearchParams(window.location.search);
+      const hashPath = currentHashRoute().split('?')[0] || '/';
+      // Legacy aliases: `?demo=science-panel[&path=<i>]`, `#/demo/science-panel`.
+      if (params.get('demo') === 'science-panel' || hashPath === '/demo/science-panel') {
+        const wanted = Number(params.get('path'));
+        const target = scienceGalleryIdForPathIndex(wanted) != null ? wanted : DEFAULT_Z1_SCIENCE_PATH_INDEX;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('demo');
+        url.searchParams.delete('path');
+        url.hash = `#/science/${target}`;
+        window.history.replaceState({}, '', url);
+      }
+
+      const index = sciencePathIndexFromRoute(currentHashRoute());
+      if (index == null) return;
+      const id = scienceGalleryIdForPathIndex(index);
+      if (!id) {
+        // Unknown golden path: normalize to the default instead of stranding the URL.
+        window.history.replaceState({}, '', `#/science/${DEFAULT_Z1_SCIENCE_PATH_INDEX}`);
+        return;
+      }
+
+      // The hash is canonical for science loads — strip stale ?sim/?load so
+      // the generic molecule reconciler never fights this effect.
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('sim') || url.searchParams.has('load')) {
+        url.searchParams.delete('sim');
+        url.searchParams.delete('load');
+        window.history.replaceState({}, '', url);
+      }
+
+      const state = useStore.getState();
+      if (state.activeCardId === id && (state.file || state.loading)) {
+        // Already loaded (e.g. arrived via the landing card's ?sim= flow):
+        // make sure the SCIENCE section is open.
+        if (state.file?.science) useStore.setState({ activePanel: 'science' });
+        return;
+      }
+      void openMolecule({ kind: 'gallery', id, history: 'none' });
+    };
+
+    reconcileScienceRoute();
+    window.addEventListener('hashchange', reconcileScienceRoute);
+    window.addEventListener('popstate', reconcileScienceRoute);
+    return () => {
+      window.removeEventListener('hashchange', reconcileScienceRoute);
+      window.removeEventListener('popstate', reconcileScienceRoute);
     };
   }, []);
 
@@ -606,7 +684,8 @@ export function ViewerApp() {
             <TransportButton onClick={nextFrame} title="Next [→]" icon={<IconNext />} />
             <TransportButton onClick={() => useStore.getState().setFrame(totalFrames - 1)} title="Last frame" icon={<IconLast />} />
           </div>
-          <ThermoMinimap
+          <PlaybackScrubber
+            hasScience={hasScience}
             thermo={file?.thermo ?? null}
             totalFrames={totalFrames}
             currentFrame={frame}
@@ -621,8 +700,16 @@ export function ViewerApp() {
             textAlign: 'right',
             fontVariantNumeric: 'tabular-nums',
           }}>
-            <span style={{ color: '#f8fafc', fontWeight: 500 }}>{Math.floor(frame) + 1}</span>
-            <span style={{ color: '#475569' }}> / {totalFrames}</span>
+            {hasScience ? (
+              <span style={{ color: '#f8fafc', fontWeight: 500 }}>
+                NEB image {Math.floor(frame)}<span style={{ color: '#475569' }}> of {totalFrames - 1}</span>
+              </span>
+            ) : (
+              <>
+                <span style={{ color: '#f8fafc', fontWeight: 500 }}>{Math.floor(frame) + 1}</span>
+                <span style={{ color: '#475569' }}> / {totalFrames}</span>
+              </>
+            )}
           </div>
           <PlaybackSpeedControl
             isMobile={isMobile}

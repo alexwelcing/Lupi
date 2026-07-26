@@ -1,5 +1,5 @@
 /**
- * SciencePathPanel — first-class Z1 science panel (phase-0 prototype).
+ * SciencePathPanel — first-class Z1 science panel.
  *
  * Renders one golden path of the Z1 union campaign as a REACTION-PATH
  * SEQUENCE: per-image energy series (model profiles, GPAW anchors, VASP
@@ -13,6 +13,12 @@
  *   - missing values stay missing; lines never interpolate across them;
  *   - cross-engine evidence is secondary and turns ochre when the T1
  *     wander gate fails; ochre is used for warnings/contamination only.
+ *
+ * Theming: the data path is theme-agnostic. `SCIENCE_PAPER_THEME` reproduces
+ * the original paper/ink prototype look; the viewer passes a dark-glass
+ * theme (see ScienceDeckPanel) so the same validated panel lives natively
+ * inside the command deck. `variant="deck"` compacts the chrome for the
+ * command-panel width; every number, mark, and readout is identical.
  */
 
 import { useMemo, useState } from 'react';
@@ -22,19 +28,42 @@ import type {
   SciencePathData,
 } from './sciencePanelTypes';
 
-const PAPER = '#faf9f6';
-const INK = '#16171d';
-const INDIGO = '#3d4db3';
-const OCHRE = '#b97a1c';
-const GRID = '#e4e2da';
-const MUTED = '#6b6f7a';
-/** Model profiles: four distinguishable grays + dash patterns (never ochre). */
-const MODEL_STYLES = [
-  { stroke: '#8b90a0', dash: '6 3' },
-  { stroke: '#a8adbb', dash: '2 2' },
-  { stroke: '#787d8c', dash: '8 3 2 3' },
-  { stroke: '#c0c4cf', dash: '1 2' },
-];
+export interface SciencePanelTheme {
+  /** Plot/card background. */
+  paper: string;
+  /** Primary text and the VASP reference series stroke. */
+  ink: string;
+  /** GPAW anchor accent (primary same-engine evidence). */
+  indigo: string;
+  /** Warning/contamination accent — never used for data series. */
+  ochre: string;
+  grid: string;
+  muted: string;
+  /** Recessed readout/stepper background. */
+  readoutBg: string;
+  bannerOkBg: string;
+  bannerWarnBg: string;
+  /** Model profiles: four distinguishable strokes + dash patterns (never ochre). */
+  modelStrokes: Array<{ stroke: string; dash: string }>;
+}
+
+export const SCIENCE_PAPER_THEME: SciencePanelTheme = {
+  paper: '#faf9f6',
+  ink: '#16171d',
+  indigo: '#3d4db3',
+  ochre: '#b97a1c',
+  grid: '#e4e2da',
+  muted: '#6b6f7a',
+  readoutBg: '#f4f2ec',
+  bannerOkBg: '#eef0fa',
+  bannerWarnBg: '#faf3e6',
+  modelStrokes: [
+    { stroke: '#8b90a0', dash: '6 3' },
+    { stroke: '#a8adbb', dash: '2 2' },
+    { stroke: '#787d8c', dash: '8 3 2 3' },
+    { stroke: '#c0c4cf', dash: '1 2' },
+  ],
+};
 
 const FONT = 'system-ui, -apple-system, sans-serif';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -85,10 +114,10 @@ interface SeriesStyle {
   width: number;
 }
 
-function styleForSeries(series: ScienceEnergySeries, modelSlot: number): SeriesStyle {
-  if (series.id === 'vasp-reference') return { stroke: INK, width: 1.8 };
-  if (series.id === 'gpaw-anchors') return { stroke: INDIGO, width: 2.4 };
-  const m = MODEL_STYLES[modelSlot % MODEL_STYLES.length];
+function styleForSeries(series: ScienceEnergySeries, modelSlot: number, theme: SciencePanelTheme): SeriesStyle {
+  if (series.id === 'vasp-reference') return { stroke: theme.ink, width: 1.8 };
+  if (series.id === 'gpaw-anchors') return { stroke: theme.indigo, width: 2.4 };
+  const m = theme.modelStrokes[modelSlot % theme.modelStrokes.length];
   return { stroke: m.stroke, dash: m.dash, width: 1.5 };
 }
 
@@ -102,10 +131,12 @@ function EnergyPlot({
   data,
   currentImage,
   onSelectImage,
+  theme,
 }: {
   data: SciencePathData;
   currentImage: number;
   onSelectImage: (i: number) => void;
+  theme: SciencePanelTheme;
 }) {
   const [hoverImage, setHoverImage] = useState<number | null>(null);
   const n = data.imageCount;
@@ -124,11 +155,11 @@ function EnergyPlot({
       }));
       for (const p of shifted) if (p.mev != null && p.mev > maxMev) maxMev = p.mev;
       const isModel = s.id.startsWith('model-');
-      const style = isModel ? styleForSeries(s, modelSlot++) : styleForSeries(s, 0);
+      const style = isModel ? styleForSeries(s, modelSlot++, theme) : styleForSeries(s, 0, theme);
       return { series: s, shifted, style, isModel };
     });
     return { rows, yMax: niceCeil(maxMev * 1.06) };
-  }, [data]);
+  }, [data, theme]);
 
   const yFor = (mev: number) =>
     M.t + (1 - mev / prepared.yMax) * (ENERGY_H - M.t - M.b);
@@ -164,35 +195,35 @@ function EnergyPlot({
         onClick={() => onSelectImage(activeImage)}
         style={{ cursor: 'crosshair', display: 'block' }}
       >
-        <rect x={0} y={0} width={PLOT_W} height={ENERGY_H} fill={PAPER} />
+        <rect x={0} y={0} width={PLOT_W} height={ENERGY_H} fill={theme.paper} />
         {/* grid + axes */}
         {yTicks.map((v) => (
           <g key={v}>
-            <line x1={M.l} x2={PLOT_W - M.r} y1={yFor(v)} y2={yFor(v)} stroke={GRID} strokeWidth={1} />
-            <text x={M.l - 8} y={yFor(v) + 3.5} textAnchor="end" fontSize={10.5} fill={MUTED} fontFamily={MONO}>
+            <line x1={M.l} x2={PLOT_W - M.r} y1={yFor(v)} y2={yFor(v)} stroke={theme.grid} strokeWidth={1} />
+            <text x={M.l - 8} y={yFor(v) + 3.5} textAnchor="end" fontSize={10.5} fill={theme.muted} fontFamily={MONO}>
               {fmtMev(v, 0)}
             </text>
           </g>
         ))}
         {Array.from({ length: n }, (_, i) => (
           <g key={i}>
-            <line x1={xFor(i, n)} x2={xFor(i, n)} y1={M.t} y2={ENERGY_H - M.b} stroke={GRID} strokeWidth={i === 0 || i === n - 1 ? 0 : 0.6} />
-            <text x={xFor(i, n)} y={ENERGY_H - M.b + 16} textAnchor="middle" fontSize={11} fill={INK} fontFamily={MONO}>
+            <line x1={xFor(i, n)} x2={xFor(i, n)} y1={M.t} y2={ENERGY_H - M.b} stroke={theme.grid} strokeWidth={i === 0 || i === n - 1 ? 0 : 0.6} />
+            <text x={xFor(i, n)} y={ENERGY_H - M.b + 16} textAnchor="middle" fontSize={11} fill={theme.ink} fontFamily={MONO}>
               {i}
             </text>
           </g>
         ))}
-        <text x={(M.l + PLOT_W - M.r) / 2} y={ENERGY_H - 8} textAnchor="middle" fontSize={11.5} fill={INK} fontFamily={FONT}>
+        <text x={(M.l + PLOT_W - M.r) / 2} y={ENERGY_H - 8} textAnchor="middle" fontSize={11.5} fill={theme.ink} fontFamily={FONT}>
           NEB image index — reaction-path sequence (zero-based; not a time axis)
         </text>
-        <text x={16} y={M.t - 12} fontSize={11} fill={MUTED} fontFamily={FONT}>
+        <text x={16} y={M.t - 12} fontSize={11} fill={theme.muted} fontFamily={FONT}>
           meV above each series’ own path minimum
         </text>
 
         {/* current-image indicator */}
         <line
           x1={xFor(currentImage, n)} x2={xFor(currentImage, n)} y1={M.t} y2={ENERGY_H - M.b}
-          stroke={INK} strokeWidth={1} strokeDasharray="2 3" opacity={0.55}
+          stroke={theme.ink} strokeWidth={1} strokeDasharray="2 3" opacity={0.55}
         />
 
         {/* series lines + points */}
@@ -207,8 +238,8 @@ function EnergyPlot({
                 if (series.id !== 'gpaw-anchors') return null;
                 return (
                   <g key={p.image} opacity={0.5}>
-                    <line x1={xFor(p.image, n) - 4} x2={xFor(p.image, n) + 4} y1={ENERGY_H - M.b - 4} y2={ENERGY_H - M.b + 4} stroke={MUTED} strokeWidth={1.2} />
-                    <line x1={xFor(p.image, n) + 4} x2={xFor(p.image, n) - 4} y1={ENERGY_H - M.b - 4} y2={ENERGY_H - M.b + 4} stroke={MUTED} strokeWidth={1.2} />
+                    <line x1={xFor(p.image, n) - 4} x2={xFor(p.image, n) + 4} y1={ENERGY_H - M.b - 4} y2={ENERGY_H - M.b + 4} stroke={theme.muted} strokeWidth={1.2} />
+                    <line x1={xFor(p.image, n) + 4} x2={xFor(p.image, n) - 4} y1={ENERGY_H - M.b - 4} y2={ENERGY_H - M.b + 4} stroke={theme.muted} strokeWidth={1.2} />
                     <title>{`${series.label} — NEB image ${p.image}: missing (not evaluated)`}</title>
                   </g>
                 );
@@ -222,8 +253,8 @@ function EnergyPlot({
                   <g key={p.image}>
                     <circle
                       cx={cx} cy={cy} r={5}
-                      fill={evaluated ? INDIGO : PAPER}
-                      stroke={INDIGO} strokeWidth={2}
+                      fill={evaluated ? theme.indigo : theme.paper}
+                      stroke={theme.indigo} strokeWidth={2}
                     >
                       <title>{`${title} · ${evaluated ? 'evaluated anchor' : 'nominated, not evaluated'}`}</title>
                     </circle>
@@ -231,8 +262,8 @@ function EnergyPlot({
                       <text
                         x={cx} y={cy - 9}
                         textAnchor={p.image === n - 1 ? 'end' : 'middle'}
-                        fontSize={8.5} fill={INDIGO} fontFamily={MONO} fontWeight={700}
-                        style={{ paintOrder: 'stroke' }} stroke={PAPER} strokeWidth={3}
+                        fontSize={8.5} fill={theme.indigo} fontFamily={MONO} fontWeight={700}
+                        style={{ paintOrder: 'stroke' }} stroke={theme.paper} strokeWidth={3}
                       >
                         dense-ext
                       </text>
@@ -242,13 +273,13 @@ function EnergyPlot({
               }
               if (series.id === 'vasp-reference') {
                 return (
-                  <rect key={p.image} x={cx - 3.6} y={cy - 3.6} width={7.2} height={7.2} fill={INK}>
+                  <rect key={p.image} x={cx - 3.6} y={cy - 3.6} width={7.2} height={7.2} fill={theme.ink}>
                     <title>{title}</title>
                   </rect>
                 );
               }
               return (
-                <circle key={p.image} cx={cx} cy={cy} r={3} fill={PAPER} stroke={style.stroke} strokeWidth={1.6}>
+                <circle key={p.image} cx={cx} cy={cy} r={3} fill={theme.paper} stroke={style.stroke} strokeWidth={1.6}>
                   <title>{title}</title>
                 </circle>
               );
@@ -302,7 +333,7 @@ function EnergyPlot({
                   x={labelX} y={(yOfEv(maxV) + yOfEv(maxV - ex.barrierEv)) / 2}
                   textAnchor={lastImage ? 'end' : 'start'}
                   fontSize={10.5} fill={style.stroke} fontFamily={MONO} fontWeight={600}
-                  style={{ paintOrder: 'stroke' }} stroke={PAPER} strokeWidth={3.5}
+                  style={{ paintOrder: 'stroke' }} stroke={theme.paper} strokeWidth={3.5}
                 >
                   {`GPAW barrier ${fmtMev(ex.barrierEv * 1000)} meV`}
                 </text>
@@ -312,12 +343,12 @@ function EnergyPlot({
 
         {/* hover cursor */}
         {hoverImage != null && (
-          <line x1={xFor(hoverImage, n)} x2={xFor(hoverImage, n)} y1={M.t} y2={ENERGY_H - M.b} stroke={INDIGO} strokeWidth={1} opacity={0.35} />
+          <line x1={xFor(hoverImage, n)} x2={xFor(hoverImage, n)} y1={M.t} y2={ENERGY_H - M.b} stroke={theme.indigo} strokeWidth={1} opacity={0.35} />
         )}
       </svg>
 
       {/* legend: series identity, role, zero convention, extrema + barrier-defining pair */}
-      <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, fontSize: 12, fontFamily: FONT, color: INK }}>
+      <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, fontSize: 12, fontFamily: FONT, color: theme.ink }}>
         {prepared.rows.map(({ series, style }) => {
           const ex = data.extrema[series.id];
           return (
@@ -326,9 +357,9 @@ function EnergyPlot({
                 <line x1={0} x2={34} y1={4} y2={4} stroke={style.stroke} strokeWidth={style.width + 0.4} strokeDasharray={style.dash} />
               </svg>
               <strong>{series.label}</strong>
-              <span style={{ color: MUTED }}>{series.role}</span>
+              <span style={{ color: theme.muted }}>{series.role}</span>
               {ex && ex.barrierEv != null && (
-                <span style={{ fontFamily: MONO, color: MUTED }}>
+                <span style={{ fontFamily: MONO, color: theme.muted }}>
                   min@{ex.argmin} · max@{ex.argmax} · barrier {fmtMev(ex.barrierEv * 1000)} meV
                 </span>
               )}
@@ -336,7 +367,7 @@ function EnergyPlot({
           );
         })}
       </ul>
-      <p style={{ margin: '4px 0 0', fontSize: 11.5, color: MUTED, fontFamily: FONT }}>
+      <p style={{ margin: '4px 0 0', fontSize: 11.5, color: theme.muted, fontFamily: FONT }}>
         Zero convention: each series shifted to its own path minimum for display; absolute eV values in point tooltips and the readout below.
         Extrema tie rule: first index. ▲/▼ mark each series’ argmax/argmin (the barrier-defining pair).
       </p>
@@ -345,8 +376,8 @@ function EnergyPlot({
       <div
         data-testid="science-energy-readout"
         style={{
-          marginTop: 6, padding: '6px 10px', border: `1px solid ${GRID}`, borderRadius: 4,
-          fontFamily: MONO, fontSize: 11.5, color: INK, background: '#f4f2ec',
+          marginTop: 6, padding: '6px 10px', border: `1px solid ${theme.grid}`, borderRadius: 4,
+          fontFamily: MONO, fontSize: 11.5, color: theme.ink, background: theme.readoutBg,
           display: 'flex', flexWrap: 'wrap', columnGap: 14, rowGap: 2,
         }}
       >
@@ -373,7 +404,7 @@ function EnergyPlot({
 
 const STRIP_H = 74;
 
-function AnchorStrip({ data, currentImage }: { data: SciencePathData; currentImage: number }) {
+function AnchorStrip({ data, currentImage, theme }: { data: SciencePathData; currentImage: number; theme: SciencePanelTheme }) {
   const n = data.imageCount;
   const union = new Set(data.anchors.unionNominated);
   const evaluated = new Set(data.anchors.evaluated);
@@ -382,7 +413,7 @@ function AnchorStrip({ data, currentImage }: { data: SciencePathData; currentIma
   return (
     <figure style={{ margin: '18px 0 0' }} data-testid="science-anchor-strip">
       <svg viewBox={`0 0 ${PLOT_W} ${STRIP_H}`} width="100%" role="img" aria-label="Anchor nomination and evaluation marks per NEB image">
-        <rect x={0} y={0} width={PLOT_W} height={STRIP_H} fill={PAPER} />
+        <rect x={0} y={0} width={PLOT_W} height={STRIP_H} fill={theme.paper} />
         {Array.from({ length: n }, (_, i) => {
           const cx = xFor(i, n);
           const isEval = evaluated.has(i);
@@ -390,17 +421,17 @@ function AnchorStrip({ data, currentImage }: { data: SciencePathData; currentIma
           const isDense = denseExt.has(i);
           return (
             <g key={i}>
-              <line x1={cx} x2={cx} y1={y - 12} y2={y + 12} stroke={GRID} strokeWidth={1} />
+              <line x1={cx} x2={cx} y1={y - 12} y2={y + 12} stroke={theme.grid} strokeWidth={1} />
               {isEval ? (
-                <circle cx={cx} cy={y} r={5.5} fill={INDIGO} stroke={INDIGO}>
+                <circle cx={cx} cy={y} r={5.5} fill={theme.indigo} stroke={theme.indigo}>
                   <title>{`NEB image ${i}: evaluated GPAW anchor${isDense ? ' (dense extension — evaluated beyond union nominations)' : ''}`}</title>
                 </circle>
               ) : isUnion ? (
-                <circle cx={cx} cy={y} r={5.5} fill={PAPER} stroke={INDIGO} strokeWidth={2}>
+                <circle cx={cx} cy={y} r={5.5} fill={theme.paper} stroke={theme.indigo} strokeWidth={2}>
                   <title>{`NEB image ${i}: nominated by union, not evaluated`}</title>
                 </circle>
               ) : (
-                <circle cx={cx} cy={y} r={3} fill="none" stroke={GRID} strokeWidth={1.2}>
+                <circle cx={cx} cy={y} r={3} fill="none" stroke={theme.grid} strokeWidth={1.2}>
                   <title>{`NEB image ${i}: not nominated, not evaluated`}</title>
                 </circle>
               )}
@@ -408,23 +439,23 @@ function AnchorStrip({ data, currentImage }: { data: SciencePathData; currentIma
                 <text
                   x={cx} y={y + 22}
                   textAnchor={i === n - 1 ? 'end' : 'middle'}
-                  fontSize={9} fill={INDIGO} fontFamily={MONO} fontWeight={700}
+                  fontSize={9} fill={theme.indigo} fontFamily={MONO} fontWeight={700}
                 >
                   dense-ext
                 </text>
               )}
-              <text x={cx} y={STRIP_H - 6} textAnchor="middle" fontSize={10} fill={MUTED} fontFamily={MONO}>
+              <text x={cx} y={STRIP_H - 6} textAnchor="middle" fontSize={10} fill={theme.muted} fontFamily={MONO}>
                 {i}
               </text>
-              {i === currentImage && <circle cx={cx} cy={y} r={9} fill="none" stroke={INK} strokeWidth={1} strokeDasharray="2 2" />}
+              {i === currentImage && <circle cx={cx} cy={y} r={9} fill="none" stroke={theme.ink} strokeWidth={1} strokeDasharray="2 2" />}
             </g>
           );
         })}
       </svg>
-      <p style={{ margin: '2px 0 0', fontSize: 11.5, color: MUTED, fontFamily: FONT }}>
-        Anchors: <MarkSwatch kind="evaluated" /> evaluated · <MarkSwatch kind="nominated" /> nominated (not evaluated) ·{' '}
-        <MarkSwatch kind="union-only" /> union-only (nominated by the union, absent from this model’s set) ·{' '}
-        <span style={{ color: INDIGO, fontFamily: MONO, fontWeight: 700, fontSize: 10 }}>dense-ext</span> dense-extension
+      <p style={{ margin: '2px 0 0', fontSize: 11.5, color: theme.muted, fontFamily: FONT }}>
+        Anchors: <MarkSwatch kind="evaluated" theme={theme} /> evaluated · <MarkSwatch kind="nominated" theme={theme} /> nominated (not evaluated) ·{' '}
+        <MarkSwatch kind="union-only" theme={theme} /> union-only (nominated by the union, absent from this model’s set) ·{' '}
+        <span style={{ color: theme.indigo, fontFamily: MONO, fontWeight: 700, fontSize: 10 }}>dense-ext</span> dense-extension
         (evaluated beyond the union nomination). Union nominated [{data.anchors.unionNominated.join(', ') || '—'}]; evaluated [
         {data.anchors.evaluated.join(', ')}].
       </p>
@@ -432,17 +463,17 @@ function AnchorStrip({ data, currentImage }: { data: SciencePathData; currentIma
   );
 }
 
-function MarkSwatch({ kind }: { kind: 'evaluated' | 'nominated' | 'union-only' }) {
+function MarkSwatch({ kind, theme }: { kind: 'evaluated' | 'nominated' | 'union-only'; theme: SciencePanelTheme }) {
   if (kind === 'union-only') {
     return (
       <svg width={12} height={12} style={{ verticalAlign: '-1px' }}>
-        <rect x={3} y={3} width={6} height={6} transform="rotate(45 6 6)" fill={PAPER} stroke={INDIGO} strokeWidth={1.6} />
+        <rect x={3} y={3} width={6} height={6} transform="rotate(45 6 6)" fill={theme.paper} stroke={theme.indigo} strokeWidth={1.6} />
       </svg>
     );
   }
   return (
     <svg width={12} height={12} style={{ verticalAlign: '-1px' }}>
-      <circle cx={6} cy={6} r={4.5} fill={kind === 'evaluated' ? INDIGO : PAPER} stroke={INDIGO} strokeWidth={1.6} />
+      <circle cx={6} cy={6} r={4.5} fill={kind === 'evaluated' ? theme.indigo : theme.paper} stroke={theme.indigo} strokeWidth={1.6} />
     </svg>
   );
 }
@@ -457,15 +488,17 @@ function T1Panel({
   data,
   currentImage,
   onSelectImage,
+  theme,
 }: {
   data: SciencePathData;
   currentImage: number;
   onSelectImage: (i: number) => void;
+  theme: SciencePanelTheme;
 }) {
   const n = data.imageCount;
   const { t1 } = data;
   const contaminated = t1.verdict === 'contaminated';
-  const accent = contaminated ? OCHRE : INDIGO;
+  const accent = contaminated ? theme.ochre : theme.indigo;
 
   const values = t1.offsets.map((o) => o.offsetMev);
   const present = values.filter((v): v is number => v != null);
@@ -493,24 +526,24 @@ function T1Panel({
           onSelectImage(best);
         }}
       >
-        <rect x={0} y={0} width={PLOT_W} height={T1_H} fill={PAPER} />
+        <rect x={0} y={0} width={PLOT_W} height={T1_H} fill={theme.paper} />
         {yTicks.map((v) => (
           <g key={v}>
-            <line x1={M.l} x2={PLOT_W - M.r} y1={yFor(v)} y2={yFor(v)} stroke={GRID} strokeWidth={1} />
-            <text x={M.l - 8} y={yFor(v) + 3.5} textAnchor="end" fontSize={10.5} fill={MUTED} fontFamily={MONO}>
+            <line x1={M.l} x2={PLOT_W - M.r} y1={yFor(v)} y2={yFor(v)} stroke={theme.grid} strokeWidth={1} />
+            <text x={M.l - 8} y={yFor(v) + 3.5} textAnchor="end" fontSize={10.5} fill={theme.muted} fontFamily={MONO}>
               {fmtMev(v, 0)}
-              </text>
+            </text>
           </g>
         ))}
         {Array.from({ length: n }, (_, i) => (
-          <text key={i} x={xFor(i, n)} y={T1_H - M.b + 16} textAnchor="middle" fontSize={11} fill={INK} fontFamily={MONO}>
+          <text key={i} x={xFor(i, n)} y={T1_H - M.b + 16} textAnchor="middle" fontSize={11} fill={theme.ink} fontFamily={MONO}>
             {i}
           </text>
         ))}
-        <text x={(M.l + PLOT_W - M.r) / 2} y={T1_H - 8} textAnchor="middle" fontSize={11.5} fill={INK} fontFamily={FONT}>
+        <text x={(M.l + PLOT_W - M.r) / 2} y={T1_H - 8} textAnchor="middle" fontSize={11.5} fill={theme.ink} fontFamily={FONT}>
           NEB image index — offsets exist at evaluated anchors only; missing stays missing
         </text>
-        <text x={16} y={M.t - 12} fontSize={11} fill={MUTED} fontFamily={FONT}>
+        <text x={16} y={M.t - 12} fontSize={11} fill={theme.muted} fontFamily={FONT}>
           E_GPAW(i) − E_VASP(i), meV
         </text>
 
@@ -527,7 +560,7 @@ function T1Panel({
             <text
               x={lx} y={yFor(max) + 18}
               fontSize={11} fill={accent} fontFamily={MONO} fontWeight={700}
-              style={{ paintOrder: 'stroke' }} stroke={PAPER} strokeWidth={3}
+              style={{ paintOrder: 'stroke' }} stroke={theme.paper} strokeWidth={3}
             >
               {label}
             </text>
@@ -537,14 +570,14 @@ function T1Panel({
         {/* gate reference bracket (threshold in the same meV units; unlabeled on
             purpose — the comparison is in the wander label and stats strip) */}
         <g>
-          <line x1={M.l + 6} x2={M.l + 6} y1={yFor(min)} y2={yFor(min + t1.thresholdMev)} stroke={MUTED} strokeWidth={1.4}>
+          <line x1={M.l + 6} x2={M.l + 6} y1={yFor(min)} y2={yFor(min + t1.thresholdMev)} stroke={theme.muted} strokeWidth={1.4}>
             <title>{`T1 gate: ${fmtMev(t1.thresholdMev, 0)} meV, drawn in the same units as the offsets`}</title>
           </line>
         </g>
 
         {/* offset polyline (breaks at missing) + points */}
         {segmentsFor(t1.offsets.map((o) => ({ image: o.image, energyEv: o.offsetMev })), yFor).map((d, k) => (
-          <path key={k} d={d} fill="none" stroke={INDIGO} strokeWidth={1.8} />
+          <path key={k} d={d} fill="none" stroke={theme.indigo} strokeWidth={1.8} />
         ))}
         {t1.offsets.map((o) => {
           if (o.offsetMev == null) return null;
@@ -555,14 +588,14 @@ function T1Panel({
           return (
             <g key={o.image}>
               {isDriver && <circle cx={cx} cy={cy} r={8.5} fill="none" stroke={accent} strokeWidth={2.2} />}
-              <circle cx={cx} cy={cy} r={4.5} fill={o.image === currentImage ? INK : INDIGO} stroke={PAPER} strokeWidth={1}>
+              <circle cx={cx} cy={cy} r={4.5} fill={o.image === currentImage ? theme.ink : theme.indigo} stroke={theme.paper} strokeWidth={1}>
                 <title>{`NEB image ${o.image}: offset ${fmtMev(o.offsetMev, 2)} meV${isDriver ? ' — T1 driver image' : ''}`}</title>
               </circle>
               {isDriver && (
                 <text
                   x={cx} y={isMaxDriver ? cy - 13 : cy + 21}
                   textAnchor="middle" fontSize={9.5} fill={accent} fontFamily={MONO} fontWeight={700}
-                  style={{ paintOrder: 'stroke' }} stroke={PAPER} strokeWidth={3}
+                  style={{ paintOrder: 'stroke' }} stroke={theme.paper} strokeWidth={3}
                 >
                   driver
                 </text>
@@ -575,8 +608,8 @@ function T1Panel({
       <div
         style={{
           marginTop: 6, padding: '8px 12px', borderRadius: 4, fontFamily: FONT, fontSize: 12.5,
-          border: `1px solid ${contaminated ? OCHRE : GRID}`,
-          background: contaminated ? '#faf3e6' : '#f4f2ec', color: INK,
+          border: `1px solid ${contaminated ? theme.ochre : theme.grid}`,
+          background: contaminated ? theme.bannerWarnBg : theme.readoutBg, color: theme.ink,
         }}
         data-testid="science-t1-verdict"
       >
@@ -595,10 +628,10 @@ function T1Panel({
             ? 'missing'
             : `${fmtMev(t1.offsets[currentImage].offsetMev as number, 1)} meV`}
         </span>
-        <span style={{ marginLeft: 10, color: MUTED, fontFamily: MONO }}>
+        <span style={{ marginLeft: 10, color: theme.muted, fontFamily: MONO }}>
           mean offset {fmtMev(t1.offsetMeanMev, 0)} meV (cell-convention shift; only the wander is gated)
         </span>
-        <div style={{ marginTop: 4, fontSize: 11.5, color: MUTED }}>
+        <div style={{ marginTop: 4, fontSize: 11.5, color: theme.muted }}>
           Same-engine evidence (GPAW anchors vs dense GPAW profile) is primary. Cross-engine comparison to the VASP
           reference is secondary{contaminated ? ' and marked contaminated here because the wander gate fails.' : '.'}{' '}
           Offsets: {t1.definition}.
@@ -612,7 +645,7 @@ function T1Panel({
 /* Guidance, model failure, dense extension                            */
 /* ------------------------------------------------------------------ */
 
-function GuidanceSection({ data }: { data: SciencePathData }) {
+function GuidanceSection({ data, theme }: { data: SciencePathData; theme: SciencePanelTheme }) {
   const models = Object.entries(data.anchors.perModel);
   const union = new Set(data.anchors.unionNominated);
   const deficitValues = models
@@ -622,54 +655,56 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
 
   return (
     <section data-testid="science-guidance" style={{ marginTop: 20, fontFamily: FONT }}>
-      <h3 style={{ margin: '0 0 6px', fontSize: 13.5, color: INK }}>Guidance, anchor selection, and model failures</h3>
-      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
-        <thead>
-          <tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${GRID}` }}>
-            <th style={{ padding: '4px 8px 4px 0', fontWeight: 600 }}>model</th>
-            <th style={{ padding: '4px 8px', fontWeight: 600 }}>status</th>
-            <th style={{ padding: '4px 8px', fontWeight: 600 }}>nominated → evaluated</th>
-            <th style={{ padding: '4px 8px', fontWeight: 600 }}>same-engine deficit</th>
-            <th style={{ padding: '4px 8px', fontWeight: 600 }}>cross-engine |err|</th>
-            <th style={{ padding: '4px 8px', fontWeight: 600 }}>notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {models.map(([model, m]) => {
-            const failed = m.status !== 'guided';
-            const unionOnly = [...union].filter((i) => !m.nominated.includes(i));
-            return (
-              <tr key={model} style={{ borderBottom: `1px solid ${GRID}`, color: failed ? OCHRE : INK }}>
-                <td style={{ padding: '4px 8px 4px 0', fontFamily: MONO }}>{model}</td>
-                <td style={{ padding: '4px 8px', fontWeight: failed ? 700 : 400 }}>{m.status}</td>
-                <td style={{ padding: '4px 8px', fontFamily: MONO }}>
-                  [{m.nominated.join(', ')}] → [{m.evaluated.join(', ')}]
-                  {unionOnly.length > 0 && (
-                    <span title="union-only anchors: nominated by the union but absent from this model's set">
-                      {' '}· ◇ [{unionOnly.join(', ')}]
-                    </span>
-                  )}
-                </td>
-                <td style={{ padding: '4px 8px', fontFamily: MONO }}>
-                  {m.sameEngineAbsErrorMev == null ? '—' : `${fmtMev(m.sameEngineAbsErrorMev)} meV`}
-                </td>
-                <td style={{ padding: '4px 8px', fontFamily: MONO }}>
-                  {m.vaspAbsErrorMev == null ? '—' : `${fmtMev(m.vaspAbsErrorMev)} meV`}
-                </td>
-                <td style={{ padding: '4px 8px', color: MUTED }}>
-                  {[
-                    m.shortPathFallback ? 'short-path fallback' : null,
-                    m.window != null ? `window ±${m.window}` : null,
-                    !m.profileAvailable && !failed ? 'no profile in cell result' : null,
-                  ].filter(Boolean).join(' · ') || '—'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <h3 style={{ margin: '0 0 6px', fontSize: 13.5, color: theme.ink }}>Guidance, anchor selection, and model failures</h3>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: theme.muted, borderBottom: `1px solid ${theme.grid}` }}>
+              <th style={{ padding: '4px 8px 4px 0', fontWeight: 600 }}>model</th>
+              <th style={{ padding: '4px 8px', fontWeight: 600 }}>status</th>
+              <th style={{ padding: '4px 8px', fontWeight: 600 }}>nominated → evaluated</th>
+              <th style={{ padding: '4px 8px', fontWeight: 600 }}>same-engine deficit</th>
+              <th style={{ padding: '4px 8px', fontWeight: 600 }}>cross-engine |err|</th>
+              <th style={{ padding: '4px 8px', fontWeight: 600 }}>notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {models.map(([model, m]) => {
+              const failed = m.status !== 'guided';
+              const unionOnly = [...union].filter((i) => !m.nominated.includes(i));
+              return (
+                <tr key={model} style={{ borderBottom: `1px solid ${theme.grid}`, color: failed ? theme.ochre : theme.ink }}>
+                  <td style={{ padding: '4px 8px 4px 0', fontFamily: MONO }}>{model}</td>
+                  <td style={{ padding: '4px 8px', fontWeight: failed ? 700 : 400 }}>{m.status}</td>
+                  <td style={{ padding: '4px 8px', fontFamily: MONO }}>
+                    [{m.nominated.join(', ')}] → [{m.evaluated.join(', ')}]
+                    {unionOnly.length > 0 && (
+                      <span title="union-only anchors: nominated by the union but absent from this model's set">
+                        {' '}· ◇ [{unionOnly.join(', ')}]
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '4px 8px', fontFamily: MONO }}>
+                    {m.sameEngineAbsErrorMev == null ? '—' : `${fmtMev(m.sameEngineAbsErrorMev)} meV`}
+                  </td>
+                  <td style={{ padding: '4px 8px', fontFamily: MONO }}>
+                    {m.vaspAbsErrorMev == null ? '—' : `${fmtMev(m.vaspAbsErrorMev)} meV`}
+                  </td>
+                  <td style={{ padding: '4px 8px', color: theme.muted }}>
+                    {[
+                      m.shortPathFallback ? 'short-path fallback' : null,
+                      m.window != null ? `window ±${m.window}` : null,
+                      !m.profileAvailable && !failed ? 'no profile in cell result' : null,
+                    ].filter(Boolean).join(' · ') || '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-      <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12.5, color: INK }}>
+      <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12.5, color: theme.ink }}>
         {data.guidance.misses.length === 0 ? (
           <li>
             No guidance misses: every guided model’s evaluated anchor set contains both dense-profile extrema
@@ -677,7 +712,7 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
           </li>
         ) : (
           data.guidance.misses.map((miss) => (
-            <li key={miss.model} style={{ color: miss.kind === 'model-failed' ? OCHRE : INK }}>
+            <li key={miss.model} style={{ color: miss.kind === 'model-failed' ? theme.ochre : theme.ink }}>
               {miss.kind === 'model-failed'
                 ? `${miss.model}: guide failed (${miss.reason}) — counted in the denominator, not hidden`
                 : `${miss.model}: missed dense extremum image(s) [${(miss.missedImages ?? []).join(', ')}]` +
@@ -697,7 +732,7 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
             : ' — no images beyond the union nomination needed'}
           . Dense-profile barrier {fmtMev(data.dense.barrierEv * 1000)} meV.
         </li>
-        <li style={{ color: MUTED }}>
+        <li style={{ color: theme.muted }}>
           Subset theorem used by Z1: {data.guidance.subsetTheorem}.
         </li>
       </ul>
@@ -756,9 +791,21 @@ export interface SciencePathPanelProps {
   fixture: SciencePanelFixture;
   currentImage?: number;
   onImageChange?: (image: number) => void;
+  /** Color theme; defaults to the paper/ink prototype palette. */
+  theme?: SciencePanelTheme;
+  /** `page` is the standalone review sheet; `deck` compacts the chrome so the
+   *  panel lives inside the viewer command panel (same data, same marks). */
+  variant?: 'page' | 'deck';
 }
 
-export function SciencePathPanel({ data, fixture, currentImage, onImageChange }: SciencePathPanelProps) {
+export function SciencePathPanel({
+  data,
+  fixture,
+  currentImage,
+  onImageChange,
+  theme = SCIENCE_PAPER_THEME,
+  variant = 'page',
+}: SciencePathPanelProps) {
   const [internalImage, setInternalImage] = useState(0);
   const image = Math.min(currentImage ?? internalImage, data.imageCount - 1);
   const setImage = (i: number) => {
@@ -769,42 +816,81 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
 
   const quality = qualityCopy(data, fixture);
   const campaign = fixture.campaign;
+  const deck = variant === 'deck';
+
+  const stepButtonStyle: React.CSSProperties = {
+    fontFamily: FONT,
+    fontSize: deck ? 11 : 12,
+    padding: deck ? '3px 8px' : '4px 10px',
+    borderRadius: 4,
+    border: `1px solid ${theme.indigo}`,
+    background: theme.paper,
+    color: theme.indigo,
+    cursor: 'pointer',
+  };
+
+  const provenance = (
+    <>
+      <p style={{ margin: '0 0 4px' }}>
+        Source vs derived: raw values come from the campaign record, anchor receipts, barrier lock, and model cell
+        results (digests in fixture provenance). Derived on top: T1 offsets are recomputed per-image differences
+        (E_GPAW − E_VASP); displayed profile energies are source values shifted so each series' own path minimum is
+        zero (absolute values remain in tooltips and the readout); barriers, extrema, anchor sets, wander, and driver
+        pairs are recomputed and cross-checked against the campaign record. No inferred series are drawn; missing
+        values stay missing. Geometry, bonds, and coordination are out of scope for this panel; the 3D scene draws
+        bonds with viewer heuristics (inferred, not source topology) — never quantitative mechanism evidence.
+      </p>
+      <p style={{ margin: '0 0 4px' }}>
+        Parser warnings: none — the fixture converter recomputed and verified barriers, extrema, anchor sets, T1
+        wander, and driver pairs against the campaign record before shipping.
+      </p>
+      <p style={{ margin: 0 }}>
+        This panel describes a reaction-path sequence (climbing-image NEB). Image index orders configurations along
+        the path; it is never elapsed time, temperature, or dynamics. The scene’s frame counter and this panel’s
+        NEB image index are the same zero-based number.
+      </p>
+    </>
+  );
 
   return (
     <article
       data-testid="science-path-panel"
       data-path-index={data.pathIndex}
       data-quality-state={data.qualityState}
-      style={{
-        background: PAPER, color: INK, fontFamily: FONT,
-        border: `1px solid ${GRID}`, borderRadius: 8,
+      data-variant={variant}
+      style={deck ? {
+        color: theme.ink, fontFamily: FONT,
+        padding: 0, margin: 0, maxWidth: 'none',
+      } : {
+        background: theme.paper, color: theme.ink, fontFamily: FONT,
+        border: `1px solid ${theme.grid}`, borderRadius: 8,
         padding: '20px 22px', maxWidth: 1060, margin: '0 auto',
         boxShadow: '0 1px 4px rgba(22,23,29,0.08)',
       }}
     >
       {/* header: campaign / run / path identity, bundle revision, quality, citation */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', gap: deck ? 10 : 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: MUTED, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          <div style={{ fontSize: deck ? 10 : 12, color: theme.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
             Z1 union campaign · run recorded {campaign.recordedAt.slice(0, 10)}
           </div>
-          <h2 style={{ margin: '2px 0', fontSize: 19, color: INK }}>
-            Path {data.pathIndex} · <span style={{ fontFamily: MONO, fontSize: 16 }}>{data.pathId}</span> · {data.chemicalSystem}
+          <h2 style={{ margin: '2px 0', fontSize: deck ? 15 : 19, color: theme.ink }}>
+            Path {data.pathIndex} · <span style={{ fontFamily: MONO, fontSize: deck ? 12.5 : 16 }}>{data.pathId}</span> · {data.chemicalSystem}
           </h2>
-          <div style={{ fontSize: 11.5, color: MUTED, fontFamily: MONO }}>
-            bundle: {fixture.schema} · campaign {campaign.sha256.slice(0, 19)}… · prototype fixture (pre-sealed-bundle)
+          <div style={{ fontSize: deck ? 10.5 : 11.5, color: theme.muted, fontFamily: MONO }}>
+            bundle: {fixture.schema} · campaign {campaign.sha256.slice(0, 19)}…
           </div>
-          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>
+          <div style={{ fontSize: deck ? 10.5 : 11.5, color: theme.muted, marginTop: 2 }}>
             {campaign.citation}
           </div>
         </div>
         <div
           data-testid="science-quality-badge"
           style={{
-            alignSelf: 'flex-start', padding: '6px 12px', borderRadius: 5,
-            border: `1.5px solid ${quality.warn ? OCHRE : INDIGO}`,
-            color: quality.warn ? OCHRE : INDIGO,
-            fontWeight: 700, fontSize: 12, letterSpacing: '0.03em', whiteSpace: 'nowrap',
+            alignSelf: 'flex-start', padding: deck ? '4px 9px' : '6px 12px', borderRadius: 5,
+            border: `1.5px solid ${quality.warn ? theme.ochre : theme.indigo}`,
+            color: quality.warn ? theme.ochre : theme.indigo,
+            fontWeight: 700, fontSize: deck ? 10.5 : 12, letterSpacing: '0.03em', whiteSpace: 'nowrap',
           }}
         >
           {data.qualityState.replace(/-/g, ' ').toUpperCase()}
@@ -816,14 +902,14 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
         data-testid="science-quality-banner"
         role={quality.warn ? 'alert' : 'status'}
         style={{
-          marginTop: 12, padding: '9px 12px', borderRadius: 5,
-          border: `1px solid ${quality.warn ? OCHRE : INDIGO}`,
-          background: quality.warn ? '#faf3e6' : '#eef0fa',
-          fontSize: 13,
+          marginTop: 12, padding: deck ? '7px 10px' : '9px 12px', borderRadius: 5,
+          border: `1px solid ${quality.warn ? theme.ochre : theme.indigo}`,
+          background: quality.warn ? theme.bannerWarnBg : theme.bannerOkBg,
+          fontSize: deck ? 12 : 13,
         }}
       >
-        <strong style={{ color: quality.warn ? OCHRE : INDIGO }}>{quality.title}</strong>
-        <span style={{ marginLeft: 8, color: INK }}>{quality.detail}.</span>
+        <strong style={{ color: quality.warn ? theme.ochre : theme.indigo }}>{quality.title}</strong>
+        <span style={{ marginLeft: 8, color: theme.ink }}>{quality.detail}.</span>
       </div>
 
       {/* reaction-path position control — explicitly not a time control */}
@@ -831,11 +917,12 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
         data-testid="science-image-stepper"
         style={{
           marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          padding: '8px 12px', border: `1px solid ${GRID}`, borderRadius: 5, background: '#f4f2ec',
+          padding: deck ? '6px 10px' : '8px 12px', border: `1px solid ${theme.grid}`, borderRadius: 5,
+          background: theme.readoutBg, fontSize: deck ? 12 : 13,
         }}
       >
-        <strong style={{ fontSize: 13 }}>
-          Reaction-path sequence — NEB image {image} of {data.imageCount} (zero-based; indices 0–{data.imageCount - 1})
+        <strong style={{ fontSize: 'inherit' }}>
+          Reaction-path sequence — NEB image {image} of {data.imageCount - 1} (zero-based; indices 0–{data.imageCount - 1})
         </strong>
         <button onClick={() => setImage(image - 1)} disabled={image <= 0} style={stepButtonStyle}>
           ← previous image
@@ -843,57 +930,37 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
         <button onClick={() => setImage(image + 1)} disabled={image >= data.imageCount - 1} style={stepButtonStyle}>
           next image →
         </button>
-        <span style={{ fontSize: 11.5, color: MUTED }}>
+        <span style={{ fontSize: deck ? 10.5 : 11.5, color: theme.muted }}>
           {data.reactionCoordinate.definition}. Click either plot to select an image.
         </span>
       </div>
 
       {/* energy profiles */}
       <section style={{ marginTop: 16 }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: 13.5 }}>Energy along the reaction path</h3>
-        <EnergyPlot data={data} currentImage={image} onSelectImage={setImage} />
-        <AnchorStrip data={data} currentImage={image} />
+        <h3 style={{ margin: '0 0 4px', fontSize: deck ? 12.5 : 13.5 }}>Energy along the reaction path</h3>
+        <EnergyPlot data={data} currentImage={image} onSelectImage={setImage} theme={theme} />
+        <AnchorStrip data={data} currentImage={image} theme={theme} />
       </section>
 
       {/* T1 wander */}
       <section style={{ marginTop: 22 }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: 13.5 }}>T1 convention wander (same-path GPAW − VASP offset)</h3>
-        <T1Panel data={data} currentImage={image} onSelectImage={setImage} />
+        <h3 style={{ margin: '0 0 4px', fontSize: deck ? 12.5 : 13.5 }}>T1 convention wander (same-path GPAW − VASP offset)</h3>
+        <T1Panel data={data} currentImage={image} onSelectImage={setImage} theme={theme} />
       </section>
 
-      <GuidanceSection data={data} />
+      <GuidanceSection data={data} theme={theme} />
 
-      {/* provenance + contract footer */}
-      <footer style={{ marginTop: 20, borderTop: `1px solid ${GRID}`, paddingTop: 10, fontSize: 11.5, color: MUTED }}>
-        <p style={{ margin: '0 0 4px' }}>
-          Source vs derived: raw values come from the campaign record, anchor receipts, barrier lock, and model cell
-          results (digests in fixture provenance). Derived on top: T1 offsets are recomputed per-image differences
-          (E_GPAW − E_VASP); displayed profile energies are source values shifted so each series' own path minimum is
-          zero (absolute values remain in tooltips and the readout); barriers, extrema, anchor sets, wander, and driver
-          pairs are recomputed and cross-checked against the campaign record. No inferred series are drawn; missing
-          values stay missing. Geometry, bonds, and coordination are out of scope for this panel prototype; when bound,
-          bonds must be labeled source topology vs viewer inference.
-        </p>
-        <p style={{ margin: '0 0 4px' }}>
-          Parser warnings: none — the fixture converter recomputed and verified barriers, extrema, anchor sets, T1
-          wander, and driver pairs against the campaign record before shipping.
-        </p>
-        <p style={{ margin: 0 }}>
-          This panel describes a reaction-path sequence (climbing-image NEB). Image index orders configurations along
-          the path; it is never elapsed time, temperature, or dynamics.
-        </p>
-      </footer>
+      {/* provenance + contract footer (collapsible in the deck; always inspectable) */}
+      {deck ? (
+        <details style={{ marginTop: 18, borderTop: `1px solid ${theme.grid}`, paddingTop: 8, fontSize: 10.5, color: theme.muted }}>
+          <summary style={{ cursor: 'pointer', color: theme.ink, fontSize: 11 }}>Provenance and display contract</summary>
+          <div style={{ marginTop: 6 }}>{provenance}</div>
+        </details>
+      ) : (
+        <footer style={{ marginTop: 20, borderTop: `1px solid ${theme.grid}`, paddingTop: 10, fontSize: 11.5, color: theme.muted }}>
+          {provenance}
+        </footer>
+      )}
     </article>
   );
 }
-
-const stepButtonStyle: React.CSSProperties = {
-  fontFamily: FONT,
-  fontSize: 12,
-  padding: '4px 10px',
-  borderRadius: 4,
-  border: `1px solid ${INDIGO}`,
-  background: PAPER,
-  color: INDIGO,
-  cursor: 'pointer',
-};

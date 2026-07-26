@@ -954,6 +954,11 @@ button:focus:not(:focus-visible) {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
+/* The Z1 science panel carries wide energy/T1 plots; give it more room than
+   the standard command panel while keeping the compact layout untouched. */
+@media (min-width: 641px) and (min-height: 501px) {
+  .lupine-command-panel[data-panel='science'] { width: clamp(420px, 40vw, 600px); }
+}
 .lupine-command-panel__loading {
   min-height: 160px;
   display: grid;

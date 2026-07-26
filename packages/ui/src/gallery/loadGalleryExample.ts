@@ -13,6 +13,7 @@ import {
 import type { ViewerOpenResult } from '../viewer/openTypes';
 import type { Frame, Trajectory } from '@atlas/core/types';
 import { resolveExampleUrl, type GalleryExample, publicAssetUrl } from './catalog';
+import { scienceBundleForPathIndex } from '../science/scienceBundle';
 import {
   assertViewerLoadCurrent,
   viewerLoadIsCurrent,
@@ -165,6 +166,35 @@ async function loadOutputSidecars(example: GalleryExample): Promise<void> {
   } catch (err) {
     console.warn('[gallery-outputs] sidecar load failed:', err);
   }
+}
+
+/**
+ * Attach the validated Z1 science bundle to the just-loaded file when the
+ * gallery entry declares `sciencePathIndex`. This is the real load path for
+ * the SCIENCE deck section: gallery card / `?sim=` / `#/science/<index>` all
+ * funnel through here, so the panel is never reachable from test-only state.
+ * Fail-closed twice: an invalid fixture yields no bundle, and a trajectory
+ * whose frame count disagrees with the path's NEB image count attaches no
+ * science (a mismatch is a load error, not a warning, per the data contract).
+ * Exported for unit tests.
+ */
+export function attachScienceBundle(example: GalleryExample): void {
+  if (example.sciencePathIndex == null) return;
+  const file = useStore.getState().file;
+  if (!file) return;
+  const science = scienceBundleForPathIndex(example.sciencePathIndex);
+  if (!science) return; // validation already logged the precise errors
+  if (file.trajectory.totalFrames !== science.path.imageCount) {
+    console.error(
+      `[science-panel] trajectory/science mismatch — failing closed: "${example.id}" loaded ` +
+      `${file.trajectory.totalFrames} frames but path ${science.path.pathIndex} declares ` +
+      `${science.path.imageCount} NEB images.`,
+    );
+    return;
+  }
+  // Force the SCIENCE deck section open (not the toggling setter: reloading a
+  // second science path while the section is open must keep it open).
+  useStore.setState({ file: { ...file, science }, activePanel: 'science' });
 }
 
 export async function loadGalleryExample(
@@ -386,6 +416,7 @@ export async function loadGalleryExample(
     if (example.autoPlay && result.trajectory.totalFrames > 1) {
       useStore.setState({ playing: true });
     }
+    attachScienceBundle(example);
     await loadKnowledgeLabels(example, options.isCurrent);
     assertViewerLoadCurrent(options.isCurrent);
     void loadOutputSidecars(example);

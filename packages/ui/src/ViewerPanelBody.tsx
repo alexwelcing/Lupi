@@ -10,6 +10,7 @@ import { FlythroughPanel } from './panels/FlythroughPanel';
 import { TelemetryPanel } from './panels/TelemetryPanel';
 import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
 import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
+import { ScienceDeckPanel } from './science/ScienceDeckPanel';
 
 export interface ViewerPanelBodyProps {
   activePanel: AppState['activePanel'];
@@ -32,6 +33,8 @@ function renderPanel(activePanel: NonNullable<AppState['activePanel']>, studioDe
       return <CameraCommandSurface />;
     case 'telemetry':
       return <TelemetryCommandSurface />;
+    case 'science':
+      return <ScienceCommandSurface />;
     case 'equilibrium':
       return <EquilibriumSolveWorkbench />;
     case 'mlipLongRun':
@@ -100,4 +103,23 @@ function TelemetryCommandSurface() {
       embedded
     />
   );
+}
+
+/**
+ * Frame ↔ image sync, both directions, through the single store `frame`:
+ * the panel renders the clamped store frame as the selected NEB image and
+ * writes plot/stepper clicks back with `setFrame` — so transport buttons,
+ * the scrubber, keyboard arrows, and the science panel all address the same
+ * zero-based image of the reaction-path sequence.
+ */
+function ScienceCommandSurface() {
+  const bundle = useStore(s => s.file?.science);
+  const frame = useStore(s => s.frame);
+  const setFrame = useStore(s => s.setFrame);
+
+  if (!bundle) return null;
+  const lastImage = Math.max(0, bundle.path.imageCount - 1);
+  const currentImage = Math.max(0, Math.min(Math.floor(frame), lastImage));
+
+  return <ScienceDeckPanel bundle={bundle} currentImage={currentImage} onImageChange={setFrame} />;
 }

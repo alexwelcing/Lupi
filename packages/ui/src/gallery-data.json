@@ -67,7 +67,6 @@
     "domain": "Energy Materials",
     "atoms": "51",
     "frames": "5",
-    "route": "#/science/16",
     "available": true,
     "featured": true,
     "colors": [
@@ -81,16 +80,16 @@
       "same_engine_mae": "0.0 meV",
       "reference": "LiTraj nebDFT2k · doi:10.1038/s41524-025-01571-z"
     },
-    "file": ""
+    "file": "gallery/research/z1/z1-path-16.extxyz",
+    "sciencePathIndex": 16
   },
   {
     "id": "z1_science_path_0",
     "title": "Z1 Path 0 · metallic saddle in Ag-F-Li",
     "subtitle": "The mechanism case: a near-zero-gap (0.018 eV) transition state where GPAW and VASP converge to different electronic descriptions — 4,212 meV of convention wander on exactly the saddle image. The T1 law made visible.",
     "domain": "Energy Materials",
-    "atoms": "51",
+    "atoms": "111",
     "frames": "7",
-    "route": "#/science/0",
     "available": true,
     "featured": null,
     "colors": [
@@ -104,16 +103,16 @@
       "t1_wander": "4,212.3 meV (driver images 0 & 3)",
       "mechanism": "metallic transition state, gap 0.018 eV"
     },
-    "file": ""
+    "file": "gallery/research/z1/z1-path-0.extxyz",
+    "sciencePathIndex": 0
   },
   {
     "id": "z1_science_path_14",
     "title": "Z1 Path 14 · all four guides failed",
     "subtitle": "The failure case that must stay visible: every uMLIP's NEB failed to converge, so no model could nominate an anchor — the dense extension supplied the whole profile anyway. Recorded with its denominator, not dropped from the average.",
     "domain": "Energy Materials",
-    "atoms": "51",
+    "atoms": "95",
     "frames": "7",
-    "route": "#/science/14",
     "available": true,
     "featured": null,
     "colors": [
@@ -127,16 +126,16 @@
       "guided_models": "0 of 4",
       "coverage": "dense extension, 7 of 7 images"
     },
-    "file": ""
+    "file": "gallery/research/z1/z1-path-14.extxyz",
+    "sciencePathIndex": 14
   },
   {
     "id": "z1_science_path_27",
     "title": "Z1 Path 27 · the only T1-clean path",
     "subtitle": "One path of 23 passed the wander gate outright: 33.5 meV against a 40 meV threshold, same-engine strong win, and a signed cross-engine error of −33.4 meV (direction preserved).",
     "domain": "Energy Materials",
-    "atoms": "51",
+    "atoms": "87",
     "frames": "5",
-    "route": "#/science/27",
     "available": true,
     "featured": null,
     "colors": [
@@ -150,7 +149,8 @@
       "t1_wander": "33.5 meV ≤ 40 meV gate",
       "signed_error": "−33.4 meV"
     },
-    "file": ""
+    "file": "gallery/research/z1/z1-path-27.extxyz",
+    "sciencePathIndex": 27
   },
   {
     "id": "hfc_r125_research",
