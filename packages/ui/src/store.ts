@@ -287,6 +287,10 @@ export interface LoadedFile {
   size: number;
   trajectory: Trajectory;
   thermo: ThermoData | null;
+  /** Validated Z1 reaction-path science attached by the gallery load path.
+   *  Drives the SCIENCE command-deck section and switches NEB navigation to
+   *  zero-based image indexing. Never adapted through LAMMPS thermo UI. */
+  science?: import('./science/scienceBundle').ScienceViewerBundle;
   /** Spatial profile time series (LAMMPS `fix ave/chunk` outputs) loaded
    *  alongside the structure — temperature/density/velocity profiles from
    *  real research runs. Replayed in sync with trajectory playback. */
@@ -494,7 +498,7 @@ export interface AppState {
   colorblindMode: boolean;
 
   // ─── UI ───
-  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'equilibrium' | 'mlipLongRun' | null;
+  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'science' | 'equilibrium' | 'mlipLongRun' | null;
   /** Sign-in callout visibility. Defaults CLOSED — the app never auto-prompts
    *  anonymous visitors to sign up; opened only by an explicit user action. */
   authPromptOpen: boolean;

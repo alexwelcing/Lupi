@@ -8,16 +8,18 @@ import {
   LupiGlyph,
 } from '../icons';
 
-type ViewerCommand = 'visuals' | 'analyze' | 'camera' | 'capture' | 'learn';
+type ViewerCommand = 'visuals' | 'analyze' | 'science' | 'camera' | 'capture' | 'learn';
 
 const COMMANDS: Array<{
   id: ViewerCommand;
   label: string;
   shortcut: string;
   icon: ReactNode;
+  requiresScience?: boolean;
 }> = [
   { id: 'visuals', label: 'Visuals', shortcut: '1', icon: <IconVisuals /> },
   { id: 'analyze', label: 'Analyze', shortcut: '2', icon: <IconTelemetryTool /> },
+  { id: 'science', label: 'Science', shortcut: '6', icon: <IconScience />, requiresScience: true },
   { id: 'camera', label: 'Camera', shortcut: '3', icon: <IconFlythrough /> },
   { id: 'capture', label: 'Capture', shortcut: '4', icon: <IconExport /> },
   { id: 'learn', label: 'Learn', shortcut: '5', icon: <IconStudy /> },
@@ -31,6 +33,7 @@ function commandIsActive(
   switch (command) {
     case 'visuals': return activePanel === 'studio';
     case 'analyze': return activePanel === 'telemetry';
+    case 'science': return activePanel === 'science';
     case 'camera': return activePanel === 'flythrough';
     case 'capture': return activePanel === 'export';
     case 'learn': return studyLensOpen;
@@ -47,6 +50,7 @@ function commandIsActive(
 export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { compact: boolean }) {
   const activePanel = useStore(s => s.activePanel);
   const studyLensOpen = useStore(s => s.studyLensOpen);
+  const hasScience = useStore(s => Boolean(s.file?.science));
 
   const activate = (command: ViewerCommand) => {
     const state = useStore.getState();
@@ -75,6 +79,10 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
         state.setStudioDeck(null);
         state.setActivePanel('telemetry');
         break;
+      case 'science':
+        state.setStudioDeck(null);
+        state.setActivePanel('science');
+        break;
       case 'camera':
         state.setStudioDeck(null);
         state.setActivePanel('flythrough');
@@ -93,7 +101,7 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
       role="toolbar"
       aria-label="Viewer commands"
     >
-      {COMMANDS.map(command => {
+      {COMMANDS.filter(command => !command.requiresScience || hasScience).map(command => {
         const active = commandIsActive(command.id, activePanel, studyLensOpen);
         return (
           <button
@@ -118,6 +126,18 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
     </nav>
   );
 });
+
+function IconScience() {
+  return (
+    <LupiGlyph>
+      <path d="M6.5 16.5 10 11l2.4 2.2L17.5 6.5" />
+      <circle cx="6.5" cy="16.5" r="1.2" />
+      <circle cx="10" cy="11" r="1.2" />
+      <circle cx="12.4" cy="13.2" r="1.2" />
+      <circle cx="17.5" cy="6.5" r="1.2" />
+    </LupiGlyph>
+  );
+}
 
 function IconVisuals() {
   return (

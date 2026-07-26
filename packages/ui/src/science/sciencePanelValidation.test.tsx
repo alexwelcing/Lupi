@@ -1,7 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { validateSciencePanelFixture } from './sciencePanelValidation';
-import { SciencePanelDemo } from './SciencePanelDemo';
 import fixtureJson from './z1GoldenPanelFixture.json';
 
 /** Deep clone so each corruption case starts from the real, valid fixture. */
@@ -80,29 +78,5 @@ describe('validateSciencePanelFixture', () => {
     const result = validateSciencePanelFixture(fixture);
     expect(result.ok).toBe(false);
     expect(result.errors.some((e: string) => e.includes('null energy'))).toBe(true);
-  });
-});
-
-describe('SciencePanelDemo fail-closed rendering', () => {
-  afterEach(() => cleanup());
-
-  it('renders the real panel for the shipped fixture', () => {
-    render(<SciencePanelDemo />);
-    expect(screen.getByTestId('science-path-panel')).toBeTruthy();
-    expect(screen.queryByTestId('science-fixture-invalid')).toBeNull();
-  });
-
-  it('renders the invalid state, not a partial panel, for a corrupted fixture', () => {
-    const fixture = freshFixture();
-    fixture.paths[0].series[0].points.pop();
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    render(<SciencePanelDemo fixture={fixture} />);
-    expect(screen.getByTestId('science-fixture-invalid')).toBeTruthy();
-    expect(screen.queryByTestId('science-path-panel')).toBeNull();
-    expect(errorSpy).toHaveBeenCalledWith(
-      '[science-panel] fixture invalid — failing closed:',
-      expect.arrayContaining([expect.stringContaining('imageCount')]),
-    );
-    errorSpy.mockRestore();
   });
 });

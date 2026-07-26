@@ -14,6 +14,7 @@ const PANEL_TITLES: Record<NonNullable<AppState['activePanel']>, string> = {
   export: 'Capture',
   flythrough: 'Camera',
   telemetry: 'Analyze',
+  science: 'Z1 Science',
   equilibrium: 'Equilibrium Solve',
   mlipLongRun: 'MLIP Long Run',
 };

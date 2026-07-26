@@ -67,6 +67,11 @@ export interface GalleryExample {
    *  `file` into the viewer (e.g. '/?billion-atoms'). `file` stays unused
    *  but present for the catalog contract. */
   route?: string;
+  /** Z1 golden-path index whose validated science bundle attaches to the
+   *  loaded trajectory (energy/T1 panel + zero-based NEB navigation). The
+   *  trajectory frame count must equal the path's NEB image count — a
+   *  mismatch fails closed and no science is shown. */
+  sciencePathIndex?: number;
 }
 
 export const EXAMPLES: GalleryExample[] = galleryData as GalleryExample[];

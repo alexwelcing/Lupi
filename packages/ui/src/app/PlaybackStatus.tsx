@@ -11,6 +11,9 @@ export function PlaybackStatus({
   showFrame?: boolean;
 }) {
   const file = useStore(s => s.file);
+  // Science loads are zero-based NEB image sequences: every readout follows
+  // the reaction-path convention (no "FRAME 1/5" contradictions).
+  const hasScience = Boolean(file?.science);
   const streamingFrameStatus = (() => {
     if (!file || file.trajectory.totalFrames <= 1) return null;
     const bufferedFrameCount = file.trajectory.frames.reduce((count, candidate) => count + (candidate ? 1 : 0), 0);
@@ -20,7 +23,9 @@ export function PlaybackStatus({
       return {
         tone: 'buffering' as const,
         label: 'Buffering',
-        detail: `${Math.floor(frame) + 1}/${file.trajectory.totalFrames}`,
+        detail: hasScience
+          ? `${Math.floor(frame)}/${file.trajectory.totalFrames - 1}`
+          : `${Math.floor(frame) + 1}/${file.trajectory.totalFrames}`,
       };
     }
     return {
@@ -51,10 +56,17 @@ export function PlaybackStatus({
         fontVariantNumeric: 'tabular-nums',
       }}>
         {showFrame && (
-          <>
-            <span style={{ color: 'rgba(203,213,225,0.56)', fontSize: 10, textTransform: 'uppercase' }}>Frame</span>
-            {frame + 1} / {totalFrames}
-          </>
+          hasScience ? (
+            <>
+              <span style={{ color: 'rgba(203,213,225,0.56)', fontSize: 10, textTransform: 'uppercase' }}>NEB image</span>
+              {frame} of {totalFrames - 1}
+            </>
+          ) : (
+            <>
+              <span style={{ color: 'rgba(203,213,225,0.56)', fontSize: 10, textTransform: 'uppercase' }}>Frame</span>
+              {frame + 1} / {totalFrames}
+            </>
+          )
         )}
         {streamingFrameStatus && (
           <Badge
