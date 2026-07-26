@@ -136,6 +136,14 @@ export function ViewerApp() {
     track(ANALYTICS_EVENTS.APP_LANDED);
   }, []);
 
+  // A non-science file replacing a science one closes the science panel
+  // (loading a molecule after a Z1 entry must not leave the panel forced open).
+  useEffect(() => {
+    if (file && !file.science && useStore.getState().activePanel === 'science') {
+      useStore.getState().setActivePanel(null);
+    }
+  }, [file]);
+
   // Saved view query (mirrors loading/error/title state into the store).
   const savedViewQuery = useSavedViewQuerySync(savedViewSlug);
   if (savedViewSlug && loadedSavedViewSlugRef.current !== savedViewSlug) {
