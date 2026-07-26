@@ -14,6 +14,7 @@ import type { ViewerOpenResult } from '../viewer/openTypes';
 import type { Frame, Trajectory } from '@atlas/core/types';
 import { resolveExampleUrl, type GalleryExample, publicAssetUrl } from './catalog';
 import { scienceBundleForPathIndex } from '../science/scienceBundle';
+import { minimumImageUnwrapTrajectory } from '../science/minimumImage';
 import {
   assertViewerLoadCurrent,
   viewerLoadIsCurrent,
@@ -192,9 +193,14 @@ export function attachScienceBundle(example: GalleryExample): void {
     );
     return;
   }
+  // Unwrap the periodic path to minimum-image so playback interpolates the
+  // short way (atoms never fly backward through the cell). Display-only
+  // transform; the discrete image indices and energies are untouched.
+  const unwrappedTrajectory = minimumImageUnwrapTrajectory(file.trajectory);
+
   // Force the SCIENCE deck section open (not the toggling setter: reloading a
   // second science path while the section is open must keep it open).
-  useStore.setState({ file: { ...file, science }, activePanel: 'science' });
+  useStore.setState({ file: { ...file, trajectory: unwrappedTrajectory, science }, activePanel: 'science' });
 }
 
 export async function loadGalleryExample(

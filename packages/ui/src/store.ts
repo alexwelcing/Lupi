@@ -483,6 +483,8 @@ export interface AppState {
   playing: boolean;
   playbackSpeed: number;
   loopMode: 'loop' | 'bounce' | 'once';
+  /** Science (NEB) playback: false = smooth interpolated display (default), true = discrete image stepping. */
+  scienceDiscretePlayback: boolean;
 
   // ─── Camera ───
   cameraPosition: [number, number, number];
@@ -661,6 +663,7 @@ export interface AppState {
   prevFrame: () => void;
   togglePlay: () => void;
   setPlaybackSpeed: (speed: number) => void;
+  setScienceDiscretePlayback: (discrete: boolean) => void;
   setColorScheme: (id: ColorSchemeId) => void;
   setAtomColorSource: (src: AtomColorSource) => void;
   setColorMode: (mode: ColorMode) => void;
@@ -880,6 +883,7 @@ const DEFAULTS = {
   playing: false,
   playbackSpeed: 1.0,
   loopMode: 'loop' as const,
+  scienceDiscretePlayback: false,
   cameraPosition: [0, 0, 50] as [number, number, number],
   cameraTarget: [0, 0, 0] as [number, number, number],
   cameraFov: 50,
@@ -1138,6 +1142,7 @@ export const useStore = create<AppState>()(
 
     togglePlay: () => set(s => ({ playing: !s.playing })),
     setPlaybackSpeed: (playbackSpeed) => set({ playbackSpeed }),
+    setScienceDiscretePlayback: (scienceDiscretePlayback: boolean) => set({ scienceDiscretePlayback }),
 
     setColorScheme: (colorScheme) => {
       const scheme = COLOR_SCHEMES[colorScheme];

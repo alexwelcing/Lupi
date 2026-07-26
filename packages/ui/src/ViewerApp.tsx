@@ -200,6 +200,7 @@ export function ViewerApp() {
   const highFidelityPlayback = Boolean(file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000);
   const totalFrames = file?.trajectory.totalFrames ?? 0;
   const hasScience = Boolean(file?.science);
+  const scienceDiscretePlayback = useStore((s) => s.scienceDiscretePlayback);
 
   // A non-science file replacing a science one closes the science panel
   // (loading a molecule after a Z1 entry must not leave the panel forced open).
@@ -248,7 +249,7 @@ export function ViewerApp() {
     targetFPS: highFidelityPlayback ? 120 : 60,
     mdFrameRate: playbackFrameRate,
     // NEB images are discrete reaction-path states — never interpolate between them.
-    snapToIntegers: hasScience,
+    snapToIntegers: hasScience && scienceDiscretePlayback,
     // Atom and vector shaders read the live RAF ref directly. React now only
     // synchronizes source-frame uploads (and bond interpolation when enabled).
     stateSyncFPS: highFidelityPlayback ? (showBonds ? 60 : 30) : 15,

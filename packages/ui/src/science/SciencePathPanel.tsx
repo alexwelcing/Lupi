@@ -22,6 +22,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useStore } from '../store';
 import type {
   ScienceEnergySeries,
   SciencePanelFixture,
@@ -930,6 +931,7 @@ export function SciencePathPanel({
         <button onClick={() => setImage(image + 1)} disabled={image >= data.imageCount - 1} style={stepButtonStyle}>
           next image →
         </button>
+        <PlaybackModeToggle />
         <span style={{ fontSize: deck ? 10.5 : 11.5, color: theme.muted }}>
           {data.reactionCoordinate.definition}. Click either plot to select an image.
         </span>
@@ -962,5 +964,35 @@ export function SciencePathPanel({
         </footer>
       )}
     </article>
+  );
+}
+
+/** Smooth-vs-discrete playback toggle for the NEB transport (science mode). */
+function PlaybackModeToggle() {
+  const discrete = useStore((s) => s.scienceDiscretePlayback);
+  const setDiscrete = useStore((s) => s.setScienceDiscretePlayback);
+  return (
+    <button
+      type="button"
+      onClick={() => setDiscrete(!discrete)}
+      title={
+        discrete
+          ? 'Stepping image-by-image (physically strict). Switch to smooth display interpolation (geometric morph between NEB images — a visualization convenience, not dynamics).'
+          : 'Smooth display interpolation between NEB images (geometric morph; not dynamics). Switch to strict image stepping.'
+      }
+      style={{
+        padding: '3px 10px',
+        borderRadius: 4,
+        border: '1px solid #3d4db3',
+        background: discrete ? '#faf9f6' : '#eef0fa',
+        color: '#16171d',
+        cursor: 'pointer',
+        fontSize: 11,
+        fontFamily: 'inherit',
+      }}
+      data-testid="science-playback-mode-toggle"
+    >
+      {discrete ? 'step images' : 'smooth · geometric morph (not dynamics)'}
+    </button>
   );
 }
