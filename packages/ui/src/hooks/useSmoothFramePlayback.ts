@@ -31,6 +31,7 @@ interface SmoothPlaybackOptions {
    *  datasets, but raise it for small cinematic trajectories where every
    *  generated subframe is part of the story. */
   stateSyncFPS?: number;
+  /** Snap playback to integer frames (e.g., NEB images — never interpolate between reaction-path states). */ snapToIntegers?: boolean;
   /** Playback mode */
   loopMode?: PlaybackLoopMode;
   /** Return false for streamed frames that are not resident yet. */
@@ -120,7 +121,8 @@ export function advancePlaybackFrame(
   return { effectiveFrame, direction: nextDirection, ended: false };
 }
 
-function stateForEffectiveFrame(effectiveFrame: number, totalFrames: number): InterpolatedFrameState {
+function stateForEffectiveFrame(effectiveFrame: number, totalFrames: number, snapToIntegers = false): InterpolatedFrameState {
+  if (snapToIntegers) effectiveFrame = Math.round(effectiveFrame);
   if (totalFrames <= 1) {
     return {
       frameIndex: 0,
@@ -197,10 +199,11 @@ export function useSmoothFramePlayback(
     isFrameReady,
     onFrameNeeded,
     stateSyncFPS = 15,
+    snapToIntegers = false,
   } = options;
 
   // Playback state — use ref for hot path, state only for UI sync
-  const stateRef = useRef<InterpolatedFrameState>(stateForEffectiveFrame(0, frames.length));
+  const stateRef = useRef<InterpolatedFrameState>(stateForEffectiveFrame(0, frames.length, snapToIntegers));
   const [currentState, setCurrentState] = useState<InterpolatedFrameState>(stateRef.current);
   const directionRef = useRef<PlaybackDirection>(1);
 
@@ -253,7 +256,7 @@ export function useSmoothFramePlayback(
         directionRef.current,
         totalFrames,
       );
-      const state = stateForEffectiveFrame(advanced.effectiveFrame, totalFrames);
+      const state = stateForEffectiveFrame(advanced.effectiveFrame, totalFrames, snapToIntegers);
 
       const frameReady = isFrameReady?.(state.frameIndex) ?? true;
       const nextReady = state.isInterpolating
@@ -281,7 +284,7 @@ export function useSmoothFramePlayback(
           // The adjacent source frame is already resident, so advance by that
           // one bounded step instead of freezing forever on consistently slow
           // renderers. Only the excess wall-time catch-up is discarded.
-          heldState = stateForEffectiveFrame(neededFrame, totalFrames);
+          heldState = stateForEffectiveFrame(neededFrame, totalFrames, snapToIntegers);
           directionRef.current = advancePlaybackFrame(
             prev.effectiveFrame,
             1,
@@ -360,6 +363,7 @@ export function useSmoothFramePlayback(
     const nextState = stateForEffectiveFrame(
       Math.min(stateRef.current.effectiveFrame, maxFrame),
       frames.length,
+      snapToIntegers,
     );
     stateRef.current = nextState;
     setCurrentState(nextState);
@@ -419,13 +423,13 @@ export function useSmoothFramePlayback(
   const setFrame = useCallback((frameIndex: number) => {
     directionRef.current = 1;
     if (frames.length === 0) {
-      const emptyState = stateForEffectiveFrame(0, 0);
+      const emptyState = stateForEffectiveFrame(0, 0, snapToIntegers);
       stateRef.current = emptyState;
       setCurrentState(emptyState);
       return;
     }
     const clamped = Math.max(0, Math.min(frames.length - 1, frameIndex));
-    const state = stateForEffectiveFrame(clamped, frames.length);
+    const state = stateForEffectiveFrame(clamped, frames.length, snapToIntegers);
     if (isFrameReady && !isFrameReady(state.frameIndex)) {
       if (neededFrameRef.current !== state.frameIndex) {
         neededFrameRef.current = state.frameIndex;
@@ -443,7 +447,7 @@ export function useSmoothFramePlayback(
     directionRef.current = 1;
     if (frames.length === 0) return;
     const newIndex = manualStep(stateRef.current.frameIndex, 1, loopMode, frames.length);
-    const state = stateForEffectiveFrame(newIndex, frames.length);
+    const state = stateForEffectiveFrame(newIndex, frames.length, snapToIntegers);
     stateRef.current = state;
     setCurrentState(state);
     onFrame(state);
@@ -453,7 +457,7 @@ export function useSmoothFramePlayback(
     directionRef.current = 1;
     if (frames.length === 0) return;
     const newIndex = manualStep(stateRef.current.frameIndex, -1, loopMode, frames.length);
-    const state = stateForEffectiveFrame(newIndex, frames.length);
+    const state = stateForEffectiveFrame(newIndex, frames.length, snapToIntegers);
     stateRef.current = state;
     setCurrentState(state);
     onFrame(state);

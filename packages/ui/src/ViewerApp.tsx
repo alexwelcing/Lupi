@@ -239,6 +239,8 @@ export function ViewerApp() {
     speed: playbackSpeed,
     targetFPS: highFidelityPlayback ? 120 : 60,
     mdFrameRate: playbackFrameRate,
+    // NEB images are discrete reaction-path states — never interpolate between them.
+    snapToIntegers: hasScience,
     // Atom and vector shaders read the live RAF ref directly. React now only
     // synchronizes source-frame uploads (and bond interpolation when enabled).
     stateSyncFPS: highFidelityPlayback ? (showBonds ? 60 : 30) : 15,
