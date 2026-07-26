@@ -136,14 +136,6 @@ export function ViewerApp() {
     track(ANALYTICS_EVENTS.APP_LANDED);
   }, []);
 
-  // A non-science file replacing a science one closes the science panel
-  // (loading a molecule after a Z1 entry must not leave the panel forced open).
-  useEffect(() => {
-    if (file && !file.science && useStore.getState().activePanel === 'science') {
-      useStore.getState().setActivePanel(null);
-    }
-  }, [file]);
-
   // Saved view query (mirrors loading/error/title state into the store).
   const savedViewQuery = useSavedViewQuerySync(savedViewSlug);
   if (savedViewSlug && loadedSavedViewSlugRef.current !== savedViewSlug) {
@@ -208,6 +200,14 @@ export function ViewerApp() {
   const highFidelityPlayback = Boolean(file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000);
   const totalFrames = file?.trajectory.totalFrames ?? 0;
   const hasScience = Boolean(file?.science);
+
+  // A non-science file replacing a science one closes the science panel
+  // (loading a molecule after a Z1 entry must not leave the panel forced open).
+  useEffect(() => {
+    if (file && !file.science && useStore.getState().activePanel === 'science') {
+      useStore.getState().setActivePanel(null);
+    }
+  }, [file]);
   const frameIsBuffered = Boolean(file?.trajectory.frames[frame]);
   const displayFrameIndex = useMemo(() => {
     if (!file || totalFrames <= 0) return 0;
