@@ -15,14 +15,15 @@
  */
 import type { Frame, Trajectory } from '@atlas/core';
 
-/** 3x3 lattice from frame box bounds + tilt (rows a, b, c in Angstrom). */
+/** 3x3 lattice from frame box bounds + tilt, basis vectors as COLUMNS a|b|c (Angstrom). */
 export function latticeFromFrame(frame: Frame): [number, number, number, number, number, number, number, number, number] | null {
   const [xlo, xhi, ylo, yhi, zlo, zhi] = Array.from(frame.boxBounds);
   const [xy, xz, yz] = Array.from(frame.boxTilt);
   const lx = xhi - xlo, ly = yhi - ylo, lz = zhi - zlo;
   if (!(lx > 0 && ly > 0 && lz > 0)) return null;
-  // LAMMPS-style: a = (lx,0,0), b = (xy,ly,0), c = (xz,yz,lz)
-  return [lx, 0, 0, xy, ly, 0, xz, yz, lz];
+  // Column-major basis: column a = (lx,0,0), column b = (xy,ly,0), column c = (xz,yz,lz).
+  // Stored row-major for solve3/matVec: rows are (a.x,b.x,c.x), (a.y,b.y,c.y), (a.z,b.z,c.z).
+  return [lx, xy, xz, 0, ly, yz, 0, 0, lz];
 }
 
 /** Solve M x = b for a 3x3 matrix (rows). Returns null when singular. */

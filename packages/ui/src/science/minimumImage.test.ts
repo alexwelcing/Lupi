@@ -44,6 +44,18 @@ describe('minimumImageUnwrapFrame', () => {
     expect(out[0]).toBeCloseTo(6, 5);
   });
 
+  it('handles a triclinic (tilted) cell with a real boundary crossing', () => {
+    // a = (10,0,0), b = (2,10,0), c = (0,0,10)
+    const tilted = makeFrame([1.5, 0.5, 5], [0, 10, 0, 10, 0, 10]);
+    tilted.boxTilt = new Float64Array([2, 0, 0]);
+    const prev = new Float32Array([9.5, 9.5, 5]);
+    const out = minimumImageUnwrapFrame(prev, tilted);
+    // Minimum image: prev→out is (4,1,0) ≈ 4.1 Å, not the naive (−8,−9,0) ≈ 12 Å.
+    expect(out[0]).toBeCloseTo(13.5, 4);
+    expect(out[1]).toBeCloseTo(10.5, 4);
+    expect(out[2]).toBeCloseTo(5, 4);
+  });
+
   it('handles a triclinic (tilted) cell without shifting valid hops', () => {
     const prev = new Float32Array([1, 1, 5]);
     const frame = makeFrame([2, 1, 5]);
