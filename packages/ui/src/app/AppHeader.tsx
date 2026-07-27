@@ -22,7 +22,10 @@ export const AppHeader = memo(function AppHeader({
   const fileName = useStore(s => s.file?.name ?? '');
   const atomCount = useStore(s => s.file?.trajectory.frames.find(Boolean)?.natoms ?? 0);
   const totalFrames = useStore(s => s.file?.trajectory.totalFrames ?? 0);
-  const mobileLoadedHeader = isMobile && fileLoaded;
+  // Loaded mobile sessions use the same single-row capsule as desktop. The
+  // previous two-row status card obscured the scene before the user had even
+  // opened a tool; detailed file metadata remains available in Analyze.
+  const mobileLoadedHeader = false;
   const statusSummary = atomCount > 0
     ? `${atomCountFormatter.format(atomCount)} atoms${totalFrames > 1 ? ` · ${totalFrames} frames` : ''}`
     : totalFrames > 1 ? `${totalFrames} frames` : '';
