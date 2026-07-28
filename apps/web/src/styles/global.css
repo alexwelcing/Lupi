@@ -1165,7 +1165,14 @@ button:focus:not(:focus-visible) {
     transform: translate(50%, 140%) scale(.82);
     pointer-events: none;
   }
-  .lupine-ui-bucket { left: 10px; min-width: 106px; }
+  /* Keep the expanded bucket on its own row above the horizontal command
+     deck. When controls are stowed, the more-specific rule above returns the
+     bucket to the bottom safe area. */
+  .lupine-ui-bucket {
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    left: 10px;
+    min-width: 106px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
