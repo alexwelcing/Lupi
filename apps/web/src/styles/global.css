@@ -769,6 +769,85 @@ button:focus:not(:focus-visible) {
   contain: layout paint;
 }
 
+/* Viewer chrome lives over the scene instead of reserving a header row. The
+   compact capsule keeps identity and session actions legible without stealing
+   vertical space from the molecule. */
+.lupine-app-root[data-file='true'] .lupine-viewer-chrome--header {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 230;
+  pointer-events: none;
+  transition: opacity 220ms ease, transform 420ms cubic-bezier(.2,.85,.2,1);
+}
+.lupine-app-root[data-file='true'] .lupine-viewer-chrome--header > * { pointer-events: auto; }
+.lupine-app-root[data-file='true'] .lupine-status-bar {
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 8px !important;
+  margin: 12px 16px 0 !important;
+  border-radius: 14px;
+}
+
+.lupine-ui-bucket {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  z-index: 260;
+  min-width: 112px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px 5px 6px;
+  color: #d9f9fa;
+  background: linear-gradient(145deg, rgba(13, 25, 33, .96), rgba(5, 10, 15, .98));
+  border: 1px solid rgba(75, 211, 214, .38);
+  border-radius: 16px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.46), inset 0 1px rgba(255,255,255,.06);
+  cursor: pointer;
+  transform-origin: 22px 23px;
+  transition: width 260ms ease, transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+.lupine-ui-bucket:hover { border-color: rgba(75, 211, 214, .78); box-shadow: 0 16px 42px rgba(0,0,0,.52), 0 0 20px rgba(34,211,215,.12); }
+.lupine-ui-bucket:active { transform: scale(.95); }
+.lupine-ui-bucket:focus-visible { outline: 2px solid #67e8f9; outline-offset: 3px; }
+.lupine-ui-bucket__orb {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  position: relative;
+  border-radius: 12px;
+  background: radial-gradient(circle at 35% 30%, #49e1dc, #168b98 58%, #07333d);
+  box-shadow: 0 0 18px rgba(34,211,215,.26), inset 0 1px 1px rgba(255,255,255,.35);
+  overflow: hidden;
+}
+.lupine-ui-bucket__orb span { position: absolute; width: 5px; height: 5px; border: 1px solid rgba(255,255,255,.82); border-radius: 2px; transition: transform 480ms cubic-bezier(.2,1.4,.3,1); }
+.lupine-ui-bucket__orb span:nth-child(1) { transform: translate(-8px, -5px) rotate(12deg); }
+.lupine-ui-bucket__orb span:nth-child(2) { transform: translate(7px, -3px) rotate(-18deg); }
+.lupine-ui-bucket__orb span:nth-child(3) { transform: translate(0, 8px) rotate(45deg); }
+.lupine-ui-bucket[data-stowed='true'] .lupine-ui-bucket__orb span { transform: translate(0, 1px) rotate(180deg); }
+.lupine-ui-bucket[data-stowed='true'] .lupine-ui-bucket__orb { animation: lupi-bucket-breathe 2.4s ease-in-out infinite; }
+.lupine-ui-bucket__label { font-size: 11px; font-weight: 760; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; }
+.lupine-ui-bucket__count { color: #5ee7e2; font-family: var(--font-mono); font-size: 10px; font-weight: 800; }
+@keyframes lupi-bucket-breathe { 50% { box-shadow: 0 0 28px rgba(34,211,215,.48), inset 0 1px 1px rgba(255,255,255,.35); transform: rotate(-3deg) scale(1.04); } }
+
+/* Everything returns to its exact previous state: stowing only transforms the
+   chrome, it never unmounts panels or mutates the viewer store. */
+.lupine-app-root[data-ui-stowed='true'] .lupine-viewer-chrome--header { opacity: 0; transform: translateY(-120%); pointer-events: none; }
+.lupine-app-root[data-ui-stowed='true'] .lupine-command-deck { opacity: 0; transform: translateX(140%); pointer-events: none; }
+.lupine-app-root[data-ui-stowed='true'] .lupine-command-panel { opacity: 0; transform: translateX(110%); pointer-events: none; }
+.lupine-app-root[data-ui-stowed='true'] #viewer-study-panel { opacity: 0; pointer-events: none; }
+.lupine-app-root[data-ui-stowed='true'] .lupine-viewer-chrome--timeline { opacity: 0; transform: translateY(110%); pointer-events: none; }
+.lupine-command-deck, .lupine-command-panel, .lupine-viewer-chrome--timeline, #viewer-study-panel { transition: opacity 220ms ease, transform 420ms cubic-bezier(.2,.85,.2,1); }
+.lupine-app-root[data-timeline='true'] .lupine-ui-bucket { bottom: calc(76px + env(safe-area-inset-bottom)); }
+.lupine-app-root[data-ui-stowed='true'] .lupine-ui-bucket { bottom: calc(14px + env(safe-area-inset-bottom)); }
+
 .lupine-status-bar__readout {
   color: #6f8397;
   font-family: var(--font-mono);
@@ -1074,6 +1153,34 @@ button:focus:not(:focus-visible) {
     animation: none;
     transition: none;
   }
+}
+
+@media (max-width: 640px), (max-height: 500px) and (max-width: 900px) {
+  .lupine-app-root[data-file='true'] .lupine-status-bar {
+    max-width: calc(100% - 24px);
+    margin: calc(env(safe-area-inset-top) + 8px) 12px 0 !important;
+  }
+  .lupine-app-root[data-ui-stowed='true'] .lupine-command-deck {
+    opacity: 0;
+    transform: translate(50%, 140%) scale(.82);
+    pointer-events: none;
+  }
+  /* Keep the expanded bucket on its own row above the horizontal command
+     deck. When controls are stowed, the more-specific rule above returns the
+     bucket to the bottom safe area. */
+  .lupine-ui-bucket {
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    left: 10px;
+    min-width: 106px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lupine-ui-bucket,
+  .lupine-ui-bucket__orb,
+  .lupine-ui-bucket__orb span,
+  .lupine-viewer-chrome--header,
+  .lupine-viewer-chrome--timeline { animation: none !important; transition-duration: 1ms !important; }
 }
 
 .lupine-app-root {

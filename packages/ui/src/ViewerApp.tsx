@@ -497,6 +497,7 @@ export function ViewerApp() {
 
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
   const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
+  const [uiStowed, setUiStowed] = useState(false);
 
   const clearLoadedFile = useCallback(() => {
     // A streamed trajectory owns abort controllers, subscriptions, loader
@@ -522,6 +523,7 @@ export function ViewerApp() {
       data-mobile={isMobile}
       data-file={!!file}
       data-timeline={mobileTimelineActive}
+      data-ui-stowed={uiStowed}
       style={{
         height: file ? '100dvh' : 'auto',
         overflow: file ? 'hidden' : 'visible',
@@ -529,7 +531,9 @@ export function ViewerApp() {
       }}
     >
       <GlobalShortcuts commandPaletteOpen={commandPaletteOpen} setCommandPaletteOpen={setCommandPaletteOpen} />
-      <AppHeader isMobile={isMobile} clearLoadedFile={clearLoadedFile} />
+      <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
+        <AppHeader isMobile={isMobile} clearLoadedFile={clearLoadedFile} />
+      </div>
       <MoleculeConfigurator />
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
@@ -642,6 +646,26 @@ export function ViewerApp() {
         {file && <ViewerCommandDeck compact={isMobile} />}
         {file && <PanelHost />}
 
+        {file && (
+          <button
+            type="button"
+            className="lupine-ui-bucket"
+            data-stowed={uiStowed}
+            aria-label={uiStowed ? 'Restore viewer controls' : 'Stow viewer controls'}
+            aria-pressed={uiStowed}
+            title={uiStowed ? 'Restore controls' : 'Stow all controls'}
+            onClick={() => setUiStowed(value => !value)}
+          >
+            <span className="lupine-ui-bucket__orb" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="lupine-ui-bucket__label">{uiStowed ? 'Restore' : 'Clear view'}</span>
+            <span className="lupine-ui-bucket__count" aria-hidden="true">{uiStowed ? 'UI' : '↓'}</span>
+          </button>
+        )}
+
         {!file && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>
             {automaticLoadFailed
@@ -664,7 +688,7 @@ export function ViewerApp() {
       {isBatchExport && <BatchAssetGenerator />}
 
       {file && totalFrames > 1 && (
-        <div style={{
+        <div className="lupine-viewer-chrome lupine-viewer-chrome--timeline" style={{
           height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60,
           flexShrink: 0,
           display: 'flex',

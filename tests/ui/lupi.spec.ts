@@ -220,6 +220,22 @@ test.describe('mobile viewer', () => {
 
     const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
     await expect(commands).toBeVisible({ timeout: 30_000 });
+
+    const stowControls = page.getByRole('button', { name: 'Stow viewer controls' });
+    await expect.poll(async () => {
+      const [bucketBox, commandsBox] = await Promise.all([
+        stowControls.boundingBox(),
+        commands.boundingBox(),
+      ]);
+      return bucketBox !== null
+        && commandsBox !== null
+        && bucketBox.y + bucketBox.height <= commandsBox.y;
+    }).toBe(true);
+
+    await stowControls.click();
+    await expect(commands).toHaveCSS('pointer-events', 'none');
+    await page.getByRole('button', { name: 'Restore viewer controls' }).click();
+    await expect(commands).toHaveCSS('pointer-events', 'auto');
     await commands.getByRole('button', { name: 'Visuals command' }).click();
 
     const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
