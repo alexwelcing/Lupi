@@ -1,0 +1,24 @@
+{
+ "anchor_index": 2,
+ "gpaw_energy_ev": -495.72453984362704,
+ "gpaw_params": {
+  "h": 0.2,
+  "kpts": [
+   1,
+   1,
+   1
+  ],
+  "mode": "fd",
+  "txt": null,
+  "xc": "PBE"
+ },
+ "offset_ev": -44.34865444362703,
+ "path_id": "mp-761269_2_1_1_-1_0",
+ "path_index": 0,
+ "recorded_at": "2026-07-22T01:57:35.584536+00:00",
+ "reference_energy_ev": -451.3758854,
+ "schema": "lupine.z1.union_pilot.anchor.v1",
+ "source": "gpaw",
+ "status": "completed",
+ "wall_seconds": 1919.0
+}

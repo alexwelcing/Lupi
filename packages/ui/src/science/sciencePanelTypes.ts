@@ -1,11 +1,9 @@
 /**
- * Types for the Z1 science-panel fixture (`z1GoldenPanelFixture.json`).
+ * Viewer projection types for canonical Z1 visualization bundles.
  *
- * The fixture is a prototype stand-in for the phase-0 visualization bundle:
- * every displayed scalar is copied from — or recomputed and verified against —
- * `z1-union-campaign.json`, `z1_nebdft2k_barriers.lock.json`, and the local
- * anchor receipts / model cell results. See
- * `tools/build-z1-science-panel-fixture.mjs`.
+ * The adapter maps only validated `lupine.visualization-bundle.v1` manifests.
+ * Missing values remain explicit and every displayed identity stays bound to
+ * its canonical manifest, run, bundle, campaign, and source digests.
  */
 
 export type ScienceQualityState =
@@ -66,7 +64,37 @@ export interface GuidanceMiss {
   sameEngineAbsErrorMev?: number | null;
 }
 
+export interface ScienceBundleRevision {
+  schema: 'lupine.visualization-bundle.v1';
+  bundleId: string;
+  manifestSha256: string;
+  campaignSha256: string;
+  campaignId: string;
+  runId: string;
+  status: 'active';
+  supersedes: string | null;
+  supersedesChain: string[];
+  retraction: null;
+  qualityState: 'verified' | 'published';
+  qualityChecks: Array<{ name: string; status: string; detail: string }>;
+  qualityWarnings: string[];
+  sourceArtifacts: Array<{
+    role: string;
+    schema: string | null;
+    sha256: string;
+    bytes: number;
+    gitCommit: string | null;
+  }>;
+  sources: {
+    campaign: string;
+    barrierLock: string;
+    anchorReceipts: string[];
+    modelArtifacts: string[];
+  };
+}
+
 export interface SciencePathData {
+  revision: ScienceBundleRevision;
   pathIndex: number;
   pathId: string;
   chemicalSystem: string;

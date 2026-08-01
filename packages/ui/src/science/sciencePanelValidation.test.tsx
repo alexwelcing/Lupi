@@ -1,7 +1,8 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validateSciencePanelFixture } from './sciencePanelValidation';
 import { SciencePanelDemo } from './SciencePanelDemo';
+import { CANONICAL_BUNDLE_REGISTRY } from './canonicalBundleRegistry';
 import fixtureJson from './z1GoldenPanelFixture.json';
 
 /** Deep clone so each corruption case starts from the real, valid fixture. */
@@ -83,25 +84,51 @@ describe('validateSciencePanelFixture', () => {
   });
 });
 
-describe('SciencePanelDemo fail-closed rendering', () => {
+describe('SciencePanelDemo canonical bundle rendering', () => {
   afterEach(() => cleanup());
 
-  it('renders the real panel for the shipped fixture', () => {
-    render(<SciencePanelDemo />);
-    expect(screen.getByTestId('science-path-panel')).toBeTruthy();
+  it('renders exact manifest, bundle, run, and source identities from the canonical bundle', () => {
+    const entry = CANONICAL_BUNDLE_REGISTRY[16];
+    const manifest = entry.manifest as {
+      bundle_id: string;
+      run_id: string;
+      campaign_id: string;
+      source_artifacts: Array<{ role: string; sha256: string }>;
+    };
+    render(<SciencePanelDemo pathIndex={16} />);
+
+    const panel = screen.getByTestId('science-path-panel');
+    expect(panel.getAttribute('data-bundle-status')).toBe('active');
+    expect(panel.getAttribute('data-bundle-quality')).toBe('verified');
+    const provenance = screen.getByTestId('science-run-provenance').textContent ?? '';
+    expect(provenance).toContain(entry.manifestSha256);
+    expect(provenance).toContain(manifest.bundle_id);
+    expect(provenance).toContain(manifest.run_id);
+    expect(provenance).toContain(manifest.campaign_id);
+    for (const source of manifest.source_artifacts.filter(
+      ({ role }) => role === 'campaign_record' || role === 'barrier_panel',
+    )) {
+      expect(provenance).toContain(source.sha256);
+    }
     expect(screen.queryByTestId('science-fixture-invalid')).toBeNull();
   });
 
-  it('renders the invalid state, not a partial panel, for a corrupted fixture', () => {
-    const fixture = freshFixture();
-    fixture.paths[0].series[0].points.pop();
+  it('switches tabs by resolving the selected canonical path identity', () => {
+    const entry = CANONICAL_BUNDLE_REGISTRY[27];
+    render(<SciencePanelDemo pathIndex={16} />);
+    fireEvent.click(screen.getByTestId('science-demo-tab-27'));
+    expect(screen.getByTestId('science-path-panel').getAttribute('data-path-index')).toBe('27');
+    expect(screen.getByTestId('science-run-provenance').textContent).toContain(entry.manifestSha256);
+  });
+
+  it('renders the invalid state, not a partial panel, for an unknown canonical path', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    render(<SciencePanelDemo fixture={fixture} />);
+    render(<SciencePanelDemo pathIndex={999} />);
     expect(screen.getByTestId('science-fixture-invalid')).toBeTruthy();
     expect(screen.queryByTestId('science-path-panel')).toBeNull();
     expect(errorSpy).toHaveBeenCalledWith(
-      '[science-panel] fixture invalid — failing closed:',
-      expect.arrayContaining([expect.stringContaining('imageCount')]),
+      '[science-panel] canonical bundle unavailable — failing closed:',
+      999,
     );
     errorSpy.mockRestore();
   });

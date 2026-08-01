@@ -344,6 +344,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.62.0
         version: 5.101.0(react@19.2.4)
+      ajv:
+        specifier: 8.18.0
+        version: 8.18.0
       firebase:
         specifier: ^12.16.0
         version: 12.16.0
@@ -9069,7 +9072,7 @@ snapshots:
       inherits: 2.0.4
       readable-stream: 3.6.2
 
-  terser-webpack-plugin@5.4.0(esbuild@0.28.1)(webpack@5.105.0):
+  terser-webpack-plugin@5.4.0(esbuild@0.28.1)(webpack@5.105.0(esbuild@0.28.1)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
@@ -9401,7 +9404,7 @@ snapshots:
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.0
-      terser-webpack-plugin: 5.4.0(esbuild@0.28.1)(webpack@5.105.0)
+      terser-webpack-plugin: 5.4.0(esbuild@0.28.1)(webpack@5.105.0(esbuild@0.28.1))
       watchpack: 2.5.1
       webpack-sources: 3.3.4
     transitivePeerDependencies:

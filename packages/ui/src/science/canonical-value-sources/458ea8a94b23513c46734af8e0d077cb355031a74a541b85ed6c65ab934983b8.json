@@ -1,0 +1,127 @@
+{
+  "prediction": {
+    "absolute_error_mev": 236.11655541793652,
+    "chemical_system": "Ag-F-Li",
+    "endpoint_final_converged": true,
+    "endpoint_initial_converged": true,
+    "material_id": "mp-761269",
+    "neb_converged": true,
+    "path_id": "mp-761269_2_1_1_-1_0",
+    "predicted_barrier_ev": 1.3424316845820954,
+    "predicted_image_energies_ev": [
+      -459.84985740456244,
+      -459.48667131633465,
+      -458.7987976071138,
+      -458.50742571998035,
+      -458.802001534102,
+      -459.4892683500827,
+      -459.84985740397167
+    ],
+    "reference_barrier_ev": 1.578548240000032,
+    "signed_error_mev": -236.11655541793652,
+    "status": "completed"
+  },
+  "provenance": {
+    "accuracy": {
+      "acceptance_threshold_mev": 40.0,
+      "barrier_mae_mev": 174.70373717850015,
+      "completed_path_count": 29,
+      "failed_path_count": 1,
+      "measurement_complete": false,
+      "minimum_path_count": 30,
+      "primary_metric": "barrier_mae_mev",
+      "score": 0.0,
+      "unit": "row_native_physical_score"
+    },
+    "campaign_id": "discovery.round-4.z1-barriers.v1",
+    "cell_id": "z1-barrier-full-f64",
+    "checkpoint": {
+      "cache_misses": 8,
+      "flush_count": 8,
+      "ignored_reason": null,
+      "loaded_predictions": 22,
+      "mode": "read-write",
+      "pending_flush_predictions": 0,
+      "schema": "lupine.mlip.cell_checkpoint.summary.v1",
+      "stored_predictions": 29,
+      "url": "gs://shed-489901-atlas-outputs/z1/campaign-float64/mace-mp-medium/cell_checkpoint.json",
+      "written_predictions": 7
+    },
+    "distill_policy_engine": "auto",
+    "distill_policy_hash": null,
+    "distill_policy_url": null,
+    "distill_profile": "off",
+    "duration_s": 2065.092467917,
+    "execution": {
+      "calculator_dtype": "float64",
+      "cloud_run_job": "mlip-cell-mace-round4-mp-medium",
+      "cloud_run_revision": null,
+      "cold_total_seconds": 2089.8313697149997,
+      "model_load_seconds": 24.221264097999892,
+      "model_preloaded": false,
+      "runner_image_digest": null,
+      "warm_inference_seconds": 2065.092467917
+    },
+    "fixture_contract": {
+      "blockers": [],
+      "campaign_id": "discovery.round-4.z1-barriers.v1",
+      "campaign_manifest_hash": "sha256:0a85044ca84d10e021a0a282987976a3a9e79a611a618470e1638e9105171e40",
+      "candidate_panel_sha256": "sha256:192fe54a5579cc421f6644d5d76fb442c6dfb985f014dc4741549e29052efb68",
+      "candidate_panel_url": "gs://shed-489901-atlas-inputs/z1/data/candidates/z1_nebdft2k_barriers.lock.json",
+      "minimum_path_count": 30,
+      "panel_id": "z1-nebdft2k-chemistry-held-out-v1",
+      "path_count": 30,
+      "release_ready": true,
+      "schema": "lupine.z1.neb_barrier_panel.v1"
+    },
+    "manifest_hash": "sha256:0a85044ca84d10e021a0a282987976a3a9e79a611a618470e1638e9105171e40",
+    "manifest_url": "gs://shed-489901-atlas-inputs/z1/campaigns/v1/z1.campaign-manifest.v1.json",
+    "mlip_id": "mace-mp-medium",
+    "operation_name": null,
+    "ribbon_version": "hyperribbon-v1",
+    "row_id": "barrier",
+    "row_spec": {
+      "execution_protocol": {
+        "barrier_definition": "max(image_energy_ev) - min(image_energy_ev)",
+        "climb": true,
+        "endpoint_relaxation": true,
+        "failure_policy": "record failure without imputation",
+        "force_convergence_ev_per_angstrom": 0.1,
+        "maximum_steps": 100,
+        "method": "climbing-image NEB",
+        "optimizer": "FIRE",
+        "spring_constant_ev_per_angstrom2": 5.0,
+        "tangent_method": "improvedtangent"
+      },
+      "measurement": {
+        "metric": "barrier_mae",
+        "minimum_path_count": 30,
+        "unit": "meV"
+      }
+    },
+    "run_id": "z1-campaign-f64-mace-mp-medium",
+    "schema": "lupine.mlip.cell_artifact.v1",
+    "speed": {
+      "score": 0.014527194528126942,
+      "unit": "structures_per_second"
+    },
+    "support_manifest_url": null,
+    "variant_id": "baseline",
+    "versions": {
+      "ase": "3.28.0",
+      "chgnet": null,
+      "cuda_available": true,
+      "cuda_device": "NVIDIA L4",
+      "fairchem-core": null,
+      "mace-torch": "0.3.16",
+      "matgl": null,
+      "numpy": "1.26.4",
+      "orb-models": null,
+      "python": "3.10.12",
+      "sevenn": null,
+      "torch": "2.4.1+cu121",
+      "uma_model_name": null,
+      "uma_task_name": null
+    }
+  }
+}
