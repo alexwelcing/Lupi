@@ -842,9 +842,15 @@ export function SciencePathPanel({
         bonds with viewer heuristics (inferred, not source topology) — never quantitative mechanism evidence.
       </p>
       <p style={{ margin: '0 0 4px' }}>
-        Parser warnings: none — the fixture converter recomputed and verified barriers, extrema, anchor sets, T1
-        wander, and driver pairs against the campaign record before shipping.
+        Canonical revision: {data.revision.manifestSha256} · run {data.revision.runId} · status {data.revision.status}
+        {' '}· quality {data.revision.qualityState}. Source bindings: campaign {data.revision.sources.campaign}, barrier
+        {' '}{data.revision.sources.barrierLock}, {data.revision.sources.anchorReceipts.length} anchor receipts, and
+        {' '}{data.revision.sources.modelArtifacts.length} model artifacts. Quality checks passed:{' '}
+        {data.revision.qualityChecks.filter((check) => check.status === 'pass').length}/{data.revision.qualityChecks.length}.
       </p>
+      {data.revision.qualityWarnings.map((warning) => (
+        <p key={warning} style={{ margin: '0 0 4px' }}>Bundle warning: {warning}</p>
+      ))}
       <p style={{ margin: 0 }}>
         This panel describes a reaction-path sequence (climbing-image NEB). Image index orders configurations along
         the path; it is never elapsed time, temperature, or dynamics. The scene’s frame counter and this panel’s
@@ -858,6 +864,8 @@ export function SciencePathPanel({
       data-testid="science-path-panel"
       data-path-index={data.pathIndex}
       data-quality-state={data.qualityState}
+      data-bundle-status={data.revision.status}
+      data-bundle-quality={data.revision.qualityState}
       data-variant={variant}
       style={deck ? {
         color: theme.ink, fontFamily: FONT,
@@ -879,7 +887,16 @@ export function SciencePathPanel({
             Path {data.pathIndex} · <span style={{ fontFamily: MONO, fontSize: deck ? 12.5 : 16 }}>{data.pathId}</span> · {data.chemicalSystem}
           </h2>
           <div style={{ fontSize: deck ? 10.5 : 11.5, color: theme.muted, fontFamily: MONO }}>
-            bundle: {fixture.schema} · campaign {campaign.sha256.slice(0, 19)}…
+            manifest: {data.revision.manifestSha256.slice(0, 23)}… · bundle: {data.revision.bundleId.slice(0, 23)}…
+          </div>
+          <div
+            data-testid="science-run-provenance"
+            style={{ fontSize: deck ? 10.5 : 11.5, color: theme.muted, fontFamily: MONO, marginTop: 2, overflowWrap: 'anywhere' }}
+          >
+            Source campaign: {data.revision.campaignId}<br />
+            Run id: {data.revision.runId}<br />
+            Bundle digest: {data.revision.bundleId}<br />
+            Supersedes chain: {data.revision.supersedesChain.length > 0 ? data.revision.supersedesChain.join(' → ') : 'none'}
           </div>
           <div style={{ fontSize: deck ? 10.5 : 11.5, color: theme.muted, marginTop: 2 }}>
             {campaign.citation}

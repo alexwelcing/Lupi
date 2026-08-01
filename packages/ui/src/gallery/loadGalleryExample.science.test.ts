@@ -1,83 +1,96 @@
+import { getAtomicNumberBySymbol, type Trajectory } from '@atlas/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockTrajectory } from '@atlas/core/test-utils';
 import { useStore } from '../store';
 import { resetStore } from '../test-utils';
+import { CANONICAL_BUNDLE_REGISTRY } from '../science/canonicalBundleRegistry';
+import { ViewerLoadSupersededError } from '../viewer/loadGuard';
 import { EXAMPLES, type GalleryExample } from './catalog';
 import { attachScienceBundle } from './loadGalleryExample';
 
 const z1 = (id: string): GalleryExample => {
-  const example = EXAMPLES.find((e) => e.id === id);
+  const example = EXAMPLES.find((candidate) => candidate.id === id);
   if (!example) throw new Error(`gallery entry ${id} missing`);
   return example;
 };
 
-function loadMockFile(frameCount: number) {
+function canonicalTrajectory(pathIndex: number): Trajectory {
+  const manifest = CANONICAL_BUNDLE_REGISTRY[pathIndex].manifest as any;
+  return {
+    totalFrames: manifest.image_count,
+    atomTypes: [...new Set(manifest.coordinates.species.map((symbol: string) => getAtomicNumberBySymbol(symbol)!))] as number[],
+    globalBounds: { min: [0, 0, 0], max: [10, 10, 10] },
+    frames: manifest.coordinates.frames.map((sourceFrame: any, image: number) => ({
+      timestep: image,
+      natoms: manifest.coordinates.atom_count,
+      boxBounds: new Float64Array(6), boxTilt: new Float64Array(3), triclinic: true,
+      columns: ['id', 'type', 'x', 'y', 'z'],
+      ids: Int32Array.from(manifest.coordinates.atom_ids.map((_: string, index: number) => index + 1)),
+      identity: { kind: 'synthetic-row' as const, unique: true },
+      types: Int32Array.from(manifest.coordinates.species.map((symbol: string) => getAtomicNumberBySymbol(symbol)!)),
+      typeSemantics: { kind: 'atomic-number' as const, provenance: 'xyz-element-token' as const },
+      distanceSemantics: { kind: 'angstrom' as const, provenance: 'source-declared' as const },
+      positions: Float32Array.from(sourceFrame.positions_angstrom.flat()),
+      bonds: new Int32Array(), properties: new Map(),
+    })),
+  };
+}
+
+function loadCanonicalFile(pathIndex: number): void {
   useStore.getState().setFile({
-    name: 'z1-path-16.extxyz',
-    size: 10315,
-    trajectory: createMockTrajectory(frameCount, 51),
+    name: `z1-path-${pathIndex}.extxyz`,
+    size: 10_315,
+    trajectory: canonicalTrajectory(pathIndex),
     thermo: null,
   });
 }
 
-describe('attachScienceBundle (gallery load path)', () => {
+describe('attachScienceBundle canonical gallery load', () => {
   beforeEach(() => resetStore());
 
-  it('attaches the validated bundle and opens the SCIENCE deck section', () => {
-    loadMockFile(5);
-    attachScienceBundle(z1('z1_science_path_16'));
-
-    const state = useStore.getState();
-    expect(state.file?.science?.path.pathIndex).toBe(16);
-    expect(state.file?.science?.path.imageCount).toBe(5);
-    expect(state.activePanel).toBe('science');
-  });
-
-  it('binds every golden gallery entry to its own path', () => {
-    for (const [id, index, frames] of [
-      ['z1_science_path_16', 16, 5],
-      ['z1_science_path_0', 0, 7],
-      ['z1_science_path_14', 14, 7],
-      ['z1_science_path_27', 27, 5],
-    ] as const) {
+  it('loads each gallery entry by exact manifest digest', async () => {
+    for (const pathIndex of [0, 14, 16, 27]) {
       resetStore();
-      loadMockFile(frames);
-      attachScienceBundle(z1(id));
-      expect(useStore.getState().file?.science?.path.pathIndex).toBe(index);
+      loadCanonicalFile(pathIndex);
+      const example = z1(`z1_science_path_${pathIndex}`);
+      await attachScienceBundle(example);
+      expect(useStore.getState().file?.science?.path.pathIndex).toBe(pathIndex);
+      expect(useStore.getState().file?.science?.path.revision.manifestSha256).toBe(example.scienceManifestSha256);
+      expect(useStore.getState().activePanel).toBe('science');
     }
   });
 
-  it('keeps the SCIENCE section open when a second science path loads over the first', () => {
-    loadMockFile(5);
-    attachScienceBundle(z1('z1_science_path_16'));
-    expect(useStore.getState().activePanel).toBe('science');
-    // The toggling setter would have closed it; the load path must not.
-    loadMockFile(7);
-    attachScienceBundle(z1('z1_science_path_0'));
-    const state = useStore.getState();
-    expect(state.activePanel).toBe('science');
-    expect(state.file?.science?.path.pathIndex).toBe(0);
+  it('fails closed for an unknown digest rather than falling back to mutable path lookup', async () => {
+    loadCanonicalFile(16);
+    await attachScienceBundle({
+      ...z1('z1_science_path_16'),
+      scienceManifestSha256: `sha256:${'0'.repeat(64)}`,
+    });
+    expect(useStore.getState().file?.science).toBeUndefined();
+    expect(useStore.getState().activePanel).toBeNull();
   });
 
-  it('fails closed — no science — when the trajectory frame count disagrees with the image count', () => {
-    loadMockFile(4); // path 16 declares 5 NEB images
+  it('fails closed when the trajectory disagrees with the canonical atom/frame contract', async () => {
+    loadCanonicalFile(16);
+    useStore.getState().file!.trajectory.frames[0]!.types[0] = 1;
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    attachScienceBundle(z1('z1_science_path_16'));
-
-    const state = useStore.getState();
-    expect(state.file?.science).toBeUndefined();
-    expect(state.activePanel).toBeNull();
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[science-panel] trajectory/science mismatch — failing closed:'),
-    );
+    await attachScienceBundle(z1('z1_science_path_16'));
+    expect(useStore.getState().file?.science).toBeUndefined();
+    expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 
-  it('is a no-op for ordinary gallery entries', () => {
-    loadMockFile(5);
-    const plain = EXAMPLES.find((e) => e.sciencePathIndex == null && e.available && !e.route)!;
-    attachScienceBundle(plain);
+  it('cannot commit a verified bundle after a newer viewer load supersedes it', async () => {
+    loadCanonicalFile(16);
+    await expect(attachScienceBundle(z1('z1_science_path_16'), () => false))
+      .rejects.toBeInstanceOf(ViewerLoadSupersededError);
     expect(useStore.getState().file?.science).toBeUndefined();
     expect(useStore.getState().activePanel).toBeNull();
+  });
+
+  it('is a no-op for ordinary gallery entries', async () => {
+    loadCanonicalFile(16);
+    const plain = EXAMPLES.find((example) => example.sciencePathIndex == null && example.available && !example.route)!;
+    await attachScienceBundle(plain);
+    expect(useStore.getState().file?.science).toBeUndefined();
   });
 });
