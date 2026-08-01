@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from 'playwright/test';
 
 const CAFFEINE_ASSET = '/gallery/curated/popular/caffeine.xyz';
+const SPHERE_GRID_ASSET = '/generated/lupine-wiki/sphere-grid.lammpstrj';
 const TRAJECTORY_ID = 'this_is_water';
 const NEUTRAL_HDR = Buffer.concat([
   Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n', 'ascii'),
@@ -10,7 +11,12 @@ const NEUTRAL_HDR = Buffer.concat([
 async function preparePage(page: Page) {
   // The app has system-font fallbacks; a third-party font CDN must never hold
   // the product gate open or decide whether a deployment is healthy.
-  await page.route(/^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//, route => route.abort());
+  await page.route('https://fonts.googleapis.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/css',
+    body: '',
+  }));
+  await page.route('https://fonts.gstatic.com/**', route => route.abort());
   // The reflection map is an optional third-party enhancement. Supply a tiny,
   // deterministic neutral HDR so that CDN health cannot decide product health.
   await page.route('https://raw.githack.com/**', route => route.fulfill({
@@ -107,6 +113,22 @@ test('@deployed-smoke viewer settings are usable and learning tools are discover
 
   await commands.getByRole('button', { name: 'Learn command' }).click();
   await expect(page.getByTestId('study-lens-panel')).toBeVisible();
+  await releaseRenderer(page);
+});
+
+test('a trajectory deep link renders without React console errors', async ({ page }) => {
+  await preparePage(page);
+  const consoleErrors: string[] = [];
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', error => consoleErrors.push(error.message));
+
+  await page.goto(`/?load=${encodeURIComponent(SPHERE_GRID_ASSET)}`, { waitUntil: 'commit' });
+  await expectViewerReady(page);
+  await page.waitForTimeout(1_000);
+
+  expect(consoleErrors).toEqual([]);
   await releaseRenderer(page);
 });
 
