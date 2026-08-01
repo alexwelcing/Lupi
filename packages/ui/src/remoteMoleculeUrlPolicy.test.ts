@@ -35,6 +35,17 @@ describe('assertAllowedRemoteMoleculeUrl', () => {
     });
   });
 
+  it('accepts the generated sphere-grid gallery asset from the same origin', () => {
+    expect(assertAllowedRemoteMoleculeUrl(
+      '/generated/lupine-wiki/sphere-grid.lammpstrj',
+      'human-load',
+      'http://localhost:3000',
+    )).toMatchObject({
+      url: '/generated/lupine-wiki/sphere-grid.lammpstrj',
+      sameOriginStrict: true,
+    });
+  });
+
   it('accepts an absolute loopback molecule URL only for an interactive local build', () => {
     const url = 'http://127.0.0.1:8787/v1/datasets/research/gst-phase-change-ace-start/files/GST_config.data';
     expect(assertAllowedRemoteMoleculeUrl(
