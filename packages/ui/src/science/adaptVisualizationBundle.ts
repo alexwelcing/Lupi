@@ -113,6 +113,7 @@ type CanonicalManifest = {
       reference_barrier_ev: number;
       dense_vs_reference_signed_error_mev: number | null;
       dense_vs_reference_abs_error_mev: number | null;
+      per_model?: Record<string, { sparse_barrier_ev: number; vasp_abs_error_mev: number; vasp_signed_error_mev: number }>;
     };
     t1: {
       offset_definition: string;
