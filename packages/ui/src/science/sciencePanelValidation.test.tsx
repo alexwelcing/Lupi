@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validateSciencePanelFixture } from './sciencePanelValidation';
 import { SciencePanelDemo } from './SciencePanelDemo';
 import { CANONICAL_BUNDLE_REGISTRY } from './canonicalBundleRegistry';
+import {
+  verifiedSciencePanelBundleForPathIndex,
+  type ScienceViewerBundle,
+} from './scienceBundle';
 import fixtureJson from './z1GoldenPanelFixture.json';
 
 /** Deep clone so each corruption case starts from the real, valid fixture. */
@@ -93,7 +97,13 @@ describe('SciencePanelDemo canonical bundle rendering', () => {
       bundle_id: string;
       run_id: string;
       campaign_id: string;
-      source_artifacts: Array<{ role: string; sha256: string }>;
+      source_artifacts: Array<{
+        role: string;
+        uri: string;
+        sha256: string;
+        schema: string | null;
+        git_commit: string | null;
+      }>;
     };
     render(<SciencePanelDemo pathIndex={16} />);
 
@@ -107,6 +117,9 @@ describe('SciencePanelDemo canonical bundle rendering', () => {
     expect(provenance).toContain(manifest.campaign_id);
     for (const source of manifest.source_artifacts) {
       expect(provenance).toContain(source.sha256);
+      expect(provenance).toContain(source.uri);
+      expect(provenance).toContain(source.schema ?? 'none');
+      expect(provenance).toContain(source.git_commit ?? 'none');
     }
     expect(screen.queryByTestId('science-fixture-invalid')).toBeNull();
   });
@@ -119,6 +132,59 @@ describe('SciencePanelDemo canonical bundle rendering', () => {
       expect(screen.getByTestId('science-path-panel').getAttribute('data-path-index')).toBe('27');
     });
     expect(screen.getByTestId('science-run-provenance').textContent).toContain(entry.manifestSha256);
+  });
+
+  it('withholds the old panel immediately while a newly selected identity is still verifying', async () => {
+    let resolvePath27: ((value: ScienceViewerBundle | null) => void) | undefined;
+    const verifyBundle = vi.fn((pathIndex: number) => {
+      if (pathIndex !== 27) return verifiedSciencePanelBundleForPathIndex(pathIndex);
+      return new Promise<ScienceViewerBundle | null>((resolve) => {
+        resolvePath27 = resolve;
+      });
+    });
+    render(<SciencePanelDemo pathIndex={16} verifyBundle={verifyBundle} />);
+    expect((await screen.findByTestId('science-path-panel')).getAttribute('data-path-index')).toBe('16');
+
+    fireEvent.click(screen.getByTestId('science-demo-tab-27'));
+    expect(screen.queryByTestId('science-path-panel')).toBeNull();
+    expect(screen.getByTestId('science-bundle-loading')).toBeTruthy();
+
+    resolvePath27?.(await verifiedSciencePanelBundleForPathIndex(27));
+    await waitFor(() => {
+      expect(screen.getByTestId('science-path-panel').getAttribute('data-path-index')).toBe('27');
+    });
+  });
+
+  it('withholds the old panel synchronously when the requested path prop changes', async () => {
+    let resolvePath27: ((value: ScienceViewerBundle | null) => void) | undefined;
+    const verifyBundle = vi.fn((pathIndex: number) => {
+      if (pathIndex !== 27) return verifiedSciencePanelBundleForPathIndex(pathIndex);
+      return new Promise<ScienceViewerBundle | null>((resolve) => {
+        resolvePath27 = resolve;
+      });
+    });
+    const view = render(<SciencePanelDemo pathIndex={16} verifyBundle={verifyBundle} />);
+    expect((await screen.findByTestId('science-path-panel')).getAttribute('data-path-index')).toBe('16');
+
+    view.rerender(<SciencePanelDemo pathIndex={27} verifyBundle={verifyBundle} />);
+    expect(screen.queryByTestId('science-path-panel')).toBeNull();
+    expect(screen.getByTestId('science-bundle-loading')).toBeTruthy();
+
+    resolvePath27?.(await verifiedSciencePanelBundleForPathIndex(27));
+    await waitFor(() => {
+      expect(screen.getByTestId('science-path-panel').getAttribute('data-path-index')).toBe('27');
+    });
+  });
+
+  it('does not call a multi-eV cross-engine error acceptable', async () => {
+    render(<SciencePanelDemo pathIndex={0} />);
+    const path0Banner = await screen.findByTestId('science-quality-banner');
+    expect(path0Banner.textContent).toContain('exceeds the 40 meV win gate');
+    expect(path0Banner.textContent).not.toContain('looks acceptable');
+    cleanup();
+
+    render(<SciencePanelDemo pathIndex={16} />);
+    expect((await screen.findByTestId('science-quality-banner')).textContent).toContain('looks acceptable');
   });
 
   it('renders the invalid state, not a partial panel, for an unknown canonical path', async () => {

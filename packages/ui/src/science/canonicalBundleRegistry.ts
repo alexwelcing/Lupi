@@ -18,10 +18,10 @@ function entry(pathIndex: number, serializedManifest: string, manifestSha256: st
 
 /** Exact canonical bytes from lupine-rhizo main and their serialized-manifest digests. */
 export const CANONICAL_BUNDLE_REGISTRY: Readonly<Record<number, CanonicalBundleRegistryEntry>> = {
-  0: entry(0, path0Raw, 'sha256:f3b25d6073b94430d4f7401987b4984e16de8e3f2bb7c9dc24cb59980697584c'),
-  14: entry(14, path14Raw, 'sha256:aba79c0ed7f98a0356a8c1aae31739b5398907805ee8fb2cd86e81f49808b525'),
-  16: entry(16, path16Raw, 'sha256:8fa964dffe3742df09f25375c64b145ab34de2dc89888bbe09696d2582bfeaf5'),
-  27: entry(27, path27Raw, 'sha256:748143a0099b75d96cd5cc158ab865f00928d14713497f19ea447e6e70a88128'),
+  0: entry(0, path0Raw, 'sha256:42c856fe737059ff389443ac6bda5b3604cc735196aaba4b16d45a9a9fa32bc3'),
+  14: entry(14, path14Raw, 'sha256:016d2f55b134ef7b94640a56a5bd9146202f3e0289203e321cc314d86ba067db'),
+  16: entry(16, path16Raw, 'sha256:22766c56417b9002e03668c65c53bdda5cb3b725946aef5af66105773708b8cf'),
+  27: entry(27, path27Raw, 'sha256:21c1e96c92588a592c52d7be0f42af377279b15c6a5bf350481d4e5f5ea0418a'),
 };
 
 function identityOf(entry: CanonicalBundleRegistryEntry): BundleIdentity {

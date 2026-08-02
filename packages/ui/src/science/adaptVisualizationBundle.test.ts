@@ -1,5 +1,6 @@
 import { getAtomicNumberBySymbol, type Trajectory } from '@atlas/core';
 import { describe, expect, it } from 'vitest';
+import path14 from './canonical-bundles/path-14.visualization-bundle.json';
 import path16 from './canonical-bundles/path-16.visualization-bundle.json';
 import path16Raw from './canonical-bundles/path-16.visualization-bundle.json?raw';
 import { CANONICAL_VALUE_SOURCE_ASSETS } from './canonicalValueSourceAssets';
@@ -9,7 +10,7 @@ import {
   verifyVisualizationManifest,
 } from './adaptVisualizationBundle';
 
-const MANIFEST_SHA = 'sha256:8fa964dffe3742df09f25375c64b145ab34de2dc89888bbe09696d2582bfeaf5';
+const MANIFEST_SHA = 'sha256:22766c56417b9002e03668c65c53bdda5cb3b725946aef5af66105773708b8cf';
 const clone = (): any => JSON.parse(JSON.stringify(path16));
 
 function trajectoryFromManifest(): Trajectory {
@@ -73,6 +74,64 @@ describe('canonical visualization-bundle adapter', () => {
     const unresolved = clone();
     unresolved.series[0].value_sources[0].json_pointer = '/not/a/real/value';
     expect(() => adaptVisualizationBundle(unresolved, MANIFEST_SHA)).toThrow(/unresolved value source/i);
+  });
+
+  it('rejects verified labels with failed checks and contradictory displayed derivations', () => {
+    const failedCheck = clone();
+    failedCheck.quality.checks[0].status = 'fail';
+    expect(() => adaptVisualizationBundle(failedCheck, MANIFEST_SHA)).toThrow(/failed quality check/i);
+
+    const mutations: Array<(manifest: any) => void> = [
+      (manifest) => { manifest.quality_gates.same_engine.dense_barrier_ev += 1; },
+      (manifest) => { manifest.quality_gates.cross_engine.reference_barrier_ev += 1; },
+      (manifest) => { manifest.quality_gates.cross_engine.dense_vs_reference_signed_error_mev += 1; },
+      (manifest) => { manifest.quality_gates.cross_engine.dense_vs_reference_abs_error_mev += 1; },
+      (manifest) => { manifest.quality_gates.t1.offset_series_mev[0].offset_mev += 1; },
+      (manifest) => { manifest.quality_gates.t1.offset_mean_mev += 1; },
+      (manifest) => { manifest.quality_gates.t1.wander_mev += 1; },
+      (manifest) => { manifest.quality_gates.t1.driver_pair.reverse(); },
+      (manifest) => { manifest.quality_gates.t1.verdict = 'clean'; },
+      (manifest) => { manifest.selection.per_model.chgnet.sparse_barrier_ev += 1; },
+      (manifest) => { manifest.selection.guidance_deficits_mev.chgnet.same_engine_abs_error_mev += 1; },
+      (manifest) => { manifest.quality_gates.same_engine.per_model.chgnet.verdict = 'loss'; },
+      (manifest) => { manifest.quality_gates.verdict.same_engine = 'loss'; },
+      (manifest) => { manifest.quality_gates.verdict.t1 = 'clean'; },
+      (manifest) => { manifest.quality_gates.verdict.cross_engine_contaminated = false; },
+      (manifest) => { manifest.quality_gates.verdict.label = 'loss_t1_clean'; },
+    ];
+    for (const mutate of mutations) {
+      const contradictory = clone();
+      mutate(contradictory);
+      expect(() => adaptVisualizationBundle(contradictory, MANIFEST_SHA)).toThrow(/derived canonical value mismatch/i);
+    }
+  });
+
+  it('preserves missing model evidence separately from failed evidence', () => {
+    const missing: any = JSON.parse(JSON.stringify(path14));
+    missing.model_provenance[0].status = 'missing';
+    missing.model_provenance[0].failure_reason = 'receipt unavailable';
+    const path = adaptVisualizationBundle(missing, MANIFEST_SHA);
+    expect(path.quality.state).toBe('no-guides-completed');
+    expect(path.quality.guidedModelCount).toBe(0);
+    expect(path.quality.failedModelCount).toBe(3);
+    expect(path.quality.missingModelCount).toBe(1);
+    expect(path.guidance.misses).toContainEqual(expect.objectContaining({
+      model: 'chgnet',
+      kind: 'model-missing',
+      reason: 'receipt unavailable',
+    }));
+  });
+
+  it('fails closed when model status and model-scoped evidence disagree', () => {
+    const inconsistent = clone();
+    inconsistent.model_provenance[0].status = 'missing';
+    expect(() => adaptVisualizationBundle(inconsistent, MANIFEST_SHA)).toThrow(/canonical model-state mismatch/i);
+  });
+
+  it('fails closed on duplicate model provenance identities', () => {
+    const duplicate = clone();
+    duplicate.model_provenance[1].model = duplicate.model_provenance[0].model;
+    expect(() => adaptVisualizationBundle(duplicate, MANIFEST_SHA)).toThrow(/duplicate model identities/i);
   });
 });
 

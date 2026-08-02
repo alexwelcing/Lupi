@@ -10,6 +10,7 @@ export type ScienceQualityState =
   | 'clean'
   | 'contaminated'
   | 'strong-win-contaminated'
+  | 'no-guides-completed'
   | 'all-guides-failed';
 
 export type AnchorPointStatus = 'evaluated' | 'nominated' | 'missing' | 'source';
@@ -58,7 +59,7 @@ export interface ModelAnchorInfo {
 
 export interface GuidanceMiss {
   model: string;
-  kind: 'model-failed' | 'extremum-missed';
+  kind: 'model-failed' | 'model-missing' | 'extremum-missed';
   reason?: string;
   missedImages?: number[];
   sameEngineAbsErrorMev?: number | null;
@@ -80,6 +81,7 @@ export interface ScienceBundleRevision {
   qualityWarnings: string[];
   sourceArtifacts: Array<{
     role: string;
+    uri: string;
     schema: string | null;
     sha256: string;
     bytes: number;
@@ -106,6 +108,7 @@ export interface SciencePathData {
     sameEngineStrongWin: boolean;
     guidedModelCount: number;
     failedModelCount: number;
+    missingModelCount?: number;
     modelDenominator: number;
     crossEngineErrorMev: number;
     /** Dense-GPAW − VASP signed error (direction matters; e.g. path-27 is negative). Optional for backward compatibility. */

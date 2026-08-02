@@ -680,6 +680,8 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
             <li key={miss.model} style={{ color: miss.kind === 'model-failed' ? OCHRE : INK }}>
               {miss.kind === 'model-failed'
                 ? `${miss.model}: guide failed (${miss.reason}) — counted in the denominator, not hidden`
+                : miss.kind === 'model-missing'
+                  ? `${miss.model}: guide evidence missing (${miss.reason}) — preserved as missing, not failed`
                 : `${miss.model}: missed dense extremum image(s) [${(miss.missedImages ?? []).join(', ')}]` +
                   (miss.sameEngineAbsErrorMev != null ? ` · same-engine deficit ${fmtMev(miss.sameEngineAbsErrorMev)} meV` : '')}
             </li>
@@ -688,6 +690,7 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
         <li>
           Model availability: {data.quality.guidedModelCount} of {data.quality.modelDenominator} models guided this path
           {data.quality.failedModelCount > 0 ? `; ${data.quality.failedModelCount} failed` : ''}.
+          {(data.quality.missingModelCount ?? 0) > 0 ? ` ${data.quality.missingModelCount} missing.` : ''}
           {maxDeficit != null && <> Same-engine deficit (max over models): {fmtMev(maxDeficit)} meV.</>}
         </li>
         <li>
@@ -726,8 +729,11 @@ function qualityCopy(data: SciencePathData, fixture: SciencePanelFixture): { tit
     case 'strong-win-contaminated':
       return {
         title: 'STRONG WIN (same-engine) — but cross-engine CONTAMINATED',
-        detail: `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed) looks acceptable (≤ ${fmtMev(win, 0)} meV), ` +
-          `yet T1 wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV gate — the agreement is a convention coincidence`,
+        detail: q.crossEngineLooksAcceptable
+          ? `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed) looks acceptable (≤ ${fmtMev(win, 0)} meV), ` +
+            `yet T1 wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV gate — the agreement is a convention coincidence`
+          : `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed) exceeds the ${fmtMev(win, 0)} meV win gate, ` +
+            `and T1 wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV gate — no cross-engine agreement is claimed`,
         warn: true,
       };
     case 'contaminated':
@@ -742,6 +748,13 @@ function qualityCopy(data: SciencePathData, fixture: SciencePanelFixture): { tit
         title: 'ALL GUIDES FAILED — dense extension supplied the profile',
         detail: `0 of ${q.modelDenominator} models produced a profile; every GPAW image evaluated as dense extension. ` +
           `This path stays visible as a failure case, not dropped from averages`,
+        warn: true,
+      };
+    case 'no-guides-completed':
+      return {
+        title: 'NO GUIDES COMPLETED — model states preserved',
+        detail: `${q.failedModelCount} failed and ${q.missingModelCount ?? 0} are missing out of ${q.modelDenominator}; ` +
+          `dense evidence remains visible without relabeling missing guidance as failure`,
         warn: true,
       };
   }
@@ -808,7 +821,8 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
             Barrier-lock source: {data.revision.sources.barrierLock}<br />
             {data.revision.sourceArtifacts.map((source) => (
               <span key={`${source.role}:${source.sha256}`}>
-                Source artifact ({source.role}): {source.sha256} · {source.bytes} bytes<br />
+                Source artifact ({source.role}): {source.uri} · {source.sha256} · {source.bytes} bytes
+                {' '}· schema {source.schema ?? 'none'} · git {source.gitCommit ?? 'none'}<br />
               </span>
             ))}
             Supersedes chain: {data.revision.supersedesChain.length > 0 ? data.revision.supersedesChain.join(' → ') : 'none'}

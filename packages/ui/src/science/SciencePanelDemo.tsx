@@ -63,9 +63,14 @@ export function ScienceFixtureInvalid({ errors }: { errors: string[] }) {
 export interface SciencePanelDemoProps {
   /** Exact canonical path selection. Unknown indices fail closed. */
   pathIndex?: number;
+  /** Test seam for delayed verification; production always uses the canonical resolver. */
+  verifyBundle?: typeof verifiedSciencePanelBundleForPathIndex;
 }
 
-export function SciencePanelDemo({ pathIndex }: SciencePanelDemoProps) {
+function SciencePanelDemoContent({
+  pathIndex,
+  verifyBundle = verifiedSciencePanelBundleForPathIndex,
+}: SciencePanelDemoProps) {
   const initialPath = useMemo(() => {
     if (pathIndex != null) return pathIndex;
     if (typeof window === 'undefined') return DEFAULT_Z1_SCIENCE_PATH_INDEX;
@@ -84,7 +89,7 @@ export function SciencePanelDemo({ pathIndex }: SciencePanelDemoProps) {
   useEffect(() => {
     let cancelled = false;
     setBundle(undefined);
-    void verifiedSciencePanelBundleForPathIndex(selectedPath).then((resolved) => {
+    void verifyBundle(selectedPath).then((resolved) => {
       if (cancelled) return;
       if (!resolved) {
         console.error('[science-panel] canonical bundle unavailable — failing closed:', selectedPath);
@@ -94,9 +99,9 @@ export function SciencePanelDemo({ pathIndex }: SciencePanelDemoProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedPath]);
+  }, [selectedPath, verifyBundle]);
 
-  if (bundle === undefined) {
+  if (bundle === undefined || (bundle !== null && bundle.path.pathIndex !== selectedPath)) {
     return <div data-testid="science-bundle-loading" role="status">Verifying canonical science bundle…</div>;
   }
 
@@ -158,6 +163,10 @@ export function SciencePanelDemo({ pathIndex }: SciencePanelDemoProps) {
       />
     </div>
   );
+}
+
+export function SciencePanelDemo(props: SciencePanelDemoProps) {
+  return <SciencePanelDemoContent key={props.pathIndex ?? 'url-selected'} {...props} />;
 }
 
 export default SciencePanelDemo;

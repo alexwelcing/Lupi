@@ -20,7 +20,7 @@
  *     ⟺ zero guided models).
  */
 
-const QUALITY_STATES = new Set(['clean', 'contaminated', 'strong-win-contaminated', 'all-guides-failed']);
+const QUALITY_STATES = new Set(['clean', 'contaminated', 'strong-win-contaminated', 'no-guides-completed', 'all-guides-failed']);
 const VALUE_STATUSES = new Set(['evaluated', 'nominated', 'missing', 'source']);
 const T1_VERDICTS = new Set(['clean', 'contaminated']);
 const FIXTURE_SCHEMA = 'lupi.z1-science-panel-fixture.v1';
@@ -111,12 +111,13 @@ export function validateSciencePanelFixture(input: unknown): FixtureValidation {
     } else {
       const g = quality.guidedModelCount;
       const f = quality.failedModelCount;
+      const m = quality.missingModelCount ?? 0;
       const d = quality.modelDenominator;
       if (!isInt(d) || (d as number) < 1) fail(P('.quality.modelDenominator'), 'expected integer ≥ 1 (honest denominators)');
-      if (!isInt(g) || (g as number) < 0 || !isInt(f) || (f as number) < 0) {
-        fail(P('.quality'), 'guided/failed model counts must be non-negative integers');
-      } else if (isInt(d) && (g as number) + (f as number) !== (d as number)) {
-        fail(P('.quality'), `guided (${g}) + failed (${f}) must equal denominator (${d})`);
+      if (!isInt(g) || (g as number) < 0 || !isInt(f) || (f as number) < 0 || !isInt(m) || (m as number) < 0) {
+        fail(P('.quality'), 'guided/failed/missing model counts must be non-negative integers');
+      } else if (isInt(d) && (g as number) + (f as number) + (m as number) !== (d as number)) {
+        fail(P('.quality'), `guided (${g}) + failed (${f}) + missing (${m}) must equal denominator (${d})`);
       }
       if (!isFiniteNumber(quality.crossEngineErrorMev) || (quality.crossEngineErrorMev as number) < 0) {
         fail(P('.quality.crossEngineErrorMev'), 'expected non-negative finite number');
@@ -303,6 +304,12 @@ export function validateSciencePanelFixture(input: unknown): FixtureValidation {
       }
       if (path.qualityState === 'all-guides-failed' && quality.guidedModelCount !== 0) {
         fail(P('.qualityState'), 'all-guides-failed requires guidedModelCount 0');
+      }
+      if (path.qualityState === 'all-guides-failed' && quality.failedModelCount !== quality.modelDenominator) {
+        fail(P('.qualityState'), 'all-guides-failed requires every model state to be failed');
+      }
+      if (path.qualityState === 'no-guides-completed' && (quality.guidedModelCount !== 0 || (quality.missingModelCount ?? 0) === 0)) {
+        fail(P('.qualityState'), 'no-guides-completed requires zero guided models and at least one missing model');
       }
     }
 

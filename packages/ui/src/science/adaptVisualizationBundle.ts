@@ -18,6 +18,7 @@ const validateSchema = ajv.compile(schema);
 
 type SourceArtifact = {
   role: string;
+  uri: string;
   schema: string | null;
   sha256: string;
   bytes: number;
@@ -76,12 +77,28 @@ type CanonicalManifest = {
       sparse_barrier_ev: number;
     }>;
     guidance_misses: Record<string, number[]>;
-    guidance_deficits_mev: Record<string, { same_engine_abs_error_mev: number; sparse_barrier_ev: number }>;
+    guidance_deficits_mev: Record<string, {
+      dense_barrier_ev: number;
+      same_engine_abs_error_mev: number;
+      same_engine_signed_error_mev: number;
+      sparse_barrier_ev: number;
+    }>;
     subset_theorem: string;
   };
   quality_gates: {
     thresholds_mev: { strong_win: number; win: number; t1_gate: number };
-    same_engine: { dense_complete: boolean; dense_barrier_ev: number | null };
+    same_engine: {
+      dense_complete: boolean;
+      dense_barrier_ev: number | null;
+      per_model: Record<string, {
+        complete: boolean;
+        dense_barrier_ev: number | null;
+        same_engine_abs_error_mev: number | null;
+        same_engine_signed_error_mev: number | null;
+        sparse_barrier_ev: number | null;
+        verdict: 'strong_win' | 'win' | 'loss' | 'incomplete';
+      }>;
+    };
     cross_engine: {
       reference_barrier_ev: number;
       dense_vs_reference_signed_error_mev: number | null;
@@ -91,6 +108,8 @@ type CanonicalManifest = {
       offset_definition: string;
       offset_series_mev: Array<{ image_index: number; offset_mev: number }>;
       offset_mean_mev: number | null;
+      offset_min_mev: number | null;
+      offset_max_mev: number | null;
       wander_mev: number | null;
       gate_mev: number;
       verdict: 'clean' | 'contaminated' | 'insufficient_data';
@@ -99,6 +118,7 @@ type CanonicalManifest = {
     verdict: {
       same_engine: 'strong_win' | 'win' | 'loss' | 'incomplete' | 'no_guidance';
       t1: 'clean' | 'contaminated' | 'insufficient_data';
+      cross_engine_contaminated: boolean;
       label: string;
     };
   };
@@ -142,6 +162,42 @@ function resolveJsonPointer(document: unknown, pointer: string): unknown {
   return current;
 }
 
+function canonicalNumbersAgree(actual: number | null, expected: number | null): boolean {
+  if (actual == null || expected == null) return actual === expected;
+  return Number.isFinite(actual) && Number.isFinite(expected) && Math.abs(actual - expected) <= 1e-9;
+}
+
+function assertDerivedCanonicalValue(label: string, actual: unknown, expected: unknown): void {
+  const agrees = typeof actual === 'number' || actual == null
+    ? canonicalNumbersAgree(actual as number | null, expected as number | null)
+    : JSON.stringify(actual) === JSON.stringify(expected);
+  if (!agrees) {
+    throw new Error(`Derived canonical value mismatch for ${label}`);
+  }
+}
+
+function sameEngineVerdict(
+  absoluteErrorMev: number | null,
+  complete: boolean,
+  strongWinMev: number,
+  winMev: number,
+): 'strong_win' | 'win' | 'loss' | 'incomplete' {
+  if (!complete || absoluteErrorMev == null) return 'incomplete';
+  if (absoluteErrorMev <= strongWinMev) return 'strong_win';
+  if (absoluteErrorMev <= winMev) return 'win';
+  return 'loss';
+}
+
+function assertExactModelSet(label: string, actual: string[], expected: string[]): void {
+  const actualSorted = [...actual].sort();
+  const expectedSorted = [...expected].sort();
+  if (new Set(actualSorted).size !== actualSorted.length || actualSorted.join('\0') !== expectedSorted.join('\0')) {
+    throw new Error(
+      `Canonical model-state mismatch at ${label}: expected [${expectedSorted.join(', ')}], got [${actualSorted.join(', ')}]`,
+    );
+  }
+}
+
 function validateCanonicalManifest(input: unknown): CanonicalManifest {
   const candidate = input as { schema?: unknown } | null;
   if (candidate?.schema !== SCHEMA) {
@@ -157,6 +213,10 @@ function validateCanonicalManifest(input: unknown): CanonicalManifest {
   }
   if (manifest.quality.state !== 'verified' && manifest.quality.state !== 'published') {
     throw new Error(`Panel requires verified or published quality; got ${manifest.quality.state}`);
+  }
+  const failedQualityCheck = manifest.quality.checks.find((check) => check.status !== 'pass');
+  if (failedQualityCheck) {
+    throw new Error(`Panel rejects failed quality check: ${failedQualityCheck.name}`);
   }
 
   const wantedImages = Array.from({ length: manifest.image_count }, (_, index) => index);
@@ -219,6 +279,116 @@ function validateCanonicalManifest(input: unknown): CanonicalManifest {
     }
   }
 
+  const denseSeries = manifest.series.find((series) => series.series_id === 'gpaw_total_energy');
+  const referenceSeries = manifest.series.find((series) => series.series_id === 'vasp_reference_total_energy');
+  if (!denseSeries || !referenceSeries) {
+    throw new Error('Derived canonical value mismatch: required GPAW and VASP series are missing');
+  }
+  const denseExtrema = extrema(denseSeries.values);
+  const referenceExtrema = extrema(referenceSeries.values);
+  const denseBarrier = denseExtrema.barrierEv;
+  const referenceBarrier = referenceExtrema.barrierEv;
+  if (denseBarrier == null || referenceBarrier == null) {
+    throw new Error('Derived canonical value mismatch: complete GPAW and VASP barriers are required');
+  }
+  const signedCrossEngineErrorMev = (denseBarrier - referenceBarrier) * 1000;
+  assertDerivedCanonicalValue('quality_gates.same_engine.dense_barrier_ev', manifest.quality_gates.same_engine.dense_barrier_ev, denseBarrier);
+  assertDerivedCanonicalValue('quality_gates.cross_engine.reference_barrier_ev', manifest.quality_gates.cross_engine.reference_barrier_ev, referenceBarrier);
+  assertDerivedCanonicalValue('quality_gates.cross_engine.dense_vs_reference_signed_error_mev', manifest.quality_gates.cross_engine.dense_vs_reference_signed_error_mev, signedCrossEngineErrorMev);
+  assertDerivedCanonicalValue('quality_gates.cross_engine.dense_vs_reference_abs_error_mev', manifest.quality_gates.cross_engine.dense_vs_reference_abs_error_mev, Math.abs(signedCrossEngineErrorMev));
+
+  const verdictRank = { strong_win: 0, win: 1, loss: 2, incomplete: 3 } as const;
+  const perModelVerdicts: Array<'strong_win' | 'win' | 'loss' | 'incomplete'> = [];
+  for (const [model, selection] of Object.entries(manifest.selection.per_model)) {
+    const nominatedValues = selection.nominated.map((image) => denseSeries.values[image]);
+    if (nominatedValues.some((value) => value == null)) {
+      throw new Error(`Derived canonical value mismatch: ${model} nominated an unevaluated GPAW image`);
+    }
+    const sparseBarrier = extrema(nominatedValues as number[]).barrierEv;
+    if (sparseBarrier == null) {
+      throw new Error(`Derived canonical value mismatch: ${model} has no nominated GPAW values`);
+    }
+    const signedSameEngineErrorMev = (sparseBarrier - denseBarrier) * 1000;
+    const absoluteSameEngineErrorMev = Math.abs(signedSameEngineErrorMev);
+    const deficit = manifest.selection.guidance_deficits_mev[model];
+    const gate = manifest.quality_gates.same_engine.per_model[model];
+    if (!deficit || !gate) {
+      throw new Error(`Derived canonical value mismatch: ${model} guidance evidence is missing`);
+    }
+    assertDerivedCanonicalValue(`selection.per_model.${model}.sparse_barrier_ev`, selection.sparse_barrier_ev, sparseBarrier);
+    assertDerivedCanonicalValue(`selection.guidance_deficits_mev.${model}.dense_barrier_ev`, deficit.dense_barrier_ev, denseBarrier);
+    assertDerivedCanonicalValue(`selection.guidance_deficits_mev.${model}.sparse_barrier_ev`, deficit.sparse_barrier_ev, sparseBarrier);
+    assertDerivedCanonicalValue(`selection.guidance_deficits_mev.${model}.same_engine_signed_error_mev`, deficit.same_engine_signed_error_mev, signedSameEngineErrorMev);
+    assertDerivedCanonicalValue(`selection.guidance_deficits_mev.${model}.same_engine_abs_error_mev`, deficit.same_engine_abs_error_mev, absoluteSameEngineErrorMev);
+    assertDerivedCanonicalValue(`quality_gates.same_engine.per_model.${model}.complete`, gate.complete, selection.complete);
+    assertDerivedCanonicalValue(`quality_gates.same_engine.per_model.${model}.dense_barrier_ev`, gate.dense_barrier_ev, denseBarrier);
+    assertDerivedCanonicalValue(`quality_gates.same_engine.per_model.${model}.sparse_barrier_ev`, gate.sparse_barrier_ev, sparseBarrier);
+    assertDerivedCanonicalValue(`quality_gates.same_engine.per_model.${model}.same_engine_signed_error_mev`, gate.same_engine_signed_error_mev, signedSameEngineErrorMev);
+    assertDerivedCanonicalValue(`quality_gates.same_engine.per_model.${model}.same_engine_abs_error_mev`, gate.same_engine_abs_error_mev, absoluteSameEngineErrorMev);
+    const verdict = sameEngineVerdict(
+      absoluteSameEngineErrorMev,
+      selection.complete,
+      manifest.quality_gates.thresholds_mev.strong_win,
+      manifest.quality_gates.thresholds_mev.win,
+    );
+    assertDerivedCanonicalValue(`quality_gates.same_engine.per_model.${model}.verdict`, gate.verdict, verdict);
+    perModelVerdicts.push(verdict);
+  }
+
+  const offsets = denseSeries.values.flatMap((denseValue, image) => {
+    const referenceValue = referenceSeries.values[image];
+    return denseValue == null || referenceValue == null
+      ? []
+      : [{ image_index: image, offset_mev: (denseValue - referenceValue) * 1000 }];
+  });
+  const t1 = manifest.quality_gates.t1;
+  if (
+    t1.offset_series_mev.length !== offsets.length
+    || t1.offset_series_mev.some((offset, index) => (
+      offset.image_index !== offsets[index]?.image_index
+      || !canonicalNumbersAgree(offset.offset_mev, offsets[index]?.offset_mev ?? null)
+    ))
+  ) {
+    throw new Error('Derived canonical value mismatch for quality_gates.t1.offset_series_mev');
+  }
+  if (offsets.length === 0) {
+    assertDerivedCanonicalValue('quality_gates.t1.offset_mean_mev', t1.offset_mean_mev, null);
+    assertDerivedCanonicalValue('quality_gates.t1.offset_min_mev', t1.offset_min_mev, null);
+    assertDerivedCanonicalValue('quality_gates.t1.offset_max_mev', t1.offset_max_mev, null);
+    assertDerivedCanonicalValue('quality_gates.t1.wander_mev', t1.wander_mev, null);
+    assertDerivedCanonicalValue('quality_gates.t1.driver_pair', t1.driver_pair, null);
+    assertDerivedCanonicalValue('quality_gates.t1.verdict', t1.verdict, 'insufficient_data');
+  } else {
+    const minimumOffset = offsets.reduce((minimum, offset) => offset.offset_mev < minimum.offset_mev ? offset : minimum);
+    const maximumOffset = offsets.reduce((maximum, offset) => offset.offset_mev > maximum.offset_mev ? offset : maximum);
+    const offsetMean = offsets.reduce((sum, offset) => sum + offset.offset_mev, 0) / offsets.length;
+    const wander = maximumOffset.offset_mev - minimumOffset.offset_mev;
+    assertDerivedCanonicalValue('quality_gates.t1.offset_mean_mev', t1.offset_mean_mev, offsetMean);
+    assertDerivedCanonicalValue('quality_gates.t1.offset_min_mev', t1.offset_min_mev, minimumOffset.offset_mev);
+    assertDerivedCanonicalValue('quality_gates.t1.offset_max_mev', t1.offset_max_mev, maximumOffset.offset_mev);
+    assertDerivedCanonicalValue('quality_gates.t1.wander_mev', t1.wander_mev, wander);
+    assertDerivedCanonicalValue('quality_gates.t1.driver_pair', t1.driver_pair, [minimumOffset.image_index, maximumOffset.image_index]);
+    assertDerivedCanonicalValue('quality_gates.t1.verdict', t1.verdict, wander <= t1.gate_mev ? 'clean' : 'contaminated');
+  }
+  assertDerivedCanonicalValue('quality_gates.thresholds_mev.t1_gate', manifest.quality_gates.thresholds_mev.t1_gate, t1.gate_mev);
+  const expectedSameEngineVerdict = perModelVerdicts.length === 0
+    ? 'no_guidance'
+    : perModelVerdicts.reduce((worst, verdict) => (
+      verdictRank[verdict] > verdictRank[worst] ? verdict : worst
+    ));
+  assertDerivedCanonicalValue('quality_gates.verdict.same_engine', manifest.quality_gates.verdict.same_engine, expectedSameEngineVerdict);
+  assertDerivedCanonicalValue('quality_gates.verdict.t1', manifest.quality_gates.verdict.t1, t1.verdict);
+  assertDerivedCanonicalValue(
+    'quality_gates.verdict.cross_engine_contaminated',
+    manifest.quality_gates.verdict.cross_engine_contaminated,
+    t1.verdict === 'contaminated',
+  );
+  assertDerivedCanonicalValue(
+    'quality_gates.verdict.label',
+    manifest.quality_gates.verdict.label,
+    `${expectedSameEngineVerdict}_t1_${t1.verdict}`,
+  );
+
   const sourceRoles = new Set(manifest.source_artifacts.map((source) => source.role));
   for (const role of ['campaign_record', 'barrier_panel', 'anchor_receipt', 'model_cell_result']) {
     if (!sourceRoles.has(role)) throw new Error(`Invalid source_artifacts: required role ${role} is missing`);
@@ -260,8 +430,9 @@ function pointStatus(status: string, value: number | null): AnchorPointStatus {
   return status === 'evaluated' ? 'evaluated' : 'source';
 }
 
-function qualityState(manifest: CanonicalManifest, successful: number): ScienceQualityState {
-  if (successful === 0) return 'all-guides-failed';
+function qualityState(manifest: CanonicalManifest, successful: number, failed: number): ScienceQualityState {
+  if (successful === 0 && failed === manifest.model_provenance.length) return 'all-guides-failed';
+  if (successful === 0) return 'no-guides-completed';
   if (manifest.quality_gates.t1.verdict === 'clean') return 'clean';
   return manifest.quality_gates.verdict.same_engine === 'strong_win'
     ? 'strong-win-contaminated'
@@ -280,8 +451,33 @@ export function adaptVisualizationBundle(
   if (manifest.supersedes !== (resolvedSupersedesChain[0] ?? null)) {
     throw new Error('Invalid supersedes chain: immediate predecessor does not match the manifest');
   }
+  const provenanceModelNames = manifest.model_provenance.map((model) => model.model);
+  if (new Set(provenanceModelNames).size !== provenanceModelNames.length) {
+    throw new Error('Canonical model-state mismatch: model_provenance contains duplicate model identities');
+  }
   const successfulModels = manifest.model_provenance.filter((model) => model.status === 'completed');
-  const failedModels = manifest.model_provenance.filter((model) => model.status !== 'completed');
+  const failedModels = manifest.model_provenance.filter((model) => model.status === 'failed');
+  const missingModels = manifest.model_provenance.filter((model) => model.status === 'missing');
+  const completedModelNames = successfulModels.map((model) => model.model);
+  assertExactModelSet(
+    'series[series_id=model_total_energy/*]',
+    manifest.series
+      .filter((source) => source.series_id.startsWith('model_total_energy/'))
+      .map((source) => source.engine_or_model),
+    completedModelNames,
+  );
+  assertExactModelSet('selection.per_model', Object.keys(manifest.selection.per_model), completedModelNames);
+  assertExactModelSet(
+    'selection.guidance_deficits_mev',
+    Object.keys(manifest.selection.guidance_deficits_mev),
+    completedModelNames,
+  );
+  assertExactModelSet('selection.guidance_misses', Object.keys(manifest.selection.guidance_misses), completedModelNames);
+  assertExactModelSet(
+    'quality_gates.same_engine.per_model',
+    Object.keys(manifest.quality_gates.same_engine.per_model),
+    completedModelNames,
+  );
   const denseExtension = new Set(manifest.selection.dense_extension.supplied_indices);
   const series: ScienceEnergySeries[] = manifest.series.map((source) => ({
     id: panelSeriesId(source),
@@ -343,7 +539,7 @@ export function adaptVisualizationBundle(
   }
   const sources = manifest.source_artifacts;
   const sourceDigests = (role: string) => sources.filter((source) => source.role === role).map((source) => source.sha256);
-  const state = qualityState(manifest, successfulModels.length);
+  const state = qualityState(manifest, successfulModels.length, failedModels.length);
 
   return {
     revision: {
@@ -362,6 +558,7 @@ export function adaptVisualizationBundle(
       qualityWarnings: manifest.quality.warnings,
       sourceArtifacts: sources.map((source) => ({
         role: source.role,
+        uri: source.uri,
         schema: source.schema,
         sha256: source.sha256,
         bytes: source.bytes,
@@ -385,6 +582,7 @@ export function adaptVisualizationBundle(
       sameEngineStrongWin: manifest.quality_gates.verdict.same_engine === 'strong_win',
       guidedModelCount: successfulModels.length,
       failedModelCount: failedModels.length,
+      missingModelCount: missingModels.length,
       modelDenominator: manifest.model_provenance.length,
       crossEngineErrorMev: absoluteCrossEngine,
       crossEngineSignedErrorMev: signedCrossEngine,
@@ -430,6 +628,7 @@ export function adaptVisualizationBundle(
     guidance: {
       misses: [
         ...failedModels.map((model) => ({ model: model.model, kind: 'model-failed' as const, reason: model.failure_reason ?? 'model unavailable' })),
+        ...missingModels.map((model) => ({ model: model.model, kind: 'model-missing' as const, reason: model.failure_reason ?? 'model evidence missing' })),
         ...Object.entries(manifest.selection.guidance_misses)
           .filter(([, images]) => images.length > 0)
           .map(([model, images]) => ({
