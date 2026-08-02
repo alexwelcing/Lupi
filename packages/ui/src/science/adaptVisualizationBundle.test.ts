@@ -21,8 +21,16 @@ function trajectoryFromManifest(): Trajectory {
     frames: path16.coordinates.frames.map((sourceFrame, image) => ({
       timestep: image,
       natoms: path16.coordinates.atom_count,
-      boxBounds: new Float64Array(6),
-      boxTilt: new Float64Array(3),
+      boxBounds: Float64Array.from([
+        0, Math.hypot(...sourceFrame.lattice_angstrom[0]),
+        0, Math.hypot(...sourceFrame.lattice_angstrom[1]),
+        0, Math.hypot(...sourceFrame.lattice_angstrom[2]),
+      ]),
+      boxTilt: Float64Array.from([
+        sourceFrame.lattice_angstrom[1][0],
+        sourceFrame.lattice_angstrom[2][0],
+        sourceFrame.lattice_angstrom[2][1],
+      ]),
       triclinic: true,
       columns: ['id', 'type', 'x', 'y', 'z'],
       ids: Int32Array.from(path16.coordinates.atom_ids.map((_, index) => index + 1)),

@@ -58,7 +58,12 @@ type CanonicalManifest = {
     atom_ids: string[];
     species: string[];
     reaction_coordinate: { definition: string; unit: string; values: number[] };
-    frames: Array<{ image_index: number; positions_angstrom: number[][] }>;
+    frames: Array<{
+      image_index: number;
+      lattice_angstrom: number[][];
+      pbc: boolean[];
+      positions_angstrom: number[][];
+    }>;
   };
   series: CanonicalSeries[];
   selection: {
@@ -643,6 +648,99 @@ export function adaptVisualizationBundle(
   };
 }
 
+function vectorLength(v: number[]): number {
+  return Math.hypot(v[0], v[1], v[2]);
+}
+
+/** Cell semantics must agree with positions before a trajectory may present bundle science. */
+function verifyTrajectoryLattice(manifest: CanonicalManifest, trajectory: Trajectory): void {
+  manifest.coordinates.frames.forEach((sourceFrame, image) => {
+    const frame = trajectory.frames[image];
+    const lattice = sourceFrame.lattice_angstrom;
+    if (!frame || !lattice || lattice.length !== 3) {
+      throw new Error(`Cell mismatch at NEB image ${image}: manifest lattice is unavailable`);
+    }
+    const [xlo, xhi, ylo, yhi, zlo, zhi] = Array.from(frame.boxBounds);
+    const spans = [xhi - xlo, yhi - ylo, zhi - zlo];
+    const lengths = lattice.map(vectorLength);
+    spans.forEach((span, axis) => {
+      if (Math.abs(span - lengths[axis]) > 1e-4) {
+        throw new Error(
+          `Cell mismatch at NEB image ${image}: box span ${axis} is ${span.toFixed(5)} Å but the canonical lattice is ${lengths[axis].toFixed(5)} Å`,
+        );
+      }
+    });
+    const [xy, xz, yz] = Array.from(frame.boxTilt);
+    if (frame.triclinic) {
+      const tilts: Array<[number, [number, number], number]> = [
+        [xy, [1, 0], lattice[1][0]],
+        [xz, [2, 0], lattice[2][0]],
+        [yz, [2, 1], lattice[2][1]],
+      ];
+      for (const [expected, [row, col], actual] of tilts) {
+        if (Math.abs(actual - expected) > 1e-4) {
+          throw new Error(
+            `Cell mismatch at NEB image ${image}: triclinic tilt differs from the canonical lattice (${actual.toFixed(5)} vs ${expected.toFixed(5)})`,
+          );
+        }
+      }
+    } else {
+      const offDiagonal = [
+        lattice[0][1], lattice[0][2], lattice[1][0],
+        lattice[1][2], lattice[2][0], lattice[2][1],
+      ];
+      if (offDiagonal.some((component) => Math.abs(component) > 1e-4)) {
+        throw new Error(`Cell mismatch at NEB image ${image}: orthogonal box cannot carry a non-orthogonal canonical lattice`);
+      }
+    }
+  });
+}
+
+function assertIndexSet(indices: number[], imageCount: number, label: string): void {
+  indices.forEach((index) => {
+    if (!Number.isInteger(index) || index < 0 || index >= imageCount) {
+      throw new Error(`Anchor set ${label} contains out-of-range image ${index} (image_count=${imageCount})`);
+    }
+  });
+}
+
+/** Pinned anchor evidence must be internally consistent before it may be projected. */
+function verifyAnchorSets(manifest: CanonicalManifest): void {
+  const imageCount = manifest.image_count;
+  const selection = manifest.selection;
+  assertIndexSet(selection.anchor_universe, imageCount, 'anchor_universe');
+  assertIndexSet(selection.evaluated, imageCount, 'evaluated');
+  assertIndexSet(selection.nominated_union, imageCount, 'nominated_union');
+  assertIndexSet(selection.dense_extension.supplied_indices, imageCount, 'dense_extension');
+  for (const [model, perModel] of Object.entries(selection.per_model)) {
+    assertIndexSet(perModel.nominated, imageCount, `per_model.${model}.nominated`);
+    assertIndexSet(perModel.evaluated, imageCount, `per_model.${model}.evaluated`);
+  }
+  const universe = new Set(selection.anchor_universe);
+  const evaluated = new Set(selection.evaluated);
+  const union = new Set(selection.nominated_union);
+  if (!selection.nominated_union.every((image) => universe.has(image))) {
+    throw new Error('Anchor set nominated_union is not contained in anchor_universe');
+  }
+  const successfulNominated = new Set<number>();
+  for (const model of manifest.model_provenance) {
+    if (model.status === 'completed') {
+      selection.per_model[model.model]?.nominated.forEach((image) => successfulNominated.add(image));
+    }
+  }
+  if (successfulNominated.size !== union.size || [...successfulNominated].some((image) => !union.has(image))) {
+    throw new Error('Anchor set nominated_union does not equal the union of successful per-model nominations');
+  }
+  const expectedExtension = new Set([...evaluated].filter((image) => !union.has(image)));
+  const suppliedExtension = new Set(selection.dense_extension.supplied_indices);
+  if (
+    suppliedExtension.size !== expectedExtension.size
+    || [...suppliedExtension].some((image) => !expectedExtension.has(image))
+  ) {
+    throw new Error('Dense-extension set does not equal evaluated minus nominated_union');
+  }
+}
+
 function verifyTrajectoryAtomOrder(manifest: CanonicalManifest, trajectory: Trajectory): void {
   if (trajectory.totalFrames !== manifest.image_count || trajectory.frames.length !== manifest.image_count) {
     throw new Error(`Trajectory/profile frame mismatch: expected ${manifest.image_count}, got ${trajectory.totalFrames}`);
@@ -764,5 +862,7 @@ export async function verifyVisualizationBundle({
     supersedesChain,
   });
   verifyTrajectoryAtomOrder(verified.manifest, trajectory);
+  verifyTrajectoryLattice(verified.manifest, trajectory);
+  verifyAnchorSets(verified.manifest);
   return verified.path;
 }

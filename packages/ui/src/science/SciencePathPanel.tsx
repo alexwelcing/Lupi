@@ -636,7 +636,7 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
         </thead>
         <tbody>
           {models.map(([model, m]) => {
-            const failed = m.status !== 'guided';
+            const failed = m.status !== 'guided' && m.status !== 'completed';
             const unionOnly = [...union].filter((i) => !m.nominated.includes(i));
             return (
               <tr key={model} style={{ borderBottom: `1px solid ${GRID}`, color: failed ? OCHRE : INK }}>

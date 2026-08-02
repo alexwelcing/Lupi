@@ -15,8 +15,16 @@ function canonicalTrajectory(pathIndex: number): Trajectory {
     frames: manifest.coordinates.frames.map((sourceFrame: any, image: number) => ({
       timestep: image,
       natoms: manifest.coordinates.atom_count,
-      boxBounds: new Float64Array(6),
-      boxTilt: new Float64Array(3),
+      boxBounds: Float64Array.from([
+        0, Math.hypot(...sourceFrame.lattice_angstrom[0]),
+        0, Math.hypot(...sourceFrame.lattice_angstrom[1]),
+        0, Math.hypot(...sourceFrame.lattice_angstrom[2]),
+      ]),
+      boxTilt: Float64Array.from([
+        sourceFrame.lattice_angstrom[1][0],
+        sourceFrame.lattice_angstrom[2][0],
+        sourceFrame.lattice_angstrom[2][1],
+      ]),
       triclinic: true,
       columns: ['id', 'type', 'x', 'y', 'z'],
       ids: Int32Array.from(manifest.coordinates.atom_ids.map((_: string, index: number) => index + 1)),
