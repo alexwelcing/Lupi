@@ -14,7 +14,7 @@ This document maps the canonical Lupine visualization bundle to the Lupi science
 1. Z1 frames are a **reaction-path sequence** of zero-based **NEB images**. A defined reaction coordinate may replace image index only when its definition and unit come from the bundle.
 2. Never label an NEB image as time, trajectory time, elapsed time, temperature, kinetics, or dynamics. Playback is navigation through a reaction path, not physical time evolution.
 3. `ThermoMinimap` is forbidden for this data. In particular, its fallback from missing `Temp` to the first numeric column can color image index as if it were temperature. Science-bundle navigation must use a dedicated zero-based NEB-image control.
-4. Path-0 electronic diagnostics (SCF status, iterations/residual, gap, Fermi level, smearing/occupations, or spin policy) must be absent unless a separate diagnostic artifact and exact source pointer are bound. None of the four current golden bundles has an `electronic_diagnostics` field.
+4. Path-0 electronic diagnostics (SCF status, iterations/residual, gap, Fermi level, smearing/occupations, or spin policy) are bound for image 3 via a separate diagnostic artifact and exact source pointer (`diagnostics.status: bound`; two SCF runs and four `electronic_diagnostic` source artifacts). Paths 14, 16, and 27 carry no diagnostics.
 5. Missing and failed observations remain missing or failed. Do not interpolate them, connect a line through them, or convert a failed model into a zero-valued series.
 6. Same-engine GPAW evidence is primary. Cross-engine GPAW-versus-VASP evidence is secondary and must display the T1 contamination verdict.
 
@@ -116,7 +116,7 @@ The panel's “source vs inferred” audit is constructed as follows:
 | Migrating-atom highlight | Inferred/derived annotation | Current converter chooses the largest endpoint minimum-image displacement. |
 | Bonds/coordination graphics | Inferred unless separately bound | No source topology is present in the goldens. If bonds are drawn using viewer heuristics, label them inferred; do not use them as quantitative mechanism evidence. |
 | Unwrapped motion | Absent | `unwrapped_convention` is null in the goldens. Do not claim unwrapped coordinates. |
-| Electronic diagnostics | Absent | No separately bound diagnostic artifact/field exists, especially for path 0. |
+| Electronic diagnostics | Bound for path 0 image 3 | Two metallic-saddle SCF runs (adopted h=0.20 and comparison), with four `electronic_diagnostic` source artifacts; no other golden path carries diagnostics. |
 | Temperature/kinetics/time | Forbidden inference | The bundle supplies none of these quantities. |
 
 ## Four golden roles and available data
@@ -125,7 +125,7 @@ The canonical repository-relative manifests are:
 
 | Role | Manifest | Expected panel evidence |
 | --- | --- | --- |
-| Large-wander mechanism | `data/visualization/z1-golden/path-0.visualization-bundle.json` | 7 images; path ID `mp-761269_2_1_1_-1_0`; bundle ID `sha256:85ab92ff6f2dc3aebf8dd8c5642d5173a84c96ebaeeaefc2f7ad1555230a24ec`; dense extension `[1,5]`; all four guides completed and same-engine `strong_win`; T1 contaminated with 4212.33092634 meV wander and driver pair `[0,3]`; cross-engine error 4212.26030045 meV. Electronic diagnostics are absent. |
+| Large-wander mechanism | `data/visualization/z1-golden/path-0.visualization-bundle.json` | 7 images; path ID `mp-761269_2_1_1_-1_0`; bundle ID `sha256:85ab92ff6f2dc3aebf8dd8c5642d5173a84c96ebaeeaefc2f7ad1555230a24ec`; dense extension `[1,5]`; all four guides completed and same-engine `strong_win`; T1 contaminated with 4212.33092634 meV wander and driver pair `[0,3]`; cross-engine error 4212.26030045 meV. Electronic diagnostics are bound for image 3 (metallic-saddle SCF evidence, adopted h=0.20 run plus comparison run). |
 | All guides failed / dense completion | `data/visualization/z1-golden/path-14.visualization-bundle.json` | 7 images; path ID `mp-756912_1_1_1_0_0`; bundle ID `sha256:d2b2932287d1995534fabba7316e7a8f8b09aab67b1d82057cb9451898566f10`; all four `model_provenance` records are `failed` with “CI-NEB did not converge under the frozen protocol”; no model series, nominations, or guidance entries; union `[]`; dense extension is all images; same-engine verdict `not_applicable` with a 0-of-4 denominator; T1 contaminated with 4542.38853759 meV wander and driver pair `[0,4]`. |
 | Apparently successful but contaminated | `data/visualization/z1-golden/path-16.visualization-bundle.json` | 5 images; path ID `mp-760344_10_4_0_1_0`; bundle ID `sha256:c3ef7c66c57542b488e0ad1362fcdb4d160ccd96e9f4732a5135c77c096eb81c`; all four guides completed, full union, no dense-extension indices, same-engine `strong_win`; cross-engine error 32.7296928566 meV but T1 contaminated with 117.271678515 meV wander and driver pair `[1,3]`. |
 | Sole T1-clean path | `data/visualization/z1-golden/path-27.visualization-bundle.json` | 5 images; path ID `mp-752552_0_7_0_0_1`; bundle ID `sha256:365c03cac0ea5ccd19f28e39f2b20f63aa50e57d7cc25935d523f4bf54f67dd0`; all four guides completed, full union, no dense-extension indices, same-engine `strong_win`; T1 clean with 33.4682497736 meV wander, driver pair `[2,0]`, and cross-engine error -33.4000753630 meV. |

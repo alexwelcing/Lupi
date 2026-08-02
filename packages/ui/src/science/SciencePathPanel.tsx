@@ -703,6 +703,11 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
         <li style={{ color: MUTED }}>
           Subset theorem used by Z1: {data.guidance.subsetTheorem}.
         </li>
+        <li data-testid="science-anchor-rule" style={{ fontFamily: MONO, fontSize: 11.5 }}>
+          Anchor rule: {data.anchors.rule.id} · {data.anchors.rule.version} · source {data.anchors.rule.source.path} @{' '}
+          {data.anchors.rule.source.git_commit.slice(0, 10)} · ties: {data.anchors.rule.extremaTiePolicy} · window:{' '}
+          {data.anchors.rule.windowRule}
+        </li>
       </ul>
     </section>
   );

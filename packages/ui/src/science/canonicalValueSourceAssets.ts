@@ -39,6 +39,7 @@ import source36 from './canonical-value-sources/f2d099fe9039e7ebddf7a7df7ce5d38c
 import source37 from './canonical-value-sources/f59fbe4d0b5da966d3c95f6725d4aa300346a17f3d00f1f5bc1981119b90d343.json?raw';
 import source38 from './canonical-value-sources/f859ee347b7fcf9af9ff10cb3ea9b4a8bed298a15a29bbbe41c9c5a7c64e2ab9.json?raw';
 import source39 from './canonical-value-sources/f8e79f556cce60cde7b93210ab4f8a734b29b49b16d18c7d441260581b632535.json?raw';
+import source40 from './canonical-value-sources/af8a02ad5a663de2433b78917569af01f12a10f54ac8d94b33e934cfedc8a3f2.json?raw';
 
 export const CANONICAL_VALUE_SOURCE_ASSETS: Readonly<Record<string, string>> = {
   'sha256:151e7b06ab1e3c1fbc0df334ceb23fef9e0cbb9dcfe08cccf869ac5e59e9e42f': source0,
@@ -81,4 +82,5 @@ export const CANONICAL_VALUE_SOURCE_ASSETS: Readonly<Record<string, string>> = {
   'sha256:f59fbe4d0b5da966d3c95f6725d4aa300346a17f3d00f1f5bc1981119b90d343': source37,
   'sha256:f859ee347b7fcf9af9ff10cb3ea9b4a8bed298a15a29bbbe41c9c5a7c64e2ab9': source38,
   'sha256:f8e79f556cce60cde7b93210ab4f8a734b29b49b16d18c7d441260581b632535': source39,
+  'sha256:af8a02ad5a663de2433b78917569af01f12a10f54ac8d94b33e934cfedc8a3f2': source40,
 };

@@ -146,6 +146,13 @@ export interface SciencePathData {
     denseExtensionImages: number[];
     anchorsMissing: number[];
     perModel: Record<string, ModelAnchorInfo>;
+    rule: {
+      id: string;
+      version: string;
+      source: { git_commit: string; path: string };
+      extremaTiePolicy: string;
+      windowRule: string;
+    };
   };
   dense: {
     applied: boolean;

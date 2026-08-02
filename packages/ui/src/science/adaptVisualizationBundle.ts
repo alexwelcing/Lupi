@@ -70,6 +70,11 @@ type CanonicalManifest = {
     anchor_universe: number[];
     evaluated: number[];
     nominated_union: number[];
+    rule_id: string;
+    rule_version: string;
+    rule_source: { git_commit: string; path: string };
+    extrema_tie_policy: string;
+    window_rule: string;
     dense_extension: { applied: boolean; supplied_indices: number[] };
     per_model: Record<string, {
       nominated: number[];
@@ -127,7 +132,7 @@ type CanonicalManifest = {
       label: string;
     };
   };
-  assets: Array<{ sha256: string }>;
+  assets: Array<{ sha256: string; uri?: string; bytes?: number; role?: string }>;
   provenance: {
     creators: unknown;
     organization: unknown;
@@ -532,7 +537,7 @@ export function adaptVisualizationBundle(
       modelMaxIndex: selected.model_max_index,
       sparseBarrierEv: selected.sparse_barrier_ev,
       sameEngineAbsErrorMev: deficit?.same_engine_abs_error_mev ?? null,
-      vaspAbsErrorMev: manifest.quality_gates.cross_engine.dense_vs_reference_abs_error_mev,
+      vaspAbsErrorMev: manifest.quality_gates.cross_engine.per_model?.[model.model]?.vasp_abs_error_mev ?? null,
       profileAvailable: true,
     } : {
       status: model.status,
@@ -632,6 +637,13 @@ export function adaptVisualizationBundle(
       denseExtensionImages: manifest.selection.dense_extension.supplied_indices,
       anchorsMissing: manifest.selection.anchor_universe.filter((image) => !manifest.selection.evaluated.includes(image)),
       perModel,
+      rule: {
+        id: manifest.selection.rule_id,
+        version: manifest.selection.rule_version,
+        source: manifest.selection.rule_source,
+        extremaTiePolicy: manifest.selection.extrema_tie_policy,
+        windowRule: manifest.selection.window_rule,
+      },
     },
     dense: {
       applied: manifest.selection.dense_extension.applied,
@@ -744,6 +756,69 @@ function verifySeriesConsistency(manifest: CanonicalManifest): void {
       }
     });
   });
+}
+
+/** Displayed source artifacts must cross-link to frozen asset metadata; shipped bytes must verify. */
+function verifySourceArtifacts(manifest: CanonicalManifest): void {
+  const byRole = new Map<string, Array<{ sha256: string; uri?: string; bytes?: number; role?: string }>>();
+  for (const asset of manifest.assets) {
+    const role = asset.role ?? '';
+    byRole.set(role, [...(byRole.get(role) ?? []), asset]);
+  }
+  const sourceCount = (role: string) => manifest.source_artifacts.filter((artifact) => artifact.role === role).length;
+
+  const campaign = manifest.source_artifacts.find((artifact) => artifact.role === 'campaign_record');
+  if (!campaign) {
+    throw new Error('Source artifact campaign_record is required for canonical provenance');
+  }
+  const campaignAsset = (byRole.get('campaign_record') ?? []).find((asset) => asset.sha256 === campaign.sha256);
+  if (!campaignAsset) {
+    throw new Error(`Source artifact campaign_record has no frozen asset entry for ${campaign.sha256}`);
+  }
+  if (campaignAsset.bytes != null && campaignAsset.bytes !== campaign.bytes) {
+    throw new Error(
+      `Source artifact campaign_record byte mismatch: manifest declares ${campaign.bytes}, asset entry declares ${campaignAsset.bytes}`,
+    );
+  }
+  if (CANONICAL_VALUE_SOURCE_ASSETS[campaign.sha256] == null) {
+    throw new Error('Source artifact campaign_record: frozen campaign bytes are not shipped with the bundle');
+  }
+
+  if (sourceCount('barrier_panel') > 0 && (byRole.get('panel_path_excerpt') ?? []).length === 0) {
+    throw new Error('Source artifact barrier_panel has no frozen panel_path_excerpt asset entry');
+  }
+
+  const sourceReceipts = sourceCount('anchor_receipt');
+  const frozenReceipts = (byRole.get('anchor_receipt') ?? []).length;
+  if (sourceReceipts !== frozenReceipts) {
+    throw new Error(
+      `Source artifact anchor_receipt count mismatch: ${sourceReceipts} declared but ${frozenReceipts} frozen`,
+    );
+  }
+
+  const modelRoles = new Set(
+    manifest.source_artifacts.filter((artifact) => artifact.role === 'model_cell_result').map(() => true),
+  );
+  if (modelRoles.size > 0) {
+    const frozenModels = new Set(
+      manifest.assets
+        .map((asset) => asset.role ?? '')
+        .filter((role) => role.startsWith('model_cell_excerpt/')),
+    );
+    for (const model of manifest.model_provenance) {
+      if (model.status === 'completed' && !frozenModels.has(`model_cell_excerpt/${model.model}`)) {
+        throw new Error(`Source artifact model_cell_result has no frozen excerpt asset for ${model.model}`);
+      }
+    }
+  }
+
+  const sourceDiagnostics = sourceCount('electronic_diagnostic');
+  const frozenDiagnostics = (byRole.get('electronic_diagnostic') ?? []).length;
+  if (sourceDiagnostics > frozenDiagnostics) {
+    throw new Error(
+      `Source artifact electronic_diagnostic count mismatch: ${sourceDiagnostics} declared but ${frozenDiagnostics} frozen`,
+    );
+  }
 }
 
 /** Pinned anchor evidence must be internally consistent before it may be projected. */
@@ -907,5 +982,6 @@ export async function verifyVisualizationBundle({
   verifyTrajectoryLattice(verified.manifest, trajectory);
   verifyAnchorSets(verified.manifest);
   verifySeriesConsistency(verified.manifest);
+  verifySourceArtifacts(verified.manifest);
   return verified.path;
 }
