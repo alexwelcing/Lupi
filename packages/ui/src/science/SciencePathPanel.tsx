@@ -830,6 +830,27 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
           <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>
             {campaign.citation}
           </div>
+          <div
+            data-testid="science-canonical-citation"
+            style={{ fontSize: 11.5, color: MUTED, fontFamily: MONO, marginTop: 2, overflowWrap: 'anywhere' }}
+          >
+            {data.revision.provenance.citation.dataset} · DOI {data.revision.provenance.citation.doi} ·{' '}
+            {data.revision.provenance.citation.theory}
+            <br />
+            Repository: {data.revision.provenance.citation.source_repository} ·{' '}
+            <a href={data.revision.provenance.citation.source_url} style={{ color: INDIGO }}>
+              {data.revision.provenance.citation.source_url}
+            </a>
+            <br />
+            License: {data.revision.provenance.license} · dataset revision{' '}
+            {data.revision.provenance.sourceRevision.reference_dataset_revision} · archive{' '}
+            {data.revision.provenance.sourceRevision.reference_source_archive_sha256.slice(0, 19)}…
+            <br />
+            Preregistration: {data.revision.provenance.preregistration}
+            {data.revision.provenance.amendments.length > 0
+              ? ` · amendments: ${data.revision.provenance.amendments.join(', ')}`
+              : ''}
+          </div>
         </div>
         <div
           data-testid="science-quality-badge"

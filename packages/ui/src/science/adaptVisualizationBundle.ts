@@ -128,7 +128,19 @@ type CanonicalManifest = {
     };
   };
   assets: Array<{ sha256: string }>;
-  provenance: { citation: { dataset: string; doi: string; theory: string }; preregistration: string; amendments: string[] };
+  provenance: {
+    creators: unknown;
+    organization: unknown;
+    citation: { dataset: string; doi: string; source_repository: string; source_url: string; theory: string };
+    license: string;
+    source_revision: {
+      reference_dataset_revision: string;
+      reference_source_archive_sha256: string;
+      converter_git_commit: string | null;
+    };
+    preregistration: string;
+    amendments: string[];
+  };
   quality: {
     state: 'complete' | 'partial' | 'invalid' | 'quarantined' | 'verified' | 'published';
     checks: Array<{ name: string; status: string; detail: string }>;
@@ -551,6 +563,13 @@ export function adaptVisualizationBundle(
       schema: SCHEMA,
       bundleId: manifest.bundle_id,
       manifestSha256,
+      provenance: {
+        citation: manifest.provenance.citation,
+        license: manifest.provenance.license,
+        sourceRevision: manifest.provenance.source_revision,
+        preregistration: manifest.provenance.preregistration,
+        amendments: manifest.provenance.amendments,
+      },
       campaignSha256: manifest.campaign_sha256,
       campaignId: manifest.campaign_id,
       runId: manifest.run_id,
@@ -622,7 +641,12 @@ export function adaptVisualizationBundle(
     t1: {
       unit: 'meV',
       definition: t1.offset_definition,
-      offsets: t1.offset_series_mev.map((offset) => ({ image: offset.image_index, offsetMev: offset.offset_mev, status: 'evaluated' })),
+      offsets: Array.from({ length: manifest.image_count }, (_, image) => {
+        const offset = t1.offset_series_mev.find((entry) => entry.image_index === image);
+        return offset
+          ? { image, offsetMev: offset.offset_mev, status: 'evaluated' }
+          : { image, offsetMev: null, status: 'missing' };
+      }),
       offsetMeanMev: t1.offset_mean_mev,
       wanderMev: t1.wander_mev,
       thresholdMev: t1.gate_mev,
@@ -701,6 +725,24 @@ function assertIndexSet(indices: number[], imageCount: number, label: string): v
     if (!Number.isInteger(index) || index < 0 || index >= imageCount) {
       throw new Error(`Anchor set ${label} contains out-of-range image ${index} (image_count=${imageCount})`);
     }
+  });
+}
+
+/** Status and value must never contradict: evaluated ↔ numeric, anything else ↔ null. */
+function verifySeriesConsistency(manifest: CanonicalManifest): void {
+  const NON_EVALUATED = new Set(['failed', 'missing', 'rejected_params_mismatch', 'not_recorded']);
+  manifest.series.forEach((series) => {
+    series.values.forEach((value, image) => {
+      const status = series.value_status[image];
+      if (status === 'evaluated' && value == null) {
+        throw new Error(`Series ${series.series_id} declares image ${image} evaluated but carries no value`);
+      }
+      if (NON_EVALUATED.has(status) && value != null) {
+        throw new Error(
+          `Series ${series.series_id} declares image ${image} ${status} but carries a numeric value; contradictory evidence cannot be plotted`,
+        );
+      }
+    });
   });
 }
 
@@ -864,5 +906,6 @@ export async function verifyVisualizationBundle({
   verifyTrajectoryAtomOrder(verified.manifest, trajectory);
   verifyTrajectoryLattice(verified.manifest, trajectory);
   verifyAnchorSets(verified.manifest);
+  verifySeriesConsistency(verified.manifest);
   return verified.path;
 }

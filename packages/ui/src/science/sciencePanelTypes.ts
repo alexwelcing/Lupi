@@ -69,6 +69,17 @@ export interface ScienceBundleRevision {
   schema: 'lupine.visualization-bundle.v1';
   bundleId: string;
   manifestSha256: string;
+  provenance: {
+    citation: { dataset: string; doi: string; source_repository: string; source_url: string; theory: string };
+    license: string;
+    sourceRevision: {
+      reference_dataset_revision: string;
+      reference_source_archive_sha256: string;
+      converter_git_commit: string | null;
+    };
+    preregistration: string;
+    amendments: string[];
+  };
   campaignSha256: string;
   campaignId: string;
   runId: string;
