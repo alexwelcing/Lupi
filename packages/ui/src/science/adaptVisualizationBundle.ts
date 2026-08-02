@@ -486,18 +486,15 @@ function verifyTrajectoryAtomOrder(manifest: CanonicalManifest, trajectory: Traj
   });
 }
 
-/** Manifest bytes, canonical identity, source bindings, and atom order pass or nothing is returned. */
-export async function verifyVisualizationBundle({
+async function verifyCanonicalManifest({
   serializedManifest,
   expectedManifestSha256,
-  trajectory,
   supersedesChain,
 }: {
   serializedManifest: string;
   expectedManifestSha256: string;
-  trajectory: Trajectory;
   supersedesChain?: string[];
-}): Promise<SciencePathData> {
+}): Promise<{ manifest: CanonicalManifest; path: SciencePathData }> {
   digest(expectedManifestSha256, 'expected serialized manifest SHA-256');
   const actualManifestSha256 = await sha256(serializedManifest);
   if (actualManifestSha256 !== expectedManifestSha256) {
@@ -527,6 +524,46 @@ export async function verifyVisualizationBundle({
       throw new Error(`Value-source asset SHA-256 mismatch: expected ${sourceDigest}, got ${actualSourceDigest}`);
     }
   }
-  verifyTrajectoryAtomOrder(manifest, trajectory);
-  return adaptVisualizationBundle(manifest, actualManifestSha256, supersedesChain);
+  return {
+    manifest,
+    path: adaptVisualizationBundle(manifest, actualManifestSha256, supersedesChain),
+  };
+}
+
+/** Manifest bytes, canonical identity, and frozen source bindings pass or nothing is returned. */
+export async function verifyVisualizationManifest({
+  serializedManifest,
+  expectedManifestSha256,
+  supersedesChain,
+}: {
+  serializedManifest: string;
+  expectedManifestSha256: string;
+  supersedesChain?: string[];
+}): Promise<SciencePathData> {
+  return (await verifyCanonicalManifest({
+    serializedManifest,
+    expectedManifestSha256,
+    supersedesChain,
+  })).path;
+}
+
+/** Manifest bytes, canonical identity, source bindings, and atom order pass or nothing is returned. */
+export async function verifyVisualizationBundle({
+  serializedManifest,
+  expectedManifestSha256,
+  trajectory,
+  supersedesChain,
+}: {
+  serializedManifest: string;
+  expectedManifestSha256: string;
+  trajectory: Trajectory;
+  supersedesChain?: string[];
+}): Promise<SciencePathData> {
+  const verified = await verifyCanonicalManifest({
+    serializedManifest,
+    expectedManifestSha256,
+    supersedesChain,
+  });
+  verifyTrajectoryAtomOrder(verified.manifest, trajectory);
+  return verified.path;
 }

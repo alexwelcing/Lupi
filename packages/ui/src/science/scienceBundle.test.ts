@@ -1,7 +1,7 @@
 import { getAtomicNumberBySymbol, type Trajectory } from '@atlas/core';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  scienceBundleForPathIndex,
+  verifiedSciencePanelBundleForPathIndex,
   verifiedScienceBundleForManifestSha256,
 } from './scienceBundle';
 import { CANONICAL_BUNDLE_REGISTRY } from './canonicalBundleRegistry';
@@ -32,7 +32,7 @@ function canonicalTrajectory(pathIndex: number): Trajectory {
 }
 
 describe('canonical science bundle registry', () => {
-  it('projects every pinned golden manifest without the legacy fixture', () => {
+  it('verifies and projects every pinned golden manifest without the legacy fixture', async () => {
     const expected = new Map([
       [0, ['mp-761269_2_1_1_-1_0', 7]],
       [14, ['mp-756912_1_1_1_0_0', 7]],
@@ -40,7 +40,7 @@ describe('canonical science bundle registry', () => {
       [27, ['mp-752552_0_7_0_0_1', 5]],
     ]);
     for (const [pathIndex, [pathId, imageCount]] of expected) {
-      const bundle = scienceBundleForPathIndex(pathIndex)!;
+      const bundle = (await verifiedSciencePanelBundleForPathIndex(pathIndex))!;
       expect(bundle.path.pathId).toBe(pathId);
       expect(bundle.path.imageCount).toBe(imageCount);
       expect(bundle.fixture.schema).toBe('lupine.visualization-bundle.v1');
@@ -48,14 +48,18 @@ describe('canonical science bundle registry', () => {
     }
   });
 
-  it('retains exact dense-extension and guide failure semantics', () => {
-    expect(scienceBundleForPathIndex(0)!.path.anchors.denseExtensionImages).toEqual([1, 5]);
-    expect(scienceBundleForPathIndex(14)!.path.anchors.denseExtensionImages).toEqual([0, 1, 2, 3, 4, 5, 6]);
-    expect(scienceBundleForPathIndex(16)!.path.anchors.denseExtensionImages).toEqual([]);
-    const fourteen = scienceBundleForPathIndex(14)!.path;
+  it('retains exact dense-extension and guide failure semantics', async () => {
+    expect((await verifiedSciencePanelBundleForPathIndex(0))!.path.anchors.denseExtensionImages).toEqual([1, 5]);
+    expect((await verifiedSciencePanelBundleForPathIndex(14))!.path.anchors.denseExtensionImages).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect((await verifiedSciencePanelBundleForPathIndex(16))!.path.anchors.denseExtensionImages).toEqual([]);
+    const fourteen = (await verifiedSciencePanelBundleForPathIndex(14))!.path;
     expect(fourteen.series.map((series) => series.id).sort()).toEqual(['gpaw-anchors', 'vasp-reference']);
     expect(fourteen.quality.guidedModelCount).toBe(0);
     expect(fourteen.quality.modelDenominator).toBe(4);
+  });
+
+  it('fails closed when a panel requests an unknown canonical path', async () => {
+    expect(await verifiedSciencePanelBundleForPathIndex(999)).toBeNull();
   });
 
   it('loads path 16 only through its exact content digest and atom-order gate', async () => {

@@ -1,6 +1,9 @@
 /** Canonical Z1 visualization-bundle registry and viewer adapter boundary. */
 import type { Trajectory } from '@atlas/core/types';
-import { adaptVisualizationBundle, verifyVisualizationBundle } from './adaptVisualizationBundle';
+import {
+  verifyVisualizationBundle,
+  verifyVisualizationManifest,
+} from './adaptVisualizationBundle';
 import {
   canonicalBundleForManifestSha256,
   canonicalBundleSupersedesChain,
@@ -27,14 +30,22 @@ type CampaignManifestFields = {
   quality_gates: { thresholds_mev: { strong_win: number; win: number; t1_gate: number } };
 };
 
-function canonicalPaths(): SciencePathData[] {
-  return Object.values(CANONICAL_BUNDLE_REGISTRY)
-    .map((entry) => adaptVisualizationBundle(
-      entry.manifest,
-      entry.manifestSha256,
-      canonicalBundleSupersedesChain(entry),
-    ))
-    .sort((a, b) => a.pathIndex - b.pathIndex);
+async function verifiedCanonicalPaths(): Promise<SciencePathData[]> {
+  const paths = await Promise.all(Object.values(CANONICAL_BUNDLE_REGISTRY).map(async (entry) => {
+    const path = await verifyVisualizationManifest({
+      serializedManifest: entry.serializedManifest,
+      expectedManifestSha256: entry.manifestSha256,
+      supersedesChain: canonicalBundleSupersedesChain(entry),
+    });
+    if (path.pathIndex !== entry.pathIndex) {
+      throw new Error(
+        `Canonical registry path mismatch: digest ${entry.manifestSha256} is registered for ` +
+        `${entry.pathIndex} but manifest declares ${path.pathIndex}`,
+      );
+    }
+    return path;
+  }));
+  return paths.sort((a, b) => a.pathIndex - b.pathIndex);
 }
 
 function fixtureFromPaths(paths: SciencePathData[]): SciencePanelFixture {
@@ -77,11 +88,13 @@ function fixtureFromPaths(paths: SciencePathData[]): SciencePanelFixture {
   };
 }
 
-/** Synchronous projection for render-only/test consumers from pinned canonical bytes. */
-export function scienceBundleForPathIndex(pathIndex: number): ScienceViewerBundle | null {
+/** Verify every canonical bundle and return the requested standalone science panel. */
+export async function verifiedSciencePanelBundleForPathIndex(
+  pathIndex: number,
+): Promise<ScienceViewerBundle | null> {
   if (!CANONICAL_BUNDLE_REGISTRY[pathIndex]) return null;
   try {
-    const fixture = fixtureFromPaths(canonicalPaths());
+    const fixture = fixtureFromPaths(await verifiedCanonicalPaths());
     const path = fixture.paths.find((candidate) => candidate.pathIndex === pathIndex);
     return path ? { fixture, path } : null;
   } catch (error) {
@@ -121,7 +134,7 @@ export async function verifiedScienceBundleForManifestSha256(
         `${entry.pathIndex} but manifest declares ${verifiedPath.pathIndex}`,
       );
     }
-    const paths = canonicalPaths().map((path) => (
+    const paths = (await verifiedCanonicalPaths()).map((path) => (
       path.pathIndex === entry.pathIndex ? verifiedPath : path
     ));
     const fixture = fixtureFromPaths(paths);

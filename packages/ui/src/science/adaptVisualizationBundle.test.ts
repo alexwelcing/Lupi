@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import path16 from './canonical-bundles/path-16.visualization-bundle.json';
 import path16Raw from './canonical-bundles/path-16.visualization-bundle.json?raw';
 import { CANONICAL_VALUE_SOURCE_ASSETS } from './canonicalValueSourceAssets';
-import { adaptVisualizationBundle, verifyVisualizationBundle } from './adaptVisualizationBundle';
+import {
+  adaptVisualizationBundle,
+  verifyVisualizationBundle,
+  verifyVisualizationManifest,
+} from './adaptVisualizationBundle';
 
 const MANIFEST_SHA = 'sha256:8fa964dffe3742df09f25375c64b145ab34de2dc89888bbe09696d2582bfeaf5';
 const clone = (): any => JSON.parse(JSON.stringify(path16));
@@ -73,6 +77,19 @@ describe('canonical visualization-bundle adapter', () => {
 });
 
 describe('atomic canonical load gate', () => {
+  it('verifies canonical manifest, bundle, and source bytes without requiring a viewer trajectory', async () => {
+    const path = await verifyVisualizationManifest({
+      serializedManifest: path16Raw,
+      expectedManifestSha256: MANIFEST_SHA,
+    });
+    expect(path.revision.bundleId).toBe(path16.bundle_id);
+
+    await expect(verifyVisualizationManifest({
+      serializedManifest: `${path16Raw} `,
+      expectedManifestSha256: MANIFEST_SHA,
+    })).rejects.toThrow(/manifest sha-256 mismatch/i);
+  });
+
   it('verifies manifest bytes, bundle identity, source bindings, and atom order together', async () => {
     const path = await verifyVisualizationBundle({
       serializedManifest: path16Raw,

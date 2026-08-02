@@ -13,7 +13,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { SciencePathPanel } from './SciencePathPanel';
-import { DEFAULT_Z1_SCIENCE_PATH_INDEX, scienceBundleForPathIndex } from './scienceBundle';
+import {
+  DEFAULT_Z1_SCIENCE_PATH_INDEX,
+  verifiedSciencePanelBundleForPathIndex,
+  type ScienceViewerBundle,
+} from './scienceBundle';
 
 const PATH_BLURB: Record<number, string> = {
   16: 'seemingly good cross-engine result that is T1-contaminated',
@@ -70,13 +74,31 @@ export function SciencePanelDemo({ pathIndex }: SciencePanelDemoProps) {
   }, [pathIndex]);
   const [selectedPath, setSelectedPath] = useState(initialPath);
   const [currentImage, setCurrentImage] = useState(0);
-  const bundle = useMemo(() => scienceBundleForPathIndex(selectedPath), [selectedPath]);
+  const [bundle, setBundle] = useState<ScienceViewerBundle | null>();
 
   useEffect(() => {
-    if (!bundle) {
-      console.error('[science-panel] canonical bundle unavailable — failing closed:', selectedPath);
-    }
-  }, [bundle, selectedPath]);
+    setSelectedPath(initialPath);
+    setCurrentImage(0);
+  }, [initialPath]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBundle(undefined);
+    void verifiedSciencePanelBundleForPathIndex(selectedPath).then((resolved) => {
+      if (cancelled) return;
+      if (!resolved) {
+        console.error('[science-panel] canonical bundle unavailable — failing closed:', selectedPath);
+      }
+      setBundle(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPath]);
+
+  if (bundle === undefined) {
+    return <div data-testid="science-bundle-loading" role="status">Verifying canonical science bundle…</div>;
+  }
 
   if (!bundle) {
     return <ScienceFixtureInvalid errors={[`No active canonical visualization bundle for path ${selectedPath}`]} />;

@@ -806,6 +806,11 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
             Manifest digest: {data.revision.manifestSha256}<br />
             Campaign source: {data.revision.sources.campaign}<br />
             Barrier-lock source: {data.revision.sources.barrierLock}<br />
+            {data.revision.sourceArtifacts.map((source) => (
+              <span key={`${source.role}:${source.sha256}`}>
+                Source artifact ({source.role}): {source.sha256} · {source.bytes} bytes<br />
+              </span>
+            ))}
             Supersedes chain: {data.revision.supersedesChain.length > 0 ? data.revision.supersedesChain.join(' → ') : 'none'}
           </div>
           <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>

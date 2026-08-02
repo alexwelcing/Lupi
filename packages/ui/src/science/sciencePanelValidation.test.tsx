@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validateSciencePanelFixture } from './sciencePanelValidation';
 import { SciencePanelDemo } from './SciencePanelDemo';
@@ -87,7 +87,7 @@ describe('validateSciencePanelFixture', () => {
 describe('SciencePanelDemo canonical bundle rendering', () => {
   afterEach(() => cleanup());
 
-  it('renders exact manifest, bundle, run, and source identities from the canonical bundle', () => {
+  it('renders exact manifest, bundle, run, and source identities from the canonical bundle', async () => {
     const entry = CANONICAL_BUNDLE_REGISTRY[16];
     const manifest = entry.manifest as {
       bundle_id: string;
@@ -97,7 +97,7 @@ describe('SciencePanelDemo canonical bundle rendering', () => {
     };
     render(<SciencePanelDemo pathIndex={16} />);
 
-    const panel = screen.getByTestId('science-path-panel');
+    const panel = await screen.findByTestId('science-path-panel');
     expect(panel.getAttribute('data-bundle-status')).toBe('active');
     expect(panel.getAttribute('data-bundle-quality')).toBe('verified');
     const provenance = screen.getByTestId('science-run-provenance').textContent ?? '';
@@ -105,26 +105,26 @@ describe('SciencePanelDemo canonical bundle rendering', () => {
     expect(provenance).toContain(manifest.bundle_id);
     expect(provenance).toContain(manifest.run_id);
     expect(provenance).toContain(manifest.campaign_id);
-    for (const source of manifest.source_artifacts.filter(
-      ({ role }) => role === 'campaign_record' || role === 'barrier_panel',
-    )) {
+    for (const source of manifest.source_artifacts) {
       expect(provenance).toContain(source.sha256);
     }
     expect(screen.queryByTestId('science-fixture-invalid')).toBeNull();
   });
 
-  it('switches tabs by resolving the selected canonical path identity', () => {
+  it('switches tabs by resolving the selected canonical path identity', async () => {
     const entry = CANONICAL_BUNDLE_REGISTRY[27];
     render(<SciencePanelDemo pathIndex={16} />);
-    fireEvent.click(screen.getByTestId('science-demo-tab-27'));
-    expect(screen.getByTestId('science-path-panel').getAttribute('data-path-index')).toBe('27');
+    fireEvent.click(await screen.findByTestId('science-demo-tab-27'));
+    await waitFor(() => {
+      expect(screen.getByTestId('science-path-panel').getAttribute('data-path-index')).toBe('27');
+    });
     expect(screen.getByTestId('science-run-provenance').textContent).toContain(entry.manifestSha256);
   });
 
-  it('renders the invalid state, not a partial panel, for an unknown canonical path', () => {
+  it('renders the invalid state, not a partial panel, for an unknown canonical path', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     render(<SciencePanelDemo pathIndex={999} />);
-    expect(screen.getByTestId('science-fixture-invalid')).toBeTruthy();
+    expect(await screen.findByTestId('science-fixture-invalid')).toBeTruthy();
     expect(screen.queryByTestId('science-path-panel')).toBeNull();
     expect(errorSpy).toHaveBeenCalledWith(
       '[science-panel] canonical bundle unavailable — failing closed:',
