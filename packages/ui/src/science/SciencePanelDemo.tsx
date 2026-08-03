@@ -1,24 +1,23 @@
 /**
- * SciencePanelDemo — isolated demo route for the Z1 science panel prototype.
+ * SciencePanelDemo — isolated review route for canonical Z1 bundles.
  *
- * Loads the static golden-set fixture (paths 16, 0, 14, 27) and renders one
- * SciencePathPanel per selected path. Reachable at `?demo=science-panel`
+ * Resolves the exact, content-addressed `lupine.visualization-bundle.v1`
+ * manifests (paths 16, 0, 14, 27) and renders one SciencePathPanel per
+ * selected path. Reachable at `?demo=science-panel`
  * (optionally `&path=<16|0|14|27>`) or `#/demo/science-panel`.
  *
- * The fixture is validated fail-closed before anything renders: a drifted,
- * mis-regenerated, or corrupted fixture must never become guessed or partial
- * science on screen. See sciencePanelValidation.ts.
- *
- * This route exists so the panel can be reviewed and screenshot-tested
- * without the 3D viewer; production wiring belongs to the manifest-native
- * bundle load path (phase 2), not to this prototype.
+ * Unknown or invalid canonical identities fail closed before anything renders.
+ * This route exists so the adapter and panel can be reviewed and screenshot-
+ * tested without a bespoke projection fixture.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { SciencePathPanel } from './SciencePathPanel';
-import type { SciencePanelFixture } from './sciencePanelTypes';
-import { validateSciencePanelFixture } from './sciencePanelValidation';
-import fixtureJson from './z1GoldenPanelFixture.json';
+import {
+  DEFAULT_Z1_SCIENCE_PATH_INDEX,
+  verifiedSciencePanelBundleForPathIndex,
+  type ScienceViewerBundle,
+} from './scienceBundle';
 
 const PATH_BLURB: Record<number, string> = {
   16: 'seemingly good cross-engine result that is T1-contaminated',
@@ -27,7 +26,7 @@ const PATH_BLURB: Record<number, string> = {
   27: 'the only T1-clean path',
 };
 
-/** Fail-closed state: never render a partial or guessed panel from bad bytes. */
+/** Fail-closed state: never render a partial or guessed panel from bad canonical bytes. */
 export function ScienceFixtureInvalid({ errors }: { errors: string[] }) {
   return (
     <div
@@ -45,12 +44,11 @@ export function ScienceFixtureInvalid({ errors }: { errors: string[] }) {
       }}
     >
       <h1 style={{ fontSize: 17, margin: '0 0 6px', color: '#b97a1c' }}>
-        Science fixture invalid — panel withheld
+        Canonical science bundle unavailable — panel withheld
       </h1>
       <p style={{ fontSize: 13, margin: '0 0 10px' }}>
-        The Z1 panel fixture failed validation. The panel does not render guessed or partial science from a fixture
-        that drifted, was regenerated incorrectly, or was corrupted. Rebuild the fixture with{' '}
-        <code>tools/build-z1-science-panel-fixture.mjs</code> and verify it before shipping.
+        The selected Z1 visualization bundle failed canonical resolution or validation. The panel does not render
+        guessed or partial science from missing, stale, or corrupted identities.
       </p>
       <ul style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace', margin: 0, paddingLeft: 18 }}>
         {errors.slice(0, 20).map((e) => (
@@ -63,35 +61,55 @@ export function ScienceFixtureInvalid({ errors }: { errors: string[] }) {
 }
 
 export interface SciencePanelDemoProps {
-  /** Test seam: override the fixture payload (validated before render). Defaults to the shipped JSON. */
-  fixture?: unknown;
+  /** Exact canonical path selection. Unknown indices fail closed. */
+  pathIndex?: number;
+  /** Test seam for delayed verification; production always uses the canonical resolver. */
+  verifyBundle?: typeof verifiedSciencePanelBundleForPathIndex;
 }
 
-export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProps) {
-  const raw = fixtureInput ?? fixtureJson;
-  const validation = useMemo(() => validateSciencePanelFixture(raw), [raw]);
+function SciencePanelDemoContent({
+  pathIndex,
+  verifyBundle = verifiedSciencePanelBundleForPathIndex,
+}: SciencePanelDemoProps) {
   const initialPath = useMemo(() => {
-    if (!validation.ok) return 0;
-    const fixture = raw as SciencePanelFixture;
-    if (typeof window === 'undefined') return fixture.paths[0].pathIndex;
-    const wanted = Number(new URLSearchParams(window.location.search).get('path'));
-    return fixture.paths.some((p) => p.pathIndex === wanted) ? wanted : fixture.paths[0].pathIndex;
-  }, [raw, validation.ok]);
+    if (pathIndex != null) return pathIndex;
+    if (typeof window === 'undefined') return DEFAULT_Z1_SCIENCE_PATH_INDEX;
+    const rawPath = new URLSearchParams(window.location.search).get('path');
+    return rawPath == null ? DEFAULT_Z1_SCIENCE_PATH_INDEX : Number(rawPath);
+  }, [pathIndex]);
   const [selectedPath, setSelectedPath] = useState(initialPath);
   const [currentImage, setCurrentImage] = useState(0);
+  const [bundle, setBundle] = useState<ScienceViewerBundle | null>();
 
   useEffect(() => {
-    if (!validation.ok) {
-      console.error('[science-panel] fixture invalid — failing closed:', validation.errors);
-    }
-  }, [validation]);
+    setSelectedPath(initialPath);
+    setCurrentImage(0);
+  }, [initialPath]);
 
-  if (!validation.ok) {
-    return <ScienceFixtureInvalid errors={validation.errors} />;
+  useEffect(() => {
+    let cancelled = false;
+    setBundle(undefined);
+    void verifyBundle(selectedPath).then((resolved) => {
+      if (cancelled) return;
+      if (!resolved) {
+        console.error('[science-panel] canonical bundle unavailable — failing closed:', selectedPath);
+      }
+      setBundle(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPath, verifyBundle]);
+
+  if (bundle === undefined || (bundle !== null && bundle.path.pathIndex !== selectedPath)) {
+    return <div data-testid="science-bundle-loading" role="status">Verifying canonical science bundle…</div>;
   }
 
-  const fixture = raw as SciencePanelFixture;
-  const data = fixture.paths.find((p) => p.pathIndex === selectedPath) ?? fixture.paths[0];
+  if (!bundle) {
+    return <ScienceFixtureInvalid errors={[`No active canonical visualization bundle for path ${selectedPath}`]} />;
+  }
+
+  const { fixture, path: data } = bundle;
 
   return (
     <div
@@ -104,7 +122,7 @@ export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProp
     >
       <div style={{ maxWidth: 1060, margin: '0 auto 14px' }}>
         <h1 style={{ fontSize: 17, margin: '0 0 2px', color: '#16171d' }}>
-          Z1 science panel — golden-set prototype
+          Z1 science panel — canonical visualization bundles
         </h1>
         <p style={{ fontSize: 12, color: '#6b6f7a', margin: 0 }}>
           Reaction-path sequences (climbing-image NEB) from the Z1 union campaign. No time axes, no thermo minimap.
@@ -145,6 +163,10 @@ export function SciencePanelDemo({ fixture: fixtureInput }: SciencePanelDemoProp
       />
     </div>
   );
+}
+
+export function SciencePanelDemo(props: SciencePanelDemoProps) {
+  return <SciencePanelDemoContent key={props.pathIndex ?? 'url-selected'} {...props} />;
 }
 
 export default SciencePanelDemo;

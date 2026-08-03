@@ -636,7 +636,7 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
         </thead>
         <tbody>
           {models.map(([model, m]) => {
-            const failed = m.status !== 'guided';
+            const failed = m.status !== 'guided' && m.status !== 'completed';
             const unionOnly = [...union].filter((i) => !m.nominated.includes(i));
             return (
               <tr key={model} style={{ borderBottom: `1px solid ${GRID}`, color: failed ? OCHRE : INK }}>
@@ -680,6 +680,8 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
             <li key={miss.model} style={{ color: miss.kind === 'model-failed' ? OCHRE : INK }}>
               {miss.kind === 'model-failed'
                 ? `${miss.model}: guide failed (${miss.reason}) — counted in the denominator, not hidden`
+                : miss.kind === 'model-missing'
+                  ? `${miss.model}: guide evidence missing (${miss.reason}) — preserved as missing, not failed`
                 : `${miss.model}: missed dense extremum image(s) [${(miss.missedImages ?? []).join(', ')}]` +
                   (miss.sameEngineAbsErrorMev != null ? ` · same-engine deficit ${fmtMev(miss.sameEngineAbsErrorMev)} meV` : '')}
             </li>
@@ -688,6 +690,7 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
         <li>
           Model availability: {data.quality.guidedModelCount} of {data.quality.modelDenominator} models guided this path
           {data.quality.failedModelCount > 0 ? `; ${data.quality.failedModelCount} failed` : ''}.
+          {(data.quality.missingModelCount ?? 0) > 0 ? ` ${data.quality.missingModelCount} missing.` : ''}
           {maxDeficit != null && <> Same-engine deficit (max over models): {fmtMev(maxDeficit)} meV.</>}
         </li>
         <li>
@@ -699,6 +702,11 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
         </li>
         <li style={{ color: MUTED }}>
           Subset theorem used by Z1: {data.guidance.subsetTheorem}.
+        </li>
+        <li data-testid="science-anchor-rule" style={{ fontFamily: MONO, fontSize: 11.5 }}>
+          Anchor rule: {data.anchors.rule.id} · {data.anchors.rule.version} · source {data.anchors.rule.source.path} @{' '}
+          {data.anchors.rule.source.git_commit.slice(0, 10)} · ties: {data.anchors.rule.extremaTiePolicy} · window:{' '}
+          {data.anchors.rule.windowRule}
         </li>
       </ul>
     </section>
@@ -726,8 +734,11 @@ function qualityCopy(data: SciencePathData, fixture: SciencePanelFixture): { tit
     case 'strong-win-contaminated':
       return {
         title: 'STRONG WIN (same-engine) — but cross-engine CONTAMINATED',
-        detail: `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed) looks acceptable (≤ ${fmtMev(win, 0)} meV), ` +
-          `yet T1 wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV gate — the agreement is a convention coincidence`,
+        detail: q.crossEngineLooksAcceptable
+          ? `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed) looks acceptable (≤ ${fmtMev(win, 0)} meV), ` +
+            `yet T1 wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV gate — the agreement is a convention coincidence`
+          : `cross-engine error ${fmtMev(q.crossEngineSignedErrorMev ?? q.crossEngineErrorMev, 1)} meV (signed) exceeds the ${fmtMev(win, 0)} meV win gate, ` +
+            `and T1 wander ${fmtMev(data.t1.wanderMev, 2)} meV > ${fmtMev(gate, 0)} meV gate — no cross-engine agreement is claimed`,
         warn: true,
       };
     case 'contaminated':
@@ -742,6 +753,13 @@ function qualityCopy(data: SciencePathData, fixture: SciencePanelFixture): { tit
         title: 'ALL GUIDES FAILED — dense extension supplied the profile',
         detail: `0 of ${q.modelDenominator} models produced a profile; every GPAW image evaluated as dense extension. ` +
           `This path stays visible as a failure case, not dropped from averages`,
+        warn: true,
+      };
+    case 'no-guides-completed':
+      return {
+        title: 'NO GUIDES COMPLETED — model states preserved',
+        detail: `${q.failedModelCount} failed and ${q.missingModelCount ?? 0} are missing out of ${q.modelDenominator}; ` +
+          `dense evidence remains visible without relabeling missing guidance as failure`,
         warn: true,
       };
   }
@@ -775,6 +793,8 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
       data-testid="science-path-panel"
       data-path-index={data.pathIndex}
       data-quality-state={data.qualityState}
+      data-bundle-status={data.revision.status}
+      data-bundle-quality={data.revision.qualityState}
       style={{
         background: PAPER, color: INK, fontFamily: FONT,
         border: `1px solid ${GRID}`, borderRadius: 8,
@@ -792,10 +812,49 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
             Path {data.pathIndex} · <span style={{ fontFamily: MONO, fontSize: 16 }}>{data.pathId}</span> · {data.chemicalSystem}
           </h2>
           <div style={{ fontSize: 11.5, color: MUTED, fontFamily: MONO }}>
-            bundle: {fixture.schema} · campaign {campaign.sha256.slice(0, 19)}… · prototype fixture (pre-sealed-bundle)
+            manifest: {data.revision.manifestSha256.slice(0, 23)}… · bundle: {data.revision.bundleId.slice(0, 23)}…
+          </div>
+          <div
+            data-testid="science-run-provenance"
+            style={{ fontSize: 11.5, color: MUTED, fontFamily: MONO, marginTop: 2, overflowWrap: 'anywhere' }}
+          >
+            Source campaign: {data.revision.campaignId}<br />
+            Run id: {data.revision.runId}<br />
+            Bundle digest: {data.revision.bundleId}<br />
+            Manifest digest: {data.revision.manifestSha256}<br />
+            Campaign source: {data.revision.sources.campaign}<br />
+            Barrier-lock source: {data.revision.sources.barrierLock}<br />
+            {data.revision.sourceArtifacts.map((source) => (
+              <span key={`${source.role}:${source.sha256}`}>
+                Source artifact ({source.role}): {source.uri} · {source.sha256} · {source.bytes} bytes
+                {' '}· schema {source.schema ?? 'none'} · git {source.gitCommit ?? 'none'}<br />
+              </span>
+            ))}
+            Supersedes chain: {data.revision.supersedesChain.length > 0 ? data.revision.supersedesChain.join(' → ') : 'none'}
           </div>
           <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>
             {campaign.citation}
+          </div>
+          <div
+            data-testid="science-canonical-citation"
+            style={{ fontSize: 11.5, color: MUTED, fontFamily: MONO, marginTop: 2, overflowWrap: 'anywhere' }}
+          >
+            {data.revision.provenance.citation.dataset} · DOI {data.revision.provenance.citation.doi} ·{' '}
+            {data.revision.provenance.citation.theory}
+            <br />
+            Repository: {data.revision.provenance.citation.source_repository} ·{' '}
+            <a href={data.revision.provenance.citation.source_url} style={{ color: INDIGO }}>
+              {data.revision.provenance.citation.source_url}
+            </a>
+            <br />
+            License: {data.revision.provenance.license} · dataset revision{' '}
+            {data.revision.provenance.sourceRevision.reference_dataset_revision} · archive{' '}
+            {data.revision.provenance.sourceRevision.reference_source_archive_sha256.slice(0, 19)}…
+            <br />
+            Preregistration: {data.revision.provenance.preregistration}
+            {data.revision.provenance.amendments.length > 0
+              ? ` · amendments: ${data.revision.provenance.amendments.join(', ')}`
+              : ''}
           </div>
         </div>
         <div
@@ -875,9 +934,13 @@ export function SciencePathPanel({ data, fixture, currentImage, onImageChange }:
           bonds must be labeled source topology vs viewer inference.
         </p>
         <p style={{ margin: '0 0 4px' }}>
-          Parser warnings: none — the fixture converter recomputed and verified barriers, extrema, anchor sets, T1
-          wander, and driver pairs against the campaign record before shipping.
+          Canonical revision: {data.revision.manifestSha256} · run {data.revision.runId} · status {data.revision.status}
+          {' '}· quality {data.revision.qualityState}. Quality checks passed:{' '}
+          {data.revision.qualityChecks.filter((check) => check.status === 'pass').length}/{data.revision.qualityChecks.length}.
         </p>
+        {data.revision.qualityWarnings.map((warning) => (
+          <p key={warning} style={{ margin: '0 0 4px' }}>Bundle warning: {warning}</p>
+        ))}
         <p style={{ margin: 0 }}>
           This panel describes a reaction-path sequence (climbing-image NEB). Image index orders configurations along
           the path; it is never elapsed time, temperature, or dynamics.

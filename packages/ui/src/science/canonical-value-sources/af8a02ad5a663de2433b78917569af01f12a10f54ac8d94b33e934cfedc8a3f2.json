@@ -1,0 +1,3671 @@
+{
+ "active_path_indices": [
+  0,
+  1,
+  3,
+  4,
+  5,
+  6,
+  7,
+  9,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  19,
+  21,
+  22,
+  24,
+  25,
+  26,
+  27,
+  29
+ ],
+ "amendment": "docs/plans/2026-07-21-sparse-dft-pilot-amendment-01.md",
+ "campaign_sha256": "sha256:539ca24f3729b93aed2f6258c606ce888ff7df1c1be88f5fa2dc62f40731c05a",
+ "cost": {
+  "anchors_evaluated": 129,
+  "anchors_remaining": 0,
+  "anchors_total": 129
+ },
+ "deferred_path_indices": [
+  2,
+  8,
+  10,
+  18,
+  20,
+  23,
+  28
+ ],
+ "gpaw_params": {
+  "h": 0.2,
+  "kpts": [
+   1,
+   1,
+   1
+  ],
+  "mode": "fd",
+  "txt": null,
+  "xc": "PBE"
+ },
+ "per_model_summary": {
+  "chgnet": {
+   "basis": "same-engine dense GPAW profile (primary, amendment A1); VASP reference secondary",
+   "paths_guided": 22,
+   "paths_with_same_engine_error": 22,
+   "paths_with_vasp_error": 22,
+   "same_engine_mae_mev": 0.0,
+   "strong_win": true,
+   "vasp_mae_mev": 692.9983969574649,
+   "verdict": "strong_win",
+   "win": true
+  },
+  "mace-mp-medium": {
+   "basis": "same-engine dense GPAW profile (primary, amendment A1); VASP reference secondary",
+   "paths_guided": 22,
+   "paths_with_same_engine_error": 22,
+   "paths_with_vasp_error": 22,
+   "same_engine_mae_mev": 0.0,
+   "strong_win": true,
+   "vasp_mae_mev": 692.9983969574649,
+   "verdict": "strong_win",
+   "win": true
+  },
+  "mace-mp-small": {
+   "basis": "same-engine dense GPAW profile (primary, amendment A1); VASP reference secondary",
+   "paths_guided": 21,
+   "paths_with_same_engine_error": 21,
+   "paths_with_vasp_error": 21,
+   "same_engine_mae_mev": 6.76184414119992,
+   "strong_win": true,
+   "vasp_mae_mev": 705.7245286150998,
+   "verdict": "strong_win",
+   "win": true
+  },
+  "mace-mpa-0-medium": {
+   "basis": "same-engine dense GPAW profile (primary, amendment A1); VASP reference secondary",
+   "paths_guided": 21,
+   "paths_with_same_engine_error": 21,
+   "paths_with_vasp_error": 21,
+   "same_engine_mae_mev": 6.76184414119992,
+   "strong_win": true,
+   "vasp_mae_mev": 705.7245286150998,
+   "verdict": "strong_win",
+   "win": true
+  }
+ },
+ "per_path": [
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_missing": [],
+   "chemical_system": "Ag-F-Li",
+   "dense_barrier_ev": 5.79080854044912,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 4212.260300449088,
+   "image_count": 7,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-761269_2_1_1_-1_0",
+   "path_index": 0,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 5.79080854044912,
+     "vasp_abs_error_mev": 4212.260300449088,
+     "vasp_signed_error_mev": 4212.260300449088,
+     "window": 1
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 5.79080854044912,
+     "vasp_abs_error_mev": 4212.260300449088,
+     "vasp_signed_error_mev": 4212.260300449088,
+     "window": 1
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 5.79080854044912,
+     "vasp_abs_error_mev": 4212.260300449088,
+     "vasp_signed_error_mev": 4212.260300449088,
+     "window": 1
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 5.79080854044912,
+     "vasp_abs_error_mev": 4212.260300449088,
+     "vasp_signed_error_mev": 4212.260300449088,
+     "window": 1
+    }
+   },
+   "reference_barrier_ev": 1.578548240000032,
+   "t1": {
+    "evaluated_image_count": 7,
+    "offset_mean_mev": -44585.68878195336,
+    "offset_wander_mev": 4212.3309263396295
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     3
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 4212.3309263396295
+   },
+   "union_model_anchor_indices": [
+    0,
+    2,
+    3,
+    4,
+    6
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "Al-B-Li-O",
+   "dense_barrier_ev": 0.6945843485137857,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 269.3670885137181,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-556655_0_7_0_1_-1",
+   "path_index": 1,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.6945843485137857,
+     "vasp_abs_error_mev": 269.3670885137181,
+     "vasp_signed_error_mev": 269.3670885137181,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.6945843485137857,
+     "vasp_abs_error_mev": 269.3670885137181,
+     "vasp_signed_error_mev": 269.3670885137181,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.6945843485137857,
+     "vasp_abs_error_mev": 269.3670885137181,
+     "vasp_signed_error_mev": 269.3670885137181,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.6945843485137857,
+     "vasp_abs_error_mev": 269.3670885137181,
+     "vasp_signed_error_mev": 269.3670885137181,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.4252172600000676,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -24973.893348583533,
+    "offset_wander_mev": 269.85817171794406
+   },
+   "t1_gate": {
+    "driver_pair": [
+     4,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 269.85817171794406
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "Al-Li-Mn-O",
+   "dense_barrier_ev": 1.576793685004759,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 1177.3646350046647,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-770551_3_4_0_0_1",
+   "path_index": 3,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.576793685004759,
+     "vasp_abs_error_mev": 1177.3646350046647,
+     "vasp_signed_error_mev": 1177.3646350046647,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.576793685004759,
+     "vasp_abs_error_mev": 1177.3646350046647,
+     "vasp_signed_error_mev": 1177.3646350046647,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.576793685004759,
+     "vasp_abs_error_mev": 1177.3646350046647,
+     "vasp_signed_error_mev": 1177.3646350046647,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.576793685004759,
+     "vasp_abs_error_mev": 1177.3646350046647,
+     "vasp_signed_error_mev": 1177.3646350046647,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.3994290500000943,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -34292.831498806365,
+    "offset_wander_mev": 1177.3775734919836
+   },
+   "t1_gate": {
+    "driver_pair": [
+     4,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 1177.3775734919836
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_missing": [],
+   "chemical_system": "Al-Li-O-Si",
+   "dense_barrier_ev": 2.4718397080378054,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 1126.4482180378081,
+   "image_count": 7,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-1222469_0_0_0_1_0",
+   "path_index": 4,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 2.4718397080378054,
+     "vasp_abs_error_mev": 1126.4482180378081,
+     "vasp_signed_error_mev": 1126.4482180378081,
+     "window": 1
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 2.4718397080378054,
+     "vasp_abs_error_mev": 1126.4482180378081,
+     "vasp_signed_error_mev": 1126.4482180378081,
+     "window": 1
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 2.4718397080378054,
+     "vasp_abs_error_mev": 1126.4482180378081,
+     "vasp_signed_error_mev": 1126.4482180378081,
+     "window": 1
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 2.4718397080378054,
+     "vasp_abs_error_mev": 1126.4482180378081,
+     "vasp_signed_error_mev": 1126.4482180378081,
+     "window": 1
+    }
+   },
+   "reference_barrier_ev": 1.3453914899999972,
+   "t1": {
+    "evaluated_image_count": 7,
+    "offset_mean_mev": -21016.614562891733,
+    "offset_wander_mev": 1126.4493505059363
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     3
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 1126.4493505059363
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    6
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "Al-Li-O-V",
+   "dense_barrier_ev": 1.1881443131876495,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 767.7439831877564,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-754923_0_2_0_0_1",
+   "path_index": 5,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1881443131876495,
+     "vasp_abs_error_mev": 767.7439831877564,
+     "vasp_signed_error_mev": 767.7439831877564,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1881443131876495,
+     "vasp_abs_error_mev": 767.7439831877564,
+     "vasp_signed_error_mev": 767.7439831877564,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1881443131876495,
+     "vasp_abs_error_mev": 767.7439831877564,
+     "vasp_signed_error_mev": 767.7439831877564,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1881443131876495,
+     "vasp_abs_error_mev": 767.7439831877564,
+     "vasp_signed_error_mev": 767.7439831877564,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.4204003299998931,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -13297.017277103034,
+    "offset_wander_mev": 903.3949231876468
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 903.3949231876468
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_missing": [],
+   "chemical_system": "As-B-Cr-Li-O",
+   "dense_barrier_ev": 1.9768113354273282,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 1055.836915427335,
+   "image_count": 7,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-754292_0_3_0_0_0",
+   "path_index": 6,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 5,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.9768113354273282,
+     "vasp_abs_error_mev": 1055.836915427335,
+     "vasp_signed_error_mev": 1055.836915427335,
+     "window": 1
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.9768113354273282,
+     "vasp_abs_error_mev": 1055.836915427335,
+     "vasp_signed_error_mev": 1055.836915427335,
+     "window": 1
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.9768113354273282,
+     "vasp_abs_error_mev": 1055.836915427335,
+     "vasp_signed_error_mev": 1055.836915427335,
+     "window": 1
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.9768113354273282,
+     "vasp_abs_error_mev": 1055.836915427335,
+     "vasp_signed_error_mev": 1055.836915427335,
+     "window": 1
+    }
+   },
+   "reference_barrier_ev": 0.9209744199999932,
+   "t1": {
+    "evaluated_image_count": 7,
+    "offset_mean_mev": -27438.65023741793,
+    "offset_wander_mev": 1055.836915427335
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     3
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 1055.836915427335
+   },
+   "union_model_anchor_indices": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "As-C-Fe-Li-O",
+   "dense_barrier_ev": 0.4491677310288651,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 114.449881028861,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-770939_10_1_1_0_1",
+   "path_index": 7,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 0,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.4491677310288651,
+     "vasp_abs_error_mev": 114.449881028861,
+     "vasp_signed_error_mev": 114.449881028861,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.4491677310288651,
+     "vasp_abs_error_mev": 114.449881028861,
+     "vasp_signed_error_mev": 114.449881028861,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.4491677310288651,
+     "vasp_abs_error_mev": 114.449881028861,
+     "vasp_signed_error_mev": 114.449881028861,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.4491677310288651,
+     "vasp_abs_error_mev": 114.449881028861,
+     "vasp_signed_error_mev": 114.449881028861,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.3347178500000041,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -18775.39514244977,
+    "offset_wander_mev": 135.0219610288841
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 135.0219610288841
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "B-Co-Li-O",
+   "dense_barrier_ev": 0.9424330867377648,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 310.9866667377901,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-752707_0_2_0_0_0",
+   "path_index": 9,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.9424330867377648,
+     "vasp_abs_error_mev": 310.9866667377901,
+     "vasp_signed_error_mev": 310.9866667377901,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.9424330867377648,
+     "vasp_abs_error_mev": 310.9866667377901,
+     "vasp_signed_error_mev": 310.9866667377901,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.9424330867377648,
+     "vasp_abs_error_mev": 310.9866667377901,
+     "vasp_signed_error_mev": 310.9866667377901,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.9424330867377648,
+     "vasp_abs_error_mev": 310.9866667377901,
+     "vasp_signed_error_mev": 310.9866667377901,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.6314464199999748,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -44426.84117789479,
+    "offset_wander_mev": 402.6145799726946
+   },
+   "t1_gate": {
+    "driver_pair": [
+     4,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 402.6145799726946
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "B-Li-O",
+   "dense_barrier_ev": 0.7652884594959914,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 144.0130894959566,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-3635_0_3_0_0_0",
+   "path_index": 11,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.7652884594959914,
+     "vasp_abs_error_mev": 144.0130894959566,
+     "vasp_signed_error_mev": 144.0130894959566,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.7652884594959914,
+     "vasp_abs_error_mev": 144.0130894959566,
+     "vasp_signed_error_mev": 144.0130894959566,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.7652884594959914,
+     "vasp_abs_error_mev": 144.0130894959566,
+     "vasp_signed_error_mev": 144.0130894959566,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 1,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.7652884594959914,
+     "vasp_abs_error_mev": 144.0130894959566,
+     "vasp_signed_error_mev": 144.0130894959566,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.6212753700000349,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -30410.29438502678,
+    "offset_wander_mev": 384.12868111220087
+   },
+   "t1_gate": {
+    "driver_pair": [
+     4,
+     1
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 384.12868111220087
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "B-Li-O-Sn",
+   "dense_barrier_ev": 1.493111741107441,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 793.9096111074377,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-759667_2_1_1_1_0",
+   "path_index": 12,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.493111741107441,
+     "vasp_abs_error_mev": 793.9096111074377,
+     "vasp_signed_error_mev": 793.9096111074377,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.493111741107441,
+     "vasp_abs_error_mev": 793.9096111074377,
+     "vasp_signed_error_mev": 793.9096111074377,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.493111741107441,
+     "vasp_abs_error_mev": 793.9096111074377,
+     "vasp_signed_error_mev": 793.9096111074377,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.493111741107441,
+     "vasp_abs_error_mev": 793.9096111074377,
+     "vasp_signed_error_mev": 793.9096111074377,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.6992021300000033,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -23228.487789888346,
+    "offset_wander_mev": 1002.4534987124971
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 1002.4534987124971
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "B-Li-O-Ti",
+   "dense_barrier_ev": 0.6753903575432787,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 335.3848275432938,
+   "image_count": 5,
+   "models_missing": {
+    "mace-mp-small": "failed",
+    "mace-mpa-0-medium": "failed"
+   },
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium"
+   ],
+   "path_id": "mp-770749_2_4_0_0_0",
+   "path_index": 13,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.6753903575432787,
+     "vasp_abs_error_mev": 335.3848275432938,
+     "vasp_signed_error_mev": 335.3848275432938,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.6753903575432787,
+     "vasp_abs_error_mev": 335.3848275432938,
+     "vasp_signed_error_mev": 335.3848275432938,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.3400055299999849,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -12408.253069043554,
+    "offset_wander_mev": 704.2189317315897
+   },
+   "t1_gate": {
+    "driver_pair": [
+     4,
+     0
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 704.2189317315897
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_missing": [],
+   "chemical_system": "B-Li-O-Zn",
+   "dense_barrier_ev": 4.879200412623959,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 4309.0016226240095,
+   "image_count": 7,
+   "models_missing": {
+    "chgnet": "failed",
+    "mace-mp-medium": "failed",
+    "mace-mp-small": "failed",
+    "mace-mpa-0-medium": "failed"
+   },
+   "models_present": [],
+   "path_id": "mp-756912_1_1_1_0_0",
+   "path_index": 14,
+   "per_model": {},
+   "reference_barrier_ev": 0.5701987899999494,
+   "t1": {
+    "evaluated_image_count": 7,
+    "offset_mean_mev": -24625.339358502028,
+    "offset_wander_mev": 4542.388537592273
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     4
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 4542.388537592273
+   },
+   "union_model_anchor_indices": []
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "Bi-Li-S",
+   "dense_barrier_ev": 1.1160739366191592,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 658.9649866191962,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-1222404_0_0_0_1_-1",
+   "path_index": 15,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1160739366191592,
+     "vasp_abs_error_mev": 658.9649866191962,
+     "vasp_signed_error_mev": 658.9649866191962,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1160739366191592,
+     "vasp_abs_error_mev": 658.9649866191962,
+     "vasp_signed_error_mev": 658.9649866191962,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1160739366191592,
+     "vasp_abs_error_mev": 658.9649866191962,
+     "vasp_signed_error_mev": 658.9649866191962,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1160739366191592,
+     "vasp_abs_error_mev": 658.9649866191962,
+     "vasp_signed_error_mev": 658.9649866191962,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.457108949999963,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": 23395.91099963395,
+    "offset_wander_mev": 658.9679726267277
+   },
+   "t1_gate": {
+    "driver_pair": [
+     4,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 658.9679726267277
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Co-Li-Na-O-P",
+   "dense_barrier_ev": 0.5571680228566152,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 32.72969285660565,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-760344_10_4_0_1_0",
+   "path_index": 16,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.5571680228566152,
+     "vasp_abs_error_mev": 32.72969285660565,
+     "vasp_signed_error_mev": 32.72969285660565,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.5571680228566152,
+     "vasp_abs_error_mev": 32.72969285660565,
+     "vasp_signed_error_mev": 32.72969285660565,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.5571680228566152,
+     "vasp_abs_error_mev": 32.72969285660565,
+     "vasp_signed_error_mev": 32.72969285660565,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.5571680228566152,
+     "vasp_abs_error_mev": 32.72969285660565,
+     "vasp_signed_error_mev": 32.72969285660565,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.5244383300000095,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -20916.10371465556,
+    "offset_wander_mev": 117.27167851484046
+   },
+   "t1_gate": {
+    "driver_pair": [
+     1,
+     3
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 117.27167851484046
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Cr-Li-O",
+   "dense_barrier_ev": 0.4022456457844328,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 116.18176578451767,
+   "image_count": 7,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-758282_0_2_0_0_0",
+   "path_index": 17,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 0.4022456457844328,
+     "vasp_abs_error_mev": 116.18176578451767,
+     "vasp_signed_error_mev": 116.18176578451767,
+     "window": 1
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 1,
+     "model_min_index": 3,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 0.4022456457844328,
+     "vasp_abs_error_mev": 116.18176578451767,
+     "vasp_signed_error_mev": 116.18176578451767,
+     "window": 1
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 0,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 141.99872696519833,
+     "same_engine_signed_error_mev": -141.99872696519833,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 0.26024691881923445,
+     "vasp_abs_error_mev": 25.816961180680664,
+     "vasp_signed_error_mev": -25.816961180680664,
+     "window": 1
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 0,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 141.99872696519833,
+     "same_engine_signed_error_mev": -141.99872696519833,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 0.26024691881923445,
+     "vasp_abs_error_mev": 25.816961180680664,
+     "vasp_signed_error_mev": -25.816961180680664,
+     "window": 1
+    }
+   },
+   "reference_barrier_ev": 0.2860638799999151,
+   "t1": {
+    "evaluated_image_count": 7,
+    "offset_mean_mev": -43119.161471132706,
+    "offset_wander_mev": 268.71582736646815
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     3
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 268.71582736646815
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    6
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Fe-Li-Na-O-P",
+   "dense_barrier_ev": 1.332943015558726,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 679.5390855587584,
+   "image_count": 7,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-772851_6_10_0_1_0",
+   "path_index": 19,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 5,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.332943015558726,
+     "vasp_abs_error_mev": 679.5390855587584,
+     "vasp_signed_error_mev": 679.5390855587584,
+     "window": 1
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.332943015558726,
+     "vasp_abs_error_mev": 679.5390855587584,
+     "vasp_signed_error_mev": 679.5390855587584,
+     "window": 1
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 1,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.332943015558726,
+     "vasp_abs_error_mev": 679.5390855587584,
+     "vasp_signed_error_mev": 679.5390855587584,
+     "window": 1
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 6,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.332943015558726,
+     "vasp_abs_error_mev": 679.5390855587584,
+     "vasp_signed_error_mev": 679.5390855587584,
+     "window": 1
+    }
+   },
+   "reference_barrier_ev": 0.6534039299999677,
+   "t1": {
+    "evaluated_image_count": 7,
+    "offset_mean_mev": -24450.642963973496,
+    "offset_wander_mev": 753.5274494739497
+   },
+   "t1_gate": {
+    "driver_pair": [
+     6,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 753.5274494739497
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Fe-Li-O-P",
+   "dense_barrier_ev": 1.050176718771695,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 320.44362877172716,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-768508_3_7_0_0_0",
+   "path_index": 21,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.050176718771695,
+     "vasp_abs_error_mev": 320.44362877172716,
+     "vasp_signed_error_mev": 320.44362877172716,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.050176718771695,
+     "vasp_abs_error_mev": 320.44362877172716,
+     "vasp_signed_error_mev": 320.44362877172716,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.050176718771695,
+     "vasp_abs_error_mev": 320.44362877172716,
+     "vasp_signed_error_mev": 320.44362877172716,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.050176718771695,
+     "vasp_abs_error_mev": 320.44362877172716,
+     "vasp_signed_error_mev": 320.44362877172716,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.7297330899999679,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -33321.38356627042,
+    "offset_wander_mev": 573.3406561287193
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 573.3406561287193
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Fe-Li-O-S",
+   "dense_barrier_ev": 1.2040894933661548,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 562.0572633662277,
+   "image_count": 7,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-771011_2_1_1_-1_0",
+   "path_index": 22,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 4,
+     "model_min_index": 1,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.2040894933661548,
+     "vasp_abs_error_mev": 562.0572633662277,
+     "vasp_signed_error_mev": 562.0572633662277,
+     "window": 1
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      2,
+      3,
+      4,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.2040894933661548,
+     "vasp_abs_error_mev": 562.0572633662277,
+     "vasp_signed_error_mev": 562.0572633662277,
+     "window": 1
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 4,
+     "model_min_index": 1,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.2040894933661548,
+     "vasp_abs_error_mev": 562.0572633662277,
+     "vasp_signed_error_mev": 562.0572633662277,
+     "window": 1
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      3,
+      4,
+      5,
+      6
+     ],
+     "anchors_evaluated": [
+      0,
+      3,
+      4,
+      5,
+      6
+     ],
+     "complete": true,
+     "model_max_index": 4,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": false,
+     "sparse_barrier_ev": 1.2040894933661548,
+     "vasp_abs_error_mev": 562.0572633662277,
+     "vasp_signed_error_mev": 562.0572633662277,
+     "window": 1
+    }
+   },
+   "reference_barrier_ev": 0.642032229999927,
+   "t1": {
+    "evaluated_image_count": 7,
+    "offset_mean_mev": -30049.55339375996,
+    "offset_wander_mev": 736.429820230569
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     3
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 736.429820230569
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Li-Mn-O-P-V",
+   "dense_barrier_ev": 1.0700338814471024,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 358.2318814470682,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-753882_0_1_1_0_-1",
+   "path_index": 24,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.0700338814471024,
+     "vasp_abs_error_mev": 358.2318814470682,
+     "vasp_signed_error_mev": 358.2318814470682,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.0700338814471024,
+     "vasp_abs_error_mev": 358.2318814470682,
+     "vasp_signed_error_mev": 358.2318814470682,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.0700338814471024,
+     "vasp_abs_error_mev": 358.2318814470682,
+     "vasp_signed_error_mev": 358.2318814470682,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.0700338814471024,
+     "vasp_abs_error_mev": 358.2318814470682,
+     "vasp_signed_error_mev": 358.2318814470682,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.7118020000000342,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -22053.4391621022,
+    "offset_wander_mev": 540.72843787276
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 540.72843787276
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Li-O-P-V",
+   "dense_barrier_ev": 1.8399002666358228,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 1228.99088663587,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-25463_4_10_1_0_0",
+   "path_index": 25,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.8399002666358228,
+     "vasp_abs_error_mev": 1228.99088663587,
+     "vasp_signed_error_mev": 1228.99088663587,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.8399002666358228,
+     "vasp_abs_error_mev": 1228.99088663587,
+     "vasp_signed_error_mev": 1228.99088663587,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.8399002666358228,
+     "vasp_abs_error_mev": 1228.99088663587,
+     "vasp_signed_error_mev": 1228.99088663587,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.8399002666358228,
+     "vasp_abs_error_mev": 1228.99088663587,
+     "vasp_signed_error_mev": 1228.99088663587,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.6109093799999528,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -18560.420730788428,
+    "offset_wander_mev": 1229.1445066358647
+   },
+   "t1_gate": {
+    "driver_pair": [
+     4,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 1229.1445066358647
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Li-O-Si-V",
+   "dense_barrier_ev": 1.1318835582303564,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 885.0127682303538,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-772542_0_2_0_0_0",
+   "path_index": 26,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1318835582303564,
+     "vasp_abs_error_mev": 885.0127682303538,
+     "vasp_signed_error_mev": 885.0127682303538,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1318835582303564,
+     "vasp_abs_error_mev": 885.0127682303538,
+     "vasp_signed_error_mev": 885.0127682303538,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1318835582303564,
+     "vasp_abs_error_mev": 885.0127682303538,
+     "vasp_signed_error_mev": 885.0127682303538,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 1.1318835582303564,
+     "vasp_abs_error_mev": 885.0127682303538,
+     "vasp_signed_error_mev": 885.0127682303538,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.2468707900000026,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -15746.569547557558,
+    "offset_wander_mev": 885.7725282302927
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     2
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 885.7725282302927
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "C-Li-O-V",
+   "dense_barrier_ev": 0.07939278463697974,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": -33.400075363033466,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-752552_0_7_0_0_1",
+   "path_index": 27,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.07939278463697974,
+     "vasp_abs_error_mev": 33.400075363033466,
+     "vasp_signed_error_mev": -33.400075363033466,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.07939278463697974,
+     "vasp_abs_error_mev": 33.400075363033466,
+     "vasp_signed_error_mev": -33.400075363033466,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 4,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.07939278463697974,
+     "vasp_abs_error_mev": 33.400075363033466,
+     "vasp_signed_error_mev": -33.400075363033466,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 2,
+     "model_min_index": 0,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.07939278463697974,
+     "vasp_abs_error_mev": 33.400075363033466,
+     "vasp_signed_error_mev": -33.400075363033466,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.1127928600000132,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": -26841.476781193247,
+    "offset_wander_mev": 33.468249773592106
+   },
+   "t1_gate": {
+    "driver_pair": [
+     2,
+     0
+    ],
+    "verdict": "clean",
+    "wander_mev": 33.468249773592106
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "anchor_universe": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_evaluated": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "anchors_missing": [],
+   "chemical_system": "Cl-Cr-Li",
+   "dense_barrier_ev": 0.13037270189715855,
+   "dense_complete": true,
+   "dense_extension_applied": true,
+   "dense_vs_vasp_signed_error_mev": 62.647481897158755,
+   "image_count": 5,
+   "models_missing": {},
+   "models_present": [
+    "chgnet",
+    "mace-mp-medium",
+    "mace-mp-small",
+    "mace-mpa-0-medium"
+   ],
+   "path_id": "mp-567474_0_1_0_0_0",
+   "path_index": 29,
+   "per_model": {
+    "chgnet": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 2,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.13037270189715855,
+     "vasp_abs_error_mev": 62.647481897158755,
+     "vasp_signed_error_mev": 62.647481897158755,
+     "window": 2
+    },
+    "mace-mp-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 3,
+     "model_min_index": 2,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.13037270189715855,
+     "vasp_abs_error_mev": 62.647481897158755,
+     "vasp_signed_error_mev": 62.647481897158755,
+     "window": 2
+    },
+    "mace-mp-small": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 1,
+     "model_min_index": 2,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.13037270189715855,
+     "vasp_abs_error_mev": 62.647481897158755,
+     "vasp_signed_error_mev": 62.647481897158755,
+     "window": 2
+    },
+    "mace-mpa-0-medium": {
+     "anchor_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "anchors_evaluated": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "complete": true,
+     "model_max_index": 1,
+     "model_min_index": 2,
+     "same_engine_abs_error_mev": 0.0,
+     "same_engine_signed_error_mev": 0.0,
+     "short_path_fallback": true,
+     "sparse_barrier_ev": 0.13037270189715855,
+     "vasp_abs_error_mev": 62.647481897158755,
+     "vasp_signed_error_mev": 62.647481897158755,
+     "window": 2
+    }
+   },
+   "reference_barrier_ev": 0.0677252199999998,
+   "t1": {
+    "evaluated_image_count": 5,
+    "offset_mean_mev": 7434.915137795736,
+    "offset_wander_mev": 189.14870454762058
+   },
+   "t1_gate": {
+    "driver_pair": [
+     0,
+     1
+    ],
+    "verdict": "contaminated",
+    "wander_mev": 189.14870454762058
+   },
+   "union_model_anchor_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  }
+ ],
+ "preregistration": "docs/plans/2026-07-20-sparse-dft-pilot-preregistration.md",
+ "recorded_at": "2026-07-24T17:07:00.201851+00:00",
+ "schema": "lupine.z1.union_pilot.campaign.v1",
+ "settings_note": "adopted per amendment 02: h=0.2, kpts=(1,1,1)",
+ "t1_summary": {
+  "contaminated_path_indices": [
+   0,
+   1,
+   3,
+   4,
+   5,
+   6,
+   7,
+   9,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   19,
+   21,
+   22,
+   24,
+   25,
+   26,
+   29
+  ],
+  "max_offset_wander_mev": 4542.388537592273,
+  "mean_offset_wander_mev": 952.2865166183486,
+  "paths_contaminated": 22,
+  "paths_with_offsets": 23
+ },
+ "thresholds": {
+  "basis": "same-engine (sparse GPAW vs dense same-engine GPAW profile)",
+  "strong_win_mev": 15.0,
+  "t1_gate_mev": 40.0,
+  "win_mev": 40.0
+ }
+}
