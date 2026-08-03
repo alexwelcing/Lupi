@@ -23,8 +23,9 @@ export interface MaterialScene {
   materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
   /** 0 = per-element identity, 1 = full preset override. */
   materialIntensity: number;
-  /** HDRI environment map. */
-  environmentPreset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'apartment' | 'park' | 'none';
+  /** Environment map. 'softbox' is the procedural scientific-studio rig
+   *  (generated on-device, no HDR fetch); the rest are fetched Drei HDRIs. */
+  environmentPreset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none';
   /** Environment map contribution multiplier. */
   envIntensity: number;
   /** Fill / ambient light. */
@@ -79,7 +80,7 @@ export const MATERIAL_SCENES: MaterialScene[] = [
     code: 'SPC',
     materialPreset: 'default',
     materialIntensity: 0.0,
-    environmentPreset: 'apartment',
+    environmentPreset: 'softbox',
     envIntensity: 1.2,
     ambientIntensity: 0.5,
     dirLightIntensity: 1.5,

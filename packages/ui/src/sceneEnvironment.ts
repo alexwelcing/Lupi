@@ -5,15 +5,17 @@ export type SceneEnvironmentPreset =
   | 'night'
   | 'warehouse'
   | 'forest'
-  | 'apartment'
+  | 'softbox'
   | 'park'
   | 'none';
 
-export type DreiEnvironmentPreset = Exclude<SceneEnvironmentPreset, 'none'>;
+/** Presets backed by a fetched Drei HDRI asset. 'softbox' is generated
+ *  procedurally on-device (see studioEnvironment.ts) and 'none' disables IBL,
+ *  so neither belongs to the Drei asset universe. */
+export type DreiEnvironmentPreset = Exclude<SceneEnvironmentPreset, 'none' | 'softbox'>;
 
 export const DREI_ENVIRONMENT_ASSET_REVISION = '456060a26bbeb8fdf79326f224b6d99b8bcce736';
 export const DREI_ENVIRONMENT_FILES: Record<DreiEnvironmentPreset, string> = {
-  apartment: 'lebombo_1k.hdr',
   city: 'potsdamer_platz_1k.hdr',
   dawn: 'kiara_1_dawn_1k.hdr',
   forest: 'forest_slope_1k.hdr',
@@ -23,8 +25,20 @@ export const DREI_ENVIRONMENT_FILES: Record<DreiEnvironmentPreset, string> = {
   warehouse: 'empty_warehouse_01_1k.hdr',
 };
 
+/**
+ * The procedural scientific-studio softbox rig (replaces the retired Drei
+ * 'apartment' room HDRI). There is no fetched asset: the identity pins the
+ * generator design version instead of a file revision, and the "file" names
+ * the procedural recipe. sha1('lupi-scientific-softbox-studio-v1').
+ */
+export const SOFTBOX_ENVIRONMENT_REVISION = 'fecf2129e6137375f8a071c0b949f02aea986fd9';
+export const SOFTBOX_ENVIRONMENT_FILE = 'procedural-scientific-softbox-v1';
+
+/** Presets that resolve to a concrete PMREM texture (everything but 'none'). */
+export type TexturedEnvironmentPreset = Exclude<SceneEnvironmentPreset, 'none'>;
+
 export interface SceneEnvironmentIdentity {
-  preset: DreiEnvironmentPreset;
+  preset: TexturedEnvironmentPreset;
   assetRevision: string;
   file: string;
   colorSpace: 'srgb-linear';
@@ -42,8 +56,16 @@ export function environmentAssetIdentity(
   preset: SceneEnvironmentPreset,
 ): SceneEnvironmentSpecIdentity {
   if (preset === 'none') return { preset: 'none' as const };
+  if (preset === 'softbox') {
+    return {
+      preset: 'softbox' as const,
+      assetRevision: SOFTBOX_ENVIRONMENT_REVISION,
+      file: SOFTBOX_ENVIRONMENT_FILE,
+      colorSpace: 'srgb-linear' as const,
+    };
+  }
   return {
-    preset: preset as DreiEnvironmentPreset,
+    preset,
     assetRevision: DREI_ENVIRONMENT_ASSET_REVISION,
     file: DREI_ENVIRONMENT_FILES[preset],
     colorSpace: 'srgb-linear' as const,
@@ -52,7 +74,7 @@ export function environmentAssetIdentity(
 
 export function markSceneEnvironmentReady(
   texture: THREE.Texture,
-  preset: DreiEnvironmentPreset,
+  preset: TexturedEnvironmentPreset,
 ): SceneEnvironmentIdentity {
   const assetIdentity = environmentAssetIdentity(preset) as SceneEnvironmentAssetIdentity;
   const identity: SceneEnvironmentIdentity = {
@@ -153,7 +175,9 @@ export function assertSceneEnvironmentReady(
   }
 }
 
-export function resolveSceneEnvironment(environmentPreset: SceneEnvironmentPreset): DreiEnvironmentPreset | null {
+export function resolveSceneEnvironment(
+  environmentPreset: SceneEnvironmentPreset,
+): TexturedEnvironmentPreset | null {
   return environmentPreset === 'none' ? null : environmentPreset;
 }
 import * as THREE from 'three';

@@ -315,7 +315,10 @@ const EDGE_RENDER_VIEW_SCHEMA_V1: JsonValue = {
               additionalProperties: false,
               required: ['preset', 'assetRevision', 'file', 'colorSpace'],
               properties: {
-                preset: { enum: ['city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'apartment', 'park'] },
+                // Mirrors ENVIRONMENT_PRESETS_V1: 'softbox' is the procedural
+                // scientific-studio rig; 'apartment' remains accepted so
+                // previously persisted v1 specs still validate.
+                preset: { enum: ['city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'softbox', 'apartment', 'park'] },
                 assetRevision: { type: 'string', pattern: '^[0-9a-f]{40,64}$' },
                 file: { type: 'string', minLength: 1 },
                 colorSpace: { const: 'srgb-linear' },

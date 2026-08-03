@@ -14,7 +14,10 @@ const COLORMAPS_V1 = [
 ] as const;
 const MATERIAL_PRESETS_V1 = ['default', 'matte', 'metallic', 'glass', 'plastic'] as const;
 const ENVIRONMENT_PRESETS_V1 = [
-  'city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'apartment', 'park', 'none',
+  // 'softbox' is the procedural scientific-studio rig that replaced the
+  // 'apartment' room HDRI in the viewer. 'apartment' stays in the contract so
+  // previously persisted v1 specs still validate structurally.
+  'city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'softbox', 'apartment', 'park', 'none',
 ] as const;
 const HEX_COLOR_PATTERN_V1 = /^#[0-9a-fA-F]{6}$/;
 

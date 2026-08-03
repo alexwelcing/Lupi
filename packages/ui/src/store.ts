@@ -158,8 +158,11 @@ function sanitizeMaterialScene(value: unknown): string {
     : DEFAULT_SCENE_ID;
 }
 
-function sanitizeEnvironmentPreset(value: unknown): AppState['environmentPreset'] {
-  return value === 'city' || value === 'studio' || value === 'dawn' || value === 'night' || value === 'warehouse' || value === 'forest' || value === 'apartment' || value === 'park' || value === 'none'
+export function sanitizeEnvironmentPreset(value: unknown): AppState['environmentPreset'] {
+  // Legacy saved views / share URLs may still carry the retired 'apartment'
+  // room HDRI; it maps onto its replacement, the procedural softbox studio.
+  if (value === 'apartment') return 'softbox';
+  return value === 'city' || value === 'studio' || value === 'dawn' || value === 'night' || value === 'warehouse' || value === 'forest' || value === 'softbox' || value === 'park' || value === 'none'
     ? value
     : 'studio';
 }
@@ -426,7 +429,7 @@ export interface AppState {
   filterShellPreset: FilterShellPreset;
   filterShellOpacity: number;
   filterShellRadius: number;
-  environmentPreset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'apartment' | 'park' | 'none';
+  environmentPreset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none';
   materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
   /** Active material scene ID. Scenes coordinate material + lighting + env
    *  + post into a holistic authored look. */
@@ -725,7 +728,7 @@ export interface AppState {
   setFilterShellPreset: (preset: FilterShellPreset) => void;
   setFilterShellOpacity: (opacity: number) => void;
   setFilterShellRadius: (radius: number) => void;
-  setEnvironmentPreset: (preset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'apartment' | 'park' | 'none') => void;
+  setEnvironmentPreset: (preset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none') => void;
   setArLightEstimationActive: (active: boolean) => void;
   setMaterialPreset: (preset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic') => void;
   setMaterialScene: (sceneId: string) => void;
@@ -1264,7 +1267,9 @@ export const useStore = create<AppState>()(
     setFilterShellPreset: (filterShellPreset) => set({ filterShellPreset }),
     setFilterShellOpacity: (filterShellOpacity) => set({ filterShellOpacity: Math.max(0, Math.min(0.65, filterShellOpacity)) }),
     setFilterShellRadius: (filterShellRadius) => set({ filterShellRadius: Math.max(0.75, Math.min(4, filterShellRadius)) }),
-    setEnvironmentPreset: (environmentPreset) => set({ environmentPreset }),
+    // Sanitized so untyped callers (dev probes, saved views, legacy bridges)
+    // asking for the retired 'apartment' preset land on its replacement.
+    setEnvironmentPreset: (environmentPreset) => set({ environmentPreset: sanitizeEnvironmentPreset(environmentPreset) }),
     setMaterialPreset: (materialPreset) => set({ materialPreset }),
     setMaterialScene: (materialScene) => set({ materialScene }),
     setMaterialIntensity: (materialIntensity) => set({ materialIntensity: Math.max(0, Math.min(1, materialIntensity)) }),
