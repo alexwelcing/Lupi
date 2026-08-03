@@ -729,10 +729,6 @@ export function adaptVisualizationBundle(
   };
 }
 
-function vectorLength(v: number[]): number {
-  return Math.hypot(v[0], v[1], v[2]);
-}
-
 /** Cell semantics must agree with positions before a trajectory may present bundle science. */
 function verifyTrajectoryLattice(manifest: CanonicalManifest, trajectory: Trajectory): void {
   manifest.coordinates.frames.forEach((sourceFrame, image) => {
@@ -743,11 +739,13 @@ function verifyTrajectoryLattice(manifest: CanonicalManifest, trajectory: Trajec
     }
     const [xlo, xhi, ylo, yhi, zlo, zhi] = Array.from(frame.boxBounds);
     const spans = [xhi - xlo, yhi - ylo, zhi - zlo];
-    const lengths = lattice.map(vectorLength);
+    // LAMMPS triclinic bounds carry lx/ly/lz on the diagonal; off-axis
+    // components are represented separately by xy/xz/yz in boxTilt.
+    const canonicalSpans = lattice.map((vector, axis) => Math.abs(vector[axis]));
     spans.forEach((span, axis) => {
-      if (Math.abs(span - lengths[axis]) > 1e-4) {
+      if (Math.abs(span - canonicalSpans[axis]) > 1e-4) {
         throw new Error(
-          `Cell mismatch at NEB image ${image}: box span ${axis} is ${span.toFixed(5)} Å but the canonical lattice is ${lengths[axis].toFixed(5)} Å`,
+          `Cell mismatch at NEB image ${image}: box span ${axis} is ${span.toFixed(5)} Å but the canonical lattice span is ${canonicalSpans[axis].toFixed(5)} Å`,
         );
       }
     });
