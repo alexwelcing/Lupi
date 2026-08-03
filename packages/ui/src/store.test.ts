@@ -237,6 +237,17 @@ describe('Store — URL Serialization', () => {
     expect(restored.environmentPreset).toBe('studio');
   });
 
+  it('maps the retired apartment environment onto the softbox studio', () => {
+    getStoreState().decodeFromURL(encodeStateDelta({ env: 'apartment' }));
+    expect(getStoreState().environmentPreset).toBe('softbox');
+
+    getStoreState().setEnvironmentPreset('apartment' as never);
+    expect(getStoreState().environmentPreset).toBe('softbox');
+
+    getStoreState().setEnvironmentPreset('softbox');
+    expect(getStoreState().environmentPreset).toBe('softbox');
+  });
+
   it('infers color scheme for legacy URL color state', () => {
     getStoreState().decodeFromURL(encodeStateDelta({
       cm: 'property',

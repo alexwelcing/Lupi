@@ -13,7 +13,7 @@
 import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { EffectComposer, SSAO, Bloom, ToneMapping, Vignette, DepthOfField } from '@react-three/postprocessing';
+import { EffectComposer, N8AO, Bloom, ToneMapping, Vignette, DepthOfField } from '@react-three/postprocessing';
 import { ToneMappingMode, BlendFunction } from 'postprocessing';
 import { useXR } from '@react-three/xr';
 
@@ -37,18 +37,26 @@ export function ScenePostprocessing() {
   return (
     <EffectComposer
       key={composerKey(active)}
-      enableNormalPass={active.ssao.enabled}
       multisampling={active.multisampling}
     >
       {active.ssao.enabled ? (
-        <SSAO
-          radius={active.ssao.radius}
-          intensity={active.ssao.intensity * 70}
-          luminanceInfluence={0.5}
-          worldDistanceThreshold={100}
-          worldDistanceFalloff={5}
-          worldProximityThreshold={0.5}
-          worldProximityFalloff={0.3}
+        // N8AO derives normals from the depth buffer, so the ray-traced atom
+        // impostors (which write true sphere depth via gl_FragDepth) get
+        // correct ambient occlusion. The old SSAO effect read a NormalPass
+        // G-buffer instead — an override material that never runs the
+        // impostor shader — so it computed occlusion from garbage normals
+        // and peppered every sphere with dark speckle. Never reintroduce a
+        // normal-pass-based AO here without teaching the pass about
+        // impostors. aoRadius is world-space (Å): tuned for atom contact
+        // shadows, and the built-in Poisson denoise keeps surfaces clean.
+        <N8AO
+          aoRadius={active.ssao.radius}
+          intensity={active.ssao.intensity}
+          distanceFalloff={1}
+          aoSamples={16}
+          denoiseSamples={8}
+          denoiseRadius={12}
+          depthAwareUpsampling
         />
       ) : (<></>) as any}
       {active.bloom.enabled ? (

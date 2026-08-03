@@ -21,7 +21,7 @@ import type { Frame } from '@atlas/core/types';
 import { firebaseDb } from './auth/firebase';
 import { loadInlineMolecule, loadMoleculeSource } from './loadMoleculeSource';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
-import { useStore, type AppState, type LoadedFile } from './store';
+import { useStore, sanitizeEnvironmentPreset, type AppState, type LoadedFile } from './store';
 import {
   measurementForInlineSnapshot,
   sanitizeMolecularMeasurement,
@@ -422,10 +422,16 @@ function applyCanonicalView(view: CanonicalMolecularView) {
   const measurement = sanitizeMolecularMeasurement(view.analysis?.measurement);
   const atomVisibility = view.atomVisibility ?? { hiddenAtomTypes: [], atomTypeScales: {} };
   const knowledgeLabels = view.knowledgeLabels ?? {};
+  // Views saved before the softbox studio existed may carry the retired
+  // 'apartment' environment; sanitize instead of spreading it into the store.
+  const material = { ...(view.material ?? {}) };
+  if (material.environmentPreset !== undefined) {
+    material.environmentPreset = sanitizeEnvironmentPreset(material.environmentPreset);
+  }
   useStore.setState({
     ...(view.color ?? {}),
     ...(view.display ?? {}),
-    ...(view.material ?? {}),
+    ...material,
     ...(view.lighting ?? {}),
     ...(view.effects ?? {}),
     ...(view.playback ?? {}),

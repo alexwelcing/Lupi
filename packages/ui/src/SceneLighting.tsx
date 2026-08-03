@@ -26,6 +26,7 @@ import {
   resolveSceneEnvironment,
   type DreiEnvironmentPreset,
 } from './sceneEnvironment';
+import { installScientificStudioEnvironment } from './studioEnvironment';
 
 // Lighting rig radius (meters) — matches the legacy inline placement in App.
 const RIG_RADIUS = 11.18;
@@ -52,6 +53,22 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
     preset,
     () => new THREE.PMREMGenerator(gl),
   ), [gl, preset, scene, source]);
+
+  return null;
+}
+
+/**
+ * The procedural scientific-studio softbox rig. Nothing to fetch and nothing
+ * to suspend on: the emissive rig scene is built on-device and PMREM-baked
+ * exactly once per install; after that it costs the same as any static
+ * environment texture.
+ */
+function LupiSoftboxEnvironment() {
+  const { gl, scene } = useThree();
+  useLayoutEffect(() => installScientificStudioEnvironment(
+    scene,
+    () => new THREE.PMREMGenerator(gl),
+  ), [gl, scene]);
 
   return null;
 }
@@ -110,7 +127,8 @@ export function SceneLighting() {
           <directionalLight position={[rx, ry, rz]} intensity={key * 0.15} color={rimLightColor} />
         </>
       )}
-      {!isAR && finalEnv && <LupiEnvironment preset={finalEnv} />}
+      {!isAR && finalEnv === 'softbox' && <LupiSoftboxEnvironment />}
+      {!isAR && finalEnv && finalEnv !== 'softbox' && <LupiEnvironment preset={finalEnv} />}
     </>
   );
 }

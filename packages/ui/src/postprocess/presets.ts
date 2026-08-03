@@ -27,6 +27,9 @@ export interface PostprocessPresetConfig {
    *  heavy (+DOF). Communicated to the user as a tier badge. */
   performanceTier: 'fast' | 'balanced' | 'heavy';
 
+  /** N8AO parameters. `intensity` is the AO strength multiplier (~1 = subtle,
+   *  2+ = heavy); `radius` is the world-space AO radius in scene units (Å) —
+   *  sized for contact shadows between touching atoms. */
   ssao: { enabled: boolean; intensity: number; radius: number };
   bloom: { enabled: boolean; intensity: number; threshold: number; smoothing: number };
   dof: {
@@ -46,7 +49,7 @@ export interface PostprocessPresetConfig {
    *  `null` disables IBL (atoms fall back to neutral grey, bonds get no
    *  envMap). */
   env: {
-    drei: 'studio' | 'apartment' | 'city' | 'dawn' | 'forest' | 'lobby' | 'night' | 'park' | 'sunset' | 'warehouse' | null;
+    drei: 'studio' | 'softbox' | 'city' | 'dawn' | 'forest' | 'lobby' | 'night' | 'park' | 'sunset' | 'warehouse' | null;
   };
 }
 
@@ -56,20 +59,20 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
     label: 'Paper',
     tagline: 'Soft, true-to-print shading with neutral exposure — reads like a journal figure.',
     performanceTier: 'fast',
-    ssao: { enabled: true, intensity: 0.4, radius: 0.25 },
+    ssao: { enabled: true, intensity: 1.0, radius: 1.0 },
     bloom: { enabled: false, intensity: 0, threshold: 0.9, smoothing: 0.3 },
     dof: { enabled: false, bokehScale: 1, focalLength: 0.02, focusDistance: 3, focusRange: 4, auto: false },
     vignette: { enabled: false, offset: 0.5, darkness: 0.3 },
     toneMapping: 'aces',
     multisampling: 4,
-    env: { drei: 'apartment' }, // neutral
+    env: { drei: 'softbox' }, // neutral procedural studio
   },
   studio: {
     id: 'studio',
     label: 'Studio',
     tagline: 'Balanced studio light with a subtle glow and soft shadows. The everyday default.',
     performanceTier: 'fast',
-    ssao: { enabled: true, intensity: 0.55, radius: 0.3 },
+    ssao: { enabled: true, intensity: 1.4, radius: 1.2 },
     bloom: { enabled: true, intensity: 0.18, threshold: 0.85, smoothing: 0.3 },
     dof: { enabled: false, bokehScale: 1, focalLength: 0.02, focusDistance: 3, focusRange: 5, auto: false },
     vignette: { enabled: true, offset: 0.4, darkness: 0.4 },
@@ -82,7 +85,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
     label: 'Editorial',
     tagline: 'Dark and high-contrast with a heavy vignette and glow. Built to pop on dark slides.',
     performanceTier: 'balanced',
-    ssao: { enabled: true, intensity: 0.85, radius: 0.32 },
+    ssao: { enabled: true, intensity: 2.2, radius: 1.3 },
     bloom: { enabled: true, intensity: 0.45, threshold: 0.7, smoothing: 0.25 },
     dof: { enabled: false, bokehScale: 1, focalLength: 0.02, focusDistance: 3, focusRange: 5, auto: false },
     vignette: { enabled: true, offset: 0.35, darkness: 0.65 },
@@ -95,7 +98,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
     label: 'Cinematic',
     tagline: 'Shallow depth-of-field that tracks the molecule, plus warm bloom. Hero shots and trailers.',
     performanceTier: 'heavy',
-    ssao: { enabled: true, intensity: 0.7, radius: 0.32 },
+    ssao: { enabled: true, intensity: 1.8, radius: 1.3 },
     bloom: { enabled: true, intensity: 0.6, threshold: 0.55, smoothing: 0.2 },
     dof: { enabled: true, bokehScale: 2.1, focalLength: 0.025, focusDistance: 12, focusRange: 8, auto: true },
     vignette: { enabled: true, offset: 0.3, darkness: 0.7 },
@@ -108,7 +111,7 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
     label: 'Diagram',
     tagline: 'No effects at all — flat, exact element colors. Best for labeled, schematic figures.',
     performanceTier: 'fast',
-    ssao: { enabled: false, intensity: 0, radius: 0.3 },
+    ssao: { enabled: false, intensity: 0, radius: 1.2 },
     bloom: { enabled: false, intensity: 0, threshold: 0.9, smoothing: 0.3 },
     dof: { enabled: false, bokehScale: 1, focalLength: 0.02, focusDistance: 3, focusRange: 4, auto: false },
     vignette: { enabled: false, offset: 0.5, darkness: 0.3 },
