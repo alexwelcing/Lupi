@@ -16,6 +16,7 @@
     "start": "node tools/serve-web.mjs",
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "typecheck": "turbo run build --filter=@atlas/ui",
     "build:wasm": "cd packages/parsers/wasm && wasm-pack build --target web --out-dir ../pkg",
     "nist:build": "npx -y tsx scripts/build-nist-catalog.ts",
     "test": "turbo run test --concurrency=1",
