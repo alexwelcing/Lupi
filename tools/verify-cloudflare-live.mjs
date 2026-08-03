@@ -8,6 +8,8 @@ import { pathToFileURL } from 'node:url';
 const REPORT_SCHEMA = 'lupi-live-verification-report-v1';
 const BASELINE_SCHEMA = 'lupi-public-baseline-v1';
 const CUSTOM_DOMAIN = 'https://lupi.live';
+const FIREBASE_AUTH_DOMAIN = 'shed-489901.firebaseapp.com';
+const FIREBASE_PROJECT_ID = 'shed-489901';
 const EDGE_TOOL_COUNT = 6;
 const BROWSER_TOOL_COUNT = 28;
 const RANGE_PATH = '/gallery/curated/lupine_genesis.glimbin';
@@ -178,6 +180,36 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
     assert.match(html, /\bid=["']root["']/i, 'SPA route HTML does not contain id="root"');
     observations.spa = { path: '/materials/clean-energy', edgeExecuted: routeMarker(response) };
     return observations.spa;
+  });
+
+  await check('firebase-auth-routes', async () => {
+    const initResponse = await request('/__/firebase/init.json');
+    assert.equal(initResponse.status, 200, `Firebase init expected HTTP 200, got ${initResponse.status}`);
+    assertRouteExecution(initResponse, true, options, 'Firebase init');
+    assert.match(initResponse.headers.get('content-type') ?? '', /^application\/json\b/i,
+      'Firebase init route is not JSON');
+    const init = await initResponse.json();
+    assert.equal(init.projectId, FIREBASE_PROJECT_ID, 'Firebase init project ID mismatch');
+    assert.equal(init.authDomain, FIREBASE_AUTH_DOMAIN, 'Firebase init auth domain mismatch');
+
+    const handlerResponse = await request('/__/auth/handler');
+    assert.equal(handlerResponse.status, 200, `Firebase Auth handler expected HTTP 200, got ${handlerResponse.status}`);
+    assertRouteExecution(handlerResponse, true, options, 'Firebase Auth handler');
+    assert.match(handlerResponse.headers.get('content-type') ?? '', /^text\/html\b/i,
+      'Firebase Auth handler is not HTML');
+    const handler = await handlerResponse.text();
+    assert.match(handler, /(?:src=["'][^"']*handler\.js["']|\/__\/auth\/handler)/i,
+      'Firebase Auth handler did not return the reserved Firebase handler document');
+    assert.doesNotMatch(handler, /\bid=["']root["']/i,
+      'Firebase Auth handler returned the viewer SPA instead of Firebase');
+
+    observations.firebaseAuth = {
+      projectId: init.projectId,
+      authDomain: init.authDomain,
+      initEdgeExecuted: routeMarker(initResponse),
+      handlerEdgeExecuted: routeMarker(handlerResponse),
+    };
+    return observations.firebaseAuth;
   });
 
   await check('reserved-api-namespace', async () => {

@@ -32,6 +32,13 @@ test('complete normal verification passes without an external request', async ()
   assert.deepEqual([...fixture.hosts], ['127.0.0.1']);
 });
 
+test('Firebase reserved auth routes must be proxied instead of serving the SPA', async () => {
+  const fixture = await createFixture({ firebaseAuthHandlerBody: '<!doctype html><div id="root"></div>' });
+  const report = await verifyCloudflareLive(normalOptions(fixture.origin));
+  assert.equal(report.ok, false);
+  assert.match(failed(report, 'firebase-auth-routes'), /Firebase Auth handler/);
+});
+
 test('hashed entry must be publicly cacheable and expose an ETag', async () => {
   const fixture = await createFixture({ entryCacheControl: 'private, no-store', entryEtag: null });
   const report = await verifyCloudflareLive(normalOptions(fixture.origin));
@@ -366,7 +373,7 @@ async function createFixture(overrides = {}) {
     const url = new URL(request.url, 'http://fixture.invalid');
     const dynamicRoute = url.pathname === '/health' || url.pathname === '/mcp-manifest.json' ||
       url.pathname === '/mcp' || url.pathname === '/gallery/curated/lupine_genesis.glimbin' ||
-      url.pathname === '/v1' || url.pathname.startsWith('/view/');
+      url.pathname === '/v1' || url.pathname.startsWith('/view/') || url.pathname.startsWith('/__/');
     const staticRoute = url.pathname === '/' || url.pathname === entryPath ||
       url.pathname === '/browser-mcp-manifest.json' || url.pathname === '/materials/clean-energy';
     if (dynamicRoute && overrides.dynamicMarker !== null) {
@@ -421,6 +428,17 @@ async function createFixture(overrides = {}) {
     if (url.pathname === '/materials/clean-energy') {
       response.setHeader('content-type', 'text/html');
       response.end('<!doctype html><div id="root"></div>');
+      return;
+    }
+    if (url.pathname === '/__/firebase/init.json') {
+      return json(response, {
+        authDomain: overrides.firebaseInitAuthDomain ?? 'shed-489901.firebaseapp.com',
+        projectId: 'shed-489901',
+      });
+    }
+    if (url.pathname === '/__/auth/handler') {
+      response.setHeader('content-type', 'text/html; charset=utf-8');
+      response.end(overrides.firebaseAuthHandlerBody ?? '<!doctype html><script src="handler.js"></script>');
       return;
     }
     if (url.pathname === '/v1') {
