@@ -8,6 +8,7 @@
 
 export type ScienceQualityState =
   | 'clean'
+  | 'clean-t1'
   | 'contaminated'
   | 'strong-win-contaminated'
   | 'no-guides-completed'
@@ -149,7 +150,7 @@ export interface SciencePathData {
     rule: {
       id: string;
       version: string;
-      source: { git_commit: string; path: string };
+      source: { git_commit: string | null; path: string };
       extremaTiePolicy: string;
       windowRule: string;
     };
@@ -159,6 +160,23 @@ export interface SciencePathData {
     complete: boolean;
     barrierEv: number;
   };
+  diagnostics: {
+    status: 'bound';
+    imageIndex: number;
+    note: string;
+    runs: Array<{
+      label: string;
+      gpawVersion: string | null;
+      params: Record<string, unknown>;
+      chargeE: number;
+      energyEv: number;
+      fermiLevelEv: number;
+      gapEv: number;
+      occupations: { type: string; width_ev: number };
+      scf: { converged: boolean; steps: number; max_iterations: number };
+      spin: Record<string, unknown> | null;
+    }>;
+  } | null;
   t1: {
     unit: 'meV';
     definition: string;

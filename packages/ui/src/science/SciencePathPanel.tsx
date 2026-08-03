@@ -705,10 +705,35 @@ function GuidanceSection({ data }: { data: SciencePathData }) {
         </li>
         <li data-testid="science-anchor-rule" style={{ fontFamily: MONO, fontSize: 11.5 }}>
           Anchor rule: {data.anchors.rule.id} · {data.anchors.rule.version} · source {data.anchors.rule.source.path} @{' '}
-          {data.anchors.rule.source.git_commit.slice(0, 10)} · ties: {data.anchors.rule.extremaTiePolicy} · window:{' '}
+          {data.anchors.rule.source.git_commit?.slice(0, 10) ?? 'unknown revision'} · ties: {data.anchors.rule.extremaTiePolicy} · window:{' '}
           {data.anchors.rule.windowRule}
         </li>
       </ul>
+      {data.diagnostics && (
+        <div data-testid="science-diagnostics" style={{ marginTop: 12, fontSize: 12 }}>
+          <div style={{ fontWeight: 600, color: INK }}>
+            Bound electronic diagnostics · image {data.diagnostics.imageIndex} · status {data.diagnostics.status}
+          </div>
+          <div style={{ color: MUTED, margin: '2px 0 6px' }}>{data.diagnostics.note}</div>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11.5, fontFamily: MONO }}>
+            <tbody>
+              {data.diagnostics.runs.map((run) => (
+                <tr key={run.label} style={{ borderBottom: `1px solid ${GRID}` }}>
+                  <td style={{ padding: '3px 8px 3px 0' }}>{run.label}</td>
+                  <td style={{ padding: '3px 8px' }}>GPAW {run.gpawVersion ?? 'unknown version'}</td>
+                  <td style={{ padding: '3px 8px' }}>E {run.energyEv.toFixed(4)} eV</td>
+                  <td style={{ padding: '3px 8px' }}>gap {run.gapEv.toFixed(3)} eV</td>
+                  <td style={{ padding: '3px 8px' }}>Fermi {run.fermiLevelEv.toFixed(3)} eV</td>
+                  <td style={{ padding: '3px 8px' }}>
+                    SCF {run.scf.converged ? `converged in ${run.scf.steps}` : 'not converged'} · occ {run.occupations.type} {run.occupations.width_ev} eV
+                    {run.spin ? ` · spin ${JSON.stringify(run.spin)}` : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
@@ -731,6 +756,12 @@ function qualityCopy(data: SciencePathData, fixture: SciencePanelFixture): { tit
         warn: false,
       };
     }
+    case 'clean-t1':
+      return {
+        title: 'T1 CLEAN — guidance below strong-win',
+        detail: `wander ${fmtMev(data.t1.wanderMev, 2)} meV ≤ ${fmtMev(gate, 0)} meV; same-engine verdict below strong win — no strong guidance is claimed`,
+        warn: false,
+      };
     case 'strong-win-contaminated':
       return {
         title: 'STRONG WIN (same-engine) — but cross-engine CONTAMINATED',

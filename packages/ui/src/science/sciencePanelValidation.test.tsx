@@ -2,6 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validateSciencePanelFixture } from './sciencePanelValidation';
 import { SciencePanelDemo } from './SciencePanelDemo';
+import { SciencePathPanel } from './SciencePathPanel';
+import path16 from './canonical-bundles/path-16.visualization-bundle.json';
+import { adaptVisualizationBundle } from './adaptVisualizationBundle';
 import { CANONICAL_BUNDLE_REGISTRY } from './canonicalBundleRegistry';
 import {
   verifiedSciencePanelBundleForPathIndex,
@@ -185,6 +188,23 @@ describe('SciencePanelDemo canonical bundle rendering', () => {
 
     render(<SciencePanelDemo pathIndex={16} />);
     expect((await screen.findByTestId('science-quality-banner')).textContent).toContain('looks acceptable');
+  });
+
+  it('renders bound path-0 electronic diagnostics', async () => {
+    render(<SciencePanelDemo pathIndex={0} />);
+    const diagnostics = await screen.findByTestId('science-diagnostics');
+    expect(diagnostics.textContent).toContain('Bound electronic diagnostics');
+    expect(diagnostics.textContent).toContain('image 3');
+    expect(diagnostics.querySelectorAll('tbody tr')).toHaveLength(2);
+  });
+
+  it('renders a nullable anchor-rule revision without throwing', () => {
+    const nullableRevision: any = JSON.parse(JSON.stringify(path16));
+    nullableRevision.selection.rule_source.git_commit = null;
+    const data = adaptVisualizationBundle(nullableRevision, `sha256:${'0'.repeat(64)}`);
+
+    render(<SciencePathPanel data={data} fixture={fixtureJson as any} />);
+    expect(screen.getByTestId('science-anchor-rule').textContent).toContain('unknown revision');
   });
 
   it('renders the invalid state, not a partial panel, for an unknown canonical path', async () => {
