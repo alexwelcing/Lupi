@@ -13,7 +13,7 @@ import {
 import type { ViewerOpenResult } from '../viewer/openTypes';
 import type { Frame, Trajectory } from '@atlas/core/types';
 import { resolveExampleUrl, type GalleryExample, publicAssetUrl } from './catalog';
-import { scienceBundleForPathIndex } from '../science/scienceBundle';
+import { verifiedScienceBundleForManifestSha256 } from '../science/scienceBundle';
 import { minimumImageUnwrapTrajectory } from '../science/minimumImage';
 import {
   assertViewerLoadCurrent,
@@ -171,7 +171,7 @@ async function loadOutputSidecars(example: GalleryExample): Promise<void> {
 
 /**
  * Attach the validated Z1 science bundle to the just-loaded file when the
- * gallery entry declares `sciencePathIndex`. This is the real load path for
+ * gallery entry declares a canonical manifest digest. This is the real load path for
  * the SCIENCE deck section: gallery card / `?sim=` / `#/science/<index>` all
  * funnel through here, so the panel is never reachable from test-only state.
  * Fail-closed twice: an invalid fixture yields no bundle, and a trajectory
@@ -179,24 +179,33 @@ async function loadOutputSidecars(example: GalleryExample): Promise<void> {
  * science (a mismatch is a load error, not a warning, per the data contract).
  * Exported for unit tests.
  */
-export function attachScienceBundle(example: GalleryExample): void {
-  if (example.sciencePathIndex == null) return;
+export async function attachScienceBundle(
+  example: GalleryExample,
+  isCurrent?: ViewerLoadGuard,
+): Promise<void> {
+  if (example.sciencePathIndex == null && example.scienceManifestSha256 == null) return;
+  if (example.sciencePathIndex == null || example.scienceManifestSha256 == null) {
+    console.error(`[science-panel] incomplete canonical identity for "${example.id}" — failing closed.`);
+    return;
+  }
   const file = useStore.getState().file;
   if (!file) return;
-  const science = scienceBundleForPathIndex(example.sciencePathIndex);
+  const science = await verifiedScienceBundleForManifestSha256(
+    example.scienceManifestSha256,
+    file.trajectory,
+    example.sciencePathIndex,
+  );
   if (!science) return; // validation already logged the precise errors
-  if (file.trajectory.totalFrames !== science.path.imageCount) {
-    console.error(
-      `[science-panel] trajectory/science mismatch — failing closed: "${example.id}" loaded ` +
-      `${file.trajectory.totalFrames} frames but path ${science.path.pathIndex} declares ` +
-      `${science.path.imageCount} NEB images.`,
-    );
-    return;
+  if (!viewerLoadIsCurrent(isCurrent) || useStore.getState().file !== file) {
+    throw new ViewerLoadSupersededError();
   }
   // Unwrap the periodic path to minimum-image so playback interpolates the
   // short way (atoms never fly backward through the cell). Display-only
   // transform; the discrete image indices and energies are untouched.
   const unwrappedTrajectory = minimumImageUnwrapTrajectory(file.trajectory);
+  if (!viewerLoadIsCurrent(isCurrent) || useStore.getState().file !== file) {
+    throw new ViewerLoadSupersededError();
+  }
 
   // Force the SCIENCE deck section open (not the toggling setter: reloading a
   // second science path while the section is open must keep it open).
@@ -422,7 +431,7 @@ export async function loadGalleryExample(
     if (example.autoPlay && result.trajectory.totalFrames > 1) {
       useStore.setState({ playing: true });
     }
-    attachScienceBundle(example);
+    await attachScienceBundle(example, options.isCurrent);
     await loadKnowledgeLabels(example, options.isCurrent);
     assertViewerLoadCurrent(options.isCurrent);
     void loadOutputSidecars(example);

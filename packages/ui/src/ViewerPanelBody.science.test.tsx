@@ -32,6 +32,20 @@ describe('ViewerPanelBody science frame ↔ image sync', () => {
     const panel = screen.getByTestId('science-path-panel');
     expect(panel.getAttribute('data-path-index')).toBe('16');
     expect(panel.getAttribute('data-variant')).toBe('deck');
+    expect(panel.getAttribute('data-bundle-status')).toBe('active');
+    expect(panel.getAttribute('data-bundle-quality')).toBe('verified');
+    expect(screen.getByText(/manifest: sha256:8fa964dffe3742df/)).toBeTruthy();
+  });
+
+  it('surfaces the loaded run provenance and supersedes chain in the panel chrome', () => {
+    const bundle = scienceBundleForPathIndex(16)!;
+    render(<ViewerPanelBody activePanel="science" studioDeck={null} />);
+
+    const provenance = screen.getByTestId('science-run-provenance');
+    expect(provenance.textContent).toContain(`Source campaign: ${bundle.path.revision.campaignId}`);
+    expect(provenance.textContent).toContain(`Run id: ${bundle.path.revision.runId}`);
+    expect(provenance.textContent).toContain(`Bundle digest: ${bundle.path.revision.bundleId}`);
+    expect(provenance.textContent).toContain('Supersedes chain: none');
   });
 
   it('writes panel image selection back to the store frame', () => {

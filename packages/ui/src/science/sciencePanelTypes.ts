@@ -66,7 +66,37 @@ export interface GuidanceMiss {
   sameEngineAbsErrorMev?: number | null;
 }
 
+export interface ScienceBundleRevision {
+  schema: 'lupine.visualization-bundle.v1';
+  bundleId: string;
+  manifestSha256: string;
+  campaignSha256: string;
+  campaignId: string;
+  runId: string;
+  status: 'active';
+  supersedes: string | null;
+  supersedesChain: string[];
+  retraction: null;
+  qualityState: 'verified' | 'published';
+  qualityChecks: Array<{ name: string; status: string; detail: string }>;
+  qualityWarnings: string[];
+  sourceArtifacts: Array<{
+    role: string;
+    schema: string | null;
+    sha256: string;
+    bytes: number;
+    gitCommit: string | null;
+  }>;
+  sources: {
+    campaign: string;
+    barrierLock: string;
+    anchorReceipts: string[];
+    modelArtifacts: string[];
+  };
+}
+
 export interface SciencePathData {
+  revision: ScienceBundleRevision;
   pathIndex: number;
   pathId: string;
   chemicalSystem: string;
