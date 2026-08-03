@@ -34,7 +34,7 @@ describe('ViewerPanelBody science frame ↔ image sync', () => {
     expect(panel.getAttribute('data-variant')).toBe('deck');
     expect(panel.getAttribute('data-bundle-status')).toBe('active');
     expect(panel.getAttribute('data-bundle-quality')).toBe('verified');
-    expect(screen.getByText(/manifest: sha256:8fa964dffe3742df/)).toBeTruthy();
+    expect(screen.getByText(/manifest: sha256:a80daede7aafdd15/)).toBeTruthy();
   });
 
   it('surfaces the loaded run provenance and supersedes chain in the panel chrome', () => {

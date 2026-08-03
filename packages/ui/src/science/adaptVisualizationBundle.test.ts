@@ -5,7 +5,7 @@ import path16Raw from './canonical-bundles/path-16.visualization-bundle.json?raw
 import { CANONICAL_VALUE_SOURCE_ASSETS } from './canonicalValueSourceAssets';
 import { adaptVisualizationBundle, verifyVisualizationBundle } from './adaptVisualizationBundle';
 
-const MANIFEST_SHA = 'sha256:8fa964dffe3742df09f25375c64b145ab34de2dc89888bbe09696d2582bfeaf5';
+const MANIFEST_SHA = 'sha256:a80daede7aafdd155fcc1d9b56f3ddbf4636e2ea647934f8a1202f7526c069b5';
 const clone = (): any => JSON.parse(JSON.stringify(path16));
 
 function trajectoryFromManifest(): Trajectory {
