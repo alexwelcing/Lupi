@@ -103,41 +103,9 @@
       "role": "model_cell_excerpt/mace-mpa-0-medium",
       "sha256": "sha256:836c7c6b1a51866a62c66c6bc7c5409aed6eac08cf11eedb6fd16e97b13d5f16",
       "uri": "assets/sha256/83/836c7c6b1a51866a62c66c6bc7c5409aed6eac08cf11eedb6fd16e97b13d5f16.json"
-    },
-    {
-      "bytes": 105,
-      "format": "json",
-      "media_type": "application/json",
-      "role": "electronic_diagnostic",
-      "sha256": "sha256:caf7835efa45864f52ce43a2fbab4d42b902d66f828e0952cbd47015f87e6bee",
-      "uri": "assets/sha256/ca/caf7835efa45864f52ce43a2fbab4d42b902d66f828e0952cbd47015f87e6bee.json"
-    },
-    {
-      "bytes": 20946,
-      "format": "txt",
-      "media_type": "text/plain",
-      "role": "electronic_diagnostic",
-      "sha256": "sha256:daf43609ecb6d7a082044b1dc23251b85c8798e3e37c5d62c209134bdd44d24e",
-      "uri": "assets/sha256/da/daf43609ecb6d7a082044b1dc23251b85c8798e3e37c5d62c209134bdd44d24e.txt"
-    },
-    {
-      "bytes": 106,
-      "format": "json",
-      "media_type": "application/json",
-      "role": "electronic_diagnostic",
-      "sha256": "sha256:e1f41587814cf0e99ba92ab16f303829588bbcb0165db770f46814ad6e38fdd2",
-      "uri": "assets/sha256/e1/e1f41587814cf0e99ba92ab16f303829588bbcb0165db770f46814ad6e38fdd2.json"
-    },
-    {
-      "bytes": 21000,
-      "format": "txt",
-      "media_type": "text/plain",
-      "role": "electronic_diagnostic",
-      "sha256": "sha256:274e4bc491e59bca8f85da904e3b9ba48284232ade06b7448aa0c710e1950543",
-      "uri": "assets/sha256/27/274e4bc491e59bca8f85da904e3b9ba48284232ade06b7448aa0c710e1950543.txt"
     }
   ],
-  "bundle_id": "sha256:c3da4be89ab2ea990c351491076408f434b4bea412b64e1fe0966e832a44401f",
+  "bundle_id": "sha256:820f8270a46adb77a0689423ff3e6b364f2c82c05fa9363cd233b4b68d634c6d",
   "campaign_id": "z1-union-pilot",
   "campaign_sha256": "sha256:539ca24f3729b93aed2f6258c606ce888ff7df1c1be88f5fa2dc62f40731c05a",
   "campaign_version": "lupine.z1.union_pilot.campaign.v1",
@@ -4475,95 +4443,9 @@
   },
   "created_at": "2026-07-24T17:07:00.201851+00:00",
   "diagnostics": {
-    "image_index": 3,
-    "note": "Separately bound diagnostic receipts for path-0 image 3 (metallic-saddle SCF evidence). These are NOT part of the campaign record and are bound only for path 0.",
-    "runs": [
-      {
-        "charge_e": 0.0,
-        "energy_ev": -492.7180955159977,
-        "fermi_level_ev": 0.665,
-        "gap_ev": 0.019,
-        "gpaw_version": "26.7.0",
-        "label": "adopted_h0.20",
-        "occupations": {
-          "type": "Fermi-Dirac",
-          "width_ev": 0.1
-        },
-        "params": {
-          "h": "0.2",
-          "kpts": "(1, 1, 1)",
-          "mode": "fd",
-          "xc": "PBE"
-        },
-        "scf": {
-          "converged": true,
-          "density_criterion_electrons": 0.0001,
-          "eigenstate_criterion_ev2": 4e-08,
-          "max_iterations": 333,
-          "steps": 36
-        },
-        "source_assets": [
-          {
-            "filename": "img3-adopted.json",
-            "media_type": "application/json",
-            "sha256": "sha256:caf7835efa45864f52ce43a2fbab4d42b902d66f828e0952cbd47015f87e6bee"
-          },
-          {
-            "filename": "img3-adopted.txt",
-            "media_type": "text/plain",
-            "sha256": "sha256:daf43609ecb6d7a082044b1dc23251b85c8798e3e37c5d62c209134bdd44d24e"
-          }
-        ],
-        "spin": {
-          "components": 1,
-          "degeneracy": 2,
-          "policy": "collinear, spin-components 1 (spin-unpolarized)"
-        }
-      },
-      {
-        "charge_e": 0.0,
-        "energy_ev": -471.0107246641591,
-        "fermi_level_ev": 0.676,
-        "gap_ev": 0.018,
-        "gpaw_version": "26.7.0",
-        "label": "sensitivity_h0.18",
-        "occupations": {
-          "type": "Fermi-Dirac",
-          "width_ev": 0.1
-        },
-        "params": {
-          "h": "0.18",
-          "kpts": "(1, 1, 1)",
-          "mode": "fd",
-          "xc": "PBE"
-        },
-        "scf": {
-          "converged": true,
-          "density_criterion_electrons": 0.0001,
-          "eigenstate_criterion_ev2": 4e-08,
-          "max_iterations": 333,
-          "steps": 37
-        },
-        "source_assets": [
-          {
-            "filename": "img3-h018.json",
-            "media_type": "application/json",
-            "sha256": "sha256:e1f41587814cf0e99ba92ab16f303829588bbcb0165db770f46814ad6e38fdd2"
-          },
-          {
-            "filename": "img3-h018.txt",
-            "media_type": "text/plain",
-            "sha256": "sha256:274e4bc491e59bca8f85da904e3b9ba48284232ade06b7448aa0c710e1950543"
-          }
-        ],
-        "spin": {
-          "components": 1,
-          "degeneracy": 2,
-          "policy": "collinear, spin-components 1 (spin-unpolarized)"
-        }
-      }
-    ],
-    "status": "bound"
+    "note": "no reviewed, contradiction-free diagnostic contract is bound for path 0; electronic diagnostics must not be inferred",
+    "status": "absent",
+    "value": null
   },
   "image_count": 7,
   "method": {
@@ -4789,7 +4671,7 @@
       "status": "not_containerized",
       "value": null
     },
-    "git_commit": "3953cbe40c6e7ecb1f2dc4cf7a5e87d69c96334c",
+    "git_commit": "38e7527763468198059cb9b405807b39d1a3926d",
     "normalized_parameters": {
       "anchor_receipt_sha256": {
         "0": "sha256:7cba7f0ae91690c739ac58a0aed12cd4eff8f62c4824b39c4736c3eaf4cec62c",
@@ -4808,7 +4690,7 @@
       "t1_gate_mev": 40.0
     },
     "tool": "tools/analysis/build_visualization_bundle.py",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "provenance": {
     "amendments": [
@@ -4839,7 +4721,7 @@
     },
     "preregistration": "docs/plans/2026-07-20-sparse-dft-pilot-preregistration.md",
     "source_revision": {
-      "converter_git_commit": "3953cbe40c6e7ecb1f2dc4cf7a5e87d69c96334c",
+      "converter_git_commit": "38e7527763468198059cb9b405807b39d1a3926d",
       "reference_dataset_revision": "c3ca5c2afbc13ffc823306f546dcee24486ade2a",
       "reference_source_archive_sha256": "b7a99d89337902e9e1da319f57547170fdb132bf15bf6ffef03a0140e2207d7f"
     }
@@ -4891,7 +4773,6 @@
     "warnings": [
       "T1 convention-wander gate FAILED: cross-engine (VASP-referenced) numbers are convention-contaminated; the same-engine basis is primary (amendment A1).",
       "Dense extension active on a <= 7-image path: sparse ≡ nearly dense by construction; same-engine verdicts are partly structural (gate-power caveat).",
-      "Metallic-saddle mechanism suspected; see bound image-3 electronic diagnostics (docs/analysis/t1-wander-mechanism.md).",
       "Images are a reaction-path sequence (NEB image index); never display the index as time, dynamics, or temperature."
     ]
   },
@@ -5604,19 +5485,19 @@
   "source_artifacts": [
     {
       "bytes": 72081,
-      "git_commit": "469998dc2d46d7977bc0307d5e786a4361debcdf",
+      "git_commit": null,
       "role": "campaign_record",
       "schema": "lupine.z1.union_pilot.campaign.v1",
       "sha256": "sha256:af8a02ad5a663de2433b78917569af01f12a10f54ac8d94b33e934cfedc8a3f2",
-      "uri": "/home/alex/Dev/lupine/lupine-rhizo-vis/data/candidates/z1-union-campaign.json"
+      "uri": "data/candidates/z1-union-campaign.json"
     },
     {
       "bytes": 4021811,
-      "git_commit": "2eada1f19637132f3dbb4ea90ac02c9449e939e1",
+      "git_commit": null,
       "role": "barrier_panel",
       "schema": "lupine.z1.neb_barrier_panel.v1",
       "sha256": "sha256:192fe54a5579cc421f6644d5d76fb442c6dfb985f014dc4741549e29052efb68",
-      "uri": "/home/alex/Dev/lupine/lupine-rhizo-vis/data/candidates/z1_nebdft2k_barriers.lock.json"
+      "uri": "data/candidates/z1_nebdft2k_barriers.lock.json"
     },
     {
       "bytes": 468,
@@ -5624,7 +5505,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:7cba7f0ae91690c739ac58a0aed12cd4eff8f62c4824b39c4736c3eaf4cec62c",
-      "uri": "/tmp/z1-union-local/anchors/path-0/anchor-0.json"
+      "uri": "path-0/anchor-0.json"
     },
     {
       "bytes": 467,
@@ -5632,7 +5513,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:f8e79f556cce60cde7b93210ab4f8a734b29b49b16d18c7d441260581b632535",
-      "uri": "/tmp/z1-union-local/anchors/path-0/anchor-1.json"
+      "uri": "path-0/anchor-1.json"
     },
     {
       "bytes": 468,
@@ -5640,7 +5521,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:57ad2c70ce322c2e9660da2f20a28146d6002a718955a17c0bdab49f2f7de343",
-      "uri": "/tmp/z1-union-local/anchors/path-0/anchor-2.json"
+      "uri": "path-0/anchor-2.json"
     },
     {
       "bytes": 468,
@@ -5648,7 +5529,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:e065ab00aa98b310c1d3d0a3c68a87f2ae71412cb70e12d6c860c68f2fd7307a",
-      "uri": "/tmp/z1-union-local/anchors/path-0/anchor-3.json"
+      "uri": "path-0/anchor-3.json"
     },
     {
       "bytes": 468,
@@ -5656,7 +5537,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:65b881e419d05fe32ba6d25313eec19a8d3f164796c541eae307ca0da9ff9ad9",
-      "uri": "/tmp/z1-union-local/anchors/path-0/anchor-4.json"
+      "uri": "path-0/anchor-4.json"
     },
     {
       "bytes": 467,
@@ -5664,7 +5545,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:41c15130486a01fb9976f3336321f770713a753046b0bd517aec6cacccb256b4",
-      "uri": "/tmp/z1-union-local/anchors/path-0/anchor-5.json"
+      "uri": "path-0/anchor-5.json"
     },
     {
       "bytes": 468,
@@ -5672,7 +5553,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:3894159afecb7ef3995b247b5b8d7e4655c0382fa32a9ff45c0857ffebf7df4a",
-      "uri": "/tmp/z1-union-local/anchors/path-0/anchor-6.json"
+      "uri": "path-0/anchor-6.json"
     },
     {
       "bytes": 22699,
@@ -5680,7 +5561,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:887f208a681c3a9046b825833b9cd049a200c304b381520149cb2fed5c144110",
-      "uri": "/tmp/z1-union-local/inputs/chgnet/cell_result.json"
+      "uri": "chgnet/cell_result.json"
     },
     {
       "bytes": 21988,
@@ -5688,7 +5569,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:430534abd99b3f9715d1bc684553af5cfd4a13a40f8a5cb3ab0a3a7da680f20c",
-      "uri": "/tmp/z1-union-local/inputs/mace-mp-small/cell_result.json"
+      "uri": "mace-mp-small/cell_result.json"
     },
     {
       "bytes": 23136,
@@ -5696,7 +5577,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:71b22af16ffd6c451ec805006bbf8ad1696c72022bc973de6c70dd99d96f252d",
-      "uri": "/tmp/z1-union-local/inputs/mace-mp-medium/cell_result.json"
+      "uri": "mace-mp-medium/cell_result.json"
     },
     {
       "bytes": 22797,
@@ -5704,39 +5585,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:801316f804d9f8bb64049f32ba09b4a42ee038c19c9ba8da0f5cd027f808f939",
-      "uri": "/tmp/z1-union-local/inputs/mace-mpa-0-medium/cell_result.json"
-    },
-    {
-      "bytes": 105,
-      "git_commit": null,
-      "role": "electronic_diagnostic",
-      "schema": null,
-      "sha256": "sha256:caf7835efa45864f52ce43a2fbab4d42b902d66f828e0952cbd47015f87e6bee",
-      "uri": "/tmp/z1-diagnose/img3-adopted.json"
-    },
-    {
-      "bytes": 20946,
-      "git_commit": null,
-      "role": "electronic_diagnostic",
-      "schema": null,
-      "sha256": "sha256:daf43609ecb6d7a082044b1dc23251b85c8798e3e37c5d62c209134bdd44d24e",
-      "uri": "/tmp/z1-diagnose/img3-adopted.txt"
-    },
-    {
-      "bytes": 106,
-      "git_commit": null,
-      "role": "electronic_diagnostic",
-      "schema": null,
-      "sha256": "sha256:e1f41587814cf0e99ba92ab16f303829588bbcb0165db770f46814ad6e38fdd2",
-      "uri": "/tmp/z1-diagnose/img3-h018.json"
-    },
-    {
-      "bytes": 21000,
-      "git_commit": null,
-      "role": "electronic_diagnostic",
-      "schema": null,
-      "sha256": "sha256:274e4bc491e59bca8f85da904e3b9ba48284232ade06b7448aa0c710e1950543",
-      "uri": "/tmp/z1-diagnose/img3-h018.txt"
+      "uri": "mace-mpa-0-medium/cell_result.json"
     }
   ],
   "status": "active",

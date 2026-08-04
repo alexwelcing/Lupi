@@ -105,7 +105,7 @@
       "uri": "assets/sha256/da/dabdfb8811617ce0d37d1297020922e26126e5171fac6777bfc902de621e5b5e.json"
     }
   ],
-  "bundle_id": "sha256:898693f0a59f9059aa192fb81667c1dacae1660fdcb5bae41b5551623d7236e1",
+  "bundle_id": "sha256:0f47bbba72d00785ff81bac5af6f21205dedd6ec0103cf4770e02a639ee226d0",
   "campaign_id": "z1-union-pilot",
   "campaign_sha256": "sha256:539ca24f3729b93aed2f6258c606ce888ff7df1c1be88f5fa2dc62f40731c05a",
   "campaign_version": "lupine.z1.union_pilot.campaign.v1",
@@ -3851,7 +3851,7 @@
   },
   "created_at": "2026-07-24T17:07:00.201851+00:00",
   "diagnostics": {
-    "note": "no separately bound diagnostic receipts for this path; electronic diagnostics must not be inferred from the campaign record",
+    "note": "no reviewed, contradiction-free diagnostic contract is bound for path 14; electronic diagnostics must not be inferred",
     "status": "absent",
     "value": null
   },
@@ -4083,7 +4083,7 @@
       "status": "not_containerized",
       "value": null
     },
-    "git_commit": "3953cbe40c6e7ecb1f2dc4cf7a5e87d69c96334c",
+    "git_commit": "38e7527763468198059cb9b405807b39d1a3926d",
     "normalized_parameters": {
       "anchor_receipt_sha256": {
         "0": "sha256:45f7c8d4d792697489c06b837234e13313242cd1578d787071be4a814ebfe179",
@@ -4102,7 +4102,7 @@
       "t1_gate_mev": 40.0
     },
     "tool": "tools/analysis/build_visualization_bundle.py",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "provenance": {
     "amendments": [
@@ -4133,7 +4133,7 @@
     },
     "preregistration": "docs/plans/2026-07-20-sparse-dft-pilot-preregistration.md",
     "source_revision": {
-      "converter_git_commit": "3953cbe40c6e7ecb1f2dc4cf7a5e87d69c96334c",
+      "converter_git_commit": "38e7527763468198059cb9b405807b39d1a3926d",
       "reference_dataset_revision": "c3ca5c2afbc13ffc823306f546dcee24486ade2a",
       "reference_source_archive_sha256": "b7a99d89337902e9e1da319f57547170fdb132bf15bf6ffef03a0140e2207d7f"
     }
@@ -4455,19 +4455,19 @@
   "source_artifacts": [
     {
       "bytes": 72081,
-      "git_commit": "469998dc2d46d7977bc0307d5e786a4361debcdf",
+      "git_commit": null,
       "role": "campaign_record",
       "schema": "lupine.z1.union_pilot.campaign.v1",
       "sha256": "sha256:af8a02ad5a663de2433b78917569af01f12a10f54ac8d94b33e934cfedc8a3f2",
-      "uri": "/home/alex/Dev/lupine/lupine-rhizo-vis/data/candidates/z1-union-campaign.json"
+      "uri": "data/candidates/z1-union-campaign.json"
     },
     {
       "bytes": 4021811,
-      "git_commit": "2eada1f19637132f3dbb4ea90ac02c9449e939e1",
+      "git_commit": null,
       "role": "barrier_panel",
       "schema": "lupine.z1.neb_barrier_panel.v1",
       "sha256": "sha256:192fe54a5579cc421f6644d5d76fb442c6dfb985f014dc4741549e29052efb68",
-      "uri": "/home/alex/Dev/lupine/lupine-rhizo-vis/data/candidates/z1_nebdft2k_barriers.lock.json"
+      "uri": "data/candidates/z1_nebdft2k_barriers.lock.json"
     },
     {
       "bytes": 468,
@@ -4475,7 +4475,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:45f7c8d4d792697489c06b837234e13313242cd1578d787071be4a814ebfe179",
-      "uri": "/tmp/z1-union-local/anchors/path-14/anchor-0.json"
+      "uri": "path-14/anchor-0.json"
     },
     {
       "bytes": 469,
@@ -4483,7 +4483,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:1d17fd28e482023f56258ec555610d59090847df6eae52800c370c041b0c07ec",
-      "uri": "/tmp/z1-union-local/anchors/path-14/anchor-1.json"
+      "uri": "path-14/anchor-1.json"
     },
     {
       "bytes": 469,
@@ -4491,7 +4491,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:151e7b06ab1e3c1fbc0df334ceb23fef9e0cbb9dcfe08cccf869ac5e59e9e42f",
-      "uri": "/tmp/z1-union-local/anchors/path-14/anchor-2.json"
+      "uri": "path-14/anchor-2.json"
     },
     {
       "bytes": 469,
@@ -4499,7 +4499,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:b736c64ada7268d82dd4a6e6440de4c216592d0d920d67be91947947f1a7f333",
-      "uri": "/tmp/z1-union-local/anchors/path-14/anchor-3.json"
+      "uri": "path-14/anchor-3.json"
     },
     {
       "bytes": 468,
@@ -4507,7 +4507,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:3d2ef974f636214cb4ebabb199c9f63f7cef4f8cfb14bf5c8f1a5c7535d44cb7",
-      "uri": "/tmp/z1-union-local/anchors/path-14/anchor-4.json"
+      "uri": "path-14/anchor-4.json"
     },
     {
       "bytes": 469,
@@ -4515,7 +4515,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:1c1068f1204b48ca45d16db3fe01806e033bc842442e6a542e0f552a7c80a742",
-      "uri": "/tmp/z1-union-local/anchors/path-14/anchor-5.json"
+      "uri": "path-14/anchor-5.json"
     },
     {
       "bytes": 469,
@@ -4523,7 +4523,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:6e0093ea4d70c14b4ec26a70f021161cd448d3ec5e8a69d0031a9fbb9f0eece2",
-      "uri": "/tmp/z1-union-local/anchors/path-14/anchor-6.json"
+      "uri": "path-14/anchor-6.json"
     },
     {
       "bytes": 22699,
@@ -4531,7 +4531,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:887f208a681c3a9046b825833b9cd049a200c304b381520149cb2fed5c144110",
-      "uri": "/tmp/z1-union-local/inputs/chgnet/cell_result.json"
+      "uri": "chgnet/cell_result.json"
     },
     {
       "bytes": 21988,
@@ -4539,7 +4539,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:430534abd99b3f9715d1bc684553af5cfd4a13a40f8a5cb3ab0a3a7da680f20c",
-      "uri": "/tmp/z1-union-local/inputs/mace-mp-small/cell_result.json"
+      "uri": "mace-mp-small/cell_result.json"
     },
     {
       "bytes": 23136,
@@ -4547,7 +4547,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:71b22af16ffd6c451ec805006bbf8ad1696c72022bc973de6c70dd99d96f252d",
-      "uri": "/tmp/z1-union-local/inputs/mace-mp-medium/cell_result.json"
+      "uri": "mace-mp-medium/cell_result.json"
     },
     {
       "bytes": 22797,
@@ -4555,7 +4555,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:801316f804d9f8bb64049f32ba09b4a42ee038c19c9ba8da0f5cd027f808f939",
-      "uri": "/tmp/z1-union-local/inputs/mace-mpa-0-medium/cell_result.json"
+      "uri": "mace-mpa-0-medium/cell_result.json"
     }
   ],
   "status": "active",

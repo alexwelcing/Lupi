@@ -86,7 +86,7 @@
   },
   "pnpm": {
     "overrides": {
-      "fast-uri": "3.1.4",
+      "fast-uri": "3.1.5",
       "postcss@8.5.8": "8.5.20",
       "protobufjs@7.6.1": "7.6.3",
       "websocket-driver@0.7.4": "0.7.5"

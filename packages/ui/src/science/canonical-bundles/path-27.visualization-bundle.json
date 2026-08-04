@@ -89,7 +89,7 @@
       "uri": "assets/sha256/88/881ee797bda78f37bf37079c54d361f860718652aebb393978e7f6d8d305aacc.json"
     }
   ],
-  "bundle_id": "sha256:91e28ec5f064dc6075c0889e146b5e195854513abf23ed3a67750399c938587e",
+  "bundle_id": "sha256:54aa4fcf05937b83b9a532a11be9dc2ce286f1fd80374af770e5428898e83a81",
   "campaign_id": "z1-union-pilot",
   "campaign_sha256": "sha256:539ca24f3729b93aed2f6258c606ce888ff7df1c1be88f5fa2dc62f40731c05a",
   "campaign_version": "lupine.z1.union_pilot.campaign.v1",
@@ -2613,7 +2613,7 @@
   },
   "created_at": "2026-07-24T17:07:00.201851+00:00",
   "diagnostics": {
-    "note": "no separately bound diagnostic receipts for this path; electronic diagnostics must not be inferred from the campaign record",
+    "note": "no reviewed, contradiction-free diagnostic contract is bound for path 27; electronic diagnostics must not be inferred",
     "status": "absent",
     "value": null
   },
@@ -2841,7 +2841,7 @@
       "status": "not_containerized",
       "value": null
     },
-    "git_commit": "3953cbe40c6e7ecb1f2dc4cf7a5e87d69c96334c",
+    "git_commit": "38e7527763468198059cb9b405807b39d1a3926d",
     "normalized_parameters": {
       "anchor_receipt_sha256": {
         "0": "sha256:8c5af579f73be8dd2bb993ca79a5abaa645cfdea94bc4f92b79fc25fe3847c30",
@@ -2858,7 +2858,7 @@
       "t1_gate_mev": 40.0
     },
     "tool": "tools/analysis/build_visualization_bundle.py",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "provenance": {
     "amendments": [
@@ -2889,7 +2889,7 @@
     },
     "preregistration": "docs/plans/2026-07-20-sparse-dft-pilot-preregistration.md",
     "source_revision": {
-      "converter_git_commit": "3953cbe40c6e7ecb1f2dc4cf7a5e87d69c96334c",
+      "converter_git_commit": "38e7527763468198059cb9b405807b39d1a3926d",
       "reference_dataset_revision": "c3ca5c2afbc13ffc823306f546dcee24486ade2a",
       "reference_source_archive_sha256": "b7a99d89337902e9e1da319f57547170fdb132bf15bf6ffef03a0140e2207d7f"
     }
@@ -3553,19 +3553,19 @@
   "source_artifacts": [
     {
       "bytes": 72081,
-      "git_commit": "469998dc2d46d7977bc0307d5e786a4361debcdf",
+      "git_commit": null,
       "role": "campaign_record",
       "schema": "lupine.z1.union_pilot.campaign.v1",
       "sha256": "sha256:af8a02ad5a663de2433b78917569af01f12a10f54ac8d94b33e934cfedc8a3f2",
-      "uri": "/home/alex/Dev/lupine/lupine-rhizo-vis/data/candidates/z1-union-campaign.json"
+      "uri": "data/candidates/z1-union-campaign.json"
     },
     {
       "bytes": 4021811,
-      "git_commit": "2eada1f19637132f3dbb4ea90ac02c9449e939e1",
+      "git_commit": null,
       "role": "barrier_panel",
       "schema": "lupine.z1.neb_barrier_panel.v1",
       "sha256": "sha256:192fe54a5579cc421f6644d5d76fb442c6dfb985f014dc4741549e29052efb68",
-      "uri": "/home/alex/Dev/lupine/lupine-rhizo-vis/data/candidates/z1_nebdft2k_barriers.lock.json"
+      "uri": "data/candidates/z1_nebdft2k_barriers.lock.json"
     },
     {
       "bytes": 469,
@@ -3573,7 +3573,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:8c5af579f73be8dd2bb993ca79a5abaa645cfdea94bc4f92b79fc25fe3847c30",
-      "uri": "/tmp/z1-union-local/anchors/path-27/anchor-0.json"
+      "uri": "path-27/anchor-0.json"
     },
     {
       "bytes": 467,
@@ -3581,7 +3581,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:b839ea1fa3194c73425e1bfa8b4eef25b456e950a68183719d41cf7827658fe0",
-      "uri": "/tmp/z1-union-local/anchors/path-27/anchor-1.json"
+      "uri": "path-27/anchor-1.json"
     },
     {
       "bytes": 469,
@@ -3589,7 +3589,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:f59fbe4d0b5da966d3c95f6725d4aa300346a17f3d00f1f5bc1981119b90d343",
-      "uri": "/tmp/z1-union-local/anchors/path-27/anchor-2.json"
+      "uri": "path-27/anchor-2.json"
     },
     {
       "bytes": 469,
@@ -3597,7 +3597,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:f2d099fe9039e7ebddf7a7df7ce5d38cefccbc5a1d089362cfe98b87f391fc8a",
-      "uri": "/tmp/z1-union-local/anchors/path-27/anchor-3.json"
+      "uri": "path-27/anchor-3.json"
     },
     {
       "bytes": 468,
@@ -3605,7 +3605,7 @@
       "role": "anchor_receipt",
       "schema": "lupine.z1.union_pilot.anchor.v1",
       "sha256": "sha256:b22574aa42cb8ec1f702df1ff6a5ed9265906a06a6d2156d6207a5c1438aa013",
-      "uri": "/tmp/z1-union-local/anchors/path-27/anchor-4.json"
+      "uri": "path-27/anchor-4.json"
     },
     {
       "bytes": 22699,
@@ -3613,7 +3613,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:887f208a681c3a9046b825833b9cd049a200c304b381520149cb2fed5c144110",
-      "uri": "/tmp/z1-union-local/inputs/chgnet/cell_result.json"
+      "uri": "chgnet/cell_result.json"
     },
     {
       "bytes": 21988,
@@ -3621,7 +3621,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:430534abd99b3f9715d1bc684553af5cfd4a13a40f8a5cb3ab0a3a7da680f20c",
-      "uri": "/tmp/z1-union-local/inputs/mace-mp-small/cell_result.json"
+      "uri": "mace-mp-small/cell_result.json"
     },
     {
       "bytes": 23136,
@@ -3629,7 +3629,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:71b22af16ffd6c451ec805006bbf8ad1696c72022bc973de6c70dd99d96f252d",
-      "uri": "/tmp/z1-union-local/inputs/mace-mp-medium/cell_result.json"
+      "uri": "mace-mp-medium/cell_result.json"
     },
     {
       "bytes": 22797,
@@ -3637,7 +3637,7 @@
       "role": "model_cell_result",
       "schema": "lupine.mlip.cell_artifact.v1",
       "sha256": "sha256:801316f804d9f8bb64049f32ba09b4a42ee038c19c9ba8da0f5cd027f808f939",
-      "uri": "/tmp/z1-union-local/inputs/mace-mpa-0-medium/cell_result.json"
+      "uri": "mace-mpa-0-medium/cell_result.json"
     }
   ],
   "status": "active",
