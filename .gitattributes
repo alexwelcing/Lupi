@@ -1,0 +1,3 @@
+# Canonical science digests cover exact serialized bytes; prevent checkout-local CRLF conversion.
+/packages/ui/src/science/canonical-bundles/*.json text eol=lf
+/packages/ui/src/science/canonical-value-sources/*.json text eol=lf

@@ -20,7 +20,7 @@
  *     ⟺ zero guided models).
  */
 
-const QUALITY_STATES = new Set(['clean', 'contaminated', 'strong-win-contaminated', 'no-guides-completed', 'all-guides-failed']);
+const QUALITY_STATES = new Set(['clean', 'clean-t1', 'contaminated', 'strong-win-contaminated', 'no-guides-completed', 'all-guides-failed']);
 const VALUE_STATUSES = new Set(['evaluated', 'nominated', 'missing', 'source']);
 const T1_VERDICTS = new Set(['clean', 'contaminated']);
 const FIXTURE_SCHEMA = 'lupi.z1-science-panel-fixture.v1';
@@ -296,10 +296,10 @@ export function validateSciencePanelFixture(input: unknown): FixtureValidation {
 
     // cross-field quality consistency
     if (isObj(t1) && T1_VERDICTS.has(t1.verdict as string) && QUALITY_STATES.has(path.qualityState as string) && isObj(quality)) {
-      if (t1.verdict === 'clean' && path.qualityState !== 'clean') {
+      if (t1.verdict === 'clean' && path.qualityState !== 'clean' && path.qualityState !== 'clean-t1') {
         fail(P('.qualityState'), `T1-clean path must not be marked ${JSON.stringify(path.qualityState)}`);
       }
-      if (t1.verdict === 'contaminated' && path.qualityState === 'clean') {
+      if (t1.verdict === 'contaminated' && (path.qualityState === 'clean' || path.qualityState === 'clean-t1')) {
         fail(P('.qualityState'), 'T1-contaminated path must not be marked clean');
       }
       if (path.qualityState === 'all-guides-failed' && quality.guidedModelCount !== 0) {

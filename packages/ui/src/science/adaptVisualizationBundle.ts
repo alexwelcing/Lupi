@@ -26,8 +26,10 @@ type SourceArtifact = {
 };
 type CanonicalSeries = {
   series_id: string;
+  quantity: string;
   engine_or_model: string;
   kind: 'dft_single_point' | 'reference' | 'model';
+  absolute_or_relative: 'absolute' | 'relative';
   unit: string;
   zero_convention: string;
   image_indices: number[];
@@ -51,6 +53,24 @@ type CanonicalManifest = {
   retraction: string | null;
   source_artifacts: SourceArtifact[];
   producer: { tool: string; normalized_parameters: Record<string, unknown> };
+  diagnostics: {
+    status: 'bound';
+    image_index: number;
+    note: string;
+    runs: Array<{
+      label: string;
+      gpaw_version: string | null;
+      params: Record<string, unknown>;
+      charge_e: number;
+      energy_ev: number;
+      fermi_level_ev: number;
+      gap_ev: number;
+      occupations: { type: string; width_ev: number };
+      scf: { converged: boolean; steps: number; max_iterations: number };
+      spin?: Record<string, unknown>;
+      source_assets: Array<Record<string, unknown>>;
+    }>;
+  } | { status: 'absent'; note: string; value: null };
   model_provenance: Array<{ model: string; status: 'completed' | 'failed' | 'missing'; failure_reason: string | null }>;
   coordinates: {
     units: 'angstrom';
@@ -72,7 +92,7 @@ type CanonicalManifest = {
     nominated_union: number[];
     rule_id: string;
     rule_version: string;
-    rule_source: { git_commit: string; path: string };
+    rule_source: { git_commit: string | null; path: string };
     extrema_tie_policy: string;
     window_rule: string;
     dense_extension: { applied: boolean; supplied_indices: number[] };
@@ -456,7 +476,9 @@ function pointStatus(status: string, value: number | null): AnchorPointStatus {
 function qualityState(manifest: CanonicalManifest, successful: number, failed: number): ScienceQualityState {
   if (successful === 0 && failed === manifest.model_provenance.length) return 'all-guides-failed';
   if (successful === 0) return 'no-guides-completed';
-  if (manifest.quality_gates.t1.verdict === 'clean') return 'clean';
+  if (manifest.quality_gates.t1.verdict === 'clean') {
+    return manifest.quality_gates.verdict.same_engine === 'strong_win' ? 'clean' : 'clean-t1';
+  }
   return manifest.quality_gates.verdict.same_engine === 'strong_win'
     ? 'strong-win-contaminated'
     : 'contaminated';
@@ -469,6 +491,9 @@ export function adaptVisualizationBundle(
   supersedesChain?: string[],
 ): SciencePathData {
   const manifest = validateCanonicalManifest(input);
+  verifyAnchorSets(manifest);
+  verifySeriesConsistency(manifest);
+  verifySourceArtifacts(manifest);
   digest(manifestSha256, 'serialized manifest SHA-256');
   const resolvedSupersedesChain = supersedesChain ?? (manifest.supersedes ? [manifest.supersedes] : []);
   if (manifest.supersedes !== (resolvedSupersedesChain[0] ?? null)) {
@@ -651,6 +676,25 @@ export function adaptVisualizationBundle(
       complete: manifest.quality_gates.same_engine.dense_complete,
       barrierEv: denseBarrier,
     },
+    diagnostics: manifest.diagnostics.status === 'bound'
+      ? {
+          status: manifest.diagnostics.status,
+          imageIndex: manifest.diagnostics.image_index,
+          note: manifest.diagnostics.note,
+          runs: manifest.diagnostics.runs.map((run) => ({
+            label: run.label,
+            gpawVersion: run.gpaw_version,
+            params: run.params,
+            chargeE: run.charge_e,
+            energyEv: run.energy_ev,
+            fermiLevelEv: run.fermi_level_ev,
+            gapEv: run.gap_ev,
+            occupations: run.occupations,
+            scf: run.scf,
+            spin: run.spin ?? null,
+          })),
+        }
+      : null,
     t1: {
       unit: 'meV',
       definition: t1.offset_definition,
@@ -685,10 +729,6 @@ export function adaptVisualizationBundle(
   };
 }
 
-function vectorLength(v: number[]): number {
-  return Math.hypot(v[0], v[1], v[2]);
-}
-
 /** Cell semantics must agree with positions before a trajectory may present bundle science. */
 function verifyTrajectoryLattice(manifest: CanonicalManifest, trajectory: Trajectory): void {
   manifest.coordinates.frames.forEach((sourceFrame, image) => {
@@ -699,22 +739,24 @@ function verifyTrajectoryLattice(manifest: CanonicalManifest, trajectory: Trajec
     }
     const [xlo, xhi, ylo, yhi, zlo, zhi] = Array.from(frame.boxBounds);
     const spans = [xhi - xlo, yhi - ylo, zhi - zlo];
-    const lengths = lattice.map(vectorLength);
+    // LAMMPS triclinic bounds carry lx/ly/lz on the diagonal; off-axis
+    // components are represented separately by xy/xz/yz in boxTilt.
+    const canonicalSpans = lattice.map((vector, axis) => Math.abs(vector[axis]));
     spans.forEach((span, axis) => {
-      if (Math.abs(span - lengths[axis]) > 1e-4) {
+      if (Math.abs(span - canonicalSpans[axis]) > 1e-4) {
         throw new Error(
-          `Cell mismatch at NEB image ${image}: box span ${axis} is ${span.toFixed(5)} Å but the canonical lattice is ${lengths[axis].toFixed(5)} Å`,
+          `Cell mismatch at NEB image ${image}: box span ${axis} is ${span.toFixed(5)} Å but the canonical lattice span is ${canonicalSpans[axis].toFixed(5)} Å`,
         );
       }
     });
     const [xy, xz, yz] = Array.from(frame.boxTilt);
     if (frame.triclinic) {
-      const tilts: Array<[number, [number, number], number]> = [
-        [xy, [1, 0], lattice[1][0]],
-        [xz, [2, 0], lattice[2][0]],
-        [yz, [2, 1], lattice[2][1]],
+      const tilts: Array<[number, number]> = [
+        [xy, lattice[1][0]],
+        [xz, lattice[2][0]],
+        [yz, lattice[2][1]],
       ];
-      for (const [expected, [row, col], actual] of tilts) {
+      for (const [expected, actual] of tilts) {
         if (Math.abs(actual - expected) > 1e-4) {
           throw new Error(
             `Cell mismatch at NEB image ${image}: triclinic tilt differs from the canonical lattice (${actual.toFixed(5)} vs ${expected.toFixed(5)})`,
@@ -734,6 +776,9 @@ function verifyTrajectoryLattice(manifest: CanonicalManifest, trajectory: Trajec
 }
 
 function assertIndexSet(indices: number[], imageCount: number, label: string): void {
+  if (new Set(indices).size !== indices.length || indices.some((index, position) => position > 0 && index <= indices[position - 1])) {
+    throw new Error(`Anchor set ${label} must contain unique image indices in ascending order`);
+  }
   indices.forEach((index) => {
     if (!Number.isInteger(index) || index < 0 || index >= imageCount) {
       throw new Error(`Anchor set ${label} contains out-of-range image ${index} (image_count=${imageCount})`);
@@ -744,6 +789,14 @@ function assertIndexSet(indices: number[], imageCount: number, label: string): v
 /** Status and value must never contradict: evaluated ↔ numeric, anything else ↔ null. */
 function verifySeriesConsistency(manifest: CanonicalManifest): void {
   const NON_EVALUATED = new Set(['failed', 'missing', 'rejected_params_mismatch', 'not_recorded']);
+  manifest.series.forEach((series) => {
+    if (series.quantity !== 'total_energy' || series.absolute_or_relative !== 'absolute') {
+      throw new Error(
+        `Series ${series.series_id} declares quantity ${series.quantity} (${series.absolute_or_relative}); ` +
+        'the panel only projects absolute total energies and refuses to relabel them',
+      );
+    }
+  });
   manifest.series.forEach((series) => {
     series.values.forEach((value, image) => {
       const status = series.value_status[image];
@@ -837,8 +890,26 @@ function verifyAnchorSets(manifest: CanonicalManifest): void {
   const universe = new Set(selection.anchor_universe);
   const evaluated = new Set(selection.evaluated);
   const union = new Set(selection.nominated_union);
+  const suppliedExtension = new Set(selection.dense_extension.supplied_indices);
+  const sameSet = (actual: Set<number>, expected: Set<number>) => (
+    actual.size === expected.size && [...actual].every((image) => expected.has(image))
+  );
+  const denseSeries = manifest.series.find((series) => series.series_id === 'gpaw_total_energy');
+  const evaluatedFromSeries = new Set(
+    denseSeries?.value_status.flatMap((status, image) => status === 'evaluated' ? [image] : []) ?? [],
+  );
+  if (!denseSeries || !sameSet(evaluated, evaluatedFromSeries)) {
+    throw new Error('Anchor set evaluated does not equal the evaluated GPAW series images');
+  }
   if (!selection.nominated_union.every((image) => universe.has(image))) {
     throw new Error('Anchor set nominated_union is not contained in anchor_universe');
+  }
+  if (!selection.evaluated.every((image) => universe.has(image))) {
+    throw new Error('Anchor set evaluated is not contained in anchor_universe');
+  }
+  const expectedUniverse = new Set([...union, ...suppliedExtension]);
+  if (!sameSet(universe, expectedUniverse)) {
+    throw new Error('Anchor set anchor_universe does not equal nominated_union plus dense extension');
   }
   const successfulNominated = new Set<number>();
   for (const model of manifest.model_provenance) {
@@ -846,15 +917,21 @@ function verifyAnchorSets(manifest: CanonicalManifest): void {
       selection.per_model[model.model]?.nominated.forEach((image) => successfulNominated.add(image));
     }
   }
-  if (successfulNominated.size !== union.size || [...successfulNominated].some((image) => !union.has(image))) {
+  if (!sameSet(successfulNominated, union)) {
     throw new Error('Anchor set nominated_union does not equal the union of successful per-model nominations');
   }
+  for (const [model, perModel] of Object.entries(selection.per_model)) {
+    const expectedModelEvaluated = new Set(perModel.nominated.filter((image) => evaluated.has(image)));
+    const actualModelEvaluated = new Set(perModel.evaluated);
+    if (!sameSet(actualModelEvaluated, expectedModelEvaluated)) {
+      throw new Error(`Anchor set per_model.${model}.evaluated does not equal nominated intersect evaluated`);
+    }
+    if (perModel.complete !== (expectedModelEvaluated.size === perModel.nominated.length)) {
+      throw new Error(`Anchor set per_model.${model}.complete contradicts its evaluated nominations`);
+    }
+  }
   const expectedExtension = new Set([...evaluated].filter((image) => !union.has(image)));
-  const suppliedExtension = new Set(selection.dense_extension.supplied_indices);
-  if (
-    suppliedExtension.size !== expectedExtension.size
-    || [...suppliedExtension].some((image) => !expectedExtension.has(image))
-  ) {
+  if (!sameSet(suppliedExtension, expectedExtension)) {
     throw new Error('Dense-extension set does not equal evaluated minus nominated_union');
   }
 }
@@ -981,8 +1058,5 @@ export async function verifyVisualizationBundle({
   });
   verifyTrajectoryAtomOrder(verified.manifest, trajectory);
   verifyTrajectoryLattice(verified.manifest, trajectory);
-  verifyAnchorSets(verified.manifest);
-  verifySeriesConsistency(verified.manifest);
-  verifySourceArtifacts(verified.manifest);
   return verified.path;
 }

@@ -1,8 +1,10 @@
 import { getAtomicNumberBySymbol, type Trajectory } from '@atlas/core';
 import { describe, expect, it } from 'vitest';
+import path0 from './canonical-bundles/path-0.visualization-bundle.json';
 import path14 from './canonical-bundles/path-14.visualization-bundle.json';
 import path16 from './canonical-bundles/path-16.visualization-bundle.json';
 import path16Raw from './canonical-bundles/path-16.visualization-bundle.json?raw';
+import path27 from './canonical-bundles/path-27.visualization-bundle.json';
 import { CANONICAL_VALUE_SOURCE_ASSETS } from './canonicalValueSourceAssets';
 import {
   adaptVisualizationBundle,
@@ -22,9 +24,9 @@ function trajectoryFromManifest(): Trajectory {
       timestep: image,
       natoms: path16.coordinates.atom_count,
       boxBounds: Float64Array.from([
-        0, Math.hypot(...sourceFrame.lattice_angstrom[0]),
-        0, Math.hypot(...sourceFrame.lattice_angstrom[1]),
-        0, Math.hypot(...sourceFrame.lattice_angstrom[2]),
+        0, Math.abs(sourceFrame.lattice_angstrom[0][0]),
+        0, Math.abs(sourceFrame.lattice_angstrom[1][1]),
+        0, Math.abs(sourceFrame.lattice_angstrom[2][2]),
       ]),
       boxTilt: Float64Array.from([
         sourceFrame.lattice_angstrom[1][0],
@@ -140,6 +142,60 @@ describe('canonical visualization-bundle adapter', () => {
     const duplicate = clone();
     duplicate.model_provenance[1].model = duplicate.model_provenance[0].model;
     expect(() => adaptVisualizationBundle(duplicate, MANIFEST_SHA)).toThrow(/duplicate model identities/i);
+  });
+
+  it('rejects series whose canonical quantity or absolute semantics cannot be projected', () => {
+    const wrongQuantity = clone();
+    wrongQuantity.series[0].quantity = 'force';
+    expect(() => adaptVisualizationBundle(wrongQuantity, MANIFEST_SHA)).toThrow(/absolute total energies/i);
+
+    const relative = clone();
+    relative.series[0].absolute_or_relative = 'relative';
+    expect(() => adaptVisualizationBundle(relative, MANIFEST_SHA)).toThrow(/absolute total energies/i);
+  });
+
+  it('recomputes anchor containment, uniqueness, and per-model evaluated sets before projection', () => {
+    const duplicateEvaluated = clone();
+    duplicateEvaluated.selection.evaluated.push(duplicateEvaluated.selection.evaluated[0]);
+    expect(() => adaptVisualizationBundle(duplicateEvaluated, MANIFEST_SHA)).toThrow(/anchor set/i);
+
+    const missingFromUniverse: any = JSON.parse(JSON.stringify(path0));
+    const denseImage = missingFromUniverse.selection.dense_extension.supplied_indices[0];
+    missingFromUniverse.selection.anchor_universe = missingFromUniverse.selection.anchor_universe
+      .filter((image: number) => image !== denseImage);
+    expect(() => adaptVisualizationBundle(missingFromUniverse, MANIFEST_SHA)).toThrow(/anchor set/i);
+
+    const inconsistentModel = clone();
+    inconsistentModel.selection.per_model.chgnet.evaluated.pop();
+    expect(() => adaptVisualizationBundle(inconsistentModel, MANIFEST_SHA)).toThrow(/per_model\.chgnet\.evaluated/i);
+  });
+
+  it('keeps a clean T1 verdict separate from non-strong same-engine guidance', () => {
+    const cleanButNotStrong: any = JSON.parse(JSON.stringify(path27));
+    cleanButNotStrong.quality_gates.thresholds_mev.strong_win = -1;
+    for (const gate of Object.values(cleanButNotStrong.quality_gates.same_engine.per_model) as any[]) {
+      gate.verdict = 'win';
+    }
+    cleanButNotStrong.quality_gates.verdict.same_engine = 'win';
+    cleanButNotStrong.quality_gates.verdict.label = 'win_t1_clean';
+
+    const path = adaptVisualizationBundle(cleanButNotStrong, MANIFEST_SHA);
+    expect(path.qualityState).toBe('clean-t1');
+    expect(path.quality.sameEngineStrongWin).toBe(false);
+  });
+
+  it('projects separately bound electronic diagnostics without dropping their evidence', () => {
+    const path = adaptVisualizationBundle(path0, MANIFEST_SHA);
+    expect(path.diagnostics).toEqual(expect.objectContaining({
+      status: 'bound',
+      imageIndex: 3,
+    }));
+    expect(path.diagnostics?.runs).toHaveLength(2);
+    expect(path.diagnostics?.runs[0]).toEqual(expect.objectContaining({
+      label: expect.any(String),
+      scf: expect.objectContaining({ converged: expect.any(Boolean) }),
+      occupations: expect.objectContaining({ type: expect.any(String) }),
+    }));
   });
 });
 

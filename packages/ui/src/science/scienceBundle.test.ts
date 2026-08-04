@@ -16,9 +16,9 @@ function canonicalTrajectory(pathIndex: number): Trajectory {
       timestep: image,
       natoms: manifest.coordinates.atom_count,
       boxBounds: Float64Array.from([
-        0, Math.hypot(...sourceFrame.lattice_angstrom[0]),
-        0, Math.hypot(...sourceFrame.lattice_angstrom[1]),
-        0, Math.hypot(...sourceFrame.lattice_angstrom[2]),
+        0, Math.abs(sourceFrame.lattice_angstrom[0][0]),
+        0, Math.abs(sourceFrame.lattice_angstrom[1][1]),
+        0, Math.abs(sourceFrame.lattice_angstrom[2][2]),
       ]),
       boxTilt: Float64Array.from([
         sourceFrame.lattice_angstrom[1][0],
