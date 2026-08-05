@@ -34,3 +34,7 @@ tools/sims/output/
 
 # Rust build output (wasm crate) — only the committed pkg/ artifact ships.
 packages/parsers/wasm/target/
+
+# local-only artifacts
+.chromium/
+.worktrees/
