@@ -35,6 +35,7 @@ import {
   computeDecodedRenderFrameDigestV3,
 } from '../renderArtifactSource';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
+import { activeTransmissionQualityV1 } from './transmissionRuntime';
 
 export const BROWSER_RENDERER_VERSION_V1 = 'lupi-browser-webgl.v1';
 export const BROWSER_RENDERER_MODULE_ID_V1 = '@atlas/ui/mcp/renderArtifactAdapter';
@@ -540,6 +541,10 @@ export function browserRendererRuntimeV1(): RenderJsonObjectV1 {
     moduleId: BROWSER_RENDERER_MODULE_ID_V1,
     browserUserAgent: typeof navigator === 'undefined' ? 'unavailable' : navigator.userAgent,
     platform: typeof navigator === 'undefined' ? 'unavailable' : navigator.platform,
+    // The transmission renderer's tier-derived samples/resolution change
+    // raster bytes; the mounted viewer reports the effective values so two
+    // executions on different tiers never share an artifact key.
+    transmission: activeTransmissionQualityV1(),
   };
   if (typeof document === 'undefined') return runtime;
 

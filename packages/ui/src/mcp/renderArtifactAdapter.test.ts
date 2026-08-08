@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Frame, Trajectory } from '@atlas/core';
 import { useStore, type LoadedFile } from '../store';
+import { reportActiveTransmissionQuality } from './transmissionRuntime';
 import {
   browserRendererRuntimeV1,
   canonicalArtifactCameraPlanesV1,
@@ -191,6 +192,24 @@ describe('browser render artifact adapter', () => {
     } finally {
       wrapper.remove();
     }
+  });
+
+  it('fingerprints the effective transmission quality reported by the viewer', () => {
+    expect(browserRendererRuntimeV1()).toMatchObject({ transmission: 'inactive' });
+    try {
+      // Byte-changing execution state: two tiers must produce two runtimes.
+      reportActiveTransmissionQuality({ samples: 4, resolution: 256 });
+      expect(browserRendererRuntimeV1()).toMatchObject({
+        transmission: { samples: 4, resolution: 256 },
+      });
+      reportActiveTransmissionQuality({ samples: 6, resolution: 512 });
+      expect(browserRendererRuntimeV1()).toMatchObject({
+        transmission: { samples: 6, resolution: 512 },
+      });
+    } finally {
+      reportActiveTransmissionQuality(null);
+    }
+    expect(browserRendererRuntimeV1()).toMatchObject({ transmission: 'inactive' });
   });
 });
 

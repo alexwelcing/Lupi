@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import {
   MAX_TRANSMISSION_ATOMS,
+  applyTransmissionInstanceMatrices,
   createAtomColorResolver,
   transmissionQuality,
   transmissionSphereDetail,
   transmissionStrength,
+  type TransmissionInterpolationData,
 } from './AtomsTransmission';
 import { COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
 import type { TypeRenderTable, TypeRenderEntry } from './typeRenderTable';
@@ -55,6 +58,56 @@ describe('transmissionStrength', () => {
     expect(transmissionStrength(0.5)).toBeCloseTo(0.75);
     expect(transmissionStrength(-4)).toBe(0.5);
     expect(transmissionStrength(9)).toBe(1);
+  });
+});
+
+describe('applyTransmissionInstanceMatrices', () => {
+  function makeMesh() {
+    const matrices: THREE.Matrix4[] = [];
+    return {
+      matrices,
+      instanceMatrix: { needsUpdate: false },
+      setMatrixAt(index: number, matrix: THREE.Matrix4) {
+        matrices[index] = matrix.clone();
+      },
+    };
+  }
+
+  const data: TransmissionInterpolationData = {
+    count: 2,
+    base: new Float32Array([0, 0, 0, 10, 0, 0]),
+    target: new Float32Array([4, 8, 0, 10, 0, 6]),
+    radius: new Float32Array([1, 2.5]),
+    interpolatable: true,
+  };
+
+  function positionOf(matrix: THREE.Matrix4): [number, number, number] {
+    const v = new THREE.Vector3().setFromMatrixPosition(matrix);
+    return [v.x, v.y, v.z];
+  }
+
+  it('lerps every instance toward its PBC-unwrapped target and flags the upload', () => {
+    const mesh = makeMesh();
+    applyTransmissionInstanceMatrices(mesh, data, 0.5);
+    expect(positionOf(mesh.matrices[0])).toEqual([2, 4, 0]);
+    expect(positionOf(mesh.matrices[1])).toEqual([10, 0, 3]);
+    expect(new THREE.Vector3().setFromMatrixScale(mesh.matrices[1]).x).toBeCloseTo(2.5);
+    expect(mesh.instanceMatrix.needsUpdate).toBe(true);
+  });
+
+  it('clamps progress to the uploaded endpoint pair', () => {
+    const mesh = makeMesh();
+    applyTransmissionInstanceMatrices(mesh, data, 4.2);
+    expect(positionOf(mesh.matrices[0])).toEqual([4, 8, 0]);
+    applyTransmissionInstanceMatrices(mesh, data, -1);
+    expect(positionOf(mesh.matrices[0])).toEqual([0, 0, 0]);
+  });
+
+  it('pins non-interpolatable uploads to the base positions', () => {
+    const mesh = makeMesh();
+    applyTransmissionInstanceMatrices(mesh, { ...data, interpolatable: false }, 0.9);
+    expect(positionOf(mesh.matrices[0])).toEqual([0, 0, 0]);
+    expect(positionOf(mesh.matrices[1])).toEqual([10, 0, 0]);
   });
 });
 

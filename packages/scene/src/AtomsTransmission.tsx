@@ -11,6 +11,11 @@
  * (type/element/property/uniform + element overrides) via instance colors, so
  * switching between the two renderers never changes what a color "means".
  *
+ * Playback parity: like the impostor path, interpolation endpoints are
+ * uploaded once per frame change (current + PBC-unwrapped target) and the
+ * per-substep sweep runs at display rate — here as a useFrame matrix rewrite
+ * driven by the live playback ref, instead of a GPU uProgress lerp.
+ *
  * Transmission is a publish look, not a scale mode: real sphere geometry plus
  * a scene-sized FBO pass caps out far below the impostor path. Callers gate on
  * MAX_TRANSMISSION_ATOMS and fall back to the impostor 'glass' preset.
@@ -18,9 +23,10 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { MeshTransmissionMaterial } from '@react-three/drei';
 import type { ColormapName, Frame } from '@atlas/core/types';
-import { hexToRgb } from '@atlas/core';
+import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
 import { COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
 import { wrapDelta } from './interpolation';
 import { SpatialHash3D } from './SpatialHash';
@@ -64,6 +70,10 @@ export interface TransmissionQuality {
  * drei's defaults (10 samples, viewport-sized buffer) are tuned for a single
  * hero object; a molecule is hundreds of refractive surfaces, so both knobs
  * come down per drei's own performance guidance.
+ *
+ * These knobs change raster bytes, so the effective quality participates in
+ * the renderer fingerprint (see @atlas/ui's transmissionRuntime) — two
+ * executions on different tiers must never share an artifact key.
  */
 export function transmissionQuality(qualityTier: number): TransmissionQuality {
   return qualityTier <= 0
@@ -131,6 +141,50 @@ export function createAtomColorResolver(options: AtomColorResolverOptions) {
 
   return (_atomIndex: number, slot: number): [number, number, number] =>
     bySlot[slot] ?? DEFAULT_TYPE_COLOR;
+}
+
+/**
+ * Interpolation endpoints for one uploaded frame pair. `base` and `target`
+ * are packed xyz in local space; `target` is already PBC-unwrapped onto the
+ * short arc, so a plain lerp between them matches the impostor GPU sweep.
+ */
+export interface TransmissionInterpolationData {
+  count: number;
+  base: Float32Array;
+  target: Float32Array;
+  radius: Float32Array;
+  interpolatable: boolean;
+}
+
+interface TransmissionMatrixTarget {
+  setMatrixAt(index: number, matrix: THREE.Matrix4): void;
+  instanceMatrix: { needsUpdate: boolean };
+}
+
+/**
+ * Write every instance matrix at the given interpolation progress. This is the
+ * display-rate hot path — one scratch matrix, no allocation, progress clamped
+ * to the uploaded endpoint pair exactly like the impostor uProgress clamp.
+ */
+export function applyTransmissionInstanceMatrices(
+  mesh: TransmissionMatrixTarget,
+  data: TransmissionInterpolationData,
+  progress: number,
+  scratch: THREE.Matrix4 = new THREE.Matrix4(),
+): void {
+  const t = data.interpolatable ? (progress < 0 ? 0 : progress > 1 ? 1 : progress) : 0;
+  for (let i = 0; i < data.count; i += 1) {
+    const r = data.radius[i];
+    const j = i * 3;
+    scratch.makeScale(r, r, r);
+    scratch.setPosition(
+      data.base[j] + (data.target[j] - data.base[j]) * t,
+      data.base[j + 1] + (data.target[j + 1] - data.base[j + 1]) * t,
+      data.base[j + 2] + (data.target[j + 2] - data.base[j + 2]) * t,
+    );
+    mesh.setMatrixAt(i, scratch);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
 }
 
 /**
@@ -213,6 +267,14 @@ interface AtomsTransmissionProps {
   atomTexture?: 'none' | 'scratched' | 'noise';
   /** Device tier from deviceCapabilities: 0 = low/mobile. */
   qualityTier?: number;
+  /** Integer index of the loaded `frame` within its trajectory. Paired with
+   *  `liveStateRef` to drive interpolation progress at display rate. */
+  frameIndex?: number;
+  /** Live playback ref (updated every RAF tick by useSmoothFramePlayback).
+   *  Its `effectiveFrame` minus `frameIndex` gives the substep progress at
+   *  display rate with no React re-render. Falls back to
+   *  `interpolationFactor` when absent. */
+  liveStateRef?: { readonly current: { readonly effectiveFrame: number } | null };
   onSpatialHash?: (hash: SpatialHash3D) => void;
   artifactSpecId?: string;
 }
@@ -237,12 +299,21 @@ export function AtomsTransmission({
   surfaceClearcoat = 0.0,
   atomTexture = 'none',
   qualityTier = 1,
+  frameIndex,
+  liveStateRef,
   onSpatialHash,
   artifactSpecId,
 }: AtomsTransmissionProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const materialRef = useRef<ComponentRef<typeof MeshTransmissionMaterial> | null>(null);
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
+  const interpDataRef = useRef<TransmissionInterpolationData | null>(null);
+  const appliedProgressRef = useRef(0);
+  const scratchMatrix = useMemo(() => new THREE.Matrix4(), []);
+  // Latest React-synced factor for hosts without a live playback ref, read
+  // from effects/useFrame without forcing a re-upload per sync.
+  const factorRef = useRef(interpolationFactor);
+  factorRef.current = interpolationFactor;
 
   const renderAtomCount = Math.max(
     0,
@@ -257,6 +328,13 @@ export function AtomsTransmission({
     stableTableRef.current = candidateTable;
   }
   const typeRenderTable = stableTableRef.current;
+
+  // Same gate as the impostor path: equal atom counts are NOT enough — frames
+  // that reorder rows would interpolate each atom toward an unrelated atom.
+  const canInterpolateToNextFrame = useMemo(
+    () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
+    [frame, nextFrame],
+  );
 
   const detail = transmissionSphereDetail(renderAtomCount);
   const geometry = useMemo(
@@ -310,7 +388,16 @@ export function AtomsTransmission({
 
   const [visibleCount, setVisibleCount] = useState(0);
 
-  // ─── Upload: matrices + instance colors (once per frame/state change) ──
+  const resolveLiveProgress = (interpolatable: boolean) => {
+    if (!interpolatable) return 0;
+    const live = liveStateRef?.current;
+    const raw = live && frameIndex != null
+      ? live.effectiveFrame - frameIndex
+      : factorRef.current ?? 0;
+    return raw < 0 ? 0 : raw > 1 ? 1 : raw;
+  };
+
+  // ─── Upload: endpoints + instance colors (once per frame/state change) ──
   useLayoutEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -336,10 +423,7 @@ export function AtomsTransmission({
 
     const positions = frame.positions;
     const types = frame.types;
-    const nextPositions = nextFrame && nextFrame.natoms === frame.natoms
-      ? nextFrame.positions
-      : null;
-    const t = Math.max(0, Math.min(1, interpolationFactor));
+    const nextPositions = canInterpolateToNextFrame ? nextFrame!.positions : null;
 
     let bsx = 0, bsy = 0, bsz = 0;
     if (frame.boxBounds) {
@@ -348,7 +432,9 @@ export function AtomsTransmission({
       bsz = frame.boxBounds[5] - frame.boxBounds[4];
     }
 
-    const matrix = new THREE.Matrix4();
+    const base = new Float32Array(capacity * 3);
+    const target = new Float32Array(capacity * 3);
+    const radiusArr = new Float32Array(capacity);
     const color = new THREE.Color();
     const colorArray = mesh.instanceColor.array as Float32Array;
 
@@ -356,6 +442,7 @@ export function AtomsTransmission({
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     let maxRadius = 0;
+    let boundsAreFinite = true;
 
     for (let i = 0; i < renderAtomCount && written < capacity; i += 1) {
       const rawType = types[i];
@@ -366,46 +453,78 @@ export function AtomsTransmission({
         : entry.displayRadius * scale * (atomTypeScales?.[rawType] ?? 1);
       if (radius === 0) continue;
 
-      let x = positions[i * 3];
-      let y = positions[i * 3 + 1];
-      let z = positions[i * 3 + 2];
-      if (nextPositions && t > 0) {
+      const x = positions[i * 3];
+      const y = positions[i * 3 + 1];
+      const z = positions[i * 3 + 2];
+      let targetX = x;
+      let targetY = y;
+      let targetZ = z;
+      if (nextPositions) {
         // Same PBC short-arc unwrap as the impostor GPU lerp.
-        x += wrapDelta(nextPositions[i * 3] - x, bsx) * t;
-        y += wrapDelta(nextPositions[i * 3 + 1] - y, bsy) * t;
-        z += wrapDelta(nextPositions[i * 3 + 2] - z, bsz) * t;
+        targetX = x + wrapDelta(nextPositions[i * 3] - x, bsx);
+        targetY = y + wrapDelta(nextPositions[i * 3 + 1] - y, bsy);
+        targetZ = z + wrapDelta(nextPositions[i * 3 + 2] - z, bsz);
       }
 
-      matrix.makeScale(radius, radius, radius);
-      matrix.setPosition(x, y, z);
-      mesh.setMatrixAt(written, matrix);
+      const j = written * 3;
+      base[j] = x;
+      base[j + 1] = y;
+      base[j + 2] = z;
+      target[j] = targetX;
+      target[j + 1] = targetY;
+      target[j + 2] = targetZ;
+      radiusArr[written] = radius;
 
       const [r, g, b] = resolveColor(i, entry.slot);
       // Palette values are display-sRGB (same authored values the impostor
       // palette textures decode); convert into the linear working space.
       color.setRGB(r, g, b, THREE.SRGBColorSpace);
-      colorArray[written * 3] = color.r;
-      colorArray[written * 3 + 1] = color.g;
-      colorArray[written * 3 + 2] = color.b;
+      colorArray[j] = color.r;
+      colorArray[j + 1] = color.g;
+      colorArray[j + 2] = color.b;
 
-      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) && Number.isFinite(radius)) {
-        minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
-        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+      // Bound BOTH interpolation endpoints so the display-rate sweep can never
+      // leave the culling sphere mid-substep.
+      if (
+        Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+        && Number.isFinite(targetX) && Number.isFinite(targetY) && Number.isFinite(targetZ)
+        && Number.isFinite(radius)
+      ) {
+        minX = Math.min(minX, x, targetX);
+        minY = Math.min(minY, y, targetY);
+        minZ = Math.min(minZ, z, targetZ);
+        maxX = Math.max(maxX, x, targetX);
+        maxY = Math.max(maxY, y, targetY);
+        maxZ = Math.max(maxZ, z, targetZ);
         maxRadius = Math.max(maxRadius, radius);
+      } else {
+        boundsAreFinite = false;
       }
 
       written += 1;
     }
 
+    const data: TransmissionInterpolationData = {
+      count: written,
+      base,
+      target,
+      radius: radiusArr,
+      interpolatable: Boolean(nextPositions),
+    };
+    interpDataRef.current = data;
+
+    const initialProgress = resolveLiveProgress(data.interpolatable);
+    appliedProgressRef.current = initialProgress;
+    applyTransmissionInstanceMatrices(mesh, data, initialProgress, scratchMatrix);
+
     mesh.count = written;
-    mesh.instanceMatrix.needsUpdate = true;
     mesh.instanceColor.needsUpdate = true;
     setVisibleCount(written);
 
     // InstancedMesh culls and raycasts against its OWN boundingSphere, and
     // three caches it after the first compute — install the exact bound for
     // this upload so a moving trajectory can never cull against stale extents.
-    if (written > 0 && Number.isFinite(minX)) {
+    if (written > 0 && boundsAreFinite && Number.isFinite(minX)) {
       const center = new THREE.Vector3(
         (minX + maxX) * 0.5,
         (minY + maxY) * 0.5,
@@ -431,12 +550,29 @@ export function AtomsTransmission({
       onSpatialHash(spatialHashRef.current);
     });
     return () => cancelIdle(idleId as ReturnType<typeof setTimeout> & number);
+    // The substep factor is deliberately NOT a dependency: uploads happen per
+    // frame change; the useFrame sweep below owns per-substep motion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    frame, nextFrame, interpolationFactor, renderAtomCount, capacity, geometry,
-    typeRenderTable, hiddenAtomTypes, atomTypeScales, scale,
+    frame, nextFrame, canInterpolateToNextFrame, renderAtomCount, capacity,
+    geometry, typeRenderTable, hiddenAtomTypes, atomTypeScales, scale,
     colorMode, colormap, uniformColor, elementColorOverrides, atomColorSource,
-    propData, propMin, propMax, onSpatialHash,
+    propData, propMin, propMax, onSpatialHash, scratchMatrix,
   ]);
+
+  // ─── Display-rate interpolation sweep ───────────────────────────────
+  // React syncs interpolationFactor at ~15fps during playback; the impostor
+  // path stays smooth by reading the live playback ref each rAF. Do the same
+  // here: rewrite instance matrices only when the live progress moves.
+  useFrame(() => {
+    const mesh = meshRef.current;
+    const data = interpDataRef.current;
+    if (!mesh || !data || !data.interpolatable || data.count === 0) return;
+    const progress = resolveLiveProgress(true);
+    if (Math.abs(progress - appliedProgressRef.current) < 1e-4) return;
+    appliedProgressRef.current = progress;
+    applyTransmissionInstanceMatrices(mesh, data, progress, scratchMatrix);
+  });
 
   // Export receipt: ExportManager only trusts a capture when the atoms-layer
   // mesh's material carries the requested artifact spec id.
