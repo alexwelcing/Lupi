@@ -165,11 +165,20 @@ test('the prism appearance preset renders transmission glass without errors', as
   await commands.getByRole('button', { name: 'Visuals command' }).click();
   const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
   await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
-  await visualsPanel.getByRole('button', { name: 'Fine-tune structure' }).click();
 
-  const appearance = visualsPanel.getByLabel('Appearance preset');
-  await appearance.selectOption('prism');
-  await expect(appearance).toHaveValue('prism');
+  // The scene cards are first-class controls: no disclosure to open first.
+  const prismCard = visualsPanel.getByTestId('appearance-scene-prism');
+  await prismCard.click();
+  await expect(prismCard).toHaveAttribute('aria-pressed', 'true');
+
+  // Transmission-specific glass controls appear only for the refractive look.
+  await expect(visualsPanel.getByRole('slider', { name: /Clarity/ })).toBeVisible();
+  await expect(visualsPanel.getByRole('slider', { name: /Frost/ })).toBeVisible();
+  await expect(visualsPanel.getByRole('slider', { name: /Gloss/ })).toBeVisible();
+  await visualsPanel.getByTestId('appearance-scene-specimen').click();
+  await expect(visualsPanel.getByRole('slider', { name: /Clarity/ })).toHaveCount(0);
+  await prismCard.click();
+  await expect(prismCard).toHaveAttribute('aria-pressed', 'true');
 
   // Let the transmission shader compile and the buffer pass draw a few frames;
   // a broken MeshTransmissionMaterial surfaces here as console/page errors.

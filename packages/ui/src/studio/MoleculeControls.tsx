@@ -13,6 +13,11 @@ import {
 } from '@atlas/core';
 import type { ColormapName } from '@atlas/core/types';
 import { MATERIAL_SCENES, type MaterialScene } from '@atlas/scene/materials';
+import { MAX_TRANSMISSION_ATOMS, TRANSMISSION_BASE_ROUGHNESS } from '@atlas/scene';
+
+// Full-frost ceiling for the glass Frost slider: 100% is heavily frosted
+// glass, 0% is perfectly clear (the material clamps negative offsets to 0).
+const FROST_MAX = 0.66;
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from '../coloring';
 import { POSTPROCESS_PRESETS } from '../postprocess/presets';
 import { useStore } from '../store';
@@ -24,6 +29,7 @@ import {
   CompactSelect,
   ColorPicker,
   ElementColorPicker,
+  SceneCard,
   SwatchButton,
   paletteRailStyle,
   schemeHintStyle,
@@ -135,6 +141,12 @@ export function MoleculeControls() {
 
   const materialScene = useStore(s => s.materialScene);
   const setMaterialScene = useStore(s => s.setMaterialScene);
+  const materialPreset = useStore(s => s.materialPreset);
+  const materialIntensity = useStore(s => s.materialIntensity);
+  const surfaceRoughness = useStore(s => s.surfaceRoughness);
+  const setSurfaceRoughness = useStore(s => s.setSurfaceRoughness);
+  const surfaceClearcoat = useStore(s => s.surfaceClearcoat);
+  const setSurfaceClearcoat = useStore(s => s.setSurfaceClearcoat);
   const setMaterialPreset = useStore(s => s.setMaterialPreset);
   const setEnvironmentPreset = useStore(s => s.setEnvironmentPreset);
   const setAmbientLightIntensity = useStore(s => s.setAmbientLightIntensity);
@@ -514,6 +526,82 @@ export function MoleculeControls() {
         )}
       </ControlGroup>
 
+      {/* Appearance recipes are a primary creative choice, not an expert
+          tweak: every scene card is visible without opening a disclosure, in
+          the visual identity each scene authors for itself. Prism (true
+          refractive glass) sits here as a peer of the classic looks. */}
+      <ControlGroup title="Appearance" wide>
+        <div
+          role="group"
+          aria-label="Appearance scenes"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5 }}
+        >
+          {materialScenes.map(scene => (
+            <SceneCard
+              key={scene.id}
+              active={materialScene === scene.id}
+              label={scene.label}
+              code={scene.code}
+              description={scene.description}
+              gradient={scene.cardGradient}
+              accent={scene.accentColor}
+              testId={`appearance-scene-${scene.id}`}
+              onClick={() => applyMoleculeRecipe(scene)}
+            />
+          ))}
+        </div>
+        {activeRecipe && <p style={schemeHintStyle}>{activeRecipe.description}</p>}
+
+        {materialPreset === 'transmission' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5 }}>
+              <CompactSlider
+                label="Clarity"
+                value={materialIntensity}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={setMaterialIntensity}
+                format={value => `${Math.round(value * 100)}%`}
+              />
+              <CompactSlider
+                label="Frost"
+                // surfaceRoughness is an offset over the glass baseline and
+                // load-time scene directives make it negative; present the
+                // EFFECTIVE frost so the readout can never go below 0%.
+                value={Math.max(0, Math.min(FROST_MAX, TRANSMISSION_BASE_ROUGHNESS + surfaceRoughness))}
+                min={0}
+                max={FROST_MAX}
+                step={0.02}
+                onChange={(value) => setSurfaceRoughness(value - TRANSMISSION_BASE_ROUGHNESS)}
+                format={value => `${Math.round((value / FROST_MAX) * 100)}%`}
+              />
+              <CompactSlider
+                label="Gloss"
+                value={surfaceClearcoat}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={setSurfaceClearcoat}
+                format={value => `${Math.round(value * 100)}%`}
+              />
+            </div>
+            {atomCount > MAX_TRANSMISSION_ATOMS ? (
+              <p role="status" style={schemeHintStyle}>
+                True refraction is available up to {MAX_TRANSMISSION_ATOMS.toLocaleString()} atoms.
+                This {atomCount.toLocaleString()}-atom structure uses the fast glass approximation instead.
+              </p>
+            ) : (
+              <p style={schemeHintStyle}>
+                Atoms refract the scene behind them. Clarity sets transmission, Frost softens it, Gloss adds a polished coat.
+              </p>
+            )}
+          </>
+        )}
+
+        <CompactSlider label="Atom size" value={atomScale} min={0.1} max={2} step={0.05} onChange={setAtomScale} format={value => value.toFixed(2)} />
+      </ControlGroup>
+
       {/* Vectors are only offered when the loaded data actually contains a
           complete force, velocity, or other vector triplet. */}
       {vectorSpecs.length > 0 && (
@@ -570,24 +658,6 @@ export function MoleculeControls() {
           onChange={setPostprocessIntensity}
           format={value => `${Math.round(value * 100)}%`}
         />
-      </ControlGroup>
-
-      {/* Material is a single clear choice — pick a recipe, read what it
-          does. The recipe sets finish/lighting/texture together, so the
-          old Mix/Rough/Polish/Coat sliders are gone; only atom size (a
-          geometry control no recipe owns) stays exposed. */}
-      <ControlGroup title="Atom appearance">
-        <CompactSelect
-          label="Appearance preset"
-          value={materialScene}
-          onChange={(value) => {
-            const scene = materialScenes.find(item => item.id === value);
-            if (scene) applyMoleculeRecipe(scene);
-          }}
-          options={materialScenes.map(scene => ({ value: scene.id, label: scene.label }))}
-        />
-        {activeRecipe && <p style={schemeHintStyle}>{activeRecipe.description}</p>}
-        <CompactSlider label="Atom size" value={atomScale} min={0.1} max={2} step={0.05} onChange={setAtomScale} format={value => value.toFixed(2)} />
       </ControlGroup>
 
       <ControlGroup title="Bond detection">
