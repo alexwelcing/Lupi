@@ -119,6 +119,22 @@ export function installSceneEnvironmentPmrem(
   }
 
   const texture = target.texture;
+  // A degraded CDN asset (tiny or truncated HDR) can PMREM into a ≤1px atlas.
+  // Three injects `1/width` and `1/height` as bare numeric shader defines, so
+  // a 1px dimension emits an integer define that strict GLSL drivers reject —
+  // failing compilation for EVERY environment-lit material in the scene. Such
+  // a probe carries no directional light anyway: keep the previous
+  // environment instead of letting CDN health decide product health.
+  const image = texture.image as { width?: unknown; height?: unknown } | undefined;
+  const atlasWidth = typeof image?.width === 'number' ? image.width : 0;
+  const atlasHeight = typeof image?.height === 'number' ? image.height : 0;
+  if (!(atlasWidth > 1 && atlasHeight > 1)) {
+    console.warn(
+      `[SceneLighting] Ignoring degenerate ${atlasWidth}x${atlasHeight} PMREM atlas for environment '${preset}'; keeping the previous environment.`,
+    );
+    target.dispose();
+    return () => {};
+  }
   markSceneEnvironmentReady(texture, preset);
   scene.environment = texture;
 

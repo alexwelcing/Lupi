@@ -381,7 +381,7 @@ const EDGE_RENDER_VIEW_SCHEMA_V1: JsonValue = {
           propertyNames: { pattern: '^(?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$' },
           additionalProperties: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         },
-        materialPreset: { enum: ['default', 'matte', 'metallic', 'glass', 'plastic'] },
+        materialPreset: { enum: ['default', 'matte', 'metallic', 'glass', 'plastic', 'transmission'] },
         roughness: { type: 'number', minimum: -1, maximum: 1 },
         polish: { type: 'number', minimum: -1, maximum: 1 },
         propertyRange: {

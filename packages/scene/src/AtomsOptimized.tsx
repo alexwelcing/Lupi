@@ -45,7 +45,10 @@ interface AtomsOptimizedProps {
   highlightedAtoms?: Set<number>;
   hiddenAtomTypes?: Set<number>;
   atomTypeScales?: Record<number, number>;
-  materialPreset?: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
+  /** 'transmission' has no impostor implementation; this renderer treats it
+   *  as 'glass' so oversized scenes falling back from AtomsTransmission still
+   *  read glassy. */
+  materialPreset?: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission';
   /** 0 = pure per-element identity, 1 = full preset override. Scenes can
    *  blend, e.g. 0.7 means 70% preset + 30% element character. */
   materialIntensity?: number;
@@ -1053,7 +1056,7 @@ export function AtomsOptimized({
     let matMode = 0;
     if (materialPreset === 'matte') matMode = 1;
     if (materialPreset === 'metallic') matMode = 2;
-    if (materialPreset === 'glass') matMode = 3;
+    if (materialPreset === 'glass' || materialPreset === 'transmission') matMode = 3;
     if (materialPreset === 'plastic') matMode = 4;
     uniforms.uMaterialPreset.value = matMode;
     uniforms.uMaterialIntensity.value = materialIntensity ?? 0.0;

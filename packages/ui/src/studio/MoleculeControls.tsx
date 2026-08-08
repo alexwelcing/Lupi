@@ -110,6 +110,7 @@ const FEATURED_SCENE_IDS = [
   'blueprint',
   'forge',
   'crystallography',
+  'prism',
   'deep_space',
   'holograph',
   'subsurface',

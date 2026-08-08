@@ -150,6 +150,34 @@ test('@deployed-smoke the save view and account menus open over the viewer', asy
   await releaseRenderer(page);
 });
 
+test('the prism appearance preset renders transmission glass without errors', async ({ page }) => {
+  await preparePage(page);
+  const consoleErrors: string[] = [];
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', error => consoleErrors.push(error.message));
+
+  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  await expectViewerReady(page);
+
+  const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
+  await commands.getByRole('button', { name: 'Visuals command' }).click();
+  const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
+  await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
+  await visualsPanel.getByRole('button', { name: 'Fine-tune structure' }).click();
+
+  const appearance = visualsPanel.getByLabel('Appearance preset');
+  await appearance.selectOption('prism');
+  await expect(appearance).toHaveValue('prism');
+
+  // Let the transmission shader compile and the buffer pass draw a few frames;
+  // a broken MeshTransmissionMaterial surfaces here as console/page errors.
+  await page.waitForTimeout(1_500);
+  expect(consoleErrors).toEqual([]);
+  await releaseRenderer(page);
+});
+
 test('a trajectory deep link renders without React console errors', async ({ page }) => {
   await preparePage(page);
   const consoleErrors: string[] = [];

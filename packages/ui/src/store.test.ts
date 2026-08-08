@@ -237,6 +237,17 @@ describe('Store — URL Serialization', () => {
     expect(restored.environmentPreset).toBe('studio');
   });
 
+  it('round-trips the transmission material preset and prism scene through URL state', () => {
+    getStoreState().decodeFromURL(encodeStateDelta({
+      ms: 'prism',
+      mp: 'transmission',
+    }));
+
+    const restored = getStoreState();
+    expect(restored.materialScene).toBe('prism');
+    expect(restored.materialPreset).toBe('transmission');
+  });
+
   it('maps the retired apartment environment onto the softbox studio', () => {
     getStoreState().decodeFromURL(encodeStateDelta({ env: 'apartment' }));
     expect(getStoreState().environmentPreset).toBe('softbox');

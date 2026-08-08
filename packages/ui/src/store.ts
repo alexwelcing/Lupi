@@ -147,7 +147,7 @@ function sanitizePostprocessPreset(value: unknown): AppState['postprocessPreset'
 }
 
 function sanitizeMaterialPreset(value: unknown): AppState['materialPreset'] {
-  return value === 'default' || value === 'matte' || value === 'metallic' || value === 'glass' || value === 'plastic'
+  return value === 'default' || value === 'matte' || value === 'metallic' || value === 'glass' || value === 'plastic' || value === 'transmission'
     ? value
     : 'default';
 }
@@ -430,7 +430,7 @@ export interface AppState {
   filterShellOpacity: number;
   filterShellRadius: number;
   environmentPreset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none';
-  materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
+  materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission';
   /** Active material scene ID. Scenes coordinate material + lighting + env
    *  + post into a holistic authored look. */
   materialScene: string;
@@ -730,7 +730,7 @@ export interface AppState {
   setFilterShellRadius: (radius: number) => void;
   setEnvironmentPreset: (preset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none') => void;
   setArLightEstimationActive: (active: boolean) => void;
-  setMaterialPreset: (preset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic') => void;
+  setMaterialPreset: (preset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission') => void;
   setMaterialScene: (sceneId: string) => void;
   setMaterialIntensity: (v: number) => void;
   applyMaterialScene: (sceneId: string) => void;

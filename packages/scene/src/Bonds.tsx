@@ -132,7 +132,7 @@ interface BondsProps {
   cellBounds?: [number, number, number, number, number, number];
   radius?: number;
   opacity?: number;
-  materialPreset?: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
+  materialPreset?: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission';
   materialIntensity?: number;
   rimLightIntensity?: number;
   surfaceRoughness?: number;
@@ -723,6 +723,10 @@ export function Bonds({
         matConfig = { metalness: 0.8, roughness: 0.2, envMapIntensity: 2.0 };
         break;
       case 'glass':
+      // Bonds stay on the impostor-era glass config in transmission mode:
+      // thin cylinders gain nothing from a per-bond refraction pass, and the
+      // matched finish keeps them visually continuous with the atoms.
+      case 'transmission':
         matConfig = { metalness: 0.3, roughness: 0.05, envMapIntensity: 1.5 };
         break;
       case 'plastic':

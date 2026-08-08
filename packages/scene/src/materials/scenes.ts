@@ -19,8 +19,10 @@ export interface MaterialScene {
   label: string;
   description: string;
   code: string;                // Short text code used in preset cards.
-  /** Material override preset. 'default' = per-element identity only. */
-  materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
+  /** Material override preset. 'default' = per-element identity only.
+   *  'transmission' switches the viewer to the real-geometry refractive
+   *  renderer (AtomsTransmission) when the scene fits its atom budget. */
+  materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission';
   /** 0 = per-element identity, 1 = full preset override. */
   materialIntensity: number;
   /** Environment map. 'softbox' is the procedural scientific-studio rig
@@ -150,6 +152,28 @@ export const MATERIAL_SCENES: MaterialScene[] = [
     atomTexture: 'none',
     cardGradient: 'linear-gradient(135deg, #0a1628, #162040)',
     accentColor: '#80d8ff',
+  },
+
+  {
+    id: 'prism',
+    label: 'Prism',
+    description: 'True refractive glass. Per-atom tinted transmission with chromatic dispersion.',
+    code: 'PRS',
+    materialPreset: 'transmission',
+    materialIntensity: 1.0,
+    // Refraction needs something behind the molecule to bend: a bright
+    // studio probe plus a non-void background give every sphere content.
+    environmentPreset: 'studio',
+    envIntensity: 1.15,
+    ambientIntensity: 0.55,
+    dirLightIntensity: 1.1,
+    rimLightIntensity: 0.25,
+    postprocessPreset: 'studio',
+    toneMapping: 'aces',
+    backgroundPreset: 'deep',
+    atomTexture: 'none',
+    cardGradient: 'linear-gradient(135deg, #131a2e, #2a1a4a)',
+    accentColor: '#c4b5fd',
   },
 
   // ─── Dramatic Tier ───────────────────────────────────────────────────

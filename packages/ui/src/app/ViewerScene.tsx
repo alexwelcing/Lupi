@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { useStore } from '../store';
 import { useSmoothFramePlayback, type InterpolatedFrameState } from '../hooks/useSmoothFramePlayback';
 import { AtomsOptimized } from '@atlas/scene/AtomsOptimized';
+import { AtomsTransmission, MAX_TRANSMISSION_ATOMS } from '@atlas/scene';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
 import { buildClusters, type Clusters } from '@atlas/scene/ClusterBuilder';
 import { Bonds } from '@atlas/scene/Bonds';
@@ -425,6 +426,30 @@ export function ViewerScene({
           )}
           <AnomalyTracker frame={currentFrame} colorProperty={colorProperty} active={anomalyTracking} />
           {ghostFrame && <GhostAtoms frame={ghostFrame} scale={atomScale * 0.34} />}
+          {materialPreset === 'transmission' && currentFrame.natoms <= MAX_TRANSMISSION_ATOMS ? (
+            <AtomsTransmission
+              frame={interpolatedFrame ?? currentFrame}
+              nextFrame={interpolatedNextFrame}
+              interpolationFactor={interpolationFactor}
+              colorMode={colorMode}
+              colorProperty={colorProperty ?? undefined}
+              colormap={colormap}
+              uniformColor={uniformAtomColor}
+              elementColorOverrides={elementColorOverrides}
+              atomColorSource={atomColorSource}
+              scale={atomScale}
+              loadedAtomCount={loadedAtomCount}
+              hiddenAtomTypes={hiddenAtomTypes}
+              atomTypeScales={atomTypeScales}
+              materialIntensity={materialIntensity}
+              surfaceRoughness={surfaceRoughness}
+              surfaceClearcoat={surfaceClearcoat}
+              atomTexture={atomTexture}
+              qualityTier={deviceQualityTier}
+              onSpatialHash={!playing && atomPickingEnabled ? setSpatialHash : undefined}
+              artifactSpecId={artifactSpecId}
+            />
+          ) : (
           <AtomsOptimized
             frame={interpolatedFrame ?? currentFrame!}
             nextFrame={interpolatedNextFrame}
@@ -463,6 +488,7 @@ export function ViewerScene({
             etchAtomId={etchAtomId}
             artifactSpecId={artifactSpecId}
           />
+          )}
           {activeVectorField && (
             <VectorGlyphs
               frame={interpolatedFrame ?? currentFrame!}
