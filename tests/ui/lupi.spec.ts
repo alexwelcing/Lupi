@@ -42,6 +42,20 @@ async function expectPressed(control: Locator) {
   await expect(control).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
 }
 
+async function expectHitTestable(panel: Locator) {
+  // toBeVisible cannot detect an ancestor clipping the panel away (for example
+  // paint containment on the status bar), so assert the opened menu actually
+  // wins hit-testing at its own on-screen coordinates.
+  await expect.poll(() => panel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const probe = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + Math.min(24, rect.height / 2),
+    );
+    return probe !== null && element.contains(probe);
+  })).toBe(true);
+}
+
 async function releaseRenderer(page: Page) {
   // End the continuous WebGL render loop before Playwright tears down the
   // context; software-rendered CI browsers can otherwise spend the timeout in
@@ -113,6 +127,54 @@ test('@deployed-smoke viewer settings are usable and learning tools are discover
 
   await commands.getByRole('button', { name: 'Learn command' }).click();
   await expect(page.getByTestId('study-lens-panel')).toBeVisible();
+  await releaseRenderer(page);
+});
+
+test('@deployed-smoke the save view and account menus open over the viewer', async ({ page }) => {
+  await preparePage(page);
+  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  await expectViewerReady(page);
+
+  await page.getByTestId('lupi-save-view-button').click();
+  const savePanel = page.getByTestId('lupi-save-view-panel');
+  await expect(savePanel).toBeVisible();
+  await expectHitTestable(savePanel);
+
+  await page.keyboard.press('Escape');
+  await expect(savePanel).toBeHidden();
+
+  await page.getByTestId('lupi-agent-dock-button').click();
+  const dockPanel = page.getByTestId('lupi-agent-dock-panel');
+  await expect(dockPanel).toBeVisible();
+  await expectHitTestable(dockPanel);
+  await releaseRenderer(page);
+});
+
+test('the prism appearance preset renders transmission glass without errors', async ({ page }) => {
+  await preparePage(page);
+  const consoleErrors: string[] = [];
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', error => consoleErrors.push(error.message));
+
+  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  await expectViewerReady(page);
+
+  const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
+  await commands.getByRole('button', { name: 'Visuals command' }).click();
+  const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
+  await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
+  await visualsPanel.getByRole('button', { name: 'Fine-tune structure' }).click();
+
+  const appearance = visualsPanel.getByLabel('Appearance preset');
+  await appearance.selectOption('prism');
+  await expect(appearance).toHaveValue('prism');
+
+  // Let the transmission shader compile and the buffer pass draw a few frames;
+  // a broken MeshTransmissionMaterial surfaces here as console/page errors.
+  await page.waitForTimeout(1_500);
+  expect(consoleErrors).toEqual([]);
   await releaseRenderer(page);
 });
 

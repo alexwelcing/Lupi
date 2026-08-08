@@ -579,12 +579,14 @@ export async function detectExportBonds(
 
 // ─── Materials ─────────────────────────────────────────────────────
 
-export type ExportMaterialPreset = 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
+export type ExportMaterialPreset = 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission';
 
 /**
  * Shared preset → PBR params mapping (was duplicated between the atom and
  * bond loops in ExportManager). Glass keeps transmission for GLB but falls
  * back to plain rough glass for USDZ, whose exporter drops physical props.
+ * The viewer's true-refraction 'transmission' preset exports as full-strength
+ * glass: GLB carries KHR_materials_transmission, USDZ the same rough fallback.
  */
 export function createExportMaterial(
   preset: ExportMaterialPreset,
@@ -605,6 +607,11 @@ export function createExportMaterial(
         ? { metalness: 0.1, roughness: 0.2 }
         : { metalness: 0.1, roughness: 0.1, transmission: 0.8, transparent: true, opacity: 0.8, ior: 1.5 };
       break;
+    case 'transmission':
+      config = isUsdZ
+        ? { metalness: 0.05, roughness: 0.15 }
+        : { metalness: 0.0, roughness: 0.06, transmission: 1.0, transparent: true, opacity: 1.0, ior: 1.5, thickness: 1.0 };
+      break;
     case 'plastic':
       config = { metalness: 0.0, roughness: 0.4 };
       break;
@@ -613,7 +620,8 @@ export function createExportMaterial(
   config.metalness = Math.max(0.0, Math.min(1.0, (config.metalness as number) + surfacePolish));
   config.roughness = Math.max(0.0, Math.min(1.0, (config.roughness as number) + surfaceRoughness));
 
-  const MaterialClass = preset === 'glass' && !isUsdZ ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
+  const usesPhysical = (preset === 'glass' || preset === 'transmission') && !isUsdZ;
+  const MaterialClass = usesPhysical ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
   return new MaterialClass({ color: new THREE.Color(1, 1, 1), ...config });
 }
 

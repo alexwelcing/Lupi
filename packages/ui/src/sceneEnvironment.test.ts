@@ -116,6 +116,35 @@ describe('procedural scientific-studio softbox environment', () => {
 });
 
 describe('scene PMREM lifecycle ownership', () => {
+  it('refuses a degenerate PMREM atlas and keeps the previous environment', () => {
+    const scene = new THREE.Scene();
+    const previous = new THREE.Texture();
+    scene.environment = previous;
+    // A 1px atlas would make three emit integer CUBEUV texel defines that
+    // strict GLSL drivers reject for every environment-lit material.
+    const generated = new THREE.Texture({ width: 1, height: 1 });
+    generated.mapping = THREE.CubeUVReflectionMapping;
+    generated.colorSpace = THREE.LinearSRGBColorSpace;
+    const disposeTarget = vi.fn();
+    const generator = {
+      compileEquirectangularShader: vi.fn(),
+      fromEquirectangular: vi.fn(() => ({ texture: generated, dispose: disposeTarget })),
+      dispose: vi.fn(),
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const cleanup = installSceneEnvironmentPmrem(scene, new THREE.Texture(), 'studio', () => generator);
+      expect(scene.environment).toBe(previous);
+      expect(disposeTarget).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledOnce();
+      cleanup();
+      expect(scene.environment).toBe(previous);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('commits in the effect transaction and restores/disposes exactly once', () => {
     const scene = new THREE.Scene();
     const previous = new THREE.Texture();

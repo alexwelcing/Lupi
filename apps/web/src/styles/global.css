@@ -766,7 +766,10 @@ button:focus:not(:focus-visible) {
   background: linear-gradient(90deg, rgba(11, 18, 26, 0.985), rgba(6, 10, 16, 0.96)), #070b10;
   border: 1px solid #22303d;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34), inset 3px 0 0 rgba(34, 211, 215, 0.76), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  contain: layout paint;
+  /* No `paint` containment here: the Save view and account menus are
+     absolutely-positioned descendants of this bar and must render below the
+     48px capsule. Paint containment clips them invisible (and un-clickable). */
+  contain: layout;
 }
 
 /* Viewer chrome lives over the scene instead of reserving a header row. The

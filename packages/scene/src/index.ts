@@ -5,6 +5,21 @@ export {
   LUPI_ARTIFACT_ATOMS_LAYER,
   LUPI_ARTIFACT_LAYER_KEY,
 } from './AtomsOptimized';
+export {
+  AtomsTransmission,
+  MAX_TRANSMISSION_ATOMS,
+  applyTransmissionInstanceMatrices,
+  buildAtomSurfaceRoughnessMap,
+  createAtomColorResolver,
+  transmissionQuality,
+  transmissionSphereDetail,
+  transmissionStrength,
+} from './AtomsTransmission';
+export type {
+  TransmissionInterpolationData,
+  TransmissionQuality,
+  TransmissionSphereDetail,
+} from './AtomsTransmission';
 export { AtomClusters } from './AtomClusters';
 export { buildClusters, MAX_GRID_DIM, clusterCellRadius } from './ClusterBuilder';
 export type { Clusters } from './ClusterBuilder';
