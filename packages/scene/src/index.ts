@@ -8,6 +8,7 @@ export {
 export {
   AtomsTransmission,
   MAX_TRANSMISSION_ATOMS,
+  TRANSMISSION_BASE_ROUGHNESS,
   applyTransmissionInstanceMatrices,
   buildAtomSurfaceRoughnessMap,
   createAtomColorResolver,

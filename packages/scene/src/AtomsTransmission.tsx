@@ -82,6 +82,14 @@ export function transmissionQuality(qualityTier: number): TransmissionQuality {
 }
 
 /**
+ * Baseline micro-roughness of clear transmission glass. The store's
+ * surfaceRoughness is an OFFSET added to this (and load-time scene directives
+ * legitimately make it negative), so UI controls that present "frost" must
+ * speak in the effective value: clamp(base + offset).
+ */
+export const TRANSMISSION_BASE_ROUGHNESS = 0.06;
+
+/**
  * Blend strength → physical transmission. materialIntensity keeps its scene
  * semantics ("how strongly the preset overrides element identity") but a true
  * refractive material cannot partially fall back to the per-element BRDF, so
@@ -616,7 +624,7 @@ export function AtomsTransmission({
         // distortion knobs would make two captures of one spec differ.
         distortion={0}
         temporalDistortion={0}
-        roughness={Math.max(0, Math.min(1, 0.06 + surfaceRoughness))}
+        roughness={Math.max(0, Math.min(1, TRANSMISSION_BASE_ROUGHNESS + surfaceRoughness))}
         roughnessMap={surfaceMap ?? undefined}
         clearcoat={surfaceClearcoat}
         clearcoatRoughness={0.08}
