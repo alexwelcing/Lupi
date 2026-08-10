@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { assessAsset, canonicalAssessmentJson, trajectorySource, type AssessmentReport } from '@atlas/assessment';
 import { renderWithStore, resetStore, getStoreState } from './test-utils';
 import { McpViewerBridge, type LupiMcpDriver } from './mcpViewerBridge';
 import { useStore } from './store';
+import { LUPI_MCP_SCHEMAS } from './mcp/schemas';
+import { MCP_TOOL_DEFINITIONS } from './mcp/toolManifest';
 import {
   MCP_ERROR_EVENT,
   MCP_REQUEST_EVENT,
   MCP_SUCCESS_EVENT,
 } from './mcp/protocol';
+import { isLocalAssessmentOrigin } from './mcp/tools';
 
 describe('MCP viewer bridge', () => {
   beforeEach(() => {
@@ -43,7 +47,9 @@ describe('MCP viewer bridge', () => {
     expect(typeof driver.state).toBe('function');
     expect(driver.tools().some((t) => t.name === 'lupi.set_frame')).toBe(true);
     expect(driver.tools().some((t) => t.name === 'lupi.generate_molecule')).toBe(true);
+    expect(driver.tools().some((t) => t.name === 'lupi.open_gallery_example')).toBe(true);
     expect(driver.tools().some((t) => t.name === 'lupi.export_asset')).toBe(true);
+    expect(driver.tools().some((t) => t.name === 'lupi.assess_asset')).toBe(true);
   });
 
   it('generates a molecule through the legacy tool path', async () => {
@@ -251,6 +257,19 @@ describe('MCP viewer bridge', () => {
     }
   });
 
+  it('declares a strict gallery example tool contract', () => {
+    expect(LUPI_MCP_SCHEMAS['lupi.open_gallery_example']).toMatchObject({
+      additionalProperties: false,
+      required: ['id', 'expectedAtomCount', 'maxAtomCount'],
+      properties: {
+        id: { type: 'string', minLength: 1 },
+        expectedAtomCount: { type: 'integer', minimum: 1, maximum: 50_000_000 },
+        maxAtomCount: { type: 'integer', minimum: 1, maximum: 50_000_000 },
+      },
+    });
+    expect(MCP_TOOL_DEFINITIONS.find((tool) => tool.name === 'lupi.open_gallery_example')).toBeTruthy();
+  });
+
   it('parses only allowlisted remote molecule URLs into MCP load requests', () => {
     const driver = mountBridge();
     expect(driver.parseCommand('https://lupi.live/gallery/curated/caffeine.xyz')[0]).toMatchObject({
@@ -266,6 +285,7 @@ describe('MCP viewer bridge', () => {
     expect(names).toEqual(expect.arrayContaining([
       'lupi.generate_molecule',
       'lupi.export_asset',
+      'lupi.assess_asset',
       'lupi.set_frame',
       'lupi.play',
       'lupi.pause',
@@ -301,6 +321,92 @@ describe('MCP viewer bridge', () => {
     });
     expect(setFrameResponse.ok).toBe(true);
     expect(setFrameResponse.result?.frame).toBe(0);
+  });
+
+  it('assesses the active materialized trajectory without rendering or refetching', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const loadedBefore = getStoreState().file;
+
+    const response = await driver.execute({
+      id: 'test-assess-active',
+      tool: 'lupi.assess_asset',
+      arguments: { source: 'active', mode: 'fast' },
+    });
+
+    const assessment = response.result?.assessment as AssessmentReport & {
+      observations: { format: string; atomCount: number; hasInferredBonds: boolean };
+    };
+    expect(response.ok).toBe(true);
+    expect(assessment.observations).toMatchObject({ format: 'trajectory', atomCount: 12 });
+    expect(assessment.rankKey).toMatch(/^\d{2}:/);
+    expect(getStoreState().file).toBe(loadedBefore);
+    const direct = await assessAsset(trajectorySource(loadedBefore!.trajectory, {
+      name: loadedBefore!.name,
+      size: loadedBefore!.size,
+      sidecars: { thermo: Boolean(loadedBefore!.thermo), profiles: Boolean(loadedBefore!.profiles?.length) },
+    }), {
+      metadata: {
+        lupiTrajectory: {
+          totalFrames: loadedBefore!.trajectory.totalFrames,
+          residentFrames: loadedBefore!.trajectory.frames.filter(Boolean).length,
+          currentFrame: getStoreState().frame,
+          residency: loadedBefore!.trajectory.residency?.mode ?? 'complete',
+        },
+      },
+    });
+    expect(canonicalAssessmentJson(assessment)).toBe(canonicalAssessmentJson(direct.report));
+  });
+
+  it('reports authoritative totalFrames for a sparse active trajectory', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    const loaded = getStoreState().file!;
+    useStore.setState({
+      file: {
+        ...loaded,
+        trajectory: {
+          ...loaded.trajectory,
+          frames: [loaded.trajectory.frames[0]],
+          totalFrames: 120,
+          residency: { mode: 'sparse', maxResidentFrames: 4, maxResidentBytes: 1024 * 1024 },
+        },
+      },
+    });
+
+    const response = await driver.execute({
+      id: 'test-assess-sparse-active',
+      tool: 'lupi.assess_asset',
+      arguments: { source: 'active', mode: 'fast' },
+    });
+
+    expect(response.ok).toBe(true);
+    expect((response.result?.assessment as AssessmentReport).observations.frameCount).toBe(120);
+  });
+
+  it('rejects deep browser assessment before reading the active asset or fetching a URL', async () => {
+    const driver = mountBridge();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const response = await driver.execute({
+        id: 'test-assess-deep-url',
+        tool: 'lupi.assess_asset',
+        arguments: { source: 'url', url: 'https://lupi.live/gallery/curated/caffeine.xyz', mode: 'deep' },
+      });
+      expect(response.ok).toBe(false);
+      expect(response.error?.message).toMatch(/bounded fast mode only/i);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('allows private assessment URLs only from a loopback browser origin', () => {
+    expect(isLocalAssessmentOrigin('http://127.0.0.1:5177')).toBe(true);
+    expect(isLocalAssessmentOrigin('http://localhost:5177')).toBe(true);
+    expect(isLocalAssessmentOrigin('http://[::1]:5177')).toBe(true);
+    expect(isLocalAssessmentOrigin('https://lupi.live')).toBe(false);
+    expect(isLocalAssessmentOrigin('https://preview.lupi.live')).toBe(false);
   });
 
   it('toggles playback through play/pause tools', async () => {

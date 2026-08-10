@@ -62,7 +62,12 @@ export async function openMolecule(request: ViewerOpenRequest): Promise<ViewerOp
     }
 
     syncHistory(request);
-    const result = await loadGalleryExample(example, { isCurrent });
+    const result = await loadGalleryExample(example, {
+      isCurrent,
+      expectedAtoms: request.expectedAtoms,
+      maxAtoms: request.maxAtoms,
+      includeScience: request.includeScience,
+    });
     if (!isCurrent()) return { ok: false, message: 'Viewer load was superseded by newer navigation.' };
     if (!result.ok && request.history !== 'none') clearFailedGalleryUrl(request.id);
     return result;

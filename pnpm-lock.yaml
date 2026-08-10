@@ -90,6 +90,9 @@ importers:
 
   apps/mcp-worker:
     dependencies:
+      '@atlas/assessment':
+        specifier: workspace:*
+        version: link:../../packages/assessment
       '@atlas/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -229,6 +232,22 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@22.19.15)(jsdom@29.1.1(canvas@3.2.3))(vite@6.4.1(@types/node@22.19.15)(jiti@1.21.7)(terser@5.46.1)(yaml@2.9.0))
 
+  packages/assessment:
+    dependencies:
+      '@atlas/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@22.19.15)(jsdom@29.1.1(canvas@3.2.3))(vite@6.4.1(@types/node@22.19.15)(jiti@1.21.7)(terser@5.46.1)(yaml@2.9.0))
+
   packages/core:
     devDependencies:
       typescript:
@@ -315,6 +334,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@atlas/assessment':
+        specifier: workspace:*
+        version: link:../assessment
       '@atlas/core':
         specifier: workspace:*
         version: link:../core
@@ -391,6 +413,9 @@ importers:
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1(canvas@3.2.3)
+      react-dom:
+        specifier: 19.2.4
+        version: 19.2.4(react@19.2.4)
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

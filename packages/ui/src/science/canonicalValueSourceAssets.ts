@@ -1,4 +1,5 @@
 /** Exact frozen JSON asset bytes referenced by canonical energy-series value_sources. */
+import { normalizeCanonicalLfText } from './canonicalText';
 import source0 from './canonical-value-sources/151e7b06ab1e3c1fbc0df334ceb23fef9e0cbb9dcfe08cccf869ac5e59e9e42f.json?raw';
 import source1 from './canonical-value-sources/1c1068f1204b48ca45d16db3fe01806e033bc842442e6a542e0f552a7c80a742.json?raw';
 import source2 from './canonical-value-sources/1d17fd28e482023f56258ec555610d59090847df6eae52800c370c041b0c07ec.json?raw';
@@ -40,7 +41,7 @@ import source37 from './canonical-value-sources/f59fbe4d0b5da966d3c95f6725d4aa30
 import source38 from './canonical-value-sources/f859ee347b7fcf9af9ff10cb3ea9b4a8bed298a15a29bbbe41c9c5a7c64e2ab9.json?raw';
 import source39 from './canonical-value-sources/f8e79f556cce60cde7b93210ab4f8a734b29b49b16d18c7d441260581b632535.json?raw';
 
-export const CANONICAL_VALUE_SOURCE_ASSETS: Readonly<Record<string, string>> = {
+const RAW_CANONICAL_VALUE_SOURCE_ASSETS: Readonly<Record<string, string>> = {
   'sha256:151e7b06ab1e3c1fbc0df334ceb23fef9e0cbb9dcfe08cccf869ac5e59e9e42f': source0,
   'sha256:1c1068f1204b48ca45d16db3fe01806e033bc842442e6a542e0f552a7c80a742': source1,
   'sha256:1d17fd28e482023f56258ec555610d59090847df6eae52800c370c041b0c07ec': source2,
@@ -82,3 +83,13 @@ export const CANONICAL_VALUE_SOURCE_ASSETS: Readonly<Record<string, string>> = {
   'sha256:f859ee347b7fcf9af9ff10cb3ea9b4a8bed298a15a29bbbe41c9c5a7c64e2ab9': source38,
   'sha256:f8e79f556cce60cde7b93210ab4f8a734b29b49b16d18c7d441260581b632535': source39,
 };
+
+// Asset digests are identities of the repository's canonical LF bytes. Raw
+// imports can contain CRLF after a Windows checkout, so materialize the same
+// byte contract on every development and CI platform before verification.
+export const CANONICAL_VALUE_SOURCE_ASSETS: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(RAW_CANONICAL_VALUE_SOURCE_ASSETS).map(([digest, source]) => [
+    digest,
+    normalizeCanonicalLfText(source, `Canonical value-source ${digest}`),
+  ]),
+);

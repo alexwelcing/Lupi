@@ -7,6 +7,15 @@
  */
 
 import { useStore, type BackgroundBackdropShape, type BackgroundBackdropPattern, type ExportRequest } from '../store';
+import {
+  assessAsset,
+  byteSourceFromUrl,
+  envelopeSource,
+  trajectorySource,
+  type AssessmentContext,
+  type AssetEnvelope,
+  type AssessmentSource,
+} from '@atlas/assessment';
 import type { LupiMcpRequest, LupiMcpResponseResult, LupiMcpToolDefinition } from './types';
 import { MCP_TOOL_DEFINITIONS } from './toolManifest';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
@@ -38,6 +47,16 @@ function readBoolean(value: unknown): boolean | undefined {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+/** Private-network assessment URLs are a local-preview convenience only. */
+export function isLocalAssessmentOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
 }
 
 function readTuple3(value: unknown): [number, number, number] | undefined {
@@ -635,10 +654,66 @@ async function handleStatus(): Promise<LupiMcpResponseResult> {
   };
 }
 
+async function handleAssessAsset(request: LupiMcpRequest): Promise<LupiMcpResponseResult> {
+  const args = request.arguments;
+  const requestedSource = readString(args.source) ?? (args.url ? 'url' : args.envelope ? 'envelope' : 'active');
+  const requestedMode = readString(args.mode) ?? 'fast';
+  if (requestedMode !== 'fast') {
+    throw new Error(`Browser assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Use the Node CLI for deep streaming inspection.`);
+  }
+  let context = args.context && typeof args.context === 'object' && !Array.isArray(args.context)
+    ? args.context as AssessmentContext
+    : undefined;
+
+  let source: AssessmentSource;
+  if (requestedSource === 'active') {
+    const state = useStore.getState();
+    const file = state.file;
+    if (!file) throw new Error('No materialized trajectory is loaded for assessment.');
+    const residentFrames = file.trajectory.frames.reduce((count, frame) => count + (frame ? 1 : 0), 0);
+    context = {
+      ...context,
+      metadata: {
+        ...context?.metadata,
+        lupiTrajectory: {
+          totalFrames: file.trajectory.totalFrames,
+          residentFrames,
+          currentFrame: state.frame,
+          residency: file.trajectory.residency?.mode ?? 'complete',
+        },
+      },
+    };
+    source = trajectorySource(file.trajectory, {
+      name: file.name,
+      size: file.size,
+      sidecars: { thermo: Boolean(file.thermo), profiles: Boolean(file.profiles?.length) },
+    });
+  } else if (requestedSource === 'url') {
+    const url = readString(args.url);
+    if (!url) throw new Error('lupi.assess_asset requires "url" when source is "url".');
+    source = byteSourceFromUrl(url, {
+      timeoutMs: 5_000,
+      maxBytes: 128 * 1024,
+      allowPrivate: isLocalAssessmentOrigin(window.location.origin),
+    });
+  } else if (requestedSource === 'envelope') {
+    if (!args.envelope || typeof args.envelope !== 'object' || Array.isArray(args.envelope)) {
+      throw new Error('lupi.assess_asset requires an object "envelope" when source is "envelope".');
+    }
+    source = envelopeSource(args.envelope as AssetEnvelope);
+  } else {
+    throw new Error(`Unsupported assessment source: ${requestedSource}`);
+  }
+
+  const assessed = await assessAsset(source, context, { mode: 'fast' });
+  return { assessment: assessed.report, execution: assessed.execution };
+}
+
 /* ─── Registry ─── */
 
 export const LUPI_MCP_TOOLS: LupiMcpToolDefinition[] = [
   { name: 'lupi.status', description: 'Report MCP bridge readiness and viewer health.', handler: handleStatus },
+  { name: 'lupi.assess_asset', description: 'Run a bounded fast assessment of a materialized Lupi asset without rendering or external scientific lookups.', handler: handleAssessAsset },
   { name: 'lupi.set_frame', description: 'Jump to a specific trajectory frame.', handler: handleSetFrame },
   { name: 'lupi.play', description: 'Start trajectory playback.', handler: handlePlay },
   { name: 'lupi.pause', description: 'Pause trajectory playback.', handler: handlePause },

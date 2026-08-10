@@ -14,6 +14,8 @@
     "noEmit": true,
     "types": ["@webgpu/types"],
     "paths": {
+      "@atlas/assessment": ["./packages/assessment/src"],
+      "@atlas/assessment/*": ["./packages/assessment/src/*"],
       "@atlas/core": ["./packages/core/src"],
       "@atlas/core/*": ["./packages/core/src/*"],
       "@atlas/nist": ["./packages/nist/src"],

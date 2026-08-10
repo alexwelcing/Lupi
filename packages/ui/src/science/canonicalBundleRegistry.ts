@@ -2,6 +2,7 @@ import path0Raw from './canonical-bundles/path-0.visualization-bundle.json?raw';
 import path14Raw from './canonical-bundles/path-14.visualization-bundle.json?raw';
 import path16Raw from './canonical-bundles/path-16.visualization-bundle.json?raw';
 import path27Raw from './canonical-bundles/path-27.visualization-bundle.json?raw';
+import { normalizeCanonicalLfText } from './canonicalText';
 
 export interface CanonicalBundleRegistryEntry {
   pathIndex: number;
@@ -13,7 +14,16 @@ export interface CanonicalBundleRegistryEntry {
 type BundleIdentity = { bundle_id: string; supersedes: string | null };
 
 function entry(pathIndex: number, serializedManifest: string, manifestSha256: string): CanonicalBundleRegistryEntry {
-  return { pathIndex, manifest: JSON.parse(serializedManifest) as unknown, serializedManifest, manifestSha256 };
+  // Canonical bundle identities were minted from the repository's LF bytes.
+  // Vite's `?raw` import can expose CRLF after a Windows checkout, so normalize
+  // line endings before parsing or hashing to keep the identity cross-platform.
+  const canonicalManifest = normalizeCanonicalLfText(serializedManifest, `Canonical bundle ${pathIndex}`);
+  return {
+    pathIndex,
+    manifest: JSON.parse(canonicalManifest) as unknown,
+    serializedManifest: canonicalManifest,
+    manifestSha256,
+  };
 }
 
 /** Exact canonical bytes from lupine-rhizo main and their serialized-manifest digests. */

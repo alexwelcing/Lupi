@@ -5,8 +5,21 @@ import {
   createCanonicalBundleResolver,
   type CanonicalBundleRegistryEntry,
 } from './canonicalBundleRegistry';
+import { CANONICAL_VALUE_SOURCE_ASSETS } from './canonicalValueSourceAssets';
 
 describe('canonical bundle supersession resolver', () => {
+  it('materializes canonical manifest bytes with platform-independent LF endings', () => {
+    for (const entry of Object.values(CANONICAL_BUNDLE_REGISTRY)) {
+      expect(entry.serializedManifest).not.toContain('\r');
+    }
+  });
+
+  it('materializes canonical value-source bytes with platform-independent LF endings', () => {
+    for (const source of Object.values(CANONICAL_VALUE_SOURCE_ASSETS)) {
+      expect(source).not.toContain('\r');
+    }
+  });
+
   it('rejects all stale pre-remediation manifest pins', () => {
     for (const staleDigest of [
       'sha256:f3b25d6073b94430d4f7401987b4984e16de8e3f2bb7c9dc24cb59980697584c',

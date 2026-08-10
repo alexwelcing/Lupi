@@ -20,8 +20,8 @@ Recommended integration stance:
 
 1. Prefer the Cloudflare MCP endpoint for agent-native asset requests.
 2. Use the browser bridge only when you need live viewer visual QA or a fallback before the Cloudflare renderer is fully wired.
-3. Use `/mcp-manifest.json` for the six-tool edge runtime and
-   `/browser-mcp-manifest.json` for the 28-tool browser viewer runtime.
+3. Use `/mcp-manifest.json` for the seven-tool edge runtime and
+   `/browser-mcp-manifest.json` for the 30-tool browser viewer runtime.
 4. Do not wait for browser `networkidle`; wait for explicit MCP readiness/status checks.
 
 ## Fast path for model integration
@@ -46,7 +46,7 @@ const status = await page.evaluate(() => window.__lupiViewerMcp.status());
 // {
 //   ready: true,
 //   version: string,
-//   toolCount: 28,
+//   toolCount: 30,
 //   moleculeLoaded: boolean,
 //   atomCount: number,
 //   frame: number,
@@ -195,19 +195,21 @@ interface LupiMcpStatus {
 
 ## Tool inventory
 
-There are currently 28 browser-viewer `lupi.*` tools. Always prefer
+There are currently 30 browser-viewer `lupi.*` tools. Always prefer
 `/browser-mcp-manifest.json` for their live schemas.
 
 Molecule and asset tools:
 
 - `lupi.generate_molecule` — load/generate by template, name, SMILES, XYZ, description, or procedural lattice.
 - `lupi.load_molecule_url` — load a molecule or trajectory URL.
+- `lupi.open_gallery_example` — open a canonical gallery item with caller-pinned identity and atom-count limits.
 - `lupi.open_saved_view` — open a saved Lupi view slug.
 - `lupi.search_molecules` — search molecule/catalog providers and return load specs.
 - `lupi.set_viewer` — broad viewer patch for common style/camera settings.
 - `lupi.export_xyz` — return active frame XYZ text.
 - `lupi.export_asset` — return the active deterministic view as inline PNG/JPEG/WebP or GLB with `dataBase64`, `dataUrl`, `mimeType`, `filename`, and `byteLength`. USDZ stays outside the immutable-key lane until its serializer is byte-stable.
 - `lupi.viewer_state` — return current viewer state.
+- `lupi.assess_asset` — run a bounded fast assessment of active, URL, or envelope source evidence.
 - `lupi.knowledge_graph` — query active knowledge-graph labels.
 
 Core health:
@@ -373,7 +375,7 @@ pnpm run test
 As of this brief, the Playwright MCP smoke verifies:
 
 - driver ready on `window`
-- 28 live tools
+- 30 live tools
 - `status()` reports ready and matching `toolCount`
 - `/browser-mcp-manifest.json` matches the live registry
 - unsupported tools return structured errors

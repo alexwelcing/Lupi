@@ -14,8 +14,8 @@ truth currently has two explicitly different profiles. See
 - `GET /__/auth/*` and `/__/firebase/*` - Firebase reserved-path proxy
 - `POST /mcp` - MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
 - `GET /health` - service, release-metadata, binding, and render-profile status
-- `GET /mcp-manifest.json` - six-tool browser-free edge manifest
-- `GET /browser-mcp-manifest.json` - 28-tool browser-viewer manifest
+- `GET /mcp-manifest.json` - seven-tool browser-free edge manifest
+- `GET /browser-mcp-manifest.json` - 30-tool browser-viewer manifest
 - `POST /v1/render` - authenticated render submission
 - `GET /v1/jobs/:jobId` - authenticated job receipt
 - `GET|HEAD /v1/jobs/:jobId/provenance` - authenticated per-job provenance
@@ -156,12 +156,13 @@ public retrieval surface.
 
 - `lupi.status`
 - `lupi.search_molecules`
+- `lupi.assess_asset`
 - `lupi.render_molecule_asset`
 - `lupi.get_render_job`
 - `lupi.get_asset`
 - `lupi.viewer_manifest`
 
-The browser manifest intentionally remains a separate 28-tool interactive
+The browser manifest intentionally remains a separate 30-tool interactive
 surface. A shared render specification does not imply a shared tool inventory.
 
 ## Resource shape and authorization boundary
