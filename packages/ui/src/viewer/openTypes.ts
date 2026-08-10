@@ -1,5 +1,12 @@
 export type ViewerOpenRequest =
-  | { kind: 'gallery'; id: string; history?: 'push' | 'replace' | 'none' }
+  | {
+      kind: 'gallery';
+      id: string;
+      history?: 'push' | 'replace' | 'none';
+      expectedAtoms?: number;
+      maxAtoms?: number;
+      includeScience?: boolean;
+    }
   | { kind: 'url'; url: string; title?: string; history?: 'push' | 'replace' | 'none'; strictRemote?: boolean }
   | { kind: 'saved-view'; slug: string };
 

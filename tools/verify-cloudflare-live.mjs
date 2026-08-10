@@ -8,8 +8,8 @@ import { pathToFileURL } from 'node:url';
 const REPORT_SCHEMA = 'lupi-live-verification-report-v1';
 const BASELINE_SCHEMA = 'lupi-public-baseline-v1';
 const CUSTOM_DOMAIN = 'https://lupi.live';
-const EDGE_TOOL_COUNT = 6;
-const BROWSER_TOOL_COUNT = 28;
+const EDGE_TOOL_COUNT = 7;
+const BROWSER_TOOL_COUNT = 30;
 const RANGE_PATH = '/gallery/curated/lupine_genesis.glimbin';
 const POSTURE_KEYS = [
   'webAssets',
@@ -199,6 +199,7 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
     assertRouteExecution(response, true, options, 'edge manifest');
     observations.edgeTools = manifestToolNames(await response.json(), EDGE_TOOL_COUNT);
     assert.ok(observations.edgeTools.includes('lupi.render_molecule_asset'), 'lupi.render_molecule_asset is missing');
+    assert.ok(observations.edgeTools.includes('lupi.assess_asset'), 'edge lupi.assess_asset is missing');
     assert.ok(!observations.edgeTools.includes('lupi.set_frame'), 'edge manifest must not expose browser camera tools');
     assert.ok(!observations.edgeTools.includes('lupi.export_asset'), 'edge manifest must not expose browser export tools');
     return { count: observations.edgeTools.length };
@@ -212,6 +213,8 @@ export async function verifyCloudflareLive(options, dependencies = {}) {
     observations.browserTools = manifestToolNames(await response.json(), BROWSER_TOOL_COUNT);
     assert.ok(observations.browserTools.includes('lupi.export_asset'), 'lupi.export_asset is missing');
     assert.ok(observations.browserTools.includes('lupi.set_frame'), 'lupi.set_frame is missing');
+    assert.ok(observations.browserTools.includes('lupi.open_gallery_example'), 'lupi.open_gallery_example is missing');
+    assert.ok(observations.browserTools.includes('lupi.assess_asset'), 'browser lupi.assess_asset is missing');
     return { count: observations.browserTools.length };
   });
 

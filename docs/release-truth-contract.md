@@ -91,7 +91,7 @@ Every release must preserve these invariants:
    shipped. Any accepted lower-severity risk names reachability, owner, and
    follow-up.
 4. The edge control plane and browser bridge retain their intentionally distinct
-   tool contracts (currently six edge tools and 28 browser tools) unless a
+   tool contracts (currently seven edge tools and 30 browser tools) unless a
    separately reviewed contract migration changes them.
 5. Paid work fails closed without per-user authorization, explicit limits,
    durable ownership/lease semantics, a cost ceiling, and a kill switch.

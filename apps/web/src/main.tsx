@@ -9,6 +9,7 @@ import {
   isBillionAtomsRoute,
   isTestbedRoute,
   isEmojiRoute,
+  isEmbeddedMobileViewerRoute,
   isMcpViewerRoute,
   isScienceDemoRoute,
   SEO_EDUCATION_ROUTES,
@@ -42,6 +43,7 @@ function wantsViewerImmediately(): boolean {
   if (isScienceDemoRoute()) return true;
   const hashPath = currentHashRoute().split('?')[0] || '/';
   if (hashPath === '/system/mlip-flywheel') return true;
+  if (isEmbeddedMobileViewerRoute(hashPath)) return true;
   if (isMcpViewerRoute(hashPath)) return true;
   if (savedViewSlugFromRoute(hashPath)) return true;
   const normalizedPath = normalizedPathRoute(currentPathRoute());

@@ -52,6 +52,10 @@ export function isMcpViewerRoute(hashPath: string, search = typeof window === 'u
   return hashPath === '/mcp' || new URLSearchParams(search).has('mcp');
 }
 
+export function isEmbeddedMobileViewerRoute(hashRoute: string): boolean {
+  return hashRoute.split('?')[0] === '/embed/mobile';
+}
+
 /**
  * Legacy Z1 science URLs: `?demo=science-panel` or `#/demo/science-panel`.
  * These redirect into the integrated viewer experience (`#/science/<index>`

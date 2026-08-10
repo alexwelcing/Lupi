@@ -1,11 +1,12 @@
 import { getAtomicNumberBySymbol, type Trajectory } from '@atlas/core';
 import { describe, expect, it } from 'vitest';
 import path16 from './canonical-bundles/path-16.visualization-bundle.json';
-import path16Raw from './canonical-bundles/path-16.visualization-bundle.json?raw';
+import { CANONICAL_BUNDLE_REGISTRY } from './canonicalBundleRegistry';
 import { CANONICAL_VALUE_SOURCE_ASSETS } from './canonicalValueSourceAssets';
 import { adaptVisualizationBundle, verifyVisualizationBundle } from './adaptVisualizationBundle';
 
 const MANIFEST_SHA = 'sha256:a80daede7aafdd155fcc1d9b56f3ddbf4636e2ea647934f8a1202f7526c069b5';
+const path16Raw = CANONICAL_BUNDLE_REGISTRY[16].serializedManifest;
 const clone = (): any => JSON.parse(JSON.stringify(path16));
 
 function trajectoryFromManifest(): Trajectory {

@@ -5,7 +5,7 @@ import { resetStore } from '../test-utils';
 import { CANONICAL_BUNDLE_REGISTRY } from '../science/canonicalBundleRegistry';
 import { ViewerLoadSupersededError } from '../viewer/loadGuard';
 import { EXAMPLES, type GalleryExample } from './catalog';
-import { attachScienceBundle } from './loadGalleryExample';
+import { attachScienceBundle, unwrapGalleryScienceTrajectory } from './loadGalleryExample';
 
 const z1 = (id: string): GalleryExample => {
   const example = EXAMPLES.find((candidate) => candidate.id === id);
@@ -92,5 +92,17 @@ describe('attachScienceBundle canonical gallery load', () => {
     const plain = EXAMPLES.find((example) => example.sciencePathIndex == null && example.available && !example.route)!;
     await attachScienceBundle(plain);
     expect(useStore.getState().file?.science).toBeUndefined();
+  });
+
+  it('keeps minimum-image playback when an embedded client omits the science deck', () => {
+    loadCanonicalFile(16);
+    const before = useStore.getState().file;
+    expect(before).toBeTruthy();
+    unwrapGalleryScienceTrajectory(z1('z1_science_path_16'));
+    const after = useStore.getState().file;
+    expect(after).not.toBe(before);
+    expect(after?.trajectory).not.toBe(before?.trajectory);
+    expect(after?.science).toBeUndefined();
+    expect(useStore.getState().activePanel).toBeNull();
   });
 });

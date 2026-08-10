@@ -38,12 +38,14 @@ import {
 type LupiMcpToolName =
   | 'lupi.generate_molecule'
   | 'lupi.load_molecule_url'
+  | 'lupi.open_gallery_example'
   | 'lupi.open_saved_view'
   | 'lupi.search_molecules'
   | 'lupi.set_viewer'
   | 'lupi.export_xyz'
   | 'lupi.export_asset'
   | 'lupi.viewer_state'
+  | 'lupi.assess_asset'
   | 'lupi.knowledge_graph';
 
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
@@ -99,6 +101,7 @@ interface LupiMcpResponse {
   tool: LupiMcpToolName;
   ok: boolean;
   result?: {
+    [key: string]: unknown;
     molecule?: {
       name: string;
       formula: string;
@@ -149,6 +152,8 @@ interface LupiMcpResponse {
         position: [number, number, number];
       }>;
     };
+    assessment?: Record<string, unknown>;
+    execution?: Record<string, unknown>;
   };
   error?: {
     code: string;
@@ -1232,6 +1237,36 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
       const result = await openMolecule({ kind: 'url', url: allowed.url, history: 'none', strictRemote: true });
       if (!result.ok) throw new Error(result.message);
       transcript.push(`loaded molecule URL: ${allowed.url}`);
+      return okResponse(request, transcript, { viewer: readViewerState() });
+    }
+
+    if (request.tool === 'lupi.open_gallery_example') {
+      const id = readString(request.arguments.id);
+      if (!id) throw new Error('lupi.open_gallery_example requires a gallery example id.');
+      const expectedAtoms = readNumber(request.arguments.expectedAtomCount);
+      const maxAtoms = readNumber(request.arguments.maxAtomCount);
+      if (!Number.isSafeInteger(expectedAtoms) || (expectedAtoms ?? 0) < 1) {
+        throw new Error('lupi.open_gallery_example requires a positive integer expectedAtomCount.');
+      }
+      if (!Number.isSafeInteger(maxAtoms) || (maxAtoms ?? 0) < 1) {
+        throw new Error('lupi.open_gallery_example requires a positive integer maxAtomCount.');
+      }
+      if ((expectedAtoms as number) > 50_000_000 || (maxAtoms as number) > 50_000_000) {
+        throw new Error('Gallery atom counts cannot exceed the bridge safety maximum.');
+      }
+      if ((expectedAtoms as number) > (maxAtoms as number)) {
+        throw new Error('The expected gallery atom count exceeds the requested safety ceiling.');
+      }
+      const result = await openMolecule({
+        kind: 'gallery',
+        id,
+        history: 'none',
+        expectedAtoms,
+        maxAtoms,
+        includeScience: false,
+      });
+      if (!result.ok) throw new Error(result.message);
+      transcript.push(`opened gallery example: ${id}`);
       return okResponse(request, transcript, { viewer: readViewerState() });
     }
 

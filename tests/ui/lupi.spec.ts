@@ -1,5 +1,35 @@
 import { expect, test, type Locator, type Page } from 'playwright/test';
 
+// Keep this release-only verifier aligned with the native catalog shipped in
+// the signed development build without pulling the entire Expo workspace into
+// the Cloudflare web/worker release branch.
+const MOBILE_GALLERY_ATOM_COUNTS = {
+  lupine_sphere_grid: 1_513,
+  caffeine: 24,
+  aspirin: 21,
+  dopamine: 22,
+  serotonin: 25,
+  glucose: 24,
+  ethanol: 9,
+  water: 3,
+  sodium_chloride: 2,
+  acetone: 10,
+  phenol: 13,
+  nitrobenzene: 14,
+  ethyl_acetate: 14,
+  c60_buckyball: 60,
+  cnt_6_6: 96,
+  graphene_ribbon: 112,
+  diamond_crystal: 512,
+  sio2_glass: 12_000,
+  cuzr_melt: 13_500,
+  this_is_water: 450,
+  oscillation_timeseries: 1_000,
+  z1_science_path_16: 51,
+  z1_science_path_27: 87,
+  elliott_gst_crystallization: 4_096,
+} as const;
+
 const CAFFEINE_ASSET = '/gallery/curated/popular/caffeine.xyz';
 const SPHERE_GRID_ASSET = '/generated/lupine-wiki/sphere-grid.lammpstrj';
 const TRAJECTORY_ID = 'this_is_water';
@@ -305,6 +335,146 @@ test.describe('mobile viewer', () => {
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,
+  });
+
+  test('embedded Expo route loads only the requested molecule without browser chrome or MCP controls', async ({ page }) => {
+    await preparePage(page);
+    const runtimeErrors: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', error => runtimeErrors.push(error.message));
+
+    await page.goto('/?load#/embed/mobile', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 30_000 });
+
+    const embeddedRoot = page.locator('.lupine-app-root[data-embedded-mobile-viewer="true"]');
+    await expect(embeddedRoot).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+    await expect(page.getByTestId('lupine-mcp-open')).toHaveCount(0);
+    await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Stow viewer controls' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Explore matter in 3D.' })).toHaveCount(0);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.status().moleculeLoaded)).toBe(false);
+
+    const responses = await page.evaluate(async () => {
+      const driver = window.__lupiViewerMcp!;
+      const generated = await driver.execute({
+        id: 'expo-embedded-caffeine',
+        tool: 'lupi.generate_molecule',
+        arguments: { inputType: 'template', input: 'Caffeine' },
+      });
+      const fitted = await driver.execute({
+        id: 'expo-embedded-fit',
+        tool: 'lupi.fit_camera',
+        arguments: {},
+      });
+      const camera = await driver.execute({
+        id: 'expo-embedded-camera',
+        tool: 'lupi.set_camera_preset',
+        arguments: { preset: 'iso' },
+      });
+      return { generated, fitted, camera };
+    });
+
+    expect(responses.generated.ok).toBe(true);
+    expect(responses.generated.result?.molecule?.atomCount).toBe(24);
+    expect(responses.fitted.ok).toBe(true);
+    expect(responses.camera.ok).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount)).toBe(24);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.state().fileName)).toMatch(/Caffeine/i);
+
+    const canvas = page.locator('.lupine-main-viewport canvas');
+    await expect(canvas).toBeVisible({ timeout: 30_000 });
+    await expect.poll(async () => {
+      const bounds = await canvas.boundingBox();
+      return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
+    }).toBe(true);
+    await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+    await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    expect(runtimeErrors).toEqual([]);
+    await releaseRenderer(page);
+  });
+
+  test('embedded Expo route opens every curated native gallery example without web chrome', async ({ page }) => {
+    test.setTimeout(300_000);
+    await preparePage(page);
+    const runtimeErrors: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', error => runtimeErrors.push(error.message));
+
+    await page.goto('/?load#/embed/mobile', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 30_000 });
+
+    const examples = Object.entries(MOBILE_GALLERY_ATOM_COUNTS).map(([id, atomCount]) => ({
+      id,
+      atomCount,
+    }));
+    expect(examples).toHaveLength(24);
+    for (const [index, example] of examples.entries()) {
+      if (index > 0) {
+        // Native navigation keys the WebView by molecule identity. Reload the
+        // embedded document here to exercise the same fresh-renderer boundary.
+        await page.goto('/?load#/embed/mobile', { waitUntil: 'commit' });
+        await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 30_000 });
+      }
+      const response = await test.step(`open gallery example ${example.id}`, () => page.evaluate(
+        ({ id, expectedAtomCount, requestIndex }) => Promise.race([
+          window.__lupiViewerMcp!.execute({
+            id: `expo-gallery-${requestIndex}`,
+            tool: 'lupi.open_gallery_example',
+            arguments: { id, expectedAtomCount, maxAtomCount: 50_000 },
+          }),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(
+              () => reject(new Error(`Timed out opening gallery example ${id}`)),
+              25_000,
+            );
+          }),
+        ]),
+        { id: example.id, expectedAtomCount: example.atomCount, requestIndex: index },
+      ));
+
+      expect(response.ok, example.id).toBe(true);
+      expect(response.result?.viewer, example.id).toMatchObject({ atomCount: example.atomCount });
+      await expect.poll(
+        () => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount),
+        { message: example.id },
+      ).toBe(example.atomCount);
+      const canvas = page.locator('.lupine-main-viewport canvas');
+      await expect(canvas, `${example.id} canvas`).toBeVisible({ timeout: 30_000 });
+      await expect.poll(async () => {
+        const bounds = await canvas.boundingBox();
+        return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
+      }, { message: `${example.id} fills the embedded phone viewport` }).toBe(true);
+      await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+      await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+      await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    }
+    const rejectedDrift = await page.evaluate(() => window.__lupiViewerMcp!.execute({
+      id: 'expo-gallery-drift-check',
+      tool: 'lupi.open_gallery_example',
+      arguments: { id: 'water', expectedAtomCount: 4, maxAtomCount: 50_000 },
+    }));
+    expect(rejectedDrift.ok).toBe(false);
+    expect(rejectedDrift.error?.message).toMatch(/caller expected 4/i);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.status().atomCount)).toBe(
+      examples.at(-1)?.atomCount,
+    );
+    expect(await page.evaluate(() => ({ hash: window.location.hash, search: window.location.search }))).toEqual({
+      hash: '#/embed/mobile',
+      search: '?load',
+    });
+    await expect(page.locator('.lupine-main-viewport canvas')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+    await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    expect(runtimeErrors).toEqual([]);
+    await releaseRenderer(page);
   });
 
   test('keeps the primary viewer settings reachable on a phone', async ({ page }) => {

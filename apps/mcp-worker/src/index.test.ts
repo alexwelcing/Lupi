@@ -22,6 +22,7 @@ import {
   handleRequest,
   validateExternalAssetPaths,
 } from './index';
+import { assessAsset, canonicalAssessmentJson, envelopeSource, type AssessmentReport } from '@atlas/assessment';
 
 function req(path: string, init: RequestInit = {}) {
   return new Request(`https://mcp.lupi.live${path}`, init);
@@ -236,10 +237,10 @@ describe('lupi Cloudflare MCP worker', () => {
     };
     expect(body.ready).toBe(true);
     expect(body.browserRequired).toBe(false);
-    expect(body.toolCount).toBe(6);
+    expect(body.toolCount).toBe(7);
     expect(body.renderExecution).toBe(false);
     expect(body.renderRequestCapability).toEqual(EDGE_RENDER_CAPABILITY_V1);
-    expect(MCP_TOOLS).toHaveLength(6);
+    expect(MCP_TOOLS).toHaveLength(7);
     expect(body).not.toHaveProperty('release');
     expect(res.headers.get('x-lupi-edge-executed')).toBe('1');
   });
@@ -486,6 +487,114 @@ describe('lupi Cloudflare MCP worker', () => {
     }));
     const body = await res.json() as { result: { tools: Array<{ name: string }> } };
     expect(body.result.tools.map((tool) => tool.name)).toContain('lupi.render_molecule_asset');
+    expect(body.result.tools.map((tool) => tool.name)).toContain('lupi.assess_asset');
+  });
+
+  it('assesses a materialized envelope without a browser', async () => {
+    const envelope = { name: 'water.xyz', text: '3\nwater\nO 0 0 0\nH 1 0 0\nH 0 1 0\n' };
+    const res = await handleRequest(authedReq('/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'assess-1',
+        method: 'tools/call',
+        params: {
+          name: 'lupi.assess_asset',
+          arguments: {
+            source: 'envelope',
+            envelope,
+          },
+        },
+      }),
+    }), TEST_AUTH_ENV);
+    const body = await res.json() as {
+      result: { structuredContent: { report: { observations: { format: string }; rankKey: string }; execution: { mode: string } } };
+    };
+    expect(body.result.structuredContent.report.observations.format).toBe('xyz');
+    expect(body.result.structuredContent.report.rankKey).toMatch(/^\d{2}:/);
+    expect(body.result.structuredContent.execution.mode).toBe('fast');
+    const direct = await assessAsset(envelopeSource(envelope));
+    expect(canonicalAssessmentJson(body.result.structuredContent.report as AssessmentReport)).toBe(canonicalAssessmentJson(direct.report));
+  });
+
+  it('rejects private edge assessment URLs before fetching', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const res = await handleRequest(authedReq('/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'assess-private',
+        method: 'tools/call',
+        params: { name: 'lupi.assess_asset', arguments: { source: 'url', url: 'https://127.0.0.1/private.xyz' } },
+      }),
+    }), TEST_AUTH_ENV);
+    const body = await res.json() as { error: { message: string } };
+    expect(body.error.message).toMatch(/private network/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects deep edge assessment before materializing an envelope', async () => {
+    const res = await handleRequest(authedReq('/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'assess-deep',
+        method: 'tools/call',
+        params: {
+          name: 'lupi.assess_asset',
+          arguments: { source: 'envelope', mode: 'deep', envelope: { name: 'water.xyz', text: '1\nwater\nO 0 0 0\n' } },
+        },
+      }),
+    }), TEST_AUTH_ENV);
+    const body = await res.json() as { error: { message: string } };
+    expect(body.error.message).toMatch(/bounded fast mode only/i);
+    expect(body.error.message).toMatch(/Node CLI/i);
+  });
+
+  it('assesses a configured public HTTPS asset with a bounded range request', async () => {
+    const xyz = '1\ncopper\nCu 0 0 0\n';
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(xyz, {
+      status: 206,
+      headers: {
+        'content-range': `bytes 0-${xyz.length - 1}/${xyz.length}`,
+        etag: '"edge-fixture"',
+        'content-type': 'chemical/x-xyz',
+      },
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const res = await handleRequest(authedReq('/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 'assess-public', method: 'tools/call',
+        params: { name: 'lupi.assess_asset', arguments: { source: 'url', url: 'https://assets.lupi.live/copper.xyz' } },
+      }),
+    }), { ...TEST_AUTH_ENV, LUPI_LARGE_ASSET_BASE_URL: 'https://assets.lupi.live' });
+    const body = await res.json() as { result: { structuredContent: { report: { observations: { format: string } } } } };
+    expect(body.result.structuredContent.report.observations.format).toBe('xyz');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const fetchInit = fetchSpy.mock.calls[0]?.[1];
+    expect(new Headers(fetchInit?.headers).get('range')).toMatch(/^bytes=0-/);
+  });
+
+  it('rejects an oversized assessment envelope at the edge', async () => {
+    const res = await handleRequest(authedReq('/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 'assess-large', method: 'tools/call',
+        params: {
+          name: 'lupi.assess_asset',
+          arguments: { source: 'envelope', envelope: { name: 'large.xyz', text: 'x'.repeat(128 * 1024 + 1) } },
+        },
+      }),
+    }), TEST_AUTH_ENV);
+    const body = await res.json() as { error: { message: string } };
+    expect(body.error.message).toMatch(/exceeds.*fast-mode limit/);
   });
 
   it('keeps the edge and generated browser manifests distinct', async () => {
@@ -499,13 +608,15 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(cloudflareBody.endpoint).toBe('/mcp');
     expect(cloudflareBody.browserBridgeManifest).toBe('/browser-mcp-manifest.json');
     expect(cloudflareBody.tools.map((tool) => tool.name)).toContain('lupi.render_molecule_asset');
+    expect(cloudflareBody.tools.map((tool) => tool.name)).toContain('lupi.assess_asset');
     expect(cloudflareBody.tools.map((tool) => tool.name)).not.toContain('lupi.set_frame');
-    expect(cloudflareBody.tools).toHaveLength(6);
+    expect(cloudflareBody.tools).toHaveLength(7);
     expect(cloudflareBody.renderRequestCapability).toEqual(EDGE_RENDER_CAPABILITY_V1);
 
     expect(browserManifest.schemaVersion).toBe('0.3.0');
     expect(browserManifest.tools.map((tool) => tool.name)).toContain('lupi.set_frame');
     expect(browserManifest.tools.map((tool) => tool.name)).toContain('lupi.export_asset');
+    expect(browserManifest.tools.map((tool) => tool.name)).toContain('lupi.assess_asset');
   });
 
   it('returns a JSON-RPC parse error for invalid JSON', async () => {
