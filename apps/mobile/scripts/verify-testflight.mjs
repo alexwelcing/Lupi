@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 const executable = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const steps = [
   ["Source configuration and assets", ["check:testflight"]],
+  ["Resolved production Expo config", ["check:resolved-expo-config"]],
+  ["Resolved Expo config policy tests", ["test:resolved-expo-config"]],
   ["Focused unit tests", ["test"]],
   ["TypeScript", ["typecheck"]],
   ["ESLint", ["lint"]],

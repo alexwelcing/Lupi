@@ -12,19 +12,28 @@ renderer.
 ## Candidate identity and evidence boundary
 
 The integration branch is `codex/mobile-testflight-integration`, source
-marketing/runtime version is `1.0.1`, iOS deployment target is `17.6`, and the
-EAS-managed remote iOS build number baseline is `1`. Record the final full commit
-with `git rev-parse HEAD` after the docs amendment; do not copy an earlier SHA
-into App Store Connect notes. The final local ladder is green: 105/105 tests,
-typecheck, zero-warning lint, Expo dependency check, Doctor 18/18, 20-route web
-export, clean unsigned iOS export, local visual contract, EAS workflow schema,
-and 90-file archive audit passed.
+marketing/runtime version is `1.0.1`, Expo SDK is `57.0.12`, React Native is
+`0.86.2`, React is `19.2.3`, Expo Router is `57.0.12`, Viro is `2.57.5`, the
+built-in iOS deployment target is `17.6`, and the EAS-managed remote iOS build
+number baseline is `1`. Every EAS profile uses Node `22.23.1` and the `sdk-57`
+image. Record the final full commit with `git rev-parse HEAD` after the docs
+amendment; do not copy an earlier SHA into App Store Connect notes. The current
+local ladder is green: 105/105 tests, typecheck, zero-warning lint, Expo
+dependency check, Doctor 20/20, 20-route web export, clean unsigned iOS export,
+local visual contract, EAS workflow schema, and a 92-file/1,656,247-byte archive
+audit passed.
+
+Historical local receipts remain separate: SDK 56 commit `42536acd` passed its
+105/105 tests, Doctor 21/21, both exports, and 92-file/1,660,534-byte archive;
+SDK 55 commit `1a56e398` passed its own ladder and 92-file/1,707,990-byte
+archive. Neither checkpoint is a signed or device-tested receipt for SDK 57.
 
 A signed internal development artifact exists as EAS build
 `2b57a89e-e398-44a8-b799-871b7f8e3651`, exact clean revision `7c64bd70`,
 version/build `1.0.0 (1)`, for one registered iPhone. It predates both source
-version `1.0.1` and the iOS `17.6` deployment-target fix, so it is not a signed
-receipt for this candidate. No visual-workflow run, App Store Connect creation,
+version `1.0.1`, SDK 57, and the iOS `17.6` deployment-target fix, so it is not a
+signed receipt for this candidate. No signed SDK 57 build, visual-workflow run,
+App Store Connect creation,
 Apple upload, TestFlight processing, or physical Room AR acceptance exists. The
 existing development artifact is signed by the `Alex Welcing Individual` team;
 mandatory Lupine Science organization enrollment/legal-team verification for
@@ -140,9 +149,9 @@ The current source/configuration review found this first-beta data flow:
   and any future SDK must be reconciled separately in the privacy policy and
   App Store Connect privacy answers.
 
-Resolved Expo source declares `expo-router`, `expo-splash-screen`,
-`expo-build-properties` with iOS target `17.6`, the pinned Viro plugin, and
-Lupi's camera-only Viro sanitizer. It contains an explicit room placement camera
+Resolved Expo source declares `expo-router`, `expo-splash-screen`, the built-in
+`ios.deploymentTarget` value `17.6`, the pinned Viro plugin, and Lupi's
+camera-only Viro sanitizer. It contains an explicit room placement camera
 usage description and App Transport Security enforcement, but no microphone,
 location, contacts, or photo-library usage description. The earlier signed
 `1.0.0 (1)` IPA inspection found ViroKit and only the camera usage description,

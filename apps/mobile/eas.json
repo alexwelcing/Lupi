@@ -9,12 +9,12 @@
       "developmentClient": true,
       "distribution": "internal",
       "environment": "development",
-      "node": "20.19.4",
+      "node": "22.23.1",
       "ios": {
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "android": {
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "env": {
         "APP_VARIANT": "development",
@@ -27,17 +27,17 @@
       "withoutCredentials": true,
       "ios": {
         "simulator": true,
-        "image": "sdk-56"
+        "image": "sdk-57"
       }
     },
     "visual-ios": {
       "channel": "visual",
       "environment": "preview",
-      "node": "20.19.4",
+      "node": "22.23.1",
       "withoutCredentials": true,
       "ios": {
         "simulator": true,
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "env": {
         "APP_VARIANT": "development",
@@ -49,10 +49,10 @@
       "channel": "visual",
       "distribution": "internal",
       "environment": "preview",
-      "node": "20.19.4",
+      "node": "22.23.1",
       "android": {
         "buildType": "apk",
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "env": {
         "APP_VARIANT": "development",
@@ -64,12 +64,12 @@
       "channel": "preview",
       "distribution": "internal",
       "environment": "preview",
-      "node": "20.19.4",
+      "node": "22.23.1",
       "ios": {
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "android": {
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "env": {
         "APP_VARIANT": "production",
@@ -82,12 +82,12 @@
       "channel": "production",
       "distribution": "store",
       "environment": "production",
-      "node": "20.19.4",
+      "node": "22.23.1",
       "ios": {
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "android": {
-        "image": "sdk-56"
+        "image": "sdk-57"
       },
       "env": {
         "APP_VARIANT": "production",
