@@ -73,29 +73,55 @@ interface PendingVisualQaCommand {
   id: string;
 }
 
-export function ViewerScreen({
-  displayName,
-  initialMolecule,
-  initialSummary,
-  visualQa,
-}: {
+interface ViewerScreenProps {
   displayName?: string;
   initialMolecule?: MoleculeLoadInput;
   initialSummary?: MoleculeSummary;
   visualQa?: VisualQaViewerContract;
-}) {
-  const molecule = initialMolecule ?? DEFAULT_MOLECULE;
+}
+
+interface ViewerScreenSessionProps extends ViewerScreenProps {
+  molecule: MoleculeLoadInput;
+  moleculeKey: string;
+  sourceUrl: string;
+}
+
+export function ViewerScreen(props: ViewerScreenProps) {
+  const molecule = props.initialMolecule ?? DEFAULT_MOLECULE;
+  const moleculeKey = useMemo(() => moleculeIdentity(molecule), [molecule]);
+  const sourceUrl = useMemo(() => getLupiEmbeddedViewerUrl(), []);
+  const sessionKey = JSON.stringify([
+    sourceUrl,
+    moleculeKey,
+    props.visualQa !== undefined,
+    props.visualQa?.scenarioId ?? null,
+  ]);
+
+  return (
+    <ViewerScreenSession
+      key={sessionKey}
+      {...props}
+      molecule={molecule}
+      moleculeKey={moleculeKey}
+      sourceUrl={sourceUrl}
+    />
+  );
+}
+
+function ViewerScreenSession({
+  displayName,
+  initialSummary,
+  molecule,
+  moleculeKey,
+  sourceUrl,
+  visualQa,
+}: ViewerScreenSessionProps) {
   const historySummary =
     initialSummary && sameMoleculeLoad(initialSummary.load, molecule)
       ? initialSummary
       : undefined;
-  const moleculeKey = useMemo(() => moleculeIdentity(molecule), [molecule]);
-  const sourceUrl = useMemo(() => getLupiEmbeddedViewerUrl(), []);
   const visualQaEnabled = visualQa !== undefined;
-  const visualQaScenarioId = visualQa?.scenarioId;
   const surfaceRef = useRef<ViewerSurfaceHandle>(null);
-  const activeMoleculeKey = useRef(moleculeKey);
-  activeMoleculeKey.current = moleculeKey;
   const initialExecutionKey = useRef<string | null>(null);
   const pendingInitialRequest = useRef<PendingInitialViewerRequest | null>(
     null,
@@ -134,42 +160,6 @@ export function ViewerScreen({
       clearTimeout(initialRequestTimeout.current);
     initialRequestTimeout.current = null;
   }, []);
-
-  useEffect(() => {
-    clearInitialRequestTimeout();
-    setBridgeReadyMoleculeKey(null);
-    setMoleculeLoaded(false);
-    setAtomCount(undefined);
-    setLastError(null);
-    setHistoryWarning(null);
-    setRecoveryNotice(null);
-    automaticRuntimeRecoveryAttempts.current = 0;
-    initialExecutionKey.current = null;
-    pendingInitialRequest.current = null;
-    timedOutInitialRequestId.current = null;
-    historyAttemptedKey.current = null;
-    pendingHistoryWriteKey.current = null;
-    pendingShareId.current = null;
-    if (shareTimeout.current) clearTimeout(shareTimeout.current);
-    shareTimeout.current = null;
-    pendingArExport.current = null;
-    if (arExportTimeout.current) clearTimeout(arExportTimeout.current);
-    arExportTimeout.current = null;
-    bridgeVersion.current = undefined;
-    setArAvailable(false);
-    setArPreparing(false);
-    pendingResumeProbeId.current = null;
-    if (resumeProbeTimeout.current) clearTimeout(resumeProbeTimeout.current);
-    resumeProbeTimeout.current = null;
-    pendingVisualQaCommand.current = null;
-    setVisualQaCommandsComplete(!visualQaEnabled);
-  }, [
-    clearInitialRequestTimeout,
-    moleculeKey,
-    sourceUrl,
-    visualQaEnabled,
-    visualQaScenarioId,
-  ]);
 
   useEffect(
     () => () => {
@@ -210,7 +200,7 @@ export function ViewerScreen({
       const timeoutResolution = consumeInitialViewerTimeout(
         pendingInitialRequest.current,
         request.id,
-        activeMoleculeKey.current,
+        moleculeKey,
       );
       pendingInitialRequest.current = timeoutResolution.pending;
       initialRequestTimeout.current = null;

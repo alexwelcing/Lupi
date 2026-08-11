@@ -11,10 +11,10 @@
       "environment": "development",
       "node": "20.19.4",
       "ios": {
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "android": {
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "env": {
         "APP_VARIANT": "development",
@@ -27,7 +27,7 @@
       "withoutCredentials": true,
       "ios": {
         "simulator": true,
-        "image": "sdk-55"
+        "image": "sdk-56"
       }
     },
     "visual-ios": {
@@ -37,7 +37,7 @@
       "withoutCredentials": true,
       "ios": {
         "simulator": true,
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "env": {
         "APP_VARIANT": "development",
@@ -52,7 +52,7 @@
       "node": "20.19.4",
       "android": {
         "buildType": "apk",
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "env": {
         "APP_VARIANT": "development",
@@ -66,10 +66,10 @@
       "environment": "preview",
       "node": "20.19.4",
       "ios": {
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "android": {
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "env": {
         "APP_VARIANT": "production",
@@ -84,10 +84,10 @@
       "environment": "production",
       "node": "20.19.4",
       "ios": {
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "android": {
-        "image": "sdk-55"
+        "image": "sdk-56"
       },
       "env": {
         "APP_VARIANT": "production",

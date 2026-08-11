@@ -101,18 +101,28 @@ const MOLECULE_ROOM_SCENE = {
 };
 
 function MoleculeRoomScene({ sceneNavigator }: ViroRoomSceneProps) {
-  const {
-    onAtomSelected,
-    onError,
-    onStateChange,
-    resetToken,
-    scene,
-    selectedAtomIndices,
-  } = sceneNavigator.viroAppProps;
+  const props = sceneNavigator.viroAppProps;
+
+  return (
+    <MoleculeRoomSceneSession
+      key={JSON.stringify([props.scene.source.moleculeKey, props.resetToken])}
+      {...props}
+    />
+  );
+}
+
+function MoleculeRoomSceneSession({
+  onAtomSelected,
+  onError,
+  onStateChange,
+  scene,
+  selectedAtomIndices,
+}: ViroRoomProps) {
   const selectorRef = useRef<ViroARPlaneSelector>(null);
   const knownPlanes = useRef(new Set<string>());
   const selectedPlaneId = useRef<string | null>(null);
   const [placed, setPlaced] = useState(false);
+  const [planeCount, setPlaneCount] = useState(0);
   const [tracking, setTracking] =
     useState<MoleculeArTrackingState>("initializing");
   const [position, setPosition] = useState<ArVector3>(() =>
@@ -123,35 +133,17 @@ function MoleculeRoomScene({ sceneNavigator }: ViroRoomSceneProps) {
   const pinchStartScale = useRef(1);
   const rotateStartDegrees = useRef(0);
   const state = useMemo<MoleculeArSurfaceState>(
-    () => ({ placed, planeCount: knownPlanes.current.size, tracking }),
-    [placed, tracking],
+    () => ({ placed, planeCount, tracking }),
+    [placed, planeCount, tracking],
   );
 
   useEffect(() => onStateChange(state), [onStateChange, state]);
-
-  useEffect(() => {
-    selectorRef.current?.reset();
-    knownPlanes.current.clear();
-    selectedPlaneId.current = null;
-    setPlaced(false);
-    setPosition(initialModelPosition(scene));
-    setScale(1);
-    setRotationY(0);
-  }, [resetToken, scene]);
-
-  const reportPlaneCount = () => {
-    onStateChange({
-      placed,
-      planeCount: knownPlanes.current.size,
-      tracking,
-    });
-  };
 
   const onAnchorFound = (anchor: ViroAnchor) => {
     selectorRef.current?.handleAnchorFound(anchor);
     if (anchor.type === "plane") {
       knownPlanes.current.add(anchor.anchorId);
-      reportPlaneCount();
+      setPlaneCount(knownPlanes.current.size);
     }
   };
 
@@ -163,16 +155,12 @@ function MoleculeRoomScene({ sceneNavigator }: ViroRoomSceneProps) {
     if (!anchor) return;
     selectorRef.current?.handleAnchorRemoved(anchor);
     knownPlanes.current.delete(anchor.anchorId);
+    setPlaneCount(knownPlanes.current.size);
     const removedSelectedPlane = selectedPlaneId.current === anchor.anchorId;
     if (removedSelectedPlane) {
       selectedPlaneId.current = null;
       setPlaced(false);
     }
-    onStateChange({
-      placed: removedSelectedPlane ? false : placed,
-      planeCount: knownPlanes.current.size,
-      tracking,
-    });
   };
 
   const onTrackingUpdated = (
@@ -247,11 +235,6 @@ function MoleculeRoomScene({ sceneNavigator }: ViroRoomSceneProps) {
         onPlaneSelected={(plane) => {
           selectedPlaneId.current = plane.anchorId;
           setPlaced(true);
-          onStateChange({
-            placed: true,
-            planeCount: knownPlanes.current.size,
-            tracking,
-          });
         }}
         ref={selectorRef}
         useActualShape

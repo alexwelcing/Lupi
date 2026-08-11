@@ -92,25 +92,38 @@ check(
   "EAS Update URL is pinned to this Expo project",
 );
 check(
-  packageJson.dependencies?.expo === "~55.0.28",
-  "Expo framework is pinned to SDK 55",
+  packageJson.dependencies?.expo === "~56.0.19",
+  "Expo framework is pinned to SDK 56",
 );
 check(
-  packageJson.dependencies?.["@expo/metro-runtime"] === "~55.0.12" &&
-    packageJson.dependencies?.["expo-router"] === "~55.0.17",
-  "Expo Router and Metro runtime match SDK 55",
+  packageJson.dependencies?.["@expo/metro-runtime"] === "~56.0.19" &&
+    packageJson.dependencies?.["expo-router"] === "~56.2.18",
+  "Expo Router and Metro runtime match SDK 56",
 );
 check(
-  packageJson.dependencies?.["expo-dev-client"] === "~55.0.37",
-  "Expo development client matches SDK 55",
+  packageJson.dependencies?.["expo-dev-client"] === "~56.0.24",
+  "Expo development client matches SDK 56",
 );
 check(
-  packageJson.dependencies?.["expo-updates"] === "~55.0.26",
-  "EAS Update matches SDK 55",
+  packageJson.dependencies?.["expo-updates"] === "~56.0.24",
+  "EAS Update matches SDK 56",
+);
+check(
+  packageJson.dependencies?.react === "19.2.3" &&
+    packageJson.dependencies?.["react-native"] === "0.85.3" &&
+    packageJson.dependencies?.["react-native-webview"] === "13.16.1",
+  "React, React Native, and the embedded viewer match SDK 56",
+);
+check(
+  packageJson.dependencies?.["@expo/dom-webview"] === "~56.0.6" &&
+    packageJson.dependencies?.["react-native-reanimated"] === "4.3.1" &&
+    packageJson.dependencies?.["react-native-worklets"] === "0.8.3" &&
+    packageJson.devDependencies?.["@react-native/metro-config"] === "0.85.3",
+  "SDK 56 optional native peers resolve to the supported graph",
 );
 check(
   packageJson.devDependencies?.["expo-mcp"] === "~0.2.1",
-  "Expo MCP local capabilities stay pinned for the SDK 55 checkpoint",
+  "Expo MCP local capabilities stay pinned for the SDK 56 checkpoint",
 );
 check(
   packageJson.dependencies?.["@reactvision/react-viro"] === "2.57.5",
@@ -118,28 +131,35 @@ check(
 );
 check(
   rootPackageJson.pnpm?.packageExtensions?.["@reactvision/react-viro@2.57.5"]
-    ?.dependencies?.["@expo/config-plugins"] === "55.0.11",
+    ?.dependencies?.["@expo/config-plugins"] === "56.0.14",
   "Viro config-plugin resolution is explicit for strict pnpm installs",
 );
 check(
-  rootPackageJson.pnpm?.packageExtensions?.["babel-preset-expo@55.0.24"]
-    ?.dependencies?.["expo-router"] === "55.0.17",
-  "Expo Router Babel discovery is explicit for strict pnpm installs",
+  rootPackageJson.pnpm?.packageExtensions?.["babel-preset-expo@55.0.24"] ===
+    undefined &&
+    rootPackageJson.pnpm?.packageExtensions?.["babel-preset-expo@56.0.19"] ===
+      undefined,
+  "SDK 56 uses Babel preset's upstream project-root Router discovery",
+);
+check(
+  packageJson.devDependencies?.["typescript"] === "~6.0.3" &&
+    packageJson.devDependencies?.["@types/node"] === "^22.0.0",
+  "SDK 56 TypeScript keeps explicit Node test and script types",
 );
 const buildPropertiesPlugin = app.plugins?.find(
   (plugin) => Array.isArray(plugin) && plugin[0] === "expo-build-properties",
 );
 check(
-  packageJson.dependencies?.["expo-build-properties"] === "~55.0.16" &&
+  packageJson.dependencies?.["expo-build-properties"] === "~56.0.25" &&
     buildPropertiesPlugin?.[1]?.ios?.deploymentTarget === "17.6",
-  "SDK 55 build properties preserve the ViroKit iOS deployment target",
+  "SDK 56 build properties preserve the ViroKit iOS deployment target",
 );
 check(
-  packageJson.dependencies?.["expo-font"] === "~55.0.8" &&
+  packageJson.dependencies?.["expo-font"] === "~56.0.7" &&
     app.plugins?.includes("expo-font") === true &&
     app.plugins?.includes("expo-sqlite") === true &&
     app.plugins?.includes("expo-web-browser") === true,
-  "SDK 55 native peer dependencies and config plugins are explicit",
+  "SDK 56 native peer dependencies and config plugins are explicit",
 );
 check(
   packageJson.dependencies?.["@atlas/core"] === "workspace:^" &&
@@ -148,11 +168,11 @@ check(
 );
 check(
   !("newArchEnabled" in app),
-  "SDK 55 omits the removed New Architecture opt-out",
+  "SDK 56 omits the removed New Architecture opt-out",
 );
 check(
   !("edgeToEdgeEnabled" in (app.android ?? {})),
-  "SDK 55 omits the removed Android edge-to-edge switch",
+  "SDK 56 omits the removed Android edge-to-edge switch",
 );
 const viroPlugin = app.plugins?.find(
   (plugin) => Array.isArray(plugin) && plugin[0] === "@reactvision/react-viro",
@@ -264,19 +284,19 @@ check(
 );
 check(
   eas.build?.production?.node === "20.19.4",
-  "SDK 55 checkpoint builds pin supported Node 20.19.4",
+  "SDK 56 checkpoint builds pin supported Node 20.19.4",
 );
 check(
-  eas.build?.development?.ios?.image === "sdk-55" &&
-    eas.build?.development?.android?.image === "sdk-55" &&
-    eas.build?.["development-simulator"]?.ios?.image === "sdk-55" &&
-    eas.build?.["visual-ios"]?.ios?.image === "sdk-55" &&
-    eas.build?.["visual-android"]?.android?.image === "sdk-55" &&
-    eas.build?.preview?.ios?.image === "sdk-55" &&
-    eas.build?.preview?.android?.image === "sdk-55" &&
-    eas.build?.production?.ios?.image === "sdk-55" &&
-    eas.build?.production?.android?.image === "sdk-55",
-  "Every EAS platform profile pins the SDK 55 builder image",
+  eas.build?.development?.ios?.image === "sdk-56" &&
+    eas.build?.development?.android?.image === "sdk-56" &&
+    eas.build?.["development-simulator"]?.ios?.image === "sdk-56" &&
+    eas.build?.["visual-ios"]?.ios?.image === "sdk-56" &&
+    eas.build?.["visual-android"]?.android?.image === "sdk-56" &&
+    eas.build?.preview?.ios?.image === "sdk-56" &&
+    eas.build?.preview?.android?.image === "sdk-56" &&
+    eas.build?.production?.ios?.image === "sdk-56" &&
+    eas.build?.production?.android?.image === "sdk-56",
+  "Every EAS platform profile pins the SDK 56 builder image",
 );
 check(
   eas.build?.production?.env?.EXPO_PUBLIC_LUPI_WEB_URL === "https://lupi.live",

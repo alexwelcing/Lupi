@@ -10,14 +10,18 @@ Expo login, EAS project-link/configuration, remote build-number, and earlier
 development-build receipts exist. The current integration branch
 `codex/mobile-testflight-integration` is based on live `origin/main` revision
 `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`; its new source checkpoint is Expo
-SDK 55, React Native 0.83, React 19.2, version `1.0.1`, fingerprint runtime,
-and iOS deployment target `17.6`. The complete local ladder is green, but the
-final integrated SHA is not frozen. A signed internal development build exists
+SDK 56, React Native 0.85.3, React 19.2.3, version `1.0.1`, fingerprint runtime,
+and iOS deployment target `17.6`. The SDK 56 local verification ladder and
+92-file/1,660,534-byte archive audit are green, but the final integrated SHA is
+not frozen. A signed
+internal development build exists
 only for earlier SDK 54 exact clean revision `7c64bd70`,
 version/build `1.0.0 (1)`, along with an active runtime `1.0.0` development
 update. The compatible 30-browser-tool/seven-edge-tool bridge is live. No signed
-SDK 55 binary, visual-workflow run, App Store Connect app, TestFlight
-build, or physical Room AR receipt is recorded. A checked item below means only
+SDK 56 binary, visual-workflow run, App Store Connect app, TestFlight build, or
+physical Room AR receipt is recorded. SDK 56 remains a local/development-build
+checkpoint; physical-iPhone proof waits for the planned signed SDK 57
+development build. A checked item below means only
 that its stated evidence was verified; it never stands in for a later gate.
 
 ## How to use this checklist
@@ -49,15 +53,19 @@ that its stated evidence was verified; it never stands in for a later gate.
 
 These checks establish what exists in source. Separate sections record an EAS
 development builder and registered-device artifact for earlier revision
-`7c64bd70`; those receipts do **not** prove the integrated SDK 55 source,
+`7c64bd70`; those receipts do **not** prove the integrated SDK 56 source,
 TestFlight, or physical Room AR behavior. Expo Go cannot execute the native Room
 runtime; AR proof requires a compatible development or TestFlight build on an
 ARKit-capable iPhone.
 
-- [x] **An Expo Router SDK 55 app exists at `apps/mobile`.** It uses Expo
-      `~55.0.28`, React Native `0.83.10`, and React `19.2.0`; explicit
+- [x] **An Expo Router SDK 56 app exists at `apps/mobile`.** It uses Expo
+      `~56.0.19`, React Native `0.85.3`, React `19.2.3`, Expo Router
+      `~56.2.18`, and TypeScript `~6.0.3`; explicit
       `@expo/metro-runtime` and `expo-font` dependencies are present, and
-      `expo-font` is an app-config plugin. **Owner:** Codex.
+      `expo-font` is an app-config plugin. SDK 56 also explicitly pins
+      `react-native-webview` `13.16.1`, `expo-web-browser` `~56.0.6`,
+      `react-native-reanimated` `4.3.1`, `react-native-worklets` `0.8.3`, and
+      `@react-native/metro-config` `0.85.3`. **Owner:** Codex.
       **Receipt:** [`apps/mobile/package.json`](../apps/mobile/package.json).
 - [x] **The application identity is reserved in source.** Name `Lupi`, slug
       `lupi`, scheme `lupi`, iOS bundle identifier `live.lupi.app`, app version
@@ -74,7 +82,7 @@ ARKit-capable iPhone.
       gate. On-device appearance remains G5.
 - [x] **EAS profiles and version policy exist in source.** `preview` is internal
       distribution; `production` is store distribution, uses the production EAS
-      environment, pins Node `20.19.4` and the `sdk-55` image, explicitly targets `https://lupi.live`,
+      environment, pins Node `20.19.4` and the `sdk-56` image, explicitly targets `https://lupi.live`,
       and auto-increments the remote build number. `submit.production` remains
       empty. **Owner:** Codex. **Receipt:** [`eas.json`](../apps/mobile/eas.json).
 - [x] **The Expo project identity is linked.** Source pins owner `alexwelcing`
@@ -86,7 +94,7 @@ ARKit-capable iPhone.
       configuration.** iOS `associatedDomains` remains absent. The app includes
       `expo-updates`, a `fingerprint` `runtimeVersion` policy, the linked Update
       URL, and named EAS channels. An active development update exists for
-      runtime `1.0.0` and exact clean SDK 54 revision `7c64bd70`; the new SDK 55
+      runtime `1.0.0` and exact clean SDK 54 revision `7c64bd70`; the new SDK 56
       fingerprint requires a new compatible binary. **Owner:** Codex. **Receipt:**
       [`app.json`](../apps/mobile/app.json),
       [`package.json`](../apps/mobile/package.json), and the TestFlight notes.
@@ -258,8 +266,8 @@ revision “the candidate”; start a new candidate record after any change.
 
 - [ ] **Name and freeze the Room candidate.** Development is isolated on
       `codex/mobile-testflight-integration`, source marketing version is `1.0.1`,
-      runtime policy is `fingerprint`, the SDK checkpoint is Expo 55 / React Native
-      0.83 / React 19.2, iOS deployment target is `17.6`, and the recorded remote iOS
+      runtime policy is `fingerprint`, the SDK checkpoint is Expo 56 / React Native
+      0.85.3 / React 19.2.3, iOS deployment target is `17.6`, and the recorded remote iOS
       build number baseline is `1`. Capture the final full SHA with
       `git rev-parse HEAD`, UTC timestamp, and effective remote build number only
       after all AR/config/docs changes and checks finish. **Owner:** Codex.
@@ -275,11 +283,12 @@ revision “the candidate”; start a new candidate record after any change.
       local relink workaround, not an acceptable clean-install receipt. The
       integration candidate used Node `20.19.4` and pnpm `9.0.0`. **Owner:** Codex.
       **Receipt:** version output plus clean install exit 0.
-- [x] **Install the exact lockfile without bypassing lifecycle scripts.** The
-      frozen filtered mobile dependency graph installed cleanly with lifecycle
-      scripts enabled and `pnpm-lock.yaml` preserved. **Owner:** Codex.
-      **Receipt:** `pnpm install --frozen-lockfile --filter @lupi/mobile...`, exit
-      0, and lockfile review.
+- [x] **Install the frozen SDK 56 lockfile without bypassing lifecycle scripts.**
+      The final SDK 56 lockfile passed a clean filtered install with lifecycle
+      scripts enabled under Node `20.19.4` and pnpm `9.0.0`. **Owner:** Codex.
+      **Receipt:** `pnpm install --frozen-lockfile --filter @lupi/mobile...`,
+      1,428 packages relinked, exit 0, followed by 105/105 tests, typecheck,
+      zero-warning lint, Expo dependency check, and the source gate.
 - [x] **Set the candidate web origin deliberately.** The resolved production
       value is `EXPO_PUBLIC_LUPI_WEB_URL=https://lupi.live`; no secret, LAN, or
       localhost value is present. **Owner:** Product owner + Codex. **Receipt:**
@@ -306,11 +315,14 @@ revision “the candidate”; start a new candidate record after any change.
       both public manifests, deployment identity, and public-origin Gallery matrix.
 - [ ] **Freeze the new native scope for the candidate.** Review the exact
       `@reactvision/react-viro` `2.57.5` pin, `@expo/metro-runtime` and
-      `expo-font` dependencies, exact pnpm package extensions for Viro config
-      plugins and Router Babel discovery, Viro/camera-sanitizer/font plugins,
-      `expo-build-properties` iOS `17.6` target, SDK 55's required New Architecture
+      `expo-font` dependencies, the exact Viro package extension supplying
+      `@expo/config-plugins` `56.0.14`, and removal of the historical SDK 55
+      Babel/Router extension because SDK 56 fixes project-root resolution
+      upstream. Review the Viro/camera-sanitizer/font plugins,
+      `expo-build-properties` iOS `17.6` target, SDK 56's required New Architecture
       with the obsolete config flag absent, nested
-      NativeTabs API, `sdk-55` EAS images, fingerprint runtime policy, and archive
+      NativeTabs API, `sdk-56` EAS images, fingerprint runtime policy, explicit
+      WebView/DOM/reanimated/worklets/Metro-config dependencies, and archive
       contents. Rive and `react-native-wgpu` remain absent. Any native
       dependency/plugin change requires a new binary and candidate gate.
       **Owner:** Product owner + Codex. **Receipt:** final dependency, lockfile,
@@ -337,25 +349,24 @@ final SHA changes when source or documentation is amended, so capture
 `git rev-parse HEAD` afterward; the app/source checks remain bounded local
 receipts and do not complete G1 by themselves.
 
-- [x] **The non-release source configuration and asset gate passes.** It checks
-      linked Expo identity, version policy, store profile/origin, and 1024-pixel
-      icon/splash PNG properties. **Owner:** Codex. **Receipt:**
+- [x] **The non-release source configuration and asset gate passes on SDK 56.** It
+      checks linked Expo identity, version policy, store profile/origin, and
+      1024-pixel icon/splash PNG properties. **Owner:** Codex. **Receipt:** current
       `check:testflight` output and exit 0.
-- [x] **The complete local verification ladder passes on the integrated
-      candidate.** `verify:testflight` completed the source gate, 105/105 tests,
-      typecheck, zero-warning lint, Expo dependency check, 20-route web export,
-      and clean unsigned iOS export. **Owner:** Codex. **Receipt:** terminal
+- [x] **The full local verification ladder passes on SDK 56.** It completed the
+      source gate, 105/105 tests, typecheck, zero-warning lint, Expo dependency
+      compatibility, the 36-command visual contract, a 20-route web export with
+      1,425 server modules and 1,392 web modules, and a clean unsigned iOS export
+      with 1,796 modules and 4.5 MB HBC. Doctor also passed 21/21 and native
+      autolinking discovered 41 modules. **Owner:** Codex. **Receipt:** terminal
       command/output and exit 0 on `codex/mobile-testflight-integration`.
-- [x] **The complete local source/browser/configuration ladder was refreshed for
-      the integrated Room candidate.** Doctor passed 19/19; the 36-command,
-      five-capture native workflow contract passed locally; EAS accepted the workflow
-      schema; the separate 12-case Expo-web composition matrix passed 63/63 semantic
-      checks with no overflow or unexpected runtime failure;
-      the clean unsigned iOS export reported 1,392 modules and 3.7 MB HBC; the
-      92-file archive audit passed; and the public 24-item Gallery matrix remains
-      green against the 30-tool live bridge. The final clean commit and SHA remain
-      a separate open freeze item. **Owner:** Codex. **Receipt:** command ledger
-      plus public bridge receipts.
+- [x] **Preserve the completed SDK 55 ladder as historical evidence.** Commits
+      `d33e7aeb` and `1a56e398` retain the frozen install, 105/105 tests,
+      typecheck, zero-warning lint, Expo dependency/config checks, Doctor 19/19,
+      20-route web export, 1,392-module/3.7 MB unsigned iOS export, local
+      visual/workflow contracts, browser matrices, and 92-file/1,707,990-byte
+      archive. None of those receipts proves SDK 56. **Owner:** Codex.
+      **Receipt:** historical SDK 55 command ledger and commits.
 - [ ] **Make the strict release gate fully green.** Its required-file tracking
       and clean scoped-Git checks passed before the docs amendment; the only
       failure is the absent numeric `submit.production.ios.ascAppId`. **Owner:**
@@ -369,29 +380,35 @@ receipts and do not complete G1 by themselves.
       and recent decoding. **Owner:** Codex. **Receipt:**
       `test` output and exit 0. This is not a device receipt.
 - [x] **The integrated-candidate TypeScript check passes.** **Owner:** Codex.
-      **Receipt:** `typecheck` output and exit 0.
-- [x] **The integrated-candidate lint check passes with zero warnings.** **Owner:**
-      Codex. **Receipt:** `lint` output and exit 0.
+      **Receipt:** current SDK 56 `typecheck` output and exit 0 under TypeScript
+      `6.0.3`.
+- [x] **The SDK 56 lint check passes with zero warnings.** **Owner:** Codex.
+      **Receipt:** current `lint` output and exit 0.
 - [x] **Expo dependency compatibility passes.** `expo install --check` reports
       the installed Expo package set compatible. **Owner:** Codex. **Receipt:**
       `check:expo` output and exit 0.
-- [x] **The Expo web export completes with 20 reported routes.** Treat this only
+- [x] **The SDK 56 Expo web export completes with 20 reported routes.** It
+      bundled 1,425 server modules and 1,392 web modules. Treat it only
       as a browser-fallback bundling receipt, not proof of an iOS binary or native
       layout. **Owner:** Codex. **Receipt:** `export:web --clear` output and route
-      count on the integrated candidate.
-- [x] **Post-fix browser QA passes at 320x693 and 390x844.** Initial QA exposed
-      web-fallback header/tab overlap; hiding nested web headers and reserving top
-      tab space resolved it at both viewports. **Owner:** Codex. **Receipt:**
-      before/fix/after browser QA record. This is not physical-iPhone evidence.
-- [x] **The clean unsigned iOS export completes on the integrated candidate.**
+      count on the SDK 56 checkpoint.
+- [ ] **Refresh browser QA on the SDK 56 export.** The historical SDK 55 QA passed
+      at 320x693 and 390x844 after the header/tab overlap fix, but it is not a
+      current SDK 56 or physical-iPhone receipt. **Owner:** Codex. **Receipt:**
+      current before/fix/after browser QA record.
+- [x] **The clean unsigned iOS export completes on the SDK 56 checkpoint.** It
+      reported 1,796 modules and a 4.5 MB HBC bundle.
       “Clean” means `export:ios --clear` regenerated output; it does not mean
       native project generation. Treat it only as an iOS JavaScript/assets bundle
       smoke, not code signing, an IPA, EAS build, App Store processing, or device
       behavior.
-      **Owner:** Codex. **Receipt:** `export:ios --clear` output and exit 0.
-- [x] **Expo Doctor passes 19/19 checks.** **Owner:** Codex. **Receipt:**
+      **Owner:** Codex. **Receipt:** current `export:ios --clear` output and exit 0.
+- [x] **Expo Doctor passes 21/21 checks.** **Owner:** Codex. **Receipt:**
       `pnpm dlx expo-doctor@latest` output from `apps/mobile` on the integrated
       candidate.
+- [x] **Native autolinking discovers 41 modules.** This is a dependency graph
+      receipt, not a native compile or device result. **Owner:** Codex.
+      **Receipt:** current SDK 56 autolinking output.
 - [x] **Resolve and inspect public Expo config.** Name, scheme, version, bundle
       identifier, icon/splash paths, plugins, linked project ID, and the public
       `https://lupi.live` origin were reviewed. EAS remote build number `1` is a
@@ -440,7 +457,7 @@ receipts and do not complete G1 by themselves.
       named EAS channels. A development update is active for runtime `1.0.0`,
       group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision
       `7c64bd70`; no device screenshot or acceptance receipt exists. The new
-      source SDK 55 fingerprint requires a compatible binary. Viro,
+      source SDK 56 fingerprint requires a compatible binary. Viro,
       permissions, plugins, deployment-target changes, SDK changes, and other
       native changes require a new binary. Remote web/Worker releases remain
       independently identified. **Owner:** Product owner + Codex.
@@ -632,7 +649,7 @@ npx eas-cli@latest whoami
 - [x] **Inspect the resolved EAS project identity.** Local owner/slug, bundle ID,
       remote project ID, production profile, environment, and viewer origin resolve
       consistently. Production resolves store distribution, `autoIncrement`, Node
-      `20.19.4`, `https://lupi.live`, and project ID
+      `20.19.4`, the `sdk-56` image, `https://lupi.live`, and project ID
       `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`. **Owner:** Codex. **Receipt:**
       sanitized EAS production config result. This is configuration truth, not
       build truth.
@@ -645,10 +662,11 @@ npx eas-cli@latest whoami
       Node `20.19.4`. **Owner:** Codex. **Receipt:** passed source gate, resolved
       production config, and [`eas.json`](../apps/mobile/eas.json).
 - [ ] **Verify the complete builder environment.** Confirm pnpm/corepack
-      behavior, SDK 55 dependencies and `sdk-55` image, and the actual EAS macOS/Xcode image. Recheck
+      behavior, SDK 56 dependencies and `sdk-56` image, and the actual EAS
+      macOS/Xcode `26.4` image. Recheck
       that its Xcode/iOS SDK meets Apple's current upload minimum. **Owner:** Codex.
       The earlier development artifact used Xcode/iOS SDK 26, but the integrated
-      SDK 55/runtime-fingerprint candidate still needs its own builder receipt. **Receipt:**
+      SDK 56/runtime-fingerprint checkpoint still needs its own builder receipt. **Receipt:**
       terminal EAS build profile/image and current requirement link.
 - [x] **Resolve the public WebView origin in production EAS config.** The current
       production config resolves `EXPO_PUBLIC_LUPI_WEB_URL=https://lupi.live`.
@@ -660,7 +678,7 @@ npx eas-cli@latest whoami
       `7c64bd702bd50ecf7b161054ced5c2d806e4c780`, version/build `1.0.0 (1)`,
       bundle `live.lupi.app.dev`, for one registered iPhone; SHA-256 is
       `54889F7A16A377D2CD2B4ADFD652A6508CFE21C418E77771B5BE10124914441D`.
-      It predates the SDK 55 source checkpoint and the iOS `17.6` fix and is distinct
+      It predates the SDK 56 source checkpoint and the iOS `17.6` fix and is distinct
       from the production store/TestFlight binary. No physical Room acceptance
       receipt is implied. **Owner:** Codex + User. **Receipt:** finished EAS build,
       artifact/provisioning inspection, and registered-device ledger.
@@ -668,17 +686,19 @@ npx eas-cli@latest whoami
       acceptance.** Channel `development` points to runtime `1.0.0`, group
       `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision `7c64bd70`,
       created 2026-08-10. No screenshot or device-acceptance receipt is attached,
-      and the SDK 55 fingerprint needs a new compatible binary. **Owner:** Codex.
+      and the SDK 56 fingerprint needs a new compatible binary. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
-- [x] **Regenerate and audit the staged EAS upload archive allowlist.** The fresh
-      standalone archive contains 92 files totaling 1,707,990 bytes (about
-      1.63 MiB), includes the root Viewer, Settings, Room routes, AR/config plugin,
-      and canonical core element data, and excludes the deleted
-      Viewer-tab routes plus tests/docs/exports/dependencies/unrelated product
-      trees, and matches every corresponding source byte. **Owner:** Codex.
-      **Receipt:** [`check-eas-archive.mjs`](../apps/mobile/scripts/check-eas-archive.mjs),
+- [x] **Regenerate and audit the staged SDK 56 EAS upload archive allowlist.** The
+      current archive contains exactly 92 files totaling 1,660,534 bytes (about
+      1.58 MiB), and every byte matches current source. **Owner:** Codex. **Receipt:**
+      [`check-eas-archive.mjs`](../apps/mobile/scripts/check-eas-archive.mjs),
       regenerated `apps/mobile/.verify-artifacts/mobile-eas-archive`, and
       [`.easignore`](../.easignore). This is not an upload or build.
+- [x] **Preserve the SDK 55 archive receipt as historical.** At commit
+      `1a56e398`, the standalone archive contained 92 files totaling 1,707,990
+      bytes (about 1.63 MiB) and passed its allowlist and byte-match audit. That
+      count and size do not describe SDK 56. **Owner:** Codex. **Receipt:** the
+      historical SDK 55 archive ledger.
 
 - [x] **Record the bounded EAS pre-build inspection result.** The inspection
       initialized remote iOS build number `1`, then stopped at Apple signing

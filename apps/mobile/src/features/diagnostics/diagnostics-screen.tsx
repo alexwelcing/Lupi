@@ -28,9 +28,8 @@ export function DiagnosticsScreen() {
   const projectId = Constants.easConfig?.projectId ?? readProjectId(extra);
   const [health, setHealth] = useState<HealthState>({ status: "loading" });
 
-  const refreshHealth = useCallback(
-    async (signal?: AbortSignal) => {
-      setHealth({ status: "loading" });
+  const requestHealth = useCallback(
+    async (signal?: AbortSignal): Promise<HealthState | null> => {
       try {
         const response = await fetch(`${origin}/health`, {
           headers: { Accept: "application/json" },
@@ -39,23 +38,31 @@ export function DiagnosticsScreen() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const identity = parseRemoteHealthIdentity(await response.json());
         if (!identity) throw new Error("invalid health identity");
-        setHealth({ status: "ready", identity });
+        return { status: "ready", identity };
       } catch (error) {
-        if (signal?.aborted) return;
-        setHealth({
+        if (signal?.aborted) return null;
+        return {
           status: "error",
           message: error instanceof Error ? error.message : "unknown error",
-        });
+        };
       }
     },
     [origin],
   );
 
+  const refreshHealth = useCallback(async () => {
+    setHealth({ status: "loading" });
+    const next = await requestHealth();
+    if (next) setHealth(next);
+  }, [requestHealth]);
+
   useEffect(() => {
     const controller = new AbortController();
-    void refreshHealth(controller.signal);
+    void requestHealth(controller.signal).then((next) => {
+      if (next && !controller.signal.aborted) setHealth(next);
+    });
     return () => controller.abort();
-  }, [refreshHealth]);
+  }, [requestHealth]);
 
   const rows = useMemo<DiagnosticRow[]>(() => {
     const remote = health.status === "ready" ? health.identity : undefined;

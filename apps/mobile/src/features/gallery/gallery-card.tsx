@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { colors } from "@/src/theme/colors";
@@ -10,28 +10,32 @@ import type { CuratedGalleryItem } from "./gallery-catalog";
 
 type PreviewState = "failed" | "fallback" | "loaded" | "loading";
 
-export function GalleryCard({
-  featured = false,
-  imageUrl,
-  item,
-  largeText,
-  onPress,
-  singleColumn,
-}: {
+interface GalleryCardProps {
   featured?: boolean;
   imageUrl: string | null;
   item: CuratedGalleryItem;
   largeText: boolean;
   onPress: () => void;
   singleColumn: boolean;
-}) {
+}
+
+export function GalleryCard(props: GalleryCardProps) {
+  return (
+    <GalleryCardContent key={JSON.stringify([props.imageUrl])} {...props} />
+  );
+}
+
+function GalleryCardContent({
+  featured = false,
+  imageUrl,
+  item,
+  largeText,
+  onPress,
+  singleColumn,
+}: GalleryCardProps) {
   const [previewState, setPreviewState] = useState<PreviewState>(
     imageUrl ? "loading" : "fallback",
   );
-
-  useEffect(() => {
-    setPreviewState(imageUrl ? "loading" : "fallback");
-  }, [imageUrl]);
 
   const open = () => {
     if (process.env.EXPO_OS === "ios") {
