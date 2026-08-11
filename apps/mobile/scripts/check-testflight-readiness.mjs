@@ -81,36 +81,52 @@ check(
   "EAS CLI minimum supports the Expo visual workflow",
 );
 check(
-  app.runtimeVersion?.policy === "appVersion",
-  "EAS Update runtime version follows the app version",
+  app.runtimeVersion?.policy === "fingerprint",
+  "EAS Update runtime version follows the native fingerprint",
 );
 check(
   app.updates?.url === `https://u.expo.dev/${app.extra?.eas?.projectId}`,
   "EAS Update URL is pinned to this Expo project",
 );
 check(
-  packageJson.dependencies?.["expo-dev-client"] === "~6.0.21",
-  "Expo development client matches SDK 54",
+  packageJson.dependencies?.expo === "~55.0.28",
+  "Expo framework is pinned to SDK 55",
 );
 check(
-  packageJson.dependencies?.["expo-updates"] === "~29.0.19",
-  "EAS Update matches SDK 54",
+  packageJson.dependencies?.["@expo/metro-runtime"] === "~55.0.12" &&
+    packageJson.dependencies?.["expo-router"] === "~55.0.17",
+  "Expo Router and Metro runtime match SDK 55",
+);
+check(
+  packageJson.dependencies?.["expo-dev-client"] === "~55.0.37",
+  "Expo development client matches SDK 55",
+);
+check(
+  packageJson.dependencies?.["expo-updates"] === "~55.0.26",
+  "EAS Update matches SDK 55",
 );
 check(
   packageJson.devDependencies?.["expo-mcp"] === "~0.2.1",
-  "Expo MCP local capabilities match SDK 54",
+  "Expo MCP local capabilities stay pinned for the SDK 55 checkpoint",
 );
 check(
   packageJson.dependencies?.["@reactvision/react-viro"] === "2.56.0",
-  "Native AR renderer is pinned to the Expo 54 compatible Viro release",
+  "Native AR renderer stays pinned to Viro 2.56 for the SDK 55 checkpoint",
 );
 const buildPropertiesPlugin = app.plugins?.find(
   (plugin) => Array.isArray(plugin) && plugin[0] === "expo-build-properties",
 );
 check(
-  packageJson.dependencies?.["expo-build-properties"] === "~1.0.10" &&
+  packageJson.dependencies?.["expo-build-properties"] === "~55.0.16" &&
     buildPropertiesPlugin?.[1]?.ios?.deploymentTarget === "17.6",
-  "iOS deployment target matches the embedded ViroKit framework minimum",
+  "SDK 55 build properties preserve the ViroKit iOS deployment target",
+);
+check(
+  packageJson.dependencies?.["expo-font"] === "~55.0.8" &&
+    app.plugins?.includes("expo-font") === true &&
+    app.plugins?.includes("expo-sqlite") === true &&
+    app.plugins?.includes("expo-web-browser") === true,
+  "SDK 55 native peer dependencies and config plugins are explicit",
 );
 check(
   packageJson.dependencies?.["@atlas/core"] === "workspace:^" &&
@@ -118,8 +134,12 @@ check(
   "Native AR uses the canonical bounded element-color and radius table",
 );
 check(
-  app.newArchEnabled === true,
-  "Native AR keeps React Native New Architecture enabled",
+  !("newArchEnabled" in app),
+  "SDK 55 omits the removed New Architecture opt-out",
+);
+check(
+  !("edgeToEdgeEnabled" in (app.android ?? {})),
+  "SDK 55 omits the removed Android edge-to-edge switch",
 );
 const viroPlugin = app.plugins?.find(
   (plugin) => Array.isArray(plugin) && plugin[0] === "@reactvision/react-viro",
@@ -231,7 +251,19 @@ check(
 );
 check(
   eas.build?.production?.node === "20.19.4",
-  "Production EAS builds pin Node 20.19.4",
+  "SDK 55 checkpoint builds pin supported Node 20.19.4",
+);
+check(
+  eas.build?.development?.ios?.image === "sdk-55" &&
+    eas.build?.development?.android?.image === "sdk-55" &&
+    eas.build?.["development-simulator"]?.ios?.image === "sdk-55" &&
+    eas.build?.["visual-ios"]?.ios?.image === "sdk-55" &&
+    eas.build?.["visual-android"]?.android?.image === "sdk-55" &&
+    eas.build?.preview?.ios?.image === "sdk-55" &&
+    eas.build?.preview?.android?.image === "sdk-55" &&
+    eas.build?.production?.ios?.image === "sdk-55" &&
+    eas.build?.production?.android?.image === "sdk-55",
+  "Every EAS platform profile pins the SDK 55 builder image",
 );
 check(
   eas.build?.production?.env?.EXPO_PUBLIC_LUPI_WEB_URL === "https://lupi.live",

@@ -1,8 +1,8 @@
 # Lupi mobile: Expo migration and release guide
 
-Status: **Expo hybrid shell plus native Viro/ARKit Room source locally verified; the compatible 30-tool web bridge is live and an earlier Room revision has a signed development build, while the new 1.0.1/iOS 17.6 candidate still needs its own signed build, workflow run, TestFlight processing, and physical-iPhone AR acceptance**
+Status: **Expo SDK 55 hybrid shell plus native Viro/ARKit Room source locally verified; the compatible 30-tool web bridge is live and an earlier SDK 54 Room revision has a signed development build, while the SDK 55/runtime-fingerprint candidate still needs its own signed build, workflow run, TestFlight processing, and physical-iPhone AR acceptance**
 
-Compatibility snapshot: **2026-08-10**
+Compatibility snapshot: **2026-08-11**
 
 This document is the engineering plan for turning Lupi into an installable
 iPhone app without pretending that the browser renderer can be copied directly
@@ -25,34 +25,42 @@ have passed their source/browser ladder. The fresh 92-file EAS archive matches
 current source; the final integrated commit still needs its full SHA recorded.
 The compatible web bridge is deployed and the earlier Room revision has a signed
 development artifact. Those receipts do not assert a signed build of the new
-`1.0.1`/iOS `17.6` source, an executed visual workflow, Apple upload, TestFlight
-processing, App Store release, or physical-iPhone AR pass.
+SDK 55/runtime-fingerprint source, an executed visual workflow, Apple upload,
+TestFlight processing, App Store release, or physical-iPhone AR pass.
 
-## Compatibility decision: Expo SDK 54 shell plus development-client AR
+## Compatibility decision: Expo SDK 55 shell plus development-client AR
 
-`apps/mobile/package.json` pins Expo `~54.0.35`, React Native `0.81.5`, and
-React `19.1.0`. That is deliberate. During the current Expo transition, the
-App Store build of Expo Go for a physical iPhone supports SDK 54. Apple does not
-allow installing an older Expo Go build side-by-side on an iPhone. Expo's
-current project guide therefore tells physical-device Expo Go users to use SDK
-54, and its development-build FAQ records the one-SDK iPhone constraint.
+`apps/mobile/package.json` pins Expo `~55.0.28`, React Native `0.83.10`, and
+React `19.2.0` as one aligned source checkpoint. It explicitly includes
+`@expo/metro-runtime` and `expo-font`; `app.json` declares the `expo-font` plugin
+alongside the Router, SQLite, web-browser, splash, build-properties, and Viro
+plugins. EAS profiles select the `sdk-55` image. Expo Router now uses the nested
+`NativeTabs.Trigger`, `.Icon`, and `.Label` API rather than an older flat tabs
+surface.
+
+The stock iPhone Expo Go client may be used only after its current SDK support is
+checked at test time. iOS cannot install an older Expo Go app side-by-side. This
+checkpoint has no signed SDK 55 device receipt, so it must not be presented as
+an Expo Go or native-device success.
 
 Consequences:
 
-- Do not upgrade the mobile app's Expo SDK piecemeal during the Expo Go phase.
+- Do not change Expo, React Native, React, Router, or Expo packages piecemeal.
+  The SDK 55 upgrade is one source checkpoint and must receive its own signed
+  development-build receipt.
 - Keep Expo, React Native, React, Router, and Expo package versions aligned with
-  SDK 54. Use `npx expo install`, not arbitrary package upgrades, for Expo
+  SDK 55. Use `npx expo install`, not arbitrary package upgrades, for Expo
   dependencies.
-- Use the current App Store Expo Go app on the iPhone. If the store client moves
-  off SDK 54, either upgrade this app as one tested change or move development
-  to the custom development client described below.
-- Expo Go remains valid for the hybrid shell, but it cannot load the custom
-  native `@reactvision/react-viro` runtime. Room work must use a development or
-  TestFlight build on a physical ARKit iPhone.
-- SDK 54 requires Node `20.19.x` or newer, targets React Native `0.81`, and has
-  an Expo baseline iOS minimum of 15.1. Lupi now explicitly sets iOS `17.6`
-  through `expo-build-properties` because embedded ViroKit requires that higher
-  target. The repository already requires Node 20 or newer.
+- Use the current App Store Expo Go app on the iPhone only when its current SDK
+  compatibility is confirmed. Otherwise, move hybrid-shell testing to the custom
+  development client described below.
+- A compatible Expo Go client can run the hybrid shell, but it cannot load the
+  custom native `@reactvision/react-viro` runtime. Room work must use a
+  development or TestFlight build on a physical ARKit iPhone.
+- SDK 55 targets React Native `0.83` and React 19.2. Lupi continues to pin Node
+  `20.19.4` in EAS and explicitly sets iOS `17.6` through
+  `expo-build-properties` because embedded ViroKit requires that higher target.
+  The repository already requires Node 20 or newer.
 
 Windows install note: on this machine, a full root install under Node 24 reached
 `canvas@3.2.3` native compilation and failed in the ClangCL toolchain. Prefer a
@@ -67,7 +75,7 @@ Primary references:
 
 - [Create an Expo project: physical-device SDK note](https://docs.expo.dev/get-started/create-a-project/)
 - [Expo Go and development-build FAQ](https://docs.expo.dev/develop/development-builds/faq/)
-- [Expo SDK 54 compatibility table](https://docs.expo.dev/versions/v54.0.0/)
+- [Expo SDK 55 compatibility table](https://docs.expo.dev/versions/v55.0.0/)
 
 Recheck those pages before any SDK upgrade; this compatibility fact is
 time-sensitive.
@@ -76,20 +84,20 @@ time-sensitive.
 
 The integrated candidate has reached a complete local/configuration milestone.
 Cloud receipts exist for an earlier clean Room revision, but no signed release
-artifact exists for the new `1.0.1`/iOS `17.6` source:
+artifact exists for the new SDK 55/runtime-fingerprint source:
 
-| Surface                     | Verified receipt                                                                                                                                                                                    | Still not proven                                                                |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Expo identity               | Authenticated as `alexwelcing`; project `@alexwelcing/lupi` is linked with ID `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`                                                                                | App Store Connect app/ID or the intended Lupine Science organization team       |
-| Integrated candidate        | Branch `codex/mobile-testflight-integration` based on deployed `ee0d8885`; Node `20.19.4`, pnpm `9.0.0`, frozen filtered install with lifecycle scripts                                             | Final clean integrated SHA                                                      |
-| App source identity         | Version/runtime `1.0.1`, bundle `live.lupi.app`, explicit iOS `17.6`, EAS remote version source/build number `1`, production store/autoIncrement/Node `20.19.4`, exact `https://lupi.live` origin   | Signed artifact of this source or on-device presentation                        |
-| Source/assets gate          | `check:testflight` passed; strict gate passed tracked/clean scope checks and failed only because `submit.production.ios.ascAppId` is absent; icon/splash source properties passed                   | Fully green strict gate, App Store Connect ID, or rendered assets               |
-| Final local ladder          | 105/105 tests, typecheck, zero-warning lint, `expo install --check`, Doctor 18/18, 20-route web export, clean unsigned iOS export, local visual contract, and EAS workflow schema validation passed | Native compile or device behavior                                               |
-| Signed development artifact | Build `2b57a89e-e398-44a8-b799-871b7f8e3651` finished for exact clean `7c64bd70`, version/build `1.0.0 (1)`, signed for one registered iPhone                                                       | The integrated `1.0.1`/iOS `17.6` source, TestFlight, or physical AR acceptance |
-| Development update          | Active on channel `development`, runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean `7c64bd70`                                                                              | Device screenshot/acceptance; runtime `1.0.1` requires a new binary             |
-| Visual workflow             | Local contract and EAS schema passed; `eas workflow:runs --json` returned `[]`                                                                                                                      | Any workflow/simulator execution or screenshots                                 |
-| EAS archive                 | Fresh standalone archive passed for 92 files and 1,472,201 bytes, every byte matching current mobile/core source                                                                                    | Upload or EAS builder receipt for integrated source                             |
-| Live service                | `/health` ready at tag `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, timestamp `2026-08-10T19:54:28.637969Z`; edge manifest exactly seven tools and browser manifest exactly 30                       | Compatibility observed inside the new physical binary                           |
+| Surface                     | Verified receipt                                                                                                                                                                                                 | Still not proven                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Expo identity               | Authenticated as `alexwelcing`; project `@alexwelcing/lupi` is linked with ID `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`                                                                                             | App Store Connect app/ID or the intended Lupine Science organization team  |
+| Integrated candidate        | Branch `codex/mobile-testflight-integration` based on deployed `ee0d8885`; Node `20.19.4`, pnpm `9.0.0`, frozen filtered install with lifecycle scripts                                                          | Final clean integrated SHA                                                 |
+| App source identity         | Expo SDK 55, React Native 0.83, React 19.2, version `1.0.1`, fingerprint runtime, bundle `live.lupi.app`, explicit iOS `17.6`, `sdk-55` EAS image, remote build number `1`, and exact `https://lupi.live` origin | Signed artifact of this source or on-device presentation                   |
+| Source/assets gate          | `check:testflight` passed; strict gate passed tracked/clean scope checks and failed only because `submit.production.ios.ascAppId` is absent; icon/splash source properties passed                                | Fully green strict gate, App Store Connect ID, or rendered assets          |
+| Final local ladder          | 105/105 tests, typecheck, zero-warning lint, `expo install --check`, Doctor 19/19, 20-route web export, clean unsigned iOS export, local visual contract, and EAS workflow schema validation passed              | Native compile or device behavior                                          |
+| Signed development artifact | Build `2b57a89e-e398-44a8-b799-871b7f8e3651` finished for exact clean SDK 54 revision `7c64bd70`, version/build `1.0.0 (1)`, signed for one registered iPhone                                                    | The integrated SDK 55 source, TestFlight, or physical AR acceptance        |
+| Development update          | Active on channel `development`, runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean SDK 54 revision `7c64bd70`                                                                           | Device screenshot/acceptance; the SDK 55 fingerprint requires a new binary |
+| Visual workflow             | Local contract and EAS schema passed; `eas workflow:runs --json` returned `[]`                                                                                                                                   | Any workflow/simulator execution or screenshots                            |
+| EAS archive                 | Fresh standalone archive passed for 92 files and 1,444,711 bytes, every byte matching current mobile/core source                                                                                                 | Upload or EAS builder receipt for integrated source                        |
+| Live service                | `/health` ready at tag `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, timestamp `2026-08-10T19:54:28.637969Z`; edge manifest exactly seven tools and browser manifest exactly 30                                    | Compatibility observed inside the new physical binary                      |
 
 The actionable gate-by-gate record is
 [`docs/mobile-testflight-checklist.md`](mobile-testflight-checklist.md).
@@ -291,18 +299,20 @@ and the browser manifest exactly 30, including `lupi.open_gallery_example` and
 `lupi.assess_asset`. This identifies the live service at that check; it does not
 prove which remote revision a future physical app session will load.
 
-Expo SDK 54 includes the exact `react-native-webview` `13.15.0` line used here,
-so this slice runs in Expo Go. See the [SDK 54 WebView reference](https://docs.expo.dev/versions/v54.0.0/sdk/webview/).
+Expo SDK 55 pins `react-native-webview` `13.16.0` in this source. The embedded
+viewer is eligible for the stock Expo Go shell only if the installed iPhone
+client supports SDK 55 at test time; no such device receipt exists. See the
+[SDK 55 WebView reference](https://docs.expo.dev/versions/v55.0.0/sdk/webview/).
 
-SDK 54 also marks `expo-document-picker` `~14.0.8` and `expo-file-system`
-`~19.0.23` as included in Expo Go, matching the installed package lines. The
+SDK 55 also marks `expo-document-picker` `~55.0.15` and `expo-file-system`
+`~55.0.24` as included in Expo Go, matching the installed package lines. The
 picker uses `copyToCacheDirectory: true`, which Expo documents as the setting
 that makes a picked file immediately readable by FileSystem. Therefore this
 bounded XYZ path does not require a development client. This compatibility
 claim is about the stock native modules; physical Files/iCloud-provider and
 viewer behavior still need the device receipt below. See the
-[SDK 54 DocumentPicker reference](https://docs.expo.dev/versions/v54.0.0/sdk/document-picker/)
-and [SDK 54 FileSystem reference](https://docs.expo.dev/versions/v54.0.0/sdk/filesystem/).
+[SDK 55 DocumentPicker reference](https://docs.expo.dev/versions/v55.0.0/sdk/document-picker/)
+and [SDK 55 FileSystem reference](https://docs.expo.dev/versions/v55.0.0/sdk/filesystem/).
 
 ### Bridge boundary and security rules
 
@@ -351,7 +361,8 @@ The bridge is an API boundary, not a general JavaScript escape hatch.
 
 - Node.js 20.19.x; the isolated candidate used `20.19.4`.
 - pnpm 9; the isolated candidate used the repository-pinned `9.0.0`.
-- The current Expo Go app from the iOS App Store.
+- A current Expo Go app from the iOS App Store whose SDK 55 support has been
+  confirmed at test time; otherwise use the development client.
 - The Windows machine and iPhone on the same reachable Wi-Fi network for LAN
   mode. Guest networks, VPNs, and Windows Firewall rules can prevent the phone
   from reaching Metro or Vite.
@@ -367,9 +378,9 @@ pnpm --filter @lupi/mobile lint
 pnpm --filter @lupi/mobile start
 ```
 
-Scan the QR code with the iPhone camera or Expo Go. On Windows, the `ios` script
-cannot launch Apple's iOS Simulator; the physical-device QR path is the normal
-workflow.
+Scan the QR code with the iPhone camera or compatible Expo Go client. On Windows,
+the `ios` script cannot launch Apple's iOS Simulator; the physical-device QR path
+is the normal workflow. This source checkpoint has no resulting device receipt.
 
 If LAN discovery is blocked but internet access is available:
 
@@ -462,7 +473,7 @@ Reuse only code that is genuinely platform-neutral.
 - An exact pure subpath such as `@atlas/scene/bondDetectCpu` can be evaluated
   independently, with mobile tests, because it has no React component boundary.
 - Do not import `@atlas/ui` into mobile. It is the browser UI, owns DOM/browser
-  assumptions, and resolves a different React patch line than Expo SDK 54.
+  assumptions, and resolves a different React patch line than Expo SDK 55.
 - Do not import the `@atlas/scene` package root into mobile. That package
   declares React, React Three Fiber, Drei, Three.js, and renderer dependencies;
   importing the root risks bringing the web renderer and a second React/R3F
@@ -588,24 +599,24 @@ The physical acceptance sequence is:
    near-512-atom fixture. The current caps are safety limits, not performance
    promises, and should move only from physical evidence.
 
-Viro `2.56.0` is pinned because the current app remains on Expo SDK 54 / React
-Native 0.81. Its Expo plugin unconditionally excludes `arm64` for iOS simulator
-builds. Therefore the existing Apple-silicon `visual-ios` simulator workflow may
+Viro remains pinned to `2.56.0` for this Expo SDK 55 / React Native 0.83 source
+checkpoint; its upgrade is intentionally deferred. Its Expo plugin unconditionally
+excludes `arm64` for iOS simulator builds. Therefore the existing Apple-silicon `visual-ios` simulator workflow may
 need a separate non-AR profile and cannot serve as a Room receipt. Even if a
 simulator build succeeds elsewhere, it cannot prove camera permission, ARKit
 tracking, plane discovery, placement, occlusion, or real-room interaction.
 
 The longer-term native viewer investigation can still use an `expo-gl`
-physical-device spike. SDK 54
+physical-device spike. SDK 55
 includes `expo-gl` in Expo Go, so it can measure native canvas lifecycle, touch
 input, buffer upload, atom instancing, and thermal behavior without forcing an
 early development build. The spike is experimental evidence only; it does not
 replace the WebView renderer or establish WebGPU/render-artifact parity. See
-the [SDK 54 GLView reference](https://docs.expo.dev/versions/v54.0.0/sdk/gl-view/).
+the [SDK 55 GLView reference](https://docs.expo.dev/versions/v55.0.0/sdk/gl-view/).
 
 Install the spike as a deliberate follow-up change from the mobile app
-directory, keeping the same Three/R3F lines as the web workspace while Expo 54
-pins React 19.1:
+directory, keeping the same Three/R3F lines as the web workspace while this
+SDK 55 source pins React 19.2:
 
 ```powershell
 Push-Location apps/mobile
@@ -690,8 +701,9 @@ and one acceptance fixture after the Expo GL measurements are recorded.
 The target native WebGPU path uses `react-native-wgpu`, which wraps native Dawn,
 requires the New Architecture, and ships an Expo config plugin. It is not part
 of the fixed native library set in Expo Go, so it requires a development build.
-The current app already has `newArchEnabled: true` and React Native 0.81, which
-meet the library's documented baseline, but compatibility still has to be
+SDK 55 is New Architecture-only and intentionally omits the removed
+`newArchEnabled` config field. React Native 0.83 meets the library's documented
+baseline, but compatibility still has to be
 proven as one locked set of Expo, React Native WebGPU, Three.js, and R3F
 versions. See [React Native WebGPU installation](https://wcandillon.github.io/react-native-webgpu/docs/getting-started/installation).
 
@@ -724,9 +736,10 @@ Gallery, focused local Library, native Settings, saved-view policy handoff, devi
 accessibility, lifecycle handling, and eventually companion/native rendering
 are part of that app value.
 
-Version/runtime `1.0.1` is selected in source, iOS deployment target `17.6` is
-explicit, and remote iOS build number `1` is initialized. A signed development
-binary exists only for earlier version `1.0.0 (1)` / revision `7c64bd70`; it does
+Marketing version `1.0.1` and a fingerprint runtime policy are selected in
+source, iOS deployment target `17.6` is explicit, and remote iOS build number
+`1` is initialized. A signed development binary exists only for earlier SDK 54
+version `1.0.0 (1)` / revision `7c64bd70`; it does
 not validate the new native configuration. Before submission, build and sign the
 integrated source, finish the selected parity claims, run them on TestFlight,
 and clearly document intentionally web-backed features in App Review notes.
@@ -783,39 +796,39 @@ success.
 
 ### Integrated-candidate local/configuration receipts
 
-| Check                            | Integrated-candidate result                                   | Evidence boundary                                                                                                                                                           |
-| -------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| frozen filtered install          | Passed with Node 20.19.4 and pnpm 9.0.0                       | Exact lockfile and lifecycle scripts; not an EAS builder receipt                                                                                                            |
-| local source ladder components   | Passed                                                        | Source gate, 105/105 tests, typecheck, zero-warning lint, Expo dependency check, Doctor 18/18, 20-route web export, and clean unsigned iOS export                           |
-| `check:testflight`               | Passed                                                        | Source/config/assets only; App Store Connect ID remains an external release gate                                                                                            |
-| `check:testflight:release`       | Scoped checks passed; one blocker                             | Required files were tracked and the mobile scope was clean; only `submit.production.ios.ascAppId` was missing                                                               |
-| Focused unit tests               | 105/105 passed on 2026-08-10                                  | Includes strict AR scene/session/handoff/build-policy tests plus Gallery/catalog, history, menus, Library/Settings, runtime recovery, config, XYZ, bridge, and recent codec |
-| TypeScript                       | Final pass                                                    | Static type receipt only                                                                                                                                                    |
-| ESLint                           | Final pass, zero warnings                                     | Static lint receipt only                                                                                                                                                    |
-| `expo install --check`           | Passed                                                        | Installed Expo dependency compatibility only                                                                                                                                |
-| Expo Doctor                      | 18/18 checks passed                                           | Expo project diagnostics only                                                                                                                                               |
-| `check:visual-workflow:local`    | Passed; 36 Maestro commands                                   | Gallery-backed Caffeine, exact public 30-tool manifest, camera-free Room intro, and native Gallery/Library/Settings screenshot contracts; cloud execution remains open      |
-| EAS visual workflow schema       | Passed                                                        | Schema/configuration receipt only; `eas workflow:runs --json` returned `[]`, so no cloud execution or screenshots exist                                                     |
-| `visual:web` composition matrix  | Passed; 12/12 captures and 63/63 semantic checks              | Three iPhone-sized Expo-web profiles, zero overflow/unexpected-runtime failures; explicitly not native iOS, device, AR, or TestFlight proof                                 |
-| `export:web --clear`             | Passed; 20 routes                                             | Expo browser-fallback export only; native Viro remains behind a lazy platform boundary                                                                                      |
-| browser fallback QA              | Passed at 320x693 and 390x844 after overlap fix               | Web header/tab geometry only; not native layout                                                                                                                             |
-| embedded Gallery browser matrix  | 24/24 plus drift rejection                                    | Exact atom counts, fresh renderer per molecule, and no web chrome/MCP harness; not a physical WKWebView receipt                                                             |
-| browser Gallery safety tests     | 11/11 passed                                                  | Metadata-before-fetch, max-across-trajectory, and superseded-load guards reject before stale store mutation                                                                 |
-| mobile science playback test     | 1/1 passed                                                    | Z1 minimum-image unwrapping remains active when the embedded client omits science-panel attachment                                                                          |
-| `export:ios --clear`             | Passed; 1,271 modules, 3.43 MB HBC                            | Clean unsigned JS/assets export only; “clean” refers to regenerated export output                                                                                           |
-| EAS production config resolution | Store/autoIncrement/Node 20.19.4/origin/project ID resolved   | Configuration resolution only; not a build                                                                                                                                  |
-| iOS deployment target            | Source gate passed at `17.6`                                  | `expo-build-properties` alignment for ViroKit; absent from the existing signed `1.0.0 (1)` artifact                                                                         |
-| Signed development build         | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651`              | Exact clean `7c64bd70`, version/build `1.0.0 (1)`, one registered iPhone; not the integrated `1.0.1`/iOS 17.6 source, TestFlight, or physical-AR acceptance                 |
-| Active development update        | Runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8` | Exact clean `7c64bd70`; channel publication only, with no device screenshot or acceptance receipt                                                                           |
-| EAS remote version               | iOS build number `1`                                          | Initialized remotely; no production/store build exists                                                                                                                      |
-| `check:eas-archive`              | Passed for 92 files and 1,472,201 bytes (~1.40 MiB)           | Fresh allowlisted standalone archive; every byte matches mobile/core source and required AR/config inputs are present                                                       |
-| live `/health`                   | Ready; recorded version, release tag, and timestamp           | Live-service snapshot only; not native-build compatibility                                                                                                                  |
+| Check                            | Integrated-candidate result                                                | Evidence boundary                                                                                                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| frozen filtered install          | Passed with Node 20.19.4 and pnpm 9.0.0                                    | Exact lockfile and lifecycle scripts; not an EAS builder receipt                                                                                                            |
+| local source ladder components   | Passed                                                                     | Source gate, 105/105 tests, typecheck, zero-warning lint, Expo dependency check, Doctor 19/19, 20-route web export, and clean unsigned iOS export                           |
+| `check:testflight`               | Passed                                                                     | Source/config/assets only; App Store Connect ID remains an external release gate                                                                                            |
+| `check:testflight:release`       | Scoped checks passed; one blocker                                          | Required files were tracked and the mobile scope was clean; only `submit.production.ios.ascAppId` was missing                                                               |
+| Focused unit tests               | 105/105 passed on 2026-08-10                                               | Includes strict AR scene/session/handoff/build-policy tests plus Gallery/catalog, history, menus, Library/Settings, runtime recovery, config, XYZ, bridge, and recent codec |
+| TypeScript                       | Final pass                                                                 | Static type receipt only                                                                                                                                                    |
+| ESLint                           | Final pass, zero warnings                                                  | Static lint receipt only                                                                                                                                                    |
+| `expo install --check`           | Passed                                                                     | Installed Expo dependency compatibility only                                                                                                                                |
+| Expo Doctor                      | 19/19 checks passed                                                        | Expo project diagnostics only                                                                                                                                               |
+| `check:visual-workflow:local`    | Passed; 36 Maestro commands                                                | Gallery-backed Caffeine, exact public 30-tool manifest, camera-free Room intro, and native Gallery/Library/Settings screenshot contracts; cloud execution remains open      |
+| EAS visual workflow schema       | Passed                                                                     | Schema/configuration receipt only; `eas workflow:runs --json` returned `[]`, so no cloud execution or screenshots exist                                                     |
+| `visual:web` composition matrix  | Passed; 12/12 captures and 63/63 semantic checks                           | Three iPhone-sized Expo-web profiles, zero overflow/unexpected-runtime failures; explicitly not native iOS, device, AR, or TestFlight proof                                 |
+| `export:web --clear`             | Passed; 20 routes                                                          | Expo browser-fallback export only; native Viro remains behind a lazy platform boundary                                                                                      |
+| browser fallback QA              | Passed at 320x693 and 390x844 after overlap fix                            | Web header/tab geometry only; not native layout                                                                                                                             |
+| embedded Gallery browser matrix  | 24/24 plus drift rejection                                                 | Exact atom counts, fresh renderer per molecule, and no web chrome/MCP harness; not a physical WKWebView receipt                                                             |
+| browser Gallery safety tests     | 11/11 passed                                                               | Metadata-before-fetch, max-across-trajectory, and superseded-load guards reject before stale store mutation                                                                 |
+| mobile science playback test     | 1/1 passed                                                                 | Z1 minimum-image unwrapping remains active when the embedded client omits science-panel attachment                                                                          |
+| `export:ios --clear`             | Passed; 1,372 modules, 3.5 MB HBC                                          | Clean unsigned JS/assets export only; “clean” refers to regenerated export output                                                                                           |
+| EAS production config resolution | Store/autoIncrement/Node 20.19.4/`sdk-55` image/origin/project ID resolved | Configuration resolution only; not a build                                                                                                                                  |
+| iOS deployment target            | Source gate passed at `17.6`                                               | `expo-build-properties` alignment for ViroKit; absent from the existing signed `1.0.0 (1)` artifact                                                                         |
+| Signed development build         | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651`                           | Exact clean SDK 54 `7c64bd70`, version/build `1.0.0 (1)`, one registered iPhone; not the integrated SDK 55 source, TestFlight, or physical-AR acceptance                    |
+| Active development update        | Runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`              | Exact clean `7c64bd70`; channel publication only, with no device screenshot or acceptance receipt                                                                           |
+| EAS remote version               | iOS build number `1`                                                       | Initialized remotely; no production/store build exists                                                                                                                      |
+| `check:eas-archive`              | Passed for 92 files and 1,444,711 bytes (~1.38 MiB)                        | Fresh allowlisted standalone archive; every byte matches mobile/core source and required AR/config inputs are present                                                       |
+| live `/health`                   | Ready; recorded version, release tag, and timestamp                        | Live-service snapshot only; not native-build compatibility                                                                                                                  |
 
 Tests, typecheck, lint, Expo dependency/config gates, Doctor, the local visual
 contract, workflow schema, archive, and web/iOS exports were freshly rerun after
 the integrated Room work. The signed development build and development update
 remain receipts for earlier exact clean revision `7c64bd70`; neither proves the
-new `1.0.1`/iOS `17.6` source. G1 remains open until the clean final integrated
+new SDK 55/runtime-fingerprint source. G1 remains open until the clean final integrated
 SHA is recorded and the strict release gate receives the App Store Connect
 numeric ID. Workflow execution, TestFlight, and physical Room AR remain open.
 
@@ -892,11 +905,12 @@ physical-device smoke separately:
 
 Expo authentication and project linking are complete. `app.json` pins owner
 `alexwelcing`, EAS project ID `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`, iOS
-bundle identifier `live.lupi.app`, marketing/runtime version `1.0.1`, and iOS
-deployment target `17.6`. The remote project is `@alexwelcing/lupi`.
+bundle identifier `live.lupi.app`, marketing version `1.0.1`, fingerprint runtime
+policy, and iOS deployment target `17.6`. The remote project is
+`@alexwelcing/lupi`.
 
 `eas.json` pins EAS CLI `>=20.3.0`, `appVersionSource: remote`, Node `20.19.4`
-for preview and production, preview internal distribution, production store
+and the `sdk-55` image for every profile, preview internal distribution, production store
 distribution with `autoIncrement: true`, the production EAS environment, and
 `EXPO_PUBLIC_LUPI_WEB_URL=https://lupi.live`. The production EAS config has
 resolved successfully for project ID
@@ -908,7 +922,7 @@ Apple account credentials were supplied; its pre-build output was empty. A
 later authorized development build finished as
 `2b57a89e-e398-44a8-b799-871b7f8e3651` for exact clean revision `7c64bd70`,
 version/build `1.0.0 (1)`, using Xcode/iOS SDK 26 and an Ad Hoc profile for one
-registered iPhone. It predates the `1.0.1`/iOS `17.6` source and is not a
+registered iPhone. It predates the SDK 55/runtime-fingerprint source and is not a
 production, TestFlight, or physical-AR receipt. A direct
 `expo prebuild --platform ios --no-install` attempt on Windows also stopped
 honestly because Expo permits iOS native-project generation only on macOS or
@@ -921,8 +935,8 @@ web favicon still uses `lupi-icon.png`. The source gate verifies those byte
 properties, but only a physical binary can prove rendered icon/splash fidelity.
 
 The root [`.easignore`](../.easignore) is a deliberate upload allowlist. The
-current isolated-candidate archive contains 92 files totaling 1,472,201 bytes
-(about 1.40 MiB), excluding tests, docs, generated exports, dependencies, and
+current isolated-candidate archive contains 92 files totaling 1,444,711 bytes
+(about 1.38 MiB), excluding tests, docs, generated exports, dependencies, and
 unrelated web/research trees. `check:eas-archive` verified it byte-for-byte
 against current source, including the root Viewer and Settings routes and
 excluding the deleted Viewer-tab routes. This is not an upload, native compile,
@@ -930,12 +944,12 @@ signed artifact, or EAS build.
 
 ### First-beta update and reviewer boundary
 
-The app includes `expo-updates`, an app-version runtime policy, the linked EAS
+The app includes `expo-updates`, a fingerprint runtime policy, the linked EAS
 Update URL, and named development/visual/preview/production channels. A
 development-channel update is active for runtime `1.0.0`, group
 `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision `7c64bd70`; no
-device screenshot or acceptance receipt exists. The new `1.0.1` runtime needs a
-new compatible binary before it can receive `1.0.1` updates. Viro, permissions,
+device screenshot or acceptance receipt exists. The new SDK 55 fingerprint needs
+a compatible binary before it can receive updates. Viro, permissions,
 config plugins, deployment-target changes, SDK changes, and other native changes
 require another binary and TestFlight build. The remote viewer/Worker
 can still deploy independently, which is why native build, update, and remote
@@ -986,7 +1000,7 @@ Prerequisites:
 - A live, reviewable backend and saved-view path. Apple asks reviewers to be
   given full access and for backend services to remain available during review.
 - A current SDK/toolchain check. As of this compatibility snapshot, Apple
-  requires iOS uploads to use the iOS 26 SDK, and Expo states that SDK 54's
+  requires iOS uploads to use the iOS 26 SDK, and Expo states that SDK 55's
   default EAS image uses Xcode 26. Recheck both requirements for the actual
   release date.
 
@@ -1032,7 +1046,7 @@ existing Local, CI, Deploy, Live API, and Public site lanes.
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Isolated candidate            | Named/reviewed clean branch; Node 20.19.4/pnpm 9.0.0 frozen filtered install; full local ladder; Doctor; resolved config; byte-identical reviewed archive; scoped release checks | Final post-amendment SHA ledger, EAS build, Apple, or device behavior  |
 | Final local release identity  | `git rev-parse HEAD` after all amendments; clean scope; exact remote build number; fully green strict release gate                                                               | EAS can compile/sign it, Apple can process it, or users can install it |
-| Expo/EAS configuration        | Authenticated owner; linked project ID; resolved store/autoIncrement/Node/origin profile; remote build number `1`                                                                | A queued or successful EAS build                                       |
+| Expo/EAS configuration        | Authenticated owner; linked project ID; resolved store/autoIncrement/Node/`sdk-55` image/origin profile; remote build number `1`                                                 | A queued or successful EAS build                                       |
 | EAS pre-build inspection      | Remote build-number receipt plus terminal stage result                                                                                                                           | Native prebuild, Apple signing, compile, artifact, or upload           |
 | EAS build                     | EAS build URL/ID and success; exact SHA; app version/build number; native runtime fingerprint; Xcode image; signed artifact identity                                             | The artifact launches on an iPhone or passed TestFlight/App Review     |
 | TestFlight                    | App Store Connect build processed; exact build installed through TestFlight; physical-device acceptance report                                                                   | App Review approval or public availability                             |

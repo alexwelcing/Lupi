@@ -7,9 +7,8 @@
     "icon": "./assets/images/lupi-app-icon.png",
     "scheme": "lupi",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     },
     "updates": {
       "url": "https://u.expo.dev/38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d"
@@ -47,7 +46,6 @@
         "backgroundColor": "#071118",
         "foregroundImage": "./assets/images/lupi-splash-mark-1024.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -56,6 +54,9 @@
     },
     "plugins": [
       "expo-router",
+      "expo-font",
+      "expo-sqlite",
+      "expo-web-browser",
       [
         "expo-splash-screen",
         {
@@ -93,8 +94,7 @@
       "./plugins/with-viro-camera-only"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "autolinkingModuleResolution": true
+      "typedRoutes": true
     },
     "extra": {
       "router": {},
