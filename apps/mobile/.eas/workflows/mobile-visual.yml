@@ -1,0 +1,37 @@
+name: Lupi iOS visual receipt
+
+# Manual dispatch keeps paid simulator work explicit while the visual suite is
+# being established. Add a labeled pull-request trigger only after the first
+# baseline is approved and the job's cost and flake rate are known.
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  cancel_in_progress: true
+  group: ${{ workflow.filename }}-${{ github.ref }}
+
+jobs:
+  build_ios_visual:
+    name: Build iOS visual fixture
+    type: build
+    params:
+      platform: ios
+      profile: visual-ios
+
+  capture_native_app:
+    name: Capture native app on iPhone 16 Plus
+    needs: [build_ios_visual]
+    type: maestro
+    environment: preview
+    env:
+      MAESTRO_APP_ID: live.lupi.app.dev
+      LUPI_VIEWER_BROWSER_MANIFEST_URL: https://lupi.live/browser-mcp-manifest.json
+      LUPI_VIEWER_HEALTH_URL: https://lupi.live/health
+    params:
+      build_id: ${{ needs.build_ios_visual.outputs.build_id }}
+      flow_path: .maestro/visual/caffeine-ready.yml
+      device_identifier: iPhone 16 Plus
+      maestro_version: 2.7.0
+      record_screen: true
+      retries: 1
+      retry_failed_only: true

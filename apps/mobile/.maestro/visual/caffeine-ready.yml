@@ -1,0 +1,123 @@
+appId: ${MAESTRO_APP_ID}
+name: Caffeine viewer ready screenshot
+tags:
+  - visual
+  - viewer
+---
+- launchApp:
+    clearState: true
+
+- openLink:
+    link: lupi-dev://__visual?scenario=viewer-caffeine-ready
+
+# iOS can ask for confirmation the first time a custom scheme is opened.
+- runFlow:
+    when:
+      visible: "Open in.*Lupi.*"
+    commands:
+      - tapOn: Open
+
+- extendedWaitUntil:
+    visible:
+      id: visual-qa-ready-viewer-caffeine-ready
+    timeout: 45000
+
+# These human-visible assertions make the screenshot receipt useful even when
+# the automation identifier is present.
+- assertVisible: Caffeine
+- extendedWaitUntil:
+    visible: "24 atoms"
+    timeout: 15000
+
+- assertNotVisible: Loading molecular viewer
+- assertNotVisible: "Could.*open this structure"
+
+# The visual scenario has already applied its fixed camera and scene commands.
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Record the exact remotely served viewer revision beside the native receipt.
+# JavaScript console output is retained in Maestro's run log.
+- runScript:
+    file: scripts/capture-viewer-health.js
+    env:
+      viewerBrowserManifestUrl: ${LUPI_VIEWER_BROWSER_MANIFEST_URL}
+      viewerHealthUrl: ${LUPI_VIEWER_HEALTH_URL}
+
+- takeScreenshot:
+    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/caffeine-ready
+    label: Capture deterministic Caffeine viewer
+
+# Capture the native Room introduction without starting the camera. This is a
+# deterministic shell receipt; physical-iPhone ARKit behavior remains a
+# separate acceptance gate.
+- openLink:
+    link: lupi-dev://__visual?scenario=ar-caffeine-intro
+
+- runFlow:
+    when:
+      visible: "Open in.*Lupi.*"
+    commands:
+      - tapOn: Open
+
+- extendedWaitUntil:
+    visible:
+      id: ar-room-intro
+    timeout: 15000
+
+- assertVisible: Place Caffeine in your room
+- assertVisible: Camera privacy
+- assertVisible: Start Room View
+
+- takeScreenshot:
+    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/ar-caffeine-intro
+    label: Capture deterministic native AR introduction
+
+# Relaunch the ordinary app shell so the receipt includes the real native tab
+# bar and large-title stacks, not only gated visual-fixture routes.
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible:
+      id: gallery-screen
+    timeout: 15000
+
+- assertVisible: Gallery
+- assertVisible: 24 structures
+- assertVisible: Caffeine
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- takeScreenshot:
+    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/gallery-first-fold
+    label: Capture native Gallery first fold
+
+- tapOn: Library
+
+- extendedWaitUntil:
+    visible:
+      id: library-screen
+    timeout: 15000
+
+- assertVisible: Recent Structures
+- assertVisible: No recent structures
+
+- takeScreenshot:
+    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/library-empty
+    label: Capture native empty Library
+
+- tapOn: Settings
+
+- extendedWaitUntil:
+    visible:
+      id: settings-screen
+    timeout: 15000
+
+- assertVisible: Open Content
+- assertVisible: Open XYZ File
+- assertVisible: Secure Viewing
+
+- takeScreenshot:
+    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/settings
+    label: Capture native Settings
