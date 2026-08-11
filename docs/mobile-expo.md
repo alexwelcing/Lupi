@@ -96,7 +96,7 @@ artifact exists for the new SDK 55/runtime-fingerprint source:
 | Signed development artifact | Build `2b57a89e-e398-44a8-b799-871b7f8e3651` finished for exact clean SDK 54 revision `7c64bd70`, version/build `1.0.0 (1)`, signed for one registered iPhone                                                    | The integrated SDK 55 source, TestFlight, or physical AR acceptance        |
 | Development update          | Active on channel `development`, runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean SDK 54 revision `7c64bd70`                                                                           | Device screenshot/acceptance; the SDK 55 fingerprint requires a new binary |
 | Visual workflow             | Local contract and EAS schema passed; `eas workflow:runs --json` returned `[]`                                                                                                                                   | Any workflow/simulator execution or screenshots                            |
-| EAS archive                 | Fresh standalone archive passed for 92 files and 1,444,711 bytes, every byte matching current mobile/core source                                                                                                 | Upload or EAS builder receipt for integrated source                        |
+| EAS archive                 | Fresh standalone archive passed for 92 files and 1,707,990 bytes, every byte matching current mobile/core source                                                                                                 | Upload or EAS builder receipt for integrated source                        |
 | Live service                | `/health` ready at tag `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, timestamp `2026-08-10T19:54:28.637969Z`; edge manifest exactly seven tools and browser manifest exactly 30                                    | Compatibility observed inside the new physical binary                      |
 
 The actionable gate-by-gate record is
@@ -118,7 +118,7 @@ flowchart LR
     Viewer["ViewerScreen, toolbar, and action sheets"]
     ARRoute["Room: full-screen native AR route"]
     ARSession["Opaque in-memory AR session"]
-    ARKit["Viro 2.56 and ARKit"]
+    ARKit["Viro 2.57.5 and ARKit"]
     Saved["SavedViewHandoffScreen and 50k policy"]
     Diagnostics["About & Diagnostics and privacy boundary"]
     Recovery["Root error boundary and viewer recovery"]
@@ -228,7 +228,7 @@ The current vertical slice is:
   camera route. XYZ bytes are never route parameters or durable storage: the
   app passes a bounded opaque in-memory session ID, expires it after ten minutes,
   keeps at most three sessions, and removes the active session on route exit.
-- `/ar` is a full-screen route using Viro `2.56.0` with ARKit. It discovers
+- `/ar` is a full-screen route using Viro `2.57.5` with ARKit. It discovers
   horizontal and vertical planes, places on tap, supports drag, pinch scaling,
   two-finger rotation, atom selection, second-atom distance measurement in
   angstroms, and a native accessible atom-inspection/measurement sheet. It also
@@ -566,7 +566,7 @@ web page:
 ### Phase 1A: native Room AR development-build cut (current source)
 
 Room is the first current feature that deliberately crosses out of Expo Go.
-`@reactvision/react-viro` `2.56.0` contributes native iOS code and an Expo config
+`@reactvision/react-viro` `2.57.5` contributes native iOS code and an Expo config
 plugin, so a stock Expo Go client cannot execute it. Keep Expo Go as the quick
 feedback lane for the Gallery/Library/Settings/WebView shell; use a Lupi
 development client for Room. Rebuild that client after native dependency or
@@ -599,12 +599,22 @@ The physical acceptance sequence is:
    near-512-atom fixture. The current caps are safety limits, not performance
    promises, and should move only from physical evidence.
 
-Viro remains pinned to `2.56.0` for this Expo SDK 55 / React Native 0.83 source
-checkpoint; its upgrade is intentionally deferred. Its Expo plugin unconditionally
-excludes `arm64` for iOS simulator builds. Therefore the existing Apple-silicon `visual-ios` simulator workflow may
+Viro is pinned to `2.57.5`, whose peer range covers Expo SDK 55–57 and React
+Native 0.83–0.86. Its Expo plugin unconditionally excludes `arm64` for iOS
+simulator builds. Therefore the existing Apple-silicon `visual-ios` simulator workflow may
 need a separate non-AR profile and cannot serve as a Room receipt. Even if a
 simulator build succeeds elsewhere, it cannot prove camera permission, ARKit
 tracking, plane discovery, placement, occlusion, or real-room interaction.
+
+Viro 2.57.5 imports `@expo/config-plugins` at runtime but publishes it only as a
+development dependency. The root pnpm `packageExtensions` entry supplies exact
+SDK-55 config plugins beside Viro so direct Expo CLI and Expo Doctor processes
+do not depend on a hidden hoist or `NODE_PATH` shim.
+
+The SDK-55 Babel preset also conditionally discovers Expo Router from its own
+physical package path. A second exact package extension supplies Router beside
+the preset so a filtered strict-pnpm install still performs the app-root Babel
+transform. Without it, web export leaves `EXPO_ROUTER_APP_ROOT` unresolved.
 
 The longer-term native viewer investigation can still use an `expo-gl`
 physical-device spike. SDK 55
@@ -757,7 +767,7 @@ executes in the web runtime. It does not mean native parity.
 | Saved-view URLs                        | Exact-origin slug/URL normalization and `/view/[slug]` policy screen; no embedded render or automatic external open; explicit Safari button only                                                                                 | Keep Safari handoff until trusted atom-count/size metadata supports 50,000-atom preflight; test invalid slugs and browser errors            | In-app rendering only after trusted metadata and compatible renderer proof                   |
 | HTTPS Universal Links                  | Route/pasted-URL handling only                                                                                                                                                                                                   | Define association contract                                                                                                                 | Associated Domains + AASA, proven in development build/TestFlight                            |
 | 3D atoms and trajectories              | Hybrid WebView                                                                                                                                                                                                                   | Expo GL device spike only                                                                                                                   | Native WebGPU renderer, slice by slice                                                       |
-| Native Room AR                         | Viro 2.56 / ARKit source behind strict `export_xyz` handoff; 512 atoms, 2,048 inferred bonds, opaque in-memory session; no device receipt                                                                                        | Expo Go shows the explicit development-build boundary only                                                                                  | Physical iPhone placement, gesture, tracking, privacy, performance, and lifecycle acceptance |
+| Native Room AR                         | Viro 2.57.5 / ARKit source behind strict `export_xyz` handoff; 512 atoms, 2,048 inferred bonds, opaque in-memory session; no device receipt                                                                                      | Expo Go shows the explicit development-build boundary only                                                                                  | Physical iPhone placement, gesture, tracking, privacy, performance, and lifecycle acceptance |
 | Expo web fallback                      | 18-route static export; browser viewer handoff; post-fix 320x693 and 390x844 header/tab QA                                                                                                                                       | Keep web-only headers and top-tab spacing regression-tested                                                                                 | Does not replace WKWebView/native acceptance                                                 |
 | Viewer camera/style controls           | Compact Fit/Camera/Look/More/Share/Room toolbar with iOS action sheets and accessible fallback; camera, appearance, playback, bonds, reset, reload, share, and AR handoff cross typed boundaries                                 | Versioned bridge plus physical action-sheet, playback, Room fallback, and error receipts                                                    | Native controls drive native scene state                                                     |
 | Viewer compatibility and recovery      | Accepts legacy bridge major `0` or dated `asset-export` releases from `2026-07-07`, plus nine base tools and conditional `lupi.open_gallery_example`; probes on foreground resume; bounded recovery behavior is in source        | Deploy matching browser bridge; physical background/termination/network receipts                                                            | Preserve equivalent lifecycle contracts for a native renderer                                |
@@ -815,13 +825,13 @@ success.
 | embedded Gallery browser matrix  | 24/24 plus drift rejection                                                 | Exact atom counts, fresh renderer per molecule, and no web chrome/MCP harness; not a physical WKWebView receipt                                                             |
 | browser Gallery safety tests     | 11/11 passed                                                               | Metadata-before-fetch, max-across-trajectory, and superseded-load guards reject before stale store mutation                                                                 |
 | mobile science playback test     | 1/1 passed                                                                 | Z1 minimum-image unwrapping remains active when the embedded client omits science-panel attachment                                                                          |
-| `export:ios --clear`             | Passed; 1,372 modules, 3.5 MB HBC                                          | Clean unsigned JS/assets export only; “clean” refers to regenerated export output                                                                                           |
+| `export:ios --clear`             | Passed; 1,392 modules, 3.7 MB HBC                                          | Clean unsigned JS/assets export only; “clean” refers to regenerated export output                                                                                           |
 | EAS production config resolution | Store/autoIncrement/Node 20.19.4/`sdk-55` image/origin/project ID resolved | Configuration resolution only; not a build                                                                                                                                  |
 | iOS deployment target            | Source gate passed at `17.6`                                               | `expo-build-properties` alignment for ViroKit; absent from the existing signed `1.0.0 (1)` artifact                                                                         |
 | Signed development build         | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651`                           | Exact clean SDK 54 `7c64bd70`, version/build `1.0.0 (1)`, one registered iPhone; not the integrated SDK 55 source, TestFlight, or physical-AR acceptance                    |
 | Active development update        | Runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`              | Exact clean `7c64bd70`; channel publication only, with no device screenshot or acceptance receipt                                                                           |
 | EAS remote version               | iOS build number `1`                                                       | Initialized remotely; no production/store build exists                                                                                                                      |
-| `check:eas-archive`              | Passed for 92 files and 1,444,711 bytes (~1.38 MiB)                        | Fresh allowlisted standalone archive; every byte matches mobile/core source and required AR/config inputs are present                                                       |
+| `check:eas-archive`              | Passed for 92 files and 1,707,990 bytes (~1.63 MiB)                        | Fresh allowlisted standalone archive; every byte matches mobile/core source and required AR/config inputs are present                                                       |
 | live `/health`                   | Ready; recorded version, release tag, and timestamp                        | Live-service snapshot only; not native-build compatibility                                                                                                                  |
 
 Tests, typecheck, lint, Expo dependency/config gates, Doctor, the local visual
@@ -935,8 +945,8 @@ web favicon still uses `lupi-icon.png`. The source gate verifies those byte
 properties, but only a physical binary can prove rendered icon/splash fidelity.
 
 The root [`.easignore`](../.easignore) is a deliberate upload allowlist. The
-current isolated-candidate archive contains 92 files totaling 1,444,711 bytes
-(about 1.38 MiB), excluding tests, docs, generated exports, dependencies, and
+current isolated-candidate archive contains 92 files totaling 1,707,990 bytes
+(about 1.63 MiB), excluding tests, docs, generated exports, dependencies, and
 unrelated web/research trees. `check:eas-archive` verified it byte-for-byte
 against current source, including the root Viewer and Settings routes and
 excluding the deleted Viewer-tab routes. This is not an upload, native compile,

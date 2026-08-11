@@ -17,6 +17,9 @@ const passes = [];
 const app = readJson("app.json").expo;
 const eas = readJson("eas.json");
 const packageJson = readJson("package.json");
+const rootPackageJson = JSON.parse(
+  readFileSync(join(repositoryDirectory, "package.json"), "utf8"),
+);
 const corePackageJson = JSON.parse(
   readFileSync(
     join(repositoryDirectory, "packages", "core", "package.json"),
@@ -110,8 +113,18 @@ check(
   "Expo MCP local capabilities stay pinned for the SDK 55 checkpoint",
 );
 check(
-  packageJson.dependencies?.["@reactvision/react-viro"] === "2.56.0",
-  "Native AR renderer stays pinned to Viro 2.56 for the SDK 55 checkpoint",
+  packageJson.dependencies?.["@reactvision/react-viro"] === "2.57.5",
+  "Native AR renderer uses the Expo 55-57 compatible Viro release",
+);
+check(
+  rootPackageJson.pnpm?.packageExtensions?.["@reactvision/react-viro@2.57.5"]
+    ?.dependencies?.["@expo/config-plugins"] === "55.0.11",
+  "Viro config-plugin resolution is explicit for strict pnpm installs",
+);
+check(
+  rootPackageJson.pnpm?.packageExtensions?.["babel-preset-expo@55.0.24"]
+    ?.dependencies?.["expo-router"] === "55.0.17",
+  "Expo Router Babel discovery is explicit for strict pnpm installs",
 );
 const buildPropertiesPlugin = app.plugins?.find(
   (plugin) => Array.isArray(plugin) && plugin[0] === "expo-build-properties",

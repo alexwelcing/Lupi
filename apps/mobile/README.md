@@ -34,8 +34,11 @@ TestFlight or physical-AR acceptance receipt.
   compatible evidence for this source checkpoint.
 - iOS version source: EAS remote; build number `1` is initialized
 - EAS Node runtime: `20.19.4` in preview and production profiles
-- EAS iOS/Android image: `sdk-55`; Viro remains pinned to `2.56.0` until its
-  separately reviewed upgrade checkpoint
+- EAS iOS/Android image: `sdk-55`; Viro is pinned to `2.57.5`, whose peer range
+  spans the planned Expo SDK 55–57 upgrade checkpoints
+- pnpm supplies Viro's undeclared runtime import of Expo config plugins and
+  Router discovery from Babel through exact SDK-55 package extensions; direct
+  Expo config, Doctor, and filtered-install exports do not depend on hidden hoists
 - Metro and asset runtime: explicit `@expo/metro-runtime` and `expo-font`
   dependencies, with the corresponding `expo-font` config plugin
 - native tab shell: Expo Router's nested `NativeTabs.Trigger`, `.Icon`, and
@@ -52,7 +55,7 @@ TestFlight or physical-AR acceptance receipt.
 - strict release gate: tracked-file and clean scoped-Git checks passed; its only
   failure is the absent `submit.production.ios.ascAppId`
 - current EAS archive audit: `check:eas-archive` passed for 92 allowlisted files
-  totaling 1,444,711 bytes (approximately 1.38 MiB), byte-identical to current
+  totaling 1,707,990 bytes (approximately 1.63 MiB), byte-identical to current
   source and free of the deleted Viewer-tab routes
 - live service snapshot: `https://lupi.live/health` returned `ready: true`,
   version `2026-07-20.remote-science-data.1`, seven edge tools, release tag
@@ -207,7 +210,7 @@ a local Vite success is not production evidence.
 - a root-stack Viewer with molecule metadata, native loading/retry states, a
   safe-area-aware toolbar, manual WebView reload, WebKit content-process
   recovery, and an active-app resume probe with timed reload
-- a full-screen `/ar` Room route backed by Viro `2.56.0` and ARKit. The Viewer
+- a full-screen `/ar` Room route backed by Viro `2.57.5` and ARKit. The Viewer
   requests the active structure with the correlated `lupi.export_xyz` browser
   tool, validates and centers it natively, stores it under a short-lived opaque
   in-memory session ID, and passes only that ID through Expo Router
@@ -371,10 +374,10 @@ remain open.
 | embedded Gallery browser matrix  | 24/24 plus drift rejection                       | Fresh renderer per molecule; exact counts and no web chrome/MCP harness; not WKWebView hardware evidence                                                          |
 | browser Gallery safety tests     | 11/11 passed                                     | Prefetch atom caps, max-across-trajectory checks, and superseded-load rejection guards                                                                            |
 | mobile science playback test     | 1/1 passed                                       | Z1 minimum-image trajectory playback remains intact while the hidden science deck is omitted                                                                      |
-| `export:ios --clear`             | Passed; 1,372 modules, 3.5 MB HBC                | Clean unsigned JavaScript/assets export only                                                                                                                      |
+| `export:ios --clear`             | Passed; 1,392 modules, 3.7 MB HBC                | Clean unsigned JavaScript/assets export only                                                                                                                      |
 | production EAS config resolution | Passed                                           | Store/autoIncrement/Node 20.19.4/origin/project-ID resolution; not a build                                                                                        |
 | `check:testflight:release`       | One external blocker                             | Tracked and clean scoped-Git checks passed; `submit.production.ios.ascAppId` is absent                                                                            |
-| `check:eas-archive`              | Passed: 92 files, 1,444,711 bytes                | Fresh standalone archive; every uploaded byte matches current mobile/core source and required AR/config inputs are present                                        |
+| `check:eas-archive`              | Passed: 92 files, 1,707,990 bytes                | Fresh standalone archive; every uploaded byte matches current mobile/core source and required AR/config inputs are present                                        |
 | iOS deployment target            | Source gate passed at `17.6`                     | `expo-build-properties` alignment for ViroKit; not present in the existing signed `1.0.0 (1)` binary                                                              |
 | signed development build         | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651` | Exact clean `7c64bd70`, internal registered-iPhone artifact, `1.0.0 (1)`; predates the `1.0.1`/iOS 17.6 candidate and is not TestFlight or physical-AR acceptance |
 | active development update        | Published for runtime `1.0.0`                    | Group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean `7c64bd70`; no device screenshot/acceptance receipt                                                     |
@@ -487,9 +490,9 @@ ARKit work. `@reactvision/react-viro` is custom native code and is not bundled
 in Expo Go. A missing-native-module result in Expo Go is expected and is not AR
 evidence.
 
-Viro remains pinned to `2.56.0` for this SDK 55 / React Native 0.83 source
-checkpoint; its upgrade is deliberately deferred to the next native checkpoint.
-Its Expo config plugin excludes `arm64` for the iOS simulator,
+Viro is pinned to `2.57.5`, whose peer range supports this SDK 55 / React Native
+0.83 checkpoint and the planned SDK 56–57 upgrades. Its Expo config plugin
+excludes `arm64` for the iOS simulator,
 so the existing Apple-silicon `visual-ios` simulator workflow must not be treated
 as an AR build receipt and may require a separate non-AR profile. The authoritative
 Room feedback loop is a physical ARKit iPhone development build. JavaScript-only
@@ -542,8 +545,8 @@ alpha (`lupi-splash-mark-1024.png`); the web favicon remains `lupi-icon.png`.
 These source/byte properties do not prove on-device icon or splash fidelity.
 
 The root [`.easignore`](../../.easignore) is an allowlist. The current
-integration-candidate archive contains 92 files totaling 1,444,711 bytes (about
-1.38 MiB) and excludes tests, docs, generated exports, and unrelated web/research
+integration-candidate archive contains 92 files totaling 1,707,990 bytes (about
+1.63 MiB) and excludes tests, docs, generated exports, and unrelated web/research
 trees. `check:eas-archive` verified every archived byte against current source;
 the deleted Viewer-tab routes are absent and the root Viewer plus Settings routes
 are present. This remains a local archive-content receipt, not an upload or build.

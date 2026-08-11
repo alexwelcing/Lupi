@@ -30,7 +30,7 @@
   "dependencies": {
     "@atlas/core": "workspace:^",
     "@expo/metro-runtime": "~55.0.12",
-    "@reactvision/react-viro": "2.56.0",
+    "@reactvision/react-viro": "2.57.5",
     "expo": "~55.0.28",
     "expo-build-properties": "~55.0.16",
     "expo-constants": "~55.0.17",

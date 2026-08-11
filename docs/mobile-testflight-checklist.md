@@ -175,7 +175,7 @@ ARKit-capable iPhone.
       [`ar-session-store.ts`](../apps/mobile/src/features/ar/ar-session-store.ts),
       [`viewer-ar-handoff.ts`](../apps/mobile/src/features/viewer/viewer-ar-handoff.ts),
       and [`app/ar.tsx`](../apps/mobile/app/ar.tsx).
-- [x] **The Room surface uses native ARKit interaction in source.** Viro `2.56.0`
+- [x] **The Room surface uses native ARKit interaction in source.** Viro `2.57.5`
       provides horizontal/vertical plane discovery, tap placement, drag, pinch,
       two-finger rotation, atom selection, second-atom distance measurement, and
       a native accessible atom-inspection/measurement sheet. It also provides
@@ -305,8 +305,9 @@ revision “the candidate”; start a new candidate record after any change.
       24 stable IDs. **Owner:** Codex + Product owner. **Receipt:** live health,
       both public manifests, deployment identity, and public-origin Gallery matrix.
 - [ ] **Freeze the new native scope for the candidate.** Review the exact
-      `@reactvision/react-viro` `2.56.0` pin, `@expo/metro-runtime` and
-      `expo-font` dependencies, Viro/camera-sanitizer/font plugins,
+      `@reactvision/react-viro` `2.57.5` pin, `@expo/metro-runtime` and
+      `expo-font` dependencies, exact pnpm package extensions for Viro config
+      plugins and Router Babel discovery, Viro/camera-sanitizer/font plugins,
       `expo-build-properties` iOS `17.6` target, SDK 55's required New Architecture
       with the obsolete config flag absent, nested
       NativeTabs API, `sdk-55` EAS images, fingerprint runtime policy, and archive
@@ -350,7 +351,7 @@ receipts and do not complete G1 by themselves.
       five-capture native workflow contract passed locally; EAS accepted the workflow
       schema; the separate 12-case Expo-web composition matrix passed 63/63 semantic
       checks with no overflow or unexpected runtime failure;
-      the clean unsigned iOS export reported 1,372 modules and 3.5 MB HBC; the
+      the clean unsigned iOS export reported 1,392 modules and 3.7 MB HBC; the
       92-file archive audit passed; and the public 24-item Gallery matrix remains
       green against the 30-tool live bridge. The final clean commit and SHA remain
       a separate open freeze item. **Owner:** Codex. **Receipt:** command ledger
@@ -407,7 +408,7 @@ receipts and do not complete G1 by themselves.
 ### Source and product review before cloud build
 
 - [x] **Review declared Room permissions and native plugins at source/config
-      level.** Source now declares Viro `2.56.0`, camera-only usage copy, and a
+      level.** Source now declares Viro `2.57.5`, camera-only usage copy, and a
       local config sanitizer that removes Viro's unused microphone, photo-library,
       and location iOS descriptions. `expo-build-properties` explicitly sets the
       ViroKit-compatible iOS deployment target to `17.6`. Android blocks
@@ -670,8 +671,8 @@ npx eas-cli@latest whoami
       and the SDK 55 fingerprint needs a new compatible binary. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
 - [x] **Regenerate and audit the staged EAS upload archive allowlist.** The fresh
-      standalone archive contains 92 files totaling 1,444,711 bytes (about
-      1.38 MiB), includes the root Viewer, Settings, Room routes, AR/config plugin,
+      standalone archive contains 92 files totaling 1,707,990 bytes (about
+      1.63 MiB), includes the root Viewer, Settings, Room routes, AR/config plugin,
       and canonical core element data, and excludes the deleted
       Viewer-tab routes plus tests/docs/exports/dependencies/unrelated product
       trees, and matches every corresponding source byte. **Owner:** Codex.
@@ -702,7 +703,7 @@ npx eas-cli@latest whoami
       but its minimum iOS value is 15.1, so it does not prove the source-level
       `17.6` fix. **Owner:** Codex + Privacy reviewer. **Receipt:** generated-native
       diff and sanitized effective Info.plist/entitlements from the exact build SHA.
-- [ ] **Keep simulator evidence out of the Room lane.** Viro `2.56.0` excludes
+- [ ] **Keep simulator evidence out of the Room lane.** Viro `2.57.5` excludes
       `arm64` for the iOS simulator. Confirm whether the existing Apple-silicon
       `visual-ios` workflow needs a separate non-AR profile; never count its
       screenshots as tracking, camera, placement, occlusion, or gesture proof.
