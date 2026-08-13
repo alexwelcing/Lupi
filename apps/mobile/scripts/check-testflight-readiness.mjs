@@ -20,6 +20,10 @@ const packageJson = readJson("package.json");
 const rootPackageJson = JSON.parse(
   readFileSync(join(repositoryDirectory, "package.json"), "utf8"),
 );
+const rootLockfile = readFileSync(
+  join(repositoryDirectory, "pnpm-lock.yaml"),
+  "utf8",
+).replaceAll("\r\n", "\n");
 const corePackageJson = JSON.parse(
   readFileSync(
     join(repositoryDirectory, "packages", "core", "package.json"),
@@ -27,6 +31,7 @@ const corePackageJson = JSON.parse(
   ),
 );
 const easIgnore = readFileSync(join(repositoryDirectory, ".easignore"), "utf8");
+const appGitIgnore = readFileSync(join(appDirectory, ".gitignore"), "utf8");
 const visualWorkflow = readFileSync(
   join(appDirectory, ".eas", "workflows", "mobile-visual.yml"),
   "utf8",
@@ -84,6 +89,16 @@ check(
   "EAS CLI minimum supports the Expo visual workflow",
 );
 check(
+  rootPackageJson.packageManager === "pnpm@9.0.0",
+  "The repository pins pnpm 9.0.0 for local, CI, and EAS installs",
+);
+check(
+  readLockPackageBlock("prebuild-install@7.1.3").includes(
+    "\n    hasBin: true\n",
+  ),
+  "The frozen lock preserves canvas's prebuilt-binary installer executable",
+);
+check(
   packageJson.scripts?.["inspect:eas-archive"]?.includes(
     "eas-cli@21.7.0 build:inspect",
   ) === true &&
@@ -96,12 +111,17 @@ check(
   "Cloud archive and visual workflow commands pin EAS CLI 21.7.0",
 );
 check(
-  app.runtimeVersion?.policy === "fingerprint",
-  "EAS Update runtime version follows the native fingerprint",
+  app.runtimeVersion?.policy === "appVersion",
+  "EAS Update runtime version follows the app version",
 );
 check(
   app.updates?.url === `https://u.expo.dev/${app.extra?.eas?.projectId}`,
   "EAS Update URL is pinned to this Expo project",
+);
+check(
+  appGitIgnore.split(/\r?\n/u).includes("/ios") &&
+    appGitIgnore.split(/\r?\n/u).includes("/android"),
+  "App-local Git ignores keep post-prebuild runtime resolution in managed workflow",
 );
 check(
   packageJson.dependencies?.expo === "~57.0.12",
@@ -342,6 +362,7 @@ for (const requiredRule of [
   "!apps/mobile/app/**",
   "!apps/mobile/.eas/**",
   "!apps/mobile/.maestro/**",
+  "!apps/mobile/.gitignore",
   "!apps/mobile/assets/**",
   "!apps/mobile/src/**",
   "!apps/mobile/plugins/**",
@@ -402,6 +423,7 @@ if (strictRelease) {
   assertTracked("docs/mobile-expo.md");
   assertTracked("docs/mobile-testflight-checklist.md");
   assertTracked("pnpm-lock.yaml");
+  assertTracked("tools/verify-pnpm-lock-bins.mjs");
   try {
     const scopedStatus = execFileSync(
       "git",
@@ -417,6 +439,7 @@ if (strictRelease) {
         "docs/mobile-testflight-checklist.md",
         "packages/core/package.json",
         "pnpm-lock.yaml",
+        "tools/verify-pnpm-lock-bins.mjs",
       ],
       { cwd: repositoryDirectory, encoding: "utf8" },
     ).trim();
@@ -445,6 +468,20 @@ function check(condition, message) {
 
 function readJson(path) {
   return JSON.parse(readFileSync(join(appDirectory, path), "utf8"));
+}
+
+function readLockPackageBlock(packageKey) {
+  const marker = `\n  ${packageKey}:\n`;
+  const start = rootLockfile.indexOf(marker);
+  if (start < 0) return "";
+  const remainder = rootLockfile.slice(start + marker.length);
+  const nextPackage = /\n  \S[^\n]*:\n/u.exec(remainder)?.index;
+  return rootLockfile.slice(
+    start,
+    nextPackage === undefined
+      ? rootLockfile.length
+      : start + marker.length + nextPackage,
+  );
 }
 
 function inspectPng(path) {

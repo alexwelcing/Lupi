@@ -8,6 +8,9 @@ const requireFromApp = createRequire(join(appDirectory, "package.json"));
 
 export const EXPECTED_IOS_BUNDLE_IDENTIFIER = "live.lupi.app";
 export const EXPECTED_IOS_DEPLOYMENT_TARGET = "17.6";
+export const EXPECTED_APP_VERSION = "1.0.1";
+export const EXPECTED_RUNTIME_VERSION_POLICY = "appVersion";
+export const EXPECTED_RUNTIME_VERSION = EXPECTED_APP_VERSION;
 
 /**
  * Resolve the production Expo configuration after native config plugins have
@@ -56,6 +59,17 @@ export function inspectResolvedProductionConfig(config) {
   const passes = [];
   const ios = isRecord(config?.ios) ? config.ios : {};
   const infoPlist = isRecord(ios.infoPlist) ? ios.infoPlist : {};
+  const effectiveRuntimeVersion = ios.runtimeVersion ?? config?.runtimeVersion;
+
+  check(
+    config?.version === EXPECTED_APP_VERSION,
+    `Resolved production app version is ${EXPECTED_APP_VERSION}`,
+  );
+  check(
+    isRecord(effectiveRuntimeVersion) &&
+      effectiveRuntimeVersion.policy === EXPECTED_RUNTIME_VERSION_POLICY,
+    `Resolved production runtime policy is ${EXPECTED_RUNTIME_VERSION_POLICY}`,
+  );
 
   check(
     ios.bundleIdentifier === EXPECTED_IOS_BUNDLE_IDENTIFIER,
@@ -101,11 +115,101 @@ export function inspectResolvedProductionConfig(config) {
   }
 }
 
+export function resolveIosRuntimeVersion({ builderMetadata = false } = {}) {
+  const expoUpdatesDirectory = dirname(
+    requireFromApp.resolve("expo-updates/package.json"),
+  );
+  const env = {
+    ...process.env,
+    APP_VARIANT: "production",
+    CI: "1",
+    EAS_BUILD_PLATFORM: "ios",
+    EXPO_OFFLINE: "1",
+    EXPO_PUBLIC_VISUAL_QA: "0",
+    NO_COLOR: "1",
+  };
+
+  delete env.EAS_BUILD_PROFILE;
+  delete env.EAS_BUILD_ID;
+  delete env.EAS_BUILD_GIT_COMMIT_HASH;
+  if (builderMetadata) {
+    env.EAS_BUILD_PROFILE = "production";
+    env.EAS_BUILD_ID = "resolved-config-gate";
+    env.EAS_BUILD_GIT_COMMIT_HASH = "0123456789abcdef0123456789abcdef01234567";
+  }
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      join(expoUpdatesDirectory, "bin", "cli.js"),
+      "runtimeversion:resolve",
+      "--platform",
+      "ios",
+    ],
+    { cwd: appDirectory, encoding: "utf8", env },
+  );
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    const detail = result.stderr.trim() || result.stdout.trim();
+    throw new Error(
+      `Expo runtime resolution exited with status ${result.status}${detail ? `: ${detail}` : ""}`,
+    );
+  }
+
+  try {
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    throw new Error(
+      `Expo runtime resolution did not return JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export function inspectResolvedRuntimeVersion(result) {
+  const failures = [];
+  const passes = [];
+  check(
+    result?.runtimeVersion === EXPECTED_RUNTIME_VERSION,
+    `Resolved iOS runtime version is ${EXPECTED_RUNTIME_VERSION}`,
+  );
+  check(
+    result?.workflow === "managed",
+    "Resolved iOS runtime uses the managed workflow",
+  );
+  check(
+    result?.fingerprintSources === null,
+    "Resolved app-version runtime has no fingerprint sources",
+  );
+  return { failures, passes };
+
+  function check(condition, message) {
+    if (condition) passes.push(message);
+    else failures.push(message);
+  }
+}
+
 if (isMainModule()) {
   try {
-    const result = inspectResolvedProductionConfig(
+    const configResult = inspectResolvedProductionConfig(
       resolveProductionExpoConfig(),
     );
+    const localRuntime = resolveIosRuntimeVersion();
+    const builderRuntime = resolveIosRuntimeVersion({ builderMetadata: true });
+    const runtimeResult = inspectResolvedRuntimeVersion(localRuntime);
+    if (JSON.stringify(localRuntime) !== JSON.stringify(builderRuntime)) {
+      runtimeResult.failures.push(
+        "Resolved iOS runtime changes when EAS builder metadata is present",
+      );
+    } else {
+      runtimeResult.passes.push(
+        "Resolved iOS runtime is stable with EAS builder metadata",
+      );
+    }
+    const result = {
+      failures: [...configResult.failures, ...runtimeResult.failures],
+      passes: [...configResult.passes, ...runtimeResult.passes],
+    };
     for (const message of result.passes) console.log(`[ok] ${message}`);
     for (const message of result.failures) console.error(`[fail] ${message}`);
 

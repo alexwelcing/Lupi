@@ -23,11 +23,11 @@ The native 24-item Gallery, root-stack Viewer, focused Library, Settings, galler
 browser tool, atom-cap contract, and success-only recent-history correlation
 passed their full source/browser ladder at historical SDK 55 commit `1a56e398`.
 SDK 56 has a historical green local ladder at commit `42536acd`. SDK 57 now has
-its own green local ladder and audited 92-file archive; the final integrated
+its own green local ladder and audited 93-file archive; the final integrated
 commit still needs its full SHA recorded.
 The compatible web bridge is deployed and the earlier Room revision has a signed
 development artifact. Those receipts do not assert a signed build of the new
-SDK 57/runtime-fingerprint source, an executed visual workflow, Apple upload,
+SDK 57/runtime-1.0.1 source, an executed visual workflow, Apple upload,
 TestFlight processing, App Store release, or physical-iPhone AR pass.
 
 ## Compatibility decision: Expo SDK 57 shell plus development-client AR
@@ -95,21 +95,21 @@ The SDK 57 candidate has reached a complete local/configuration checkpoint, not
 a signed or device-tested release milestone. Cloud receipts exist for an earlier
 clean Room revision, and complete
 SDK 55 and SDK 56 local receipts exist at commits `1a56e398` and `42536acd`, but
-no signed artifact exists for the SDK 57/runtime-fingerprint source:
+no signed artifact exists for the SDK 57/runtime-1.0.1 source:
 
-| Surface                     | Verified receipt                                                                                                                                                                                                                          | Still not proven                                                           |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Expo identity               | Authenticated as `alexwelcing`; project `@alexwelcing/lupi` is linked with ID `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`                                                                                                                      | App Store Connect app/ID or the intended Lupine Science organization team  |
-| Integrated candidate        | Branch `codex/mobile-testflight-integration` based on deployed `ee0d8885`; EAS profiles pin Node `22.23.1` and the repository pins pnpm `9.0.0`                                                                                           | Final clean SHA and final frozen-install receipt                           |
-| App source identity         | Expo SDK 57.0.12, React Native 0.86.2, React 19.2.3, Router 57.0.12, version `1.0.1`, fingerprint runtime, bundle `live.lupi.app`, built-in iOS `17.6`, `sdk-57` EAS image, remote build number `1`, and exact `https://lupi.live` origin | Signed artifact of this source or on-device presentation                   |
-| Current SDK 57 checks       | Source/config gates, 105/105 tests, typecheck, zero-warning lint, `expo install --check`, 36-command visual contract, both exports, Doctor 20/20, and 41-module autolinking passed                                                        | Native compile or device behavior                                          |
-| Historical SDK 56 ladder    | Commit `42536acd`: tests, typecheck, zero-warning lint, Expo checks, Doctor 21/21, both exports, visual contracts, and 92-file/1,660,534-byte archive passed                                                                              | Current SDK 57 behavior                                                    |
-| Historical SDK 55 ladder    | Commits `d33e7aeb` and `1a56e398`: frozen install, tests, typecheck, zero-warning lint, Expo checks, Doctor 19/19, both exports, visual contracts, and archive passed                                                                     | Current SDK 57 behavior                                                    |
-| Signed development artifact | Build `2b57a89e-e398-44a8-b799-871b7f8e3651` finished for exact clean SDK 54 revision `7c64bd70`, version/build `1.0.0 (1)`, signed for one registered iPhone                                                                             | The SDK 57 source, TestFlight, or physical AR acceptance                   |
-| Development update          | Active on channel `development`, runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean SDK 54 revision `7c64bd70`                                                                                                    | Device screenshot/acceptance; the SDK 57 fingerprint requires a new binary |
-| Visual workflow             | Local contract and EAS schema passed; `eas workflow:runs --json` returned `[]`                                                                                                                                                            | Any workflow/simulator execution or screenshots                            |
-| EAS archive                 | Current SDK 57 archive passed for 92 files and 1,656,247 bytes, every byte matching current source; SDK 56 and SDK 55 archive receipts remain historical                                                                                  | Upload or EAS builder receipt                                              |
-| Live service                | `/health` ready at tag `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, timestamp `2026-08-10T19:54:28.637969Z`; edge manifest exactly seven tools and browser manifest exactly 30                                                             | Compatibility observed inside the new physical binary                      |
+| Surface                     | Verified receipt                                                                                                                                                                                                             | Still not proven                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Expo identity               | Authenticated as `alexwelcing`; project `@alexwelcing/lupi` is linked with ID `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`                                                                                                         | App Store Connect app/ID or the intended Lupine Science organization team |
+| Integrated candidate        | Branch `codex/mobile-testflight-integration` based on deployed `ee0d8885`; EAS profiles pin Node `22.23.1` and the repository pins pnpm `9.0.0`                                                                              | Final clean SHA and final frozen-install receipt                          |
+| App source identity         | Expo SDK 57.0.12, React Native 0.86.2, React 19.2.3, Router 57.0.12, version/runtime `1.0.1`, bundle `live.lupi.app`, built-in iOS `17.6`, `sdk-57` EAS image, remote build number `1`, and exact `https://lupi.live` origin | Signed artifact of this source or on-device presentation                  |
+| Current SDK 57 checks       | Source/config gates, 105/105 tests, typecheck, zero-warning lint, `expo install --check`, 36-command visual contract, both exports, Doctor 20/20, and 41-module autolinking passed                                           | Native compile or device behavior                                         |
+| Historical SDK 56 ladder    | Commit `42536acd`: tests, typecheck, zero-warning lint, Expo checks, Doctor 21/21, both exports, visual contracts, and 92-file/1,660,534-byte archive passed                                                                 | Current SDK 57 behavior                                                   |
+| Historical SDK 55 ladder    | Commits `d33e7aeb` and `1a56e398`: frozen install, tests, typecheck, zero-warning lint, Expo checks, Doctor 19/19, both exports, visual contracts, and archive passed                                                        | Current SDK 57 behavior                                                   |
+| Signed development artifact | Build `2b57a89e-e398-44a8-b799-871b7f8e3651` finished for exact clean SDK 54 revision `7c64bd70`, version/build `1.0.0 (1)`, signed for one registered iPhone                                                                | The SDK 57 source, TestFlight, or physical AR acceptance                  |
+| Development update          | Active on channel `development`, runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean SDK 54 revision `7c64bd70`                                                                                       | Device screenshot/acceptance; runtime `1.0.1` requires a new binary       |
+| Visual workflow             | Local contract and EAS schema passed; `eas workflow:runs --json` returned `[]`                                                                                                                                               | Any workflow/simulator execution or screenshots                           |
+| EAS archive                 | Current SDK 57 archive passed for 93 files and 1,657,346 bytes, every byte matching current source; SDK 56 and SDK 55 archive receipts remain historical                                                                     | Upload or EAS builder receipt                                             |
+| Live service                | `/health` ready at tag `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, timestamp `2026-08-10T19:54:28.637969Z`; edge manifest exactly seven tools and browser manifest exactly 30                                                | Compatibility observed inside the new physical binary                     |
 
 The actionable gate-by-gate record is
 [`docs/mobile-testflight-checklist.md`](mobile-testflight-checklist.md).
@@ -759,7 +759,7 @@ Gallery, focused local Library, native Settings, saved-view policy handoff, devi
 accessibility, lifecycle handling, and eventually companion/native rendering
 are part of that app value.
 
-Marketing version `1.0.1` and a fingerprint runtime policy are selected in
+Marketing version `1.0.1` and an `appVersion` runtime policy are selected in
 source, iOS deployment target `17.6` is explicit, and remote iOS build number
 `1` is initialized. A signed development binary exists only for earlier SDK 54
 version `1.0.0 (1)` / revision `7c64bd70`; it does
@@ -831,7 +831,7 @@ success.
 | Local visual contract     | Passed; 36 commands                                           | Workflow contract only; not paid cloud execution or native screenshots                                                                        |
 | `export:web --clear`      | Passed; 20 routes                                             | 1,447 server modules and 1,415 web modules; browser-fallback bundling only                                                                    |
 | `export:ios --clear`      | Passed; 1,817 modules, 4.4 MB HBC                             | Clean unsigned JavaScript/assets export only                                                                                                  |
-| `check:eas-archive`       | Passed; 92 files, 1,656,247 bytes (~1.58 MiB)                 | Fresh allowlisted archive; every byte matches current source; local archive evidence only                                                     |
+| `check:eas-archive`       | Passed; 93 files, 1,657,346 bytes (~1.58 MiB)                 | Fresh allowlisted archive; every byte matches current source; local archive evidence only                                                     |
 | EAS production config     | Resolved with `sdk-57` image and Node 22.23.1                 | Store/profile/configuration truth only; not a queued build                                                                                    |
 | iOS deployment target     | Resolved source remains configured at `17.6`                  | Built-in `ios.deploymentTarget`; absent from the existing signed `1.0.0 (1)` artifact                                                         |
 | Signed development build  | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651`              | Exact clean SDK 54 `7c64bd70`, version/build `1.0.0 (1)`, one registered iPhone; not the SDK 57 source, TestFlight, or physical-AR acceptance |
@@ -927,7 +927,7 @@ physical-device smoke separately:
 
 Expo authentication and project linking are complete. `app.json` pins owner
 `alexwelcing`, EAS project ID `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`, iOS
-bundle identifier `live.lupi.app`, marketing version `1.0.1`, fingerprint runtime
+bundle identifier `live.lupi.app`, marketing version/runtime `1.0.1`, `appVersion` runtime
 policy, and iOS deployment target `17.6`. The remote project is
 `@alexwelcing/lupi`.
 
@@ -944,7 +944,7 @@ Apple account credentials were supplied; its pre-build output was empty. A
 later authorized development build finished as
 `2b57a89e-e398-44a8-b799-871b7f8e3651` for exact clean revision `7c64bd70`,
 version/build `1.0.0 (1)`, using Xcode/iOS SDK 26 and an Ad Hoc profile for one
-registered iPhone. It predates the SDK 57/runtime-fingerprint source and is not a
+registered iPhone. It predates the SDK 57/runtime-1.0.1 source and is not a
 production, TestFlight, or physical-AR receipt. A direct
 `expo prebuild --platform ios --no-install` attempt on Windows also stopped
 honestly because Expo permits iOS native-project generation only on macOS or
@@ -957,7 +957,7 @@ web favicon still uses `lupi-icon.png`. The source gate verifies those byte
 properties, but only a physical binary can prove rendered icon/splash fidelity.
 
 The root [`.easignore`](../.easignore) is a deliberate upload allowlist. The
-current SDK 57 archive contains 92 files totaling 1,656,247 bytes (about
+current SDK 57 archive contains 93 files totaling 1,657,346 bytes (about
 1.58 MiB), and every byte matches current source. Historical SDK 56 commit
 `42536acd` produced a 92-file/1,660,534-byte archive, and historical SDK 55
 commit `1a56e398` produced a 92-file/1,707,990-byte archive. None of these local
@@ -965,14 +965,15 @@ archive receipts proves an upload, native compile, signed artifact, or EAS build
 
 ### First-beta update and reviewer boundary
 
-The app includes `expo-updates`, a fingerprint runtime policy, the linked EAS
+The app includes `expo-updates`, an `appVersion` runtime policy, the linked EAS
 Update URL, and named development/visual/preview/production channels. A
 development-channel update is active for runtime `1.0.0`, group
 `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision `7c64bd70`; no
-device screenshot or acceptance receipt exists. The new SDK 57 fingerprint needs
-a compatible binary before it can receive updates. Viro, permissions,
-config plugins, deployment-target changes, SDK changes, and other native changes
-require another binary and TestFlight build. The remote viewer/Worker
+device screenshot or acceptance receipt exists. Runtime `1.0.1` needs a
+compatible `1.0.1` binary before it can receive updates. Before every later
+Viro, permission, config-plugin, deployment-target, SDK, Metal, or other native
+compatibility change, increment the app version and ship another binary and
+TestFlight build. The remote viewer/Worker
 can still deploy independently, which is why native build, update, and remote
 identity must be recorded separately.
 
@@ -1069,7 +1070,7 @@ existing Local, CI, Deploy, Live API, and Public site lanes.
 | Final local release identity  | `git rev-parse HEAD` after all amendments; clean scope; exact remote build number; fully green strict release gate                                                  | EAS can compile/sign it, Apple can process it, or users can install it                |
 | Expo/EAS configuration        | Authenticated owner; linked project ID; resolved store/autoIncrement/Node 22.23.1/`sdk-57` image/origin profile; remote build number `1`                            | A queued or successful EAS build                                                      |
 | EAS pre-build inspection      | Remote build-number receipt plus terminal stage result                                                                                                              | Native prebuild, Apple signing, compile, artifact, or upload                          |
-| EAS build                     | EAS build URL/ID and success; exact SHA; app version/build number; native runtime fingerprint; Xcode image; signed artifact identity                                | The artifact launches on an iPhone or passed TestFlight/App Review                    |
+| EAS build                     | EAS build URL/ID and success; exact SHA; app/runtime version and build number; Xcode image; signed artifact identity                                                | The artifact launches on an iPhone or passed TestFlight/App Review                    |
 | TestFlight                    | App Store Connect build processed; exact build installed through TestFlight; physical-device acceptance report                                                      | App Review approval or public availability                                            |
 | App Store release             | Approved version/build, storefront URL and availability, clean App Store install, post-release acceptance                                                           | That a later remote web/Worker deploy remains compatible                              |
 | Current live-service snapshot | `/health` ready plus recorded version, release tag, and timestamp                                                                                                   | Compatibility inside a future Expo Go/TestFlight session                              |
@@ -1077,7 +1078,7 @@ existing Local, CI, Deploy, Live API, and Public site lanes.
 
 For every hybrid acceptance report, record both axes:
 
-1. native identity: Git SHA, Expo runtime/native fingerprint, version, and iOS
+1. native identity: Git SHA, Expo runtime version, app version, and iOS
    build number;
 2. remote identity: the exact Lupi web/Worker revision and manifest/health
    identity loaded by the WebView.

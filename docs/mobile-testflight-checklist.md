@@ -10,9 +10,9 @@ Expo login, EAS project-link/configuration, remote build-number, and earlier
 development-build receipts exist. The current integration branch
 `codex/mobile-testflight-integration` is based on live `origin/main` revision
 `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`; its new source checkpoint is Expo
-SDK 57.0.12, React Native 0.86.2, React 19.2.3, version `1.0.1`, fingerprint runtime,
+SDK 57.0.12, React Native 0.86.2, React 19.2.3, version/runtime `1.0.1`,
 and built-in iOS deployment target `17.6`. The SDK 57 local verification ladder and
-92-file/1,656,247-byte archive audit are green, but the final integrated SHA is
+93-file/1,657,346-byte archive audit are green, but the final integrated SHA is
 not frozen. A signed
 internal development build exists
 only for earlier SDK 54 exact clean revision `7c64bd70`,
@@ -69,7 +69,7 @@ ARKit-capable iPhone.
       **Receipt:** [`apps/mobile/package.json`](../apps/mobile/package.json).
 - [x] **The application identity is reserved in source.** Name `Lupi`, slug
       `lupi`, scheme `lupi`, iOS bundle identifier `live.lupi.app`, app version
-      `1.0.1`, runtime policy `fingerprint`, explicit iOS deployment target
+      `1.0.1`, runtime policy `appVersion`, explicit iOS deployment target
       `17.6`, and iPhone-only support are declared. Local `ios.buildNumber` is
       intentionally omitted because EAS owns the remote build number; that remote
       value is initialized to `1`. **Owner:** Codex. **Receipt:**
@@ -92,10 +92,10 @@ ARKit-capable iPhone.
       receipt.
 - [x] **Source has no Universal Links and has an explicit OTA runtime
       configuration.** iOS `associatedDomains` remains absent. The app includes
-      `expo-updates`, a `fingerprint` `runtimeVersion` policy, the linked Update
+      `expo-updates`, an `appVersion` `runtimeVersion` policy, the linked Update
       URL, and named EAS channels. An active development update exists for
-      runtime `1.0.0` and exact clean SDK 54 revision `7c64bd70`; the new SDK 57
-      fingerprint requires a new compatible binary. **Owner:** Codex. **Receipt:**
+      runtime `1.0.0` and exact clean SDK 54 revision `7c64bd70`; runtime `1.0.1`
+      requires a new compatible binary. **Owner:** Codex. **Receipt:**
       [`app.json`](../apps/mobile/app.json),
       [`package.json`](../apps/mobile/package.json), and the TestFlight notes.
 - [x] **Native tab routes exist for Gallery, Library, and Settings.** The tab shell
@@ -266,7 +266,7 @@ revision “the candidate”; start a new candidate record after any change.
 
 - [ ] **Name and freeze the Room candidate.** Development is isolated on
       `codex/mobile-testflight-integration`, source marketing version is `1.0.1`,
-      runtime policy is `fingerprint`, the SDK checkpoint is Expo 57 / React Native
+      runtime policy is `appVersion`, the SDK checkpoint is Expo 57 / React Native
       0.86.2 / React 19.2.3, iOS deployment target is `17.6`, and the recorded remote iOS
       build number baseline is `1`. Capture the final full SHA with
       `git rev-parse HEAD`, UTC timestamp, and effective remote build number only
@@ -321,7 +321,7 @@ revision “the candidate”; start a new candidate record after any change.
       resolution upstream. Review the Viro/camera-sanitizer/font plugins,
       built-in `ios.deploymentTarget` `17.6`, SDK 57's required New Architecture
       with the obsolete config flag absent, nested
-      NativeTabs API, `sdk-57` EAS images, fingerprint runtime policy, explicit
+      NativeTabs API, `sdk-57` EAS images, `appVersion` runtime policy, explicit
       WebView/DOM/reanimated/worklets/Metro-config dependencies, and archive
       contents. Rive and `react-native-wgpu` remain absent. Any native
       dependency/plugin change requires a new binary and candidate gate.
@@ -461,13 +461,14 @@ receipts and do not complete G1 by themselves.
       and Apple's
       [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/).
 - [x] **Decide the first-beta OTA boundary.** The candidate includes
-      `expo-updates`, a fingerprint runtime policy, the linked update URL, and
+      `expo-updates`, an `appVersion` runtime policy, the linked update URL, and
       named EAS channels. A development update is active for runtime `1.0.0`,
       group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision
-      `7c64bd70`; no device screenshot or acceptance receipt exists. The new
-      source SDK 57 fingerprint requires a compatible binary. Viro,
-      permissions, plugins, deployment-target changes, SDK changes, and other
-      native changes require a new binary. Remote web/Worker releases remain
+      `7c64bd70`; no device screenshot or acceptance receipt exists. Runtime
+      `1.0.1` requires a compatible `1.0.1` binary. Before every later Viro,
+      permission, plugin, deployment-target, SDK, Metal, or other native
+      compatibility change, increment the app version and ship a new binary.
+      Remote web/Worker releases remain
       independently identified. **Owner:** Product owner + Codex.
       **Receipt:**
       [`testflight-notes.md`](../apps/mobile/store/testflight-notes.md#first-beta-delivery-and-ota-decision).
@@ -476,7 +477,7 @@ receipts and do not complete G1 by themselves.
       and beta notes do not promise automatic `https://lupi.live/view/...`
       opening in-app. **Owner:** Product owner + Codex. **Receipt:** resolved
       config and tester copy.
-- [x] **Marketing version `1.0.1` and fingerprint runtime are aligned in source.**
+- [x] **Marketing version and runtime are both `1.0.1` in source.**
       **Owner:** Product owner + Codex. **Receipt:** [`app.json`](../apps/mobile/app.json),
       [`package.json`](../apps/mobile/package.json), and the source gate.
 - [x] **Initialize and record the remote iOS build number.** EAS owns the remote
@@ -509,7 +510,7 @@ receipts and do not complete G1 by themselves.
 G1 remains open. The integrated candidate has the complete local ladder and a
 compatible live bridge, but no durable current-source Expo Go launch is recorded,
 the strict release gate still needs the numeric App Store Connect ID, the new SDK
-55/runtime-fingerprint source lacks a signed binary, signed icon/splash behavior is
+57/runtime-1.0.1 source lacks a signed binary, signed icon/splash behavior is
 untested, and the post-amendment full SHA still must be entered in the final
 release ledger.
 
@@ -674,7 +675,7 @@ npx --yes eas-cli@21.7.0 whoami
       macOS `26.5.2`/Xcode `26.6` image. Recheck
       that its Xcode/iOS SDK meets Apple's current upload minimum. **Owner:** Codex.
       The earlier development artifact used Xcode/iOS SDK 26, but the integrated
-      SDK 57/runtime-fingerprint checkpoint still needs its own builder receipt. **Receipt:**
+      SDK 57/runtime-1.0.1 checkpoint still needs its own builder receipt. **Receipt:**
       terminal EAS build profile/image and current requirement link.
 - [x] **Resolve the public WebView origin in production EAS config.** The current
       production config resolves `EXPO_PUBLIC_LUPI_WEB_URL=https://lupi.live`.
@@ -694,10 +695,10 @@ npx --yes eas-cli@21.7.0 whoami
       acceptance.** Channel `development` points to runtime `1.0.0`, group
       `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision `7c64bd70`,
       created 2026-08-10. No screenshot or device-acceptance receipt is attached,
-      and the SDK 57 fingerprint needs a new compatible binary. **Owner:** Codex.
+      and runtime `1.0.1` needs a new compatible binary. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
 - [x] **Regenerate and audit the staged SDK 57 EAS upload archive allowlist.** The
-      current archive contains exactly 92 files totaling 1,656,247 bytes (about
+      current archive contains exactly 93 files totaling 1,657,346 bytes (about
       1.58 MiB), and every byte matches current source. **Owner:** Codex. **Receipt:**
       [`check-eas-archive.mjs`](../apps/mobile/scripts/check-eas-archive.mjs),
       regenerated `apps/mobile/.verify-artifacts/mobile-eas-archive`, and
@@ -1056,7 +1057,7 @@ network type, configured web origin, deployed web revision, and Worker revision.
 
 - [ ] **Use the exact development/TestFlight binary on a supported physical
       iPhone.** Record EAS build ID, artifact checksum, full Git SHA, native
-      runtime fingerprint, app version/build, iPhone model, iOS version, remote
+      runtime version, app version/build, iPhone model, iOS version, remote
       viewer/Worker identities, room conditions, and test date. Expo Go and the
       simulator are explicitly invalid Room runtimes. Existing signed build
       `2b57a89e` proves only the earlier `1.0.0 (1)` artifact; no physical AR

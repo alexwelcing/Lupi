@@ -17,6 +17,7 @@ const requiredFiles = new Set([
   "pnpm-workspace.yaml",
   "apps/mobile/app.config.ts",
   "apps/mobile/app.json",
+  "apps/mobile/.gitignore",
   "apps/mobile/eas.json",
   "apps/mobile/package.json",
   "apps/mobile/.eas/workflows/mobile-visual.yml",
