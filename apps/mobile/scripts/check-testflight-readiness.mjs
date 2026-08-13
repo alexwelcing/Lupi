@@ -102,8 +102,10 @@ check(
   rootPackageJson.pnpm?.overrides?.["picomatch@4.0.3"] === "4.0.5" &&
     rootPackageJson.pnpm?.overrides?.["brace-expansion@1.1.14"] === "1.1.18" &&
     rootPackageJson.pnpm?.overrides?.["brace-expansion@5.0.7"] === "5.0.9" &&
-    rootPackageJson.pnpm?.overrides?.["js-yaml@4.3.0"] === "4.3.1",
-  "Patched transitive releases close the Expo CLI high-severity audit findings",
+    rootPackageJson.pnpm?.overrides?.["js-yaml@4.3.0"] === "4.3.1" &&
+    rootPackageJson.pnpm?.overrides?.["nanoid@3.3.17"] === "3.3.18" &&
+    rootPackageJson.pnpm?.overrides?.["nanoid@<3.3.17"] === undefined,
+  "Patched transitive releases close the reviewed high-severity audit findings",
 );
 check(
   JSON.stringify(rootPackageJson.pnpm?.auditConfig?.ignoreCves) ===

@@ -54,9 +54,12 @@ TestFlight or physical-AR acceptance receipt.
 - EAS build runtime: Node `22.23.1`; the repository remains pinned to pnpm
   `9.0.0`. The final full frozen install under that exact Node/pnpm pair passed,
   including loading the published Canvas prebuilt binary.
-- dependency audit policy: patched `picomatch`, `brace-expansion`, and
-  `js-yaml` transitive releases are forced at the workspace root. The two exact
-  `image-size` high-severity advisories remain temporarily allowlisted because
+- dependency audit policy: patched `picomatch`, `brace-expansion`, `js-yaml`,
+  and `nanoid` transitive releases are forced at the workspace root. Nano ID is
+  present in Expo Router's navigation runtime as well as PostCSS build tooling;
+  the resolved calls use its default generator rather than the vulnerable
+  custom zero-size operation. The two exact `image-size` high-severity
+  advisories remain temporarily allowlisted because
   upstream has no patched release. The native app and web service do not expose
   Metro's ICNS/JXL/HEIF parsers to user input. Pull-request assets remain
   contributor-controlled and therefore retain a CI availability risk; the
@@ -66,7 +69,7 @@ TestFlight or physical-AR acceptance receipt.
   typecheck, zero-warning lint, `expo install --check`, the 36-command visual
   contract, a 20-route web export (1,447 server modules and 1,415 web modules),
   a clean unsigned iOS export (1,817 modules and 4.4 MB HBC), Expo Doctor 20/20,
-  41-module native autolinking, and an audited 93-file/1,657,633-byte EAS
+  41-module native autolinking, and an audited 93-file/1,657,631-byte EAS
   archive.
 - production EAS config resolved to store distribution, automatic build-number
   incrementing, Node `22.23.1`, the `sdk-57` image, `https://lupi.live`, and the
@@ -376,7 +379,7 @@ config gate, 105/105 tests,
 typecheck, zero-warning lint, Expo dependency compatibility, the 36-command
 visual contract, both exports, Expo Doctor 20/20, and 41-module native
 autolinking passed. The fresh EAS archive audit also passed for 93 files and
-1,657,633 bytes (about 1.58 MiB), every byte matching current source.
+1,657,631 bytes (about 1.58 MiB), every byte matching current source.
 
 | Check                       | Result                                           | Boundary                                                                                                                           |
 | --------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -390,7 +393,7 @@ autolinking passed. The fresh EAS archive audit also passed for 93 files and
 | SDK 57 visual contract      | Passed; 36 commands                              | Local workflow contract only; no paid workflow execution or native screenshot receipt                                              |
 | SDK 57 `export:web --clear` | Passed; 20 routes                                | 1,447 server modules and 1,415 web modules; browser-fallback bundling only                                                         |
 | SDK 57 `export:ios --clear` | Passed; 1,817 modules, 4.4 MB HBC                | Clean unsigned JavaScript/assets export only                                                                                       |
-| SDK 57 `check:eas-archive`  | Passed: 93 files, 1,657,633 bytes                | Fresh allowlisted archive; every byte matches current source; local archive evidence only                                          |
+| SDK 57 `check:eas-archive`  | Passed: 93 files, 1,657,631 bytes                | Fresh allowlisted archive; every byte matches current source; local archive evidence only                                          |
 | iOS deployment target       | Resolved source gate passed at `17.6`            | Built-in `ios.deploymentTarget` in `app.json`; not present in the existing signed `1.0.0 (1)` binary                               |
 | signed development build    | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651` | Exact clean SDK 54 `7c64bd70`, internal registered-iPhone artifact, `1.0.0 (1)`; not SDK 57, TestFlight, or physical-AR acceptance |
 | active development update   | Published for runtime `1.0.0`                    | Group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact SDK 54 `7c64bd70`; no SDK 57 device screenshot/acceptance receipt              |
@@ -569,7 +572,7 @@ alpha (`lupi-splash-mark-1024.png`); the web favicon remains `lupi-icon.png`.
 These source/byte properties do not prove on-device icon or splash fidelity.
 
 The root [`.easignore`](../../.easignore) is an allowlist. The current SDK 57
-archive contains 93 files totaling 1,657,633 bytes (about 1.58 MiB); every byte
+archive contains 93 files totaling 1,657,631 bytes (about 1.58 MiB); every byte
 matches current source. Historical SDK 56 commit `42536acd` produced a
 92-file/1,660,534-byte archive, and historical SDK 55 commit `1a56e398` produced
 a 92-file/1,707,990-byte archive. All are local archive-content receipts, not an

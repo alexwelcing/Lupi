@@ -12,8 +12,8 @@ Windows and Linux checkouts.
 
 | File | SHA-256 |
 |---|---|
-| `package.json` | `AE5DB2098D8073792D1C080F61477236402F0BAF8271B6AC585B8985C24E0DE0` |
-| `pnpm-lock.yaml` | `38773B2F8D7638348A55CDF5940B1B2447C3FA5D963D146AE07092EF53F56789` |
+| `package.json` | `EDC046BC259C0EE0A512BBF6808DEAA1077B66425FE561C4A4219B3975A73FA8` |
+| `pnpm-lock.yaml` | `FB00A7D4DF16077EB95FF3BFC9EEA4E6AD7C9391147C5203AC2967FAA57880FF` |
 | `functions/package.json` | `8D7B95FD0EF680C989E46866265EE3D6B6CEDEFAE4496A88B2C4F42AC8560672` |
 | `functions/package-lock.json` | `0730C78D3614B40288F26A139BCA33B5339D3167C84C74B22C0FF0B9E63DFB58` |
 
@@ -48,6 +48,7 @@ Windows and Linux checkouts.
 | `GHSA-c2c7-rcm5-vvqj` | `picomatch` | `4.0.3` -> `4.0.5` | high | Expo/React Native build tooling through `tinyglobby` | Build-time only; Lupi does not accept remote glob expressions. | Constrained only the resolved vulnerable `4.0.3` source version to patched `4.0.5`. |
 | `GHSA-mh99-v99m-4gvg`, `GHSA-rgw5-rvv9-x895` | `brace-expansion` | `1.1.14` -> `1.1.18`; `5.0.7` -> `5.0.9` | high | Expo CLI/config build tooling through `glob` and `minimatch` | Build-time only; patterns originate in repository and Expo configuration. | Constrained only the two resolved vulnerable source versions to compatible patched releases. |
 | `GHSA-5p4m-2wfm-xmqj` | `js-yaml` | `4.3.0` -> `4.3.1` | high | Expo CLI display/build tooling through `@expo/xcpretty` | Build-time only; no app or service endpoint parses attacker-supplied YAML through this path. | Constrained only the resolved vulnerable `4.3.0` source version to patched `4.3.1`. |
+| `GHSA-2v37-7h3g-55p8` | `nanoid` | `3.3.17` -> `3.3.18` | high | Mobile/web navigation runtime through Expo Router; CSS build tooling through PostCSS | Expo Router's reachable calls use the default generator and never pass an attacker-controlled custom size of zero; Lupi has no first-party custom zero-size call. | Constrained only the resolved `3.3.17` source version to patched `3.3.18`, closing the production dependency audit and future transitive-use risk. |
 
 The repository override keys include the vulnerable source version, rather than
 globally replacing every version of a package. They are limited to versions
