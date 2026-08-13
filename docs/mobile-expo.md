@@ -108,7 +108,7 @@ no signed artifact exists for the SDK 57/runtime-1.0.1 source:
 | Signed development artifact | Build `2b57a89e-e398-44a8-b799-871b7f8e3651` finished for exact clean SDK 54 revision `7c64bd70`, version/build `1.0.0 (1)`, signed for one registered iPhone                                                                | The SDK 57 source, TestFlight, or physical AR acceptance                  |
 | Development update          | Active on channel `development`, runtime `1.0.0`, group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean SDK 54 revision `7c64bd70`                                                                                       | Device screenshot/acceptance; runtime `1.0.1` requires a new binary       |
 | Visual workflow             | Local contract and EAS schema passed; `eas workflow:runs --json` returned `[]`                                                                                                                                               | Any workflow/simulator execution or screenshots                           |
-| EAS archive                 | Current SDK 57 archive passed for 93 files and 1,657,510 bytes, every byte matching current source; SDK 56 and SDK 55 archive receipts remain historical                                                                     | Upload or EAS builder receipt                                             |
+| EAS archive                 | Current SDK 57 archive passed for 93 files and 1,657,633 bytes, every byte matching current source; SDK 56 and SDK 55 archive receipts remain historical                                                                     | Upload or EAS builder receipt                                             |
 | Live service                | `/health` ready at tag `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, timestamp `2026-08-10T19:54:28.637969Z`; edge manifest exactly seven tools and browser manifest exactly 30                                                | Compatibility observed inside the new physical binary                     |
 
 The actionable gate-by-gate record is
@@ -847,7 +847,7 @@ success.
 | Local visual contract     | Passed; 36 commands                                           | Workflow contract only; not paid cloud execution or native screenshots                                                                        |
 | `export:web --clear`      | Passed; 20 routes                                             | 1,447 server modules and 1,415 web modules; browser-fallback bundling only                                                                    |
 | `export:ios --clear`      | Passed; 1,817 modules, 4.4 MB HBC                             | Clean unsigned JavaScript/assets export only                                                                                                  |
-| `check:eas-archive`       | Passed; 93 files, 1,657,510 bytes (~1.58 MiB)                 | Fresh allowlisted archive; every byte matches current source; local archive evidence only                                                     |
+| `check:eas-archive`       | Passed; 93 files, 1,657,633 bytes (~1.58 MiB)                 | Fresh allowlisted archive; every byte matches current source; local archive evidence only                                                     |
 | EAS production config     | Resolved with `sdk-57` image and Node 22.23.1                 | Store/profile/configuration truth only; not a queued build                                                                                    |
 | iOS deployment target     | Resolved source remains configured at `17.6`                  | Built-in `ios.deploymentTarget`; absent from the existing signed `1.0.0 (1)` artifact                                                         |
 | Signed development build  | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651`              | Exact clean SDK 54 `7c64bd70`, version/build `1.0.0 (1)`, one registered iPhone; not the SDK 57 source, TestFlight, or physical-AR acceptance |
@@ -973,7 +973,7 @@ web favicon still uses `lupi-icon.png`. The source gate verifies those byte
 properties, but only a physical binary can prove rendered icon/splash fidelity.
 
 The root [`.easignore`](../.easignore) is a deliberate upload allowlist. The
-current SDK 57 archive contains 93 files totaling 1,657,510 bytes (about
+current SDK 57 archive contains 93 files totaling 1,657,633 bytes (about
 1.58 MiB), and every byte matches current source. Historical SDK 56 commit
 `42536acd` produced a 92-file/1,660,534-byte archive, and historical SDK 55
 commit `1a56e398` produced a 92-file/1,707,990-byte archive. None of these local
