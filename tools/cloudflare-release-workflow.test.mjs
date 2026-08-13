@@ -495,6 +495,11 @@ function assertCiContract(workflow) {
     assert.notEqual(step['continue-on-error'], true, `CI gate cannot continue on error: ${command}`);
     assert.equal(step.if, undefined, `CI gate cannot be conditional: ${command}`);
   }
+  const auditStep = stepNamed(job, 'Gate root production dependencies');
+  assert.equal(auditStep.env?.NODE_OPTIONS, '--max-old-space-size=8192');
+  const mobileJob = workflow.jobs?.['mobile-testflight-source'];
+  assert.ok(mobileJob, 'CI mobile-testflight-source job is required');
+  assert.equal(mobileJob['timeout-minutes'], 45, 'mobile source verification must bound parser availability risk');
   assertFullShaActions('ci.yml', workflow);
   assertManifestPnpmAuthority('ci.yml', workflow);
 }
@@ -644,6 +649,8 @@ function assertDeployContract(workflow) {
   assert.match(String(actionlintBootstrap.run), /sha256sum --check --strict/);
   const releaseGate = stepNamed(jobs['release-package'], 'Run every source-side release gate');
   assert.equal(releaseGate.env?.LUPI_FIREBASE_WEB_API_KEY, '${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}');
+  assert.equal(releaseGate.env?.NODE_OPTIONS, undefined);
+  assert.ok(runLines(releaseGate).includes('NODE_OPTIONS=--max-old-space-size=8192 pnpm audit --prod --audit-level high'));
   assert.match(String(releaseGate.run), /VITE_FIREBASE_API_KEY="\$LUPI_FIREBASE_WEB_API_KEY" pnpm build/);
   const releaseCommands = runLines(releaseGate);
   assert.ok(

@@ -99,6 +99,18 @@ check(
   "The frozen lock preserves canvas's prebuilt-binary installer executable",
 );
 check(
+  rootPackageJson.pnpm?.overrides?.["picomatch@4.0.3"] === "4.0.5" &&
+    rootPackageJson.pnpm?.overrides?.["brace-expansion@1.1.14"] === "1.1.18" &&
+    rootPackageJson.pnpm?.overrides?.["brace-expansion@5.0.7"] === "5.0.9" &&
+    rootPackageJson.pnpm?.overrides?.["js-yaml@4.3.0"] === "4.3.1",
+  "Patched transitive releases close the Expo CLI high-severity audit findings",
+);
+check(
+  JSON.stringify(rootPackageJson.pnpm?.auditConfig?.ignoreCves) ===
+    JSON.stringify(["CVE-2025-71329", "CVE-2025-71330"]),
+  "The unpatched Metro image parser exceptions stay exact and reviewable",
+);
+check(
   packageJson.scripts?.["inspect:eas-archive"]?.includes(
     "eas-cli@21.7.0 build:inspect",
   ) === true &&

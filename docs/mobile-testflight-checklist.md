@@ -12,7 +12,7 @@ development-build receipts exist. The current integration branch
 `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`; its new source checkpoint is Expo
 SDK 57.0.12, React Native 0.86.2, React 19.2.3, version/runtime `1.0.1`,
 and built-in iOS deployment target `17.6`. The SDK 57 local verification ladder and
-93-file/1,657,346-byte archive audit are green, but the final integrated SHA is
+93-file/1,657,510-byte archive audit are green, but the final integrated SHA is
 not frozen. A signed
 internal development build exists
 only for earlier SDK 54 exact clean revision `7c64bd70`,
@@ -282,13 +282,14 @@ revision “the candidate”; start a new candidate record after any change.
       `pnpm install --ignore-scripts` was a
       local relink workaround, not an acceptable clean-install receipt. Source
       engines and every EAS profile now use Node `22.23.1`; pnpm remains `9.0.0`.
-      **Owner:** Codex. **Receipt:** source gate and resolved EAS config. The
-      final frozen install under this exact runtime remains the next item.
-- [ ] **Install the frozen SDK 57 lockfile without bypassing lifecycle scripts.**
-      The historical SDK 56 lockfile passed under Node `20.19.4`, but that does
-      not prove the current dependency graph. **Owner:** Codex. **Receipt:**
-      `pnpm install --frozen-lockfile --filter @lupi/mobile...` under Node
-      `22.23.1`, exit 0, followed by the focused verification ladder.
+      **Owner:** Codex. **Receipt:** source gate, resolved EAS config, and the
+      exact-runtime frozen install in the next item.
+- [x] **Install the frozen SDK 57 lockfile without bypassing lifecycle scripts.**
+      Exact Node `22.23.1` and pnpm `9.0.0` completed the full frozen workspace
+      install with lifecycle scripts enabled; Canvas loaded its published
+      prebuilt binary. **Owner:** Codex. **Receipt:**
+      `pnpm install --frozen-lockfile` under Node `22.23.1`, exit 0, followed by
+      the focused verification ladder.
 - [x] **Set the candidate web origin deliberately.** The resolved production
       value is `EXPO_PUBLIC_LUPI_WEB_URL=https://lupi.live`; no secret, LAN, or
       localhost value is present. **Owner:** Product owner + Codex. **Receipt:**
@@ -698,7 +699,7 @@ npx --yes eas-cli@21.7.0 whoami
       and runtime `1.0.1` needs a new compatible binary. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
 - [x] **Regenerate and audit the staged SDK 57 EAS upload archive allowlist.** The
-      current archive contains exactly 93 files totaling 1,657,346 bytes (about
+      current archive contains exactly 93 files totaling 1,657,510 bytes (about
       1.58 MiB), and every byte matches current source. **Owner:** Codex. **Receipt:**
       [`check-eas-archive.mjs`](../apps/mobile/scripts/check-eas-archive.mjs),
       regenerated `apps/mobile/.verify-artifacts/mobile-eas-archive`, and

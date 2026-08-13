@@ -1,8 +1,8 @@
 # Dependency security baseline
 
-Snapshot date: 2026-07-19
+Snapshot date: 2026-08-13
 
-Git parent base: `baf445a0b99d59b5dc99cfd1f493cf997c8944b9`
+Git parent base: `50adc18a1eda20187b67b2d6ab69d93215856954`
 
 Dependency-state identity: Git identifies the committed implementation snapshot;
 the parent base and manifest/lockfile SHA-256 values below independently bind the
@@ -12,24 +12,27 @@ Windows and Linux checkouts.
 
 | File | SHA-256 |
 |---|---|
-| `package.json` | `321031DADF890D6A2A0A327956C4E7C34836CEEE16B189D9E01B4E7A89FF41B1` |
-| `pnpm-lock.yaml` | `A226B6969E014A5B512BDF130F37F0802C7D7DD4EA055794AA9CA97A256C9299` |
+| `package.json` | `240E5E60C30B9C5B8C1CED40B0245C453DD9ABB1D75B78F0410F24A78CB44C57` |
+| `pnpm-lock.yaml` | `9A27AD772EBFA1302E35C93E2C6D6FAF72BD766507485DEB43A6591461D56A3E` |
 | `functions/package.json` | `8D7B95FD0EF680C989E46866265EE3D6B6CEDEFAE4496A88B2C4F42AC8560672` |
 | `functions/package-lock.json` | `0730C78D3614B40288F26A139BCA33B5339D3167C84C74B22C0FF0B9E63DFB58` |
 
 ## Gate policy and result
 
 - Repository production closure: `pnpm audit --prod --audit-level high`
-  exits 0 with zero known vulnerabilities at all severities (488 production
-  dependencies).
+  exits 0 under the documented 8 GiB Node heap. It reports one low, three
+  moderate, and the two exact ignored high-severity Metro build-tool findings
+  recorded below. It reports no unreviewed high or critical finding.
 - Cloud Functions production closure:
   `npm audit --prefix functions --omit=dev --audit-level=high` exits 0 with no
   high or critical finding (159 production dependencies). Eight package-level
   moderate entries remain, all caused by one `uuid` advisory and recorded
   below.
-- A high or critical exception is not permitted. Moderate findings require an
-  explicit reachability and disposition record; `uncertain` is not treated as
-  `unreachable`.
+- A high or critical exception is not normally permitted. A temporary exception
+  requires an exact CVE allowlist, no available patched release, bounded
+  build-only reachability, an explicit removal trigger, and a retained record
+  below. Moderate findings require an explicit reachability and disposition
+  record; `uncertain` is not treated as `unreachable`.
 - The root `serve` dependency was removed because `pnpm start` uses the native
   Node server in `tools/serve-web.mjs`.
 
@@ -42,11 +45,36 @@ Windows and Linux checkouts.
 | npm `1119108`, `1123259` | `ws` | `8.17.1` -> `8.21.0` | moderate, high | creative tooling: `@remotion/cli -> @remotion/renderer -> ws` | Reachable while running Remotion Studio or rendering trailers; not deployed by Lupi web/Worker builds. | The supported Remotion `4.0.494` lockstep upgrade supplies fixed `ws@8.21.0`. No override is used for `ws`; no known advisory remains. |
 | npm `1123482`, `1123483` | `websocket-driver` | `0.7.4` -> `0.7.5` | moderate, critical | public web: `firebase -> @firebase/database -> faye-websocket -> websocket-driver` | Present in the aggregate Firebase browser runtime. It is not safe to call it unreachable merely because current first-party code primarily uses Firestore. | Upgraded Firebase to `12.16.0`; because the current parent still resolved the vulnerable patch, constrained only `websocket-driver@0.7.4` to `0.7.5`, admitted by `faye-websocket`'s `>=0.5.1` range. No known advisory remains. |
 | npm `1123492` | `protobufjs` | `7.6.1` -> `7.6.3` | moderate | public web: `firebase -> @firebase/firestore -> @grpc/proto-loader -> protobufjs` | Reachable through saved-view and other Firestore behavior. | Upgraded Firebase to `12.16.0`; constrained only vulnerable `protobufjs@7.6.1` to the fixed patch admitted by the proto-loader range. No known advisory remains. |
+| `GHSA-c2c7-rcm5-vvqj` | `picomatch` | `4.0.3` -> `4.0.5` | high | Expo/React Native build tooling through `tinyglobby` | Build-time only; Lupi does not accept remote glob expressions. | Constrained only the resolved vulnerable `4.0.3` source version to patched `4.0.5`. |
+| `GHSA-mh99-v99m-4gvg`, `GHSA-rgw5-rvv9-x895` | `brace-expansion` | `1.1.14` -> `1.1.18`; `5.0.7` -> `5.0.9` | high | Expo CLI/config build tooling through `glob` and `minimatch` | Build-time only; patterns originate in repository and Expo configuration. | Constrained only the two resolved vulnerable source versions to compatible patched releases. |
+| `GHSA-5p4m-2wfm-xmqj` | `js-yaml` | `4.3.0` -> `4.3.1` | high | Expo CLI display/build tooling through `@expo/xcpretty` | Build-time only; no app or service endpoint parses attacker-supplied YAML through this path. | Constrained only the resolved vulnerable `4.3.0` source version to patched `4.3.1`. |
 
 The repository override keys include the vulnerable source version, rather than
 globally replacing every version of a package. They are limited to versions
 already admitted by the direct parent ranges and are covered by workspace,
 Cloudflare Worker, and browser regressions.
+
+## Retained high-severity build-tool exceptions
+
+`CVE-2025-71329` (`GHSA-5p2g-fcmc-qvqq`) and `CVE-2025-71330`
+(`GHSA-w3rx-r6r6-pgpr`) affect `image-size@1.2.1` parsers for crafted JXL,
+HEIF, and ICNS buffers. GitHub's reviewed advisories list no patched release.
+The package is present through Metro. Lupi does not route uploaded, imported,
+or remote molecule content through these image parsers, so the installed app
+and public service are not exposed through this dependency path. Pull-request
+assets are nevertheless contributor-controlled and Metro detects image formats
+from buffer contents, leaving a CI availability risk for crafted build inputs.
+The `mobile-testflight-source` job is capped at 45 minutes to bound that risk.
+Both CVEs are listed exactly in `pnpm.auditConfig.ignoreCves`; no package-wide
+or severity exception is used. Remove both entries as soon as Metro selects a
+fixed `image-size` release, or immediately if this reachability boundary
+changes.
+
+pnpm 9 expands every advisory path across the combined Expo/R3F peer graph and
+exceeds Node's default 4 GiB heap before applying CVE exceptions. CI and the
+Cloudflare release package therefore give only this audit step an 8 GiB heap.
+The accepted run peaked at approximately 4.9 GiB and completed in 272.7 seconds.
+This is capacity for the audited graph, not an exception to the audit result.
 
 ## Remediated Cloud Functions advisories
 
@@ -102,6 +130,7 @@ Run from the repository root:
 
 ```powershell
 pnpm install --frozen-lockfile
+$env:NODE_OPTIONS='--max-old-space-size=8192'
 pnpm audit --prod --json
 pnpm audit --prod --audit-level high
 pnpm -r why --prod websocket-driver protobufjs fast-uri ws postcss

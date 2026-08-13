@@ -68,6 +68,7 @@ permissions:
 jobs:
   mobile-testflight-source:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       CI: "1"
       EXPO_NO_TELEMETRY: "1"
@@ -144,6 +145,8 @@ jobs:
         run: pnpm lint
 
       - name: Gate root production dependencies
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm audit --prod --audit-level high
 
       - name: Test Cloudflare live verifier
