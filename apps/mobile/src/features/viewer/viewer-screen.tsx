@@ -68,6 +68,9 @@ const DEFAULT_MOLECULE: MoleculeLoadInput = {
   input: "Caffeine",
 };
 
+const VISUAL_QA_RENDER_SETTLE_TIMEOUT_MS = 10_000;
+const VISUAL_QA_RENDER_PROBE_INTERVAL_MS = 250;
+
 interface PendingVisualQaCommand {
   commandIndex: number;
   id: string;
@@ -140,6 +143,7 @@ function ViewerScreenSession({
   const pendingResumeProbeId = useRef<string | null>(null);
   const resumeProbeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingVisualQaCommand = useRef<PendingVisualQaCommand | null>(null);
+  const pendingVisualQaProbeId = useRef<string | null>(null);
   const previousAppState = useRef<AppStateStatus>(AppState.currentState);
   const automaticRuntimeRecoveryAttempts = useRef(0);
   const [bridgeReadyMoleculeKey, setBridgeReadyMoleculeKey] = useState<
@@ -147,6 +151,7 @@ function ViewerScreenSession({
   >(null);
   const [moleculeLoaded, setMoleculeLoaded] = useState(false);
   const [atomCount, setAtomCount] = useState<number | undefined>();
+  const [bondCount, setBondCount] = useState<number | undefined>();
   const [lastError, setLastError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
   const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
@@ -169,6 +174,7 @@ function ViewerScreenSession({
       if (resumeProbeTimeout.current) clearTimeout(resumeProbeTimeout.current);
       if (arExportTimeout.current) clearTimeout(arExportTimeout.current);
       pendingVisualQaCommand.current = null;
+      pendingVisualQaProbeId.current = null;
     },
     [clearInitialRequestTimeout],
   );
@@ -185,6 +191,7 @@ function ViewerScreenSession({
       return;
     clearInitialRequestTimeout();
     setAtomCount(undefined);
+    setBondCount(undefined);
     timedOutInitialRequestId.current = null;
     initialExecutionKey.current = moleculeKey;
     const command = initialViewerCommand(molecule);
@@ -241,6 +248,7 @@ function ViewerScreenSession({
       setArPreparing(false);
       setArAvailable(false);
       setAtomCount(undefined);
+      setBondCount(undefined);
       setBridgeReadyMoleculeKey(null);
       return;
     }
@@ -269,6 +277,7 @@ function ViewerScreenSession({
     bridgeVersion.current = status.version;
     setArAvailable(status.toolNames?.includes(VIEWER_AR_EXPORT_TOOL) === true);
     if (typeof status.atomCount === "number") setAtomCount(status.atomCount);
+    if (typeof status.bondCount === "number") setBondCount(status.bondCount);
   };
 
   const reloadViewer = (notice = "Preparing a fresh 3D view…") => {
@@ -278,6 +287,7 @@ function ViewerScreenSession({
     setBridgeReadyMoleculeKey(null);
     setMoleculeLoaded(false);
     setAtomCount(undefined);
+    setBondCount(undefined);
     initialExecutionKey.current = null;
     pendingInitialRequest.current = null;
     timedOutInitialRequestId.current = null;
@@ -293,6 +303,7 @@ function ViewerScreenSession({
     if (resumeProbeTimeout.current) clearTimeout(resumeProbeTimeout.current);
     resumeProbeTimeout.current = null;
     pendingVisualQaCommand.current = null;
+    pendingVisualQaProbeId.current = null;
     setVisualQaCommandsComplete(!visualQaEnabled);
     surfaceRef.current?.reload();
   };
@@ -399,6 +410,11 @@ function ViewerScreenSession({
       return;
     }
     if (message.type === "probe") {
+      if (message.id === pendingVisualQaProbeId.current) {
+        pendingVisualQaProbeId.current = null;
+        applyBridgeStatus(message.status);
+        return;
+      }
       if (message.id !== pendingResumeProbeId.current) return;
       pendingResumeProbeId.current = null;
       if (resumeProbeTimeout.current) clearTimeout(resumeProbeTimeout.current);
@@ -507,6 +523,51 @@ function ViewerScreenSession({
     return () => subscription.remove();
   }, [bridgeReady]);
 
+  useEffect(() => {
+    if (
+      !visualQa ||
+      !bridgeReady ||
+      !moleculeLoaded ||
+      !visualQaCommandsComplete ||
+      lastError ||
+      (bondCount ?? 0) >= visualQa.minimumBondCount
+    )
+      return;
+
+    const startedAt = Date.now();
+    const probeRenderedBonds = () => {
+      if (Date.now() - startedAt >= VISUAL_QA_RENDER_SETTLE_TIMEOUT_MS) {
+        setLastError(
+          "The molecule loaded, but its bonds did not finish rendering for visual verification.",
+        );
+        return;
+      }
+      if (pendingVisualQaProbeId.current) return;
+      const surface = surfaceRef.current;
+      if (!surface) return;
+      const id = `visual-bonds-${Date.now()}`;
+      pendingVisualQaProbeId.current = id;
+      surface.probe(id);
+    };
+
+    probeRenderedBonds();
+    const interval = setInterval(
+      probeRenderedBonds,
+      VISUAL_QA_RENDER_PROBE_INTERVAL_MS,
+    );
+    return () => {
+      clearInterval(interval);
+      pendingVisualQaProbeId.current = null;
+    };
+  }, [
+    bondCount,
+    bridgeReady,
+    lastError,
+    moleculeLoaded,
+    visualQa,
+    visualQaCommandsComplete,
+  ]);
+
   const execute = (tool: string, args: Record<string, unknown> = {}) => {
     setLastError(null);
     surfaceRef.current?.execute(makeViewerRequest(tool, args));
@@ -613,9 +674,11 @@ function ViewerScreenSession({
   const visualQaReady = visualQa
     ? isVisualQaViewerReady({
         atomCount,
+        bondCount,
         bridgeReady,
         commandsComplete: visualQaCommandsComplete,
         expectedAtomCount: visualQa.expectedAtomCount,
+        minimumBondCount: visualQa.minimumBondCount,
         hasError: Boolean(lastError),
         moleculeLoaded,
       })

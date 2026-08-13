@@ -3,7 +3,15 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { SymbolView, type SFSymbol } from "expo-symbols";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -27,11 +35,12 @@ import {
   type MoleculeArAtom,
   type MoleculeArScene,
 } from "./ar-scene";
-import { checkMoleculeArSupport, requestMoleculeArCamera } from "./ar-runtime";
-import {
-  MoleculeArSurface,
-  type MoleculeArSurfaceState,
-} from "./molecule-ar-surface";
+import type { MoleculeArSurfaceState } from "./molecule-ar-surface.types";
+
+const NativeMoleculeArSurface = lazy(async () => {
+  const module = await import("./molecule-ar-surface");
+  return { default: module.MoleculeArSurface };
+});
 
 type ArScreenPhase =
   | "intro"
@@ -76,7 +85,19 @@ export function ArScreen({ scene }: { scene: MoleculeArScene | null }) {
 
     setMessage(null);
     setPhase("checking");
-    const support = await checkMoleculeArSupport();
+    let arRuntime: typeof import("./ar-runtime");
+    try {
+      arRuntime = await import("./ar-runtime");
+    } catch {
+      if (!mounted.current) return;
+      setMessage(
+        "Native room view could not start in this build. Close and reopen Lupi, then try again.",
+      );
+      setPhase("unsupported");
+      return;
+    }
+    if (!mounted.current) return;
+    const support = await arRuntime.checkMoleculeArSupport();
     if (!mounted.current) return;
     if (!support.supported) {
       setMessage(
@@ -86,7 +107,7 @@ export function ArScreen({ scene }: { scene: MoleculeArScene | null }) {
       return;
     }
 
-    const cameraGranted = await requestMoleculeArCamera();
+    const cameraGranted = await arRuntime.requestMoleculeArCamera();
     if (!mounted.current) return;
     if (!cameraGranted) {
       setMessage(
@@ -371,14 +392,16 @@ export function ArScreen({ scene }: { scene: MoleculeArScene | null }) {
       testID="ar-room-screen"
     >
       <StatusBar style="light" />
-      <MoleculeArSurface
-        onAtomSelected={handleAtomSelected}
-        onError={handleSurfaceError}
-        onStateChange={handleSurfaceState}
-        resetToken={resetToken}
-        scene={scene}
-        selectedAtomIndices={selectedAtomIndices}
-      />
+      <Suspense fallback={<ArSurfaceLoadingState />}>
+        <NativeMoleculeArSurface
+          onAtomSelected={handleAtomSelected}
+          onError={handleSurfaceError}
+          onStateChange={handleSurfaceState}
+          resetToken={resetToken}
+          scene={scene}
+          selectedAtomIndices={selectedAtomIndices}
+        />
+      </Suspense>
       <View
         pointerEvents="box-none"
         style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
@@ -582,6 +605,26 @@ export function ArScreen({ scene }: { scene: MoleculeArScene | null }) {
         selectedAtomIndices={selectedAtomIndices}
         visible={atomInspectorOpen}
       />
+    </View>
+  );
+}
+
+function ArSurfaceLoadingState() {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        backgroundColor: "#000000",
+        flex: 1,
+        gap: 12,
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <ActivityIndicator color={colors.accent} size="large" />
+      <Text selectable style={{ color: colors.textMuted, fontSize: 15 }}>
+        Starting the room renderer…
+      </Text>
     </View>
   );
 }

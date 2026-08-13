@@ -24,7 +24,7 @@ jobs:
       profile: visual-ios
 
   capture_native_app:
-    name: Capture native app on iPhone 16 Plus
+    name: Capture viewer and native shell on iPhone 16 Plus
     needs: [build_ios_visual]
     type: maestro
     environment: preview

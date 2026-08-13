@@ -23,7 +23,7 @@
     "check:testflight:release": "node scripts/check-testflight-readiness.mjs --release",
     "check:eas-archive": "node scripts/check-eas-archive.mjs .verify-artifacts/mobile-eas-archive",
     "check:visual-workflow:local": "node scripts/check-visual-workflow.mjs",
-    "check:visual-workflow": "pnpm check:visual-workflow:local && npx --yes eas-cli@21.7.0 workflow:validate .eas/workflows/mobile-visual.yml --non-interactive",
+    "check:visual-workflow": "pnpm check:visual-workflow:local && npx --yes eas-cli@21.7.0 workflow:validate .eas/workflows/mobile-visual.yml --non-interactive && npx --yes eas-cli@21.7.0 workflow:validate .eas/workflows/mobile-visual-capture.yml --non-interactive && npx --yes eas-cli@21.7.0 workflow:validate .eas/workflows/mobile-visual-ar-diagnostic.yml --non-interactive",
     "visual:ios:cloud": "npx --yes eas-cli@21.7.0 workflow:run .eas/workflows/mobile-visual.yml --wait",
     "inspect:eas-archive": "npx --yes eas-cli@21.7.0 build:inspect --platform ios --stage archive --profile production --output .verify-artifacts/mobile-eas-archive --force && node scripts/check-eas-archive.mjs .verify-artifacts/mobile-eas-archive",
     "check:expo": "expo install --check",

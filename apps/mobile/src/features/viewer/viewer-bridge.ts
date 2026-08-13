@@ -11,6 +11,8 @@ export interface ViewerBridgeStatus {
   toolNames?: string[];
   moleculeLoaded?: boolean;
   atomCount?: number;
+  bondCount?: number;
+  bondSource?: "cpu" | "gpu" | "none";
   frame?: number;
   playing?: boolean;
 }

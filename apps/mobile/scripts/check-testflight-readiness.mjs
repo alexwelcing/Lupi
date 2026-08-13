@@ -40,6 +40,15 @@ const visualFlow = readFileSync(
   join(appDirectory, ".maestro", "visual", "caffeine-ready.yml"),
   "utf8",
 );
+const arDiagnosticFlow = readFileSync(
+  join(
+    appDirectory,
+    ".maestro",
+    "visual",
+    "ar-intro-simulator-diagnostic.yml",
+  ),
+  "utf8",
+);
 const viewerHealthScript = readFileSync(
   join(
     appDirectory,
@@ -118,6 +127,12 @@ check(
   ) === true &&
     packageJson.scripts?.["check:visual-workflow"]?.includes(
       "eas-cli@21.7.0 workflow:validate",
+    ) === true &&
+    packageJson.scripts?.["check:visual-workflow"]?.includes(
+      "mobile-visual-capture.yml",
+    ) === true &&
+    packageJson.scripts?.["check:visual-workflow"]?.includes(
+      "mobile-visual-ar-diagnostic.yml",
     ) === true &&
     packageJson.scripts?.["visual:ios:cloud"]?.includes(
       "eas-cli@21.7.0 workflow:run",
@@ -313,12 +328,14 @@ check(
     visualFlow.includes(
       "${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/caffeine-ready",
     ) &&
-    visualFlow.includes("lupi-dev://__visual?scenario=ar-caffeine-intro") &&
-    visualFlow.includes(
+    !visualFlow.includes("scenario=ar-") &&
+    arDiagnosticFlow.includes("non-authoritative") &&
+    arDiagnosticFlow.includes("lupi-dev://__visual?scenario=ar-caffeine-intro") &&
+    arDiagnosticFlow.includes(
       "${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/ar-caffeine-intro",
     ) &&
     visualFlow.includes("scripts/capture-viewer-health.js"),
-  "Maestro retains correlated viewer and camera-free native AR screenshots",
+  "Maestro keeps required viewer/native-shell receipts separate from non-authoritative AR simulator diagnostics",
 );
 check(
   viewerHealthScript.includes("LUPI_VISUAL_VIEWER_IDENTITY") &&

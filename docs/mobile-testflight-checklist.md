@@ -1,6 +1,6 @@
 # Lupi iPhone TestFlight checklist
 
-Status snapshot: **2026-08-11**
+Status snapshot: **2026-08-13**
 
 This is the gated path from the current `apps/mobile` source to an iPhone
 TestFlight acceptance result. It deliberately separates source, local build,
@@ -12,15 +12,16 @@ development-build receipts exist. The current integration branch
 `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`; its new source checkpoint is Expo
 SDK 57.0.12, React Native 0.86.2, React 19.2.3, version/runtime `1.0.1`,
 and built-in iOS deployment target `17.6`. The SDK 57 local verification ladder and
-93-file/1,657,631-byte archive audit are green, but the final integrated SHA is
-not frozen. A signed
-internal development build exists
-only for earlier SDK 54 exact clean revision `7c64bd70`,
-version/build `1.0.0 (1)`, along with an active runtime `1.0.0` development
-update. The compatible 30-browser-tool/seven-edge-tool bridge is live. No signed
-SDK 57 binary, visual-workflow run, App Store Connect app, TestFlight build, or
-physical Room AR receipt is recorded. SDK 57 remains a local/development-build
-checkpoint; physical-iPhone proof waits for a signed SDK 57 development build.
+96-file/1,664,275-byte archive audit are green, but the final integrated SHA is
+not frozen. Signed SDK 57 internal build
+`5a02d5f9-5ffb-41f9-92c4-2afda99419d1` exists for exact historical SHA
+`8f558e2f`, version/build `1.0.1 (1)`. It proves native compilation/signing, not
+installation or the newer candidate. Visual workflows ran; the latest capture
+proved Caffeine and exact live 30-tool identity, then stopped at the
+non-authoritative Viro simulator boundary before the native-shell matrix. The
+compatible 30-browser-tool/seven-edge-tool bridge is live. No App Store Connect
+app, TestFlight build, or physical Room AR receipt is recorded. Physical-iPhone
+proof waits for installing and exercising a signed current-candidate build.
 A checked item below means only
 that its stated evidence was verified; it never stands in for a later gate.
 
@@ -355,8 +356,9 @@ receipts and do not complete G1 by themselves.
       1024-pixel icon/splash PNG properties. **Owner:** Codex. **Receipt:** current
       `check:testflight` output and exit 0.
 - [x] **The full local verification ladder passes on SDK 57.** It completed the
-      source and resolved-production config gates, 105/105 tests, typecheck,
-      zero-warning lint, Expo dependency compatibility, the 36-command visual
+      source and resolved-production config gates, 106/106 tests, typecheck,
+      zero-warning lint, Expo dependency compatibility, the 29-command required
+      visual flow plus 8-command isolated AR diagnostic,
       contract, a 20-route web export with 1,447 server modules and 1,415 web
       modules, and a clean unsigned iOS export with 1,817 modules and 4.4 MB
       HBC. Doctor also passed 20/20 and native
@@ -381,7 +383,7 @@ receipts and do not complete G1 by themselves.
       failure is the absent numeric `submit.production.ios.ascAppId`. **Owner:**
       Codex + Apple Account Holder. **Receipt:** `check:testflight:release` output
       after App Store Connect creation and the final docs amendment.
-- [x] **Mobile unit tests pass on the Room candidate: 105/105.** Coverage
+- [x] **Mobile unit tests pass on the Room candidate: 106/106.** Coverage
       includes strict AR scene/session/handoff/build-policy contracts, config/release
       identity, molecule/route caps, saved-view and XYZ
       validation, WebView bridge compatibility/recovery/session/navigation/share,
@@ -675,9 +677,10 @@ npx --yes eas-cli@21.7.0 whoami
       behavior, SDK 57 dependencies and `sdk-57` image, and the actual EAS
       macOS `26.5.2`/Xcode `26.6` image. Recheck
       that its Xcode/iOS SDK meets Apple's current upload minimum. **Owner:** Codex.
-      The earlier development artifact used Xcode/iOS SDK 26, but the integrated
-      SDK 57/runtime-1.0.1 checkpoint still needs its own builder receipt. **Receipt:**
-      terminal EAS build profile/image and current requirement link.
+      SDK 57 build `5a02d5f9-5ffb-41f9-92c4-2afda99419d1` is the historical
+      builder receipt for SHA `8f558e2f`; record the newer candidate's environment
+      separately after it builds. **Receipt:** terminal EAS build profile/image
+      and current requirement link.
 - [x] **Resolve the public WebView origin in production EAS config.** The current
       production config resolves `EXPO_PUBLIC_LUPI_WEB_URL=https://lupi.live`.
       **Owner:** Codex. **Receipt:** non-secret EAS config result. Product approval
@@ -699,8 +702,8 @@ npx --yes eas-cli@21.7.0 whoami
       and runtime `1.0.1` needs a new compatible binary. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
 - [x] **Regenerate and audit the staged SDK 57 EAS upload archive allowlist.** The
-      current archive contains exactly 93 files totaling 1,657,631 bytes (about
-      1.58 MiB), and every byte matches current source. **Owner:** Codex. **Receipt:**
+      current archive contains exactly 96 files totaling 1,664,275 bytes (about
+      1.59 MiB), and every byte matches current source. **Owner:** Codex. **Receipt:**
       [`check-eas-archive.mjs`](../apps/mobile/scripts/check-eas-archive.mjs),
       regenerated `apps/mobile/.verify-artifacts/mobile-eas-archive`, and
       [`.easignore`](../.easignore). This is not an upload or build.
@@ -738,14 +741,18 @@ npx --yes eas-cli@21.7.0 whoami
       but its minimum iOS value is 15.1, so it does not prove the source-level
       `17.6` fix. **Owner:** Codex + Privacy reviewer. **Receipt:** generated-native
       diff and sanitized effective Info.plist/entitlements from the exact build SHA.
-- [ ] **Keep simulator evidence out of the Room lane.** Viro `2.57.5` excludes
-      `arm64` for the iOS simulator. Confirm whether the existing Apple-silicon
-      `visual-ios` workflow needs a separate non-AR profile; never count its
-      screenshots as tracking, camera, placement, occlusion, or gesture proof.
-      The local workflow contract and EAS schema pass, but
-      `eas workflow:runs --json` returned `[]`; zero workflow executions or
-      screenshots exist. **Owner:** Codex. **Receipt:** workflow/profile decision
-      and build log if run.
+- [x] **Keep simulator evidence out of the Room lane.** Viro `2.57.5` excludes
+      `arm64` for the iOS simulator. The required build-and-capture and reusable
+      capture-only workflows now stop at the Caffeine viewer and native
+      Gallery/Library/Settings shells. AR runs only in a separate manual,
+      capture-only simulator diagnostic that reuses an existing `build_id`, so
+      its failure cannot block required screenshots. Workflow run
+      `019ffcbc-514a-7466-b530-b241452a07bc` reached the AR deep link and then
+      returned to the iOS Home Screen before `ar-room-intro`, consistent with
+      the documented Viro simulator architecture boundary. This is not
+      tracking, camera, placement, occlusion, gesture, or physical-AR evidence.
+      **Owner:** Codex. **Receipt:** isolated Maestro flows, three validated EAS
+      workflow schemas, run recording/failure screenshot, and JUnit assertion.
 
 ### iOS identifiers and signing
 

@@ -12,6 +12,7 @@ export interface VisualQaViewerCommand {
 
 export interface VisualQaViewerContract {
   expectedAtomCount: number;
+  minimumBondCount: number;
   readyTestID: string;
   scenarioId: string;
   settlingCommands: VisualQaViewerCommand[];
@@ -27,9 +28,11 @@ export interface VisualQaViewerScenario {
 
 export interface VisualQaViewerReadiness {
   atomCount?: number;
+  bondCount?: number;
   bridgeReady: boolean;
   commandsComplete: boolean;
   expectedAtomCount: number;
+  minimumBondCount: number;
   hasError: boolean;
   moleculeLoaded: boolean;
 }
@@ -42,6 +45,7 @@ const CAFFEINE_MOLECULE: MoleculeLoadInput = {
 
 const CAFFEINE_VIEWER_CONTRACT: VisualQaViewerContract = {
   expectedAtomCount: 24,
+  minimumBondCount: 1,
   readyTestID: "visual-qa-ready-viewer-caffeine-ready",
   scenarioId: DEFAULT_VISUAL_QA_SCENARIO_ID,
   settlingCommands: [
@@ -99,6 +103,8 @@ export function isVisualQaViewerReady(
     readiness.moleculeLoaded &&
     readiness.commandsComplete &&
     !readiness.hasError &&
-    readiness.atomCount === readiness.expectedAtomCount
+    readiness.atomCount === readiness.expectedAtomCount &&
+    typeof readiness.bondCount === "number" &&
+    readiness.bondCount >= readiness.minimumBondCount
   );
 }

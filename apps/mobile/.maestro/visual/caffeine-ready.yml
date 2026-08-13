@@ -1,8 +1,9 @@
 appId: ${MAESTRO_APP_ID}
-name: Caffeine viewer ready screenshot
+name: Caffeine viewer and native shell screenshots
 tags:
   - visual
   - viewer
+  - native-shell
 ---
 - launchApp:
     clearState: true
@@ -48,33 +49,11 @@ tags:
     path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/caffeine-ready
     label: Capture deterministic Caffeine viewer
 
-# Capture the native Room introduction without starting the camera. This is a
-# deterministic shell receipt; physical-iPhone ARKit behavior remains a
-# separate acceptance gate.
-- openLink:
-    link: lupi-dev://__visual?scenario=ar-caffeine-intro
-
-- runFlow:
-    when:
-      visible: "Open in.*Lupi.*"
-    commands:
-      - tapOn: Open
-
-- extendedWaitUntil:
-    visible:
-      id: ar-room-intro
-    timeout: 15000
-
-- assertVisible: Place Caffeine in your room
-- assertVisible: Camera privacy
-- assertVisible: Start Room View
-
-- takeScreenshot:
-    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/ar-caffeine-intro
-    label: Capture deterministic native AR introduction
-
 # Relaunch the ordinary app shell so the receipt includes the real native tab
 # bar and large-title stacks, not only gated visual-fixture routes.
+# AR is deliberately absent from this required flow: Viro's iOS simulator
+# architecture boundary is isolated in ar-intro-simulator-diagnostic.yml so it
+# can never prevent these Gallery, Library, and Settings receipts.
 - launchApp:
     clearState: true
 

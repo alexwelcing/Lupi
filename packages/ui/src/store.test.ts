@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { resetStore, getStoreState, setStoreState } from './test-utils';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 import { DEFAULT_SCENE_ID } from '@atlas/scene/materials';
-import { getDefaultVectorDensity } from './store';
+import { getDefaultVectorDensity, useStore } from './store';
 
 function encodeStateDelta(delta: Record<string, unknown>) {
   return btoa(JSON.stringify(delta))
@@ -48,8 +48,13 @@ describe('Store — Display Toggles', () => {
     s.toggleBonds();
     expect(getStoreState().showBonds).toBe(true);
 
+    useStore.setState({ bondSource: 'cpu', lastBondCount: 7 });
     s.toggleBonds();
-    expect(getStoreState().showBonds).toBe(false);
+    expect(getStoreState()).toMatchObject({
+      showBonds: false,
+      bondSource: 'none',
+      lastBondCount: 0,
+    });
   });
 
   it('toggles cell visibility', () => {

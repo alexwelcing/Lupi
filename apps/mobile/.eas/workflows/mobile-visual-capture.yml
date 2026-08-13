@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   capture_native_app:
-    name: Capture native app on iPhone 16 Plus
+    name: Capture viewer and native shell on iPhone 16 Plus
     type: maestro
     environment: preview
     env:

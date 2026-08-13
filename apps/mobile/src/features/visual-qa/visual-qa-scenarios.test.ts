@@ -40,6 +40,7 @@ test("the route resolves to one deterministic Gallery-backed caffeine scenario b
     },
   });
   assert.equal(scenario?.viewerContract.expectedAtomCount, 24);
+  assert.equal(scenario?.viewerContract.minimumBondCount, 1);
   assert.equal(scenario?.summary.formula, "C8H10N4O2");
   assert.deepEqual(scenario?.viewerContract.settlingCommands, [
     {
@@ -67,14 +68,17 @@ test("scenario lookup accepts Expo Router arrays and fails closed on unknown inp
 test("readiness requires correlated viewer settling and the exact caffeine atom count", () => {
   const ready = {
     atomCount: 24,
+    bondCount: 25,
     bridgeReady: true,
     commandsComplete: true,
     expectedAtomCount: 24,
+    minimumBondCount: 1,
     hasError: false,
     moleculeLoaded: true,
   };
 
   assert.equal(isVisualQaViewerReady(ready), true);
+  assert.equal(isVisualQaViewerReady({ ...ready, bondCount: 0 }), false);
   assert.equal(isVisualQaViewerReady({ ...ready, atomCount: 23 }), false);
   assert.equal(
     isVisualQaViewerReady({ ...ready, commandsComplete: false }),

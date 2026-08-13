@@ -18,9 +18,9 @@ built-in iOS deployment target is `17.6`, and the EAS-managed remote iOS build
 number baseline is `1`. Every EAS profile uses Node `22.23.1` and the `sdk-57`
 image. Record the final full commit with `git rev-parse HEAD` after the docs
 amendment; do not copy an earlier SHA into App Store Connect notes. The current
-local ladder is green: 105/105 tests, typecheck, zero-warning lint, Expo
+local ladder is green: 106/106 tests, typecheck, zero-warning lint, Expo
 dependency check, Doctor 20/20, 20-route web export, clean unsigned iOS export,
-local visual contract, EAS workflow schema, and a 93-file/1,657,631-byte archive
+local visual contract, EAS workflow schema, and a 96-file/1,664,275-byte archive
 audit passed.
 
 Historical local receipts remain separate: SDK 56 commit `42536acd` passed its
@@ -28,14 +28,16 @@ Historical local receipts remain separate: SDK 56 commit `42536acd` passed its
 SDK 55 commit `1a56e398` passed its own ladder and 92-file/1,707,990-byte
 archive. Neither checkpoint is a signed or device-tested receipt for SDK 57.
 
-A signed internal development artifact exists as EAS build
-`2b57a89e-e398-44a8-b799-871b7f8e3651`, exact clean revision `7c64bd70`,
-version/build `1.0.0 (1)`, for one registered iPhone. It predates both source
-version `1.0.1`, SDK 57, and the iOS `17.6` deployment-target fix, so it is not a
-signed receipt for this candidate. No signed SDK 57 build, visual-workflow run,
-App Store Connect creation,
-Apple upload, TestFlight processing, or physical Room AR acceptance exists. The
-existing development artifact is signed by the `Alex Welcing Individual` team;
+A signed SDK 57 internal development artifact exists as EAS build
+`5a02d5f9-5ffb-41f9-92c4-2afda99419d1`, exact revision `8f558e2f`,
+version/build `1.0.1 (1)`, for the registered iPhone. It proves native compilation
+and signing but predates the newer visual/camera/bond candidate and has no install
+or device-acceptance receipt. Visual workflows also ran: capture run
+`019ffcbc-514a-7466-b530-b241452a07bc` proved live health, the exact 30-tool
+browser manifest, and Caffeine before the Viro simulator boundary returned to
+Home. It did not complete the required native-shell matrix or prove ARKit.
+No App Store Connect app, Apple upload, TestFlight processing, or physical Room
+AR acceptance exists. The development artifact is signed by the `Alex Welcing Individual` team;
 mandatory Lupine Science organization enrollment/legal-team verification for
 the intended release path remains open.
 

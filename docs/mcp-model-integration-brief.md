@@ -50,7 +50,11 @@ const status = await page.evaluate(() => window.__lupiViewerMcp.status());
 //   moleculeLoaded: boolean,
 //   atomCount: number,
 //   frame: number,
-//   playing: boolean
+//   playing: boolean,
+//   bondCount: number,
+//   bondSource: 'cpu' | 'gpu' | 'none',
+//   bondTopology: 'source' | 'inferred' | 'unavailable',
+//   showBondsEffective: boolean
 // }
 ```
 
@@ -190,8 +194,17 @@ interface LupiMcpStatus {
   atomCount: number;
   frame: number;
   playing: boolean;
+  bondCount: number;
+  bondSource: 'cpu' | 'gpu' | 'none';
+  bondTopology: 'source' | 'inferred' | 'unavailable';
+  showBondsEffective: boolean;
 }
 ```
+
+`bondTopology` describes whether bonds can come from source data or truthful
+distance inference. `showBondsEffective` is stricter: it becomes true only
+after a renderer backend has materialized at least one bond. Use `bondCount`
+and `bondSource` when a screenshot or visual handoff must prove rendered bonds.
 
 ## Tool inventory
 
