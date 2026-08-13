@@ -14,6 +14,11 @@ jobs:
   build_ios_visual:
     name: Build iOS visual fixture
     type: build
+    # Manual CLI dispatch uploads an immutable source archive rather than a
+    # Git checkout. Keep VCS discovery disabled only for this build worker so
+    # its nested noninteractive EAS command never prompts to initialize Git.
+    env:
+      EAS_NO_VCS: "1"
     params:
       platform: ios
       profile: visual-ios
@@ -25,8 +30,11 @@ jobs:
     environment: preview
     env:
       MAESTRO_APP_ID: live.lupi.app.dev
-      LUPI_VIEWER_BROWSER_MANIFEST_URL: https://lupi.live/browser-mcp-manifest.json
-      LUPI_VIEWER_HEALTH_URL: https://lupi.live/health
+      # EAS forwards MAESTRO_-prefixed job variables into the Maestro process.
+      # Keep these non-secret endpoints in that namespace so runScript receives
+      # concrete URLs rather than unresolved empty substitutions.
+      MAESTRO_LUPI_VIEWER_BROWSER_MANIFEST_URL: https://lupi.live/browser-mcp-manifest.json
+      MAESTRO_LUPI_VIEWER_HEALTH_URL: https://lupi.live/health
     params:
       build_id: ${{ needs.build_ios_visual.outputs.build_id }}
       flow_path: .maestro/visual/caffeine-ready.yml

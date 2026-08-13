@@ -41,8 +41,8 @@ tags:
 - runScript:
     file: scripts/capture-viewer-health.js
     env:
-      viewerBrowserManifestUrl: ${LUPI_VIEWER_BROWSER_MANIFEST_URL}
-      viewerHealthUrl: ${LUPI_VIEWER_HEALTH_URL}
+      viewerBrowserManifestUrl: ${MAESTRO_LUPI_VIEWER_BROWSER_MANIFEST_URL}
+      viewerHealthUrl: ${MAESTRO_LUPI_VIEWER_HEALTH_URL}
 
 - takeScreenshot:
     path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/caffeine-ready

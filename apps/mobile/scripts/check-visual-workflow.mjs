@@ -11,6 +11,12 @@ const workflowPath = resolve(
   "workflows",
   "mobile-visual.yml",
 );
+const captureWorkflowPath = resolve(
+  appDirectory,
+  ".eas",
+  "workflows",
+  "mobile-visual-capture.yml",
+);
 const flowPath = resolve(
   appDirectory,
   ".maestro",
@@ -26,6 +32,7 @@ const healthScriptPath = resolve(
 );
 
 const workflow = parse(readFileSync(workflowPath, "utf8"));
+const captureWorkflow = parse(readFileSync(captureWorkflowPath, "utf8"));
 const flowDocuments = parseAllDocuments(readFileSync(flowPath, "utf8"));
 const flowHeader = flowDocuments[0]?.toJS();
 const flowCommands = flowDocuments[1]?.toJS();
@@ -38,8 +45,9 @@ check(
 );
 check(
   workflow?.jobs?.build_ios_visual?.type === "build" &&
-    workflow.jobs.build_ios_visual.params?.profile === "visual-ios",
-  "workflow builds the visual-ios profile",
+    workflow.jobs.build_ios_visual.params?.profile === "visual-ios" &&
+    workflow.jobs.build_ios_visual.env?.EAS_NO_VCS === "1",
+  "workflow builds the visual-ios archive in explicit no-VCS mode",
 );
 check(
   workflow?.jobs?.capture_native_app?.type === "maestro" &&
@@ -51,11 +59,42 @@ check(
 check(
   workflow?.jobs?.capture_native_app?.env?.MAESTRO_APP_ID ===
     "live.lupi.app.dev" &&
-    workflow.jobs.capture_native_app.env?.LUPI_VIEWER_BROWSER_MANIFEST_URL ===
+    workflow.jobs.capture_native_app.env
+      ?.MAESTRO_LUPI_VIEWER_BROWSER_MANIFEST_URL ===
       "https://lupi.live/browser-mcp-manifest.json" &&
-    workflow.jobs.capture_native_app.env?.LUPI_VIEWER_HEALTH_URL ===
+    workflow.jobs.capture_native_app.env?.MAESTRO_LUPI_VIEWER_HEALTH_URL ===
       "https://lupi.live/health",
-  "workflow pins the development app and remote viewer identity endpoints",
+  "workflow pins the development app and Maestro-forwarded remote viewer identity endpoints",
+);
+check(
+  captureWorkflow?.on?.workflow_dispatch?.inputs?.build_id?.type ===
+    "string" &&
+    captureWorkflow.on.workflow_dispatch.inputs.build_id.required === true,
+  "capture-only workflow requires an existing simulator build ID",
+);
+check(
+  captureWorkflow?.jobs?.capture_native_app?.type === "maestro" &&
+    captureWorkflow.jobs.capture_native_app.params?.build_id ===
+      "${{ inputs.build_id }}" &&
+    captureWorkflow.jobs.capture_native_app.params?.flow_path ===
+      ".maestro/visual/caffeine-ready.yml" &&
+    captureWorkflow.jobs.capture_native_app.params?.maestro_version ===
+      "2.7.0" &&
+    captureWorkflow.jobs.capture_native_app.params?.device_identifier ===
+      "iPhone 16 Plus",
+  "capture-only workflow reuses the pinned native Maestro matrix without rebuilding",
+);
+check(
+  captureWorkflow?.jobs?.capture_native_app?.env?.MAESTRO_APP_ID ===
+    workflow?.jobs?.capture_native_app?.env?.MAESTRO_APP_ID &&
+    captureWorkflow.jobs.capture_native_app.env
+      ?.MAESTRO_LUPI_VIEWER_BROWSER_MANIFEST_URL ===
+      workflow.jobs.capture_native_app.env
+        ?.MAESTRO_LUPI_VIEWER_BROWSER_MANIFEST_URL &&
+    captureWorkflow.jobs.capture_native_app.env
+      ?.MAESTRO_LUPI_VIEWER_HEALTH_URL ===
+      workflow.jobs.capture_native_app.env?.MAESTRO_LUPI_VIEWER_HEALTH_URL,
+  "capture-only workflow retains the exact app and live viewer identity contract",
 );
 check(
   flowHeader?.appId === "${MAESTRO_APP_ID}",
@@ -79,9 +118,10 @@ const runScript = findCommand("runScript");
 check(
   runScript?.file === "scripts/capture-viewer-health.js" &&
     runScript.env?.viewerBrowserManifestUrl ===
-      "${LUPI_VIEWER_BROWSER_MANIFEST_URL}" &&
-    runScript.env?.viewerHealthUrl === "${LUPI_VIEWER_HEALTH_URL}",
-  "flow records the remote viewer and browser-manifest identities",
+      "${MAESTRO_LUPI_VIEWER_BROWSER_MANIFEST_URL}" &&
+    runScript.env?.viewerHealthUrl ===
+      "${MAESTRO_LUPI_VIEWER_HEALTH_URL}",
+  "flow records the Maestro-forwarded remote viewer and browser-manifest identities",
 );
 
 const screenshot = findCommand("takeScreenshot");
