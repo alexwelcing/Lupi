@@ -490,7 +490,8 @@ function ViewerScreenSession({
     const subscription = AppState.addEventListener("change", (nextState) => {
       const previous = previousAppState.current;
       previousAppState.current = nextState;
-      if (!shouldProbeViewerOnAppStateChange(previous, nextState)) return;
+      if (!shouldProbeViewerOnAppStateChange(previous, nextState, bridgeReady))
+        return;
 
       const id = `resume-${Date.now()}`;
       pendingResumeProbeId.current = id;
@@ -504,7 +505,7 @@ function ViewerScreenSession({
       }, 2_500);
     });
     return () => subscription.remove();
-  }, []);
+  }, [bridgeReady]);
 
   const execute = (tool: string, args: Record<string, unknown> = {}) => {
     setLastError(null);

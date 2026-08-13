@@ -14,12 +14,36 @@ test("content-process termination clears readiness before reporting recovery", (
   ]);
 });
 
-test("the viewer is probed only when the app returns to the foreground", () => {
-  assert.equal(shouldProbeViewerOnAppStateChange("background", "active"), true);
-  assert.equal(shouldProbeViewerOnAppStateChange("inactive", "active"), true);
-  assert.equal(shouldProbeViewerOnAppStateChange("active", "active"), false);
+test("cold launch transitions do not probe before the viewer document is ready", () => {
   assert.equal(
-    shouldProbeViewerOnAppStateChange("active", "background"),
+    shouldProbeViewerOnAppStateChange("unknown", "active", false),
+    false,
+  );
+  assert.equal(
+    shouldProbeViewerOnAppStateChange("inactive", "active", false),
+    false,
+  );
+  assert.equal(
+    shouldProbeViewerOnAppStateChange("background", "active", false),
+    false,
+  );
+});
+
+test("a ready viewer is probed only when the app returns to the foreground", () => {
+  assert.equal(
+    shouldProbeViewerOnAppStateChange("background", "active", true),
+    true,
+  );
+  assert.equal(
+    shouldProbeViewerOnAppStateChange("inactive", "active", true),
+    true,
+  );
+  assert.equal(
+    shouldProbeViewerOnAppStateChange("active", "active", true),
+    false,
+  );
+  assert.equal(
+    shouldProbeViewerOnAppStateChange("active", "background", true),
     false,
   );
 });

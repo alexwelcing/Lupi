@@ -15,6 +15,9 @@ export function contentProcessTerminationMessages(): ViewerSurfaceMessage[] {
 export function shouldProbeViewerOnAppStateChange(
   previous: AppStateStatus,
   next: AppStateStatus,
+  hasReadyViewerDocument: boolean,
 ): boolean {
-  return previous !== "active" && next === "active";
+  return (
+    hasReadyViewerDocument && previous !== "active" && next === "active"
+  );
 }
