@@ -64,7 +64,10 @@ tags:
 
 - assertVisible: Gallery
 - assertVisible: 24 structures
-- assertVisible: Caffeine
+# The native card is one accessible button whose label begins with
+# "Open Caffeine, ..."; match that contract instead of an inaccessible child
+# text node.
+- assertVisible: "Open Caffeine.*"
 - waitForAnimationToEnd:
     timeout: 5000
 

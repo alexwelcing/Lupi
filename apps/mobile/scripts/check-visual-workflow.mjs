@@ -180,6 +180,10 @@ check(
     !screenshots.some((command) => command?.path?.includes("/ar-")),
   "required viewer and native-shell flow cannot cross the AR simulator boundary",
 );
+check(
+  flowCommands.some((command) => command?.assertVisible === "Open Caffeine.*"),
+  "native Gallery receipt targets the complete accessible Caffeine card label",
+);
 
 const requiredNativeShellScreenshots = [
   "gallery-first-fold",
