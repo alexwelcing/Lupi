@@ -12,7 +12,7 @@ development-build receipts exist. The current integration branch
 `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`; its new source checkpoint is Expo
 SDK 57.0.12, React Native 0.86.2, React 19.2.3, version/runtime `1.0.1`,
 and built-in iOS deployment target `17.6`. The SDK 57 local verification ladder and
-96-file/1,664,275-byte archive audit are green, but the final integrated SHA is
+96-file/1,665,048-byte archive audit are green, but the final integrated SHA is
 not frozen. Signed SDK 57 internal build
 `5a02d5f9-5ffb-41f9-92c4-2afda99419d1` exists for exact historical SHA
 `8f558e2f`, version/build `1.0.1 (1)`. It proves native compilation/signing, not
@@ -702,7 +702,7 @@ npx --yes eas-cli@21.7.0 whoami
       and runtime `1.0.1` needs a new compatible binary. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
 - [x] **Regenerate and audit the staged SDK 57 EAS upload archive allowlist.** The
-      current archive contains exactly 96 files totaling 1,664,275 bytes (about
+      current archive contains exactly 96 files totaling 1,665,048 bytes (about
       1.59 MiB), and every byte matches current source. **Owner:** Codex. **Receipt:**
       [`check-eas-archive.mjs`](../apps/mobile/scripts/check-eas-archive.mjs),
       regenerated `apps/mobile/.verify-artifacts/mobile-eas-archive`, and

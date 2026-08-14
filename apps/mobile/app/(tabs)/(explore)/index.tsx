@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import type { SearchBarCommands } from "react-native-screens";
 
 import { GalleryScreen } from "@/src/features/gallery/gallery-screen";
+import { colors } from "@/src/theme/colors";
 
 export default function ExploreRoute() {
   const [query, setQuery] = useState("");
@@ -21,6 +22,7 @@ export default function ExploreRoute() {
         ? {
             headerSearchBarOptions: {
               autoCapitalize: "none" as const,
+              barTintColor: colors.card,
               hideWhenScrolling: false,
               obscureBackground: false,
               onCancelButtonPress: clearQuery,
@@ -29,6 +31,8 @@ export default function ExploreRoute() {
               placeholder: "Search molecules and materials",
               placement: "automatic" as const,
               ref: searchBarRef,
+              textColor: colors.text,
+              tintColor: colors.accent,
             },
           }
         : {}),

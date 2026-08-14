@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { DarkTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -10,7 +10,20 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-export default function RootLayout() {
+const lupiNavigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: colors.accent,
+    background: colors.background,
+    card: colors.backgroundElevated,
+    text: colors.text,
+    border: colors.border,
+    notification: colors.warning,
+  },
+};
+
+function RootNavigation() {
   return (
     <GestureHandlerRootView
       style={{ flex: 1, backgroundColor: colors.background }}
@@ -64,5 +77,13 @@ export default function RootLayout() {
       </Stack>
       <StatusBar style="light" />
     </GestureHandlerRootView>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider value={lupiNavigationTheme}>
+      <RootNavigation />
+    </ThemeProvider>
   );
 }
