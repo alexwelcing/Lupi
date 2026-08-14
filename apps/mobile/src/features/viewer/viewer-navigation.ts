@@ -1,5 +1,13 @@
 export type ViewerNavigationDecision = "allow" | "block" | "open-external";
 
+export const VIEWER_STACK_OPTIONS = {
+  animation: "slide_from_right",
+  gestureEnabled: false,
+  headerLargeTitle: false,
+  presentation: "card",
+  title: "Molecule",
+} as const;
+
 export function makeViewerOriginWhitelist(): string[] {
   // react-native-webview opens URLs that miss this whitelist through the
   // operating system before onShouldStartLoadWithRequest can decide. Passing

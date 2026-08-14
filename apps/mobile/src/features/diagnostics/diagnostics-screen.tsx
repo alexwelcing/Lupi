@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import * as Updates from "expo-updates";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Share, Text, View } from "react-native";
 
@@ -11,6 +12,7 @@ import {
   parseRemoteHealthIdentity,
   readProjectId,
   readReleaseMetadata,
+  runtimeUpdateDiagnosticRows,
   softWrapDiagnosticValue,
   type DiagnosticRow,
   type RemoteHealthIdentity,
@@ -82,6 +84,14 @@ export function DiagnosticsScreen() {
       },
       { label: "EAS build", value: release.easBuildId ?? "unavailable" },
       { label: "Git commit", value: release.gitCommit ?? "unavailable" },
+      ...runtimeUpdateDiagnosticRows({
+        channel: Updates.channel,
+        createdAt: Updates.createdAt,
+        isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+        isEnabled: Updates.isEnabled,
+        runtimeVersion: Updates.runtimeVersion,
+        updateId: Updates.updateId,
+      }),
       {
         label: "Execution environment",
         value: String(Constants.executionEnvironment),
@@ -204,7 +214,7 @@ export function DiagnosticsScreen() {
         />
         <PrivacyCard
           title="Remote processing"
-          body={`Search terms go to ${origin}/mcp. The interactive 3D viewer is a trusted WebView from ${origin}; selected XYZ coordinates enter that page's memory for rendering. Use synthetic or non-sensitive structures in this internal beta.`}
+          body={`Gallery filtering stays on device. The interactive 3D viewer is a trusted WebView from ${origin}; selected XYZ coordinates enter that page's memory for rendering. Use synthetic or non-sensitive structures in this internal beta.`}
         />
         <PrivacyCard
           title="On-device history"

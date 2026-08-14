@@ -11,34 +11,28 @@ a supported physical iPhone.
 The WebView is a parity bridge, not a claim that the web renderer is native.
 See [the full Expo migration guide](../../docs/mobile-expo.md) for architecture,
 the parity matrix, development-build boundaries, and App Store preparation.
-The current source is being integrated on `codex/mobile-testflight-integration`
-from deployed `origin/main` revision
-`ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`. Record the final clean commit with
-`git rev-parse HEAD` after the documentation and native configuration are
-complete. A signed development artifact exists for the earlier clean Room
-revision `7c64bd702bd50ecf7b161054ced5c2d806e4c780`; it is useful development
-evidence, but it is not a signed artifact of the integrated source and is not a
-TestFlight or physical-AR acceptance receipt.
+Current main is `82edf6141174b40098da6d2346f598e5d480b1c8`. The follow-up
+`codex/mobile-review-fixes` candidate removes an unused four-template search
+client, reports the running Expo Update identity, discovers unit tests
+fail-closed, and disables Viewer back-swipe so horizontal drags remain available
+for molecule rotation. Record its final clean SHA only after review and CI.
 
 ## Current release snapshot
 
 - Expo login: `alexwelcing`
 - EAS project: `@alexwelcing/lupi`
 - EAS project ID: `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`
-- current integration branch: `codex/mobile-testflight-integration`; it is not a
-  frozen release candidate until the changes are committed and the clean full
-  SHA is recorded
+- current follow-up branch: `codex/mobile-review-fixes`, based on exact main
+  `82edf6141174b40098da6d2346f598e5d480b1c8`; it is not a frozen release
+  candidate until committed, reviewed, and green in exact-head CI
 - current source checkpoint: Expo SDK 57 (`~57.0.12`), React Native `0.86.2`,
   React `19.2.3`, Expo Router `~57.0.12`, TypeScript `~6.0.3`, and a
-  deterministic `appVersion` runtime policy. The existing signed
-  development artifact remains the earlier SDK 54 `1.0.0 (1)` binary; it is not
-  compatible evidence for this source checkpoint.
+  deterministic `appVersion` runtime policy.
 - iOS version source: EAS remote; build number `1` is initialized
 - EAS Node runtime: `22.23.1` in every build profile
 - EAS iOS/Android image: `sdk-57`; Viro remains pinned to `2.57.5`, whose peer
-  range spans the Expo SDK 55–57 upgrade checkpoints. Expo currently maps the
-  SDK 57 iOS image to macOS `26.5.2` and Xcode `26.6`; the actual builder
-  environment still needs its own build receipt.
+  range spans the Expo SDK 55–57 upgrade checkpoints. EAS build `2960e909…`
+  proves the SDK 57 iOS image with Xcode `26.6` for the current native graph.
 - pnpm supplies Viro's undeclared runtime import through an exact
   `@expo/config-plugins` `57.0.7` package extension. The SDK 55 Babel/Router
   package extension remains removed because newer Router releases fix project-root
@@ -65,13 +59,11 @@ TestFlight or physical-AR acceptance receipt.
   contributor-controlled and therefore retain a CI availability risk; the
   mobile source job is explicitly capped at 45 minutes while the exception is
   active.
-- current SDK 57 integration-worktree receipts: 106/106 focused tests,
+- current SDK 57 follow-up receipts: 106/106 dynamically discovered tests,
   typecheck, zero-warning lint, `expo install --check`, the 34-command required
-  visual flow plus 8-command isolated AR diagnostic,
-  contract, a 20-route web export (1,447 server modules and 1,415 web modules),
-  a clean unsigned iOS export (1,817 modules and 4.4 MB HBC), Expo Doctor 20/20,
-  41-module native autolinking, and an audited 96-file/1,665,547-byte EAS
-  archive.
+  visual flow plus 8-command isolated AR diagnostic, a 20-route web export, a
+  clean unsigned iOS export, Expo Doctor 20/20, 41-module native autolinking,
+  and an audited 95-file/1,689,816-byte EAS archive.
 - production EAS config resolved to store distribution, automatic build-number
   incrementing, Node `22.23.1`, the `sdk-57` image, `https://lupi.live`, and the
   linked project ID
@@ -85,8 +77,7 @@ TestFlight or physical-AR acceptance receipt.
   1.63 MiB)
 - live service snapshot: `https://lupi.live/health` returned `ready: true`,
   version `2026-07-20.remote-science-data.1`, seven edge tools, release tag
-  `ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, and release timestamp
-  `2026-08-10T19:54:28.637969Z`; the browser manifest contains exactly 30
+  `7cd75aaf346f362f29bb51d6b22677fb44e1e644`; the browser manifest contains exactly 30
   unique tools, including `lupi.open_gallery_example` and `lupi.assess_asset`
 - signed development receipt: EAS build
   `2b57a89e-e398-44a8-b799-871b7f8e3651` finished for exact clean revision
@@ -94,20 +85,27 @@ TestFlight or physical-AR acceptance receipt.
   non-simulator internal `Lupi Dev` artifact for the registered iPhone; SHA-256
   `54889F7A16A377D2CD2B4ADFD652A6508CFE21C418E77771B5BE10124914441D`
 - signed SDK 57 development receipt: EAS build
-  `5a02d5f9-5ffb-41f9-92c4-2afda99419d1` finished for exact SHA `8f558e2f`,
-  version/build `1.0.1 (1)`, as a physical-device internal build. It proves
-  native compilation/signing, not installation, AR behavior, or the newer candidate.
-- active development update: iOS runtime `1.0.0`, group
-  `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision `7c64bd70`;
-  this is channel truth, not a screenshot or device-acceptance receipt
+  `2960e909-355d-46b0-8394-013786627180` finished for exact SHA `7cd75aaf`,
+  version/build `1.0.1 (1)`, as a physical-device internal build. Its IPA is
+  signed for the registered iPhone and targets iOS `17.6`.
+- active development update: runtime `1.0.1`, group
+  `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`;
+  it is compatible with build `2960e909…`
+- exact-main simulator visual receipt: build `813857a7…` plus workflow
+  `01a0009b-1133-711b-b57a-60f3067a4b6b` passed 37 commands and captured
+  Viewer, Gallery, focused search, Library, and Settings on iPhone 16 Plus /
+  iOS 18.3
+- physical-device receipt is in progress: the product owner installed the SDK
+  57 development build on an iPhone 15 Pro running iOS 26.6. Viewer rotation
+  exposed an interactive back-swipe conflict; the follow-up source disables
+  that gesture and retains explicit header Back. Room AR remains unverified.
 - Expo web-fallback browser QA: 320x693 and 390x844 initially exposed, then
   verified the fixes for header/tab overlap
 
 The complete SDK 55 and SDK 56 source ladders remain historical receipts at
 commits `1a56e398` and `42536acd`. The current SDK 57 local ladder and archive
-are green, but the final clean commit/release identity is not frozen. The signed
-SDK 57 build is an older-SHA compile/signing receipt; no TestFlight build or
-SDK 57 physical-iPhone result is claimed.
+are green, but the follow-up commit is not frozen. Signed installation is
+proven; the full Viewer/Room matrix and TestFlight remain open.
 
 ## Quick start on a physical iPhone
 
@@ -202,11 +200,11 @@ First open the LAN URL in iPhone Safari. If Safari cannot reach it, check that
 both devices are on the same non-guest network, disable a routing VPN, and allow
 Node/Vite on the Windows private network.
 
-Gallery metadata and filtering are bundled in the native app and do not depend
-on `/mcp`. Opening a card still requires the configured web runtime to contain
-the matching gallery asset and the `lupi.open_gallery_example` browser-bridge
-tool. Use `https://lupi.live` only after that bridge revision has been deployed;
-a local Vite success is not production evidence.
+Gallery metadata and filtering are bundled in the native app and do not send
+search terms to `/mcp`. Opening a card still requires the configured web runtime
+to contain the matching gallery asset and the `lupi.open_gallery_example`
+browser-bridge tool. Use `https://lupi.live` only after that bridge revision has
+been deployed; a local Vite success is not production evidence.
 
 ## What is native today
 
@@ -332,14 +330,15 @@ evidence in the development-build phase.
 ### Remote prerequisite and remaining device gate
 
 The remote prerequisite is complete: deployed revision
-`ee0d8885d90ffb3cd37243d0c1eb998c41e4572f` exposes
+`7cd75aaf346f362f29bb51d6b22677fb44e1e644` exposes
 `lupi.open_gallery_example`; `/browser-mcp-manifest.json` contains exactly 30
 unique browser tools including `lupi.assess_asset`; and the edge manifest
 contains exactly seven tools. The deterministic visual contract loads Caffeine
 through the Gallery command and fails closed on browser-manifest drift. The
-remaining gates are an executed workflow and physical-iPhone proof that a
-Gallery card opens the requested molecule directly in the embedded canvas
-without Safari, browser chrome, or the MCP configuration overlay.
+exact-main simulator workflow passed the complete Viewer/Gallery/Library/
+Settings lane. A physical iPhone 15 Pro then proved installation and Viewer
+interaction, while exposing the back-swipe conflict fixed by this follow-up.
+Room AR and the post-fix device retest remain open.
 
 ## Commands
 
@@ -394,27 +393,27 @@ The SDK 57 local verification ladder is green: source gate, resolved-production
 config gate, 106/106 tests, typecheck, zero-warning lint, Expo dependency
 compatibility, the 34-command required visual contract plus 8-command isolated
 AR diagnostic, both exports, Expo Doctor 20/20, and 41-module native autolinking
-passed. The fresh EAS archive audit also passed for 96 files and 1,665,547 bytes
-(about 1.59 MiB), every byte matching current source.
+passed. The fresh EAS archive audit also passed for 95 files and 1,689,816 bytes
+(about 1.61 MiB), every byte matching current source.
 
-| Check                       | Result                                           | Boundary                                                                                                                           |
-| --------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| SDK 57 runtime              | Node 22.23.1; pnpm 9.0.0                         | Declared EAS/repository target; capture a final frozen-install receipt after the candidate is committed                            |
-| SDK 57 `test`               | 106/106 passed                                   | Current JavaScript/domain contract receipt; not native rendering or physical UI behavior                                           |
-| SDK 57 `typecheck`          | Passed                                           | Current TypeScript 6.0.3 static receipt; not runtime behavior                                                                      |
-| SDK 57 `check:expo`         | Passed                                           | Current installed Expo package compatibility                                                                                       |
-| SDK 57 Expo Doctor          | 20/20 passed                                     | Current Expo project diagnostics                                                                                                   |
-| SDK 57 native autolinking   | 41 modules                                       | Dependency-discovery receipt only; not a native compile                                                                            |
-| SDK 57 `lint`               | Passed, zero warnings                            | Current static lint receipt only                                                                                                   |
-| SDK 57 visual contract      | Passed; 34 required + 8 isolated AR commands     | Required viewer/shell lane and non-authoritative AR diagnostic contract; cloud and device receipts remain separate                 |
-| SDK 57 `export:web --clear` | Passed; 20 routes                                | 1,447 server modules and 1,415 web modules; browser-fallback bundling only                                                         |
-| SDK 57 `export:ios --clear` | Passed; 1,817 modules, 4.4 MB HBC                | Clean unsigned JavaScript/assets export only                                                                                       |
-| SDK 57 `check:eas-archive`  | Passed: 96 files, 1,665,547 bytes                | Fresh allowlisted archive; every byte matches current source; local archive evidence only                                          |
-| iOS deployment target       | Resolved source gate passed at `17.6`            | Built-in `ios.deploymentTarget` in `app.json`; not present in the existing signed `1.0.0 (1)` binary                               |
-| signed development build    | Finished: `2b57a89e-e398-44a8-b799-871b7f8e3651` | Exact clean SDK 54 `7c64bd70`, internal registered-iPhone artifact, `1.0.0 (1)`; not SDK 57, TestFlight, or physical-AR acceptance |
-| active development update   | Published for runtime `1.0.0`                    | Group `0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact SDK 54 `7c64bd70`; no SDK 57 device screenshot/acceptance receipt              |
-| EAS remote version          | iOS build number `1`                             | Initialized remotely; the existing signed development artifact uses `1.0.0 (1)` and no production/store build exists               |
-| live `/health`              | Ready with recorded version/tag/time             | Live service identity only; not native compatibility in a shipped binary                                                           |
+| Check                       | Result                                           | Boundary                                                                                                           |
+| --------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| SDK 57 runtime              | Node 22.23.1; pnpm 9.0.0                         | Declared EAS/repository target; capture a final frozen-install receipt after the candidate is committed            |
+| SDK 57 `test`               | 106/106 passed                                   | Current JavaScript/domain contract receipt; not native rendering or physical UI behavior                           |
+| SDK 57 `typecheck`          | Passed                                           | Current TypeScript 6.0.3 static receipt; not runtime behavior                                                      |
+| SDK 57 `check:expo`         | Passed                                           | Current installed Expo package compatibility                                                                       |
+| SDK 57 Expo Doctor          | 20/20 passed                                     | Current Expo project diagnostics                                                                                   |
+| SDK 57 native autolinking   | 41 modules                                       | Dependency-discovery receipt only; not a native compile                                                            |
+| SDK 57 `lint`               | Passed, zero warnings                            | Current static lint receipt only                                                                                   |
+| SDK 57 visual contract      | Passed; 34 required + 8 isolated AR commands     | Required viewer/shell lane and non-authoritative AR diagnostic contract; cloud and device receipts remain separate |
+| SDK 57 `export:web --clear` | Passed; 20 routes                                | 1,447 server modules and 1,415 web modules; browser-fallback bundling only                                         |
+| SDK 57 `export:ios --clear` | Passed; 1,817 modules, 4.4 MB HBC                | Clean unsigned JavaScript/assets export only                                                                       |
+| SDK 57 `check:eas-archive`  | Passed: 95 files, 1,689,816 bytes                | Fresh allowlisted archive; every byte matches current source; local archive evidence only                          |
+| iOS deployment target       | Signed artifact and source resolve `17.6`        | Build `2960e909…` proves the app and ViroKit target; not TestFlight or Room acceptance                             |
+| signed development build    | Finished: `2960e909-355d-46b0-8394-013786627180` | Exact clean `7cd75aaf`, SDK 57 internal registered-iPhone artifact, `1.0.1 (1)`; installed on iPhone 15 Pro        |
+| active development update   | Published for runtime `1.0.1`                    | Group `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact `7cd75aaf`; a landed follow-up OTA is still required           |
+| EAS remote version          | iOS build number `1`                             | Initialized remotely; no production/store build exists                                                             |
+| live `/health`              | Ready with recorded version/tag/time             | Live service identity only; not native compatibility in a shipped binary                                           |
 
 Historical SDK 56 commit `42536acd` retains its completed local ladder:
 105/105 tests, typecheck, zero-warning lint, Expo dependency checks, Doctor
@@ -452,8 +451,8 @@ The separately observed live `/health` response was:
 ```text
 ready: true
 version: 2026-07-20.remote-science-data.1
-release tag: ee0d8885d90ffb3cd37243d0c1eb998c41e4572f
-release timestamp: 2026-08-10T19:54:28.637969Z
+release tag: 7cd75aaf346f362f29bb51d6b22677fb44e1e644
+release timestamp: 2026-08-14T11:50:14.750703Z
 ```
 
 That identifies the live service at the time of the check. A future Expo Go or
@@ -472,8 +471,10 @@ version, then verify:
    counts, and reset to All Structures.
 3. Open Aspirin and confirm `lupi.open_gallery_example` reaches a visible,
    interactive embedded viewer canvas without Safari, browser chrome, or the MCP
-   overlay. Repeat with `This is Water` (450 atoms, 120 frames) and verify Play
-   and Pause from More affect trajectory playback.
+   overlay. Rotate the molecule horizontally in both directions and confirm the
+   Viewer never navigates back; only the explicit header Back button may exit.
+   Repeat with `This is Water` (450 atoms, 120 frames) and verify Play and Pause
+   from More affect trajectory playback.
 4. From Library, choose a valid small `.xyz` file in Files or iCloud Drive;
    confirm its atom count and visible viewer result. Confirm wrong-extension,
    malformed, over-2,000,000-byte, over-50,000-atom, long-coordinate-token, and
@@ -578,10 +579,11 @@ environment, and the exact `https://lupi.live` public viewer origin. The remote
 iOS build number is initialized to `1`. An earlier pre-build inspection stopped
 before Apple credentials and produced no artifact. A later authorized
 development build did finish as
-`2b57a89e-e398-44a8-b799-871b7f8e3651` for exact clean revision `7c64bd70`,
-version/build `1.0.0 (1)`, signed for the registered iPhone. That artifact
-predates both the source version `1.0.1` and the iOS `17.6` deployment-target
-fix, so it does not validate either change and is not a TestFlight receipt.
+`2960e909-355d-46b0-8394-013786627180` for exact clean revision `7cd75aaf`,
+version/build `1.0.1 (1)`, signed for the registered iPhone with app and ViroKit
+minimum iOS `17.6`. The product owner installed it on an iPhone 15 Pro running
+iOS 26.6. That is signed-install and partial Viewer evidence, not TestFlight or
+Room AR acceptance.
 
 The iOS app icon is a 1024x1024 truecolor RGB PNG with no alpha
 (`lupi-app-icon.png`). The splash mark is a separate 1024x1024 RGBA PNG with
@@ -589,7 +591,7 @@ alpha (`lupi-splash-mark-1024.png`); the web favicon remains `lupi-icon.png`.
 These source/byte properties do not prove on-device icon or splash fidelity.
 
 The root [`.easignore`](../../.easignore) is an allowlist. The current SDK 57
-archive contains 96 files totaling 1,665,547 bytes (about 1.59 MiB); every byte
+archive contains 95 files totaling 1,689,816 bytes (about 1.61 MiB); every byte
 matches current source. Historical SDK 56 commit `42536acd` produced a
 92-file/1,660,534-byte archive, and historical SDK 55 commit `1a56e398` produced
 a 92-file/1,707,990-byte archive. All are local archive-content receipts, not an
@@ -597,10 +599,9 @@ upload, native compile, signed artifact, or EAS build.
 
 The app includes `expo-updates`, an `appVersion` runtime policy, and named
 development/visual/preview/production channels. A development-channel update is
-active for runtime `1.0.0`, group
-`0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean SDK 54 revision `7c64bd70`; it has
-no device screenshot or acceptance receipt. The SDK 57 source resolves runtime
-`1.0.1` and requires a compatible `1.0.1` binary before it can receive updates.
+active for runtime `1.0.1`, group
+`27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`; the
+installed SDK 57 binary can receive a landed follow-up with the same runtime.
 Every SDK, Viro, permission, config-plugin, deployment-target, or other native
 compatibility change must increment `app.json`'s version before the new binary
 and update are published. The remote viewer/Worker can

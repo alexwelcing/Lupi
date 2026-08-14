@@ -18,6 +18,15 @@ export interface DiagnosticRow {
   value: string;
 }
 
+export interface RuntimeUpdateIdentity {
+  channel: string | null;
+  createdAt: Date | null;
+  isEmbeddedLaunch: boolean;
+  isEnabled: boolean;
+  runtimeVersion: string | null;
+  updateId: string | null;
+}
+
 export function readReleaseMetadata(extra: unknown): ReleaseMetadata {
   if (!isRecord(extra) || !isRecord(extra.release)) return {};
   const metadata: ReleaseMetadata = {};
@@ -61,6 +70,45 @@ export function diagnosticReport(rows: DiagnosticRow[]): string {
     "Lupi iPhone diagnostics",
     ...rows.map((row) => `${row.label}: ${row.value}`),
   ].join("\n");
+}
+
+export function runtimeUpdateDiagnosticRows(
+  identity: RuntimeUpdateIdentity,
+): DiagnosticRow[] {
+  const channel = optionalString(identity.channel);
+  const runtimeVersion = optionalString(identity.runtimeVersion);
+  const updateId = optionalString(identity.updateId);
+  const createdAt =
+    identity.createdAt instanceof Date &&
+    Number.isFinite(identity.createdAt.getTime())
+      ? identity.createdAt.toISOString()
+      : "unavailable";
+
+  return [
+    {
+      label: "Update runtime",
+      value: runtimeVersion ?? "unavailable",
+    },
+    {
+      label: "Update source",
+      value: !identity.isEnabled
+        ? "disabled / local runtime"
+        : updateId
+          ? "downloaded update"
+          : identity.isEmbeddedLaunch
+            ? "embedded bundle"
+            : "unavailable",
+    },
+    {
+      label: "Update ID",
+      value: updateId ?? "unavailable",
+    },
+    {
+      label: "Update channel",
+      value: channel ?? "unavailable (development or unbound)",
+    },
+    { label: "Update created", value: createdAt },
+  ];
 }
 
 export function softWrapDiagnosticValue(value: string): string {

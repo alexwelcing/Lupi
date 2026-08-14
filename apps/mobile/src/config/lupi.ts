@@ -57,10 +57,6 @@ export function getLupiWebBaseUrl(): string {
   return validateLupiWebBaseUrl(configured, { release });
 }
 
-export function getLupiMcpUrl(): string {
-  return `${getLupiWebBaseUrl()}/mcp`;
-}
-
 export function getLupiEmbeddedViewerUrl(): string {
   // `?load` keeps today's deployed web app on its immediate viewer code path.
   // The hash is the first-class chrome-free route used by newer deployments.

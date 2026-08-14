@@ -11,7 +11,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "eslint app src app.config.ts scripts plugins",
-    "test": "node --import tsx --test --test-concurrency=1 src/config/app-identity.test.ts src/config/lupi.test.ts src/domain/molecules.test.ts src/domain/saved-views.test.ts src/features/ar/ar-build-policy.test.ts src/features/ar/ar-scene.test.ts src/features/ar/ar-session-store.test.ts src/features/diagnostics/release-identity.test.ts src/features/gallery/gallery-catalog.test.ts src/features/import/xyz-document.test.ts src/features/library/library-sections.test.ts src/features/settings/settings-sections.test.ts src/features/viewer/viewer-ar-handoff.test.ts src/features/viewer/viewer-bridge.test.ts src/features/viewer/viewer-compatibility.test.ts src/features/viewer/viewer-menu.test.ts src/features/viewer/viewer-navigation.test.ts src/features/viewer/viewer-recovery.test.ts src/features/viewer/viewer-runtime.test.ts src/features/viewer/viewer-session.test.ts src/features/viewer/viewer-share.test.ts src/features/visual-qa/visual-qa-scenarios.test.ts src/services/lupi-mcp.test.ts src/storage/recent-molecules-codec.test.ts src/storage/recent-molecules-repository.test.ts",
+    "test": "node scripts/run-unit-tests.mjs",
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web --clear",
     "visual:web": "pnpm export:web && node scripts/capture-web-composition.mjs",

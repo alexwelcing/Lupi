@@ -41,12 +41,7 @@ const visualFlow = readFileSync(
   "utf8",
 );
 const arDiagnosticFlow = readFileSync(
-  join(
-    appDirectory,
-    ".maestro",
-    "visual",
-    "ar-intro-simulator-diagnostic.yml",
-  ),
+  join(appDirectory, ".maestro", "visual", "ar-intro-simulator-diagnostic.yml"),
   "utf8",
 );
 const viewerHealthScript = readFileSync(
@@ -61,6 +56,10 @@ const viewerHealthScript = readFileSync(
 );
 const arSurfaceSource = readFileSync(
   join(appDirectory, "src", "features", "ar", "molecule-ar-surface.native.tsx"),
+  "utf8",
+);
+const unitTestRunner = readFileSync(
+  join(appDirectory, "scripts", "run-unit-tests.mjs"),
   "utf8",
 );
 
@@ -138,6 +137,13 @@ check(
       "eas-cli@21.7.0 workflow:run",
     ) === true,
   "Cloud archive and visual workflow commands pin EAS CLI 21.7.0",
+);
+check(
+  packageJson.scripts?.test === "node scripts/run-unit-tests.mjs" &&
+    unitTestRunner.includes("No mobile unit tests were discovered") &&
+    unitTestRunner.includes("/\\.test\\.tsx?$/") &&
+    unitTestRunner.includes('"--test-concurrency=1"'),
+  "Mobile unit tests are discovered fail-closed across TypeScript and TSX files",
 );
 check(
   app.runtimeVersion?.policy === "appVersion",
@@ -330,7 +336,9 @@ check(
     ) &&
     !visualFlow.includes("scenario=ar-") &&
     arDiagnosticFlow.includes("non-authoritative") &&
-    arDiagnosticFlow.includes("lupi-dev://__visual?scenario=ar-caffeine-intro") &&
+    arDiagnosticFlow.includes(
+      "lupi-dev://__visual?scenario=ar-caffeine-intro",
+    ) &&
     arDiagnosticFlow.includes(
       "${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/ar-caffeine-intro",
     ) &&
@@ -450,6 +458,7 @@ if (strictRelease) {
   assertTracked("apps/mobile/app.json");
   assertTracked("apps/mobile/eas.json");
   assertTracked("apps/mobile/package.json");
+  assertTracked("apps/mobile/scripts/run-unit-tests.mjs");
   assertTracked("packages/core/package.json");
   assertTracked("docs/mobile-expo.md");
   assertTracked("docs/mobile-testflight-checklist.md");

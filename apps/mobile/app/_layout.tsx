@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { colors } from "@/src/theme/colors";
+import { VIEWER_STACK_OPTIONS } from "@/src/features/viewer/viewer-navigation";
 
 export { RootErrorBoundary as ErrorBoundary } from "@/src/components/root-error-boundary";
 
@@ -38,16 +39,7 @@ function RootNavigation() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="viewer"
-          options={{
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            headerLargeTitle: false,
-            presentation: "card",
-            title: "Molecule",
-          }}
-        />
+        <Stack.Screen name="viewer" options={VIEWER_STACK_OPTIONS} />
         <Stack.Screen
           name="ar"
           options={{
