@@ -11,7 +11,8 @@ renderer.
 
 ## Candidate identity and evidence boundary
 
-The integration branch is `codex/mobile-testflight-integration`, source
+Exact main is `82edf6141174b40098da6d2346f598e5d480b1c8`; focused follow-up
+branch is `codex/mobile-review-fixes`. Source
 marketing/runtime version is `1.0.1`, Expo SDK is `57.0.12`, React Native is
 `0.86.2`, React is `19.2.3`, Expo Router is `57.0.12`, Viro is `2.57.5`, the
 built-in iOS deployment target is `17.6`, and the EAS-managed remote iOS build
@@ -20,7 +21,7 @@ image. Record the final full commit with `git rev-parse HEAD` after the docs
 amendment; do not copy an earlier SHA into App Store Connect notes. The current
 local ladder is green: 106/106 tests, typecheck, zero-warning lint, Expo
 dependency check, Doctor 20/20, 20-route web export, clean unsigned iOS export,
-local visual contract, EAS workflow schema, and a 96-file/1,665,547-byte archive
+local visual contract, EAS workflow schema, and a 95-file/1,689,816-byte archive
 audit passed.
 
 Historical local receipts remain separate: SDK 56 commit `42536acd` passed its
@@ -29,21 +30,22 @@ SDK 55 commit `1a56e398` passed its own ladder and 92-file/1,707,990-byte
 archive. Neither checkpoint is a signed or device-tested receipt for SDK 57.
 
 A signed SDK 57 internal development artifact exists as EAS build
-`5a02d5f9-5ffb-41f9-92c4-2afda99419d1`, exact revision `8f558e2f`,
-version/build `1.0.1 (1)`, for the registered iPhone. It proves native compilation
-and signing but predates the newer visual/camera/bond candidate and has no install
-or device-acceptance receipt. Visual workflows also ran: capture run
-`019ffcbc-514a-7466-b530-b241452a07bc` proved live health, the exact 30-tool
-browser manifest, and Caffeine before the Viro simulator boundary returned to
-Home. It did not complete the required native-shell matrix or prove ARKit.
-No App Store Connect app, Apple upload, TestFlight processing, or physical Room
-AR acceptance exists. The development artifact is signed by the `Alex Welcing Individual` team;
+`2960e909-355d-46b0-8394-013786627180`, exact revision `7cd75aaf`,
+version/build `1.0.1 (1)`, for the registered iPhone. It was installed on an
+iPhone 15 Pro running iOS 26.6 and proved the native shell plus Viewer. That
+session exposed an interactive back-swipe conflict; follow-up source disables
+the gesture and preserves the explicit Back button so horizontal drags rotate
+the molecule. Exact-main simulator workflow
+`01a0009b-1133-711b-b57a-60f3067a4b6b` passed 37 commands and five native-shell
+screenshots. No App Store Connect app, Apple upload, TestFlight processing,
+post-fix device retest, or physical Room AR acceptance exists. The development
+artifact is signed by the `Alex Welcing Individual` team;
 mandatory Lupine Science organization enrollment/legal-team verification for
 the intended release path remains open.
 
 The compatible remote prerequisite is live at exact revision
-`ee0d8885d90ffb3cd37243d0c1eb998c41e4572f`, timestamp
-`2026-08-10T19:54:28.637969Z`: the browser manifest contains exactly 30 tools,
+`7cd75aaf346f362f29bb51d6b22677fb44e1e644`, timestamp
+`2026-08-14T11:50:14.750703Z`: the browser manifest contains exactly 30 tools,
 including `lupi.open_gallery_example` and `lupi.assess_asset`, and the edge
 manifest contains exactly seven. Physical-device compatibility remains a
 separate receipt.
@@ -53,7 +55,9 @@ separate receipt.
 1. Browse the featured Gallery, search for caffeine, water, aspirin, and a
    material, then open a result and verify that the immersive Viewer replaces
    the tab bar and shows the intended molecule with an atom count.
-2. Exercise Iso, Fit, Bonds off, Blueprint, Reset, Share, and Reload.
+2. Rotate horizontally in both directions and confirm the Viewer never swipes
+   back; exit only with the explicit Back button. Exercise Iso, Fit, Bonds off,
+   Blueprint, Reset, Share, and Reload.
 3. Import a small, non-sensitive `.xyz` file from Files or iCloud Drive. Confirm
    malformed, over-2 MB, and over-50,000-atom inputs are rejected before load.
 4. Kill and relaunch the app; confirm recent catalog structures remain in
@@ -85,10 +89,10 @@ separate receipt.
 
 The candidate includes `expo-updates`, an app-version `runtimeVersion`, the
 linked EAS Update URL, and named development, visual, preview, and production
-channels. A development update is active for runtime `1.0.0`, group
-`0442ed9e-1ebc-4da0-a79c-8750e37641e8`, exact clean revision `7c64bd70`; it has
-no device screenshot or acceptance receipt. The new source runtime is `1.0.1`
-and requires a compatible `1.0.1` binary before it can receive `1.0.1` updates.
+channels. A development update is active for runtime `1.0.1`, group
+`27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`; it ran
+in the compatible installed `1.0.1` binary. The focused JS-only follow-up needs
+a landed development update and post-fix device receipt.
 Any Viro, SDK, permission, deployment-target, config-plugin, or other native
 change requires a new EAS binary and TestFlight build. Do not tell testers that
 an update is available until that specific update has a device receipt.

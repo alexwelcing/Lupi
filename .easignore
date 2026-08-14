@@ -44,5 +44,6 @@ apps/mobile/dist/
 apps/mobile/dist-*/
 apps/mobile/.vscode/
 apps/mobile/src/**/*.test.ts
+apps/mobile/src/**/*.test.tsx
 apps/mobile/store/
 apps/mobile/README.md

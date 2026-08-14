@@ -4,9 +4,15 @@ import test from "node:test";
 import {
   decideViewerNavigation,
   makeViewerOriginWhitelist,
+  VIEWER_STACK_OPTIONS,
 } from "./viewer-navigation";
 
 const TRUSTED_ORIGIN = "https://lupi.live";
+
+test("reserves horizontal Viewer drags for molecule rotation", () => {
+  assert.equal(VIEWER_STACK_OPTIONS.gestureEnabled, false);
+  assert.equal(VIEWER_STACK_OPTIONS.presentation, "card");
+});
 
 test("routes every WebView navigation through the explicit policy callback", () => {
   assert.deepEqual(makeViewerOriginWhitelist(), ["*"]);

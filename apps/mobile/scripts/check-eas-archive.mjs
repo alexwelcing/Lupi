@@ -52,6 +52,8 @@ const requiredFiles = new Set([
   "apps/mobile/src/features/gallery/gallery-card.tsx",
   "apps/mobile/src/features/gallery/gallery-catalog.ts",
   "apps/mobile/src/features/gallery/gallery-screen.tsx",
+  "apps/mobile/src/features/diagnostics/diagnostics-screen.tsx",
+  "apps/mobile/src/features/diagnostics/release-identity.ts",
   "apps/mobile/src/features/library/library-screen.tsx",
   "apps/mobile/src/features/library/library-sections.ts",
   "apps/mobile/src/features/settings/settings-screen.tsx",
