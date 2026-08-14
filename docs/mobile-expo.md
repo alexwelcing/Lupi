@@ -1,6 +1,6 @@
 # Lupi mobile: Expo migration and release guide
 
-Status: **Expo SDK 57 hybrid shell plus native Viro/ARKit Room source has a green local verification ladder and audited archive. The compatible 30-tool web bridge is live. SDK 57 build `2960e909…` was installed on an iPhone 15 Pro running iOS 26.6; that session proved the native shell and Viewer while exposing a back-swipe conflict now fixed in follow-up source. The post-fix device retest, physical Room AR, and TestFlight remain open.**
+Status: **Expo SDK 57 hybrid shell plus native Viro/ARKit Room source has a green local verification ladder and audited archive. The compatible 30-tool web bridge is live. SDK 57 build `2960e909…` was installed on an iPhone 15 Pro running iOS 26.6; that session proved the native shell and Viewer while exposing a back-swipe conflict now fixed on main. The post-fix device retest, physical Room AR, and TestFlight remain open.**
 
 Compatibility snapshot: **2026-08-14**
 
@@ -16,8 +16,8 @@ The hybrid is a migration bridge, not the final architecture and not evidence
 of native-renderer parity.
 
 This document describes exact main revision
-`82edf6141174b40098da6d2346f598e5d480b1c8` and the focused
-`codex/mobile-review-fixes` follow-up, plus clearly identified receipts from
+`15eb0b4cfeb1e9583e817599d43003c173f5481d` and the focused
+`codex/sdk57-patch-alignment` follow-up, plus clearly identified receipts from
 earlier signed revisions.
 The native 24-item Gallery, root-stack Viewer, focused Library, Settings, gallery
 browser tool, atom-cap contract, and success-only recent-history correlation
@@ -26,7 +26,7 @@ SDK 56 has a historical green local ladder at commit `42536acd`. SDK 57 now has
 its own green local ladder and audited 95-file archive. Signed internal build
 `2960e909-355d-46b0-8394-013786627180` proves native compilation and signing for
 exact SHA `7cd75aaf346f362f29bb51d6b22677fb44e1e644`, version/build `1.0.1 (1)`,
-and was installed on the registered iPhone. Exact-main simulator workflow
+and was installed on the registered iPhone. Exact-`82edf614` simulator workflow
 `01a0009b-1133-711b-b57a-60f3067a4b6b` completed the required native-shell
 visual matrix. These receipts do not assert TestFlight processing, App Store
 release, post-fix device behavior, or physical-iPhone Room AR.
@@ -101,15 +101,15 @@ still needs a landed development update plus post-fix device retest:
 | Surface                     | Verified receipt                                                                                                                                                                                                              | Still not proven                                                          |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Expo identity               | Authenticated as `alexwelcing`; project `@alexwelcing/lupi` is linked with ID `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`                                                                                                          | App Store Connect app/ID or the intended Lupine Science organization team |
-| Integrated candidate        | Exact main `82edf614…`; focused branch `codex/mobile-review-fixes`; EAS profiles pin Node `22.23.1` and the repository pins pnpm `9.0.0`                                                                                      | Final clean follow-up SHA and exact-head CI                               |
+| Integrated candidate        | Exact main `15eb0b4c…`; focused branch `codex/sdk57-patch-alignment`; EAS profiles pin Node `22.23.1` and the repository pins pnpm `9.0.0`                                                                                   | Final clean follow-up SHA and exact-head CI                               |
 | App source identity         | Expo SDK 57.0.12, React Native 0.86.2, React 19.2.3, Router 57.0.12, version/runtime `1.0.1`, bundle `live.lupi.app`, built-in iOS `17.6`, `sdk-57` EAS image, remote build number `1`, and exact `https://lupi.live` origin  | Signed artifact of this source or on-device presentation                  |
-| Current SDK 57 checks       | Source/config gates, 106/106 tests, typecheck, zero-warning lint, `expo install --check`, 34-command required visual flow plus 8-command isolated AR diagnostic, both exports, Doctor 20/20, and 41-module autolinking passed | Native compile or device behavior                                         |
+| Current SDK 57 checks       | Source/config gates, 108/108 tests, typecheck, zero-warning lint, fail-closed installed-SDK dependency validation, 34-command required visual flow plus 8-command isolated AR diagnostic, both exports, Doctor 20/20, and 41-module autolinking passed | Native compile or device behavior                                         |
 | Historical SDK 56 ladder    | Commit `42536acd`: tests, typecheck, zero-warning lint, Expo checks, Doctor 21/21, both exports, visual contracts, and 92-file/1,660,534-byte archive passed                                                                  | Current SDK 57 behavior                                                   |
 | Historical SDK 55 ladder    | Commits `d33e7aeb` and `1a56e398`: frozen install, tests, typecheck, zero-warning lint, Expo checks, Doctor 19/19, both exports, visual contracts, and archive passed                                                         | Current SDK 57 behavior                                                   |
 | Signed development artifact | SDK 57 build `2960e909-355d-46b0-8394-013786627180`, exact SHA `7cd75aaf`, version/build `1.0.1 (1)`, installed on an iPhone 15 Pro / iOS 26.6; historical SDK 54 build remains separate                                      | Post-fix Viewer behavior, TestFlight, or physical Room AR acceptance      |
 | Development update          | Active on channel `development`, runtime `1.0.1`, group `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`                                                                                               | Landed follow-up OTA and post-fix device retest                           |
-| Visual workflow             | Exact-main build `813857a7…` and workflow `01a0009b-1133-711b-b57a-60f3067a4b6b` passed 37 commands and five screenshots on iPhone 16 Plus / iOS 18.3                                                                         | Simulator does not prove physical AR or iPhone 15 Pro gesture behavior    |
-| EAS archive                 | Current SDK 57 archive passed for 95 files and 1,689,816 bytes, every byte matching current source; SDK 56 and SDK 55 archive receipts remain historical                                                                      | Upload or EAS builder receipt                                             |
+| Visual workflow             | Exact-`82edf614` build `813857a7…` and workflow `01a0009b-1133-711b-b57a-60f3067a4b6b` passed 37 commands and five screenshots on iPhone 16 Plus / iOS 18.3                                                                    | Simulator does not prove physical AR or iPhone 15 Pro gesture behavior    |
+| EAS archive                 | Current SDK 57 archive passed for 95 files and 1,690,897 bytes, every byte matching current source; SDK 56 and SDK 55 archive receipts remain historical                                                                      | Upload or EAS builder receipt                                             |
 | Live service                | `/health` ready at tag `7cd75aaf346f362f29bb51d6b22677fb44e1e644`, timestamp `2026-08-14T11:50:14.750703Z`; edge manifest exactly seven tools and browser manifest exactly 30                                                 | Compatibility after a future remote release                               |
 
 The actionable gate-by-gate record is
@@ -848,16 +848,16 @@ success.
 | Check                     | Current SDK 57 result                                         | Evidence boundary                                                                                               |
 | ------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Runtime/tooling           | Node 22.23.1 and pnpm 9.0.0                                   | Declared EAS/repository target; capture a final frozen-install receipt after commit                             |
-| Focused unit tests        | 106/106 passed                                                | Current JavaScript/domain contracts; not native rendering or physical UI behavior                               |
+| Focused unit tests        | 108/108 passed                                                | Current JavaScript/domain contracts; not native rendering or physical UI behavior                               |
 | TypeScript                | Passed with TypeScript 6.0.3                                  | Static type receipt only                                                                                        |
-| `expo install --check`    | Passed                                                        | Current installed Expo dependency compatibility only                                                            |
+| `check:expo`             | Passed; 30 installed SDK packages                             | Uses the compatibility map shipped with the installed Expo release; online upgrade recommendations are separate |
 | Expo Doctor               | 20/20 checks passed                                           | Current Expo project diagnostics only                                                                           |
 | Native autolinking        | 41 modules discovered                                         | Native dependency-discovery receipt only; not a compile                                                         |
 | ESLint                    | Passed, zero warnings                                         | Current static lint receipt only                                                                                |
 | Local visual contract     | Passed; 34 required + 8 isolated AR commands                  | Viewer/shell lane plus a non-authoritative AR simulator diagnostic; cloud and device receipts remain separate   |
-| `export:web --clear`      | Passed; 20 routes                                             | 1,447 server modules and 1,415 web modules; browser-fallback bundling only                                      |
-| `export:ios --clear`      | Passed; 1,817 modules, 4.4 MB HBC                             | Clean unsigned JavaScript/assets export only                                                                    |
-| `check:eas-archive`       | Passed; 95 files, 1,689,816 bytes (~1.61 MiB)                 | Fresh allowlisted archive; every byte matches current source; local archive evidence only                       |
+| `export:web --clear`      | Passed; 20 routes                                             | 1,457 server modules and 1,425 web modules; browser-fallback bundling only                                      |
+| `export:ios --clear`      | Passed; 1,826 modules, 4.4 MB HBC                             | Clean unsigned JavaScript/assets export only                                                                    |
+| `check:eas-archive`       | Passed; 95 files, 1,690,897 bytes (~1.61 MiB)                 | Fresh allowlisted archive; every byte matches current source; local archive evidence only                       |
 | EAS production config     | Resolved with `sdk-57` image and Node 22.23.1                 | Store/profile/configuration truth only; not a queued build                                                      |
 | iOS deployment target     | Signed app and embedded ViroKit resolve `17.6`                | Build `2960e909…`; not TestFlight or physical Room acceptance                                                   |
 | Signed development build  | Finished: `2960e909-355d-46b0-8394-013786627180`              | Exact clean `7cd75aaf`, version/build `1.0.1 (1)`, installed on iPhone 15 Pro / iOS 26.6; Room remains untested |
@@ -983,7 +983,7 @@ web favicon still uses `lupi-icon.png`. The source gate verifies those byte
 properties, but only a physical binary can prove rendered icon/splash fidelity.
 
 The root [`.easignore`](../.easignore) is a deliberate upload allowlist. The
-current SDK 57 archive contains 95 files totaling 1,689,816 bytes (about
+current SDK 57 archive contains 95 files totaling 1,690,897 bytes (about
 1.61 MiB), and every byte matches current source. Historical SDK 56 commit
 `42536acd` produced a 92-file/1,660,534-byte archive, and historical SDK 55
 commit `1a56e398` produced a 92-file/1,707,990-byte archive. None of these local

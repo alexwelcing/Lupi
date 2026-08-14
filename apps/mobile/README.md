@@ -11,19 +11,21 @@ a supported physical iPhone.
 The WebView is a parity bridge, not a claim that the web renderer is native.
 See [the full Expo migration guide](../../docs/mobile-expo.md) for architecture,
 the parity matrix, development-build boundaries, and App Store preparation.
-Current main is `82edf6141174b40098da6d2346f598e5d480b1c8`. The follow-up
-`codex/mobile-review-fixes` candidate removes an unused four-template search
-client, reports the running Expo Update identity, discovers unit tests
-fail-closed, and disables Viewer back-swipe so horizontal drags remain available
-for molecule rotation. Record its final clean SHA only after review and CI.
+Current main is `15eb0b4cfeb1e9583e817599d43003c173f5481d`. It removes an
+unused four-template search client, reports the running Expo Update identity,
+discovers unit tests fail-closed, and disables Viewer back-swipe so horizontal
+drags remain available for molecule rotation. The focused
+`codex/sdk57-patch-alignment` follow-up makes Expo dependency validation use the
+installed SDK's immutable compatibility map after the mutable online feed
+advanced immediately after the merge.
 
 ## Current release snapshot
 
 - Expo login: `alexwelcing`
 - EAS project: `@alexwelcing/lupi`
 - EAS project ID: `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`
-- current follow-up branch: `codex/mobile-review-fixes`, based on exact main
-  `82edf6141174b40098da6d2346f598e5d480b1c8`; it is not a frozen release
+- current follow-up branch: `codex/sdk57-patch-alignment`, based on exact main
+  `15eb0b4cfeb1e9583e817599d43003c173f5481d`; it is not a frozen release
   candidate until committed, reviewed, and green in exact-head CI
 - current source checkpoint: Expo SDK 57 (`~57.0.12`), React Native `0.86.2`,
   React `19.2.3`, Expo Router `~57.0.12`, TypeScript `~6.0.3`, and a
@@ -59,11 +61,12 @@ for molecule rotation. Record its final clean SHA only after review and CI.
   contributor-controlled and therefore retain a CI availability risk; the
   mobile source job is explicitly capped at 45 minutes while the exception is
   active.
-- current SDK 57 follow-up receipts: 106/106 dynamically discovered tests,
-  typecheck, zero-warning lint, `expo install --check`, the 34-command required
+- current SDK 57 follow-up receipts: 108/108 dynamically discovered tests,
+  typecheck, zero-warning lint, the fail-closed `check:expo` validation against
+  the compatibility map shipped with the installed SDK, the 34-command required
   visual flow plus 8-command isolated AR diagnostic, a 20-route web export, a
   clean unsigned iOS export, Expo Doctor 20/20, 41-module native autolinking,
-  and an audited 95-file/1,689,816-byte EAS archive.
+  and an audited 95-file/1,690,897-byte EAS archive.
 - production EAS config resolved to store distribution, automatic build-number
   incrementing, Node `22.23.1`, the `sdk-57` image, `https://lupi.live`, and the
   linked project ID
@@ -91,20 +94,21 @@ for molecule rotation. Record its final clean SHA only after review and CI.
 - active development update: runtime `1.0.1`, group
   `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`;
   it is compatible with build `2960e909…`
-- exact-main simulator visual receipt: build `813857a7…` plus workflow
+- exact-`82edf614` simulator visual receipt: build `813857a7…` plus workflow
   `01a0009b-1133-711b-b57a-60f3067a4b6b` passed 37 commands and captured
   Viewer, Gallery, focused search, Library, and Settings on iPhone 16 Plus /
   iOS 18.3
 - physical-device receipt is in progress: the product owner installed the SDK
   57 development build on an iPhone 15 Pro running iOS 26.6. Viewer rotation
-  exposed an interactive back-swipe conflict; the follow-up source disables
-  that gesture and retains explicit header Back. Room AR remains unverified.
+  exposed an interactive back-swipe conflict; current main disables that
+  gesture and retains explicit header Back. The post-fix device retest and Room
+  AR remain unverified.
 - Expo web-fallback browser QA: 320x693 and 390x844 initially exposed, then
   verified the fixes for header/tab overlap
 
 The complete SDK 55 and SDK 56 source ladders remain historical receipts at
 commits `1a56e398` and `42536acd`. The current SDK 57 local ladder and archive
-are green, but the follow-up commit is not frozen. Signed installation is
+are green, but the dependency-gate follow-up is not frozen. Signed installation is
 proven; the full Viewer/Room matrix and TestFlight remain open.
 
 ## Quick start on a physical iPhone
@@ -335,9 +339,9 @@ The remote prerequisite is complete: deployed revision
 unique browser tools including `lupi.assess_asset`; and the edge manifest
 contains exactly seven tools. The deterministic visual contract loads Caffeine
 through the Gallery command and fails closed on browser-manifest drift. The
-exact-main simulator workflow passed the complete Viewer/Gallery/Library/
+exact-`82edf614` simulator workflow passed the complete Viewer/Gallery/Library/
 Settings lane. A physical iPhone 15 Pro then proved installation and Viewer
-interaction, while exposing the back-swipe conflict fixed by this follow-up.
+interaction, while exposing the back-swipe conflict now fixed on main.
 Room AR and the post-fix device retest remain open.
 
 ## Commands
@@ -390,25 +394,25 @@ Pop-Location
 ### Current SDK 57 checkpoint and historical SDK 55–56 receipts
 
 The SDK 57 local verification ladder is green: source gate, resolved-production
-config gate, 106/106 tests, typecheck, zero-warning lint, Expo dependency
+config gate, 108/108 tests, typecheck, zero-warning lint, Expo dependency
 compatibility, the 34-command required visual contract plus 8-command isolated
 AR diagnostic, both exports, Expo Doctor 20/20, and 41-module native autolinking
-passed. The fresh EAS archive audit also passed for 95 files and 1,689,816 bytes
+passed. The fresh EAS archive audit also passed for 95 files and 1,690,897 bytes
 (about 1.61 MiB), every byte matching current source.
 
 | Check                       | Result                                           | Boundary                                                                                                           |
 | --------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | SDK 57 runtime              | Node 22.23.1; pnpm 9.0.0                         | Declared EAS/repository target; capture a final frozen-install receipt after the candidate is committed            |
-| SDK 57 `test`               | 106/106 passed                                   | Current JavaScript/domain contract receipt; not native rendering or physical UI behavior                           |
+| SDK 57 `test`               | 108/108 passed                                   | Current JavaScript/domain contract receipt; not native rendering or physical UI behavior                           |
 | SDK 57 `typecheck`          | Passed                                           | Current TypeScript 6.0.3 static receipt; not runtime behavior                                                      |
-| SDK 57 `check:expo`         | Passed                                           | Current installed Expo package compatibility                                                                       |
+| SDK 57 `check:expo`         | Passed: 30 installed SDK packages                | Reproducible compatibility against this installed Expo release's bundled map; not the mutable online upgrade feed  |
 | SDK 57 Expo Doctor          | 20/20 passed                                     | Current Expo project diagnostics                                                                                   |
 | SDK 57 native autolinking   | 41 modules                                       | Dependency-discovery receipt only; not a native compile                                                            |
 | SDK 57 `lint`               | Passed, zero warnings                            | Current static lint receipt only                                                                                   |
 | SDK 57 visual contract      | Passed; 34 required + 8 isolated AR commands     | Required viewer/shell lane and non-authoritative AR diagnostic contract; cloud and device receipts remain separate |
-| SDK 57 `export:web --clear` | Passed; 20 routes                                | 1,447 server modules and 1,415 web modules; browser-fallback bundling only                                         |
-| SDK 57 `export:ios --clear` | Passed; 1,817 modules, 4.4 MB HBC                | Clean unsigned JavaScript/assets export only                                                                       |
-| SDK 57 `check:eas-archive`  | Passed: 95 files, 1,689,816 bytes                | Fresh allowlisted archive; every byte matches current source; local archive evidence only                          |
+| SDK 57 `export:web --clear` | Passed; 20 routes                                | 1,457 server modules and 1,425 web modules; browser-fallback bundling only                                         |
+| SDK 57 `export:ios --clear` | Passed; 1,826 modules, 4.4 MB HBC                | Clean unsigned JavaScript/assets export only                                                                       |
+| SDK 57 `check:eas-archive`  | Passed: 95 files, 1,690,897 bytes                | Fresh allowlisted archive; every byte matches current source; local archive evidence only                          |
 | iOS deployment target       | Signed artifact and source resolve `17.6`        | Build `2960e909…` proves the app and ViroKit target; not TestFlight or Room acceptance                             |
 | signed development build    | Finished: `2960e909-355d-46b0-8394-013786627180` | Exact clean `7cd75aaf`, SDK 57 internal registered-iPhone artifact, `1.0.1 (1)`; installed on iPhone 15 Pro        |
 | active development update   | Published for runtime `1.0.1`                    | Group `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact `7cd75aaf`; a landed follow-up OTA is still required           |
@@ -591,7 +595,7 @@ alpha (`lupi-splash-mark-1024.png`); the web favicon remains `lupi-icon.png`.
 These source/byte properties do not prove on-device icon or splash fidelity.
 
 The root [`.easignore`](../../.easignore) is an allowlist. The current SDK 57
-archive contains 95 files totaling 1,689,816 bytes (about 1.61 MiB); every byte
+archive contains 95 files totaling 1,690,897 bytes (about 1.61 MiB); every byte
 matches current source. Historical SDK 56 commit `42536acd` produced a
 92-file/1,660,534-byte archive, and historical SDK 55 commit `1a56e398` produced
 a 92-file/1,707,990-byte archive. All are local archive-content receipts, not an

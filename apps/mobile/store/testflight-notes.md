@@ -11,17 +11,17 @@ renderer.
 
 ## Candidate identity and evidence boundary
 
-Exact main is `82edf6141174b40098da6d2346f598e5d480b1c8`; focused follow-up
-branch is `codex/mobile-review-fixes`. Source
+Exact main is `15eb0b4cfeb1e9583e817599d43003c173f5481d`; focused follow-up
+branch is `codex/sdk57-patch-alignment`. Source
 marketing/runtime version is `1.0.1`, Expo SDK is `57.0.12`, React Native is
 `0.86.2`, React is `19.2.3`, Expo Router is `57.0.12`, Viro is `2.57.5`, the
 built-in iOS deployment target is `17.6`, and the EAS-managed remote iOS build
 number baseline is `1`. Every EAS profile uses Node `22.23.1` and the `sdk-57`
 image. Record the final full commit with `git rev-parse HEAD` after the docs
 amendment; do not copy an earlier SHA into App Store Connect notes. The current
-local ladder is green: 106/106 tests, typecheck, zero-warning lint, Expo
+local ladder is green: 108/108 tests, typecheck, zero-warning lint, Expo
 dependency check, Doctor 20/20, 20-route web export, clean unsigned iOS export,
-local visual contract, EAS workflow schema, and a 95-file/1,689,816-byte archive
+local visual contract, EAS workflow schema, and a 95-file/1,690,897-byte archive
 audit passed.
 
 Historical local receipts remain separate: SDK 56 commit `42536acd` passed its
@@ -33,9 +33,9 @@ A signed SDK 57 internal development artifact exists as EAS build
 `2960e909-355d-46b0-8394-013786627180`, exact revision `7cd75aaf`,
 version/build `1.0.1 (1)`, for the registered iPhone. It was installed on an
 iPhone 15 Pro running iOS 26.6 and proved the native shell plus Viewer. That
-session exposed an interactive back-swipe conflict; follow-up source disables
+session exposed an interactive back-swipe conflict; current main disables
 the gesture and preserves the explicit Back button so horizontal drags rotate
-the molecule. Exact-main simulator workflow
+the molecule. Exact-`82edf614` simulator workflow
 `01a0009b-1133-711b-b57a-60f3067a4b6b` passed 37 commands and five native-shell
 screenshots. No App Store Connect app, Apple upload, TestFlight processing,
 post-fix device retest, or physical Room AR acceptance exists. The development
