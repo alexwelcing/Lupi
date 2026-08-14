@@ -187,6 +187,7 @@ check(
 
 const requiredNativeShellScreenshots = [
   "gallery-first-fold",
+  "gallery-search-caffeine",
   "library-empty",
   "settings",
 ];
@@ -203,7 +204,7 @@ check(
         (entry) => entry?.extendedWaitUntil?.visible?.id === id,
       ),
     ),
-  "flow captures the native Gallery, empty Library, and Settings shell after semantic readiness",
+  "flow captures the native Gallery first fold, focused search, empty Library, and Settings shell after semantic readiness",
 );
 
 const orderedRequiredScreenshots = [

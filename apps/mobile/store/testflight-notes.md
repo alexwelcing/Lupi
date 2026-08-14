@@ -20,7 +20,7 @@ image. Record the final full commit with `git rev-parse HEAD` after the docs
 amendment; do not copy an earlier SHA into App Store Connect notes. The current
 local ladder is green: 106/106 tests, typecheck, zero-warning lint, Expo
 dependency check, Doctor 20/20, 20-route web export, clean unsigned iOS export,
-local visual contract, EAS workflow schema, and a 96-file/1,664,275-byte archive
+local visual contract, EAS workflow schema, and a 96-file/1,665,547-byte archive
 audit passed.
 
 Historical local receipts remain separate: SDK 56 commit `42536acd` passed its
