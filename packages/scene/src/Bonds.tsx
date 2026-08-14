@@ -157,10 +157,10 @@ interface BondsProps {
   atomColorSource?: 'colormap' | 'element';
   /** Raw types hidden by the owner viewer. Bonds touching them are removed. */
   hiddenAtomTypes?: ReadonlySet<number>;
-  /** Telemetry hook — fires after every bond detection completes, with the
-   *  backend that produced the result and the count. Used by the dev HUD
-   *  to verify state-flow; safe to omit. */
-  onBondsUpdate?: (info: { source: 'cpu' | 'gpu'; count: number }) => void;
+  /** Telemetry hook — reports the bonds actually left after visibility
+   *  filtering, not merely the raw inference result. Used by visual readiness
+   *  and the dev HUD; safe to omit. */
+  onBondsUpdate?: (info: { source: 'cpu' | 'gpu' | 'none'; count: number }) => void;
   /** Telemetry hook — fires when the GPU pipeline's status changes. */
   onGpuStatusChange?: (status: 'idle' | 'ready' | 'unsupported') => void;
 }
@@ -256,6 +256,7 @@ export function Bonds({
   // Bond pair data from the worker
   const [detectedBondPairs, setBondPairs] = useState<Int32Array>(EMPTY_BOND_PAIRS);
   const [detectedBondDistances, setBondDistances] = useState<Float32Array>(EMPTY_BOND_DISTANCES);
+  const [detectedBondSource, setDetectedBondSource] = useState<'cpu' | 'gpu' | 'none'>('none');
   const { pairs: bondPairs, distances: bondDistances } = useMemo(
     () => filterHiddenTypeBonds(frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypes),
     // The key binds contents even if the store reuses its hidden-types array.
@@ -264,10 +265,20 @@ export function Bonds({
   );
   const bondCount = bondPairs.length / 2;
   const halfCount = bondCount * 2; // Each bond → 2 half-cylinders
+  const onBondsUpdateRef = useRef(onBondsUpdate);
+
+  useEffect(() => {
+    onBondsUpdateRef.current = onBondsUpdate;
+  }, [onBondsUpdate]);
+
+  useEffect(() => {
+    onBondsUpdateRef.current?.({ source: detectedBondSource, count: bondCount });
+  }, [bondCount, detectedBondSource]);
 
   const clearBondState = useCallback(() => {
     setBondPairs(prev => prev.length === 0 ? prev : EMPTY_BOND_PAIRS);
     setBondDistances(prev => prev.length === 0 ? prev : EMPTY_BOND_DISTANCES);
+    setDetectedBondSource('none');
   }, []);
 
   // (tubeGeo moved below — depends on `capacity`, which is computed by
@@ -279,7 +290,7 @@ export function Bonds({
     workerRef.current = worker;
 
     worker.onmessage = (e: MessageEvent) => {
-      const { requestId, bondPairs: pairs, count, distances } = e.data;
+      const { requestId, bondPairs: pairs, distances } = e.data;
       const isFresh = typeof requestId === 'number' && requestId === cpuDispatchGenRef.current;
       if (isFresh) {
         // pairs is Int32Array [a0,b0, a1,b1, ...]
@@ -292,7 +303,7 @@ export function Bonds({
               ? new Float32Array(distances)
               : EMPTY_BOND_DISTANCES
         );
-        onBondsUpdate?.({ source: 'cpu', count: count ?? nextPairs.length / 2 });
+        setDetectedBondSource('cpu');
       }
 
       workerBusyRef.current = false;
@@ -327,6 +338,10 @@ export function Bonds({
   const lastDispatchPositionsRef = useRef<Float32Array | null>(null);
   const lastDispatchTypesRef = useRef<Int32Array | null>(null);
   const lastDispatchTypeSemanticsKeyRef = useRef<string>('');
+  // Motion/parameter caches are backend-owned. A GPU attempt can populate the
+  // same frame snapshot before capability detection reports `unsupported`;
+  // the CPU fallback must still dispatch that frame once.
+  const lastDispatchBackendRef = useRef<'cpu' | 'gpu' | null>(null);
   // Snapshot of the tolerance + max-bond-length we last dispatched on. The
   // motion-skip path must NOT fire when the user has slid the tolerance
   // knob; topology changes immediately even if atoms haven't moved.
@@ -347,6 +362,7 @@ export function Bonds({
       pendingMsgRef.current = null;
       clearBondState();
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
       prevFrameRef.current = frame;
@@ -360,6 +376,7 @@ export function Bonds({
       pendingMsgRef.current = null;
       clearBondState();
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
       prevFrameRef.current = frame;
@@ -370,6 +387,7 @@ export function Bonds({
       pendingMsgRef.current = null;
       clearBondState();
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
       prevFrameRef.current = frame;
@@ -391,6 +409,7 @@ export function Bonds({
     prevNatomsRef.current = frame.natoms;
     if (isMoleculeSwitch) {
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
       lastDispatchTypesRef.current = null;
@@ -404,6 +423,7 @@ export function Bonds({
     // Subsamples up to 1000 atoms for the displacement check so the gate
     // itself stays cheap on million-atom scenes.
     const cpuParamsUnchanged =
+      lastDispatchBackendRef.current === 'cpu' &&
       lastDispatchToleranceRef.current === tolerance &&
       lastDispatchMaxBondLengthRef.current === maxBondLength;
     if (!hasSourceTopology && !isMoleculeSwitch && isFrameChange && cpuParamsUnchanged && lastDispatchPositionsRef.current && frame.positions.length === lastDispatchPositionsRef.current.length) {
@@ -465,6 +485,7 @@ export function Bonds({
       lastDispatchPositionsRef.current = new Float32Array(frame.positions);
       lastDispatchTypesRef.current = new Int32Array(frame.types);
       lastDispatchTypeSemanticsKeyRef.current = typeSemanticsKey;
+      lastDispatchBackendRef.current = 'cpu';
       lastDispatchToleranceRef.current = tolerance;
       lastDispatchMaxBondLengthRef.current = maxBondLength;
 
@@ -505,6 +526,7 @@ export function Bonds({
       gpuDispatchGenRef.current += 1;
       clearBondState();
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
       return;
@@ -513,6 +535,7 @@ export function Bonds({
       gpuDispatchGenRef.current += 1;
       clearBondState();
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
       return;
@@ -528,6 +551,7 @@ export function Bonds({
     prevNatomsRef.current = frame.natoms;
     if (gpuMoleculeSwitch) {
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
       lastDispatchTypesRef.current = null;
@@ -542,6 +566,7 @@ export function Bonds({
     // as cutoffs widen/narrow), so the skip only fires when tolerance and
     // maxBondLength match the last dispatch as well.
     const paramsUnchanged =
+      lastDispatchBackendRef.current === 'gpu' &&
       lastDispatchToleranceRef.current === tolerance &&
       lastDispatchMaxBondLengthRef.current === maxBondLength;
     if (!gpuMoleculeSwitch && paramsUnchanged && lastDispatchPositionsRef.current && frame.positions.length === lastDispatchPositionsRef.current.length) {
@@ -553,6 +578,7 @@ export function Bonds({
     lastDispatchPositionsRef.current = new Float32Array(frame.positions);
     lastDispatchTypesRef.current = new Int32Array(frame.types);
     lastDispatchTypeSemanticsKeyRef.current = typeSemanticsKey;
+    lastDispatchBackendRef.current = 'gpu';
     lastDispatchToleranceRef.current = tolerance;
     lastDispatchMaxBondLengthRef.current = maxBondLength;
 
@@ -602,14 +628,14 @@ export function Bonds({
       // readBondsAsync returns freshly-allocated arrays — no need to clone.
       setBondPairs(readback.pairs);
       setBondDistances(readback.distances);
-      onBondsUpdate?.({ source: 'gpu', count: readback.count });
+      setDetectedBondSource('gpu');
     }).catch((err) => {
       console.warn('[Bonds] GPU compute failed, falling back to worker:', err);
     });
 
     // No cleanup needed — staleness is tracked via gpuDispatchGenRef, not a
     // boolean that races with React's synchronous effect teardown.
-  }, [gpuActive, frame, maxBondLength, tolerance, gpuCompute, onBondsUpdate, visible, clearBondState, typeSemanticsKey]);
+  }, [gpuActive, frame, maxBondLength, tolerance, gpuCompute, visible, clearBondState, typeSemanticsKey]);
 
   // ─── Capacity management ───────────────────────────────────────────
   // Grow on demand (with headroom), shrink when sustainably under-utilized.

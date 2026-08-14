@@ -222,7 +222,7 @@ jobs:
           pnpm verify:product-contract
           pnpm lint
           pnpm verify:workflows
-          pnpm audit --prod --audit-level high
+          NODE_OPTIONS=--max-old-space-size=8192 pnpm audit --prod --audit-level high
           node --test tools/verify-cloudflare-live.test.mjs
           node --test tools/cloudflare-release-receipt.test.mjs
           node --test tools/cloudflare-release-authority.test.mjs

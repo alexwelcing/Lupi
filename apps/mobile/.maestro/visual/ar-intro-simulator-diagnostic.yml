@@ -1,0 +1,36 @@
+appId: ${MAESTRO_APP_ID}
+name: AR introduction simulator diagnostic
+tags:
+  - visual
+  - ar
+  - simulator-diagnostic
+  - non-authoritative
+---
+# This flow intentionally crosses the Viro native-module boundary. It may fail
+# on iOS Simulator because Viro 2.57.5 excludes the simulator arm64 slice. Its
+# result is diagnostic only; physical-iPhone ARKit acceptance is authoritative.
+- launchApp:
+    clearState: true
+
+- openLink:
+    link: lupi-dev://__visual?scenario=ar-caffeine-intro
+
+# iOS can ask for confirmation the first time a custom scheme is opened.
+- runFlow:
+    when:
+      visible: "Open in.*Lupi.*"
+    commands:
+      - tapOn: Open
+
+- extendedWaitUntil:
+    visible:
+      id: ar-room-intro
+    timeout: 15000
+
+- assertVisible: Place Caffeine in your room
+- assertVisible: Camera privacy
+- assertVisible: Start Room View
+
+- takeScreenshot:
+    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/ar-caffeine-intro
+    label: Capture non-authoritative AR simulator diagnostic

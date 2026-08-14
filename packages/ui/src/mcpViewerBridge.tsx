@@ -25,7 +25,7 @@ import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { openMolecule } from './viewer/openMolecule';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
-import { createLupiMcpDriver } from './mcp/driver';
+import { createLupiMcpDriver, type LupiMcpStatus } from './mcp/driver';
 import {
   LUPI_VIEWER_MCP_VERSION,
   MAX_PERSISTED_EXPORT_CHARS,
@@ -174,18 +174,6 @@ interface LupiMcpResponsePayload {
   source?: string;
   state: ReturnType<typeof readViewerState>;
   type: 'lupi:mcp:response';
-}
-
-interface LupiMcpStatus {
-  ready: true;
-  version: string;
-  toolCount: number;
-  moleculeLoaded: boolean;
-  atomCount: number;
-  frame: number;
-  playing: boolean;
-  bondTopology: 'source' | 'inferred' | 'unavailable';
-  showBondsEffective: boolean;
 }
 
 interface LupiMcpDriver {
@@ -1943,7 +1931,10 @@ function readViewerState() {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     showBonds: state.showBonds,
-    showBondsEffective: state.showBonds && effectiveBondTopology(frame) !== 'unavailable',
+    showBondsEffective:
+      state.showBonds && effectiveBondTopology(frame) !== 'unavailable' && state.lastBondCount > 0,
+    bondCount: state.lastBondCount,
+    bondSource: state.bondSource,
     bondTopology: effectiveBondTopology(frame),
     typeSemantics: frame ? normalizeAtomTypeSemantics(frame.typeSemantics) : null,
     distanceSemantics: frame ? normalizeDistanceSemantics(frame.distanceSemantics) : null,
@@ -1972,8 +1963,11 @@ function readMcpStatus(): LupiMcpStatus {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     playing: state.playing,
+    bondCount: state.lastBondCount,
+    bondSource: state.bondSource,
     bondTopology: effectiveBondTopology(frame),
-    showBondsEffective: state.showBonds && effectiveBondTopology(frame) !== 'unavailable',
+    showBondsEffective:
+      state.showBonds && effectiveBondTopology(frame) !== 'unavailable' && state.lastBondCount > 0,
   };
 }
 
@@ -2030,7 +2024,13 @@ function applyViewerPatch(patch: ViewerPatch, transcript: string[]) {
     applied.bondColorMode = patch.bondColorMode;
   }
 
-  if (patch.showBonds !== undefined) next.showBonds = patch.showBonds;
+  if (patch.showBonds !== undefined) {
+    next.showBonds = patch.showBonds;
+    if (!patch.showBonds) {
+      next.bondSource = 'none';
+      next.lastBondCount = 0;
+    }
+  }
   if (patch.atomScale !== undefined) next.atomScale = clamp(patch.atomScale, 0.2, 3);
   if (patch.showCell !== undefined) next.showCell = patch.showCell;
   if (patch.showAxes !== undefined) next.showAxes = patch.showAxes;

@@ -24,7 +24,7 @@ The Vite app runs at `http://localhost:5173` by default.
 ```bash
 pnpm verify:product-contract
 pnpm lint
-pnpm audit --prod --audit-level high
+NODE_OPTIONS=--max-old-space-size=8192 pnpm audit --prod --audit-level high
 npm audit --prefix functions --omit=dev --audit-level=high
 pnpm build
 pnpm exec playwright install --with-deps chromium

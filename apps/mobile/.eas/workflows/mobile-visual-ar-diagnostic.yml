@@ -1,0 +1,31 @@
+name: Lupi iOS AR simulator diagnostic
+
+# This is an optional, non-authoritative diagnostic that reuses a successful
+# visual-ios build. It is intentionally separate from the required viewer and
+# native-shell workflows, so a Viro simulator failure cannot block those
+# screenshots. Room acceptance remains a physical-iPhone gate.
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        type: string
+        required: true
+        description: Existing successful visual-ios EAS build ID
+
+concurrency:
+  cancel_in_progress: true
+  group: ${{ workflow.filename }}-${{ github.ref }}
+
+jobs:
+  capture_ar_simulator_diagnostic:
+    name: Probe AR introduction on iPhone 16 Plus simulator
+    type: maestro
+    environment: preview
+    env:
+      MAESTRO_APP_ID: live.lupi.app.dev
+    params:
+      build_id: ${{ inputs.build_id }}
+      flow_path: .maestro/visual/ar-intro-simulator-diagnostic.yml
+      device_identifier: iPhone 16 Plus
+      maestro_version: 2.7.0
+      record_screen: true

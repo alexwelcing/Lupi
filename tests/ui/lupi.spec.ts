@@ -360,30 +360,33 @@ test.describe('mobile viewer', () => {
 
     const responses = await page.evaluate(async () => {
       const driver = window.__lupiViewerMcp!;
-      const generated = await driver.execute({
+      const opened = await driver.execute({
         id: 'expo-embedded-caffeine',
-        tool: 'lupi.generate_molecule',
-        arguments: { inputType: 'template', input: 'Caffeine' },
+        tool: 'lupi.open_gallery_example',
+        arguments: { id: 'caffeine', expectedAtomCount: 24, maxAtomCount: 50_000 },
+      });
+      const viewer = await driver.execute({
+        id: 'expo-embedded-camera',
+        tool: 'lupi.set_viewer',
+        arguments: { cameraPreset: 'iso', showBonds: true },
       });
       const fitted = await driver.execute({
         id: 'expo-embedded-fit',
         tool: 'lupi.fit_camera',
         arguments: {},
       });
-      const camera = await driver.execute({
-        id: 'expo-embedded-camera',
-        tool: 'lupi.set_camera_preset',
-        arguments: { preset: 'iso' },
-      });
-      return { generated, fitted, camera };
+      return { opened, viewer, fitted };
     });
 
-    expect(responses.generated.ok).toBe(true);
-    expect(responses.generated.result?.molecule?.atomCount).toBe(24);
+    expect(responses.opened.ok).toBe(true);
+    expect(responses.viewer.ok).toBe(true);
     expect(responses.fitted.ok).toBe(true);
-    expect(responses.camera.ok).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount)).toBe(24);
     await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.state().fileName)).toMatch(/Caffeine/i);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondCount)).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondSource)).toMatch(/cpu|gpu/);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.status().showBondsEffective)).toBe(true);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.state().cameraPreset)).toBe('iso');
 
     const canvas = page.locator('.lupine-main-viewport canvas');
     await expect(canvas).toBeVisible({ timeout: 30_000 });

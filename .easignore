@@ -1,0 +1,48 @@
+# Lupi's iPhone app has no source-time dependency on the web, Worker, research,
+# test, or local workshop trees. EAS still needs the pnpm workspace metadata at
+# the repository root, so keep a deliberately small allowlist for the archive.
+*
+
+!.npmrc
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+
+!packages
+!packages/core
+!packages/core/package.json
+!packages/core/src
+!packages/core/src/elements.ts
+
+!apps
+!apps/mobile
+!apps/mobile/.eas
+!apps/mobile/.eas/**
+!apps/mobile/.maestro
+!apps/mobile/.maestro/**
+!apps/mobile/app
+!apps/mobile/app/**
+!apps/mobile/assets
+!apps/mobile/assets/**
+!apps/mobile/src
+!apps/mobile/src/**
+!apps/mobile/app.config.ts
+!apps/mobile/app.json
+!apps/mobile/.gitignore
+!apps/mobile/eas.json
+!apps/mobile/package.json
+!apps/mobile/plugins
+!apps/mobile/plugins/**
+!apps/mobile/tsconfig.json
+
+# Never upload generated output, dependencies, editor state, tests, or release
+# notes. The release archive is inspected before every cloud build.
+apps/mobile/node_modules/
+apps/mobile/.expo/
+apps/mobile/.verify-artifacts/
+apps/mobile/dist/
+apps/mobile/dist-*/
+apps/mobile/.vscode/
+apps/mobile/src/**/*.test.ts
+apps/mobile/store/
+apps/mobile/README.md

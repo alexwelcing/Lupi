@@ -8,8 +8,8 @@
  * drift from what the product actually does.
  *
  * Usage:
- *   npx -y tsx tools/lupi-doctor.mjs <file.lammpstrj> [more files...]
- *   npx -y tsx tools/lupi-doctor.mjs --deep <file>     # full parse: frames,
+ *   pnpm doctor -- <file.lammpstrj> [more files...]
+ *   pnpm doctor -- --deep <file>     # full parse: frames,
  *                                                      # types, transformation
  *
  * Exit code: 0 if every file is at least viewable, 1 if any is not.

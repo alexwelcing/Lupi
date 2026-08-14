@@ -124,13 +124,39 @@ describe('MCP viewer bridge', () => {
     await loadBenzene(driver);
 
     expect(driver.state()).toMatchObject({
+      bondCount: 0,
+      bondSource: 'none',
       bondTopology: 'inferred',
       showBonds: true,
-      showBondsEffective: true,
+      showBondsEffective: false,
       typeSemantics: { kind: 'atomic-number', provenance: 'source-element-symbol' },
       distanceSemantics: { kind: 'angstrom', provenance: 'source-declared' },
     });
-    expect(driver.status()).toMatchObject({ bondTopology: 'inferred', showBondsEffective: true });
+    expect(driver.status()).toMatchObject({
+      bondCount: 0,
+      bondSource: 'none',
+      bondTopology: 'inferred',
+      showBondsEffective: false,
+    });
+
+    useStore.setState({ bondSource: 'cpu', lastBondCount: 12 });
+    expect(driver.status()).toMatchObject({
+      bondCount: 12,
+      bondSource: 'cpu',
+      showBondsEffective: true,
+    });
+
+    const hidden = await driver.execute({
+      id: 'hide-rendered-bonds',
+      tool: 'lupi.set_viewer',
+      arguments: { showBonds: false },
+    });
+    expect(hidden.ok).toBe(true);
+    expect(driver.status()).toMatchObject({
+      bondCount: 0,
+      bondSource: 'none',
+      showBondsEffective: false,
+    });
   });
 
   it('declines impossible bond and element settings instead of reporting requested-only state', async () => {

@@ -127,7 +127,11 @@ console.log(status);
 //   moleculeLoaded: true,
 //   atomCount: 250000,
 //   frame: 0,
-//   playing: false
+//   playing: false,
+//   bondCount: 420000,
+//   bondSource: 'gpu',
+//   bondTopology: 'inferred',
+//   showBondsEffective: true
 // }
 ```
 

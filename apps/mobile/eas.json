@@ -1,0 +1,102 @@
+{
+  "cli": {
+    "version": ">= 20.3.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "channel": "development",
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "node": "22.23.1",
+      "ios": {
+        "image": "sdk-57"
+      },
+      "android": {
+        "image": "sdk-57"
+      },
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_LUPI_WEB_URL": "https://lupi.live",
+        "EXPO_PUBLIC_VISUAL_QA": "1"
+      }
+    },
+    "development-simulator": {
+      "extends": "development",
+      "withoutCredentials": true,
+      "ios": {
+        "simulator": true,
+        "image": "sdk-57"
+      }
+    },
+    "visual-ios": {
+      "channel": "visual",
+      "environment": "preview",
+      "node": "22.23.1",
+      "withoutCredentials": true,
+      "ios": {
+        "simulator": true,
+        "image": "sdk-57"
+      },
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_LUPI_WEB_URL": "https://lupi.live",
+        "EXPO_PUBLIC_VISUAL_QA": "1"
+      }
+    },
+    "visual-android": {
+      "channel": "visual",
+      "distribution": "internal",
+      "environment": "preview",
+      "node": "22.23.1",
+      "android": {
+        "buildType": "apk",
+        "image": "sdk-57"
+      },
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_LUPI_WEB_URL": "https://lupi.live",
+        "EXPO_PUBLIC_VISUAL_QA": "1"
+      }
+    },
+    "preview": {
+      "channel": "preview",
+      "distribution": "internal",
+      "environment": "preview",
+      "node": "22.23.1",
+      "ios": {
+        "image": "sdk-57"
+      },
+      "android": {
+        "image": "sdk-57"
+      },
+      "env": {
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_LUPI_WEB_URL": "https://lupi.live",
+        "EXPO_PUBLIC_VISUAL_QA": "0"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "distribution": "store",
+      "environment": "production",
+      "node": "22.23.1",
+      "ios": {
+        "image": "sdk-57"
+      },
+      "android": {
+        "image": "sdk-57"
+      },
+      "env": {
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_LUPI_WEB_URL": "https://lupi.live",
+        "EXPO_PUBLIC_VISUAL_QA": "0"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

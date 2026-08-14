@@ -8,7 +8,7 @@
  * in-browser ingest worker uses, with the bytes landing on disk instead of
  * OPFS. One frame in flight; the whole trajectory is never resident.
  *
- * Usage:  npx -y tsx tools/bake-glimbin.mjs <file.lammpstrj[.gz]> [...] [--out-dir DIR]
+ * Usage:  pnpm bake:glimbin -- <file.lammpstrj[.gz]> [...] [--out-dir DIR]
  *
  * For each input it writes, next to the input or under --out-dir:
  *   <name>.glimbin        — the artifact
