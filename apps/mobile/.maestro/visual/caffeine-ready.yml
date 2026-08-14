@@ -75,6 +75,18 @@ tags:
     path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/gallery-first-fold
     label: Capture native Gallery first fold
 
+- tapOn: Search molecules and materials
+
+- inputText: caffeine
+
+- assertVisible: "Open Caffeine.*"
+
+- takeScreenshot:
+    path: ${MAESTRO_TESTS_DIR}/visual/ios/${MAESTRO_DEVICE_UDID}/shard-${MAESTRO_SHARD_INDEX}/gallery-search-caffeine
+    label: Capture focused native Gallery search
+
+- hideKeyboard
+
 - tapOn: Library
 
 - extendedWaitUntil:

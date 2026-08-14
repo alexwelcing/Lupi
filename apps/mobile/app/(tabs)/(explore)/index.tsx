@@ -32,7 +32,12 @@ export default function ExploreRoute() {
               placement: "automatic" as const,
               ref: searchBarRef,
               textColor: colors.text,
-              tintColor: colors.accent,
+              ...(Platform.OS === "ios"
+                ? { tintColor: colors.accent }
+                : {
+                    headerIconColor: colors.textMuted,
+                    hintTextColor: colors.textMuted,
+                  }),
             },
           }
         : {}),
