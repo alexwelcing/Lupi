@@ -8,19 +8,22 @@ EAS build, App Store Connect, TestFlight, device, and feedback truth.
 
 Expo login, EAS project-link/configuration, remote build-number, and signed
 development-build receipts exist. Exact main is
-`82edf6141174b40098da6d2346f598e5d480b1c8`; focused follow-up branch
-`codex/mobile-review-fixes` keeps Expo SDK 57.0.12, React Native 0.86.2, React
-19.2.3, version/runtime `1.0.1`, and iOS deployment target `17.6`. Its local
-verification ladder and 95-file/1,689,816-byte archive are green, but the final
+`15eb0b4cfeb1e9583e817599d43003c173f5481d`; focused follow-up branch
+`codex/sdk57-patch-alignment` keeps Expo SDK 57.0.12, React Native 0.86.2,
+React 19.2.3, version/runtime `1.0.1`, and iOS deployment target `17.6`. Its local
+verification ladder and 95-file/1,690,897-byte archive are green, but the final
 follow-up SHA is not frozen. Signed SDK 57 internal build
 `2960e909-355d-46b0-8394-013786627180`, exact SHA `7cd75aaf`, version/build
 `1.0.1 (1)`, was installed on an iPhone 15 Pro running iOS 26.6. That session
 proved installation and Viewer interaction, and exposed an interactive
-back-swipe conflict now disabled in follow-up source. Exact-main simulator
+back-swipe conflict now disabled on main. Exact-`82edf614` simulator
 workflow `01a0009b-1133-711b-b57a-60f3067a4b6b` passed the complete shell
 matrix. The compatible 30-browser-tool/seven-edge-tool bridge is live. No App
 Store Connect app, TestFlight build, post-fix device retest, or physical Room AR
-receipt is recorded.
+receipt is recorded. The post-merge source job also proved that Expo's mutable
+online compatibility feed can advance after review; the current follow-up
+therefore validates the installed SDK's bundled map while leaving upgrades as
+an explicit native-release decision.
 A checked item below means only
 that its stated evidence was verified; it never stands in for a later gate.
 
@@ -267,7 +270,7 @@ revision “the candidate”; start a new candidate record after any change.
 ### Candidate freeze and environment
 
 - [ ] **Name and freeze the Room candidate.** Development is isolated on
-      `codex/mobile-review-fixes`, source marketing version is `1.0.1`,
+      `codex/sdk57-patch-alignment`, source marketing version is `1.0.1`,
       runtime policy is `appVersion`, the SDK checkpoint is Expo 57 / React Native
       0.86.2 / React 19.2.3, iOS deployment target is `17.6`, and the recorded remote iOS
       build number baseline is `1`. Capture the final full SHA with
@@ -278,7 +281,7 @@ revision “the candidate”; start a new candidate record after any change.
       release scope were reviewed, and unrelated shared-working-tree changes were
       excluded from the candidate claim. Reconfirm the clean state after the final
       docs amendment. **Owner:** Codex. **Receipt:** reviewed file list on
-      `codex/mobile-review-fixes` and scoped strict-gate output.
+      `codex/sdk57-patch-alignment` and scoped strict-gate output.
 - [x] **Pin the SDK 57 EAS runtime to Node `22.23.1`.** This
       machine's Node 24 root install hit `canvas@3.2.3`/ClangCL.
       `pnpm install --ignore-scripts` was a
@@ -357,14 +360,14 @@ receipts and do not complete G1 by themselves.
       1024-pixel icon/splash PNG properties. **Owner:** Codex. **Receipt:** current
       `check:testflight` output and exit 0.
 - [x] **The full local verification ladder passes on SDK 57.** It completed the
-      source and resolved-production config gates, 106/106 tests, typecheck,
+      source and resolved-production config gates, 108/108 tests, typecheck,
       zero-warning lint, Expo dependency compatibility, the 34-command required
       visual flow plus 8-command isolated AR diagnostic,
-      contract, a 20-route web export with 1,447 server modules and 1,415 web
-      modules, and a clean unsigned iOS export with 1,817 modules and 4.4 MB
+      contract, a 20-route web export with 1,457 server modules and 1,425 web
+      modules, and a clean unsigned iOS export with 1,826 modules and 4.4 MB
       HBC. Doctor also passed 20/20 and native
       autolinking discovered 41 modules. **Owner:** Codex. **Receipt:** terminal
-      command/output and exit 0 on `codex/mobile-review-fixes`.
+      command/output and exit 0 on `codex/sdk57-patch-alignment`.
 - [x] **Preserve the completed SDK 56 ladder as historical evidence.** Commit
       `42536acd` retains 105/105 tests, typecheck, zero-warning lint, Expo
       dependency/config checks, Doctor 21/21, 41-module autolinking, a 20-route
@@ -384,7 +387,7 @@ receipts and do not complete G1 by themselves.
       failure is the absent numeric `submit.production.ios.ascAppId`. **Owner:**
       Codex + Apple Account Holder. **Receipt:** `check:testflight:release` output
       after App Store Connect creation and the final docs amendment.
-- [x] **Mobile unit tests pass on the Room candidate: 106/106.** Coverage
+- [x] **Mobile unit tests pass on the Room candidate: 108/108.** Coverage
       includes strict AR scene/session/handoff/build-policy contracts, config/release
       identity, molecule/route caps, saved-view and XYZ
       validation, WebView bridge compatibility/recovery/session/navigation/share,
@@ -396,11 +399,14 @@ receipts and do not complete G1 by themselves.
       `6.0.3`.
 - [x] **The SDK 57 lint check passes with zero warnings.** **Owner:** Codex.
       **Receipt:** current `lint` output and exit 0.
-- [x] **Expo dependency compatibility passes.** `expo install --check` reports
-      the installed Expo package set compatible. **Owner:** Codex. **Receipt:**
-      `check:expo` output and exit 0.
+- [x] **Expo dependency compatibility passes reproducibly.** `check:expo`
+      validates all 30 installed Expo-managed packages against
+      `expo/bundledNativeModules.json` from the installed SDK and fails closed
+      on an incompatible fixture. The mutable online upgrade feed is not used
+      as a release gate. **Owner:** Codex. **Receipt:** `check:expo` output and
+      exit 0 plus the positive/negative unit tests.
 - [x] **The SDK 57 Expo web export completes with 20 reported routes.** It
-      bundled 1,447 server modules and 1,415 web modules. Treat it only
+      bundled 1,457 server modules and 1,425 web modules. Treat it only
       as a browser-fallback bundling receipt, not proof of an iOS binary or native
       layout. **Owner:** Codex. **Receipt:** `export:web --clear` output and route
       count on the SDK 57 checkpoint.
@@ -409,7 +415,7 @@ receipts and do not complete G1 by themselves.
       current SDK 57 or physical-iPhone receipt. **Owner:** Codex. **Receipt:**
       current before/fix/after browser QA record.
 - [x] **The clean unsigned iOS export completes on the SDK 57 checkpoint.** It
-      reported 1,817 modules and a 4.4 MB HBC bundle.
+      reported 1,826 modules and a 4.4 MB HBC bundle.
       “Clean” means `export:ios --clear` regenerated output; it does not mean
       native project generation. Treat it only as an iOS JavaScript/assets bundle
       smoke, not code signing, an IPA, EAS build, App Store processing, or device
@@ -703,7 +709,7 @@ npx --yes eas-cli@21.7.0 whoami
       the follow-up needs its own landed update identity. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
 - [x] **Regenerate and audit the staged SDK 57 EAS upload archive allowlist.** The
-      current archive contains exactly 95 files totaling 1,689,816 bytes (about
+      current archive contains exactly 95 files totaling 1,690,897 bytes (about
       1.61 MiB), and every byte matches current source. **Owner:** Codex. **Receipt:**
       [`check-eas-archive.mjs`](../apps/mobile/scripts/check-eas-archive.mjs),
       regenerated `apps/mobile/.verify-artifacts/mobile-eas-archive`, and

@@ -62,6 +62,10 @@ const unitTestRunner = readFileSync(
   join(appDirectory, "scripts", "run-unit-tests.mjs"),
   "utf8",
 );
+const expoDependencyCheck = readFileSync(
+  join(appDirectory, "scripts", "check-expo-dependencies.mjs"),
+  "utf8",
+);
 
 check(app.name === "Lupi", "App name is Lupi");
 check(app.slug === "lupi", "Expo slug is lupi");
@@ -144,6 +148,14 @@ check(
     unitTestRunner.includes("/\\.test\\.tsx?$/") &&
     unitTestRunner.includes('"--test-concurrency=1"'),
   "Mobile unit tests are discovered fail-closed across TypeScript and TSX files",
+);
+check(
+  packageJson.scripts?.["check:expo"] ===
+    "node scripts/check-expo-dependencies.mjs" &&
+    expoDependencyCheck.includes('require.resolve("expo/package.json")') &&
+    expoDependencyCheck.includes('"bundledNativeModules.json"') &&
+    expoDependencyCheck.includes("isDependencyVersionIncorrect"),
+  "Expo dependency validation uses the installed SDK compatibility map",
 );
 check(
   app.runtimeVersion?.policy === "appVersion",
