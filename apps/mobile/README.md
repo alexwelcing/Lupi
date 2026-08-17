@@ -11,22 +11,23 @@ a supported physical iPhone.
 The WebView is a parity bridge, not a claim that the web renderer is native.
 See [the full Expo migration guide](../../docs/mobile-expo.md) for architecture,
 the parity matrix, development-build boundaries, and App Store preparation.
-Current main is `15eb0b4cfeb1e9583e817599d43003c173f5481d`. It removes an
-unused four-template search client, reports the running Expo Update identity,
-discovers unit tests fail-closed, and disables Viewer back-swipe so horizontal
-drags remain available for molecule rotation. The focused
-`codex/sdk57-patch-alignment` follow-up makes Expo dependency validation use the
-installed SDK's immutable compatibility map after the mutable online feed
-advanced immediately after the merge.
+For the Apple Silicon development-machine transition, start with the
+[M2 MacBook Air handoff guide](../../docs/mobile-macbook-air-handoff.md).
+The verified runtime source is main commit
+`0e78b6b4a4493cae31019bbcb9aa5b01c6ae32a0`. It removes the unused
+four-template search client, reports the running Expo Update identity,
+discovers unit tests fail-closed, disables Viewer back-swipe so horizontal
+drags remain available for molecule rotation, and validates Expo dependencies
+against the installed SDK's immutable compatibility map.
 
 ## Current release snapshot
 
 - Expo login: `alexwelcing`
 - EAS project: `@alexwelcing/lupi`
 - EAS project ID: `38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d`
-- current follow-up branch: `codex/sdk57-patch-alignment`, based on exact main
-  `15eb0b4cfeb1e9583e817599d43003c173f5481d`; it is not a frozen release
-  candidate until committed, reviewed, and green in exact-head CI
+- authoritative source: clean GitHub `main` at exact reviewed commit
+  `0e78b6b4a4493cae31019bbcb9aa5b01c6ae32a0`; the matching source and build-test
+  CI jobs passed before the handoff
 - current source checkpoint: Expo SDK 57 (`~57.0.12`), React Native `0.86.2`,
   React `19.2.3`, Expo Router `~57.0.12`, TypeScript `~6.0.3`, and a
   deterministic `appVersion` runtime policy.
@@ -91,9 +92,11 @@ advanced immediately after the merge.
   `2960e909-355d-46b0-8394-013786627180` finished for exact SHA `7cd75aaf`,
   version/build `1.0.1 (1)`, as a physical-device internal build. Its IPA is
   signed for the registered iPhone and targets iOS `17.6`.
-- active development update: runtime `1.0.1`, group
-  `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`;
-  it is compatible with build `2960e909…`
+- active development update: iOS update
+  `01a0101e-640a-7d5e-b248-6ae762f7a50f`, group
+  `11ec17f2-4047-4e80-b688-a769fb892668`, runtime `1.0.1`, exact clean revision
+  `0e78b6b4`; it resolves as `Lupi Dev` / `live.lupi.app.dev` and is compatible
+  with build `2960e909…`
 - exact-`82edf614` simulator visual receipt: build `813857a7…` plus workflow
   `01a0009b-1133-711b-b57a-60f3067a4b6b` passed 37 commands and captured
   Viewer, Gallery, focused search, Library, and Settings on iPhone 16 Plus /
@@ -107,9 +110,10 @@ advanced immediately after the merge.
   verified the fixes for header/tab overlap
 
 The complete SDK 55 and SDK 56 source ladders remain historical receipts at
-commits `1a56e398` and `42536acd`. The current SDK 57 local ladder and archive
-are green, but the dependency-gate follow-up is not frozen. Signed installation is
-proven; the full Viewer/Room matrix and TestFlight remain open.
+commits `1a56e398` and `42536acd`. The current SDK 57 source is frozen on main,
+its local ladder and archive are green, and a matching development update is
+active. Signed installation is proven; the post-fix Viewer/Room matrix and
+TestFlight remain open.
 
 ## Quick start on a physical iPhone
 
@@ -402,7 +406,7 @@ passed. The fresh EAS archive audit also passed for 95 files and 1,690,897 bytes
 
 | Check                       | Result                                           | Boundary                                                                                                           |
 | --------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| SDK 57 runtime              | Node 22.23.1; pnpm 9.0.0                         | Declared EAS/repository target; capture a final frozen-install receipt after the candidate is committed            |
+| SDK 57 runtime              | Node 22.23.1; pnpm 9.0.0                         | Exact frozen-install and release-verification toolchain used for the landed main checkpoint                        |
 | SDK 57 `test`               | 108/108 passed                                   | Current JavaScript/domain contract receipt; not native rendering or physical UI behavior                           |
 | SDK 57 `typecheck`          | Passed                                           | Current TypeScript 6.0.3 static receipt; not runtime behavior                                                      |
 | SDK 57 `check:expo`         | Passed: 30 installed SDK packages                | Reproducible compatibility against this installed Expo release's bundled map; not the mutable online upgrade feed  |
@@ -415,7 +419,7 @@ passed. The fresh EAS archive audit also passed for 95 files and 1,690,897 bytes
 | SDK 57 `check:eas-archive`  | Passed: 95 files, 1,690,897 bytes                | Fresh allowlisted archive; every byte matches current source; local archive evidence only                          |
 | iOS deployment target       | Signed artifact and source resolve `17.6`        | Build `2960e909…` proves the app and ViroKit target; not TestFlight or Room acceptance                             |
 | signed development build    | Finished: `2960e909-355d-46b0-8394-013786627180` | Exact clean `7cd75aaf`, SDK 57 internal registered-iPhone artifact, `1.0.1 (1)`; installed on iPhone 15 Pro        |
-| active development update   | Published for runtime `1.0.1`                    | Group `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact `7cd75aaf`; a landed follow-up OTA is still required           |
+| active development update   | Published for runtime `1.0.1`                    | Update `01a0101e…`, group `11ec17f2-4047-4e80-b688-a769fb892668`, exact clean `0e78b6b4`, Lupi Dev identity        |
 | EAS remote version          | iOS build number `1`                             | Initialized remotely; no production/store build exists                                                             |
 | live `/health`              | Ready with recorded version/tag/time             | Live service identity only; not native compatibility in a shipped binary                                           |
 
@@ -603,9 +607,11 @@ upload, native compile, signed artifact, or EAS build.
 
 The app includes `expo-updates`, an `appVersion` runtime policy, and named
 development/visual/preview/production channels. A development-channel update is
-active for runtime `1.0.1`, group
-`27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`; the
-installed SDK 57 binary can receive a landed follow-up with the same runtime.
+active for runtime `1.0.1`: update
+`01a0101e-640a-7d5e-b248-6ae762f7a50f`, group
+`11ec17f2-4047-4e80-b688-a769fb892668`, exact clean revision `0e78b6b4`. It
+resolves as `Lupi Dev` / `live.lupi.app.dev` and is compatible with the installed
+SDK 57 binary.
 Every SDK, Viro, permission, config-plugin, deployment-target, or other native
 compatibility change must increment `app.json`'s version before the new binary
 and update are published. The remote viewer/Worker can

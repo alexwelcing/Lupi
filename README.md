@@ -22,6 +22,8 @@ repos.
 Owns:
 
 - `apps/web`: public LUPI viewer
+- `apps/mobile`: Expo Router iPhone shell, native Gallery/Library/import/settings,
+  constrained viewer bridge, diagnostics, and bounded ARKit Room experience
 - `packages/core`, `packages/parsers`, `packages/renderer`, `packages/scene`,
   `packages/ui`, `packages/ui-core`
 - `functions`: viewer Firebase functions
@@ -50,6 +52,14 @@ pnpm dev
 ```
 
 Open `http://localhost:5173`.
+
+## iPhone development
+
+The Expo SDK 57 app lives in `apps/mobile`. Room uses a custom native Viro/ARKit
+runtime, so native development uses Lupi Dev rather than Expo Go. For the
+resource-conscious Apple Silicon setup, current Git/Expo identities, physical
+iPhone loop, and Codex startup prompt, follow the
+[M2 MacBook Air handoff guide](docs/mobile-macbook-air-handoff.md).
 
 ## Terminal Authentication (planned—not yet shipped)
 
@@ -88,6 +98,7 @@ Playwright writes failure diagnostics under `playwright-report/` and
 ## App Map
 
 - `apps/web`: Vite/React app that ships to `lupi.live`
+- `apps/mobile`: Expo Router iPhone app and native Room AR shell
 - `apps/remotion-trailer`: media/rendering support app
 - `packages/parsers`: LAMMPS/XYZ parsing and streaming contracts
 - `packages/parsers/wasm`: Rust/WASM parser build
@@ -120,3 +131,4 @@ custom domain or public product. See the
 - [docs/operations.md](docs/operations.md): local, CI, deploy, and live checks
 - [docs/deploy-cutover.md](docs/deploy-cutover.md): production deploy split
 - [docs/release-checklist.md](docs/release-checklist.md): cutover checklist
+- [docs/mobile-macbook-air-handoff.md](docs/mobile-macbook-air-handoff.md): Apple Silicon mobile-development handoff

@@ -1,18 +1,17 @@
 # Lupi iPhone TestFlight checklist
 
-Status snapshot: **2026-08-14**
+Status snapshot: **2026-08-17**
 
 This is the gated path from the current `apps/mobile` source to an iPhone
 TestFlight acceptance result. It deliberately separates source, local build,
 EAS build, App Store Connect, TestFlight, device, and feedback truth.
 
 Expo login, EAS project-link/configuration, remote build-number, and signed
-development-build receipts exist. Exact main is
-`15eb0b4cfeb1e9583e817599d43003c173f5481d`; focused follow-up branch
-`codex/sdk57-patch-alignment` keeps Expo SDK 57.0.12, React Native 0.86.2,
-React 19.2.3, version/runtime `1.0.1`, and iOS deployment target `17.6`. Its local
-verification ladder and 95-file/1,690,897-byte archive are green, but the final
-follow-up SHA is not frozen. Signed SDK 57 internal build
+development-build receipts exist. Exact clean main is
+`0e78b6b4a4493cae31019bbcb9aa5b01c6ae32a0`, with Expo SDK 57.0.12, React
+Native 0.86.2, React 19.2.3, version/runtime `1.0.1`, and iOS deployment target
+`17.6`. Its exact-head CI, local verification ladder, and
+95-file/1,690,897-byte archive are green. Signed SDK 57 internal build
 `2960e909-355d-46b0-8394-013786627180`, exact SHA `7cd75aaf`, version/build
 `1.0.1 (1)`, was installed on an iPhone 15 Pro running iOS 26.6. That session
 proved installation and Viewer interaction, and exposed an interactive
@@ -20,10 +19,12 @@ back-swipe conflict now disabled on main. Exact-`82edf614` simulator
 workflow `01a0009b-1133-711b-b57a-60f3067a4b6b` passed the complete shell
 matrix. The compatible 30-browser-tool/seven-edge-tool bridge is live. No App
 Store Connect app, TestFlight build, post-fix device retest, or physical Room AR
-receipt is recorded. The post-merge source job also proved that Expo's mutable
-online compatibility feed can advance after review; the current follow-up
-therefore validates the installed SDK's bundled map while leaving upgrades as
-an explicit native-release decision.
+receipt is recorded. A matching same-runtime Lupi Dev update is active at exact
+clean `0e78b6b4`. The post-merge source job also proved that Expo's mutable
+online compatibility feed can advance after review; current main therefore
+validates the installed SDK's bundled map while leaving upgrades as an explicit
+native-release decision. Development-machine setup moves to the
+[M2 MacBook Air handoff guide](mobile-macbook-air-handoff.md).
 A checked item below means only
 that its stated evidence was verified; it never stands in for a later gate.
 
@@ -472,10 +473,11 @@ receipts and do not complete G1 by themselves.
       [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/).
 - [x] **Decide the first-beta OTA boundary.** The candidate includes
       `expo-updates`, an `appVersion` runtime policy, the linked update URL, and
-      named EAS channels. A development update is active for runtime `1.0.1`,
-      group `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision
-      `7cd75aaf`; it was exercised in the compatible installed binary. The
-      focused follow-up requires a landed same-runtime update. Before every later Viro,
+      named EAS channels. Development update
+      `01a0101e-640a-7d5e-b248-6ae762f7a50f`, group
+      `11ec17f2-4047-4e80-b688-a769fb892668`, is active for runtime `1.0.1` at
+      exact clean revision `0e78b6b4`; it resolves as the Lupi Dev identity and
+      is compatible with the installed binary. Before every later Viro,
       permission, plugin, deployment-target, SDK, Metal, or other native
       compatibility change, increment the app version and ship a new binary.
       Remote web/Worker releases remain
@@ -703,10 +705,11 @@ npx --yes eas-cli@21.7.0 whoami
       implied. **Owner:** Codex + User. **Receipt:** finished EAS build,
       artifact/provisioning inspection, and registered-device ledger.
 - [x] **Record the active development update without treating it as device
-      acceptance.** Channel `development` points to runtime `1.0.1`, group
-      `27fd1483-2d23-40f5-95cd-a52eeb1a8a45`, exact clean revision `7cd75aaf`.
-      It ran in the compatible signed binary during the partial device session;
-      the follow-up needs its own landed update identity. **Owner:** Codex.
+      acceptance.** Channel `development` points to iOS update
+      `01a0101e-640a-7d5e-b248-6ae762f7a50f`, runtime `1.0.1`, group
+      `11ec17f2-4047-4e80-b688-a769fb892668`, exact clean revision `0e78b6b4`.
+      It resolves as `Lupi Dev` / `live.lupi.app.dev`; post-fix physical behavior
+      is still an independent receipt. **Owner:** Codex.
       **Receipt:** EAS Update branch/channel/group output.
 - [x] **Regenerate and audit the staged SDK 57 EAS upload archive allowlist.** The
       current archive contains exactly 95 files totaling 1,690,897 bytes (about
