@@ -88,8 +88,19 @@ Terminal authentication is planned—not yet shipped. Plan 026 owns it.
       'test:ui': 'echo ui',
       'cloudflare:test': 'echo worker',
       lint: 'echo lint',
+      'nist:build': 'tsx scripts/build-nist-catalog.ts',
+      doctor: 'tsx tools/lupi-doctor.mjs',
+      'bake:glimbin': 'tsx tools/bake-glimbin.mjs',
+      'generate:mcp-manifest': 'tsx tools/generate-mcp-manifest.ts',
       'verify:product-contract': 'node tools/verify-product-contract.mjs',
     },
+    devDependencies: { tsx: '^4.20.0' },
+  }, null, 2)}\n`);
+  write(root, 'apps/web/package.json', `${JSON.stringify({
+    scripts: {
+      build: 'tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build',
+    },
+    devDependencies: { tsx: '^4.20.0' },
   }, null, 2)}\n`);
   return root;
 }
@@ -110,6 +121,44 @@ test('valid fixture passes every contract check', (t) => {
   const root = createFixture(t);
   const result = verifyProductContract(root);
   assert.equal(result.ok, true, result.checks.filter((entry) => !entry.ok).map((entry) => entry.id).join(', '));
+});
+
+test('root tsx scripts fail closed without direct CLI ownership', (t) => {
+  const root = createFixture(t);
+  mutate(root, 'package.json', (text) => {
+    const parsed = JSON.parse(text);
+    delete parsed.devDependencies.tsx;
+    return `${JSON.stringify(parsed, null, 2)}\n`;
+  });
+  assert.equal(check(verifyProductContract(root), 'tsx-owner:root').ok, false);
+});
+
+test('root tsx scripts reject npx fallback', (t) => {
+  const root = createFixture(t);
+  mutate(root, 'package.json', (text) => text.replace(
+    'tsx tools/generate-mcp-manifest.ts',
+    'npx tsx tools/generate-mcp-manifest.ts',
+  ));
+  assert.equal(check(verifyProductContract(root), 'tsx-owner:root').ok, false);
+});
+
+test('web build fails closed without direct CLI ownership', (t) => {
+  const root = createFixture(t);
+  mutate(root, 'apps/web/package.json', (text) => {
+    const parsed = JSON.parse(text);
+    delete parsed.devDependencies.tsx;
+    return `${JSON.stringify(parsed, null, 2)}\n`;
+  });
+  assert.equal(check(verifyProductContract(root), 'tsx-owner:web').ok, false);
+});
+
+test('web build rejects npx fallback', (t) => {
+  const root = createFixture(t);
+  mutate(root, 'apps/web/package.json', (text) => text.replace(
+    'tsx ../../tools/generate-mcp-manifest.ts',
+    'npx tsx ../../tools/generate-mcp-manifest.ts',
+  ));
+  assert.equal(check(verifyProductContract(root), 'tsx-owner:web').ok, false);
 });
 
 for (const relativePath of [

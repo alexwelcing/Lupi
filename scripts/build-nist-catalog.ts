@@ -5,7 +5,7 @@
  * with demo manifest to produce apps/web/public/nist/nist_catalog.json.
  *
  * Run from atlas-view root:
- *   npx tsx scripts/build-nist-catalog.ts
+ *   pnpm nist:build
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';

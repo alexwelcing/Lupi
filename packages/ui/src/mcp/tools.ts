@@ -256,7 +256,11 @@ async function handleFitCamera(): Promise<LupiMcpResponseResult> {
   const state = useStore.getState();
   if (!state.file) throw new Error('No molecule is loaded.');
   state.fitCameraView();
-  return { cameraPosition: state.cameraPosition, cameraTarget: state.cameraTarget };
+  const fittedState = useStore.getState();
+  return {
+    cameraPosition: fittedState.cameraPosition,
+    cameraTarget: fittedState.cameraTarget,
+  };
 }
 
 async function handleSetBackground(request: LupiMcpRequest): Promise<LupiMcpResponseResult> {

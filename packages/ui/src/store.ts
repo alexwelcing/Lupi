@@ -30,6 +30,12 @@ import {
   hasCompleteElementMapping,
   resolveTypeDisplayRadius,
 } from '@atlas/core';
+import {
+  fitPerspectiveCameraToBounds,
+  maxRenderedAtomRadius,
+  type CameraVector3,
+  type PerspectiveCameraFitResult,
+} from './cameraFit';
 
 /** A pinned text annotation tied to a specific atom by index in the
  *  current frame. Persists across frame changes; if the atom moves, the
@@ -493,6 +499,8 @@ export interface AppState {
   cameraPosition: [number, number, number];
   cameraTarget: [number, number, number];
   cameraFov: number;
+  /** Runtime-only aspect reported by the mounted R3F viewer Canvas. */
+  cameraViewportAspect: number;
   cameraPreset: 'free' | 'front' | 'side' | 'top' | 'iso';
 
   // ─── Viewport Modes ───
@@ -646,6 +654,7 @@ export interface AppState {
   // ─── Actions: Camera ───
   setCameraState: (position: [number, number, number], target: [number, number, number]) => void;
   setCameraPreset: (preset: AppState['cameraPreset']) => void;
+  setCameraViewportAspect: (aspect: number) => void;
   setShowScaleBar: (show: boolean) => void;
   setColorblindMode: (enabled: boolean) => void;
   setViewportMode: (mode: AppState['viewportMode']) => void;
@@ -798,6 +807,54 @@ export interface AppState {
   setLoadedAtomCount: (count: number) => void;
 }
 
+function cameraPresetDirection(preset: AppState['cameraPreset']): CameraVector3 {
+  switch (preset) {
+    case 'side':
+      return [1, 0, 0];
+    case 'top':
+      return [0, 1, 0];
+    case 'iso':
+      return [1, 1, 1];
+    case 'front':
+    case 'free':
+    default:
+      return [0, 0, 1];
+  }
+}
+
+function fitCameraForState(
+  state: AppState,
+  directionOverride?: CameraVector3,
+): PerspectiveCameraFitResult | null {
+  if (!state.file) return null;
+  const bounds = state.file.trajectory.globalBounds;
+  const frame = state.file.trajectory.frames[state.frame]
+    ?? state.file.trajectory.frames[0];
+  const target: CameraVector3 = [
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  ];
+  const cameraTarget = directionOverride ? target : state.cameraTarget;
+  const cameraPosition: CameraVector3 = directionOverride
+    ? [
+        target[0] + directionOverride[0],
+        target[1] + directionOverride[1],
+        target[2] + directionOverride[2],
+      ]
+    : state.cameraPosition;
+
+  return fitPerspectiveCameraToBounds({
+    bounds,
+    cameraPosition,
+    cameraTarget,
+    verticalFovDegrees: state.cameraFov,
+    viewportAspect: state.cameraViewportAspect,
+    atomRadius: maxRenderedAtomRadius(frame, state.atomScale, state.atomTypeScales),
+    fallbackDirection: directionOverride ?? cameraPresetDirection(state.cameraPreset),
+  });
+}
+
 const DEFAULTS = {
   file: null,
   ghostFile: null as LoadedFile | null,
@@ -902,6 +959,7 @@ const DEFAULTS = {
   cameraPosition: [0, 0, 50] as [number, number, number],
   cameraTarget: [0, 0, 0] as [number, number, number],
   cameraFov: 50,
+  cameraViewportAspect: Number.NaN,
   cameraPreset: 'free' as const,
   showScaleBar: true,
   colorblindMode: false,
@@ -1398,7 +1456,11 @@ export const useStore = create<AppState>()(
 
     toggleCell: () => set(s => ({ showCell: !s.showCell })),
     toggleAxes: () => set(s => ({ showAxes: !s.showAxes })),
-    toggleBonds: () => set(s => ({ showBonds: !s.showBonds })),
+    toggleBonds: () => set((s) =>
+      s.showBonds
+        ? { showBonds: false, bondSource: 'none', lastBondCount: 0 }
+        : { showBonds: true },
+    ),
     setBondCutoff: (bondCutoff) => set({ bondCutoff }),
     setBondTolerance: (bondTolerance) => set({ bondTolerance }),
     setBondColorMode: (bondColorMode) => set({ bondColorMode }),
@@ -1691,62 +1753,31 @@ export const useStore = create<AppState>()(
 
     setCameraState: (position, target) => set({ cameraPosition: position, cameraTarget: target }),
 
+    setCameraViewportAspect: (cameraViewportAspect) => {
+      if (!Number.isFinite(cameraViewportAspect) || cameraViewportAspect <= 0) return;
+      set({ cameraViewportAspect });
+    },
+
     fitCameraView: () => {
       const state = get();
-      if (!state.file) return;
-      const { min, max } = state.file.trajectory.globalBounds;
-      const center: [number, number, number] = [
-        (min[0] + max[0]) / 2,
-        (min[1] + max[1]) / 2,
-        (min[2] + max[2]) / 2,
-      ];
-      const dx = max[0] - min[0], dy = max[1] - min[1], dz = max[2] - min[2];
-      const distance = Math.hypot(dx, dy, dz) * 1.4;
+      const fit = fitCameraForState(state);
+      if (!fit) return;
       set({
-        cameraPosition: [center[0], center[1], center[2] + distance],
-        cameraTarget: center,
+        cameraPosition: fit.position,
+        cameraTarget: fit.target,
       });
     },
 
     setCameraPreset: (cameraPreset) => {
       const state = get();
       if (!state.file) return;
-      
-      const { min, max } = state.file.trajectory.globalBounds;
-      const center: [number, number, number] = [
-        (min[0] + max[0]) / 2,
-        (min[1] + max[1]) / 2,
-        (min[2] + max[2]) / 2,
-      ];
-      const dx = max[0] - min[0];
-      const dy = max[1] - min[1];
-      const dz = max[2] - min[2];
-      const size = Math.max(dx, dy, dz);
-      const distance = size * 1.5;
-
-      let position: [number, number, number];
-      switch (cameraPreset) {
-        case 'front':
-          position = [center[0], center[1], center[2] + distance];
-          break;
-        case 'side':
-          position = [center[0] + distance, center[1], center[2]];
-          break;
-        case 'top':
-          position = [center[0], center[1] + distance, center[2]];
-          break;
-        case 'iso':
-          position = [
-            center[0] + distance * 0.7,
-            center[1] + distance * 0.7,
-            center[2] + distance * 0.7,
-          ];
-          break;
-        default:
-          return;
+      if (cameraPreset === 'free') {
+        set({ cameraPreset });
+        return;
       }
-      
-      set({ cameraPreset, cameraPosition: position, cameraTarget: center });
+      const fit = fitCameraForState(state, cameraPresetDirection(cameraPreset));
+      if (!fit) return;
+      set({ cameraPreset, cameraPosition: fit.position, cameraTarget: fit.target });
     },
     setShowScaleBar: (showScaleBar) => set({ showScaleBar }),
 
