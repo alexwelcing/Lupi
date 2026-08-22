@@ -25,7 +25,7 @@ describe('ViewerCommandDeck', () => {
   it('maps the visible game commands to one canonical surface at a time', () => {
     render(<ViewerCommandDeck compact={false} />);
 
-    expect(screen.getAllByRole('button')).toHaveLength(5);
+    expect(screen.getAllByRole('button')).toHaveLength(6);
 
     const visuals = screen.getByRole('button', { name: 'Visuals command' });
     fireEvent.click(visuals);
@@ -44,6 +44,10 @@ describe('ViewerCommandDeck', () => {
     expect(useStore.getState().activePanel).toBe('export');
     expect(useStore.getState().studioDeck).toBeNull();
     expect(useStore.getState().studyLensOpen).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Elements command' }));
+    expect(useStore.getState().activePanel).toBe('elements');
+    expect(useStore.getState().studioDeck).toBeNull();
   });
 
   it('makes Learn exclusive and lets an active command close itself', () => {

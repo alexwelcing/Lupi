@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ELEMENT_DATA, getElementSpec, hexToRgb } from './elements';
+import { ELEMENT_DATA, PERIODIC_LAYOUT, getElementSpec, hexToRgb } from './elements';
 
 describe('getElementSpec', () => {
   it('returns known elements by atomic number', () => {
@@ -67,6 +67,112 @@ describe('getElementSpec', () => {
     const la = getElementSpec(57);
     expect(la.symbol).toBe('La');
     expect(la.radius).toBeGreaterThanOrEqual(2.0);
+  });
+});
+
+describe('element group/period/category/electronegativity', () => {
+  it('fills all four fields for every element Z=1-118 with in-range values', () => {
+    for (let z = 1; z <= 118; z++) {
+      const spec = ELEMENT_DATA[z];
+      expect(spec.category, `Z=${z} category`).toBeDefined();
+      expect(
+        spec.group === null || (spec.group >= 1 && spec.group <= 18),
+        `Z=${z} group ${spec.group}`,
+      ).toBe(true);
+      // Every real element has a period; only the synthesized fallback is null.
+      expect(spec.period, `Z=${z} period`).not.toBeNull();
+      expect(spec.period!, `Z=${z} period ${spec.period}`).toBeGreaterThanOrEqual(1);
+      expect(spec.period!, `Z=${z} period ${spec.period}`).toBeLessThanOrEqual(7);
+      expect(
+        spec.electronegativity === null ||
+          (spec.electronegativity > 0 && spec.electronegativity <= 3.98),
+        `Z=${z} electronegativity ${spec.electronegativity}`,
+      ).toBe(true);
+    }
+  });
+
+  it('spot-checks canonical values', () => {
+    const h = ELEMENT_DATA[1];
+    expect(h.group).toBe(1);
+    expect(h.period).toBe(1);
+    expect(h.category).toBe('nonmetal');
+    expect(h.electronegativity).toBe(2.20);
+
+    const he = ELEMENT_DATA[2];
+    expect(he.group).toBe(18);
+    expect(he.period).toBe(1);
+    expect(he.category).toBe('noble-gas');
+    expect(he.electronegativity).toBeNull();
+
+    const fe = ELEMENT_DATA[26];
+    expect(fe.group).toBe(8);
+    expect(fe.period).toBe(4);
+    expect(fe.category).toBe('transition-metal');
+    expect(fe.electronegativity).toBe(1.83);
+
+    const o = ELEMENT_DATA[8];
+    expect(o.group).toBe(16);
+    expect(o.period).toBe(2);
+    expect(o.category).toBe('nonmetal');
+    expect(o.electronegativity).toBe(3.44);
+
+    const nd = ELEMENT_DATA[60];
+    expect(nd.category).toBe('lanthanide');
+    expect(nd.group).toBeNull();
+    expect(nd.period).toBe(6);
+
+    const u = ELEMENT_DATA[92];
+    expect(u.category).toBe('actinide');
+    expect(u.group).toBeNull();
+    expect(u.period).toBe(7);
+
+    // Fluorine has the maximum Pauling electronegativity.
+    expect(ELEMENT_DATA[9].electronegativity).toBe(3.98);
+  });
+
+  it('gives the fallback element unknown category and null group/period/EN', () => {
+    const unknown = getElementSpec(999);
+    expect(unknown.group).toBeNull();
+    expect(unknown.period).toBeNull();
+    expect(unknown.category).toBe('unknown');
+    expect(unknown.electronegativity).toBeNull();
+  });
+});
+
+describe('PERIODIC_LAYOUT', () => {
+  it('has exactly 120 cells (118 elements + 2 f-block placeholders)', () => {
+    expect(PERIODIC_LAYOUT).toHaveLength(120);
+  });
+
+  it('has no (col,row) collisions and stays inside the 18-column grid', () => {
+    const seen = new Set<string>();
+    for (const cell of PERIODIC_LAYOUT) {
+      expect(cell.col, `col of ${JSON.stringify(cell)}`).toBeGreaterThanOrEqual(1);
+      expect(cell.col, `col of ${JSON.stringify(cell)}`).toBeLessThanOrEqual(18);
+      expect(cell.row, `row of ${JSON.stringify(cell)}`).toBeGreaterThanOrEqual(1);
+      expect(cell.row, `row of ${JSON.stringify(cell)}`).toBeLessThanOrEqual(10);
+      // Row 8 is a visual gap and must stay empty.
+      expect(cell.row, `row of ${JSON.stringify(cell)}`).not.toBe(8);
+      const key = `${cell.col}:${cell.row}`;
+      expect(seen.has(key), `duplicate cell at ${key}`).toBe(false);
+      seen.add(key);
+    }
+  });
+
+  it('places every atomic number 1-118 exactly once', () => {
+    const zs = PERIODIC_LAYOUT.map((cell) => cell.z).filter((z) => z !== null);
+    expect(zs).toHaveLength(118);
+    const seen = new Set(zs);
+    for (let z = 1; z <= 118; z++) {
+      expect(seen.has(z), `missing Z=${z}`).toBe(true);
+    }
+  });
+
+  it('has exactly two placeholder cells at group 3 of periods 6 and 7', () => {
+    const placeholders = PERIODIC_LAYOUT.filter((cell) => cell.z === null);
+    expect(placeholders).toHaveLength(2);
+    expect(placeholders).toContainEqual({ z: null, placeholder: 'lanthanides', col: 3, row: 6 });
+    expect(placeholders).toContainEqual({ z: null, placeholder: 'actinides', col: 3, row: 7 });
   });
 });
 

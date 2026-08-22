@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { useStore } from './store';
 import { LandingPage } from './LandingPage';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
+import { RunConfigurator } from './molecules/RunConfigurator';
 import { LupiAgentDock } from './LupiAgentDock';
 import { LupiAuthCallout } from './LupiAuthCallout';
 import { openRandomOmol25Molecule } from './molecules/randomOmol';
@@ -149,6 +150,8 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
       <LupiAuthCallout compact={isMobile} />
       {/* Modal host for the hero "Build a scene" flow; renders null until opened. */}
       <MoleculeConfigurator />
+      {/* Modal host for the "New run" lattice flow (command palette / Elements panel). */}
+      <RunConfigurator />
 
       <div style={{ flex: 1, minHeight: 0 }}>
         <LandingPage />

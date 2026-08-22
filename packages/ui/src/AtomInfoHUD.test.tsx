@@ -34,6 +34,7 @@ describe('AtomInfoHUD chemistry truth', () => {
 
     expect(screen.getByText('Carbon')).toBeTruthy();
     expect(screen.getByText('Framework')).toBeTruthy();
-    expect(screen.getByText(/Å$/)).toBeTruthy();
+    // Å-suffixed rows: the enriched card adds "mass · rcov" alongside xyz.
+    expect(screen.getAllByText(/Å$/).length).toBeGreaterThan(0);
   });
 });

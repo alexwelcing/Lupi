@@ -8,7 +8,7 @@ import {
   LupiGlyph,
 } from '../icons';
 
-type ViewerCommand = 'visuals' | 'analyze' | 'science' | 'camera' | 'capture' | 'learn';
+type ViewerCommand = 'visuals' | 'analyze' | 'science' | 'camera' | 'capture' | 'learn' | 'elements';
 
 const COMMANDS: Array<{
   id: ViewerCommand;
@@ -23,6 +23,7 @@ const COMMANDS: Array<{
   { id: 'camera', label: 'Camera', shortcut: '3', icon: <IconFlythrough /> },
   { id: 'capture', label: 'Capture', shortcut: '4', icon: <IconExport /> },
   { id: 'learn', label: 'Learn', shortcut: '5', icon: <IconStudy /> },
+  { id: 'elements', label: 'Elements', shortcut: '7', icon: <IconElements /> },
 ];
 
 function commandIsActive(
@@ -37,6 +38,7 @@ function commandIsActive(
     case 'camera': return activePanel === 'flythrough';
     case 'capture': return activePanel === 'export';
     case 'learn': return studyLensOpen;
+    case 'elements': return activePanel === 'elements';
   }
 }
 
@@ -90,6 +92,10 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
       case 'capture':
         state.setStudioDeck(null);
         state.setActivePanel('export');
+        break;
+      case 'elements':
+        state.setStudioDeck(null);
+        state.setActivePanel('elements');
         break;
     }
   };
@@ -146,6 +152,17 @@ function IconVisuals() {
       <circle cx="15.8" cy="8.2" r="1.7" />
       <circle cx="15.8" cy="16" r="1.7" />
       <path d="m9.8 11 4.3-2.1M9.8 13l4.3 2.1" />
+    </LupiGlyph>
+  );
+}
+
+function IconElements() {
+  return (
+    <LupiGlyph>
+      <rect x="4.5" y="4.5" width="6.5" height="6.5" rx="1" />
+      <rect x="13" y="4.5" width="6.5" height="6.5" rx="1" />
+      <rect x="4.5" y="13" width="6.5" height="6.5" rx="1" />
+      <rect x="13" y="13" width="6.5" height="6.5" rx="1" />
     </LupiGlyph>
   );
 }
