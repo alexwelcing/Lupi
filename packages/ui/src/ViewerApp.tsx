@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { useStore } from './store';
+import { useStore, initSettingsPersistence } from './store';
 import {
   getMaxSafeAtomCount,
   getDefaultQualityTier,
@@ -50,6 +50,7 @@ import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
 import { DeferredCommandPalette } from './CommandPalette';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
+import { RunConfigurator } from './molecules/RunConfigurator';
 import { openRandomOmol25Molecule } from './molecules/randomOmol';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
@@ -99,6 +100,11 @@ import { Perf } from 'r3f-perf';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 
 const EMPTY_TRAJECTORY_FRAMES: Array<import('@atlas/core/types').Frame | undefined> = [];
+
+// Boot settings persistence (rehydrate + subscribe) as the viewer chunk
+// evaluates — before the component effect decodes `?s=`, so an explicit share
+// URL always wins over stored device settings. Idempotent and SSR/test-safe.
+initSettingsPersistence();
 
 export function ViewerApp() {
   const [hashRoute, setHashRoute] = useState(currentHashRoute);
@@ -540,6 +546,7 @@ export function ViewerApp() {
         <AppHeader isMobile={isMobile} clearLoadedFile={clearLoadedFile} />
       </div>}
       {!isEmbeddedMobileViewer && <MoleculeConfigurator />}
+      {!isEmbeddedMobileViewer && <RunConfigurator />}
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
         <McpViewerBridge />
@@ -754,6 +761,12 @@ export function ViewerApp() {
         onClose={() => setCommandPaletteOpen(false)}
         actions={useMemo(() => {
           const list: import('./CommandPalette').CommandAction[] = [
+            {
+              id: 'new-run',
+              label: 'New run — structure & configure a lattice',
+              group: 'Discover',
+              onSelect: () => useStore.getState().openRunConfigurator(),
+            },
             {
               id: 'random-molecule',
               label: 'View random OMol25 molecule',

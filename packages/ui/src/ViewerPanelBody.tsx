@@ -11,6 +11,8 @@ import { TelemetryPanel } from './panels/TelemetryPanel';
 import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
 import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
 import { ScienceDeckPanel } from './science/ScienceDeckPanel';
+import { ElementsPanel } from './panels/ElementsPanel';
+import { SettingsPanel } from './panels/SettingsPanel';
 
 export interface ViewerPanelBodyProps {
   activePanel: AppState['activePanel'];
@@ -39,6 +41,10 @@ function renderPanel(activePanel: NonNullable<AppState['activePanel']>, studioDe
       return <EquilibriumSolveWorkbench />;
     case 'mlipLongRun':
       return <MlipLongRunWorkbench />;
+    case 'elements':
+      return <ElementsPanel />;
+    case 'settings':
+      return <SettingsPanel />;
   }
 }
 

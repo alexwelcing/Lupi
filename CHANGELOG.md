@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased] - Periodic Table Explorer, Settings & Run Configurator
+
+### Added
+- **Enriched periodic-table data + Elements explorer panel**: `ElementData`
+  now carries group, period, category, and electronegativity (with a canonical
+  `PERIODIC_LAYOUT` in `@atlas/core`); the Elements command-deck panel offers
+  a searchable periodic grid and element detail cards, and AtomInfoHUD shows
+  the enriched per-element facts.
+- **Settings panel with cross-session persistence**: a real Settings surface
+  (atom-type visibility + radius per loaded type, playback speed/loop, and
+  preferences) whose whitelisted values — the same key set as shareable-URL
+  state — persist to `lupi:settings:v1` on this device, with an opt-out toggle
+  and a reset-to-defaults action.
+- **New Run configurator**: a guided modal (command palette "New run", or
+  seeded from the Elements explorer) that structures a procedural lattice —
+  1–4 elements, sc/bcc/fcc, atom count up to the 1,000,000 cap, optional
+  spacing and viewer patch — previews the exact `lupi.generate_molecule`
+  request, and executes it through the viewer MCP bridge.
+
 ## [Unreleased] - Gallery Truth Audit + One Billion Atoms
 
 ### Added

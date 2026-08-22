@@ -29,7 +29,7 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
         state.setViewMenuOpen(false);
         state.setStudyLensOpen(false);
       }
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && ['1', '2', '3', '4', '5', '6', '7'].includes(e.key)) {
         e.preventDefault();
         state.setViewMenuOpen(false);
         state.setStudyLensOpen(e.key === '5');
@@ -49,6 +49,10 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
           // Science deck section — only meaningful for science-bound loads.
           state.setStudioDeck(null);
           if (state.file?.science) state.setActivePanel('science');
+        } else if (e.key === '7') {
+          // Elements explorer — fileless reference surface.
+          state.setStudioDeck(null);
+          state.setActivePanel('elements');
         } else {
           state.setStudioDeck(null);
           state.setActivePanel(null);

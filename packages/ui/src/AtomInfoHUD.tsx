@@ -14,6 +14,7 @@ import {
   resolveTypeLabel,
 } from '@atlas/core';
 import { useStore, type KnowledgeLabel } from './store';
+import { humanizeCategory } from './periodic-table/ElementDetailCard';
 
 const MAX_PROPERTY_ROWS = 4;
 const MAX_KNOWLEDGE_ROWS = 4;
@@ -166,6 +167,15 @@ export function AtomInfoHUD({
           }}
         >
           {element && <DetailRow label="role" value={element.role} />}
+          {element && (
+            <DetailRow label="mass · rcov" value={`${element.mass} u · ${element.radius} Å`} />
+          )}
+          {element && (
+            <DetailRow
+              label={humanizeCategory(element.category)}
+              value={`G${element.group ?? '—'} · P${element.period ?? '—'} · χ ${element.electronegativity ?? '—'}`}
+            />
+          )}
           <DetailRow label="xyz" value={`${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)} ${coordinateUnit}`} />
           {properties.map(({ name, value }) => (
             <DetailRow key={name} label={name} value={formatPropertyValue(value)} strong={name === activeProperty} />
