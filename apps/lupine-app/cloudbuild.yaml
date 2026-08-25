@@ -1,0 +1,60 @@
+# Deploy lupine-app to Cloud Run (project shed-489901, us-central1).
+#
+# One-time prerequisites:
+#   gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
+#     secretmanager.googleapis.com artifactregistry.googleapis.com --project=shed-489901
+#   gcloud iam service-accounts create lupine-app-runner --project=shed-489901
+#   gcloud projects add-iam-policy-binding shed-489901 \
+#     --member=serviceAccount:lupine-app-runner@shed-489901.iam.gserviceaccount.com \
+#     --role=roles/datastore.user
+#   echo -n "<stripe sk_test_...>" | gcloud secrets create stripe-secret-key --data-file=- --project=shed-489901
+#   echo -n "<stripe whsec_...>"  | gcloud secrets create stripe-webhook-secret --data-file=- --project=shed-489901
+#   echo -n "<shared glim-think internal token>" | gcloud secrets create glim-think-token --data-file=- --project=shed-489901
+#   for s in stripe-secret-key stripe-webhook-secret glim-think-token; do
+#     gcloud secrets add-iam-policy-binding $s --project=shed-489901 \
+#       --member=serviceAccount:lupine-app-runner@shed-489901.iam.gserviceaccount.com \
+#       --role=roles/secretmanager.secretAccessor
+#   done
+
+substitutions:
+  _PROJECT_ID: shed-489901
+  _REGION: us-central1
+  _REPOSITORY: cloud-run-source-deploy
+  _IMAGE_TAG: latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY}/lupine-app:${_IMAGE_TAG}
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY}/lupine-app:${_IMAGE_TAG}
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - lupine-app
+      - --image=${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY}/lupine-app:${_IMAGE_TAG}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --service-account=lupine-app-runner@${_PROJECT_ID}.iam.gserviceaccount.com
+      - --cpu=1
+      - --memory=512Mi
+      - --min-instances=0
+      - --max-instances=4
+      - --allow-unauthenticated
+      - --set-secrets=STRIPE_SECRET_KEY=stripe-secret-key:latest
+      - --set-secrets=STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest
+      - --set-secrets=GLIM_THINK_TOKEN=glim-think-token:latest
+      - --set-env-vars=BASE_URL=https://app.lupine.science
+
+images:
+  - ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPOSITORY}/lupine-app:${_IMAGE_TAG}

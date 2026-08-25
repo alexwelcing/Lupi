@@ -1,0 +1,20 @@
+{
+  "name": "lupine-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lupine Science self-serve SaaS — shared Firebase auth (shed-489901) + Stripe subscriptions on Cloud Run",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs",
+    "test": "node --test",
+    "lint": "node --check src/admin.mjs && node --check src/app.mjs && node --check src/config.mjs && node --check src/data.mjs && node --check src/model.mjs && node --check src/security.mjs && node --check src/server.mjs && node --check public/app.js && node --check public/security.js && node --check test/app.test.mjs && node --check test/campaigns.test.mjs && node --check test/fakes.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "firebase-admin": "^12.6.0",
+    "hono": "^4.6.3",
+    "stripe": "^17.2.0"
+  }
+}

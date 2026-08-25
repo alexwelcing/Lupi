@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campaigns — Lupine Science</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="shell-root">
+    <h1>Campaigns</h1>
+    <p class="sub">Candidate-screening runs on the savings stack — define a space, lock the
+      preregistered manifest, the fleet executes, evidence ships.</p>
+
+    <div class="stat-row" id="stats">
+      <div class="stat"><div class="n" id="st-campaigns">—</div><div class="l">campaigns</div></div>
+      <div class="stat"><div class="n" id="st-paths">—</div><div class="l">paths analyzed</div></div>
+      <div class="stat"><div class="n">72.4% fewer DFT evaluations</div></div>
+      <div class="stat"><div class="n">$14.65 per 129 anchors</div></div>
+    </div>
+
+    <p><a class="btn" href="/campaigns/new">+ New campaign</a></p>
+    <div id="list"><p class="muted">Loading…</p></div>
+    <p class="muted" id="live-note"></p>
+  </div>
+  <script type="module">
+    import { mountShell } from "/shell.js";
+    import { authedFetch, escapeHtml as e } from "/app.js";
+    mountShell("campaigns");
+
+    const body = await authedFetch("/api/campaigns").catch((error) => ({ campaigns: [], live: false, live_error: error.message }));
+    const campaigns = body.campaigns || [];
+    const seed = campaigns.find((c) => c.campaign_id === "z1-union-pilot");
+
+    document.getElementById("st-campaigns").textContent = campaigns.length;
+    document.getElementById("st-paths").textContent = seed?.path_count ?? 0;
+
+    const statusPill = (s) => {
+      const cls = { completed: "ok", failed: "bad", running: "warn" }[s] || "neutral";
+      return `<span class="pill ${cls}">${e(s)}</span>`;
+    };
+    document.getElementById("list").innerHTML = campaigns.map((c) => `
+      <div class="card">
+        <h2><a href="/campaigns/${encodeURIComponent(c.campaign_id)}" style="color:var(--ink)">${e(c.title || c.campaign_id)}</a></h2>
+        <p style="margin:6px 0">${statusPill(c.status)}
+          ${c.recorded ? '<span class="pill neutral">recorded pilot</span>' : ""}
+          ${c.path_count ? `<span class="pill neutral">${e(c.path_count)} paths</span>` : ""}
+          ${c.models ? `<span class="pill neutral">${c.models.length} models</span>` : ""}
+        </p>
+        ${c.recorded ? `<p class="muted" style="margin:6px 0 0"><a href="/campaigns/${encodeURIComponent(c.campaign_id)}/results">results &amp; evidence →</a></p>` : ""}
+      </div>`).join("") || '<p class="muted">No campaigns yet.</p>';
+    document.getElementById("live-note").textContent = body.live
+      ? "Live fleet connected."
+      : "Live fleet status not reachable — showing recorded campaigns. " + (body.live_error || "");
+  </script>
+</body>
+</html>

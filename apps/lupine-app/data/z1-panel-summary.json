@@ -1,0 +1,499 @@
+{
+ "schema": "lupine.z1.neb_barrier_panel.v1",
+ "panel_id": "z1-nebdft2k-chemistry-held-out-v1",
+ "locked_at": "2026-07-19T00:00:00Z",
+ "source_sha256": "192fe54a5579cc421f6644d5d76fb442c6dfb985f014dc4741549e29052efb68",
+ "source_path": "lupine-rhizo/data/candidates/z1_nebdft2k_barriers.lock.json",
+ "reference_provenance": {
+  "dataset": "LiTraj nebDFT2k",
+  "doi": "10.1038/s41524-025-01571-z",
+  "license": "MIT; source Materials Project structures CC BY 4.0",
+  "source_archive_sha256": "b7a99d89337902e9e1da319f57547170fdb132bf15bf6ffef03a0140e2207d7f",
+  "source_repository": "https://github.com/AIRI-Institute/LiTraj",
+  "source_revision": "c3ca5c2afbc13ffc823306f546dcee24486ade2a",
+  "source_url": "https://bs3u.obs.ru-moscow-1.hc.sbercloud.ru/litraj/nebDFT2k.zip",
+  "theory": "DFT(PBE) climbing-image NEB"
+ },
+ "measurement": {
+  "metric": "barrier_mae",
+  "minimum_path_count": 30,
+  "unit": "meV"
+ },
+ "path_count": 30,
+ "paths": [
+  {
+   "path_id": "mp-761269_2_1_1_-1_0",
+   "material_id": "mp-761269",
+   "chemical_system": "Ag-F-Li",
+   "reference_barrier_ev": 1.578548240000032,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -452.63561171,
+    -452.19772835,
+    -451.3758854,
+    -451.05714522,
+    -451.37898915,
+    -452.2009726,
+    -452.63569346
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-556655_0_7_0_1_-1",
+   "material_id": "mp-556655",
+   "chemical_system": "Al-B-Li-O",
+   "reference_barrier_ev": 0.4252172600000676,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -867.5378057,
+    -867.26120995,
+    -867.11258844,
+    -867.263584,
+    -867.53731461
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-1222591_0_0_0_1_0",
+   "material_id": "mp-1222591",
+   "chemical_system": "Al-Co-Li-O",
+   "reference_barrier_ev": 0.4859350400001858,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -1236.18040409,
+    -1235.99523206,
+    -1235.69450309,
+    -1235.99965256,
+    -1236.18043813
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-770551_3_4_0_0_1",
+   "material_id": "mp-770551",
+   "chemical_system": "Al-Li-Mn-O",
+   "reference_barrier_ev": 0.3994290500000943,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -837.99407011,
+    -837.84993825,
+    -837.59464106,
+    -837.84995734,
+    -837.99405652
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-1222469_0_0_0_1_0",
+   "material_id": "mp-1222469",
+   "chemical_system": "Al-Li-O-Si",
+   "reference_barrier_ev": 1.3453914899999972,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -587.72008067,
+    -586.46908978,
+    -586.47777607,
+    -586.37469033,
+    -586.91741155,
+    -586.62330925,
+    -587.72008182
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-754923_0_2_0_0_1",
+   "material_id": "mp-754923",
+   "chemical_system": "Al-Li-O-V",
+   "reference_barrier_ev": 0.4204003299998931,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -867.24504549,
+    -867.34202761,
+    -866.9602961,
+    -867.38069643,
+    -867.24751765
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-754292_0_3_0_0_0",
+   "material_id": "mp-754292",
+   "chemical_system": "As-B-Cr-Li-O",
+   "reference_barrier_ev": 0.9209744199999932,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -674.82524758,
+    -674.66439849,
+    -674.17513666,
+    -673.90427316,
+    -674.17618577,
+    -674.66432238,
+    -674.82523753
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-770939_10_1_1_0_1",
+   "material_id": "mp-770939",
+   "chemical_system": "As-C-Fe-Li-O",
+   "reference_barrier_ev": 0.3347178500000041,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -324.88751542,
+    -324.8379344,
+    -324.57336965,
+    -324.71908113,
+    -324.9080875
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-768738_3_2_1_1_0",
+   "material_id": "mp-768738",
+   "chemical_system": "B-Bi-Li-O",
+   "reference_barrier_ev": 1.1438136799999938,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -1237.35298209,
+    -1237.30599585,
+    -1236.75029997,
+    -1236.24037796,
+    -1236.75793858,
+    -1237.29451135,
+    -1237.38419164
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-752707_0_2_0_0_0",
+   "material_id": "mp-752707",
+   "chemical_system": "B-Co-Li-O",
+   "reference_barrier_ev": 0.6314464199999748,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -810.11077083,
+    -809.75985982,
+    -809.47932441,
+    -809.66459822,
+    -809.90619247
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-770876_2_3_0_1_0",
+   "material_id": "mp-770876",
+   "chemical_system": "B-Li-Ni-O",
+   "reference_barrier_ev": 1.0284103799999684,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -1226.98553525,
+    -1228.01201779,
+    -1227.72023639,
+    -1228.01330545,
+    -1226.98489507
+   ],
+   "saddle_image_index": 4
+  },
+  {
+   "path_id": "mp-3635_0_3_0_0_0",
+   "material_id": "mp-3635",
+   "chemical_system": "B-Li-O",
+   "reference_barrier_ev": 0.6212753700000349,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -890.92905722,
+    -890.55615229,
+    -890.30778185,
+    -890.62002899,
+    -890.92902118
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-759667_2_1_1_1_0",
+   "material_id": "mp-759667",
+   "chemical_system": "B-Li-O-Sn",
+   "reference_barrier_ev": 0.6992021300000033,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -586.7649599,
+    -586.56284781,
+    -586.37891689,
+    -586.75138359,
+    -587.07811902
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-770749_2_4_0_0_0",
+   "material_id": "mp-770749",
+   "chemical_system": "B-Li-O-Ti",
+   "reference_barrier_ev": 0.3400055299999849,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -652.84228815,
+    -652.69969232,
+    -652.51632596,
+    -652.50228262,
+    -652.53937351
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-756912_1_1_1_0_0",
+   "material_id": "mp-756912",
+   "chemical_system": "B-Li-O-Zn",
+   "reference_barrier_ev": 0.5701987899999494,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -583.37383606,
+    -583.43211104,
+    -583.32814648,
+    -582.86191225,
+    -583.0370242,
+    -583.12814007,
+    -583.37397919
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-1222404_0_0_0_1_-1",
+   "material_id": "mp-1222404",
+   "chemical_system": "Bi-Li-S",
+   "reference_barrier_ev": 0.457108949999963,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -453.89734165,
+    -453.66010281,
+    -453.4402327,
+    -453.66053744,
+    -453.89733865
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-760344_10_4_0_1_0",
+   "material_id": "mp-760344",
+   "chemical_system": "C-Co-Li-Na-O-P",
+   "reference_barrier_ev": 0.5244383300000095,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -333.99628918,
+    -333.82671757,
+    -333.47185085,
+    -333.59554192,
+    -333.83259107
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-758282_0_2_0_0_0",
+   "material_id": "mp-758282",
+   "chemical_system": "C-Cr-Li-O",
+   "reference_barrier_ev": 0.2860638799999151,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -900.51448005,
+    -900.51106319,
+    -900.47995891,
+    -900.61936698,
+    -900.58643192,
+    -900.60157619,
+    -900.76602279
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-757800_1_4_0_0_0",
+   "material_id": "mp-757800",
+   "chemical_system": "C-Cu-Li-O",
+   "reference_barrier_ev": 1.2522963999999774,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -1008.60743838,
+    -1008.45849236,
+    -1007.73605198,
+    -1007.379364,
+    -1007.81492938,
+    -1008.58423351,
+    -1008.6316604
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-772851_6_10_0_1_0",
+   "material_id": "mp-772851",
+   "chemical_system": "C-Fe-Li-Na-O-P",
+   "reference_barrier_ev": 0.6534039299999677,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -678.31402656,
+    -678.18855384,
+    -677.97531186,
+    -677.66062263,
+    -677.92996647,
+    -678.1634126,
+    -678.24312322
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-753899_0_3_0_0_0",
+   "material_id": "mp-753899",
+   "chemical_system": "C-Fe-Li-O",
+   "reference_barrier_ev": 3.2507238600001074,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -1148.34635954,
+    -1147.87237866,
+    -1146.44990868,
+    -1145.09569053,
+    -1146.40632731,
+    -1147.83577263,
+    -1148.34641439
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-768508_3_7_0_0_0",
+   "material_id": "mp-768508",
+   "chemical_system": "C-Fe-Li-O-P",
+   "reference_barrier_ev": 0.7297330899999679,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -654.81682273,
+    -654.7258655,
+    -654.56486699,
+    -654.909899,
+    -655.29460008
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-771011_2_1_1_-1_0",
+   "material_id": "mp-771011",
+   "chemical_system": "C-Fe-Li-O-S",
+   "reference_barrier_ev": 0.642032229999927,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -615.87130902,
+    -615.76971176,
+    -615.42773595,
+    -615.40422381,
+    -615.23009646,
+    -615.53713226,
+    -615.87212869
+   ],
+   "saddle_image_index": 4
+  },
+  {
+   "path_id": "mp-1295192_1_1_1_0_0",
+   "material_id": "mp-1295192",
+   "chemical_system": "C-Li-Mn-O",
+   "reference_barrier_ev": 1.0270062199999757,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -1166.3215312,
+    -1166.1885884,
+    -1165.63152092,
+    -1165.29457106,
+    -1165.75563143,
+    -1166.23901145,
+    -1166.32157728
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-753882_0_1_1_0_-1",
+   "material_id": "mp-753882",
+   "chemical_system": "C-Li-Mn-O-P-V",
+   "reference_barrier_ev": 0.7118020000000342,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -701.19112163,
+    -700.99325013,
+    -700.66997069,
+    -701.2138914,
+    -701.38177269
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-25463_4_10_1_0_0",
+   "material_id": "mp-25463",
+   "chemical_system": "C-Li-O-P-V",
+   "reference_barrier_ev": 0.6109093799999528,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -706.02478155,
+    -705.78750258,
+    -705.41387217,
+    -705.78731699,
+    -706.02462793
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-772542_0_2_0_0_0",
+   "material_id": "mp-772542",
+   "chemical_system": "C-Li-O-Si-V",
+   "reference_barrier_ev": 0.2468707900000026,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -696.86287402,
+    -696.77712492,
+    -696.61676299,
+    -696.77704419,
+    -696.86363378
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-752552_0_7_0_0_1",
+   "material_id": "mp-752552",
+   "chemical_system": "C-Li-O-V",
+   "reference_barrier_ev": 0.1127928600000132,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -622.21911203,
+    -622.19936196,
+    -622.10631917,
+    -622.20002901,
+    -622.21871226
+   ],
+   "saddle_image_index": 2
+  },
+  {
+   "path_id": "mp-1020056_0_0_1_1_0",
+   "material_id": "mp-1020056",
+   "chemical_system": "Ca-Li-N-Si",
+   "reference_barrier_ev": 2.066868429999886,
+   "image_count": 7,
+   "reference_energies_ev": [
+    -1159.47762462,
+    -1158.99212145,
+    -1157.72768283,
+    -1157.41076545,
+    -1157.92164936,
+    -1159.13028355,
+    -1159.47763388
+   ],
+   "saddle_image_index": 3
+  },
+  {
+   "path_id": "mp-567474_0_1_0_0_0",
+   "material_id": "mp-567474",
+   "chemical_system": "Cl-Cr-Li",
+   "reference_barrier_ev": 0.0677252199999998,
+   "image_count": 5,
+   "reference_energies_ev": [
+    -340.86518572,
+    -340.92411986,
+    -340.93288814,
+    -340.91586167,
+    -340.86516292
+   ],
+   "saddle_image_index": 4
+  }
+ ]
+}
