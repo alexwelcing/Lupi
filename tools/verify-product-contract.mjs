@@ -494,10 +494,12 @@ export function verifyProductContract(rootDir) {
   );
 
   let scripts = null;
+  let rootPackage = null;
   const packageText = readText(root, 'package.json');
   if (packageText != null) {
     try {
       const parsed = JSON.parse(packageText);
+      rootPackage = parsed;
       scripts = parsed?.scripts && typeof parsed.scripts === 'object'
         ? parsed.scripts
         : null;
@@ -506,6 +508,31 @@ export function verifyProductContract(rootDir) {
     }
   }
   add('package-scripts', scripts != null, 'package.json has a valid scripts object');
+
+  let webPackage = null;
+  const webPackageText = readText(root, 'apps/web/package.json');
+  if (webPackageText != null) {
+    try {
+      webPackage = JSON.parse(webPackageText);
+    } catch {
+      webPackage = null;
+    }
+  }
+  const rootTsxScripts = ['nist:build', 'doctor', 'bake:glimbin', 'generate:mcp-manifest'];
+  add(
+    'tsx-owner:root',
+    rootPackage?.devDependencies?.tsx === '^4.20.0'
+      && rootTsxScripts.every((name) => /^tsx\s/u.test(rootPackage?.scripts?.[name] ?? ''))
+      && rootTsxScripts.every((name) => !/\bnpx\b[^\n]*\btsx\b/u.test(rootPackage?.scripts?.[name] ?? '')),
+    'root scripts directly own and invoke the pinned tsx CLI',
+  );
+  add(
+    'tsx-owner:web',
+    webPackage?.devDependencies?.tsx === '^4.20.0'
+      && /(?:^|&&\s*)tsx\s+\.\.\/\.\.\/tools\/generate-mcp-manifest\.ts(?:\s*&&|$)/u.test(webPackage?.scripts?.build ?? '')
+      && !/\bnpx\b[^\n]*\btsx\b/u.test(webPackage?.scripts?.build ?? ''),
+    '@atlas/web directly owns the tsx CLI used by its build',
+  );
 
   const documentedCommands = documentedPnpmScripts(root);
   if (scripts != null) {

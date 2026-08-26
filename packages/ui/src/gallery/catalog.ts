@@ -72,6 +72,8 @@ export interface GalleryExample {
    *  trajectory frame count must equal the path's NEB image count — a
    *  mismatch fails closed and no science is shown. */
   sciencePathIndex?: number;
+  /** Exact SHA-256 of the canonical serialized visualization manifest. */
+  scienceManifestSha256?: string;
 }
 
 export const EXAMPLES: GalleryExample[] = galleryData as GalleryExample[];

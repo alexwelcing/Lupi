@@ -12,9 +12,15 @@ const COLORMAPS_V1 = [
   'sunset', 'vaporwave', 'ocean', 'fire', 'ice', 'forest', 'cyberpunk',
   'autumn', 'grayscale', 'turbo',
 ] as const;
-const MATERIAL_PRESETS_V1 = ['default', 'matte', 'metallic', 'glass', 'plastic'] as const;
+// 'transmission' is the real-geometry refractive preset added after v1
+// shipped; extending the list is additive, so previously persisted specs
+// still validate structurally (same precedent as 'softbox' below).
+const MATERIAL_PRESETS_V1 = ['default', 'matte', 'metallic', 'glass', 'plastic', 'transmission'] as const;
 const ENVIRONMENT_PRESETS_V1 = [
-  'city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'apartment', 'park', 'none',
+  // 'softbox' is the procedural scientific-studio rig that replaced the
+  // 'apartment' room HDRI in the viewer. 'apartment' stays in the contract so
+  // previously persisted v1 specs still validate structurally.
+  'city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'softbox', 'apartment', 'park', 'none',
 ] as const;
 const HEX_COLOR_PATTERN_V1 = /^#[0-9a-fA-F]{6}$/;
 

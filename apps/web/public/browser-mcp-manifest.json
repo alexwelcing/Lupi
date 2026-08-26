@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-07-20T20:57:25.101Z",
+  "generatedAt": "2026-08-10T19:16:57.349Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
@@ -91,6 +91,36 @@
             "type": "string",
             "format": "uri",
             "description": "URL to a molecule, trajectory, or saved Lupi payload."
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.open_gallery_example",
+      "description": "Open a curated Lupi gallery example by stable catalog id, preserving scene and trajectory semantics while enforcing caller-pinned atom counts.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "expectedAtomCount",
+          "maxAtomCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable gallery example id from the Lupi catalog."
+          },
+          "expectedAtomCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50000000
+          },
+          "maxAtomCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50000000
           }
         }
       }
@@ -305,6 +335,44 @@
       "parameters": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "lupi.assess_asset",
+      "description": "Run a bounded fast assessment of the active materialized trajectory, a URL, or an evidence envelope without rendering or scientific lookups.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "active",
+              "url",
+              "envelope"
+            ],
+            "description": "Defaults to the active materialized trajectory."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "envelope": {
+            "type": "object",
+            "description": "Materialized text, base64 bytes, trajectory, or procedural evidence envelope."
+          },
+          "context": {
+            "type": "object",
+            "description": "Optional declared provenance, method, validation, and interpretation evidence."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fast"
+            ],
+            "default": "fast",
+            "description": "The browser bridge is intentionally bounded to fast mode; use the Node CLI for deep streaming inspection."
+          }
+        }
       }
     },
     {

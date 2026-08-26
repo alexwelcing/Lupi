@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { resetStore, getStoreState, setStoreState } from './test-utils';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 import { DEFAULT_SCENE_ID } from '@atlas/scene/materials';
-import { getDefaultVectorDensity } from './store';
+import { getDefaultVectorDensity, useStore } from './store';
 
 function encodeStateDelta(delta: Record<string, unknown>) {
   return btoa(JSON.stringify(delta))
@@ -48,8 +48,13 @@ describe('Store — Display Toggles', () => {
     s.toggleBonds();
     expect(getStoreState().showBonds).toBe(true);
 
+    useStore.setState({ bondSource: 'cpu', lastBondCount: 7 });
     s.toggleBonds();
-    expect(getStoreState().showBonds).toBe(false);
+    expect(getStoreState()).toMatchObject({
+      showBonds: false,
+      bondSource: 'none',
+      lastBondCount: 0,
+    });
   });
 
   it('toggles cell visibility', () => {
@@ -235,6 +240,28 @@ describe('Store — URL Serialization', () => {
     expect(restored.materialScene).toBe(DEFAULT_SCENE_ID);
     expect(restored.materialPreset).toBe('default');
     expect(restored.environmentPreset).toBe('studio');
+  });
+
+  it('round-trips the transmission material preset and prism scene through URL state', () => {
+    getStoreState().decodeFromURL(encodeStateDelta({
+      ms: 'prism',
+      mp: 'transmission',
+    }));
+
+    const restored = getStoreState();
+    expect(restored.materialScene).toBe('prism');
+    expect(restored.materialPreset).toBe('transmission');
+  });
+
+  it('maps the retired apartment environment onto the softbox studio', () => {
+    getStoreState().decodeFromURL(encodeStateDelta({ env: 'apartment' }));
+    expect(getStoreState().environmentPreset).toBe('softbox');
+
+    getStoreState().setEnvironmentPreset('apartment' as never);
+    expect(getStoreState().environmentPreset).toBe('softbox');
+
+    getStoreState().setEnvironmentPreset('softbox');
+    expect(getStoreState().environmentPreset).toBe('softbox');
   });
 
   it('infers color scheme for legacy URL color state', () => {

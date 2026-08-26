@@ -24,6 +24,10 @@ export interface LupiMcpStatus {
   atomCount: number;
   frame: number;
   playing: boolean;
+  bondCount: number;
+  bondSource: 'cpu' | 'gpu' | 'none';
+  bondTopology: 'source' | 'inferred' | 'unavailable';
+  showBondsEffective: boolean;
 }
 
 export interface LupiMcpDriver<State = unknown> {

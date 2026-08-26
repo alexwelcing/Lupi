@@ -30,6 +30,12 @@ import {
   hasCompleteElementMapping,
   resolveTypeDisplayRadius,
 } from '@atlas/core';
+import {
+  fitPerspectiveCameraToBounds,
+  maxRenderedAtomRadius,
+  type CameraVector3,
+  type PerspectiveCameraFitResult,
+} from './cameraFit';
 
 /** A pinned text annotation tied to a specific atom by index in the
  *  current frame. Persists across frame changes; if the atom moves, the
@@ -147,7 +153,7 @@ function sanitizePostprocessPreset(value: unknown): AppState['postprocessPreset'
 }
 
 function sanitizeMaterialPreset(value: unknown): AppState['materialPreset'] {
-  return value === 'default' || value === 'matte' || value === 'metallic' || value === 'glass' || value === 'plastic'
+  return value === 'default' || value === 'matte' || value === 'metallic' || value === 'glass' || value === 'plastic' || value === 'transmission'
     ? value
     : 'default';
 }
@@ -158,8 +164,11 @@ function sanitizeMaterialScene(value: unknown): string {
     : DEFAULT_SCENE_ID;
 }
 
-function sanitizeEnvironmentPreset(value: unknown): AppState['environmentPreset'] {
-  return value === 'city' || value === 'studio' || value === 'dawn' || value === 'night' || value === 'warehouse' || value === 'forest' || value === 'apartment' || value === 'park' || value === 'none'
+export function sanitizeEnvironmentPreset(value: unknown): AppState['environmentPreset'] {
+  // Legacy saved views / share URLs may still carry the retired 'apartment'
+  // room HDRI; it maps onto its replacement, the procedural softbox studio.
+  if (value === 'apartment') return 'softbox';
+  return value === 'city' || value === 'studio' || value === 'dawn' || value === 'night' || value === 'warehouse' || value === 'forest' || value === 'softbox' || value === 'park' || value === 'none'
     ? value
     : 'studio';
 }
@@ -426,8 +435,8 @@ export interface AppState {
   filterShellPreset: FilterShellPreset;
   filterShellOpacity: number;
   filterShellRadius: number;
-  environmentPreset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'apartment' | 'park' | 'none';
-  materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic';
+  environmentPreset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none';
+  materialPreset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission';
   /** Active material scene ID. Scenes coordinate material + lighting + env
    *  + post into a holistic authored look. */
   materialScene: string;
@@ -490,6 +499,8 @@ export interface AppState {
   cameraPosition: [number, number, number];
   cameraTarget: [number, number, number];
   cameraFov: number;
+  /** Runtime-only aspect reported by the mounted R3F viewer Canvas. */
+  cameraViewportAspect: number;
   cameraPreset: 'free' | 'front' | 'side' | 'top' | 'iso';
 
   // ─── Viewport Modes ───
@@ -500,7 +511,7 @@ export interface AppState {
   colorblindMode: boolean;
 
   // ─── UI ───
-  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'science' | 'equilibrium' | 'mlipLongRun' | null;
+  activePanel: 'studio' | 'export' | 'flythrough' | 'telemetry' | 'science' | 'equilibrium' | 'mlipLongRun' | 'elements' | 'settings' | null;
   /** Sign-in callout visibility. Defaults CLOSED — the app never auto-prompts
    *  anonymous visitors to sign up; opened only by an explicit user action. */
   authPromptOpen: boolean;
@@ -513,6 +524,13 @@ export interface AppState {
   /** Landing-page molecule configurator state for the on-page MCP demo. */
   configuratorOpen: boolean;
   configuratorSeed: string | null;
+  /** Run configurator seeded from the Elements explorer. The modal that
+   *  consumes this state lands in a later phase. */
+  runConfiguratorOpen: boolean;
+  runConfiguratorSeed: { elements?: string[] } | null;
+  /** Remember whitelisted viewer settings (the URL-delta key set) on this
+   *  device via localStorage. Default ON; toggled from the Settings panel. */
+  persistSettings: boolean;
   activeProfile: 'publication' | 'neon' | 'cinematic' | 'raw' | null;
   equilibriumSolve: EquilibriumSolveState | null;
 
@@ -636,6 +654,7 @@ export interface AppState {
   // ─── Actions: Camera ───
   setCameraState: (position: [number, number, number], target: [number, number, number]) => void;
   setCameraPreset: (preset: AppState['cameraPreset']) => void;
+  setCameraViewportAspect: (aspect: number) => void;
   setShowScaleBar: (show: boolean) => void;
   setColorblindMode: (enabled: boolean) => void;
   setViewportMode: (mode: AppState['viewportMode']) => void;
@@ -663,6 +682,7 @@ export interface AppState {
   prevFrame: () => void;
   togglePlay: () => void;
   setPlaybackSpeed: (speed: number) => void;
+  setLoopMode: (mode: AppState['loopMode']) => void;
   setScienceDiscretePlayback: (discrete: boolean) => void;
   setColorScheme: (id: ColorSchemeId) => void;
   setAtomColorSource: (src: AtomColorSource) => void;
@@ -725,9 +745,9 @@ export interface AppState {
   setFilterShellPreset: (preset: FilterShellPreset) => void;
   setFilterShellOpacity: (opacity: number) => void;
   setFilterShellRadius: (radius: number) => void;
-  setEnvironmentPreset: (preset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'apartment' | 'park' | 'none') => void;
+  setEnvironmentPreset: (preset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none') => void;
   setArLightEstimationActive: (active: boolean) => void;
-  setMaterialPreset: (preset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic') => void;
+  setMaterialPreset: (preset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission') => void;
   setMaterialScene: (sceneId: string) => void;
   setMaterialIntensity: (v: number) => void;
   applyMaterialScene: (sceneId: string) => void;
@@ -756,6 +776,10 @@ export interface AppState {
   fitCameraView: () => void;
   openConfigurator: (seed?: string) => void;
   closeConfigurator: () => void;
+  openRunConfigurator: (seed?: { elements?: string[] }) => void;
+  closeRunConfigurator: () => void;
+  setPersistSettings: (on: boolean) => void;
+  resetSettings: () => void;
   setEquilibriumSolve: (state: EquilibriumSolveState | null) => void;
   setNistCatalog: (catalog: NistCatalogEntry[] | null) => void;
   setActivePotentialId: (id: string | null) => void;
@@ -781,6 +805,54 @@ export interface AppState {
    *  upload upper bound. Setter is intentionally direct (no merging or
    *  clamping) — the streaming pipeline owns this value. */
   setLoadedAtomCount: (count: number) => void;
+}
+
+function cameraPresetDirection(preset: AppState['cameraPreset']): CameraVector3 {
+  switch (preset) {
+    case 'side':
+      return [1, 0, 0];
+    case 'top':
+      return [0, 1, 0];
+    case 'iso':
+      return [1, 1, 1];
+    case 'front':
+    case 'free':
+    default:
+      return [0, 0, 1];
+  }
+}
+
+function fitCameraForState(
+  state: AppState,
+  directionOverride?: CameraVector3,
+): PerspectiveCameraFitResult | null {
+  if (!state.file) return null;
+  const bounds = state.file.trajectory.globalBounds;
+  const frame = state.file.trajectory.frames[state.frame]
+    ?? state.file.trajectory.frames[0];
+  const target: CameraVector3 = [
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  ];
+  const cameraTarget = directionOverride ? target : state.cameraTarget;
+  const cameraPosition: CameraVector3 = directionOverride
+    ? [
+        target[0] + directionOverride[0],
+        target[1] + directionOverride[1],
+        target[2] + directionOverride[2],
+      ]
+    : state.cameraPosition;
+
+  return fitPerspectiveCameraToBounds({
+    bounds,
+    cameraPosition,
+    cameraTarget,
+    verticalFovDegrees: state.cameraFov,
+    viewportAspect: state.cameraViewportAspect,
+    atomRadius: maxRenderedAtomRadius(frame, state.atomScale, state.atomTypeScales),
+    fallbackDirection: directionOverride ?? cameraPresetDirection(state.cameraPreset),
+  });
 }
 
 const DEFAULTS = {
@@ -887,6 +959,7 @@ const DEFAULTS = {
   cameraPosition: [0, 0, 50] as [number, number, number],
   cameraTarget: [0, 0, 0] as [number, number, number],
   cameraFov: 50,
+  cameraViewportAspect: Number.NaN,
   cameraPreset: 'free' as const,
   showScaleBar: true,
   colorblindMode: false,
@@ -897,6 +970,9 @@ const DEFAULTS = {
   studyLensOpen: false,
   configuratorOpen: false,
   configuratorSeed: null,
+  runConfiguratorOpen: false,
+  runConfiguratorSeed: null,
+  persistSettings: true,
   activeProfile: null,
   equilibriumSolve: null,
   nistCatalog: null,
@@ -948,6 +1024,185 @@ export function getDefaultVectorDensity(atomCount: number): number {
   if (!Number.isFinite(atomCount) || atomCount <= 0) return 1;
   const targetGlyphs = 300;
   return Math.max(0.01, Math.min(1, Math.round((targetGlyphs / atomCount) * 100) / 100));
+}
+
+/**
+ * The URL/persistence state-delta contract. `buildStateDelta` emits only the
+ * whitelisted fields whose values differ from DEFAULTS (short keys keep share
+ * URLs compact); `applyStateDelta` sanitizes an untrusted delta back into a
+ * partial state, filling every covered key with its default when missing or
+ * invalid. The two cover EXACTLY the same key set — settings persistence and
+ * `resetSettings` derive their whitelist from this pairing so it cannot drift.
+ */
+export function buildStateDelta(s: AppState): Record<string, unknown> {
+  // ── Delta encoding: only include values that differ from defaults ──
+  const delta: Record<string, unknown> = {};
+
+  // Helper: truncate floats to 2 decimal places
+  const r = (n: number) => Math.round(n * 100) / 100;
+  const rArr = (a: number[]) => a.map(r);
+
+  // Helper: arrays are "equal" if same length and all elements within epsilon
+  const arrEq = (a: number[], b: number[]) =>
+    a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 0.01);
+
+  if (s.frame !== 0)                              delta.f = s.frame;
+  if (s.colorScheme !== DEFAULTS.colorScheme)      delta.cs = s.colorScheme;
+  if (s.atomColorSource !== COLOR_SCHEMES[s.colorScheme].atomColorSource) delta.acs = s.atomColorSource;
+  if (s.colorMode !== 'type')                     delta.cm = s.colorMode;
+  if (s.colorProperty !== null)                    delta.cp = s.colorProperty;
+  if (s.colormap !== 'viridis')                    delta.cmap = s.colormap;
+  if (s.vectorField !== null)                      delta.vf = s.vectorField;
+  if (r(s.vectorScale) !== DEFAULTS.vectorScale)   delta.vsc = r(s.vectorScale);
+  if (r(s.vectorDensity) !== DEFAULTS.vectorDensity) delta.vd = r(s.vectorDensity);
+  if (s.uniformAtomColor !== '#1edce0')            delta.uac = s.uniformAtomColor;
+  if (Object.keys(s.elementColorOverrides).length > 0) delta.eco = s.elementColorOverrides;
+  if (s.postprocessPreset !== DEFAULTS.postprocessPreset) delta.pp = s.postprocessPreset;
+  if (r(s.postprocessIntensity) !== DEFAULTS.postprocessIntensity) delta.pi = r(s.postprocessIntensity);
+  if (r(s.propertyEmissionStrength) !== DEFAULTS.propertyEmissionStrength) delta.pe = r(s.propertyEmissionStrength);
+  if (!s.ssao)                                     delta.ssao = 0;
+  if (!s.bloom)                                    delta.bloom = 0;
+  if (s.dof)                                       delta.dof = 1;
+  if (!s.showCell)                                 delta.cell = 0;
+  if (!s.showAxes)                                 delta.axes = 0;
+  if (r(s.atomScale) !== 1.0)                      delta.as = r(s.atomScale);
+  if (s.backgroundPreset !== DEFAULTS.backgroundPreset) delta.bg = s.backgroundPreset;
+  if (s.backgroundStyle !== DEFAULTS.backgroundStyle) delta.bgs = s.backgroundStyle;
+  if (s.backgroundMotionPaused)                    delta.bmp = 1;
+  if (r(s.backgroundMotionSpeed) !== DEFAULTS.backgroundMotionSpeed) delta.bms = r(s.backgroundMotionSpeed);
+  if (r(s.backgroundOpacity) !== DEFAULTS.backgroundOpacity) delta.bo = r(s.backgroundOpacity);
+  if (r(s.backgroundBrightness) !== DEFAULTS.backgroundBrightness) delta.bb = r(s.backgroundBrightness);
+  if (r(s.backgroundSaturation) !== DEFAULTS.backgroundSaturation) delta.bs = r(s.backgroundSaturation);
+  if (r(s.backgroundContrast) !== DEFAULTS.backgroundContrast) delta.bct = r(s.backgroundContrast);
+  if (r(s.backgroundYawDegrees) !== DEFAULTS.backgroundYawDegrees) delta.by = r(s.backgroundYawDegrees);
+  if (r(s.backgroundPitchDegrees) !== DEFAULTS.backgroundPitchDegrees) delta.bp = r(s.backgroundPitchDegrees);
+  if (s.backgroundBackdropShape !== DEFAULTS.backgroundBackdropShape) delta.bds = s.backgroundBackdropShape;
+  if (s.backgroundBackdropPattern !== DEFAULTS.backgroundBackdropPattern) delta.bdp = s.backgroundBackdropPattern;
+  if (r(s.backgroundBackdropRadius) !== DEFAULTS.backgroundBackdropRadius) delta.bdr = r(s.backgroundBackdropRadius);
+  if (s.filterShellShape !== 'off')                delta.fss = s.filterShellShape;
+  if (s.filterShellPreset !== 'haze')              delta.fsp = s.filterShellPreset;
+  if (r(s.filterShellOpacity) !== 0.24)            delta.fso = r(s.filterShellOpacity);
+  if (r(s.filterShellRadius) !== 1.08)             delta.fsr = r(s.filterShellRadius);
+  if (!arrEq(s.cameraPosition, [0, 0, 50]))       delta.cp3 = rArr(s.cameraPosition);
+  if (!arrEq(s.cameraTarget, [0, 0, 0]))          delta.ct = rArr(s.cameraTarget);
+  if (s.cameraFov !== 50)                          delta.fov = s.cameraFov;
+  if (r(s.playbackSpeed) !== 1.0)                  delta.spd = r(s.playbackSpeed);
+  if (r(s.ssaoIntensity) !== DEFAULTS.ssaoIntensity) delta.si = r(s.ssaoIntensity);
+  if (r(s.bloomIntensity) !== DEFAULTS.bloomIntensity) delta.bi = r(s.bloomIntensity);
+  if (s.dofFocus !== 50)                           delta.df = s.dofFocus;
+  if (s.toneMapping !== 'aces')                    delta.tm = s.toneMapping;
+  if (s.showBonds)                                 delta.bonds = 1;
+  if (r(s.bondCutoff) !== 3.2)                     delta.bc = r(s.bondCutoff);
+  if (r(s.bondTolerance) !== 0.45)                 delta.bt = r(s.bondTolerance);
+  if (s.materialScene !== DEFAULTS.materialScene)  delta.ms = s.materialScene;
+  if (s.materialPreset !== DEFAULTS.materialPreset) delta.mp = s.materialPreset;
+  if (r(s.materialIntensity) !== DEFAULTS.materialIntensity) delta.mi = r(s.materialIntensity);
+  if (s.environmentPreset !== DEFAULTS.environmentPreset) delta.env = s.environmentPreset;
+  if (r(s.ambientLightIntensity) !== DEFAULTS.ambientLightIntensity) delta.ali = r(s.ambientLightIntensity);
+  if (r(s.dirLightIntensity) !== DEFAULTS.dirLightIntensity) delta.dli = r(s.dirLightIntensity);
+  if (r(s.rimLightIntensity) !== DEFAULTS.rimLightIntensity) delta.rli = r(s.rimLightIntensity);
+  if (s.atomTexture !== 'none')                    delta.at = s.atomTexture;
+  if (r(s.surfaceRoughness) !== 0.0)               delta.sr = r(s.surfaceRoughness);
+  if (r(s.surfacePolish) !== 0.0)                  delta.sp = r(s.surfacePolish);
+  if (r(s.surfaceClearcoat) !== 0.0)               delta.scc = r(s.surfaceClearcoat);
+  if (r(s.keyLightAzimuth) !== 40.0)               delta.kla = r(s.keyLightAzimuth);
+  if (r(s.keyLightElevation) !== 45.0)             delta.kle = r(s.keyLightElevation);
+  if (r(s.fillLightAzimuth) !== -120.0)            delta.fla = r(s.fillLightAzimuth);
+  if (r(s.fillLightElevation) !== 10.0)            delta.fle = r(s.fillLightElevation);
+  if (r(s.rimLightAzimuth) !== 160.0)              delta.rla = r(s.rimLightAzimuth);
+  if (r(s.rimLightElevation) !== 30.0)             delta.rle = r(s.rimLightElevation);
+  if (s.fillLightColor !== DEFAULTS.fillLightColor) delta.flc = s.fillLightColor;
+  if (s.rimLightColor !== DEFAULTS.rimLightColor)  delta.rlc = s.rimLightColor;
+
+  if (s.knowledgeLabelSearchQuery)               delta.ksq = s.knowledgeLabelSearchQuery;
+  if (s.knowledgeLabelSearchFilter !== 'all')    delta.ksf = s.knowledgeLabelSearchFilter;
+  if (s.pinnedKnowledgeLabelIds.size > 0)        delta.kpl = Array.from(s.pinnedKnowledgeLabelIds);
+
+  return delta;
+}
+
+/** Sanitize an untrusted delta (URL `?s=` payload or stored settings record)
+ *  into a partial state. Throws on a non-object delta so callers can warn. */
+export function applyStateDelta(delta: unknown): Partial<AppState> {
+  if (!delta || typeof delta !== 'object' || Array.isArray(delta)) {
+    throw new Error('URL state must be an object.');
+  }
+  const s = delta as Record<string, unknown>;
+  const colorScheme = resolveUrlColorScheme(s.cs, s);
+  const scheme = COLOR_SCHEMES[colorScheme];
+  // Merge delta onto defaults — missing keys stay at their default values
+  return {
+    frame: sanitizeIntegerRange(s.f, 0, 0, 10_000_000),
+    colorScheme,
+    atomColorSource: sanitizeAtomColorSource(s.acs, scheme.atomColorSource),
+    colorMode: sanitizeColorMode(s.cm, scheme.atomColorMode),
+    colorProperty: typeof s.cp === 'string' && s.cp.length <= 64 ? s.cp : null,
+    colormap: sanitizeColormap(s.cmap),
+    uniformAtomColor: sanitizeHexColor(typeof s.uac === 'string' ? s.uac : '#1edce0'),
+    elementColorOverrides: sanitizeElementColorOverrides(s.eco),
+    vectorField: typeof s.vf === 'string' && s.vf.length <= 64 ? s.vf : null,
+    vectorScale: sanitizeNumberRange(s.vsc, DEFAULTS.vectorScale, 0.1, 10),
+    vectorDensity: sanitizeNumberRange(s.vd, DEFAULTS.vectorDensity, 0.01, 1),
+    postprocessPreset: sanitizePostprocessPreset(s.pp),
+    postprocessIntensity: sanitizeNumberRange(s.pi, DEFAULTS.postprocessIntensity, 0, 2),
+    propertyEmissionStrength: sanitizeNumberRange(s.pe, DEFAULTS.propertyEmissionStrength, 0, 1),
+    ssao: sanitizeBinaryFlag(s.ssao, true),
+    bloom: sanitizeBinaryFlag(s.bloom, true),
+    dof: sanitizeBinaryFlag(s.dof, false),
+    showCell: sanitizeBinaryFlag(s.cell, true),
+    showAxes: sanitizeBinaryFlag(s.axes, true),
+    atomScale: sanitizeNumberRange(s.as, 1.0, 0.05, 20),
+    backgroundPreset: sanitizeString(s.bg, DEFAULTS.backgroundPreset, 64),
+    backgroundStyle: sanitizeBackgroundStyle(s.bgs),
+    backgroundMotionPaused: sanitizeBinaryFlag(s.bmp, false),
+    backgroundMotionSpeed: sanitizeNumberRange(s.bms, DEFAULTS.backgroundMotionSpeed, 0.05, 2),
+    backgroundOpacity: sanitizeNumberRange(s.bo, DEFAULTS.backgroundOpacity, 0.15, 1),
+    backgroundBrightness: sanitizeNumberRange(s.bb, DEFAULTS.backgroundBrightness, 0.35, 1.8),
+    backgroundSaturation: sanitizeNumberRange(s.bs, DEFAULTS.backgroundSaturation, 0, 2),
+    backgroundContrast: sanitizeNumberRange(s.bct, DEFAULTS.backgroundContrast, 0.5, 1.8),
+    backgroundYawDegrees: sanitizeNumberRange(s.by, DEFAULTS.backgroundYawDegrees, -180, 180),
+    backgroundPitchDegrees: sanitizeNumberRange(s.bp, DEFAULTS.backgroundPitchDegrees, -45, 45),
+    backgroundBackdropShape: sanitizeBackgroundBackdropShape(s.bds),
+    backgroundBackdropPattern: sanitizeBackgroundBackdropPattern(s.bdp),
+    backgroundBackdropRadius: sanitizeNumberRange(s.bdr, DEFAULTS.backgroundBackdropRadius, 0.25, 5),
+    filterShellShape: sanitizeFilterShellShape(s.fss),
+    filterShellPreset: sanitizeFilterShellPreset(s.fsp),
+    filterShellOpacity: sanitizeNumberRange(s.fso, 0.24, 0, 0.65),
+    filterShellRadius: sanitizeNumberRange(s.fsr, 1.08, 0.75, 4),
+    cameraPosition: sanitizeVec3(s.cp3, [0, 0, 50]),
+    cameraTarget: sanitizeVec3(s.ct, [0, 0, 0]),
+    cameraFov: sanitizeNumberRange(s.fov, 50, 1, 179),
+    playbackSpeed: sanitizeNumberRange(s.spd, 1.0, 0.0625, 16),
+    ssaoIntensity: sanitizeNumberRange(s.si, DEFAULTS.ssaoIntensity, 0, 4),
+    bloomIntensity: sanitizeNumberRange(s.bi, DEFAULTS.bloomIntensity, 0, 4),
+    dofFocus: sanitizeNumberRange(s.df, 50, 0, 10_000),
+    toneMapping: sanitizeToneMapping(s.tm),
+    showBonds: sanitizeBinaryFlag(s.bonds, false),
+    bondCutoff: sanitizeNumberRange(s.bc, 3.2, 0.01, 100),
+    bondTolerance: sanitizeNumberRange(s.bt, 0.45, 0, 1.5),
+    materialScene: sanitizeMaterialScene(s.ms),
+    materialPreset: sanitizeMaterialPreset(s.mp),
+    materialIntensity: sanitizeNumberRange(s.mi, DEFAULTS.materialIntensity, 0, 1),
+    environmentPreset: sanitizeEnvironmentPreset(s.env),
+    ambientLightIntensity: sanitizeNumberRange(s.ali, DEFAULTS.ambientLightIntensity, 0, 4),
+    dirLightIntensity: sanitizeNumberRange(s.dli, DEFAULTS.dirLightIntensity, 0, 4),
+    rimLightIntensity: sanitizeNumberRange(s.rli, DEFAULTS.rimLightIntensity, 0, 4),
+    atomTexture: sanitizeAtomTexture(s.at),
+    surfaceRoughness: sanitizeNumberRange(s.sr, 0.0, -1, 1),
+    surfacePolish: sanitizeNumberRange(s.sp, 0.0, -1, 1),
+    surfaceClearcoat: sanitizeNumberRange(s.scc, 0.0, 0, 1),
+    keyLightAzimuth: sanitizeNumberRange(s.kla, 40, -360, 360),
+    keyLightElevation: sanitizeNumberRange(s.kle, 45, -90, 90),
+    fillLightAzimuth: sanitizeNumberRange(s.fla, -120, -360, 360),
+    fillLightElevation: sanitizeNumberRange(s.fle, 10, -90, 90),
+    rimLightAzimuth: sanitizeNumberRange(s.rla, 160, -360, 360),
+    rimLightElevation: sanitizeNumberRange(s.rle, 30, -90, 90),
+    fillLightColor: sanitizeHexColor(typeof s.flc === 'string' ? s.flc : DEFAULTS.fillLightColor),
+    rimLightColor: sanitizeHexColor(typeof s.rlc === 'string' ? s.rlc : DEFAULTS.rimLightColor),
+    knowledgeLabelSearchQuery: sanitizeString(s.ksq, '', 256),
+    knowledgeLabelSearchFilter: sanitizeKnowledgeFilter(s.ksf),
+    pinnedKnowledgeLabelIds: new Set(sanitizeStringArray(s.kpl)),
+  };
 }
 
 export const useStore = create<AppState>()(
@@ -1142,6 +1397,7 @@ export const useStore = create<AppState>()(
 
     togglePlay: () => set(s => ({ playing: !s.playing })),
     setPlaybackSpeed: (playbackSpeed) => set({ playbackSpeed }),
+    setLoopMode: (loopMode) => set({ loopMode }),
     setScienceDiscretePlayback: (scienceDiscretePlayback: boolean) => set({ scienceDiscretePlayback }),
 
     setColorScheme: (colorScheme) => {
@@ -1200,7 +1456,11 @@ export const useStore = create<AppState>()(
 
     toggleCell: () => set(s => ({ showCell: !s.showCell })),
     toggleAxes: () => set(s => ({ showAxes: !s.showAxes })),
-    toggleBonds: () => set(s => ({ showBonds: !s.showBonds })),
+    toggleBonds: () => set((s) =>
+      s.showBonds
+        ? { showBonds: false, bondSource: 'none', lastBondCount: 0 }
+        : { showBonds: true },
+    ),
     setBondCutoff: (bondCutoff) => set({ bondCutoff }),
     setBondTolerance: (bondTolerance) => set({ bondTolerance }),
     setBondColorMode: (bondColorMode) => set({ bondColorMode }),
@@ -1264,7 +1524,9 @@ export const useStore = create<AppState>()(
     setFilterShellPreset: (filterShellPreset) => set({ filterShellPreset }),
     setFilterShellOpacity: (filterShellOpacity) => set({ filterShellOpacity: Math.max(0, Math.min(0.65, filterShellOpacity)) }),
     setFilterShellRadius: (filterShellRadius) => set({ filterShellRadius: Math.max(0.75, Math.min(4, filterShellRadius)) }),
-    setEnvironmentPreset: (environmentPreset) => set({ environmentPreset }),
+    // Sanitized so untyped callers (dev probes, saved views, legacy bridges)
+    // asking for the retired 'apartment' preset land on its replacement.
+    setEnvironmentPreset: (environmentPreset) => set({ environmentPreset: sanitizeEnvironmentPreset(environmentPreset) }),
     setMaterialPreset: (materialPreset) => set({ materialPreset }),
     setMaterialScene: (materialScene) => set({ materialScene }),
     setMaterialIntensity: (materialIntensity) => set({ materialIntensity: Math.max(0, Math.min(1, materialIntensity)) }),
@@ -1310,6 +1572,22 @@ export const useStore = create<AppState>()(
     setAuthPromptOpen: (authPromptOpen) => set({ authPromptOpen }),
     openConfigurator: (seed) => set({ configuratorOpen: true, configuratorSeed: seed ?? null }),
     closeConfigurator: () => set({ configuratorOpen: false }),
+    openRunConfigurator: (seed) => set({ runConfiguratorOpen: true, runConfiguratorSeed: seed ?? null }),
+    closeRunConfigurator: () => set({ runConfiguratorOpen: false }),
+    setPersistSettings: (on) => {
+      set({ persistSettings: on });
+      // The toggle owns its own storage write: opting out erases the record
+      // immediately; opting in snapshots the current settings right away.
+      if (on) persistSettingsNow();
+      else clearSettingsStorage();
+    },
+    resetSettings: () => {
+      // applyStateDelta({}) yields DEFAULTS for exactly the key set
+      // buildStateDelta covers — the reset whitelist cannot drift from the
+      // URL/persistence delta contract.
+      set(applyStateDelta({}));
+      clearSettingsStorage();
+    },
     setEquilibriumSolve: (equilibriumSolve) => set({ equilibriumSolve }),
     setNistCatalog: (nistCatalog) => set({ nistCatalog }),
     setActivePotentialId: (activePotentialId) => set({ activePotentialId }),
@@ -1475,62 +1753,31 @@ export const useStore = create<AppState>()(
 
     setCameraState: (position, target) => set({ cameraPosition: position, cameraTarget: target }),
 
+    setCameraViewportAspect: (cameraViewportAspect) => {
+      if (!Number.isFinite(cameraViewportAspect) || cameraViewportAspect <= 0) return;
+      set({ cameraViewportAspect });
+    },
+
     fitCameraView: () => {
       const state = get();
-      if (!state.file) return;
-      const { min, max } = state.file.trajectory.globalBounds;
-      const center: [number, number, number] = [
-        (min[0] + max[0]) / 2,
-        (min[1] + max[1]) / 2,
-        (min[2] + max[2]) / 2,
-      ];
-      const dx = max[0] - min[0], dy = max[1] - min[1], dz = max[2] - min[2];
-      const distance = Math.hypot(dx, dy, dz) * 1.4;
+      const fit = fitCameraForState(state);
+      if (!fit) return;
       set({
-        cameraPosition: [center[0], center[1], center[2] + distance],
-        cameraTarget: center,
+        cameraPosition: fit.position,
+        cameraTarget: fit.target,
       });
     },
 
     setCameraPreset: (cameraPreset) => {
       const state = get();
       if (!state.file) return;
-      
-      const { min, max } = state.file.trajectory.globalBounds;
-      const center: [number, number, number] = [
-        (min[0] + max[0]) / 2,
-        (min[1] + max[1]) / 2,
-        (min[2] + max[2]) / 2,
-      ];
-      const dx = max[0] - min[0];
-      const dy = max[1] - min[1];
-      const dz = max[2] - min[2];
-      const size = Math.max(dx, dy, dz);
-      const distance = size * 1.5;
-
-      let position: [number, number, number];
-      switch (cameraPreset) {
-        case 'front':
-          position = [center[0], center[1], center[2] + distance];
-          break;
-        case 'side':
-          position = [center[0] + distance, center[1], center[2]];
-          break;
-        case 'top':
-          position = [center[0], center[1] + distance, center[2]];
-          break;
-        case 'iso':
-          position = [
-            center[0] + distance * 0.7,
-            center[1] + distance * 0.7,
-            center[2] + distance * 0.7,
-          ];
-          break;
-        default:
-          return;
+      if (cameraPreset === 'free') {
+        set({ cameraPreset });
+        return;
       }
-      
-      set({ cameraPreset, cameraPosition: position, cameraTarget: center });
+      const fit = fitCameraForState(state, cameraPresetDirection(cameraPreset));
+      if (!fit) return;
+      set({ cameraPreset, cameraPosition: fit.position, cameraTarget: fit.target });
     },
     setShowScaleBar: (showScaleBar) => set({ showScaleBar }),
 
@@ -1594,91 +1841,7 @@ export const useStore = create<AppState>()(
     }),
 
     encodeToURL: () => {
-      const s = get();
-      // ── Delta encoding: only include values that differ from defaults ──
-      const delta: Record<string, unknown> = {};
-
-      // Helper: truncate floats to 2 decimal places
-      const r = (n: number) => Math.round(n * 100) / 100;
-      const rArr = (a: number[]) => a.map(r);
-
-      // Helper: arrays are "equal" if same length and all elements within epsilon
-      const arrEq = (a: number[], b: number[]) =>
-        a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 0.01);
-
-      if (s.frame !== 0)                              delta.f = s.frame;
-      if (s.colorScheme !== DEFAULTS.colorScheme)      delta.cs = s.colorScheme;
-      if (s.atomColorSource !== COLOR_SCHEMES[s.colorScheme].atomColorSource) delta.acs = s.atomColorSource;
-      if (s.colorMode !== 'type')                     delta.cm = s.colorMode;
-      if (s.colorProperty !== null)                    delta.cp = s.colorProperty;
-      if (s.colormap !== 'viridis')                    delta.cmap = s.colormap;
-      if (s.vectorField !== null)                      delta.vf = s.vectorField;
-      if (r(s.vectorScale) !== DEFAULTS.vectorScale)   delta.vsc = r(s.vectorScale);
-      if (r(s.vectorDensity) !== DEFAULTS.vectorDensity) delta.vd = r(s.vectorDensity);
-      if (s.uniformAtomColor !== '#1edce0')            delta.uac = s.uniformAtomColor;
-      if (Object.keys(s.elementColorOverrides).length > 0) delta.eco = s.elementColorOverrides;
-      if (s.postprocessPreset !== DEFAULTS.postprocessPreset) delta.pp = s.postprocessPreset;
-      if (r(s.postprocessIntensity) !== DEFAULTS.postprocessIntensity) delta.pi = r(s.postprocessIntensity);
-      if (r(s.propertyEmissionStrength) !== DEFAULTS.propertyEmissionStrength) delta.pe = r(s.propertyEmissionStrength);
-      if (!s.ssao)                                     delta.ssao = 0;
-      if (!s.bloom)                                    delta.bloom = 0;
-      if (s.dof)                                       delta.dof = 1;
-      if (!s.showCell)                                 delta.cell = 0;
-      if (!s.showAxes)                                 delta.axes = 0;
-      if (r(s.atomScale) !== 1.0)                      delta.as = r(s.atomScale);
-      if (s.backgroundPreset !== DEFAULTS.backgroundPreset) delta.bg = s.backgroundPreset;
-      if (s.backgroundStyle !== DEFAULTS.backgroundStyle) delta.bgs = s.backgroundStyle;
-      if (s.backgroundMotionPaused)                    delta.bmp = 1;
-      if (r(s.backgroundMotionSpeed) !== DEFAULTS.backgroundMotionSpeed) delta.bms = r(s.backgroundMotionSpeed);
-      if (r(s.backgroundOpacity) !== DEFAULTS.backgroundOpacity) delta.bo = r(s.backgroundOpacity);
-      if (r(s.backgroundBrightness) !== DEFAULTS.backgroundBrightness) delta.bb = r(s.backgroundBrightness);
-      if (r(s.backgroundSaturation) !== DEFAULTS.backgroundSaturation) delta.bs = r(s.backgroundSaturation);
-      if (r(s.backgroundContrast) !== DEFAULTS.backgroundContrast) delta.bct = r(s.backgroundContrast);
-      if (r(s.backgroundYawDegrees) !== DEFAULTS.backgroundYawDegrees) delta.by = r(s.backgroundYawDegrees);
-      if (r(s.backgroundPitchDegrees) !== DEFAULTS.backgroundPitchDegrees) delta.bp = r(s.backgroundPitchDegrees);
-      if (s.backgroundBackdropShape !== DEFAULTS.backgroundBackdropShape) delta.bds = s.backgroundBackdropShape;
-      if (s.backgroundBackdropPattern !== DEFAULTS.backgroundBackdropPattern) delta.bdp = s.backgroundBackdropPattern;
-      if (r(s.backgroundBackdropRadius) !== DEFAULTS.backgroundBackdropRadius) delta.bdr = r(s.backgroundBackdropRadius);
-      if (s.filterShellShape !== 'off')                delta.fss = s.filterShellShape;
-      if (s.filterShellPreset !== 'haze')              delta.fsp = s.filterShellPreset;
-      if (r(s.filterShellOpacity) !== 0.24)            delta.fso = r(s.filterShellOpacity);
-      if (r(s.filterShellRadius) !== 1.08)             delta.fsr = r(s.filterShellRadius);
-      if (!arrEq(s.cameraPosition, [0, 0, 50]))       delta.cp3 = rArr(s.cameraPosition);
-      if (!arrEq(s.cameraTarget, [0, 0, 0]))          delta.ct = rArr(s.cameraTarget);
-      if (s.cameraFov !== 50)                          delta.fov = s.cameraFov;
-      if (r(s.playbackSpeed) !== 1.0)                  delta.spd = r(s.playbackSpeed);
-      if (r(s.ssaoIntensity) !== DEFAULTS.ssaoIntensity) delta.si = r(s.ssaoIntensity);
-      if (r(s.bloomIntensity) !== DEFAULTS.bloomIntensity) delta.bi = r(s.bloomIntensity);
-      if (s.dofFocus !== 50)                           delta.df = s.dofFocus;
-      if (s.toneMapping !== 'aces')                    delta.tm = s.toneMapping;
-      if (s.showBonds)                                 delta.bonds = 1;
-      if (r(s.bondCutoff) !== 3.2)                     delta.bc = r(s.bondCutoff);
-      if (r(s.bondTolerance) !== 0.45)                 delta.bt = r(s.bondTolerance);
-      if (s.materialScene !== DEFAULTS.materialScene)  delta.ms = s.materialScene;
-      if (s.materialPreset !== DEFAULTS.materialPreset) delta.mp = s.materialPreset;
-      if (r(s.materialIntensity) !== DEFAULTS.materialIntensity) delta.mi = r(s.materialIntensity);
-      if (s.environmentPreset !== DEFAULTS.environmentPreset) delta.env = s.environmentPreset;
-      if (r(s.ambientLightIntensity) !== DEFAULTS.ambientLightIntensity) delta.ali = r(s.ambientLightIntensity);
-      if (r(s.dirLightIntensity) !== DEFAULTS.dirLightIntensity) delta.dli = r(s.dirLightIntensity);
-      if (r(s.rimLightIntensity) !== DEFAULTS.rimLightIntensity) delta.rli = r(s.rimLightIntensity);
-      if (s.atomTexture !== 'none')                    delta.at = s.atomTexture;
-      if (r(s.surfaceRoughness) !== 0.0)               delta.sr = r(s.surfaceRoughness);
-      if (r(s.surfacePolish) !== 0.0)                  delta.sp = r(s.surfacePolish);
-      if (r(s.surfaceClearcoat) !== 0.0)               delta.scc = r(s.surfaceClearcoat);
-      if (r(s.keyLightAzimuth) !== 40.0)               delta.kla = r(s.keyLightAzimuth);
-      if (r(s.keyLightElevation) !== 45.0)             delta.kle = r(s.keyLightElevation);
-      if (r(s.fillLightAzimuth) !== -120.0)            delta.fla = r(s.fillLightAzimuth);
-      if (r(s.fillLightElevation) !== 10.0)            delta.fle = r(s.fillLightElevation);
-      if (r(s.rimLightAzimuth) !== 160.0)              delta.rla = r(s.rimLightAzimuth);
-      if (r(s.rimLightElevation) !== 30.0)             delta.rle = r(s.rimLightElevation);
-      if (s.fillLightColor !== DEFAULTS.fillLightColor) delta.flc = s.fillLightColor;
-      if (s.rimLightColor !== DEFAULTS.rimLightColor)  delta.rlc = s.rimLightColor;
-
-      if (s.knowledgeLabelSearchQuery)               delta.ksq = s.knowledgeLabelSearchQuery;
-      if (s.knowledgeLabelSearchFilter !== 'all')    delta.ksf = s.knowledgeLabelSearchFilter;
-      if (s.pinnedKnowledgeLabelIds.size > 0)        delta.kpl = Array.from(s.pinnedKnowledgeLabelIds);
-
-      const json = JSON.stringify(delta);
+      const json = JSON.stringify(buildStateDelta(get()));
       // URL-safe base64: replace +/= with -_. for shorter, URL-friendly tokens
       return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     },
@@ -1693,86 +1856,7 @@ export const useStore = create<AppState>()(
         // Re-pad if needed
         while (b64.length % 4) b64 += '=';
 
-        const parsed: unknown = JSON.parse(atob(b64));
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          throw new Error('URL state must be an object.');
-        }
-        const s = parsed as Record<string, unknown>;
-        const colorScheme = resolveUrlColorScheme(s.cs, s);
-        const scheme = COLOR_SCHEMES[colorScheme];
-        // Merge delta onto defaults — missing keys stay at their default values
-        set({
-          frame: sanitizeIntegerRange(s.f, 0, 0, 10_000_000),
-          colorScheme,
-          atomColorSource: sanitizeAtomColorSource(s.acs, scheme.atomColorSource),
-          colorMode: sanitizeColorMode(s.cm, scheme.atomColorMode),
-          colorProperty: typeof s.cp === 'string' && s.cp.length <= 64 ? s.cp : null,
-          colormap: sanitizeColormap(s.cmap),
-          uniformAtomColor: sanitizeHexColor(typeof s.uac === 'string' ? s.uac : '#1edce0'),
-          elementColorOverrides: sanitizeElementColorOverrides(s.eco),
-          vectorField: typeof s.vf === 'string' && s.vf.length <= 64 ? s.vf : null,
-          vectorScale: sanitizeNumberRange(s.vsc, DEFAULTS.vectorScale, 0.1, 10),
-          vectorDensity: sanitizeNumberRange(s.vd, DEFAULTS.vectorDensity, 0.01, 1),
-          postprocessPreset: sanitizePostprocessPreset(s.pp),
-          postprocessIntensity: sanitizeNumberRange(s.pi, DEFAULTS.postprocessIntensity, 0, 2),
-          propertyEmissionStrength: sanitizeNumberRange(s.pe, DEFAULTS.propertyEmissionStrength, 0, 1),
-          ssao: sanitizeBinaryFlag(s.ssao, true),
-          bloom: sanitizeBinaryFlag(s.bloom, true),
-          dof: sanitizeBinaryFlag(s.dof, false),
-          showCell: sanitizeBinaryFlag(s.cell, true),
-          showAxes: sanitizeBinaryFlag(s.axes, true),
-          atomScale: sanitizeNumberRange(s.as, 1.0, 0.05, 20),
-          backgroundPreset: sanitizeString(s.bg, DEFAULTS.backgroundPreset, 64),
-          backgroundStyle: sanitizeBackgroundStyle(s.bgs),
-          backgroundMotionPaused: sanitizeBinaryFlag(s.bmp, false),
-          backgroundMotionSpeed: sanitizeNumberRange(s.bms, DEFAULTS.backgroundMotionSpeed, 0.05, 2),
-          backgroundOpacity: sanitizeNumberRange(s.bo, DEFAULTS.backgroundOpacity, 0.15, 1),
-          backgroundBrightness: sanitizeNumberRange(s.bb, DEFAULTS.backgroundBrightness, 0.35, 1.8),
-          backgroundSaturation: sanitizeNumberRange(s.bs, DEFAULTS.backgroundSaturation, 0, 2),
-          backgroundContrast: sanitizeNumberRange(s.bct, DEFAULTS.backgroundContrast, 0.5, 1.8),
-          backgroundYawDegrees: sanitizeNumberRange(s.by, DEFAULTS.backgroundYawDegrees, -180, 180),
-          backgroundPitchDegrees: sanitizeNumberRange(s.bp, DEFAULTS.backgroundPitchDegrees, -45, 45),
-          backgroundBackdropShape: sanitizeBackgroundBackdropShape(s.bds),
-          backgroundBackdropPattern: sanitizeBackgroundBackdropPattern(s.bdp),
-          backgroundBackdropRadius: sanitizeNumberRange(s.bdr, DEFAULTS.backgroundBackdropRadius, 0.25, 5),
-          filterShellShape: sanitizeFilterShellShape(s.fss),
-          filterShellPreset: sanitizeFilterShellPreset(s.fsp),
-          filterShellOpacity: sanitizeNumberRange(s.fso, 0.24, 0, 0.65),
-          filterShellRadius: sanitizeNumberRange(s.fsr, 1.08, 0.75, 4),
-          cameraPosition: sanitizeVec3(s.cp3, [0, 0, 50]),
-          cameraTarget: sanitizeVec3(s.ct, [0, 0, 0]),
-          cameraFov: sanitizeNumberRange(s.fov, 50, 1, 179),
-          playbackSpeed: sanitizeNumberRange(s.spd, 1.0, 0.0625, 16),
-          ssaoIntensity: sanitizeNumberRange(s.si, DEFAULTS.ssaoIntensity, 0, 4),
-          bloomIntensity: sanitizeNumberRange(s.bi, DEFAULTS.bloomIntensity, 0, 4),
-          dofFocus: sanitizeNumberRange(s.df, 50, 0, 10_000),
-          toneMapping: sanitizeToneMapping(s.tm),
-          showBonds: sanitizeBinaryFlag(s.bonds, false),
-          bondCutoff: sanitizeNumberRange(s.bc, 3.2, 0.01, 100),
-          bondTolerance: sanitizeNumberRange(s.bt, 0.45, 0, 1.5),
-          materialScene: sanitizeMaterialScene(s.ms),
-          materialPreset: sanitizeMaterialPreset(s.mp),
-          materialIntensity: sanitizeNumberRange(s.mi, DEFAULTS.materialIntensity, 0, 1),
-          environmentPreset: sanitizeEnvironmentPreset(s.env),
-          ambientLightIntensity: sanitizeNumberRange(s.ali, DEFAULTS.ambientLightIntensity, 0, 4),
-          dirLightIntensity: sanitizeNumberRange(s.dli, DEFAULTS.dirLightIntensity, 0, 4),
-          rimLightIntensity: sanitizeNumberRange(s.rli, DEFAULTS.rimLightIntensity, 0, 4),
-          atomTexture: sanitizeAtomTexture(s.at),
-          surfaceRoughness: sanitizeNumberRange(s.sr, 0.0, -1, 1),
-          surfacePolish: sanitizeNumberRange(s.sp, 0.0, -1, 1),
-          surfaceClearcoat: sanitizeNumberRange(s.scc, 0.0, 0, 1),
-          keyLightAzimuth: sanitizeNumberRange(s.kla, 40, -360, 360),
-          keyLightElevation: sanitizeNumberRange(s.kle, 45, -90, 90),
-          fillLightAzimuth: sanitizeNumberRange(s.fla, -120, -360, 360),
-          fillLightElevation: sanitizeNumberRange(s.fle, 10, -90, 90),
-          rimLightAzimuth: sanitizeNumberRange(s.rla, 160, -360, 360),
-          rimLightElevation: sanitizeNumberRange(s.rle, 30, -90, 90),
-          fillLightColor: sanitizeHexColor(typeof s.flc === 'string' ? s.flc : DEFAULTS.fillLightColor),
-          rimLightColor: sanitizeHexColor(typeof s.rlc === 'string' ? s.rlc : DEFAULTS.rimLightColor),
-          knowledgeLabelSearchQuery: sanitizeString(s.ksq, '', 256),
-          knowledgeLabelSearchFilter: sanitizeKnowledgeFilter(s.ksf),
-          pinnedKnowledgeLabelIds: new Set(sanitizeStringArray(s.kpl)),
-        });
+        set(applyStateDelta(JSON.parse(atob(b64))));
       } catch {
         console.warn('Failed to decode URL state');
       }
@@ -1799,6 +1883,102 @@ export const useStore = create<AppState>()(
     setLoadedAtomCount: (count: number) => set(() => ({ loadedAtomCount: count })),
   }))
 );
+
+// ─── Settings persistence (localStorage) ───
+//
+// Storage shape under `lupi:settings:v1` (the version lives in the key):
+//   { "persist": boolean, "delta": Record<string, unknown> }
+// `delta` uses the exact short-key vocabulary of the shareable-URL `?s=`
+// parameter (buildStateDelta / applyStateDelta), so on-device persistence and
+// share links can never drift apart. `persist` mirrors the opt-out toggle; it
+// is stored alongside the delta rather than inside it so the whitelisted key
+// set stays identical to the URL contract.
+export const SETTINGS_STORAGE_KEY = 'lupi:settings:v1';
+const SETTINGS_PERSIST_DEBOUNCE_MS = 250;
+
+let settingsPersistenceStop: (() => void) | null = null;
+let lastPersistedPayload: string | null = null;
+
+function readSettingsStorage(): { persist: boolean; delta: Record<string, unknown> } | null {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const record = parsed as { persist?: unknown; delta?: unknown };
+    return {
+      persist: record.persist !== false,
+      delta: record.delta && typeof record.delta === 'object' && !Array.isArray(record.delta)
+        ? record.delta as Record<string, unknown>
+        : {},
+    };
+  } catch {
+    return null; // blocked storage or corrupt JSON — start from defaults
+  }
+}
+
+function persistSettingsNow(): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const state = useStore.getState();
+    if (!state.persistSettings) return;
+    const payload = JSON.stringify({ persist: true, delta: buildStateDelta(state) });
+    if (payload === lastPersistedPayload) return; // nothing whitelisted changed
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, payload);
+    lastPersistedPayload = payload;
+  } catch {
+    /* storage blocked — settings stay in-memory only */
+  }
+}
+
+function clearSettingsStorage(): void {
+  lastPersistedPayload = null;
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.removeItem(SETTINGS_STORAGE_KEY);
+  } catch {
+    /* storage blocked */
+  }
+}
+
+/** Apply the stored settings record to the store. Exported for tests and for
+ *  the boot path; returns false when there is nothing valid to apply. A `?s=`
+ *  URL decoded later naturally overrides these values. */
+export function rehydrateSettingsFromStorage(): boolean {
+  const stored = readSettingsStorage();
+  if (!stored || !stored.persist) return false;
+  useStore.setState(applyStateDelta(stored.delta));
+  return true;
+}
+
+/**
+ * Wire cross-session settings persistence: rehydrate once, then mirror
+ * whitelisted changes into localStorage (debounced). Idempotent — the second
+ * call returns the existing teardown. SSR/test-safe: no-ops without
+ * `window.localStorage`. Called once from the viewer bootstrap (ViewerApp).
+ */
+export function initSettingsPersistence(): () => void {
+  if (settingsPersistenceStop) return settingsPersistenceStop;
+  if (typeof window === 'undefined') return () => {};
+  rehydrateSettingsFromStorage();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const unsubscribe = useStore.subscribe(() => {
+    if (timer !== null) return; // a write is already scheduled; it reads latest state
+    timer = setTimeout(() => {
+      timer = null;
+      persistSettingsNow();
+    }, SETTINGS_PERSIST_DEBOUNCE_MS);
+  });
+  const stop = () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    unsubscribe();
+    if (settingsPersistenceStop === stop) settingsPersistenceStop = null;
+  };
+  settingsPersistenceStop = stop;
+  return stop;
+}
 
 /**
  * Pick the opening-frame visual directive for a freshly-loaded file. This

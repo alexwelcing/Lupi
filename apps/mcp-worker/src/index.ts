@@ -20,6 +20,13 @@ import {
   type RenderRequestSpecV1,
 } from '@atlas/core';
 import { routeScienceData } from './scienceData';
+import {
+  assessAsset,
+  byteSourceFromUrl,
+  envelopeSource,
+  type AssessmentContext,
+  type AssetEnvelope,
+} from '@atlas/assessment';
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -179,6 +186,7 @@ const DEFAULT_PUBLIC_ORIGIN = 'https://lupi.live';
 const DEFAULT_SOCIAL_IMAGE = '/og-lupi.png';
 const MAX_ANALYTICS_BODY_BYTES = 16 * 1024;
 const EXTERNAL_ASSET_PATHS = new Set(validateExternalAssetPaths(externalAssetPathConfig));
+const MAX_ASSESSMENT_ENVELOPE_BYTES = 128 * 1024;
 const ANALYTICS_EVENTS = new Set([
   'app_landed',
   'molecule_loaded',
@@ -315,7 +323,10 @@ const EDGE_RENDER_VIEW_SCHEMA_V1: JsonValue = {
               additionalProperties: false,
               required: ['preset', 'assetRevision', 'file', 'colorSpace'],
               properties: {
-                preset: { enum: ['city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'apartment', 'park'] },
+                // Mirrors ENVIRONMENT_PRESETS_V1: 'softbox' is the procedural
+                // scientific-studio rig; 'apartment' remains accepted so
+                // previously persisted v1 specs still validate.
+                preset: { enum: ['city', 'studio', 'dawn', 'night', 'warehouse', 'forest', 'softbox', 'apartment', 'park'] },
                 assetRevision: { type: 'string', pattern: '^[0-9a-f]{40,64}$' },
                 file: { type: 'string', minLength: 1 },
                 colorSpace: { const: 'srgb-linear' },
@@ -378,7 +389,7 @@ const EDGE_RENDER_VIEW_SCHEMA_V1: JsonValue = {
           propertyNames: { pattern: '^(?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$' },
           additionalProperties: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         },
-        materialPreset: { enum: ['default', 'matte', 'metallic', 'glass', 'plastic'] },
+        materialPreset: { enum: ['default', 'matte', 'metallic', 'glass', 'plastic', 'transmission'] },
         roughness: { type: 'number', minimum: -1, maximum: 1 },
         polish: { type: 'number', minimum: -1, maximum: 1 },
         propertyRange: {
@@ -516,6 +527,20 @@ export const MCP_TOOLS: ToolDefinition[] = [
       properties: {
         query: { type: 'string' },
         limit: { type: 'number', minimum: 1, maximum: 25 },
+      },
+    },
+  },
+  {
+    name: 'lupi.assess_asset',
+    description: 'Assess an authenticated materialized evidence envelope or permitted public HTTPS asset without launching a browser.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source: { type: 'string', enum: ['url', 'envelope'] },
+        url: { type: 'string', format: 'uri' },
+        envelope: { type: 'object' },
+        context: { type: 'object' },
+        mode: { type: 'string', enum: ['fast'], default: 'fast' },
       },
     },
   },
@@ -787,6 +812,8 @@ async function callTool(
       return statusPayload(env);
     case 'lupi.search_molecules':
       return searchMolecules(args);
+    case 'lupi.assess_asset':
+      return await assessMoleculeAsset(args, env);
     case 'lupi.render_molecule_asset':
       return await renderMoleculeAsset(args, env, ctx);
     case 'lupi.get_render_job':
@@ -798,6 +825,58 @@ async function callTool(
     default:
       throw new Error(`Unsupported Lupi Cloudflare MCP tool: ${name}`);
   }
+}
+
+async function assessMoleculeAsset(args: Record<string, unknown>, env: Env) {
+  const requestedMode = typeof args.mode === 'string' ? args.mode : 'fast';
+  if (requestedMode !== 'fast') {
+    throw new Error(`Cloudflare assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Use the Node CLI for deep streaming inspection.`);
+  }
+  const context = isRecord(args.context) ? args.context as AssessmentContext : undefined;
+  const requestedSource = typeof args.source === 'string' ? args.source : args.url ? 'url' : 'envelope';
+  if (requestedSource === 'url') {
+    if (typeof args.url !== 'string') throw new Error('lupi.assess_asset requires "url" when source is "url".');
+    const source = byteSourceFromUrl(args.url, {
+      requireHttps: true,
+      allowedOrigins: assessmentAllowedOrigins(env),
+      timeoutMs: 5_000,
+      maxBytes: 128 * 1024,
+    });
+    return await assessAsset(source, context, { mode: 'fast' });
+  }
+  if (requestedSource !== 'envelope' || !isRecord(args.envelope)) {
+    throw new Error('lupi.assess_asset requires an object "envelope" or a permitted public HTTPS URL.');
+  }
+  const envelope = args.envelope as unknown as AssetEnvelope;
+  assertBoundedAssessmentEnvelope(envelope);
+  return await assessAsset(envelopeSource(envelope), context, { mode: 'fast' });
+}
+
+function assertBoundedAssessmentEnvelope(envelope: AssetEnvelope) {
+  const serializedBytes = new TextEncoder().encode(JSON.stringify(envelope)).byteLength;
+  if (serializedBytes > MAX_ASSESSMENT_ENVELOPE_BYTES * 2) {
+    throw new Error(`Assessment envelope exceeds the ${MAX_ASSESSMENT_ENVELOPE_BYTES * 2} byte edge metadata limit.`);
+  }
+  if (typeof envelope.text === 'string' && new TextEncoder().encode(envelope.text).byteLength > MAX_ASSESSMENT_ENVELOPE_BYTES) {
+    throw new Error(`Assessment envelope text exceeds the ${MAX_ASSESSMENT_ENVELOPE_BYTES} byte fast-mode limit.`);
+  }
+  if (typeof envelope.bytesBase64 === 'string' && envelope.bytesBase64.replace(/\s+/g, '').length > Math.ceil(MAX_ASSESSMENT_ENVELOPE_BYTES / 3) * 4) {
+    throw new Error(`Assessment envelope bytes exceed the ${MAX_ASSESSMENT_ENVELOPE_BYTES} byte fast-mode limit.`);
+  }
+}
+
+function assessmentAllowedOrigins(env: Env): string[] {
+  const origins = new Set<string>();
+  for (const value of [env.LUPI_PUBLIC_ORIGIN ?? DEFAULT_PUBLIC_ORIGIN, env.LUPI_LARGE_ASSET_BASE_URL, env.ASSET_BASE_URL]) {
+    if (!value) continue;
+    try {
+      const url = new URL(value);
+      if (url.protocol === 'https:') origins.add(url.origin);
+    } catch {
+      // Relative asset paths are served by LUPI_PUBLIC_ORIGIN, already included above.
+    }
+  }
+  return [...origins].sort();
 }
 
 async function renderMoleculeAsset(

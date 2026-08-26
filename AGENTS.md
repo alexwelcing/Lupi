@@ -25,8 +25,8 @@ Core endpoints:
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
 - `GET /health` — service and binding readiness
-- `GET /mcp-manifest.json` — six-tool Cloudflare edge control-plane manifest
-- `GET /browser-mcp-manifest.json` — 28-tool browser viewer manifest
+- `GET /mcp-manifest.json` — seven-tool Cloudflare edge control-plane manifest
+- `GET /browser-mcp-manifest.json` — 30-tool browser viewer manifest
 - `POST /v1/render` — REST shortcut for `lupi.render_molecule_asset`
 - `GET /v1/jobs/:jobId` — legacy-v0 render-job compatibility
 - `GET /assets/:assetId.:ext` — legacy-v0 R2 asset compatibility
@@ -95,7 +95,7 @@ window.__lupiViewerMcp: {
 ```ts
 interface LupiMcpRequest {
   id: string; // any unique string
-  tool: string; // one of the 28 lupi.* browser tools
+  tool: string; // one of the 30 lupi.* browser tools
   arguments: Record<string, unknown>;
 }
 ```
@@ -123,11 +123,15 @@ console.log(status);
 // {
 //   ready: true,
 //   version: '0.3.0',
-//   toolCount: 28,
+//   toolCount: 30,
 //   moleculeLoaded: true,
 //   atomCount: 250000,
 //   frame: 0,
-//   playing: false
+//   playing: false,
+//   bondCount: 420000,
+//   bondSource: 'gpu',
+//   bondTopology: 'inferred',
+//   showBondsEffective: true
 // }
 ```
 
@@ -149,18 +153,20 @@ const manifest = await page.evaluate(() =>
 );
 ```
 
-## Tool Reference (28 tools)
+## Tool Reference (30 tools)
 
 | Tool                       | Description                                                                                                                      | Example arguments                                         |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `lupi.generate_molecule`   | Load/generate a molecule by template, name, SMILES, XYZ, description, or procedural lattice.                                     | `{ inputType: 'template', input: 'Caffeine' }`            |
 | `lupi.load_molecule_url`   | Load a molecule or trajectory URL.                                                                                               | `{ url: 'https://example.com/molecule.xyz' }`             |
+| `lupi.open_gallery_example` | Open a canonical gallery example with caller-pinned identity and atom-count limits.                                             | `{ id: 'c60_buckyball', expectedAtomCount: 60, maxAtomCount: 50000 }` |
 | `lupi.open_saved_view`     | Open a saved Lupi view by slug.                                                                                                  | `{ slug: 'abc123' }`                                      |
 | `lupi.search_molecules`    | Search molecule/catalog providers.                                                                                               | `{ query: 'aspirin', limit: 5 }`                          |
 | `lupi.set_viewer`          | Apply common viewer display/style settings.                                                                                      | `{ showBonds: true, cameraPreset: 'iso' }`                |
 | `lupi.export_xyz`          | Return active frame XYZ text.                                                                                                    | `{}`                                                      |
 | `lupi.export_asset`        | Return the active deterministic profile as inline PNG/JPEG/WebP or GLB; unsupported active layers/combinations fail closed.       | `{ format: 'png', width: 1024, height: 1024 }`            |
 | `lupi.viewer_state`        | Return current viewer state.                                                                                                     | `{}`                                                      |
+| `lupi.assess_asset`        | Run a bounded fast assessment of materialized source data and declared context without rendering.                                | `{ source: 'active', mode: 'fast' }`                      |
 | `lupi.knowledge_graph`     | Query active knowledge-graph labels.                                                                                             | `{ query: 'force', limit: 20 }`                           |
 | `lupi.status`              | Report bridge readiness and viewer health.                                                                                       | `{}`                                                      |
 | `lupi.set_frame`           | Jump to a trajectory frame.                                                                                                      | `{ frame: 0 }`                                            |

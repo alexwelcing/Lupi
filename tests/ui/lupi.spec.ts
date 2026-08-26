@@ -1,5 +1,35 @@
 import { expect, test, type Locator, type Page } from 'playwright/test';
 
+// Keep this release-only verifier aligned with the native catalog shipped in
+// the signed development build without pulling the entire Expo workspace into
+// the Cloudflare web/worker release branch.
+const MOBILE_GALLERY_ATOM_COUNTS = {
+  lupine_sphere_grid: 1_513,
+  caffeine: 24,
+  aspirin: 21,
+  dopamine: 22,
+  serotonin: 25,
+  glucose: 24,
+  ethanol: 9,
+  water: 3,
+  sodium_chloride: 2,
+  acetone: 10,
+  phenol: 13,
+  nitrobenzene: 14,
+  ethyl_acetate: 14,
+  c60_buckyball: 60,
+  cnt_6_6: 96,
+  graphene_ribbon: 112,
+  diamond_crystal: 512,
+  sio2_glass: 12_000,
+  cuzr_melt: 13_500,
+  this_is_water: 450,
+  oscillation_timeseries: 1_000,
+  z1_science_path_16: 51,
+  z1_science_path_27: 87,
+  elliott_gst_crystallization: 4_096,
+} as const;
+
 const CAFFEINE_ASSET = '/gallery/curated/popular/caffeine.xyz';
 const SPHERE_GRID_ASSET = '/generated/lupine-wiki/sphere-grid.lammpstrj';
 const TRAJECTORY_ID = 'this_is_water';
@@ -40,6 +70,20 @@ async function expectViewerReady(page: Page) {
 
 async function expectPressed(control: Locator) {
   await expect(control).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
+}
+
+async function expectHitTestable(panel: Locator) {
+  // toBeVisible cannot detect an ancestor clipping the panel away (for example
+  // paint containment on the status bar), so assert the opened menu actually
+  // wins hit-testing at its own on-screen coordinates.
+  await expect.poll(() => panel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const probe = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + Math.min(24, rect.height / 2),
+    );
+    return probe !== null && element.contains(probe);
+  })).toBe(true);
 }
 
 async function releaseRenderer(page: Page) {
@@ -113,6 +157,63 @@ test('@deployed-smoke viewer settings are usable and learning tools are discover
 
   await commands.getByRole('button', { name: 'Learn command' }).click();
   await expect(page.getByTestId('study-lens-panel')).toBeVisible();
+  await releaseRenderer(page);
+});
+
+test('@deployed-smoke the save view and account menus open over the viewer', async ({ page }) => {
+  await preparePage(page);
+  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  await expectViewerReady(page);
+
+  await page.getByTestId('lupi-save-view-button').click();
+  const savePanel = page.getByTestId('lupi-save-view-panel');
+  await expect(savePanel).toBeVisible();
+  await expectHitTestable(savePanel);
+
+  await page.keyboard.press('Escape');
+  await expect(savePanel).toBeHidden();
+
+  await page.getByTestId('lupi-agent-dock-button').click();
+  const dockPanel = page.getByTestId('lupi-agent-dock-panel');
+  await expect(dockPanel).toBeVisible();
+  await expectHitTestable(dockPanel);
+  await releaseRenderer(page);
+});
+
+test('the prism appearance preset renders transmission glass without errors', async ({ page }) => {
+  await preparePage(page);
+  const consoleErrors: string[] = [];
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', error => consoleErrors.push(error.message));
+
+  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  await expectViewerReady(page);
+
+  const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
+  await commands.getByRole('button', { name: 'Visuals command' }).click();
+  const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
+  await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
+
+  // The scene cards are first-class controls: no disclosure to open first.
+  const prismCard = visualsPanel.getByTestId('appearance-scene-prism');
+  await prismCard.click();
+  await expect(prismCard).toHaveAttribute('aria-pressed', 'true');
+
+  // Transmission-specific glass controls appear only for the refractive look.
+  await expect(visualsPanel.getByRole('slider', { name: /Clarity/ })).toBeVisible();
+  await expect(visualsPanel.getByRole('slider', { name: /Frost/ })).toBeVisible();
+  await expect(visualsPanel.getByRole('slider', { name: /Gloss/ })).toBeVisible();
+  await visualsPanel.getByTestId('appearance-scene-specimen').click();
+  await expect(visualsPanel.getByRole('slider', { name: /Clarity/ })).toHaveCount(0);
+  await prismCard.click();
+  await expect(prismCard).toHaveAttribute('aria-pressed', 'true');
+
+  // Let the transmission shader compile and the buffer pass draw a few frames;
+  // a broken MeshTransmissionMaterial surfaces here as console/page errors.
+  await page.waitForTimeout(1_500);
+  expect(consoleErrors).toEqual([]);
   await releaseRenderer(page);
 });
 
@@ -234,6 +335,149 @@ test.describe('mobile viewer', () => {
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,
+  });
+
+  test('embedded Expo route loads only the requested molecule without browser chrome or MCP controls', async ({ page }) => {
+    await preparePage(page);
+    const runtimeErrors: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', error => runtimeErrors.push(error.message));
+
+    await page.goto('/?load#/embed/mobile', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 30_000 });
+
+    const embeddedRoot = page.locator('.lupine-app-root[data-embedded-mobile-viewer="true"]');
+    await expect(embeddedRoot).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+    await expect(page.getByTestId('lupine-mcp-open')).toHaveCount(0);
+    await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Stow viewer controls' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Explore matter in 3D.' })).toHaveCount(0);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.status().moleculeLoaded)).toBe(false);
+
+    const responses = await page.evaluate(async () => {
+      const driver = window.__lupiViewerMcp!;
+      const opened = await driver.execute({
+        id: 'expo-embedded-caffeine',
+        tool: 'lupi.open_gallery_example',
+        arguments: { id: 'caffeine', expectedAtomCount: 24, maxAtomCount: 50_000 },
+      });
+      const viewer = await driver.execute({
+        id: 'expo-embedded-camera',
+        tool: 'lupi.set_viewer',
+        arguments: { cameraPreset: 'iso', showBonds: true },
+      });
+      const fitted = await driver.execute({
+        id: 'expo-embedded-fit',
+        tool: 'lupi.fit_camera',
+        arguments: {},
+      });
+      return { opened, viewer, fitted };
+    });
+
+    expect(responses.opened.ok).toBe(true);
+    expect(responses.viewer.ok).toBe(true);
+    expect(responses.fitted.ok).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount)).toBe(24);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.state().fileName)).toMatch(/Caffeine/i);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondCount)).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondSource)).toMatch(/cpu|gpu/);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.status().showBondsEffective)).toBe(true);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.state().cameraPreset)).toBe('iso');
+
+    const canvas = page.locator('.lupine-main-viewport canvas');
+    await expect(canvas).toBeVisible({ timeout: 30_000 });
+    await expect.poll(async () => {
+      const bounds = await canvas.boundingBox();
+      return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
+    }).toBe(true);
+    await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+    await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    expect(runtimeErrors).toEqual([]);
+    await releaseRenderer(page);
+  });
+
+  test('embedded Expo route opens every curated native gallery example without web chrome', async ({ page }) => {
+    test.setTimeout(300_000);
+    await preparePage(page);
+    const runtimeErrors: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', error => runtimeErrors.push(error.message));
+
+    await page.goto('/?load#/embed/mobile', { waitUntil: 'commit' });
+    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 30_000 });
+
+    const examples = Object.entries(MOBILE_GALLERY_ATOM_COUNTS).map(([id, atomCount]) => ({
+      id,
+      atomCount,
+    }));
+    expect(examples).toHaveLength(24);
+    for (const [index, example] of examples.entries()) {
+      if (index > 0) {
+        // Native navigation keys the WebView by molecule identity. Reload the
+        // embedded document here to exercise the same fresh-renderer boundary.
+        await page.goto('/?load#/embed/mobile', { waitUntil: 'commit' });
+        await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 30_000 });
+      }
+      const response = await test.step(`open gallery example ${example.id}`, () => page.evaluate(
+        ({ id, expectedAtomCount, requestIndex }) => Promise.race([
+          window.__lupiViewerMcp!.execute({
+            id: `expo-gallery-${requestIndex}`,
+            tool: 'lupi.open_gallery_example',
+            arguments: { id, expectedAtomCount, maxAtomCount: 50_000 },
+          }),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(
+              () => reject(new Error(`Timed out opening gallery example ${id}`)),
+              25_000,
+            );
+          }),
+        ]),
+        { id: example.id, expectedAtomCount: example.atomCount, requestIndex: index },
+      ));
+
+      expect(response.ok, example.id).toBe(true);
+      expect(response.result?.viewer, example.id).toMatchObject({ atomCount: example.atomCount });
+      await expect.poll(
+        () => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount),
+        { message: example.id },
+      ).toBe(example.atomCount);
+      const canvas = page.locator('.lupine-main-viewport canvas');
+      await expect(canvas, `${example.id} canvas`).toBeVisible({ timeout: 30_000 });
+      await expect.poll(async () => {
+        const bounds = await canvas.boundingBox();
+        return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
+      }, { message: `${example.id} fills the embedded phone viewport` }).toBe(true);
+      await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+      await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+      await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    }
+    const rejectedDrift = await page.evaluate(() => window.__lupiViewerMcp!.execute({
+      id: 'expo-gallery-drift-check',
+      tool: 'lupi.open_gallery_example',
+      arguments: { id: 'water', expectedAtomCount: 4, maxAtomCount: 50_000 },
+    }));
+    expect(rejectedDrift.ok).toBe(false);
+    expect(rejectedDrift.error?.message).toMatch(/caller expected 4/i);
+    expect(await page.evaluate(() => window.__lupiViewerMcp?.status().atomCount)).toBe(
+      examples.at(-1)?.atomCount,
+    );
+    expect(await page.evaluate(() => ({ hash: window.location.hash, search: window.location.search }))).toEqual({
+      hash: '#/embed/mobile',
+      search: '?load',
+    });
+    await expect(page.locator('.lupine-main-viewport canvas')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
+    await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
+    expect(runtimeErrors).toEqual([]);
+    await releaseRenderer(page);
   });
 
   test('keeps the primary viewer settings reachable on a phone', async ({ page }) => {

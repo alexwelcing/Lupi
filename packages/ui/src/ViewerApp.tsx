@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { useStore } from './store';
+import { useStore, initSettingsPersistence } from './store';
 import {
   getMaxSafeAtomCount,
   getDefaultQualityTier,
@@ -28,6 +28,7 @@ import {
   SEO_EDUCATION_ROUTES,
   currentHashRoute,
   currentPathRoute,
+  isEmbeddedMobileViewerRoute,
   isMcpViewerRoute as isMcpViewerRouteMatch,
   isSciencePanelRoute,
   normalizedPathRoute,
@@ -49,6 +50,7 @@ import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
 import { DeferredCommandPalette } from './CommandPalette';
 import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
+import { RunConfigurator } from './molecules/RunConfigurator';
 import { openRandomOmol25Molecule } from './molecules/randomOmol';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
@@ -97,6 +99,13 @@ import { DevProbe } from './DevProbe';
 import { Perf } from 'r3f-perf';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 
+const EMPTY_TRAJECTORY_FRAMES: Array<import('@atlas/core/types').Frame | undefined> = [];
+
+// Boot settings persistence (rehydrate + subscribe) as the viewer chunk
+// evaluates — before the component effect decodes `?s=`, so an explicit share
+// URL always wins over stored device settings. Idempotent and SSR/test-safe.
+initSettingsPersistence();
+
 export function ViewerApp() {
   const [hashRoute, setHashRoute] = useState(currentHashRoute);
   const [pathRoute, setPathRoute] = useState(currentPathRoute);
@@ -110,7 +119,8 @@ export function ViewerApp() {
   const hashPath = hashRoute.split('?')[0] || '/';
   const normalizedPath = normalizedPathRoute(pathRoute);
   const isMlipFlywheelRoute = hashPath === '/system/mlip-flywheel';
-  const isMcpViewerRoute = isMcpViewerRouteMatch(hashPath);
+  const isEmbeddedMobileViewer = isEmbeddedMobileViewerRoute(hashPath);
+  const isMcpViewerRoute = !isEmbeddedMobileViewer && isMcpViewerRouteMatch(hashPath);
   const savedViewSlug = savedViewSlugFromRoute(hashPath) ?? savedViewSlugFromRoute(normalizedPath);
   const isSavedViewRoute = Boolean(savedViewSlug);
   const isCopperSceneRoute = normalizedPath === '/scenes/1m-copper-lattice';
@@ -244,7 +254,7 @@ export function ViewerApp() {
   }, [isFrameReady, requestBufferedFrame]);
 
   const { currentState: interpState, setFrame: setSmoothFrame, liveStateRef } = useSmoothFramePlayback(playing, {
-    frames: file?.trajectory.frames ?? [],
+    frames: file?.trajectory.frames ?? EMPTY_TRAJECTORY_FRAMES,
     speed: playbackSpeed,
     targetFPS: highFidelityPlayback ? 120 : 60,
     mdFrameRate: playbackFrameRate,
@@ -520,21 +530,23 @@ export function ViewerApp() {
   return (
     <div
       className="lupine-app-root"
+      data-embedded-mobile-viewer={isEmbeddedMobileViewer}
       data-mobile={isMobile}
       data-file={!!file}
       data-timeline={mobileTimelineActive}
       data-ui-stowed={uiStowed}
       style={{
-        height: file ? '100dvh' : 'auto',
-        overflow: file ? 'hidden' : 'visible',
+        height: file || isEmbeddedMobileViewer ? '100dvh' : 'auto',
+        overflow: file || isEmbeddedMobileViewer ? 'hidden' : 'visible',
         background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
       }}
     >
-      <GlobalShortcuts commandPaletteOpen={commandPaletteOpen} setCommandPaletteOpen={setCommandPaletteOpen} />
-      <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
+      {!isEmbeddedMobileViewer && <GlobalShortcuts commandPaletteOpen={commandPaletteOpen} setCommandPaletteOpen={setCommandPaletteOpen} />}
+      {!isEmbeddedMobileViewer && <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
         <AppHeader isMobile={isMobile} clearLoadedFile={clearLoadedFile} />
-      </div>
-      <MoleculeConfigurator />
+      </div>}
+      {!isEmbeddedMobileViewer && <MoleculeConfigurator />}
+      {!isEmbeddedMobileViewer && <RunConfigurator />}
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
         <McpViewerBridge />
@@ -598,10 +610,10 @@ export function ViewerApp() {
             <PresetLegacyBridge />
           </ViewerCanvas>
 
-          {import.meta.env.DEV && showDebugHud && <StateInspector />}
-          <RendererWarningToast />
+          {!isEmbeddedMobileViewer && import.meta.env.DEV && showDebugHud && <StateInspector />}
+          {!isEmbeddedMobileViewer && <RendererWarningToast />}
 
-          {file && currentFrame && (
+          {file && currentFrame && !isEmbeddedMobileViewer && (
             <ScaleBar
               frame={currentFrame}
               cameraDistance={cameraDistance}
@@ -610,19 +622,19 @@ export function ViewerApp() {
             />
           )}
 
-          {file && currentFrame && studyLensOpen && (
+          {file && currentFrame && studyLensOpen && !isEmbeddedMobileViewer && (
             <div id="viewer-study-panel">
               <StudyLensPanel compact={isMobile} onClose={() => useStore.getState().setStudyLensOpen(false)} />
             </div>
           )}
 
-          {file && totalFrames > 1 && (
+          {file && totalFrames > 1 && !isEmbeddedMobileViewer && (
             <PlaybackStatus frame={frame} totalFrames={totalFrames} showFrame={!isMobile} />
           )}
 
-          {showDebugHud && <TelemetryHUD />}
-          <LabelPerfHUD />
-          <PropertyLegendHUD
+          {!isEmbeddedMobileViewer && showDebugHud && <TelemetryHUD />}
+          {!isEmbeddedMobileViewer && <LabelPerfHUD />}
+          {!isEmbeddedMobileViewer && <PropertyLegendHUD
             frame={currentFrame}
             colorMode={colorMode}
             colorProperty={colorProperty}
@@ -630,23 +642,23 @@ export function ViewerApp() {
             activeVectorField={activeVectorField}
             vectorStats={vectorStats}
             bottomOffset={isMobile ? 96 : 44}
-          />
+          />}
 
-          {file && <ViewerGestureHint
+          {file && !isEmbeddedMobileViewer && <ViewerGestureHint
             isMobile={isMobile}
             canSelectAtoms={(rawCurrentFrame?.natoms ?? 0) <= MAX_INTERACTIVE_PICKING_ATOMS}
           />}
-          {file && (
+          {file && !isEmbeddedMobileViewer && (
             <div style={{ position: 'absolute', top: isMobile ? 72 : 84, left: 18, zIndex: 149 }}>
               <XREntryButton store={xrStore} />
             </div>
           )}
         </div>}
 
-        {file && <ViewerCommandDeck compact={isMobile} />}
-        {file && <PanelHost />}
+        {file && !isEmbeddedMobileViewer && <ViewerCommandDeck compact={isMobile} />}
+        {file && !isEmbeddedMobileViewer && <PanelHost />}
 
-        {file && (
+        {file && !isEmbeddedMobileViewer && (
           <button
             type="button"
             className="lupine-ui-bucket"
@@ -666,7 +678,7 @@ export function ViewerApp() {
           </button>
         )}
 
-        {!file && (
+        {!file && !isEmbeddedMobileViewer && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>
             {automaticLoadFailed
               ? <RemoteMoleculeLoadError />
@@ -685,9 +697,9 @@ export function ViewerApp() {
         )}
       </div>
 
-      {isBatchExport && <BatchAssetGenerator />}
+      {isBatchExport && !isEmbeddedMobileViewer && <BatchAssetGenerator />}
 
-      {file && totalFrames > 1 && (
+      {file && totalFrames > 1 && !isEmbeddedMobileViewer && (
         <div className="lupine-viewer-chrome lupine-viewer-chrome--timeline" style={{
           height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60,
           flexShrink: 0,
@@ -745,10 +757,16 @@ export function ViewerApp() {
       )}
 
       <DeferredCommandPalette
-        open={commandPaletteOpen}
+        open={!isEmbeddedMobileViewer && commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         actions={useMemo(() => {
           const list: import('./CommandPalette').CommandAction[] = [
+            {
+              id: 'new-run',
+              label: 'New run — structure & configure a lattice',
+              group: 'Discover',
+              onSelect: () => useStore.getState().openRunConfigurator(),
+            },
             {
               id: 'random-molecule',
               label: 'View random OMol25 molecule',

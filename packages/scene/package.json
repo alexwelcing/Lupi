@@ -23,6 +23,7 @@
   "dependencies": {
     "@atlas/core": "workspace:*",
     "@atlas/renderer": "workspace:*",
+    "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.6.0",
     "react": "^19.0.0",
     "three": "^0.184.0"

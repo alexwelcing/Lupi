@@ -39,6 +39,19 @@ test('Firebase reserved auth routes must be proxied instead of serving the SPA',
   assert.match(failed(report, 'firebase-auth-routes'), /Firebase Auth handler/);
 });
 
+test('Firebase auth handler rejects partial lookalike documents', async () => {
+  for (const firebaseAuthHandlerBody of [
+    '<!doctype html><p>Requested /__/auth/handler</p>',
+    '<!doctype html><script src="handler.js"></script>',
+  ]) {
+    const fixture = await createFixture({ firebaseAuthHandlerBody });
+    const report = await verifyCloudflareLive(normalOptions(fixture.origin));
+    assert.equal(report.ok, false);
+    assert.match(failed(report, 'firebase-auth-routes'), /Firebase Auth handler/);
+    await closeFixture(fixture);
+  }
+});
+
 test('hashed entry must be publicly cacheable and expose an ETag', async () => {
   const fixture = await createFixture({ entryCacheControl: 'private, no-store', entryEtag: null });
   const report = await verifyCloudflareLive(normalOptions(fixture.origin));
@@ -79,11 +92,30 @@ test('bad health and binding drift fail closed', async () => {
 });
 
 test('wrong edge and browser tool counts are reported separately', async () => {
-  const fixture = await createFixture({ edgeToolCount: 5, browserToolCount: 27 });
+  const fixture = await createFixture({ edgeToolCount: 6, browserToolCount: 29 });
   const report = await verifyCloudflareLive(normalOptions(fixture.origin));
   assert.equal(report.ok, false);
-  assert.match(failed(report, 'edge-manifest'), /expected 6 tools/);
-  assert.match(failed(report, 'browser-manifest'), /expected 28 tools/);
+  assert.match(failed(report, 'edge-manifest'), /expected 7 tools/);
+  assert.match(failed(report, 'browser-manifest'), /expected 30 tools/);
+});
+
+test('required assessment and native Gallery tools fail closed when counts still match', async () => {
+  const missingEdgeAssessment = await createFixture({ omitEdgeAssessment: true });
+  const edgeReport = await verifyCloudflareLive(normalOptions(missingEdgeAssessment.origin));
+  assert.equal(edgeReport.ok, false);
+  assert.match(failed(edgeReport, 'edge-manifest'), /edge lupi\.assess_asset is missing/);
+  await closeFixture(missingEdgeAssessment);
+
+  const missingGallery = await createFixture({ omitGalleryTool: true });
+  const galleryReport = await verifyCloudflareLive(normalOptions(missingGallery.origin));
+  assert.equal(galleryReport.ok, false);
+  assert.match(failed(galleryReport, 'browser-manifest'), /lupi\.open_gallery_example is missing/);
+  await closeFixture(missingGallery);
+
+  const missingBrowserAssessment = await createFixture({ omitBrowserAssessment: true });
+  const browserReport = await verifyCloudflareLive(normalOptions(missingBrowserAssessment.origin));
+  assert.equal(browserReport.ok, false);
+  assert.match(failed(browserReport, 'browser-manifest'), /browser lupi\.assess_asset is missing/);
 });
 
 test('JSON-RPC initialize or tools/list failure is not a Live API pass', async () => {
@@ -102,7 +134,7 @@ test('authenticated posture keeps MCP discovery public and rejects protected cal
   }));
   assert.equal(report.ok, true);
   assert.equal(report.observations.mcp.credentialFreeStatus, 200);
-  assert.equal(report.observations.mcp.toolCount, 6);
+  assert.equal(report.observations.mcp.toolCount, 7);
   assert.equal(report.observations.mcp.protectedCallCode, -32001);
 });
 
@@ -360,12 +392,17 @@ async function closeFixture(fixture) {
 
 async function createFixture(overrides = {}) {
   const hosts = new Set();
-  const edgeTools = makeTools(overrides.edgeToolCount ?? 6, 'edge', overrides.edgeToolSuffix ?? '');
-  if (edgeTools.length >= 1) edgeTools[0] = { name: 'lupi.render_molecule_asset' };
-  const browserTools = makeTools(overrides.browserToolCount ?? 28, 'browser');
-  if (browserTools.length >= 2) {
+  const edgeTools = makeTools(overrides.edgeToolCount ?? 7, 'edge', overrides.edgeToolSuffix ?? '');
+  if (edgeTools.length >= 2) {
+    edgeTools[0] = { name: 'lupi.render_molecule_asset' };
+    edgeTools[1] = { name: overrides.omitEdgeAssessment ? 'edge-missing-assessment' : 'lupi.assess_asset' };
+  }
+  const browserTools = makeTools(overrides.browserToolCount ?? 30, 'browser');
+  if (browserTools.length >= 4) {
     browserTools[0] = { name: 'lupi.export_asset' };
     browserTools[1] = { name: 'lupi.set_frame' };
+    browserTools[2] = { name: overrides.omitGalleryTool ? 'browser-missing-gallery' : 'lupi.open_gallery_example' };
+    browserTools[3] = { name: overrides.omitBrowserAssessment ? 'browser-missing-assessment' : 'lupi.assess_asset' };
   }
   const entryPath = overrides.entryPath ?? '/assets/index-test.js';
   const server = createServer(async (request, response) => {
@@ -387,7 +424,7 @@ async function createFixture(overrides = {}) {
         ready: true,
         name: 'lupi-cloudflare-edge',
         version: overrides.serverVersion ?? '0.3.0',
-        toolCount: 6,
+        toolCount: 7,
         agentNative: true,
         browserRequired: false,
         renderExecution: overrides.renderExecution ?? false,
@@ -438,7 +475,12 @@ async function createFixture(overrides = {}) {
     }
     if (url.pathname === '/__/auth/handler') {
       response.setHeader('content-type', 'text/html; charset=utf-8');
-      response.end(overrides.firebaseAuthHandlerBody ?? '<!doctype html><script src="handler.js"></script>');
+      response.end(overrides.firebaseAuthHandlerBody ?? [
+        '<!doctype html>',
+        '<script src="experiments.js"></script>',
+        '<script src="handler.js"></script>',
+        '<script>fireauth.oauthhelper.widget.initialize();</script>',
+      ].join(''));
       return;
     }
     if (url.pathname === '/v1') {

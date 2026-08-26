@@ -25,7 +25,7 @@ import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { openMolecule } from './viewer/openMolecule';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
-import { createLupiMcpDriver } from './mcp/driver';
+import { createLupiMcpDriver, type LupiMcpStatus } from './mcp/driver';
 import {
   LUPI_VIEWER_MCP_VERSION,
   MAX_PERSISTED_EXPORT_CHARS,
@@ -38,12 +38,14 @@ import {
 type LupiMcpToolName =
   | 'lupi.generate_molecule'
   | 'lupi.load_molecule_url'
+  | 'lupi.open_gallery_example'
   | 'lupi.open_saved_view'
   | 'lupi.search_molecules'
   | 'lupi.set_viewer'
   | 'lupi.export_xyz'
   | 'lupi.export_asset'
   | 'lupi.viewer_state'
+  | 'lupi.assess_asset'
   | 'lupi.knowledge_graph';
 
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
@@ -99,6 +101,7 @@ interface LupiMcpResponse {
   tool: LupiMcpToolName;
   ok: boolean;
   result?: {
+    [key: string]: unknown;
     molecule?: {
       name: string;
       formula: string;
@@ -149,6 +152,8 @@ interface LupiMcpResponse {
         position: [number, number, number];
       }>;
     };
+    assessment?: Record<string, unknown>;
+    execution?: Record<string, unknown>;
   };
   error?: {
     code: string;
@@ -169,18 +174,6 @@ interface LupiMcpResponsePayload {
   source?: string;
   state: ReturnType<typeof readViewerState>;
   type: 'lupi:mcp:response';
-}
-
-interface LupiMcpStatus {
-  ready: true;
-  version: string;
-  toolCount: number;
-  moleculeLoaded: boolean;
-  atomCount: number;
-  frame: number;
-  playing: boolean;
-  bondTopology: 'source' | 'inferred' | 'unavailable';
-  showBondsEffective: boolean;
 }
 
 interface LupiMcpDriver {
@@ -1235,6 +1228,36 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
       return okResponse(request, transcript, { viewer: readViewerState() });
     }
 
+    if (request.tool === 'lupi.open_gallery_example') {
+      const id = readString(request.arguments.id);
+      if (!id) throw new Error('lupi.open_gallery_example requires a gallery example id.');
+      const expectedAtoms = readNumber(request.arguments.expectedAtomCount);
+      const maxAtoms = readNumber(request.arguments.maxAtomCount);
+      if (!Number.isSafeInteger(expectedAtoms) || (expectedAtoms ?? 0) < 1) {
+        throw new Error('lupi.open_gallery_example requires a positive integer expectedAtomCount.');
+      }
+      if (!Number.isSafeInteger(maxAtoms) || (maxAtoms ?? 0) < 1) {
+        throw new Error('lupi.open_gallery_example requires a positive integer maxAtomCount.');
+      }
+      if ((expectedAtoms as number) > 50_000_000 || (maxAtoms as number) > 50_000_000) {
+        throw new Error('Gallery atom counts cannot exceed the bridge safety maximum.');
+      }
+      if ((expectedAtoms as number) > (maxAtoms as number)) {
+        throw new Error('The expected gallery atom count exceeds the requested safety ceiling.');
+      }
+      const result = await openMolecule({
+        kind: 'gallery',
+        id,
+        history: 'none',
+        expectedAtoms,
+        maxAtoms,
+        includeScience: false,
+      });
+      if (!result.ok) throw new Error(result.message);
+      transcript.push(`opened gallery example: ${id}`);
+      return okResponse(request, transcript, { viewer: readViewerState() });
+    }
+
     if (request.tool === 'lupi.open_saved_view') {
       const slug = readString(request.arguments.slug);
       if (!slug) throw new Error('lupi.open_saved_view requires a saved-view slug.');
@@ -1908,7 +1931,10 @@ function readViewerState() {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     showBonds: state.showBonds,
-    showBondsEffective: state.showBonds && effectiveBondTopology(frame) !== 'unavailable',
+    showBondsEffective:
+      state.showBonds && effectiveBondTopology(frame) !== 'unavailable' && state.lastBondCount > 0,
+    bondCount: state.lastBondCount,
+    bondSource: state.bondSource,
     bondTopology: effectiveBondTopology(frame),
     typeSemantics: frame ? normalizeAtomTypeSemantics(frame.typeSemantics) : null,
     distanceSemantics: frame ? normalizeDistanceSemantics(frame.distanceSemantics) : null,
@@ -1937,8 +1963,11 @@ function readMcpStatus(): LupiMcpStatus {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     playing: state.playing,
+    bondCount: state.lastBondCount,
+    bondSource: state.bondSource,
     bondTopology: effectiveBondTopology(frame),
-    showBondsEffective: state.showBonds && effectiveBondTopology(frame) !== 'unavailable',
+    showBondsEffective:
+      state.showBonds && effectiveBondTopology(frame) !== 'unavailable' && state.lastBondCount > 0,
   };
 }
 
@@ -1995,7 +2024,13 @@ function applyViewerPatch(patch: ViewerPatch, transcript: string[]) {
     applied.bondColorMode = patch.bondColorMode;
   }
 
-  if (patch.showBonds !== undefined) next.showBonds = patch.showBonds;
+  if (patch.showBonds !== undefined) {
+    next.showBonds = patch.showBonds;
+    if (!patch.showBonds) {
+      next.bondSource = 'none';
+      next.lastBondCount = 0;
+    }
+  }
   if (patch.atomScale !== undefined) next.atomScale = clamp(patch.atomScale, 0.2, 3);
   if (patch.showCell !== undefined) next.showCell = patch.showCell;
   if (patch.showAxes !== undefined) next.showAxes = patch.showAxes;

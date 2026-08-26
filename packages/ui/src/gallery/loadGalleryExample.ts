@@ -13,7 +13,7 @@ import {
 import type { ViewerOpenResult } from '../viewer/openTypes';
 import type { Frame, Trajectory } from '@atlas/core/types';
 import { resolveExampleUrl, type GalleryExample, publicAssetUrl } from './catalog';
-import { scienceBundleForPathIndex } from '../science/scienceBundle';
+import { verifiedScienceBundleForManifestSha256 } from '../science/scienceBundle';
 import { minimumImageUnwrapTrajectory } from '../science/minimumImage';
 import {
   assertViewerLoadCurrent,
@@ -28,6 +28,38 @@ function oversizeMessage(title: string, atomCount: number, ceiling: number, suff
   return `"${title}" has ${suffix}${formatAtomCount(atomCount)} atoms, ` +
     `over Lupi's current ${formatAtomCount(ceiling)}-atom single-scene ceiling. ` +
     `Try a smaller frame or a chunked trajectory.`;
+}
+
+interface GalleryLoadOptions {
+  isCurrent?: ViewerLoadGuard;
+  expectedAtoms?: number;
+  maxAtoms?: number;
+  includeScience?: boolean;
+}
+
+function galleryAtomCountError(
+  title: string,
+  atomCount: number,
+  maxAtoms: number,
+  expectedAtoms?: number,
+): string | null {
+  if (expectedAtoms !== undefined && atomCount !== expectedAtoms) {
+    return `"${title}" resolved to ${formatAtomCount(atomCount)} atoms, but the caller expected `
+      + `${formatAtomCount(expectedAtoms)}. The gallery asset changed, so Lupi refused to load it.`;
+  }
+  return atomCount > maxAtoms ? oversizeMessage(title, atomCount, maxAtoms, '') : null;
+}
+
+function rejectedGalleryLoad(message: string): ViewerOpenResult {
+  useStore.getState().setError(message);
+  return { ok: false, message };
+}
+
+function maxTrajectoryAtoms(trajectory: Trajectory): number {
+  return trajectory.frames.reduce(
+    (maximum, frame) => Math.max(maximum, frame?.natoms ?? 0),
+    0,
+  );
 }
 
 function resultFromCurrentFile(): ViewerOpenResult {
@@ -171,7 +203,7 @@ async function loadOutputSidecars(example: GalleryExample): Promise<void> {
 
 /**
  * Attach the validated Z1 science bundle to the just-loaded file when the
- * gallery entry declares `sciencePathIndex`. This is the real load path for
+ * gallery entry declares a canonical manifest digest. This is the real load path for
  * the SCIENCE deck section: gallery card / `?sim=` / `#/science/<index>` all
  * funnel through here, so the panel is never reachable from test-only state.
  * Fail-closed twice: an invalid fixture yields no bundle, and a trajectory
@@ -179,33 +211,66 @@ async function loadOutputSidecars(example: GalleryExample): Promise<void> {
  * science (a mismatch is a load error, not a warning, per the data contract).
  * Exported for unit tests.
  */
-export function attachScienceBundle(example: GalleryExample): void {
-  if (example.sciencePathIndex == null) return;
+export async function attachScienceBundle(
+  example: GalleryExample,
+  isCurrent?: ViewerLoadGuard,
+): Promise<void> {
+  if (example.sciencePathIndex == null && example.scienceManifestSha256 == null) return;
+  if (example.sciencePathIndex == null || example.scienceManifestSha256 == null) {
+    console.error(`[science-panel] incomplete canonical identity for "${example.id}" — failing closed.`);
+    return;
+  }
   const file = useStore.getState().file;
   if (!file) return;
-  const science = scienceBundleForPathIndex(example.sciencePathIndex);
+  const science = await verifiedScienceBundleForManifestSha256(
+    example.scienceManifestSha256,
+    file.trajectory,
+    example.sciencePathIndex,
+  );
   if (!science) return; // validation already logged the precise errors
-  if (file.trajectory.totalFrames !== science.path.imageCount) {
-    console.error(
-      `[science-panel] trajectory/science mismatch — failing closed: "${example.id}" loaded ` +
-      `${file.trajectory.totalFrames} frames but path ${science.path.pathIndex} declares ` +
-      `${science.path.imageCount} NEB images.`,
-    );
-    return;
+  if (!viewerLoadIsCurrent(isCurrent) || useStore.getState().file !== file) {
+    throw new ViewerLoadSupersededError();
   }
   // Unwrap the periodic path to minimum-image so playback interpolates the
   // short way (atoms never fly backward through the cell). Display-only
   // transform; the discrete image indices and energies are untouched.
   const unwrappedTrajectory = minimumImageUnwrapTrajectory(file.trajectory);
+  if (!viewerLoadIsCurrent(isCurrent) || useStore.getState().file !== file) {
+    throw new ViewerLoadSupersededError();
+  }
 
   // Force the SCIENCE deck section open (not the toggling setter: reloading a
   // second science path while the section is open must keep it open).
   useStore.setState({ file: { ...file, trajectory: unwrappedTrajectory, science }, activePanel: 'science' });
 }
 
+/**
+ * Preserve the minimum-image playback transform for embedded clients that do
+ * not mount the science deck. This intentionally skips bundle verification and
+ * panel state while keeping the canonical trajectory's visual semantics.
+ */
+export function unwrapGalleryScienceTrajectory(
+  example: GalleryExample,
+  isCurrent?: ViewerLoadGuard,
+): void {
+  if (example.sciencePathIndex == null && example.scienceManifestSha256 == null) return;
+  if (example.sciencePathIndex == null || example.scienceManifestSha256 == null) {
+    console.error(`[science-panel] incomplete canonical identity for "${example.id}" — failing closed.`);
+    return;
+  }
+  const file = useStore.getState().file;
+  if (!file) return;
+  assertViewerLoadCurrent(isCurrent);
+  const unwrappedTrajectory = minimumImageUnwrapTrajectory(file.trajectory);
+  if (!viewerLoadIsCurrent(isCurrent) || useStore.getState().file !== file) {
+    throw new ViewerLoadSupersededError();
+  }
+  useStore.setState({ file: { ...file, trajectory: unwrappedTrajectory } });
+}
+
 export async function loadGalleryExample(
   example: GalleryExample,
-  options: { isCurrent?: ViewerLoadGuard } = {},
+  options: GalleryLoadOptions = {},
 ): Promise<ViewerOpenResult> {
   assertViewerLoadCurrent(options.isCurrent);
   if (!example.available) {
@@ -213,15 +278,24 @@ export async function loadGalleryExample(
   }
 
   const profile = getDeviceProfile();
-  const estimatedAtoms = parseAtomCountLabel(example.atoms);
-  if (estimatedAtoms > profile.maxAtoms) {
-    const message = `"${example.title}" has ~${formatAtomCount(estimatedAtoms)} atoms, ` +
-      `over Lupi's current ${formatAtomCount(profile.maxAtoms)}-atom ` +
-      `single-scene ceiling (${profile.reason}). ` +
-      `Try a smaller frame or a chunked trajectory.`;
-    useStore.getState().setError(message);
-    return { ok: false, message };
+  const requestedMax = options.maxAtoms;
+  const maxAtoms = requestedMax !== undefined
+    && Number.isSafeInteger(requestedMax)
+    && requestedMax > 0
+    ? Math.min(profile.maxAtoms, requestedMax)
+    : profile.maxAtoms;
+  const expectedAtoms = options.expectedAtoms;
+  if (expectedAtoms !== undefined && (!Number.isSafeInteger(expectedAtoms) || expectedAtoms < 1)) {
+    return rejectedGalleryLoad('The requested gallery atom count is invalid.');
   }
+  const estimatedAtoms = parseAtomCountLabel(example.atoms);
+  const estimatedCountError = galleryAtomCountError(
+    example.title,
+    estimatedAtoms,
+    maxAtoms,
+    expectedAtoms,
+  );
+  if (estimatedCountError) return rejectedGalleryLoad(estimatedCountError);
 
   const store = useStore.getState();
   store.setLoading(true, 0);
@@ -238,6 +312,13 @@ export async function loadGalleryExample(
       const payload = await resp.json();
       assertViewerLoadCurrent(options.isCurrent);
       const loaded = artifactToLoadedFile(payload, url);
+      const countError = galleryAtomCountError(
+        example.title,
+        maxTrajectoryAtoms(loaded.trajectory),
+        maxAtoms,
+        expectedAtoms,
+      );
+      if (countError) return rejectedGalleryLoad(countError);
       const nextStore = useStore.getState();
       nextStore.setFile({
         ...loaded,
@@ -276,9 +357,30 @@ export async function loadGalleryExample(
 
       await loader.fetchHeader();
       await loader.fetchIndex();
-      const frame0 = applyCatalogFrameSemantics(await loader.fetchFrame(0), example);
       assertViewerLoadCurrent(options.isCurrent, () => loader.dispose());
       const meta = loader.getMetadata()!;
+      const metadataCountError = galleryAtomCountError(
+        example.title,
+        meta.atomsPerFrame,
+        maxAtoms,
+        expectedAtoms,
+      );
+      if (metadataCountError) {
+        loader.dispose();
+        return rejectedGalleryLoad(metadataCountError);
+      }
+      const frame0 = applyCatalogFrameSemantics(await loader.fetchFrame(0), example);
+      assertViewerLoadCurrent(options.isCurrent, () => loader.dispose());
+      const countError = galleryAtomCountError(
+        example.title,
+        frame0.natoms,
+        maxAtoms,
+        expectedAtoms,
+      );
+      if (countError) {
+        loader.dispose();
+        return rejectedGalleryLoad(countError);
+      }
       const placeholderFrames = new Array(meta.totalFrames);
       placeholderFrames[0] = frame0;
 
@@ -341,17 +443,20 @@ export async function loadGalleryExample(
       const { canStreamDump } = await import('@atlas/parsers');
       const natomsMatch = head.match(/ITEM:\s*NUMBER OF ATOMS\s*\n\s*(\d+)/);
       const headerAtoms = natomsMatch ? parseInt(natomsMatch[1], 10) : 0;
+      assertViewerLoadCurrent(options.isCurrent);
 
       if (
         canStreamDump(head)
         && totalSize > STREAMING_BYTES_THRESHOLD
         && headerAtoms >= STREAMING_ATOM_THRESHOLD
       ) {
-        if (headerAtoms > profile.maxAtoms) {
-          const message = oversizeMessage(example.title, headerAtoms, profile.maxAtoms, '');
-          useStore.getState().setError(message);
-          return { ok: false, message };
-        }
+        const headerCountError = galleryAtomCountError(
+          example.title,
+          headerAtoms,
+          maxAtoms,
+          expectedAtoms,
+        );
+        if (headerCountError) return rejectedGalleryLoad(headerCountError);
         const streamResp = await fetch(url);
         if (!streamResp.ok) throw new Error(`Failed to fetch: ${streamResp.status}`);
         const { parseDumpResponseStreaming } = await import('@atlas/parsers');
@@ -359,6 +464,14 @@ export async function loadGalleryExample(
         for await (const event of parseDumpResponseStreaming(streamResp)) {
           assertViewerLoadCurrent(options.isCurrent);
           if (event.type === 'header') {
+            const actualAtoms = maxTrajectoryAtoms(event.trajectory);
+            const countError = galleryAtomCountError(
+              example.title,
+              actualAtoms,
+              maxAtoms,
+              expectedAtoms,
+            );
+            if (countError) return rejectedGalleryLoad(countError);
             streamingStore.setFile({
               name: example.title,
               size: totalSize,
@@ -394,12 +507,14 @@ export async function loadGalleryExample(
     }
 
     const trajectory = applyCatalogSemantics(result.trajectory, example);
-    const actualAtoms = trajectory.frames[0]?.natoms ?? 0;
-    if (actualAtoms > profile.maxAtoms) {
-      const message = oversizeMessage(example.title, actualAtoms, profile.maxAtoms, '');
-      useStore.getState().setError(message);
-      return { ok: false, message };
-    }
+    const actualAtoms = maxTrajectoryAtoms(trajectory);
+    const countError = galleryAtomCountError(
+      example.title,
+      actualAtoms,
+      maxAtoms,
+      expectedAtoms,
+    );
+    if (countError) return rejectedGalleryLoad(countError);
 
     const parsedStore = useStore.getState();
     parsedStore.setFile({
@@ -422,7 +537,11 @@ export async function loadGalleryExample(
     if (example.autoPlay && result.trajectory.totalFrames > 1) {
       useStore.setState({ playing: true });
     }
-    attachScienceBundle(example);
+    if (options.includeScience === false) {
+      unwrapGalleryScienceTrajectory(example, options.isCurrent);
+    } else {
+      await attachScienceBundle(example, options.isCurrent);
+    }
     await loadKnowledgeLabels(example, options.isCurrent);
     assertViewerLoadCurrent(options.isCurrent);
     void loadOutputSidecars(example);

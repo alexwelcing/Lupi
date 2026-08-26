@@ -182,7 +182,9 @@ export function XRControlPanel() {
     setColormap(colormaps[(idx + 1) % colormaps.length]);
   };
 
-  const materials: ('default' | 'matte' | 'metallic' | 'glass' | 'plastic')[] = ['default', 'matte', 'metallic', 'glass'];
+  // 'transmission' is deliberately absent: its extra scene render per frame
+  // is a poor trade at XR refresh rates.
+  const materials: ('default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission')[] = ['default', 'matte', 'metallic', 'glass'];
   const cycleMaterial = () => {
     const idx = materials.indexOf(materialPreset);
     setMaterialPreset(materials[(idx + 1) % materials.length]);

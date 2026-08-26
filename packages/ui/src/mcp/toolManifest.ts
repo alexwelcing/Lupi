@@ -25,6 +25,11 @@ export const MCP_TOOL_DEFINITIONS: McpToolManifestEntry[] = [
     parameters: LUPI_MCP_SCHEMAS['lupi.load_molecule_url'],
   },
   {
+    name: 'lupi.open_gallery_example',
+    description: 'Open a curated Lupi gallery example by stable catalog id, preserving scene and trajectory semantics while enforcing caller-pinned atom counts.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.open_gallery_example'],
+  },
+  {
     name: 'lupi.open_saved_view',
     description: 'Open a saved Lupi view by slug.',
     parameters: LUPI_MCP_SCHEMAS['lupi.open_saved_view'],
@@ -53,6 +58,11 @@ export const MCP_TOOL_DEFINITIONS: McpToolManifestEntry[] = [
     name: 'lupi.viewer_state',
     description: 'Return the current viewer state summary.',
     parameters: LUPI_MCP_SCHEMAS['lupi.viewer_state'],
+  },
+  {
+    name: 'lupi.assess_asset',
+    description: 'Run a bounded fast assessment of the active materialized trajectory, a URL, or an evidence envelope without rendering or scientific lookups.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.assess_asset'],
   },
   {
     name: 'lupi.knowledge_graph',

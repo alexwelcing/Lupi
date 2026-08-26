@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '../store';
+import { viewportAspectFromSize } from '../cameraFit';
 
 export function CameraManager({
   fileId,
@@ -14,8 +15,13 @@ export function CameraManager({
   distance: number;
   near: number;
 }) {
-  const { camera, controls } = useThree((s) => ({ camera: s.camera, controls: s.controls as any }));
+  const { camera, controls, size } = useThree((s) => ({
+    camera: s.camera,
+    controls: s.controls as any,
+    size: s.size,
+  }));
   const flythroughPreview = useStore(s => s.flythroughPreview);
+  const file = useStore(s => s.file);
 
   const applyPerspectiveProjection = useCallback((nextFov?: number) => {
     if (camera instanceof THREE.PerspectiveCamera) {
@@ -92,9 +98,30 @@ export function CameraManager({
     return () => unsubs.forEach((unsub) => unsub());
   }, [camera, controls, applyPerspectiveProjection]);
 
-  // NOTE: the initial camera fit on file load has moved to the store's
-  // setFile action (via fitCameraView) and the file-load completion paths,
-  // so this component no longer watches file/center/distance dependencies.
+  // R3F owns the real Canvas layout and updates this size on every resize.
+  // Install camera subscriptions above before fitting: store mutations then
+  // reach the mounted Three camera on the same tick. The first usable Canvas
+  // measurement corrects the provisional pre-mount fit; later orientation
+  // changes refit named presets but respect a user-positioned free camera.
+  useEffect(() => {
+    const viewportAspect = viewportAspectFromSize(size.width, size.height);
+    const state = useStore.getState();
+    const hadViewportAspect =
+      Number.isFinite(state.cameraViewportAspect) &&
+      state.cameraViewportAspect > 0;
+    const aspectChanged =
+      !hadViewportAspect ||
+      Math.abs(state.cameraViewportAspect - viewportAspect) > 1e-4;
+    state.setCameraViewportAspect(viewportAspect);
+    // A file already present at the first Canvas measurement was provisionally
+    // fit against a square viewport. Correct it once. Afterwards setFile uses
+    // the stored real aspect itself; metadata/streaming file replacements do
+    // not refit, and orientation changes respect a user-positioned free camera.
+    if (file && (!hadViewportAspect || (aspectChanged && state.cameraPreset !== 'free'))) {
+      useStore.getState().fitCameraView();
+    }
+  }, [file, size.width, size.height]);
+
   void fileId;
 
   return null;

@@ -1,0 +1,100 @@
+{
+  "expo": {
+    "name": "Lupi",
+    "slug": "lupi",
+    "version": "1.0.1",
+    "orientation": "default",
+    "icon": "./assets/images/lupi-app-icon.png",
+    "scheme": "lupi",
+    "userInterfaceStyle": "dark",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "live.lupi.app",
+      "deploymentTarget": "17.6",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "localhost": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        },
+        "NSCameraUsageDescription": "Lupi uses the camera to place and interact with molecules in your room. Camera images are processed on this device."
+      }
+    },
+    "android": {
+      "package": "live.lupi.app",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#071118",
+        "foregroundImage": "./assets/images/lupi-splash-mark-1024.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/lupi-icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-sqlite",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/lupi-splash-mark-1024.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F4EF",
+          "dark": {
+            "backgroundColor": "#071118"
+          }
+        }
+      ],
+      [
+        "@reactvision/react-viro",
+        {
+          "provider": "none",
+          "ios": {
+            "cameraUsagePermission": "Lupi uses the camera to place and interact with molecules in your room. Camera images are processed on this device.",
+            "includeARCore": false,
+            "includeSemantics": false
+          },
+          "android": {
+            "xRMode": ["AR"]
+          }
+        }
+      ],
+      "./plugins/with-viro-camera-only"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "38c55c8d-b7dc-4bec-ab5e-1809eda6bf9d"
+      }
+    },
+    "owner": "alexwelcing"
+  }
+}

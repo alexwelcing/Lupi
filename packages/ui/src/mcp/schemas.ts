@@ -37,6 +37,17 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
     },
   },
 
+  'lupi.open_gallery_example': {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'expectedAtomCount', 'maxAtomCount'],
+    properties: {
+      id: { type: 'string', minLength: 1, description: 'Stable gallery example id from the Lupi catalog.' },
+      expectedAtomCount: { type: 'integer', minimum: 1, maximum: 50000000 },
+      maxAtomCount: { type: 'integer', minimum: 1, maximum: 50000000 },
+    },
+  },
+
   'lupi.open_saved_view': {
     type: 'object',
     required: ['slug'],
@@ -107,6 +118,22 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
   'lupi.viewer_state': {
     type: 'object',
     properties: {},
+  },
+
+  'lupi.assess_asset': {
+    type: 'object',
+    properties: {
+      source: { type: 'string', enum: ['active', 'url', 'envelope'], description: 'Defaults to the active materialized trajectory.' },
+      url: { type: 'string', format: 'uri' },
+      envelope: { type: 'object', description: 'Materialized text, base64 bytes, trajectory, or procedural evidence envelope.' },
+      context: { type: 'object', description: 'Optional declared provenance, method, validation, and interpretation evidence.' },
+      mode: {
+        type: 'string',
+        enum: ['fast'],
+        default: 'fast',
+        description: 'The browser bridge is intentionally bounded to fast mode; use the Node CLI for deep streaming inspection.',
+      },
+    },
   },
 
   'lupi.knowledge_graph': {

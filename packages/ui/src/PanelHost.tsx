@@ -17,17 +17,22 @@ const PANEL_TITLES: Record<NonNullable<AppState['activePanel']>, string> = {
   science: 'Z1 Science',
   equilibrium: 'Equilibrium Solve',
   mlipLongRun: 'MLIP Long Run',
+  elements: 'Elements',
+  settings: 'Settings',
 };
+
+/** Panels that open without a loaded file (reference/app-level surfaces). */
+const FILELESS_PANELS: ReadonlySet<string> = new Set(['elements', 'settings']);
 
 export const PanelHost = memo(function PanelHost() {
   const file = useStore(s => s.file);
   const activePanel = useStore(s => s.activePanel);
   const studioDeck = useStore(s => s.studioDeck);
 
-  if (!activePanel || !file) return null;
+  if (!activePanel || (!file && !FILELESS_PANELS.has(activePanel))) return null;
 
   const title = PANEL_TITLES[activePanel];
-  const autoHeight = activePanel === 'telemetry' && !file.thermo?.runs.length;
+  const autoHeight = activePanel === 'telemetry' && !file?.thermo?.runs.length;
 
   return (
     <aside

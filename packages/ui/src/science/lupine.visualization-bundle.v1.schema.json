@@ -1,0 +1,829 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lupine.dev/schemas/visualization/lupine.visualization-bundle.v1.schema.json",
+  "title": "LupineVisualizationBundle v1",
+  "description": "Immutable, schema-validated visualization bundle for one science run path. Canonical JSON (sorted keys, 2-space indent, trailing newline); bundle_id is the SHA-256 over the canonical manifest with the bundle_id field omitted during hashing. Zero-based image indices are mandatory. Images are an NEB reaction-path sequence, never time. Missingness is always a status plus a null value, never NaN or Infinity. Every derived scalar must be recomputable from the stored arrays.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "bundle_id",
+    "campaign_id",
+    "campaign_version",
+    "campaign_sha256",
+    "run_id",
+    "path_id",
+    "path_index",
+    "chemical_system",
+    "image_count",
+    "created_at",
+    "status",
+    "supersedes",
+    "retraction",
+    "source_artifacts",
+    "producer",
+    "method",
+    "model_provenance",
+    "coordinates",
+    "series",
+    "selection",
+    "quality_gates",
+    "diagnostics",
+    "assets",
+    "provenance",
+    "quality"
+  ],
+  "properties": {
+    "schema": { "const": "lupine.visualization-bundle.v1" },
+    "bundle_id": { "$ref": "#/$defs/sha256id" },
+    "campaign_id": { "type": "string", "minLength": 1 },
+    "campaign_version": { "type": "string", "minLength": 1 },
+    "campaign_sha256": { "$ref": "#/$defs/sha256id" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "path_id": { "type": "string", "minLength": 1 },
+    "path_index": { "type": "integer", "minimum": 0 },
+    "chemical_system": { "type": "string", "minLength": 1 },
+    "image_count": { "type": "integer", "minimum": 3 },
+    "created_at": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["active", "superseded", "retracted"] },
+    "supersedes": { "type": ["string", "null"] },
+    "retraction": { "type": ["string", "null"] },
+    "source_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/sourceArtifact" }
+    },
+    "producer": { "$ref": "#/$defs/producer" },
+    "method": { "$ref": "#/$defs/method" },
+    "model_provenance": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/modelProvenance" }
+    },
+    "coordinates": { "$ref": "#/$defs/coordinates" },
+    "series": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/series" }
+    },
+    "selection": { "$ref": "#/$defs/selection" },
+    "quality_gates": { "$ref": "#/$defs/qualityGates" },
+    "diagnostics": {
+      "description": "Separately bound electronic diagnostics (e.g. path-0 metallic-saddle SCF evidence). Absent — status plus null — unless a diagnostic receipt is bound; never inferred from the campaign record.",
+      "oneOf": [
+        { "$ref": "#/$defs/missingValue" },
+        { "$ref": "#/$defs/diagnosticsBound" }
+      ]
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "quality": { "$ref": "#/$defs/quality" }
+  },
+  "$defs": {
+    "sha256id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "missingValue": {
+      "description": "Missingness encoding: a status and a null value, never NaN/Infinity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value"],
+      "properties": {
+        "status": { "type": "string", "minLength": 1 },
+        "value": { "const": null },
+        "note": { "type": "string" }
+      }
+    },
+    "sourceArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "uri", "bytes", "sha256", "schema", "git_commit"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "uri": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256id" },
+        "schema": { "type": ["string", "null"] },
+        "git_commit": { "type": ["string", "null"] }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "version", "git_commit", "container_digest", "normalized_parameters"],
+      "properties": {
+        "tool": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "git_commit": { "type": ["string", "null"] },
+        "container_digest": { "$ref": "#/$defs/missingValue" },
+        "normalized_parameters": { "type": "object" }
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "code",
+        "code_version",
+        "xc",
+        "paw_setups",
+        "basis_grid",
+        "k_points",
+        "charge",
+        "spin",
+        "occupations_smearing",
+        "convergence",
+        "neb"
+      ],
+      "properties": {
+        "engine": { "type": "string", "minLength": 1 },
+        "code": { "type": "string", "minLength": 1 },
+        "code_version": { "$ref": "#/$defs/missingValue" },
+        "xc": { "type": "string", "minLength": 1 },
+        "paw_setups": { "$ref": "#/$defs/missingValue" },
+        "basis_grid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "grid_spacing_h_angstrom", "cutoff"],
+          "properties": {
+            "mode": { "type": "string" },
+            "grid_spacing_h_angstrom": { "type": "number" },
+            "cutoff": { "$ref": "#/$defs/missingValue" }
+          }
+        },
+        "k_points": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kpts", "units"],
+          "properties": {
+            "kpts": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": { "type": "integer" }
+            },
+            "units": { "type": "string" }
+          }
+        },
+        "charge": { "$ref": "#/$defs/missingValue" },
+        "spin": { "$ref": "#/$defs/missingValue" },
+        "occupations_smearing": { "$ref": "#/$defs/missingValue" },
+        "convergence": { "$ref": "#/$defs/missingValue" },
+        "neb": {
+          "description": "Protocol that generated the reference reaction-path sequence. Images are NEB structures along a reaction coordinate, not time samples.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scope",
+            "method",
+            "optimizer",
+            "tangent",
+            "spring_constant_ev_per_angstrom2",
+            "climbing_image",
+            "fmax_ev_per_angstrom",
+            "max_steps",
+            "endpoint_relaxation",
+            "barrier_definition",
+            "failure_policy"
+          ],
+          "properties": {
+            "scope": { "type": "string" },
+            "method": { "type": "string" },
+            "optimizer": { "type": "string" },
+            "tangent": { "type": "string" },
+            "spring_constant_ev_per_angstrom2": { "type": "number" },
+            "climbing_image": { "type": "boolean" },
+            "fmax_ev_per_angstrom": { "type": "number" },
+            "max_steps": { "type": "integer" },
+            "endpoint_relaxation": { "type": "boolean" },
+            "barrier_definition": { "type": "string" },
+            "failure_policy": { "type": "string" }
+          }
+        }
+      }
+    },
+    "modelProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "status", "failure_reason"],
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["completed", "failed", "missing"] },
+        "failure_reason": { "type": ["string", "null"] },
+        "failure_class": { "type": "string" },
+        "mlip_id": { "type": ["string", "null"] },
+        "run_id": { "type": "string" },
+        "campaign_id": { "type": "string" },
+        "checkpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["summary_schema", "source_url", "artifact_url", "manifest_url", "manifest_hash"],
+          "properties": {
+            "summary_schema": { "type": ["string", "null"] },
+            "source_url": { "type": ["string", "null"] },
+            "artifact_url": { "type": "string" },
+            "manifest_url": { "type": ["string", "null"] },
+            "manifest_hash": { "type": ["string", "null"] }
+          }
+        },
+        "package": { "type": "string" },
+        "package_version": { "type": ["string", "null"] },
+        "versions": { "type": "object" },
+        "dtype": { "type": "string" },
+        "dtype_source": { "type": "string" },
+        "device": { "type": ["string", "null"] },
+        "receipt_excerpt_sha256": { "$ref": "#/$defs/sha256id" }
+      }
+    },
+    "coordinates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "units",
+        "atom_count",
+        "atom_ids",
+        "species",
+        "atom_order_convention",
+        "wrapped_convention",
+        "unwrapped",
+        "migrating_atom_ids",
+        "reaction_coordinate",
+        "frames"
+      ],
+      "properties": {
+        "units": { "enum": ["angstrom"] },
+        "atom_count": { "type": "integer", "minimum": 1 },
+        "atom_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^a[0-9]{3,}$" }
+        },
+        "species": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "atom_order_convention": { "type": "string" },
+        "wrapped_convention": { "type": "string" },
+        "unwrapped": { "$ref": "#/$defs/missingValue" },
+        "migrating_atom_ids": { "$ref": "#/$defs/missingValue" },
+        "reaction_coordinate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["definition", "unit", "values"],
+          "properties": {
+            "definition": {
+              "type": "string",
+              "description": "Must name a reaction-path sequence / NEB image index; never time."
+            },
+            "unit": { "enum": ["image_index"] },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "frames": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/frame" }
+        }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image_index", "lattice_angstrom", "pbc", "positions_angstrom"],
+      "properties": {
+        "image_index": { "type": "integer", "minimum": 0 },
+        "lattice_angstrom": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": { "type": "number" }
+          }
+        },
+        "pbc": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "boolean" }
+        },
+        "positions_angstrom": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": { "type": "number" }
+          }
+        }
+      }
+    },
+    "series": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "series_id",
+        "quantity",
+        "engine_or_model",
+        "kind",
+        "absolute_or_relative",
+        "unit",
+        "zero_convention",
+        "image_indices",
+        "values",
+        "value_status",
+        "value_sources"
+      ],
+      "properties": {
+        "series_id": { "type": "string", "minLength": 1 },
+        "quantity": { "type": "string", "minLength": 1 },
+        "engine_or_model": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["dft_single_point", "reference", "model"] },
+        "absolute_or_relative": { "enum": ["absolute", "relative"] },
+        "unit": { "type": "string", "minLength": 1 },
+        "zero_convention": { "type": "string" },
+        "image_indices": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "values": {
+          "type": "array",
+          "items": { "type": ["number", "null"] }
+        },
+        "value_status": {
+          "type": "array",
+          "items": {
+            "enum": ["evaluated", "missing", "failed", "rejected_params_mismatch", "not_recorded"]
+          }
+        },
+        "value_sources": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "const": null },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["asset_sha256", "json_pointer"],
+                "properties": {
+                  "asset_sha256": { "$ref": "#/$defs/sha256id" },
+                  "json_pointer": { "type": "string" }
+                }
+              }
+            ]
+          }
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "rule_version",
+        "rule_source",
+        "extrema_tie_policy",
+        "window_rule",
+        "subset_theorem",
+        "per_model",
+        "nominated_union",
+        "evaluated",
+        "anchor_universe",
+        "dense_extension",
+        "dense_profile_extrema",
+        "guidance_misses",
+        "guidance_deficits_mev"
+      ],
+      "properties": {
+        "rule_id": { "type": "string" },
+        "rule_version": { "type": "string" },
+        "rule_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "git_commit"],
+          "properties": {
+            "path": { "type": "string" },
+            "git_commit": { "type": ["string", "null"] }
+          }
+        },
+        "extrema_tie_policy": { "type": "string" },
+        "window_rule": { "type": "string" },
+        "subset_theorem": { "type": "string" },
+        "per_model": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "nominated",
+              "evaluated",
+              "complete",
+              "model_min_index",
+              "model_max_index",
+              "window",
+              "short_path_fallback"
+            ],
+            "properties": {
+              "nominated": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+              "evaluated": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+              "complete": { "type": "boolean" },
+              "model_min_index": { "type": "integer", "minimum": 0 },
+              "model_max_index": { "type": "integer", "minimum": 0 },
+              "window": { "type": "integer", "minimum": 0 },
+              "short_path_fallback": { "type": "boolean" },
+              "sparse_barrier_ev": { "type": "number" }
+            }
+          }
+        },
+        "nominated_union": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "evaluated": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "anchor_universe": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "dense_extension": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["applied", "image_threshold", "supplied_indices", "note"],
+          "properties": {
+            "applied": { "type": "boolean" },
+            "image_threshold": { "type": "integer" },
+            "supplied_indices": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+            "note": { "type": "string" }
+          }
+        },
+        "dense_profile_extrema": {
+          "oneOf": [
+            { "$ref": "#/$defs/missingValue" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["argmin", "argmax"],
+              "properties": {
+                "argmin": { "type": "integer", "minimum": 0 },
+                "argmax": { "type": "integer", "minimum": 0 }
+              }
+            }
+          ]
+        },
+        "guidance_misses": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "guidance_deficits_mev": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sparse_barrier_ev",
+              "dense_barrier_ev",
+              "same_engine_signed_error_mev",
+              "same_engine_abs_error_mev"
+            ],
+            "properties": {
+              "sparse_barrier_ev": { "type": "number" },
+              "dense_barrier_ev": { "type": "number" },
+              "same_engine_signed_error_mev": { "type": "number" },
+              "same_engine_abs_error_mev": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "qualityGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thresholds_mev", "denominator_policy", "same_engine", "cross_engine", "t1", "verdict"],
+      "properties": {
+        "thresholds_mev": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["win", "strong_win", "t1_gate"],
+          "properties": {
+            "win": { "type": "number" },
+            "strong_win": { "type": "number" },
+            "t1_gate": { "type": "number" }
+          }
+        },
+        "denominator_policy": { "type": "string" },
+        "same_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "primary", "dense_complete", "dense_barrier_ev", "per_model"],
+          "properties": {
+            "basis": { "type": "string" },
+            "primary": { "const": true },
+            "dense_complete": { "type": "boolean" },
+            "dense_barrier_ev": { "type": ["number", "null"] },
+            "per_model": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["complete", "verdict"],
+                "properties": {
+                  "complete": { "type": "boolean" },
+                  "verdict": { "enum": ["strong_win", "win", "loss", "incomplete"] },
+                  "sparse_barrier_ev": { "type": "number" },
+                  "dense_barrier_ev": { "type": "number" },
+                  "same_engine_signed_error_mev": { "type": "number" },
+                  "same_engine_abs_error_mev": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "cross_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "primary",
+            "reference_engine",
+            "reference_barrier_ev",
+            "dense_vs_reference_signed_error_mev",
+            "dense_vs_reference_abs_error_mev",
+            "per_model",
+            "contamination_note"
+          ],
+          "properties": {
+            "primary": { "const": false },
+            "reference_engine": { "type": "string" },
+            "reference_barrier_ev": { "type": "number" },
+            "dense_vs_reference_signed_error_mev": { "type": ["number", "null"] },
+            "dense_vs_reference_abs_error_mev": { "type": ["number", "null"] },
+            "per_model": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sparse_barrier_ev", "vasp_signed_error_mev", "vasp_abs_error_mev"],
+                "properties": {
+                  "sparse_barrier_ev": { "type": "number" },
+                  "vasp_signed_error_mev": { "type": "number" },
+                  "vasp_abs_error_mev": { "type": "number" }
+                }
+              }
+            },
+            "contamination_note": { "type": "string" }
+          }
+        },
+        "t1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "offset_definition",
+            "offset_series_mev",
+            "offset_mean_mev",
+            "offset_min_mev",
+            "offset_max_mev",
+            "wander_mev",
+            "driver_pair",
+            "gate_mev",
+            "verdict"
+          ],
+          "properties": {
+            "offset_definition": { "type": "string" },
+            "offset_series_mev": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["image_index", "offset_mev"],
+                "properties": {
+                  "image_index": { "type": "integer", "minimum": 0 },
+                  "offset_mev": { "type": "number" }
+                }
+              }
+            },
+            "offset_mean_mev": { "type": ["number", "null"] },
+            "offset_min_mev": { "type": ["number", "null"] },
+            "offset_max_mev": { "type": ["number", "null"] },
+            "wander_mev": { "type": ["number", "null"] },
+            "driver_pair": {
+              "type": ["array", "null"],
+              "minItems": 2,
+              "maxItems": 2,
+              "items": { "type": "integer", "minimum": 0 }
+            },
+            "gate_mev": { "type": "number" },
+            "verdict": { "enum": ["clean", "contaminated", "insufficient_data"] }
+          }
+        },
+        "verdict": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "same_engine",
+            "t1",
+            "cross_engine_contaminated",
+            "label",
+            "interpretation"
+          ],
+          "properties": {
+            "same_engine": {
+              "enum": ["strong_win", "win", "loss", "incomplete", "no_guidance"]
+            },
+            "t1": { "enum": ["clean", "contaminated", "insufficient_data"] },
+            "cross_engine_contaminated": { "type": "boolean" },
+            "label": {
+              "type": "string",
+              "description": "<same_engine>_t1_<t1 verdict>; e.g. strong_win_t1_contaminated is NOT a plain cross-engine win."
+            },
+            "interpretation": { "type": "string" }
+          }
+        }
+      }
+    },
+    "diagnosticsBound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "image_index", "note", "runs"],
+      "properties": {
+        "status": { "const": "bound" },
+        "image_index": { "type": "integer", "minimum": 0 },
+        "note": { "type": "string" },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "params",
+              "energy_ev",
+              "gpaw_version",
+              "scf",
+              "gap_ev",
+              "fermi_level_ev",
+              "spin",
+              "occupations",
+              "charge_e",
+              "source_assets"
+            ],
+            "properties": {
+              "label": { "type": "string" },
+              "params": { "type": "object" },
+              "energy_ev": { "type": "number" },
+              "gpaw_version": { "type": ["string", "null"] },
+              "scf": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "converged",
+                  "steps",
+                  "max_iterations",
+                  "density_criterion_electrons",
+                  "eigenstate_criterion_ev2"
+                ],
+                "properties": {
+                  "converged": { "type": "boolean" },
+                  "steps": { "type": "integer" },
+                  "max_iterations": { "type": "integer" },
+                  "density_criterion_electrons": { "type": "number" },
+                  "eigenstate_criterion_ev2": { "type": "number" }
+                }
+              },
+              "gap_ev": { "type": "number" },
+              "fermi_level_ev": { "type": "number" },
+              "spin": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["components", "degeneracy", "policy"],
+                "properties": {
+                  "components": { "type": "integer" },
+                  "degeneracy": { "type": "integer" },
+                  "policy": { "type": "string" }
+                }
+              },
+              "occupations": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["type", "width_ev"],
+                "properties": {
+                  "type": { "type": "string" },
+                  "width_ev": { "type": "number" }
+                }
+              },
+              "charge_e": { "type": "number" },
+              "source_assets": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["filename", "media_type", "sha256"],
+                  "properties": {
+                    "filename": { "type": "string" },
+                    "media_type": { "type": "string" },
+                    "sha256": { "$ref": "#/$defs/sha256id" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "media_type", "format", "bytes", "sha256", "uri"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "media_type": { "type": "string" },
+        "format": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256id" },
+        "uri": { "type": "string", "pattern": "^assets/sha256/[0-9a-f]{2}/[0-9a-f]{64}\\.[a-z0-9]+$" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "creators",
+        "organization",
+        "citation",
+        "license",
+        "source_revision",
+        "preregistration",
+        "amendments",
+        "claim_evidence_ids"
+      ],
+      "properties": {
+        "creators": { "$ref": "#/$defs/missingValue" },
+        "organization": { "$ref": "#/$defs/missingValue" },
+        "citation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dataset", "doi", "source_repository", "source_url", "theory"],
+          "properties": {
+            "dataset": { "type": "string" },
+            "doi": { "type": "string" },
+            "source_repository": { "type": "string" },
+            "source_url": { "type": "string" },
+            "theory": { "type": "string" }
+          }
+        },
+        "license": { "type": "string" },
+        "source_revision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reference_dataset_revision",
+            "reference_source_archive_sha256",
+            "converter_git_commit"
+          ],
+          "properties": {
+            "reference_dataset_revision": { "type": "string" },
+            "reference_source_archive_sha256": { "type": "string" },
+            "converter_git_commit": { "type": ["string", "null"] }
+          }
+        },
+        "preregistration": { "type": "string" },
+        "amendments": { "type": "array", "items": { "type": "string" } },
+        "claim_evidence_ids": { "$ref": "#/$defs/missingValue" }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "checks", "warnings"],
+      "properties": {
+        "state": {
+          "enum": ["complete", "partial", "invalid", "quarantined", "verified", "published"]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "status", "detail"],
+            "properties": {
+              "name": { "type": "string" },
+              "status": { "enum": ["pass", "fail"] },
+              "detail": { "type": "string" }
+            }
+          }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -553,6 +553,68 @@ export function ElementColorPicker({
   );
 }
 
+/**
+ * Appearance-scene card — the visual identity a MaterialScene authors
+ * (cardGradient background, short code, accent glow when active). Sized for a
+ * rail of 8-10 scenes without scrolling the deck.
+ */
+export function SceneCard({
+  active,
+  label,
+  code,
+  description,
+  gradient,
+  accent,
+  testId,
+  onClick,
+}: {
+  active?: boolean;
+  label: string;
+  code: string;
+  description: string;
+  gradient: string;
+  accent: string;
+  testId?: string;
+  onClick: () => void;
+}) {
+  const press = usePressSpring({ pressedScale: 0.95, sound: false });
+  return (
+    <button
+      {...press}
+      type="button"
+      aria-label={`${label} appearance`}
+      aria-pressed={active}
+      title={description}
+      data-testid={testId}
+      onClick={onClick}
+      style={{
+        display: 'grid',
+        gap: 3,
+        alignContent: 'end',
+        justifyItems: 'start',
+        minWidth: 0,
+        height: 52,
+        padding: '6px 8px',
+        borderRadius: 8,
+        border: active ? `1px solid ${accent}` : '1px solid rgba(148,163,184,0.22)',
+        background: gradient,
+        boxShadow: active
+          ? `0 0 12px ${accent}55, inset 0 1px 0 rgba(255,255,255,0.14)`
+          : 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.28)',
+        cursor: 'pointer',
+        touchAction: 'manipulation',
+      }}
+    >
+      <span aria-hidden="true" style={{ color: active ? accent : 'rgba(226,232,240,0.55)', fontSize: 8, fontWeight: 900, fontFamily: 'var(--font-mono)', letterSpacing: 0.6, lineHeight: 1 }}>
+        {code}
+      </span>
+      <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#f1f5f9', fontSize: 11, fontWeight: 780, lineHeight: 1.1 }}>
+        {label}
+      </span>
+    </button>
+  );
+}
+
 export function SwatchButton({
   active,
   label,

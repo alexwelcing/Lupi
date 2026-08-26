@@ -81,7 +81,8 @@
       "reference": "LiTraj nebDFT2k · doi:10.1038/s41524-025-01571-z"
     },
     "file": "gallery/research/z1/z1-path-16.extxyz",
-    "sciencePathIndex": 16
+    "sciencePathIndex": 16,
+    "scienceManifestSha256": "sha256:a80daede7aafdd155fcc1d9b56f3ddbf4636e2ea647934f8a1202f7526c069b5"
   },
   {
     "id": "z1_science_path_0",
@@ -104,7 +105,8 @@
       "mechanism": "metallic transition state, gap 0.018 eV"
     },
     "file": "gallery/research/z1/z1-path-0.extxyz",
-    "sciencePathIndex": 0
+    "sciencePathIndex": 0,
+    "scienceManifestSha256": "sha256:e8710ff305cba9523e07127e363f7c1b5c97e83a6d95689c7273a10ef3d9998e"
   },
   {
     "id": "z1_science_path_14",
@@ -127,7 +129,8 @@
       "coverage": "dense extension, 7 of 7 images"
     },
     "file": "gallery/research/z1/z1-path-14.extxyz",
-    "sciencePathIndex": 14
+    "sciencePathIndex": 14,
+    "scienceManifestSha256": "sha256:425c68c2d771442940423e861a74cb2b553203fd2beb25ac8eb0634fb7cdcfe7"
   },
   {
     "id": "z1_science_path_27",
@@ -150,7 +153,8 @@
       "signed_error": "−33.4 meV"
     },
     "file": "gallery/research/z1/z1-path-27.extxyz",
-    "sciencePathIndex": 27
+    "sciencePathIndex": 27,
+    "scienceManifestSha256": "sha256:7ff623c8a04a87ce5fbf232242b5a2a068b0e5248ae146df5f352551fa0523e2"
   },
   {
     "id": "hfc_r125_research",
