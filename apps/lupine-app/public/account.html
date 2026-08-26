@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Account — Lupine Science</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/">Lupine Science</a>
+    <a href="/pricing">Pricing</a>
+    <span class="spacer"></span>
+    <a href="#" id="sign-out">Sign out</a>
+  </nav>
+  <main>
+    <h1>Account</h1>
+    <div class="card" id="who"><p class="muted">Loading…</p></div>
+    <div class="card" id="sub"><p class="muted">Loading subscription…</p></div>
+  </main>
+  <footer>Lupine Science</footer>
+  <script type="module">
+    import { onUser, signOut, loadEntitlement, openBillingPortal, escapeHtml as e } from "/app.js";
+    onUser(async (u) => {
+      if (!u) { window.location.href = "/sign-in"; return; }
+      document.getElementById("who").innerHTML =
+        `<h2>Profile</h2><p>${e(u.email || u.uid)}</p>`;
+      document.getElementById("sign-out").addEventListener("click", (e) => {
+        e.preventDefault(); signOut().then(() => (window.location.href = "/"));
+      });
+      const sub = document.getElementById("sub");
+      try {
+        const { entitlement } = await loadEntitlement();
+        if (entitlement && ["active", "trialing"].includes(entitlement.status)) {
+          sub.innerHTML = `<h2>Subscription</h2>
+            <p>Status: <span class="status-ok">${e(entitlement.status)}</span></p>
+            <p class="muted">Renews: ${e(entitlement.currentPeriodEnd || "—")}${entitlement.cancelAtPeriodEnd ? " (cancels at period end)" : ""}</p>
+            <button id="portal">Manage billing</button>`;
+          sub.querySelector("#portal").addEventListener("click", () =>
+            openBillingPortal().catch((e) => alert(e.message)));
+        } else {
+          sub.innerHTML = `<h2>Subscription</h2>
+            <p>No active subscription.</p>
+            <a class="btn" href="/pricing">See plans</a>`;
+        }
+      } catch (error) {
+        sub.innerHTML = `<h2>Subscription</h2><p class="status-bad">${e(error.message)}</p>`;
+      }
+    });
+    if (new URLSearchParams(location.search).get("checkout") === "success") {
+      history.replaceState({}, "", "/account");
+    }
+  </script>
+</body>
+</html>

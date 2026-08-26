@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New campaign — Lupine Science</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="shell-root">
+    <h1>New campaign</h1>
+    <p class="sub">Three steps: define the candidate space, configure the savings stack, lock the preregistered manifest.</p>
+    <div class="steps">
+      <span id="s1" class="on">1 · Candidate space</span><span id="s2">2 · Configure</span><span id="s3">3 · Review &amp; lock</span>
+    </div>
+
+    <section class="step active" id="step1">
+      <div class="card">
+        <h2>Define the candidate space</h2>
+        <p class="muted">A panel is a locked set of NEB paths
+          (<span class="mono">lupine.z1.neb_barrier_panel.v1</span>). Start from the validated
+          Li-ion panel or upload your own.</p>
+        <p>
+          <button id="use-z1">Use the Z1 Li-ion panel (30 paths)</button>
+          <label class="btn secondary">Upload panel JSON<input id="upload" type="file" accept=".json" hidden></label>
+        </p>
+        <div id="panel-info"></div>
+        <div id="panel-preview"></div>
+        <p class="muted warn">Working on Li-S or another domain? Upload your own paths — the workflow is
+          domain-general and the schema only requires structures, not references. A curated Li-S
+          polysulfide panel is on the roadmap, not bundled today.</p>
+        <p><button id="next1" disabled>Continue →</button></p>
+      </div>
+    </section>
+
+    <section class="step" id="step2">
+      <div class="card">
+        <h2>Model fleet</h2>
+        <p class="muted">Every selected model is gated against the shared anchors. Availability shown honestly.</p>
+        <div id="models"><p class="muted">Loading…</p></div>
+      </div>
+      <div class="card">
+        <h2>Anchor policy — frozen preset</h2>
+        <p style="font-size:14.5px">The protocol pays DFT only for path endpoints, each model's predicted minimum,
+          and a ±1 window around its predicted maximum (±2 on short paths); budget ≤ 7 anchors/path.
+          Anchors are <strong>shared across models</strong> (union) — that sharing is the savings stack.</p>
+        <div class="stat-row" id="savings"></div>
+      </div>
+      <div class="card">
+        <h2>Acceptance &amp; budget</h2>
+        <p style="font-size:14.5px">Verdict: <strong>win</strong> at barrier MAE ≤ 40 meV, <strong>strong win</strong> ≤ 15 meV
+          (preregistered thresholds).</p>
+        <p class="muted warn">Runs consume subscription compute. Launch is limited to the reviewed panel and
+          registered model set; missing or contradictory evidence is refused.</p>
+      </div>
+      <p><button class="secondary" id="back2">← Back</button> <button id="next2">Continue →</button></p>
+    </section>
+
+    <section class="step" id="step3">
+      <div class="card">
+        <h2>Review &amp; lock</h2>
+        <p class="muted">Freezing computes the manifest hash — this is the preregistration. Execution cannot start without it.</p>
+        <pre id="manifest">…</pre>
+        <p id="lock-status"></p>
+        <p><button class="secondary" id="back3">← Back</button> <button id="launch">Freeze &amp; enqueue</button></p>
+      </div>
+    </section>
+  </div>
+  <script type="module">
+    import { mountShell } from "/shell.js";
+    import { onUser, authedFetch, escapeHtml as e } from "/app.js";
+    mountShell("new");
+    let user = null;
+    onUser((u) => { user = u; });
+
+    const state = { panel: null, panelHash: null, panelSummary: null, models: [] };
+    const show = (n) => {
+      for (const i of [1, 2, 3]) {
+        document.getElementById("step" + i).classList.toggle("active", i === n);
+        document.getElementById("s" + i).classList.toggle("on", i <= n);
+      }
+      if (n === 3) renderReview();
+      window.scrollTo(0, 0);
+    };
+
+    function previewPanel(t) {
+      const rows = (t.paths || []).slice(0, 8).map((p) =>
+        `<tr><td class="mono" style="font-size:12px">${e(p.path_id)}</td><td>${e(p.chemical_system)}</td>
+         <td>${e(p.image_count)}</td><td>${p.reference_barrier_ev != null ? e(p.reference_barrier_ev.toFixed(3)) : "to measure"}</td></tr>`).join("");
+      document.getElementById("panel-preview").innerHTML = `
+        <table style="margin-top:12px">
+          <tr><th>path</th><th>system</th><th>images</th><th>ref barrier (eV)</th></tr>${rows}
+        </table>
+        ${(t.paths || []).length > 8 ? `<p class="muted">…and ${t.paths.length - 8} more</p>` : ""}`;
+    }
+
+    document.getElementById("use-z1").addEventListener("click", async () => {
+      const t = await fetch("/api/panel-template").then((r) => r.json());
+      state.panel = { template: "z1", panel_id: t.panel_id };
+      state.panelHash = "sha256:" + t.source_sha256;
+      state.panelSummary = t;
+      document.getElementById("panel-info").innerHTML = `
+        <p style="margin:10px 0 0">Panel <strong>${e(t.panel_id)}</strong> — ${e(t.path_count)} paths, locked ${e(t.locked_at?.slice(0, 10))}<br>
+        <span class="muted mono" style="font-size:12px">sha256:${e(t.source_sha256)}</span></p>`;
+      previewPanel(t);
+      document.getElementById("next1").disabled = false;
+    });
+
+    document.getElementById("upload").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      let panel;
+      try { panel = JSON.parse(await file.text()); } catch { return alert("not valid JSON"); }
+      const res = await fetch("/api/panels/validate", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(panel),
+      }).then((r) => r.json());
+      if (!res.ok) {
+        document.getElementById("panel-info").innerHTML =
+          `<p class="status-bad">Invalid panel:</p><ul>${(res.errors || ["validation failed"]).map((x) => `<li>${e(x)}</li>`).join("")}</ul>`;
+        document.getElementById("panel-preview").innerHTML = "";
+        return;
+      }
+      state.panel = { inline: panel, panel_id: panel.panel_id };
+      state.panelHash = res.content_hash;
+      state.panelSummary = { paths: panel.paths.map((p) => ({ path_id: p.path_id, chemical_system: p.chemical_system, image_count: p.input_images.length })) };
+      document.getElementById("panel-info").innerHTML =
+        `<p class="status-bad" style="margin:10px 0 0">Structurally valid, but ${e(res.status)}: a reviewed CampaignManifest is required before dispatch.</p>`;
+      previewPanel(state.panelSummary);
+      document.getElementById("next1").disabled = true;
+    });
+    document.getElementById("next1").addEventListener("click", () => show(2));
+
+    const modelsRes = await fetch("/api/models").then((r) => r.json());
+    document.getElementById("models").innerHTML = modelsRes.models.map((m) => `
+      <label class="model"><input type="checkbox" value="${e(m.mlip_id)}" ${m.gated || !m.dispatchable ? "disabled" : ""}>
+        <span>${e(m.label)} <span class="muted">· ${e(m.target_job)}</span>
+        ${m.gated ? ' · <span class="pill bad">gated</span>' : ""}
+        ${!m.dispatchable && !m.gated ? ' · <span class="pill warn">needs verification</span>' : ""}</span></label>`).join("");
+
+    async function refreshSavings() {
+      state.models = [...document.querySelectorAll("#models input:checked")].map((x) => x.value);
+      const el = document.getElementById("savings");
+      if (!state.models.length) { el.innerHTML = '<p class="muted">Select models to preview savings.</p>'; return; }
+      const prev = await fetch(`/api/savings-preview?models=${state.models.length}`).then((r) => r.json());
+      el.innerHTML = `
+        <div class="stat"><div class="n" style="color:var(--ok)">${e(prev.evaluation_reduction)}</div></div>
+        <div class="stat"><div class="n" style="color:var(--indigo)">${e(prev.anchor_cost)}</div></div>
+        <p class="muted" style="grid-column:1/-1;margin:4px 0 0">Reviewed public economics; not scaled to this selection.</p>`;
+    }
+    document.getElementById("models").addEventListener("change", refreshSavings);
+    document.getElementById("back2").addEventListener("click", () => show(1));
+    document.getElementById("next2").addEventListener("click", () => {
+      if (!state.models.length) return alert("Select at least one model.");
+      show(3);
+    });
+
+    function renderReview() {
+      const manifest = {
+        schema: "lupine.campaign_dispatch.v1",
+        panel: { panel_id: state.panel.panel_id, content_hash: state.panelHash },
+        models: state.models,
+        anchor_policy: "union-sparse",
+        acceptance_test: { metric: "barrier_mae", operator: "lte", threshold: 40, unit: "meV" },
+      };
+      document.getElementById("manifest").textContent = JSON.stringify(manifest, null, 2);
+    }
+    document.getElementById("back3").addEventListener("click", () => show(2));
+    document.getElementById("launch").addEventListener("click", async () => {
+      const el = document.getElementById("lock-status");
+      if (!user) { window.location.href = "/sign-in?next=/campaigns/new"; return; }
+      el.textContent = "Locking manifest and contacting dispatch…";
+      try {
+        const res = await authedFetch("/api/campaigns", {
+          method: "POST",
+          body: JSON.stringify({
+            panel: { panel_id: state.panel.panel_id, content_hash: state.panelHash },
+            models: state.models,
+            anchor_policy: "union-sparse",
+          }),
+        });
+        el.innerHTML = `<span class="status-ok">Launched.</span> Manifest <span class="mono" style="font-size:12px">${e(res.manifest.content_hash)}</span>`;
+      } catch (error) {
+        el.innerHTML = `<span class="status-bad">${e(error.message)}</span>
+          <p class="muted">If this says a subscription is required, see <a href="/pricing">pricing</a>. Your choices are preserved on this page.</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

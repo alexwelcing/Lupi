@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campaign — Lupine Science</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="shell-root">
+    <h1 id="title">Campaign</h1>
+    <p class="sub" id="subtitle"></p>
+    <div id="meta"></div>
+    <div class="card">
+      <h2>Cell grid — paths</h2>
+      <div class="grid" id="cells"></div>
+      <div class="legend">
+        <span><i style="background:var(--indigo)"></i>completed</span>
+        <span><i style="background:var(--ochre)"></i>running</span>
+        <span><i style="background:var(--line)"></i>queued</span>
+        <span><i style="background:var(--bad)"></i>failed / T1-contaminated (recorded, never imputed)</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Live beat ticker</h2>
+      <div class="beats" id="beats"><p class="muted">Loading…</p></div>
+    </div>
+    <p><a class="btn" id="results-link" href="#">Results &amp; evidence →</a></p>
+  </div>
+  <script type="module">
+    import { mountShell } from "/shell.js";
+    import { authedFetch, escapeHtml as e } from "/app.js";
+    mountShell("campaigns");
+    const id = decodeURIComponent(location.pathname.split("/")[2]);
+    document.getElementById("results-link").href = `/campaigns/${encodeURIComponent(id)}/results`;
+
+    const body = id === "z1-union-pilot"
+      ? await fetch(`/api/campaigns/${encodeURIComponent(id)}`).then((r) => r.json())
+      : await authedFetch(`/api/campaigns/${encodeURIComponent(id)}`).catch((error) => ({ error: error.message }));
+    if (body.error) {
+      document.getElementById("meta").innerHTML = `<div class="card"><p class="status-bad">${e(body.error)}</p></div>`;
+    } else {
+      const camp = body.campaign;
+      document.getElementById("title").textContent = camp.title || camp.campaign_id;
+      document.getElementById("subtitle").textContent = camp.recorded
+        ? "Recorded pilot results — every number reconciles to the preregistration."
+        : "Live campaign";
+      document.getElementById("meta").innerHTML = `
+        <div class="stat-row">
+          <div class="stat"><div class="n">${e(camp.status)}</div><div class="l">status</div></div>
+          <div class="stat"><div class="n">${e(camp.path_count ?? "—")}</div><div class="l">paths</div></div>
+          <div class="stat"><div class="n">${(camp.models || []).length}</div><div class="l">models</div></div>
+          <div class="stat"><div class="n">${camp.recorded ? "recorded" : "live"}</div><div class="l">evidence mode</div></div>
+        </div>
+        ${camp.campaign_sha256 ? `<p class="muted mono" style="font-size:12px">${e(camp.campaign_sha256)}</p>` : ""}
+        ${camp.preregistration ? `<p class="muted">preregistration: ${e(camp.preregistration)}</p>` : ""}`;
+      const cells = document.getElementById("cells");
+      if (body.per_path) {
+        cells.innerHTML = body.per_path.map((p) =>
+          `<a class="cell ${p.t1_gate?.verdict === "contaminated" ? "failed" : "completed"}"
+             title="${e(p.path_index)} · ${e(p.path_id)} (${e(p.chemical_system)})"
+             href="/campaigns/${encodeURIComponent(id)}/results#${encodeURIComponent(p.path_id)}"></a>`).join("");
+        const contaminated = body.per_path.filter((p) => p.t1_gate?.verdict === "contaminated").length;
+        if (contaminated > 0) {
+          cells.insertAdjacentHTML("afterend", `<p class="muted" style="margin-top:10px">This pilot's headline
+            finding: ${contaminated} of ${body.per_path.length} paths show T1 offset-wander contamination —
+            an honest negative result the evidence layer is built to catch, not hide.</p>`);
+        }
+      } else if (body.cells) {
+        cells.innerHTML = body.cells.map((cell) =>
+          `<span class="cell ${["completed","running","queued","failed"].includes(cell.status) ? cell.status : "queued"}" title="${e(cell.cell_id || "")} ${e(cell.status)}"></span>`).join("");
+      } else {
+        cells.innerHTML = '<p class="muted">No cell data.</p>';
+      }
+    }
+
+    const beats = await authedFetch("/api/beats").catch(() => null);
+    const fmtTs = (ts) => typeof ts === "number"
+      ? new Date(ts * (ts < 1e12 ? 1000 : 1)).toISOString().slice(0, 19)
+      : String(ts || "").slice(0, 19);
+    document.getElementById("beats").innerHTML = beats?.beats?.length
+      ? beats.beats.slice().reverse().map((b) =>
+          `<div>${e(fmtTs(b.ts))} · ${e(b.summary || b.beat_id || "")}</div>`).join("")
+      : '<div class="muted">No recent beats.</div>';
+  </script>
+</body>
+</html>

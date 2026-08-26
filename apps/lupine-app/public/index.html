@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lupine Science — materials discovery, measured</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/">Lupine Science</a>
+    <a href="/pricing">Pricing</a>
+    <span class="spacer"></span>
+    <a href="/sign-in" id="nav-auth">Sign in</a>
+  </nav>
+  <main>
+    <h1>Sift more candidates. Run fewer simulations.</h1>
+    <p class="lede">
+      Lupine's shared-anchor protocol reuses a single set of reference calculations
+      across every model in your campaign — 72.4% fewer DFT evaluations on the
+      locked 30-path Z1 panel, at a measured $14.65 per 129 anchors.
+    </p>
+    <div class="card">
+      <h2>How it works</h2>
+      <p>Upload or pick a candidate space. We run the sparse anchor set once,
+        validate each model against the shared anchors, and only the models that
+        pass the gate earn full simulations. Every number ships with its evidence
+        pack: preregistered protocol, receipts, and provenance hashes.</p>
+    </div>
+    <div class="card">
+      <h2>Built for labs that publish</h2>
+      <p>Results are reproducible byte-for-byte, with Lean-checked evidence
+        contracts behind the claims. Academic, industry, and national-lab teams
+        self-serve — no sales call required.</p>
+    </div>
+    <p>
+      <a class="btn" href="/pricing">See plans</a>
+      <a class="btn secondary" href="https://lupine.science">Research &amp; evidence</a>
+    </p>
+  </main>
+  <footer>Lupine Science · savings-stack-v1 evidence pack · <a href="mailto:alex@lupinesci.com">contact</a></footer>
+  <script type="module">
+    import { onUser } from "/app.js";
+    onUser((u) => {
+      const el = document.getElementById("nav-auth");
+      if (u) { el.textContent = "Account"; el.href = "/account"; }
+    });
+  </script>
+</body>
+</html>

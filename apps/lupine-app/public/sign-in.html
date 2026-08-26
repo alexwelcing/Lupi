@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — Lupine Science</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/">Lupine Science</a>
+    <a href="/pricing">Pricing</a>
+    <span class="spacer"></span>
+  </nav>
+  <main>
+    <h1>Sign in</h1>
+    <p class="lede">Use your Lupi account — one login across Lupine Science and the Lupi viewer.</p>
+    <div class="card">
+      <p>
+        <button id="google">Continue with Google</button>
+        <button id="github" class="secondary">Continue with GitHub</button>
+      </p>
+      <p class="muted" id="msg"></p>
+    </div>
+  </main>
+  <footer>Lupine Science</footer>
+  <script type="module">
+    import { signIn, onUser, safeNextPath } from "/app.js";
+    const msg = document.getElementById("msg");
+    const next = safeNextPath(new URLSearchParams(location.search).get("next"));
+    onUser((u) => { if (u) window.location.href = next; });
+    for (const id of ["google", "github"]) {
+      document.getElementById(id).addEventListener("click", async () => {
+        msg.textContent = "Signing in…";
+        try { await signIn(id); } catch (e) { msg.textContent = e.message; }
+      });
+    }
+  </script>
+</body>
+</html>

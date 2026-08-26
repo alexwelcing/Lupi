@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pricing — Lupine Science</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/">Lupine Science</a>
+    <a href="/pricing">Pricing</a>
+    <span class="spacer"></span>
+    <a href="/sign-in" id="nav-auth">Sign in</a>
+  </nav>
+  <main>
+    <h1>Self-serve plans</h1>
+    <p class="lede">Subscribe and start sifting candidates today. Cancel anytime from your account page.</p>
+    <div id="plans"><p class="muted">Loading plans…</p></div>
+  </main>
+  <footer>Lupine Science · <a href="mailto:alex@lupinesci.com">contact</a></footer>
+  <script type="module">
+    import { getConfig, onUser, startCheckout, escapeHtml as e } from "/app.js";
+    let user = null;
+    onUser((u) => {
+      user = u;
+      const el = document.getElementById("nav-auth");
+      if (u) { el.textContent = "Account"; el.href = "/account"; }
+    });
+    const { plans } = await getConfig();
+    const root = document.getElementById("plans");
+    if (!plans.length) {
+      root.innerHTML = '<p class="muted">Plans are being finalized — <a href="mailto:alex@lupinesci.com">contact us</a> for early access.</p>';
+    } else {
+      root.innerHTML = plans.map((p, i) => `
+        <div class="card">
+          <h2>${e(p.name)}</h2>
+          <p>${e(p.blurb)}</p>
+          <p><strong>$${e(p.amount)}</strong> / ${e(p.interval)}</p>
+          <button data-i="${i}">Subscribe</button>
+        </div>`).join("");
+      root.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+        if (!user) { window.location.href = "/sign-in?next=/pricing"; return; }
+        startCheckout(plans[Number(b.dataset.i)].priceId).catch((e) => alert(e.message));
+      }));
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lupine.dev/schemas/campaign-manifest.v1.schema.json",
+  "title": "CampaignManifest v1",
+  "description": "A frozen, preregistered research campaign with explicit model scope and stopping rules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "campaign_id",
+    "version",
+    "preregistration_id",
+    "preregistration",
+    "frozen_hypotheses",
+    "available_models",
+    "exclusions",
+    "target_premises",
+    "acceptance_test",
+    "evidence_requirements",
+    "execution",
+    "kill_conditions",
+    "demotion_conditions",
+    "content_hash"
+  ],
+  "properties": {
+    "campaign_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "version": {
+      "const": 1
+    },
+    "preregistration_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "preregistration": {
+      "$ref": "#/$defs/preregistration"
+    },
+    "frozen_hypotheses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/frozen_hypothesis"
+      }
+    },
+    "available_models": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/model"
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exclusion"
+      }
+    },
+    "target_premises": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/premise_target"
+      }
+    },
+    "acceptance_test": {
+      "$ref": "#/$defs/acceptance_test"
+    },
+    "evidence_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/evidence_requirement"
+      }
+    },
+    "execution": {
+      "$ref": "#/$defs/execution"
+    },
+    "kill_conditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/decision_condition"
+      }
+    },
+    "demotion_conditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/decision_condition"
+      }
+    },
+    "content_hash": {
+      "description": "SHA-256 of the RFC 8785 canonical JSON document with this content_hash member omitted.",
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "preregistration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registered_at",
+        "source",
+        "frozen_before_execution"
+      ],
+      "properties": {
+        "registered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "source_as_of": {
+          "description": "Freshness date of the source literature; distinct from the preregistration event time.",
+          "type": "string",
+          "format": "date"
+        },
+        "input_document": {
+          "description": "RFC 8785 content lock for the exact reviewed input document.",
+          "$ref": "#/$defs/artifact_lock"
+        },
+        "frozen_before_execution": {
+          "const": true,
+          "description": "The manifest and hypotheses are frozen before this campaign's own execution. For campaigns declaring recorded_inputs, execution is the registered analysis of those recorded artifacts, not the original recording of the inputs, which legitimately predates registration."
+        },
+        "recorded_inputs": {
+          "description": "Previously recorded artifacts this campaign analyzes. Declaring them makes a retrospective-input design explicit: inputs predate registration, while the analysis plan and hypothesis do not.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/artifact_lock"
+          }
+        }
+      }
+    },
+    "frozen_hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hypothesis_id",
+        "statement",
+        "frozen"
+      ],
+      "properties": {
+        "hypothesis_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "statement": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "frozen": {
+          "const": true
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "version",
+        "artifact_hash"
+      ],
+      "properties": {
+        "model_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "version": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "artifact_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject",
+        "disposition",
+        "rationale"
+      ],
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "disposition": {
+          "enum": [
+            "excluded",
+            "deprioritized"
+          ]
+        },
+        "rationale": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "premise_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "premise_id"
+      ],
+      "properties": {
+        "claim_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "premise_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "acceptance_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "operator",
+        "threshold",
+        "unit"
+      ],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/identifier"
+        },
+        "operator": {
+          "enum": [
+            "lt",
+            "lte",
+            "eq",
+            "gte",
+            "gt"
+          ]
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "unit": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "evidence_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement_id",
+        "artifact_type",
+        "description",
+        "minimum_count"
+      ],
+      "properties": {
+        "requirement_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "artifact_type": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "minimum_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lane",
+        "model_selection",
+        "excluded_models_block_execution"
+      ],
+      "properties": {
+        "lane": {
+          "$ref": "#/$defs/identifier"
+        },
+        "model_selection": {
+          "const": "available_models"
+        },
+        "excluded_models_block_execution": {
+          "const": false
+        },
+        "candidate_panel": {
+          "$ref": "#/$defs/artifact_lock"
+        }
+      }
+    },
+    "artifact_lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "decision_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition_id",
+        "metric",
+        "operator",
+        "threshold",
+        "action"
+      ],
+      "properties": {
+        "condition_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "metric": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "operator": {
+          "enum": [
+            "lt",
+            "lte",
+            "eq",
+            "gte",
+            "gt"
+          ]
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "unit": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "action": {
+          "enum": [
+            "kill",
+            "demote"
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "kill_conditions": {
+          "items": {
+            "properties": {
+              "action": {
+                "const": "kill"
+              }
+            }
+          }
+        },
+        "demotion_conditions": {
+          "items": {
+            "properties": {
+              "action": {
+                "const": "demote"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

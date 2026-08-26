@@ -1,0 +1,158 @@
+{
+  "schema": "lupine.mlip.backend_catalog.v1",
+  "backends": [
+    {
+      "mlip_id": "mace-mp-0",
+      "label": "MACE-MP medium (legacy runtime alias)",
+      "target_job": "mlip-cell-mace",
+      "requirements": "requirements-mace.txt",
+      "local_env": "tmp/mlip-runtimes/mace-mp-0",
+      "canary_row": "forces",
+      "local_windows": {
+        "status": "supported",
+        "reason": "Verified on the RTX A4500 Windows local lab with torch 2.4.1+cu121 and mace-torch 0.3.16."
+      },
+      "preferred_cloud": {
+        "gcp_gpu": "nvidia-l4",
+        "hf_flavor": "l4x1"
+      },
+      "checkpoint_scope": "raw_predictions",
+      "notes": "Backward-compatible alias for mace-mp-medium; retained for existing campaign manifests."
+    },
+    {
+      "mlip_id": "mace-mp-small",
+      "label": "MACE-MP small",
+      "target_job": "mlip-cell-mace-mp-small",
+      "requirements": "requirements-mace.txt",
+      "local_env": "tmp/mlip-runtimes/mace-mp-0",
+      "canary_row": "forces",
+      "local_windows": {
+        "status": "supported",
+        "reason": "Shares the verified mace-torch 0.3.16 runtime; selects the small MACE-MP checkpoint."
+      },
+      "preferred_cloud": {"gcp_gpu": "nvidia-l4", "hf_flavor": "l4x1"},
+      "checkpoint_scope": "raw_predictions",
+      "notes": "Round-4 registered endpoint; distinct Cloud Run Job and mlip_id."
+    },
+    {
+      "mlip_id": "mace-mp-medium",
+      "label": "MACE-MP medium",
+      "target_job": "mlip-cell-mace-mp-medium",
+      "requirements": "requirements-mace.txt",
+      "local_env": "tmp/mlip-runtimes/mace-mp-0",
+      "canary_row": "forces",
+      "local_windows": {
+        "status": "supported",
+        "reason": "Shares the verified mace-torch 0.3.16 runtime; selects the medium MACE-MP checkpoint."
+      },
+      "preferred_cloud": {"gcp_gpu": "nvidia-l4", "hf_flavor": "l4x1"},
+      "checkpoint_scope": "raw_predictions",
+      "notes": "Round-4 registered endpoint; distinct Cloud Run Job and mlip_id."
+    },
+    {
+      "mlip_id": "mace-mpa-0-medium",
+      "label": "MACE-MPA-0 medium",
+      "target_job": "mlip-cell-mace-mpa-0-medium",
+      "requirements": "requirements-mace.txt",
+      "local_env": "tmp/mlip-runtimes/mace-mp-0",
+      "canary_row": "forces",
+      "local_windows": {
+        "status": "supported",
+        "reason": "Shares the verified mace-torch 0.3.16 runtime; selects the medium-mpa-0 checkpoint."
+      },
+      "preferred_cloud": {"gcp_gpu": "nvidia-l4", "hf_flavor": "l4x1"},
+      "checkpoint_scope": "raw_predictions",
+      "notes": "Round-4 registered endpoint; distinct Cloud Run Job and mlip_id."
+    },
+    {
+      "mlip_id": "chgnet",
+      "label": "CHGNet",
+      "target_job": "mlip-cell-chgnet",
+      "requirements": "requirements-chgnet.txt",
+      "local_env": "tmp/mlip-runtimes/chgnet",
+      "canary_row": "forces",
+      "local_windows": {
+        "status": "supported",
+        "reason": "Verified on the RTX A4500 Windows local lab with torch 2.4.1+cu121 and chgnet 0.4.2."
+      },
+      "preferred_cloud": {
+        "gcp_gpu": "nvidia-l4",
+        "hf_flavor": "l4x1"
+      },
+      "checkpoint_scope": "raw_predictions",
+      "notes": "Fastest first canary for dependency and beat-path validation."
+    },
+    {
+      "mlip_id": "m3gnet",
+      "label": "M3GNet",
+      "target_job": "mlip-cell-m3gnet",
+      "requirements": "requirements-m3gnet.txt",
+      "local_env": "tmp/mlip-runtimes/m3gnet",
+      "canary_row": "energy_volume",
+      "local_windows": {
+        "status": "blocked",
+        "reason": "Pinned dgl==2.4.0+cu121 wheel is Linux-only for this stack; route M3GNet to GCP or Hugging Face Linux runners."
+      },
+      "preferred_cloud": {
+        "gcp_gpu": "nvidia-l4",
+        "hf_flavor": "l4x1"
+      },
+      "checkpoint_scope": "raw_predictions",
+      "notes": "MatGL/DGL backend; start with energy-volume if stress support is noisy."
+    },
+    {
+      "mlip_id": "orb-v3",
+      "label": "ORB v3 conservative",
+      "target_job": "mlip-cell-orb",
+      "requirements": "requirements-orb.txt",
+      "local_env": "tmp/mlip-runtimes/orb-v3",
+      "canary_row": "energy_volume",
+      "local_windows": {
+        "status": "heavy",
+        "reason": "Uses a separate cu118 torch stack; run intentionally with disk headroom or prefer Linux cloud canaries."
+      },
+      "preferred_cloud": {
+        "gcp_gpu": "nvidia-l4",
+        "hf_flavor": "a10g-small"
+      },
+      "checkpoint_scope": "raw_predictions",
+      "notes": "Heavier PyTorch stack; use checkpointed single-row canaries before campaign fan-out."
+    },
+    {
+      "mlip_id": "sevennet",
+      "label": "SevenNet 7net-0",
+      "target_job": "mlip-cell-sevennet",
+      "requirements": "requirements-sevennet.txt",
+      "local_env": "tmp/mlip-runtimes/sevennet",
+      "canary_row": "forces",
+      "local_windows": {
+        "status": "supported",
+        "reason": "Verified on the RTX A4500 Windows local lab with torch 2.4.1+cu121 and sevenn 0.12.1."
+      },
+      "preferred_cloud": {
+        "gcp_gpu": "nvidia-l4",
+        "hf_flavor": "l4x1"
+      },
+      "checkpoint_scope": "raw_predictions",
+      "notes": "SevenNet ASE calculator path; validate package import before full relaxation cells."
+    },
+    {
+      "mlip_id": "uma-s-1p1",
+      "label": "Meta FAIR Chemistry UMA small 1.1",
+      "target_job": "mlip-cell-uma",
+      "requirements": "requirements-uma.txt",
+      "local_env": "tmp/mlip-runtimes/uma-s-1p1",
+      "canary_row": "energy_volume",
+      "local_windows": {
+        "status": "cloud-first",
+        "reason": "fairchem-core 2.14.0 uses a separate torch 2.8-era stack; build/run in an isolated GCP image first."
+      },
+      "preferred_cloud": {
+        "gcp_gpu": "nvidia-l4",
+        "hf_flavor": "l4x1"
+      },
+      "checkpoint_scope": "raw_predictions",
+      "notes": "Uses fairchem.core FAIRChemCalculator with pretrained_mlip.get_predict_unit(model=uma-s-1p1, task_name=omat). FairChem 2.14.0 exposes uma-s-1, uma-s-1p1, and uma-m-1p1. GCP image/import/GPU wiring is verified, and HF_TOKEN is mounted through Secret Manager, but facebook/UMA returned 403 until the account is added to the gated repo authorization list."
+    }
+  ]
+}

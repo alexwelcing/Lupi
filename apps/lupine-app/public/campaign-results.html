@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Results — Lupine Science</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="shell-root">
+    <h1 id="title">Results</h1>
+    <p class="sub" id="subtitle"></p>
+
+    <div class="stat-row" id="stats"></div>
+
+    <div class="card">
+      <h2>NEB energy profile — anchors are the only DFT the protocol pays for</h2>
+      <div id="chart"></div>
+      <p style="margin:10px 0 0"><label class="muted">Path: <select id="path-select"></select></label></p>
+    </div>
+
+    <div class="card">
+      <h2>Per-path results</h2>
+      <div style="overflow-x:auto"><table id="table"></table></div>
+    </div>
+
+    <div class="card" id="evidence">
+      <h2>Evidence</h2>
+      <p class="muted">Failures recorded, never imputed. T1-contaminated paths are excluded from
+        verdicts and shown red. Provenance: <span id="prov"></span></p>
+    </div>
+  </div>
+  <script type="module">
+    import { mountShell } from "/shell.js";
+    import { authedFetch, escapeHtml as e } from "/app.js";
+    mountShell("campaigns");
+    const id = decodeURIComponent(location.pathname.split("/")[2]);
+    const [res, panelRes] = await Promise.all([
+      id === "z1-union-pilot" ? fetch(`/api/campaigns/${encodeURIComponent(id)}`).then((r) => r.json()) : authedFetch(`/api/campaigns/${encodeURIComponent(id)}`),
+      fetch("/api/panel-template").then((r) => r.json()),
+    ]);
+    if (res.error) { document.getElementById("title").textContent = res.error; throw new Error(res.error); }
+
+    const camp = res.campaign;
+    const paths = res.per_path || [];
+    document.getElementById("title").textContent = `Results — ${camp.title || id}`;
+    document.getElementById("subtitle").textContent = camp.recorded ? "Recorded pilot (2026-07-24), preregistered." : "";
+    document.getElementById("prov").textContent = camp.preregistration || "—";
+
+    const wins = paths.filter((p) => p.t1_gate?.verdict !== "contaminated").length;
+    const contaminated = paths.length - wins;
+    document.getElementById("stats").innerHTML = `
+      <div class="stat"><div class="n">${paths.length}</div><div class="l">paths analyzed</div></div>
+      <div class="stat"><div class="n">${wins}</div><div class="l">clean gates</div></div>
+      <div class="stat"><div class="n" style="color:var(--bad)">${contaminated}</div><div class="l">T1 contaminated</div></div>
+      <div class="stat"><div class="n">recorded</div><div class="l">evidence mode</div></div>`;
+
+    const panelByPath = Object.fromEntries((panelRes.paths || []).map((p) => [p.path_id, p]));
+    const sel = document.getElementById("path-select");
+    sel.innerHTML = paths.map((p) =>
+      `<option value="${e(p.path_id)}">${e(p.path_index)} · ${e(p.path_id)} (${e(p.chemical_system)})</option>`).join("");
+
+    function draw(pathId) {
+      const row = paths.find((p) => p.path_id === pathId);
+      const panel = panelByPath[pathId];
+      const ref = panel?.reference_energies_ev || [];
+      if (!row || !ref.length) {
+        document.getElementById("chart").innerHTML = '<p class="muted">No reference profile for this path.</p>';
+        return;
+      }
+      const anchors = row.union_model_anchor_indices || row.anchors_evaluated || [];
+      const W = 760, H = 280, padL = 52, padB = 36, padT = 16, padR = 16;
+      const n = ref.length;
+      const dE = ref.map((e) => e - ref[0]); // ΔE vs initial image, how barriers are read
+      const minE = Math.min(...dE, 0), maxE = Math.max(...dE, (row.reference_barrier_ev || 0) * 1.15);
+      const span = (maxE - minE) || 1;
+      const x = (i) => padL + (i / (n - 1)) * (W - padL - padR);
+      const y = (e) => padT + (1 - (e - minE) / span) * (H - padT - padB);
+      const pts = dE.map((e, i) => `${x(i)},${y(e)}`).join(" ");
+      const yBar = y(row.reference_barrier_ev || 0);
+      document.getElementById("chart").innerHTML = `
+        <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="NEB profile">
+          ${[0, .25, .5, .75, 1].map((f) => {
+            const e = minE + f * span;
+            return `<line x1="${padL}" y1="${y(e)}" x2="${W - padR}" y2="${y(e)}" stroke="var(--line)" stroke-width="1"/>
+                    <text x="${padL - 8}" y="${y(e) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${e.toFixed(2)}</text>`;
+          }).join("")}
+          <polyline points="${pts}" fill="none" stroke="var(--indigo)" stroke-width="2"/>
+          ${dE.map((e, i) => `<circle cx="${x(i)}" cy="${y(e)}" r="3" fill="var(--indigo)"/>`).join("")}
+          ${anchors.map((i) => `
+            <line x1="${x(i)}" y1="${padT}" x2="${x(i)}" y2="${H - padB}" stroke="var(--ochre)" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <circle cx="${x(i)}" cy="${y(dE[i])}" r="5" fill="none" stroke="var(--ochre)" stroke-width="2"/>`).join("")}
+          <line x1="${padL}" y1="${yBar}" x2="${W - padR}" y2="${yBar}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="6 4"/>
+          <text x="${padL + 6}" y="${yBar - 6}" font-size="11" fill="var(--ink)">reference barrier ${(row.reference_barrier_ev || 0).toFixed(2)} eV</text>
+          <text x="${padL}" y="${H - 6}" font-size="11" fill="var(--muted)">reaction coordinate (image index)</text>
+          <text x="${padL - 40}" y="${padT - 2}" font-size="11" fill="var(--muted)">ΔE (eV)</text>
+          <text x="${W - padR}" y="${padT + 4}" text-anchor="end" font-size="11.5" fill="var(--ochre)">○ union anchors — ${anchors.length} selected</text>
+        </svg>`;
+    }
+    sel.addEventListener("change", () => draw(sel.value));
+    if (location.hash && paths.some((p) => p.path_id === location.hash.slice(1))) sel.value = location.hash.slice(1);
+    if (paths.length) draw(sel.value);
+
+    document.getElementById("table").innerHTML = `
+      <tr><th>#</th><th>path</th><th>system</th><th>ref barrier (eV)</th><th>sparse (eV)</th><th>anchors</th><th>T1 gate</th></tr>
+      ${paths.map((p) => `<tr id="${e(p.path_id)}">
+        <td>${e(p.path_index)}</td>
+        <td class="mono" style="font-size:12px"><a href="#${encodeURIComponent(p.path_id)}" data-path-id="${e(p.path_id)}" style="color:var(--indigo)">${e(p.path_id)}</a></td>
+        <td>${e(p.chemical_system)}</td>
+        <td>${(p.reference_barrier_ev ?? NaN).toFixed(3)}</td>
+        <td>${(p.dense_barrier_ev ?? NaN).toFixed(3)}</td>
+        <td>${(p.union_model_anchor_indices || p.anchors_evaluated || []).length}</td>
+        <td>${p.t1_gate?.verdict === "contaminated"
+          ? '<span class="pill bad">contaminated</span>'
+          : '<span class="pill ok">clean</span>'}</td>
+      </tr>`).join("")}`;
+    document.getElementById("table").addEventListener("click", (event) => {
+      const link = event.target.closest("[data-path-id]");
+      if (!link) return;
+      sel.value = link.dataset.pathId;
+      draw(sel.value);
+    });
+  </script>
+</body>
+</html>
