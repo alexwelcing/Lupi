@@ -10,7 +10,7 @@
  * Replaces the old PostProcessingEffects function in App.tsx.
  */
 
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { EffectComposer, N8AO, Bloom, ToneMapping, Vignette, DepthOfField } from '@react-three/postprocessing';
@@ -18,21 +18,27 @@ import { ToneMappingMode, BlendFunction } from 'postprocessing';
 import { useXR } from '@react-three/xr';
 
 import { useStore } from '../store';
-import { POSTPROCESS_PRESETS, scalePreset, reduceForPlayback, composerKey } from './presets';
+import { scalePreset, reduceForPlayback, reduceForMobile, composerKey } from './presets';
+import { resolveEffects } from './controls';
+import { getDeviceTier } from '../deviceCapabilities';
 
 export function ScenePostprocessing() {
   const presetId = useStore(s => s.postprocessPreset);
   const intensity = useStore(s => s.postprocessIntensity);
   const playing = useStore(s => s.playing);
+  const overrides = useStore(s => s.effectOverrides);
+  const fullEffects = useStore(s => s.fullSceneEffects);
+  const deviceTier = useMemo(getDeviceTier, []);
 
   const mode = useXR(state => state.mode);
   const isImmersive = mode === 'immersive-ar' || mode === 'immersive-vr';
 
   if (isImmersive) return null;
 
-  const base = POSTPROCESS_PRESETS[presetId] ?? POSTPROCESS_PRESETS.studio;
+  const base = resolveEffects(presetId, overrides);
   const scaled = scalePreset(base, intensity);
-  const active = playing ? reduceForPlayback(scaled) : scaled;
+  const playback = playing ? reduceForPlayback(scaled) : scaled;
+  const active = !fullEffects && (deviceTier === 'mobile' || deviceTier === 'low') ? reduceForMobile(playback) : playback;
 
   return (
     <EffectComposer

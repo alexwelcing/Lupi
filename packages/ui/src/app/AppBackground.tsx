@@ -126,7 +126,12 @@ export function AppBackground({
   const xrMode = mode as string | null;
   const isImmersiveAR = xrMode === 'immersive-ar';
   const isImmersiveVR = xrMode === 'immersive-vr';
-  const usesBackdropMesh = media.kind !== 'gradient' || backdropShape !== 'dome' || backdropPattern !== 'image';
+  // A plain gradient can use scene.background, but its fine adjustments need
+  // the same live shader as image backdrops. Never show inert adjustment UI.
+  const adjusted = adjustments.opacity !== 1 || adjustments.brightness !== 1
+    || adjustments.saturation !== 1 || adjustments.contrast !== 1
+    || adjustments.yawDegrees !== 0 || adjustments.pitchDegrees !== 0;
+  const usesBackdropMesh = adjusted || media.kind !== 'gradient' || backdropShape !== 'dome' || backdropPattern !== 'image';
   const texture = useEquirectMediaTexture({
     media,
     top,
@@ -177,8 +182,8 @@ export function AppBackground({
     const visible = !isImmersiveAR;
     return (
       <group userData={{ [LUPI_EXPORT_LAYER_KEY]: LUPI_EXPORT_BACKGROUND_LAYER }}>
-        <ProceduralBackground variant={procedural} top={top} bottom={bottom} visible={visible} />
-        <ProceduralMathField variant={procedural} center={center} radius={distance * 1.46} visible={visible} />
+        <ProceduralBackground variant={procedural} top={top} bottom={bottom} visible={visible} paused={adjustments.motionPaused} speed={adjustments.motionSpeed} />
+        <ProceduralMathField variant={procedural} center={center} radius={distance * 1.46} visible={visible} paused={adjustments.motionPaused} speed={adjustments.motionSpeed} />
       </group>
     );
   }

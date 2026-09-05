@@ -71,6 +71,12 @@ function expectPaddedBoundsInsideProjection(viewportAspect: number) {
 }
 
 describe('perspective camera fit', () => {
+  it('includes the atmosphere in a recentered portrait scene', () => {
+    const fit = fitPerspectiveCameraToBounds({ bounds: BOUNDS, cameraPosition: [0, 0, 20], cameraTarget: [0, 0, 0],
+      verticalFovDegrees: 50, viewportAspect: 390 / 844, atomRadius: .5, enclosingRadius: 12 });
+    expect(fit.contentRadius).toBeCloseTo(12 * DEFAULT_CAMERA_FIT_PADDING);
+    expect(fit.distance).toBeGreaterThan(fitAtAspect(390 / 844).distance);
+  });
   it('uses the portrait horizontal FOV as the limiting projection', () => {
     const fit = fitAtAspect(390 / 844);
     const projectedHalfAngle = Math.asin(fit.contentRadius / fit.distance);

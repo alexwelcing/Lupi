@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { snapshotForStudio, type StudioLook, type StudioSnapshot } from './snapshot';
 import type { StudioRuntime } from './runtime';
+import { LupiActionButton } from '../LupiActionButton';
+import { IconBack, IconOptics, IconPause, IconRecenter, IconRemix, IconTick } from '../icons';
 import './gpu-studio.css';
 
 interface Preview {
@@ -39,7 +41,7 @@ export function GpuStudioLaunch({ onOpenChange }: { onOpenChange: (open: boolean
   if (!file) return null;
   return (
     <>
-      <button
+      <LupiActionButton
         ref={launchButton}
         className="gpu-studio-launch"
         type="button"
@@ -48,13 +50,13 @@ export function GpuStudioLaunch({ onOpenChange }: { onOpenChange: (open: boolean
         aria-haspopup="dialog"
       >
         <span className="gpu-studio-launch__mark" aria-hidden="true">
-          ✳
+          <IconOptics />
         </span>
         <span>
           GPU<span className="gpu-studio-launch__word"> Studio</span>
         </span>
         <span className="gpu-studio-launch__new">New</span>
-      </button>
+      </LupiActionButton>
       {preview && (
         <GpuStudio
           preview={preview}
@@ -156,10 +158,10 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
     >
       <header className="gpu-studio__header">
         <button type="button" onClick={close} className="gpu-studio__back" autoFocus>
-          <span aria-hidden="true">←</span> Back to viewer
+          <IconBack /> Back to viewer
         </button>
         <span className="gpu-studio__edition">
-          <span aria-hidden="true">✳</span> GPU Studio <small>by Lupi</small>
+          <span aria-hidden="true"><IconOptics /></span> GPU Studio <small>by Lupi</small>
         </span>
         <span className="gpu-studio__connection">
           <i className="gpu-studio__live" data-ready={status === 'ready'} />
@@ -182,7 +184,7 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
           {status !== 'ready' && (
             <div className="gpu-studio__message" role="status">
               <span className="gpu-studio__message-mark" aria-hidden="true">
-                ✳
+                <IconOptics />
               </span>
               <h2>
                 {status === 'loading' ? 'Finding the light…' : 'Stay with the regular viewer'}
@@ -192,7 +194,7 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
               </p>
               {status === 'unavailable' && (
                 <button type="button" onClick={close}>
-                  Return to my molecule →
+                  Return to my molecule
                 </button>
               )}
             </div>
@@ -211,7 +213,7 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
                   setSpinning(!spinning);
                 }}
               >
-                <span aria-hidden="true">{spinning ? 'Ⅱ' : '↻'}</span>
+                <span aria-hidden="true">{spinning ? <IconPause /> : <IconRemix />}</span>
                 {spinning ? 'Stop rotation' : 'Rotate'}
               </button>
               <button
@@ -219,7 +221,7 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
                 disabled={status !== 'ready'}
                 onClick={() => runtime.current?.reset()}
               >
-                <span aria-hidden="true">⤢</span> Reset view
+                <IconRecenter /> Reset view
               </button>
             </div>
           </div>
@@ -252,7 +254,7 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
                   Studio light<small>Soft light. Real depth.</small>
                 </span>
                 <span className="gpu-studio__selected" aria-hidden="true">
-                  {look === 'studio' ? '✓' : ''}
+                  {look === 'studio' && <IconTick />}
                 </span>
               </button>
               <button
@@ -272,7 +274,7 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
                   Graphic contours<small>Trace every curve</small>
                 </span>
                 <span className="gpu-studio__selected" aria-hidden="true">
-                  {look === 'contours' ? '✓' : ''}
+                  {look === 'contours' && <IconTick />}
                 </span>
               </button>
             </div>

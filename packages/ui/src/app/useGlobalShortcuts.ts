@@ -15,6 +15,9 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
 
       const target = e.target as HTMLElement;
       if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      // Space belongs to a focused control, not the scene's playback shortcut.
+      // Escape still closes the panel, including when an action has focus.
+      if (e.key !== 'Escape' && target.closest('button, a[href], summary, [role="button"], [role="slider"]')) return;
 
       const state = useStore.getState();
       const currentFile = state.file;

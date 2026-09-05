@@ -25,6 +25,8 @@ import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
 import type { MolecularMeasurement, MeasurementTool } from './measurements';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
 import { MATERIAL_SCENES, getScene, DEFAULT_SCENE_ID } from '@atlas/scene/materials';
+import { sceneLookPatch } from './sceneLooks';
+import { sanitizeEffectOverrides, type EffectOverrides } from './postprocess/controls';
 import {
   canInferCovalentBonds,
   hasCompleteElementMapping,
@@ -474,6 +476,10 @@ export interface AppState {
   /** 0..2 — scales the active preset's effect strengths. 0 disables all
    *  effects (preset still selected); 1 = preset's authored values. */
   postprocessIntensity: number;
+  /** Live, shareable fine controls, scoped to the selected effect recipe. */
+  effectOverrides: EffectOverrides | null;
+  /** Device-local opt-in; never imposed on a recipient of a shared view. */
+  fullSceneEffects: boolean;
   /** 0..1 — when colorScheme is 'property', atoms with high property values
    *  emit additional light proportional to value × this strength × the
    *  colormap-mapped color. Reads as "this atom is doing something." */
@@ -851,6 +857,10 @@ function fitCameraForState(
     verticalFovDegrees: state.cameraFov,
     viewportAspect: state.cameraViewportAspect,
     atomRadius: maxRenderedAtomRadius(frame, state.atomScale, state.atomTypeScales),
+    enclosingRadius: state.filterShellShape !== 'off' && state.filterShellOpacity > 0
+      ? Math.max(4, Math.hypot(...bounds.max.map((value, index) => value - bounds.min[index])) * .58)
+        * state.filterShellRadius * (state.filterShellShape === 'cube' ? Math.sqrt(3) : 1)
+      : 0,
     fallbackDirection: directionOverride ?? cameraPresetDirection(state.cameraPreset),
   });
 }
@@ -942,6 +952,8 @@ const DEFAULTS = {
   // ─── Effects Defaults ───
   postprocessPreset: 'studio' as const,
   postprocessIntensity: 1.0,
+  effectOverrides: null as EffectOverrides | null,
+  fullSceneEffects: false,
   propertyEmissionStrength: 0.6,
   ssao: true,
   ssaoIntensity: 0.65,
@@ -1059,6 +1071,7 @@ export function buildStateDelta(s: AppState): Record<string, unknown> {
   if (Object.keys(s.elementColorOverrides).length > 0) delta.eco = s.elementColorOverrides;
   if (s.postprocessPreset !== DEFAULTS.postprocessPreset) delta.pp = s.postprocessPreset;
   if (r(s.postprocessIntensity) !== DEFAULTS.postprocessIntensity) delta.pi = r(s.postprocessIntensity);
+  if (s.effectOverrides) delta.pfx = s.effectOverrides;
   if (r(s.propertyEmissionStrength) !== DEFAULTS.propertyEmissionStrength) delta.pe = r(s.propertyEmissionStrength);
   if (!s.ssao)                                     delta.ssao = 0;
   if (!s.bloom)                                    delta.bloom = 0;
@@ -1145,6 +1158,7 @@ export function applyStateDelta(delta: unknown): Partial<AppState> {
     vectorDensity: sanitizeNumberRange(s.vd, DEFAULTS.vectorDensity, 0.01, 1),
     postprocessPreset: sanitizePostprocessPreset(s.pp),
     postprocessIntensity: sanitizeNumberRange(s.pi, DEFAULTS.postprocessIntensity, 0, 2),
+    effectOverrides: sanitizeEffectOverrides(s.pfx),
     propertyEmissionStrength: sanitizeNumberRange(s.pe, DEFAULTS.propertyEmissionStrength, 0, 1),
     ssao: sanitizeBinaryFlag(s.ssao, true),
     bloom: sanitizeBinaryFlag(s.bloom, true),
@@ -1271,6 +1285,7 @@ export const useStore = create<AppState>()(
         showAxes: sceneDirective.showAxes,
         postprocessPreset: sceneDirective.preset,
         postprocessIntensity: sceneDirective.intensity,
+        effectOverrides: null,
         materialScene: materialScene?.id ?? DEFAULT_SCENE_ID,
         materialPreset: materialScene?.materialPreset ?? DEFAULTS.materialPreset,
         materialIntensity: materialScene?.materialIntensity ?? DEFAULTS.materialIntensity,
@@ -1320,6 +1335,8 @@ export const useStore = create<AppState>()(
         // consumers don't need to special-case this field. The streaming
         // path overrides via setLoadedAtomCount during the load.
         loadedAtomCount: atomCount,
+        // Saved URL state is applied after this and remains authoritative.
+        ...(atomCount > 0 && atomCount < 25_000 ? sceneLookPatch('studio', atomCount) : {}),
       });
       // Fit the camera to the newly-loaded bounds immediately. URL-state
       // restore (decodeFromURL) may override this in a subsequent tick, but
@@ -1436,7 +1453,7 @@ export const useStore = create<AppState>()(
     resetElementColorOverrides: () => set({ elementColorOverrides: {} }),
     setAnomalyTracking: (anomalyTracking) => set({ anomalyTracking }),
 
-    setPostprocessPreset: (postprocessPreset) => set({ postprocessPreset }),
+    setPostprocessPreset: (postprocessPreset) => set({ postprocessPreset, effectOverrides: null }),
     setPostprocessIntensity: (postprocessIntensity) =>
       set({ postprocessIntensity: Math.max(0, Math.min(2, postprocessIntensity)) }),
     setPropertyEmissionStrength: (propertyEmissionStrength) =>
@@ -1543,6 +1560,7 @@ export const useStore = create<AppState>()(
         dirLightIntensity: scene.dirLightIntensity,
         rimLightIntensity: scene.rimLightIntensity,
         postprocessPreset: scene.postprocessPreset,
+        effectOverrides: null,
         toneMapping: scene.toneMapping,
         backgroundPreset: scene.backgroundPreset,
         atomTexture: scene.atomTexture,

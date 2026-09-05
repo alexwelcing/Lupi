@@ -196,7 +196,9 @@ export function ViewerApp() {
 
   // Renderer warning is derived from gpu bond state.
   useEffect(() => {
-    if (useGpuBonds && gpuBondsStatus === 'unsupported') {
+    // A working CPU fallback for a small molecule is routine, not a learner
+    // warning. Keep diagnostics in debug mode and notices for costly scenes.
+    if (useGpuBonds && gpuBondsStatus === 'unsupported' && (showDebugHud || loadedAtomCount >= 25_000)) {
       useStore
         .getState()
         .setRendererWarning(
@@ -205,7 +207,7 @@ export function ViewerApp() {
     } else if (gpuBondsStatus === 'ready') {
       useStore.getState().setRendererWarning(null);
     }
-  }, [useGpuBonds, gpuBondsStatus]);
+  }, [useGpuBonds, gpuBondsStatus, showDebugHud, loadedAtomCount]);
 
   const playbackFrameRate = file?.playbackFrameRate ?? 30;
   const highFidelityPlayback = Boolean(
@@ -576,6 +578,7 @@ export function ViewerApp() {
       data-file={!!file}
       data-timeline={mobileTimelineActive}
       data-ui-stowed={uiStowed}
+      data-style-open={!uiStowed && activePanel === 'studio'}
       style={{
         height: file || isEmbeddedMobileViewer ? '100dvh' : 'auto',
         overflow: file || isEmbeddedMobileViewer ? 'hidden' : 'visible',

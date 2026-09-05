@@ -1,0 +1,48 @@
+.lupi-action {
+  position: relative;
+  isolation: isolate;
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.lupi-action__content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  max-width: 100%;
+}
+.lupi-action__content > svg { flex: 0 0 auto; }
+.lupi-action__light {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 16% 0%, #f4ffd480, transparent 62%),
+    linear-gradient(112deg, #d2f1cc35, #f6e4ba25 45%, #d9bfe740);
+}
+.lupi-action__light canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 180ms ease; }
+.lupi-action[data-light-active='true'] .lupi-action__light canvas { opacity: .88; }
+.lupi-action:hover:not(:disabled) { box-shadow: inset 0 1px 0 #ffffffa0, 0 0 0 1px #c1e9c54d, 0 5px 20px #6aafaa26; }
+.lupi-action:active:not(:disabled) { box-shadow: inset 0 2px 4px #233b2f30; }
+.lupi-action:focus-visible { outline: 2px solid #f1edc9; outline-offset: 3px; box-shadow: 0 0 0 3px #14241e; }
+.lupi-action:disabled { cursor: default; opacity: .45; }
+.lupi-action:disabled .lupi-action__light { display: none; }
+/* With enlarged text, a 320px sheet cannot always fit both sticky action
+   rows and the introduction. Keep the footer in flow so neither row is cut. */
+@media (max-width: 359px) {
+  .scene-controls .scene-controls__actions { position: static; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lupi-action, .lupi-action__light canvas { transition: none; }
+  .lupi-action__light canvas { display: none; }
+}
+@media (forced-colors: active) {
+  .lupi-action__light { display: none; }
+  .lupi-action { border: 1px solid ButtonText; }
+  .lupi-action:focus-visible { outline: 2px solid Highlight; box-shadow: none; }
+}

@@ -52,7 +52,11 @@ export const PanelHost = memo(function PanelHost() {
           className="lupine-command-panel__close"
           aria-label={`Close ${title} panel`}
           title="Close panel [Esc]"
-          onClick={() => useStore.getState().setActivePanel(null)}
+          onClick={() => {
+            const trigger = document.querySelector<HTMLButtonElement>('.lupine-command-slot[aria-pressed="true"]');
+            useStore.getState().setActivePanel(null);
+            trigger?.focus();
+          }}
         >
           <IconClose size={14} />
         </button>

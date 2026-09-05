@@ -256,6 +256,7 @@ export const BG_PRESETS: Record<string, BgPreset> = {
   // ── Solid gradients (legacy) ──
   void:      { top: '#000000', bottom: '#000000', label: 'Void', category: 'gradient' },
   deep:      { top: '#080a14', bottom: '#000000', label: 'Deep Field', category: 'gradient' },
+  'gallery-studio': { top: '#29463f', bottom: '#0b1816', label: 'Gallery Studio', category: 'gradient' },
   dark:      { top: '#1a1a1f', bottom: '#0a0a0c', label: 'Dark', category: 'gradient' },
   white:     { top: '#ffffff', bottom: '#f0f0f5', label: 'White', category: 'gradient' },
   blueprint: { top: '#0b162c', bottom: '#050a14', label: 'Blueprint', category: 'gradient' },

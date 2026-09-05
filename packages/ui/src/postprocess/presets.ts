@@ -123,6 +123,18 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
 
 export const PRESET_ORDER: PostprocessPresetId[] = ['paper', 'studio', 'editorial', 'cinematic', 'diagram'];
 
+/** Phone/low-power presentation keeps color and lighting, without full-screen
+ * AO, glow or defocus passes. This does not rewrite a saved scene's intent. */
+export function reduceForMobile(preset: PostprocessPresetConfig): PostprocessPresetConfig {
+  return {
+    ...preset,
+    ssao: { ...preset.ssao, enabled: false },
+    bloom: { ...preset.bloom, enabled: false },
+    dof: { ...preset.dof, enabled: false },
+    multisampling: Math.min(preset.multisampling, 2) as 0 | 2,
+  };
+}
+
 /** Apply intensity to a preset. Intensity 0 = effects disabled (preset still
  *  selected); 1 = preset's authored values; values > 1 over-drive. Most
  *  effects scale linearly; vignette darkness is non-linear (eyeball'd). */

@@ -35,6 +35,12 @@ export function MoleculeFilterShell({
   const diameter = shellRadius * 2;
   const fillOpacity = Math.min(0.34, opacity * 0.58);
   const rimOpacity = Math.min(0.72, opacity * 1.35);
+  const sphereUniforms = useMemo(() => ({
+    uFill: { value: new THREE.Color(style.fill) },
+    uEdge: { value: new THREE.Color(style.edge) },
+    uAccent: { value: new THREE.Color(style.accent) },
+    uOpacity: { value: opacity },
+  }), [style, opacity]);
 
   const cubeEdgesGeometry = useMemo(() => {
     if (shape !== 'cube') return null;
@@ -52,12 +58,8 @@ export function MoleculeFilterShell({
 
   return (
     <group position={center} renderOrder={-40}>
-      <mesh frustumCulled={false} renderOrder={-40}>
-        {shape === 'sphere' ? (
-          <sphereGeometry args={[shellRadius, 40, 20]} />
-        ) : (
-          <boxGeometry args={[diameter, diameter, diameter, 1, 1, 1]} />
-        )}
+      {shape === 'cube' && <mesh frustumCulled={false} renderOrder={-40}>
+        <boxGeometry args={[diameter, diameter, diameter, 1, 1, 1]} />
         <meshBasicMaterial
           color={style.fill}
           transparent
@@ -67,16 +69,19 @@ export function MoleculeFilterShell({
           side={THREE.BackSide}
           toneMapped={false}
         />
-      </mesh>
+      </mesh>}
 
       {shape === 'sphere' && (
         <mesh frustumCulled={false} renderOrder={-39}>
-          <sphereGeometry args={[shellRadius * 1.003, 24, 12]} />
-          <meshBasicMaterial
-            color={style.edge}
+          <sphereGeometry args={[shellRadius, 64, 40]} />
+          {/* One inexpensive, camera-responsive surface: no refraction buffer,
+              animation loop, or dense wireframe competing with the molecule. */}
+          <shaderMaterial
+            uniforms={sphereUniforms}
+            vertexShader={SPHERE_VERTEX}
+            fragmentShader={SPHERE_FRAGMENT}
             transparent
-            opacity={rimOpacity}
-            wireframe
+            side={THREE.BackSide}
             depthWrite={false}
             depthTest
             toneMapped={false}
@@ -114,3 +119,37 @@ export function MoleculeFilterShell({
     </group>
   );
 }
+
+const SPHERE_VERTEX = /* glsl */`
+  varying vec3 vNormal;
+  varying vec3 vView;
+  varying vec3 vLocal;
+  void main() {
+    vec4 view = modelViewMatrix * vec4(position, 1.0);
+    vView = -view.xyz;
+    vNormal = normalize(normalMatrix * normal);
+    vLocal = normalize(position);
+    gl_Position = projectionMatrix * view;
+  }
+`;
+
+const SPHERE_FRAGMENT = /* glsl */`
+  uniform vec3 uFill;
+  uniform vec3 uEdge;
+  uniform vec3 uAccent;
+  uniform float uOpacity;
+  varying vec3 vNormal;
+  varying vec3 vView;
+  varying vec3 vLocal;
+  void main() {
+    float facing = abs(dot(normalize(vNormal), normalize(vView)));
+    float fresnel = pow(1.0 - facing, 2.6);
+    float pearl = 0.5 + 0.5 * sin(vLocal.y * 4.0 + vLocal.x * 3.0 + facing * 6.0);
+    vec3 rim = mix(uEdge, uAccent, pearl);
+    vec3 color = mix(uFill, rim, 0.25 + 0.75 * fresnel);
+    float sheen = pow(max(0.0, dot(normalize(vLocal), normalize(vec3(-0.5, 0.8, 0.4)))), 20.0);
+    color = mix(color, vec3(1.0), sheen * 0.5);
+    gl_FragColor = vec4(color, uOpacity * (0.035 + fresnel * 0.9 + sheen * 0.15));
+    #include <colorspace_fragment>
+  }
+`;
