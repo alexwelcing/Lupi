@@ -29,13 +29,13 @@ console.log(`Generated static SEO HTML for ${routes.length} Lupi routes.`);
 function injectSeo(html, route, manifest) {
   const canonical = absoluteUrl(route.canonicalPath, manifest.siteOrigin);
   const image = absoluteUrl(route.image ?? manifest.defaultSocialImage, manifest.siteOrigin);
-  const imageAlt = route.imageAlt ?? 'Lupi molecular viewer from Lupine Science.';
+  const imageAlt = route.imageAlt ?? 'Lupi interactive molecular viewer.';
 
   let next = html;
   next = replaceTitle(next, route.title);
   next = upsertMeta(next, 'name', 'description', route.description);
-  next = upsertMeta(next, 'name', 'robots', 'index,follow,max-image-preview:large');
-  next = upsertMeta(next, 'property', 'og:site_name', 'Lupine Science');
+  next = upsertMeta(next, 'name', 'robots', route.robots ?? 'index,follow,max-image-preview:large');
+  next = upsertMeta(next, 'property', 'og:site_name', 'Lupi');
   next = upsertMeta(next, 'property', 'og:locale', 'en_US');
   next = upsertMeta(next, 'property', 'og:type', route.type ?? 'website');
   next = upsertMeta(next, 'property', 'og:title', route.title);
@@ -94,7 +94,7 @@ function indent(value, spaces) {
   const prefix = ' '.repeat(spaces);
   return value
     .split('\n')
-    .map((line) => `${prefix}${line}`)
+    .map(line => `${prefix}${line}`)
     .join('\n');
 }
 

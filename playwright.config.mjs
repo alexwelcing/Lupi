@@ -27,6 +27,8 @@ const browserExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim(
 
 export default defineConfig({
   testDir: './tests/ui',
+  // Real WebGPU checks have their own explicit device-capable lane.
+  testIgnore: '**/*.webgpu.spec.ts',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: isDeployedRun ? 2 : process.env.CI ? 1 : 0,

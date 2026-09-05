@@ -8,6 +8,7 @@ import type { RenderCapability } from '../renderCapability';
 import { xrStore } from './xrStore';
 
 interface ViewerCanvasProps {
+  paused?: boolean;
   capability: RenderCapability;
   cameraDistance: number;
   cameraNear: number;
@@ -51,6 +52,7 @@ export function configureViewerRenderer(gl: ViewerRendererConfigurationTarget): 
 }
 
 export function ViewerCanvas({
+  paused = false,
   capability,
   cameraDistance,
   cameraNear,
@@ -62,6 +64,7 @@ export function ViewerCanvas({
   return (
     <CanvasErrorBoundary capability={capability}>
       <Canvas
+        frameloop={paused ? 'never' : 'always'}
         id="lupi-viewer-canvas"
         camera={{
           position: [center[0], center[1], center[2] + cameraDistance],

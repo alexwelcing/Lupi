@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { wgslVitePlugin } from 'vgpu/client';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import path from 'path';
@@ -275,6 +276,7 @@ export default defineConfig(({ command }) => ({
   plugins: [
     reactPerformanceTrackGuardPlugin(),
     react(),
+    wgslVitePlugin({ minify: true }),
     galleryAssetUploadPlugin(),
     pruneExternalHostedAssets(),
   ],
@@ -326,7 +328,12 @@ export default defineConfig(({ command }) => ({
           if (id.includes('park')) return 'env-park';
 
           if (id.includes('node_modules')) {
-            if (id.includes('/node_modules/three/')) return 'vendor-three';
+            // Keep the optional node-material/WebGPU backend out of the normal
+            // viewer. Three's shared core remains in the existing vendor chunk.
+            if (id.includes('/node_modules/three/')) {
+              if (/\/(nodes|renderers\/(common|webgpu|webgl-fallback))\//.test(id) || /three\.(webgpu|tsl)\.js$/.test(id)) return 'vendor-three-webgpu';
+              return 'vendor-three';
+            }
             // Keep the whole @react-three family (fiber/drei/xr) in one chunk:
             // they cross-reference, so splitting drei out creates a circular
             // chunk. The real win for this stack is route-level lazy loading

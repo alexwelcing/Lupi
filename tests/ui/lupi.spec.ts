@@ -41,49 +41,64 @@ const NEUTRAL_HDR = Buffer.concat([
 async function preparePage(page: Page) {
   // The app has system-font fallbacks; a third-party font CDN must never hold
   // the product gate open or decide whether a deployment is healthy.
-  await page.route('https://fonts.googleapis.com/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/css',
-    body: '',
-  }));
+  await page.route('https://fonts.googleapis.com/**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/css',
+      body: '',
+    }),
+  );
   await page.route('https://fonts.gstatic.com/**', route => route.abort());
   // The reflection map is an optional third-party enhancement. Supply a tiny,
   // deterministic neutral HDR so that CDN health cannot decide product health.
-  await page.route('https://raw.githack.com/**', route => route.fulfill({
-    status: 200,
-    contentType: 'application/octet-stream',
-    body: NEUTRAL_HDR,
-  }));
+  await page.route('https://raw.githack.com/**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/octet-stream',
+      body: NEUTRAL_HDR,
+    }),
+  );
 }
 
 async function expectViewerReady(page: Page) {
-  await expect(page.getByRole('button', { name: 'Close dataset' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Return to Lupi home' })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toBeVisible({ timeout: 30_000 });
 
   const canvas = page.locator('.lupine-main-viewport canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
-  await expect.poll(async () => {
-    const bounds = await canvas.boundingBox();
-    return Boolean(bounds && bounds.width > 100 && bounds.height > 100);
-  }, { timeout: 30_000 }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const bounds = await canvas.boundingBox();
+        return Boolean(bounds && bounds.width > 100 && bounds.height > 100);
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
 }
 
 async function expectPressed(control: Locator) {
-  await expect(control).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
+  await expect(control).toHaveAttribute('aria-pressed', 'true', {
+    timeout: 30_000,
+  });
 }
 
 async function expectHitTestable(panel: Locator) {
   // toBeVisible cannot detect an ancestor clipping the panel away (for example
   // paint containment on the status bar), so assert the opened menu actually
   // wins hit-testing at its own on-screen coordinates.
-  await expect.poll(() => panel.evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    const probe = document.elementFromPoint(
-      rect.left + rect.width / 2,
-      rect.top + Math.min(24, rect.height / 2),
-    );
-    return probe !== null && element.contains(probe);
-  })).toBe(true);
+  await expect
+    .poll(() =>
+      panel.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        const probe = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + Math.min(24, rect.height / 2),
+        );
+        return probe !== null && element.contains(probe);
+      }),
+    )
+    .toBe(true);
 }
 
 async function releaseRenderer(page: Page) {
@@ -114,16 +129,19 @@ test('@deployed-smoke a visitor can discover caffeine and enter the viewer', asy
   await preparePage(page);
   await page.goto('/', { waitUntil: 'commit' });
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Explore matter in 3D.' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', {
+      level: 1,
+      name: 'Small structures. Big discoveries.',
+    }),
+  ).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
 
-  const search = page.getByRole('searchbox', { name: 'Search molecules and materials' });
+  const search = page.getByRole('searchbox', { name: 'Find an example' });
   await expect(search).toBeVisible();
   await search.fill('caffeine');
 
-  const matches = page.getByRole('region', { name: 'Matching examples' });
-  await expect(matches).toBeVisible();
-  await matches.getByRole('button', { name: /^Caffeine\b/ }).click();
+  await page.getByRole('link', { name: 'Explore Caffeine', exact: true }).click();
 
   await expect(page).toHaveURL(/[?&]sim=caffeine(?:&|$)/);
   await expectViewerReady(page);
@@ -132,25 +150,27 @@ test('@deployed-smoke a visitor can discover caffeine and enter the viewer', asy
 
 test('@deployed-smoke viewer settings are usable and learning tools are discoverable', async ({ page }) => {
   await preparePage(page);
-  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, {
+    waitUntil: 'commit',
+  });
   await expectViewerReady(page);
 
   const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
-  await commands.getByRole('button', { name: 'Visuals command' }).click();
+  await commands.getByRole('button', { name: 'Style command' }).click();
 
-  const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
+  const visualsPanel = page.getByRole('region', {
+    name: 'Style command panel',
+  });
   await expect(visualsPanel).toBeVisible();
-  await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
-
-  const occupiedSpace = visualsPanel.getByTestId('model-preset-space');
-  await occupiedSpace.click();
-  await expectPressed(occupiedSpace);
-
-  await visualsPanel.getByRole('button', { name: 'Scene controls' }).click();
-
-  const warmBackground = visualsPanel.getByRole('button', { name: 'Warm' });
-  await warmBackground.click();
-  await expectPressed(warmBackground);
+  const bonds = visualsPanel.getByRole('checkbox', { name: 'Bond guides' });
+  await bonds.uncheck();
+  await expect(bonds).not.toBeChecked();
+  const paper = visualsPanel.getByRole('button', {
+    name: 'Paper',
+    exact: true,
+  });
+  await paper.click();
+  await expectPressed(paper);
 
   await commands.getByRole('button', { name: 'Camera command' }).click();
   await expect(page.getByRole('region', { name: 'Camera command panel' })).toBeVisible();
@@ -162,7 +182,9 @@ test('@deployed-smoke viewer settings are usable and learning tools are discover
 
 test('@deployed-smoke the save view and account menus open over the viewer', async ({ page }) => {
   await preparePage(page);
-  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, {
+    waitUntil: 'commit',
+  });
   await expectViewerReady(page);
 
   await page.getByTestId('lupi-save-view-button').click();
@@ -180,40 +202,18 @@ test('@deployed-smoke the save view and account menus open over the viewer', asy
   await releaseRenderer(page);
 });
 
-test('the prism appearance preset renders transmission glass without errors', async ({ page }) => {
+test('the student style controls change the model without renderer errors', async ({ page }) => {
   await preparePage(page);
-  const consoleErrors: string[] = [];
-  page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
-  });
-  page.on('pageerror', error => consoleErrors.push(error.message));
-
-  await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?sim=water');
   await expectViewerReady(page);
-
-  const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
-  await commands.getByRole('button', { name: 'Visuals command' }).click();
-  const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
-  await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
-
-  // The scene cards are first-class controls: no disclosure to open first.
-  const prismCard = visualsPanel.getByTestId('appearance-scene-prism');
-  await prismCard.click();
-  await expect(prismCard).toHaveAttribute('aria-pressed', 'true');
-
-  // Transmission-specific glass controls appear only for the refractive look.
-  await expect(visualsPanel.getByRole('slider', { name: /Clarity/ })).toBeVisible();
-  await expect(visualsPanel.getByRole('slider', { name: /Frost/ })).toBeVisible();
-  await expect(visualsPanel.getByRole('slider', { name: /Gloss/ })).toBeVisible();
-  await visualsPanel.getByTestId('appearance-scene-specimen').click();
-  await expect(visualsPanel.getByRole('slider', { name: /Clarity/ })).toHaveCount(0);
-  await prismCard.click();
-  await expect(prismCard).toHaveAttribute('aria-pressed', 'true');
-
-  // Let the transmission shader compile and the buffer pass draw a few frames;
-  // a broken MeshTransmissionMaterial surfaces here as console/page errors.
-  await page.waitForTimeout(1_500);
-  expect(consoleErrors).toEqual([]);
+  await page.getByRole('button', { name: 'Style command' }).click();
+  await page.getByRole('checkbox', { name: 'Bond guides' }).uncheck();
+  await page.getByRole('button', { name: 'Paper', exact: true }).click();
+  await expectPressed(page.getByRole('button', { name: 'Paper', exact: true }));
+  await page.getByRole('button', { name: 'Use element colors', exact: true }).click();
+  expect(errors).toEqual([]);
   await releaseRenderer(page);
 });
 
@@ -225,7 +225,9 @@ test('a trajectory deep link renders without React console errors', async ({ pag
   });
   page.on('pageerror', error => consoleErrors.push(error.message));
 
-  await page.goto(`/?load=${encodeURIComponent(SPHERE_GRID_ASSET)}`, { waitUntil: 'commit' });
+  await page.goto(`/?load=${encodeURIComponent(SPHERE_GRID_ASSET)}`, {
+    waitUntil: 'commit',
+  });
   await expectViewerReady(page);
   await page.waitForTimeout(1_000);
 
@@ -243,7 +245,11 @@ test('@deployed-smoke a missing saved view has a visible retryable state', async
   if (process.env.UI_TEST_EXPECT_HEALTH === 'true') {
     await expect(page.getByRole('heading', { name: 'View not found' })).toBeVisible();
   } else {
-    await expect(page.getByRole('heading', { name: /View not found|could not be opened/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', {
+        name: /View not found|could not be opened/i,
+      }),
+    ).toBeVisible();
   }
 
   await page.getByRole('button', { name: 'Retry' }).click();
@@ -261,12 +267,14 @@ test('@deployed-smoke URL MCP commands require deliberate execution', async ({ p
     tool: 'lupi.generate_molecule',
     arguments: { inputType: 'template', input: 'Caffeine' },
   });
-  await page.goto(`/?mcpCommand=${encodeURIComponent(command)}#/mcp`, { waitUntil: 'commit' });
+  await page.goto(`/?mcpCommand=${encodeURIComponent(command)}#/mcp`, {
+    waitUntil: 'commit',
+  });
   await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true);
   await page.waitForTimeout(750);
   expect(await page.evaluate(() => window.__lupiViewerMcp?.status().moleculeLoaded)).toBe(false);
 
-  const responses = await page.evaluate(async (payload) => {
+  const responses = await page.evaluate(async payload => {
     const driver = window.__lupiViewerMcp!;
     return driver.executeBatch(driver.parseCommand(payload));
   }, command);
@@ -282,8 +290,12 @@ test('@deployed-smoke unsafe automatic molecule links fail visibly without a fet
   page.on('request', request => {
     if (request.url() === unsafeUrl) unsafeRequests += 1;
   });
-  await page.goto(`/?load=${encodeURIComponent(unsafeUrl)}`, { waitUntil: 'commit' });
-  await expect(page.getByRole('heading', { name: /molecule link could not be opened/i })).toBeVisible({ timeout: 30_000 });
+  await page.goto(`/?load=${encodeURIComponent(unsafeUrl)}`, {
+    waitUntil: 'commit',
+  });
+  await expect(page.getByRole('heading', { name: /molecule link could not be opened/i })).toBeVisible({
+    timeout: 30_000,
+  });
   expect(unsafeRequests).toBe(0);
   await expect(page.getByRole('link', { name: /explore trusted examples/i })).toBeVisible();
 });
@@ -309,9 +321,15 @@ test('@deployed-smoke browser origin can discover the edge MCP tools', async ({ 
     return { initialize, tools };
   });
   expect(result.initialize.status).toBe(200);
-  expect(result.initialize.body).toMatchObject({ jsonrpc: '2.0', id: 'browser-init' });
+  expect(result.initialize.body).toMatchObject({
+    jsonrpc: '2.0',
+    id: 'browser-init',
+  });
   expect(result.tools.status).toBe(200);
-  expect(result.tools.body).toMatchObject({ jsonrpc: '2.0', id: 'browser-tools' });
+  expect(result.tools.body).toMatchObject({
+    jsonrpc: '2.0',
+    id: 'browser-tools',
+  });
   expect(Array.isArray((result.tools.body as { result?: { tools?: unknown[] } }).result?.tools)).toBe(true);
 });
 
@@ -337,7 +355,9 @@ test.describe('mobile viewer', () => {
     hasTouch: true,
   });
 
-  test('embedded Expo route loads only the requested molecule without browser chrome or MCP controls', async ({ page }) => {
+  test('embedded Expo route loads only the requested molecule without browser chrome or MCP controls', async ({
+    page,
+  }) => {
     await preparePage(page);
     const runtimeErrors: string[] = [];
     page.on('console', message => {
@@ -363,7 +383,11 @@ test.describe('mobile viewer', () => {
       const opened = await driver.execute({
         id: 'expo-embedded-caffeine',
         tool: 'lupi.open_gallery_example',
-        arguments: { id: 'caffeine', expectedAtomCount: 24, maxAtomCount: 50_000 },
+        arguments: {
+          id: 'caffeine',
+          expectedAtomCount: 24,
+          maxAtomCount: 50_000,
+        },
       });
       const viewer = await driver.execute({
         id: 'expo-embedded-camera',
@@ -382,18 +406,26 @@ test.describe('mobile viewer', () => {
     expect(responses.viewer.ok).toBe(true);
     expect(responses.fitted.ok).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount)).toBe(24);
-    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.state().fileName)).toMatch(/Caffeine/i);
-    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondCount)).toBeGreaterThan(0);
-    await expect.poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondSource)).toMatch(/cpu|gpu/);
+    await expect
+      .poll(() => page.evaluate(() => window.__lupiViewerMcp?.state().fileName))
+      .toMatch(/Caffeine/i);
+    await expect
+      .poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondCount))
+      .toBeGreaterThan(0);
+    await expect
+      .poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().bondSource))
+      .toMatch(/cpu|gpu/);
     expect(await page.evaluate(() => window.__lupiViewerMcp?.status().showBondsEffective)).toBe(true);
     expect(await page.evaluate(() => window.__lupiViewerMcp?.state().cameraPreset)).toBe('iso');
 
     const canvas = page.locator('.lupine-main-viewport canvas');
     await expect(canvas).toBeVisible({ timeout: 30_000 });
-    await expect.poll(async () => {
-      const bounds = await canvas.boundingBox();
-      return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
-    }).toBe(true);
+    await expect
+      .poll(async () => {
+        const bounds = await canvas.boundingBox();
+        return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
+      })
+      .toBe(true);
     await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
     await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
     await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
@@ -401,7 +433,9 @@ test.describe('mobile viewer', () => {
     await releaseRenderer(page);
   });
 
-  test('embedded Expo route opens every curated native gallery example without web chrome', async ({ page }) => {
+  test('embedded Expo route opens every curated native gallery example without web chrome', async ({
+    page,
+  }) => {
     test.setTimeout(300_000);
     await preparePage(page);
     const runtimeErrors: string[] = [];
@@ -425,54 +459,74 @@ test.describe('mobile viewer', () => {
         await page.goto('/?load#/embed/mobile', { waitUntil: 'commit' });
         await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 30_000 });
       }
-      const response = await test.step(`open gallery example ${example.id}`, () => page.evaluate(
-        ({ id, expectedAtomCount, requestIndex }) => Promise.race([
-          window.__lupiViewerMcp!.execute({
-            id: `expo-gallery-${requestIndex}`,
-            tool: 'lupi.open_gallery_example',
-            arguments: { id, expectedAtomCount, maxAtomCount: 50_000 },
-          }),
-          new Promise<never>((_, reject) => {
-            window.setTimeout(
-              () => reject(new Error(`Timed out opening gallery example ${id}`)),
-              25_000,
-            );
-          }),
-        ]),
-        { id: example.id, expectedAtomCount: example.atomCount, requestIndex: index },
-      ));
+      const response = await test.step(`open gallery example ${example.id}`, () =>
+        page.evaluate(
+          ({ id, expectedAtomCount, requestIndex }) =>
+            Promise.race([
+              window.__lupiViewerMcp!.execute({
+                id: `expo-gallery-${requestIndex}`,
+                tool: 'lupi.open_gallery_example',
+                arguments: { id, expectedAtomCount, maxAtomCount: 50_000 },
+              }),
+              new Promise<never>((_, reject) => {
+                window.setTimeout(() => reject(new Error(`Timed out opening gallery example ${id}`)), 25_000);
+              }),
+            ]),
+          {
+            id: example.id,
+            expectedAtomCount: example.atomCount,
+            requestIndex: index,
+          },
+        ));
 
       expect(response.ok, example.id).toBe(true);
-      expect(response.result?.viewer, example.id).toMatchObject({ atomCount: example.atomCount });
-      await expect.poll(
-        () => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount),
-        { message: example.id },
-      ).toBe(example.atomCount);
+      expect(response.result?.viewer, example.id).toMatchObject({
+        atomCount: example.atomCount,
+      });
+      await expect
+        .poll(() => page.evaluate(() => window.__lupiViewerMcp?.status().atomCount), { message: example.id })
+        .toBe(example.atomCount);
       const canvas = page.locator('.lupine-main-viewport canvas');
-      await expect(canvas, `${example.id} canvas`).toBeVisible({ timeout: 30_000 });
-      await expect.poll(async () => {
-        const bounds = await canvas.boundingBox();
-        return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
-      }, { message: `${example.id} fills the embedded phone viewport` }).toBe(true);
+      await expect(canvas, `${example.id} canvas`).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect
+        .poll(
+          async () => {
+            const bounds = await canvas.boundingBox();
+            return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
+          },
+          { message: `${example.id} fills the embedded phone viewport` },
+        )
+        .toBe(true);
       await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
       await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
       await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
     }
-    const rejectedDrift = await page.evaluate(() => window.__lupiViewerMcp!.execute({
-      id: 'expo-gallery-drift-check',
-      tool: 'lupi.open_gallery_example',
-      arguments: { id: 'water', expectedAtomCount: 4, maxAtomCount: 50_000 },
-    }));
+    const rejectedDrift = await page.evaluate(() =>
+      window.__lupiViewerMcp!.execute({
+        id: 'expo-gallery-drift-check',
+        tool: 'lupi.open_gallery_example',
+        arguments: { id: 'water', expectedAtomCount: 4, maxAtomCount: 50_000 },
+      }),
+    );
     expect(rejectedDrift.ok).toBe(false);
     expect(rejectedDrift.error?.message).toMatch(/caller expected 4/i);
     expect(await page.evaluate(() => window.__lupiViewerMcp?.status().atomCount)).toBe(
       examples.at(-1)?.atomCount,
     );
-    expect(await page.evaluate(() => ({ hash: window.location.hash, search: window.location.search }))).toEqual({
+    expect(
+      await page.evaluate(() => ({
+        hash: window.location.hash,
+        search: window.location.search,
+      })),
+    ).toEqual({
       hash: '#/embed/mobile',
       search: '?load',
     });
-    await expect(page.locator('.lupine-main-viewport canvas')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('.lupine-main-viewport canvas')).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);
     await expect(page.locator('.lupine-viewer-chrome--header')).toHaveCount(0);
     await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toHaveCount(0);
@@ -482,49 +536,60 @@ test.describe('mobile viewer', () => {
 
   test('keeps the primary viewer settings reachable on a phone', async ({ page }) => {
     await preparePage(page);
-    await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, { waitUntil: 'commit' });
+    await page.goto(`/?load=${encodeURIComponent(CAFFEINE_ASSET)}`, {
+      waitUntil: 'commit',
+    });
 
     const commands = page.getByRole('toolbar', { name: 'Viewer commands' });
     await expect(commands).toBeVisible({ timeout: 30_000 });
 
-    const stowControls = page.getByRole('button', { name: 'Stow viewer controls' });
-    await expect.poll(async () => {
-      const [bucketBox, commandsBox] = await Promise.all([
-        stowControls.boundingBox(),
-        commands.boundingBox(),
-      ]);
-      return bucketBox !== null
-        && commandsBox !== null
-        && bucketBox.y + bucketBox.height <= commandsBox.y;
-    }).toBe(true);
+    const stowControls = page.getByRole('button', {
+      name: 'Stow viewer controls',
+    });
+    await expect
+      .poll(async () => {
+        const [bucketBox, commandsBox] = await Promise.all([
+          stowControls.boundingBox(),
+          commands.boundingBox(),
+        ]);
+        return bucketBox !== null && commandsBox !== null && bucketBox.y + bucketBox.height <= commandsBox.y;
+      })
+      .toBe(true);
 
     await stowControls.click();
     await expect(commands).toHaveCSS('pointer-events', 'none');
     await page.getByRole('button', { name: 'Restore viewer controls' }).click();
     await expect(commands).toHaveCSS('pointer-events', 'auto');
-    await commands.getByRole('button', { name: 'Visuals command' }).click();
+    await commands.getByRole('button', { name: 'Style command' }).click();
 
-    const visualsPanel = page.getByRole('region', { name: 'Visuals command panel' });
+    const visualsPanel = page.getByRole('region', {
+      name: 'Style command panel',
+    });
     await expect(visualsPanel).toBeVisible();
-    await visualsPanel.getByRole('button', { name: 'Structure controls' }).click();
-    await expect(visualsPanel.getByTestId('model-preset-space')).toBeVisible();
+    await expect(visualsPanel.getByRole('checkbox', { name: 'Bond guides' })).toBeVisible();
+    await expect(visualsPanel.getByRole('button', { name: 'Paper', exact: true })).toBeVisible();
 
-    await visualsPanel.getByRole('button', { name: 'Scene controls' }).click();
-    await expect(visualsPanel.getByRole('button', { name: 'Warm' })).toBeVisible();
-
-    await visualsPanel.getByRole('button', { name: 'Close Visuals panel' }).click();
+    await visualsPanel.getByRole('button', { name: 'Close Style panel' }).click();
     await expect(visualsPanel).toBeHidden();
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
     await releaseRenderer(page);
   });
 
-  test('mobile playback uses one touch-safe cycling speed chip without a duplicate frame overlay', async ({ page }) => {
+  test('mobile playback uses one touch-safe cycling speed chip without a duplicate frame overlay', async ({
+    page,
+  }) => {
     await preparePage(page);
     await page.goto(`/?sim=${TRAJECTORY_ID}`, { waitUntil: 'commit' });
 
     await expect(page.getByRole('toolbar', { name: 'Viewer commands' })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('transport-frame-readout')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('playback-status')).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId('transport-frame-readout')).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId('playback-status')).toHaveCount(0, {
+      timeout: 30_000,
+    });
     await expect(page.getByTestId('desktop-playback-speeds')).toHaveCount(0);
 
     const speedChip = page.getByTestId('mobile-playback-speed');

@@ -1,5 +1,10 @@
 # Lupi 2026 experience redesign
 
+> Historical implementation brief. The 2026-09-04 owner-requested student
+> reset supersedes the navigation, cinematic archive, and research handoffs
+> below. Current surface and publication rules live in the product ownership
+> contract; removed UI is recoverable from Git history, not hidden in the app.
+
 This experience brief implements the normative
 [Lupi product ownership contract](product-ownership-contract.md). If an older
 phase or success measure conflicts with that contract, the contract wins.

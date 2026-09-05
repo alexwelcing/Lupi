@@ -45,13 +45,23 @@ Lupi owns these outcomes end to end:
 - Give an agent the same bounded artifact contract with machine-verifiable
   identity, format, and provenance.
 
-The canonical public verbs are Explore, Search, Learn, Upload, and Research.
-Inside the viewer they are Structure, Background, Analyze, Learn, and Export.
-The interaction details live in the [experience redesign](ux-redesign-2026.md).
+The 2026-09-04 owner-requested product reset narrows the public surface to
+Explore, How to use, and Open a file. Public search explicitly filters the
+student collection; it does not silently query a research corpus. Inside the
+viewer the controls are Learn, Style, Data, Camera, Export, and Elements, with
+Path only for an explicitly opened, source-bound reaction trajectory.
 
-On the current landing shell, **Research** is an external handoff to
-`lupine.science`. Lupi owns that handoff and viewer-attached presentation of
-versioned evidence; it does not own an internal research workbench.
+Research is not a primary navigation item or a learner workflow. Retired
+research URLs explain the separation and offer an external handoff to
+`lupine.science`. The separate `apps/lupine-app` and its execution contracts
+remain independent. The agent API and explicit data deep links retain their
+bounded inspection capabilities; they do not determine the public menu.
+
+Student publication is positive-list controlled by
+`packages/ui/src/gallery/studentCollection.ts`: every entry needs a working
+small coordinate asset, an observation prompt, a source-bound preview, and
+review by the Lupi content steward. Catalog additions alone do not publish.
+Historical UI is recoverable from Git, not retained as hidden production code.
 
 ## Supporting capabilities
 
@@ -77,7 +87,7 @@ canonical source, source version or date, and synchronization provenance.
 
 Inside the viewer, Lupi's research-adjacent role is limited to discovering and
 displaying externally supplied evidence, provenance, and research-result
-manifests under Learn or Analyze. The public **Research** verb remains the
+manifests under Learn or Data. Retired research links use the explicit
 external handoff described above. Neither behavior means executing experiments,
 choosing MLIP policy, adjudicating scientific claims, or generating synthetic
 evidence.
@@ -135,6 +145,12 @@ readback under the [release truth contract](release-truth-contract.md).
 
 Ratification records known contradictions; it does not erase them. These items
 block the affected release evidence until their exit condition is met:
+
+The 2026-09-04 product-reset candidate removes the Comparison Theater route
+and replaces the research publication mirrors with Lupi-owned metadata. This
+is source-side remediation, not proof that the public deployment has changed.
+Keep the affected rows release-blocking until the intended deployed revision
+and its public routes have been verified.
 
 | Current contradiction | Accountable owner | Exit condition |
 |---|---|---|

@@ -1,12 +1,9 @@
-import { Testbed } from './Testbed';
-import EmojiPlayground from './EmojiPlayground';
-import BillionAtomsPage from './BillionAtomsPage';
+import { lazy } from 'react';
+const Testbed = lazy(() => import('./Testbed').then(module => ({ default: module.Testbed })));
+const EmojiPlayground = lazy(() => import('./EmojiPlayground'));
+const BillionAtomsPage = lazy(() => import('./BillionAtomsPage'));
 import { ViewerApp } from './ViewerApp';
-import {
-  isBillionAtomsRoute,
-  isEmojiRoute,
-  isTestbedRoute,
-} from './viewer/viewerRoutes';
+import { isBillionAtomsRoute, isEmojiRoute, isTestbedRoute } from './viewer/viewerRoutes';
 
 export { xrStore } from './viewer/xrStore';
 

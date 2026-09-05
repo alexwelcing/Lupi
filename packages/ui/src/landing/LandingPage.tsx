@@ -1,61 +1,90 @@
-import { MelancholiaLanding } from './melancholia/MelancholiaLanding';
 import { DropZoneSection } from './DropZoneSection';
 import { GallerySection } from './GallerySection';
 import { LandingFooter } from './LandingFooter';
-import { ANIMATION_CSS } from './shared';
 import { HOME_SEO, useSeo } from '../seo';
+import './student-home.css';
 
-/**
- * LandingPage — the home page in the register of *Melancholia*.
- *
- * A twilight of matter up top: the approaching billion-atom planet, a curated
- * collection of lesser bodies, the field index. Then the working layer beneath
- * — bring your own matter, the complete searchable archive — introduced in the
- * same restrained voice rather than a second, louder design. The fixed sky
- * carries the cinematic sections; the working sections bring their own darkness
- * so the shift from dream to instrument is deliberate, not accidental.
- */
 export function LandingPage() {
   useSeo(HOME_SEO);
-
   return (
-    <>
-      <style>{ANIMATION_CSS}</style>
-      <div style={{ width: '100%', minHeight: '100vh', background: '#05060b' }}>
-        <MelancholiaLanding />
-
-        {/* Open research data in the same restrained visual register. */}
-        <div className="mel">
-          <section className="mel-part mel-part--tight" aria-labelledby="mel-part-two">
-            <div className="mel-part-head is-shown">
-              <span className="mel-part-mark">Open your data</span>
-              <h2 id="mel-part-two" className="mel-part-title">Bring your own research data.</h2>
-              <p className="mel-part-sub">
-                Drop a LAMMPS dump, data file, XYZ structure, trajectory, or
-                profile. Lupi opens it locally so you can inspect its structure,
-                forces, properties, and motion in the same viewer.
-              </p>
-            </div>
-          </section>
+    <main id="main" className="student-home">
+      <section className="student-hero student-width" aria-labelledby="home-title">
+        <div>
+          <p className="student-eyebrow">A closer look at chemistry</p>
+          <h1 id="home-title">
+            Small structures.
+            <br />
+            Big discoveries.
+          </h1>
+          <p className="student-deck">
+            Meet the molecules behind everyday things. Turn them around, look a little closer, and start
+            making connections.
+          </p>
+          <div className="student-actions">
+            <a className="student-primary" href="/?sim=water">
+              Start with water <span aria-hidden="true">↗</span>
+            </a>
+            <a className="student-secondary" href="#gallery">
+              Explore the collection
+            </a>
+          </div>
+          <p className="student-caption">Free to explore. No account needed.</p>
         </div>
-
-        <DropZoneSection />
-        <GallerySection />
-
-        {/* Colophon */}
-        <div className="mel">
-          <section className="mel-colophon" aria-label="Colophon">
-            <p className="mel-colophon-line">The light that reaches you left long ago.</p>
-            <p className="mel-colophon-sub">
-              Lupi is a browser-native viewer for molecules and materials &mdash;
-              open data, inspect properties, preserve sources, and export the
-              result. Every example is a live structure, not a static picture.
-            </p>
-          </section>
+        <figure className="student-feature">
+          <a href="/?sim=caffeine" aria-label="Explore caffeine in 3D">
+            <img
+              src="/learn/caffeine.svg"
+              alt="Preview of the caffeine coordinate model"
+              width="560"
+              height="400"
+              fetchPriority="high"
+            />
+            <figcaption>
+              <span>
+                <strong>Caffeine</strong>
+                <small>A familiar molecule, a different perspective.</small>
+              </span>
+              <span aria-hidden="true">↗</span>
+            </figcaption>
+          </a>
+        </figure>
+      </section>
+      <GallerySection />
+      <section id="learn" className="student-guide student-width" aria-labelledby="guide-title">
+        <div>
+          <p className="student-eyebrow">Your first three minutes</p>
+          <h2 id="guide-title">
+            A model you can
+            <br />
+            learn from.
+          </h2>
+          <a href="/study/organic-functional-groups">Read the functional groups guide ↗</a>
         </div>
-
-        <LandingFooter />
-      </div>
-    </>
+        <ol>
+          <li>
+            <strong>Open something familiar.</strong>
+            <p>Each example has one question to start with. Choose a small molecule if you’re new here.</p>
+          </li>
+          <li>
+            <strong>Look from another angle.</strong>
+            <p>Drag to rotate. Scroll or pinch to zoom. Open Learn for composition and source notes.</p>
+          </li>
+          <li>
+            <strong>Keep what you discover.</strong>
+            <p>Export a picture, or sign in to save a view link. Your model stays interactive.</p>
+          </li>
+        </ol>
+      </section>
+      <section className="student-width student-file-intro" aria-labelledby="file-title">
+        <p className="student-eyebrow">Have your own structure?</p>
+        <h2 id="file-title">Bring it into view.</h2>
+        <p>
+          Open XYZ or LAMMPS files from a class or your own work. File opening is local; saving a shared view
+          is a separate action.
+        </p>
+      </section>
+      <DropZoneSection />
+      <LandingFooter />
+    </main>
   );
 }

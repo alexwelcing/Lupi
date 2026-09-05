@@ -22,8 +22,12 @@ import type { VectorGlyphStats } from '@atlas/scene';
 import { LandingPage } from './LandingPage';
 import { SceneLandingPage } from './landing/SceneLandingPage';
 import { SeoEducationPage } from './landing/SeoEducationPage';
-import { MlipFlywheelPage } from './MlipFlywheelPage';
-import { useViewerBackgroundState, useViewerFileState, useViewerPanelState, useViewerPlaybackState } from './storeSelectors';
+import {
+  useViewerBackgroundState,
+  useViewerFileState,
+  useViewerPanelState,
+  useViewerPlaybackState,
+} from './storeSelectors';
 import {
   SEO_EDUCATION_ROUTES,
   currentHashRoute,
@@ -49,9 +53,6 @@ import { xrStore } from './viewer/xrStore';
 import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
 import { DeferredCommandPalette } from './CommandPalette';
-import { MoleculeConfigurator } from './molecules/MoleculeConfigurator';
-import { RunConfigurator } from './molecules/RunConfigurator';
-import { openRandomOmol25Molecule } from './molecules/randomOmol';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { decodeFlythrough } from './flythrough';
@@ -61,7 +62,10 @@ import { PanelHost } from './PanelHost';
 import { StudyLensPanel } from './StudyLensPanel';
 import { XREntryButton } from './xr/XREntryButton';
 
-import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/useSmoothFramePlayback';
+import {
+  useSmoothFramePlayback,
+  type InterpolatedFrameState,
+} from './hooks/useSmoothFramePlayback';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { clearStreamingFrameCoordinator, requestStreamingFrame } from './streamingFrameCoordinator';
 
@@ -81,14 +85,7 @@ import { RemoteMoleculeLoadError } from './app/RemoteMoleculeLoadError';
 import { ViewerScene } from './app/ViewerScene';
 import { cancelViewerLoad } from './viewer/loadGuard';
 
-import {
-  IconFirst,
-  IconPrev,
-  IconPlay,
-  IconPause,
-  IconNext,
-  IconLast,
-} from './icons';
+import { IconFirst, IconPrev, IconPlay, IconPause, IconNext, IconLast } from './icons';
 import { TransportButton } from './controls';
 
 import { TelemetryHUD } from './TelemetryHUD';
@@ -111,6 +108,7 @@ export function ViewerApp() {
   const [pathRoute, setPathRoute] = useState(currentPathRoute);
   const [isExportingQuickLook, setIsExportingQuickLook] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [gpuStudioOpen, setGpuStudioOpen] = useState(false);
   const [vectorStats, setVectorStats] = useState<VectorGlyphStats | null>(null);
   const [automaticLoadFailed, setAutomaticLoadFailed] = useState(false);
   const loadedSavedViewSlugRef = useRef<string | null>(null);
@@ -118,7 +116,6 @@ export function ViewerApp() {
 
   const hashPath = hashRoute.split('?')[0] || '/';
   const normalizedPath = normalizedPathRoute(pathRoute);
-  const isMlipFlywheelRoute = hashPath === '/system/mlip-flywheel';
   const isEmbeddedMobileViewer = isEmbeddedMobileViewerRoute(hashPath);
   const isMcpViewerRoute = !isEmbeddedMobileViewer && isMcpViewerRouteMatch(hashPath);
   const savedViewSlug = savedViewSlugFromRoute(hashPath) ?? savedViewSlugFromRoute(normalizedPath);
@@ -200,17 +197,23 @@ export function ViewerApp() {
   // Renderer warning is derived from gpu bond state.
   useEffect(() => {
     if (useGpuBonds && gpuBondsStatus === 'unsupported') {
-      useStore.getState().setRendererWarning('GPU bond acceleration unavailable on this device — using the slower CPU path.');
+      useStore
+        .getState()
+        .setRendererWarning(
+          'GPU bond acceleration unavailable on this device — using the slower CPU path.',
+        );
     } else if (gpuBondsStatus === 'ready') {
       useStore.getState().setRendererWarning(null);
     }
   }, [useGpuBonds, gpuBondsStatus]);
 
   const playbackFrameRate = file?.playbackFrameRate ?? 30;
-  const highFidelityPlayback = Boolean(file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000);
+  const highFidelityPlayback = Boolean(
+    file?.playbackFrameRate && (file?.trajectory.frames[0]?.natoms ?? 0) <= 5000,
+  );
   const totalFrames = file?.trajectory.totalFrames ?? 0;
   const hasScience = Boolean(file?.science);
-  const scienceDiscretePlayback = useStore((s) => s.scienceDiscretePlayback);
+  const scienceDiscretePlayback = useStore(s => s.scienceDiscretePlayback);
 
   // A non-science file replacing a science one closes the science panel
   // (loading a molecule after a Z1 entry must not leave the panel forced open).
@@ -243,17 +246,24 @@ export function ViewerApp() {
     const state = useStore.getState();
     if (state.playing) state.togglePlay();
   }, []);
-  const handlePlaybackFrame = useCallback((state: InterpolatedFrameState) => {
-    if (!isFrameReady(state.frameIndex)) {
-      requestBufferedFrame(state.frameIndex);
-      return;
-    }
-    if (useStore.getState().playing && state.frameIndex !== useStore.getState().frame) {
-      useStore.getState().setFrame(state.frameIndex);
-    }
-  }, [isFrameReady, requestBufferedFrame]);
+  const handlePlaybackFrame = useCallback(
+    (state: InterpolatedFrameState) => {
+      if (!isFrameReady(state.frameIndex)) {
+        requestBufferedFrame(state.frameIndex);
+        return;
+      }
+      if (useStore.getState().playing && state.frameIndex !== useStore.getState().frame) {
+        useStore.getState().setFrame(state.frameIndex);
+      }
+    },
+    [isFrameReady, requestBufferedFrame],
+  );
 
-  const { currentState: interpState, setFrame: setSmoothFrame, liveStateRef } = useSmoothFramePlayback(playing, {
+  const {
+    currentState: interpState,
+    setFrame: setSmoothFrame,
+    liveStateRef,
+  } = useSmoothFramePlayback(playing, {
     frames: file?.trajectory.frames ?? EMPTY_TRAJECTORY_FRAMES,
     speed: playbackSpeed,
     targetFPS: highFidelityPlayback ? 120 : 60,
@@ -277,7 +287,14 @@ export function ViewerApp() {
     } else if (!playing && !frameIsBuffered) {
       requestBufferedFrame(frame);
     }
-  }, [frame, frameIsBuffered, playing, requestBufferedFrame, setSmoothFrame, interpState.effectiveFrame]);
+  }, [
+    frame,
+    frameIsBuffered,
+    playing,
+    requestBufferedFrame,
+    setSmoothFrame,
+    interpState.effectiveFrame,
+  ]);
 
   // URL state restore + auto-load
   useEffect(() => {
@@ -287,7 +304,7 @@ export function ViewerApp() {
     if (state) {
       useStore.getState().decodeFromURL(state);
       const unsub = useStore.subscribe(
-        (s) => s.file,
+        s => s.file,
         (loadedFile, prevFile) => {
           if (loadedFile && loadedFile !== prevFile) {
             unsub();
@@ -305,7 +322,6 @@ export function ViewerApp() {
         useStore.getState().setActivePanel('flythrough');
       }
     }
-
   }, []);
 
   // Own molecule URL history in the shell that remains mounted while a scene
@@ -330,7 +346,11 @@ export function ViewerApp() {
       if (sim) {
         if (state.activeCardId === sim && (state.file || state.loading)) return;
         setAutomaticLoadFailed(false);
-        const result = await openMolecule({ kind: 'gallery', id: sim, history: 'none' });
+        const result = await openMolecule({
+          kind: 'gallery',
+          id: sim,
+          history: 'none',
+        });
         if (generation !== navigationGeneration) return;
         if (!result.ok) {
           useStore.getState().setError(result.message);
@@ -345,7 +365,11 @@ export function ViewerApp() {
           setAutomaticLoadFailed(false);
           // Preserve root-relative local dataset routes while applying the
           // strict remote policy to absolute network URLs.
-          const allowed = assertAllowedRemoteMoleculeUrl(loadUrl, 'human-load', window.location.origin);
+          const allowed = assertAllowedRemoteMoleculeUrl(
+            loadUrl,
+            'human-load',
+            window.location.origin,
+          );
           const result = await openMolecule({
             kind: 'url',
             url: allowed.url,
@@ -359,14 +383,19 @@ export function ViewerApp() {
           }
         } catch (error) {
           if (generation !== navigationGeneration) return;
-          useStore.getState().setError(error instanceof Error ? error.message : 'This molecule link could not be opened.');
+          useStore
+            .getState()
+            .setError(
+              error instanceof Error ? error.message : 'This molecule link could not be opened.',
+            );
           setAutomaticLoadFailed(true);
         }
         return;
       }
 
-      const routeSavedViewSlug = savedViewSlugFromRoute(currentHashRoute())
-        ?? savedViewSlugFromRoute(normalizedPathRoute(currentPathRoute()));
+      const routeSavedViewSlug =
+        savedViewSlugFromRoute(currentHashRoute()) ??
+        savedViewSlugFromRoute(normalizedPathRoute(currentPathRoute()));
       if (routeSavedViewSlug) return;
 
       cancelViewerLoad();
@@ -376,7 +405,9 @@ export function ViewerApp() {
       }
     };
 
-    const onPopState = () => { void reconcileMoleculeUrl(); };
+    const onPopState = () => {
+      void reconcileMoleculeUrl();
+    };
     void reconcileMoleculeUrl();
     window.addEventListener('popstate', onPopState);
     return () => {
@@ -397,7 +428,8 @@ export function ViewerApp() {
       // Legacy aliases: `?demo=science-panel[&path=<i>]`, `#/demo/science-panel`.
       if (params.get('demo') === 'science-panel' || hashPath === '/demo/science-panel') {
         const wanted = Number(params.get('path'));
-        const target = scienceGalleryIdForPathIndex(wanted) != null ? wanted : DEFAULT_Z1_SCIENCE_PATH_INDEX;
+        const target =
+          scienceGalleryIdForPathIndex(wanted) != null ? wanted : DEFAULT_Z1_SCIENCE_PATH_INDEX;
         const url = new URL(window.location.href);
         url.searchParams.delete('demo');
         url.searchParams.delete('path');
@@ -443,12 +475,16 @@ export function ViewerApp() {
   }, []);
 
   // Hold the last resident frame across streaming gaps.
-  const lastResidentRef = useRef<{ trajectory: import('@atlas/core/types').Trajectory | undefined; frame: import('@atlas/core/types').Frame | undefined }>(
-    { trajectory: undefined, frame: undefined },
-  );
+  const lastResidentRef = useRef<{
+    trajectory: import('@atlas/core/types').Trajectory | undefined;
+    frame: import('@atlas/core/types').Frame | undefined;
+  }>({ trajectory: undefined, frame: undefined });
   const rawCurrentFrame = file?.trajectory.frames[frame];
   if (lastResidentRef.current.trajectory !== file?.trajectory) {
-    lastResidentRef.current = { trajectory: file?.trajectory, frame: undefined };
+    lastResidentRef.current = {
+      trajectory: file?.trajectory,
+      frame: undefined,
+    };
   }
   if (rawCurrentFrame) lastResidentRef.current.frame = rawCurrentFrame;
   const currentFrame = file ? (rawCurrentFrame ?? lastResidentRef.current.frame) : undefined;
@@ -456,9 +492,10 @@ export function ViewerApp() {
   // frame. This render-time override closes the pause->export race where the
   // playback hook's RAF ref/passive synchronization can still describe a
   // fractional frame even though the store is already paused.
-  const artifactCaptureFrameIndex = exportRequest.type === 'image' && exportRequest.artifactSpec
-    ? exportRequest.artifactSpec.frame
-    : null;
+  const artifactCaptureFrameIndex =
+    exportRequest.type === 'image' && exportRequest.artifactSpec
+      ? exportRequest.artifactSpec.frame
+      : null;
   const renderedFrames = selectViewerFrames(
     file?.trajectory.frames ?? [],
     displayFrameIndex,
@@ -475,35 +512,45 @@ export function ViewerApp() {
     return f0 ? detectFrameVectorFields(f0) : [];
   }, [file]);
   const activeVectorField = useMemo(
-    () => (vectorField ? vectorFieldSpecs.find((s) => s.id === vectorField) ?? null : null),
+    () => (vectorField ? (vectorFieldSpecs.find(s => s.id === vectorField) ?? null) : null),
     [vectorField, vectorFieldSpecs],
   );
 
-  const {
-    cameraDistance,
-    cameraMinDistance,
-    cameraNear,
-    center,
-    filterShellBaseRadius,
-  } = useViewerSceneModel(file);
+  const { cameraDistance, cameraMinDistance, cameraNear, center, filterShellBaseRadius } =
+    useViewerSceneModel(file);
 
-  const bg = resolveBackground(backgroundPreset, useStore(s => s.colormap));
+  const bg = resolveBackground(
+    backgroundPreset,
+    useStore(s => s.colormap),
+  );
   const bgMedia = bg.media;
-  const bgAdjustments = useMemo<BackgroundAssetAdjustments>(() => ({
-    yawDegrees: backgroundYawDegrees,
-    pitchDegrees: backgroundPitchDegrees,
-    opacity: backgroundOpacity,
-    brightness: backgroundBrightness,
-    saturation: backgroundSaturation,
-    contrast: backgroundContrast,
-    motionPaused: backgroundMotionPaused,
-    motionSpeed: backgroundMotionSpeed,
-  }), [
-    backgroundBrightness, backgroundContrast, backgroundMotionPaused, backgroundMotionSpeed,
-    backgroundOpacity, backgroundPitchDegrees, backgroundSaturation, backgroundYawDegrees,
-  ]);
+  const bgAdjustments = useMemo<BackgroundAssetAdjustments>(
+    () => ({
+      yawDegrees: backgroundYawDegrees,
+      pitchDegrees: backgroundPitchDegrees,
+      opacity: backgroundOpacity,
+      brightness: backgroundBrightness,
+      saturation: backgroundSaturation,
+      contrast: backgroundContrast,
+      motionPaused: backgroundMotionPaused,
+      motionSpeed: backgroundMotionSpeed,
+    }),
+    [
+      backgroundBrightness,
+      backgroundContrast,
+      backgroundMotionPaused,
+      backgroundMotionSpeed,
+      backgroundOpacity,
+      backgroundPitchDegrees,
+      backgroundSaturation,
+      backgroundYawDegrees,
+    ],
+  );
   const backgroundBackdropRadiusMax = useMemo(() => getBackdropRadiusLimit(file), [file]);
-  const backgroundBackdropEffectiveRadius = Math.max(0.25, Math.min(backgroundBackdropRadius, backgroundBackdropRadiusMax));
+  const backgroundBackdropEffectiveRadius = Math.max(
+    0.25,
+    Math.min(backgroundBackdropRadius, backgroundBackdropRadiusMax),
+  );
 
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
   const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
@@ -517,14 +564,8 @@ export function ViewerApp() {
     clearStreamingFrameCoordinator();
     cancelViewerLoad();
     useStore.getState().clearFile();
-    const url = new URL(window.location.href);
-    url.searchParams.delete('sim');
-    url.searchParams.delete('load');
-    if (url.pathname.startsWith('/view/')) url.pathname = '/';
-    url.hash = '';
-    window.history.pushState({}, '', url);
-    setHashRoute(currentHashRoute());
-    setPathRoute(currentPathRoute());
+    // Return through the lightweight entry point, releasing the renderer graph.
+    window.location.assign('/');
   }, []);
 
   return (
@@ -541,119 +582,155 @@ export function ViewerApp() {
         background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
       }}
     >
-      {!isEmbeddedMobileViewer && <GlobalShortcuts commandPaletteOpen={commandPaletteOpen} setCommandPaletteOpen={setCommandPaletteOpen} />}
-      {!isEmbeddedMobileViewer && <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
-        <AppHeader isMobile={isMobile} clearLoadedFile={clearLoadedFile} />
-      </div>}
-      {!isEmbeddedMobileViewer && <MoleculeConfigurator />}
-      {!isEmbeddedMobileViewer && <RunConfigurator />}
+      {!isEmbeddedMobileViewer && !gpuStudioOpen && (
+        <GlobalShortcuts
+          commandPaletteOpen={commandPaletteOpen}
+          setCommandPaletteOpen={setCommandPaletteOpen}
+        />
+      )}
+      {!isEmbeddedMobileViewer && (
+        <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
+          <AppHeader
+            isMobile={isMobile}
+            clearLoadedFile={clearLoadedFile}
+            onStudioOpenChange={setGpuStudioOpen}
+          />
+        </div>
+      )}
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
         <McpViewerBridge />
         {isMcpViewerRoute && <McpViewerHarness />}
 
-        {file && <div className="lupine-main-viewport" style={{
-          position: file ? 'absolute' : 'fixed',
-          top: file ? 0 : 56,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          zIndex: 0,
-        }}>
-          <style>{`
+        {file && (
+          <div
+            className="lupine-main-viewport"
+            style={{
+              position: file ? 'absolute' : 'fixed',
+              top: file ? 0 : 56,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              zIndex: 0,
+            }}
+          >
+            <style>{`
             .lupine-main-viewport canvas {
               width: 100% !important;
               height: 100% !important;
             }
           `}</style>
-          <ViewerCanvas
-            capability={renderCapability}
-            center={center}
-            cameraDistance={cameraDistance}
-            cameraNear={cameraNear}
-          >
-            {import.meta.env.DEV && showDebugHud && <Perf position="top-left" logsPerSecond={4} matrixUpdate />}
-            {(import.meta.env.DEV || showDebugHud) && <DevProbe enabled={showDebugHud} />}
-            <ViewerScene
-              file={file}
-              currentFrame={currentFrame}
-              interpolatedFrame={interpolatedFrame}
-              interpolatedNextFrame={interpolatedNextFrame}
-              interpolationFactor={interpolationFactor}
-              interpolatedFrameKey={interpolatedFrameKey}
-              ghostFile={ghostFile}
-              interpState={interpState}
-              liveStateRef={liveStateRef}
-              deviceMaxAtoms={deviceMaxAtoms}
-              deviceQualityTier={deviceQualityTier}
-              loadedAtomCount={loadedAtomCount}
+            <ViewerCanvas
+              paused={gpuStudioOpen}
+              capability={renderCapability}
               center={center}
               cameraDistance={cameraDistance}
-              cameraMinDistance={cameraMinDistance}
-              filterShellBaseRadius={filterShellBaseRadius}
-              bgTop={bg.top}
-              bgBottom={bg.bottom}
-              bgMedia={bgMedia}
-              bgProcedural={bg.procedural}
-              bgAdjustments={bgAdjustments}
-              bgStyle={backgroundStyle}
-              backdropShape={backgroundBackdropShape}
-              backdropPattern={backgroundBackdropPattern}
-              backdropRadius={backgroundBackdropEffectiveRadius}
-              isExportingQuickLook={isExportingQuickLook}
-              setIsExportingQuickLook={setIsExportingQuickLook}
-              interactedForFileRef={interactedForFileRef}
-              activeVectorField={activeVectorField}
-              setVectorStats={setVectorStats}
-            />
-            <CameraManager fileId={file?.name} center={center} distance={cameraDistance} near={cameraNear} />
-            <PresetLegacyBridge />
-          </ViewerCanvas>
+              cameraNear={cameraNear}
+            >
+              {import.meta.env.DEV && showDebugHud && (
+                <Perf position="top-left" logsPerSecond={4} matrixUpdate />
+              )}
+              {(import.meta.env.DEV || showDebugHud) && <DevProbe enabled={showDebugHud} />}
+              <ViewerScene
+                file={file}
+                currentFrame={currentFrame}
+                interpolatedFrame={interpolatedFrame}
+                interpolatedNextFrame={interpolatedNextFrame}
+                interpolationFactor={interpolationFactor}
+                interpolatedFrameKey={interpolatedFrameKey}
+                ghostFile={ghostFile}
+                interpState={interpState}
+                liveStateRef={liveStateRef}
+                deviceMaxAtoms={deviceMaxAtoms}
+                deviceQualityTier={deviceQualityTier}
+                loadedAtomCount={loadedAtomCount}
+                center={center}
+                cameraDistance={cameraDistance}
+                cameraMinDistance={cameraMinDistance}
+                filterShellBaseRadius={filterShellBaseRadius}
+                bgTop={bg.top}
+                bgBottom={bg.bottom}
+                bgMedia={bgMedia}
+                bgProcedural={bg.procedural}
+                bgAdjustments={bgAdjustments}
+                bgStyle={backgroundStyle}
+                backdropShape={backgroundBackdropShape}
+                backdropPattern={backgroundBackdropPattern}
+                backdropRadius={backgroundBackdropEffectiveRadius}
+                isExportingQuickLook={isExportingQuickLook}
+                setIsExportingQuickLook={setIsExportingQuickLook}
+                interactedForFileRef={interactedForFileRef}
+                activeVectorField={activeVectorField}
+                setVectorStats={setVectorStats}
+              />
+              <CameraManager
+                fileId={file?.name}
+                center={center}
+                distance={cameraDistance}
+                near={cameraNear}
+              />
+              <PresetLegacyBridge />
+            </ViewerCanvas>
 
-          {!isEmbeddedMobileViewer && import.meta.env.DEV && showDebugHud && <StateInspector />}
-          {!isEmbeddedMobileViewer && <RendererWarningToast />}
+            {!isEmbeddedMobileViewer && import.meta.env.DEV && showDebugHud && <StateInspector />}
+            {!isEmbeddedMobileViewer && <RendererWarningToast />}
 
-          {file && currentFrame && !isEmbeddedMobileViewer && (
-            <ScaleBar
-              frame={currentFrame}
-              cameraDistance={cameraDistance}
-              visible={showScaleBar}
-              position="bottom-left"
-            />
-          )}
+            {file && currentFrame && !isEmbeddedMobileViewer && (
+              <ScaleBar
+                frame={currentFrame}
+                cameraDistance={cameraDistance}
+                visible={showScaleBar}
+                position="bottom-left"
+              />
+            )}
 
-          {file && currentFrame && studyLensOpen && !isEmbeddedMobileViewer && (
-            <div id="viewer-study-panel">
-              <StudyLensPanel compact={isMobile} onClose={() => useStore.getState().setStudyLensOpen(false)} />
-            </div>
-          )}
+            {file && currentFrame && studyLensOpen && !isEmbeddedMobileViewer && (
+              <div>
+                <StudyLensPanel
+                  compact={isMobile}
+                  onClose={() => useStore.getState().setStudyLensOpen(false)}
+                />
+              </div>
+            )}
 
-          {file && totalFrames > 1 && !isEmbeddedMobileViewer && (
-            <PlaybackStatus frame={frame} totalFrames={totalFrames} showFrame={!isMobile} />
-          )}
+            {file && totalFrames > 1 && !isEmbeddedMobileViewer && (
+              <PlaybackStatus frame={frame} totalFrames={totalFrames} showFrame={!isMobile} />
+            )}
 
-          {!isEmbeddedMobileViewer && showDebugHud && <TelemetryHUD />}
-          {!isEmbeddedMobileViewer && <LabelPerfHUD />}
-          {!isEmbeddedMobileViewer && <PropertyLegendHUD
-            frame={currentFrame}
-            colorMode={colorMode}
-            colorProperty={colorProperty}
-            colormap={colormap}
-            activeVectorField={activeVectorField}
-            vectorStats={vectorStats}
-            bottomOffset={isMobile ? 96 : 44}
-          />}
+            {!isEmbeddedMobileViewer && showDebugHud && <TelemetryHUD />}
+            {!isEmbeddedMobileViewer && <LabelPerfHUD />}
+            {!isEmbeddedMobileViewer && (
+              <PropertyLegendHUD
+                frame={currentFrame}
+                colorMode={colorMode}
+                colorProperty={colorProperty}
+                colormap={colormap}
+                activeVectorField={activeVectorField}
+                vectorStats={vectorStats}
+                bottomOffset={isMobile ? 96 : 44}
+              />
+            )}
 
-          {file && !isEmbeddedMobileViewer && <ViewerGestureHint
-            isMobile={isMobile}
-            canSelectAtoms={(rawCurrentFrame?.natoms ?? 0) <= MAX_INTERACTIVE_PICKING_ATOMS}
-          />}
-          {file && !isEmbeddedMobileViewer && (
-            <div style={{ position: 'absolute', top: isMobile ? 72 : 84, left: 18, zIndex: 149 }}>
-              <XREntryButton store={xrStore} />
-            </div>
-          )}
-        </div>}
+            {file && !isEmbeddedMobileViewer && (
+              <ViewerGestureHint
+                isMobile={isMobile}
+                canSelectAtoms={(rawCurrentFrame?.natoms ?? 0) <= MAX_INTERACTIVE_PICKING_ATOMS}
+              />
+            )}
+            {file && !isEmbeddedMobileViewer && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: isMobile ? 72 : 84,
+                  left: 18,
+                  zIndex: 149,
+                }}
+              >
+                <XREntryButton store={xrStore} />
+              </div>
+            )}
+          </div>
+        )}
 
         {file && !isEmbeddedMobileViewer && <ViewerCommandDeck compact={isMobile} />}
         {file && !isEmbeddedMobileViewer && <PanelHost />}
@@ -674,25 +751,25 @@ export function ViewerApp() {
               <span />
             </span>
             <span className="lupine-ui-bucket__label">{uiStowed ? 'Restore' : 'Clear view'}</span>
-            <span className="lupine-ui-bucket__count" aria-hidden="true">{uiStowed ? 'UI' : '↓'}</span>
+            <span className="lupine-ui-bucket__count" aria-hidden="true">
+              {uiStowed ? 'UI' : '↓'}
+            </span>
           </button>
         )}
 
         {!file && !isEmbeddedMobileViewer && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>
-            {automaticLoadFailed
-              ? <RemoteMoleculeLoadError />
-              : isMlipFlywheelRoute
-              ? <MlipFlywheelPage />
-              : isMcpViewerRoute
-                ? null
-                : isSavedViewRoute && savedViewSlug
-                  ? <SavedViewLoadState slug={savedViewSlug} query={savedViewQuery} />
-                : isCopperSceneRoute
-                  ? <SceneLandingPage />
-                  : seoEducationKind
-                    ? <SeoEducationPage kind={seoEducationKind} />
-                    : <LandingPage />}
+            {automaticLoadFailed ? (
+              <RemoteMoleculeLoadError />
+            ) : isMcpViewerRoute ? null : isSavedViewRoute && savedViewSlug ? (
+              <SavedViewLoadState slug={savedViewSlug} query={savedViewQuery} />
+            ) : isCopperSceneRoute ? (
+              <SceneLandingPage />
+            ) : seoEducationKind ? (
+              <SeoEducationPage kind={seoEducationKind} />
+            ) : (
+              <LandingPage />
+            )}
           </div>
         )}
       </div>
@@ -700,46 +777,74 @@ export function ViewerApp() {
       {isBatchExport && !isEmbeddedMobileViewer && <BatchAssetGenerator />}
 
       {file && totalFrames > 1 && !isEmbeddedMobileViewer && (
-        <div className="lupine-viewer-chrome lupine-viewer-chrome--timeline" style={{
-          height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60,
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: isMobile ? 8 : 16,
-          padding: isMobile ? '8px 12px calc(env(safe-area-inset-bottom) + 8px)' : '0 20px',
-          borderTop: '1px solid #1f2937',
-          background: 'rgba(10,10,12,0.96)',
-          overflowX: 'auto',
-          position: 'relative',
-          zIndex: 120,
-          scrollbarWidth: 'none',
-        }}>
+        <div
+          className="lupine-viewer-chrome lupine-viewer-chrome--timeline"
+          style={{
+            height: isMobile ? 'calc(64px + env(safe-area-inset-bottom))' : 60,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: isMobile ? 8 : 16,
+            padding: isMobile ? '8px 12px calc(env(safe-area-inset-bottom) + 8px)' : '0 20px',
+            borderTop: '1px solid #1f2937',
+            background: 'rgba(10,10,12,0.96)',
+            overflowX: 'auto',
+            position: 'relative',
+            zIndex: 120,
+            scrollbarWidth: 'none',
+          }}
+        >
           <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexShrink: 0 }}>
-            <TransportButton onClick={() => useStore.getState().setFrame(0)} title="First frame" icon={<IconFirst />} />
-            <TransportButton onClick={() => useStore.getState().prevFrame()} title="Previous [←]" icon={<IconPrev />} />
-            <TransportButton onClick={togglePlay} title="Play/Pause [Space]" icon={playing ? <IconPause /> : <IconPlay />} active={playing} width={40} />
+            <TransportButton
+              onClick={() => useStore.getState().setFrame(0)}
+              title="First frame"
+              icon={<IconFirst />}
+            />
+            <TransportButton
+              onClick={() => useStore.getState().prevFrame()}
+              title="Previous [←]"
+              icon={<IconPrev />}
+            />
+            <TransportButton
+              onClick={togglePlay}
+              title="Play/Pause [Space]"
+              icon={playing ? <IconPause /> : <IconPlay />}
+              active={playing}
+              width={40}
+            />
             <TransportButton onClick={nextFrame} title="Next [→]" icon={<IconNext />} />
-            <TransportButton onClick={() => useStore.getState().setFrame(totalFrames - 1)} title="Last frame" icon={<IconLast />} />
+            <TransportButton
+              onClick={() => useStore.getState().setFrame(totalFrames - 1)}
+              title="Last frame"
+              icon={<IconLast />}
+            />
           </div>
           <PlaybackScrubber
             hasScience={hasScience}
             thermo={file?.thermo ?? null}
             totalFrames={totalFrames}
             currentFrame={frame}
-            onFrameChange={(f) => { if (playing) togglePlay(); setFrame(f); }}
+            onFrameChange={f => {
+              if (playing) togglePlay();
+              setFrame(f);
+            }}
           />
-          <div data-testid="transport-frame-readout" style={{
-            fontSize: '11px',
-            fontFamily: 'var(--font-mono)',
-            color: '#64748b',
-            minWidth: isMobile ? 58 : 90,
-            flexShrink: 0,
-            textAlign: 'right',
-            fontVariantNumeric: 'tabular-nums',
-          }}>
+          <div
+            data-testid="transport-frame-readout"
+            style={{
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              color: '#64748b',
+              minWidth: isMobile ? 58 : 90,
+              flexShrink: 0,
+              textAlign: 'right',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
             {hasScience ? (
               <span style={{ color: '#f8fafc', fontWeight: 500 }}>
-                NEB image {Math.floor(frame)}<span style={{ color: '#475569' }}> of {totalFrames - 1}</span>
+                NEB image {Math.floor(frame)}
+                <span style={{ color: '#475569' }}> of {totalFrames - 1}</span>
               </span>
             ) : (
               <>
@@ -762,19 +867,6 @@ export function ViewerApp() {
         actions={useMemo(() => {
           const list: import('./CommandPalette').CommandAction[] = [
             {
-              id: 'new-run',
-              label: 'New run — structure & configure a lattice',
-              group: 'Discover',
-              onSelect: () => useStore.getState().openRunConfigurator(),
-            },
-            {
-              id: 'random-molecule',
-              label: 'View random OMol25 molecule',
-              group: 'Discover',
-              shortcut: 'R',
-              onSelect: () => void openRandomOmol25Molecule(),
-            },
-            {
               id: 'gallery',
               label: 'Open gallery',
               group: 'Discover',
@@ -782,29 +874,18 @@ export function ViewerApp() {
               onSelect: () => {
                 const el = document.getElementById('gallery');
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                else window.location.href = '/#/gallery';
+                else window.location.href = '/#gallery';
               },
             },
             {
               id: 'controls-molecule',
-              label: 'Open Visuals: Structure',
+              label: 'Open Style',
               group: 'Panels',
               shortcut: 'V',
               disabled: !file,
               onSelect: () => {
                 useStore.getState().setViewMenuOpen(false);
                 useStore.getState().setStudioDeck('molecule');
-                useStore.getState().setActivePanel('studio');
-              },
-            },
-            {
-              id: 'controls-scene',
-              label: 'Open Visuals: Scene',
-              group: 'Panels',
-              disabled: !file,
-              onSelect: () => {
-                useStore.getState().setViewMenuOpen(false);
-                useStore.getState().setStudioDeck('scene');
                 useStore.getState().setActivePanel('studio');
               },
             },
@@ -825,7 +906,7 @@ export function ViewerApp() {
             },
             {
               id: 'telemetry-panel',
-              label: 'Open telemetry',
+              label: 'Open Data and measurements',
               group: 'Panels',
               shortcut: 'T',
               disabled: !file,
@@ -833,7 +914,7 @@ export function ViewerApp() {
             },
             {
               id: 'flythrough-panel',
-              label: 'Open flythrough',
+              label: 'Open Camera',
               group: 'Panels',
               disabled: !file,
               onSelect: () => setActivePanel('flythrough'),

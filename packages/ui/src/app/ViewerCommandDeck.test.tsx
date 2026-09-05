@@ -27,7 +27,7 @@ describe('ViewerCommandDeck', () => {
 
     expect(screen.getAllByRole('button')).toHaveLength(6);
 
-    const visuals = screen.getByRole('button', { name: 'Visuals command' });
+    const visuals = screen.getByRole('button', { name: 'Style command' });
     fireEvent.click(visuals);
     expect(useStore.getState().activePanel).toBe('studio');
     expect(useStore.getState().studioDeck).toBe('molecule');
@@ -40,7 +40,7 @@ describe('ViewerCommandDeck', () => {
     expect(useStore.getState().activePanel).toBe('studio');
     expect(useStore.getState().studioDeck).toBe('scene');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Capture command' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export command' }));
     expect(useStore.getState().activePanel).toBe('export');
     expect(useStore.getState().studioDeck).toBeNull();
     expect(useStore.getState().studyLensOpen).toBe(false);
@@ -53,7 +53,7 @@ describe('ViewerCommandDeck', () => {
   it('makes Learn exclusive and lets an active command close itself', () => {
     render(<ViewerCommandDeck compact />);
 
-    const analyze = screen.getByRole('button', { name: 'Analyze command' });
+    const analyze = screen.getByRole('button', { name: 'Data command' });
     fireEvent.click(analyze);
     expect(useStore.getState().activePanel).toBe('telemetry');
     expect(analyze.getAttribute('aria-pressed')).toBe('true');
@@ -70,15 +70,15 @@ describe('ViewerCommandDeck', () => {
     expect(useStore.getState().studyLensOpen).toBe(false);
   });
 
-  it('shows the Science command only for science-bound loads and maps it to the science panel', () => {
+  it('shows the Path command only for science-bound loads and maps it to the science panel', () => {
     const { unmount } = render(<ViewerCommandDeck compact={false} />);
-    // Ordinary molecule: no Science command.
-    expect(screen.queryByRole('button', { name: 'Science command' })).toBeNull();
+    // Ordinary molecule: no Path command.
+    expect(screen.queryByRole('button', { name: 'Path command' })).toBeNull();
     unmount();
 
     loadMolecule(true);
     render(<ViewerCommandDeck compact={false} />);
-    const science = screen.getByRole('button', { name: 'Science command' });
+    const science = screen.getByRole('button', { name: 'Path command' });
     fireEvent.click(science);
     expect(useStore.getState().activePanel).toBe('science');
     expect(science.getAttribute('aria-pressed')).toBe('true');

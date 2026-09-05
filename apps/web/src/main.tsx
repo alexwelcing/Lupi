@@ -23,13 +23,23 @@ import {
  *                     the ~1MB-gzip viewer stack stays off the critical path.
  *   - App           — the full viewer; loaded on demand the moment a molecule
  *                     is requested (deep link, or LandingShell hand-off).
- *   - ComparisonTheater — the ?view=compare side-by-side.
+ * Retired research URLs get an explicit handoff, never a synthetic demo.
  *
  * We decide from the URL ALONE, before importing anything heavy.
  */
 
 const params = new URLSearchParams(window.location.search);
-const isCompare = params.get('view') === 'compare';
+const retiredResearchRoute =
+  params.get('view') === 'compare' ||
+  [
+    '/materials/omol25',
+    '/materials/omol25-molecule-geometry',
+    '/materials/million-atom-viewer',
+    '/scenes/1m-copper-lattice',
+    '/research',
+  ].includes(normalizedPathRoute(currentPathRoute())) ||
+  currentHashRoute().split('?')[0] === '/system/mlip-flywheel' ||
+  ['research', 'potentials', 'equilibrium', 'omol25'].includes(params.get('tab') ?? '');
 const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute())] ?? null;
 
 /**
@@ -69,7 +79,7 @@ declare global {
 }
 
 const rootElement = document.getElementById('root')!;
-const root = window.__lupiReactRoot ??= createRoot(rootElement);
+const root = (window.__lupiReactRoot ??= createRoot(rootElement));
 
 function withProviders(node: ReactNode) {
   return (
@@ -94,7 +104,14 @@ function Splash() {
         letterSpacing: '0.04em',
       }}
     >
-      <div style={{ fontSize: 22, fontWeight: 800, opacity: 0.9, animation: 'lupiSplashPulse 1.4s ease-in-out infinite' }}>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          opacity: 0.9,
+          animation: 'lupiSplashPulse 1.4s ease-in-out infinite',
+        }}
+      >
         Lupi
       </div>
       <style>{`@keyframes lupiSplashPulse { 0%,100% { opacity: 0.45 } 50% { opacity: 0.95 } }`}</style>
@@ -105,7 +122,16 @@ function Splash() {
 function renderError(stage: string, err: any) {
   console.error(`[lupi] ${stage} FAILED:`, err);
   root.render(
-    <div style={{ padding: 40, background: '#06080d', color: '#ff5472', height: '100vh', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+    <div
+      style={{
+        padding: 40,
+        background: '#06080d',
+        color: '#ff5472',
+        height: '100vh',
+        fontFamily: 'monospace',
+        whiteSpace: 'pre-wrap',
+      }}
+    >
       <h2 style={{ color: '#00c8f0', marginBottom: 16 }}>LUPI - {stage} Error</h2>
       {err?.message}
       {'\n'}
@@ -122,16 +148,6 @@ async function mountViewer() {
     root.render(withProviders(<mod.default />));
   } catch (err) {
     renderError('Viewer import', err);
-  }
-}
-
-async function mountCompare() {
-  root.render(<Splash />);
-  try {
-    const mod = await import('@atlas/ui/compare/ComparisonTheater');
-    root.render(withProviders(<mod.default />));
-  } catch (err) {
-    renderError('Comparison Theater import', err);
   }
 }
 
@@ -160,8 +176,39 @@ async function mountEducation(kind: NonNullable<typeof educationKind>) {
   }
 }
 
-if (isCompare) {
-  void mountCompare();
+if (retiredResearchRoute) {
+  document.title = 'Retired workspace | Lupi';
+  document.querySelector('meta[name="robots"]')?.setAttribute('content', 'noindex,follow');
+  root.render(
+    <div
+      style={{
+        minHeight: '100vh',
+        padding: '64px 24px',
+        background: '#101817',
+        color: '#eff3e9',
+        font: '16px/1.6 system-ui',
+      }}
+    >
+      <main style={{ maxWidth: 600, margin: 'auto' }}>
+        <p>Lupi</p>
+        <h1>This research workspace has retired from Lupi.</h1>
+        <p>
+          Lupi now focuses on exploring and learning from molecular structures. Research execution and large
+          dataset browsing are separate from the learning app.
+        </p>
+        <p>
+          <a style={{ color: '#d5ef9c' }} href="/">
+            Explore the learning collection
+          </a>
+        </p>
+        <p>
+          <a style={{ color: '#d5ef9c' }} href="https://lupine.science">
+            Visit Lupine Science ↗
+          </a>
+        </p>
+      </main>
+    </div>,
+  );
 } else if (wantsViewerImmediately()) {
   void mountViewer();
 } else if (educationKind) {

@@ -8,7 +8,6 @@
   "exports": {
     ".": "./src/App.tsx",
     "./App": "./src/App.tsx",
-    "./compare": "./src/compare/ComparisonTheater.tsx",
     "./store": "./src/store.ts",
     "./FileDropZone": "./src/FileDropZone.tsx",
     "./panels/StylePanel": "./src/panels/StylePanel.tsx",
@@ -42,6 +41,7 @@
     "r3f-perf": "^7.2.3",
     "react": "^19.0.0",
     "three": "^0.184.0",
+    "vgpu": "0.4.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
