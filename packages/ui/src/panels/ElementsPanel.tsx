@@ -1,16 +1,12 @@
 /**
  * ElementsPanel — the Elements explorer. Search-filtered periodic table in
- * single-select mode, a detail card for the selection, and a hand-off button
- * that seeds the run configurator (store state only; the modal that consumes
- * `runConfiguratorSeed` lands in a later phase).
+ * single-select mode and a detail card. Search results remain reachable on
+ * narrow screens without hunting across an off-screen periodic table.
  */
 import { useState, type CSSProperties } from 'react';
 import { ELEMENT_DATA } from '@atlas/core';
-import { useStore } from '../store';
 import { PeriodicTableGrid } from '../periodic-table/PeriodicTableGrid';
 import { ElementDetailCard } from '../periodic-table/ElementDetailCard';
-
-const ACCENT = '#1edce0';
 
 export function ElementsPanel() {
   const [query, setQuery] = useState('');
@@ -19,52 +15,81 @@ export function ElementsPanel() {
   const selectedZ = selected[0];
   const element = selectedZ !== undefined ? ELEMENT_DATA[selectedZ] : undefined;
 
-  // Single-select: clicking the selected cell deselects; the grid disables the
-  // other cells while one is selected (maxSelection=1), so switching goes
-  // through deselect first.
-  const toggle = (z: number) => setSelected((prev) => (prev.includes(z) ? [] : [z]));
-
-  const configureRun = () => {
-    if (!element) return;
-    useStore.getState().openRunConfigurator({ elements: [element.symbol] });
-  };
+  const matchingElements = Object.entries(ELEMENT_DATA).filter(
+    ([, data]) =>
+      data.name.toLowerCase().includes(query.trim().toLowerCase()) ||
+      data.symbol.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+  // Single-select replaces the previous choice; other elements stay usable.
+  const toggle = (z: number) => setSelected(prev => (prev.includes(z) ? [] : [z]));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        padding: '4px 0',
+      }}
+    >
       <input
         type="search"
         aria-label="Filter elements"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={e => setQuery(e.target.value)}
         placeholder="Filter by symbol or name…"
         style={searchInputStyle}
       />
 
-      <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
-        <PeriodicTableGrid
-          selected={selected}
-          onToggle={toggle}
-          maxSelection={1}
-          filterText={query}
-        />
-      </div>
+      {query.trim() ? (
+        <div role="group" aria-label="Matching elements" style={{ display: 'grid', gap: 8 }}>
+          {matchingElements.length === 0 && <p role="status">No matching elements. Try a name or symbol.</p>}
+          {matchingElements.map(([z, data]) => (
+            <button
+              key={z}
+              type="button"
+              aria-pressed={selectedZ === Number(z)}
+              onClick={() => toggle(Number(z))}
+              style={{
+                minHeight: 44,
+                padding: '10px 12px',
+                textAlign: 'left',
+                background: '#192522',
+                color: '#eff3e9',
+                border: '1px solid #526253',
+                borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              {data.symbol} · {data.name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Scrollable periodic table"
+          style={{ overflowX: 'auto', paddingBottom: 4 }}
+        >
+          <PeriodicTableGrid selected={selected} onToggle={toggle} cellSize={44} />
+        </div>
+      )}
 
       {selectedZ !== undefined && element ? (
         <ElementDetailCard z={selectedZ} />
       ) : (
-        <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', padding: '8px 2px' }}>
+        <div
+          style={{
+            fontSize: 12,
+            color: '#64748b',
+            fontStyle: 'italic',
+            padding: '8px 2px',
+          }}
+        >
           Select an element to see its periodic facts.
         </div>
       )}
-
-      <button
-        type="button"
-        disabled={!element}
-        onClick={configureRun}
-        style={primaryBtnStyle(Boolean(element))}
-      >
-        {element ? `Configure a run with ${element.symbol} →` : 'Configure a run →'}
-      </button>
     </div>
   );
 }
@@ -78,17 +103,4 @@ const searchInputStyle: CSSProperties = {
   borderRadius: 6,
   padding: '8px 12px',
   fontSize: 13,
-  outline: 'none',
 };
-
-const primaryBtnStyle = (enabled: boolean): CSSProperties => ({
-  alignSelf: 'flex-start',
-  padding: '9px 18px',
-  borderRadius: 6,
-  border: 'none',
-  background: enabled ? ACCENT : '#1e2533',
-  color: enabled ? '#04141a' : '#475569',
-  cursor: enabled ? 'pointer' : 'not-allowed',
-  fontSize: 13,
-  fontWeight: 700,
-});

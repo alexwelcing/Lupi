@@ -2,14 +2,20 @@
  * Active command body. Store subscriptions live inside the surface that needs
  * them so frame playback does not repaint every closed menu.
  */
-import { memo } from 'react';
+import { lazy, memo, Suspense } from 'react';
 import { StudioControlDeck } from './StudioControlDeck';
 import { useStore, type AppState, type ViewerControlMode } from './store';
-import { FigureExportPanel } from './panels/FigureExportPanel';
-import { FlythroughPanel } from './panels/FlythroughPanel';
+const FigureExportPanel = lazy(() =>
+  import('./panels/FigureExportPanel').then(module => ({
+    default: module.FigureExportPanel,
+  })),
+);
+const FlythroughPanel = lazy(() =>
+  import('./panels/FlythroughPanel').then(module => ({
+    default: module.FlythroughPanel,
+  })),
+);
 import { TelemetryPanel } from './panels/TelemetryPanel';
-import { EquilibriumSolveWorkbench } from './EquilibriumSolveWorkbench';
-import { MlipLongRunWorkbench } from './MlipLongRunWorkbench';
 import { ScienceDeckPanel } from './science/ScienceDeckPanel';
 import { ElementsPanel } from './panels/ElementsPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
@@ -19,12 +25,20 @@ export interface ViewerPanelBodyProps {
   studioDeck: ViewerControlMode | null;
 }
 
-export const ViewerPanelBody = memo(function ViewerPanelBody({ activePanel, studioDeck }: ViewerPanelBodyProps) {
+export const ViewerPanelBody = memo(function ViewerPanelBody({
+  activePanel,
+  studioDeck,
+}: ViewerPanelBodyProps) {
   if (!activePanel) return null;
-  return renderPanel(activePanel, studioDeck);
+  return (
+    <Suspense fallback={<p role="status">Loading tools…</p>}>{renderPanel(activePanel, studioDeck)}</Suspense>
+  );
 });
 
-function renderPanel(activePanel: NonNullable<AppState['activePanel']>, studioDeck: ViewerControlMode | null) {
+function renderPanel(
+  activePanel: NonNullable<AppState['activePanel']>,
+  studioDeck: ViewerControlMode | null,
+) {
   switch (activePanel) {
     case 'studio':
       if (studioDeck === 'export') return <FigureExportPanel showCloseButton={false} embedded />;
@@ -38,9 +52,13 @@ function renderPanel(activePanel: NonNullable<AppState['activePanel']>, studioDe
     case 'science':
       return <ScienceCommandSurface />;
     case 'equilibrium':
-      return <EquilibriumSolveWorkbench />;
     case 'mlipLongRun':
-      return <MlipLongRunWorkbench />;
+      return (
+        <p>
+          Research execution is separate from the learning viewer.{' '}
+          <a href="https://lupine.science">Visit Lupine Science</a>.
+        </p>
+      );
     case 'elements':
       return <ElementsPanel />;
     case 'settings':
@@ -89,9 +107,10 @@ function CameraCommandSurface() {
           </button>
         </div>
       </section>
-      <div className="lupine-camera-command__path">
+      <details className="lupine-camera-command__path">
+        <summary style={{ padding: 16, cursor: 'pointer' }}>Camera animation</summary>
         <FlythroughPanel showCloseButton={false} embedded />
-      </div>
+      </details>
     </div>
   );
 }

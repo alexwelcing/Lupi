@@ -18,7 +18,12 @@ type ExportStatus =
 
 /** Live phase feed for long 3D exports (bonds → geometry → encode),
  *  rendered inline on the GLB/USDZ buttons while the export runs. */
-type Export3DProgress = { target: 'glb' | 'usdz'; phase: string; done: number; total: number };
+type Export3DProgress = {
+  target: 'glb' | 'usdz';
+  phase: string;
+  done: number;
+  total: number;
+};
 
 function format3DProgress(p: Export3DProgress) {
   if (p.total > 0) {
@@ -55,9 +60,17 @@ const VIDEO_EXPORT = {
   meta: '1080p / 5s',
 };
 
-
 const IconDownload = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M12 4v10" />
     <path d="m7 10 5 5 5-5" />
     <path d="M5 20h14" />
@@ -65,7 +78,16 @@ const IconDownload = () => (
 );
 
 const IconStudySheet = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M7 4h7l3 3v13H7z" />
     <path d="M14 4v4h4" />
     <path d="M9 11h6" />
@@ -75,7 +97,16 @@ const IconStudySheet = () => (
 );
 
 const IconCube = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
     <path d="M12 12 4 7.5" />
     <path d="m12 12 8-4.5" />
@@ -84,24 +115,18 @@ const IconCube = () => (
 );
 
 const IconVideo = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <rect x="3" y="5" width="14" height="14" rx="2" />
     <path d="m17 9 4-2.5v11L17 15" />
-  </svg>
-);
-const IconPath = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="5" cy="6" r="2" />
-    <circle cx="19" cy="10" r="2" />
-    <circle cx="9" cy="18" r="2" />
-    <path d="M6.7 7.2C12 9 9 13 10.5 16" opacity="0.7" />
-    <path d="M7 6.6c4 0 6.5 1.4 10.3 2.9" opacity="0.7" />
-  </svg>
-);
-const IconLink = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 13a4 4 0 0 0 5.66 0l2.83-2.83a4 4 0 0 0-5.66-5.66l-1 1" />
-    <path d="M15 11a4 4 0 0 0-5.66 0L6.5 13.83a4 4 0 0 0 5.66 5.66l1-1" />
   </svg>
 );
 
@@ -130,7 +155,11 @@ function createAutoFlythrough(
       keyframes: [
         createKeyframe(cameraPosition, cameraTarget, null, 'Start'),
         createKeyframe(
-          [cameraTarget[0] - (cameraPosition[2] - cameraTarget[2]), cameraPosition[1], cameraTarget[2] + (cameraPosition[0] - cameraTarget[0])],
+          [
+            cameraTarget[0] - (cameraPosition[2] - cameraTarget[2]),
+            cameraPosition[1],
+            cameraTarget[2] + (cameraPosition[0] - cameraTarget[0]),
+          ],
           cameraTarget,
           null,
           'End',
@@ -190,7 +219,6 @@ export function FigureExportPanel({
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
   const triggerExport = useStore(s => s.triggerExport);
-  const encodeToURL = useStore(s => s.encodeToURL);
   const setShowScaleBar = useStore(s => s.setShowScaleBar);
   const cameraPosition = useStore(s => s.cameraPosition);
   const cameraTarget = useStore(s => s.cameraTarget);
@@ -198,7 +226,10 @@ export function FigureExportPanel({
   const measurement = useStore(s => s.measurement);
   const lastBondCount = useStore(s => s.lastBondCount);
   const showBonds = useStore(s => s.showBonds);
-  const [status, setStatus] = useState<ExportStatus>({ kind: 'idle', label: 'Ready' });
+  const [status, setStatus] = useState<ExportStatus>({
+    kind: 'idle',
+    label: 'Ready',
+  });
   const [progress3d, setProgress3d] = useState<Export3DProgress | null>(null);
   // Video export now uses native MediaRecorder (works on every browser incl. iOS
   // Safari), so it no longer requires WebCodecs/desktop Chrome.
@@ -235,25 +266,28 @@ export function FigureExportPanel({
     };
   }, [currentFrame, file]);
 
-  const runImageExport = useCallback((preset: typeof IMAGE_EXPORTS[number]) => {
-    if (!file) return;
-    setShowScaleBar(true);
-    setStatus({ kind: 'working', label: `Rendering ${preset.label}` });
-    triggerExport({
-      type: 'image',
-      resolution: { width: preset.width, height: preset.height },
-      format: preset.format,
-      transparent: false,
-      baseName: `${preset.baseName}-${safeName(file.name)}`,
-      onComplete: (success, blob, filename) => {
-        if (success && blob && filename) {
-          handoffDownload(blob, filename, preset.label, setStatus);
-        } else {
-          setStatus({ kind: 'error', label: `${preset.label} failed` });
-        }
-      },
-    });
-  }, [file, setShowScaleBar, triggerExport]);
+  const runImageExport = useCallback(
+    (preset: (typeof IMAGE_EXPORTS)[number]) => {
+      if (!file) return;
+      setShowScaleBar(true);
+      setStatus({ kind: 'working', label: `Rendering ${preset.label}` });
+      triggerExport({
+        type: 'image',
+        resolution: { width: preset.width, height: preset.height },
+        format: preset.format,
+        transparent: false,
+        baseName: `${preset.baseName}-${safeName(file.name)}`,
+        onComplete: (success, blob, filename) => {
+          if (success && blob && filename) {
+            handoffDownload(blob, filename, preset.label, setStatus);
+          } else {
+            setStatus({ kind: 'error', label: `${preset.label} failed` });
+          }
+        },
+      });
+    },
+    [file, setShowScaleBar, triggerExport],
+  );
 
   const runStudySheetExport = useCallback(() => {
     if (!file || !currentFrame) return;
@@ -292,7 +326,8 @@ export function FigureExportPanel({
           const visualSnapshotDataUrl = await blobToDataUrl(blob);
           const html = renderStudySheetHtml(facts, {
             visualSnapshotDataUrl,
-            visualCaption: 'Rendered from the active Lupi camera, atom colors, material style, optional visual bond guides, and background at export time. Bond guides are not source topology unless the data provenance section says source bonds exist.',
+            visualCaption:
+              'Rendered from the active Lupi camera, atom colors, material style, optional visual bond guides, and background at export time. Bond guides are not source topology unless the data provenance section says source bonds exist.',
           });
           openStudySheetWindow(html, filename, setStatus);
         } catch {
@@ -344,44 +379,35 @@ export function FigureExportPanel({
     });
   }, [file, triggerExport]);
 
-  const runVideoExport = useCallback((motion: 'rotate' | 'flythrough') => {
-    if (!file || !hasVideoExport) return;
-    const label = motion === 'rotate' ? 'MP4 rotate' : 'MP4 auto flythrough';
-    setStatus({ kind: 'working', label: `Recording ${label}` });
-    triggerExport({
-      type: 'video',
-      resolution: { width: VIDEO_EXPORT.width, height: VIDEO_EXPORT.height },
-      format: 'mp4',
-      orbit: motion === 'rotate',
-      cinematic: false,
-      flythrough: motion === 'flythrough' ? createAutoFlythrough(file, cameraPosition, cameraTarget) : undefined,
-      durationSeconds: VIDEO_EXPORT.durationSeconds,
-      baseName: `Lupi-${motion === 'rotate' ? 'mp4-rotate' : 'mp4-auto-flythrough'}-${safeName(file.name)}`,
-      onComplete: (success, blob, filename) => {
-        if (success && blob && filename) {
-          handoffDownload(blob, filename, label, setStatus);
-        } else {
-          setStatus({ kind: success ? 'success' : 'error', label: success ? `Recorded ${label}` : `${label} failed` });
-        }
-      },
-    });
-  }, [cameraPosition, cameraTarget, file, hasVideoExport, triggerExport]);
-
-  // Share the current view as a URL that restores camera, colors, material, and
-  // scene. Relocated here from the studio "Grade" group, where it was an orphan
-  // share button sitting among grade controls.
-  const runCopyViewLink = useCallback(async () => {
-    if (typeof window === 'undefined') return;
-    setStatus({ kind: 'working', label: 'Copying view link' });
-    const url = new URL(window.location.href);
-    url.searchParams.set('s', encodeToURL());
-    try {
-      await navigator.clipboard.writeText(url.toString());
-      setStatus({ kind: 'success', label: 'Copied view link' });
-    } catch {
-      setStatus({ kind: 'error', label: 'Copy failed' });
-    }
-  }, [encodeToURL]);
+  const runVideoExport = useCallback(
+    (motion: 'rotate' | 'flythrough') => {
+      if (!file || !hasVideoExport) return;
+      const label = motion === 'rotate' ? 'MP4 rotate' : 'MP4 auto flythrough';
+      setStatus({ kind: 'working', label: `Recording ${label}` });
+      triggerExport({
+        type: 'video',
+        resolution: { width: VIDEO_EXPORT.width, height: VIDEO_EXPORT.height },
+        format: 'mp4',
+        orbit: motion === 'rotate',
+        cinematic: false,
+        flythrough:
+          motion === 'flythrough' ? createAutoFlythrough(file, cameraPosition, cameraTarget) : undefined,
+        durationSeconds: VIDEO_EXPORT.durationSeconds,
+        baseName: `Lupi-${motion === 'rotate' ? 'mp4-rotate' : 'mp4-auto-flythrough'}-${safeName(file.name)}`,
+        onComplete: (success, blob, filename) => {
+          if (success && blob && filename) {
+            handoffDownload(blob, filename, label, setStatus);
+          } else {
+            setStatus({
+              kind: success ? 'success' : 'error',
+              label: success ? `Recorded ${label}` : `${label} failed`,
+            });
+          }
+        },
+      });
+    },
+    [cameraPosition, cameraTarget, file, hasVideoExport, triggerExport],
+  );
 
   const busy = status.kind === 'working';
   const videoMeta = hasVideoExport ? VIDEO_EXPORT.meta : 'Not supported here';
@@ -400,38 +426,44 @@ export function FigureExportPanel({
         color: '#e5edf7',
       }}
     >
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 10,
-        padding: embedded ? '8px 10px' : compact ? '8px 10px 7px' : '14px 16px 12px',
-        borderBottom: '1px solid rgba(148, 163, 184, 0.16)',
-        flexShrink: 0,
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          padding: embedded ? '8px 10px' : compact ? '8px 10px 7px' : '14px 16px 12px',
+          borderBottom: '1px solid rgba(148, 163, 184, 0.16)',
+          flexShrink: 0,
+        }}
+      >
         <div style={{ minWidth: 0 }}>
           {!embedded && (
-            <div style={{
-              fontSize: compact ? 10 : 11,
-              fontWeight: 800,
-              letterSpacing: 0,
-              color: '#7dd3fc',
-              textTransform: 'uppercase',
-            }}>
+            <div
+              style={{
+                fontSize: compact ? 10 : 11,
+                fontWeight: 800,
+                letterSpacing: 0,
+                color: '#7dd3fc',
+                textTransform: 'uppercase',
+              }}
+            >
               Export
             </div>
           )}
           {systemInfo && (
-            <div style={{
-              marginTop: embedded ? 0 : 4,
-              color: 'rgba(203, 213, 225, 0.68)',
-              fontSize: compact ? 10 : 11,
-              fontFamily: 'var(--font-mono), ui-monospace, monospace',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: compact ? 'calc(100vw - 76px)' : 290,
-            }}>
+            <div
+              style={{
+                marginTop: embedded ? 0 : 4,
+                color: 'rgba(203, 213, 225, 0.68)',
+                fontSize: compact ? 10 : 11,
+                fontFamily: 'var(--font-mono), ui-monospace, monospace',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: compact ? 'calc(100vw - 76px)' : 290,
+              }}
+            >
               {compact
                 ? `${systemInfo.formula ? `${systemInfo.formula} / ` : ''}${systemInfo.natoms.toLocaleString()} atoms / frame ${frame + 1}`
                 : `${systemInfo.formula || file?.name} / ${systemInfo.natoms.toLocaleString()} atoms / frame ${frame + 1}`}
@@ -461,11 +493,13 @@ export function FigureExportPanel({
         )}
       </div>
 
-      <div style={{
-        display: 'grid',
-        gap: compact ? 10 : 14,
-        padding: compact ? 8 : 12,
-      }}>
+      <div
+        style={{
+          display: 'grid',
+          gap: compact ? 10 : 14,
+          padding: compact ? 8 : 12,
+        }}
+      >
         <ExportSection label="Image" compact={compact}>
           {IMAGE_EXPORTS.map(preset => (
             <ExportAction
@@ -490,76 +524,65 @@ export function FigureExportPanel({
           />
         </ExportSection>
 
-        <ExportSection label="3D model" compact={compact}>
-          <ExportAction
-            testId="export-glb"
-            icon={<IconCube />}
-            label="GLB"
-            meta={progress3d?.target === 'glb'
-              ? format3DProgress(progress3d)
-              : systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'glTF 3D model'}
-            disabled={!file || busy}
-            onClick={runGlbExport}
-            compact={compact}
-          />
-          <ExportAction
-            testId="export-usdz"
-            icon={<IconCube />}
-            label="USDZ"
-            meta={progress3d?.target === 'usdz'
-              ? format3DProgress(progress3d)
-              : systemInfo ? `${systemInfo.natoms.toLocaleString()} atoms` : 'AR model'}
-            disabled={!file || busy}
-            onClick={runUsdExport}
-            compact={compact}
-          />
-        </ExportSection>
+        <details>
+          <summary style={{ minHeight: 44, padding: 12, cursor: 'pointer' }}>3D models and video</summary>
+          <ExportSection label="3D model" compact={compact}>
+            <ExportAction
+              testId="export-glb"
+              icon={<IconCube />}
+              label="GLB"
+              meta={
+                progress3d?.target === 'glb'
+                  ? format3DProgress(progress3d)
+                  : systemInfo
+                    ? `${systemInfo.natoms.toLocaleString()} atoms`
+                    : 'glTF 3D model'
+              }
+              disabled={!file || busy}
+              onClick={runGlbExport}
+              compact={compact}
+            />
+            <ExportAction
+              testId="export-usdz"
+              icon={<IconCube />}
+              label="USDZ"
+              meta={
+                progress3d?.target === 'usdz'
+                  ? format3DProgress(progress3d)
+                  : systemInfo
+                    ? `${systemInfo.natoms.toLocaleString()} atoms`
+                    : 'AR model'
+              }
+              disabled={!file || busy}
+              onClick={runUsdExport}
+              compact={compact}
+            />
+          </ExportSection>
 
-        <ExportSection label="Video" compact={compact}>
-          <ExportAction
-            testId="export-mp4-rotate"
-            icon={<IconVideo />}
-            label="MP4 rotate"
-            meta={hasVideoExport ? '360° orbit · 5s' : videoMeta}
-            disabled={!file || busy || !hasVideoExport}
-            onClick={() => runVideoExport('rotate')}
-            compact={compact}
-          />
-          <ExportAction
-            testId="export-mp4-auto-flythrough"
-            icon={<IconVideo />}
-            label="Auto flythrough"
-            meta={hasVideoExport ? 'auto camera path · 5s' : videoMeta}
-            disabled={!file || busy || !hasVideoExport}
-            onClick={() => runVideoExport('flythrough')}
-            compact={compact}
-          />
-          {/* Resurfaced entry to the custom flythrough studio — place camera
-              stops, set transitions, preview, and export the video. The editor
-              is its own panel (works on desktop dock + mobile sheet); this is
-              the discoverable doorway from the Export surface. */}
-          <ExportAction
-            testId="export-custom-flythrough"
-            icon={<IconPath />}
-            label="Custom flythrough"
-            meta="place camera stops → video"
-            disabled={!file || busy}
-            onClick={() => setActivePanel('flythrough')}
-            compact={compact}
-          />
-        </ExportSection>
-
-        <ExportSection label="Share" compact={compact}>
-          <ExportAction
-            testId="export-copy-view-link"
-            icon={<IconLink />}
-            label="Copy view link"
-            meta="URL that restores this exact view"
-            disabled={!file || busy}
-            onClick={runCopyViewLink}
-            compact={compact}
-          />
-        </ExportSection>
+          <ExportSection label="Video" compact={compact}>
+            <ExportAction
+              testId="export-mp4-rotate"
+              icon={<IconVideo />}
+              label="MP4 rotate"
+              meta={hasVideoExport ? '360° orbit · 5s' : videoMeta}
+              disabled={!file || busy || !hasVideoExport}
+              onClick={() => runVideoExport('rotate')}
+              compact={compact}
+            />
+            <ExportAction
+              testId="export-mp4-auto-flythrough"
+              icon={<IconVideo />}
+              label="Auto flythrough"
+              meta={hasVideoExport ? 'auto camera path · 5s' : videoMeta}
+              disabled={!file || busy || !hasVideoExport}
+              onClick={() => runVideoExport('flythrough')}
+              compact={compact}
+            />
+          </ExportSection>
+        </details>
+        <p style={{ fontSize: 12, color: '#afc0b4', margin: 0 }}>
+          To share an interactive view, use Save in the top bar.
+        </p>
       </div>
 
       <div
@@ -582,23 +605,35 @@ export function FigureExportPanel({
   );
 }
 
-function ExportSection({ label, compact, children }: { label: string; compact?: boolean; children: ReactNode }) {
+function ExportSection({
+  label,
+  compact,
+  children,
+}: {
+  label: string;
+  compact?: boolean;
+  children: ReactNode;
+}) {
   return (
     <section style={{ display: 'grid', gap: compact ? 5 : 6 }}>
-      <div style={{
-        color: 'rgba(203, 213, 225, 0.6)',
-        fontSize: compact ? 9 : 10,
-        fontWeight: 800,
-        letterSpacing: 0.4,
-        textTransform: 'uppercase',
-      }}>
+      <div
+        style={{
+          color: 'rgba(203, 213, 225, 0.6)',
+          fontSize: compact ? 9 : 10,
+          fontWeight: 800,
+          letterSpacing: 0.4,
+          textTransform: 'uppercase',
+        }}
+      >
         {label}
       </div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: compact ? 'repeat(2, minmax(0, 1fr))' : '1fr',
-        gap: compact ? 6 : 8,
-      }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: compact ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+          gap: compact ? 6 : 8,
+        }}
+      >
         {children}
       </div>
     </section>
@@ -644,42 +679,58 @@ function ExportAction({
         textAlign: 'left',
       }}
     >
-      <span style={{
-        display: 'grid',
-        placeItems: 'center',
-        width: compact ? 24 : 34,
-        height: compact ? 24 : 34,
-        color: disabled ? 'rgba(148, 163, 184, 0.42)' : '#7dd3fc',
-        background: 'rgba(125, 211, 252, 0.08)',
-        border: '1px solid rgba(125, 211, 252, 0.16)',
-        borderRadius: compact ? 6 : 8,
-      }}>
+      <span
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          width: compact ? 24 : 34,
+          height: compact ? 24 : 34,
+          color: disabled ? 'rgba(148, 163, 184, 0.42)' : '#7dd3fc',
+          background: 'rgba(125, 211, 252, 0.08)',
+          border: '1px solid rgba(125, 211, 252, 0.16)',
+          borderRadius: compact ? 6 : 8,
+        }}
+      >
         {icon}
       </span>
       <span style={{ minWidth: 0 }}>
-        <span style={{
-          display: 'block',
-          fontSize: compact ? 11 : 13,
-          fontWeight: 760,
-          lineHeight: 1.12,
-          whiteSpace: compact ? 'normal' : 'nowrap',
-          overflowWrap: 'anywhere',
-        }}>{label}</span>
-        <span style={{
-          display: 'block',
-          marginTop: compact ? 1 : 2,
-          color: 'rgba(203, 213, 225, 0.58)',
-          fontSize: compact ? 9 : 10,
-          fontFamily: 'var(--font-mono), ui-monospace, monospace',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
+        <span
+          style={{
+            display: 'block',
+            fontSize: compact ? 11 : 13,
+            fontWeight: 760,
+            lineHeight: 1.12,
+            whiteSpace: compact ? 'normal' : 'nowrap',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {label}
+        </span>
+        <span
+          style={{
+            display: 'block',
+            marginTop: compact ? 1 : 2,
+            color: 'rgba(203, 213, 225, 0.58)',
+            fontSize: compact ? 9 : 10,
+            fontFamily: 'var(--font-mono), ui-monospace, monospace',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
           {meta}
         </span>
       </span>
       {!compact && (
-        <span style={{ color: 'rgba(125, 211, 252, 0.64)', fontSize: 14, lineHeight: 1 }}>&gt;</span>
+        <span
+          style={{
+            color: 'rgba(125, 211, 252, 0.64)',
+            fontSize: 14,
+            lineHeight: 1,
+          }}
+        >
+          &gt;
+        </span>
       )}
     </button>
   );
@@ -707,15 +758,16 @@ function handoffDownload(
   }, 80);
 }
 
-function openStudySheetWindow(
-  html: string,
-  filename: string,
-  setStatus: (status: ExportStatus) => void,
-) {
+function openStudySheetWindow(html: string, filename: string, setStatus: (status: ExportStatus) => void) {
   setStatus({ kind: 'working', label: 'Opening study sheet' });
   const sheetWindow = window.open('', '_blank', 'width=920,height=1100');
   if (!sheetWindow) {
-    handoffDownload(new Blob([html], { type: 'text/html;charset=utf-8' }), filename, 'Study sheet', setStatus);
+    handoffDownload(
+      new Blob([html], { type: 'text/html;charset=utf-8' }),
+      filename,
+      'Study sheet',
+      setStatus,
+    );
     return;
   }
 
@@ -728,7 +780,12 @@ function openStudySheetWindow(
       sheetWindow.print();
       setStatus({ kind: 'success', label: 'Opened study sheet' });
     } catch {
-      handoffDownload(new Blob([html], { type: 'text/html;charset=utf-8' }), filename, 'Study sheet', setStatus);
+      handoffDownload(
+        new Blob([html], { type: 'text/html;charset=utf-8' }),
+        filename,
+        'Study sheet',
+        setStatus,
+      );
     }
   }, 250);
 }
@@ -762,9 +819,11 @@ function sortFormulaTypes(a: number, b: number) {
 }
 
 function safeName(value: string) {
-  return value
-    .replace(/\.[^.]+$/, '')
-    .replace(/[^a-z0-9_-]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72) || 'Lupi';
+  return (
+    value
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-z0-9_-]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 72) || 'Lupi'
+  );
 }

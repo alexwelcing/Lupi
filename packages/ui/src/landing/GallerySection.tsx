@@ -1,360 +1,93 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { EquilibriumSolveWorkbench } from '../EquilibriumSolveWorkbench';
-import { Gallery } from '../Gallery';
-import { BG_PRESETS, getBgPoster, type BgPresetWithId } from '../backgroundPresets';
-import { MoleculeBrowser } from '../molecules/MoleculeBrowser';
-import { OmolCollection } from '../molecules/OmolCollection';
-import { type MoleculeSourceId } from '../molecules';
-import { PotentialBrowser } from '../panels/PotentialBrowser';
-import { useStore } from '../store';
-import { ALL_DOMAINS, type Domain } from '../gallery/catalog';
+import { useState } from 'react';
+import { STUDENT_COLLECTION, STUDENT_EXAMPLES } from '../gallery/studentCollection';
 
-// The large research sources need direct doors: a 34.3M-row split cannot be
-// represented honestly as a handful of federated cards, while the fixed
-// LAMMPS catalog can reuse the source-filtered browser.
-type GalleryView = 'explore' | 'search' | 'omol25' | 'research' | 'potentials' | 'equilibrium';
-
-const QUERY_TAB_TO_VIEW: Record<string, GalleryView> = {
-  simulations: 'explore',
-  omol25: 'omol25',
-  research: 'research',
-  browse: 'search',
-  potentials: 'potentials',
-  equilibrium: 'equilibrium',
-};
-
-const VIEW_TO_QUERY_TAB: Record<GalleryView, string> = {
-  explore: 'simulations',
-  search: 'browse',
-  omol25: 'omol25',
-  research: 'research',
-  potentials: 'potentials',
-  equilibrium: 'equilibrium',
-};
-
-function viewFromLocation(): GalleryView {
-  const requested = new URLSearchParams(window.location.search).get('tab');
-  return requested ? QUERY_TAB_TO_VIEW[requested] ?? 'explore' : 'explore';
-}
-
+const TOPICS = ['All examples', 'Start small', 'Rings & groups', 'Carbon structures'] as const;
 export function GallerySection() {
-  // Start visible immediately so the catalog does not flash or paint hidden
-  // while the IntersectionObserver fires.
-  const [visible] = useState(true);
-  const [view, setView] = useState<GalleryView>(viewFromLocation);
-  // When a deep link lands on Search, preselect the requested source facet.
-  const [searchSource, setSearchSource] = useState<MoleculeSourceId | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchIntentRevision, setSearchIntentRevision] = useState(0);
-  const [catalogDomain, setCatalogDomain] = useState<Domain | 'All'>('All');
-  const [catalogIntentRevision, setCatalogIntentRevision] = useState(0);
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const backgroundPreset = useStore((state) => state.backgroundPreset);
-
-  const activePreset = useMemo<BgPresetWithId>(() => {
-    const preset = BG_PRESETS[backgroundPreset];
-    if (preset) return { id: backgroundPreset, ...preset };
-    return { id: 'deep', ...BG_PRESETS.deep };
-  }, [backgroundPreset]);
-
-  const selectView = useCallback((next: GalleryView, history: 'push' | 'replace' = 'push') => {
-    setView(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set('tab', VIEW_TO_QUERY_TAB[next]);
-    url.hash = 'gallery';
-    window.history[history === 'push' ? 'pushState' : 'replaceState']({}, '', url);
-  }, []);
-
-  useEffect(() => {
-    // Keep catalog navigation durable across refresh and browser back/forward.
-    // The previous one-shot deep-link handler deleted ?tab= after consuming it,
-    // so a refresh silently returned researchers to the generic catalog.
-    const syncFromLocation = () => setView(viewFromLocation());
-    window.addEventListener('popstate', syncFromLocation);
-    return () => window.removeEventListener('popstate', syncFromLocation);
-  }, []);
-
-  // Own homepage-to-library intent at the surface that controls which catalog
-  // is mounted. This prevents events from being lost when a different tab is
-  // active and lets unmatched hero queries reach the federated search.
-  useEffect(() => {
-    const handleSearchIntent = (event: Event) => {
-      const query = (event as CustomEvent<string>).detail?.trim();
-      if (!query) return;
-      setSearchSource(null);
-      setSearchQuery(query);
-      setSearchIntentRevision((revision) => revision + 1);
-      selectView('search', 'replace');
-    };
-    const handleDomainIntent = (event: Event) => {
-      const requested = (event as CustomEvent<string>).detail;
-      const domain = requested === 'All' || ALL_DOMAINS.includes(requested as Domain)
-        ? requested as Domain | 'All'
-        : 'All';
-      setCatalogDomain(domain);
-      setCatalogIntentRevision((revision) => revision + 1);
-      selectView('explore', 'replace');
-    };
-    window.addEventListener('lupi:gallery-search', handleSearchIntent);
-    window.addEventListener('lupi:gallery-domain', handleDomainIntent);
-    return () => {
-      window.removeEventListener('lupi:gallery-search', handleSearchIntent);
-      window.removeEventListener('lupi:gallery-domain', handleDomainIntent);
-    };
-  }, [selectView]);
-
+  const [query, setQuery] = useState('');
+  const [topic, setTopic] = useState<string>('All examples');
+  const examples = STUDENT_EXAMPLES.filter(example => {
+    const lesson = STUDENT_COLLECTION.find(entry => entry.id === example.id)!;
+    return (
+      (topic === 'All examples' || topic === lesson.topic) &&
+      `${example.title} ${lesson.prompt} ${lesson.topic}`.toLowerCase().includes(query.trim().toLowerCase())
+    );
+  });
   return (
-    <section
-      id="gallery"
-      ref={sectionRef}
-      style={{
-        ...gallerySectionBackground(activePreset),
-        position: 'relative',
-        overflow: 'hidden',
-        padding: 'clamp(30px, 4.5vw, 58px) 0 clamp(48px, 8vw, 100px)',
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'opacity 0.8s ease-out, transform 0.8s ease-out',
-        willChange: 'opacity, transform',
-      }}
-    >
-      <style>{GALLERY_SECTION_CSS}</style>
-      <div className="lupi-gallery-section__shade" aria-hidden="true" />
-      <div className="lupi-gallery-section__shell">
-        <div className="lupi-gallery-section__intro">
-          <div>
-            <p>Explore the library</p>
-            <h2>Search every molecule, material, and simulation.</h2>
-          </div>
-          <a href="#dropzone">Open your data</a>
+    <section id="gallery" className="student-collection student-width" aria-labelledby="collection-title">
+      <div className="student-section-head">
+        <div>
+          <p className="student-eyebrow">The collection</p>
+          <h2 id="collection-title">Pick a starting point.</h2>
         </div>
-
-        <div style={sTabBar} role="tablist" aria-label="Browse molecules">
-          <button
-            role="tab"
-            aria-selected={view === 'explore'}
-            data-testid="tab-explore"
-            style={sTab(view === 'explore', '#d8b878')}
-            onClick={() => selectView('explore')}
-          >
-            Explore examples
-          </button>
-          <button
-            role="tab"
-            aria-selected={view === 'search'}
-            data-testid="tab-search"
-            style={sTab(view === 'search', '#8fb0d4')}
-            onClick={() => selectView('search')}
-          >
-            Search all sources
-          </button>
-          <button
-            role="tab"
-            aria-selected={view === 'omol25'}
-            data-testid="tab-omol25"
-            style={sTab(view === 'omol25', '#34d399')}
-            onClick={() => selectView('omol25')}
-          >
-            OMol25 <span aria-hidden="true">·</span> 34.3M
-          </button>
-        </div>
-
-        <div style={sToolsRow} aria-label="Advanced tools">
-          <span style={sToolsLabel}>Research tools</span>
-          <button
-            data-testid="tool-research-files"
-            style={sToolBtn(view === 'research')}
-            onClick={() => selectView('research')}
-          >
-            LAMMPS research <span aria-hidden="true">·</span> 8
-          </button>
-          <button
-            data-testid="tool-potentials"
-            style={sToolBtn(view === 'potentials')}
-            onClick={() => selectView('potentials')}
-          >
-            NIST potentials
-          </button>
-          <button
-            data-testid="tool-equilibrium"
-            style={sToolBtn(view === 'equilibrium')}
-            onClick={() => selectView('equilibrium')}
-          >
-            Equilibrium solver
-          </button>
-        </div>
-
-        <div className="lupi-gallery-section__panel">
-          {view === 'explore' && <Gallery key={`catalog-${catalogIntentRevision}`} initialDomain={catalogDomain} />}
-          {view === 'search' && <MoleculeBrowser key={`search-${searchIntentRevision}`} initialSource={searchSource} initialQuery={searchQuery} />}
-          {view === 'omol25' && <OmolCollection />}
-          {view === 'research' && <MoleculeBrowser initialSource="research" />}
-          {view === 'potentials' && <PotentialBrowser />}
-          {view === 'equilibrium' && <EquilibriumSolveWorkbench embedded />}
-        </div>
+        <label className="student-search">
+          <span>Find an example</span>
+          <input
+            type="search"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Try caffeine, carbon, oxygen…"
+          />
+        </label>
       </div>
+      <div className="student-filters" role="group" aria-label="Example topics">
+        {TOPICS.map(label => (
+          <button key={label} type="button" aria-pressed={topic === label} onClick={() => setTopic(label)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="student-result-count" role="status">
+        {examples.length} {examples.length === 1 ? 'example' : 'examples'} · One question to start each
+        exploration.
+      </p>
+      <div className="student-cards">
+        {examples.map(example => {
+          const lesson = STUDENT_COLLECTION.find(entry => entry.id === example.id)!;
+          return (
+            <article key={example.id} className="student-card">
+              <a href={`/?sim=${encodeURIComponent(example.id)}`} aria-label={`Explore ${example.title}`}>
+                <div className="student-card-image">
+                  <img
+                    src={`/learn/${example.id}.svg`}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    width="400"
+                    height="270"
+                  />
+                  <span aria-hidden="true">↗</span>
+                </div>
+                <div className="student-card-copy">
+                  <p className="student-caption">
+                    {lesson.topic} <span>· {example.atoms} atoms</span>
+                  </p>
+                  <h3>{example.title}</h3>
+                  <p>{lesson.prompt}</p>
+                </div>
+              </a>
+            </article>
+          );
+        })}
+      </div>
+      {examples.length === 0 && (
+        <div className="student-empty">
+          <h3>No matching examples</h3>
+          <p>Try a molecule name or choose a different topic.</p>
+          <button
+            className="student-secondary"
+            onClick={() => {
+              setQuery('');
+              setTopic('All examples');
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+      <p className="student-collection-note">
+        These are coordinate models, not photographs. Bond lines can be inferred visual guides; they do not
+        establish bond order or material properties. Open Learn in the viewer for source details.
+      </p>
     </section>
   );
 }
-
-function gallerySectionBackground(preset: BgPresetWithId): CSSProperties {
-  const poster = getBgPoster(preset);
-  const readableTop = 'rgba(2, 2, 4, 0.70)';
-  const readableMid = 'rgba(2, 2, 4, 0.90)';
-  const readableBottom = 'rgba(6, 8, 13, 0.97)';
-
-  if (poster) {
-    return {
-      backgroundColor: preset.bottom,
-      backgroundImage: `linear-gradient(180deg, ${readableTop}, ${readableMid} 38%, ${readableBottom}), url("${poster}")`,
-      backgroundPosition: 'center',
-      backgroundSize: 'cover',
-    };
-  }
-
-  return {
-    backgroundColor: preset.bottom,
-    backgroundImage:
-      `radial-gradient(circle at 16% 0%, ${preset.top}aa, transparent 36%), ` +
-      `radial-gradient(circle at 84% 14%, ${preset.bottom}66, transparent 34%), ` +
-      `linear-gradient(180deg, ${preset.top}, ${preset.bottom})`,
-  };
-}
-
-const GALLERY_SECTION_CSS = `
-.lupi-gallery-section__shade {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 12%, rgba(216, 184, 120, 0.07), transparent 34%),
-    linear-gradient(180deg, rgba(4, 6, 11, 0.20), rgba(4, 6, 11, 0.5) 72%, #05060b);
-}
-.lupi-gallery-section__shell {
-  position: relative;
-  z-index: 1;
-  width: min(1480px, 100%);
-  box-sizing: border-box;
-  margin: 0 auto;
-  padding: 0 clamp(12px, 2vw, 28px);
-}
-.lupi-gallery-section__intro {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
-  align-items: end;
-  margin: 0 auto 18px;
-  color: #f8fafc;
-}
-.lupi-gallery-section__intro p {
-  margin: 0 0 10px;
-  color: rgba(216, 184, 120, 0.82);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-}
-.lupi-gallery-section__intro h2 {
-  max-width: 820px;
-  margin: 0;
-  color: #eef2f8;
-  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
-  font-size: clamp(26px, 4vw, 44px);
-  line-height: 1.06;
-  font-weight: 400;
-  letter-spacing: -0.01em;
-  text-wrap: balance;
-}
-.lupi-gallery-section__intro a {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(216, 184, 120, 0.34);
-  background: rgba(216, 184, 120, 0.05);
-  color: #f2ead8;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-decoration: none;
-  backdrop-filter: blur(12px);
-}
-.lupi-gallery-section__panel {
-  min-width: 0;
-}
-@media (max-width: 760px) {
-  .lupi-gallery-section__shell {
-    padding-inline: 10px;
-  }
-  .lupi-gallery-section__intro {
-    grid-template-columns: 1fr;
-    align-items: start;
-    gap: 12px;
-  }
-  .lupi-gallery-section__intro h2 {
-    font-size: 30px;
-  }
-  .lupi-gallery-section__intro a {
-    width: max-content;
-  }
-}
-`;
-
-const sTabBar: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'center',
-  flexWrap: 'wrap',
-  gap: 8,
-  margin: '18px 0 22px',
-  padding: 0,
-};
-
-const sTab = (active: boolean, color: string): CSSProperties => ({
-  padding: '8px 20px',
-  borderRadius: 2,
-  fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-  fontSize: 13,
-  letterSpacing: '0.03em',
-  fontWeight: active ? 600 : 500,
-  color: active ? '#f2f5fa' : 'rgba(205,214,228,0.5)',
-  background: active ? `${color}14` : 'transparent',
-  border: active ? `1px solid ${color}` : '1px solid rgba(200,214,236,0.12)',
-  cursor: 'pointer',
-  transition: 'all 0.3s ease',
-});
-
-// Secondary "Tools" row — deliberately quieter than the primary tab bar so the
-// power-user surfaces (potentials, equilibrium solve) stay reachable without
-// competing with Explore/Search for a first-time visitor's attention.
-const sToolsRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexWrap: 'wrap',
-  gap: 8,
-  margin: '-8px 0 24px',
-};
-
-const sToolsLabel: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: 'rgba(255,255,255,0.32)',
-};
-
-const sToolBtn = (active: boolean): CSSProperties => ({
-  padding: '5px 12px',
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: active ? 650 : 550,
-  color: active ? '#f8fafc' : 'rgba(255,255,255,0.5)',
-  background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
-  border: `1px solid ${active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)'}`,
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-});

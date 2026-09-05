@@ -1,155 +1,100 @@
-/**
- * StudioControlDeck — the shell for the Molecule / Scene control surfaces.
- *
- * Renders inside the edge-docked command panel. It owns the shared styles used
- * by both bodies; MoleculeControls and SceneControls own their store wiring.
- */
-import { MoleculeControls } from './studio/MoleculeControls';
-import { SceneControls } from './studio/SceneControls';
 import { useStore } from './store';
-
 export type StudioDeckMode = 'molecule' | 'scene';
 
-export function StudioControlDeck({ mode }: { mode: StudioDeckMode }) {
-  const setStudioDeck = useStore(s => s.setStudioDeck);
-
+/** The everyday controls. Renderer/agent capabilities are not a menu inventory. */
+export function StudioControlDeck({ mode: _mode }: { mode: StudioDeckMode }) {
+  const showBonds = useStore(s => s.showBonds);
+  const showAxes = useStore(s => s.showAxes);
+  const showCell = useStore(s => s.showCell);
+  const atomScale = useStore(s => s.atomScale);
+  const background = useStore(s => s.backgroundPreset);
   return (
     <div
       data-testid="studio-control-deck"
-      className="lupi-studio-deck"
       style={{
-        width: '100%',
-        height: '100%',
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        scrollbarWidth: 'none',
-        padding: '8px 8px 14px',
+        padding: 16,
+        display: 'grid',
+        gap: 24,
+        font: '14px/1.6 system-ui',
+        color: '#eff3e9',
       }}
     >
-      <style>{`
-        @keyframes lupi-rive-snap {
-          0% { transform: scale(1); box-shadow: 0 0 16px rgba(30, 220, 224, 0.42); }
-          38% { transform: scale(0.97); }
-          100% { transform: scale(1); }
-        }
-        @keyframes lupi-rive-flash {
-          0% { opacity: 0.78; transform: scale(0.96); }
-          100% { opacity: 0; transform: scale(1.06); }
-        }
-        .lupi-rive-snap {
-          animation: lupi-rive-snap 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .lupi-rive-flash {
-          animation: lupi-rive-flash 150ms ease-out forwards;
-        }
-        .lupi-rive-dial:focus-visible {
-          outline: 2px solid rgba(30, 220, 224, 0.85);
-          outline-offset: 2px;
-        }
-        .lupi-deck-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 0;
-          align-items: stretch;
-        }
-        .lupi-studio-segments {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 6px;
-        }
-        .lupi-visuals-switcher {
-          position: sticky;
-          top: -8px;
-          z-index: 3;
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 5px;
-          margin: -8px -8px 8px;
-          padding: 8px;
-          background: #081019;
-          border-bottom: 1px solid #22303d;
-        }
-        .lupi-visuals-switcher button {
-          min-height: 34px;
-          color: #8192a3;
-          background: #0b141e;
-          border: 1px solid #263746;
-          border-radius: 5px;
-          font-size: 10px;
-          font-weight: 760;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          cursor: pointer;
-        }
-        .lupi-visuals-switcher button:hover {
-          color: #d8e3ed;
-          border-color: #385064;
-        }
-        .lupi-visuals-switcher button[aria-pressed='true'] {
-          color: #dffeff;
-          background: rgba(34, 211, 215, 0.1);
-          border-color: rgba(34, 211, 215, 0.46);
-          box-shadow: inset 0 -2px 0 #22d3d7;
-        }
-        .lupi-visuals-switcher button:focus-visible {
-          outline: 2px solid rgba(34, 211, 215, 0.82);
-          outline-offset: -2px;
-        }
-        .lupi-studio-slider-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 7px;
-        }
-        .lupi-world-rail {
-          display: flex;
-          gap: 7px;
-          overflow-x: auto;
-          overflow-y: hidden;
-          padding: 1px;
-          scroll-snap-type: x proximity;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-        }
-        .lupi-world-rail::-webkit-scrollbar {
-          display: none;
-          width: 0;
-          height: 0;
-        }
-        .lupi-native-color::-webkit-color-swatch-wrapper {
-          padding: 0;
-        }
-        .lupi-native-color::-webkit-color-swatch {
-          border: 0;
-          border-radius: 5px;
-        }
-        @media (max-width: 768px) {
-          .lupi-studio-slider-grid {
-            grid-template-columns: 1fr;
-            gap: 7px;
-          }
-        }
-      `}</style>
-
-      <div className="lupi-visuals-switcher" role="group" aria-label="Visual controls">
-        <button
-          type="button"
-          aria-label="Structure controls"
-          aria-pressed={mode === 'molecule'}
-          onClick={() => setStudioDeck('molecule')}
-        >
-          Structure
-        </button>
-        <button
-          type="button"
-          aria-label="Scene controls"
-          aria-pressed={mode === 'scene'}
-          onClick={() => setStudioDeck('scene')}
-        >
-          Scene
-        </button>
-      </div>
-
-      {mode === 'molecule' ? <MoleculeControls /> : <SceneControls />}
+      <fieldset style={section}>
+        <legend>Structure</legend>
+        <label style={row}>
+          <span>Bond guides</span>
+          <input type="checkbox" checked={showBonds} onChange={() => useStore.getState().toggleBonds()} />
+        </label>
+        <p style={hint}>Connections may be inferred from distance. They are not a claim about bond order.</p>
+        <label style={row}>
+          <span>Coordinate axes</span>
+          <input type="checkbox" checked={showAxes} onChange={() => useStore.getState().toggleAxes()} />
+        </label>
+        <label style={row}>
+          <span>Cell / bounding box</span>
+          <input type="checkbox" checked={showCell} onChange={() => useStore.getState().toggleCell()} />
+        </label>
+        <label style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+          Atom size · {atomScale.toFixed(2)}×
+          <input
+            aria-label="Atom size"
+            type="range"
+            min=".3"
+            max="2"
+            step=".05"
+            value={atomScale}
+            onChange={event => useStore.getState().setAtomScale(Number(event.target.value))}
+          />
+        </label>
+      </fieldset>
+      <fieldset style={section}>
+        <legend>Background</legend>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          {[
+            ['deep', 'Dark'],
+            ['white', 'Paper'],
+            ['blueprint', 'Blueprint'],
+          ].map(([id, label]) => (
+            <button
+              type="button"
+              key={id}
+              aria-pressed={background === id}
+              onClick={() => useStore.getState().setBackgroundPreset(id)}
+              style={{
+                ...button,
+                borderColor: background === id ? '#d5ef9c' : '#526253',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      <button type="button" style={button} onClick={() => useStore.getState().setColorScheme('element')}>
+        Use element colors
+      </button>
+      <p style={hint}>
+        Use Data to inspect source properties, Camera to change the viewing angle, and Export to make a
+        picture.
+      </p>
     </div>
   );
 }
+const section = { border: 0, margin: 0, padding: 0, minWidth: 0 } as const;
+const row = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  minHeight: 44,
+  gap: 16,
+} as const;
+const hint = { color: '#afc0b4', fontSize: 12, margin: '4px 0 8px' } as const;
+const button = {
+  minHeight: 44,
+  padding: '10px 14px',
+  color: '#eff3e9',
+  border: '1px solid #526253',
+  borderRadius: 7,
+  background: '#1c2c26',
+  cursor: 'pointer',
+} as const;

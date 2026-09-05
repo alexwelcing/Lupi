@@ -1,12 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { useStore } from '../store';
-import {
-  IconExport,
-  IconFlythrough,
-  IconStudy,
-  IconTelemetryTool,
-  LupiGlyph,
-} from '../icons';
+import { IconExport, IconFlythrough, IconStudy, IconTelemetryTool, LupiGlyph } from '../icons';
 
 type ViewerCommand = 'visuals' | 'analyze' | 'science' | 'camera' | 'capture' | 'learn' | 'elements';
 
@@ -17,12 +11,18 @@ const COMMANDS: Array<{
   icon: ReactNode;
   requiresScience?: boolean;
 }> = [
-  { id: 'visuals', label: 'Visuals', shortcut: '1', icon: <IconVisuals /> },
-  { id: 'analyze', label: 'Analyze', shortcut: '2', icon: <IconTelemetryTool /> },
-  { id: 'science', label: 'Science', shortcut: '6', icon: <IconScience />, requiresScience: true },
-  { id: 'camera', label: 'Camera', shortcut: '3', icon: <IconFlythrough /> },
-  { id: 'capture', label: 'Capture', shortcut: '4', icon: <IconExport /> },
   { id: 'learn', label: 'Learn', shortcut: '5', icon: <IconStudy /> },
+  { id: 'visuals', label: 'Style', shortcut: '1', icon: <IconVisuals /> },
+  { id: 'analyze', label: 'Data', shortcut: '2', icon: <IconTelemetryTool /> },
+  {
+    id: 'science',
+    label: 'Path',
+    shortcut: '6',
+    icon: <IconScience />,
+    requiresScience: true,
+  },
+  { id: 'camera', label: 'Camera', shortcut: '3', icon: <IconFlythrough /> },
+  { id: 'capture', label: 'Export', shortcut: '4', icon: <IconExport /> },
   { id: 'elements', label: 'Elements', shortcut: '7', icon: <IconElements /> },
 ];
 
@@ -32,13 +32,20 @@ function commandIsActive(
   studyLensOpen: boolean,
 ) {
   switch (command) {
-    case 'visuals': return activePanel === 'studio';
-    case 'analyze': return activePanel === 'telemetry';
-    case 'science': return activePanel === 'science';
-    case 'camera': return activePanel === 'flythrough';
-    case 'capture': return activePanel === 'export';
-    case 'learn': return studyLensOpen;
-    case 'elements': return activePanel === 'elements';
+    case 'visuals':
+      return activePanel === 'studio';
+    case 'analyze':
+      return activePanel === 'telemetry';
+    case 'science':
+      return activePanel === 'science';
+    case 'camera':
+      return activePanel === 'flythrough';
+    case 'capture':
+      return activePanel === 'export';
+    case 'learn':
+      return studyLensOpen;
+    case 'elements':
+      return activePanel === 'elements';
   }
 }
 
@@ -101,12 +108,7 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
   };
 
   return (
-    <nav
-      className="lupine-command-deck"
-      data-compact={compact}
-      role="toolbar"
-      aria-label="Viewer commands"
-    >
+    <nav className="lupine-command-deck" data-compact={compact} role="toolbar" aria-label="Viewer commands">
       {COMMANDS.filter(command => !command.requiresScience || hasScience).map(command => {
         const active = commandIsActive(command.id, activePanel, studyLensOpen);
         return (
@@ -123,8 +125,12 @@ export const ViewerCommandDeck = memo(function ViewerCommandDeck({ compact }: { 
             title={`${command.label} [${command.shortcut}]`}
             onClick={() => activate(command.id)}
           >
-            <span className="lupine-command-slot__key" aria-hidden="true">{command.shortcut}</span>
-            <span className="lupine-command-slot__icon" aria-hidden="true">{command.icon}</span>
+            <span className="lupine-command-slot__key" aria-hidden="true">
+              {command.shortcut}
+            </span>
+            <span className="lupine-command-slot__icon" aria-hidden="true">
+              {command.icon}
+            </span>
             <span className="lupine-command-slot__label">{command.label}</span>
           </button>
         );

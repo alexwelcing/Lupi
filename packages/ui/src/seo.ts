@@ -39,11 +39,11 @@ export function useSeo(config: SeoConfig) {
 function applySeo(config: SeoConfig) {
   const canonical = absoluteUrl(config.canonicalPath);
   const image = absoluteUrl(config.image ?? DEFAULT_SOCIAL_IMAGE);
-  const imageAlt = config.imageAlt ?? 'Lupi molecular viewer from Lupine Science.';
+  const imageAlt = config.imageAlt ?? 'Lupi interactive molecular viewer.';
 
   document.title = config.title;
   upsertMeta('name', 'description', config.description);
-  upsertMeta('property', 'og:site_name', 'Lupine Science');
+  upsertMeta('property', 'og:site_name', 'Lupi');
   upsertMeta('property', 'og:locale', 'en_US');
   upsertMeta('property', 'og:type', config.type ?? 'website');
   upsertMeta('property', 'og:title', config.title);

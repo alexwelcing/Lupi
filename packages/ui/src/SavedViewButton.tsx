@@ -38,14 +38,19 @@ interface SaveDraft {
 
 function BookmarkGlyph() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
     </svg>
   );
-}
-
-function slugTail(slug: string) {
-  return slug || 'new-link';
 }
 
 function socialPostText(title: string) {
@@ -69,10 +74,10 @@ function openSharePopup(url: string) {
 }
 
 export function SavedViewButton({ compact = false }: { compact?: boolean }) {
-  const file = useStore((state) => state.file);
-  const loadedAtomCount = useStore((state) => state.loadedAtomCount);
-  const frame = useStore((state) => state.frame);
-  const showBonds = useStore((state) => state.showBonds);
+  const file = useStore(state => state.file);
+  const loadedAtomCount = useStore(state => state.loadedAtomCount);
+  const frame = useStore(state => state.frame);
+  const showBonds = useStore(state => state.showBonds);
   const { loading: authLoading, signIn, user, idToken, refreshToken } = useFirebaseAuth();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -173,7 +178,9 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
       setSlug(result.view.slug);
       setStatus('Saved.');
       // Invalidate recent views query so list updates immediately
-      queryClient.invalidateQueries({ queryKey: ['recentSavedViews', user?.uid] });
+      queryClient.invalidateQueries({
+        queryKey: ['recentSavedViews', user?.uid],
+      });
       // North Star: a molecule view was persisted. No PII — counts + flags only.
       track(ANALYTICS_EVENTS.VIEW_SAVED, {
         atoms: loadedAtomCount || file?.trajectory.frames[0]?.natoms || 0,
@@ -223,24 +230,28 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
         active={Boolean(savedUrl) || open}
         compact={compact}
         glyph={<BookmarkGlyph />}
-        label={savedUrl ? 'Saved' : 'Save'}
+        label="Save"
         testId="lupi-save-view-button"
         title="Save view"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen(current => !current)}
       />
 
       {open && (
         <LupiPanel testId="lupi-save-view-panel" width={386}>
           <LupiPanelHeader
-            kicker="View link"
-            title={slugTail(cleanSlug)}
+            kicker="Save and share"
+            title={savedUrl ? 'Your saved snapshot' : 'Create a view link'}
             accessory={<LupiOpticalMark active={Boolean(savedUrl)} />}
           />
 
           <div style={panelBodyStyle}>
+            {savedUrl && (
+              <LupiNotice>
+                Your link contains the view as it was when saved. Save again to include later changes.
+              </LupiNotice>
+            )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <LupiStatusPill label={user ? 'signed in' : 'guest'} tone={user ? 'green' : 'amber'} />
-              <LupiStatusPill label="canonical" tone="cyan" />
               <LupiStatusPill label={savedUrl ? 'saved' : 'draft'} tone={savedUrl ? 'green' : 'amber'} />
             </div>
 
@@ -260,8 +271,18 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
 
             {!user ? (
               <>
-                <LupiNotice>Sign in to save this view.</LupiNotice>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <LupiNotice>
+                  {firebaseConfigured
+                    ? 'Sign in to save a shareable view link. You can export a picture without an account.'
+                    : 'Sign-in is not available in this build. You can still export a picture without an account.'}
+                </LupiNotice>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 8,
+                  }}
+                >
                   <LupiProviderButton
                     provider="google"
                     label="Google"
@@ -278,17 +299,23 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
               </>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr',
+                    gap: 10,
+                  }}
+                >
                   <LupiField
                     label="Name"
                     value={title}
                     onChange={handleTitleChange}
-                    placeholder="Ice Block Publish"
+                    placeholder="My molecule study"
                   />
                   <LupiField
-                    label="Slug (auto-generated if blank)"
+                    label="Link name"
                     value={slug}
-                    onChange={(value) => {
+                    onChange={value => {
                       setSlugTouched(true);
                       setSlug(slugifySavedViewTitle(value));
                     }}
@@ -306,7 +333,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
                     background: 'rgba(244,239,229,0.04)',
                   }}
                 >
-                  <span style={labelStyle}>URL</span>
+                  <span style={labelStyle}>{savedUrl ? 'Saved link' : 'Link preview — not saved yet'}</span>
                   <span
                     style={{
                       minWidth: 0,
@@ -325,7 +352,13 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
                 {error && <LupiNotice tone="pink">{error}</LupiNotice>}
                 {status && <LupiNotice tone="green">{status}</LupiNotice>}
 
-                <div style={{ display: 'grid', gridTemplateColumns: savedUrl ? '1fr 1fr' : '1fr', gap: 8 }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: savedUrl ? '1fr 1fr' : '1fr',
+                    gap: 8,
+                  }}
+                >
                   <LupiButton tone="primary" onClick={handleSave} disabled={busy || !idToken}>
                     {busy ? 'Saving' : 'Save'}
                   </LupiButton>
@@ -351,10 +384,17 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
                   )}
                   {savedUrl && (
                     <LupiButton
-                      onClick={() => {
-                        track(ANALYTICS_EVENTS.VIEW_SHARED, { method: 'copy_button' });
-                        void navigator.clipboard.writeText(savedUrl);
-                        setStatus('Copied social link.');
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(savedUrl);
+                          track(ANALYTICS_EVENTS.VIEW_SHARED, {
+                            method: 'copy_button',
+                          });
+                          setStatus('Link copied.');
+                          setError(null);
+                        } catch {
+                          setError('Could not copy the link. Select and copy the saved URL above.');
+                        }
                       }}
                     >
                       Copy
@@ -363,30 +403,38 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
                 </div>
 
                 {savedUrl && (
-                  <div style={{ display: 'grid', gridTemplateColumns: canNativeShare ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
-                    {canNativeShare && (
-                      <LupiButton onClick={handleNativeShare}>
-                        Share
-                      </LupiButton>
-                    )}
-                    <LupiButton onClick={() => handleExternalShare('linkedin')}>
-                      LinkedIn
-                    </LupiButton>
-                    <LupiButton onClick={() => handleExternalShare('x')}>
-                      X
-                    </LupiButton>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: canNativeShare ? '1fr 1fr 1fr' : '1fr 1fr',
+                      gap: 8,
+                    }}
+                  >
+                    {canNativeShare && <LupiButton onClick={handleNativeShare}>Share</LupiButton>}
+                    <LupiButton onClick={() => handleExternalShare('linkedin')}>LinkedIn</LupiButton>
+                    <LupiButton onClick={() => handleExternalShare('x')}>X</LupiButton>
                   </div>
                 )}
 
                 {recentViews.length > 0 && (
                   <div style={{ display: 'grid', gap: 7 }}>
                     <span style={labelStyle}>Links</span>
-                    {recentViews.slice(0, 4).map((view) => (
+                    {recentViews.slice(0, 4).map(view => (
                       <LupiIndexRow
                         key={view.slug}
-                        href={`#/view/${view.slug}`}
+                        href={makeSavedViewUrl(view.slug)}
                         label={view.title}
-                        after={<span style={{ color: lupiUserColors.amber, fontFamily: 'var(--font-mono), ui-monospace, monospace', fontSize: 10 }}>{view.slug}</span>}
+                        after={
+                          <span
+                            style={{
+                              color: lupiUserColors.amber,
+                              fontFamily: 'var(--font-mono), ui-monospace, monospace',
+                              fontSize: 10,
+                            }}
+                          >
+                            {view.slug}
+                          </span>
+                        }
                       />
                     ))}
                   </div>
@@ -403,7 +451,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
 function readPendingDraft(): SaveDraft | null {
   try {
     const raw = localStorage.getItem(PENDING_SAVE_KEY);
-    return raw ? JSON.parse(raw) as SaveDraft : null;
+    return raw ? (JSON.parse(raw) as SaveDraft) : null;
   } catch {
     return null;
   }

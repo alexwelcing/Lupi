@@ -10,11 +10,11 @@ import { useStore, type AppState } from './store';
 import { ViewerPanelBody } from './ViewerPanelBody';
 
 const PANEL_TITLES: Record<NonNullable<AppState['activePanel']>, string> = {
-  studio: 'Visuals',
-  export: 'Capture',
+  studio: 'Style',
+  export: 'Export',
   flythrough: 'Camera',
-  telemetry: 'Analyze',
-  science: 'Z1 Science',
+  telemetry: 'Data',
+  science: 'Reaction path',
   equilibrium: 'Equilibrium Solve',
   mlipLongRun: 'MLIP Long Run',
   elements: 'Elements',

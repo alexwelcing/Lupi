@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node ../../tools/generate-sphere-grid-gallery.mjs --no-snapshot --use-existing && tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs",
+    "build": "tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs",
     "lint": "eslint .",
     "test": "vitest run vite.config.test.ts",
     "preview": "vite preview"
