@@ -40,7 +40,10 @@ import {
   sciencePathIndexFromRoute,
 } from './viewer/viewerRoutes';
 import { openMolecule } from './viewer/openMolecule';
-import { DEFAULT_Z1_SCIENCE_PATH_INDEX, scienceGalleryIdForPathIndex } from './science/scienceBundle';
+import {
+  DEFAULT_Z1_SCIENCE_PATH_INDEX,
+  scienceGalleryIdForPathIndex,
+} from './science/scienceBundle';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
 import { ViewerCanvas } from './viewer/ViewerCanvas';
 import { selectViewerFrames } from './viewer/artifactFrameSelection';
@@ -59,7 +62,10 @@ import { PanelHost } from './PanelHost';
 import { StudyLensPanel } from './StudyLensPanel';
 import { XREntryButton } from './xr/XREntryButton';
 
-import { useSmoothFramePlayback, type InterpolatedFrameState } from './hooks/useSmoothFramePlayback';
+import {
+  useSmoothFramePlayback,
+  type InterpolatedFrameState,
+} from './hooks/useSmoothFramePlayback';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { clearStreamingFrameCoordinator, requestStreamingFrame } from './streamingFrameCoordinator';
 
@@ -102,6 +108,7 @@ export function ViewerApp() {
   const [pathRoute, setPathRoute] = useState(currentPathRoute);
   const [isExportingQuickLook, setIsExportingQuickLook] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [gpuStudioOpen, setGpuStudioOpen] = useState(false);
   const [vectorStats, setVectorStats] = useState<VectorGlyphStats | null>(null);
   const [automaticLoadFailed, setAutomaticLoadFailed] = useState(false);
   const loadedSavedViewSlugRef = useRef<string | null>(null);
@@ -192,7 +199,9 @@ export function ViewerApp() {
     if (useGpuBonds && gpuBondsStatus === 'unsupported') {
       useStore
         .getState()
-        .setRendererWarning('GPU bond acceleration unavailable on this device — using the slower CPU path.');
+        .setRendererWarning(
+          'GPU bond acceleration unavailable on this device — using the slower CPU path.',
+        );
     } else if (gpuBondsStatus === 'ready') {
       useStore.getState().setRendererWarning(null);
     }
@@ -278,7 +287,14 @@ export function ViewerApp() {
     } else if (!playing && !frameIsBuffered) {
       requestBufferedFrame(frame);
     }
-  }, [frame, frameIsBuffered, playing, requestBufferedFrame, setSmoothFrame, interpState.effectiveFrame]);
+  }, [
+    frame,
+    frameIsBuffered,
+    playing,
+    requestBufferedFrame,
+    setSmoothFrame,
+    interpState.effectiveFrame,
+  ]);
 
   // URL state restore + auto-load
   useEffect(() => {
@@ -349,7 +365,11 @@ export function ViewerApp() {
           setAutomaticLoadFailed(false);
           // Preserve root-relative local dataset routes while applying the
           // strict remote policy to absolute network URLs.
-          const allowed = assertAllowedRemoteMoleculeUrl(loadUrl, 'human-load', window.location.origin);
+          const allowed = assertAllowedRemoteMoleculeUrl(
+            loadUrl,
+            'human-load',
+            window.location.origin,
+          );
           const result = await openMolecule({
             kind: 'url',
             url: allowed.url,
@@ -365,7 +385,9 @@ export function ViewerApp() {
           if (generation !== navigationGeneration) return;
           useStore
             .getState()
-            .setError(error instanceof Error ? error.message : 'This molecule link could not be opened.');
+            .setError(
+              error instanceof Error ? error.message : 'This molecule link could not be opened.',
+            );
           setAutomaticLoadFailed(true);
         }
         return;
@@ -406,7 +428,8 @@ export function ViewerApp() {
       // Legacy aliases: `?demo=science-panel[&path=<i>]`, `#/demo/science-panel`.
       if (params.get('demo') === 'science-panel' || hashPath === '/demo/science-panel') {
         const wanted = Number(params.get('path'));
-        const target = scienceGalleryIdForPathIndex(wanted) != null ? wanted : DEFAULT_Z1_SCIENCE_PATH_INDEX;
+        const target =
+          scienceGalleryIdForPathIndex(wanted) != null ? wanted : DEFAULT_Z1_SCIENCE_PATH_INDEX;
         const url = new URL(window.location.href);
         url.searchParams.delete('demo');
         url.searchParams.delete('path');
@@ -470,7 +493,9 @@ export function ViewerApp() {
   // playback hook's RAF ref/passive synchronization can still describe a
   // fractional frame even though the store is already paused.
   const artifactCaptureFrameIndex =
-    exportRequest.type === 'image' && exportRequest.artifactSpec ? exportRequest.artifactSpec.frame : null;
+    exportRequest.type === 'image' && exportRequest.artifactSpec
+      ? exportRequest.artifactSpec.frame
+      : null;
   const renderedFrames = selectViewerFrames(
     file?.trajectory.frames ?? [],
     displayFrameIndex,
@@ -557,7 +582,7 @@ export function ViewerApp() {
         background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
       }}
     >
-      {!isEmbeddedMobileViewer && (
+      {!isEmbeddedMobileViewer && !gpuStudioOpen && (
         <GlobalShortcuts
           commandPaletteOpen={commandPaletteOpen}
           setCommandPaletteOpen={setCommandPaletteOpen}
@@ -565,7 +590,11 @@ export function ViewerApp() {
       )}
       {!isEmbeddedMobileViewer && (
         <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
-          <AppHeader isMobile={isMobile} clearLoadedFile={clearLoadedFile} />
+          <AppHeader
+            isMobile={isMobile}
+            clearLoadedFile={clearLoadedFile}
+            onStudioOpenChange={setGpuStudioOpen}
+          />
         </div>
       )}
 
@@ -592,6 +621,7 @@ export function ViewerApp() {
             }
           `}</style>
             <ViewerCanvas
+              paused={gpuStudioOpen}
               capability={renderCapability}
               center={center}
               cameraDistance={cameraDistance}
@@ -655,7 +685,7 @@ export function ViewerApp() {
             )}
 
             {file && currentFrame && studyLensOpen && !isEmbeddedMobileViewer && (
-              <div id="viewer-study-panel">
+              <div>
                 <StudyLensPanel
                   compact={isMobile}
                   onClose={() => useStore.getState().setStudyLensOpen(false)}

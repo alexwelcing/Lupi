@@ -2,13 +2,16 @@ import { memo } from 'react';
 import { useStore } from '../store';
 import { SavedViewButton } from '../SavedViewButton';
 import { LupiAgentDock } from '../LupiAgentDock';
+import { GpuStudioLaunch } from '../gpu-studio/GpuStudioLaunch';
 
 export const AppHeader = memo(function AppHeader({
   isMobile,
   clearLoadedFile,
+  onStudioOpenChange,
 }: {
   isMobile: boolean;
   clearLoadedFile: () => void;
+  onStudioOpenChange: (open: boolean) => void;
 }) {
   const fileName = useStore(state => state.file?.name ?? '');
   const atomCount = useStore(state => state.file?.trajectory.frames.find(Boolean)?.natoms ?? 0);
@@ -17,7 +20,7 @@ export const AppHeader = memo(function AppHeader({
       className="lupine-status-bar"
       style={{
         display: 'flex',
-        gap: 12,
+        gap: isMobile ? 6 : 12,
         alignItems: 'center',
         justifyContent: 'space-between',
         minHeight: 58,
@@ -55,10 +58,13 @@ export const AppHeader = memo(function AppHeader({
           {fileName || 'Molecule viewer'}
         </div>
         {atomCount > 0 && (
-          <div style={{ fontSize: 11, color: '#afc0b4' }}>{atomCount.toLocaleString()} atoms</div>
+          <div style={{ fontSize: 11, color: '#afc0b4', whiteSpace: 'nowrap' }}>
+            {atomCount.toLocaleString()} atoms
+          </div>
         )}
       </div>
       {fileName && <SavedViewButton compact={isMobile} />}
+      {fileName && <GpuStudioLaunch onOpenChange={onStudioOpenChange} />}
       <LupiAgentDock compact={isMobile} />
     </header>
   );
