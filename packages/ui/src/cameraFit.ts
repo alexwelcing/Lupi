@@ -12,6 +12,8 @@ export interface PerspectiveCameraFitInput {
   verticalFovDegrees: number;
   viewportAspect: number;
   atomRadius: number;
+  /** Optional decorative shell that Recenter should include in the frame. */
+  enclosingRadius?: number;
   padding?: number;
   fallbackDirection?: CameraVector3;
 }
@@ -74,7 +76,8 @@ export function fitPerspectiveCameraToBounds(
       ? input.padding!
       : DEFAULT_CAMERA_FIT_PADDING;
   const contentRadius =
-    Math.max(MIN_CONTENT_RADIUS, halfDiagonal + atomRadius) * padding;
+    Math.max(MIN_CONTENT_RADIUS, halfDiagonal + atomRadius,
+      Number.isFinite(input.enclosingRadius) ? input.enclosingRadius! : 0) * padding;
 
   const safeFov = Number.isFinite(input.verticalFovDegrees)
     ? Math.min(179, Math.max(1, input.verticalFovDegrees))

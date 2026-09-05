@@ -559,7 +559,7 @@ export function ViewerScene({
           />}
           {showCell && <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />}
 
-          {!(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
+          {showCell && !(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
             const b = currentFrame.boxBounds;
             const cx = (b[0] + b[1]) / 2;
             const cy = b[2];

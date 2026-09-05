@@ -476,9 +476,12 @@ describe('Store — File Loading', () => {
     expect(s.showBonds).toBe(true);
     expect(s.showCell).toBe(false);
     expect(s.showAxes).toBe(false);
-    expect(s.postprocessPreset).toBe('editorial');
-    expect(s.backgroundPreset).toBe('deep');
-    expect(s.rimLightColor).toBe('#7de9ff');
+    expect(s.postprocessPreset).toBe('paper');
+    expect(s.backgroundPreset).toBe('gallery-studio');
+    expect(s.environmentPreset).toBe('softbox');
+    expect(s.rimLightColor).toBe('#ffffff');
+    expect(s.bloom).toBe(false);
+    expect(s.dof).toBe(false);
     expect(s.surfacePolish).toBeGreaterThan(0);
     expect(s.surfaceClearcoat).toBeGreaterThan(0);
   });

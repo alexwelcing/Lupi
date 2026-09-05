@@ -306,9 +306,11 @@ type ProceduralBackgroundProps = {
   top: string;
   bottom: string;
   visible?: boolean;
+  paused?: boolean;
+  speed?: number;
 };
 
-export function ProceduralBackground({ variant, top, bottom, visible = true }: ProceduralBackgroundProps) {
+export function ProceduralBackground({ variant, top, bottom, visible = true, paused = false, speed = 1 }: ProceduralBackgroundProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
@@ -323,8 +325,8 @@ export function ProceduralBackground({ variant, top, bottom, visible = true }: P
     uniforms.uBottom.value.set(bottom);
   }, [bottom, top, uniforms, variant]);
 
-  useFrame((state) => {
-    uniforms.uTime.value = state.clock.elapsedTime;
+  useFrame((state, delta) => {
+    if (!paused && visible) uniforms.uTime.value += Math.min(delta, .1) * speed;
     meshRef.current?.position.copy(state.camera.position);
   });
 
@@ -349,9 +351,12 @@ type ProceduralMathFieldProps = {
   center: [number, number, number];
   radius: number;
   visible?: boolean;
+  paused?: boolean;
+  speed?: number;
 };
 
-export function ProceduralMathField({ variant, center, radius, visible = true }: ProceduralMathFieldProps) {
+export function ProceduralMathField({ variant, center, radius, visible = true, paused = false, speed = 1 }: ProceduralMathFieldProps) {
+  const time = useRef(0);
   const groupRef = useRef<THREE.Group>(null);
   const lineMaterialRef = useRef<THREE.LineBasicMaterial>(null);
   const pointMaterialRef = useRef<THREE.PointsMaterial>(null);
@@ -363,8 +368,9 @@ export function ProceduralMathField({ variant, center, radius, visible = true }:
     field.points.dispose();
   }, [field]);
 
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
+  useFrame((_state, delta) => {
+    if (!paused && visible) time.current += Math.min(delta, .1) * speed;
+    const t = time.current;
     const index = VARIANT_INDEX[variant] ?? 0;
     if (groupRef.current) {
       groupRef.current.rotation.y = t * (0.006 + index * 0.0018);

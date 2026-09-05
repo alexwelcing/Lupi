@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '../store';
@@ -22,6 +22,7 @@ export function CameraManager({
   }));
   const flythroughPreview = useStore(s => s.flythroughPreview);
   const file = useStore(s => s.file);
+  const previousLayoutHadStyle = useRef(false);
 
   const applyPerspectiveProjection = useCallback((nextFov?: number) => {
     if (camera instanceof THREE.PerspectiveCamera) {
@@ -117,9 +118,14 @@ export function CameraManager({
     // fit against a square viewport. Correct it once. Afterwards setFile uses
     // the stored real aspect itself; metadata/streaming file replacements do
     // not refit, and orientation changes respect a user-positioned free camera.
-    if (file && (!hadViewportAspect || (aspectChanged && state.cameraPreset !== 'free'))) {
+    // Opening/closing the mobile style workbench changes the actual canvas
+    // rectangle. Refit in the same viewing direction so the model stays useful
+    // above the sheet. Unrelated free-camera viewport changes remain untouched.
+    const styleLayoutChanged = aspectChanged && (state.activePanel === 'studio' || previousLayoutHadStyle.current);
+    if (file && (!hadViewportAspect || styleLayoutChanged || (aspectChanged && state.cameraPreset !== 'free'))) {
       useStore.getState().fitCameraView();
     }
+    previousLayoutHadStyle.current = state.activePanel === 'studio';
   }, [file, size.width, size.height]);
 
   void fileId;

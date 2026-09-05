@@ -162,15 +162,19 @@ test('@deployed-smoke viewer settings are usable and learning tools are discover
     name: 'Style command panel',
   });
   await expect(visualsPanel).toBeVisible();
+  await expect.poll(async () => {
+    const model = await page.locator('.lupine-main-viewport canvas').boundingBox();
+    const panel = await visualsPanel.boundingBox();
+    return !!model && !!panel && model.x + model.width <= panel.x;
+  }).toBe(true);
+  const paper = visualsPanel.getByRole('button', { name: 'Paper look', exact: true });
+  await paper.click();
+  await expectPressed(paper);
+  await visualsPanel.getByRole('button', { name: 'All visual mods', exact: true }).click();
+  await visualsPanel.getByText('Structure guides', { exact: true }).click();
   const bonds = visualsPanel.getByRole('checkbox', { name: 'Bond guides' });
   await bonds.uncheck();
   await expect(bonds).not.toBeChecked();
-  const paper = visualsPanel.getByRole('button', {
-    name: 'Paper',
-    exact: true,
-  });
-  await paper.click();
-  await expectPressed(paper);
 
   await commands.getByRole('button', { name: 'Camera command' }).click();
   await expect(page.getByRole('region', { name: 'Camera command panel' })).toBeVisible();
@@ -209,10 +213,15 @@ test('the student style controls change the model without renderer errors', asyn
   await page.goto('/?sim=water');
   await expectViewerReady(page);
   await page.getByRole('button', { name: 'Style command' }).click();
+  await page.getByRole('button', { name: 'Paper look', exact: true }).click();
+  await expectPressed(page.getByRole('button', { name: 'Paper look', exact: true }));
+  await page.getByRole('button', { name: 'All visual mods', exact: true }).click();
+  await page.getByText('Structure guides', { exact: true }).click();
   await page.getByRole('checkbox', { name: 'Bond guides' }).uncheck();
-  await page.getByRole('button', { name: 'Paper', exact: true }).click();
-  await expectPressed(page.getByRole('button', { name: 'Paper', exact: true }));
-  await page.getByRole('button', { name: 'Use element colors', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Color by', exact: true }).selectOption('uniform');
+  await expect(page.getByRole('combobox', { name: 'Color by', exact: true })).toHaveValue('uniform');
+  await page.getByRole('combobox', { name: 'Color by', exact: true }).selectOption('element');
+  await expect(page.getByRole('combobox', { name: 'Color by', exact: true })).toHaveValue('element');
   expect(errors).toEqual([]);
   await releaseRenderer(page);
 });
@@ -566,8 +575,10 @@ test.describe('mobile viewer', () => {
       name: 'Style command panel',
     });
     await expect(visualsPanel).toBeVisible();
+    await expect(visualsPanel.getByRole('button', { name: 'Paper look', exact: true })).toBeVisible();
+    await visualsPanel.getByRole('button', { name: 'All visual mods', exact: true }).click();
+    await visualsPanel.getByText('Structure guides', { exact: true }).click();
     await expect(visualsPanel.getByRole('checkbox', { name: 'Bond guides' })).toBeVisible();
-    await expect(visualsPanel.getByRole('button', { name: 'Paper', exact: true })).toBeVisible();
 
     await visualsPanel.getByRole('button', { name: 'Close Style panel' }).click();
     await expect(visualsPanel).toBeHidden();
