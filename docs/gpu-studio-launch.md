@@ -36,6 +36,41 @@ and destroys the owned GPU device. Late asynchronous initialization is canceled
 and disposed; startup has a 20-second timeout. Device loss and shader/adapter
 failure produce a closable fallback, never a false WebGPU-active badge.
 
+## Refinement pass — September 5, 2026
+
+- Specimen-first layout: the molecule name and canvas lead, with a compact
+  three-part control rail. Resizable type-role tokens replace fixed-pixel text;
+  the phone layout stacks without horizontal scrolling.
+- Locally generated 128px softbox environment, softer physical-material
+  highlights and quieter contour spacing. No additional package or HDR fetch.
+  The environment render target is owned and disposed with the preview.
+- **Light angle** moves the key light and environment rotation. The native
+  slider supports keyboard arrows/Home/End and announces degrees. It has a
+  scoped focus ring and styling independent of the app's legacy blue sliders.
+- **Atom focus** emphasizes one source type while dimming, not hiding, the
+  others. Counts come from the copied frame, not a formula lookup. Pressing the
+  same type again or **All atoms** restores the full presentation.
+- Resizing preserves viewing direction and relative zoom; **Reset view** still
+  explicitly refits the camera. Finish, lighting and focus never write back to
+  the molecule or regular-viewer state. Rotation remains opt-in.
+
+Implementation follows Three's local
+[RoomEnvironment lighting setup](https://threejs.org/docs/pages/RoomEnvironment.html)
+using the installed r184 WebGPU PMREM implementation.
+
+Refinement verification: UI TypeScript and production build passed; scoped lint
+passed; three focused unit-test files / 12 tests passed, including control
+wiring, source-coordinate preservation, truthful missing-frame labels and
+cleanup. All six production-browser regression checks passed (1.7 minutes),
+covering unsupported WebGPU, 320px text spacing, student navigation and a real
+PNG export. In-app browser checks observed real new shader pixels, oxygen
+focus, keyboard light changes, reopening, and 390px/1280px layouts. Production
+rendering was also checked; only the pre-existing Three.Clock deprecation
+warning appeared. The dedicated headless GPU lane remains
+adapter-blocked as documented below; its new focus assertions are not claimed
+as executed. The preceding candidate's CI audit is confirmed failed on the
+existing 19 dependency findings, including six high-severity findings.
+
 ## Verification
 
 - Frozen lockfile install, UI TypeScript, production web build: passed.
@@ -78,7 +113,7 @@ continues to disable WebGPU and verifies the unsupported path; its configuration
 has not been silently changed to assume device support.
 
 The observed production optional chunks are about 175.66 kB gzip for Three's
-WebGPU backend plus 5.59 kB gzip for the vgpu integration/shader runtime. These
+WebGPU backend plus 5.89 kB gzip for the vgpu integration/shader runtime. These
 are bundle sizes, not download timing or FPS measurements. The existing large
 regular-viewer and XR bundles remain a separate optimization task.
 

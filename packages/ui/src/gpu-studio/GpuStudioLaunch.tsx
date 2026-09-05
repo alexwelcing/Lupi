@@ -78,6 +78,10 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
   const [error, setError] = useState(preview.error || '');
   const [look, setLook] = useState<StudioLook>('studio');
   const [spinning, setSpinning] = useState(false);
+  const [light, setLight] = useState(-35);
+  const [focus, setFocus] = useState<number | null>(null);
+  const snapshot = preview.snapshot;
+  const focusedGroup = focus === null ? undefined : snapshot?.groups[focus];
   const close = () => {
     dialog.current?.close();
     onClose();
@@ -142,7 +146,7 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
     <dialog
       ref={dialog}
       className="gpu-studio"
-      aria-labelledby="gpu-studio-title"
+      aria-label="GPU Studio"
       onCancel={event => {
         event.preventDefault();
         close();
@@ -155,65 +159,24 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
           <span aria-hidden="true">←</span> Back to viewer
         </button>
         <span className="gpu-studio__edition">
-          Lupi / GPU Studio <span>Preview</span>
+          <span aria-hidden="true">✳</span> GPU Studio <small>by Lupi</small>
+        </span>
+        <span className="gpu-studio__connection">
+          <i className="gpu-studio__live" data-ready={status === 'ready'} />
+          {status === 'ready' ? 'WebGPU active' : 'WebGPU preview'}
         </span>
       </header>
       <div className="gpu-studio__body">
-        <section className="gpu-studio__intro">
-          <p className="gpu-studio__eyebrow">A new way to look</p>
-          <h1 id="gpu-studio-title">
-            Same molecule.
-            <br />
-            <em>Different light.</em>
-          </h1>
-          <p className="gpu-studio__lede">
-            Turn familiar structures into something worth a closer look.
-          </p>
-          <div className="gpu-studio__looks" role="group" aria-label="Studio look">
-            <button
-              type="button"
-              aria-pressed={look === 'studio'}
-              disabled={status !== 'ready'}
-              onClick={() => {
-                runtime.current?.setLook('studio');
-                setLook('studio');
-              }}
-            >
-              <span className="gpu-studio__swatch gpu-studio__swatch--studio" aria-hidden="true" />
-              <span>
-                Studio light<small>Warm, sculptural, tactile</small>
-              </span>
-              <span aria-hidden="true">01</span>
-            </button>
-            <button
-              type="button"
-              aria-pressed={look === 'contours'}
-              disabled={status !== 'ready'}
-              onClick={() => {
-                runtime.current?.setLook('contours');
-                setLook('contours');
-              }}
-            >
-              <span
-                className="gpu-studio__swatch gpu-studio__swatch--contours"
-                aria-hidden="true"
-              />
-              <span>
-                Graphic contours<small>Trace every curve</small>
-              </span>
-              <span aria-hidden="true">02</span>
-            </button>
-          </div>
-          <p className="gpu-studio__boundary">
-            A visual study of one frame. Atom positions stay unchanged; sphere sizes, lighting and
-            lines are display choices, not measured properties. Bonds and other viewer layers are
-            not shown here.
-          </p>
-        </section>
         <section className="gpu-studio__stage" aria-label="Molecule studio">
           <div className="gpu-studio__stage-label">
-            <span>{preview.snapshot?.name || 'Your molecule'}</span>
-            <span>Frame {preview.snapshot?.frameNumber || '—'}</span>
+            <div>
+              <p className="gpu-studio__eyebrow">A study in structure</p>
+              <h1>{snapshot?.name || 'Your molecule'}</h1>
+            </div>
+            <p className="gpu-studio__frame">
+              Frame <span>{snapshot ? String(snapshot.frameNumber).padStart(2, '0') : '—'}</span>
+              <small>{snapshot?.atomCount.toLocaleString() || '—'} atoms</small>
+            </p>
           </div>
           <div className="gpu-studio__canvas" ref={host} />
           {status !== 'ready' && (
@@ -224,7 +187,9 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
               <h2>
                 {status === 'loading' ? 'Finding the light…' : 'Stay with the regular viewer'}
               </h2>
-              <p>{status === 'loading' ? 'Starting a WebGPU preview on your device.' : error}</p>
+              <p>
+                {status === 'loading' ? 'Preparing your molecule and its studio lighting.' : error}
+              </p>
               {status === 'unavailable' && (
                 <button type="button" onClick={close}>
                   Return to my molecule →
@@ -233,45 +198,163 @@ function GpuStudio({ preview, onClose }: { preview: Preview; onClose: () => void
             </div>
           )}
           <div className="gpu-studio__stage-footer">
-            <div className="gpu-studio__legend" aria-label="Atom color key">
-              {preview.snapshot?.groups.map((group, index) => (
-                <span key={index}>
-                  <i style={{ backgroundColor: group.color }} />
-                  {group.label}
-                </span>
-              ))}
+            <p className="gpu-studio__gesture">
+              Drag to explore <span>·</span> Scroll or pinch to zoom
+            </p>
+            <div className="gpu-studio__tools">
+              <button
+                type="button"
+                disabled={status !== 'ready'}
+                aria-pressed={spinning}
+                onClick={() => {
+                  runtime.current?.setSpin(!spinning);
+                  setSpinning(!spinning);
+                }}
+              >
+                <span aria-hidden="true">{spinning ? 'Ⅱ' : '↻'}</span>
+                {spinning ? 'Stop rotation' : 'Rotate'}
+              </button>
+              <button
+                type="button"
+                disabled={status !== 'ready'}
+                onClick={() => runtime.current?.reset()}
+              >
+                <span aria-hidden="true">⤢</span> Reset view
+              </button>
             </div>
-            <span>{preview.snapshot?.atomCount.toLocaleString() || '—'} atoms</span>
           </div>
         </section>
+        <aside className="gpu-studio__controls" aria-label="Studio controls">
+          <div className="gpu-studio__control-heading">
+            <p className="gpu-studio__eyebrow">The light room</p>
+            <h2>A different perspective.</h2>
+            <p>Follow a curve. Find a pattern. Make the familiar feel new.</p>
+          </div>
+          <section className="gpu-studio__control-section" aria-label="Appearance">
+            <h3>
+              <span>01</span> Choose a finish
+            </h3>
+            <div className="gpu-studio__looks" role="group" aria-label="Studio look">
+              <button
+                type="button"
+                aria-pressed={look === 'studio'}
+                disabled={status !== 'ready'}
+                onClick={() => {
+                  runtime.current?.setLook('studio');
+                  setLook('studio');
+                }}
+              >
+                <span
+                  className="gpu-studio__swatch gpu-studio__swatch--studio"
+                  aria-hidden="true"
+                />
+                <span>
+                  Studio light<small>Soft light. Real depth.</small>
+                </span>
+                <span className="gpu-studio__selected" aria-hidden="true">
+                  {look === 'studio' ? '✓' : ''}
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={look === 'contours'}
+                disabled={status !== 'ready'}
+                onClick={() => {
+                  runtime.current?.setLook('contours');
+                  setLook('contours');
+                }}
+              >
+                <span
+                  className="gpu-studio__swatch gpu-studio__swatch--contours"
+                  aria-hidden="true"
+                />
+                <span>
+                  Graphic contours<small>Trace every curve</small>
+                </span>
+                <span className="gpu-studio__selected" aria-hidden="true">
+                  {look === 'contours' ? '✓' : ''}
+                </span>
+              </button>
+            </div>
+          </section>
+          <section className="gpu-studio__control-section" aria-label="Lighting">
+            <h3>
+              <span>02</span> Move the light
+            </h3>
+            <label className="gpu-studio__light-label" htmlFor="gpu-studio-light">
+              Light angle <output>{light}°</output>
+            </label>
+            <input
+              id="gpu-studio-light"
+              type="range"
+              min={-180}
+              max={180}
+              step={5}
+              value={light}
+              disabled={status !== 'ready'}
+              aria-valuetext={`${light} degrees`}
+              onChange={event => {
+                const value = Number(event.target.value);
+                runtime.current?.setLight(value);
+                setLight(value);
+              }}
+            />
+            <p className="gpu-studio__hint">Sweep the highlights around your molecule.</p>
+          </section>
+          <section className="gpu-studio__control-section" aria-label="Atom focus">
+            <h3>
+              <span>03</span> Look a little closer
+            </h3>
+            <div className="gpu-studio__legend" role="group" aria-label="Focus by atom type">
+              <button
+                type="button"
+                aria-pressed={focus === null}
+                disabled={status !== 'ready'}
+                onClick={() => {
+                  runtime.current?.setFocus(null);
+                  setFocus(null);
+                }}
+              >
+                All atoms
+              </button>
+              {snapshot?.groups.map((group, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  aria-label={`Focus ${group.label} atoms`}
+                  aria-pressed={focus === index}
+                  disabled={status !== 'ready'}
+                  onClick={() => {
+                    const next = focus === index ? null : index;
+                    runtime.current?.setFocus(next);
+                    setFocus(next);
+                  }}
+                >
+                  <i style={{ backgroundColor: group.color }} aria-hidden="true" />
+                  {group.label}
+                  <small>{group.positions.length / 3}</small>
+                </button>
+              ))}
+            </div>
+            <p className="gpu-studio__hint" role="status">
+              {focusedGroup
+                ? `${focusedGroup.positions.length / 3} ${focusedGroup.label} atoms highlighted. Other atoms stay visible for context.`
+                : 'Choose an atom type to highlight it in the structure.'}
+            </p>
+          </section>
+          <p className="gpu-studio__boundary">
+            Same coordinates. Different light.
+            <br />
+            Sizes, finishes and highlights are visual aids, not measured properties. Bonds and other
+            viewer layers are not shown.
+          </p>
+        </aside>
       </div>
       <footer className="gpu-studio__footer">
+        <p>A little more wonder. The same molecule.</p>
         <p>
-          <span className="gpu-studio__live" data-ready={status === 'ready'} />
-          {status === 'ready' ? 'WebGPU active' : 'WebGPU preview'}
-          <span className="gpu-studio__credit"> · Powered by Vercel Labs vgpu + Three.js</span>
+          Preview <span>·</span> Vercel Labs vgpu + Three.js
         </p>
-        <div className="gpu-studio__tools">
-          <span className="gpu-studio__gesture">Drag to orbit · Scroll to zoom</span>
-          <button
-            type="button"
-            disabled={status !== 'ready'}
-            aria-pressed={spinning}
-            onClick={() => {
-              runtime.current?.setSpin(!spinning);
-              setSpinning(!spinning);
-            }}
-          >
-            {spinning ? 'Stop rotation' : 'Rotate'}
-          </button>
-          <button
-            type="button"
-            disabled={status !== 'ready'}
-            onClick={() => runtime.current?.reset()}
-          >
-            Reset view
-          </button>
-        </div>
       </footer>
     </dialog>
   );

@@ -24,8 +24,18 @@ beforeEach(() => {
       },
     },
   };
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute('open', ''); } });
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute('open'); } });
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value: function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    },
+  });
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value: function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    },
+  });
   Object.defineProperty(navigator, 'gpu', { configurable: true, value: {} });
 });
 afterEach(() => {
@@ -35,6 +45,14 @@ afterEach(() => {
 });
 
 describe('GPU Studio launch lifecycle', () => {
+  it('does not invent frame metadata when a snapshot is unavailable', () => {
+    mocks.state.loadedAtomCount = 0;
+    render(<GpuStudioLaunch onOpenChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open GPU Studio' }));
+    expect(screen.getByText(/Frame/).textContent).toContain('Frame —');
+    expect(screen.getByRole('slider')).toHaveProperty('disabled', true);
+    expect(mocks.createStudio).not.toHaveBeenCalled();
+  });
   it('does not initialize on mount and gives an actionable unsupported state', async () => {
     Object.defineProperty(navigator, 'gpu', { configurable: true, value: undefined });
     const onOpenChange = vi.fn();
@@ -82,5 +100,48 @@ describe('GPU Studio launch lifecycle', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /Return to my molecule/ }));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+  it('wires the finishes, light and atom focus without modifying the source frame', async () => {
+    const instance = {
+      dispose: vi.fn(),
+      setLook: vi.fn(),
+      setLight: vi.fn(),
+      setFocus: vi.fn(),
+      setSpin: vi.fn(),
+      reset: vi.fn(),
+    };
+    mocks.createStudio.mockResolvedValue(instance);
+    const frame = mocks.state.file.trajectory.frames[0];
+    const positions = Array.from(frame.positions);
+    render(<GpuStudioLaunch onOpenChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open GPU Studio' }));
+    await screen.findByText('WebGPU active');
+    expect(screen.getByRole('button', { name: 'All atoms' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Graphic contours/ }));
+    expect(instance.setLook).toHaveBeenLastCalledWith('contours');
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '90' } });
+    expect(instance.setLight).toHaveBeenLastCalledWith(90);
+    expect(screen.getByRole('slider').getAttribute('aria-valuetext')).toBe('90 degrees');
+    const atom = screen.getByRole('button', { name: /Focus .* atoms/ });
+    fireEvent.click(atom);
+    expect(instance.setFocus).toHaveBeenLastCalledWith(0);
+    expect(atom.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(/Other atoms stay visible/)).toBeTruthy();
+    fireEvent.click(atom);
+    expect(instance.setFocus).toHaveBeenLastCalledWith(null);
+    fireEvent.click(atom);
+    fireEvent.click(screen.getByRole('button', { name: 'All atoms' }));
+    expect(instance.setFocus).toHaveBeenLastCalledWith(null);
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate', exact: true }));
+    expect(instance.setSpin).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop rotation' }));
+    expect(instance.setSpin).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
+    expect(instance.reset).toHaveBeenCalledTimes(1);
+    expect(Array.from(frame.positions)).toEqual(positions);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to viewer' }));
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
   });
 });

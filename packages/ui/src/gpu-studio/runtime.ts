@@ -7,27 +7,31 @@ import {
   InstancedMesh,
   Matrix4,
   MeshPhysicalNodeMaterial,
+  PMREMGenerator,
   PerspectiveCamera,
   Scene,
   SphereGeometry,
   Vector3,
   WebGPURenderer,
 } from 'three/webgpu';
-import type { Node } from 'three/webgpu';
+import type { Node, RenderTarget } from 'three/webgpu';
 import { color, positionLocal, uniform } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { tslExports } from 'vgpu/three';
 import atomModule from './atom-surface.wgsl';
 import type { StudioLook, StudioSnapshot } from './snapshot';
 
 type SurfaceExports = {
-  atomSurface: { position: Node; baseColor: Node; contour: Node };
+  atomSurface: { position: Node; baseColor: Node; contour: Node; emphasis: Node };
 };
 const { atomSurface } = tslExports<SurfaceExports>(atomModule)('atomSurface');
 
 export interface StudioRuntime {
   setLook: (look: StudioLook) => void;
   setSpin: (spin: boolean) => void;
+  setLight: (degrees: number) => void;
+  setFocus: (groupIndex: number | null) => void;
   reset: () => void;
   dispose: () => void;
 }
@@ -43,6 +47,7 @@ export async function createStudio(
   let renderer: WebGPURenderer | undefined;
   let controls: OrbitControls | undefined;
   let observer: ResizeObserver | undefined;
+  let environmentMap: RenderTarget | undefined;
   let pendingFrame = 0;
   let disposed = false;
   let initialized = false;
@@ -50,6 +55,7 @@ export async function createStudio(
   const geometry = new SphereGeometry(1, 32, 24);
   const materials: MeshPhysicalNodeMaterial[] = [];
   const meshes: InstancedMesh[] = [];
+  const focusSetters: Array<(emphasized: boolean) => void> = [];
   const dispose = () => {
     if (disposed) return;
     disposed = true;
@@ -61,6 +67,7 @@ export async function createStudio(
     meshes.forEach(mesh => mesh.dispose());
     materials.forEach(material => material.dispose());
     geometry.dispose();
+    environmentMap?.dispose();
     if (initialized) renderer?.dispose();
     renderer?.domElement.remove();
     device?.destroy();
@@ -130,6 +137,18 @@ export async function createStudio(
     renderer.domElement.setAttribute('role', 'img');
     host.appendChild(renderer.domElement);
 
+    // A small local softbox environment: no HDR download or per-frame generation.
+    const room = new RoomEnvironment();
+    const pmrem = new PMREMGenerator(renderer);
+    try {
+      environmentMap = pmrem.fromScene(room, 0.06, 0.1, 100, { size: 128 });
+      scene.environment = environmentMap.texture;
+      scene.environmentIntensity = 0.65;
+    } finally {
+      room.dispose();
+      pmrem.dispose();
+    }
+
     const min = new Vector3(Infinity, Infinity, Infinity);
     const max = new Vector3(-Infinity, -Infinity, -Infinity);
     for (const group of snapshot.groups) {
@@ -158,14 +177,23 @@ export async function createStudio(
     const matrix = new Matrix4();
     for (const group of snapshot.groups) {
       const material = new MeshPhysicalNodeMaterial({
-        roughness: 0.28,
-        metalness: 0.12,
-        clearcoat: 0.65,
+        roughness: 0.32,
+        metalness: 0.08,
+        clearcoat: 0.35,
+        clearcoatRoughness: 0.24,
       });
+      const emphasis = uniform(1);
       material.colorNode = atomSurface({
         position: positionLocal,
         baseColor: color(new Color(group.color)),
         contour,
+        emphasis,
+      });
+      focusSetters.push(emphasized => {
+        emphasis.value = emphasized ? 1 : 0.08;
+        material.envMapIntensity = emphasized ? 1 : 0.15;
+        material.roughness = emphasized ? 0.32 : 0.85;
+        material.clearcoat = emphasized ? 0.35 : 0;
       });
       materials.push(material);
       const mesh = new InstancedMesh(geometry, material, group.positions.length / 3);
@@ -183,26 +211,35 @@ export async function createStudio(
       mesh.instanceMatrix.needsUpdate = true;
       molecule.add(mesh);
     }
-    scene.add(molecule, new HemisphereLight(0xd8f5e8, 0x252b38, 1.3));
-    const key = new DirectionalLight(0xffe0b5, 2.8);
-    key.position.set(-3, 5, 5);
-    const rim = new DirectionalLight(0x90f3ca, 2.5);
+    scene.add(molecule, new HemisphereLight(0xd8f5e8, 0x252b38, 0.65));
+    const key = new DirectionalLight(0xffe2ba, 2.4);
+    const rim = new DirectionalLight(0xbbe8df, 2);
     rim.position.set(4, 1, -2);
-    const fill = new DirectionalLight(0xa6baff, 1.8);
+    const fill = new DirectionalLight(0xb8c8eb, 0.8);
     fill.position.set(1, -2, 4);
     scene.add(key, rim, fill);
+    const setLight = (degrees: number) => {
+      const angle = (Math.max(-180, Math.min(180, degrees)) * Math.PI) / 180;
+      key.position.set(Math.sin(angle) * 5, 3, Math.cos(angle) * 5);
+      scene.environmentRotation.y = angle;
+      requestDraw();
+    };
+    setLight(-35);
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
     controls.minDistance = radius * 1.2;
     controls.maxDistance = radius * 12;
     controls.autoRotateSpeed = 0.65;
-    const reset = () => {
+    const fitDistance = () => {
       const fov = Math.min(
         (camera.fov * Math.PI) / 180,
         2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect),
       );
-      const distance = (radius / Math.sin(fov / 2)) * 1.08;
-      camera.position.set(distance * 0.25, distance * 0.16, distance);
+      return (radius / Math.sin(fov / 2)) * 1.04;
+    };
+    const reset = () => {
+      const distance = fitDistance();
+      camera.position.set(0.25, 0.16, 1).normalize().multiplyScalar(distance);
       camera.near = radius / 100;
       camera.far = Math.max(radius * 50, distance * 4);
       camera.updateProjectionMatrix();
@@ -211,12 +248,17 @@ export async function createStudio(
       requestDraw();
     };
     const resize = () => {
+      const previousFit = fitDistance();
       const { width, height } = host.getBoundingClientRect();
       renderer!.setSize(Math.max(width, 1), Math.max(height, 1));
       camera.aspect = Math.max(width, 1) / Math.max(height, 1);
-      reset();
+      // Keep the learner's angle and relative zoom when the viewport changes.
+      camera.position.multiplyScalar(fitDistance() / previousFit);
+      camera.updateProjectionMatrix();
+      requestDraw();
     };
     resize();
+    reset();
     // Compile and submit a real frame before presenting a ready indicator.
     device.pushErrorScope('validation');
     await renderer.compileAsync(scene, camera);
@@ -243,6 +285,13 @@ export async function createStudio(
         spinning = spin;
         controls!.autoRotate = spin;
         previousTime = performance.now();
+        requestDraw();
+      },
+      setLight,
+      setFocus(groupIndex) {
+        focusSetters.forEach((setEmphasis, index) =>
+          setEmphasis(groupIndex === null || groupIndex === index),
+        );
         requestDraw();
       },
       reset,

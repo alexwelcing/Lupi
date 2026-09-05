@@ -81,6 +81,30 @@ test('vgpu renders both looks, stays lazy, releases devices and preserves the mo
   }
   expect(changedPixels).toBeGreaterThan(1000);
   await page.screenshot({ path: testInfo.outputPath('contours-desktop.png') });
+  await dialog.getByRole('button', { name: 'Focus O atoms' }).click();
+  await expect(dialog).toContainText('6 O atoms highlighted.');
+  await expect(dialog.getByRole('button', { name: 'Focus O atoms' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  const focusedPixels = await pixels(await canvas.screenshot());
+  let focusChangedPixels = 0;
+  for (let i = 0; i < contourPixels.length; i += 4) {
+    if (
+      Math.abs(contourPixels[i] - focusedPixels[i]) +
+        Math.abs(contourPixels[i + 1] - focusedPixels[i + 1]) >
+      40
+    )
+      focusChangedPixels++;
+  }
+  expect(focusChangedPixels).toBeGreaterThan(1000);
+  await dialog.getByRole('button', { name: 'All atoms' }).click();
+  const light = dialog.getByRole('slider', { name: 'Light angle' });
+  await light.focus();
+  await page.keyboard.press('Home');
+  await expect(light).toHaveValue('-180');
+  await expect(light).toHaveAttribute('aria-valuetext', '-180 degrees');
+  await expect(dialog).toHaveAttribute('data-status', 'ready');
   // No autoplay, including under the suite's reduced-motion preference.
   await expect(dialog.getByRole('button', { name: 'Rotate', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -111,6 +135,7 @@ test('vgpu renders both looks, stays lazy, releases devices and preserves the mo
     body: JSON.stringify({
       brightPixels,
       changedPixels,
+      focusChangedPixels,
       deviceCountBefore: before,
       deviceCountAfter: await deviceCount(),
     }),

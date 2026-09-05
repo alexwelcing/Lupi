@@ -7,10 +7,12 @@ test('GPU Studio fails clearly without WebGPU, preserves the viewer and returns 
   const launch = page.getByRole('button', { name: 'Open GPU Studio' });
   await expect(launch).toBeVisible();
   await launch.click();
-  const dialog = page.getByRole('dialog', { name: 'Same molecule. Different light.' });
+  const dialog = page.getByRole('dialog', { name: 'GPU Studio', exact: true });
   await expect(dialog).toHaveAttribute('data-status', 'unavailable', { timeout: 30_000 });
   await expect(dialog).toContainText(/WebGPU is unavailable/);
   await expect(dialog.getByRole('button', { name: 'Rotate', exact: true })).toBeDisabled();
+  await expect(dialog.getByRole('slider', { name: /Light angle/ })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Focus O atoms' })).toBeDisabled();
   await expect(dialog.locator('canvas')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
