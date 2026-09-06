@@ -123,7 +123,7 @@ The Cloudflare deploy workflow:
 3. Typechecks and tests the edge Worker.
 4. Uses the read environment to validate the active predecessor and rollback target.
 5. Uses the write environment to upload an immutable no-traffic version.
-6. Checks structured `/health` readiness and runs the complete UI suite against the direct preview URL.
+6. Checks structured `/health` readiness and runs `release-smoke-v1` against the direct preview URL; full UI regression remains in CI.
 7. Records durable release intent, promotes the candidate, and verifies the custom domain.
 8. Performs bounded rollback when post-promotion proof fails and retains all receipts for reconciliation.
 

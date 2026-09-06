@@ -16,7 +16,7 @@ evidence is sufficient.
 
 | Lane | Status | Required receipt |
 |---|---|---|
-| Local | NOT CHECKED | clean worktree, exact SHA, install/build/real lint/tests/Worker/Playwright results |
+| Local | NOT CHECKED | exact source identity, tool versions, scoped acceptance results and scope rationale; clean final integration worktree |
 | CI | NOT CHECKED | exact-SHA GitHub run URL, conclusion, and required jobs |
 | Deploy | BLOCKED | v2 cutover authority plus run URL, immutable revision/version, bindings/config, and previous rollback target |
 | Live API | BLOCKED | authorized promotion plus custom-domain health/version/bindings, distinct manifests, auth and relevant render/job/asset behavior |
@@ -27,6 +27,9 @@ Source presence and screenshots are not deployment or functional proof.
 
 ## Workspace
 
+Record the following full gates from exact-SHA CI/release-package receipts;
+do not repeat them all locally. Local work runs the checks relevant to its diff.
+
 - [ ] `pnpm install --frozen-lockfile` succeeds from a clean clone.
 - [ ] `pnpm verify:product-contract` succeeds.
 - [ ] `pnpm build` succeeds.
@@ -34,9 +37,14 @@ Source presence and screenshots are not deployment or functional proof.
 - [ ] CI uses pnpm 9, matching `packageManager`.
 - [ ] No retired `apps/lupi-studio` or nested research-site app is present.
 - [ ] The real `pnpm lint` gate and both production dependency audits run and
-      pass for this exact SHA; their source definitions alone are not evidence.
+      pass for this exact SHA in CI/release-package; their source definitions
+      alone are not evidence.
 
 ## Viewer Verification
+
+Full regression belongs in CI. Candidate/public deployment checks use
+`UI_TEST_URL=https://TARGET UI_TEST_EXPECT_HEALTH=true pnpm test:ui:release`.
+Historical rollback targets retain their own recorded suite, including full UI.
 
 ```bash
 pnpm test
@@ -110,7 +118,7 @@ known authority prerequisite is absent.
 
 - [ ] A full-SHA-tagged no-traffic version upload records the exact candidate
       version ID and immutable preview origin.
-- [ ] Candidate-preview Live API verification and the complete UI suite pass
+- [ ] Candidate-preview Live API verification and `release-smoke-v1` pass
       before promotion. This is not custom-domain or Public site PASS.
 - [ ] A validated `lupi-release-intent-v1` records the prior/candidate versions,
       package and rollback-contract hashes, expected posture, and bounded
@@ -118,7 +126,7 @@ known authority prerequisite is absent.
 - [ ] Immediately before promotion, the prior version is still the only active
       version and remains an eligible rollback target; immediately afterward,
       the candidate alone is active at 100%.
-- [ ] Custom-domain Live API verification and the complete UI suite pass after
+- [ ] Custom-domain Live API verification and `release-smoke-v1` pass after
       promotion for the same Worker version/Git SHA and matching entry bytes.
 - [ ] A validated `lupi-release-outcome-v1` closes success, or a linked rollback
       resolution proves the prior version and its exact-source UI contract were

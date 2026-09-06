@@ -23,23 +23,26 @@ The Vite app runs at `http://localhost:5173` by default.
 
 ```bash
 pnpm verify:product-contract
-pnpm lint
-NODE_OPTIONS=--max-old-space-size=8192 pnpm audit --prod --audit-level high
-npm audit --prefix functions --omit=dev --audit-level=high
-pnpm build
-pnpm exec playwright install --with-deps chromium
-pnpm test:ui
+pnpm test:ui:release
 ```
 
-These commands are Local-lane inputs only. Their definitions in source are not
-evidence; retain command results for one exact SHA.
+Run relevant lint/unit checks for the diff as well. Build first if app source
+changed (`pnpm build`); the browser tests serve `apps/web/dist`. Install Chromium
+once if absent (`pnpm exec playwright install --with-deps chromium`). For
+workflow-only edits, run the release receipt/authority/workflow tests and
+`pnpm verify:workflows`, not another full app build or dependency audit.
+
+These are scoped Local-lane inputs only; retain command results and source
+identity. Full lint, production audits, builds and regression remain blocking
+in exact-SHA CI and release-package. Do not rerun an exhaustive local audit just
+because a trusted exact-SHA CI audit already passed, or count CI as local proof.
 
 `pnpm test:ui` starts `tools/serve-web.mjs` against `apps/web/dist` and checks
 the production build. For a deployed preview or direct Worker URL, run only
 the deployment-safe browser journeys:
 
 ```bash
-UI_TEST_URL=https://PREVIEW_URL pnpm test:ui:deployed
+UI_TEST_URL=https://PREVIEW_URL UI_TEST_EXPECT_HEALTH=true pnpm test:ui:release
 ```
 
 ## Broader Viewer Checks
@@ -151,7 +154,7 @@ snapshot before any credentialed job proceeds.
 
 `versions upload` creates a full-SHA-tagged candidate without assigning traffic.
 Retain its exact Worker version ID and immutable preview origin. The preview
-runs `pnpm verify:cloudflare-live` and the complete UI suite before promotion.
+runs `pnpm verify:cloudflare-live` and `release-smoke-v1` before promotion.
 That result is candidate evidence only.
 
 Before the traffic step, `lupi-release-intent-v1` binds the owner confirmation,
@@ -159,9 +162,15 @@ prior/candidate identities, package, expected posture, rollback contract, and
 rollback eligibility. Promotion re-reads the single 100%-active prior and then
 assigns the candidate 100%. Afterward, a separate custom-domain report must
 match `https://lupi.live` to the same Git SHA/Worker version and to the
-candidate's entry bytes, and the complete UI suite must pass there. Only a
+candidate's entry bytes, and `release-smoke-v1` must pass there. Only a
 validated `lupi-release-outcome-v1` closes success. Candidate PASS never implies
 Live API or Public site PASS.
+
+The release smoke covers desktop discovery/learning/menus, a small real PNG,
+mobile atom-color Remix/Undo, health and saved-view/unsafe-link recovery. Full
+visual/export/security regressions stay in CI. Historical rollback contracts
+remain unchanged: the first migration release still replays its predecessor's
+full suite; subsequent smoke-profile roots replay the smaller suite.
 
 ### Reconciliation and checkpoints
 
