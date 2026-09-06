@@ -176,6 +176,7 @@ export function validateRollbackContract(value) {
     'legacy-deployed-smoke-v1',
     'full-ui-configless-v1',
     'full-ui-v1',
+    'release-smoke-v1',
   ].includes(value.commandMode), 'rollback commandMode is not closed');
   assertNonEmpty(value.nodeVersion, 'rollback Node version');
   assertNonEmpty(value.pnpmVersion, 'rollback pnpm version');
@@ -185,6 +186,12 @@ export function validateRollbackContract(value) {
   validateFileHashes(value.testFiles, 'rollback test files');
   assert.ok(Array.isArray(value.environmentNames) && value.environmentNames.every(isNonEmptyString), 'rollback environmentNames are invalid');
   assert.ok(Array.isArray(value.expectedTestNames) && value.expectedTestNames.length > 0 && value.expectedTestNames.every(isNonEmptyString), 'rollback expectedTestNames are invalid');
+  if (value.commandMode === 'release-smoke-v1') {
+    assert.deepEqual(value.configFiles.map(file => file.path), ['playwright.config.mjs'], 'release smoke config must be pinned');
+    assert.deepEqual(value.testFiles.map(file => file.path), ['tests/ui/release-smoke.spec.ts'], 'release smoke test must be pinned');
+    assert.deepEqual(value.environmentNames, ['UI_TEST_URL', 'UI_TEST_EXPECT_HEALTH'], 'release smoke environment must be pinned');
+    assert.deepEqual(value.expectedTestNames, ['release-smoke-v1'], 'release smoke profile must be pinned');
+  }
   assertPlainObject(value.preMutationReport, 'rollback preMutationReport');
   assertExactKeys(value.preMutationReport, ['result', 'sha256'], 'rollback preMutationReport');
   assert.equal(value.preMutationReport.result, 'pass', 'rollback pre-mutation suite did not pass');

@@ -19,7 +19,7 @@ different truths. Never collapse them into one green status.
 
 | Truth lane | Minimum evidence |
 |---|---|
-| Local | Exact Git SHA, clean integration worktree, frozen install, `pnpm verify:product-contract`, real `pnpm lint`, production dependency audits, build, unit tests, Worker tests, release-controller tests, and relevant Playwright results. A script name without its command receipt is not evidence. |
+| Local | Exact Git SHA (plus the reviewed diff while iterating), dependency/tool versions, and passing scoped acceptance for the changed surfaces. Record which checks ran and why that scope is sufficient. Final integration uses a clean worktree. Full audits/build/regression checks remain blocking in exact-SHA CI and the no-secret release-package job; they need not be duplicated locally. A script name without its command receipt is not evidence. |
 | CI | GitHub Actions run URL and conclusion for the exact SHA, with every required job and required/non-advisory gate named. A local result is not CI evidence. |
 | Deploy | Separately authorized owner dispatch, exact candidate version and immutable preview origin, validated prior rollback target, durable pre-mutation intent, traffic-promotion result, and terminal outcome or rollback resolution. Source presence, merge state, package creation, or candidate upload alone is not deployment proof. |
 | Live API | Separate candidate-preview and custom-domain reports for the same Git SHA and Worker version, including `/health` identity/bindings, distinct edge and browser manifests, expected authentication posture, entry-byte parity, and relevant authenticated render/job/provenance/artifact behavior. Candidate-preview evidence is not custom-domain evidence. |
@@ -135,11 +135,30 @@ external authority are configured or active.
   workflow, job, dynamic environment, inherited secret, or computed secret name
   may reach v2 Cloudflare authority.
 - Upload is a no-traffic Worker version upload. The immutable candidate preview
-  must pass the live verifier and the complete UI suite before a durable
+  must pass the live verifier and the `release-smoke-v1` browser profile before a durable
   `lupi-release-intent-v1` is written and before the fixed 100% promotion step.
   After promotion, `https://lupi.live` is verified separately for exact
-  Worker/Git identity and entry bytes. Only then may a validated
+  Worker/Git identity and entry bytes, and the same release smoke must pass on
+  the custom domain. Only then may a validated
   `lupi-release-outcome-v1` close the successful chain.
+
+### Proportionate testing
+
+- Full `pnpm test:ui` regression coverage remains blocking in CI, including
+  the complete visual workbench, accessibility/reflow, security checks, native
+  gallery coverage, and high-resolution/multi-format exports.
+- Candidate and public verification use the four tests in
+  `tests/ui/release-smoke.spec.ts`: Worker health; desktop discovery, learning,
+  menus and a real small PNG; mobile scene controls with atom-color Remix/Undo;
+  and saved-view error recovery/unsafe-link rejection. The live API verifier
+  independently retains exact identity, auth, bindings and entry-byte parity.
+- Rollback and reconciliation replay the profile recorded by the exact source
+  revision. Existing `full-ui-v1`, `full-ui-configless-v1` and legacy contracts
+  are not downgraded. The first release adopting this profile therefore still
+  pays for its predecessor's full replay. Re-anchor reconstruction remains full.
+- Local acceptance is change-scoped, not a second CI run. Reuse exact-SHA CI
+  audit/build results as CI evidence, never relabel them as locally executed.
+  Any actual failure still blocks; scope reduction cannot erase a failed check.
 
 ### Durable recovery chain
 

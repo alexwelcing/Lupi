@@ -100,6 +100,38 @@ test('Turbo forwards the exact Cloudflare web build environment to Vite', async 
   ]) assert.ok(forwarded.includes(name), `Turbo build env is missing ${name}`);
 });
 
+test('release smoke is bounded, CI stays exhaustive, and recovery replays the recorded profile', async () => {
+  const { workflows } = await loadFixture();
+  const deploy = workflows['deploy-cloudflare.yml'].jobs;
+  const reconcile = workflows['reconcile-cloudflare-deploy.yml'].jobs;
+  const smokeCommand = 'pnpm exec playwright test tests/ui/release-smoke.spec.ts';
+  const config = await readFile(resolve(ROOT, 'playwright.config.mjs'), 'utf8');
+  assert.match(config, /testDir: '\.\/tests\/ui'/);
+  assert.doesNotMatch(config, /release-smoke/, 'full CI must not exclude the release smoke');
+  assert.ok(workflows['ci.yml'].jobs['build-test'].steps.some(step => runLines(step).includes('pnpm test:ui')));
+  for (const id of ['candidate-verify', 'public-verify']) {
+    const smoke = deploy[id].steps.find(step => runLines(step).includes(smokeCommand));
+    assert.ok(smoke, `${id} must execute the bounded release smoke`);
+    assert.equal(smoke.if, undefined);
+    assert.notEqual(smoke['continue-on-error'], true);
+    assert.equal(smoke.env.UI_TEST_EXPECT_HEALTH, 'true');
+    const evidence = jobText(deploy[id]);
+    assert.match(evidence, /(?:commandMode|suite): 'release-smoke-v1'/);
+    assert.match(evidence, /path: 'tests\/ui\/release-smoke\.spec\.ts', sha256: await sha\('tests\/ui\/release-smoke\.spec\.ts'\)/);
+  }
+  for (const job of [deploy['prior-rollback-verify'], deploy['rollback-ui-verify'], reconcile['reconcile-ui-verify']]) {
+    const commands = job.steps.map(step => String(step.run ?? '')).join('\n');
+    assert.ok(commands.includes(`release-smoke-v1) ${smokeCommand} ;;`));
+    assert.ok(commands.includes('full-ui-configless-v1|full-ui-v1) pnpm test:ui ;;'));
+    assert.ok(commands.includes('legacy-deployed-smoke-v1) pnpm test:ui:deployed ;;'));
+    assert.match(commands, /Unsupported rollback command mode.*exit 1/);
+  }
+  for (const job of [deploy['rollback-ui-verify'], reconcile['reconcile-ui-verify']]) {
+    const commands = job.steps.map(step => String(step.run ?? '')).join('\n');
+    assert.match(commands, /if \[ "\$ROLLBACK_COMMAND_MODE" = release-smoke-v1 \]; then\s+sha256sum pnpm-lock\.yaml playwright\.config\.mjs tests\/ui\/release-smoke\.spec\.ts/);
+  }
+});
+
 test('credential-bearing Wrangler runtime is fully lockfile-pinned', async () => {
   const packageText = await readFile(resolve(ROOT, '.github', 'wrangler-runtime', 'package-lock.json'), 'utf8');
   const repositoryBytes = packageText.replace(/\r\n/g, '\n');
@@ -839,7 +871,7 @@ function assertReconcileContract(workflow) {
   const reconciliationUi = stepNamed(jobs['reconcile-ui-verify'], 'Run exact active source UI suite');
   assert.equal(
     reconciliationUi.env?.UI_TEST_EXPECT_HEALTH,
-    "${{ needs.reconcile-scan.outputs.rollback_command_mode == 'full-ui-v1' && 'true' || 'false' }}",
+    "${{ (needs.reconcile-scan.outputs.rollback_command_mode == 'full-ui-v1' || needs.reconcile-scan.outputs.rollback_command_mode == 'release-smoke-v1') && 'true' || 'false' }}",
   );
   assert.match(String(reconciliationUi.run), /full-ui-configless-v1\|full-ui-v1\) pnpm test:ui/);
 

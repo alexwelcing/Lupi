@@ -572,7 +572,7 @@ jobs:
             }, null, 2)}\n`);
           }
           const rollbackCommandMode = selectedRoot.rollbackContract?.commandMode;
-          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1'].includes(rollbackCommandMode));
+          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1', 'release-smoke-v1'].includes(rollbackCommandMode));
           await appendFile(
             process.env.GITHUB_OUTPUT,
             `active_version_id=${activeVersionId}\nactive_build_sha=${activeBuildSha}\ndecision=${decision}\nrollback_command_mode=${rollbackCommandMode}\n`,
@@ -1116,7 +1116,7 @@ jobs:
       - name: Run exact active source UI suite
         env:
           UI_TEST_URL: https://lupi.live
-          UI_TEST_EXPECT_HEALTH: ${{ needs.reconcile-scan.outputs.rollback_command_mode == 'full-ui-v1' && 'true' || 'false' }}
+          UI_TEST_EXPECT_HEALTH: ${{ (needs.reconcile-scan.outputs.rollback_command_mode == 'full-ui-v1' || needs.reconcile-scan.outputs.rollback_command_mode == 'release-smoke-v1') && 'true' || 'false' }}
           VERIFIED_BUILD_SHA: ${{ needs.reconcile-verify.outputs.verified_build_sha }}
           VERIFIED_ACTIVE_VERSION_ID: ${{ needs.reconcile-verify.outputs.verified_active_version_id }}
           ROLLBACK_COMMAND_MODE: ${{ needs.reconcile-scan.outputs.rollback_command_mode }}
@@ -1144,10 +1144,15 @@ jobs:
           case "$ROLLBACK_COMMAND_MODE" in
             legacy-deployed-smoke-v1) pnpm test:ui:deployed ;;
             full-ui-configless-v1|full-ui-v1) pnpm test:ui ;;
+            release-smoke-v1) pnpm exec playwright test tests/ui/release-smoke.spec.ts ;;
             *) echo "::error::Unsupported rollback command mode"; exit 1 ;;
           esac
           git rev-parse HEAD > ui-proof/source-sha.txt
-          sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/lupi.spec.ts > ui-proof/source-manifest.sha256
+          if [ "$ROLLBACK_COMMAND_MODE" = release-smoke-v1 ]; then
+            sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/release-smoke.spec.ts > ui-proof/source-manifest.sha256
+          else
+            sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/lupi.spec.ts > ui-proof/source-manifest.sha256
+          fi
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
           import { readFile, writeFile } from 'node:fs/promises';

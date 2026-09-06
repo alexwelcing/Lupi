@@ -435,8 +435,8 @@ jobs:
           assert.match(root.targetSha ?? '', /^[a-f0-9]{40}$/i);
           assert.ok(root.rollbackContract);
           const commandMode = root.rollbackContract.commandMode;
-          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1'].includes(commandMode));
-          const expectHealth = commandMode === 'full-ui-v1' ? 'true' : 'false';
+          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1', 'release-smoke-v1'].includes(commandMode));
+          const expectHealth = ['full-ui-v1', 'release-smoke-v1'].includes(commandMode) ? 'true' : 'false';
           await appendFile(
             process.env.GITHUB_OUTPUT,
             `prior_sha=${root.targetSha}\nprior_command_mode=${commandMode}\nexpect_health=${expectHealth}\n`,
@@ -471,6 +471,7 @@ jobs:
           case "$ROLLBACK_COMMAND_MODE" in
             legacy-deployed-smoke-v1) pnpm test:ui:deployed ;;
             full-ui-configless-v1|full-ui-v1) pnpm test:ui ;;
+            release-smoke-v1) pnpm exec playwright test tests/ui/release-smoke.spec.ts ;;
             *) echo "::error::Unsupported rollback command mode"; exit 1 ;;
           esac
 
@@ -704,13 +705,13 @@ jobs:
             --expect-render-execution=true \
             --json > candidate/live-api.json
 
-      - name: Run complete UI suite against immutable candidate
+      - name: Run release smoke against immutable candidate
         env:
           UI_TEST_URL: ${{ needs.version-upload.outputs.candidate_preview_origin }}
           UI_TEST_EXPECT_HEALTH: 'true'
         run: |
           pnpm exec playwright install --with-deps chromium
-          pnpm test:ui
+          pnpm exec playwright test tests/ui/release-smoke.spec.ts
 
       - name: Build candidate rollback contract
         env:
@@ -730,7 +731,7 @@ jobs:
             files: [
               { path: 'pnpm-lock.yaml', sha256: await sha('pnpm-lock.yaml') },
               { path: 'playwright.config.mjs', sha256: await sha('playwright.config.mjs') },
-              { path: 'tests/ui/lupi.spec.ts', sha256: await sha('tests/ui/lupi.spec.ts') },
+              { path: 'tests/ui/release-smoke.spec.ts', sha256: await sha('tests/ui/release-smoke.spec.ts') },
             ],
           };
           const sourceManifestBytes = Buffer.from(`${JSON.stringify(sourceManifest, null, 2)}\n`);
@@ -740,15 +741,15 @@ jobs:
             repository: 'alexwelcing/Lupi',
             targetSha: process.env.GITHUB_SHA,
             workerVersionId: process.env.CANDIDATE_VERSION_ID,
-            commandMode: 'full-ui-v1',
+            commandMode: 'release-smoke-v1',
             nodeVersion: process.version,
             pnpmVersion: '9',
             lockSha256: await sha('pnpm-lock.yaml'),
             sourceManifestSha256: createHash('sha256').update(sourceManifestBytes).digest('hex'),
             configFiles: [{ path: 'playwright.config.mjs', sha256: await sha('playwright.config.mjs') }],
-            testFiles: [{ path: 'tests/ui/lupi.spec.ts', sha256: await sha('tests/ui/lupi.spec.ts') }],
+            testFiles: [{ path: 'tests/ui/release-smoke.spec.ts', sha256: await sha('tests/ui/release-smoke.spec.ts') }],
             environmentNames: ['UI_TEST_URL', 'UI_TEST_EXPECT_HEALTH'],
-            expectedTestNames: ['full-ui-v1'],
+            expectedTestNames: ['release-smoke-v1'],
             preMutationReport: { result: 'pass', sha256: await sha('candidate/live-api.json') },
           };
           await writeFile('candidate/rollback-contract.json', `${JSON.stringify(contract, null, 2)}\n`);
@@ -1095,13 +1096,13 @@ jobs:
             --expect-render-execution=true \
             --json > public/live-api.json
 
-      - name: Run complete UI suite against custom domain
+      - name: Run release smoke against custom domain
         env:
           UI_TEST_URL: https://lupi.live
           UI_TEST_EXPECT_HEALTH: 'true'
         run: |
           pnpm exec playwright install --with-deps chromium
-          pnpm test:ui
+          pnpm exec playwright test tests/ui/release-smoke.spec.ts
 
       - name: Record public UI and source evidence
         run: |
@@ -1116,15 +1117,15 @@ jobs:
             files: [
               { path: 'pnpm-lock.yaml', sha256: await sha('pnpm-lock.yaml') },
               { path: 'playwright.config.mjs', sha256: await sha('playwright.config.mjs') },
-              { path: 'tests/ui/lupi.spec.ts', sha256: await sha('tests/ui/lupi.spec.ts') },
+              { path: 'tests/ui/release-smoke.spec.ts', sha256: await sha('tests/ui/release-smoke.spec.ts') },
             ],
           };
           const uiProof = {
             schemaVersion: 'lupi-ui-proof-v1',
             targetSha: process.env.GITHUB_SHA,
-            suite: 'full-ui-v1',
+            suite: 'release-smoke-v1',
             result: 'pass',
-            testFileSha256: await sha('tests/ui/lupi.spec.ts'),
+            testFileSha256: await sha('tests/ui/release-smoke.spec.ts'),
             configFileSha256: await sha('playwright.config.mjs'),
           };
           await writeFile('public/source-manifest.json', `${JSON.stringify(sourceManifest, null, 2)}\n`);
@@ -1370,8 +1371,8 @@ jobs:
           const sha = root?.targetSha;
           assert.match(sha ?? '', /^[a-f0-9]{40}$/i);
           const commandMode = root?.rollbackContract?.commandMode;
-          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1'].includes(commandMode));
-          const expectHealth = commandMode === 'full-ui-v1' ? 'true' : 'false';
+          assert.ok(['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1', 'release-smoke-v1'].includes(commandMode));
+          const expectHealth = ['full-ui-v1', 'release-smoke-v1'].includes(commandMode) ? 'true' : 'false';
           await appendFile(
             process.env.GITHUB_OUTPUT,
             `sha=${sha}\ncommand_mode=${commandMode}\nexpect_health=${expectHealth}\n`,
@@ -1426,9 +1427,14 @@ jobs:
           case "$ROLLBACK_COMMAND_MODE" in
             legacy-deployed-smoke-v1) pnpm test:ui:deployed ;;
             full-ui-configless-v1|full-ui-v1) pnpm test:ui ;;
+            release-smoke-v1) pnpm exec playwright test tests/ui/release-smoke.spec.ts ;;
             *) echo "::error::Unsupported rollback command mode"; exit 1 ;;
           esac
-          sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/lupi.spec.ts > rollback-ui/source-manifest.sha256
+          if [ "$ROLLBACK_COMMAND_MODE" = release-smoke-v1 ]; then
+            sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/release-smoke.spec.ts > rollback-ui/source-manifest.sha256
+          else
+            sha256sum pnpm-lock.yaml playwright.config.mjs tests/ui/lupi.spec.ts > rollback-ui/source-manifest.sha256
+          fi
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
           import { readFile, writeFile } from 'node:fs/promises';

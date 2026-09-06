@@ -143,6 +143,26 @@ test('release intent binds single owner, exact attempt, confirmation, package, c
   assert.throws(() => validateReleaseIntent({ ...value, candidateVersionId: PRIOR }), /must differ/);
 });
 
+test('release smoke pins its exact test/config profile without relabeling historical contracts', () => {
+  const value = {
+    ...rollbackContract(),
+    commandMode: 'release-smoke-v1',
+    configFiles: [{ path: 'playwright.config.mjs', sha256: HASH }],
+    testFiles: [{ path: 'tests/ui/release-smoke.spec.ts', sha256: HASH }],
+    expectedTestNames: ['release-smoke-v1'],
+  };
+  assert.equal(validateRollbackContract(value), value);
+  for (const commandMode of ['legacy-deployed-smoke-v1', 'full-ui-configless-v1', 'full-ui-v1']) {
+    assert.equal(validateRollbackContract({ ...rollbackContract(), commandMode }).commandMode, commandMode);
+  }
+  for (const [field, replacement] of [
+    ['configFiles', [{ path: 'playwright.config.ts', sha256: HASH }]],
+    ['testFiles', [{ path: 'tests/ui/lupi.spec.ts', sha256: HASH }]],
+    ['environmentNames', ['UI_TEST_URL']],
+    ['expectedTestNames', ['full-ui-v1']],
+  ]) assert.throws(() => validateRollbackContract({ ...value, [field]: replacement }), /must be pinned/);
+});
+
 test('normal, genesis, and re-anchor roots are mutually schema-bound and hash complete bundles', () => {
   const normal = rootOutcome('lupi-release-outcome-v1');
   assert.equal(validateRootOutcome(normal), normal);
