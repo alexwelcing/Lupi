@@ -4,7 +4,34 @@
   min-height: 44px;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  --action-x: 0;
+  --action-y: 0;
+  --action-press: 0;
+}
+.lupi-action.lupi-action {
+  /* The box and focus ring stay still. Only the decorative body can stretch. */
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.lupi-action.scene-remix { min-height: 52px; }
+.lupi-action__body {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  background: var(--action-fill, #dbeaaf);
+  border: 1px solid var(--action-edge, #829c62);
+  border-radius:
+    calc(15px + var(--action-x) * 5px - var(--action-y) * 3px + var(--action-press) * 7px)
+    calc(15px - var(--action-x) * 4px + var(--action-y) * 4px + var(--action-press) * 3px)
+    calc(15px + var(--action-x) * 4px - var(--action-y) * 4px + var(--action-press) * 7px)
+    calc(15px - var(--action-x) * 5px + var(--action-y) * 3px + var(--action-press) * 3px);
+  transform: translate(calc(var(--action-x) * 2px), calc(var(--action-y) * 1.5px + var(--action-press) * 1px))
+    rotate(calc(var(--action-x) * var(--action-y) * 1.2deg))
+    scale(calc(1 + var(--action-press) * .018), calc(1 - var(--action-press) * .085));
+  box-shadow: inset 0 1px 0 #ffffff99, 0 3px 10px #b8dac51a;
+  transition: box-shadow 160ms ease;
 }
 .lupi-action__content {
   position: relative;
@@ -14,6 +41,9 @@
   justify-content: center;
   gap: .5rem;
   max-width: 100%;
+  pointer-events: none;
+  /* Text follows the body slightly but is never squashed or stretched. */
+  transform: translate(calc(var(--action-x) * 1px), calc(var(--action-y) * .75px + var(--action-press) * 1.5px));
 }
 .lupi-action__content > svg { flex: 0 0 auto; }
 .lupi-action__light {
@@ -27,8 +57,10 @@
 }
 .lupi-action__light canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 180ms ease; }
 .lupi-action[data-light-active='true'] .lupi-action__light canvas { opacity: .88; }
-.lupi-action:hover:not(:disabled) { box-shadow: inset 0 1px 0 #ffffffa0, 0 0 0 1px #c1e9c54d, 0 5px 20px #6aafaa26; }
-.lupi-action:active:not(:disabled) { box-shadow: inset 0 2px 4px #233b2f30; }
+.lupi-action:hover:not(:disabled) .lupi-action__body { box-shadow: inset 0 1px 0 #ffffffa0, 0 0 0 1px #c1e9c54d, 0 5px 20px #6aafaa26; }
+.lupi-action:active:not(:disabled) .lupi-action__body { box-shadow: inset 0 2px 4px #233b2f30; }
+.lupi-action[data-action-moving='true'] .lupi-action__body,
+.lupi-action[data-action-moving='true'] .lupi-action__content { will-change: transform; }
 .lupi-action:focus-visible { outline: 2px solid #f1edc9; outline-offset: 3px; box-shadow: 0 0 0 3px #14241e; }
 .lupi-action:disabled { cursor: default; opacity: .45; }
 .lupi-action:disabled .lupi-action__light { display: none; }
@@ -38,11 +70,13 @@
   .scene-controls .scene-controls__actions { position: static; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .lupi-action__body, .lupi-action__content { transform: none; border-radius: 15px; transition: none; }
   .lupi-action, .lupi-action__light canvas { transition: none; }
   .lupi-action__light canvas { display: none; }
 }
 @media (forced-colors: active) {
-  .lupi-action__light { display: none; }
-  .lupi-action { border: 1px solid ButtonText; }
+  .lupi-action__body { display: none; }
+  .lupi-action__content { transform: none; }
+  .lupi-action.lupi-action { border: 1px solid ButtonText; background: ButtonFace; color: ButtonText; }
   .lupi-action:focus-visible { outline: 2px solid Highlight; box-shadow: none; }
 }
