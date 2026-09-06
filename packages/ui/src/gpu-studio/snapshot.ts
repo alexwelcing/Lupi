@@ -2,7 +2,7 @@ import { resolveTypeColor, resolveTypeDisplayRadius, resolveTypeLabel } from '@a
 import type { Frame } from '@atlas/core';
 
 export const GPU_STUDIO_ATOM_LIMIT = 5_000;
-export type StudioLook = 'studio' | 'contours';
+export type StudioLook = 'studio' | 'contours' | 'snowglobe';
 export interface StudioSnapshot {
   name: string;
   frameNumber: number;

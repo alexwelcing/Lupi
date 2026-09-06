@@ -13,25 +13,46 @@ import {
   SphereGeometry,
   Vector3,
   WebGPURenderer,
-} from 'three/webgpu';
-import type { Node, RenderTarget } from 'three/webgpu';
-import { color, positionLocal, uniform } from 'three/tsl';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { tslExports } from 'vgpu/three';
-import atomModule from './atom-surface.wgsl';
-import type { StudioLook, StudioSnapshot } from './snapshot';
+} from "three/webgpu";
+import type { Node, RenderTarget } from "three/webgpu";
+import {
+  color,
+  float,
+  instanceIndex,
+  normalView,
+  positionLocal,
+  uniform,
+} from "three/tsl";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { tslExports } from "vgpu/three";
+import atomModule from "./atom-surface.wgsl";
+import type { StudioLook, StudioSnapshot } from "./snapshot";
+import { SnowMotion } from "./snow-motion";
 
 type SurfaceExports = {
-  atomSurface: { position: Node; baseColor: Node; contour: Node; emphasis: Node };
+  atomSurface: {
+    position: Node;
+    viewNormal: Node;
+    baseColor: Node;
+    contour: Node;
+    emphasis: Node;
+    snow: Node;
+    time: Node;
+    energy: Node;
+    drift: Node;
+    seed: Node;
+  };
 };
-const { atomSurface } = tslExports<SurfaceExports>(atomModule)('atomSurface');
+const { atomSurface } = tslExports<SurfaceExports>(atomModule)("atomSurface");
 
 export interface StudioRuntime {
   setLook: (look: StudioLook) => void;
   setSpin: (spin: boolean) => void;
   setLight: (degrees: number) => void;
   setFocus: (groupIndex: number | null) => void;
+  shake: (x?: number, y?: number, strength?: number) => void;
+  calm: () => void;
   reset: () => void;
   dispose: () => void;
 }
@@ -52,6 +73,9 @@ export async function createStudio(
   let disposed = false;
   let initialized = false;
   let ready = false;
+  const interaction = new AbortController();
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const motion = new SnowMotion();
   const geometry = new SphereGeometry(1, 32, 24);
   const materials: MeshPhysicalNodeMaterial[] = [];
   const meshes: InstancedMesh[] = [];
@@ -59,13 +83,14 @@ export async function createStudio(
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    interaction.abort();
     cancelAnimationFrame(pendingFrame);
     observer?.disconnect();
-    document.removeEventListener('visibilitychange', requestDraw);
-    signal.removeEventListener('abort', dispose);
+    document.removeEventListener("visibilitychange", requestDraw);
+    signal.removeEventListener("abort", dispose);
     controls?.dispose();
-    meshes.forEach(mesh => mesh.dispose());
-    materials.forEach(material => material.dispose());
+    meshes.forEach((mesh) => mesh.dispose());
+    materials.forEach((material) => material.dispose());
     geometry.dispose();
     environmentMap?.dispose();
     if (initialized) renderer?.dispose();
@@ -78,11 +103,20 @@ export async function createStudio(
     onFailure(message);
   };
   const checkCanceled = () => {
-    if (signal.aborted || disposed) throw new Error('Studio closed.');
+    if (signal.aborted || disposed) throw new Error("Studio closed.");
   };
   const scene = new Scene();
   const camera = new PerspectiveCamera(38, 1, 0.01, 1000);
   const contour = uniform(0);
+  const snow = uniform(1);
+  const time = uniform(0);
+  const energy = uniform(0);
+  const drift = uniform(new Vector3());
+  const syncSnow = () => {
+    time.value = motion.time;
+    energy.value = motion.energy;
+    drift.value.set(motion.x, motion.y, 0);
+  };
   let spinning = false;
   let previousTime = 0;
   function requestDraw() {
@@ -93,25 +127,36 @@ export async function createStudio(
     pendingFrame = 0;
     if (disposed || document.hidden) return;
     try {
-      if (spinning) controls?.update(Math.min((now - previousTime) / 1000, 0.05));
+      const dt = Math.min((now - previousTime) / 1000, 0.1);
+      if (spinning) controls?.update(dt);
+      if (snow.value && !reducedMotion.matches && motion.energy > 0) {
+        motion.step(dt);
+        syncSnow();
+      }
       previousTime = now;
       renderer!.render(scene, camera);
-      if (spinning) requestDraw();
+      if (
+        spinning ||
+        (snow.value && motion.energy > 0 && !reducedMotion.matches)
+      )
+        requestDraw();
     } catch {
-      fail('The GPU preview stopped. Return to the viewer; your molecule is unchanged.');
+      fail(
+        "The GPU preview stopped. Return to the viewer; your molecule is unchanged.",
+      );
     }
   }
   try {
     checkCanceled();
     const adapter = await navigator.gpu?.requestAdapter({
-      powerPreference: 'high-performance',
+      powerPreference: "high-performance",
     });
     checkCanceled();
     if (!adapter)
       throw new Error(
-        'WebGPU is unavailable in this browser or on this device. The regular viewer still works.',
+        "WebGPU is unavailable in this browser or on this device. The regular viewer still works.",
       );
-    device = await adapter.requestDevice({ label: 'Lupi GPU Studio' });
+    device = await adapter.requestDevice({ label: "Lupi GPU Studio" });
     checkCanceled();
     renderer = new WebGPURenderer({ device, alpha: true, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
@@ -121,20 +166,24 @@ export async function createStudio(
     await renderer.init();
     initialized = true;
     checkCanceled();
-    if (!('isWebGPUBackend' in renderer.backend))
+    if (!("isWebGPUBackend" in renderer.backend))
       throw new Error(
-        'This browser could not start WebGPU. The regular viewer is still available.',
+        "This browser could not start WebGPU. The regular viewer is still available.",
       );
     renderer.onDeviceLost = () =>
-      fail('The WebGPU connection was lost. Return to the viewer and reopen Studio to try again.');
-    device.addEventListener('uncapturederror', () =>
-      fail('This device could not render the studio effect. Your regular viewer is unchanged.'),
+      fail(
+        "The WebGPU connection was lost. Return to the viewer and reopen Studio to try again.",
+      );
+    device.addEventListener("uncapturederror", () =>
+      fail(
+        "This device could not render the studio effect. Your regular viewer is unchanged.",
+      ),
     );
     renderer.domElement.setAttribute(
-      'aria-label',
+      "aria-label",
       `${snapshot.name}, GPU Studio molecular preview`,
     );
-    renderer.domElement.setAttribute('role', 'img');
+    renderer.domElement.setAttribute("role", "img");
     host.appendChild(renderer.domElement);
 
     // A small local softbox environment: no HDR download or per-frame generation.
@@ -153,7 +202,9 @@ export async function createStudio(
     const max = new Vector3(-Infinity, -Infinity, -Infinity);
     for (const group of snapshot.groups) {
       for (let i = 0; i < group.positions.length; i += 3) {
-        const p = new Vector3(...(group.positions.slice(i, i + 3) as [number, number, number]));
+        const p = new Vector3(
+          ...(group.positions.slice(i, i + 3) as [number, number, number]),
+        );
         min.min(p.clone().addScalar(-group.radius * 2.2));
         max.max(p.clone().addScalar(group.radius * 2.2));
       }
@@ -185,18 +236,28 @@ export async function createStudio(
       const emphasis = uniform(1);
       material.colorNode = atomSurface({
         position: positionLocal,
+        viewNormal: normalView,
         baseColor: color(new Color(group.color)),
         contour,
         emphasis,
+        snow,
+        time,
+        energy,
+        drift,
+        seed: float(instanceIndex),
       });
-      focusSetters.push(emphasized => {
+      focusSetters.push((emphasized) => {
         emphasis.value = emphasized ? 1 : 0.08;
         material.envMapIntensity = emphasized ? 1 : 0.15;
         material.roughness = emphasized ? 0.32 : 0.85;
         material.clearcoat = emphasized ? 0.35 : 0;
       });
       materials.push(material);
-      const mesh = new InstancedMesh(geometry, material, group.positions.length / 3);
+      const mesh = new InstancedMesh(
+        geometry,
+        material,
+        group.positions.length / 3,
+      );
       meshes.push(mesh);
       for (let i = 0; i < mesh.count; i++) {
         const r = group.radius * 2.2;
@@ -230,6 +291,68 @@ export async function createStudio(
     controls.minDistance = radius * 1.2;
     controls.maxDistance = radius * 12;
     controls.autoRotateSpeed = 0.65;
+    const shake = (x = 0.7, y = 0.4, strength = 1) => {
+      if (disposed || !snow.value || document.hidden) return;
+      motion.kick(x, y, strength);
+      // Reduced motion gets a new still composition, never a looping effect.
+      if (reducedMotion.matches) motion.time += 0.8;
+      syncSnow();
+      previousTime = performance.now();
+      requestDraw();
+    };
+    const calm = () => {
+      motion.calm();
+      syncSnow();
+      requestDraw();
+    };
+    let pointer: { id: number; x: number; y: number } | null = null;
+    renderer.domElement.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.isPrimary)
+          pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      },
+      { signal: interaction.signal, passive: true },
+    );
+    renderer.domElement.addEventListener(
+      "pointermove",
+      (event) => {
+        if (!pointer || pointer.id !== event.pointerId) return;
+        const dx = event.clientX - pointer.x;
+        const dy = pointer.y - event.clientY;
+        pointer.x = event.clientX;
+        pointer.y = event.clientY;
+        if (!reducedMotion.matches)
+          shake(dx / 60, dy / 60, Math.min(0.18, Math.hypot(dx, dy) / 180));
+      },
+      { signal: interaction.signal, passive: true },
+    );
+    const releasePointer = () => {
+      pointer = null;
+    };
+    window.addEventListener("pointerup", releasePointer, {
+      signal: interaction.signal,
+    });
+    window.addEventListener("pointercancel", releasePointer, {
+      signal: interaction.signal,
+    });
+    window.addEventListener("blur", releasePointer, {
+      signal: interaction.signal,
+    });
+    reducedMotion.addEventListener("change", calm, {
+      signal: interaction.signal,
+    });
+    document.addEventListener(
+      "visibilitychange",
+      () => {
+        previousTime = performance.now();
+        if (document.hidden) {
+          releasePointer();
+          calm();
+        }
+      },
+      { signal: interaction.signal },
+    );
     const fitDistance = () => {
       const fov = Math.min(
         (camera.fov * Math.PI) / 180,
@@ -260,25 +383,27 @@ export async function createStudio(
     resize();
     reset();
     // Compile and submit a real frame before presenting a ready indicator.
-    device.pushErrorScope('validation');
+    device.pushErrorScope("validation");
     await renderer.compileAsync(scene, camera);
     checkCanceled();
     renderer.render(scene, camera);
     const validationError = await device.popErrorScope();
     if (validationError)
       throw new Error(
-        'The studio shader is not supported by this device. The regular viewer is still available.',
+        "The studio shader is not supported by this device. The regular viewer is still available.",
       );
     checkCanceled();
     observer = new ResizeObserver(resize);
     observer.observe(host);
-    controls.addEventListener('change', requestDraw);
-    document.addEventListener('visibilitychange', requestDraw);
-    signal.addEventListener('abort', dispose, { once: true });
+    controls.addEventListener("change", requestDraw);
+    document.addEventListener("visibilitychange", requestDraw);
+    signal.addEventListener("abort", dispose, { once: true });
     ready = true;
     return {
       setLook(look) {
-        contour.value = look === 'contours' ? 1 : 0;
+        contour.value = look === "contours" ? 1 : 0;
+        snow.value = look === "snowglobe" ? 1 : 0;
+        calm();
         requestDraw();
       },
       setSpin(spin) {
@@ -288,6 +413,8 @@ export async function createStudio(
         requestDraw();
       },
       setLight,
+      shake,
+      calm,
       setFocus(groupIndex) {
         focusSetters.forEach((setEmphasis, index) =>
           setEmphasis(groupIndex === null || groupIndex === index),

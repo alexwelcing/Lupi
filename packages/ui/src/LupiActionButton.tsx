@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, type ButtonHTMLAttributes } from 'react';
 import type { ActionLight } from './action-light/runtime';
+import { attachActionMotion } from './action-light/motion';
 import './action-light/action-light.css';
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement>;
@@ -11,6 +12,9 @@ export const LupiActionButton = forwardRef<HTMLButtonElement, Props>(function Lu
   const button = useRef<HTMLButtonElement>(null);
   const lightHost = useRef<HTMLSpanElement>(null);
   useImperativeHandle(forwardedRef, () => button.current!, []);
+  useEffect(() => {
+    if (button.current && !disabled) return attachActionMotion(button.current);
+  }, [disabled]);
   useEffect(() => {
     const node = button.current;
     const host = lightHost.current;
@@ -129,7 +133,9 @@ export const LupiActionButton = forwardRef<HTMLButtonElement, Props>(function Lu
   }, [disabled]);
   return <button {...props} ref={button} type={type} disabled={disabled}
     className={`lupi-action ${className}`} data-action-renderer="css">
-    <span className="lupi-action__light" ref={lightHost} aria-hidden="true" />
+    <span className="lupi-action__body" aria-hidden="true">
+      <span className="lupi-action__light" ref={lightHost} />
+    </span>
     <span className="lupi-action__content">{children}</span>
   </button>;
 });

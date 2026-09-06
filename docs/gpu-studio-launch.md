@@ -6,7 +6,7 @@ in the header (the compact button says **GPU** on phones).
 
 ## Product boundary
 
-- Two visual looks: **Studio light** and **Graphic contours**. Both execute
+- Three visual looks: **Snowglobe** (the creative default), **Studio light** and **Graphic contours**. All execute
   the authored `atom-surface.wgsl` function through `vgpu/three` `tslExports`
   and Three.js r184 node materials on its WebGPU backend.
 - One owned snapshot of the selected source frame; playback pauses. All atoms
@@ -29,12 +29,39 @@ The regular canvas stays mounted to preserve its camera, with its render loop
 paused while the native modal dialog is open. Global viewer shortcuts are
 suspended; Escape and Back return focus to the launch button.
 
-Studio is event-rendered unless the user chooses Rotate. Rotation is off by
+Studio is event-rendered unless the user chooses Rotate or stirs a snowglobe.
+Snow motion decays to a complete stop in roughly nine seconds; hidden pages
+settle immediately. Rotation is off by
 default, including with reduced motion. DPR is capped at 1.5. Closing stops
 animation, disconnects controls/resize handlers, disposes geometries/materials,
 and destroys the owned GPU device. Late asynchronous initialization is canceled
 and disposed; startup has a 20-second timeout. Device loss and shader/adapter
 failure produce a closable fallback, never a false WebGPU-active badge.
+
+## Pocket universe: snowglobe material
+
+Each sphere shades a miniature interior with 28 analytic glitter trajectories,
+depth attenuation, a refracted view ray, a snow bed and pearlescent glass highlights.
+The WGSL runs through the existing vgpu/Three integration: no particle DOM,
+additional renderer/device, dependencies, external textures or coordinate edits.
+This is an illustrative material, not a particle solver or molecular dynamics.
+
+- **Shake it** injects bounded visual inertia; dragging the canvas also stirs it.
+- **Settle snow** returns the interiors to rest. Finish changes stop the snow loop.
+- Reduced motion uses a single new still composition per button press, with no
+  drag-driven snow animation or phone-sensor control.
+- **Enable phone motion** requests permission only from the explicit click.
+  Sampling stays local, is throttled, ignores hidden-page and invalid samples,
+  and stops on opt-out, finish change, close, or GPU failure. No usable sensor
+  data within five seconds produces an honest fallback. No secure context,
+  denial, and unsupported devices retain the button/drag alternatives.
+- Phone motion requires a supporting browser and secure context; a desktop
+  sensor mock is not physical iPhone/Android acceptance.
+
+The dedicated GPU check now compares resting/shaken/animated pixels, verifies
+reduced-motion stillness, checks phone-width layout and releases the owned
+device. Set `LUPI_STUDIO_GPU=native` to use a native local adapter explicitly;
+the portable software adapter remains the default. Neither is phone FPS proof.
 
 ## Refinement pass — September 5, 2026
 

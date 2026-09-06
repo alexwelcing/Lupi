@@ -1,4 +1,6 @@
 .gpu-studio-launch {
+  --action-fill: #dbeaaf;
+  --action-edge: #829c62;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -16,7 +18,7 @@
   line-height: 1.3;
 }
 .gpu-studio-launch:hover {
-  background: #eafac5;
+  --action-fill: #eafac5;
 }
 .gpu-studio-launch__mark {
   display: inline-flex;
@@ -169,6 +171,68 @@
 .gpu-studio[data-look='contours'] .gpu-studio__stage::before {
   opacity: 0.2;
 }
+.gpu-studio[data-look='snowglobe'] {
+  --studio-accent: #beebf6;
+  --studio-muted: #b3bfce;
+  --studio-line: #c1dfff24;
+  background: #101824;
+}
+.gpu-studio[data-look='snowglobe'] .gpu-studio__stage {
+  background: radial-gradient(ellipse at 55% 40%, #314166 0%, #1c2944 44%, #111c30 78%);
+  border-color: #b7ddff38;
+}
+.gpu-studio[data-look='snowglobe'] .gpu-studio__stage::before {
+  background: radial-gradient(ellipse, #a598df30, transparent 65%);
+}
+.gpu-studio__snow-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+  padding-bottom: 0.5rem;
+}
+.gpu-studio__snow-actions > button {
+  min-height: 48px;
+  padding: 0.75rem 1rem;
+  color: var(--studio-text);
+  background: transparent;
+  border: 1px solid var(--studio-line);
+  border-radius: 1rem;
+}
+.gpu-studio__snow-actions > .gpu-studio__shake {
+  --action-fill: #c5edfa;
+  --action-edge: #f0fcff;
+  color: #172d48;
+  background: var(--action-fill);
+  border-color: var(--action-edge);
+  min-height: 56px;
+  padding-inline: 1.5rem;
+  font-size: 1rem;
+  font-weight: 650;
+  box-shadow: 0 5px 30px #8cb9ed22;
+}
+.gpu-studio__shake .lupi-action__content { gap: 0.65rem; }
+.gpu-studio__phone { margin-top: 1rem; }
+.gpu-studio__phone button {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--studio-text);
+  background: #a1c5ed0c;
+  border: 1px solid var(--studio-line);
+  border-radius: 0.65rem;
+  min-height: 48px;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+}
+.gpu-studio__phone button[aria-pressed='true'] { border-color: var(--studio-accent); }
+.gpu-studio__swatch--snow {
+  display: grid;
+  place-items: center;
+  color: #ecfcff;
+  background: radial-gradient(circle at 30% 20%, #ecf7ff, #608aac 16%, #253556 55%, #b0ccff);
+}
 .gpu-studio__stage-label {
   display: flex;
   align-items: start;
@@ -216,6 +280,7 @@
 }
 .gpu-studio__canvas {
   position: relative;
+  grid-area: 2 / 1;
   min-width: 0;
   margin: 0.75rem 1rem;
 }
@@ -476,8 +541,9 @@
   max-width: 48ch;
 }
 .gpu-studio__message {
-  position: absolute;
-  inset: 7.5rem 1rem 5rem;
+  position: relative;
+  grid-area: 2 / 1;
+  padding: 2rem 1rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -653,7 +719,7 @@
     display: none;
   }
   .gpu-studio__message {
-    inset: 7rem 1rem 6rem;
+    padding: 1rem;
   }
 }
 @media (prefers-reduced-motion: no-preference) {
