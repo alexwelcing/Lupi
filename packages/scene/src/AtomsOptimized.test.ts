@@ -10,10 +10,18 @@ import {
   LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
   LUPI_ARTIFACT_ATOMS_LAYER,
   LUPI_ARTIFACT_LAYER_KEY,
+  QUALITY_TIER_FULL_ATOM_LIMIT,
+  QUALITY_TIER_IBL_ATOM_LIMIT,
   buildColormapTexture,
   buildMaterialPaletteTexture,
   buildPaletteTexture,
+  buildRadiusPaletteTexture,
+  buildTypeSlotLookup,
   cubeUvShaderDefinesForAtlas,
+  rendererSupportsConservativeDepth,
+  resolveAtomQualityTier,
+  resolveSlotRadius,
+  syncAtomShaderDefines,
   createAtomInterpolationBoundingSphere,
   disposeOwnedMaterialTextures,
   markInstancedAttributeUpdateRange,
@@ -22,6 +30,7 @@ import {
   syncSurfaceMaterialUniforms,
   syncCubeUvEnvironment,
 } from './AtomsOptimized';
+import { buildTypeRenderTable } from './typeRenderTable';
 
 function makeFrame(): Frame {
   return {
@@ -54,9 +63,14 @@ describe('AtomsOptimized material resource policy', () => {
     // an element-slot remap cannot silently invalidate approved pixels.
     expect((material.image.data as Uint8Array)[6 * 4 + 1]).toBe(178);
     expect(IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = vec4(color, 1.0);')).toBeGreaterThan(-1);
-    expect(IMPOSTOR_FRAGMENT.indexOf('#include <colorspace_fragment>')).toBeGreaterThan(
+    // The raw material owns its output transfer function: sRGB encode after
+    // the final color is assembled, gated by the render-target uniform.
+    expect(IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = sRGBTransferOETF(gl_FragColor);')).toBeGreaterThan(
       IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = vec4(color, 1.0);'),
     );
+    // The conservative-depth extension directive must be the first
+    // non-comment token so ANGLE accepts it in ESSL 3.00.
+    expect(IMPOSTOR_FRAGMENT.trimStart().startsWith('#ifdef LUPI_CONSERVATIVE_DEPTH\n#extension GL_EXT_conservative_depth')).toBe(true);
 
     palette.dispose();
     colormap.dispose();
@@ -160,17 +174,82 @@ describe('AtomsOptimized material resource policy', () => {
     const paletteDispose = vi.fn();
     const colormapDispose = vi.fn();
     const materialPaletteDispose = vi.fn();
+    const radiusPaletteDispose = vi.fn();
+    const envDispose = vi.fn();
 
     disposeOwnedMaterialTextures({
       uPalette: { value: { dispose: paletteDispose } },
       uColormap: { value: { dispose: colormapDispose } },
       uMaterialPalette: { value: { dispose: materialPaletteDispose } },
-      tEnvMap: { value: { dispose: vi.fn() } },
+      uRadiusPalette: { value: { dispose: radiusPaletteDispose } },
+      tEnvMap: { value: { dispose: envDispose } },
     });
 
     expect(paletteDispose).toHaveBeenCalledOnce();
     expect(colormapDispose).toHaveBeenCalledOnce();
     expect(materialPaletteDispose).toHaveBeenCalledOnce();
+    expect(radiusPaletteDispose).toHaveBeenCalledOnce();
+    // The environment probe is scene-owned, never disposed here.
+    expect(envDispose).not.toHaveBeenCalled();
+  });
+
+  it('lowers the shader quality tier with atom count, never above the device tier', () => {
+    expect(resolveAtomQualityTier(2, 1_000)).toBe(2);
+    expect(resolveAtomQualityTier(2, QUALITY_TIER_FULL_ATOM_LIMIT + 1)).toBe(1);
+    expect(resolveAtomQualityTier(2, QUALITY_TIER_IBL_ATOM_LIMIT + 1)).toBe(0);
+    expect(resolveAtomQualityTier(0, 10)).toBe(0);
+    expect(resolveAtomQualityTier(1, 10)).toBe(1);
+    expect(resolveAtomQualityTier(undefined, 10)).toBe(2);
+  });
+
+  it('flags a recompile only when quality or early-Z defines change', () => {
+    const material = new THREE.ShaderMaterial({ defines: { LUPI_QUALITY: '2' } });
+    const version = material.version;
+    expect(syncAtomShaderDefines(material, 2, false)).toBe(false);
+    expect(material.version).toBe(version);
+    expect(syncAtomShaderDefines(material, 1, true)).toBe(true);
+    expect(material.defines).toMatchObject({ LUPI_QUALITY: '1', LUPI_CONSERVATIVE_DEPTH: '1' });
+    expect(syncAtomShaderDefines(material, 1, false)).toBe(true);
+    expect(material.defines.LUPI_CONSERVATIVE_DEPTH).toBeUndefined();
+    material.dispose();
+  });
+
+  it('probes EXT_conservative_depth once per context and fails closed', () => {
+    const getExtension = vi.fn((name: string) => (name === 'EXT_conservative_depth' ? {} : null));
+    const context = { getExtension };
+    const renderer = { getContext: () => context };
+    expect(rendererSupportsConservativeDepth(renderer)).toBe(true);
+    expect(rendererSupportsConservativeDepth(renderer)).toBe(true);
+    expect(getExtension).toHaveBeenCalledTimes(1);
+    expect(rendererSupportsConservativeDepth({ getContext: () => ({ getExtension: () => null }) })).toBe(false);
+    expect(rendererSupportsConservativeDepth({ getContext: () => { throw new Error('lost'); } })).toBe(false);
+    expect(rendererSupportsConservativeDepth(null)).toBe(false);
+  });
+
+  it('resolves per-slot radii from scale, per-type scale and visibility', () => {
+    const entry = { rawType: 3, displayRadius: 0.5 };
+    expect(resolveSlotRadius(entry, 2)).toBeCloseTo(1);
+    expect(resolveSlotRadius(entry, 2, null, { 3: 0.5 })).toBeCloseTo(0.5);
+    expect(resolveSlotRadius(entry, 2, new Set([3]))).toBe(0);
+    expect(resolveSlotRadius(undefined, 2)).toBe(0);
+    const texture = buildRadiusPaletteTexture((slot) => (slot === 1 ? 0.75 : 0));
+    expect(texture.format).toBe(THREE.RedFormat);
+    expect(texture.type).toBe(THREE.FloatType);
+    expect((texture.image.data as Float32Array)[1]).toBeCloseTo(0.75);
+    expect((texture.image.data as Float32Array)[0]).toBe(0);
+    texture.dispose();
+  });
+
+  it('builds a dense slot lookup for compact raw type domains', () => {
+    const frame = makeFrame();
+    frame.types = new Int32Array([7, 3]);
+    const table = buildTypeRenderTable(frame);
+    const lookup = buildTypeSlotLookup(table);
+    expect(lookup.dense).not.toBeNull();
+    expect(lookup.base).toBe(3);
+    expect(lookup.dense![7 - lookup.base]).toBe(table.byRawType.get(7)!.slot);
+    expect(lookup.dense![3 - lookup.base]).toBe(table.byRawType.get(3)!.slot);
+    expect(lookup.dense![5 - lookup.base]).toBe(-1);
   });
 
   it('keeps stable material resources alive across capacity growth and disposes them on unmount', async () => {
@@ -208,8 +287,11 @@ describe('AtomsOptimized material resource policy', () => {
       const materialPaletteDispose = vi.spyOn(materialPalette, 'dispose');
 
       // An all-hidden frame is still fully applied scene state and must carry
-      // the artifact receipt even though it intentionally draws zero atoms.
-      expect(initialGeometry.instanceCount).toBe(0);
+      // the artifact receipt. Hidden atoms stay in the instance buffer and are
+      // culled on the GPU by a zero radius in the radius palette.
+      expect(initialGeometry.instanceCount).toBe(1);
+      const radiusPalette = material.uniforms.uRadiusPalette.value as THREE.DataTexture;
+      expect((radiusPalette.image.data as Float32Array)[0]).toBe(0);
       expect(material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY]).toBe(artifactSpecId);
 
       await renderer.update(renderAtoms(2));

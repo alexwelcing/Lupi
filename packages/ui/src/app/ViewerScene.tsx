@@ -4,7 +4,14 @@ import * as THREE from 'three';
 import { useStore } from '../store';
 import { useSmoothFramePlayback, type InterpolatedFrameState } from '../hooks/useSmoothFramePlayback';
 import { AtomsOptimized } from '@atlas/scene/AtomsOptimized';
-import { AtomsTransmission, MAX_TRANSMISSION_ATOMS, transmissionQuality } from '@atlas/scene';
+import {
+  AtomsTransmission,
+  MAX_TRANSMISSION_ATOMS,
+  transmissionQuality,
+  suggestOcclusionRadius,
+  useAtomOcclusion,
+  type AtomQualityTier,
+} from '@atlas/scene';
 import { reportActiveTransmissionQuality } from '../mcp/transmissionRuntime';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
 import { buildClusters, type Clusters } from '@atlas/scene/ClusterBuilder';
@@ -53,6 +60,14 @@ import { MAX_INTERACTIVE_PICKING_ATOMS } from '../deviceCapabilities';
 
 const CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT = 5_000;
 const CONTACT_SHADOW_MAX_ATOM_LIMIT = 50_000;
+/** Scenes at or above this atom count get the large-scene treatment: far-LOD
+ *  cluster splats, sub-pixel atom culling and baked per-atom occlusion. */
+const LARGE_SCENE_ATOM_THRESHOLD = 50_000;
+/** Projected atom radius (device px) below which atoms are culled once the
+ *  cluster splats can carry the far view, and while playing (no splats). */
+const LARGE_SCENE_CULL_PIXEL_RADIUS_WITH_CLUSTERS = 0.5;
+const LARGE_SCENE_CULL_PIXEL_RADIUS_PLAYING = 0.3;
+const ATOM_OCCLUSION_STRENGTH = 0.55;
 
 interface BudgetedContactShadowsProps {
   atomCount: number;
@@ -342,10 +357,12 @@ export function ViewerScene({
 
   const [clusters, setClusters] = useState<Clusters | null>(null);
   const clusterSourceFrame = playing ? undefined : currentFrame;
+  const isLargeScene = Boolean(currentFrame && currentFrame.natoms >= LARGE_SCENE_ATOM_THRESHOLD);
+  const fullyLoaded = Boolean(currentFrame && loadedAtomCount >= currentFrame.natoms);
   useEffect(() => {
     setClusters(null);
     if (!clusterSourceFrame) return;
-    if (clusterSourceFrame.natoms < 50_000) return;
+    if (clusterSourceFrame.natoms < LARGE_SCENE_ATOM_THRESHOLD) return;
     if (loadedAtomCount < clusterSourceFrame.natoms) return;
     let cancelled = false;
     const idleCb = (typeof requestIdleCallback !== 'undefined')
@@ -372,6 +389,36 @@ export function ViewerScene({
     return diag * 3;
   }, [file?.name]);
   const clusterFadeFar = useMemo(() => clusterFadeNear * 3.3, [clusterFadeNear]);
+
+  // Per-atom occlusion for large scenes: computed off-thread from the paused
+  // frame, kept during playback so the look does not pop when play starts.
+  const occlusionRadius = useMemo(() => {
+    if (!currentFrame || !isLargeScene) return 0;
+    let maxCovalent: number | undefined;
+    if (currentFrame.distanceSemantics?.kind === 'angstrom') {
+      const seen = new Set<number>();
+      for (let i = 0; i < currentFrame.natoms; i++) {
+        const t = currentFrame.types[i];
+        if (seen.has(t)) continue;
+        seen.add(t);
+        const atomicNumber = resolveAtomicNumber(currentFrame, t);
+        if (atomicNumber === undefined) continue;
+        const r = getElementSpec(atomicNumber).radius;
+        if (maxCovalent === undefined || r > maxCovalent) maxCovalent = r;
+      }
+    }
+    return suggestOcclusionRadius(maxCovalent, currentFrame.positions, currentFrame.natoms);
+  }, [currentFrame, isLargeScene]);
+  const atomOcclusion = useAtomOcclusion(clusterSourceFrame, {
+    enabled: isLargeScene && fullyLoaded && occlusionRadius > 0,
+    radius: occlusionRadius,
+  });
+  const atomQualityTier: AtomQualityTier = deviceQualityTier === 0 ? 0 : deviceQualityTier === 1 ? 1 : 2;
+  const atomCullPixelRadius = !isLargeScene
+    ? 0
+    : clusters && !playing
+      ? LARGE_SCENE_CULL_PIXEL_RADIUS_WITH_CLUSTERS
+      : LARGE_SCENE_CULL_PIXEL_RADIUS_PLAYING;
 
   const [spatialHash, setSpatialHash] = useState<SpatialHash3D | null>(null);
   const atomPickingEnabled = Boolean(
@@ -504,6 +551,10 @@ export function ViewerScene({
             etchTexture={etchTexture}
             etchAtomId={etchAtomId}
             artifactSpecId={artifactSpecId}
+            qualityTier={atomQualityTier}
+            cullPixelRadius={atomCullPixelRadius}
+            occlusion={atomOcclusion}
+            occlusionStrength={ATOM_OCCLUSION_STRENGTH}
           />
           )}
           {activeVectorField && (

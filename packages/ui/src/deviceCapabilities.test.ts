@@ -55,7 +55,7 @@ describe('device capability policy', () => {
   });
 
   it('keeps the picking budget below the render ceiling', () => {
-    expect(MAX_INTERACTIVE_PICKING_ATOMS).toBe(200_000);
+    expect(MAX_INTERACTIVE_PICKING_ATOMS).toBe(5_000_000);
     expect(MAX_INTERACTIVE_PICKING_ATOMS).toBeLessThan(GLOBAL_BROWSER_ATOM_CEILING);
   });
 });

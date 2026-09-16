@@ -4,7 +4,14 @@ export {
   LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
   LUPI_ARTIFACT_ATOMS_LAYER,
   LUPI_ARTIFACT_LAYER_KEY,
+  QUALITY_TIER_FULL_ATOM_LIMIT,
+  QUALITY_TIER_IBL_ATOM_LIMIT,
+  resolveAtomQualityTier,
 } from './AtomsOptimized';
+export type { AtomQualityTier } from './AtomsOptimized';
+export { computeAtomOcclusion, suggestOcclusionRadius } from './atomOcclusion';
+export type { AtomOcclusionInput, AtomOcclusionResult } from './atomOcclusion';
+export { useAtomOcclusion } from './useAtomOcclusion';
 export {
   AtomsTransmission,
   MAX_TRANSMISSION_ATOMS,

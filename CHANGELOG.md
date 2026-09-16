@@ -1,5 +1,58 @@
 # Changelog
 
+## [Unreleased] - Large-Scene Renderer + Impostor Fidelity
+
+### Changed
+- **Compact atom instance layout** (`AtomsOptimized`): per-atom GPU/CPU
+  footprint drops from 40 B to 15 B for static molecules (27 B with a
+  trajectory target buffer). Type slot is a `u8`, property a normalized
+  `u16`, and the atom index is `gl_InstanceID`. Radius, per-type scale and
+  type visibility live in a 256-entry R32F radius palette, so the atom-scale
+  slider and hide-type toggles are a 1 KB texture update instead of an O(n)
+  instance rewrite. Static frames alias the interpolation target buffer to
+  the position buffer; type slots are re-uploaded only when the type buffer
+  or slot table changes; capacity shrinks when a much smaller molecule
+  follows a large one.
+- **Raw GLSL ES 3.00 impostor material with early-Z**: the sphere impostor
+  is now a `RawShaderMaterial` that owns its prefix, which lets it declare
+  `EXT_conservative_depth` (`layout(depth_greater)`) when the browser exposes
+  it. The billboard sits on the sphere's front tangent plane, so the GPU
+  keeps early depth rejection despite the `gl_FragDepth` write and dense
+  scenes skip shading for most occluded fragments. Output color space is
+  handled per render target exactly as Three does (sRGB to the canvas,
+  linear into render targets).
+- **Quality tiers are now real**: the device quality tier reaches the atom
+  shader as compile-time defines (0 = analytic environment, 1 = image-based
+  lighting, 2 = clearcoat and texture detail on top), and the renderer lowers
+  the tier by atom count (>400k drops clearcoat/texture, >2M drops IBL).
+- **Sub-pixel culling**: atoms whose projected radius falls under a
+  device-pixel threshold collapse in the vertex shader for scenes of 50k+
+  atoms (0.5 px once cluster splats carry the far view, 0.3 px while
+  playing).
+- **Bonds render round**: the instanced bond tube uses 10 radial segments
+  under 100k half-cylinders, 6 up to 500k, and the previous 4-sided prism
+  beyond that.
+- **GPU bond grid scales with the scene**: the WebGPU bond pipeline sizes
+  its spatial grid from the atom capacity (32³ up to 80³ cells) instead of a
+  fixed 32³ × 64-slot grid, which stretched over large boxes and silently
+  dropped bonds past a few hundred thousand atoms.
+- **Typed-array spatial hash**: `SpatialHash3D` is a counting-sort uniform
+  grid (no string keys, no per-atom allocation). Interactive picking is now
+  allowed up to 5,000,000 atoms (was 200,000).
+
+### Added
+- **Per-atom ambient occlusion for large scenes**: `computeAtomOcclusion`
+  (pure) plus `useAtomOcclusion` (Web Worker) bake a neighbor-density
+  openness map (QuteMol/VMD style) for scenes of 50k+ atoms. The impostor
+  shader darkens ambient/environment light on buried atoms, so surfaces,
+  voids and grain boundaries read at every zoom level without screen-space
+  AO.
+- **Analytic studio environment**: when no PMREM probe is installed (the
+  large-scene default) atoms are lit by a hemisphere sky/ground model with an
+  overhead softbox band instead of a flat constant, and highlights use a
+  footprint-driven roughness floor (specular anti-aliasing) so small atoms
+  no longer strobe.
+
 ## [Unreleased] - Periodic Table Explorer, Settings & Run Configurator
 
 ### Added

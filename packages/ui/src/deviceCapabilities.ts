@@ -21,20 +21,23 @@
 
 export type DeviceTier = 'mobile' | 'low' | 'desktop' | 'high';
 
-/** Quality tier selects the impostor-sphere fragment-shader complexity.
- *  See AtomsOptimized.tsx for the per-tier work breakdown. */
+/** Quality tier selects the impostor-sphere fragment-shader complexity:
+ *  0 = analytic lighting only (no image-based lighting), 1 = image-based
+ *  lighting without clearcoat/texture detail, 2 = everything. AtomsOptimized
+ *  lowers the tier further for very large atom counts. */
 export type QualityTier = 0 | 1 | 2;
 
 export const GLOBAL_BROWSER_ATOM_CEILING = 50_000_000;
 
 /**
- * Atom picking currently relies on a string-keyed spatial hash with one entry
- * per atom. Building that index is useful for ordinary structures, but at
- * million-atom scale it duplicates a large O(n) CPU/memory pass after the GPU
- * upload. Large scenes remain fully navigable and renderable; only per-atom
- * hover/click inspection is withheld above this budget.
+ * Atom picking relies on a typed-array uniform grid (counting sort) with one
+ * Int32 per atom plus one per cell. Building it is a two-pass O(n) job that
+ * runs in an idle callback after the GPU upload, so it stays interactive well
+ * into the millions. Beyond this budget the build alone would stall a frame
+ * for too long, and per-atom hover/click inspection is withheld; the scene
+ * remains fully navigable and renderable.
  */
-export const MAX_INTERACTIVE_PICKING_ATOMS = 200_000;
+export const MAX_INTERACTIVE_PICKING_ATOMS = 5_000_000;
 
 interface DeviceProfile {
   tier: DeviceTier;
@@ -55,8 +58,8 @@ const PROFILES: Record<DeviceTier, DeviceProfile> = {
     tier: 'mobile',
     recommendedAtoms: 2_000_000,
     maxAtoms: GLOBAL_BROWSER_ATOM_CEILING,
-    // Fast fragment path: skips gl_FragDepth (restores early-Z), no IBL,
-    // no Cook-Torrance. 5-10x more fragment throughput on tile-based GPUs.
+    // Fast fragment path: analytic environment instead of PMREM lookups.
+    // Several times more fragment throughput on tile-based GPUs.
     qualityTier: 0,
     reason: 'the single-scene browser buffer ceiling would be exceeded',
   },

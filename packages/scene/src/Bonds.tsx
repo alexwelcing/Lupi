@@ -684,11 +684,15 @@ export function Bonds({
   // constant; only the per-instance attribute size changes.
   // (Phase-2 prune: colorT/materialBT/tangent attributes removed — bonds are
   // now flat per-half via instanceColor and isotropic, so none were used.)
+  // Radial detail follows the bond budget: small molecules get genuinely
+  // round tubes, huge systems keep the cheap 4-sided prism (matches the
+  // export builder's LOD ladder).
+  const radialSegments = bondRadialSegments(halfCount);
   const tubeGeo = useMemo(() => {
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 4, 1);
+    const geo = new THREE.CylinderGeometry(1, 1, 1, radialSegments, 1);
     geo.setAttribute('radiusBT', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2));
     return geo;
-  }, [capacity]);
+  }, [capacity, radialSegments]);
 
   // CPU-side state arrays for bulk GPU upload. instance i*2 = atom-A half
   // (solid A color), instance i*2+1 = atom-B half (solid B color); the
@@ -1348,7 +1352,7 @@ export function Bonds({
     // upload would write past the typed-array bounds. Capacity changes are
     // rare (once per file load typically), so the brief remount is cheap.
     <instancedMesh
-      key={capacity}
+      key={`${capacity}:${radialSegments}`}
       ref={onMeshRef}
       args={meshArgs}
       frustumCulled={false}
@@ -1357,6 +1361,18 @@ export function Bonds({
       <instancedBufferAttribute attach="instanceColor" args={instanceColorArgs} />
     </instancedMesh>
   );
+}
+
+/**
+ * Radial segments for the instanced bond cylinder, by drawn half-cylinder
+ * count. Vertex cost scales with instances × segments, so dense systems keep
+ * the 4-sided prism while ordinary molecules render round tubes.
+ */
+export function bondRadialSegments(halfCylinderCount: number): number {
+  if (!Number.isFinite(halfCylinderCount)) return 4;
+  if (halfCylinderCount > 500_000) return 4;
+  if (halfCylinderCount > 100_000) return 6;
+  return 10;
 }
 
 /** Predefined bond cutoffs for common elements (Angstroms) */
