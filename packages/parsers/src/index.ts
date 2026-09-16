@@ -82,6 +82,82 @@ export function hydrateWorkerFrame(f: any): Frame {
   };
 }
 
+/** Per-frame summary the parser worker ships alongside each frame so the main
+ * thread can build trajectory-level bounds and type lists in O(frames). */
+export interface WorkerFrameStats {
+  bounds: [number, number, number, number, number, number];
+  types: number[];
+}
+
+function isWorkerFrameStats(value: unknown): value is WorkerFrameStats {
+  const stats = value as Partial<WorkerFrameStats> | null;
+  return Boolean(
+    stats
+    && Array.isArray(stats.bounds)
+    && stats.bounds.length === 6
+    && stats.bounds.every((n) => typeof n === 'number')
+    && Array.isArray(stats.types),
+  );
+}
+
+/** Build trajectory bounds and the sorted type list from worker-provided
+ * per-frame stats, scanning atoms only for frames that did not carry them. */
+export function summarizeFrames(
+  frames: Frame[],
+  workerFrames: Array<{ stats?: unknown }> = [],
+): { atomTypes: number[]; globalBounds: { min: [number, number, number]; max: [number, number, number] } } {
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  const allTypes = new Set<number>();
+
+  frames.forEach((frame, index) => {
+    const stats = workerFrames[index]?.stats;
+    if (isWorkerFrameStats(stats) && frame.natoms > 0) {
+      const [bMinX, bMaxX, bMinY, bMaxY, bMinZ, bMaxZ] = stats.bounds;
+      if (bMinX < minX) minX = bMinX; if (bMaxX > maxX) maxX = bMaxX;
+      if (bMinY < minY) minY = bMinY; if (bMaxY > maxY) maxY = bMaxY;
+      if (bMinZ < minZ) minZ = bMinZ; if (bMaxZ > maxZ) maxZ = bMaxZ;
+      for (const t of stats.types) allTypes.add(t);
+      return;
+    }
+    for (let i = 0; i < frame.natoms; i++) {
+      const x = frame.positions[i * 3], y = frame.positions[i * 3 + 1], z = frame.positions[i * 3 + 2];
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+      allTypes.add(frame.types[i]);
+    }
+  });
+
+  return {
+    atomTypes: Array.from(allTypes).sort((a, b) => a - b),
+    globalBounds: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
+  };
+}
+
+/** Index frame-0 IDs. Compact non-negative ID ranges (the LAMMPS norm) use a
+ * dense Int32Array lookup instead of one Map entry per atom. */
+function buildIdIndex(ids: Int32Array, natoms: number): (id: number) => number {
+  let minId = Infinity;
+  let maxId = -Infinity;
+  for (let i = 0; i < natoms; i++) {
+    const id = ids[i];
+    if (id < minId) minId = id;
+    if (id > maxId) maxId = id;
+  }
+  if (natoms > 0 && maxId - minId < natoms * 4 + 1024) {
+    const dense = new Int32Array(maxId - minId + 1).fill(-1);
+    for (let i = 0; i < natoms; i++) dense[ids[i] - minId] = i;
+    return (id: number) => {
+      const offset = id - minId;
+      return offset >= 0 && offset < dense.length ? dense[offset] : -1;
+    };
+  }
+  const map = new Map<number, number>();
+  for (let i = 0; i < natoms; i++) map.set(ids[i], i);
+  return (id: number) => map.get(id) ?? -1;
+}
+
 /** Add displacement only when source-provided unique IDs support a truthful
  * cross-frame join. Synthetic row IDs and partial atom sets do not produce a
  * deceptively numeric property. */
@@ -89,8 +165,7 @@ export function addSourceIdDisplacement(frames: Frame[]): void {
   const f0 = frames[0];
   if (!f0 || !hasUsableSourceIds(f0)) return;
 
-  const f0IdToIndex = new Map<number, number>();
-  for (let i = 0; i < f0.natoms; i++) f0IdToIndex.set(f0.ids[i], i);
+  const f0IndexOf = buildIdIndex(f0.ids, f0.natoms);
 
   for (const frame of frames) {
     // A per-frame scalar named "Displacement" implies a complete join to the
@@ -100,8 +175,8 @@ export function addSourceIdDisplacement(frames: Frame[]): void {
     const displacement = new Float32Array(frame.natoms);
     let completeJoin = true;
     for (let i = 0; i < frame.natoms; i++) {
-      const f0Index = f0IdToIndex.get(frame.ids[i]);
-      if (f0Index === undefined) {
+      const f0Index = f0IndexOf(frame.ids[i]);
+      if (f0Index < 0) {
         completeJoin = false;
         break;
       }
@@ -123,27 +198,15 @@ export async function parseDumpFile(file: File): Promise<Trajectory> {
 
   const frames: Frame[] = result.frames.map(hydrateWorkerFrame);
 
-  // Compute global bounds and structural properties (e.g. Displacement)
-  let minX = Infinity, minY = Infinity, minZ = Infinity;
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-  const allTypes = new Set<number>();
-
-  for (const frame of frames) {
-    for (let i = 0; i < frame.natoms; i++) {
-      const x = frame.positions[i * 3], y = frame.positions[i * 3 + 1], z = frame.positions[i * 3 + 2];
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-      allTypes.add(frame.types[i]);
-    }
-  }
+  // Trajectory-level bounds/types come from the worker's per-frame stats;
+  // structural properties (e.g. Displacement) are derived here.
+  const summary = summarizeFrames(frames, result.frames);
   addSourceIdDisplacement(frames);
 
   return {
     frames,
     totalFrames: frames.length,
-    atomTypes: Array.from(allTypes).sort(),
-    globalBounds: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
+    ...summary,
   };
 }
 
@@ -192,27 +255,15 @@ export async function parseXyzFile(file: File): Promise<Trajectory> {
 
   const frames: Frame[] = result.frames.map(hydrateWorkerFrame);
 
-  // Compute global bounds and structural properties (e.g. Displacement)
-  let minX = Infinity, minY = Infinity, minZ = Infinity;
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-  const allTypes = new Set<number>();
-
-  for (const frame of frames) {
-    for (let i = 0; i < frame.natoms; i++) {
-      const x = frame.positions[i * 3], y = frame.positions[i * 3 + 1], z = frame.positions[i * 3 + 2];
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-      allTypes.add(frame.types[i]);
-    }
-  }
+  // Trajectory-level bounds/types come from the worker's per-frame stats;
+  // structural properties (e.g. Displacement) are derived here.
+  const summary = summarizeFrames(frames, result.frames);
   addSourceIdDisplacement(frames);
 
   return {
     frames,
     totalFrames: frames.length,
-    atomTypes: Array.from(allTypes).sort(),
-    globalBounds: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
+    ...summary,
   };
 }
 
@@ -225,26 +276,10 @@ export async function parseDataFile(file: File): Promise<Trajectory> {
 
   const frames: Frame[] = result.frames.map(hydrateWorkerFrame);
 
-  // Compute global bounds
-  let minX = Infinity, minY = Infinity, minZ = Infinity;
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-  const allTypes = new Set<number>();
-
-  for (const frame of frames) {
-    for (let i = 0; i < frame.natoms; i++) {
-      const x = frame.positions[i * 3], y = frame.positions[i * 3 + 1], z = frame.positions[i * 3 + 2];
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-      allTypes.add(frame.types[i]);
-    }
-  }
-
   return {
     frames,
     totalFrames: frames.length,
-    atomTypes: Array.from(allTypes).sort(),
-    globalBounds: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
+    ...summarizeFrames(frames, result.frames),
   };
 }
 
@@ -543,3 +578,13 @@ export async function streamDumpFrames(
   // Release cache
   _cachedFullParse = null;
 }
+export {
+  parseXyzBytes,
+  parseXyzText,
+  parseXyzProperties,
+  xyzElementToType,
+  XyzParseError,
+  type XyzFrameStats,
+  type XyzParseResult,
+  type XyzParseOptions,
+} from './xyzParser';

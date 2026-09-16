@@ -40,6 +40,23 @@
   grid (no string keys, no per-atom allocation). Interactive picking is now
   allowed up to 5,000,000 atoms (was 200,000).
 
+- **XYZ / extended-XYZ parse in TypeScript, bytes to typed arrays**: the
+  parser worker no longer sends XYZ through the WASM serde bridge (whole-file
+  string, line vector, boxed JavaScript number arrays that could not be
+  transferred and were copied twice more on the main thread). The new
+  byte-level parser writes `Float32Array`/`Int32Array` frames directly,
+  transfers them zero-copy, and understands extended-XYZ `Lattice=` boxes and
+  `Properties=` column layouts (extra columns become per-atom properties;
+  velocities/forces map to `vx..`/`fx..`). On a 1M-atom file it parses in
+  ~0.5 s versus ~1.8 s plus a 125 MB boxed intermediate.
+- **Parser worker fixes**: gzip decompression concatenated chunks byte by
+  byte while scanning the chunk list (quadratic); it is now one linear copy.
+  LAMMPS data frames from WASM are converted to typed arrays inside the
+  worker so their buffers transfer. Per-frame bounds and type sets ship
+  with every frame, so the main thread no longer rescans every atom of every
+  frame after hydration; the displacement join uses a dense index instead
+  of a Map entry per atom.
+
 ### Added
 - **Per-atom ambient occlusion for large scenes**: `computeAtomOcclusion`
   (pure) plus `useAtomOcclusion` (Web Worker) bake a neighbor-density
