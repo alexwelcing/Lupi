@@ -30,6 +30,7 @@
 import type { Frame } from '@atlas/core/types';
 import { ELEMENT_DATA } from '@atlas/core/elements';
 import { xyzFrameMetadata } from './workers/frameTransfer';
+import { NL, isSpace, scanFloat } from './byteScan';
 
 export interface XyzFrameStats {
   /** [minX, maxX, minY, maxY, minZ, maxZ] of the parsed coordinates. */
@@ -61,17 +62,7 @@ export class XyzParseError extends Error {
   }
 }
 
-const NL = 10;
-const CR = 13;
-const SP = 32;
-const TAB = 9;
 const BOUNDS_PAD = 2.0;
-
-const POW10 = /* @__PURE__ */ (() => {
-  const table = new Float64Array(23);
-  for (let i = 0; i < table.length; i++) table[i] = Math.pow(10, i);
-  return table;
-})();
 
 const SYMBOL_TO_ATOMIC_NUMBER: ReadonlyMap<string, number> = /* @__PURE__ */ (() => {
   const map = new Map<string, number>();
@@ -95,45 +86,6 @@ export function xyzElementToType(token: string): number {
   const atomicNumber = SYMBOL_TO_ATOMIC_NUMBER.get(trimmed.toLowerCase());
   if (atomicNumber === undefined) throw new Error(`unknown element token '${trimmed}'`);
   return atomicNumber;
-}
-
-function isSpace(c: number): boolean {
-  return c === SP || c === TAB || c === CR;
-}
-
-/** Parse a float token in [start, end). Returns NaN for malformed tokens. */
-function scanFloat(b: Uint8Array, start: number, end: number): number {
-  let i = start;
-  let c = b[i];
-  let neg = false;
-  if (c === 45 /* - */) { neg = true; c = b[++i]; }
-  else if (c === 43 /* + */) { c = b[++i]; }
-  let mant = 0;
-  let exp10 = 0;
-  let any = false;
-  while (i < end && c >= 48 && c <= 57) { mant = mant * 10 + (c - 48); any = true; c = b[++i]; }
-  if (i < end && c === 46 /* . */) {
-    c = b[++i];
-    while (i < end && c >= 48 && c <= 57) { mant = mant * 10 + (c - 48); exp10--; any = true; c = b[++i]; }
-  }
-  if (!any) return NaN;
-  if (i < end && (c === 101 || c === 69 /* e E */)) {
-    c = b[++i];
-    let eneg = false;
-    if (c === 45) { eneg = true; c = b[++i]; }
-    else if (c === 43) { c = b[++i]; }
-    let e = 0;
-    let digit = false;
-    while (i < end && c >= 48 && c <= 57) { e = e * 10 + (c - 48); digit = true; c = b[++i]; }
-    if (!digit) return NaN;
-    exp10 += eneg ? -e : e;
-  }
-  if (i !== end) return NaN;
-  let v: number;
-  if (exp10 === 0) v = mant;
-  else if (exp10 > 0) v = exp10 <= 22 ? mant * POW10[exp10] : mant * Math.pow(10, exp10);
-  else v = exp10 >= -22 ? mant / POW10[-exp10] : mant * Math.pow(10, exp10);
-  return neg ? -v : v;
 }
 
 interface ColumnSpec {

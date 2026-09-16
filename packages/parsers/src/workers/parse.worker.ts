@@ -6,11 +6,9 @@
  */
 // @ts-nocheck
 
-import init, {
-  parseLog,
-  parseDataFile,
-} from 'atlas-parsers';
+import init, { parseLog } from 'atlas-parsers';
 import { parseXyzBytes } from '../xyzParser';
+import { parseLammpsDataBytes } from '../lammpsDataParser';
 import {
   parseDumpBlobCanonical,
   parseDumpFramesCanonical,
@@ -88,18 +86,6 @@ async function readFileAsText(file: File): Promise<string> {
   return text;
 }
 
-function toFloat32(value: unknown): Float32Array {
-  if (value instanceof Float32Array) return value;
-  if (Array.isArray(value) || ArrayBuffer.isView(value)) return Float32Array.from(value as ArrayLike<number>);
-  return new Float32Array(0);
-}
-
-function toInt32(value: unknown): Int32Array {
-  if (value instanceof Int32Array) return value;
-  if (Array.isArray(value) || ArrayBuffer.isView(value)) return Int32Array.from(value as ArrayLike<number>);
-  return new Int32Array(0);
-}
-
 /** Per-frame bounds and unique types, computed here so the main thread never
  * rescans every atom of every frame after hydration. */
 function frameStats(positions: Float32Array, types: Int32Array, natoms: number) {
@@ -175,46 +161,31 @@ self.onmessage = async (e: MessageEvent) => {
       self.postMessage({ type: 'frames', id, frames: result }, transferables);
 
     } else if (type === 'parse-data') {
-      await ensureWasm();
-      const file = payload as File;
-      const content = typeof file === 'string' ? file : await readFileAsText(file);
-      const f = parseDataFile(content);
-
-      // The WASM bridge serializes Vec<f32>/Vec<i32> as plain JS arrays of
-      // boxed numbers. Convert once here so the buffers transfer zero-copy
-      // and the main thread never touches boxed arrays.
+      // Pure TypeScript byte-level parser (port of wasm/src/data.rs): no WASM
+      // init, no whole-file string, typed arrays from the first write.
+      const bytes = await readFileAsBytes(payload as File | string);
+      const parsed = parseLammpsDataBytes(bytes);
+      const f = parsed.frame;
+      const semantics = lammpsDataSemantics(parsed.hasCompleteMassMapping);
       const transferables: Transferable[] = [];
-      const positions = toFloat32(f.positions);
-      const ids = toInt32(f.ids);
-      const types = toInt32(f.types);
-      const bonds = toInt32(f.bonds);
-      if (Array.isArray(f.properties)) {
-        f.properties = f.properties.map(([name, data]: [string, unknown]) => [name, toFloat32(data)]);
-      }
       const properties = extractFrameProperties(f, transferables);
-      const hasCompleteMassMapping = properties.some((property) => property.name === 'type_id');
-      const semantics = lammpsDataSemantics(hasCompleteMassMapping);
-
-      if (positions && positions.buffer) transferables.push(positions.buffer);
-      if (ids && ids.buffer) transferables.push(ids.buffer);
-      if (types && types.buffer) transferables.push(types.buffer);
-      if (bonds && bonds.buffer) transferables.push(bonds.buffer);
+      transferables.push(f.positions.buffer, f.ids.buffer, f.types.buffer, f.bonds.buffer);
 
       self.postMessage({ type: 'frames', id, frames: [{
           timestep: f.timestep,
           natoms: f.natoms,
-          boxBounds: f.boxBounds || f.box_bounds,
-          boxTilt: f.boxTilt || f.box_tilt,
+          boxBounds: f.boxBounds,
+          boxTilt: f.boxTilt,
           triclinic: f.triclinic,
           columns: f.columns,
-          ids,
-          types,
-          positions,
-          bonds,
+          ids: f.ids,
+          types: f.types,
+          positions: f.positions,
+          bonds: f.bonds,
           properties,
           identity: extractFrameIdentity(f),
           ...semantics,
-          stats: frameStats(positions, types, f.natoms),
+          stats: parsed.stats,
       }]}, transferables);
 
     } else if (type === 'parse-xyz') {

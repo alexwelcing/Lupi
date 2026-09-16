@@ -64,6 +64,15 @@
   `Properties=` column layouts (extra columns become per-atom properties;
   velocities/forces map to `vx..`/`fx..`). On a 1M-atom file it parses in
   ~0.5 s versus ~1.8 s plus a 125 MB boxed intermediate.
+- **LAMMPS data files parse in TypeScript too**: `lammpsDataParser.ts` is a
+  byte-level port of the WASM `read_data` parser with identical semantics
+  (atomic/charge/molecular/full styles with `# style` hints and accelerator
+  suffixes, Masses mass+label element resolution with `type_id`, Bonds,
+  Velocities before or after Atoms, triclinic tilt, skipped coefficient
+  sections). A parity test runs the committed WASM artifact on the same
+  fixtures. On a 1M-atom charge-style file it parses in ~1.2 s versus ~6 s
+  plus a 190 MB boxed intermediate. The worker no longer initializes WASM
+  for XYZ or data files; only thermo logs still use it.
 - **Parser worker fixes**: gzip decompression concatenated chunks byte by
   byte while scanning the chunk list (quadratic); it is now one linear copy.
   LAMMPS data frames from WASM are converted to typed arrays inside the

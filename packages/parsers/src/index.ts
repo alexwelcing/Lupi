@@ -588,3 +588,10 @@ export {
   type XyzParseResult,
   type XyzParseOptions,
 } from './xyzParser';
+export {
+  parseLammpsDataBytes,
+  parseLammpsDataText,
+  LammpsDataParseError,
+  type LammpsDataParseResult,
+  type LammpsDataFrameStats,
+} from './lammpsDataParser';
