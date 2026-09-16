@@ -11,7 +11,7 @@ export {
 export type { AtomQualityTier } from './AtomsOptimized';
 export { computeAtomOcclusion, suggestOcclusionRadius } from './atomOcclusion';
 export type { AtomOcclusionInput, AtomOcclusionResult } from './atomOcclusion';
-export { useAtomOcclusion } from './useAtomOcclusion';
+export { useAtomOcclusion, useAtomClusters } from './useAtomOcclusion';
 export {
   AtomsTransmission,
   MAX_TRANSMISSION_ATOMS,

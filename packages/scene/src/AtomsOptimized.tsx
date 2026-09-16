@@ -861,7 +861,7 @@ export function cubeUvShaderDefinesForTexture(texture: THREE.Texture): CubeUvSha
   return cubeUvShaderDefinesForAtlas(width, height);
 }
 
-const EMPTY_CUBE_UV_DEFINES = cubeUvShaderDefinesForAtlas(1, 1);
+export const EMPTY_CUBE_UV_DEFINES = cubeUvShaderDefinesForAtlas(1, 1);
 
 function glslFloatDefine(value: number): string {
   const literal = String(value);
@@ -931,6 +931,41 @@ export function syncAtomShaderDefines(
   material.defines = defines;
   material.needsUpdate = true;
   return true;
+}
+
+/** Uniform map shape shared by the raw impostor materials. */
+export type ImpostorRenderTargetUniforms = Record<string, THREE.IUniform>;
+
+/**
+ * Per-draw uniforms a raw impostor material needs from the renderer: whether
+ * to apply the sRGB transfer function (Three applies it only when drawing to
+ * the canvas or an XR target) and the device-pixel scale that turns a world
+ * radius into a projected pixel radius (culling and specular AA).
+ */
+export function syncImpostorRenderTargetUniforms(
+  uniforms: ImpostorRenderTargetUniforms,
+  renderer: THREE.WebGLRenderer,
+  camera: THREE.Camera,
+  scratch: THREE.Vector2,
+): void {
+  const target = renderer.getRenderTarget();
+  let outputSrgb: boolean;
+  let targetHeight: number;
+  if (target === null) {
+    outputSrgb = renderer.outputColorSpace === THREE.SRGBColorSpace;
+    targetHeight = renderer.getDrawingBufferSize(scratch).y;
+  } else if ((target as { isXRRenderTarget?: boolean }).isXRRenderTarget === true) {
+    outputSrgb = target.texture.colorSpace === THREE.SRGBColorSpace;
+    targetHeight = target.height;
+  } else {
+    outputSrgb = THREE.ColorManagement.workingColorSpace === THREE.SRGBColorSpace;
+    targetHeight = target.height;
+  }
+  uniforms.uOutputSrgb.value = outputSrgb ? 1 : 0;
+  const projection = camera.projectionMatrix.elements;
+  const ortho = (camera as { isOrthographicCamera?: boolean }).isOrthographicCamera === true;
+  uniforms.uOrthographic.value = ortho ? 1 : 0;
+  uniforms.uPixelScale.value = Math.abs(projection[5]) * Math.max(1, targetHeight) * 0.5;
 }
 
 /** Cached per-context probe for EXT_conservative_depth. */
@@ -1549,25 +1584,7 @@ export function AtomsOptimized({
     _scene: THREE.Scene,
     camera: THREE.Camera,
   ) => {
-    const u = material.uniforms;
-    const target = renderer.getRenderTarget();
-    let outputSrgb: boolean;
-    let targetHeight: number;
-    if (target === null) {
-      outputSrgb = renderer.outputColorSpace === THREE.SRGBColorSpace;
-      targetHeight = renderer.getDrawingBufferSize(drawingBufferScratch).y;
-    } else if ((target as { isXRRenderTarget?: boolean }).isXRRenderTarget === true) {
-      outputSrgb = target.texture.colorSpace === THREE.SRGBColorSpace;
-      targetHeight = target.height;
-    } else {
-      outputSrgb = THREE.ColorManagement.workingColorSpace === THREE.SRGBColorSpace;
-      targetHeight = target.height;
-    }
-    u.uOutputSrgb.value = outputSrgb ? 1 : 0;
-    const projection = camera.projectionMatrix.elements;
-    const ortho = (camera as { isOrthographicCamera?: boolean }).isOrthographicCamera === true;
-    u.uOrthographic.value = ortho ? 1 : 0;
-    u.uPixelScale.value = Math.abs(projection[5]) * Math.max(1, targetHeight) * 0.5;
+    syncImpostorRenderTargetUniforms(material.uniforms, renderer, camera, drawingBufferScratch);
   }, [material, drawingBufferScratch]);
   useLayoutEffect(() => {
     const mesh = meshRef.current;

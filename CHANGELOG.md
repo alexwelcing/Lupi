@@ -29,13 +29,28 @@
   device-pixel threshold collapse in the vertex shader for scenes of 50k+
   atoms (0.5 px once cluster splats carry the far view, 0.3 px while
   playing).
-- **Bonds render round**: the instanced bond tube uses 10 radial segments
-  under 100k half-cylinders, 6 up to 500k, and the previous 4-sided prism
-  beyond that.
+- **Bonds are ray-cast cylinder impostors**: one instanced box per bond,
+  ray-cast to a finite cylinder in the fragment shader with exact depth.
+  Bonds are perfectly round at any zoom (the old tube was a 4-sided prism),
+  the two endpoint colors split at the geometric midpoint, and frame
+  interpolation happens on the GPU from the live playback ref, so
+  trajectory substeps no longer rebuild instance matrices on the CPU. Per
+  bond GPU data is 34 bytes (58 with a trajectory target) instead of two
+  64-byte matrices plus colors and taper radii, and there is no CPU
+  scratch copy. Bonds share the atom shader's quality tiers, conservative
+  depth, IBL/analytic environment, specular AA and sub-pixel culling.
 - **GPU bond grid scales with the scene**: the WebGPU bond pipeline sizes
   its spatial grid from the atom capacity (32³ up to 80³ cells) instead of a
   fixed 32³ × 64-slot grid, which stretched over large boxes and silently
   dropped bonds past a few hundred thousand atoms.
+- **Cluster splats build off the main thread**: the far-LOD cluster grid
+  now runs in the same scene-analysis worker as per-atom occlusion instead
+  of an idle callback on the main thread, so pausing or loading a
+  million-atom scene no longer stalls the frame for the build.
+- **Hidden-type bond filtering** compacts typed arrays in two passes instead
+  of pushing into JavaScript arrays per bond; the viewer caches the
+  per-type covalent-radius scan per type buffer instead of rescanning every
+  atom on each source-frame change during playback.
 - **Typed-array spatial hash**: `SpatialHash3D` is a counting-sort uniform
   grid (no string keys, no per-atom allocation). Interactive picking is now
   allowed up to 5,000,000 atoms (was 200,000).

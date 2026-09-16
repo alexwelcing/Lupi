@@ -9,12 +9,12 @@ import {
   MAX_TRANSMISSION_ATOMS,
   transmissionQuality,
   suggestOcclusionRadius,
+  useAtomClusters,
   useAtomOcclusion,
   type AtomQualityTier,
 } from '@atlas/scene';
 import { reportActiveTransmissionQuality } from '../mcp/transmissionRuntime';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
-import { buildClusters, type Clusters } from '@atlas/scene/ClusterBuilder';
 import { Bonds } from '@atlas/scene/Bonds';
 import { validateSourceBondTopology } from '@atlas/scene';
 import { SimulationCell } from '@atlas/scene/SimulationCell';
@@ -68,6 +68,37 @@ const LARGE_SCENE_ATOM_THRESHOLD = 50_000;
 const LARGE_SCENE_CULL_PIXEL_RADIUS_WITH_CLUSTERS = 0.5;
 const LARGE_SCENE_CULL_PIXEL_RADIUS_PLAYING = 0.3;
 const ATOM_OCCLUSION_STRENGTH = 0.55;
+
+/**
+ * Largest covalent radius among a frame's atom types, or undefined when any
+ * type has no element mapping. The scan is O(atoms) but a trajectory's frames
+ * usually share one type buffer, so the result is cached per buffer instead of
+ * rescanning on every source-frame change during playback.
+ */
+const covalentRadiusCache = new WeakMap<Int32Array, { semanticsKey: string; value: number | undefined }>();
+function maxCovalentRadiusForFrame(frame: Frame): number | undefined {
+  const semanticsKey = JSON.stringify(frame.typeSemantics ?? null);
+  const cached = covalentRadiusCache.get(frame.types);
+  if (cached && cached.semanticsKey === semanticsKey) return cached.value;
+  const seen = new Set<number>();
+  let maxR = 0;
+  let value: number | undefined = 0;
+  for (let i = 0; i < frame.natoms; i++) {
+    const t = frame.types[i];
+    if (seen.has(t)) continue;
+    seen.add(t);
+    const atomicNumber = resolveAtomicNumber(frame, t);
+    if (atomicNumber === undefined) {
+      value = undefined;
+      break;
+    }
+    const r = getElementSpec(atomicNumber).radius;
+    if (r > maxR) maxR = r;
+  }
+  if (value !== undefined) value = maxR;
+  covalentRadiusCache.set(frame.types, { semanticsKey, value });
+  return value;
+}
 
 interface BudgetedContactShadowsProps {
   atomCount: number;
@@ -328,24 +359,14 @@ export function ViewerScene({
     if (renderedFrame.distanceSemantics?.kind !== 'angstrom') {
       return { available: false, inferenceAllowed: false, cutoff: fallbackCutoff };
     }
-    const seen = new Set<number>();
-    let maxR = 0;
-    for (let i = 0; i < renderedFrame.natoms; i++) {
-      const t = renderedFrame.types[i];
-      if (seen.has(t)) continue;
-      seen.add(t);
-      const atomicNumber = resolveAtomicNumber(renderedFrame, t);
-      if (atomicNumber === undefined) {
-        return { available: false, inferenceAllowed: false, cutoff: fallbackCutoff };
-      }
-      const r = getElementSpec(atomicNumber).radius;
-      if (r > maxR) maxR = r;
+    const maxR = maxCovalentRadiusForFrame(renderedFrame);
+    if (maxR === undefined) {
+      return { available: false, inferenceAllowed: false, cutoff: fallbackCutoff };
     }
-    if (maxR === 0) maxR = 1.4;
     return {
       available: true,
       inferenceAllowed: true,
-      cutoff: Math.min(6, 2 * maxR + bondTolerance + 0.5),
+      cutoff: Math.min(6, 2 * (maxR || 1.4) + bondTolerance + 0.5),
     };
   }, [bondTolerance, renderedFrame, showBonds]);
 
@@ -355,32 +376,15 @@ export function ViewerScene({
     }
   }, [bondRenderPlan.warning]);
 
-  const [clusters, setClusters] = useState<Clusters | null>(null);
   const clusterSourceFrame = playing ? undefined : currentFrame;
   const isLargeScene = Boolean(currentFrame && currentFrame.natoms >= LARGE_SCENE_ATOM_THRESHOLD);
   const fullyLoaded = Boolean(currentFrame && loadedAtomCount >= currentFrame.natoms);
-  useEffect(() => {
-    setClusters(null);
-    if (!clusterSourceFrame) return;
-    if (clusterSourceFrame.natoms < LARGE_SCENE_ATOM_THRESHOLD) return;
-    if (loadedAtomCount < clusterSourceFrame.natoms) return;
-    let cancelled = false;
-    const idleCb = (typeof requestIdleCallback !== 'undefined')
-      ? requestIdleCallback
-      : (cb: () => void) => setTimeout(cb, 0);
-    const cancelIdle = (typeof cancelIdleCallback !== 'undefined')
-      ? cancelIdleCallback
-      : clearTimeout;
-    const handle = idleCb(() => {
-      if (cancelled) return;
-      const built = buildClusters(clusterSourceFrame, {
-        mobile: deviceQualityTier === 0,
-        hiddenAtomTypes,
-      });
-      if (!cancelled) setClusters(built);
-    });
-    return () => { cancelled = true; cancelIdle(handle as any); };
-  }, [clusterSourceFrame, loadedAtomCount, deviceQualityTier, hiddenAtomTypesKey]);
+  // Far-LOD cluster splats, built off the main thread from the paused frame.
+  const clusters = useAtomClusters(clusterSourceFrame, {
+    enabled: isLargeScene && fullyLoaded,
+    mobile: deviceQualityTier === 0,
+    hiddenAtomTypes: hiddenTypeSet,
+  });
 
   const clusterFadeNear = useMemo(() => {
     if (!file) return 300;
@@ -394,19 +398,9 @@ export function ViewerScene({
   // frame, kept during playback so the look does not pop when play starts.
   const occlusionRadius = useMemo(() => {
     if (!currentFrame || !isLargeScene) return 0;
-    let maxCovalent: number | undefined;
-    if (currentFrame.distanceSemantics?.kind === 'angstrom') {
-      const seen = new Set<number>();
-      for (let i = 0; i < currentFrame.natoms; i++) {
-        const t = currentFrame.types[i];
-        if (seen.has(t)) continue;
-        seen.add(t);
-        const atomicNumber = resolveAtomicNumber(currentFrame, t);
-        if (atomicNumber === undefined) continue;
-        const r = getElementSpec(atomicNumber).radius;
-        if (maxCovalent === undefined || r > maxCovalent) maxCovalent = r;
-      }
-    }
+    const maxCovalent = currentFrame.distanceSemantics?.kind === 'angstrom'
+      ? maxCovalentRadiusForFrame(currentFrame)
+      : undefined;
     return suggestOcclusionRadius(maxCovalent, currentFrame.positions, currentFrame.natoms);
   }, [currentFrame, isLargeScene]);
   const atomOcclusion = useAtomOcclusion(clusterSourceFrame, {
@@ -578,6 +572,10 @@ export function ViewerScene({
             frame={renderedFrame}
             nextFrame={interpolatedNextFrame}
             interpolationFactor={interpolationFactor}
+            frameIndex={interpolatedFrameKey}
+            liveStateRef={liveStateRef}
+            qualityTier={atomQualityTier}
+            cullPixelRadius={atomCullPixelRadius}
             maxBondLength={bondRenderPlan.cutoff}
             tolerance={bondTolerance}
             colormap={colormap}
@@ -595,6 +593,8 @@ export function ViewerScene({
             surfaceClearcoat={surfaceClearcoat}
             fillLightColor={fillLightColor}
             rimLightColor={rimLightColor}
+            keyLightAzimuth={keyLightAzimuth}
+            keyLightElevation={keyLightElevation}
             fillLightAzimuth={fillLightAzimuth}
             fillLightElevation={fillLightElevation}
             rimLightAzimuth={rimLightAzimuth}
