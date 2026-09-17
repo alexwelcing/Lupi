@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased] - Molecule-first landing
+
+### Changed
+- **Search is the first fast path** (`MoleculeFinder`): the landing hero is
+  now the h1 and one search box. Local gallery molecules match on the first
+  keystroke with no network; from two letters PubChem's compound dictionary
+  autocomplete fills in names, so a couple of characters reach 100M+
+  compounds. Enter opens the top result, arrow keys move through the list,
+  and a name with no local match goes straight to PubChem. The viewer
+  bundle only loads on a pick (`openMolecule` is code-split behind the
+  click); the landing chunk still imports no three.js.
+- **Molecule wall** (`MoleculeWall`): every directly openable gallery
+  entry (103 today, from water to the 953k-atom block) is a dense tile
+  under the search, familiar molecules first. Tiles are plain `/?sim=`
+  links that load in place on click.
+- **PubChem loads without the MCP bridge** (`molecules/pubchemLoad.ts`):
+  the PUG REST JSON record (3D conformer, 2D fallback) is parsed straight
+  into a viewer frame with PubChem's own connection table as source bonds.
+  Compounds deep-link as `?molecule=<name>` or `?molecule=cid:<n>`, which
+  the viewer restores on reload and Back/Forward like `?sim=`/`?load=`.
+  The federated PubChem provider now uses the autocomplete endpoint and the
+  name load path no longer depends on the dev-only bridge.
+- **Less copy**: the deck paragraph, two CTAs, caffeine figure, three-step
+  guide and file-intro paragraph are gone; the starter set with its
+  prompts, the tips strip (`#learn`) and the drop zone remain.
+
 ## [Unreleased] - Large-Scene Renderer + Impostor Fidelity
 
 ### Changed

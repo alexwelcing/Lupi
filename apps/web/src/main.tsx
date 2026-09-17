@@ -48,7 +48,9 @@ const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute(
  * route (saved view, scene, SEO study page, MLIP, MCP, testbed, emoji).
  */
 function wantsViewerImmediately(): boolean {
-  if (params.has('load') || params.has('sim') || params.has('s') || params.has('fly')) return true;
+  if (params.has('load') || params.has('sim') || params.has('molecule') || params.has('s') || params.has('fly')) {
+    return true;
+  }
   if (isTestbedRoute() || isEmojiRoute() || isBillionAtomsRoute()) return true;
   if (isScienceDemoRoute()) return true;
   const hashPath = currentHashRoute().split('?')[0] || '/';

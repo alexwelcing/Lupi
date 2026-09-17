@@ -40,6 +40,7 @@ import {
   sciencePathIndexFromRoute,
 } from './viewer/viewerRoutes';
 import { openMolecule } from './viewer/openMolecule';
+import { openPubChemMolecule, parseMoleculeParam, pubchemSourceUrl } from './molecules/pubchemLoad';
 import {
   DEFAULT_Z1_SCIENCE_PATH_INDEX,
   scienceGalleryIdForPathIndex,
@@ -338,6 +339,7 @@ export function ViewerApp() {
       const intent = recognizeLupiUrlPayload(window.location.href);
       const sim = params.get('sim');
       const loadUrl = params.get('load') ?? (intent?.kind === 'loadUrl' ? intent.url : null);
+      const pubchemRef = parseMoleculeParam(params.get('molecule'));
       const state = useStore.getState();
 
       // `#/science/<index>` owns its loads (see the science-route effect
@@ -390,6 +392,19 @@ export function ViewerApp() {
             .setError(
               error instanceof Error ? error.message : 'This molecule link could not be opened.',
             );
+          setAutomaticLoadFailed(true);
+        }
+        return;
+      }
+
+      if (pubchemRef) {
+        // `?molecule=<name|cid:N>`: the landing finder's PubChem deep link.
+        if (state.file?.sourceUrl === pubchemSourceUrl(pubchemRef) && !state.loading) return;
+        setAutomaticLoadFailed(false);
+        try {
+          await openPubChemMolecule(pubchemRef, { history: 'none' });
+        } catch {
+          if (generation !== navigationGeneration) return;
           setAutomaticLoadFailed(true);
         }
         return;

@@ -39,7 +39,8 @@ export function LandingShell({ onEnterViewer }: { onEnterViewer: () => void }) {
           Lupi<span>See what things are made of.</span>
         </a>
         <nav aria-label="Primary">
-          <a href="#gallery">Explore</a>
+          <a href="#molecules">Molecules</a>
+          <a href="#gallery">Starter set</a>
           <a href="#learn">How to use</a>
           <a href="#dropzone">Open a file</a>
         </nav>
