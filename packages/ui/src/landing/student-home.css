@@ -458,7 +458,9 @@
     order: 3;
     width: 100%;
     margin: 0;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    justify-content: flex-start;
   }
   .student-header > div {
     margin-left: auto;
@@ -614,9 +616,15 @@
   min-width: 0;
   flex: 1;
 }
+.finder-text strong,
+.finder-text small,
+.finder-scope,
+.wall-head p,
+.student-tips li {
+  overflow-wrap: anywhere;
+}
 .finder-text strong {
   font-weight: 500;
-  overflow-wrap: anywhere;
 }
 .finder-text small {
   color: var(--home-muted);
@@ -656,10 +664,14 @@
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 8px;
 }
+.wall-grid li {
+  min-width: 0;
+}
 .wall-grid a {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   min-height: 64px;
   padding: 8px 10px;
   background: var(--home-panel);
