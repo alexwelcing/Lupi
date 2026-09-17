@@ -4,10 +4,28 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { BondPipeline, initWebGPU } from '@atlas/renderer';
 import type { BondReadback } from '@atlas/renderer';
 
-const GRID_DIM = 32;
-const MAX_ATOMS_PER_CELL = 64;
+const MIN_GRID_DIM = 32;
+const MAX_GRID_DIM = 80;
 const INITIAL_MAX_ATOMS = 100_000;
 const INITIAL_MAX_BONDS = INITIAL_MAX_ATOMS * 12;
+
+/**
+ * Spatial-grid resolution for the compute pipeline. The grid is stretched to
+ * cover the simulation box, so a fixed 32³ grid over a large box produced
+ * cells holding far more atoms than the per-cell slot budget and silently
+ * dropped bonds past a few hundred thousand atoms. Scale the grid with the
+ * atom budget (about 12 atoms per cell on average) and trade a few slots per
+ * cell for many more cells; the cell-atom table stays under ~100 MB at the
+ * largest resolution.
+ */
+export function bondGridDimension(maxAtoms: number): number {
+  const target = Math.ceil(Math.cbrt(Math.max(1, maxAtoms) / 12));
+  return Math.max(MIN_GRID_DIM, Math.min(MAX_GRID_DIM, target));
+}
+
+export function bondGridAtomsPerCell(gridDim: number): number {
+  return gridDim <= MIN_GRID_DIM ? 64 : 48;
+}
 
 function bondsPerAtomFactor(natoms: number): number {
   if (natoms >= 500_000) return 4;
@@ -94,14 +112,15 @@ function invalidateAndDestroy(state: InternalState, generation?: number): void {
 }
 
 function pipelineOptions(device: GPUDevice, maxAtoms: number, maxBonds: number) {
+  const gridDim = bondGridDimension(maxAtoms);
   return {
     device,
     maxAtoms,
     maxBonds,
-    gridDimX: GRID_DIM,
-    gridDimY: GRID_DIM,
-    gridDimZ: GRID_DIM,
-    maxAtomsPerCell: MAX_ATOMS_PER_CELL,
+    gridDimX: gridDim,
+    gridDimY: gridDim,
+    gridDimZ: gridDim,
+    maxAtomsPerCell: bondGridAtomsPerCell(gridDim),
     stagingPoolDepth: stagingPoolDepth(maxAtoms),
   };
 }
@@ -298,7 +317,7 @@ export function useBondGpuPipeline(enabled: boolean): UseBondGpuPipelineResult {
     radiiPadded.set(input.covalentRadii.subarray(0, Math.min(input.covalentRadii.length, 128)));
     pipeline.updateElementRadii(radiiPadded);
     pipeline.updatePositions(input.positions, input.types);
-    const minCellFromBox = (input.boxExtent ?? 0) / GRID_DIM;
+    const minCellFromBox = (input.boxExtent ?? 0) / bondGridDimension(state.maxAtoms);
     const cellSize = Math.max(input.maxBondLength, minCellFromBox);
     pipeline.updateConfig(input.natoms, state.maxBonds, input.tolerance, cellSize, input.origin);
 

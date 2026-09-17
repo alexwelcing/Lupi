@@ -3,10 +3,11 @@
  * research-style LAMMPS data file (MaginnGroup HFC-FF R32 shape:
  * atom_style full, annotated Masses/Atoms/Bonds, Pair Coeffs, Velocities).
  *
- * Vitest can't spin up parse.worker.ts (Web Worker + Vite URL imports), so
- * this initializes the wasm binary from disk and calls the same
- * `parseDataFile` export the worker uses. This also catches a stale pkg/
- * that no longer matches the Rust source in wasm/src/data.rs.
+ * The viewer worker now parses data files in TypeScript
+ * (lammpsDataParser.ts); this file keeps the committed wasm artifact honest
+ * as the reference implementation that lammpsDataParser.test.ts checks
+ * parity against, and catches a stale pkg/ that no longer matches
+ * wasm/src/data.rs.
  */
 
 /// <reference types="node" />

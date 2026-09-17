@@ -1,20 +1,22 @@
 /**
  * <Bonds /> — High-performance bond rendering with off-thread detection
  *
- * Bond detection (spatial hash + neighbor query) runs in a Web Worker so it
- * never blocks rendering. The component stays mounted and uses visibility
- * toggling instead of unmount/remount.
+ * Bond detection (spatial hash + neighbor query) runs in a Web Worker or a
+ * WebGPU compute pipeline so it never blocks rendering. The component stays
+ * mounted and uses visibility toggling instead of unmount/remount.
  *
  * Architecture:
- * - Bond detection → Web Worker (non-blocking)
- * - Bond geometry → computed once per worker result
- * - GPU upload → native TypedArray.set() bulk copy
+ * - Bond detection → Web Worker / WebGPU (non-blocking)
+ * - Rendering → one ray-cast cylinder impostor per bond (bondImpostor.ts):
+ *   endpoints, radius and two endpoint colors per instance, frame
+ *   interpolation on the GPU, exact depth, no radial segments
+ * - GPU upload → endpoints gathered once per bond-set/frame change
  * - Toggle → instant visibility flip, no recomputation
  */
 
 /// <reference path="./vite-env.d.ts" />
-import { useRef, useMemo, useEffect, useState, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useRef, useMemo, useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import {
@@ -34,7 +36,24 @@ import { useBondGpuPipeline } from './useBondGpuPipeline';
 // in @atlas/scene's own tsc run and in any consumer (e.g. @atlas/ui).
 import BondWorkerCtor from './bondWorker.ts?worker';
 import { resolveBondTopologyMode, shouldUseGpuBondInference } from './bondTopology';
-import { writeDisplayRgbAsLinear } from './bondColor';
+import { wrapDelta } from './interpolation';
+import {
+  BOND_IMPOSTOR_FRAGMENT,
+  BOND_IMPOSTOR_VERTEX,
+  bondMaterialParams,
+  createBondBoxGeometry,
+} from './bondImpostor';
+import {
+  EMPTY_CUBE_UV_DEFINES,
+  markInstancedAttributeUpdateRange,
+  materialCubeUvDefines,
+  rendererSupportsConservativeDepth,
+  resolveAtomQualityTier,
+  syncAtomShaderDefines,
+  syncCubeUvEnvironment,
+  syncImpostorRenderTargetUniforms,
+  type AtomQualityTier,
+} from './AtomsOptimized';
 
 /**
  * Content-equality check for bond-pair Int32Arrays. Used by the bond-
@@ -96,20 +115,33 @@ export function filterHiddenTypeBonds(
   hiddenAtomTypes: ReadonlySet<number>,
 ): { pairs: Int32Array; distances: Float32Array } {
   if (hiddenAtomTypes.size === 0 || pairs.length === 0) return { pairs, distances };
-  const keptPairs: number[] = [];
-  const keptDistances: number[] = [];
-  for (let pairIndex = 0; pairIndex < pairs.length / 2; pairIndex += 1) {
+  // Two passes over typed arrays: count, then compact. No per-bond JS
+  // allocation, so hiding a type on a multi-million-bond scene stays cheap.
+  const pairCount = pairs.length >> 1;
+  const natoms = frame.natoms;
+  const types = frame.types;
+  const keep = new Uint8Array(pairCount);
+  let kept = 0;
+  for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
     const atomA = pairs[pairIndex * 2];
     const atomB = pairs[pairIndex * 2 + 1];
-    if (atomA < 0 || atomA >= frame.natoms || atomB < 0 || atomB >= frame.natoms) continue;
-    if (hiddenAtomTypes.has(frame.types[atomA]) || hiddenAtomTypes.has(frame.types[atomB])) continue;
-    keptPairs.push(atomA, atomB);
-    keptDistances.push(distances[pairIndex] ?? 0);
+    if (atomA < 0 || atomA >= natoms || atomB < 0 || atomB >= natoms) continue;
+    if (hiddenAtomTypes.has(types[atomA]) || hiddenAtomTypes.has(types[atomB])) continue;
+    keep[pairIndex] = 1;
+    kept += 1;
   }
-  return {
-    pairs: Int32Array.from(keptPairs),
-    distances: Float32Array.from(keptDistances),
-  };
+  if (kept === pairCount) return { pairs, distances };
+  const keptPairs = new Int32Array(kept * 2);
+  const keptDistances = new Float32Array(kept);
+  let out = 0;
+  for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+    if (!keep[pairIndex]) continue;
+    keptPairs[out * 2] = pairs[pairIndex * 2];
+    keptPairs[out * 2 + 1] = pairs[pairIndex * 2 + 1];
+    keptDistances[out] = distances[pairIndex] ?? 0;
+    out += 1;
+  }
+  return { pairs: keptPairs, distances: keptDistances };
 }
 
 interface BondsProps {
@@ -140,11 +172,21 @@ interface BondsProps {
   surfaceClearcoat?: number;
   fillLightColor?: string;
   rimLightColor?: string;
+  keyLightAzimuth?: number;
+  keyLightElevation?: number;
   fillLightAzimuth?: number;
   fillLightElevation?: number;
   rimLightAzimuth?: number;
   rimLightElevation?: number;
   visible?: boolean;
+  /** Integer index of `frame` within its trajectory; with `liveStateRef` it
+   *  drives display-rate GPU interpolation exactly like AtomsOptimized. */
+  frameIndex?: number;
+  liveStateRef?: { readonly current: { readonly effectiveFrame: number } | null };
+  /** Fragment-shader tier (see AtomsOptimized); lowered further by atom count. */
+  qualityTier?: AtomQualityTier;
+  /** Bonds thinner than this many device pixels are culled in the vertex shader. */
+  cullPixelRadius?: number;
   bondColorMode?: 'type' | 'length' | 'energy' | 'screening';
   /** Route bond detection through the WebGPU compute pipeline instead of
    *  the CPU worker. Falls back transparently if WebGPU init fails. */
@@ -190,11 +232,17 @@ export function Bonds({
   surfaceClearcoat = 0.0,
   fillLightColor = '#5577ff',
   rimLightColor = '#ff7755',
+  keyLightAzimuth = 40,
+  keyLightElevation = 45,
   fillLightAzimuth = -120,
   fillLightElevation = 10,
   rimLightAzimuth = 160,
   rimLightElevation = 30,
   visible = true,
+  frameIndex,
+  liveStateRef,
+  qualityTier,
+  cullPixelRadius = 0,
   bondColorMode = 'type',
   useGpu = false,
   inferenceAllowed: precomputedInferenceAllowed,
@@ -203,8 +251,7 @@ export function Bonds({
   onBondsUpdate,
   onGpuStatusChange,
 }: BondsProps) {
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
   const canInterpolateToNextFrame = useMemo(
     () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),
     [frame, nextFrame],
@@ -264,7 +311,6 @@ export function Bonds({
     [frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypesKey],
   );
   const bondCount = bondPairs.length / 2;
-  const halfCount = bondCount * 2; // Each bond → 2 half-cylinders
   const onBondsUpdateRef = useRef(onBondsUpdate);
 
   useEffect(() => {
@@ -281,8 +327,7 @@ export function Bonds({
     setDetectedBondSource('none');
   }, []);
 
-  // (tubeGeo moved below — depends on `capacity`, which is computed by
-  //  the ratchet block.)
+  // (Geometry and material live below the capacity ratchet.)
 
   // ─── Web Worker lifecycle ──────────────────────────────────────────
   useEffect(() => {
@@ -639,33 +684,27 @@ export function Bonds({
 
   // ─── Capacity management ───────────────────────────────────────────
   // Grow on demand (with headroom), shrink when sustainably under-utilized.
-  // Both directions take effect via the `key={capacity}` remount on the
-  // <instancedMesh> below, so the GPU buffers always match what we write.
-  //
-  // Shrink heuristic: if halfCount has been < 50% of capacity for
-  // SHRINK_IDLE_RENDERS straight (counter ticks per render — ~one per
-  // playback frame), shrink to halfCount * 1.5 (or MIN_BOND_CAPACITY,
-  // whichever is larger). This typically fires after a small file is
-  // loaded following a large one — reclaims tens of MB of GPU buffers.
+  // The instanced geometry is capacity-keyed so its per-bond attributes are
+  // reallocated whenever the ratchet moves.
   const MIN_BOND_CAPACITY = 20000;
-  const SHRINK_THRESHOLD = 0.5;     // halfCount < capacity * this → "under-used"
-  const SHRINK_IDLE_RENDERS = 60;   // sustain idle for ~1s of playback before shrinking
-  const SHRINK_MIN_GAIN = 0.7;      // require 30%+ memory savings before bothering
+  const SHRINK_THRESHOLD = 0.5;
+  const SHRINK_IDLE_RENDERS = 60;
+  const SHRINK_MIN_GAIN = 0.7;
 
   const capacityRef = useRef(MIN_BOND_CAPACITY);
   const idleRendersRef = useRef(0);
 
-  if (halfCount > capacityRef.current) {
-    capacityRef.current = Math.max(capacityRef.current * 1.5, Math.ceil(halfCount * 1.2));
+  if (bondCount > capacityRef.current) {
+    capacityRef.current = Math.max(Math.ceil(capacityRef.current * 1.5), Math.ceil(bondCount * 1.2));
     idleRendersRef.current = 0;
   } else if (
-    halfCount > 0 &&
-    halfCount < capacityRef.current * SHRINK_THRESHOLD &&
+    bondCount > 0 &&
+    bondCount < capacityRef.current * SHRINK_THRESHOLD &&
     capacityRef.current > MIN_BOND_CAPACITY
   ) {
     idleRendersRef.current += 1;
     if (idleRendersRef.current >= SHRINK_IDLE_RENDERS) {
-      const target = Math.max(MIN_BOND_CAPACITY, Math.ceil(halfCount * 1.5));
+      const target = Math.max(MIN_BOND_CAPACITY, Math.ceil(bondCount * 1.5));
       if (target < capacityRef.current * SHRINK_MIN_GAIN) {
         capacityRef.current = target;
       }
@@ -676,399 +715,261 @@ export function Bonds({
   }
   const capacity = capacityRef.current;
 
-  // Tube geometry. Capacity-keyed so the geometry-attached radiusBT
-  // InstancedBufferAttribute grows when the capacity ratchet bumps. If we
-  // kept the geometry stable and used setAttribute later, the InstancedMesh's
-  // cached attribute bindings would still reference the old (small) buffer —
-  // the 13.5k-atom CuZr fixture caught this. Cylinder vertex/index data is
-  // constant; only the per-instance attribute size changes.
-  // (Phase-2 prune: colorT/materialBT/tangent attributes removed — bonds are
-  // now flat per-half via instanceColor and isotropic, so none were used.)
-  const tubeGeo = useMemo(() => {
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 4, 1);
-    geo.setAttribute('radiusBT', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2));
+  // ─── Geometry: one box per bond, ray-cast cylinder in the fragment ────
+  const geometry = useMemo(() => {
+    const geo = createBondBoxGeometry();
+    const startAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+    startAttr.setUsage(THREE.DynamicDrawUsage);
+    const endAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+    endAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceStart', startAttr);
+    geo.setAttribute('instanceEnd', endAttr);
+    // Static frames alias the interpolation targets; trajectories allocate
+    // their own target buffers on first use (see ensureTargetAttributes).
+    geo.setAttribute('instanceStartTarget', startAttr);
+    geo.setAttribute('instanceEndTarget', endAttr);
+    const radiusAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+    radiusAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceRadius', radiusAttr);
+    const colorStart = new THREE.InstancedBufferAttribute(new Uint8Array(capacity * 3), 3, true);
+    colorStart.setUsage(THREE.DynamicDrawUsage);
+    const colorEnd = new THREE.InstancedBufferAttribute(new Uint8Array(capacity * 3), 3, true);
+    colorEnd.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceColorStart', colorStart);
+    geo.setAttribute('instanceColorEnd', colorEnd);
+    geo.instanceCount = 0;
+    // Bonds live inside the atom cloud; the atom mesh already frustum-culls
+    // the same volume, so fail open here.
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Number.POSITIVE_INFINITY);
     return geo;
   }, [capacity]);
 
-  // CPU-side state arrays for bulk GPU upload. instance i*2 = atom-A half
-  // (solid A color), instance i*2+1 = atom-B half (solid B color); the
-  // bond reads as a hard-split 2-tone cylinder. radiusBT tapers each half.
-  const cpuMatrixArray = useMemo(() => new Float32Array(capacity * 16), [capacity]);
-  const cpuColorBArray = useMemo(() => new Float32Array(capacity * 3), [capacity]);
-  const cpuRadiusBTArray = useMemo(() => new Float32Array(capacity * 2), [capacity]);
+  const ensureTargetAttributes = useCallback((geo: THREE.InstancedBufferGeometry) => {
+    const startAttr = geo.attributes.instanceStart as THREE.InstancedBufferAttribute;
+    const endAttr = geo.attributes.instanceEnd as THREE.InstancedBufferAttribute;
+    let startTarget = geo.attributes.instanceStartTarget as THREE.InstancedBufferAttribute;
+    let endTarget = geo.attributes.instanceEndTarget as THREE.InstancedBufferAttribute;
+    if (startTarget === startAttr) {
+      startTarget = new THREE.InstancedBufferAttribute(new Float32Array(startAttr.array.length), 3);
+      startTarget.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('instanceStartTarget', startTarget);
+    }
+    if (endTarget === endAttr) {
+      endTarget = new THREE.InstancedBufferAttribute(new Float32Array(endAttr.array.length), 3);
+      endTarget.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('instanceEndTarget', endTarget);
+    }
+    return { startTarget, endTarget };
+  }, []);
 
-  // (The radiusBT per-instance attribute is created inside the tubeGeo
-  //  useMemo above — it must exist at the moment the InstancedMesh remounts
-  //  via key={capacity}, not in a post-commit useEffect.)
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   // ─── Material ──────────────────────────────────────────────────────
-  const uniformsRef = useRef({
-    uSurfaceRoughness: { value: surfaceRoughness },
-    uSurfacePolish: { value: surfacePolish },
-    uFillLightColor: { value: new THREE.Color(fillLightColor) },
-    uRimLightColor: { value: new THREE.Color(rimLightColor) },
-    uFillLightDir: { value: new THREE.Vector3() },
-    uRimLightDir: { value: new THREE.Vector3() },
-    uRimLight: { value: rimLightIntensity },
+  const { gl, scene } = useThree();
+  const material = useMemo(() => new THREE.RawShaderMaterial({
+    vertexShader: BOND_IMPOSTOR_VERTEX,
+    fragmentShader: BOND_IMPOSTOR_FRAGMENT,
+    glslVersion: THREE.GLSL3,
+    defines: { ...materialCubeUvDefines(EMPTY_CUBE_UV_DEFINES), LUPI_QUALITY: '2' },
+    uniforms: {
+      uProgress: { value: 0 },
+      uPixelScale: { value: 1 },
+      uOrthographic: { value: 0 },
+      uCullPixelRadius: { value: 0 },
+      uBondFadeStart: { value: 60.0 },
+      uBondFadeEnd: { value: 200.0 },
+      uMetalness: { value: 0.35 },
+      uRoughness: { value: 0.45 },
+      uSurfaceRoughness: { value: 0 },
+      uSurfacePolish: { value: 0 },
+      uSurfaceClearcoat: { value: 0 },
+      uOpacity: { value: 1 },
+      uLightDir: { value: new THREE.Vector3(0.4, 0.7, 0.6) },
+      uFillLightDir: { value: new THREE.Vector3(-0.3, -0.2, 0.8) },
+      uRimLightDir: { value: new THREE.Vector3(0, 0, -1) },
+      uViewUp: { value: new THREE.Vector3(0, 1, 0) },
+      uFillLightColor: { value: new THREE.Color('#5577ff') },
+      uRimLightColor: { value: new THREE.Color('#ff7755') },
+      uRimLight: { value: 0.3 },
+      tEnvMap: { value: null as THREE.Texture | null },
+      uEnvIntensity: { value: 1 },
+      uHasEnv: { value: 0 },
+      uOutputSrgb: { value: 1 },
+    },
+    depthWrite: true,
+    depthTest: true,
+    transparent: false,
+    side: THREE.FrontSide,
+  }), []);
+  useEffect(() => () => material.dispose(), [material]);
+
+  const effectiveQualityTier = resolveAtomQualityTier(qualityTier, frame.natoms);
+  const conservativeDepth = useMemo(() => rendererSupportsConservativeDepth(gl), [gl]);
+  useLayoutEffect(() => {
+    syncAtomShaderDefines(material, effectiveQualityTier, conservativeDepth);
+  }, [material, effectiveQualityTier, conservativeDepth]);
+
+  useLayoutEffect(() => {
+    const u = material.uniforms;
+    const params = bondMaterialParams(materialPreset);
+    u.uMetalness.value = params.metalness;
+    u.uRoughness.value = params.roughness;
+    u.uEnvIntensity.value = params.envIntensity;
+    u.uSurfaceRoughness.value = surfaceRoughness;
+    u.uSurfacePolish.value = surfacePolish;
+    u.uSurfaceClearcoat.value = surfaceClearcoat;
+    u.uFillLightColor.value.set(fillLightColor);
+    u.uRimLightColor.value.set(rimLightColor);
+    u.uRimLight.value = rimLightIntensity;
+    u.uOpacity.value = Math.max(0, Math.min(1, opacity));
+    u.uCullPixelRadius.value = Number.isFinite(cullPixelRadius) ? Math.max(0, cullPixelRadius) : 0;
+    const wantsTransparent = opacity < 1;
+    if (material.transparent !== wantsTransparent) {
+      material.transparent = wantsTransparent;
+      material.needsUpdate = true;
+    }
+  }, [material, materialPreset, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, rimLightIntensity, opacity, cullPixelRadius]);
+
+  const lightWorldDirs = useMemo(() => {
+    const dir = (azDeg: number, elDeg: number) => {
+      const az = (azDeg * Math.PI) / 180;
+      const el = (elDeg * Math.PI) / 180;
+      return new THREE.Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).normalize();
+    };
+    return {
+      key: dir(keyLightAzimuth, keyLightElevation),
+      fill: dir(fillLightAzimuth, fillLightElevation),
+      rim: dir(rimLightAzimuth, rimLightElevation),
+      up: new THREE.Vector3(0, 1, 0),
+    };
+  }, [keyLightAzimuth, keyLightElevation, fillLightAzimuth, fillLightElevation, rimLightAzimuth, rimLightElevation]);
+  const lightScratch = useMemo(() => new THREE.Vector3(), []);
+  const drawingBufferScratch = useMemo(() => new THREE.Vector2(), []);
+
+  useFrame(({ camera }) => {
+    const u = material.uniforms;
+    syncCubeUvEnvironment(material, (scene as { environment?: THREE.Texture | null }).environment ?? null);
+    const inv = camera.matrixWorldInverse;
+    u.uLightDir.value.copy(lightScratch.copy(lightWorldDirs.key).transformDirection(inv));
+    u.uFillLightDir.value.copy(lightScratch.copy(lightWorldDirs.fill).transformDirection(inv));
+    u.uRimLightDir.value.copy(lightScratch.copy(lightWorldDirs.rim).transformDirection(inv));
+    u.uViewUp.value.copy(lightScratch.copy(lightWorldDirs.up).transformDirection(inv));
+    const live = liveStateRef?.current;
+    const prog = canInterpolateToNextFrame && live && frameIndex != null
+      ? live.effectiveFrame - frameIndex
+      : canInterpolateToNextFrame
+        ? (interpolationFactor ?? 0)
+        : 0;
+    u.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
   });
 
-  useEffect(() => {
-    uniformsRef.current.uSurfaceRoughness.value = surfaceRoughness;
-    uniformsRef.current.uSurfacePolish.value = surfacePolish;
-    uniformsRef.current.uFillLightColor.value.set(fillLightColor);
-    uniformsRef.current.uRimLightColor.value.set(rimLightColor);
-    uniformsRef.current.uRimLight.value = rimLightIntensity;
-
-    const faz = fillLightAzimuth * Math.PI / 180;
-    const fel = fillLightElevation * Math.PI / 180;
-    uniformsRef.current.uFillLightDir.value.set(
-      Math.cos(fel) * Math.sin(faz),
-      Math.sin(fel),
-      Math.cos(fel) * Math.cos(faz)
-    ).normalize();
-
-    const raz = rimLightAzimuth * Math.PI / 180;
-    const rel = rimLightElevation * Math.PI / 180;
-    uniformsRef.current.uRimLightDir.value.set(
-      Math.cos(rel) * Math.sin(raz),
-      Math.sin(rel),
-      Math.cos(rel) * Math.cos(raz)
-    ).normalize();
-  }, [surfaceRoughness, surfacePolish, fillLightColor, rimLightColor, rimLightIntensity, fillLightAzimuth, fillLightElevation, rimLightAzimuth, rimLightElevation]);
-
-  const material = useMemo(() => {
-    // MeshPhysicalMaterial, isotropic. Anisotropy was removed (it strobed
-    // on thin moving cylinders); clearcoat (surface knob) is the only
-    // Physical-only feature still used, transmission stays off.
-    let matConfig: THREE.MeshPhysicalMaterialParameters = {};
-    switch (materialPreset) {
-      case 'matte':
-        matConfig = { metalness: 0.05, roughness: 0.85 };
-        break;
-      case 'metallic':
-        matConfig = { metalness: 0.8, roughness: 0.2, envMapIntensity: 2.0 };
-        break;
-      case 'glass':
-      // Bonds stay on the impostor-era glass config in transmission mode:
-      // thin cylinders gain nothing from a per-bond refraction pass, and the
-      // matched finish keeps them visually continuous with the atoms.
-      case 'transmission':
-        matConfig = { metalness: 0.3, roughness: 0.05, envMapIntensity: 1.5 };
-        break;
-      case 'plastic':
-        matConfig = { metalness: 0.0, roughness: 0.4, envMapIntensity: 1.0 };
-        break;
-      case 'default':
-      default:
-        // Isotropic: the anisotropic streak (formerly 0.4) caused
-        // specular strobing on thin moving cylinders and is gone.
-        matConfig = { metalness: 0.35, roughness: 0.45, envMapIntensity: 1.0 };
-        break;
-    }
-    const mat = new THREE.MeshPhysicalMaterial({
-      ...matConfig,
-      clearcoat: surfaceClearcoat,
-      clearcoatRoughness: 0.1,
-      transparent: true,
-      opacity,
-    });
-
-    mat.onBeforeCompile = (shader) => {
-      // Bond LOD via distance fade. uBondFadeStart and uBondFadeEnd are in
-      // world units (Å). Bonds closer than start render fully opaque; those
-      // beyond end are fully transparent (early-z rejection in the fragment
-      // shader saves cost). Tied to a global ref via the existing uniformsRef
-      // pattern so we don't churn the material.
-      shader.uniforms.uBondFadeStart = { value: 60.0 };
-      shader.uniforms.uBondFadeEnd = { value: 200.0 };
-
-      shader.uniforms.uSurfaceRoughness = uniformsRef.current.uSurfaceRoughness;
-      shader.uniforms.uSurfacePolish = uniformsRef.current.uSurfacePolish;
-      shader.uniforms.uFillLightColor = uniformsRef.current.uFillLightColor;
-      shader.uniforms.uRimLightColor = uniformsRef.current.uRimLightColor;
-      shader.uniforms.uFillLightDir = uniformsRef.current.uFillLightDir;
-      shader.uniforms.uRimLightDir = uniformsRef.current.uRimLightDir;
-      shader.uniforms.uRimLight = uniformsRef.current.uRimLight;
-
-      shader.vertexShader = `
-        attribute vec2 radiusBT;
-        varying float vBondViewDist;
-        ${shader.vertexShader}
-      `;
-
-      // Flat per-half color: each bond's two instances carry a solid
-      // endpoint color via instanceColor (default <color_vertex> handles
-      // it). No per-fragment A→mid→B gradient and no per-bond material
-      // gradient — that stack produced visual noise and bloom strobing.
-      // metalness/roughness now come uniformly from the material preset.
-
-      const vertexChunk = `
-        #include <begin_vertex>
-        // Taper bonds using per-instance radiusBT (bottom, top)
-        float instanceRadius = mix(radiusBT.x, radiusBT.y, position.y + 0.5);
-        transformed.x *= instanceRadius;
-        transformed.z *= instanceRadius;
-      `;
-
-      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', vertexChunk);
-
-      // After project_vertex, mvPosition is the view-space coord. Capture
-      // its negative z (= camera-relative distance, since camera looks -Z)
-      // for the LOD fade in the fragment.
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <project_vertex>',
-        `
-        #include <project_vertex>
-        vBondViewDist = -mvPosition.z;
-        `,
-      );
-
-      // Bond LOD: fade alpha based on view distance. The fragment shader
-      // runs early-z rejection on fully transparent fragments, so distant
-      // bonds beyond uBondFadeEnd cost effectively nothing. The fade is
-      // smoothstep so the boundary doesn't read as a hard ring.
-      shader.fragmentShader = `
-        varying float vBondViewDist;
-        uniform float uBondFadeStart;
-        uniform float uBondFadeEnd;
-        uniform float uSurfaceRoughness;
-        uniform float uSurfacePolish;
-        uniform vec3 uFillLightColor;
-        uniform vec3 uRimLightColor;
-        uniform vec3 uFillLightDir;
-        uniform vec3 uRimLightDir;
-        uniform float uRimLight;
-        ${shader.fragmentShader}
-      `
-      // Surface knobs still nudge the uniform material factors (the rig's
-      // Roughness/Polish controls keep working); no per-bond gradient.
-      .replace(
-        '#include <metalnessmap_fragment>',
-        `
-        #include <metalnessmap_fragment>
-        metalnessFactor = clamp(metalnessFactor + uSurfacePolish, 0.0, 1.0);
-        `,
-      )
-      .replace(
-        '#include <roughnessmap_fragment>',
-        `
-        #include <roughnessmap_fragment>
-        roughnessFactor = clamp(roughnessFactor + uSurfaceRoughness, 0.0, 1.0);
-        `,
-      ).replace(
-        '#include <dithering_fragment>',
-        `
-        #include <dithering_fragment>
-        float bondFade = 1.0 - smoothstep(uBondFadeStart, uBondFadeEnd, vBondViewDist);
-        gl_FragColor.a *= bondFade;
-        
-        vec3 viewDir = normalize(vViewPosition);
-        float ndotv = max(0.0, dot(geometryNormal, viewDir));
-        float fresnel = pow(1.0 - ndotv, 4.0);
-        
-        // Additive rim lighting tinted by uRimLightColor, masked by directional light
-        // Transforms world-space rim dir into view space for dot product
-        vec3 rimLightViewDir = normalize((viewMatrix * vec4(uRimLightDir, 0.0)).xyz);
-        float rimDirMask = max(0.0, dot(geometryNormal, rimLightViewDir));
-        vec3 rimColor = uRimLightColor * fresnel * uRimLight * rimDirMask;
-        
-        // Wrap shading fill light contribution
-        vec3 fillLightViewDir = normalize((viewMatrix * vec4(uFillLightDir, 0.0)).xyz);
-        float wrapHalf = 0.5;
-        float wrapNoL2 = max((dot(geometryNormal, fillLightViewDir) + wrapHalf) / (1.0 + wrapHalf), 0.0) * 0.3;
-        vec3 fillColor = uFillLightColor * wrapNoL2;
-        
-        gl_FragColor.rgb += rimColor + fillColor;
-        `,
-      );
+  const onBeforeRender = useCallback((renderer: THREE.WebGLRenderer, _scene: THREE.Scene, camera: THREE.Camera) => {
+    syncImpostorRenderTargetUniforms(material.uniforms, renderer, camera, drawingBufferScratch);
+  }, [material, drawingBufferScratch]);
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    mesh.onBeforeRender = onBeforeRender as THREE.Mesh['onBeforeRender'];
+    return () => {
+      if (mesh.onBeforeRender === onBeforeRender) mesh.onBeforeRender = () => {};
     };
-    return mat;
-  }, [opacity, materialPreset, surfaceClearcoat]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => { tubeGeo.dispose(); };
-  }, [tubeGeo]);
-
-  useEffect(() => {
-    return () => { material.dispose(); };
-  }, [material]);
+  }, [onBeforeRender]);
 
   // ─── Property data ─────────────────────────────────────────────────
   const isPropMode = colorMode === 'property' && colorProperty;
   const propData = isPropMode && frame.properties ? frame.properties.get(colorProperty) : null;
 
-  const [autoMin, autoMax] = useMemo(() => {
-    if (!propData) return [0, 1];
-    let mn = Infinity, mx = -Infinity;
-    for (let i = 0; i < propData.length; i++) {
-      if (propData[i] < mn) mn = propData[i];
-      if (propData[i] > mx) mx = propData[i];
-    }
-    return [mn === Infinity ? 0 : mn, mx === -Infinity ? 1 : mx];
-  }, [propData]);
+  // ─── Endpoint upload — runs on bond-set or source-frame change ────────
+  // Per bond: gather two atom positions (and PBC-unwrapped targets for the
+  // next frame). No matrices, no basis construction; the vertex shader
+  // orients the box. Interpolation substeps never touch the CPU.
+  useLayoutEffect(() => {
+    const drawCount = Math.min(bondCount, capacity);
+    geometry.instanceCount = drawCount;
+    if (drawCount === 0) return;
 
-  const pMin = propRange?.[0] ?? autoMin;
-  const pMax = propRange?.[1] ?? autoMax;
-
-
-  // Upload instance matrices + colors. Extracted into a callback so we can
-  // invoke it both on dep change AND on mesh remount (R3F remounts the mesh
-  // when entering WebXR, and rAF is paused during the session-start transition
-  // so a normal useEffect won't fire on the new mesh until too late).
-  // ─── Upload split — matrix-only fast path + attribute (color/radius) path ─
-  // Architectural goal: matrices change every frame during interpolation,
-  // but per-bond colors and radii only change in property mode. Splitting
-  // these into two effects with distinct deps means non-property modes pay
-  // ~35% less GPU upload bandwidth per frame (matrices only, ~1.7MB at 27k
-  // bonds vs. 2.6MB combined). The two callbacks share their setup but
-  // touch disjoint cpu arrays — net work is similar to the single pass,
-  // but the per-frame upload to the GPU is leaner.
-
-  /** Compute per-bond INSTANCE MATRICES from interpolated positions. Writes
-   *  cpuMatrixArray and uploads instanceMatrix only. Runs on frame /
-   *  interpolation / periodic changes. */
-  const uploadBondMatrices = useCallback(() => {
-    const mesh = meshRef.current;
-    if (!mesh || halfCount === 0) return;
-    if (!mesh.instanceMatrix) return;
-
-    const drawCount = Math.min(halfCount, capacity);
-    const t = canInterpolateToNextFrame ? (interpolationFactor ?? 0) : 0;
     const positions = frame.positions;
-    const nextPos = canInterpolateToNextFrame ? nextFrame!.positions : undefined;
+    const nextPos = canInterpolateToNextFrame && nextFrame && nextFrame.positions.length >= positions.length
+      ? nextFrame.positions
+      : null;
     const pbcBox = frame.boxBounds ?? cellBounds;
+    const box = frame.boxBounds;
+    const bsx = box ? box[1] - box[0] : 0;
+    const bsy = box ? box[3] - box[2] : 0;
+    const bsz = box ? box[5] - box[4] : 0;
+    const lx = pbcBox ? pbcBox[1] - pbcBox[0] : 0;
+    const ly = pbcBox ? pbcBox[3] - pbcBox[2] : 0;
+    const lz = pbcBox ? pbcBox[5] - pbcBox[4] : 0;
+    const minimumImage = periodic && !!pbcBox;
 
-    for (let i = 0; i < drawCount / 2; i++) {
+    const startAttr = geometry.attributes.instanceStart as THREE.InstancedBufferAttribute;
+    const endAttr = geometry.attributes.instanceEnd as THREE.InstancedBufferAttribute;
+    const startArr = startAttr.array as Float32Array;
+    const endArr = endAttr.array as Float32Array;
+    let startTargetArr: Float32Array | null = null;
+    let endTargetArr: Float32Array | null = null;
+    let startTarget: THREE.InstancedBufferAttribute | null = null;
+    let endTarget: THREE.InstancedBufferAttribute | null = null;
+    const hasOwnTargets = geometry.attributes.instanceStartTarget !== startAttr;
+    if (nextPos || hasOwnTargets) {
+      const targets = ensureTargetAttributes(geometry);
+      startTarget = targets.startTarget;
+      endTarget = targets.endTarget;
+      startTargetArr = startTarget.array as Float32Array;
+      endTargetArr = endTarget.array as Float32Array;
+    }
+
+    for (let i = 0; i < drawCount; i++) {
       const a = bondPairs[i * 2];
       const b = bondPairs[i * 2 + 1];
-      let ax = positions[a * 3];
-      let ay = positions[a * 3 + 1];
-      let az = positions[a * 3 + 2];
-      let bx = positions[b * 3];
-      let by = positions[b * 3 + 1];
-      let bz = positions[b * 3 + 2];
-
-      const canInterpolate = t > 0 && nextPos && nextPos.length >= positions.length;
-      if (canInterpolate) {
-        let d_ax = nextPos[a * 3] - ax;
-        let d_ay = nextPos[a * 3 + 1] - ay;
-        let d_az = nextPos[a * 3 + 2] - az;
-        let d_bx = nextPos[b * 3] - bx;
-        let d_by = nextPos[b * 3 + 1] - by;
-        let d_bz = nextPos[b * 3 + 2] - bz;
-
-        if (frame.boxBounds) {
-          const bsx = frame.boxBounds[1] - frame.boxBounds[0];
-          const bsy = frame.boxBounds[3] - frame.boxBounds[2];
-          const bsz = frame.boxBounds[5] - frame.boxBounds[4];
-          if (d_ax > bsx / 2) d_ax -= bsx;
-          if (d_ax < -bsx / 2) d_ax += bsx;
-          if (d_bx > bsx / 2) d_bx -= bsx;
-          if (d_bx < -bsx / 2) d_bx += bsx;
-          if (d_ay > bsy / 2) d_ay -= bsy;
-          if (d_ay < -bsy / 2) d_ay += bsy;
-          if (d_by > bsy / 2) d_by -= bsy;
-          if (d_by < -bsy / 2) d_by += bsy;
-          if (d_az > bsz / 2) d_az -= bsz;
-          if (d_az < -bsz / 2) d_az += bsz;
-          if (d_bz > bsz / 2) d_bz -= bsz;
-          if (d_bz < -bsz / 2) d_bz += bsz;
+      const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
+      let bx = positions[b * 3], by = positions[b * 3 + 1], bz = positions[b * 3 + 2];
+      if (minimumImage) {
+        let dx = bx - ax, dy = by - ay, dz = bz - az;
+        if (Math.abs(dx) > lx * 0.5) dx -= Math.sign(dx) * lx;
+        if (Math.abs(dy) > ly * 0.5) dy -= Math.sign(dy) * ly;
+        if (Math.abs(dz) > lz * 0.5) dz -= Math.sign(dz) * lz;
+        bx = ax + dx; by = ay + dy; bz = az + dz;
+      }
+      const o = i * 3;
+      startArr[o] = ax; startArr[o + 1] = ay; startArr[o + 2] = az;
+      endArr[o] = bx; endArr[o + 1] = by; endArr[o + 2] = bz;
+      if (startTargetArr && endTargetArr) {
+        if (nextPos) {
+          const nax = ax + wrapDelta(nextPos[a * 3] - ax, bsx);
+          const nay = ay + wrapDelta(nextPos[a * 3 + 1] - ay, bsy);
+          const naz = az + wrapDelta(nextPos[a * 3 + 2] - az, bsz);
+          const nbx = bx + wrapDelta(nextPos[b * 3] - bx, bsx);
+          const nby = by + wrapDelta(nextPos[b * 3 + 1] - by, bsy);
+          const nbz = bz + wrapDelta(nextPos[b * 3 + 2] - bz, bsz);
+          startTargetArr[o] = nax; startTargetArr[o + 1] = nay; startTargetArr[o + 2] = naz;
+          endTargetArr[o] = nbx; endTargetArr[o + 1] = nby; endTargetArr[o + 2] = nbz;
+        } else {
+          startTargetArr[o] = ax; startTargetArr[o + 1] = ay; startTargetArr[o + 2] = az;
+          endTargetArr[o] = bx; endTargetArr[o + 1] = by; endTargetArr[o + 2] = bz;
         }
-        ax += d_ax * t;
-        ay += d_ay * t;
-        az += d_az * t;
-        bx += d_bx * t;
-        by += d_by * t;
-        bz += d_bz * t;
       }
-
-      if (periodic && pbcBox) {
-        let diffx = bx - ax;
-        let diffy = by - ay;
-        let diffz = bz - az;
-        const lx = pbcBox[1] - pbcBox[0];
-        const ly = pbcBox[3] - pbcBox[2];
-        const lz = pbcBox[5] - pbcBox[4];
-        if (Math.abs(diffx) > lx * 0.5) diffx -= Math.sign(diffx) * lx;
-        if (Math.abs(diffy) > ly * 0.5) diffy -= Math.sign(diffy) * ly;
-        if (Math.abs(diffz) > lz * 0.5) diffz -= Math.sign(diffz) * lz;
-        bx = ax + diffx;
-        by = ay + diffy;
-        bz = az + diffz;
-      }
-
-      const dx = bx - ax;
-      const dy = by - ay;
-      const dz = bz - az;
-      const bondLenSq = dx * dx + dy * dy + dz * dz;
-      if (bondLenSq === 0) continue;
-      const bondLen = Math.sqrt(bondLenSq);
-      const halfLen = bondLen * 0.5;
-
-      const nx = dx / bondLen;
-      const ny = dy / bondLen;
-      const nz = dz / bondLen;
-      let upX = 0, upY = 1, upZ = 0;
-      if (Math.abs(ny) > 0.999) { upX = 1; upY = 0; upZ = 0; }
-      let ux = upY * nz - upZ * ny;
-      let uy = upZ * nx - upX * nz;
-      let uz = upX * ny - upY * nx;
-      const uLen = Math.sqrt(ux * ux + uy * uy + uz * uz);
-      ux /= uLen; uy /= uLen; uz /= uLen;
-      const vx = uy * nz - uz * ny;
-      const vy = uz * nx - ux * nz;
-      const vz = ux * ny - uy * nx;
-
-      const midAx = ax + dx * 0.25, midAy = ay + dy * 0.25, midAz = az + dz * 0.25;
-      let offA = (i * 2) * 16;
-      cpuMatrixArray[offA + 0] = ux; cpuMatrixArray[offA + 1] = uy; cpuMatrixArray[offA + 2] = uz; cpuMatrixArray[offA + 3] = 0;
-      cpuMatrixArray[offA + 4] = nx * halfLen; cpuMatrixArray[offA + 5] = ny * halfLen; cpuMatrixArray[offA + 6] = nz * halfLen; cpuMatrixArray[offA + 7] = 0;
-      cpuMatrixArray[offA + 8] = vx; cpuMatrixArray[offA + 9] = vy; cpuMatrixArray[offA + 10] = vz; cpuMatrixArray[offA + 11] = 0;
-      cpuMatrixArray[offA + 12] = midAx; cpuMatrixArray[offA + 13] = midAy; cpuMatrixArray[offA + 14] = midAz; cpuMatrixArray[offA + 15] = 1;
-
-      const midBx = ax + dx * 0.75, midBy = ay + dy * 0.75, midBz = az + dz * 0.75;
-      let offB = (i * 2 + 1) * 16;
-      cpuMatrixArray[offB + 0] = ux; cpuMatrixArray[offB + 1] = uy; cpuMatrixArray[offB + 2] = uz; cpuMatrixArray[offB + 3] = 0;
-      cpuMatrixArray[offB + 4] = nx * halfLen; cpuMatrixArray[offB + 5] = ny * halfLen; cpuMatrixArray[offB + 6] = nz * halfLen; cpuMatrixArray[offB + 7] = 0;
-      cpuMatrixArray[offB + 8] = vx; cpuMatrixArray[offB + 9] = vy; cpuMatrixArray[offB + 10] = vz; cpuMatrixArray[offB + 11] = 0;
-      cpuMatrixArray[offB + 12] = midBx; cpuMatrixArray[offB + 13] = midBy; cpuMatrixArray[offB + 14] = midBz; cpuMatrixArray[offB + 15] = 1;
     }
+    markInstancedAttributeUpdateRange(startAttr, drawCount * 3);
+    markInstancedAttributeUpdateRange(endAttr, drawCount * 3);
+    if (startTarget && endTarget) {
+      markInstancedAttributeUpdateRange(startTarget, drawCount * 3);
+      markInstancedAttributeUpdateRange(endTarget, drawCount * 3);
+    }
+  }, [bondPairs, bondCount, capacity, geometry, frame, nextFrame, canInterpolateToNextFrame, periodic, cellBounds, ensureTargetAttributes]);
 
-    // GPU upload — matrix only. Defensive cap (see uploadBonds bug fix memo).
-    const dstMat = mesh.instanceMatrix.array as Float32Array;
-    const meshMatrixCap = (dstMat.length / 16) | 0;
-    const totalBonds = Math.min(drawCount, meshMatrixCap);
-    dstMat.set(cpuMatrixArray.subarray(0, totalBonds * 16));
-    mesh.count = totalBonds;
-    mesh.instanceMatrix.needsUpdate = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, halfCount, capacity, frame, nextFrame, canInterpolateToNextFrame, interpolationFactor, periodic, cellBounds]);
-
-  /** Compute per-bond COLORS and RADII. Writes cpuColorBArray +
-   *  cpuRadiusBTArray and uploads instanceColor + radiusBT. Runs on
-   *  bondPairs / scheme / colorMode / property data changes. In non-property
-   *  modes, this fires only when the bond set changes — not per playback
-   *  frame, saving ~35% of upload bandwidth. In property mode it fires per
-   *  frame because per-atom values interpolate. */
-  // Bond-stability cache: when the worker emits a fresh Int32Array whose
-  // CONTENT matches the last upload AND we're in a static-color mode (not
-  // property / not length / not energy / not screening), the attributes
-  // haven't changed — skip the entire iteration + GPU upload. Saves ~1-3ms
-  // and avoids re-uploading 1MB of color/radius data per stable playback
-  // frame. The check is a content-equality walk; for 27k bonds it's ~0.3ms,
-  // a fraction of the work it skips.
+  // ─── Color + radius upload — runs on bond-set or scheme changes ───────
+  // Bond-stability cache: a fresh Int32Array with identical contents (same
+  // atoms still bonded, just moving) in a static color mode skips the pass.
   const lastAttrBondPairsRef = useRef<Int32Array | null>(null);
-  const lastAttrMeshRef = useRef<THREE.InstancedMesh | null>(null);
+  const lastAttrGeometryRef = useRef<THREE.InstancedBufferGeometry | null>(null);
   const lastAttrTypesRef = useRef<Int32Array | null>(null);
   const lastAttrKeyRef = useRef<string>('');
 
-  const uploadBondAttributes = useCallback(() => {
-    const mesh = meshRef.current;
-    if (!mesh || halfCount === 0) return;
+  useLayoutEffect(() => {
+    const drawCount = Math.min(bondCount, capacity);
+    if (drawCount === 0) return;
 
-    // In any of these modes, color depends on per-frame data and we must
-    // recompute every call regardless of bondPairs stability.
     const isFrameDepColors =
       isPropMode ||
       bondColorMode === 'length' ||
@@ -1092,34 +993,50 @@ export function Bonds({
 
     if (
       !isFrameDepColors &&
-      lastAttrMeshRef.current === mesh &&
+      lastAttrGeometryRef.current === geometry &&
       lastAttrTypesRef.current === frame.types &&
       lastAttrKeyRef.current === attrCacheKey &&
       lastAttrBondPairsRef.current !== null &&
       bondPairsContentEqual(bondPairs, lastAttrBondPairsRef.current)
     ) {
-      return; // bonds + color params unchanged — nothing to upload
+      return;
     }
 
-    const drawCount = Math.min(halfCount, capacity);
+    const radiusAttr = geometry.attributes.instanceRadius as THREE.InstancedBufferAttribute;
+    const colorStartAttr = geometry.attributes.instanceColorStart as THREE.InstancedBufferAttribute;
+    const colorEndAttr = geometry.attributes.instanceColorEnd as THREE.InstancedBufferAttribute;
+    const radiusArr = radiusAttr.array as Float32Array;
+    const colorStartArr = colorStartAttr.array as Uint8Array;
+    const colorEndArr = colorEndAttr.array as Uint8Array;
+
     const t = canInterpolateToNextFrame ? (interpolationFactor ?? 0) : 0;
     const hasPropInterpolation = isPropMode && canInterpolateToNextFrame && nextFrame && t > 0 && nextFrame.properties && nextFrame.properties.has(colorProperty!);
     const nextPropData = hasPropInterpolation ? nextFrame.properties!.get(colorProperty!) : null;
     const mapFn = COLORMAPS[colormap] || COLORMAPS.viridis;
-    const linearColorScratch = new THREE.Color();
 
-    // Build type normalization map to match AtomsOptimized.tsx
+    // Type rank normalization mirrors AtomsOptimized's colormap palette.
     const typeSet = new Set<number>();
-    if (frame.types) {
-      for (let i = 0; i < frame.natoms; i++) typeSet.add(frame.types[i]);
-    }
+    for (let i = 0; i < frame.natoms; i++) typeSet.add(frame.types[i]);
     const sortedTypes = Array.from(typeSet).sort((a, b) => a - b);
     const typeToNorm = new Map<number, number>();
     for (let j = 0; j < sortedTypes.length; j++) {
       typeToNorm.set(sortedTypes[j], sortedTypes.length > 1 ? j / (sortedTypes.length - 1) : 0.5);
     }
+    // Per-type display colors are constant across the bond set; resolve each
+    // raw type once instead of once per bond endpoint.
+    const typeColorCache = new Map<number, [number, number, number]>();
+    const colorForType = (typeId: number): [number, number, number] => {
+      let color = typeColorCache.get(typeId);
+      if (!color) {
+        color = atomColorSource === 'element'
+          ? hexToRgb(elementColorOverrides[typeId] ?? resolveTypeColor(frame, typeId))
+          : mapFn(typeToNorm.get(typeId) ?? 0.5);
+        typeColorCache.set(typeId, color);
+      }
+      return color;
+    };
+    const uniformRgb = hexToRgb(uniformColor);
 
-    // Auto-compute local min/max for prop mapping if not supplied
     let pMin = propRange?.[0] ?? 0;
     let pMax = propRange?.[1] ?? 1;
     if (isPropMode && propData && !propRange) {
@@ -1132,10 +1049,10 @@ export function Bonds({
       pMax = max;
     }
 
-    // Precompute bond-distance range for length coloring mode (avoids O(N²))
-    let distMin = 0, distMax = 1, distRange = 1;
+    let distMin = 0, distRange = 1;
     if (bondColorMode === 'length' && bondDistances.length >= bondCount) {
-      distMin = Infinity; distMax = -Infinity;
+      let distMax = -Infinity;
+      distMin = Infinity;
       for (let k = 0; k < bondCount; k++) {
         if (bondDistances[k] < distMin) distMin = bondDistances[k];
         if (bondDistances[k] > distMax) distMax = bondDistances[k];
@@ -1143,219 +1060,67 @@ export function Bonds({
       distRange = distMax - distMin || 1;
     }
 
-    for (let i = 0; i < drawCount / 2; i++) {
+    const writeColor = (target: Uint8Array, offset: number, rgb: readonly [number, number, number]) => {
+      target[offset] = Math.round(Math.max(0, Math.min(1, rgb[0])) * 255);
+      target[offset + 1] = Math.round(Math.max(0, Math.min(1, rgb[1])) * 255);
+      target[offset + 2] = Math.round(Math.max(0, Math.min(1, rgb[2])) * 255);
+    };
+
+    for (let i = 0; i < drawCount; i++) {
       const a = bondPairs[i * 2];
       const b = bondPairs[i * 2 + 1];
 
-      // Property mode: interpolate normalized values per atom for radii+colors.
       let normA = 0.5, normB = 0.5;
       if (isPropMode && propData) {
         let valA = propData[a];
         if (nextPropData && nextPropData.length > a) valA += (nextPropData[a] - valA) * t;
         normA = pMax > pMin ? (valA - pMin) / (pMax - pMin) : 0.5;
-
         let valB = propData[b];
         if (nextPropData && nextPropData.length > b) valB += (nextPropData[b] - valB) * t;
         normB = pMax > pMin ? (valB - pMin) / (pMax - pMin) : 0.5;
       }
+      // Property mode scales the tube by the mean of both endpoints.
+      radiusArr[i] = isPropMode ? radius * (0.2 + 1.8 * 0.5 * (normA + normB)) : radius;
 
-      const rA = isPropMode ? radius * (0.2 + 1.8 * normA) : radius;
-      const rB = isPropMode ? radius * (0.2 + 1.8 * normB) : radius;
-      const rMid = (rA + rB) / 2.0;
-
-      // Radii (instance i*2 = bottom half A→Mid, instance i*2+1 = top half Mid→B)
-      cpuRadiusBTArray[(i * 2) * 2] = rA;
-      cpuRadiusBTArray[(i * 2) * 2 + 1] = rMid;
-      cpuRadiusBTArray[(i * 2 + 1) * 2] = rMid;
-      cpuRadiusBTArray[(i * 2 + 1) * 2 + 1] = rB;
-
-      // ─── Bond Color Logic ─────────────────────────────────────────────
-      // Per-bond modes (length/energy/screening): same color along the whole
-      // bond. Both halves get B == T == that color, so the shader's lerp is
-      // a no-op and the bond reads as uniform — current behavior preserved.
-      // Per-atom modes (type/property/uniform): the gradient is visible.
-      // tcA at the A end, tcB at the B end, midpoint is the average.
+      const o = i * 3;
       if (bondColorMode === 'length' && bondDistances.length > i) {
-        const normDist = (bondDistances[i] - distMin) / distRange;
-        const tcLen = mapFn(normDist);
-        const offA = (i * 2) * 3;
-        const offB = (i * 2 + 1) * 3;
-        writeDisplayRgbAsLinear(cpuColorBArray, offA, tcLen, linearColorScratch);
-        writeDisplayRgbAsLinear(cpuColorBArray, offB, tcLen, linearColorScratch);
+        const rgb = mapFn((bondDistances[i] - distMin) / distRange);
+        writeColor(colorStartArr, o, rgb);
+        writeColor(colorEndArr, o, rgb);
+      } else if (isPropMode && propData) {
+        writeColor(colorStartArr, o, mapFn(normA));
+        writeColor(colorEndArr, o, mapFn(normB));
+      } else if (colorMode === 'uniform') {
+        writeColor(colorStartArr, o, uniformRgb);
+        writeColor(colorEndArr, o, uniformRgb);
       } else {
-        // Endpoint colors must match what AtomsOptimized used for the same
-        // type, otherwise the bond gradient terminates in colors that don't
-        // exist on the atoms it connects. Mirror that branch structure here.
-        const colorForType = (typeId: number): [number, number, number] => {
-          if (atomColorSource === 'element') {
-            return hexToRgb(elementColorOverrides[typeId] ?? resolveTypeColor(frame, typeId));
-          }
-          // 'colormap'
-          return mapFn(typeToNorm.get(typeId) ?? 0.5);
-        };
-
-        let tcA: [number, number, number];
-        if (isPropMode && propData) {
-          tcA = mapFn(normA);
-        } else if (colorMode === 'uniform') {
-          tcA = hexToRgb(uniformColor);
-        } else {
-          tcA = frame.types ? colorForType(frame.types[a]) : DEFAULT_TYPE_COLOR;
-        }
-
-        let tcB: [number, number, number];
-        if (isPropMode && propData) {
-          tcB = mapFn(normB);
-        } else if (colorMode === 'uniform') {
-          tcB = hexToRgb(uniformColor);
-        } else {
-          tcB = frame.types ? colorForType(frame.types[b]) : DEFAULT_TYPE_COLOR;
-        }
-
-        // Flat per-half: instance i*2 = solid A, instance i*2+1 = solid B.
-        // Hard split at the geometric midpoint — the universal 2-tone bond
-        // convention. Material (metalness/roughness) comes uniformly from
-        // the active material preset; no per-bond gradient.
-        const offA = (i * 2) * 3;
-        writeDisplayRgbAsLinear(cpuColorBArray, offA, tcA, linearColorScratch);
-
-        const offB = (i * 2 + 1) * 3;
-        writeDisplayRgbAsLinear(cpuColorBArray, offB, tcB, linearColorScratch);
+        writeColor(colorStartArr, o, frame.types ? colorForType(frame.types[a]) : DEFAULT_TYPE_COLOR);
+        writeColor(colorEndArr, o, frame.types ? colorForType(frame.types[b]) : DEFAULT_TYPE_COLOR);
       }
     }
 
-    // ─── GPU upload — colors + radii only. Matrix is owned by uploadBondMatrices.
-    const dstColRaw = mesh.instanceColor ? (mesh.instanceColor.array as Float32Array) : null;
-    const meshColorCap = dstColRaw ? (dstColRaw.length / 3) | 0 : Infinity;
-    const dstRadiusBTArr = tubeGeo.attributes.radiusBT.array as Float32Array;
-    const radiusBTCap = (dstRadiusBTArr.length / 2) | 0;
+    markInstancedAttributeUpdateRange(radiusAttr, drawCount);
+    markInstancedAttributeUpdateRange(colorStartAttr, drawCount * 3);
+    markInstancedAttributeUpdateRange(colorEndAttr, drawCount * 3);
 
-    const totalBonds = Math.min(drawCount, meshColorCap, radiusBTCap);
-    if (totalBonds < drawCount) {
-      console.warn(
-        `[Bonds] attribute capacity mismatch — wanted ${drawCount}, color=${meshColorCap} radiusBT=${radiusBTCap}; clipping.`,
-      );
-    }
-
-    if (dstColRaw) dstColRaw.set(cpuColorBArray.subarray(0, totalBonds * 3));
-    dstRadiusBTArr.set(cpuRadiusBTArray.subarray(0, totalBonds * 2));
-
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    const radiusBTAttribute = tubeGeo.attributes.radiusBT as THREE.InstancedBufferAttribute;
-    radiusBTAttribute.clearUpdateRanges();
-    if (totalBonds > 0) {
-      radiusBTAttribute.addUpdateRange(0, totalBonds * 2);
-      radiusBTAttribute.needsUpdate = true;
-    }
-
-    // Cache the bondPairs we just uploaded for the next stability check.
     lastAttrBondPairsRef.current = bondPairs;
-    lastAttrMeshRef.current = mesh;
+    lastAttrGeometryRef.current = geometry;
     lastAttrTypesRef.current = frame.types;
     lastAttrKeyRef.current = attrCacheKey;
-    // Deps: NO frame.positions / nextFrame / interpolationFactor / periodic —
-    // those drive matrices, not attributes. In property mode `propData` (a
-    // per-frame Float32Array) IS in deps, so attribute updates do fire per
-    // frame for property coloring. In static modes (type/element/uniform),
-    // propData is null and frame changes don't refire this.
+    // Deps: NO frame.positions — those drive endpoints, not colors. In
+    // property mode `propData` (a per-frame Float32Array) is a dep, so colors
+    // do refresh per frame for property coloring.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, bondDistances, halfCount, capacity, frame.types, frame.typeSemantics, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, canInterpolateToNextFrame, interpolationFactor, colorProperty]);
-
-  // Matrix upload runs in the rAF loop, NOT in a useEffect. This bypasses
-  // React's commit cycle so per-frame matrix updates flow at native rAF
-  // cadence — no reconciliation overhead between bond detection and the
-  // GPU upload. The closure captures the latest props/state via R3F's
-  // useFrame-on-render pattern (R3F replaces the registered callback on
-  // every component render with the freshly-closed function).
-  //
-  // A dirty check skips the upload entirely when nothing changed since the
-  // last call — paused playback with stable bondPairs and zero interpolation
-  // costs nothing per frame.
-  const lastMatrixKeyRef = useRef<{
-    frame: typeof frame | null;
-    nextFrame: typeof nextFrame;
-    interp: number;
-    bondPairs: typeof bondPairs | null;
-    capacity: number;
-  }>({ frame: null, nextFrame: undefined, interp: -1, bondPairs: null, capacity: 0 });
-
-  useFrame(() => {
-
-    // Skip when nothing that affects matrices has changed since last upload.
-    // capacity remounts the mesh via key, so capacity flips also trigger an
-    // upload (the mesh ref is fresh, instanceMatrix needs filling).
-    const last = lastMatrixKeyRef.current;
-    const interp = interpolationFactor ?? 0;
-    if (
-      last.frame === frame &&
-      last.nextFrame === nextFrame &&
-      last.interp === interp &&
-      last.bondPairs === bondPairs &&
-      last.capacity === capacity
-    ) {
-      return;
-    }
-    uploadBondMatrices();
-    last.frame = frame;
-    last.nextFrame = nextFrame;
-    last.interp = interp;
-    last.bondPairs = bondPairs;
-    last.capacity = capacity;
-  });
-
-  // Attributes path stays on useEffect — its deps fire only on bond-set or
-  // scheme changes (rare), so React's commit cycle is the right gate. In
-  // property mode the deps include propData which changes per frame, so
-  // attributes fire per frame in that case (same cost as before).
-  useEffect(() => {
-    uploadBondAttributes();
-  }, [uploadBondAttributes]);
-
-  // Handle R3F remounts on WebXR session entry. rAF is paused during the
-  // transition, so we schedule the uploads via setTimeout (same pattern as
-  // Atoms / AtomsOptimized — see commit 17a0b66). Both passes are needed
-  // because a remount loses both matrix and attribute buffers.
-  const onMeshRef = useCallback((mesh: THREE.InstancedMesh | null) => {
-    if (mesh) {
-      (meshRef as any).current = mesh;
-      // Fresh InstancedMesh buffers start zero-filled. The stability cache
-      // may still match the previous mesh's bond pairs, so force one color
-      // upload after every remount/capacity change.
-      lastAttrBondPairsRef.current = null;
-      lastAttrMeshRef.current = null;
-      lastAttrTypesRef.current = null;
-      lastAttrKeyRef.current = '';
-      setTimeout(() => {
-        uploadBondMatrices();
-        uploadBondAttributes();
-      }, 0);
-    }
-  }, [uploadBondMatrices, uploadBondAttributes]);
-
-  const meshArgs = useMemo(
-    () => [tubeGeo, material, capacity] as [THREE.BufferGeometry, THREE.Material, number],
-    [tubeGeo, material, capacity],
-  );
-  const instanceColorArgs = useMemo(
-    () => [new Float32Array(capacity * 3), 3] as [Float32Array, number],
-    [capacity],
-  );
+  }, [bondPairs, bondDistances, bondCount, capacity, geometry, frame.types, frame.typeSemantics, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, canInterpolateToNextFrame, interpolationFactor, colorProperty]);
 
   return (
-    // `key={capacity}` forces R3F to fully remount the InstancedMesh when
-    // the capacity ratchet bumps. Without it, R3F may update the mesh's
-    // count prop without resizing instanceMatrix/instanceColor — and our
-    // upload would write past the typed-array bounds. Capacity changes are
-    // rare (once per file load typically), so the brief remount is cheap.
-    <instancedMesh
-      key={capacity}
-      ref={onMeshRef}
-      args={meshArgs}
+    <mesh
+      ref={meshRef}
+      geometry={geometry}
+      material={material}
       frustumCulled={false}
-      visible={visible && halfCount > 0}
-    >
-      <instancedBufferAttribute attach="instanceColor" args={instanceColorArgs} />
-    </instancedMesh>
+      visible={visible && bondCount > 0}
+    />
   );
 }
 

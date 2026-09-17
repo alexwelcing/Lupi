@@ -1,5 +1,125 @@
 # Changelog
 
+## [Unreleased] - Molecule-first landing
+
+### Changed
+- **Search is the first fast path** (`MoleculeFinder`): the landing hero is
+  now the h1 and one search box. Local gallery molecules match on the first
+  keystroke with no network; from two letters PubChem's compound dictionary
+  autocomplete fills in names, so a couple of characters reach 100M+
+  compounds. Enter opens the top result, arrow keys move through the list,
+  and a name with no local match goes straight to PubChem. The viewer
+  bundle only loads on a pick (`openMolecule` is code-split behind the
+  click); the landing chunk still imports no three.js.
+- **Molecule wall** (`MoleculeWall`): every directly openable gallery
+  entry (103 today, from water to the 953k-atom block) is a dense tile
+  under the search, familiar molecules first. Tiles are plain `/?sim=`
+  links that load in place on click.
+- **PubChem loads without the MCP bridge** (`molecules/pubchemLoad.ts`):
+  the PUG REST JSON record (3D conformer, 2D fallback) is parsed straight
+  into a viewer frame with PubChem's own connection table as source bonds.
+  Compounds deep-link as `?molecule=<name>` or `?molecule=cid:<n>`, which
+  the viewer restores on reload and Back/Forward like `?sim=`/`?load=`.
+  The federated PubChem provider now uses the autocomplete endpoint and the
+  name load path no longer depends on the dev-only bridge.
+- **Less copy**: the deck paragraph, two CTAs, caffeine figure, three-step
+  guide and file-intro paragraph are gone; the starter set with its
+  prompts, the tips strip (`#learn`) and the drop zone remain.
+
+## [Unreleased] - Large-Scene Renderer + Impostor Fidelity
+
+### Changed
+- **Compact atom instance layout** (`AtomsOptimized`): per-atom GPU/CPU
+  footprint drops from 40 B to 15 B for static molecules (27 B with a
+  trajectory target buffer). Type slot is a `u8`, property a normalized
+  `u16`, and the atom index is `gl_InstanceID`. Radius, per-type scale and
+  type visibility live in a 256-entry R32F radius palette, so the atom-scale
+  slider and hide-type toggles are a 1 KB texture update instead of an O(n)
+  instance rewrite. Static frames alias the interpolation target buffer to
+  the position buffer; type slots are re-uploaded only when the type buffer
+  or slot table changes; capacity shrinks when a much smaller molecule
+  follows a large one.
+- **Raw GLSL ES 3.00 impostor material with early-Z**: the sphere impostor
+  is now a `RawShaderMaterial` that owns its prefix, which lets it declare
+  `EXT_conservative_depth` (`layout(depth_greater)`) when the browser exposes
+  it. The billboard sits on the sphere's front tangent plane, so the GPU
+  keeps early depth rejection despite the `gl_FragDepth` write and dense
+  scenes skip shading for most occluded fragments. Output color space is
+  handled per render target exactly as Three does (sRGB to the canvas,
+  linear into render targets).
+- **Quality tiers are now real**: the device quality tier reaches the atom
+  shader as compile-time defines (0 = analytic environment, 1 = image-based
+  lighting, 2 = clearcoat and texture detail on top), and the renderer lowers
+  the tier by atom count (>400k drops clearcoat/texture, >2M drops IBL).
+- **Sub-pixel culling**: atoms whose projected radius falls under a
+  device-pixel threshold collapse in the vertex shader for scenes of 50k+
+  atoms (0.5 px once cluster splats carry the far view, 0.3 px while
+  playing).
+- **Bonds are ray-cast cylinder impostors**: one instanced box per bond,
+  ray-cast to a finite cylinder in the fragment shader with exact depth.
+  Bonds are perfectly round at any zoom (the old tube was a 4-sided prism),
+  the two endpoint colors split at the geometric midpoint, and frame
+  interpolation happens on the GPU from the live playback ref, so
+  trajectory substeps no longer rebuild instance matrices on the CPU. Per
+  bond GPU data is 34 bytes (58 with a trajectory target) instead of two
+  64-byte matrices plus colors and taper radii, and there is no CPU
+  scratch copy. Bonds share the atom shader's quality tiers, conservative
+  depth, IBL/analytic environment, specular AA and sub-pixel culling.
+- **GPU bond grid scales with the scene**: the WebGPU bond pipeline sizes
+  its spatial grid from the atom capacity (32³ up to 80³ cells) instead of a
+  fixed 32³ × 64-slot grid, which stretched over large boxes and silently
+  dropped bonds past a few hundred thousand atoms.
+- **Cluster splats build off the main thread**: the far-LOD cluster grid
+  now runs in the same scene-analysis worker as per-atom occlusion instead
+  of an idle callback on the main thread, so pausing or loading a
+  million-atom scene no longer stalls the frame for the build.
+- **Hidden-type bond filtering** compacts typed arrays in two passes instead
+  of pushing into JavaScript arrays per bond; the viewer caches the
+  per-type covalent-radius scan per type buffer instead of rescanning every
+  atom on each source-frame change during playback.
+- **Typed-array spatial hash**: `SpatialHash3D` is a counting-sort uniform
+  grid (no string keys, no per-atom allocation). Interactive picking is now
+  allowed up to 5,000,000 atoms (was 200,000).
+
+- **XYZ / extended-XYZ parse in TypeScript, bytes to typed arrays**: the
+  parser worker no longer sends XYZ through the WASM serde bridge (whole-file
+  string, line vector, boxed JavaScript number arrays that could not be
+  transferred and were copied twice more on the main thread). The new
+  byte-level parser writes `Float32Array`/`Int32Array` frames directly,
+  transfers them zero-copy, and understands extended-XYZ `Lattice=` boxes and
+  `Properties=` column layouts (extra columns become per-atom properties;
+  velocities/forces map to `vx..`/`fx..`). On a 1M-atom file it parses in
+  ~0.5 s versus ~1.8 s plus a 125 MB boxed intermediate.
+- **LAMMPS data files parse in TypeScript too**: `lammpsDataParser.ts` is a
+  byte-level port of the WASM `read_data` parser with identical semantics
+  (atomic/charge/molecular/full styles with `# style` hints and accelerator
+  suffixes, Masses mass+label element resolution with `type_id`, Bonds,
+  Velocities before or after Atoms, triclinic tilt, skipped coefficient
+  sections). A parity test runs the committed WASM artifact on the same
+  fixtures. On a 1M-atom charge-style file it parses in ~1.2 s versus ~6 s
+  plus a 190 MB boxed intermediate. The worker no longer initializes WASM
+  for XYZ or data files; only thermo logs still use it.
+- **Parser worker fixes**: gzip decompression concatenated chunks byte by
+  byte while scanning the chunk list (quadratic); it is now one linear copy.
+  LAMMPS data frames from WASM are converted to typed arrays inside the
+  worker so their buffers transfer. Per-frame bounds and type sets ship
+  with every frame, so the main thread no longer rescans every atom of every
+  frame after hydration; the displacement join uses a dense index instead
+  of a Map entry per atom.
+
+### Added
+- **Per-atom ambient occlusion for large scenes**: `computeAtomOcclusion`
+  (pure) plus `useAtomOcclusion` (Web Worker) bake a neighbor-density
+  openness map (QuteMol/VMD style) for scenes of 50k+ atoms. The impostor
+  shader darkens ambient/environment light on buried atoms, so surfaces,
+  voids and grain boundaries read at every zoom level without screen-space
+  AO.
+- **Analytic studio environment**: when no PMREM probe is installed (the
+  large-scene default) atoms are lit by a hemisphere sky/ground model with an
+  overhead softbox band instead of a flat constant, and highlights use a
+  footprint-driven roughness floor (specular anti-aliasing) so small atoms
+  no longer strobe.
+
 ## [Unreleased] - Periodic Table Explorer, Settings & Run Configurator
 
 ### Added

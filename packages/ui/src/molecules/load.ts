@@ -1,5 +1,6 @@
 import { useStore } from '../store';
 import { openMolecule } from '../viewer/openMolecule';
+import { openPubChemMolecule } from './pubchemLoad';
 import type { MoleculeHit } from './types';
 
 interface ViewerMcp {
@@ -29,6 +30,11 @@ export async function loadMoleculeHit(hit: MoleculeHit): Promise<void> {
       if (typeof window !== 'undefined') window.location.hash = `#/view/${spec.slug}`;
       return;
     case 'generate': {
+      if (spec.inputType === 'name') {
+        // Names resolve straight against PubChem; no bridge needed.
+        await openPubChemMolecule({ name: spec.input }, { title: hit.title });
+        return;
+      }
       // Reuse the viewer's multi-input resolver via the MCP bridge.
       const mcp =
         typeof window !== 'undefined'

@@ -1,46 +1,28 @@
 import type { MoleculeHit, MoleculeProvider, MoleculeQuery } from '../types';
-
-const BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
-
-interface PubChemProp {
-  CID: number;
-  Title?: string;
-  IUPACName?: string;
-  MolecularFormula?: string;
-}
+import { pubchemAutocomplete } from '../pubchemLoad';
 
 /**
- * External PubChem lookup by exact-ish name. Only fires on a real query (>=3
- * chars) so browsing never hits the network. Fully defensive: any failure → [].
- * Loading resolves through the multi-input resolver (name → PubChem SDF fetch).
+ * PubChem type-ahead: the compound dictionary autocomplete endpoint returns
+ * names for a short prefix in one cached round trip, so two letters reach the
+ * whole 100M+ compound set. Loading resolves by name through `pubchemLoad`
+ * (3D conformer, 2D fallback) with no MCP bridge in the loop.
  */
 export const pubchemProvider: MoleculeProvider = {
   id: 'pubchem',
   label: 'PubChem',
   isAvailable: () => typeof fetch === 'function',
   async search(query: MoleculeQuery): Promise<MoleculeHit[]> {
-    const name = query.text.trim();
-    if (name.length < 3) return [];
-    try {
-      const url =
-        `${BASE}/compound/name/${encodeURIComponent(name)}` +
-        `/property/MolecularFormula,IUPACName,Title/JSON`;
-      const res = await fetch(url);
-      if (!res.ok) return [];
-      const json = (await res.json()) as { PropertyTable?: { Properties?: PubChemProp[] } };
-      const props = json?.PropertyTable?.Properties ?? [];
-      return props.slice(0, query.limit ?? 5).map((p) => ({
-        id: `cid-${p.CID}`,
-        source: 'pubchem',
-        title: p.Title || p.IUPACName || name,
-        subtitle: `PubChem CID ${p.CID}${p.MolecularFormula ? ` · ${p.MolecularFormula}` : ''}`,
-        formula: p.MolecularFormula,
-        tags: ['pubchem'],
-        load: { kind: 'generate', inputType: 'name', input: name },
-        score: 0.5,
-      }));
-    } catch {
-      return [];
-    }
+    const prefix = query.text.trim();
+    if (prefix.length < 2) return [];
+    const names = await pubchemAutocomplete(prefix, query.limit ?? 8);
+    return names.map((name) => ({
+      id: `name-${name.toLowerCase()}`,
+      source: 'pubchem',
+      title: name,
+      subtitle: 'PubChem compound',
+      tags: ['pubchem'],
+      load: { kind: 'generate', inputType: 'name', input: name },
+      score: 0.5,
+    }));
   },
 };
