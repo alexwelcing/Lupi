@@ -1,0 +1,213 @@
+{
+  "builtAt": "2026-09-18T13:41:01.557Z",
+  "source": "/tmp/claude-0/-home-user-Lupi/ae126ddc-6588-5b8c-8bc7-b763ebcbe572/scratchpad/omol_val.json",
+  "sourceIndexVersion": 3,
+  "edge": "https://lupi.live",
+  "verification": {
+    "sampled": 24,
+    "allMatched": true,
+    "checks": [
+      {
+        "row": 0,
+        "formula": "C26H31N3O5S3",
+        "atoms": 68,
+        "edgeFormula": "C26H31N3O5S3",
+        "edgeAtoms": 68,
+        "ok": true
+      },
+      {
+        "row": 109,
+        "formula": "C2HCl3F2",
+        "atoms": 8,
+        "edgeFormula": "C2HCl3F2",
+        "edgeAtoms": 8,
+        "ok": true
+      },
+      {
+        "row": 2299,
+        "formula": "C16H14Cl3N3O2S",
+        "atoms": 39,
+        "edgeFormula": "C16H14Cl3N3O2S",
+        "edgeAtoms": 39,
+        "ok": true
+      },
+      {
+        "row": 2572,
+        "formula": "C22H21N3O7S2",
+        "atoms": 55,
+        "edgeFormula": "C22H21N3O7S2",
+        "edgeAtoms": 55,
+        "ok": true
+      },
+      {
+        "row": 2813,
+        "formula": "C24H25BF3NO",
+        "atoms": 55,
+        "edgeFormula": "C24H25BF3NO",
+        "edgeAtoms": 55,
+        "ok": true
+      },
+      {
+        "row": 4127,
+        "formula": "C12H9FN2S2",
+        "atoms": 26,
+        "edgeFormula": "C12H9FN2S2",
+        "edgeAtoms": 26,
+        "ok": true
+      },
+      {
+        "row": 4306,
+        "formula": "C13H23N5O7P2",
+        "atoms": 50,
+        "edgeFormula": "C13H23N5O7P2",
+        "edgeAtoms": 50,
+        "ok": true
+      },
+      {
+        "row": 8644,
+        "formula": "C31H30N4O3S2",
+        "atoms": 70,
+        "edgeFormula": "C31H30N4O3S2",
+        "edgeAtoms": 70,
+        "ok": true
+      },
+      {
+        "row": 10011,
+        "formula": "C23H20ClN7O6",
+        "atoms": 57,
+        "edgeFormula": "C23H20ClN7O6",
+        "edgeAtoms": 57,
+        "ok": true
+      },
+      {
+        "row": 10294,
+        "formula": "C31H25FN2O5",
+        "atoms": 64,
+        "edgeFormula": "C31H25FN2O5",
+        "edgeAtoms": 64,
+        "ok": true
+      },
+      {
+        "row": 13378,
+        "formula": "C19H17F3N2O4S2",
+        "atoms": 47,
+        "edgeFormula": "C19H17F3N2O4S2",
+        "edgeAtoms": 47,
+        "ok": true
+      },
+      {
+        "row": 17311,
+        "formula": "C3H3Cl3F4S",
+        "atoms": 14,
+        "edgeFormula": "C3H3Cl3F4S",
+        "edgeAtoms": 14,
+        "ok": true
+      },
+      {
+        "row": 17338,
+        "formula": "C25H24BF5N2",
+        "atoms": 57,
+        "edgeFormula": "C25H24BF5N2",
+        "edgeAtoms": 57,
+        "ok": true
+      },
+      {
+        "row": 17560,
+        "formula": "C7H11ClF3N",
+        "atoms": 23,
+        "edgeFormula": "C7H11ClF3N",
+        "edgeAtoms": 23,
+        "ok": true
+      },
+      {
+        "row": 18130,
+        "formula": "C22H29N3O9",
+        "atoms": 63,
+        "edgeFormula": "C22H29N3O9",
+        "edgeAtoms": 63,
+        "ok": true
+      },
+      {
+        "row": 19984,
+        "formula": "C11H7Cl2N5O",
+        "atoms": 26,
+        "edgeFormula": "C11H7Cl2N5O",
+        "edgeAtoms": 26,
+        "ok": true
+      },
+      {
+        "row": 21567,
+        "formula": "C4H11NOS3",
+        "atoms": 20,
+        "edgeFormula": "C4H11NOS3",
+        "edgeAtoms": 20,
+        "ok": true
+      },
+      {
+        "row": 22539,
+        "formula": "C10H11KN5O6P",
+        "atoms": 34,
+        "edgeFormula": "C10H11KN5O6P",
+        "edgeAtoms": 34,
+        "ok": true
+      },
+      {
+        "row": 23583,
+        "formula": "C31H28F2N4O4S",
+        "atoms": 70,
+        "edgeFormula": "C31H28F2N4O4S",
+        "edgeAtoms": 70,
+        "ok": true
+      },
+      {
+        "row": 24987,
+        "formula": "C2H3ClK2NO4P",
+        "atoms": 14,
+        "edgeFormula": "C2H3ClK2NO4P",
+        "edgeAtoms": 14,
+        "ok": true
+      },
+      {
+        "row": 26184,
+        "formula": "C23H20ClN7O6",
+        "atoms": 57,
+        "edgeFormula": "C23H20ClN7O6",
+        "edgeAtoms": 57,
+        "ok": true
+      },
+      {
+        "row": 26328,
+        "formula": "C6H5F3",
+        "atoms": 14,
+        "edgeFormula": "C6H5F3",
+        "edgeAtoms": 14,
+        "ok": true
+      },
+      {
+        "row": 27319,
+        "formula": "C11H17NO4S4",
+        "atoms": 37,
+        "edgeFormula": "C11H17NO4S4",
+        "edgeAtoms": 37,
+        "ok": true
+      },
+      {
+        "row": 27696,
+        "formula": "C15H13K2N3O4",
+        "atoms": 37,
+        "edgeFormula": "C15H13K2N3O4",
+        "edgeAtoms": 37,
+        "ok": true
+      }
+    ]
+  },
+  "index": {
+    "bytes": 698384,
+    "sha256": "ce70122211a42cf343f014be3d42f6ffe8b0117c1076effd68293557d5301055",
+    "count": 27697
+  },
+  "facets": {
+    "bytes": 1268,
+    "sha256": "d65713482af926cb1b8012ceefa322e9897aee9c6a4b93c45ac04f2859d336e6"
+  }
+}

@@ -15,6 +15,7 @@ import type { MoleculeHit } from '../molecules/types';
 import { LibraryCard } from './LibraryCard';
 import { openLibraryHit, useLibraryHandoff } from './openHit';
 import { PeriodicTableFacet } from './PeriodicTableFacet';
+import { trackLibrarySearch } from './trackLibrarySearch';
 import { useLibraryQuery } from './useLibraryQuery';
 
 const PAGE_SIZE = 24;
@@ -129,6 +130,7 @@ export function RemoteBrowser() {
         if (id !== requestId.current) return;
         setPage(result);
         setHits(result.rows.map(remoteOmolHit));
+        trackLibrarySearch({ collection: 'omol25', source: collectionId, hasQuery: debounced.length > 0, elementCount: 0, resultCount: result.returnedRows });
       })
       .catch((reason: unknown) => {
         if (id !== requestId.current) return;
@@ -314,7 +316,9 @@ export function FacetedValidation() {
       limit: FACET_PAGE,
     })
       .then((result) => {
-        if (id === requestId.current) setHits(result);
+        if (id !== requestId.current) return;
+        setHits(result);
+        trackLibrarySearch({ collection: 'omol25', source: 'neutral-validation-facets', hasQuery: debounced.length > 0, elementCount: query.elements.length + groups.length, resultCount: result.length });
       })
       .catch(() => {
         if (id === requestId.current) setHits([]);

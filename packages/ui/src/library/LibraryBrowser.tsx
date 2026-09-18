@@ -3,6 +3,7 @@ import { MOLECULE_PROVIDERS, searchMolecules } from '../molecules';
 import type { MoleculeHit, MoleculeSourceId } from '../molecules/types';
 import { LibraryCard, SOURCE_LABEL } from './LibraryCard';
 import { openLibraryHit, useLibraryHandoff } from './openHit';
+import { trackLibrarySearch } from './trackLibrarySearch';
 import { useLibraryQuery } from './useLibraryQuery';
 
 /**
@@ -78,7 +79,15 @@ export function LibraryBrowser({ lockedSource = null }: { lockedSource?: Molecul
       MOLECULE_PROVIDERS,
     )
       .then((results) => {
-        if (id === requestId.current) setHits(results);
+        if (id !== requestId.current) return;
+        setHits(results);
+        trackLibrarySearch({
+          collection: lockedSource ?? 'all',
+          source,
+          hasQuery: debounced.length > 0,
+          elementCount: query.elements.length,
+          resultCount: results.length,
+        });
       })
       .catch(() => {
         if (id === requestId.current) setHits([]);

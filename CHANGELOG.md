@@ -20,7 +20,24 @@
 - **`lupi.browse_collection`** browser MCP tool (31 tools now) so agents can
   page the 34.3M-row OMol25 split, not just the federated top-N.
 
+- **Same-origin OMol25 validation index**
+  (`tools/build-omol25-validation-index.mjs`,
+  `apps/web/public/datasets/omol25/`): the faceted OMol25 view no longer
+  depends on a GCS bucket. The compact index binds record `i` to Hugging
+  Face row `i`, is spot-checked against the dataset edge when built, and
+  every hit opens through the edge structure route.
+- **Static previews for 72 gallery entries** (`tools/build-gallery-previews.mjs`,
+  `packages/ui/src/gallery/previews.json`): the landing finder, the wall,
+  and the Library gallery show source-bound SVG art for every local XYZ
+  entry up to 1,200 atoms, not just the twelve student models.
+- **`library_searched` analytics event**: aggregate shape only (collection,
+  source filter, whether a query was typed, element and result counts).
+
 ### Changed
+- **NIST potentials rebuilt natively** (`library/PotentialsCollection.tsx`):
+  the Library no longer mounts the legacy inline-styled panel; filters run
+  on `@atlas/nist`, cards say whether a demo trajectory exists, and
+  potentials without one open a procedural crystal and say so.
 - **Ownership contract amended** (2026-09-18): public navigation is Explore,
   Library, How to use, and Open a file. Research execution stays retired.
 - `?tab=browse|simulations|omol25|research|potentials` and

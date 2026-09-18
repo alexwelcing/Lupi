@@ -98,7 +98,7 @@ finder handoff (phase 3) is permitted.
 | `/library/gallery` | The 104-entry catalog with domain, source-type, and functional-group filters. | `EXAMPLES` plus recovered `useGalleryFilters` |
 | `/library/omol25` | Two modes as before: remote collections (default) and the faceted validation slice. | `remoteOmol.ts`, `providers/omol.ts` |
 | `/library/research` | The eight cited Zenodo records with full provenance and parser notes. | `researchProvider`, `/v1/datasets/research` |
-| `/library/potentials` | NIST potential catalog. | `PotentialBrowser` as is, restyled later |
+| `/library/potentials` | NIST potential catalog. | Rebuilt natively on `@atlas/nist` filters (delivered 2026-09-18) |
 | `/library/random` | Redirect: opens a random OMol25 validation structure in the viewer. | `openRandomOmol25Molecule` |
 
 Route registration goes in `packages/ui/src/viewer/viewerRoutes.ts` next to
@@ -123,9 +123,11 @@ All new files live under `packages/ui/src/library/`.
   badge, subtitle, element pills, provenance line (DOI, license, coordinate
   and bond truth), notice, busy overlay. Pure function of `MoleculeHit`.
 - `GalleryCollection.tsx`: catalog grid over `useGalleryFilters`. Live XYZ
-  previews from the old `Gallery.tsx` are dropped in favour of the existing
-  `/learn/<id>.svg` art where it exists and the palette mark otherwise, the
-  same rule `MoleculeWall` uses.
+  previews from the old `Gallery.tsx` are dropped in favour of static
+  `/learn/<id>.svg` art. `tools/build-gallery-previews.mjs` now generates
+  that art for every local XYZ entry up to 1,200 atoms (72 of 104 entries),
+  bound to the source SHA like the student previews; the palette mark remains
+  for the rest.
 - `Omol25Collection.tsx` and `Omol25RemoteBrowser.tsx`: rebuilds of the two
   OMol components. The remote browser keeps the warming state, the
   coverage label ("complete" versus "indexed preview"), the row counts,
@@ -203,9 +205,14 @@ finder handoff. No GCS dependency. Sources: gallery, research, NIST,
 PubChem, saved views. Roughly 900 lines of new UI plus tests.
 
 **Phase 2, OMol25.** `/library/omol25` with both modes, `/library/random`,
-R2 mirror of the index, precomputed facets, `lupi.browse_collection`.
-Un-retire the two `/materials/omol25*` pages. Roughly 700 lines plus
-tests.
+precomputed facets, `lupi.browse_collection`. Un-retire the two
+`/materials/omol25*` pages. Roughly 700 lines plus tests.
+
+*Delivered 2026-09-18 with one change of approach:* instead of mirroring
+the GCS index and its 27,697 XYZ files to R2, the validation index is now a
+compact same-origin asset whose record `i` is Hugging Face row `i`, verified
+against the dataset edge at build time, and structures open through the
+edge. The external bucket is no longer a runtime dependency.
 
 **Phase 3, quality.** Search analytics event for library queries (aggregate
 only, per the analytics support role), gallery-card art for the most
@@ -252,9 +259,9 @@ with this design and the amendment), `pnpm audit:gallery-claims`,
 - **External uptime.** Hugging Face's dataset viewer warms indexes lazily
   and Zenodo rate-limits. The edge already returns explicit warming and
   502 states; the UI must show them rather than an empty grid.
-- **GCS ownership.** The validation index is on a project bucket with no
-  named operator in this repo. Mirroring to R2 in phase 2 removes the
-  dependency.
+- **GCS ownership.** Resolved: the validation index ships same-origin and
+  structures open through the edge (`tools/build-omol25-validation-index.mjs`).
+  The GCS bucket is only the offline source for rebuilding the index.
 - **Bundle weight.** The library must stay off the landing chunk. The
   student-surface height and no-canvas checks in the reset receipt are the
   regression guard.
