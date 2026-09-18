@@ -12,6 +12,8 @@ import {
   isEmbeddedMobileViewerRoute,
   isMcpViewerRoute,
   isScienceDemoRoute,
+  libraryCollectionFromRoute,
+  libraryRedirectTarget,
   SEO_EDUCATION_ROUTES,
 } from '@atlas/ui/viewer/viewerRoutes';
 
@@ -29,17 +31,19 @@ import {
  */
 
 const params = new URLSearchParams(window.location.search);
+// Pre-reset homepage tabs and the OMol25 education URLs moved into the
+// Library (docs/library-restoration-design.md); research execution stays retired.
+const libraryRedirect = libraryRedirectTarget(currentPathRoute(), window.location.search);
 const retiredResearchRoute =
   params.get('view') === 'compare' ||
   [
-    '/materials/omol25',
-    '/materials/omol25-molecule-geometry',
     '/materials/million-atom-viewer',
     '/scenes/1m-copper-lattice',
     '/research',
   ].includes(normalizedPathRoute(currentPathRoute())) ||
   currentHashRoute().split('?')[0] === '/system/mlip-flywheel' ||
-  ['research', 'potentials', 'equilibrium', 'omol25'].includes(params.get('tab') ?? '');
+  params.get('tab') === 'equilibrium';
+const libraryCollection = libraryCollectionFromRoute(normalizedPathRoute(currentPathRoute()));
 const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute())] ?? null;
 
 /**
@@ -169,6 +173,19 @@ async function mountLanding() {
   }
 }
 
+async function mountLibrary(collection: NonNullable<typeof libraryCollection>) {
+  try {
+    const mod = await import('@atlas/ui/library/LibraryShell');
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <mod.LibraryShell collection={collection} onEnterViewer={mountViewer} />
+      </QueryClientProvider>,
+    );
+  } catch (err) {
+    renderError('Library import', err);
+  }
+}
+
 async function mountEducation(kind: NonNullable<typeof educationKind>) {
   try {
     const mod = await import('@atlas/ui/landing/SeoEducationShell');
@@ -178,7 +195,9 @@ async function mountEducation(kind: NonNullable<typeof educationKind>) {
   }
 }
 
-if (retiredResearchRoute) {
+if (libraryRedirect) {
+  window.location.replace(libraryRedirect);
+} else if (retiredResearchRoute) {
   document.title = 'Retired workspace | Lupi';
   document.querySelector('meta[name="robots"]')?.setAttribute('content', 'noindex,follow');
   root.render(
@@ -213,6 +232,8 @@ if (retiredResearchRoute) {
   );
 } else if (wantsViewerImmediately()) {
   void mountViewer();
+} else if (libraryCollection) {
+  void mountLibrary(libraryCollection);
 } else if (educationKind) {
   void mountEducation(educationKind);
 } else {

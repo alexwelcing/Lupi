@@ -164,7 +164,8 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
         )}
       </div>
       <p className="finder-scope">
-        {LOCAL_MOLECULES.length} ready to open · {PUBCHEM_COMPOUND_COUNT_LABEL} more on PubChem · press Enter to open
+        {LOCAL_MOLECULES.length} ready to open · {PUBCHEM_COMPOUND_COUNT_LABEL} more on PubChem · press Enter to open ·{' '}
+        <a href="/library">browse the library</a>
       </p>
       {showList && (
         <ul className="finder-results" id={`${listId}-list`} role="listbox" aria-label="Molecule matches">
@@ -198,6 +199,11 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
             </li>
           ))}
         </ul>
+      )}
+      {showList && (
+        <p className="finder-more">
+          <a href={`/library?q=${encodeURIComponent(query.trim())}`}>Search the full library for “{query.trim()}” ↗</a>
+        </p>
       )}
       {error && !loading && (
         <p className="finder-error" role="alert">

@@ -67,6 +67,20 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
     },
   },
 
+  'lupi.browse_collection': {
+    type: 'object',
+    properties: {
+      collection: {
+        type: 'string',
+        enum: ['neutral-train', 'neutral-validation', 'all-train-preview', 'train-4m-preview', 'validation-preview'],
+      },
+      offset: { type: 'number', minimum: 0 },
+      limit: { type: 'number', minimum: 1, maximum: 36 },
+      formula: { type: 'string' },
+      query: { type: 'string' },
+    },
+  },
+
   'lupi.set_viewer': {
     type: 'object',
     properties: {

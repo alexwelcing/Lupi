@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased] - Library restoration
+
+### Added
+- **`/library` route** (`packages/ui/src/library/`): the browsable, source-backed
+  molecular library removed by the 2026-09-04 reset, rebuilt on the surviving
+  federated providers and edge routes instead of reverted. `/library` searches
+  every connected source with source and element chips; `/library/gallery` is
+  the full 104-entry catalog with domain, type, and functional-group filters
+  (the `useGalleryFilters` hook is recovered from `e15adff^`);
+  `/library/omol25` pages the public ColabFit OMol25 collections through the
+  same-origin dataset edge and facets the 27,697-row validation slice by
+  periodic table; `/library/research` lists the eight cited Zenodo records;
+  `/library/potentials` mounts the NIST potential browser; `/library/random`
+  opens a random OMol25 structure. Every card states its source and what the
+  viewer adds; no inference is presented as dataset truth.
+- **Library in the header** on the landing page, and a "Search the full
+  library" handoff under the homepage finder.
+- **`lupi.browse_collection`** browser MCP tool (31 tools now) so agents can
+  page the 34.3M-row OMol25 split, not just the federated top-N.
+
+### Changed
+- **Ownership contract amended** (2026-09-18): public navigation is Explore,
+  Library, How to use, and Open a file. Research execution stays retired.
+- `?tab=browse|simulations|omol25|research|potentials` and
+  `/materials/omol25*` redirect into the Library instead of the retired page;
+  `?tab=equilibrium` and the other research-execution URLs remain retired.
+
 ## [Unreleased] - Molecule-first landing
 
 ### Changed

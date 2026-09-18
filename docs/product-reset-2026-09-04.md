@@ -95,3 +95,19 @@ success. Alex Welcing owns the merge/release decision and any required
 identity/release credentials. Merge remains gated by exact-candidate CI and
 the normative release-truth contract; deploy requires its separate owner
 dispatch and rollback chain.
+
+## Amendment 2026-09-18: the reset went too far on browsing
+
+Owner decision: the student curation, typography, and retirement of research
+execution stand. Removing the browsable, source-backed molecular library was a
+mistake. The [library restoration design](library-restoration-design.md)
+records the decision and the [ownership contract](product-ownership-contract.md)
+now lists Library in the public navigation.
+
+| Surface | 2026-09-04 decision | 2026-09-18 amendment |
+|---|---|---|
+| Home | One learning collection, first Water model, short guide, local file opening | Unchanged; the 2026-09-17 finder and molecule wall remain, plus a Library link in the header and a full-library handoff under the finder |
+| Collection | Positive list of 12 source-bound examples | Unchanged as the homepage starter set |
+| Research/Comparison URLs | Lightweight retirement explanation, no renderer, external handoff | Research execution stays retired. `?tab=browse`, `?tab=omol25`, `?tab=research`, `?tab=potentials`, and `/materials/omol25*` redirect into `/library` |
+| Library | Removed with the homepage tab shell | `/library`, `/library/gallery`, `/library/omol25`, `/library/research`, `/library/potentials`, `/library/random`, rebuilt on the surviving federated providers and edge routes |
+

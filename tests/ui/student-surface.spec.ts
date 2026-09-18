@@ -41,11 +41,12 @@ test('homepage and learning guide reflow at 320px with increased text spacing', 
 });
 
 test('retired research entry points explain the boundary without mounting a renderer', async ({ page }) => {
+  // Dataset browsing moved into /library (see tests/ui/library.spec.ts);
+  // research execution entry points stay retired.
   for (const path of [
     '/?view=compare',
-    '/?tab=research',
+    '/?tab=equilibrium',
     '/#/system/mlip-flywheel',
-    '/materials/omol25',
     '/materials/million-atom-viewer',
     '/scenes/1m-copper-lattice',
   ]) {
