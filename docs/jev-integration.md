@@ -83,6 +83,43 @@ Response:
 A `none` choice returns `best: null`. Errors return the status with an
 `error` field; the browser treats any non-2xx as "no judgment".
 
+## What the live key showed (2026-09-19)
+
+With a real key in a local Worker, the switcher was driven end to end and
+the judgment was measured on a labeled set
+([receipt](jev-switch-eval-2026-09-19.json), `tools/eval-jev-switch.mjs`).
+
+| Measure | Value |
+|---|---|
+| Labeled cases | 27 |
+| Exact expected pick | 25 (the two others were correct answers the labels omitted: cortisol is a steroid, and the gallery has no iron entry) |
+| Accuracy at confidence 0.6 or above | 0.91 |
+| Median latency, direct | 214 ms |
+| Median latency, through the local Worker | about 300 ms |
+| Input tokens per judgment | about 10,000 |
+| Cost per judgment | about $0.0004 |
+
+Three design decisions came out of playing with it rather than planning it:
+
+1. **Judge the whole gallery, not just the typed matches.** The Choice
+   pool is the local matches plus every gallery entry (up to 160), so
+   "something sweet", "painkiller", "the molecule in coffee", and "energy
+   currency of the cell" resolve to glucose, aspirin, caffeine, and ATP even
+   though the typed text matches nothing. Fit probabilities are only asked
+   for the rows already on screen.
+2. **Start the judgment when typing pauses, not when the list settles.**
+   The first build waited for the PubChem name lookup before asking Jev; a
+   slow lookup delayed the best guess by seconds. The judgment now starts
+   from the synchronous gallery matches, and PubChem has its own 1.5 s cap.
+3. **Be conservative with the answer.** A best pick at 0.6 or above leads
+   the list; between 0.3 and 0.6 it is a dashed "Maybe" hint; below that it
+   is not shown. The rest of the list keeps its deterministic order, and
+   only rows Jev rates under 0.35 fit move to the end. An intent of
+   `not_a_molecule` at 0.8 or above turns the empty state into a plain
+   sentence saying so. The instruction prefers a food, drug, or household
+   compound over a laboratory reagent, which is what turned elements-only
+   picks from acetonitrile into caffeine.
+
 ## The switcher (`packages/ui/src/switcher/`)
 
 The Elements panel is replaced by a switcher: one search box, the periodic
@@ -91,11 +128,16 @@ table, and a result list. The list is deterministic and immediate, from the
 index, and PubChem name autocomplete after two characters. Enter or a click
 swaps the structure in place and the panel stays open.
 
-Jev re-orders that list a moment later. A best pick at confidence 0.6 or
-higher moves to the top with a "Best guess" badge and the status line says
-"best guess by Jev (inferred)"; below that it is a hint only. Per-candidate
-fit sorts the remainder. The judgment is labeled inference on screen, per the
-ownership contract, and never replaces a result the index did not find.
+Elements are picked two ways, both driven by what is actually switchable:
+large chips for the elements most structures contain, with counts, and a
+compact heat-lit periodic table that fits the panel width (elements no
+structure contains are shown disabled). A typed name overrides the element
+filter, so "water" with carbon and nitrogen selected still means water. The
+last few switches sit at the top as chips for one-click A/B comparison.
+
+Jev re-orders the list a moment later as described above. The judgment is
+labeled inference on screen, per the ownership contract, and never replaces
+a result the index did not find.
 
 What leaves the browser: the typed query, the selected elements, the current
 file name, and the candidate titles and formulas. No account identifiers.

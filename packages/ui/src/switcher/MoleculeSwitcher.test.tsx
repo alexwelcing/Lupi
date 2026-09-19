@@ -6,7 +6,11 @@ vi.mock('../viewer/openMolecule', () => ({ openMolecule }));
 vi.mock('../molecules/pubchemLoad', () => ({ openPubChemMolecule: vi.fn(), pubchemAutocomplete: vi.fn(async () => []) }));
 vi.mock('../molecules/providers/omol', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../molecules/providers/omol')>();
-  return { ...actual, omolRecords: vi.fn(async () => []) };
+  return {
+    ...actual,
+    omolRecords: vi.fn(async () => []),
+    omolFacets: vi.fn(async () => ({ total: 0, elementCounts: [], functionalGroupCounts: [], natoms: { min: 0, max: 0, median: 0 } })),
+  };
 });
 
 import { MoleculeSwitcher } from './MoleculeSwitcher';
@@ -45,9 +49,9 @@ describe('MoleculeSwitcher', () => {
       });
     });
     render(<MoleculeSwitcher />);
-    fireEvent.click(screen.getByRole('button', { name: 'Nitrogen, atomic number 7' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Nitrogen (N)' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Nitrogen (N)' }));
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('containing N'));
-    expect(screen.getByRole('button', { name: 'Remove N filter' })).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Best guess')).toBeTruthy(), { timeout: 3000 });
     expect(screen.getAllByRole('option')[0].textContent).toContain('Best guess');
     expect(screen.getByRole('status').textContent).toContain('best guess by Jev (inferred)');

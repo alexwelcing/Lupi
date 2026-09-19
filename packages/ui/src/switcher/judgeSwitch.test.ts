@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyJudgment, judgeSwitch, resetJudgeAvailability } from './judgeSwitch';
+import { applyJudgment, buildJudgePool, judgeSwitch, resetJudgeAvailability } from './judgeSwitch';
 import type { SwitchCandidate } from './switchIndex';
 
 const candidate = (key: string): SwitchCandidate => ({ key, title: key, elements: [], atoms: 1, source: 'gallery', detail: '', open: async () => undefined });
@@ -15,15 +15,25 @@ describe('applyJudgment', () => {
     expect(applyJudgment(list, null).ordered.map((c) => c.key)).toEqual(['a', 'b', 'c']);
     expect(applyJudgment(list, { configured: false }).bestKey).toBeNull();
   });
-  it('promotes a confident best pick and sorts the rest by fit', () => {
-    const { ordered, bestKey } = applyJudgment(list, { configured: true, best: { key: 'c', confidence: 0.9 }, fit: { a: 0.2, b: 0.8, c: 0.95 } });
+  it('promotes a confident best pick, keeps the rest in order, and demotes only clear misfits', () => {
+    const { ordered, bestKey, hint } = applyJudgment(list, { configured: true, best: { key: 'c', confidence: 0.9 }, fit: { a: 0.2, b: 0.8, c: 0.95 } });
     expect(ordered.map((c) => c.key)).toEqual(['c', 'b', 'a']);
     expect(bestKey).toBe('c');
+    expect(hint).toBeNull();
+    const stable = applyJudgment(list, { configured: true, best: null, fit: { a: 0.6, b: 0.9, c: 0.5 } });
+    expect(stable.ordered.map((c) => c.key)).toEqual(['a', 'b', 'c']);
+  });
+  it('pulls a confident best pick in from the pool when the typed text never matched it', () => {
+    const { ordered, bestKey } = applyJudgment(list, { configured: true, best: { key: 'glucose', confidence: 0.9 }, fit: { a: 0.1, b: 0.5 } }, [candidate('glucose')]);
+    expect(ordered.map((c) => c.key)).toEqual(['glucose', 'b', 'c', 'a']);
+    expect(bestKey).toBe('glucose');
   });
   it('treats a low-confidence best pick as a hint only', () => {
-    const { ordered, bestKey } = applyJudgment(list, { configured: true, best: { key: 'c', confidence: 0.4 }, fit: {} });
+    const { ordered, bestKey, hint } = applyJudgment(list, { configured: true, best: { key: 'c', confidence: 0.4 }, fit: {} });
     expect(ordered.map((c) => c.key)).toEqual(['a', 'b', 'c']);
     expect(bestKey).toBeNull();
+    expect(hint?.key).toBe('c');
+    expect(applyJudgment(list, { configured: true, best: { key: 'c', confidence: 0.1 }, fit: {} }).hint).toBeNull();
   });
 });
 
@@ -52,5 +62,7 @@ describe('judgeSwitch', () => {
     expect(await judgeSwitch({ query: 'x', elements: [], candidates: list })).toMatchObject({ configured: true, best: { key: 'a' } });
     expect(sent!.query).toBe('x');
     expect(sent!.candidates[0]).toEqual({ key: 'a', title: 'a', elements: [], atoms: 1, source: 'gallery' });
+    const pool = buildJudgePool(list, [candidate('a'), candidate('z')]);
+    expect(pool.map((c) => `${c.key}:${c.fit}`)).toEqual(['a:true', 'b:true', 'c:true', 'z:false']);
   });
 });

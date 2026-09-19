@@ -12,11 +12,12 @@ test('switcher swaps the molecule in place from the periodic table and search', 
   await page.getByRole('button', { name: 'Switch command' }).click();
   const input = page.getByRole('combobox', { name: 'Switch molecule' });
   await expect(input).toBeFocused();
-  await expect(page.getByText('Now showing')).toBeVisible();
+  await expect(page.locator('.switcher-now strong')).toContainText(/water/i);
 
   // Element filter: carbon + nitrogen narrows to nitrogenous organics.
-  await page.getByRole('button', { name: 'Carbon, atomic number 6' }).click();
-  await page.getByRole('button', { name: 'Nitrogen, atomic number 7' }).click();
+  await page.getByRole('button', { name: 'Carbon (C)' }).click();
+  await page.getByRole('button', { name: 'Nitrogen (N)' }).click();
+  await expect(page.getByRole('button', { name: 'Nitrogen, atomic number 7' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('status').filter({ hasText: 'containing C + N' })).toBeVisible();
   const options = page.getByRole('option');
   expect(await options.count()).toBeGreaterThan(0);
@@ -27,12 +28,17 @@ test('switcher swaps the molecule in place from the periodic table and search', 
   await expect(options.first()).toContainText('Caffeine');
   await input.press('Enter');
   await expect(page).toHaveURL(/sim=caffeine/, { timeout: 30_000 });
-  await expect(page.getByText('Now showing')).toBeVisible();
   await expect(page.locator('.switcher-now strong')).toContainText(/caffeine/i, { timeout: 30_000 });
+  // The previous molecule is one click away.
+  await expect(page.getByRole('button', { name: 'Back to Water' })).toHaveCount(0);
+  await input.fill('water');
+  await input.press('Enter');
+  await expect(page).toHaveURL(/sim=water/, { timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Back to Caffeine' })).toBeVisible();
 
   // Escape inside the box clears filters instead of closing the panel.
   await input.press('Escape');
   await expect(input).toHaveValue('');
-  await expect(page.getByRole('status').filter({ hasText: /^\d+\+? matches$/ })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Familiar molecules' })).toBeVisible();
   await expect(page.getByText('best guess by Jev')).toHaveCount(0);
 });

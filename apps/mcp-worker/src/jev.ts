@@ -25,8 +25,14 @@ export const JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_API_BASE = 'https://api.typesafe.ai';
 const JEV_TIMEOUT_MS = 1_500;
 const JEV_CACHE_TTL_SECONDS = 3_600;
-const MAX_SWITCH_BODY_BYTES = 32 * 1024;
-const MAX_SWITCH_CANDIDATES = 40;
+/** Bump when instructions or criteria change so cached judgments from the old prompt are not served. */
+export const JEV_PROMPT_VERSION = 'switch-v3-everyday';
+const MAX_SWITCH_BODY_BYTES = 64 * 1024;
+/** Choice cardinality is 255; the whole gallery plus local matches fits. */
+const MAX_SWITCH_CANDIDATES = 160;
+/** Per-candidate fit Nouls are asked only for the candidates the browser is
+ *  already showing (flagged `fit`), never for the whole pool. */
+const MAX_FIT_CANDIDATES = 24;
 const MAX_QUERY_CHARS = 200;
 
 type Criteria = Record<string, string | null>;
@@ -136,6 +142,8 @@ export interface SwitchCandidate {
   elements?: string[];
   atoms?: number;
   source: string;
+  /** Ask a per-candidate fit probability for this one (bounded). */
+  fit?: boolean;
 }
 
 export interface SwitchJudgeRequest {
@@ -177,6 +185,7 @@ export function parseSwitchJudgeRequest(raw: unknown): SwitchJudgeRequest {
   if (!Array.isArray(body.candidates)) throw new JevError('"candidates" must be an array.', 400);
   const candidates: SwitchCandidate[] = [];
   const seen = new Set<string>();
+  let fitCount = 0;
   for (const item of body.candidates.slice(0, MAX_SWITCH_CANDIDATES)) {
     if (!item || typeof item !== 'object') continue;
     const candidate = item as Record<string, unknown>;
@@ -190,8 +199,10 @@ export function parseSwitchJudgeRequest(raw: unknown): SwitchJudgeRequest {
       elements: Array.isArray(candidate.elements) ? candidate.elements.filter((e): e is string => typeof e === 'string').slice(0, 20) : undefined,
       atoms: typeof candidate.atoms === 'number' && Number.isFinite(candidate.atoms) ? Math.round(candidate.atoms) : undefined,
       source: typeof candidate.source === 'string' ? candidate.source.slice(0, 20) : 'unknown',
+      fit: candidate.fit === true && fitCount < MAX_FIT_CANDIDATES ? ((fitCount += 1), true) : undefined,
     });
   }
+  if (fitCount === 0) candidates.slice(0, MAX_FIT_CANDIDATES).forEach((candidate) => { candidate.fit = true; });
   if (!query && elements.length === 0) throw new JevError('Provide a "query" or at least one element.', 400);
   if (candidates.length === 0) throw new JevError('Provide at least one candidate.', 400);
   const loaded = body.loaded && typeof body.loaded === 'object' && typeof (body.loaded as { title?: unknown }).title === 'string'
@@ -217,11 +228,12 @@ export function buildSwitchQuestions(request: SwitchJudgeRequest): Record<string
     best: {
       type: 'choice',
       instructions:
-        'Which candidate in `candidates` best satisfies `request`? Prefer the exact molecule when one is named; when only elements or a class are given, prefer the smallest, most widely recognized molecule that fits. Choose `none` if nothing fits.',
+        'Which candidate in `candidates` best satisfies `request`? Prefer the exact molecule when one is named; when only elements or a class are given, prefer the molecule most people would have heard of (a food, drug, or household compound) over a laboratory reagent, and among equally familiar options prefer the smaller one. Choose `none` if nothing fits.',
       criteria,
     },
   };
   for (const candidate of request.candidates) {
+    if (!candidate.fit) continue;
     questions[`fit:${candidate.key}`] = {
       type: 'noul',
       instructions: `The candidate with key \`${candidate.key}\` satisfies what \`request\` asks for.`,
@@ -253,6 +265,7 @@ export function mapSwitchAnswers(request: SwitchJudgeRequest, result: JevResult)
   const best = result.answers.best;
   const fit: Record<string, number> = {};
   for (const candidate of request.candidates) {
+    if (!candidate.fit) continue;
     const answer = result.answers[`fit:${candidate.key}`];
     if (answer && answer.type === 'noul' && typeof answer.noul === 'number') fit[candidate.key] = round3(answer.noul);
   }
@@ -303,7 +316,7 @@ export async function handleSwitchJudge(
   if (!jevConfigured(env)) return jsonResponse({ configured: false } satisfies SwitchJudgeResponse);
 
   const canonical = JSON.stringify({ q: parsed.query, e: parsed.elements, c: parsed.candidates.map((c) => c.key), l: parsed.loaded?.title ?? null });
-  const cacheKey = new Request(`https://jev-cache.lupi.live/switch/${await sha256Hex(canonical)}`);
+  const cacheKey = new Request(`https://jev-cache.lupi.live/switch/${JEV_PROMPT_VERSION}/${await sha256Hex(canonical)}`);
   const cache = options.cache === undefined ? (globalThis as { caches?: { default?: Cache } }).caches?.default ?? null : options.cache;
   if (cache) {
     const hit = await cache.match(cacheKey).catch(() => null);

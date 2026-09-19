@@ -1,39 +1,42 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ELEMENT_DATA, getAtomicNumberBySymbol } from '@atlas/core';
-import { PeriodicTableGrid } from '../periodic-table/PeriodicTableGrid';
-import { ElementDetailCard } from '../periodic-table/ElementDetailCard';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../store';
 import { trackLibrarySearch } from '../library/trackLibrarySearch';
-import { applyJudgment, judgeSwitch, type SwitchJudgment } from './judgeSwitch';
-import { findSwitchCandidates, galleryCandidates, type SwitchCandidate } from './switchIndex';
+import { ElementPicker } from './ElementPicker';
+import { applyJudgment, buildJudgePool, judgeSwitch, type SwitchJudgment } from './judgeSwitch';
+import { recentSwitches, rememberSwitch, subscribeRecent } from './recent';
+import { findSwitchCandidates, galleryCandidates, galleryPool, type SwitchCandidate } from './switchIndex';
 import './switcher.css';
 
 /**
  * Molecule switcher: the fastest way to change what is on screen.
  *
- * Type a name, formula, or element, or click elements on the periodic table,
- * and a result list appears immediately from the local index. Enter or a
- * click swaps the molecule in place; the panel stays open so the next switch
- * is one keystroke away. When the edge has Jev configured, its judgment
- * arrives a moment later and re-orders the list with a labeled best guess.
- * Without it, the deterministic list is the whole feature.
+ * Type a name, formula, or element, or tap elements, and a result list
+ * appears immediately from the local index. Enter or a click swaps the
+ * molecule in place; the panel stays open so the next switch is one
+ * keystroke away, and the last few switches sit at the top as chips. When
+ * the edge has Jev configured, its judgment lands a moment later and
+ * re-orders the list with a labeled best guess, which may be a molecule the
+ * typed text never matched. Without it the deterministic list is the whole
+ * feature.
  */
 const LOCAL_DEBOUNCE_MS = 120;
 const JUDGE_DEBOUNCE_MS = 250;
 const RESULT_LIMIT = 24;
 
-const SOURCE_LABEL: Record<SwitchCandidate['source'], string> = {
-  gallery: 'Lupi gallery',
+const SOURCE_LABEL: Record<SwitchCandidate['source'], string | null> = {
+  gallery: null,
   omol: 'OMol25',
   pubchem: 'PubChem',
 };
 
 export function MoleculeSwitcher() {
   const file = useStore((state) => state.file);
+  const recent = useSyncExternalStore(subscribeRecent, recentSwitches, recentSwitches);
   const [query, setQuery] = useState('');
   const [elements, setElements] = useState<string[]>([]);
   const [candidates, setCandidates] = useState<SwitchCandidate[]>(() => galleryCandidates({ query: '', elements: [] }));
   const [judgment, setJudgment] = useState<SwitchJudgment | null>(null);
+  const [judging, setJudging] = useState(false);
   const [active, setActive] = useState(0);
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
@@ -43,8 +46,8 @@ export function MoleculeSwitcher() {
   const searchGeneration = useRef(0);
   const judgeAbort = useRef<AbortController | null>(null);
 
-  const selectedZ = useMemo(() => elements.map((symbol) => getAtomicNumberBySymbol(symbol)).filter((z): z is number => typeof z === 'number'), [elements]);
   const elementsKey = elements.join(',');
+  const idle = !query.trim() && elements.length === 0;
 
   // Local candidates: immediate, deterministic.
   useEffect(() => {
@@ -55,7 +58,6 @@ export function MoleculeSwitcher() {
         .then((results) => {
           if (generation !== searchGeneration.current) return;
           setCandidates(results);
-          setJudgment(null);
           setActive(0);
           trackLibrarySearch({ collection: 'switcher', source: 'viewer', hasQuery: query.trim().length > 0, elementCount: elements.length, resultCount: results.length });
         })
@@ -67,28 +69,43 @@ export function MoleculeSwitcher() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, elementsKey]);
 
-  // Jev judgment: never blocks, only re-orders once it lands.
+  // Jev judgment: never blocks, only re-orders once it lands. It starts from
+  // the synchronous gallery matches and the gallery pool the moment typing
+  // pauses, so a slow OMol25 or PubChem lookup never delays the best guess,
+  // and a query with zero local matches still gets one.
   useEffect(() => {
     judgeAbort.current?.abort();
-    if (loading || candidates.length === 0 || (!query.trim() && elements.length === 0)) return;
+    setJudgment(null);
+    if (idle) {
+      setJudging(false);
+      return;
+    }
     const controller = new AbortController();
     judgeAbort.current = controller;
+    setJudging(true);
     const timer = setTimeout(() => {
+      const shown = galleryCandidates({ query, elements, limit: RESULT_LIMIT });
       judgeSwitch(
-        { query: query.trim(), elements, candidates, loaded: file ? { title: file.name } : null },
+        { query: query.trim(), elements, candidates: buildJudgePool(shown, galleryPool(elements)), loaded: file ? { title: file.name } : null },
         controller.signal,
-      ).then((result) => {
-        if (!controller.signal.aborted && result?.configured) setJudgment(result);
-      });
+      )
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          if (result?.configured) setJudgment(result);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setJudging(false);
+        });
     }, JUDGE_DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidates, loading]);
+  }, [query, elementsKey]);
 
-  const { ordered, bestKey } = useMemo(() => applyJudgment(candidates, judgment), [candidates, judgment]);
+  const { ordered, bestKey, hint } = useMemo(() => applyJudgment(candidates, judgment, galleryPool(elements)), [candidates, judgment, elementsKey]);
+  const notAMolecule = judgment?.intent?.choice === 'not_a_molecule' && judgment.intent.confidence >= 0.8;
 
   const open = useCallback(
     async (candidate: SwitchCandidate) => {
@@ -97,6 +114,7 @@ export function MoleculeSwitcher() {
       setError(null);
       try {
         await candidate.open();
+        rememberSwitch(candidate);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : `Could not open ${candidate.title}.`);
       } finally {
@@ -106,9 +124,7 @@ export function MoleculeSwitcher() {
     [opening],
   );
 
-  const toggleElement = (z: number) => {
-    const symbol = ELEMENT_DATA[z]?.symbol;
-    if (!symbol) return;
+  const toggleElement = (symbol: string) => {
     setElements((previous) => (previous.includes(symbol) ? previous.filter((item) => item !== symbol) : [...previous, symbol]));
     inputRef.current?.focus();
   };
@@ -124,7 +140,7 @@ export function MoleculeSwitcher() {
       event.preventDefault();
       const pick = ordered[active] ?? ordered[0];
       if (pick) void open(pick);
-    } else if (event.key === 'Escape' && (query || elements.length)) {
+    } else if (event.key === 'Escape' && !idle) {
       event.preventDefault();
       event.stopPropagation();
       setQuery('');
@@ -134,14 +150,30 @@ export function MoleculeSwitcher() {
 
   const status = loading
     ? 'Searching…'
-    : `${ordered.length}${ordered.length >= RESULT_LIMIT ? '+' : ''} ${ordered.length === 1 ? 'match' : 'matches'}${elements.length ? ` containing ${elements.join(' + ')}` : ''}${judgment?.configured ? ' · best guess by Jev (inferred)' : ''}`;
+    : idle
+      ? 'Familiar molecules. Type, or tap an element.'
+      : `${ordered.length}${ordered.length >= RESULT_LIMIT ? '+' : ''} ${ordered.length === 1 ? 'match' : 'matches'}${elements.length ? ` containing ${elements.join(' + ')}` : ''}${
+          judgment?.configured ? ' · best guess by Jev (inferred)' : judging ? ' · asking for a best guess…' : ''
+        }`;
 
   return (
     <div className="switcher">
-      <p className="switcher-now">
-        <span>Now showing</span>
+      <div className="switcher-now">
+        <span>Now</span>
         <strong>{file?.name ?? 'nothing yet'}</strong>
-      </p>
+        {recent.filter((item) => item.title !== file?.name).length > 0 && (
+          <span className="switcher-recent" role="group" aria-label="Recent molecules">
+            {recent
+              .filter((item) => item.title !== file?.name)
+              .slice(0, 4)
+              .map((item) => (
+                <button key={item.key} type="button" onClick={() => void open(item)} disabled={opening !== null} aria-label={`Back to ${item.title}`}>
+                  ↩ {item.title}
+                </button>
+              ))}
+          </span>
+        )}
+      </div>
       <input
         ref={inputRef}
         type="search"
@@ -155,29 +187,21 @@ export function MoleculeSwitcher() {
         spellCheck={false}
         autoFocus
         value={query}
-        placeholder="Name, formula, or element… Enter switches"
+        placeholder="caffeine, C6H6, “something sweet”… Enter switches"
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      <div className="switcher-chips" aria-live="polite">
-        {elements.length === 0 ? (
-          <span>Click elements below to filter (AND).</span>
-        ) : (
-          <>
-            {elements.map((symbol) => (
-              <button key={symbol} type="button" onClick={() => setElements((previous) => previous.filter((item) => item !== symbol))} aria-label={`Remove ${symbol} filter`}>
-                {symbol} ×
-              </button>
-            ))}
-            <button type="button" className="switcher-clear" onClick={() => setElements([])}>
-              Clear elements
-            </button>
-          </>
-        )}
-      </div>
-      <div className="switcher-table" tabIndex={0} role="region" aria-label="Scrollable periodic table">
-        <PeriodicTableGrid selected={selectedZ} onToggle={toggleElement} cellSize={28} showLegend={false} />
-      </div>
+      <ElementPicker selected={elements} onToggle={toggleElement} />
+      {elements.length > 0 && (
+        <div className="switcher-chips" aria-live="polite">
+          <span>
+            Containing <b>{elements.join(' + ')}</b>
+          </span>
+          <button type="button" className="switcher-clear" onClick={() => setElements([])}>
+            Clear elements
+          </button>
+        </div>
+      )}
       <p className="switcher-status" role="status">
         {status}
       </p>
@@ -186,35 +210,55 @@ export function MoleculeSwitcher() {
           {error}
         </p>
       )}
+      {hint && (
+        <p className="switcher-hint">
+          <span>Maybe</span>
+          <button type="button" onClick={() => void open(hint)} disabled={opening !== null} aria-label={`Switch to ${hint.title}`}>
+            {hint.title}
+            {hint.formula ? ` · ${hint.formula}` : ''}
+          </button>
+          <span>low confidence, inferred</span>
+        </p>
+      )}
       {ordered.length === 0 && !loading ? (
-        <p className="switcher-empty">No match in the gallery, OMol25, or PubChem names. Try fewer elements or a name.</p>
+        <p className="switcher-empty">
+          {judging
+            ? 'No direct match. Asking for a best guess…'
+            : notAMolecule
+              ? 'That does not read as a molecule request. Try a name, a formula, or an element.'
+              : 'No match in the gallery, OMol25, or PubChem names. Try fewer elements or a name.'}
+        </p>
       ) : (
         <ul className="switcher-results" id={listId} role="listbox" aria-label="Molecules to switch to">
-          {ordered.map((candidate, index) => (
-            <li key={candidate.key} id={`${listId}-${index}`} role="option" aria-selected={index === active} className={index === active ? 'is-active' : undefined}>
-              <button
-                type="button"
-                onMouseEnter={() => setActive(index)}
-                onClick={() => void open(candidate)}
-                disabled={opening !== null}
-                aria-busy={opening === candidate.key}
-                aria-label={`Switch to ${candidate.title}`}
-              >
-                <strong>{candidate.title}</strong>
-                <small>{candidate.detail}</small>
-                <span className={`switcher-badge${candidate.key === bestKey ? ' is-best' : ''}`}>
-                  {candidate.key === bestKey ? 'Best guess' : SOURCE_LABEL[candidate.source]}
-                </span>
-              </button>
-            </li>
-          ))}
+          {ordered.map((candidate, index) => {
+            const badge = candidate.key === bestKey ? 'Best guess' : SOURCE_LABEL[candidate.source];
+            return (
+              <li key={candidate.key} id={`${listId}-${index}`} role="option" aria-selected={index === active} className={index === active ? 'is-active' : undefined}>
+                <button
+                  type="button"
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => void open(candidate)}
+                  disabled={opening !== null}
+                  aria-busy={opening === candidate.key}
+                  aria-label={`Switch to ${candidate.title}`}
+                >
+                  {candidate.image ? (
+                    <img src={candidate.image} alt="" width="40" height="40" loading="lazy" decoding="async" />
+                  ) : (
+                    <span className="switcher-glyph" aria-hidden="true">
+                      {candidate.source === 'omol' ? '◇' : candidate.source === 'pubchem' ? '⌕' : '◉'}
+                    </span>
+                  )}
+                  <span className="switcher-text">
+                    <strong>{candidate.title}</strong>
+                    <small>{candidate.detail}</small>
+                  </span>
+                  {badge && <span className={`switcher-badge${candidate.key === bestKey ? ' is-best' : ''}`}>{badge}</span>}
+                </button>
+              </li>
+            );
+          })}
         </ul>
-      )}
-      {selectedZ.length === 1 && (
-        <details className="switcher-facts">
-          <summary>About {ELEMENT_DATA[selectedZ[0]]?.name}</summary>
-          <ElementDetailCard z={selectedZ[0]} />
-        </details>
       )}
     </div>
   );

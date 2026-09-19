@@ -9,6 +9,7 @@ vi.mock('../molecules/providers/omol', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../molecules/providers/omol')>();
   return {
     ...actual,
+    omolFacets: vi.fn(async () => ({ total: 3, elementCounts: [{ element: 'C', count: 3 }, { element: 'H', count: 3 }, { element: 'O', count: 1 }], functionalGroupCounts: [], natoms: { min: 5, max: 12, median: 9 } })),
     omolRecords: vi.fn(async () => [
       { id: 'nval-0', formula: 'C2H6O', elements: ['C', 'H', 'O'], natoms: 9, gap: null, src: 'x' },
       { id: 'nval-1', formula: 'C6H6', elements: ['C', 'H'], natoms: 12, gap: null, src: 'x' },
@@ -17,7 +18,7 @@ vi.mock('../molecules/providers/omol', async (importOriginal) => {
   };
 });
 
-import { findSwitchCandidates, galleryCandidates, mergeCandidates, omolCandidates } from './switchIndex';
+import { findSwitchCandidates, galleryCandidates, mergeCandidates, omolCandidates, switchElementCounts } from './switchIndex';
 
 describe('switch candidate index', () => {
   it('lists familiar gallery molecules first with no query and filters by element AND', () => {
@@ -29,12 +30,28 @@ describe('switch candidate index', () => {
     expect(withN.some((c) => c.elements.length === 0)).toBe(false);
   });
 
+  it('lets a typed name override the element filter, and never lets OMol25 match a word', async () => {
+    const withElements = galleryCandidates({ query: 'water', elements: ['C', 'N'] });
+    expect(withElements[0]?.title).toBe('Water');
+    expect(galleryCandidates({ query: 'ol', elements: ['N'] }).every((c) => c.elements.includes('N'))).toBe(true);
+    expect(await omolCandidates({ query: 'water', elements: ['C', 'N'] })).toEqual([]);
+    const merged = await findSwitchCandidates({ query: 'water', elements: ['C', 'N'] });
+    expect(merged[0]?.title).toBe('Water');
+  });
+
   it('matches OMol25 by formula prefix or elements, smallest first', async () => {
     const byElements = await omolCandidates({ query: '', elements: ['C', 'O'] });
     expect(byElements.map((c) => c.title)).toEqual(['C2H6O']);
     const byFormula = await omolCandidates({ query: 'C', elements: [] });
     expect(byFormula.map((c) => c.title)).toEqual(['CH4', 'C2H6O', 'C6H6']);
     expect(await omolCandidates({ query: 'benzene', elements: [] })).toEqual([]);
+  });
+
+  it('counts switchable structures per element, gallery first', async () => {
+    const counts = await switchElementCounts();
+    expect(['C', 'H']).toContain(counts[0].symbol);
+    expect(counts.find((c) => c.symbol === 'C')?.omol).toBe(3);
+    expect(counts.every((c) => c.gallery + c.omol > 0)).toBe(true);
   });
 
   it('merges gallery, OMol25, and PubChem without duplicate titles', async () => {

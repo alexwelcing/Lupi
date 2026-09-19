@@ -963,6 +963,10 @@ button:focus:not(:focus-visible) {
   z-index: 210;
   width: clamp(336px, 31vw, 388px);
   max-width: calc(100% - 112px);
+}
+/* The molecule switcher carries an 18-column periodic table; give it room. */
+.lupine-command-panel[data-panel='elements'] {
+  width: clamp(360px, 42vw, 560px);
   display: flex;
   flex-direction: column;
   overflow: hidden;

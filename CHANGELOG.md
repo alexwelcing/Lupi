@@ -12,7 +12,18 @@
 - **`POST /v1/switch/judge`**: intent, best pick, and per-candidate fit for
   the molecule switcher, bounded to 40 candidates and 32 KB.
 
+- **Labeled evaluation of the switcher judgment** (`tools/eval-jev-switch.mjs`,
+  `docs/jev-switch-eval-2026-09-19.json`): 27 cases, 25 exact picks and two
+  correct picks the labels omitted, median 214 ms direct.
+
 ### Changed
+- **Switcher redesigned against the live model**: element chips with counts
+  plus a compact heat-lit table that fits the panel; recent-molecule chips;
+  thumbnails; the judgment pool is the whole gallery so class queries work;
+  conservative ordering with a "Maybe" hint below the promotion threshold;
+  the judgment starts when typing pauses rather than after the PubChem
+  lookup; a typed name overrides the element filter; the panel is wider on
+  desktop.
 - **Elements panel replaced by the molecule switcher**
   (`packages/ui/src/switcher/`): one search box plus the periodic table,
   results on the first keystroke from the gallery, the same-origin OMol25

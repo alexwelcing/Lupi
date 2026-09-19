@@ -1,5 +1,5 @@
 import { LOCAL_MOLECULES, scoreLocalMolecule, type LocalMolecule } from '../landing/moleculeIndex';
-import { elementsFromFormula, omolRecords, omolStructureUrl, type OmolRecord } from '../molecules/providers/omol';
+import { elementsFromFormula, omolFacets, omolRecords, omolStructureUrl, type OmolRecord } from '../molecules/providers/omol';
 import { openPubChemMolecule, pubchemAutocomplete } from '../molecules/pubchemLoad';
 import { openMolecule } from '../viewer/openMolecule';
 
@@ -18,6 +18,8 @@ export interface SwitchCandidate {
   atoms: number;
   source: 'gallery' | 'omol' | 'pubchem';
   detail: string;
+  /** Static preview art when the gallery has it. */
+  image?: string;
   open: () => Promise<void>;
 }
 
@@ -47,6 +49,7 @@ function galleryCandidate(molecule: LocalMolecule): SwitchCandidate {
     atoms: molecule.atoms,
     source: 'gallery',
     detail: [molecule.formula, atomsLabel(molecule.atoms), molecule.domain].filter(Boolean).join(' · '),
+    image: molecule.image,
     open: async () => {
       const result = await openMolecule({ kind: 'gallery', id: molecule.id, history: 'push' });
       if (!result.ok) throw new Error(result.message);
@@ -84,28 +87,43 @@ function pubchemCandidate(name: string): SwitchCandidate {
   };
 }
 
+const POOL_CACHE: { value: SwitchCandidate[] | null } = { value: null };
+function poolCache(): SwitchCandidate[] {
+  POOL_CACHE.value ??= LOCAL_MOLECULES.map(galleryCandidate);
+  return POOL_CACHE.value;
+}
+
 function hasAll(elements: string[], wanted: string[]): boolean {
   return wanted.every((symbol) => elements.includes(symbol));
 }
+
+/** A title or formula match this strong is an explicit ask and overrides the
+ *  element filter: typing "water" with C and N selected still means water. */
+const EXPLICIT_MATCH_SCORE = 75;
 
 /** Gallery matches, instant. With elements selected, only entries whose formula
  *  is known can qualify, so an unlabeled material never masquerades as a match. */
 export function galleryCandidates({ query, elements, limit = GALLERY_LIMIT }: SwitchQuery): SwitchCandidate[] {
   const q = query.trim();
-  const pool = LOCAL_MOLECULES.map(galleryCandidate).filter((candidate) => !elements.length || hasAll(candidate.elements, elements));
-  if (!q) return pool.slice(0, limit);
-  return pool
-    .map((candidate, index) => ({ candidate, score: scoreLocalMolecule(LOCAL_MOLECULES.find((m) => `gallery:${m.id}` === candidate.key)!, q), index }))
-    .filter((entry) => entry.score > 0)
+  const all = galleryPool();
+  const filtered = elements.length ? all.filter((candidate) => hasAll(candidate.elements, elements)) : all;
+  if (!q) return filtered.slice(0, limit);
+  const byKey = new Map(LOCAL_MOLECULES.map((molecule) => [`gallery:${molecule.id}`, molecule]));
+  return all
+    .map((candidate, index) => ({ candidate, score: scoreLocalMolecule(byKey.get(candidate.key)!, q), index }))
+    .filter((entry) => entry.score >= EXPLICIT_MATCH_SCORE || (entry.score > 0 && (!elements.length || hasAll(entry.candidate.elements, elements))))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, limit)
     .map((entry) => entry.candidate);
 }
 
-/** OMol25 validation matches: formula prefix or element AND-filter, smallest first. */
+/** OMol25 validation matches: formula prefix or element AND-filter, smallest
+ *  first. A typed word that is not a formula matches nothing here; names are
+ *  the gallery's and PubChem's job. */
 export async function omolCandidates({ query, elements, limit = OMOL_LIMIT }: SwitchQuery): Promise<SwitchCandidate[]> {
   const q = query.trim();
   const looksLikeFormula = /^[A-Z][A-Za-z0-9]*$/.test(q);
+  if (q && !looksLikeFormula) return [];
   if (!elements.length && !looksLikeFormula) return [];
   const records = await omolRecords();
   const matches: OmolRecord[] = [];
@@ -114,19 +132,63 @@ export async function omolCandidates({ query, elements, limit = OMOL_LIMIT }: Sw
     if (q && looksLikeFormula && !record.formula.startsWith(q)) continue;
     matches.push(record);
   }
-  matches.sort((a, b) => a.natoms - b.natoms || a.formula.localeCompare(b.formula));
+  // Exact formula first, then prefix matches, smallest first within each.
+  matches.sort((a, b) => Number(b.formula === q) - Number(a.formula === q) || a.natoms - b.natoms || a.formula.localeCompare(b.formula));
   return matches.slice(0, limit).map(omolCandidate);
 }
+
+/** A slow PubChem must never hold the list: past this the names simply do not appear. */
+const PUBCHEM_TIMEOUT_MS = 1_500;
 
 export async function pubchemCandidates({ query, elements, limit = PUBCHEM_LIMIT }: SwitchQuery): Promise<SwitchCandidate[]> {
   const q = query.trim();
   if (q.length < 2 || elements.length) return [];
   try {
-    const names = await pubchemAutocomplete(q, limit);
+    const names = await Promise.race([
+      pubchemAutocomplete(q, limit),
+      new Promise<string[]>((resolve) => setTimeout(() => resolve([]), PUBCHEM_TIMEOUT_MS)),
+    ]);
     return names.map(pubchemCandidate);
   } catch {
     return [];
   }
+}
+
+/** Every gallery entry as a candidate, built once. This is the pool Jev
+ *  chooses from for class and description queries ("something sweet"), so a
+ *  best guess can be a molecule the typed text never matched. */
+export function galleryPool(elements: string[] = []): SwitchCandidate[] {
+  const pool = poolCache();
+  return elements.length ? pool.filter((candidate) => hasAll(candidate.elements, elements)) : pool;
+}
+
+export interface ElementCount {
+  symbol: string;
+  gallery: number;
+  omol: number;
+}
+
+let countsCache: Promise<ElementCount[]> | null = null;
+
+/** How many switchable structures contain each element, gallery plus the
+ *  OMol25 validation slice. Drives the chip order and the table heat. */
+export function switchElementCounts(): Promise<ElementCount[]> {
+  countsCache ??= (async () => {
+    const gallery = new Map<string, number>();
+    for (const candidate of galleryPool()) for (const symbol of candidate.elements) gallery.set(symbol, (gallery.get(symbol) ?? 0) + 1);
+    let omol = new Map<string, number>();
+    try {
+      const facets = await omolFacets();
+      omol = new Map(facets.elementCounts.map((entry) => [entry.element, entry.count]));
+    } catch {
+      omol = new Map();
+    }
+    const symbols = new Set([...gallery.keys(), ...omol.keys()]);
+    return [...symbols]
+      .map((symbol) => ({ symbol, gallery: gallery.get(symbol) ?? 0, omol: omol.get(symbol) ?? 0 }))
+      .sort((a, b) => b.gallery - a.gallery || b.omol - a.omol || a.symbol.localeCompare(b.symbol));
+  })();
+  return countsCache;
 }
 
 /** Merge the three sources, gallery first, without duplicate titles. */

@@ -18,7 +18,11 @@ export interface SwitchJudgment {
 export const SWITCH_JUDGE_PATH = '/v1/switch/judge';
 /** Below this the best pick is shown as a hint only, never moved to the top. */
 export const BEST_PICK_THRESHOLD = 0.6;
-const JUDGE_TIMEOUT_MS = 2_000;
+const JUDGE_TIMEOUT_MS = 3_500;
+/** A best pick below the promotion threshold but at or above this is offered as a hint. */
+export const HINT_THRESHOLD = 0.3;
+/** Candidates whose fit falls below this move to the end; the rest keep the deterministic order. */
+export const FIT_DEMOTE_THRESHOLD = 0.35;
 
 let unavailable = false;
 
@@ -26,8 +30,29 @@ export function resetJudgeAvailability(): void {
   unavailable = false;
 }
 
+export const MAX_POOL = 160;
+
+/** Local matches first (they get fit probabilities), then the rest of the
+ *  gallery pool so Jev can name a molecule the typed text never matched. */
+export function buildJudgePool(shown: SwitchCandidate[], pool: SwitchCandidate[]): Array<SwitchCandidate & { fit: boolean }> {
+  const seen = new Set<string>();
+  const merged: Array<SwitchCandidate & { fit: boolean }> = [];
+  for (const candidate of shown) {
+    if (seen.has(candidate.key)) continue;
+    seen.add(candidate.key);
+    merged.push({ ...candidate, fit: true });
+  }
+  for (const candidate of pool) {
+    if (merged.length >= MAX_POOL) break;
+    if (seen.has(candidate.key)) continue;
+    seen.add(candidate.key);
+    merged.push({ ...candidate, fit: false });
+  }
+  return merged;
+}
+
 export async function judgeSwitch(
-  request: { query: string; elements: string[]; candidates: SwitchCandidate[]; loaded?: { title: string; formula?: string } | null },
+  request: { query: string; elements: string[]; candidates: Array<SwitchCandidate & { fit?: boolean }>; loaded?: { title: string; formula?: string } | null },
   signal?: AbortSignal,
 ): Promise<SwitchJudgment | null> {
   if (unavailable || typeof fetch !== 'function') return null;
@@ -46,13 +71,14 @@ export async function judgeSwitch(
         query: request.query,
         elements: request.elements,
         loaded: request.loaded ?? null,
-        candidates: request.candidates.slice(0, 40).map((candidate) => ({
+        candidates: request.candidates.slice(0, MAX_POOL).map((candidate) => ({
           key: candidate.key,
           title: candidate.title,
           formula: candidate.formula,
           elements: candidate.elements,
           atoms: candidate.atoms || undefined,
           source: candidate.source,
+          fit: candidate.fit || undefined,
         })),
       }),
     });
@@ -75,17 +101,29 @@ export async function judgeSwitch(
   }
 }
 
-/** Apply a judgment: a confident best pick leads, the rest sort by fit. Pure. */
-export function applyJudgment(candidates: SwitchCandidate[], judgment: SwitchJudgment | null): { ordered: SwitchCandidate[]; bestKey: string | null } {
-  if (!judgment?.configured) return { ordered: candidates, bestKey: null };
+export interface AppliedJudgment {
+  ordered: SwitchCandidate[];
+  bestKey: string | null;
+  /** A pick Jev leaned toward without enough confidence to promote it. */
+  hint: SwitchCandidate | null;
+}
+
+/**
+ * Apply a judgment, conservatively. A confident best pick leads, even when
+ * the typed text never matched it (it is pulled in from the pool). The rest
+ * keep their deterministic order; only candidates Jev is fairly sure do not
+ * fit move to the end. A best pick below the promotion threshold becomes a
+ * hint rather than silently vanishing. Pure.
+ */
+export function applyJudgment(candidates: SwitchCandidate[], judgment: SwitchJudgment | null, pool: SwitchCandidate[] = []): AppliedJudgment {
+  if (!judgment?.configured) return { ordered: candidates, bestKey: null, hint: null };
   const fit = judgment.fit ?? {};
-  const bestKey = judgment.best && judgment.best.confidence >= BEST_PICK_THRESHOLD ? judgment.best.key : null;
-  const ordered = [...candidates].sort((a, b) => {
-    if (bestKey) {
-      if (a.key === bestKey) return -1;
-      if (b.key === bestKey) return 1;
-    }
-    return (fit[b.key] ?? -1) - (fit[a.key] ?? -1);
-  });
-  return { ordered, bestKey: bestKey && ordered.some((c) => c.key === bestKey) ? bestKey : null };
+  const resolve = (key: string) => candidates.find((c) => c.key === key) ?? pool.find((c) => c.key === key) ?? null;
+  const confidence = judgment.best?.confidence ?? 0;
+  const best = judgment.best && confidence >= BEST_PICK_THRESHOLD ? resolve(judgment.best.key) : null;
+  const hint = !best && judgment.best && confidence >= HINT_THRESHOLD ? resolve(judgment.best.key) : null;
+  const rest = candidates.filter((c) => c.key !== best?.key);
+  const kept = rest.filter((c) => (fit[c.key] ?? 1) >= FIT_DEMOTE_THRESHOLD);
+  const demoted = rest.filter((c) => (fit[c.key] ?? 1) < FIT_DEMOTE_THRESHOLD);
+  return { ordered: best ? [best, ...kept, ...demoted] : [...kept, ...demoted], bestKey: best ? best.key : null, hint };
 }
