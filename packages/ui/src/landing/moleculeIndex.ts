@@ -10,6 +10,7 @@
 
 import { ALL_EXAMPLES, type GalleryExample } from './shared';
 import { galleryNomenclatureTags, nomenclatureForGalleryId } from '../galleryNomenclature';
+import previews from '../gallery/previews.json';
 
 export interface LocalMolecule {
   id: string;
@@ -26,11 +27,8 @@ export interface LocalMolecule {
   haystack: string;
 }
 
-/** Ids with preview art in apps/web/public/learn. */
-const PREVIEW_IDS = new Set([
-  'acetone', 'aspirin', 'benzene', 'c60_buckyball', 'caffeine', 'cnt_6_6',
-  'diamond_crystal', 'ethanol', 'glucose', 'graphene_ribbon', 'phenol', 'water',
-]);
+/** Ids with preview art in apps/web/public/learn (tools/build-gallery-previews.mjs). */
+const PREVIEW_IDS = new Set<string>(previews.ids);
 
 /** Molecules most visitors recognize; they lead the wall. */
 export const QUICK_PICK_IDS = [

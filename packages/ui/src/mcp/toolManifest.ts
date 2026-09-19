@@ -40,6 +40,11 @@ export const MCP_TOOL_DEFINITIONS: McpToolManifestEntry[] = [
     parameters: LUPI_MCP_SCHEMAS['lupi.search_molecules'],
   },
   {
+    name: 'lupi.browse_collection',
+    description: 'Page through a remote OMol25 collection via the same-origin dataset edge and return source-coordinate load specs; no rows are stored by Lupi.',
+    parameters: LUPI_MCP_SCHEMAS['lupi.browse_collection'],
+  },
+  {
     name: 'lupi.set_viewer',
     description: 'Apply a broad viewer patch for common display, coloring, camera, and style settings.',
     parameters: LUPI_MCP_SCHEMAS['lupi.set_viewer'],

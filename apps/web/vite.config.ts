@@ -360,6 +360,10 @@ export default defineConfig(({ command }) => ({
       // Cloudflare Worker. During Vite development, forward only that narrow
       // namespace to a local `wrangler dev` process so the UI exercises the
       // real edge contract instead of a browser-only mock.
+      '/v1/switch': {
+        target: process.env.VITE_DATA_EDGE_ORIGIN || 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
       '/v1/datasets': {
         target: process.env.VITE_DATA_EDGE_ORIGIN || 'http://127.0.0.1:8787',
         changeOrigin: true,

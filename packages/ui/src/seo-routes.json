@@ -78,32 +78,32 @@
       }
     },
     "omol25": {
-      "title": "Retired workspace | Lupi",
-      "description": "This workspace has retired from the Lupi learning app.",
+      "title": "Moved to the Library | Lupi",
+      "description": "OMol25 browsing now lives in the Lupi Library at /library/omol25.",
       "canonicalPath": "/materials/omol25",
       "image": "https://lupi.live/gallery/snapshots/diamond_crystal.jpg",
       "imageAlt": "Lupi molecular learning app",
       "jsonLd": {
         "@context": "https://schema.org",
         "@type": "WebPage",
-        "name": "Retired workspace | Lupi",
+        "name": "Moved to the Library | Lupi",
         "url": "https://lupi.live/materials/omol25",
-        "description": "This workspace has retired from the Lupi learning app."
+        "description": "OMol25 browsing now lives in the Lupi Library at /library/omol25."
       },
       "robots": "noindex,follow"
     },
     "omol25Geometry": {
-      "title": "Retired workspace | Lupi",
-      "description": "This workspace has retired from the Lupi learning app.",
+      "title": "Moved to the Library | Lupi",
+      "description": "OMol25 browsing now lives in the Lupi Library at /library/omol25.",
       "canonicalPath": "/materials/omol25-molecule-geometry",
       "image": "https://lupi.live/gallery/snapshots/water_cluster_64.jpg",
       "imageAlt": "Lupi molecular learning app",
       "jsonLd": {
         "@context": "https://schema.org",
         "@type": "WebPage",
-        "name": "Retired workspace | Lupi",
+        "name": "Moved to the Library | Lupi",
         "url": "https://lupi.live/materials/omol25-molecule-geometry",
-        "description": "This workspace has retired from the Lupi learning app."
+        "description": "OMol25 browsing now lives in the Lupi Library at /library/omol25."
       },
       "robots": "noindex,follow"
     },
@@ -121,6 +121,76 @@
         "description": "This workspace has retired from the Lupi learning app."
       },
       "robots": "noindex,follow"
+    },
+    "library": {
+      "title": "Molecular library — search every source | Lupi",
+      "description": "Browse and search Lupi’s curated gallery, Meta’s OMol25, cited Zenodo research files, NIST interatomic potentials, and PubChem in one place. Every result names its source and provenance.",
+      "canonicalPath": "/library",
+      "image": "https://lupi.live/gallery/snapshots/caffeine.jpg",
+      "imageAlt": "Lupi molecular library",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Molecular library — search every source | Lupi",
+        "url": "https://lupi.live/library",
+        "description": "Browse and search Lupi’s curated gallery, Meta’s OMol25, cited Zenodo research files, NIST interatomic potentials, and PubChem in one place. Every result names its source and provenance."
+      }
+    },
+    "libraryGallery": {
+      "title": "Lupi gallery — every curated structure | Lupi",
+      "description": "The full Lupi gallery of curated molecules, materials, and trajectories, filtered by domain, type, and functional group.",
+      "canonicalPath": "/library/gallery",
+      "image": "https://lupi.live/gallery/snapshots/diamond_crystal.jpg",
+      "imageAlt": "Lupi molecular library",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Lupi gallery — every curated structure | Lupi",
+        "url": "https://lupi.live/library/gallery",
+        "description": "The full Lupi gallery of curated molecules, materials, and trajectories, filtered by domain, type, and functional group."
+      }
+    },
+    "libraryOmol25": {
+      "title": "Open Molecules 2025 (OMol25) browser | Lupi",
+      "description": "Browse tens of millions of OMol25 DFT structures from the public ColabFit conversions, paged on demand, and open any structure in 3D.",
+      "canonicalPath": "/library/omol25",
+      "image": "https://lupi.live/gallery/snapshots/water_cluster_64.jpg",
+      "imageAlt": "Lupi molecular library",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Open Molecules 2025 (OMol25) browser | Lupi",
+        "url": "https://lupi.live/library/omol25",
+        "description": "Browse tens of millions of OMol25 DFT structures from the public ColabFit conversions, paged on demand, and open any structure in 3D."
+      }
+    },
+    "libraryResearch": {
+      "title": "Cited LAMMPS research files | Lupi",
+      "description": "Eight versioned, CC BY 4.0 LAMMPS structures and trajectories from Zenodo, fetched only when opened, with pinned checksums and provenance.",
+      "canonicalPath": "/library/research",
+      "image": "https://lupi.live/gallery/snapshots/alanine_dipeptide.jpg",
+      "imageAlt": "Lupi molecular library",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Cited LAMMPS research files | Lupi",
+        "url": "https://lupi.live/library/research",
+        "description": "Eight versioned, CC BY 4.0 LAMMPS structures and trajectories from Zenodo, fetched only when opened, with pinned checksums and provenance."
+      }
+    },
+    "libraryPotentials": {
+      "title": "NIST interatomic potentials | Lupi",
+      "description": "Search the NIST Interatomic Potentials Repository catalog by element, pair style, and year, and open demo trajectories in 3D.",
+      "canonicalPath": "/library/potentials",
+      "image": "https://lupi.live/gallery/snapshots/massive_1m.jpg",
+      "imageAlt": "Lupi molecular library",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "NIST interatomic potentials | Lupi",
+        "url": "https://lupi.live/library/potentials",
+        "description": "Search the NIST Interatomic Potentials Repository catalog by element, pair style, and year, and open demo trajectories in 3D."
+      }
     }
   }
 }

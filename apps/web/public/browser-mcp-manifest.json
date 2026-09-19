@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-08-10T19:16:57.349Z",
+  "generatedAt": "2026-09-19T05:22:36.903Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
@@ -170,6 +170,40 @@
             "type": "number",
             "minimum": 1,
             "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "lupi.browse_collection",
+      "description": "Page through a remote OMol25 collection via the same-origin dataset edge and return source-coordinate load specs; no rows are stored by Lupi.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "collection": {
+            "type": "string",
+            "enum": [
+              "neutral-train",
+              "neutral-validation",
+              "all-train-preview",
+              "train-4m-preview",
+              "validation-preview"
+            ]
+          },
+          "offset": {
+            "type": "number",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 36
+          },
+          "formula": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
           }
         }
       }

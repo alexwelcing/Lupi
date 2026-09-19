@@ -20,6 +20,7 @@ import {
   type RenderRequestSpecV1,
 } from '@atlas/core';
 import { routeScienceData } from './scienceData';
+import { handleSwitchJudge, jevConfigured } from './jev';
 import {
   assessAsset,
   byteSourceFromUrl,
@@ -100,6 +101,10 @@ export interface Env {
   LUPI_MCP_SHARED_SECRET?: string;
   RENDERER_ENDPOINT?: string;
   RENDERER_TOKEN?: string;
+  /** TypeSafe AI (Jev) key. `wrangler secret put TYPESAFE_API_KEY`; never a var. */
+  TYPESAFE_API_KEY?: string;
+  TYPESAFE_API_BASE?: string;
+  TYPESAFE_MODEL?: string;
   CF_VERSION_METADATA?: WorkerVersionMetadata;
 }
 
@@ -649,6 +654,10 @@ export async function handleRequest(
 
     const scienceDataResponse = await routeScienceData(request);
     if (scienceDataResponse) return withCors(scienceDataResponse, cors);
+
+    if (url.pathname === '/v1/switch/judge') {
+      return withCors(await handleSwitchJudge(request, env), cors);
+    }
 
     if (url.pathname === '/v1/render') {
       if (request.method !== 'POST') return methodNotAllowed(cors, ['POST']);
@@ -2027,6 +2036,7 @@ function statusPayload(env: Env) {
         timestamp: release.timestamp,
       },
     } : {}),
+    jev: { configured: jevConfigured(env), routes: ['/v1/switch/judge'] },
     bindings: {
       webAssets: Boolean(env.WEB_ASSETS),
       r2: Boolean(env.ASSETS),

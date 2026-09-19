@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import seoRoutes from './seo-routes.json';
+import type { LibraryCollectionId } from './viewer/viewerRoutes';
 
 export interface SeoConfig {
   title: string;
@@ -29,6 +30,14 @@ export const OCHEM_VIEWER_SEO = SEO_ROUTE_MANIFEST.routes.ochemViewer;
 export const OMOL25_SEO = SEO_ROUTE_MANIFEST.routes.omol25;
 export const OMOL25_GEOMETRY_SEO = SEO_ROUTE_MANIFEST.routes.omol25Geometry;
 export const MILLION_ATOM_VIEWER_SEO = SEO_ROUTE_MANIFEST.routes.millionAtomViewer;
+export const LIBRARY_SEO: Record<LibraryCollectionId, SeoConfig> = {
+  all: SEO_ROUTE_MANIFEST.routes.library,
+  gallery: SEO_ROUTE_MANIFEST.routes.libraryGallery,
+  omol25: SEO_ROUTE_MANIFEST.routes.libraryOmol25,
+  research: SEO_ROUTE_MANIFEST.routes.libraryResearch,
+  potentials: SEO_ROUTE_MANIFEST.routes.libraryPotentials,
+  random: SEO_ROUTE_MANIFEST.routes.libraryOmol25,
+};
 
 export function useSeo(config: SeoConfig) {
   useEffect(() => {

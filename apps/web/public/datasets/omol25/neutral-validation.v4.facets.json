@@ -1,0 +1,161 @@
+{
+  "schema": "lupi.omol25-validation-facets.v4",
+  "total": 27697,
+  "elementCounts": [
+    {
+      "element": "H",
+      "count": 27432
+    },
+    {
+      "element": "C",
+      "count": 27106
+    },
+    {
+      "element": "O",
+      "count": 24537
+    },
+    {
+      "element": "N",
+      "count": 24487
+    },
+    {
+      "element": "S",
+      "count": 13198
+    },
+    {
+      "element": "F",
+      "count": 9913
+    },
+    {
+      "element": "Cl",
+      "count": 9287
+    },
+    {
+      "element": "Br",
+      "count": 3730
+    },
+    {
+      "element": "P",
+      "count": 3685
+    },
+    {
+      "element": "I",
+      "count": 1608
+    },
+    {
+      "element": "Si",
+      "count": 864
+    },
+    {
+      "element": "B",
+      "count": 663
+    },
+    {
+      "element": "K",
+      "count": 519
+    },
+    {
+      "element": "Li",
+      "count": 417
+    },
+    {
+      "element": "Na",
+      "count": 329
+    },
+    {
+      "element": "Ca",
+      "count": 212
+    },
+    {
+      "element": "Mg",
+      "count": 207
+    }
+  ],
+  "functionalGroupCounts": [
+    {
+      "id": "amine",
+      "count": 19638
+    },
+    {
+      "id": "arene",
+      "count": 14873
+    },
+    {
+      "id": "amide",
+      "count": 13549
+    },
+    {
+      "id": "heteroaromatic",
+      "count": 12161
+    },
+    {
+      "id": "ether",
+      "count": 8950
+    },
+    {
+      "id": "alcohol-phenol",
+      "count": 8602
+    },
+    {
+      "id": "alkene",
+      "count": 7476
+    },
+    {
+      "id": "alkyl-halide",
+      "count": 7335
+    },
+    {
+      "id": "sulfide",
+      "count": 7236
+    },
+    {
+      "id": "nitrile",
+      "count": 4966
+    },
+    {
+      "id": "ketone",
+      "count": 2713
+    },
+    {
+      "id": "carboxylic-acid",
+      "count": 2356
+    },
+    {
+      "id": "ester",
+      "count": 1663
+    },
+    {
+      "id": "thiol",
+      "count": 1632
+    },
+    {
+      "id": "phosphate-ester",
+      "count": 1406
+    },
+    {
+      "id": "nitro",
+      "count": 1398
+    },
+    {
+      "id": "aldehyde",
+      "count": 998
+    },
+    {
+      "id": "acyl-halide",
+      "count": 252
+    },
+    {
+      "id": "epoxide",
+      "count": 148
+    },
+    {
+      "id": "anhydride",
+      "count": 120
+    }
+  ],
+  "natoms": {
+    "min": 2,
+    "max": 110,
+    "median": 46
+  }
+}

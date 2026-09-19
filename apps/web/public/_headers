@@ -3,3 +3,9 @@
 
 /browser-mcp-manifest.json
   Access-Control-Allow-Origin: *
+
+/datasets/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/learn/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

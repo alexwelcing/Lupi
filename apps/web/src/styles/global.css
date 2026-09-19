@@ -975,6 +975,11 @@ button:focus:not(:focus-visible) {
   animation: lupi-command-panel-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* The molecule switcher carries an 18-column periodic table; give it room. */
+.lupine-command-panel[data-panel='elements'] {
+  width: clamp(360px, 42vw, 560px);
+}
+
 .lupine-command-panel[data-auto-height='true'] {
   bottom: auto;
   max-height: calc(100% - 24px);

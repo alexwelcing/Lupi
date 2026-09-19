@@ -17,7 +17,7 @@ const FlythroughPanel = lazy(() =>
 );
 import { TelemetryPanel } from './panels/TelemetryPanel';
 import { ScienceDeckPanel } from './science/ScienceDeckPanel';
-import { ElementsPanel } from './panels/ElementsPanel';
+import { MoleculeSwitcher } from './switcher/MoleculeSwitcher';
 import { SettingsPanel } from './panels/SettingsPanel';
 
 export interface ViewerPanelBodyProps {
@@ -60,7 +60,7 @@ function renderPanel(
         </p>
       );
     case 'elements':
-      return <ElementsPanel />;
+      return <MoleculeSwitcher />;
     case 'settings':
       return <SettingsPanel />;
   }

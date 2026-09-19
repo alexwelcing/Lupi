@@ -1,5 +1,81 @@
 # Changelog
 
+## [Unreleased] - Jev on the edge and the molecule switcher
+
+### Added
+- **Jev seam on the Cloudflare edge** (`apps/mcp-worker/src/jev.ts`): one
+  module calls TypeSafe's System One API with constant instructions, a 1.5 s
+  timeout, one retry, a one hour cache, and an aggregate `lupi_jev` log line.
+  The key is a Worker secret (`wrangler secret put TYPESAFE_API_KEY`);
+  `/health` reports `jev.configured`. Without the key every route answers
+  `configured: false`. See `docs/jev-integration.md`.
+- **`POST /v1/switch/judge`**: intent, best pick, and per-candidate fit for
+  the molecule switcher, bounded to 40 candidates and 32 KB.
+
+- **Labeled evaluation of the switcher judgment** (`tools/eval-jev-switch.mjs`,
+  `docs/jev-switch-eval-2026-09-19.json`): 27 cases, 25 exact picks and two
+  correct picks the labels omitted, median 214 ms direct.
+
+### Changed
+- **Switcher redesigned against the live model**: element chips with counts
+  plus a compact heat-lit table that fits the panel; recent-molecule chips;
+  thumbnails; the judgment pool is the whole gallery so class queries work;
+  conservative ordering with a "Maybe" hint below the promotion threshold;
+  the judgment starts when typing pauses rather than after the PubChem
+  lookup; a typed name overrides the element filter; the panel is wider on
+  desktop.
+- **Elements panel replaced by the molecule switcher**
+  (`packages/ui/src/switcher/`): one search box plus the periodic table,
+  results on the first keystroke from the gallery, the same-origin OMol25
+  validation index, and PubChem names; Enter swaps the structure in place and
+  the panel stays open. Jev re-orders the list with a labeled "Best guess"
+  when configured; the deterministic list is the whole feature when not.
+  Deck label is now "Switch" (shortcut 7).
+
+## [Unreleased] - Library restoration
+
+### Added
+- **`/library` route** (`packages/ui/src/library/`): the browsable, source-backed
+  molecular library removed by the 2026-09-04 reset, rebuilt on the surviving
+  federated providers and edge routes instead of reverted. `/library` searches
+  every connected source with source and element chips; `/library/gallery` is
+  the full 104-entry catalog with domain, type, and functional-group filters
+  (the `useGalleryFilters` hook is recovered from `e15adff^`);
+  `/library/omol25` pages the public ColabFit OMol25 collections through the
+  same-origin dataset edge and facets the 27,697-row validation slice by
+  periodic table; `/library/research` lists the eight cited Zenodo records;
+  `/library/potentials` mounts the NIST potential browser; `/library/random`
+  opens a random OMol25 structure. Every card states its source and what the
+  viewer adds; no inference is presented as dataset truth.
+- **Library in the header** on the landing page, and a "Search the full
+  library" handoff under the homepage finder.
+- **`lupi.browse_collection`** browser MCP tool (31 tools now) so agents can
+  page the 34.3M-row OMol25 split, not just the federated top-N.
+
+- **Same-origin OMol25 validation index**
+  (`tools/build-omol25-validation-index.mjs`,
+  `apps/web/public/datasets/omol25/`): the faceted OMol25 view no longer
+  depends on a GCS bucket. The compact index binds record `i` to Hugging
+  Face row `i`, is spot-checked against the dataset edge when built, and
+  every hit opens through the edge structure route.
+- **Static previews for 72 gallery entries** (`tools/build-gallery-previews.mjs`,
+  `packages/ui/src/gallery/previews.json`): the landing finder, the wall,
+  and the Library gallery show source-bound SVG art for every local XYZ
+  entry up to 1,200 atoms, not just the twelve student models.
+- **`library_searched` analytics event**: aggregate shape only (collection,
+  source filter, whether a query was typed, element and result counts).
+
+### Changed
+- **NIST potentials rebuilt natively** (`library/PotentialsCollection.tsx`):
+  the Library no longer mounts the legacy inline-styled panel; filters run
+  on `@atlas/nist`, cards say whether a demo trajectory exists, and
+  potentials without one open a procedural crystal and say so.
+- **Ownership contract amended** (2026-09-18): public navigation is Explore,
+  Library, How to use, and Open a file. Research execution stays retired.
+- `?tab=browse|simulations|omol25|research|potentials` and
+  `/materials/omol25*` redirect into the Library instead of the retired page;
+  `?tab=equilibrium` and the other research-execution URLs remain retired.
+
 ## [Unreleased] - Molecule-first landing
 
 ### Changed

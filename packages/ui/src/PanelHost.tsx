@@ -17,7 +17,7 @@ const PANEL_TITLES: Record<NonNullable<AppState['activePanel']>, string> = {
   science: 'Reaction path',
   equilibrium: 'Equilibrium Solve',
   mlipLongRun: 'MLIP Long Run',
-  elements: 'Elements',
+  elements: 'Switch molecule',
   settings: 'Settings',
 };
 
