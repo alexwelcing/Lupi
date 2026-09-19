@@ -1,0 +1,40 @@
+{
+  "id": "jev-proof-state",
+  "tool": "lupi.viewer_state",
+  "ok": true,
+  "result": {
+    "viewer": {
+      "ready": true,
+      "fileName": "MCP: Benzene",
+      "atomCount": 12,
+      "frame": 0,
+      "showBonds": true,
+      "showBondsEffective": false,
+      "bondCount": 0,
+      "bondSource": "none",
+      "bondTopology": "inferred",
+      "typeSemantics": {
+        "kind": "atomic-number",
+        "provenance": "source-element-symbol"
+      },
+      "distanceSemantics": {
+        "kind": "angstrom",
+        "provenance": "source-declared"
+      },
+      "atomScale": 1.15,
+      "showCell": false,
+      "showAxes": false,
+      "playbackSpeed": 1,
+      "backgroundPreset": "gallery-studio",
+      "postprocessPreset": "paper",
+      "colorScheme": "element",
+      "colorMode": "type",
+      "colorProperty": null,
+      "colormap": "viridis",
+      "cameraPreset": "top"
+    }
+  },
+  "transcript": [
+    "received lupi.viewer_state"
+  ]
+}
