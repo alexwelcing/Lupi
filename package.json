@@ -52,7 +52,10 @@
     "generate:sphere-grid:assets": "node tools/generate-sphere-grid-gallery.mjs --no-snapshot",
     "analytics:report": "node tools/analytics-report.mjs",
     "lint": "node scripts/run-lint.mjs",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "demo:jev": "node tools/jev/demo.mjs",
+    "test:jev": "node --test tools/jev/*.test.mjs",
+    "bench:jev": "node tools/jev/benchmark.mjs"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",

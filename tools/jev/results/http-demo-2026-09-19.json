@@ -1,0 +1,193 @@
+{
+  "warmup": "One GET /v1/models before the local server begins listening; inference still uses a 1200 ms deadline.",
+  "results": [
+    {
+      "port": 4318,
+      "text": "hide bonds",
+      "httpStatus": 200,
+      "elapsedMs": 31,
+      "result": {
+        "action": "hide_bonds",
+        "command": {
+          "tool": "lupi.set_viewer",
+          "arguments": {
+            "showBonds": false
+          }
+        },
+        "source": "local",
+        "elapsedMs": 0
+      }
+    },
+    {
+      "port": 4318,
+      "text": "Look straight down at it from above",
+      "httpStatus": 200,
+      "elapsedMs": 309,
+      "result": {
+        "source": "jev",
+        "elapsedMs": 297,
+        "response": {
+          "model": "jev-1.13.0",
+          "answers": {
+            "action": {
+              "type": "choice",
+              "choice": "top",
+              "confidence": 0.99,
+              "probabilities": {
+                "hide_axes": 0,
+                "play": 0,
+                "pause": 0,
+                "hide_bonds": 0,
+                "front": 0,
+                "top": 1,
+                "side": 0,
+                "hide_cell": 0,
+                "iso": 0,
+                "show_cell": 0,
+                "fit": 0,
+                "show_bonds": 0,
+                "unsupported": 0,
+                "show_axes": 0
+              }
+            },
+            "scope": {
+              "type": "choice",
+              "choice": "single",
+              "confidence": 0.98,
+              "probabilities": {
+                "other": 0.01,
+                "single": 0.99
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 781,
+            "output_tokens": 151
+          }
+        },
+        "action": "top",
+        "command": {
+          "tool": "lupi.set_camera_preset",
+          "arguments": {
+            "preset": "top"
+          }
+        },
+        "confidence": 0.99
+      }
+    },
+    {
+      "port": 4318,
+      "text": "Look straight down at it from above",
+      "httpStatus": 200,
+      "elapsedMs": 4,
+      "result": {
+        "source": "cache",
+        "elapsedMs": 0,
+        "response": {
+          "model": "jev-1.13.0",
+          "answers": {
+            "action": {
+              "type": "choice",
+              "choice": "top",
+              "confidence": 0.99,
+              "probabilities": {
+                "hide_axes": 0,
+                "play": 0,
+                "pause": 0,
+                "hide_bonds": 0,
+                "front": 0,
+                "top": 1,
+                "side": 0,
+                "hide_cell": 0,
+                "iso": 0,
+                "show_cell": 0,
+                "fit": 0,
+                "show_bonds": 0,
+                "unsupported": 0,
+                "show_axes": 0
+              }
+            },
+            "scope": {
+              "type": "choice",
+              "choice": "single",
+              "confidence": 0.98,
+              "probabilities": {
+                "other": 0.01,
+                "single": 0.99
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 781,
+            "output_tokens": 151
+          }
+        },
+        "action": "top",
+        "command": {
+          "tool": "lupi.set_camera_preset",
+          "arguments": {
+            "preset": "top"
+          }
+        },
+        "confidence": 0.99
+      }
+    },
+    {
+      "port": 4318,
+      "text": "Look straight down at it from above",
+      "httpStatus": 200,
+      "elapsedMs": 3,
+      "result": {
+        "source": "cache",
+        "elapsedMs": 0,
+        "response": {
+          "model": "jev-1.13.0",
+          "answers": {
+            "action": {
+              "type": "choice",
+              "choice": "top",
+              "confidence": 0.99,
+              "probabilities": {
+                "hide_axes": 0,
+                "play": 0,
+                "pause": 0,
+                "hide_bonds": 0,
+                "front": 0,
+                "top": 1,
+                "side": 0,
+                "hide_cell": 0,
+                "iso": 0,
+                "show_cell": 0,
+                "fit": 0,
+                "show_bonds": 0,
+                "unsupported": 0,
+                "show_axes": 0
+              }
+            },
+            "scope": {
+              "type": "choice",
+              "choice": "single",
+              "confidence": 0.98,
+              "probabilities": {
+                "other": 0.01,
+                "single": 0.99
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 781,
+            "output_tokens": 151
+          }
+        },
+        "action": "top",
+        "command": {
+          "tool": "lupi.set_camera_preset",
+          "arguments": {
+            "preset": "top"
+          }
+        },
+        "confidence": 0.99
+      }
+    }
+  ]
+}

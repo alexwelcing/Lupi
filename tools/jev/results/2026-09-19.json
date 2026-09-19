@@ -1,0 +1,1458 @@
+{
+  "model": "jev-1.13.0",
+  "sourceCommit": "5985e7e66d61918fe4c21e222698f0f10a59a179",
+  "recordedAt": "2026-09-19T05:20:55.130Z",
+  "method": "Single sequential pass; fixtures labeled before evaluation; no retries; no response cache; client wall time includes transport.",
+  "runs": [
+    {
+      "suite": "lupi-development-results.json",
+      "results": [
+        {
+          "id": "dev01",
+          "expected": "pause",
+          "httpStatus": 200,
+          "elapsedMs": 4560,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "pause",
+                "confidence": 0.9,
+                "probabilities": {
+                  "hide_cell": 0,
+                  "front": 0,
+                  "side": 0,
+                  "show_bonds": 0,
+                  "pause": 0.91,
+                  "hide_bonds": 0,
+                  "show_axes": 0,
+                  "iso": 0,
+                  "show_cell": 0,
+                  "top": 0,
+                  "unsupported": 0.09,
+                  "fit": 0,
+                  "play": 0,
+                  "hide_axes": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.87,
+                "probabilities": {
+                  "other": 0.06,
+                  "single": 0.94
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 779,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev02",
+          "expected": "play",
+          "httpStatus": 200,
+          "elapsedMs": 353,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "play",
+                "confidence": 0.98,
+                "probabilities": {
+                  "show_bonds": 0,
+                  "hide_bonds": 0,
+                  "side": 0,
+                  "show_axes": 0,
+                  "hide_cell": 0,
+                  "front": 0,
+                  "unsupported": 0.02,
+                  "play": 0.98,
+                  "pause": 0,
+                  "top": 0,
+                  "show_cell": 0,
+                  "iso": 0,
+                  "fit": 0,
+                  "hide_axes": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.95,
+                "probabilities": {
+                  "other": 0.02,
+                  "single": 0.98
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 779,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev03",
+          "expected": "fit",
+          "httpStatus": 200,
+          "elapsedMs": 398,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "fit",
+                "confidence": 0.96,
+                "probabilities": {
+                  "hide_cell": 0,
+                  "unsupported": 0.04,
+                  "show_bonds": 0,
+                  "pause": 0,
+                  "fit": 0.96,
+                  "front": 0,
+                  "top": 0,
+                  "hide_axes": 0,
+                  "show_cell": 0,
+                  "play": 0,
+                  "hide_bonds": 0,
+                  "show_axes": 0,
+                  "side": 0,
+                  "iso": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.97,
+                "probabilities": {
+                  "single": 0.99,
+                  "other": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 783,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev04",
+          "expected": "top",
+          "httpStatus": 200,
+          "elapsedMs": 408,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "top",
+                "confidence": 0.99,
+                "probabilities": {
+                  "hide_bonds": 0,
+                  "play": 0,
+                  "front": 0,
+                  "top": 0.99,
+                  "unsupported": 0.01,
+                  "fit": 0,
+                  "hide_cell": 0,
+                  "hide_axes": 0,
+                  "show_axes": 0,
+                  "show_bonds": 0,
+                  "show_cell": 0,
+                  "side": 0,
+                  "iso": 0,
+                  "pause": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.97,
+                "probabilities": {
+                  "other": 0.01,
+                  "single": 0.99
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 781,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev05",
+          "expected": "hide_bonds",
+          "httpStatus": 200,
+          "elapsedMs": 323,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "hide_bonds",
+                "confidence": 0.95,
+                "probabilities": {
+                  "top": 0,
+                  "show_axes": 0,
+                  "show_cell": 0,
+                  "fit": 0,
+                  "hide_cell": 0,
+                  "side": 0,
+                  "pause": 0,
+                  "play": 0,
+                  "hide_axes": 0,
+                  "front": 0,
+                  "unsupported": 0.05,
+                  "show_bonds": 0,
+                  "iso": 0,
+                  "hide_bonds": 0.95
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.98,
+                "probabilities": {
+                  "other": 0.01,
+                  "single": 0.99
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 780,
+              "output_tokens": 153
+            }
+          }
+        },
+        {
+          "id": "dev06",
+          "expected": "show_bonds",
+          "httpStatus": 200,
+          "elapsedMs": 307,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "show_bonds",
+                "confidence": 0.99,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "play": 0,
+                  "show_bonds": 0.99,
+                  "show_axes": 0,
+                  "unsupported": 0.01,
+                  "iso": 0,
+                  "front": 0,
+                  "pause": 0,
+                  "side": 0,
+                  "top": 0,
+                  "fit": 0,
+                  "hide_bonds": 0,
+                  "show_cell": 0,
+                  "hide_cell": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.98,
+                "probabilities": {
+                  "other": 0.01,
+                  "single": 0.99
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 781,
+              "output_tokens": 153
+            }
+          }
+        },
+        {
+          "id": "dev07",
+          "expected": "show_cell",
+          "httpStatus": 200,
+          "elapsedMs": 254,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "show_cell",
+                "confidence": 1,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "show_axes": 0,
+                  "fit": 0,
+                  "pause": 0,
+                  "play": 0,
+                  "hide_cell": 0,
+                  "show_cell": 1,
+                  "iso": 0,
+                  "show_bonds": 0,
+                  "top": 0,
+                  "side": 0,
+                  "unsupported": 0,
+                  "hide_bonds": 0,
+                  "front": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.99,
+                "probabilities": {
+                  "other": 0,
+                  "single": 1
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 782,
+              "output_tokens": 152
+            }
+          }
+        },
+        {
+          "id": "dev08",
+          "expected": "hide_axes",
+          "httpStatus": 200,
+          "elapsedMs": 291,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "hide_axes",
+                "confidence": 0.61,
+                "probabilities": {
+                  "top": 0,
+                  "hide_cell": 0,
+                  "play": 0,
+                  "show_axes": 0.02,
+                  "front": 0,
+                  "unsupported": 0.34,
+                  "side": 0,
+                  "pause": 0,
+                  "show_bonds": 0,
+                  "hide_bonds": 0,
+                  "hide_axes": 0.64,
+                  "iso": 0,
+                  "fit": 0,
+                  "show_cell": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.98,
+                "probabilities": {
+                  "single": 0.99,
+                  "other": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 780,
+              "output_tokens": 152
+            }
+          }
+        },
+        {
+          "id": "dev09",
+          "expected": "iso",
+          "httpStatus": 200,
+          "elapsedMs": 319,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "iso",
+                "confidence": 0.99,
+                "probabilities": {
+                  "front": 0,
+                  "side": 0,
+                  "pause": 0,
+                  "show_axes": 0,
+                  "hide_bonds": 0,
+                  "show_bonds": 0,
+                  "hide_cell": 0,
+                  "show_cell": 0,
+                  "unsupported": 0.01,
+                  "hide_axes": 0,
+                  "fit": 0,
+                  "play": 0,
+                  "iso": 0.99,
+                  "top": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.95,
+                "probabilities": {
+                  "single": 0.98,
+                  "other": 0.02
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 783,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev10",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 398,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.96,
+                "probabilities": {
+                  "iso": 0,
+                  "show_axes": 0,
+                  "front": 0,
+                  "side": 0,
+                  "show_bonds": 0,
+                  "play": 0.03,
+                  "fit": 0,
+                  "hide_cell": 0,
+                  "hide_axes": 0,
+                  "hide_bonds": 0,
+                  "pause": 0,
+                  "top": 0,
+                  "show_cell": 0,
+                  "unsupported": 0.97
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.41,
+                "probabilities": {
+                  "single": 0.7,
+                  "other": 0.3
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 780,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev11",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 395,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.89,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "fit": 0,
+                  "side": 0,
+                  "show_cell": 0.08,
+                  "pause": 0,
+                  "iso": 0,
+                  "top": 0,
+                  "show_axes": 0,
+                  "show_bonds": 0,
+                  "hide_cell": 0,
+                  "hide_bonds": 0.02,
+                  "unsupported": 0.9,
+                  "play": 0,
+                  "front": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.58,
+                "probabilities": {
+                  "single": 0.21,
+                  "other": 0.79
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 780,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev12",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 372,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 1,
+                "probabilities": {
+                  "side": 0,
+                  "play": 0,
+                  "hide_cell": 0,
+                  "hide_bonds": 0,
+                  "hide_axes": 0,
+                  "show_bonds": 0,
+                  "show_cell": 0,
+                  "iso": 0,
+                  "fit": 0,
+                  "unsupported": 1,
+                  "front": 0,
+                  "show_axes": 0,
+                  "top": 0,
+                  "pause": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.99,
+                "probabilities": {
+                  "single": 0,
+                  "other": 1
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 780,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev13",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 315,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 1,
+                "probabilities": {
+                  "show_bonds": 0,
+                  "hide_bonds": 0,
+                  "side": 0,
+                  "show_axes": 0,
+                  "hide_cell": 0,
+                  "front": 0,
+                  "unsupported": 1,
+                  "play": 0,
+                  "pause": 0,
+                  "top": 0,
+                  "iso": 0,
+                  "fit": 0,
+                  "hide_axes": 0,
+                  "show_cell": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.92,
+                "probabilities": {
+                  "other": 0.96,
+                  "single": 0.04
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 777,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev14",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 270,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 1,
+                "probabilities": {
+                  "play": 0,
+                  "hide_axes": 0,
+                  "hide_bonds": 0,
+                  "pause": 0,
+                  "show_axes": 0,
+                  "top": 0,
+                  "side": 0,
+                  "unsupported": 1,
+                  "iso": 0,
+                  "show_cell": 0,
+                  "fit": 0,
+                  "show_bonds": 0,
+                  "hide_cell": 0,
+                  "front": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.64,
+                "probabilities": {
+                  "other": 0.82,
+                  "single": 0.18
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 782,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev15",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 338,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.99,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "top": 0.01,
+                  "side": 0,
+                  "iso": 0,
+                  "front": 0,
+                  "show_bonds": 0,
+                  "show_axes": 0,
+                  "hide_bonds": 0,
+                  "play": 0,
+                  "fit": 0,
+                  "show_cell": 0,
+                  "pause": 0,
+                  "hide_cell": 0,
+                  "unsupported": 0.99
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 1,
+                "probabilities": {
+                  "single": 0,
+                  "other": 1
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 781,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "dev16",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 335,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.9,
+                "probabilities": {
+                  "show_bonds": 0,
+                  "top": 0,
+                  "hide_bonds": 0.08,
+                  "pause": 0,
+                  "side": 0,
+                  "show_axes": 0,
+                  "play": 0,
+                  "hide_axes": 0,
+                  "unsupported": 0.92,
+                  "hide_cell": 0,
+                  "iso": 0,
+                  "front": 0,
+                  "fit": 0,
+                  "show_cell": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.98,
+                "probabilities": {
+                  "other": 0.01,
+                  "single": 0.99
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 777,
+              "output_tokens": 151
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "lupi-holdout-results.json",
+      "results": [
+        {
+          "id": "test01",
+          "expected": "pause",
+          "httpStatus": 200,
+          "elapsedMs": 4518,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "pause",
+                "confidence": 0.97,
+                "probabilities": {
+                  "hide_bonds": 0,
+                  "hide_axes": 0,
+                  "iso": 0,
+                  "side": 0,
+                  "front": 0,
+                  "fit": 0,
+                  "unsupported": 0.03,
+                  "show_axes": 0,
+                  "pause": 0.97,
+                  "play": 0,
+                  "hide_cell": 0,
+                  "show_bonds": 0,
+                  "show_cell": 0,
+                  "top": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.93,
+                "probabilities": {
+                  "other": 0.03,
+                  "single": 0.97
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 781,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test02",
+          "expected": "play",
+          "httpStatus": 200,
+          "elapsedMs": 258,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "play",
+                "confidence": 0.87,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "play": 0.88,
+                  "show_cell": 0,
+                  "fit": 0,
+                  "top": 0,
+                  "hide_cell": 0,
+                  "iso": 0,
+                  "unsupported": 0.1,
+                  "front": 0,
+                  "side": 0,
+                  "hide_bonds": 0,
+                  "show_bonds": 0,
+                  "pause": 0.02,
+                  "show_axes": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.84,
+                "probabilities": {
+                  "single": 0.92,
+                  "other": 0.08
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 780,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test03",
+          "expected": "fit",
+          "httpStatus": 200,
+          "elapsedMs": 341,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "fit",
+                "confidence": 0.86,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "show_axes": 0,
+                  "hide_cell": 0,
+                  "front": 0,
+                  "side": 0,
+                  "show_cell": 0,
+                  "show_bonds": 0,
+                  "pause": 0,
+                  "play": 0,
+                  "iso": 0,
+                  "unsupported": 0.13,
+                  "hide_bonds": 0,
+                  "fit": 0.87,
+                  "top": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.95,
+                "probabilities": {
+                  "single": 0.98,
+                  "other": 0.02
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 783,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test04",
+          "expected": "top",
+          "httpStatus": 200,
+          "elapsedMs": 279,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "top",
+                "confidence": 0.77,
+                "probabilities": {
+                  "side": 0,
+                  "front": 0,
+                  "unsupported": 0.2,
+                  "top": 0.78,
+                  "play": 0,
+                  "iso": 0.01,
+                  "hide_bonds": 0,
+                  "pause": 0,
+                  "show_axes": 0,
+                  "show_cell": 0,
+                  "fit": 0.01,
+                  "show_bonds": 0,
+                  "hide_axes": 0,
+                  "hide_cell": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.58,
+                "probabilities": {
+                  "single": 0.79,
+                  "other": 0.21
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 783,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test05",
+          "expected": "side",
+          "httpStatus": 200,
+          "elapsedMs": 296,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "side",
+                "confidence": 1,
+                "probabilities": {
+                  "side": 1,
+                  "hide_cell": 0,
+                  "front": 0,
+                  "play": 0,
+                  "show_bonds": 0,
+                  "fit": 0,
+                  "show_cell": 0,
+                  "hide_axes": 0,
+                  "iso": 0,
+                  "unsupported": 0,
+                  "show_axes": 0,
+                  "pause": 0,
+                  "top": 0,
+                  "hide_bonds": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 1,
+                "probabilities": {
+                  "single": 1,
+                  "other": 0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 781,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test06",
+          "expected": "front",
+          "httpStatus": 200,
+          "elapsedMs": 355,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "front",
+                "confidence": 0.89,
+                "probabilities": {
+                  "play": 0,
+                  "iso": 0,
+                  "top": 0,
+                  "side": 0,
+                  "hide_cell": 0,
+                  "pause": 0,
+                  "hide_bonds": 0,
+                  "fit": 0,
+                  "show_axes": 0,
+                  "hide_axes": 0,
+                  "show_cell": 0.01,
+                  "unsupported": 0.09,
+                  "show_bonds": 0,
+                  "front": 0.9
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.24,
+                "probabilities": {
+                  "single": 0.62,
+                  "other": 0.38
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 779,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test07",
+          "expected": "hide_bonds",
+          "httpStatus": 200,
+          "elapsedMs": 295,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "hide_bonds",
+                "confidence": 0.98,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "play": 0,
+                  "show_cell": 0,
+                  "fit": 0,
+                  "hide_cell": 0,
+                  "top": 0,
+                  "unsupported": 0.02,
+                  "iso": 0,
+                  "front": 0,
+                  "hide_bonds": 0.98,
+                  "side": 0,
+                  "show_bonds": 0,
+                  "pause": 0,
+                  "show_axes": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.93,
+                "probabilities": {
+                  "single": 0.96,
+                  "other": 0.04
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 783,
+              "output_tokens": 153
+            }
+          }
+        },
+        {
+          "id": "test08",
+          "expected": "show_axes",
+          "httpStatus": 200,
+          "elapsedMs": 307,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "show_axes",
+                "confidence": 0.96,
+                "probabilities": {
+                  "play": 0,
+                  "iso": 0,
+                  "top": 0,
+                  "show_axes": 0.97,
+                  "hide_bonds": 0,
+                  "pause": 0,
+                  "hide_cell": 0,
+                  "side": 0,
+                  "unsupported": 0.03,
+                  "hide_axes": 0,
+                  "show_cell": 0,
+                  "fit": 0,
+                  "show_bonds": 0,
+                  "front": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 1,
+                "probabilities": {
+                  "single": 1,
+                  "other": 0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 782,
+              "output_tokens": 152
+            }
+          }
+        },
+        {
+          "id": "test09",
+          "expected": "hide_cell",
+          "httpStatus": 200,
+          "elapsedMs": 350,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "hide_cell",
+                "confidence": 0.68,
+                "probabilities": {
+                  "unsupported": 0.25,
+                  "side": 0,
+                  "front": 0,
+                  "iso": 0,
+                  "play": 0,
+                  "show_bonds": 0,
+                  "hide_bonds": 0,
+                  "pause": 0,
+                  "show_cell": 0.04,
+                  "fit": 0,
+                  "hide_axes": 0,
+                  "top": 0,
+                  "show_axes": 0,
+                  "hide_cell": 0.71
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.99,
+                "probabilities": {
+                  "other": 0,
+                  "single": 1
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 779,
+              "output_tokens": 152
+            }
+          }
+        },
+        {
+          "id": "test10",
+          "expected": "hide_bonds",
+          "httpStatus": 200,
+          "elapsedMs": 258,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.56,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "show_cell": 0,
+                  "hide_cell": 0,
+                  "front": 0,
+                  "show_axes": 0,
+                  "side": 0,
+                  "show_bonds": 0.04,
+                  "pause": 0,
+                  "play": 0,
+                  "iso": 0,
+                  "fit": 0,
+                  "hide_bonds": 0.36,
+                  "unsupported": 0.6,
+                  "top": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.28,
+                "probabilities": {
+                  "single": 0.36,
+                  "other": 0.64
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 782,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test11",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 298,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.98,
+                "probabilities": {
+                  "unsupported": 0.98,
+                  "show_axes": 0,
+                  "hide_axes": 0,
+                  "pause": 0,
+                  "side": 0,
+                  "show_cell": 0,
+                  "front": 0,
+                  "show_bonds": 0,
+                  "top": 0.02,
+                  "play": 0,
+                  "fit": 0,
+                  "hide_cell": 0,
+                  "iso": 0,
+                  "hide_bonds": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.95,
+                "probabilities": {
+                  "single": 0.03,
+                  "other": 0.97
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 781,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test12",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 248,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.96,
+                "probabilities": {
+                  "show_axes": 0,
+                  "iso": 0,
+                  "front": 0,
+                  "side": 0,
+                  "show_bonds": 0,
+                  "play": 0,
+                  "fit": 0,
+                  "hide_cell": 0,
+                  "hide_axes": 0,
+                  "pause": 0,
+                  "hide_bonds": 0.04,
+                  "top": 0,
+                  "show_cell": 0,
+                  "unsupported": 0.96
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.97,
+                "probabilities": {
+                  "single": 0.02,
+                  "other": 0.98
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 781,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test13",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 350,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 1,
+                "probabilities": {
+                  "hide_bonds": 0,
+                  "play": 0,
+                  "front": 0,
+                  "top": 0,
+                  "unsupported": 1,
+                  "show_cell": 0,
+                  "hide_cell": 0,
+                  "show_axes": 0,
+                  "hide_axes": 0,
+                  "show_bonds": 0,
+                  "pause": 0,
+                  "side": 0,
+                  "iso": 0,
+                  "fit": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "single",
+                "confidence": 0.84,
+                "probabilities": {
+                  "other": 0.08,
+                  "single": 0.92
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 783,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test14",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 318,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.99,
+                "probabilities": {
+                  "hide_cell": 0,
+                  "play": 0,
+                  "fit": 0,
+                  "hide_axes": 0,
+                  "show_axes": 0,
+                  "iso": 0,
+                  "top": 0,
+                  "show_cell": 0,
+                  "hide_bonds": 0,
+                  "pause": 0.01,
+                  "front": 0,
+                  "show_bonds": 0,
+                  "side": 0,
+                  "unsupported": 0.99
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.98,
+                "probabilities": {
+                  "single": 0.01,
+                  "other": 0.99
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 785,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test15",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 231,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 0.46,
+                "probabilities": {
+                  "show_cell": 0,
+                  "hide_bonds": 0,
+                  "pause": 0,
+                  "fit": 0,
+                  "iso": 0,
+                  "show_axes": 0,
+                  "play": 0.49,
+                  "unsupported": 0.51,
+                  "show_bonds": 0,
+                  "front": 0,
+                  "top": 0,
+                  "side": 0,
+                  "hide_cell": 0,
+                  "hide_axes": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.29,
+                "probabilities": {
+                  "single": 0.36,
+                  "other": 0.64
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 789,
+              "output_tokens": 151
+            }
+          }
+        },
+        {
+          "id": "test16",
+          "expected": null,
+          "httpStatus": 200,
+          "elapsedMs": 283,
+          "response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "action": {
+                "type": "choice",
+                "choice": "unsupported",
+                "confidence": 1,
+                "probabilities": {
+                  "hide_axes": 0,
+                  "show_axes": 0,
+                  "fit": 0,
+                  "side": 0,
+                  "play": 0,
+                  "hide_cell": 0,
+                  "show_cell": 0,
+                  "iso": 0,
+                  "show_bonds": 0,
+                  "top": 0,
+                  "pause": 0,
+                  "unsupported": 1,
+                  "hide_bonds": 0,
+                  "front": 0
+                }
+              },
+              "scope": {
+                "type": "choice",
+                "choice": "other",
+                "confidence": 0.91,
+                "probabilities": {
+                  "other": 0.96,
+                  "single": 0.04
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 776,
+              "output_tokens": 151
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
