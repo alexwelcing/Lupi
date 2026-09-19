@@ -82,3 +82,56 @@ export function sciencePathIndexFromRoute(route: string): number | null {
   const index = Number(match[1]);
   return Number.isInteger(index) && index >= 0 ? index : null;
 }
+
+/**
+ * Library routes: the browsable, source-backed molecular library restored by
+ * the 2026-09-18 owner decision (docs/library-restoration-design.md). These
+ * are path routes, not homepage tabs, so they survive landing redesigns and
+ * can be deep-linked by lessons and agents.
+ */
+export type LibraryCollectionId = 'all' | 'gallery' | 'omol25' | 'research' | 'potentials' | 'random';
+
+export const LIBRARY_ROUTES: Record<string, LibraryCollectionId> = {
+  '/library': 'all',
+  '/library/gallery': 'gallery',
+  '/library/omol25': 'omol25',
+  '/library/research': 'research',
+  '/library/potentials': 'potentials',
+  '/library/random': 'random',
+};
+
+export function libraryPath(collection: LibraryCollectionId): string {
+  return collection === 'all' ? '/library' : `/library/${collection}`;
+}
+
+export function libraryCollectionFromRoute(route: string): LibraryCollectionId | null {
+  return LIBRARY_ROUTES[normalizedPathRoute(route.split('?')[0] || '/')] ?? null;
+}
+
+/**
+ * Pre-reset homepage tabs and the retired OMol25 education URLs now live in
+ * the Library. Returns the path to redirect to, or null when the URL is not a
+ * legacy library entry point. Research execution tabs stay retired.
+ */
+export function libraryRedirectTarget(pathname: string, search: string): string | null {
+  const path = normalizedPathRoute(pathname);
+  if (path === '/materials/omol25' || path === '/materials/omol25-molecule-geometry') {
+    return '/library/omol25';
+  }
+  if (path !== '/') return null;
+  const tab = new URLSearchParams(search).get('tab');
+  switch (tab) {
+    case 'browse':
+      return '/library';
+    case 'simulations':
+      return '/library/gallery';
+    case 'omol25':
+      return '/library/omol25';
+    case 'research':
+      return '/library/research';
+    case 'potentials':
+      return '/library/potentials';
+    default:
+      return null;
+  }
+}

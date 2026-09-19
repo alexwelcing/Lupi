@@ -47,6 +47,13 @@ export const ANALYTICS_EVENTS = {
   RETURN_ACTIVE: 'return_active',
 
   /**
+   * Discovery: a Library collection produced a result set. Aggregate shape
+   * only (collection, source filter, whether a query was typed, element and
+   * result counts); never the query text.
+   */
+  LIBRARY_SEARCHED: 'library_searched',
+
+  /**
    * Diagnostics: the 3D canvas failed to initialize (no WebGPU/WebGL,
    * init timeout). Pairs with the fallback banner work to turn the
    * "silent white screen" failure mode into a measurable signal.

@@ -123,3 +123,30 @@ describe('OMol25 provider search', () => {
     expect(hits[0].tags).toContain('Ketones');
   });
 });
+
+describe('OMol25 — compact v4 index bound to edge rows', () => {
+  it('expands compact rows, derives elements from the formula, unpacks group masks, and opens through the edge', async () => {
+    const { parseOmolIndex, omolStructureUrl } = await import('./providers/omol');
+    const records = parseOmolIndex({
+      schema: 'lupi.omol25-validation-index.v4',
+      structureUrl: '/v1/datasets/omol25/neutral-validation/structures/{row}.xyz',
+      groups: ['alcohol-phenol', 'ketone'],
+      records: [
+        ['C2H6O', 9, 1],
+        ['C3H6O', 10, 2],
+        ['CH4', 5],
+      ],
+    });
+    expect(records).toHaveLength(3);
+    expect(records[0]).toMatchObject({ id: 'nval-0', formula: 'C2H6O', elements: ['C', 'H', 'O'], natoms: 9, functionalGroups: ['alcohol-phenol'] });
+    expect(records[1].functionalGroups).toEqual(['ketone']);
+    expect(records[2].functionalGroups).toBeUndefined();
+    expect(omolStructureUrl('nval-1234')).toBe('/v1/datasets/omol25/neutral-validation/structures/1234.xyz');
+  });
+
+  it('still reads legacy v3 object records', async () => {
+    const { parseOmolIndex } = await import('./providers/omol');
+    expect(parseOmolIndex({ records: FIXTURE })).toHaveLength(FIXTURE.length);
+    expect(parseOmolIndex({ records: 'nope' })).toEqual([]);
+  });
+});

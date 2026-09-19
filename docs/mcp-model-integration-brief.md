@@ -21,7 +21,7 @@ Recommended integration stance:
 1. Prefer the Cloudflare MCP endpoint for agent-native asset requests.
 2. Use the browser bridge only when you need live viewer visual QA or a fallback before the Cloudflare renderer is fully wired.
 3. Use `/mcp-manifest.json` for the seven-tool edge runtime and
-   `/browser-mcp-manifest.json` for the 30-tool browser viewer runtime.
+   `/browser-mcp-manifest.json` for the 31-tool browser viewer runtime.
 4. Do not wait for browser `networkidle`; wait for explicit MCP readiness/status checks.
 
 ## Fast path for model integration
@@ -218,6 +218,7 @@ Molecule and asset tools:
 - `lupi.open_gallery_example` — open a canonical gallery item with caller-pinned identity and atom-count limits.
 - `lupi.open_saved_view` — open a saved Lupi view slug.
 - `lupi.search_molecules` — search molecule/catalog providers and return load specs.
+- `lupi.browse_collection` — page a remote OMol25 collection (`neutral-train`, `neutral-validation`, `all-train-preview`, `train-4m-preview`, `validation-preview`) through the same-origin dataset edge; exact `formula` or text `query`, at most 36 rows, source coordinates only, no bonds.
 - `lupi.set_viewer` — broad viewer patch for common style/camera settings.
 - `lupi.export_xyz` — return active frame XYZ text.
 - `lupi.export_asset` — return the active deterministic view as inline PNG/JPEG/WebP or GLB with `dataBase64`, `dataUrl`, `mimeType`, `filename`, and `byteLength`. USDZ stays outside the immutable-key lane until its serializer is byte-stable.

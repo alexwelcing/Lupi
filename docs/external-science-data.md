@@ -27,6 +27,25 @@ OMol25 supplies atomic numbers and source coordinates. It does **not** supply
 source bond topology in this browsing path. Bonds that Lupi draws are a viewer
 inference for display and must not be presented as dataset truth.
 
+### Same-origin validation index
+
+The faceted view at `/library/omol25?view=facets` needs the whole
+neutral-validation slice at once. `tools/build-omol25-validation-index.mjs`
+turns the v3 metadata index into a compact same-origin asset,
+`apps/web/public/datasets/omol25/neutral-validation.v4.json` (about 700 KB,
+210 KB compressed), plus a precomputed facets file and a build receipt. Each
+compact record is `[formula, atomCount, functionalGroupMask]` and record `i`
+is Hugging Face row `i` of `colabfit/OMol25_neutral_validation`; the builder
+spot-checks a sample of rows against the live edge and refuses to write on a
+mismatch. A hit therefore opens through
+`/v1/datasets/omol25/neutral-validation/structures/{i}.xyz`, and no external
+bucket is needed at runtime. `VITE_LUPI_OMOL_INDEX` can still point at an
+older v3 index for local experiments.
+
+The functional-group mask is the Lupi geometry screen recorded by
+`tools/omol25-structures.py`. It is a search aid over source coordinates, not
+OMol25 bond topology.
+
 ### Edge routes
 
 All routes accept `GET` and `HEAD`:

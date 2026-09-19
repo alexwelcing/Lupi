@@ -41,11 +41,12 @@ test('homepage and learning guide reflow at 320px with increased text spacing', 
 });
 
 test('retired research entry points explain the boundary without mounting a renderer', async ({ page }) => {
+  // Dataset browsing moved into /library (see tests/ui/library.spec.ts);
+  // research execution entry points stay retired.
   for (const path of [
     '/?view=compare',
-    '/?tab=research',
+    '/?tab=equilibrium',
     '/#/system/mlip-flywheel',
-    '/materials/omol25',
     '/materials/million-atom-viewer',
     '/scenes/1m-copper-lattice',
   ]) {
@@ -78,14 +79,13 @@ test('student export emits a real PNG and keeps link sharing in Save', async ({ 
   await expect(page.locator('.lupine-main-viewport canvas')).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole('button', { name: 'Elements command' }).click();
-  const elementSearch = page.getByRole('searchbox', { name: 'Filter elements' });
-  await elementSearch.fill('oxygen');
-  await page.getByRole('button', { name: 'O · Oxygen' }).click();
-  await elementSearch.fill('nitrogen');
-  const nitrogen = page.getByRole('button', { name: 'N · Nitrogen' });
+  await page.getByRole('button', { name: 'Switch command' }).click();
+  await page.getByRole('button', { name: 'Oxygen (O)' }).click();
+  const nitrogen = page.getByRole('button', { name: 'Nitrogen (N)' });
   await nitrogen.click();
   await expect(nitrogen).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Nitrogen, atomic number 7' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('status').filter({ hasText: 'containing O + N' })).toBeVisible();
   await page.getByRole('button', { name: 'Export command' }).click();
   const panel = page.getByTestId('simple-export-panel');
   await expect(panel).toBeVisible();

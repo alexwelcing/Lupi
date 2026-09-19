@@ -1,0 +1,310 @@
+{
+  "summary": {
+    "cases": 27,
+    "accuracy": 0.926,
+    "accuracyAtOrAbove0_6": 0.909,
+    "coveredAtOrAbove0_6": 0.815,
+    "medianMs": 226,
+    "meanTokens": 9856,
+    "errors": 0
+  },
+  "rows": [
+    {
+      "query": "caffeine",
+      "note": "exact name",
+      "pick": "gallery:caffeine",
+      "confidence": 1,
+      "intent": "named_molecule",
+      "ok": true,
+      "ms": 570,
+      "tokens": 11393,
+      "pool": 103
+    },
+    {
+      "query": "aspirin",
+      "note": "exact name",
+      "pick": "gallery:aspirin",
+      "confidence": 1,
+      "intent": "named_molecule",
+      "ok": true,
+      "ms": 361,
+      "tokens": 11392,
+      "pool": 103
+    },
+    {
+      "query": "C6H6",
+      "note": "formula",
+      "pick": "gallery:benzene",
+      "confidence": 1,
+      "intent": "formula",
+      "ok": true,
+      "ms": 243,
+      "tokens": 11394,
+      "pool": 103
+    },
+    {
+      "query": "H2O",
+      "note": "formula",
+      "pick": "gallery:water",
+      "confidence": 1,
+      "intent": "formula",
+      "ok": true,
+      "ms": 219,
+      "tokens": 11392,
+      "pool": 103
+    },
+    {
+      "query": "something sweet",
+      "note": "class",
+      "pick": "gallery:glucose",
+      "confidence": 0.57,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 215,
+      "tokens": 11367,
+      "pool": 103
+    },
+    {
+      "query": "the molecule in coffee",
+      "note": "indirect name",
+      "pick": "gallery:caffeine",
+      "confidence": 0.99,
+      "intent": "named_molecule",
+      "ok": true,
+      "ms": 220,
+      "tokens": 11369,
+      "pool": 103
+    },
+    {
+      "query": "table salt",
+      "note": "common name",
+      "pick": "gallery:sodium_chloride",
+      "confidence": 1,
+      "intent": "named_molecule",
+      "ok": true,
+      "ms": 226,
+      "tokens": 11367,
+      "pool": 103
+    },
+    {
+      "query": "an alcohol",
+      "note": "functional group",
+      "pick": "gallery:ethanol",
+      "confidence": 0.99,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 203,
+      "tokens": 11367,
+      "pool": 103
+    },
+    {
+      "query": "painkiller",
+      "note": "class",
+      "pick": "gallery:aspirin",
+      "confidence": 0.97,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 234,
+      "tokens": 11368,
+      "pool": 103
+    },
+    {
+      "query": "a neurotransmitter",
+      "note": "class",
+      "pick": "gallery:dopamine",
+      "confidence": 0.7,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 296,
+      "tokens": 11370,
+      "pool": 103
+    },
+    {
+      "query": "the happiness molecule",
+      "note": "colloquial",
+      "pick": "gallery:serotonin",
+      "confidence": 0.5,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 231,
+      "tokens": 11368,
+      "pool": 103
+    },
+    {
+      "query": "a carbon allotrope",
+      "note": "materials class",
+      "pick": "gallery:diamond_crystal",
+      "confidence": 0.73,
+      "intent": "material",
+      "ok": true,
+      "ms": 205,
+      "tokens": 11370,
+      "pool": 103
+    },
+    {
+      "query": "a nanotube",
+      "note": "material",
+      "pick": "gallery:cnt_6_6",
+      "confidence": 1,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 287,
+      "tokens": 11368,
+      "pool": 103
+    },
+    {
+      "query": "a sugar ring",
+      "note": "class",
+      "pick": "gallery:glucose",
+      "confidence": 0.76,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 244,
+      "tokens": 11368,
+      "pool": 103
+    },
+    {
+      "query": "something in chili peppers",
+      "note": "indirect",
+      "pick": "gallery:capsaicin",
+      "confidence": 1,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 285,
+      "tokens": 11369,
+      "pool": 103
+    },
+    {
+      "query": "smells like vanilla",
+      "note": "indirect",
+      "pick": "gallery:vanillin",
+      "confidence": 1,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 252,
+      "tokens": 11369,
+      "pool": 103
+    },
+    {
+      "query": "a steroid",
+      "note": "class",
+      "pick": "gallery:cortisol",
+      "confidence": 0.69,
+      "intent": "class_or_property",
+      "ok": false,
+      "ms": 316,
+      "tokens": 11367,
+      "pool": 103
+    },
+    {
+      "query": "energy currency of the cell",
+      "note": "indirect",
+      "pick": "gallery:atp",
+      "confidence": 1,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 225,
+      "tokens": 11370,
+      "pool": 103
+    },
+    {
+      "query": "aromatic ring with nitrogen",
+      "note": "structure description",
+      "pick": "gallery:caffeine",
+      "confidence": 0.31,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 212,
+      "tokens": 11371,
+      "pool": 103
+    },
+    {
+      "query": "a metal",
+      "note": "materials; any metal entry acceptable",
+      "pick": "gallery:al_polycrystal",
+      "confidence": 0.25,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 203,
+      "tokens": 11367,
+      "pool": 103
+    },
+    {
+      "query": "pizza",
+      "note": "not a molecule",
+      "pick": "none",
+      "confidence": 0.95,
+      "intent": "not_a_molecule",
+      "ok": true,
+      "ms": 238,
+      "tokens": 11366,
+      "pool": 103
+    },
+    {
+      "query": "[Na+Cl]",
+      "note": "elements only",
+      "pick": "gallery:sodium_chloride",
+      "confidence": 1,
+      "intent": "elements",
+      "ok": true,
+      "ms": 149,
+      "tokens": 742,
+      "pool": 1
+    },
+    {
+      "query": "[C+N]",
+      "note": "elements only; everyday C+N molecule",
+      "pick": "gallery:nicotine",
+      "confidence": 0.34,
+      "intent": "elements",
+      "ok": true,
+      "ms": 183,
+      "tokens": 4369,
+      "pool": 28
+    },
+    {
+      "query": "[C+H+N+O]",
+      "note": "elements only; everyday CHNO",
+      "pick": "gallery:caffeine",
+      "confidence": 0.6,
+      "intent": "elements",
+      "ok": true,
+      "ms": 190,
+      "tokens": 3692,
+      "pool": 22
+    },
+    {
+      "query": "[Fe]",
+      "note": "elements only; any iron entry",
+      "pick": "none",
+      "confidence": 1,
+      "intent": "elements",
+      "ok": false,
+      "ms": 161,
+      "tokens": 609,
+      "pool": 0
+    },
+    {
+      "query": "[C+H+O]",
+      "note": "elements only; any small CHO organic",
+      "pick": "gallery:ethanol",
+      "confidence": 0.87,
+      "intent": "elements",
+      "ok": true,
+      "ms": 224,
+      "tokens": 6509,
+      "pool": 48
+    },
+    {
+      "query": "a base in DNA",
+      "note": "class",
+      "pick": "gallery:adenosine",
+      "confidence": 0.77,
+      "intent": "class_or_property",
+      "ok": true,
+      "ms": 227,
+      "tokens": 11369,
+      "pool": 103
+    }
+  ]
+}

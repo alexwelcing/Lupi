@@ -18,6 +18,14 @@ import {
 } from '@atlas/assessment';
 import type { LupiMcpRequest, LupiMcpResponseResult, LupiMcpToolDefinition } from './types';
 import { MCP_TOOL_DEFINITIONS } from './toolManifest';
+import {
+  FALLBACK_OMOL_COLLECTIONS,
+  RemoteOmolWarmingError,
+  remoteOmolHit,
+  remoteOmolPage,
+  type RemoteOmolCollectionId,
+  type RemoteOmolPage,
+} from '../molecules/remoteOmol';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
 import { assertBrowserImageExportIntent } from '../export/renderCaptureState';
 import { validateArtifactBytesV1 } from '../export/artifactByteValidation';
@@ -713,6 +721,57 @@ async function handleAssessAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
   return { assessment: assessed.report, execution: assessed.execution };
 }
 
+/* ─── Library ─── */
+
+const OMOL_COLLECTIONS = new Set(FALLBACK_OMOL_COLLECTIONS.map((collection) => collection.id));
+
+async function handleBrowseCollection(request: LupiMcpRequest): Promise<LupiMcpResponseResult> {
+  const args = request.arguments ?? {};
+  const collection = typeof args.collection === 'string' ? args.collection : 'neutral-train';
+  if (!OMOL_COLLECTIONS.has(collection as RemoteOmolCollectionId)) {
+    throw new Error(`Unknown OMol25 collection "${collection}". Expected one of ${[...OMOL_COLLECTIONS].join(', ')}.`);
+  }
+  const offset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.max(0, Math.floor(args.offset)) : 0;
+  const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.max(1, Math.min(36, Math.floor(args.limit))) : 24;
+  const formula = typeof args.formula === 'string' && args.formula.trim() ? args.formula.trim() : undefined;
+  const query = typeof args.query === 'string' && args.query.trim() ? args.query.trim() : undefined;
+  if (formula && query) throw new Error('Pass either "formula" (exact) or "query" (text), not both.');
+
+  let page: RemoteOmolPage;
+  try {
+    page = await remoteOmolPage({ collection: collection as RemoteOmolCollectionId, offset, limit, formula, query });
+  } catch (error) {
+    if (error instanceof RemoteOmolWarmingError) {
+      throw new Error(`${error.message} Retry after ${error.retryAfterSeconds} seconds.`);
+    }
+    throw error;
+  }
+
+  return {
+    collection: page.dataset,
+    repository: page.repository,
+    coverage: page.coverage,
+    indexedRows: page.indexedRows,
+    estimatedRows: page.estimatedRows,
+    offset: page.offset,
+    limit: page.limit,
+    returnedRows: page.returnedRows,
+    matchedRows: page.matchedRows,
+    partial: page.partial,
+    sourceTruth: { coordinates: 'source', bondTopology: 'not-provided' },
+    molecules: page.rows.map(remoteOmolHit).map((hit) => ({
+      id: hit.id,
+      source: hit.source,
+      title: hit.title,
+      subtitle: hit.subtitle,
+      formula: hit.formula,
+      elements: hit.elements,
+      tags: hit.tags,
+      load: hit.load,
+    })),
+  };
+}
+
 /* ─── Registry ─── */
 
 export const LUPI_MCP_TOOLS: LupiMcpToolDefinition[] = [
@@ -737,6 +796,7 @@ export const LUPI_MCP_TOOLS: LupiMcpToolDefinition[] = [
   { name: 'lupi.encode_view_url', description: 'Serialize the current viewer state to a shareable URL.', handler: handleEncodeViewUrl },
   { name: 'lupi.export_asset', description: 'Render the active viewer as an inline PNG/JPEG/WebP image or deterministic GLB model asset.', handler: handleExportAsset },
   { name: 'lupi.reset_viewer', description: 'Reset the viewer to default state.', handler: handleResetViewer },
+  { name: 'lupi.browse_collection', description: 'Page through a remote OMol25 collection and return source-coordinate load specs.', handler: handleBrowseCollection },
 ];
 
 export const LUPI_MCP_TOOL_MAP = new Map(LUPI_MCP_TOOLS.map((t) => [t.name, t]));

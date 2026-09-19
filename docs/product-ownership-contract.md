@@ -8,6 +8,9 @@ Change control: explicit reviewed product decision approved by the decision owne
 
 Ratified: 2026-07-19
 
+Amended: 2026-09-18 (Library restoration; decision owner approval recorded in
+[the library restoration design](library-restoration-design.md))
+
 This document is the product authority for the standalone Lupi repository. If
 an older roadmap, campaign plan, branch, or feature brief conflicts with this
 contract, this contract wins until it is changed through an explicit reviewed
@@ -45,17 +48,32 @@ Lupi owns these outcomes end to end:
 - Give an agent the same bounded artifact contract with machine-verifiable
   identity, format, and provenance.
 
-The 2026-09-04 owner-requested product reset narrows the public surface to
-Explore, How to use, and Open a file. Public search explicitly filters the
-student collection; it does not silently query a research corpus. Inside the
-viewer the controls are Learn, Style, Data, Camera, Export, and Elements, with
-Path only for an explicitly opened, source-bound reaction trajectory.
+The 2026-09-04 owner-requested product reset narrowed the public surface to
+Explore, How to use, and Open a file. The 2026-09-18 owner decision recorded
+in the [library restoration design](library-restoration-design.md) found that
+the reset went too far and amended the public surface as follows:
 
-Research is not a primary navigation item or a learner workflow. Retired
-research URLs explain the separation and offer an external handoff to
-`lupine.science`. The separate `apps/lupine-app` and its execution contracts
-remain independent. The agent API and explicit data deep links retain their
-bounded inspection capabilities; they do not determine the public menu.
+- Public navigation is Explore, Library, How to use, and Open a file.
+- The homepage search matches the curated gallery and PubChem names. The
+  curated student collection remains the guided starter set on the homepage.
+- The Library route (`/library` and its collections) offers every connected
+  structure source explicitly, one source at a time or all together, with the
+  source and its provenance named on every result. No source is queried
+  silently, and the Library never presents a viewer inference (such as a
+  distance-inferred bond) as dataset truth.
+- Research execution, model policy, and scientific claim decisions remain
+  outside Lupi.
+
+Inside the viewer the controls are Learn, Style, Data, Camera, Export, and
+Elements, with Path only for an explicitly opened, source-bound reaction
+trajectory.
+
+Research execution is not a navigation item or a learner workflow. Retired
+research-execution URLs explain the separation and offer an external handoff
+to `lupine.science`; retired dataset-browsing URLs redirect into the Library.
+The separate `apps/lupine-app` and its execution contracts remain independent.
+The agent API and explicit data deep links retain their bounded inspection
+capabilities; they do not determine the public menu.
 
 Student publication is positive-list controlled by
 `packages/ui/src/gallery/studentCollection.ts`: every entry needs a working

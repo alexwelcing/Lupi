@@ -53,7 +53,7 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
           state.setStudioDeck(null);
           if (state.file?.science) state.setActivePanel('science');
         } else if (e.key === '7') {
-          // Elements explorer — fileless reference surface.
+          // Molecule switcher (periodic table + search) — works without a file.
           state.setStudioDeck(null);
           state.setActivePanel('elements');
         } else {

@@ -26,7 +26,7 @@ Core endpoints:
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
 - `GET /health` — service and binding readiness
 - `GET /mcp-manifest.json` — seven-tool Cloudflare edge control-plane manifest
-- `GET /browser-mcp-manifest.json` — 30-tool browser viewer manifest
+- `GET /browser-mcp-manifest.json` — 31-tool browser viewer manifest
 - `POST /v1/render` — REST shortcut for `lupi.render_molecule_asset`
 - `GET /v1/jobs/:jobId` — legacy-v0 render-job compatibility
 - `GET /assets/:assetId.:ext` — legacy-v0 R2 asset compatibility
@@ -95,7 +95,7 @@ window.__lupiViewerMcp: {
 ```ts
 interface LupiMcpRequest {
   id: string; // any unique string
-  tool: string; // one of the 30 lupi.* browser tools
+  tool: string; // one of the 31 lupi.* browser tools
   arguments: Record<string, unknown>;
 }
 ```
@@ -123,7 +123,7 @@ console.log(status);
 // {
 //   ready: true,
 //   version: '0.3.0',
-//   toolCount: 30,
+//   toolCount: 31,
 //   moleculeLoaded: true,
 //   atomCount: 250000,
 //   frame: 0,
@@ -153,7 +153,7 @@ const manifest = await page.evaluate(() =>
 );
 ```
 
-## Tool Reference (30 tools)
+## Tool Reference (31 tools)
 
 | Tool                       | Description                                                                                                                      | Example arguments                                         |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -162,6 +162,7 @@ const manifest = await page.evaluate(() =>
 | `lupi.open_gallery_example` | Open a canonical gallery example with caller-pinned identity and atom-count limits.                                             | `{ id: 'c60_buckyball', expectedAtomCount: 60, maxAtomCount: 50000 }` |
 | `lupi.open_saved_view`     | Open a saved Lupi view by slug.                                                                                                  | `{ slug: 'abc123' }`                                      |
 | `lupi.search_molecules`    | Search molecule/catalog providers.                                                                                               | `{ query: 'aspirin', limit: 5 }`                          |
+| `lupi.browse_collection`   | Page through a remote OMol25 collection via the dataset edge; returns source-coordinate load specs, no rows stored by Lupi.       | `{ collection: 'neutral-train', offset: 0, limit: 24 }`   |
 | `lupi.set_viewer`          | Apply common viewer display/style settings.                                                                                      | `{ showBonds: true, cameraPreset: 'iso' }`                |
 | `lupi.export_xyz`          | Return active frame XYZ text.                                                                                                    | `{}`                                                      |
 | `lupi.export_asset`        | Return the active deterministic profile as inline PNG/JPEG/WebP or GLB; unsupported active layers/combinations fail closed.       | `{ format: 'png', width: 1024, height: 1024 }`            |

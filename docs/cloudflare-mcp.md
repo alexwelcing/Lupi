@@ -128,6 +128,10 @@ provenance, and artifact calls fail closed unless the caller supplies:
 Authorization: Bearer <LUPI_MCP_SHARED_SECRET>
 ```
 
+`TYPESAFE_API_KEY` is a third secret, read only by the Jev seam in
+`src/jev.ts` for `/v1/switch/judge`; see [docs/jev-integration.md](jev-integration.md)
+for placement and behavior when it is absent.
+
 `LUPI_MCP_SHARED_SECRET` authenticates the agent to the edge.
 `RENDERER_TOKEN` is a different secret used only from the edge to
 `RENDERER_ENDPOINT`; callers must never receive it. Missing authentication or
