@@ -8,6 +8,9 @@ still wins over anything here.
 
 ## Summary
 
+*Update 2026-09-19:* the Worker seam and the first feature (the molecule
+switcher) are implemented; see [jev-integration.md](jev-integration.md).
+
 Jev is not a chat model and cannot write text. It is a hosted decision
 function: you send a JSON "state" plus a set of typed questions, and it
 returns one typed answer per question with a calibrated probability, in one

@@ -79,14 +79,12 @@ test('student export emits a real PNG and keeps link sharing in Save', async ({ 
   await expect(page.locator('.lupine-main-viewport canvas')).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole('button', { name: 'Elements command' }).click();
-  const elementSearch = page.getByRole('searchbox', { name: 'Filter elements' });
-  await elementSearch.fill('oxygen');
-  await page.getByRole('button', { name: 'O · Oxygen' }).click();
-  await elementSearch.fill('nitrogen');
-  const nitrogen = page.getByRole('button', { name: 'N · Nitrogen' });
+  await page.getByRole('button', { name: 'Switch command' }).click();
+  await page.getByRole('button', { name: 'Oxygen, atomic number 8' }).click();
+  const nitrogen = page.getByRole('button', { name: 'Nitrogen, atomic number 7' });
   await nitrogen.click();
   await expect(nitrogen).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('status').filter({ hasText: 'containing O + N' })).toBeVisible();
   await page.getByRole('button', { name: 'Export command' }).click();
   const panel = page.getByTestId('simple-export-panel');
   await expect(panel).toBeVisible();

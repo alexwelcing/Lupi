@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] - Jev on the edge and the molecule switcher
+
+### Added
+- **Jev seam on the Cloudflare edge** (`apps/mcp-worker/src/jev.ts`): one
+  module calls TypeSafe's System One API with constant instructions, a 1.5 s
+  timeout, one retry, a one hour cache, and an aggregate `lupi_jev` log line.
+  The key is a Worker secret (`wrangler secret put TYPESAFE_API_KEY`);
+  `/health` reports `jev.configured`. Without the key every route answers
+  `configured: false`. See `docs/jev-integration.md`.
+- **`POST /v1/switch/judge`**: intent, best pick, and per-candidate fit for
+  the molecule switcher, bounded to 40 candidates and 32 KB.
+
+### Changed
+- **Elements panel replaced by the molecule switcher**
+  (`packages/ui/src/switcher/`): one search box plus the periodic table,
+  results on the first keystroke from the gallery, the same-origin OMol25
+  validation index, and PubChem names; Enter swaps the structure in place and
+  the panel stays open. Jev re-orders the list with a labeled "Best guess"
+  when configured; the deterministic list is the whole feature when not.
+  Deck label is now "Switch" (shortcut 7).
+
 ## [Unreleased] - Library restoration
 
 ### Added

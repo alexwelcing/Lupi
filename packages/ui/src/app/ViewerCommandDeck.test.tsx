@@ -45,7 +45,7 @@ describe('ViewerCommandDeck', () => {
     expect(useStore.getState().studioDeck).toBeNull();
     expect(useStore.getState().studyLensOpen).toBe(false);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Elements command' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch command' }));
     expect(useStore.getState().activePanel).toBe('elements');
     expect(useStore.getState().studioDeck).toBeNull();
   });

@@ -23,7 +23,7 @@ const COMMANDS: Array<{
   },
   { id: 'camera', label: 'Camera', shortcut: '3', icon: <IconFlythrough /> },
   { id: 'capture', label: 'Export', shortcut: '4', icon: <IconExport /> },
-  { id: 'elements', label: 'Elements', shortcut: '7', icon: <IconElements /> },
+  { id: 'elements', label: 'Switch', shortcut: '7', icon: <IconElements /> },
 ];
 
 function commandIsActive(

@@ -34,3 +34,7 @@ tools/sims/output/
 
 # Rust build output (wasm crate) — only the committed pkg/ artifact ships.
 packages/parsers/wasm/target/
+
+# Wrangler local secrets (TYPESAFE_API_KEY, renderer tokens). Never commit.
+**/.dev.vars
+**/.dev.vars.*
