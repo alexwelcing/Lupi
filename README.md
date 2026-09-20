@@ -110,10 +110,11 @@ Playwright writes failure diagnostics under `playwright-report/` and
 
 ## Deploy Status
 
-Production deploy is owned by this standalone repo. The primary workflow is
-`.github/workflows/deploy-cloudflare.yml`.
-It builds and tests the app and edge Worker, deploys through Wrangler, then
-runs the deployed Playwright UI gate against the direct `workers.dev` URL.
+Production deploy is owned by this standalone repo. A merge to `main` is the
+release: `.github/workflows/deploy-cloudflare.yml` builds the app and edge
+Worker, deploys through the pinned Wrangler, and confirms `https://lupi.live`
+reports the merged commit. The owner-only checkpoint controller was retired on
+2026-09-20.
 `.github/workflows/deploy-viewer.yml` remains the manual Cloud Run fallback.
 That job is partial evidence against a mutable direct `workers.dev` endpoint;
 it does not record immutable Worker Version identity and is not proof of the

@@ -39,11 +39,16 @@ values for MCP and analytics: `VITE_LUPI_MCP_ENDPOINT=/mcp` and
 
 ## Deploy
 
-Manual GitHub workflow:
+A push to `main` runs:
 
 ```text
 .github/workflows/deploy-cloudflare.yml
 ```
+
+It builds, runs `wrangler deploy` against `apps/mcp-worker/wrangler.toml`, and
+waits until `https://lupi.live/health` reports the pushed commit. There are no
+dispatch inputs. The owner-only checkpoint controller and its weekly
+reconciliation were retired on 2026-09-20.
 
 Required GitHub secrets:
 

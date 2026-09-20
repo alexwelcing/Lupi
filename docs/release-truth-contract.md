@@ -108,11 +108,16 @@ Every release must preserve these invariants:
 
 ## Production controller contract
 
-The repository now contains a source-side v2 production design in
+**Retired 2026-09-20.** The v2 controller and reconciliation workflow were
+removed from the release path; `deploy-cloudflare.yml` now deploys on every
+push to `main`, and the release proof is `https://lupi.live/health` reporting
+the merged commit. The rest of this section is kept as history.
+
+The repository previously contained a source-side v2 production design in
 `.github/workflows/deploy-cloudflare.yml` and
-`.github/workflows/reconcile-cloudflare-deploy.yml`. This section defines how
-that design may be operated; it does not attest that the workflows or their
-external authority are configured or active.
+`.github/workflows/reconcile-cloudflare-deploy.yml`. This section defined how
+that design could be operated; it did not attest that the workflows or their
+external authority were configured or active.
 
 ### Release admission and write isolation
 
