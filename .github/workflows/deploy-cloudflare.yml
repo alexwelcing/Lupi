@@ -72,8 +72,11 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
+          # keep_vars preserves the previous release's LUPI_BUILD_SHA, and the
+          # Worker prefers that var over version metadata, so set it explicitly.
           node .github/wrangler-runtime/node_modules/wrangler/bin/wrangler.js deploy \
-            --config apps/mcp-worker/wrangler.toml
+            --config apps/mcp-worker/wrangler.toml \
+            --var "LUPI_BUILD_SHA:${GITHUB_SHA}"
 
       - name: Confirm lupi.live serves this commit
         env:
