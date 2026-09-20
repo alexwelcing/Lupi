@@ -615,6 +615,7 @@ export function ViewerApp() {
       data-timeline={mobileTimelineActive}
       data-ui-stowed={uiStowed}
       data-style-open={!uiStowed && activePanel === 'studio'}
+      data-panel-open={!uiStowed && (Boolean(activePanel) || studyLensOpen)}
       style={{
         height: file || isEmbeddedMobileViewer ? '100dvh' : 'auto',
         overflow: file || isEmbeddedMobileViewer ? 'hidden' : 'visible',

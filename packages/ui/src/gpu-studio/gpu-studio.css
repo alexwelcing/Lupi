@@ -731,3 +731,8 @@
       border-color 160ms ease;
   }
 }
+
+@media (max-width: 360px) {
+  .gpu-studio-launch { gap: 0; padding: 6px 8px; }
+  .gpu-studio-launch__label { display: none; }
+}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../store';
+import { MOBILE_MEDIA_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { trackLibrarySearch } from '../library/trackLibrarySearch';
 import { ElementPicker } from './ElementPicker';
 import { applyJudgment, buildJudgePool, judgeSwitch, type SwitchJudgment } from './judgeSwitch';
@@ -30,6 +31,7 @@ const SOURCE_LABEL: Record<SwitchCandidate['source'], string | null> = {
 };
 
 export function MoleculeSwitcher() {
+  const isMobile = useMediaQuery(MOBILE_MEDIA_QUERY);
   const file = useStore((state) => state.file);
   const recent = useSyncExternalStore(subscribeRecent, recentSwitches, recentSwitches);
   const [query, setQuery] = useState('');
@@ -187,7 +189,8 @@ export function MoleculeSwitcher() {
         spellCheck={false}
         autoFocus
         value={query}
-        placeholder="caffeine, C6H6, “something sweet”… Enter switches"
+        placeholder={isMobile ? "caffeine, C6H6, “something sweet”…" : "caffeine, C6H6, “something sweet”… Enter switches"}
+        style={{ textOverflow: 'ellipsis' }}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={onKeyDown}
       />
