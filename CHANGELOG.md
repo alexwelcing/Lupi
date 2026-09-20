@@ -3,6 +3,25 @@
 ## [Unreleased] - Jev on the edge and the molecule switcher
 
 ### Added
+- **Your views library**: every saved view the signed-in person owns, newest
+  first, with a thumbnail captured from the viewer at save time, rename,
+  copy link, open, two-step delete, and a public / unlisted switch. Opens
+  from the Account menu or the Save panel; a bottom sheet on phones and a
+  centered dialog on desktop (`packages/ui/src/user/SavedViewsLibrary.tsx`).
+- **Update in place**: opening your own `/view/<slug>` puts the Save panel in
+  "Update your view" mode with the saved name, link name and visibility
+  prefilled, plus a "Save as new" fork. Saving records the active view so the
+  panel stays in that mode.
+- **Unlisted views**: `visibility: 'unlisted'` is accepted by the Firestore
+  rules, kept out of listings, and the share page answers with `noindex`
+  instead of 404 (`functions/src/socialMeta.ts`).
+- **Account menu** rebuilt on the shared Lupi primitives: avatar, email,
+  provider, saved-view count, the three most recent views with thumbnails,
+  and a phone bottom sheet.
+- **Save view on phones** is a bottom sheet portaled to `<body>` with a
+  pinned Save / Copy / Share footer, trapped focus and 16px inputs; the
+  desktop popover is left-aligned so it stays on screen.
+
 - **One Jev client** (`packages/core/src/jev/`): the edge seam and the
   command lab from PR #99 now share one request encoder, deadline, retry
   rule, and strict answer validator, plus one viewer-command interpreter

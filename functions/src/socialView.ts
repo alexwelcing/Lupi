@@ -4,6 +4,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import {
   buildMissingViewShareModel,
   buildSavedViewShareModel,
+  isShareableVisibility,
   renderSavedViewShareHtml,
   savedViewSlugFromRequestPath,
   type SavedViewShareDoc,
@@ -39,7 +40,7 @@ export const lupiViewShare = onRequest({ maxInstances: 20 }, async (req, res) =>
     const snap = await getFirestore().collection(VIEW_COLLECTION).doc(slug).get();
     const data = snap.data() as SavedViewShareDoc | undefined;
 
-    if (!snap.exists || data?.visibility !== 'public') {
+    if (!snap.exists || !isShareableVisibility(data?.visibility)) {
       sendShareHtml(res, 404, buildMissingViewShareModel(slug, PUBLIC_ORIGIN), false);
       return;
     }

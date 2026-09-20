@@ -10,8 +10,9 @@ import {
   slugifySavedViewTitle,
   type SavedMolecularView,
 } from './savedViews';
-import { useStore } from './store';
+import { useStore, type SavedViewVisibility } from './store';
 import { track, ANALYTICS_EVENTS } from './analytics';
+import { captureViewerThumbnail } from './viewer/captureViewerThumbnail';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import {
   LupiButton,
@@ -80,6 +81,8 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const loadedAtomCount = useStore(state => state.loadedAtomCount);
   const frame = useStore(state => state.frame);
   const showBonds = useStore(state => state.showBonds);
+  const activeSavedView = useStore(state => state.activeSavedView);
+  const openLibrary = useStore(state => state.setSavedViewsLibraryOpen);
   const { loading: authLoading, signIn, user, idToken, refreshToken } = useFirebaseAuth();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
@@ -94,7 +97,13 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedUrl, setSavedUrl] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<SavedViewVisibility>('public');
   const [recentViews, setRecentViews] = useState<SavedMolecularView[]>([]);
+  const lastActiveSlugRef = useRef<string | null>(null);
+
+  // Editing your own saved view: prefill its name, slug and visibility so Save
+  // updates it in place instead of quietly forking "<file> Publish".
+  const ownsActiveView = Boolean(activeSavedView && user && activeSavedView.ownerId === user.uid);
 
   const defaultTitle = useMemo(() => defaultSavedViewTitle(file), [file?.name]);
   const cleanSlug = slugifySavedViewTitle(slug || title || defaultTitle);
@@ -107,6 +116,27 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     setTitle(defaultTitle);
     setSlug(slugifySavedViewTitle(defaultTitle));
   }, [defaultTitle, slugTouched]);
+
+  useEffect(() => {
+    const slugNow = ownsActiveView && activeSavedView ? activeSavedView.slug : null;
+    if (slugNow === lastActiveSlugRef.current) return;
+    lastActiveSlugRef.current = slugNow;
+    if (slugNow && activeSavedView) {
+      setTitle(activeSavedView.title);
+      setSlug(activeSavedView.slug);
+      setSlugTouched(true);
+      setVisibility(activeSavedView.visibility);
+      setSavedUrl(makeSavedViewUrl(activeSavedView.slug));
+      setStatus(null);
+      setError(null);
+    } else {
+      // Left the saved view (new file or signed out): back to a fresh draft.
+      setSlugTouched(false);
+      setVisibility('public');
+      setSavedUrl(null);
+      setStatus(null);
+    }
+  }, [ownsActiveView, activeSavedView]);
 
   const close = useCallback((restoreFocus = false) => {
     setOpen(false);
@@ -146,7 +176,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
 
   // TanStack Query for recent saved views (caching, loading states, refetch on save)
   const recentViewsQuery = useQuery({
-    queryKey: ['recentSavedViews', user?.uid],
+    queryKey: ['savedViews', user?.uid],
     queryFn: () => listUserSavedViews(user!.uid),
     enabled: !!user && open,
     staleTime: 1000 * 30,
@@ -174,7 +204,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     await signIn(provider);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (asNew = false) => {
     if (!user) return;
     if (!idToken) {
       setError('Your sign-in session is still initializing. Wait a moment, or click Refresh session below.');
@@ -186,15 +216,19 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     try {
       const result = await saveCurrentMolecularView({
         title,
-        slug: cleanSlug,
+        slug: asNew ? slugifySavedViewTitle(title || defaultTitle) : cleanSlug,
         user,
+        visibility,
+        thumbnail: captureViewerThumbnail(),
+        forceNewSlug: asNew,
       });
       setSavedUrl(result.url);
       setSlug(result.view.slug);
-      setStatus('Saved.');
+      setSlugTouched(true);
+      setStatus(asNew ? 'Saved as a new view.' : ownsActiveView ? 'View updated.' : 'Saved.');
       // Invalidate recent views query so list updates immediately
       queryClient.invalidateQueries({
-        queryKey: ['recentSavedViews', user?.uid],
+        queryKey: ['savedViews', user?.uid],
       });
       // North Star: a molecule view was persisted. No PII — counts + flags only.
       track(ANALYTICS_EVENTS.VIEW_SAVED, {
@@ -271,7 +305,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const header = (
     <LupiPanelHeader
       kicker="Save and share"
-      title={savedUrl ? 'Your saved snapshot' : 'Create a view link'}
+      title={ownsActiveView ? 'Update your view' : savedUrl ? 'Your saved snapshot' : 'Create a view link'}
       titleId={titleId}
       accessory={isMobile ? undefined : <LupiOpticalMark active={Boolean(savedUrl)} />}
       onClose={isMobile ? () => close(true) : undefined}
@@ -372,6 +406,63 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     </div>
   );
 
+  const visibilityControl = (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <span style={labelStyle}>Who can find it</span>
+      <div role="radiogroup" aria-label="Visibility" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+        {(['public', 'unlisted'] as const).map(option => (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={visibility === option}
+            onClick={() => setVisibility(option)}
+            style={{
+              height: isMobile ? 44 : 36,
+              borderRadius: 6,
+              border: `1px solid ${visibility === option ? 'rgba(132,215,255,0.6)' : lupiUserColors.line}`,
+              background: visibility === option ? 'rgba(132,215,255,0.14)' : 'rgba(244,239,229,0.04)',
+              color: lupiUserColors.paper,
+              fontFamily: 'var(--font-mono), ui-monospace, monospace',
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            {option === 'public' ? 'Public' : 'Unlisted'}
+          </button>
+        ))}
+      </div>
+      <span style={{ color: lupiUserColors.muted, fontSize: 11, lineHeight: 1.4 }}>
+        {visibility === 'public'
+          ? 'Listed on your profile and open to search engines.'
+          : 'Only people with the link can open it.'}
+      </span>
+    </div>
+  );
+
+  const libraryLink = (
+    <button
+      type="button"
+      onClick={() => { close(); openLibrary(true); }}
+      style={{
+        justifySelf: 'start',
+        padding: 0,
+        border: 0,
+        background: 'none',
+        color: lupiUserColors.cyan,
+        fontFamily: 'var(--font-mono), ui-monospace, monospace',
+        fontSize: 11,
+        fontWeight: 800,
+        cursor: 'pointer',
+        textDecoration: 'underline',
+        textUnderlineOffset: 3,
+      }}
+    >
+      All your views →
+    </button>
+  );
+
   const linkPreview = isMobile ? null : (
     <div
       style={{
@@ -413,10 +504,15 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   );
 
   const saveButton = (
-    <LupiButton tone="primary" size={controlSize} onClick={handleSave} disabled={busy || !idToken}>
-      {busy ? 'Saving' : savedUrl ? (isMobile ? 'Save again' : 'Save') : 'Save'}
+    <LupiButton tone="primary" size={controlSize} onClick={() => void handleSave(false)} disabled={busy || !idToken}>
+      {busy ? 'Saving' : ownsActiveView ? 'Update view' : savedUrl ? (isMobile ? 'Save again' : 'Save') : 'Save'}
     </LupiButton>
   );
+  const saveAsNewButton = ownsActiveView ? (
+    <LupiButton size={controlSize} onClick={() => void handleSave(true)} disabled={busy || !idToken}>
+      Save as new
+    </LupiButton>
+  ) : null;
   const refreshButton = !idToken && user ? (
     <LupiButton size={controlSize} onClick={handleRefreshSession} disabled={busy}>
       Refresh session
@@ -443,10 +539,11 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
           {copyButton}
           {canNativeShare && <LupiButton size="touch" onClick={handleNativeShare}>Share</LupiButton>}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: saveAsNewButton ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
           {saveButton}
-          <LupiButton size="touch" onClick={() => handleExternalShare('linkedin')}>LinkedIn</LupiButton>
-          <LupiButton size="touch" onClick={() => handleExternalShare('x')}>X</LupiButton>
+          {saveAsNewButton}
+          {!saveAsNewButton && <LupiButton size="touch" onClick={() => handleExternalShare('linkedin')}>LinkedIn</LupiButton>}
+          {!saveAsNewButton && <LupiButton size="touch" onClick={() => handleExternalShare('x')}>X</LupiButton>}
         </div>
       </>
     ) : (
@@ -457,8 +554,9 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     )
   ) : (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: savedUrl ? '1fr 1fr' : '1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: savedUrl || saveAsNewButton ? '1fr 1fr' : '1fr', gap: 8 }}>
         {saveButton}
+        {saveAsNewButton}
         {refreshButton}
         {copyButton}
       </div>
@@ -473,7 +571,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const recentLimit = isMobile ? 3 : 4;
   const recentLinks = recentViews.length > 0 && (
     <div style={{ display: 'grid', gap: 7 }}>
-      <span style={labelStyle}>Links</span>
+      <span style={labelStyle}>Recent views</span>
       {recentViews.slice(0, recentLimit).map(view => (
         <LupiIndexRow
           key={view.slug}
@@ -502,10 +600,12 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const signedIn: ReactNode = (
     <>
       {fields}
+      {visibilityControl}
       {linkPreview}
       {notices}
       {!isMobile && actions}
       {recentLinks}
+      {libraryLink}
     </>
   );
 

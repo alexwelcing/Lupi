@@ -1,5 +1,6 @@
 import type { User } from 'firebase/auth';
 import {
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -7,6 +8,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
   collection,
   type Timestamp,
@@ -21,7 +23,7 @@ import type { Frame } from '@atlas/core/types';
 import { firebaseDb } from './auth/firebase';
 import { loadInlineMolecule, loadMoleculeSource } from './loadMoleculeSource';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
-import { useStore, sanitizeEnvironmentPreset, type AppState, type LoadedFile } from './store';
+import { useStore, sanitizeEnvironmentPreset, type AppState, type LoadedFile, type SavedViewVisibility } from './store';
 import {
   measurementForInlineSnapshot,
   sanitizeMolecularMeasurement,
@@ -36,21 +38,31 @@ export const SAVED_VIEW_SCHEMA_VERSION = 1;
 const VIEW_COLLECTION = 'lupiViews';
 const INLINE_XYZ_ATOM_LIMIT = 5_000;
 
+export interface SavedViewThumbnail {
+  /** Small JPEG data URL captured from the live viewer at save time. */
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 export interface SavedMolecularView {
   schemaVersion: 1;
   slug: string;
   title: string;
   ownerId: string;
-  visibility: 'public';
+  visibility: SavedViewVisibility;
   molecule: SavedMoleculeSource;
   view: CanonicalMolecularView;
   exportDefaults: {
     baseName: string;
     canonicalSlug: string;
   };
+  thumbnail?: SavedViewThumbnail;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
+
+export const SAVED_VIEW_LIST_LIMIT = 100;
 
 export type SavedMoleculeSource =
   | {
@@ -171,13 +183,20 @@ export function makeSavedViewUrl(slug: string): string {
 }
 
 export async function saveCurrentMolecularView({
+  forceNewSlug = false,
   slug,
+  thumbnail,
   title,
   user,
+  visibility = 'public',
 }: {
+  /** Never overwrite an existing view of the caller's, even on a matching slug. */
+  forceNewSlug?: boolean;
   slug?: string;
+  thumbnail?: SavedViewThumbnail | null;
   title: string;
   user: User;
+  visibility?: SavedViewVisibility;
 }): Promise<{ url: string; view: SavedMolecularView }> {
   if (!firebaseDb) throw new Error('Firebase database is not configured.');
 
@@ -197,7 +216,7 @@ export async function saveCurrentMolecularView({
   // Default to a unique slug. If the user explicitly chose a slug that they
   // already own, reuse it (update). If it belongs to someone else or is
   // orphaned, append a short random suffix so the save always succeeds.
-  const cleanSlug = await findUniqueSlug(baseSlug, user.uid);
+  const cleanSlug = await findUniqueSlug(baseSlug, user.uid, forceNewSlug);
   const ref = doc(firebaseDb, VIEW_COLLECTION, cleanSlug);
   const current = await getDoc(ref);
 
@@ -223,13 +242,14 @@ export async function saveCurrentMolecularView({
     slug: cleanSlug,
     title: title.trim() || defaultSavedViewTitle(useStore.getState().file),
     ownerId: user.uid,
-    visibility: 'public',
+    visibility,
     molecule,
     view: canonicalView,
     exportDefaults: {
       baseName: cleanSlug,
       canonicalSlug: cleanSlug,
     },
+    ...(thumbnail ? { thumbnail } : {}),
   };
 
   const write = async () => setDoc(ref, {
@@ -252,6 +272,12 @@ export async function saveCurrentMolecularView({
     }
   }
 
+  useStore.getState().setActiveSavedView({
+    slug: cleanSlug,
+    title: view.title,
+    ownerId: user.uid,
+    visibility,
+  });
   return { url: makeSavedViewUrl(cleanSlug), view };
 }
 
@@ -270,17 +296,53 @@ export async function loadSavedMolecularView(
   await loadSavedMolecule(saved.molecule, options);
   assertViewerLoadCurrent(options.isCurrent);
   applyCanonicalView(saved.view);
+  useStore.getState().setActiveSavedView({
+    slug: saved.slug,
+    title: saved.title,
+    ownerId: saved.ownerId,
+    visibility: saved.visibility === 'unlisted' ? 'unlisted' : 'public',
+  });
   window.setTimeout(() => {
     if (viewerLoadIsCurrent(options.isCurrent)) applyCanonicalView(saved.view);
   }, 90);
   return saved;
 }
 
-export async function listUserSavedViews(uid: string): Promise<SavedMolecularView[]> {
+/** Every view the user owns, newest update first. Sorted client-side so no
+ *  composite index is needed; the collection is small per owner. */
+export async function listUserSavedViews(uid: string, max = SAVED_VIEW_LIST_LIMIT): Promise<SavedMolecularView[]> {
   if (!firebaseDb) return [];
-  const viewsQuery = query(collection(firebaseDb, VIEW_COLLECTION), where('ownerId', '==', uid), limit(8));
+  const viewsQuery = query(collection(firebaseDb, VIEW_COLLECTION), where('ownerId', '==', uid), limit(max));
   const snaps = await getDocs(viewsQuery);
-  return snaps.docs.map((viewDoc) => viewDoc.data() as SavedMolecularView);
+  return snaps.docs
+    .map((viewDoc) => viewDoc.data() as SavedMolecularView)
+    .sort((a, b) => savedViewMillis(b.updatedAt ?? b.createdAt) - savedViewMillis(a.updatedAt ?? a.createdAt));
+}
+
+export function savedViewMillis(stamp: Timestamp | undefined): number {
+  return stamp && typeof stamp.toMillis === 'function' ? stamp.toMillis() : 0;
+}
+
+export async function renameSavedView(slug: string, title: string): Promise<void> {
+  if (!firebaseDb) throw new Error('Firebase database is not configured.');
+  const clean = title.trim();
+  if (!clean) throw new Error('Give the view a name.');
+  await updateDoc(doc(firebaseDb, VIEW_COLLECTION, slug), { title: clean, updatedAt: serverTimestamp() });
+  const active = useStore.getState().activeSavedView;
+  if (active?.slug === slug) useStore.getState().setActiveSavedView({ ...active, title: clean });
+}
+
+export async function updateSavedViewVisibility(slug: string, visibility: SavedViewVisibility): Promise<void> {
+  if (!firebaseDb) throw new Error('Firebase database is not configured.');
+  await updateDoc(doc(firebaseDb, VIEW_COLLECTION, slug), { visibility, updatedAt: serverTimestamp() });
+  const active = useStore.getState().activeSavedView;
+  if (active?.slug === slug) useStore.getState().setActiveSavedView({ ...active, visibility });
+}
+
+export async function deleteSavedView(slug: string): Promise<void> {
+  if (!firebaseDb) throw new Error('Firebase database is not configured.');
+  await deleteDoc(doc(firebaseDb, VIEW_COLLECTION, slug));
+  if (useStore.getState().activeSavedView?.slug === slug) useStore.getState().setActiveSavedView(null);
 }
 
 export function readMoleculeSource(): SavedMoleculeSource {
@@ -512,15 +574,16 @@ function isFirestorePermissionDenied(error: unknown): boolean {
     && (error as { code?: unknown }).code === 'permission-denied';
 }
 
-async function findUniqueSlug(baseSlug: string, uid: string): Promise<string> {
+async function findUniqueSlug(baseSlug: string, uid: string, forceNew = false): Promise<string> {
   if (!firebaseDb) return baseSlug;
   const baseRef = doc(firebaseDb, VIEW_COLLECTION, baseSlug);
   const baseSnap = await getDoc(baseRef);
   if (!baseSnap.exists()) return baseSlug;
 
   const ownerId = baseSnap.data().ownerId;
-  // The user explicitly re-used their own slug — update in place.
-  if (ownerId === uid) return baseSlug;
+  // The user explicitly re-used their own slug — update in place, unless they
+  // asked for a fresh copy.
+  if (ownerId === uid && !forceNew) return baseSlug;
 
   // Otherwise generate a short random suffix until we find a free slug.
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -531,7 +594,7 @@ async function findUniqueSlug(baseSlug: string, uid: string): Promise<string> {
     if (!candidateSnap.exists()) return candidate;
 
     const candidateOwner = candidateSnap.data().ownerId;
-    if (candidateOwner === uid) return candidate;
+    if (candidateOwner === uid && !forceNew) return candidate;
   }
 
   // Last resort: append a millisecond timestamp.

@@ -132,6 +132,9 @@ export function LupiPanel({
         ...(align === 'left' ? { left: 0 } : { right: 0 }),
         top: 44,
         width: `min(${width}px, calc(100vw - 24px))`,
+        maxHeight: 'calc(100vh - 88px)',
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
         padding: 0,
         zIndex,
         color: lupiUserColors.paper,
@@ -161,20 +164,27 @@ export function LupiSheet({
   footer,
   header,
   labelledBy,
+  maxWidth = 560,
   onDismiss,
   sheetRef,
   testId,
+  variant = 'sheet',
   zIndex = 600,
 }: {
   children: ReactNode;
   footer?: ReactNode;
   header: ReactNode;
   labelledBy?: string;
+  /** Widest the surface grows; the dialog variant uses it for the modal width. */
+  maxWidth?: number;
   onDismiss: () => void;
   sheetRef?: (node: HTMLDivElement | null) => void;
   testId?: string;
+  /** `sheet` rises from the bottom edge (phones); `dialog` is a centered modal (desktop). */
+  variant?: 'sheet' | 'dialog';
   zIndex?: number;
 }) {
+  const dialog = variant === 'dialog';
   const localRef = useRef<HTMLDivElement | null>(null);
   const setRef = (node: HTMLDivElement | null) => {
     localRef.current = node;
@@ -217,7 +227,15 @@ export function LupiSheet({
   return createPortal(
     <div
       data-lupi-sheet-root=""
-      style={{ position: 'fixed', inset: 0, zIndex, display: 'grid', alignItems: 'end' }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex,
+        display: 'grid',
+        alignItems: dialog ? 'center' : 'end',
+        justifyItems: 'center',
+        padding: dialog ? 24 : 0,
+      }}
     >
       <div
         aria-hidden="true"
@@ -244,31 +262,32 @@ export function LupiSheet({
           display: 'grid',
           gridTemplateRows: 'auto minmax(0, 1fr) auto',
           width: '100%',
-          maxHeight: 'calc(100dvh - env(safe-area-inset-top) - 20px)',
+          maxHeight: dialog ? 'min(86dvh, 900px)' : 'calc(100dvh - env(safe-area-inset-top) - 20px)',
           margin: '0 auto',
-          maxWidth: 560,
+          maxWidth,
           color: lupiUserColors.paper,
           background: gridSurface,
-          borderTop: `1px solid ${lupiUserColors.lineStrong}`,
-          borderLeft: `1px solid ${lupiUserColors.lineStrong}`,
-          borderRight: `1px solid ${lupiUserColors.lineStrong}`,
-          borderRadius: '18px 18px 0 0',
-          boxShadow: '0 -18px 64px rgba(0,0,0,0.6)',
+          border: `1px solid ${lupiUserColors.lineStrong}`,
+          borderBottom: dialog ? `1px solid ${lupiUserColors.lineStrong}` : 'none',
+          borderRadius: dialog ? 14 : '18px 18px 0 0',
+          boxShadow: dialog ? '0 32px 96px rgba(0,0,0,0.6)' : '0 -18px 64px rgba(0,0,0,0.6)',
           outline: 'none',
           overflow: 'hidden',
         }}
       >
         <div>
-          <div
-            aria-hidden="true"
-            style={{
-              width: 42,
-              height: 4,
-              margin: '10px auto 0',
-              borderRadius: 999,
-              background: lupiUserColors.lineStrong,
-            }}
-          />
+          {!dialog && (
+            <div
+              aria-hidden="true"
+              style={{
+                width: 42,
+                height: 4,
+                margin: '10px auto 0',
+                borderRadius: 999,
+                background: lupiUserColors.lineStrong,
+              }}
+            />
+          )}
           {header}
         </div>
         <div
@@ -277,7 +296,7 @@ export function LupiSheet({
             overflowY: 'auto',
             overscrollBehavior: 'contain',
             WebkitOverflowScrolling: 'touch',
-            paddingBottom: footer ? 0 : 'env(safe-area-inset-bottom)',
+            paddingBottom: footer || dialog ? 0 : 'env(safe-area-inset-bottom)',
           }}
         >
           {children}
@@ -287,7 +306,7 @@ export function LupiSheet({
             style={{
               display: 'grid',
               gap: 8,
-              padding: '10px 14px calc(12px + env(safe-area-inset-bottom))',
+              padding: dialog ? '10px 14px 12px' : '10px 14px calc(12px + env(safe-area-inset-bottom))',
               borderTop: `1px solid ${lupiUserColors.line}`,
               background: 'rgba(5,5,5,0.5)',
             }}

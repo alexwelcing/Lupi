@@ -1,9 +1,27 @@
 import { lazy, Suspense, useState } from 'react';
+import { useStore } from './store';
 const AccountMenu = lazy(() =>
   import('./user/AccountMenu').then(module => ({
     default: module.AccountMenu,
   })),
 );
+const SavedViewsLibrary = lazy(() =>
+  import('./user/SavedViewsLibrary').then(module => ({
+    default: module.SavedViewsLibrary,
+  })),
+);
+
+/** The "Your views" library is opened from Account or Save; it mounts (and
+ *  pulls the auth/Firestore clients) only while the store flag is set. */
+function SavedViewsLibraryHost() {
+  const open = useStore(s => s.savedViewsLibraryOpen);
+  if (!open) return null;
+  return (
+    <Suspense fallback={null}>
+      <SavedViewsLibrary />
+    </Suspense>
+  );
+}
 
 /** Authentication and saved-view clients are fetched only when Account is opened. */
 export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
@@ -31,17 +49,21 @@ export function LupiAgentDock({ compact = false }: { compact?: boolean }) {
         >
           Account
         </button>
+        <SavedViewsLibraryHost />
       </div>
     );
   return (
-    <Suspense
-      fallback={
-        <span role="status" style={style}>
-          Loading account…
-        </span>
-      }
-    >
-      <AccountMenu compact={compact} />
-    </Suspense>
+    <>
+      <Suspense
+        fallback={
+          <span role="status" style={style}>
+            Loading account…
+          </span>
+        }
+      >
+        <AccountMenu compact={compact} />
+      </Suspense>
+      <SavedViewsLibraryHost />
+    </>
   );
 }
