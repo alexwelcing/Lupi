@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 export const lupiUserColors = {
@@ -187,6 +187,31 @@ export function LupiSheet({
     localRef.current?.focus({ preventScroll: true });
   }, []);
 
+  // aria-modal promises that focus stays inside; keep Tab cycling within the
+  // sheet so keyboard and screen-reader users cannot reach the obscured page.
+  const trapFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab' || !localRef.current) return;
+    const focusable = Array.from(
+      localRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === localRef.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -213,6 +238,7 @@ export function LupiSheet({
         aria-labelledby={labelledBy}
         data-testid={testId}
         tabIndex={-1}
+        onKeyDown={trapFocus}
         style={{
           position: 'relative',
           display: 'grid',
