@@ -44,6 +44,8 @@ export function buildSavedViewShareModel(
   const description = describeSavedView(doc);
   const shareUrl = `${origin}/view/${encodeURIComponent(clean)}`;
   const imageUrl = `${origin}${DEFAULT_SOCIAL_IMAGE}`;
+  // Unlisted views open from their link but must stay out of search results.
+  const unlisted = stringField(doc.visibility) === 'unlisted';
 
   return {
     appUrl: `${origin}/#/view/${encodeURIComponent(clean)}`,
@@ -51,11 +53,15 @@ export function buildSavedViewShareModel(
     imageAlt: `${title} in the Lupi molecular viewer.`,
     imageUrl,
     pageTitle: `${title} | Lupi`,
-    robots: 'index,follow,max-image-preview:large',
+    robots: unlisted ? 'noindex,nofollow,max-image-preview:large' : 'index,follow,max-image-preview:large',
     shareUrl,
     slug: clean,
     title,
   };
+}
+
+export function isShareableVisibility(visibility: unknown): boolean {
+  return visibility === 'public' || visibility === 'unlisted';
 }
 
 export function buildMissingViewShareModel(

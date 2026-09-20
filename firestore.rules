@@ -17,17 +17,19 @@ service cloud.firestore {
       allow get: if true;
       allow list: if resource.data.visibility == 'public' || isOwner(resource.data);
 
+      // 'public' views are listed and indexed; 'unlisted' views open from
+      // their link only and are hidden from listings and crawlers.
       allow create: if signedIn()
         && request.resource.data.schemaVersion == 1
         && request.resource.data.slug == slug
         && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.visibility == 'public';
+        && request.resource.data.visibility in ['public', 'unlisted'];
 
       allow update: if isOwner(resource.data)
         && request.resource.data.schemaVersion == 1
         && request.resource.data.slug == slug
         && request.resource.data.ownerId == resource.data.ownerId
-        && request.resource.data.visibility == 'public';
+        && request.resource.data.visibility in ['public', 'unlisted'];
 
       allow delete: if isOwner(resource.data);
     }

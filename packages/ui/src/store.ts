@@ -293,6 +293,19 @@ export interface ExportFailure {
   details?: Readonly<Record<string, string | number | boolean>>;
 }
 
+/** Visibility of a saved view. Public views are listed and indexed; unlisted
+ *  views open from their link but stay out of listings and search engines. */
+export type SavedViewVisibility = 'public' | 'unlisted';
+
+/** The saved view currently shown in the viewer, when the route loaded one.
+ *  Lets the Save panel offer "Update" instead of silently forking a copy. */
+export interface ActiveSavedView {
+  slug: string;
+  title: string;
+  ownerId: string;
+  visibility: SavedViewVisibility;
+}
+
 export interface LoadedFile {
   name: string;
   size: number;
@@ -521,6 +534,8 @@ export interface AppState {
   /** Sign-in callout visibility. Defaults CLOSED — the app never auto-prompts
    *  anonymous visitors to sign up; opened only by an explicit user action. */
   authPromptOpen: boolean;
+  activeSavedView: ActiveSavedView | null;
+  savedViewsLibraryOpen: boolean;
   /** Active studio deck inside the studio panel (molecule/scene/export). */
   studioDeck: ViewerControlMode | null;
   /** Camera preset popover open state. */
@@ -779,6 +794,8 @@ export interface AppState {
   toggleViewMenu: () => void;
   toggleStudyLens: () => void;
   setAuthPromptOpen: (open: boolean) => void;
+  setActiveSavedView: (view: ActiveSavedView | null) => void;
+  setSavedViewsLibraryOpen: (open: boolean) => void;
   fitCameraView: () => void;
   openConfigurator: (seed?: string) => void;
   closeConfigurator: () => void;
@@ -977,6 +994,8 @@ const DEFAULTS = {
   colorblindMode: false,
   activePanel: null,
   authPromptOpen: false,
+  activeSavedView: null,
+  savedViewsLibraryOpen: false,
   studioDeck: null,
   viewMenuOpen: false,
   studyLensOpen: false,
@@ -1274,6 +1293,8 @@ export const useStore = create<AppState>()(
 
       set({
         file,
+        // A freshly loaded file is no longer the saved view that was on screen.
+        activeSavedView: null,
         ghostFile: null,
         frame: 0,
         playing: false,
@@ -1588,6 +1609,8 @@ export const useStore = create<AppState>()(
       activePanel: s.activePanel === activePanel ? null : activePanel,
     })),
     setAuthPromptOpen: (authPromptOpen) => set({ authPromptOpen }),
+    setActiveSavedView: (activeSavedView) => set({ activeSavedView }),
+    setSavedViewsLibraryOpen: (savedViewsLibraryOpen) => set({ savedViewsLibraryOpen }),
     openConfigurator: (seed) => set({ configuratorOpen: true, configuratorSeed: seed ?? null }),
     closeConfigurator: () => set({ configuratorOpen: false }),
     openRunConfigurator: (seed) => set({ runConfiguratorOpen: true, runConfiguratorSeed: seed ?? null }),

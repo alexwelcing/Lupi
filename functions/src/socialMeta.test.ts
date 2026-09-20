@@ -4,6 +4,7 @@ import {
   buildSavedViewShareModel,
   renderSavedViewShareHtml,
   savedViewSlugFromRequestPath,
+  isShareableVisibility,
 } from './socialMeta';
 
 describe('savedViewSlugFromRequestPath', () => {
@@ -50,6 +51,14 @@ describe('buildSavedViewShareModel', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('property="og:image:width" content="1200"');
     expect(html).toContain('name="twitter:card" content="summary_large_image"');
+  });
+
+  it('keeps unlisted views out of search results but still shareable', () => {
+    const model = buildSavedViewShareModel('quiet-view', { title: 'Quiet', visibility: 'unlisted' });
+    expect(model.robots).toContain('noindex');
+    expect(model.shareUrl).toContain('/view/quiet-view');
+    expect(isShareableVisibility('unlisted')).toBe(true);
+    expect(isShareableVisibility('private')).toBe(false);
   });
 
   it('marks missing views noindex', () => {
