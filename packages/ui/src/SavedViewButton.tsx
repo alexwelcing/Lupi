@@ -99,7 +99,9 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const [savedUrl, setSavedUrl] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<SavedViewVisibility>('public');
   const [recentViews, setRecentViews] = useState<SavedMolecularView[]>([]);
-  const lastActiveSlugRef = useRef<string | null>(null);
+  // Signature of the owned active view (slug, title, visibility) so a rename
+  // or visibility change made elsewhere (the library) resyncs the draft too.
+  const lastActiveSignatureRef = useRef<string | null>(null);
 
   // Editing your own saved view: prefill its name, slug and visibility so Save
   // updates it in place instead of quietly forking "<file> Publish".
@@ -118,10 +120,12 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   }, [defaultTitle, slugTouched]);
 
   useEffect(() => {
-    const slugNow = ownsActiveView && activeSavedView ? activeSavedView.slug : null;
-    if (slugNow === lastActiveSlugRef.current) return;
-    lastActiveSlugRef.current = slugNow;
-    if (slugNow && activeSavedView) {
+    const signature = ownsActiveView && activeSavedView
+      ? `${activeSavedView.slug}\u0000${activeSavedView.title}\u0000${activeSavedView.visibility}`
+      : null;
+    if (signature === lastActiveSignatureRef.current) return;
+    lastActiveSignatureRef.current = signature;
+    if (signature && activeSavedView) {
       setTitle(activeSavedView.title);
       setSlug(activeSavedView.slug);
       setSlugTouched(true);
@@ -214,9 +218,16 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     setError(null);
     setStatus(null);
     try {
+      // Updates always target the view on screen; a different link name is a
+      // fork, which is what "Save as new" does.
+      const targetSlug = asNew
+        ? slugifySavedViewTitle(title || defaultTitle)
+        : ownsActiveView && activeSavedView
+          ? activeSavedView.slug
+          : cleanSlug;
       const result = await saveCurrentMolecularView({
         title,
-        slug: asNew ? slugifySavedViewTitle(title || defaultTitle) : cleanSlug,
+        slug: targetSlug,
         user,
         visibility,
         thumbnail: captureViewerThumbnail(),
@@ -395,13 +406,18 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}
+        readOnly={ownsActiveView}
         value={slug}
         onChange={value => {
           setSlugTouched(true);
           setSlug(slugifySavedViewTitle(value));
         }}
         placeholder={slugifySavedViewTitle(title || defaultTitle)}
-        hint={isMobile ? urlPreview : undefined}
+        hint={
+          ownsActiveView
+            ? `${isMobile ? `${urlPreview} · ` : ''}Link names are fixed once saved. Use Save as new for a different link.`
+            : isMobile ? urlPreview : undefined
+        }
       />
     </div>
   );

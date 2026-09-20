@@ -479,6 +479,26 @@ describe('lupi Cloudflare MCP worker', () => {
     expect(html).toContain('https://lupi.live/#/view/copper-publish');
   });
 
+  it('serves unlisted saved views from their link with noindex', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      fields: {
+        slug: { stringValue: 'quiet-view' },
+        title: { stringValue: 'Quiet View' },
+        visibility: { stringValue: 'unlisted' },
+      },
+    }), { headers: { 'content-type': 'application/json' } })));
+
+    const res = await handleRequest(req('/view/quiet-view'), {
+      FIREBASE_PROJECT_ID: 'shed-489901',
+      FIREBASE_WEB_API_KEY: 'public-web-key',
+      LUPI_PUBLIC_ORIGIN: 'https://lupi.live',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-robots-tag')).toContain('noindex');
+    expect(await res.text()).toContain('Quiet View | Lupi');
+  });
+
   it('implements tools/list JSON-RPC', async () => {
     const res = await handleRequest(req('/mcp', {
       method: 'POST',

@@ -478,6 +478,7 @@ export function LupiField({
   hint,
   label,
   placeholder,
+  readOnly = false,
   size = 'default',
   spellCheck,
   value,
@@ -489,6 +490,7 @@ export function LupiField({
   hint?: ReactNode;
   label: string;
   placeholder?: string;
+  readOnly?: boolean;
   /** `touch` uses a 16px font so iOS does not zoom the page on focus. */
   size?: 'default' | 'touch';
   spellCheck?: boolean;
@@ -505,14 +507,16 @@ export function LupiField({
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
         spellCheck={spellCheck}
+        readOnly={readOnly}
+        aria-readonly={readOnly || undefined}
         style={{
           width: '100%',
           height: size === 'touch' ? 46 : 38,
           padding: '0 12px',
           borderRadius: size === 'touch' ? 10 : 6,
           border: `1px solid ${lupiUserColors.line}`,
-          background: 'rgba(5,5,5,0.52)',
-          color: lupiUserColors.paper,
+          background: readOnly ? 'rgba(244,239,229,0.03)' : 'rgba(5,5,5,0.52)',
+          color: readOnly ? lupiUserColors.muted : lupiUserColors.paper,
           outline: 'none',
           fontSize: size === 'touch' ? 16 : 13,
         }}

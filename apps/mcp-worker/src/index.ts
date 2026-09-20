@@ -2391,7 +2391,9 @@ async function renderSavedViewShare(request: Request, env: Env) {
   if (slug) {
     try {
       const doc = await readSavedViewDoc(slug, env);
-      if (doc?.visibility === 'public') {
+      // Public views are indexed; unlisted views open from their link but
+      // carry noindex. Anything else stays a 404.
+      if (doc?.visibility === 'public' || doc?.visibility === 'unlisted') {
         status = 200;
         model = buildSavedViewShareModel(slug, doc, publicOrigin);
         redirectToApp = true;
@@ -2466,13 +2468,14 @@ function buildSavedViewShareModel(slug: string, doc: Record<string, unknown>, pu
   const prefix = readString(molecule?.name) ? `${clip(cleanText(String(molecule?.name)), 72)}: ` : '';
   const stats = atomCount && atomCount > 0 ? `${new Intl.NumberFormat('en-US').format(Math.round(atomCount))} atoms in ` : '';
   const description = clip(`${prefix}${stats}a browser-shareable Lupi molecular view with a live 3D scene.`, 220);
+  const unlisted = readString(doc.visibility) === 'unlisted';
   return {
     appUrl: `${origin}/#/view/${encodeURIComponent(clean)}`,
     description,
     imageAlt: `${title} in the Lupi molecular viewer.`,
     imageUrl: `${origin}${DEFAULT_SOCIAL_IMAGE}`,
     pageTitle: `${title} | Lupi`,
-    robots: 'index,follow,max-image-preview:large',
+    robots: unlisted ? 'noindex,nofollow,max-image-preview:large' : 'index,follow,max-image-preview:large',
     shareUrl: `${origin}/view/${encodeURIComponent(clean)}`,
     title,
   };
