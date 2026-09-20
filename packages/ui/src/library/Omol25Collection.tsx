@@ -14,7 +14,7 @@ import {
 import type { MoleculeHit } from '../molecules/types';
 import { LibraryCard } from './LibraryCard';
 import { openLibraryHit, useLibraryHandoff } from './openHit';
-import { PeriodicTableFacet } from './PeriodicTableFacet';
+import { ElementChips } from '../switcher/ElementChips';
 import { trackLibrarySearch } from './trackLibrarySearch';
 import { useLibraryQuery } from './useLibraryQuery';
 
@@ -43,7 +43,7 @@ function isRemoteCollection(value: string | null): value is RemoteOmolCollection
  * Meta FAIR's Open Molecules 2025 through the public ColabFit conversions.
  * Default view pages the five remote collections through the same-origin
  * edge; the facets view navigates the complete 27,697-row neutral validation
- * slice by periodic table and Lupi's functional-group geometry screen.
+ * slice by element and Lupi's functional-group geometry screen.
  */
 export function Omol25Collection() {
   const [query, update] = useLibraryQuery();
@@ -69,7 +69,7 @@ export function Omol25Collection() {
             Remote collections <small>34.3M+</small>
           </button>
           <button type="button" aria-pressed={facets} onClick={() => update({ view: 'facets', offset: 0 })}>
-            Faceted validation slice <small>27.7K</small>
+            Filter by element <small>27.7K</small>
           </button>
         </div>
       </header>
@@ -329,8 +329,7 @@ export function FacetedValidation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced, elementsKey, groupsKey]);
 
-  const countByElement = useMemo(() => new Map((facets?.elementCounts ?? []).map((entry) => [entry.element, entry.count])), [facets]);
-  const maxCount = facets?.elementCounts[0]?.count ?? 1;
+  const elementChips = useMemo(() => (facets?.elementCounts ?? []).map((entry) => ({ symbol: entry.element, count: entry.count })), [facets]);
 
   const toggleElement = (symbol: string) =>
     update({
@@ -383,9 +382,9 @@ export function FacetedValidation() {
       )}
       <section aria-labelledby="omol-space">
         <div className="library-section-head">
-          <h3 id="omol-space">Chemical space</h3>
+          <h3 id="omol-space">Elements</h3>
           <p>
-            Click elements to filter (AND).{' '}
+            Tap elements to filter (AND).{' '}
             {query.elements.length > 0 && (
               <button type="button" className="library-clear" onClick={() => update({ elements: [] })}>
                 Clear {query.elements.length}
@@ -393,7 +392,7 @@ export function FacetedValidation() {
             )}
           </p>
         </div>
-        <PeriodicTableFacet countByElement={countByElement} maxCount={maxCount} selected={query.elements} onToggle={toggleElement} />
+        <ElementChips counts={elementChips} selected={query.elements} onToggle={toggleElement} quick={16} ariaLabel="Elements in this slice" />
       </section>
       {facets && facets.functionalGroupCounts.length > 0 && (
         <section aria-labelledby="omol-groups">

@@ -37,7 +37,7 @@ const TITLES: Record<LibraryCollectionId, { heading: string; lede: string }> = {
   },
   omol25: {
     heading: 'Open Molecules 2025.',
-    lede: 'Tens of millions of DFT structures, paged from the public ColabFit conversions on demand.',
+    lede: 'Tens of millions of DFT structures, paged from the public ColabFit conversions on demand, or filtered by element.',
   },
   research: {
     heading: 'Cited research files.',

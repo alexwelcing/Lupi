@@ -17,7 +17,8 @@ test('switcher swaps the molecule in place from the periodic table and search', 
   // Element filter: carbon + nitrogen narrows to nitrogenous organics.
   await page.getByRole('button', { name: 'Carbon (C)' }).click();
   await page.getByRole('button', { name: 'Nitrogen (N)' }).click();
-  await expect(page.getByRole('button', { name: 'Nitrogen, atomic number 7' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Nitrogen (N)' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Periodic table element filter' })).toHaveCount(0);
   await expect(page.getByRole('status').filter({ hasText: 'containing C + N' })).toBeVisible();
   const options = page.getByRole('option');
   expect(await options.count()).toBeGreaterThan(0);

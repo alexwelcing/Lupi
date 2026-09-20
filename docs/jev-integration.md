@@ -128,12 +128,14 @@ table, and a result list. The list is deterministic and immediate, from the
 index, and PubChem name autocomplete after two characters. Enter or a click
 swaps the structure in place and the panel stays open.
 
-Elements are picked two ways, both driven by what is actually switchable:
-large chips for the elements most structures contain, with counts, and a
-compact heat-lit periodic table that fits the panel width (elements no
-structure contains are shown disabled). A typed name overrides the element
-filter, so "water" with carbon and nitrogen selected still means water. The
-last few switches sit at the top as chips for one-click A/B comparison.
+Elements are chips, ordered by how many switchable structures contain each
+one, with the long tail behind a single "more" toggle. The periodic-table
+grid that shipped first was removed on 2026-09-20: an 18-column grid of
+touch targets never fit a side panel or a phone, and the same decision
+removed it from the Library's OMol25 facets. A typed name overrides the
+element filter, so "water" with carbon and nitrogen selected still means
+water. The last few switches sit at the top as chips for one-click A/B
+comparison.
 
 Jev re-orders the list a moment later as described above. The judgment is
 labeled inference on screen, per the ownership contract, and never replaces

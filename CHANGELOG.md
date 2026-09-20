@@ -17,6 +17,10 @@
   correct picks the labels omitted, median 214 ms direct.
 
 ### Changed
+- **Periodic-table grids removed** from the switcher and from the Library's
+  OMol25 facets, replaced by one shared `ElementChips` control ordered by
+  structure count with the tail behind a "more" toggle. A grid of 18 columns
+  never fit a side panel or a phone.
 - **Switcher redesigned against the live model**: element chips with counts
   plus a compact heat-lit table that fits the panel; recent-molecule chips;
   thumbnails; the judgment pool is the whole gallery so class queries work;
