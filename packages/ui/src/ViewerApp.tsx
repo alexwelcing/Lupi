@@ -53,7 +53,8 @@ import { xrStore } from './viewer/xrStore';
 
 import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
-import { DeferredCommandPalette } from './CommandPalette';
+import { DeferredCommandPalette, type CommandAction } from './CommandPalette';
+import { askViewerCommand } from './jev/askViewerCommand';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { decodeFlythrough } from './flythrough';
@@ -103,6 +104,26 @@ const EMPTY_TRAJECTORY_FRAMES: Array<import('@atlas/core/types').Frame | undefin
 // evaluates — before the component effect decodes `?s=`, so an explicit share
 // URL always wins over stored device settings. Idempotent and SSR/test-safe.
 initSettingsPersistence();
+
+/**
+ * Command-palette fallback: when nothing in the action list matches, ask the
+ * edge to interpret the text as one code-owned viewer command. The result is
+ * offered as a labeled suggestion and runs only when the user selects it.
+ */
+async function askPaletteCommand(query: string, signal: AbortSignal): Promise<CommandAction | null> {
+  const suggestion = await askViewerCommand(query, signal);
+  if (!suggestion) return null;
+  const percent = Math.round(suggestion.confidence * 100);
+  return {
+    id: `ask:${suggestion.action}`,
+    label: suggestion.label,
+    group: 'Ask',
+    note: suggestion.source === 'local' ? 'exact match' : `Jev · ${percent}% · inferred`,
+    onSelect: () => {
+      void window.__lupiViewerMcp?.execute({ id: `palette-${Date.now()}`, tool: suggestion.command.tool, arguments: suggestion.command.arguments });
+    },
+  };
+}
 
 export function ViewerApp() {
   const [hashRoute, setHashRoute] = useState(currentHashRoute);
@@ -882,6 +903,7 @@ export function ViewerApp() {
       <DeferredCommandPalette
         open={!isEmbeddedMobileViewer && commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
+        onAsk={file ? askPaletteCommand : undefined}
         actions={useMemo(() => {
           const list: import('./CommandPalette').CommandAction[] = [
             {

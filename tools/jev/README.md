@@ -61,7 +61,13 @@ npm run bench:jev                 # 32 paid calls; writes results/latest.json
 
 The benchmark intentionally uses a 15-second deadline to measure cold/idle calls. The interactive demo uses 1.2 seconds. Fresh benchmark responses are not silently retried or cached. Existing full viewer CI was not run for these isolated development-tool additions; production code and MCP manifests are unchanged.
 
-## Integration path
+## Integration (2026-09-20)
+
+The integration path below was taken. The interpreter and the provider client moved to `packages/core/src/jev/` and are shared with the Cloudflare Worker, which serves them as `POST /v1/viewer/command` behind the `TYPESAFE_API_KEY` secret; the viewer's command palette offers the decision as a labeled suggestion that runs only on explicit selection. This directory is now a thin wrapper over that shared code: `client.mjs` keeps the demo envelope, memory cache, and coalescing; `interpreter.mjs` keeps the call shapes and receipt hashes. Scripts run with `tsx` because the shared code is TypeScript. Thresholds, fixtures, and receipts are unchanged. See `docs/jev-integration.md`.
+
+Run: `pnpm demo:jev`, `pnpm test:jev`, `pnpm bench:jev -- --replay`.
+
+## Integration path (as written on 2026-09-19)
 
 For a production trial, keep the existing local parser for supported exact commands. Put `interpret()` behind an authenticated server endpoint using a provider secret, and expose semantic suggestions for unsupported command phrasing. Start with explicit user acceptance or reversible camera changes. Recheck viewer readiness and command eligibility at execution. Do not place the TypeSafe key or the shared MCP service secret in the browser. Observe accepted accuracy, abstention, idle-time failures and end-to-end latency before widening the allowlist.
 

@@ -3,6 +3,18 @@
 ## [Unreleased] - Jev on the edge and the molecule switcher
 
 ### Added
+- **One Jev client** (`packages/core/src/jev/`): the edge seam and the
+  command lab from PR #99 now share one request encoder, deadline, retry
+  rule, and strict answer validator, plus one viewer-command interpreter
+  with the lab's thirteen code-owned commands and gate. The lab's wrappers,
+  fixtures, receipts, and request hashes are unchanged; its scripts run
+  under `tsx`.
+- **`POST /v1/viewer/command`**: free text to one code-owned viewer command
+  or nothing, exact literals answered in code, gated Jev decisions cached for
+  an hour. Listed in `/health` under `jev.routes`.
+- **Command palette "Ask"**: when nothing in the palette matches, it asks the
+  edge and offers the answer as one labeled suggestion (`Jev · 97% ·
+  inferred`) that runs through the viewer bridge only when selected.
 - **Jev seam on the Cloudflare edge** (`apps/mcp-worker/src/jev.ts`): one
   module calls TypeSafe's System One API with constant instructions, a 1.5 s
   timeout, one retry, a one hour cache, and an aggregate `lupi_jev` log line.
@@ -17,6 +29,10 @@
   correct picks the labels omitted, median 214 ms direct.
 
 ### Changed
+- **Periodic-table grids removed** from the switcher and from the Library's
+  OMol25 facets, replaced by one shared `ElementChips` control ordered by
+  structure count with the tail behind a "more" toggle. A grid of 18 columns
+  never fit a side panel or a phone.
 - **Switcher redesigned against the live model**: element chips with counts
   plus a compact heat-lit table that fits the panel; recent-molecule chips;
   thumbnails; the judgment pool is the whole gallery so class queries work;

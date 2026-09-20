@@ -10,7 +10,8 @@
     "./elements": "./src/elements.ts",
     "./types": "./src/types.ts",
     "./glimbin": "./src/glimbin.ts",
-    "./test-utils": "./src/test-utils.ts"
+    "./test-utils": "./src/test-utils.ts",
+    "./jev": "./src/jev/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

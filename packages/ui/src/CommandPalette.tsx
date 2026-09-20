@@ -14,6 +14,8 @@ export interface CommandAction {
   shortcut?: string;
   icon?: React.ReactNode;
   disabled?: boolean;
+  /** Small trailing note, e.g. how a suggestion was produced. */
+  note?: string;
   onSelect: () => void;
 }
 
@@ -21,15 +23,26 @@ interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   actions: CommandAction[];
+  /**
+   * Called when no action matches the typed text. Resolves to one action to
+   * offer (executed only when the user selects it) or null. Aborted when the
+   * text changes or the palette closes.
+   */
+  onAsk?: (query: string, signal: AbortSignal) => Promise<CommandAction | null>;
+  /** Minimum characters before `onAsk` runs. */
+  askMinChars?: number;
 }
 
-export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) {
+const ASK_DEBOUNCE_MS = 250;
+
+export function CommandPalette({ open, onClose, actions, onAsk, askMinChars = 3 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [suggestion, setSuggestion] = useState<{ query: string; action: CommandAction | null; pending: boolean } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const filtered = useMemo(() => {
+  const matched = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return actions.filter(a => !a.disabled);
     return actions
@@ -39,6 +52,37 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
         a.group.toLowerCase().includes(q)
       );
   }, [actions, query]);
+
+  const trimmedQuery = query.trim();
+  const askable = Boolean(onAsk) && matched.length === 0 && trimmedQuery.length >= askMinChars;
+
+  useEffect(() => {
+    if (!open || !askable || !onAsk) {
+      setSuggestion(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setSuggestion({ query: trimmedQuery, action: null, pending: true });
+      onAsk(trimmedQuery, controller.signal)
+        .then((action) => {
+          if (!controller.signal.aborted) setSuggestion({ query: trimmedQuery, action, pending: false });
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSuggestion({ query: trimmedQuery, action: null, pending: false });
+        });
+    }, ASK_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [open, askable, onAsk, trimmedQuery]);
+
+  const filtered = useMemo(() => {
+    if (matched.length > 0) return matched;
+    return suggestion?.action && suggestion.query === trimmedQuery ? [suggestion.action] : [];
+  }, [matched, suggestion, trimmedQuery]);
+  const asking = askable && suggestion?.pending === true && suggestion.query === trimmedQuery;
 
   const grouped = useMemo(() => {
     const map = new Map<string, CommandAction[]>();
@@ -187,13 +231,16 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
           className="lupine-scroll"
         >
           {filtered.length === 0 && (
-            <div style={{
-              padding: '32px 16px',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 14,
-            }}>
-              No commands match “{query}”
+            <div
+              role="status"
+              style={{
+                padding: '32px 16px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: 14,
+              }}
+            >
+              {asking ? <>Asking about “{query}”…</> : <>No commands match “{query}”</>}
             </div>
           )}
 
@@ -231,6 +278,9 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
                       </span>
                     )}
                     <span style={{ fontWeight: 500 }}>{action.label}</span>
+                    {action.note && (
+                      <span className="lupine-menu-item__note" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{action.note}</span>
+                    )}
                     {action.shortcut && (
                       <span className="lupine-menu-item__shortcut">{action.shortcut}</span>
                     )}

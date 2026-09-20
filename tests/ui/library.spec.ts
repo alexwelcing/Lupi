@@ -100,10 +100,11 @@ test('OMol25 facets and NIST potentials work from same-origin assets, no externa
     if (url.origin !== new URL(page.url() || 'http://127.0.0.1:4173').origin && url.hostname !== '127.0.0.1') external.push(url.href);
   });
   await page.goto('/library/omol25?view=facets');
-  await expect(page.getByRole('group', { name: 'Periodic table element filter' })).toBeVisible();
-  await expect(page.locator('.periodic-cell.is-present')).not.toHaveCount(0, { timeout: 30_000 });
+  const chips = page.getByRole('group', { name: 'Elements in this slice' });
+  await expect(chips).toBeVisible();
+  await expect(chips.getByRole('button')).not.toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByRole('status')).toHaveText(/\d+\+? structures/, { timeout: 30_000 });
-  await page.getByRole('button', { name: /^Cl/ }).click();
+  await chips.getByRole('button', { name: 'Chlorine (Cl)' }).click();
   await expect(page).toHaveURL(/elements=Cl/);
   await expect(page.locator('.library-card--omol').first()).toBeVisible();
   await expect(page.locator('.library-truth').first()).toContainText('OMol25 supplies no bonds');

@@ -129,7 +129,7 @@ Authorization: Bearer <LUPI_MCP_SHARED_SECRET>
 ```
 
 `TYPESAFE_API_KEY` is a third secret, read only by the Jev seam in
-`src/jev.ts` for `/v1/switch/judge`; see [docs/jev-integration.md](jev-integration.md)
+`src/jev.ts` for `/v1/switch/judge` and `/v1/viewer/command`; see [docs/jev-integration.md](jev-integration.md)
 for placement and behavior when it is absent.
 
 `LUPI_MCP_SHARED_SECRET` authenticates the agent to the edge.

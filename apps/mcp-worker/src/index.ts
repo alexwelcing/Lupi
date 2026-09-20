@@ -20,7 +20,7 @@ import {
   type RenderRequestSpecV1,
 } from '@atlas/core';
 import { routeScienceData } from './scienceData';
-import { handleSwitchJudge, jevConfigured } from './jev';
+import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } from './jev';
 import {
   assessAsset,
   byteSourceFromUrl,
@@ -657,6 +657,10 @@ export async function handleRequest(
 
     if (url.pathname === '/v1/switch/judge') {
       return withCors(await handleSwitchJudge(request, env), cors);
+    }
+
+    if (url.pathname === '/v1/viewer/command') {
+      return withCors(await handleViewerCommand(request, env), cors);
     }
 
     if (url.pathname === '/v1/render') {
@@ -2036,7 +2040,7 @@ function statusPayload(env: Env) {
         timestamp: release.timestamp,
       },
     } : {}),
-    jev: { configured: jevConfigured(env), routes: ['/v1/switch/judge'] },
+    jev: { configured: jevConfigured(env), routes: [...JEV_ROUTES] },
     bindings: {
       webAssets: Boolean(env.WEB_ASSETS),
       r2: Boolean(env.ASSETS),

@@ -1,7 +1,9 @@
 /**
  * Jev (TypeSafe AI System One) seam for the Lupi edge.
  *
- * One place calls the model. Instructions and criteria are constants here;
+ * The model is called through the one shared client in `@atlas/core/jev`;
+ * this file owns the edge routes, caching, and logging. Instructions and
+ * criteria are constants here;
  * user text is only ever a value inside `state`. Every answer returned to the
  * browser carries the model version and confidence so the UI can label it as
  * inference, and every call writes one aggregate shadow line (no user text)
@@ -12,7 +14,27 @@
  * `{ configured: false }` and the browser keeps its deterministic behavior.
  */
 
-import { getElementSpecBySymbol } from '@atlas/core';
+import {
+  JEV_MODEL_LATEST,
+  JevError,
+  getElementSpecBySymbol,
+  jevConfigured as coreConfigured,
+  systemOne as coreSystemOne,
+  type JevClientConfig,
+  type JevCriteria,
+  type JevQuestion,
+  type JevRequest,
+  type JevResult,
+  type ViewerCommandDecision,
+  VIEWER_COMMAND_PROMPT_VERSION,
+  buildViewerCommandRequest,
+  localViewerAction,
+  resolveViewerCommandDecision,
+  viewerCommandFor,
+} from '@atlas/core';
+
+export { JevError } from '@atlas/core';
+export type { JevAnswer, JevChoiceAnswer, JevNoulAnswer, JevQuestion, JevResult, JevScoreAnswer } from '@atlas/core';
 
 export interface JevEnv {
   TYPESAFE_API_KEY?: string;
@@ -21,8 +43,8 @@ export interface JevEnv {
   TYPESAFE_MODEL?: string;
 }
 
-export const JEV_DEFAULT_MODEL = 'jev-latest';
-const JEV_API_BASE = 'https://api.typesafe.ai';
+export const JEV_DEFAULT_MODEL = JEV_MODEL_LATEST;
+/** Interactive budget: the browser already shows a deterministic answer. */
 const JEV_TIMEOUT_MS = 1_500;
 const JEV_CACHE_TTL_SECONDS = 3_600;
 /** Bump when instructions or criteria change so cached judgments from the old prompt are not served. */
@@ -34,103 +56,40 @@ const MAX_SWITCH_CANDIDATES = 160;
  *  already showing (flagged `fit`), never for the whole pool. */
 const MAX_FIT_CANDIDATES = 24;
 const MAX_QUERY_CHARS = 200;
+/** Routes advertised by `/health`; the browser reads this to know what to ask. */
+export const JEV_ROUTES = ['/v1/switch/judge', '/v1/viewer/command'] as const;
 
-type Criteria = Record<string, string | null>;
+type Criteria = JevCriteria;
 
-export type JevQuestion =
-  | { type: 'noul'; instructions: string }
-  | { type: 'choice'; instructions: string; criteria: Criteria }
-  | { type: 'score'; instructions: string; criteria: string[] };
-
-export interface JevChoiceAnswer {
-  type: 'choice';
-  choice: string;
-  probabilities: Record<string, number>;
-  confidence: number;
-}
-export interface JevNoulAnswer {
-  type: 'noul';
-  noul: number;
-}
-export interface JevScoreAnswer {
-  type: 'score';
-  score: number;
-  probabilities: Record<string, number>;
-  confidence: number;
-}
-export type JevAnswer = JevChoiceAnswer | JevNoulAnswer | JevScoreAnswer;
-
-export interface JevResult {
-  model: string;
-  answers: Record<string, JevAnswer>;
-  usage?: { input_tokens?: number; output_tokens?: number };
-}
-
-export class JevError extends Error {
-  readonly status: number;
-  readonly retryAfterSeconds: number | null;
-  constructor(message: string, status: number, retryAfterSeconds: number | null = null) {
+/** A malformed browser request; never a Jev failure. */
+export class JevRequestError extends Error {
+  readonly status = 400;
+  constructor(message: string) {
     super(message);
-    this.name = 'JevError';
-    this.status = status;
-    this.retryAfterSeconds = retryAfterSeconds;
+    this.name = 'JevRequestError';
   }
 }
 
 export function jevConfigured(env: JevEnv): boolean {
-  return typeof env.TYPESAFE_API_KEY === 'string' && env.TYPESAFE_API_KEY.trim().length > 0;
+  return coreConfigured({ apiKey: env.TYPESAFE_API_KEY });
 }
 
-/** One System One call: state in, typed answers out. Retries once on 429/529. */
-export async function systemOne(
-  env: JevEnv,
-  request: { state: unknown; questions: Record<string, JevQuestion> },
-  options: { timeoutMs?: number; fetcher?: typeof fetch } = {},
-): Promise<JevResult> {
-  if (!jevConfigured(env)) throw new JevError('Jev is not configured.', 503);
-  const fetcher = options.fetcher ?? fetch;
-  const base = (env.TYPESAFE_API_BASE?.trim() || JEV_API_BASE).replace(/\/+$/, '');
-  const body = JSON.stringify({ model: env.TYPESAFE_MODEL?.trim() || JEV_DEFAULT_MODEL, ...request });
+/** The edge's client configuration: one retry on 429/529 or a transport
+ *  error, never on a timeout, and the interactive deadline above. */
+export function jevClientConfig(env: JevEnv, options: { timeoutMs?: number; fetcher?: typeof fetch } = {}): JevClientConfig {
+  return {
+    apiKey: env.TYPESAFE_API_KEY,
+    baseUrl: env.TYPESAFE_API_BASE,
+    model: env.TYPESAFE_MODEL?.trim() || JEV_DEFAULT_MODEL,
+    fetch: options.fetcher,
+    timeoutMs: options.timeoutMs ?? JEV_TIMEOUT_MS,
+    retries: 1,
+  };
+}
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? JEV_TIMEOUT_MS);
-    try {
-      const response = await fetcher(`${base}/v1/systemone`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${env.TYPESAFE_API_KEY}`,
-          'content-type': 'application/json',
-          accept: 'application/json',
-          'user-agent': 'lupi-edge/jev',
-        },
-        body,
-        signal: controller.signal,
-      });
-      if (response.status === 429 || response.status === 529) {
-        const retryAfter = Number.parseInt(response.headers.get('retry-after') ?? '', 10);
-        if (attempt === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          continue;
-        }
-        throw new JevError(`Jev is rate limited (${response.status}).`, response.status, Number.isFinite(retryAfter) ? retryAfter : null);
-      }
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        throw new JevError(`Jev request failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}.`, response.status);
-      }
-      const payload = (await response.json()) as JevResult;
-      if (!payload || typeof payload !== 'object' || !payload.answers) throw new JevError('Jev returned no answers.', 502);
-      return payload;
-    } catch (error) {
-      if (error instanceof JevError) throw error;
-      if (attempt === 0 && (error as { name?: string })?.name !== 'AbortError') continue;
-      throw new JevError(error instanceof Error && error.name === 'AbortError' ? 'Jev timed out.' : 'Jev is unreachable.', 504);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw new JevError('Jev is unreachable.', 504);
+/** One System One call from the edge, through the shared core client. */
+export function systemOne(env: JevEnv, request: JevRequest, options: { timeoutMs?: number; fetcher?: typeof fetch } = {}): Promise<JevResult> {
+  return coreSystemOne(jevClientConfig(env, options), request);
 }
 
 /* ─── Molecule switcher ─── */
@@ -174,7 +133,7 @@ const INTENT_CRITERIA: Criteria = {
 const KEY_PATTERN = /^[A-Za-z0-9:_./-]{1,80}$/;
 
 export function parseSwitchJudgeRequest(raw: unknown): SwitchJudgeRequest {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new JevError('Body must be a JSON object.', 400);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new JevRequestError('Body must be a JSON object.');
   const body = raw as Record<string, unknown>;
   const query = typeof body.query === 'string' ? body.query.trim().slice(0, MAX_QUERY_CHARS) : '';
   const elements = Array.isArray(body.elements)
@@ -182,7 +141,7 @@ export function parseSwitchJudgeRequest(raw: unknown): SwitchJudgeRequest {
         .filter((value): value is string => typeof value === 'string' && /^[A-Z][a-z]?$/.test(value) && Boolean(getElementSpecBySymbol(value)))
         .slice(0, 12)
     : [];
-  if (!Array.isArray(body.candidates)) throw new JevError('"candidates" must be an array.', 400);
+  if (!Array.isArray(body.candidates)) throw new JevRequestError('"candidates" must be an array.');
   const candidates: SwitchCandidate[] = [];
   const seen = new Set<string>();
   let fitCount = 0;
@@ -203,8 +162,8 @@ export function parseSwitchJudgeRequest(raw: unknown): SwitchJudgeRequest {
     });
   }
   if (fitCount === 0) candidates.slice(0, MAX_FIT_CANDIDATES).forEach((candidate) => { candidate.fit = true; });
-  if (!query && elements.length === 0) throw new JevError('Provide a "query" or at least one element.', 400);
-  if (candidates.length === 0) throw new JevError('Provide at least one candidate.', 400);
+  if (!query && elements.length === 0) throw new JevRequestError('Provide a "query" or at least one element.');
+  if (candidates.length === 0) throw new JevRequestError('Provide at least one candidate.');
   const loaded = body.loaded && typeof body.loaded === 'object' && typeof (body.loaded as { title?: unknown }).title === 'string'
     ? { title: String((body.loaded as { title: string }).title).slice(0, 120), formula: typeof (body.loaded as { formula?: unknown }).formula === 'string' ? String((body.loaded as { formula: string }).formula).slice(0, 60) : undefined }
     : null;
@@ -309,8 +268,7 @@ export async function handleSwitchJudge(
   try {
     parsed = parseSwitchJudgeRequest(JSON.parse(new TextDecoder().decode(raw) || 'null'));
   } catch (error) {
-    const status = error instanceof JevError ? error.status : 400;
-    return jsonResponse({ error: error instanceof Error ? error.message : 'Invalid request.' }, { status });
+    return jsonResponse({ error: error instanceof Error ? error.message : 'Invalid request.' }, { status: 400 });
   }
 
   if (!jevConfigured(env)) return jsonResponse({ configured: false } satisfies SwitchJudgeResponse);
@@ -356,6 +314,93 @@ export async function handleSwitchJudge(
     const status = error instanceof JevError ? error.status : 502;
     console.warn(JSON.stringify({ component: 'lupi_jev', route: 'switch', error: error instanceof Error ? error.message : String(error), status }));
     // The browser treats any non-2xx as "no judgment"; it never blocks the switch.
+    return jsonResponse({ configured: true, error: error instanceof Error ? error.message : 'Jev failed.' }, { status: status >= 400 && status < 600 ? status : 502 });
+  }
+}
+
+/* ─── Natural-language viewer command ─── */
+
+export interface ViewerCommandResponse {
+  configured: boolean;
+  model?: string;
+  decision?: ViewerCommandDecision & { source: 'local' | 'jev' };
+  cached?: boolean;
+  error?: string;
+}
+
+const MAX_COMMAND_BODY_BYTES = 4 * 1024;
+
+/**
+ * `POST /v1/viewer/command`: `{ text }` → one code-owned typed command or
+ * nothing. Exact literals never leave the edge. Everything else goes through
+ * the shared interpreter with the lab's conservative gate; the browser
+ * executes the returned command only on explicit user selection.
+ */
+export async function handleViewerCommand(
+  request: Request,
+  env: JevEnv,
+  options: { fetcher?: typeof fetch; cache?: Cache | null; now?: () => number } = {},
+): Promise<Response> {
+  if (request.method !== 'POST') {
+    return jsonResponse({ error: 'method_not_allowed' }, { status: 405, headers: { allow: 'POST, OPTIONS' } });
+  }
+  const raw = await request.arrayBuffer();
+  if (raw.byteLength > MAX_COMMAND_BODY_BYTES) return jsonResponse({ error: 'Request body too large.' }, { status: 413 });
+  let text: string;
+  let jevRequest: JevRequest;
+  try {
+    const body = JSON.parse(new TextDecoder().decode(raw) || 'null') as { text?: unknown } | null;
+    jevRequest = buildViewerCommandRequest(body && typeof body === 'object' ? body.text : undefined);
+    text = (jevRequest.state as { userRequest: string }).userRequest;
+  } catch (error) {
+    return jsonResponse({ error: error instanceof Error ? error.message : 'Invalid request.' }, { status: 400 });
+  }
+
+  const local = localViewerAction(text);
+  if (local) {
+    return jsonResponse({ configured: jevConfigured(env), decision: { action: local, command: viewerCommandFor(local), confidence: 1, source: 'local' } } satisfies ViewerCommandResponse);
+  }
+  if (!jevConfigured(env)) return jsonResponse({ configured: false } satisfies ViewerCommandResponse);
+
+  const model = env.TYPESAFE_MODEL?.trim() || JEV_DEFAULT_MODEL;
+  const cacheKey = new Request(`https://jev-cache.lupi.live/command/${VIEWER_COMMAND_PROMPT_VERSION}/${model}/${await sha256Hex(text.toLowerCase())}`);
+  const cache = options.cache === undefined ? (globalThis as { caches?: { default?: Cache } }).caches?.default ?? null : options.cache;
+  if (cache) {
+    const hit = await cache.match(cacheKey).catch(() => null);
+    if (hit) {
+      const body = (await hit.json()) as ViewerCommandResponse;
+      return jsonResponse({ ...body, cached: true });
+    }
+  }
+
+  const started = (options.now ?? Date.now)();
+  try {
+    const result = await systemOne(env, jevRequest, { fetcher: options.fetcher });
+    const decision = resolveViewerCommandDecision(result, model);
+    const mapped: ViewerCommandResponse = { configured: true, model: result.model, decision: { ...decision, source: 'jev' } };
+    console.log(
+      JSON.stringify({
+        component: 'lupi_jev',
+        route: 'command',
+        model: result.model,
+        chars: text.length,
+        action: decision.action,
+        reason: decision.reason ?? null,
+        confidence: decision.confidence ?? null,
+        inputTokens: result.usage?.input_tokens ?? null,
+        ms: (options.now ?? Date.now)() - started,
+      }),
+    );
+    if (cache) {
+      const stored = new Response(JSON.stringify(mapped), {
+        headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${JEV_CACHE_TTL_SECONDS}` },
+      });
+      await cache.put(cacheKey, stored).catch(() => undefined);
+    }
+    return jsonResponse(mapped);
+  } catch (error) {
+    const status = error instanceof JevError ? error.status : 502;
+    console.warn(JSON.stringify({ component: 'lupi_jev', route: 'command', error: error instanceof Error ? error.message : String(error), status }));
     return jsonResponse({ configured: true, error: error instanceof Error ? error.message : 'Jev failed.' }, { status: status >= 400 && status < 600 ? status : 502 });
   }
 }

@@ -1,0 +1,43 @@
+.element-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.element-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 36px;
+  padding: 4px 9px;
+  border: 1px solid var(--chip-line, #334155);
+  border-radius: 8px;
+  background: var(--chip-bg, #121824);
+  color: var(--chip-text, #f8fafc);
+  font: inherit;
+  cursor: pointer;
+}
+.element-chip b {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 14px;
+}
+.element-chip small {
+  color: var(--chip-muted, #94a3b8);
+  font-size: 10px;
+}
+.element-chip:hover {
+  border-color: var(--chip-accent, #d5ef9c);
+}
+.element-chip[aria-pressed='true'] {
+  background: var(--chip-accent, #d5ef9c);
+  border-color: var(--chip-accent, #d5ef9c);
+  color: var(--chip-on-accent, #18251a);
+}
+.element-chip[aria-pressed='true'] small {
+  color: var(--chip-on-accent, #18251a);
+}
+.element-chip--more {
+  color: var(--chip-muted, #94a3b8);
+  font-size: 12px;
+}

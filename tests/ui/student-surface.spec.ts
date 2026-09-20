@@ -84,7 +84,6 @@ test('student export emits a real PNG and keeps link sharing in Save', async ({ 
   const nitrogen = page.getByRole('button', { name: 'Nitrogen (N)' });
   await nitrogen.click();
   await expect(nitrogen).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'Nitrogen, atomic number 7' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('status').filter({ hasText: 'containing O + N' })).toBeVisible();
   await page.getByRole('button', { name: 'Export command' }).click();
   const panel = page.getByTestId('simple-export-panel');
