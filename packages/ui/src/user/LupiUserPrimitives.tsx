@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export const lupiUserColors = {
   ink: '#050505',
@@ -23,6 +24,8 @@ const gridSurface = `
 export function LupiUserTrigger({
   active = false,
   compact = false,
+  controls,
+  expanded,
   glyph,
   label,
   photoUrl,
@@ -32,6 +35,8 @@ export function LupiUserTrigger({
 }: {
   active?: boolean;
   compact?: boolean;
+  controls?: string;
+  expanded?: boolean;
   glyph: ReactNode;
   label: string;
   photoUrl?: string | null;
@@ -45,6 +50,9 @@ export function LupiUserTrigger({
       onClick={onClick}
       title={title}
       aria-label={title}
+      aria-expanded={expanded}
+      aria-controls={expanded ? controls : undefined}
+      aria-haspopup={expanded === undefined ? undefined : 'dialog'}
       data-testid={testId}
       style={{
         display: 'grid',
@@ -99,11 +107,18 @@ export function LupiUserTrigger({
 }
 
 export function LupiPanel({
+  align = 'right',
   children,
   testId,
   width = 372,
   zIndex = 430,
 }: {
+  /**
+   * Which edge of the trigger the popover hangs from. Triggers in the
+   * top-left header capsule must use `left`, otherwise a wide panel is pushed
+   * off the left edge of the viewport.
+   */
+  align?: 'left' | 'right';
   children: ReactNode;
   testId?: string;
   width?: number;
@@ -114,7 +129,7 @@ export function LupiPanel({
       data-testid={testId}
       style={{
         position: 'absolute',
-        right: 0,
+        ...(align === 'left' ? { left: 0 } : { right: 0 }),
         top: 44,
         width: `min(${width}px, calc(100vw - 24px))`,
         padding: 0,
@@ -134,21 +149,177 @@ export function LupiPanel({
   );
 }
 
+/**
+ * Mobile counterpart to `LupiPanel`: a bottom sheet portaled to `document.body`
+ * so it escapes the header's layout containment and the popover's right-edge
+ * anchoring (which pushed it off the left of a phone screen). The header and
+ * footer stay pinned; only the body scrolls, so the primary action is always
+ * reachable above the keyboard and the home indicator.
+ */
+export function LupiSheet({
+  children,
+  footer,
+  header,
+  labelledBy,
+  onDismiss,
+  sheetRef,
+  testId,
+  zIndex = 600,
+}: {
+  children: ReactNode;
+  footer?: ReactNode;
+  header: ReactNode;
+  labelledBy?: string;
+  onDismiss: () => void;
+  sheetRef?: (node: HTMLDivElement | null) => void;
+  testId?: string;
+  zIndex?: number;
+}) {
+  const localRef = useRef<HTMLDivElement | null>(null);
+  const setRef = (node: HTMLDivElement | null) => {
+    localRef.current = node;
+    sheetRef?.(node);
+  };
+
+  useEffect(() => {
+    // Focus the sheet itself (not the first field) so the phone keyboard does
+    // not shoot up before the person has read the header.
+    localRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  // aria-modal promises that focus stays inside; keep Tab cycling within the
+  // sheet so keyboard and screen-reader users cannot reach the obscured page.
+  const trapFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab' || !localRef.current) return;
+    const focusable = Array.from(
+      localRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === localRef.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      data-lupi-sheet-root=""
+      style={{ position: 'fixed', inset: 0, zIndex, display: 'grid', alignItems: 'end' }}
+    >
+      <div
+        aria-hidden="true"
+        data-testid={testId ? `${testId}-backdrop` : undefined}
+        onClick={onDismiss}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(3,5,6,0.62)',
+          backdropFilter: 'blur(3px)',
+          WebkitBackdropFilter: 'blur(3px)',
+        }}
+      />
+      <div
+        ref={setRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        data-testid={testId}
+        tabIndex={-1}
+        onKeyDown={trapFocus}
+        style={{
+          position: 'relative',
+          display: 'grid',
+          gridTemplateRows: 'auto minmax(0, 1fr) auto',
+          width: '100%',
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top) - 20px)',
+          margin: '0 auto',
+          maxWidth: 560,
+          color: lupiUserColors.paper,
+          background: gridSurface,
+          borderTop: `1px solid ${lupiUserColors.lineStrong}`,
+          borderLeft: `1px solid ${lupiUserColors.lineStrong}`,
+          borderRight: `1px solid ${lupiUserColors.lineStrong}`,
+          borderRadius: '18px 18px 0 0',
+          boxShadow: '0 -18px 64px rgba(0,0,0,0.6)',
+          outline: 'none',
+          overflow: 'hidden',
+        }}
+      >
+        <div>
+          <div
+            aria-hidden="true"
+            style={{
+              width: 42,
+              height: 4,
+              margin: '10px auto 0',
+              borderRadius: 999,
+              background: lupiUserColors.lineStrong,
+            }}
+          />
+          {header}
+        </div>
+        <div
+          style={{
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            paddingBottom: footer ? 0 : 'env(safe-area-inset-bottom)',
+          }}
+        >
+          {children}
+        </div>
+        {footer && (
+          <div
+            style={{
+              display: 'grid',
+              gap: 8,
+              padding: '10px 14px calc(12px + env(safe-area-inset-bottom))',
+              borderTop: `1px solid ${lupiUserColors.line}`,
+              background: 'rgba(5,5,5,0.5)',
+            }}
+          >
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function LupiPanelHeader({
   accessory,
   kicker,
+  onClose,
   title,
+  titleId,
 }: {
   accessory?: ReactNode;
   kicker: string;
+  onClose?: () => void;
   title: string;
+  titleId?: string;
 }) {
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr auto',
-        gap: 14,
+        gridTemplateColumns: onClose ? '1fr auto auto' : '1fr auto',
+        gap: 12,
         alignItems: 'center',
         padding: 14,
         borderBottom: `1px solid ${lupiUserColors.line}`,
@@ -157,9 +328,31 @@ export function LupiPanelHeader({
     >
       <div style={{ minWidth: 0 }}>
         <div style={kickerStyle}>{kicker}</div>
-        <div style={titleStyle}>{title}</div>
+        <div id={titleId} style={titleStyle}>{title}</div>
       </div>
       {accessory}
+      {onClose && (
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          style={{
+            display: 'grid',
+            placeItems: 'center',
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            border: `1px solid ${lupiUserColors.line}`,
+            background: 'rgba(244,239,229,0.06)',
+            color: lupiUserColors.paper,
+            fontSize: 20,
+            lineHeight: 1,
+            cursor: 'pointer',
+          }}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -167,11 +360,14 @@ export function LupiPanelHeader({
 export function LupiButton({
   children,
   disabled = false,
+  size = 'default',
   tone = 'quiet',
   onClick,
 }: {
   children: ReactNode;
   disabled?: boolean;
+  /** `touch` is the 48px phone size used inside `LupiSheet` footers. */
+  size?: 'default' | 'touch';
   tone?: 'primary' | 'quiet' | 'danger';
   onClick?: () => void;
 }) {
@@ -199,13 +395,14 @@ export function LupiButton({
       onClick={onClick}
       disabled={disabled}
       style={{
-        height: 38,
-        borderRadius: 6,
+        height: size === 'touch' ? 48 : 38,
+        padding: '0 12px',
+        borderRadius: size === 'touch' ? 10 : 6,
         border: palette.border,
         background: palette.background,
         color: palette.color,
         fontFamily: 'var(--font-mono), ui-monospace, monospace',
-        fontSize: 11,
+        fontSize: size === 'touch' ? 13 : 11,
         fontWeight: 860,
         letterSpacing: 0,
         opacity: disabled ? 0.48 : 1,
@@ -257,13 +454,25 @@ export function LupiProviderButton({
 }
 
 export function LupiField({
+  autoCapitalize,
+  autoCorrect,
+  hint,
   label,
   placeholder,
+  size = 'default',
+  spellCheck,
   value,
   onChange,
 }: {
+  autoCapitalize?: 'off' | 'none' | 'sentences' | 'words';
+  autoCorrect?: 'on' | 'off';
+  /** Helper line under the input, for example the resulting share URL. */
+  hint?: ReactNode;
   label: string;
   placeholder?: string;
+  /** `touch` uses a 16px font so iOS does not zoom the page on focus. */
+  size?: 'default' | 'touch';
+  spellCheck?: boolean;
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -274,18 +483,35 @@ export function LupiField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        spellCheck={spellCheck}
         style={{
           width: '100%',
-          height: 38,
-          padding: '0 10px',
-          borderRadius: 6,
+          height: size === 'touch' ? 46 : 38,
+          padding: '0 12px',
+          borderRadius: size === 'touch' ? 10 : 6,
           border: `1px solid ${lupiUserColors.line}`,
           background: 'rgba(5,5,5,0.52)',
           color: lupiUserColors.paper,
           outline: 'none',
-          fontSize: 13,
+          fontSize: size === 'touch' ? 16 : 13,
         }}
       />
+      {hint && (
+        <span
+          style={{
+            minWidth: 0,
+            overflowWrap: 'anywhere',
+            color: lupiUserColors.cyan,
+            fontFamily: 'var(--font-mono), ui-monospace, monospace',
+            fontSize: 11,
+            lineHeight: 1.4,
+          }}
+        >
+          {hint}
+        </span>
+      )}
     </label>
   );
 }

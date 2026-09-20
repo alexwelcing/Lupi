@@ -44,7 +44,7 @@ export const AppHeader = memo(function AppHeader({
       >
         Lupi
       </button>
-      <div style={{ minWidth: 0, flex: 1 }}>
+      <div style={{ minWidth: isMobile ? 56 : 0, flex: 1 }}>
         <div
           title={fileName}
           style={{
@@ -58,7 +58,7 @@ export const AppHeader = memo(function AppHeader({
           {fileName || 'Molecule viewer'}
         </div>
         {atomCount > 0 && (
-          <div style={{ fontSize: 11, color: '#afc0b4', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 11, color: '#afc0b4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {atomCount.toLocaleString()} atoms
           </div>
         )}

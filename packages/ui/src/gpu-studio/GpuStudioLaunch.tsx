@@ -166,7 +166,7 @@ export function GpuStudioLaunch({
         <span className="gpu-studio-launch__mark" aria-hidden="true">
           <IconOptics />
         </span>
-        <span>
+        <span className="gpu-studio-launch__label">
           GPU<span className="gpu-studio-launch__word"> Studio</span>
         </span>
         <span className="gpu-studio-launch__new">New</span>

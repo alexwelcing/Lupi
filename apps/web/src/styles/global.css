@@ -1147,6 +1147,11 @@ button:focus:not(:focus-visible) {
   .lupine-app-root .lupine-command-panel[data-panel='studio'] { top: auto; bottom: var(--scene-sheet-bottom); height: var(--scene-sheet-height); max-height: var(--scene-sheet-height); border-radius: 20px; }
   .lupine-app-root[data-style-open='true'] .lupine-main-viewport { bottom: calc(var(--scene-sheet-height) + var(--scene-sheet-bottom) + 8px) !important; top: calc(64px + env(safe-area-inset-top)) !important; }
   .lupine-app-root[data-style-open='true'] .lupine-ui-bucket { visibility: hidden; pointer-events: none; }
+  /* Any open panel owns the bottom of a phone screen: the Clear view bucket and
+     the gesture hint would otherwise float over its content. */
+  .lupine-app-root[data-panel-open='true'] .lupine-ui-bucket { visibility: hidden; pointer-events: none; }
+  .lupine-app-root[data-panel-open='true'] .lupine-gesture-hint { display: none !important; } /* inline display: flex on the hint */
+  .lupine-app-root .scene-controls__button { white-space: nowrap; min-width: 0; padding: 9px 10px; font-size: 13px; }
   .lupine-app-root .lupine-command-deck { bottom: calc(8px + env(safe-area-inset-bottom)); width: calc(100% - 20px); max-width: 420px; border-radius: 14px; background: #14241e; border-color: #40564a; gap: 0; }
   .lupine-app-root .lupine-command-slot { flex: 1; width: auto; min-width: 44px; min-height: 52px; }
   .lupine-app-root .lupine-command-slot[data-command='camera'] { flex: 1.1; }
@@ -1158,6 +1163,7 @@ button:focus:not(:focus-visible) {
 @media (max-height: 500px) and (min-width: 641px) and (max-width: 900px) {
   .lupine-app-root { --scene-landscape-width: min(340px, 44vw); }
   .lupine-app-root .lupine-command-panel[data-panel='studio'] { top: 64px; left: auto; width: var(--scene-landscape-width); bottom: var(--scene-sheet-bottom); height: auto; max-height: none; }
+  .lupine-app-root .scene-controls__button { font-size: 12px; padding: 8px; gap: 5px; }
   .lupine-app-root[data-style-open='true'] .lupine-main-viewport { right: calc(var(--scene-landscape-width) + 16px) !important; bottom: var(--scene-sheet-bottom) !important; }
   .scene-controls { gap: 8px; padding: 10px; }
   .scene-controls__intro, .scene-controls > .scene-controls__hint { display: none; }
@@ -1240,6 +1246,8 @@ button:focus:not(:focus-visible) {
     bottom: auto;
     max-height: calc(100% - 84px);
   }
+  /* The periodic-table floor above is a desktop width; phones use the full row. */
+  .lupine-command-panel[data-panel='elements'] { width: auto; }
   @keyframes lupi-command-panel-in-compact {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -1312,4 +1320,10 @@ button:focus:not(:focus-visible) {
 .lupine-main-viewport canvas {
   width: 100% !important;
   height: 100% !important;
+}
+
+/* 320px-class phones: the header capsule must still hold wordmark, name, Save,
+   GPU and Account without pushing Account off the right edge. */
+@media (max-width: 360px) {
+  .lupine-app-root[data-file='true'] .lupine-status-bar { gap: 4px !important; padding: 0 6px !important; }
 }

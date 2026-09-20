@@ -56,6 +56,7 @@ export function ViewerGestureHint({
       role="status"
       aria-label="Viewer controls"
       data-testid="viewer-gesture-hint"
+      className="lupine-gesture-hint"
       style={{
         position: 'absolute',
         top: isMobile ? 132 : 140,
