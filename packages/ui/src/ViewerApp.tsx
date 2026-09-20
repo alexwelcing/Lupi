@@ -68,7 +68,7 @@ import {
   useSmoothFramePlayback,
   type InterpolatedFrameState,
 } from './hooks/useSmoothFramePlayback';
-import { useMediaQuery } from './hooks/useMediaQuery';
+import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import { clearStreamingFrameCoordinator, requestStreamingFrame } from './streamingFrameCoordinator';
 
 import { AppHeader } from './app/AppHeader';
@@ -205,7 +205,7 @@ export function ViewerApp() {
   // Treat narrow phones and short landscape viewports as compact. Tablet-size
   // Codex/browser previews keep the full command-deck layout instead of a
   // canvas-covering mobile sheet.
-  const isMobile = useMediaQuery('(max-width: 640px), (max-height: 500px) and (max-width: 900px)');
+  const isMobile = useMediaQuery(MOBILE_MEDIA_QUERY);
   const showDebugHud = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);

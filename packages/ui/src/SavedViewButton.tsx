@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFirebaseAuth, type LupiAuthProviderId } from './auth/useFirebaseAuth';
 import { firebaseConfigured } from './auth/firebase';
@@ -12,6 +12,7 @@ import {
 } from './savedViews';
 import { useStore } from './store';
 import { track, ANALYTICS_EVENTS } from './analytics';
+import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import {
   LupiButton,
   LupiField,
@@ -22,6 +23,7 @@ import {
   LupiPanel,
   LupiPanelHeader,
   LupiProviderButton,
+  LupiSheet,
   LupiStatusPill,
   LupiUserTrigger,
   labelStyle,
@@ -80,6 +82,10 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const showBonds = useStore(state => state.showBonds);
   const { loading: authLoading, signIn, user, idToken, refreshToken } = useFirebaseAuth();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const isMobile = useMediaQuery(MOBILE_MEDIA_QUERY);
+  const titleId = useId();
+  const panelId = useId();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(() => defaultSavedViewTitle(file));
   const [slug, setSlug] = useState(() => slugifySavedViewTitle(defaultSavedViewTitle(file)));
@@ -102,12 +108,21 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     setSlug(slugifySavedViewTitle(defaultTitle));
   }, [defaultTitle, slugTouched]);
 
+  const close = useCallback((restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) containerRef.current?.querySelector('button')?.focus();
+  }, []);
+
   useEffect(() => {
+    if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      // The mobile sheet is portaled to <body>, so it is not inside containerRef.
+      if (containerRef.current?.contains(target) || sheetRef.current?.contains(target)) return;
+      close();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') close(true);
     };
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -115,7 +130,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [open, close]);
 
   useEffect(() => {
     if (!user || !file) return;
@@ -224,11 +239,290 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
 
   if (!file) return null;
 
+  const atomCount = loadedAtomCount || file.trajectory.frames[0]?.natoms || 0;
+  const controlSize = isMobile ? 'touch' : 'default';
+
+  const handleCopy = async () => {
+    if (!savedUrl) return;
+    try {
+      await navigator.clipboard.writeText(savedUrl);
+      track(ANALYTICS_EVENTS.VIEW_SHARED, { method: 'copy_button' });
+      setStatus('Link copied.');
+      setError(null);
+    } catch {
+      setError('Could not copy the link. Select and copy the saved URL above.');
+    }
+  };
+
+  const handleRefreshSession = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await refreshToken();
+      if (!next) throw new Error('Could not refresh session.');
+      setStatus('Session refreshed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Session refresh failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const header = (
+    <LupiPanelHeader
+      kicker="Save and share"
+      title={savedUrl ? 'Your saved snapshot' : 'Create a view link'}
+      titleId={titleId}
+      accessory={isMobile ? undefined : <LupiOpticalMark active={Boolean(savedUrl)} />}
+      onClose={isMobile ? () => close(true) : undefined}
+    />
+  );
+
+  // What is being saved. Four rows on desktop; one scannable line on a phone.
+  const summary = isMobile ? (
+    <div
+      data-testid="lupi-save-view-summary"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '4px 8px',
+        color: lupiUserColors.muted,
+        fontFamily: 'var(--font-mono), ui-monospace, monospace',
+        fontSize: 11,
+        lineHeight: 1.5,
+      }}
+    >
+      <span style={{ color: lupiUserColors.paper, minWidth: 0, overflowWrap: 'anywhere' }}>{file.name}</span>
+      <span aria-hidden="true">·</span>
+      <span>{atomCount.toLocaleString()} atoms</span>
+      <span aria-hidden="true">·</span>
+      <span>frame {frame + 1}</span>
+      <span aria-hidden="true">·</span>
+      <span>bonds {showBonds ? 'on' : 'off'}</span>
+    </div>
+  ) : (
+    <>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <LupiStatusPill label={user ? 'signed in' : 'guest'} tone={user ? 'green' : 'amber'} />
+        <LupiStatusPill label={savedUrl ? 'saved' : 'draft'} tone={savedUrl ? 'green' : 'amber'} />
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: 0,
+          borderTop: `1px solid ${lupiUserColors.line}`,
+          borderBottom: `1px solid ${lupiUserColors.line}`,
+        }}
+      >
+        <LupiMetaRow label="Source" value={file.name} />
+        <LupiMetaRow label="Atoms" value={atomCount} />
+        <LupiMetaRow label="Frame" value={frame + 1} />
+        <LupiMetaRow label="Bonds" value={showBonds ? 'on' : 'off'} />
+      </div>
+    </>
+  );
+
+  const signedOut = (
+    <>
+      <LupiNotice>
+        {firebaseConfigured
+          ? 'Sign in to save a shareable view link. You can export a picture without an account.'
+          : 'Sign-in is not available in this build. You can still export a picture without an account.'}
+      </LupiNotice>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
+        <LupiProviderButton
+          provider="google"
+          label={isMobile ? 'Continue with Google' : 'Google'}
+          onClick={() => handleProviderSignIn('google')}
+          disabled={!firebaseConfigured || authLoading}
+        />
+        <LupiProviderButton
+          provider="github"
+          label={isMobile ? 'Continue with GitHub' : 'GitHub'}
+          onClick={() => handleProviderSignIn('github')}
+          disabled={!firebaseConfigured || authLoading}
+        />
+      </div>
+    </>
+  );
+
+  const fields = (
+    <div style={{ display: 'grid', gap: isMobile ? 12 : 10 }}>
+      <LupiField
+        label="Name"
+        size={controlSize}
+        value={title}
+        onChange={handleTitleChange}
+        placeholder="My molecule study"
+      />
+      <LupiField
+        label="Link name"
+        size={controlSize}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        value={slug}
+        onChange={value => {
+          setSlugTouched(true);
+          setSlug(slugifySavedViewTitle(value));
+        }}
+        placeholder={slugifySavedViewTitle(title || defaultTitle)}
+        hint={isMobile ? urlPreview : undefined}
+      />
+    </div>
+  );
+
+  const linkPreview = isMobile ? null : (
+    <div
+      style={{
+        display: 'grid',
+        gap: 6,
+        padding: 10,
+        border: `1px solid ${lupiUserColors.line}`,
+        borderRadius: 6,
+        background: 'rgba(244,239,229,0.04)',
+      }}
+    >
+      <span style={labelStyle}>{savedUrl ? 'Saved link' : 'Link preview — not saved yet'}</span>
+      <span
+        style={{
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: lupiUserColors.cyan,
+          fontFamily: 'var(--font-mono), ui-monospace, monospace',
+          fontSize: 11,
+        }}
+      >
+        {urlPreview}
+      </span>
+    </div>
+  );
+
+  const notices = (
+    <>
+      {savedUrl && !isMobile && (
+        <LupiNotice>
+          Your link contains the view as it was when saved. Save again to include later changes.
+        </LupiNotice>
+      )}
+      {error && <LupiNotice tone="pink">{error}</LupiNotice>}
+      {status && <LupiNotice tone="green">{status}</LupiNotice>}
+    </>
+  );
+
+  const saveButton = (
+    <LupiButton tone="primary" size={controlSize} onClick={handleSave} disabled={busy || !idToken}>
+      {busy ? 'Saving' : savedUrl ? (isMobile ? 'Save again' : 'Save') : 'Save'}
+    </LupiButton>
+  );
+  const refreshButton = !idToken && user ? (
+    <LupiButton size={controlSize} onClick={handleRefreshSession} disabled={busy}>
+      Refresh session
+    </LupiButton>
+  ) : null;
+  const copyButton = savedUrl ? (
+    <LupiButton tone={isMobile ? 'primary' : 'quiet'} size={controlSize} onClick={handleCopy}>
+      {isMobile ? 'Copy link' : 'Copy'}
+    </LupiButton>
+  ) : null;
+  const shareButtons = savedUrl ? (
+    <>
+      {canNativeShare && <LupiButton size={controlSize} onClick={handleNativeShare}>Share</LupiButton>}
+      <LupiButton size={controlSize} onClick={() => handleExternalShare('linkedin')}>LinkedIn</LupiButton>
+      <LupiButton size={controlSize} onClick={() => handleExternalShare('x')}>X</LupiButton>
+    </>
+  ) : null;
+
+  // Desktop keeps Save first; the phone footer leads with Copy once a link exists.
+  const actions = isMobile ? (
+    savedUrl ? (
+      <>
+        <div style={{ display: 'grid', gridTemplateColumns: canNativeShare ? '1fr 1fr' : '1fr', gap: 8 }}>
+          {copyButton}
+          {canNativeShare && <LupiButton size="touch" onClick={handleNativeShare}>Share</LupiButton>}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+          {saveButton}
+          <LupiButton size="touch" onClick={() => handleExternalShare('linkedin')}>LinkedIn</LupiButton>
+          <LupiButton size="touch" onClick={() => handleExternalShare('x')}>X</LupiButton>
+        </div>
+      </>
+    ) : (
+      <div style={{ display: 'grid', gridTemplateColumns: refreshButton ? '1fr 1fr' : '1fr', gap: 8 }}>
+        {saveButton}
+        {refreshButton}
+      </div>
+    )
+  ) : (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: savedUrl ? '1fr 1fr' : '1fr', gap: 8 }}>
+        {saveButton}
+        {refreshButton}
+        {copyButton}
+      </div>
+      {savedUrl && (
+        <div style={{ display: 'grid', gridTemplateColumns: canNativeShare ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
+          {shareButtons}
+        </div>
+      )}
+    </>
+  );
+
+  const recentLimit = isMobile ? 3 : 4;
+  const recentLinks = recentViews.length > 0 && (
+    <div style={{ display: 'grid', gap: 7 }}>
+      <span style={labelStyle}>Links</span>
+      {recentViews.slice(0, recentLimit).map(view => (
+        <LupiIndexRow
+          key={view.slug}
+          href={makeSavedViewUrl(view.slug)}
+          label={view.title}
+          after={
+            <span
+              style={{
+                color: lupiUserColors.amber,
+                fontFamily: 'var(--font-mono), ui-monospace, monospace',
+                fontSize: 10,
+                maxWidth: isMobile ? '45%' : undefined,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {view.slug}
+            </span>
+          }
+        />
+      ))}
+    </div>
+  );
+
+  const signedIn: ReactNode = (
+    <>
+      {fields}
+      {linkPreview}
+      {notices}
+      {!isMobile && actions}
+      {recentLinks}
+    </>
+  );
+
+  const body = (
+    <div style={panelBodyStyle}>
+      {summary}
+      {user ? signedIn : signedOut}
+    </div>
+  );
+
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
       <LupiUserTrigger
         active={Boolean(savedUrl) || open}
         compact={compact}
+        controls={panelId}
+        expanded={open}
         glyph={<BookmarkGlyph />}
         label="Save"
         testId="lupi-save-view-button"
@@ -236,213 +530,29 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
         onClick={() => setOpen(current => !current)}
       />
 
-      {open && (
-        <LupiPanel testId="lupi-save-view-panel" width={386}>
-          <LupiPanelHeader
-            kicker="Save and share"
-            title={savedUrl ? 'Your saved snapshot' : 'Create a view link'}
-            accessory={<LupiOpticalMark active={Boolean(savedUrl)} />}
-          />
+      {open && isMobile && (
+        <LupiSheet
+          testId="lupi-save-view-panel"
+          labelledBy={titleId}
+          header={header}
+          footer={user ? actions : undefined}
+          onDismiss={() => close(true)}
+          sheetRef={node => {
+            sheetRef.current = node;
+            if (node) node.id = panelId;
+          }}
+        >
+          {body}
+        </LupiSheet>
+      )}
 
-          <div style={panelBodyStyle}>
-            {savedUrl && (
-              <LupiNotice>
-                Your link contains the view as it was when saved. Save again to include later changes.
-              </LupiNotice>
-            )}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <LupiStatusPill label={user ? 'signed in' : 'guest'} tone={user ? 'green' : 'amber'} />
-              <LupiStatusPill label={savedUrl ? 'saved' : 'draft'} tone={savedUrl ? 'green' : 'amber'} />
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gap: 0,
-                borderTop: `1px solid ${lupiUserColors.line}`,
-                borderBottom: `1px solid ${lupiUserColors.line}`,
-              }}
-            >
-              <LupiMetaRow label="Source" value={file.name} />
-              <LupiMetaRow label="Atoms" value={loadedAtomCount || file.trajectory.frames[0]?.natoms || 0} />
-              <LupiMetaRow label="Frame" value={frame + 1} />
-              <LupiMetaRow label="Bonds" value={showBonds ? 'on' : 'off'} />
-            </div>
-
-            {!user ? (
-              <>
-                <LupiNotice>
-                  {firebaseConfigured
-                    ? 'Sign in to save a shareable view link. You can export a picture without an account.'
-                    : 'Sign-in is not available in this build. You can still export a picture without an account.'}
-                </LupiNotice>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 8,
-                  }}
-                >
-                  <LupiProviderButton
-                    provider="google"
-                    label="Google"
-                    onClick={() => handleProviderSignIn('google')}
-                    disabled={!firebaseConfigured || authLoading}
-                  />
-                  <LupiProviderButton
-                    provider="github"
-                    label="GitHub"
-                    onClick={() => handleProviderSignIn('github')}
-                    disabled={!firebaseConfigured || authLoading}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr',
-                    gap: 10,
-                  }}
-                >
-                  <LupiField
-                    label="Name"
-                    value={title}
-                    onChange={handleTitleChange}
-                    placeholder="My molecule study"
-                  />
-                  <LupiField
-                    label="Link name"
-                    value={slug}
-                    onChange={value => {
-                      setSlugTouched(true);
-                      setSlug(slugifySavedViewTitle(value));
-                    }}
-                    placeholder={slugifySavedViewTitle(title || defaultTitle)}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gap: 6,
-                    padding: 10,
-                    border: `1px solid ${lupiUserColors.line}`,
-                    borderRadius: 6,
-                    background: 'rgba(244,239,229,0.04)',
-                  }}
-                >
-                  <span style={labelStyle}>{savedUrl ? 'Saved link' : 'Link preview — not saved yet'}</span>
-                  <span
-                    style={{
-                      minWidth: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: lupiUserColors.cyan,
-                      fontFamily: 'var(--font-mono), ui-monospace, monospace',
-                      fontSize: 11,
-                    }}
-                  >
-                    {urlPreview}
-                  </span>
-                </div>
-
-                {error && <LupiNotice tone="pink">{error}</LupiNotice>}
-                {status && <LupiNotice tone="green">{status}</LupiNotice>}
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: savedUrl ? '1fr 1fr' : '1fr',
-                    gap: 8,
-                  }}
-                >
-                  <LupiButton tone="primary" onClick={handleSave} disabled={busy || !idToken}>
-                    {busy ? 'Saving' : 'Save'}
-                  </LupiButton>
-                  {!idToken && user && (
-                    <LupiButton
-                      onClick={async () => {
-                        setBusy(true);
-                        setError(null);
-                        try {
-                          const next = await refreshToken();
-                          if (!next) throw new Error('Could not refresh session.');
-                          setStatus('Session refreshed.');
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : 'Session refresh failed.');
-                        } finally {
-                          setBusy(false);
-                        }
-                      }}
-                      disabled={busy}
-                    >
-                      Refresh session
-                    </LupiButton>
-                  )}
-                  {savedUrl && (
-                    <LupiButton
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(savedUrl);
-                          track(ANALYTICS_EVENTS.VIEW_SHARED, {
-                            method: 'copy_button',
-                          });
-                          setStatus('Link copied.');
-                          setError(null);
-                        } catch {
-                          setError('Could not copy the link. Select and copy the saved URL above.');
-                        }
-                      }}
-                    >
-                      Copy
-                    </LupiButton>
-                  )}
-                </div>
-
-                {savedUrl && (
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: canNativeShare ? '1fr 1fr 1fr' : '1fr 1fr',
-                      gap: 8,
-                    }}
-                  >
-                    {canNativeShare && <LupiButton onClick={handleNativeShare}>Share</LupiButton>}
-                    <LupiButton onClick={() => handleExternalShare('linkedin')}>LinkedIn</LupiButton>
-                    <LupiButton onClick={() => handleExternalShare('x')}>X</LupiButton>
-                  </div>
-                )}
-
-                {recentViews.length > 0 && (
-                  <div style={{ display: 'grid', gap: 7 }}>
-                    <span style={labelStyle}>Links</span>
-                    {recentViews.slice(0, 4).map(view => (
-                      <LupiIndexRow
-                        key={view.slug}
-                        href={makeSavedViewUrl(view.slug)}
-                        label={view.title}
-                        after={
-                          <span
-                            style={{
-                              color: lupiUserColors.amber,
-                              fontFamily: 'var(--font-mono), ui-monospace, monospace',
-                              fontSize: 10,
-                            }}
-                          >
-                            {view.slug}
-                          </span>
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </LupiPanel>
+      {open && !isMobile && (
+        <div id={panelId} role="dialog" aria-labelledby={titleId}>
+          <LupiPanel testId="lupi-save-view-panel" width={386} align="left">
+            {header}
+            {body}
+          </LupiPanel>
+        </div>
       )}
     </div>
   );
