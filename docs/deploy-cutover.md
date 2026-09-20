@@ -10,9 +10,9 @@ The repo has:
 
 - standalone CI in `.github/workflows/ci.yml`
 - break-glass Cloud Run fallback in `.github/workflows/deploy-viewer.yml`
-- owner-gated Cloudflare release in `.github/workflows/deploy-cloudflare.yml`
-- read-only and owner-recovery controller in
-  `.github/workflows/reconcile-cloudflare-deploy.yml`
+- push-to-main Cloudflare release in `.github/workflows/deploy-cloudflare.yml`
+  (the owner-gated checkpoint controller and its reconciliation workflow were
+  retired on 2026-09-20; the sections below that describe them are history)
 - a root `start` script that serves `apps/web/dist`
 - Cloudflare edge runtime in `apps/mcp-worker`
 - local build verification passing from this extracted copy

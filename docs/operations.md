@@ -29,8 +29,8 @@ pnpm test:ui:release
 Run relevant lint/unit checks for the diff as well. Build first if app source
 changed (`pnpm build`); the browser tests serve `apps/web/dist`. Install Chromium
 once if absent (`pnpm exec playwright install --with-deps chromium`). For
-workflow-only edits, run the release receipt/authority/workflow tests and
-`pnpm verify:workflows`, not another full app build or dependency audit.
+workflow-only edits, run `pnpm verify:workflows`, not another full app build or
+dependency audit.
 
 These are scoped Local-lane inputs only; retain command results and source
 identity. Full lint, production audits, builds and regression remain blocking
@@ -87,14 +87,20 @@ Current CI does:
 - run the real workspace lint gate and both production dependency audits
 - build the workspace
 - run tests
-- run the release authority, receipt, workflow, and live-verifier unit suites
+- run the live-verifier unit suite
 - install Chromium and run the production Playwright UI suite
 - run the standalone Cloud Functions tests
 - fail if regenerated NIST catalog output drifts
 
 ## Deploy
 
-The source-side v2 controllers are:
+**As of 2026-09-20:** a merge to `main` deploys. `deploy-cloudflare.yml`
+builds, runs `wrangler deploy`, and confirms `https://lupi.live/health`
+reports the merged commit. The v2 controller described below, its typed
+confirmation, checkpoints, cutover receipt, and reconciliation workflow were
+retired by owner decision; the text is kept as history.
+
+The former source-side v2 controllers were:
 
 ```text
 .github/workflows/deploy-cloudflare.yml

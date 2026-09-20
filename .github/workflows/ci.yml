@@ -152,18 +152,6 @@ jobs:
       - name: Test Cloudflare live verifier
         run: node --test tools/verify-cloudflare-live.test.mjs
 
-      - name: Test Cloudflare release receipts
-        run: node --test tools/cloudflare-release-receipt.test.mjs
-
-      - name: Test Cloudflare release authority
-        run: node --test tools/cloudflare-release-authority.test.mjs
-
-      - name: Test Cloudflare workflow contract
-        run: node --test tools/cloudflare-release-workflow.test.mjs
-
-      - name: Test Cloudflare release package builder
-        run: node --test tools/build-cloudflare-release-package.test.mjs
-
       - name: Build
         env:
           VITE_LUPI_BUILD_SHA: ${{ github.sha }}
