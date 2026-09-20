@@ -102,3 +102,6 @@ export * from './renderArtifact';
 
 // --- External scientific-data catalog -------------------------------------
 export * from './scienceDataCatalog';
+
+// --- TypeSafe Jev (System One) client and viewer-command interpreter -----
+export * from './jev';

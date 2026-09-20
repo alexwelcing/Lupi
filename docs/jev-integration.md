@@ -22,7 +22,7 @@ without revealing anything:
 
 ```bash
 curl -s https://lupi.live/health | jq .jev
-# { "configured": true, "routes": ["/v1/switch/judge"] }
+# { "configured": true, "routes": ["/v1/switch/judge", "/v1/viewer/command"] }
 ```
 
 **Local development.** Put the key in `apps/mcp-worker/.dev.vars`
@@ -41,14 +41,39 @@ Optional overrides: `TYPESAFE_API_BASE` (a gateway) and `TYPESAFE_MODEL`
 browser notices once per session and keeps its deterministic behavior. Nothing
 user-visible depends on Jev being present.
 
-## The seam: `apps/mcp-worker/src/jev.ts`
+## One client: `packages/core/src/jev/`
 
-One module talks to the model. Instructions and criteria are constants in
-code; user text only ever appears as a value inside `state`. Each call has a
-1.5 second timeout, one retry on 429 or 529, and a one hour edge cache keyed
-on the request. Every call logs one aggregate line, component `lupi_jev`,
-with model version, confidences, candidate count, and latency. The query text
-is never logged.
+Decided 2026-09-20. Two Jev clients had grown side by side: the edge seam
+(`apps/mcp-worker/src/jev.ts`, rolling `jev-latest`, a retry, an edge cache)
+and the command lab from PR #99 (`tools/jev/client.mjs`, pinned
+`jev-1.13.0`, no retry, a memory cache, and a strict answer validator). They
+disagreed on validation, on what a rate limit means, and on which model they
+expected back. There is now exactly one:
+
+- `packages/core/src/jev/client.ts` owns the request encoding, the
+  `Promise.race` deadline (a transport that ignores abort cannot hold a
+  caller past it), the retry rule (only 429, 529, and transport errors; never
+  a timeout), and strict validation: every question answered with its
+  declared type, Choice distributions finite and summing to one with the
+  chosen label winning, a pinned model echoed back exactly. Anything less is
+  `invalid-response` and the caller gets nothing.
+- `packages/core/src/jev/viewerCommand.ts` owns the thirteen code-owned
+  viewer commands, their criteria, the literal table, and the lab's gate
+  (confidence at or above 0.9 and chosen probability at or above 0.95 on
+  both questions). Jev only ever picks a label.
+- The Worker seam is the edge's routes, cache, and log lines on top of that
+  client, with one retry and a 1.5 second budget. Instructions and criteria
+  are constants in code; user text only ever appears as a value inside
+  `state`. Every call logs one aggregate line, component `lupi_jev`, with
+  model version, confidences, candidate count, and latency. Query text is
+  never logged.
+- The lab (`tools/jev`) is a thin wrapper: same envelope, cache, and
+  coalescing as before, `retries: 0`, pinned model, run with `tsx`. Its
+  fixtures, thresholds, and checked-in receipts are unchanged and its
+  request hashes still match.
+
+The browser never imports the client. It talks to the two edge routes below
+and treats any non-2xx or non-JSON reply as "no answer".
 
 ## Route: `POST /v1/switch/judge`
 
@@ -143,6 +168,46 @@ a result the index did not find.
 
 What leaves the browser: the typed query, the selected elements, the current
 file name, and the candidate titles and formulas. No account identifiers.
+
+## Route: `POST /v1/viewer/command`
+
+Used by the viewer's command palette (Cmd/Ctrl+K) only after its own action
+list has no match for the typed text and at least three characters were
+typed. Body: `{ "text": "look at it from above" }`, at most 600 characters
+and 4 KB.
+
+```json
+{
+  "configured": true,
+  "model": "jev-1.13.0",
+  "decision": {
+    "action": "top",
+    "command": { "tool": "lupi.set_camera_preset", "arguments": { "preset": "top" } },
+    "confidence": 0.97,
+    "source": "jev"
+  }
+}
+```
+
+- Exact literals (`hide bonds`, `top view`, `pause`, and the rest of the
+  table in `viewerCommand.ts`) answer with `source: "local"` and never reach
+  the model, key or no key.
+- A withheld answer is `decision: { action: null, reason }` with reason
+  `unsupported-or-multiple`, `uncertain`, or `invalid-response`. The palette
+  shows the ordinary "No commands match".
+- The command is always the code-owned one for the label; nothing in the
+  model's reply is copied into `arguments`.
+- The palette renders the answer as one action in an "Ask" group with the
+  note `Jev · 97% · inferred` and executes it through the viewer bridge only
+  when the user selects it. Without a loaded molecule the palette does not
+  ask.
+- Decisions are cached at the edge for an hour, keyed on the lowercased text,
+  the prompt version, and the model name.
+
+The lab's measured evidence for this interpreter is in `tools/jev/README.md`:
+on the held-out set it accepted 4 of 10 valid commands and executed 0 of 6
+invalid ones. The gate is conservative on purpose; widen it from the
+`lupi_jev` `route: "command"` log lines, not from the fixtures.
 
 ## Tuning
 

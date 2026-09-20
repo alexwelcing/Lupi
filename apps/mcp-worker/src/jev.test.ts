@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildSwitchQuestions, handleSwitchJudge, mapSwitchAnswers, parseSwitchJudgeRequest, systemOne, JevError } from './jev';
+import { JEV_ROUTES, JevRequestError, buildSwitchQuestions, handleSwitchJudge, handleViewerCommand, mapSwitchAnswers, parseSwitchJudgeRequest, systemOne } from './jev';
 
 const CANDIDATES = [
   { key: 'gallery:caffeine', title: 'Caffeine', formula: 'C8H10N4O2', elements: ['C', 'H', 'N', 'O'], atoms: 24, source: 'gallery' },
@@ -12,6 +12,20 @@ function post(body: unknown, init: RequestInit = {}) {
     headers: { 'content-type': 'application/json' },
     body: typeof body === 'string' ? body : JSON.stringify(body),
     ...init,
+  });
+}
+
+const INTENTS = ['named_molecule', 'formula', 'elements', 'class_or_property', 'material', 'not_a_molecule'];
+/** A full distribution: Jev answers every option, and the shared client rejects anything less. */
+function distribution(label: string, labels: string[], weight = 0.95) {
+  return Object.fromEntries(labels.map((key) => [key, key === label ? weight : (1 - weight) / (labels.length - 1)]));
+}
+function switchReply(bestKey: string, confidence = 0.7) {
+  return jevReply({
+    intent: { type: 'choice', choice: 'named_molecule', probabilities: distribution('named_molecule', INTENTS), confidence: 0.9 },
+    best: { type: 'choice', choice: bestKey, probabilities: distribution(bestKey, ['none', ...CANDIDATES.map((c) => c.key)]), confidence },
+    'fit:gallery:caffeine': { type: 'noul', noul: 0.5 },
+    'fit:omol:nval-12': { type: 'noul', noul: 0.5 },
   });
 }
 
@@ -32,7 +46,7 @@ describe('switch judge request parsing', () => {
     expect(parsed.query).toBe('benzene ring');
     expect(parsed.elements).toEqual(['C', 'O']);
     expect(parsed.candidates.map((c) => c.key)).toEqual(['gallery:caffeine', 'omol:nval-12']);
-    expect(() => parseSwitchJudgeRequest({ candidates: CANDIDATES })).toThrow(JevError);
+    expect(() => parseSwitchJudgeRequest({ candidates: CANDIDATES })).toThrow(JevRequestError);
     expect(() => parseSwitchJudgeRequest({ query: 'x', candidates: [] })).toThrow(/candidate/);
   });
 
@@ -64,7 +78,7 @@ describe('POST /v1/switch/judge', () => {
       expect(body.model).toBe('jev-latest');
       expect(body.state.request.query).toBe('caffeine');
       return jevReply({
-        intent: { type: 'choice', choice: 'named_molecule', probabilities: { named_molecule: 0.97 }, confidence: 0.9712 },
+        intent: { type: 'choice', choice: 'named_molecule', probabilities: distribution('named_molecule', INTENTS, 0.97), confidence: 0.9712 },
         best: { type: 'choice', choice: 'gallery:caffeine', probabilities: { 'gallery:caffeine': 0.95, 'omol:nval-12': 0.03, none: 0.02 }, confidence: 0.9456 },
         'fit:gallery:caffeine': { type: 'noul', noul: 0.98 },
         'fit:omol:nval-12': { type: 'noul', noul: 0.04 },
@@ -83,6 +97,13 @@ describe('POST /v1/switch/judge', () => {
     const big = parseSwitchJudgeRequest({ query: 'x', candidates: pool });
     expect(big.candidates).toHaveLength(160);
     expect(big.candidates.filter((c) => c.fit)).toHaveLength(24);
+  });
+
+  it('rejects a reply that skips a question or returns a partial distribution', async () => {
+    const fetcher = vi.fn(async () => jevReply({ best: { type: 'choice', choice: 'omol:nval-12', probabilities: {}, confidence: 0.7 } }));
+    const response = await handleSwitchJudge(post({ query: 'benzene', candidates: CANDIDATES }), { TYPESAFE_API_KEY: 'sk-test' }, { fetcher, cache: null });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ configured: true, error: expect.stringContaining('invalid') });
   });
 
   it('turns a "none" choice into no best pick', () => {
@@ -118,7 +139,7 @@ describe('POST /v1/switch/judge', () => {
         store.set(key.url, value);
       },
     } as unknown as Cache;
-    const fetcher = vi.fn(async () => jevReply({ best: { type: 'choice', choice: 'omol:nval-12', probabilities: {}, confidence: 0.7 } }));
+    const fetcher = vi.fn(async () => switchReply('omol:nval-12'));
     const env = { TYPESAFE_API_KEY: 'sk-test' };
     await handleSwitchJudge(post({ query: 'benzene', candidates: CANDIDATES }), env, { fetcher, cache });
     const second = await handleSwitchJudge(post({ query: 'benzene', candidates: CANDIDATES }), env, { fetcher, cache });
@@ -138,5 +159,91 @@ describe('POST /v1/switch/judge', () => {
       { fetcher },
     );
     expect(result.answers.ok).toEqual({ type: 'noul', noul: 1 });
+  });
+});
+
+function command(body: unknown) {
+  return new Request('https://lupi.live/v1/viewer/command', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+
+const choice = (label: string, labels: string[], confidence = 0.99) => ({
+  type: 'choice',
+  choice: label,
+  confidence,
+  probabilities: Object.fromEntries(labels.map((key) => [key, key === label ? 0.98 : 0.02 / (labels.length - 1)])),
+});
+const ACTION_LABELS = ['pause', 'play', 'fit', 'top', 'side', 'front', 'iso', 'hide_bonds', 'show_bonds', 'hide_cell', 'show_cell', 'hide_axes', 'show_axes', 'unsupported'];
+
+describe('POST /v1/viewer/command', () => {
+  it('advertises both routes', () => {
+    expect(JEV_ROUTES).toEqual(['/v1/switch/judge', '/v1/viewer/command']);
+  });
+
+  it('answers exact literals locally, with or without a key', async () => {
+    const fetcher = vi.fn();
+    const response = await handleViewerCommand(command({ text: ' Hide Bonds ' }), {}, { fetcher, cache: null });
+    expect(await response.json()).toEqual({
+      configured: false,
+      decision: { action: 'hide_bonds', command: { tool: 'lupi.set_viewer', arguments: { showBonds: false } }, confidence: 1, source: 'local' },
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('answers configured:false for semantic text without a key', async () => {
+    const response = await handleViewerCommand(command({ text: 'look at it from above' }), {}, { cache: null });
+    expect(await response.json()).toEqual({ configured: false });
+  });
+
+  it('rejects bad input before any upstream call', async () => {
+    const fetcher = vi.fn();
+    expect((await handleViewerCommand(new Request('https://lupi.live/v1/viewer/command'), {}, { cache: null })).status).toBe(405);
+    expect((await handleViewerCommand(command('{'), { TYPESAFE_API_KEY: 'k' }, { fetcher, cache: null })).status).toBe(400);
+    expect((await handleViewerCommand(command({ text: '' }), { TYPESAFE_API_KEY: 'k' }, { fetcher, cache: null })).status).toBe(400);
+    expect((await handleViewerCommand(command({ text: 'x'.repeat(601) }), { TYPESAFE_API_KEY: 'k' }, { fetcher, cache: null })).status).toBe(400);
+    expect((await handleViewerCommand(command({ text: 'x'.repeat(5000) }), { TYPESAFE_API_KEY: 'k' }, { fetcher, cache: null })).status).toBe(413);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('returns a gated Jev decision with a code-owned command and caches it', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.state).toEqual({ userRequest: 'look straight down at it' });
+      return jevReply({ action: { ...choice('top', ACTION_LABELS), arguments: { preset: 'evil' } }, scope: choice('single', ['single', 'other']) });
+    });
+    const store = new Map<string, Response>();
+    const cache = { match: async (key: Request) => store.get(key.url)?.clone(), put: async (key: Request, value: Response) => { store.set(key.url, value); } } as unknown as Cache;
+    const env = { TYPESAFE_API_KEY: 'k' };
+    const response = await handleViewerCommand(command({ text: 'look straight down at it' }), env, { fetcher, cache });
+    expect(await response.json()).toEqual({
+      configured: true,
+      model: 'jev-1.13.0',
+      decision: { action: 'top', command: { tool: 'lupi.set_camera_preset', arguments: { preset: 'top' } }, confidence: 0.99, source: 'jev' },
+    });
+    const again = await handleViewerCommand(command({ text: 'Look straight down at it' }), env, { fetcher, cache });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(await again.json()).toMatchObject({ cached: true, decision: { action: 'top' } });
+  });
+
+  it('withholds uncertain and compound answers', async () => {
+    const fetcher = vi.fn(async () => jevReply({ action: choice('pause', ACTION_LABELS, 0.6), scope: choice('single', ['single', 'other']) }));
+    const response = await handleViewerCommand(command({ text: 'maybe stop it?' }), { TYPESAFE_API_KEY: 'k' }, { fetcher, cache: null });
+    expect(await response.json()).toMatchObject({ configured: true, decision: { action: null, reason: 'uncertain', source: 'jev' } });
+    const compound = vi.fn(async () => jevReply({ action: choice('pause', ACTION_LABELS), scope: choice('other', ['single', 'other']) }));
+    const second = await handleViewerCommand(command({ text: 'pause then show axes' }), { TYPESAFE_API_KEY: 'k' }, { fetcher: compound, cache: null });
+    expect(await second.json()).toMatchObject({ decision: { action: null, reason: 'unsupported-or-multiple' } });
+  });
+
+  it('reports upstream failures without a command', async () => {
+    const fetcher = vi.fn(async () => new Response('secret', { status: 500 }));
+    const response = await handleViewerCommand(command({ text: 'look from the side please' }), { TYPESAFE_API_KEY: 'k' }, { fetcher, cache: null });
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.configured).toBe(true);
+    expect(body.decision).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain('secret');
   });
 });

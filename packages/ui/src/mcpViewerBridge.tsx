@@ -46,7 +46,9 @@ type LupiMcpToolName =
   | 'lupi.export_asset'
   | 'lupi.viewer_state'
   | 'lupi.assess_asset'
-  | 'lupi.knowledge_graph';
+  | 'lupi.knowledge_graph'
+  /** Known names autocomplete; any registry tool (31 in the manifest) executes. */
+  | (string & {});
 
 type MoleculeInputType = 'name' | 'template' | 'smiles' | 'xyz' | 'description' | 'procedural';
 type PostprocessPreset = ReturnType<typeof useStore.getState>['postprocessPreset'];
