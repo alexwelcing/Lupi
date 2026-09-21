@@ -1,11 +1,8 @@
 import { expect, test, type Page } from 'playwright/test';
 
-// release-smoke-v1: bounded deployment checks. deploy-cloudflare.yml runs this
-// file against https://lupi.live after every deploy; the nightly ui-regression
-// workflow runs it with the rest of the suite.
-// Keep this file self-contained: release receipts hash it and playwright.config.mjs.
-// Full visual matrices, high-resolution exports and security regressions stay
-// in the nightly suite.
+// release-smoke-v1: bounded deployment checks, run by hand against a deployed
+// origin (UI_TEST_URL=... UI_TEST_EXPECT_HEALTH=true pnpm test:ui:release).
+// No workflow runs it. Keep this file self-contained.
 const NEUTRAL_HDR = Buffer.concat([
   Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n', 'ascii'),
   Buffer.from([128, 128, 128, 129]),

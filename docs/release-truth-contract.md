@@ -149,11 +149,10 @@ external authority were configured or active.
 
 ### Proportionate testing
 
-- Full `pnpm test:ui` regression coverage (the complete visual workbench,
-  accessibility/reflow, security checks, native gallery coverage, and
-  high-resolution/multi-format exports) runs nightly and on demand in
-  `ui-regression.yml` since 2026-09-21. It no longer blocks a merge; a red
-  nightly run is a defect on `main` to fix forward.
+- Since 2026-09-21 no workflow gates a merge or a deploy. `pnpm test:ui`
+  (the complete visual workbench, accessibility/reflow, security checks,
+  native gallery coverage, and high-resolution/multi-format exports) is a
+  local tool run before pushing, when the change warrants it.
 - Candidate and public verification use the four tests in
   `tests/ui/release-smoke.spec.ts`: Worker health; desktop discovery, learning,
   menus and a real small PNG; mobile scene controls with atom-color Remix/Undo;

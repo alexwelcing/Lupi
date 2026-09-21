@@ -32,12 +32,9 @@ once if absent (`pnpm exec playwright install --with-deps chromium`). For
 workflow-only edits, run `pnpm verify:workflows`, not another full app build or
 dependency audit.
 
-These are scoped Local-lane inputs only; retain command results and source
-identity. Lint, build and unit tests block in exact-SHA CI; the production
-audits and the full browser regression run on their own schedules (see
-[CI trigger policy](ci-trigger-policy.md)). Do not rerun an exhaustive local
-audit just because a trusted exact-SHA CI audit already passed, or count CI as
-local proof.
+There is no CI gate (see [CI trigger policy](ci-trigger-policy.md)); these
+and the broader checks below are run before pushing, locally or by the agent
+making the change.
 
 `pnpm test:ui` starts `tools/serve-web.mjs` against `apps/web/dist` and checks
 the production build. For a deployed preview or direct Worker URL, run only
@@ -75,29 +72,8 @@ same dump compatibility contract used by the viewer.
 
 ## CI
 
-Workflow:
-
-```text
-.github/workflows/ci.yml
-```
-
-The merge gate is budgeted at about five minutes and runs as parallel jobs:
-
-- `lint`: workflow schemas, repository tooling tests, the product contract,
-  and the real workspace lint gate
-- `build-test`: build the workspace, dry-run the Worker upload with the
-  release-pinned Wrangler, run unit tests, the Worker tests and the standalone
-  Cloud Functions build and tests, and fail if the regenerated NIST catalog
-  drifts
-- `mobile-testflight-source`: TestFlight source verification, skipped on pull
-  requests that do not touch `apps/mobile` or the dependency graph
-
-Slower checks do not gate merges. `ui-regression.yml` runs the full Playwright
-suite nightly, on demand, and when the suite itself changes.
-`dependency-audit.yml` runs both production dependency audits weekly, on
-demand, and when a manifest or lockfile changes. After every deploy the
-release smoke runs against `https://lupi.live`. See
-[CI trigger policy](ci-trigger-policy.md).
+There is no merge gate. The only workflows are deploys; see
+[CI trigger policy](ci-trigger-policy.md). Verification happens before a push.
 
 ## Deploy
 

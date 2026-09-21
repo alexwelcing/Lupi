@@ -84,9 +84,9 @@ pnpm verify:mcp-bridge
 pnpm verify:exports
 ```
 
-`pnpm test:ui` is the full browser suite; CI runs it nightly and on demand
-rather than on every pull request, and the merge gate stays under about five
-minutes. It serves the production build and exercises homepage discovery,
+`pnpm test:ui` is the full browser suite, run before pushing when a change
+warrants it; no workflow runs it. It serves the production build and exercises
+homepage discovery,
 the real molecule viewer and settings, and the mobile controls. To run the
 deployment-safe subset against a public preview or Worker URL:
 
