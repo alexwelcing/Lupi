@@ -36,14 +36,18 @@ do not repeat them all locally. Local work runs the checks relevant to its diff.
 - [ ] `pnpm-lock.yaml` matches `package.json`.
 - [ ] CI uses pnpm 9, matching `packageManager`.
 - [ ] No retired `apps/lupi-studio` or nested research-site app is present.
-- [ ] The real `pnpm lint` gate and both production dependency audits run and
-      pass for this exact SHA in CI/release-package; their source definitions
-      alone are not evidence.
+- [ ] The real `pnpm lint` gate passes for this exact SHA in CI. Both
+      production dependency audits pass on the most recent
+      `dependency-audit.yml` run that covers this lockfile; their source
+      definitions alone are not evidence.
 
 ## Viewer Verification
 
-Full regression belongs in CI. Candidate/public deployment checks use
-`UI_TEST_URL=https://TARGET UI_TEST_EXPECT_HEALTH=true pnpm test:ui:release`.
+Full regression runs nightly in `ui-regression.yml`, not in the merge gate.
+Deployment checks use
+`UI_TEST_URL=https://TARGET UI_TEST_EXPECT_HEALTH=true pnpm test:ui:release`,
+which `deploy-cloudflare.yml` runs against `https://lupi.live` after traffic
+moves.
 Historical rollback targets retain their own recorded suite, including full UI.
 
 ```bash
