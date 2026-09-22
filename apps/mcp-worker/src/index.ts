@@ -21,6 +21,7 @@ import {
 } from '@atlas/core';
 import { routeScienceData } from './scienceData';
 import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } from './jev';
+import { SCAN_ROUTE, handleScanIdentify, scanConfigured, scanVisionModel } from './scan';
 import {
   assessAsset,
   byteSourceFromUrl,
@@ -105,6 +106,10 @@ export interface Env {
   TYPESAFE_API_KEY?: string;
   TYPESAFE_API_BASE?: string;
   TYPESAFE_MODEL?: string;
+  /** Anthropic key for the photo scanner's vision hop. `wrangler secret put ANTHROPIC_API_KEY`; never a var. */
+  ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_API_BASE?: string;
+  ANTHROPIC_VISION_MODEL?: string;
   CF_VERSION_METADATA?: WorkerVersionMetadata;
 }
 
@@ -204,6 +209,9 @@ const ANALYTICS_EVENTS = new Set([
   'return_active',
   'render_failed',
   'render_fallback_shown',
+  'scan_started',
+  'scan_identified',
+  'scan_molecule_opened',
 ]);
 
 class RenderServiceConfigurationError extends Error {
@@ -661,6 +669,10 @@ export async function handleRequest(
 
     if (url.pathname === '/v1/viewer/command') {
       return withCors(await handleViewerCommand(request, env), cors);
+    }
+
+    if (url.pathname === SCAN_ROUTE) {
+      return withCors(await handleScanIdentify(request, env), cors);
     }
 
     if (url.pathname === '/v1/render') {
@@ -2041,6 +2053,12 @@ function statusPayload(env: Env) {
       },
     } : {}),
     jev: { configured: jevConfigured(env), routes: [...JEV_ROUTES] },
+    scan: {
+      configured: scanConfigured(env),
+      route: SCAN_ROUTE,
+      vision: scanConfigured(env) ? scanVisionModel(env) : null,
+      jev: jevConfigured(env),
+    },
     bindings: {
       webAssets: Boolean(env.WEB_ASSETS),
       r2: Boolean(env.ASSETS),

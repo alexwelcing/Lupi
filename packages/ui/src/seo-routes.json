@@ -191,6 +191,20 @@
         "url": "https://lupi.live/library/potentials",
         "description": "Search the NIST Interatomic Potentials Repository catalog by element, pair style, and year, and open demo trajectories in 3D."
       }
+    },
+    "scan": {
+      "title": "Scan anything and see its molecules | Lupi",
+      "description": "Point your camera at an everyday thing. Lupi names what it is made of, molecule by molecule, and opens each one in 3D.",
+      "canonicalPath": "/scan",
+      "image": "https://lupi.live/og-lupi.png",
+      "imageAlt": "Lupi molecular scanner",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Scan anything and see its molecules | Lupi",
+        "url": "https://lupi.live/scan",
+        "description": "Point your camera at an everyday thing. Lupi names what it is made of, molecule by molecule, and opens each one in 3D."
+      }
     }
   }
 }

@@ -1,0 +1,395 @@
+/* ---- Molecular scanner (/scan) ---- */
+.scan-hero {
+  padding-block: 48px 8px;
+}
+.scan-body {
+  display: grid;
+  gap: 20px;
+  padding-block: 12px 64px;
+}
+
+/* Capture */
+.scan-drop {
+  display: grid;
+  gap: 14px;
+  padding: 36px 24px;
+  background: var(--home-panel);
+  border: 1px dashed #ffffff40;
+  border-radius: 14px;
+  text-align: center;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.scan-drop.is-dragging {
+  border-color: var(--home-accent);
+  background: #1f2d29;
+}
+.scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.scan-capture {
+  font-size: 1rem !important;
+  padding-inline: 26px;
+}
+.scan-drop-hint {
+  color: var(--home-muted);
+  font-size: 0.8125rem;
+}
+.scan-hint {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  color: var(--home-muted);
+  font-size: 0.8125rem;
+}
+.scan-hint input {
+  width: min(100%, 420px);
+  padding: 10px 14px;
+  background: #0d1412;
+  color: var(--home-text);
+  border: 1px solid #ffffff30;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+}
+.scan-hint input::placeholder {
+  color: #7f8f86;
+}
+
+/* Stage: the photo with the swirl on top */
+.scan-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #050807;
+  border: 1px solid #ffffff18;
+  max-height: min(70vh, 640px);
+  display: grid;
+  place-items: center;
+}
+.scan-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(70vh, 640px);
+  object-fit: contain;
+  transition: filter 500ms ease, transform 500ms ease;
+}
+.scan-stage.is-scanning .scan-photo {
+  filter: saturate(0.6) brightness(0.55) blur(2px);
+  transform: scale(1.02);
+}
+.scan-swirl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* Without WebGPU (or with reduced motion) a CSS spiral stands in. */
+.scan-stage[data-renderer='css'] .scan-swirl {
+  display: none;
+}
+.scan-stage[data-renderer='css'].is-scanning::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(60vw, 320px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #84d7ff00, #84d7ffaa, #d5ef9ccc, #f3a9c7aa, #84d7ff00);
+  mask: radial-gradient(circle, transparent 38%, #000 42%, #000 58%, transparent 62%);
+  animation: scanSpin 1.4s linear infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-stage[data-renderer='css'].is-scanning::after {
+    animation-duration: 4s;
+  }
+}
+@keyframes scanSpin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.scan-status {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 18px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  color: var(--home-text);
+  text-shadow: 0 1px 8px #000000cc;
+}
+.scan-status strong {
+  font-weight: 600;
+}
+.scan-status span {
+  font-variant-numeric: tabular-nums;
+  color: var(--home-accent);
+  font-size: 0.8125rem;
+}
+
+/* Panels */
+.scan-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--home-panel);
+  border: 1px solid #ffffff1f;
+  border-radius: 12px;
+}
+.scan-panel--error {
+  border-color: #f4b8a860;
+}
+.scan-panel code {
+  font-size: 0.875em;
+  color: var(--home-accent);
+}
+
+/* Result */
+.scan-result {
+  display: grid;
+  gap: 18px;
+  animation: scanMaterialize 600ms ease both;
+}
+@keyframes scanMaterialize {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-result {
+    animation: none;
+  }
+}
+.scan-verdict h2 {
+  font-size: 2.25rem;
+  line-height: 1.05;
+  margin: 0;
+}
+.scan-inference {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px dashed #ffffff40;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--home-muted);
+  text-transform: none;
+}
+.scan-headline {
+  margin-top: 10px !important;
+  font-size: 1.125rem;
+  color: var(--home-text);
+}
+.scan-elements {
+  margin-top: 8px !important;
+  color: var(--home-muted);
+  font-size: 0.875rem;
+}
+.scan-guesses {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-width: 480px;
+}
+.scan-guesses li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+.scan-bar {
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  transform: scaleX(var(--share, 0));
+  background: #d5ef9c22;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.scan-guess-label,
+.scan-guess-value {
+  position: relative;
+}
+.scan-guess-value {
+  color: var(--home-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-jev {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  border-color: var(--home-accent);
+}
+
+.scan-materials {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.scan-material {
+  padding: 18px 20px;
+  background: var(--home-panel);
+  border: 1px solid #ffffff1f;
+  border-radius: 12px;
+}
+.scan-material-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.scan-material-head h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.scan-material > p {
+  color: var(--home-muted);
+  font-size: 0.9375rem;
+  margin-bottom: 12px !important;
+}
+.scan-share {
+  position: relative;
+  flex: none;
+  min-width: 88px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #ffffff26;
+  overflow: hidden;
+  text-align: right;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--home-muted);
+}
+.scan-share .scan-bar {
+  background: #84d7ff2a;
+}
+.scan-molecules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.scan-molecule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 12px;
+  background: #ffffff08;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+.scan-molecule:hover,
+.scan-molecule:focus-visible {
+  background: #ffffff14;
+  border-color: #ffffff26;
+}
+.scan-molecule.is-gallery {
+  border-color: #d5ef9c40;
+}
+.scan-molecule:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.scan-molecule img {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #090d10;
+  object-fit: cover;
+}
+.scan-formula {
+  font-style: normal;
+  color: var(--home-muted);
+  font-weight: 400;
+}
+.scan-open {
+  flex: none;
+  color: var(--home-accent);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.scan-again .scan-hint {
+  justify-items: start;
+}
+.scan-again .scan-actions {
+  justify-content: flex-start;
+}
+
+/* Dev interface */
+.scan-dev {
+  padding: 12px 16px;
+  border: 1px solid #ffffff18;
+  border-radius: 10px;
+  color: var(--home-muted);
+  font-size: 0.8125rem;
+}
+.scan-dev summary {
+  cursor: pointer;
+  color: var(--home-text);
+}
+.scan-dev dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 12px 0;
+}
+.scan-dev dt {
+  color: var(--home-text);
+}
+.scan-dev dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.scan-dev pre {
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  background: #0a100e;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .scan-verdict h2 {
+    font-size: 1.75rem;
+  }
+  .scan-jev {
+    grid-template-columns: 1fr;
+  }
+  .scan-open {
+    display: none;
+  }
+  .scan-material-head {
+    flex-wrap: wrap;
+  }
+}

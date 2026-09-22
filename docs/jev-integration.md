@@ -209,6 +209,14 @@ on the held-out set it accepted 4 of 10 valid commands and executed 0 of 6
 invalid ones. The gate is conservative on purpose; widen it from the
 `lupi_jev` `route: "command"` log lines, not from the fixtures.
 
+## Route: `POST /v1/scan/identify`
+
+The photo scanner reuses the switch judgment. Claude turns a photo into a
+structured identification (subject, materials, molecules), the Worker
+matches those molecules to the gallery pool, and Jev answers the same
+`intent`, `best`, and `fit` questions with the identification as the query.
+The route, keys, and page are in [scan-pipeline.md](scan-pipeline.md).
+
 ## Tuning
 
 Thresholds live in `packages/ui/src/switcher/judgeSwitch.ts`. Change them

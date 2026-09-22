@@ -21,6 +21,12 @@ export function LandingPage() {
           Big discoveries.
         </h1>
         <MoleculeFinder />
+        <p className="student-scan-callout">
+          <a className="student-secondary" href="/scan">
+            <span aria-hidden="true">📷</span> Point your camera at something
+          </a>
+          <span className="student-caption">Eggs, a leather couch, your coffee: see what it&rsquo;s made of.</span>
+        </p>
       </section>
       <MoleculeWall />
       <GallerySection />

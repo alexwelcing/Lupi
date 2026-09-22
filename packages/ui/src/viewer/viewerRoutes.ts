@@ -36,6 +36,13 @@ export const SEO_EDUCATION_ROUTES: Record<string, SeoEducationKind> = {
   '/materials/million-atom-viewer': 'million-atom-viewer',
 };
 
+/** The photo scanner (`/scan`): a shell without a renderer until a molecule opens. */
+export const SCAN_PATH = '/scan';
+
+export function isScanRoute(route: string): boolean {
+  return normalizedPathRoute(route.split('?')[0] || '/') === SCAN_PATH;
+}
+
 export function isTestbedRoute(search = typeof window === 'undefined' ? '' : window.location.search) {
   return new URLSearchParams(search).has('testbed');
 }

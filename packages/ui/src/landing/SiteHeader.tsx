@@ -1,6 +1,6 @@
 import { LupiAgentDock } from '../LupiAgentDock';
 
-export type SiteSection = 'home' | 'library';
+export type SiteSection = 'home' | 'library' | 'scan';
 
 /**
  * One header for the landing page and the Library. Section anchors point at
@@ -17,6 +17,9 @@ export function SiteHeader({ current }: { current: SiteSection }) {
         <a href={`${home}#molecules`}>Molecules</a>
         <a href="/library" aria-current={current === 'library' ? 'page' : undefined}>
           Library
+        </a>
+        <a href="/scan" aria-current={current === 'scan' ? 'page' : undefined}>
+          Scan
         </a>
         <a href={`${home}#learn`}>How to use</a>
         <a href={`${home}#dropzone`}>Open a file</a>

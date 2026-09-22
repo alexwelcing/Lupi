@@ -29,6 +29,7 @@ Core endpoints:
 - `GET /browser-mcp-manifest.json` — 31-tool browser viewer manifest
 - `POST /v1/render` — REST shortcut for `lupi.render_molecule_asset`
 - `POST /v1/switch/judge`, `POST /v1/viewer/command` — Jev (TypeSafe) judgments for the molecule switcher and the command palette; `{ configured: false }` without `TYPESAFE_API_KEY` (see `docs/jev-integration.md`)
+- `POST /v1/scan/identify` — photo → molecules: Claude vision identifies the subject and its materials, Jev ranks the gallery pool; `{ configured: false }` without `ANTHROPIC_API_KEY` (see `docs/scan-pipeline.md`)
 - `GET /v1/jobs/:jobId` — legacy-v0 render-job compatibility
 - `GET /assets/:assetId.:ext` — legacy-v0 R2 asset compatibility
 
