@@ -105,3 +105,6 @@ export * from './scienceDataCatalog';
 
 // --- TypeSafe Jev (System One) client and viewer-command interpreter -----
 export * from './jev';
+
+// --- Gist: the geometric essence of an object, for the scanner ----------
+export * from './gist';

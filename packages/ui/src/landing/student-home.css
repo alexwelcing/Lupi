@@ -636,6 +636,18 @@
   font-size: 0.875rem;
 }
 
+.student-scan-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px !important;
+}
+.student-scan-callout .student-secondary {
+  gap: 10px;
+  text-decoration: none;
+}
+
 /* ---- Molecule wall ---- */
 .wall {
   padding-block: 8px 56px;

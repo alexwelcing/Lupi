@@ -30,6 +30,7 @@ export const OCHEM_VIEWER_SEO = SEO_ROUTE_MANIFEST.routes.ochemViewer;
 export const OMOL25_SEO = SEO_ROUTE_MANIFEST.routes.omol25;
 export const OMOL25_GEOMETRY_SEO = SEO_ROUTE_MANIFEST.routes.omol25Geometry;
 export const MILLION_ATOM_VIEWER_SEO = SEO_ROUTE_MANIFEST.routes.millionAtomViewer;
+export const SCAN_SEO = SEO_ROUTE_MANIFEST.routes.scan;
 export const LIBRARY_SEO: Record<LibraryCollectionId, SeoConfig> = {
   all: SEO_ROUTE_MANIFEST.routes.library,
   gallery: SEO_ROUTE_MANIFEST.routes.libraryGallery,

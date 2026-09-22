@@ -368,6 +368,10 @@ export default defineConfig(({ command }) => ({
         target: process.env.VITE_DATA_EDGE_ORIGIN || 'http://127.0.0.1:8787',
         changeOrigin: true,
       },
+      '/v1/scan': {
+        target: process.env.VITE_DATA_EDGE_ORIGIN || 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
       '/v1/datasets': {
         target: process.env.VITE_DATA_EDGE_ORIGIN || 'http://127.0.0.1:8787',
         changeOrigin: true,

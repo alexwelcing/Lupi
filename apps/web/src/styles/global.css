@@ -851,6 +851,19 @@ button:focus:not(:focus-visible) {
 .lupine-app-root[data-timeline='true'] .lupine-ui-bucket { bottom: calc(76px + env(safe-area-inset-bottom)); }
 .lupine-app-root[data-ui-stowed='true'] .lupine-ui-bucket { bottom: calc(14px + env(safe-area-inset-bottom)); }
 
+/* A molecule arriving clears the room the same way stowing does, and gives
+   it back when the atoms have landed: the header slides up, the deck and
+   panels slide out, the bucket and the hints go quiet. Nothing unmounts. */
+.lupine-app-root[data-arriving='true'] .lupine-viewer-chrome--header { opacity: 0; transform: translateY(-120%); pointer-events: none; }
+.lupine-app-root[data-arriving='true'] .lupine-command-deck { opacity: 0; transform: translateX(140%); pointer-events: none; }
+.lupine-app-root[data-arriving='true'] .lupine-command-panel { opacity: 0; transform: translateX(110%); pointer-events: none; }
+.lupine-app-root[data-arriving='true'] #viewer-study-panel { opacity: 0; pointer-events: none; }
+.lupine-app-root[data-arriving='true'] .lupine-viewer-chrome--timeline { opacity: 0; transform: translateY(110%); pointer-events: none; }
+.lupine-app-root[data-arriving='true'] .lupine-ui-bucket { opacity: 0; pointer-events: none; }
+.lupine-app-root[data-arriving='true'] .lupine-gesture-hint { display: none !important; }
+.lupine-ui-bucket { transition: opacity 260ms ease, bottom 320ms cubic-bezier(.2,.85,.2,1); }
+.lupine-viewer-chrome--header { transition: opacity 260ms ease, transform 480ms cubic-bezier(.2,.85,.2,1); }
+
 .lupine-status-bar__readout {
   color: #6f8397;
   font-family: var(--font-mono);
@@ -1272,7 +1285,8 @@ button:focus:not(:focus-visible) {
     max-width: calc(100% - 24px);
     margin: calc(env(safe-area-inset-top) + 8px) 12px 0 !important;
   }
-  .lupine-app-root[data-ui-stowed='true'] .lupine-command-deck {
+  .lupine-app-root[data-ui-stowed='true'] .lupine-command-deck,
+  .lupine-app-root[data-arriving='true'] .lupine-command-deck {
     opacity: 0;
     transform: translate(50%, 140%) scale(.82);
     pointer-events: none;

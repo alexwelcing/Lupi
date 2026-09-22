@@ -47,6 +47,8 @@ import {
 } from './science/scienceBundle';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
 import { ViewerCanvas } from './viewer/ViewerCanvas';
+import { ArrivalStage } from './viewer/ArrivalStage';
+import { CameraTap } from './viewer/cameraFeed';
 import { selectViewerFrames } from './viewer/artifactFrameSelection';
 import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
 import { xrStore } from './viewer/xrStore';
@@ -144,6 +146,14 @@ export function ViewerApp() {
   const isSavedViewRoute = Boolean(savedViewSlug);
   const isCopperSceneRoute = normalizedPath === '/scenes/1m-copper-lattice';
   const seoEducationKind = SEO_EDUCATION_ROUTES[normalizedPath] ?? null;
+
+  // An agent driving the viewer, or a batch export capturing snapshots on a
+  // timer, wants atoms at full size the moment a load resolves; the arrival
+  // is for people watching.
+  const isBatchExportRoute = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('batchExport') === 'true';
+  useEffect(() => {
+    if (isMcpViewerRoute || isBatchExportRoute) useStore.getState().setArrivalEnabled(false);
+  }, [isMcpViewerRoute, isBatchExportRoute]);
 
   // Route sync
   useEffect(() => {
@@ -593,6 +603,7 @@ export function ViewerApp() {
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
   const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
   const [uiStowed, setUiStowed] = useState(false);
+  const arrivalPhase = useStore((state) => state.arrivalPhase);
 
   const clearLoadedFile = useCallback(() => {
     // A streamed trajectory owns abort controllers, subscriptions, loader
@@ -614,6 +625,7 @@ export function ViewerApp() {
       data-file={!!file}
       data-timeline={mobileTimelineActive}
       data-ui-stowed={uiStowed}
+      data-arriving={arrivalPhase === 'whirl' || arrivalPhase === 'calling'}
       data-style-open={!uiStowed && activePanel === 'studio'}
       data-panel-open={!uiStowed && (Boolean(activePanel) || studyLensOpen)}
       style={{
@@ -710,6 +722,7 @@ export function ViewerApp() {
                 near={cameraNear}
               />
               <PresetLegacyBridge />
+              <CameraTap />
             </ViewerCanvas>
 
             {!isEmbeddedMobileViewer && import.meta.env.DEV && showDebugHud && <StateInspector />}
@@ -772,6 +785,8 @@ export function ViewerApp() {
           </div>
         )}
 
+        {/* Over the viewport, beside it in the tree: the viewport's own canvas stays the only canvas it contains. */}
+        {file && <ArrivalStage />}
         {file && !isEmbeddedMobileViewer && <ViewerCommandDeck compact={isMobile} />}
         {file && !isEmbeddedMobileViewer && <PanelHost />}
 

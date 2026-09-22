@@ -55,7 +55,13 @@
     "clean": "turbo run clean",
     "demo:jev": "tsx tools/jev/demo.mjs",
     "test:jev": "tsx --test tools/jev/*.test.mjs",
-    "bench:jev": "tsx tools/jev/benchmark.mjs"
+    "bench:jev": "tsx tools/jev/benchmark.mjs",
+    "scan:gist:headless": "tsx packages/ui/tools/gist-headless.mts",
+    "scan:sculpt:bench": "tsx apps/mcp-worker/tools/sculpt-bench.mts",
+    "scan:recipe:bench": "tsx apps/mcp-worker/tools/recipe-bench.mts",
+    "scan:masks": "tsx packages/ui/tools/mask-dump.mts",
+    "scan:photos:export": "tsx packages/ui/tools/photo-export.mts",
+    "scan:hf:bench": "tsx apps/mcp-worker/tools/hf-bench.mts"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",

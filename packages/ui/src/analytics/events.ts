@@ -59,6 +59,18 @@ export const ANALYTICS_EVENTS = {
    * "silent white screen" failure mode into a measurable signal.
    */
   RENDER_FAILED: 'render_failed',
+
+  /**
+   * Scanner: a photo was sent to the edge. Aggregate shape only (whether a
+   * hint was typed, the downscaled byte size); never the image or the hint.
+   */
+  SCAN_STARTED: 'scan_started',
+
+  /** Scanner: the edge answered. Confidence, counts, and timing; never the subject text. */
+  SCAN_IDENTIFIED: 'scan_identified',
+
+  /** Scanner: a molecule card was opened in 3D (gallery or PubChem). */
+  SCAN_MOLECULE_OPENED: 'scan_molecule_opened',
 } as const;
 
 /** Union of all valid event names. */

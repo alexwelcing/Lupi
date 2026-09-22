@@ -12,6 +12,7 @@ import {
   isEmbeddedMobileViewerRoute,
   isMcpViewerRoute,
   isScienceDemoRoute,
+  isScanRoute,
   libraryCollectionFromRoute,
   libraryRedirectTarget,
   SEO_EDUCATION_ROUTES,
@@ -45,6 +46,7 @@ const retiredResearchRoute =
   params.get('tab') === 'equilibrium';
 const libraryCollection = libraryCollectionFromRoute(normalizedPathRoute(currentPathRoute()));
 const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute())] ?? null;
+const scanRoute = isScanRoute(currentPathRoute());
 
 /**
  * URL-only signals that the viewer (App) should load immediately instead of the
@@ -186,6 +188,19 @@ async function mountLibrary(collection: NonNullable<typeof libraryCollection>) {
   }
 }
 
+async function mountScan() {
+  try {
+    const mod = await import('@atlas/ui/scan/ScanShell');
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <mod.ScanShell onEnterViewer={mountViewer} />
+      </QueryClientProvider>,
+    );
+  } catch (err) {
+    renderError('Scanner import', err);
+  }
+}
+
 async function mountEducation(kind: NonNullable<typeof educationKind>) {
   try {
     const mod = await import('@atlas/ui/landing/SeoEducationShell');
@@ -232,6 +247,8 @@ if (libraryRedirect) {
   );
 } else if (wantsViewerImmediately()) {
   void mountViewer();
+} else if (scanRoute) {
+  void mountScan();
 } else if (libraryCollection) {
   void mountLibrary(libraryCollection);
 } else if (educationKind) {
