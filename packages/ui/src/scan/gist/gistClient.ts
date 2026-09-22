@@ -1,4 +1,4 @@
-import { latheFromProfile, normalizeGist, type Gist, type OutlinePoint } from '@atlas/core/gist';
+import { latheFromProfile, normalizeGist, type DepthModel, type Gist, type MaskFeatures, type OutlinePoint } from '@atlas/core/gist';
 import type { PreparedImage } from '../identify';
 
 /**
@@ -8,8 +8,10 @@ import type { PreparedImage } from '../identify';
  */
 export const GIST_PATH = '/v1/scan/gist';
 export const SCULPT_PATH = '/v1/scan/sculpt';
+export const RECIPE_PATH = '/v1/scan/recipe';
 const GIST_TIMEOUT_MS = 20_000;
 const SCULPT_TIMEOUT_MS = 2_500;
+const RECIPE_TIMEOUT_MS = 3_000;
 
 export interface GistReply {
   configured: boolean;
@@ -43,6 +45,7 @@ let sculptUnavailable = false;
 export function resetGistAvailability(): void {
   gistUnavailable = false;
   sculptUnavailable = false;
+  recipeUnavailable = false;
 }
 
 async function post<T extends { configured: boolean }>(path: string, body: unknown, timeoutMs: number, signal?: AbortSignal): Promise<T | null> {
@@ -93,6 +96,31 @@ export async function requestSculpt(subject: string, gist: Gist, photoProfile: n
   if (reply?.configured === false) sculptUnavailable = true;
   return reply;
 }
+
+export interface RecipeReply {
+  configured: boolean;
+  model?: string;
+  reads?: number;
+  depth?: { choice: DepthModel; confidence: number; probabilities: Record<string, number> };
+  fatness?: { choice: 'thin' | 'medium' | 'round'; confidence: number; probabilities: Record<string, number> };
+  threshold?: number;
+  timing?: { ms: number };
+  error?: string;
+}
+
+let recipeUnavailable = false;
+
+/** One recipe judgment for one candidate silhouette; the page fires several in parallel. */
+export async function requestRecipe(subject: string, features: MaskFeatures & { threshold?: number }, signal?: AbortSignal): Promise<RecipeReply | null> {
+  if (recipeUnavailable) return { configured: false };
+  const { fill, aspect, profile, columns, rows, components, symmetry, edginess, threshold } = features;
+  const reply = await post<RecipeReply>(RECIPE_PATH, { subject, features: { fill, aspect, profile, columns, rows, components, symmetry, edginess, threshold } }, RECIPE_TIMEOUT_MS, signal);
+  if (reply?.configured === false) recipeUnavailable = true;
+  return reply;
+}
+
+/** Depth for a fatness word, in the volume builder's units. */
+export const FATNESS: Record<'thin' | 'medium' | 'round', number> = { thin: 0.3, medium: 0.6, round: 0.9 };
 
 /**
  * Hand-built gists for the demo link and for a deployment without keys, so

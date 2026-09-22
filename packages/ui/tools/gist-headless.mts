@@ -12,6 +12,7 @@ import { createCanvas } from 'canvas';
 import { init, target } from 'vgpu/node';
 import { createGistEngine, GIST_PARTICLE_COUNT, PARTICLE_FLOATS } from '../src/scan/gist/gistEngine';
 import { DEMO_GISTS } from '../src/scan/gist/gistClient';
+import { stageFromPhoto } from '../src/scan/gist/volumeStage';
 import { applyMove, applicableMoves, describeGist } from '@atlas/core/gist';
 
 // The shaders have no imports, so their text is already complete WGSL.
@@ -19,6 +20,7 @@ const step = { wgsl: readFileSync(fileURLToPath(new URL('../src/scan/gist/gist-s
 const points = { wgsl: readFileSync(fileURLToPath(new URL('../src/scan/gist/gist-points.wgsl', import.meta.url)), 'utf8') };
 
 const which = process.argv.slice(2).find((arg) => !arg.startsWith('-')) ?? 'apple';
+// With a photo, the output name is the photo kind, so frames do not overwrite a demo's.
 const countArg = process.argv.slice(2).find((arg) => arg.startsWith('--particles='));
 const count = countArg ? Number(countArg.slice('--particles='.length)) : GIST_PARTICLE_COUNT;
 const width = 640;
@@ -30,33 +32,52 @@ const random = () => {
   seed = (seed * 1664525 + 1013904223) >>> 0;
   return seed / 4294967296;
 };
-// `--photo` seeds the particles from a synthetic picture (a warm disc on a
-// cool ground) so the dissolve-into-shape look can be checked without a camera.
-const withPhoto = process.argv.includes('--photo');
-const photo = withPhoto
+// `--photo` seeds the particles from a synthetic picture: a warm disc on a
+// cool ground, or with `--photo=tree` a lumpy green crown on a brown trunk
+// against a pale sky. The photo's own silhouette then becomes the shape,
+// exactly as on the page: mask, clean, measure, frame, inflate.
+const photoArg = process.argv.find((arg) => arg.startsWith('--photo'));
+const withPhoto = Boolean(photoArg);
+const photoKind = photoArg?.includes('=') ? photoArg.slice(photoArg.indexOf('=') + 1) : 'disc';
+const pixels = withPhoto
   ? (() => {
       const pw = 160;
       const ph = 120;
       const data = new Uint8ClampedArray(pw * ph * 4);
-      const mask = new Uint8Array(pw * ph);
       for (let y = 0; y < ph; y += 1) {
         for (let x = 0; x < pw; x += 1) {
           const i = (y * pw + x) * 4;
-          const dx = (x - pw * 0.5) / (pw * 0.28);
-          const dy = (y - ph * 0.55) / (ph * 0.38);
-          const inside = dx * dx + dy * dy < 1;
-          const shade = inside ? 0.6 + 0.4 * (1 - Math.hypot(dx + 0.3, dy + 0.3) / 1.6) : 0.2 + 0.15 * (y / ph);
-          data[i] = Math.round((inside ? 220 : 70) * shade);
-          data[i + 1] = Math.round((inside ? 70 : 90) * shade);
-          data[i + 2] = Math.round((inside ? 50 : 120) * shade);
+          let rgb: [number, number, number];
+          if (photoKind === 'tree') {
+            const dx = (x - pw * 0.5) / (pw * 0.3);
+            const dy = (y - ph * 0.4) / (ph * 0.32);
+            const lump = Math.sin(x * 0.4) * 0.14 + Math.cos(y * 0.55) * 0.12;
+            const crown = dx * dx + dy * dy < 1 + lump;
+            const trunk = Math.abs(x - pw * 0.5) < 5 && y > ph * 0.55 && y < ph * 0.92;
+            const leaf = 0.55 + 0.45 * Math.abs(Math.sin(x * 1.3 + y * 0.7));
+            rgb = crown ? [40 * leaf, 120 * leaf + 30, 35 * leaf] : trunk ? [95, 62, 34] : [200 + 20 * (y / ph), 215, 235];
+          } else {
+            const dx = (x - pw * 0.5) / (pw * 0.28);
+            const dy = (y - ph * 0.55) / (ph * 0.38);
+            const inside = dx * dx + dy * dy < 1;
+            const shade = inside ? 0.6 + 0.4 * (1 - Math.hypot(dx + 0.3, dy + 0.3) / 1.6) : 0.2 + 0.15 * (y / ph);
+            rgb = [(inside ? 220 : 70) * shade, (inside ? 70 : 90) * shade, (inside ? 50 : 120) * shade];
+          }
+          data[i] = Math.round(rgb[0]);
+          data[i + 1] = Math.round(rgb[1]);
+          data[i + 2] = Math.round(rgb[2]);
           data[i + 3] = 255;
-          mask[y * pw + x] = inside ? 1 : 0;
         }
       }
-      return { width: pw, height: ph, data, mask };
+      return { width: pw, height: ph, data };
     })()
   : null;
-const engine = createGistEngine({ gpu, target: colorTarget, shaders: { step: step.wgsl, points: points.wgsl }, aspect: () => width / height, random, count, photo });
+const stage = pixels ? stageFromPhoto(pixels) : null;
+if (stage) console.log(`stage: masked ${stage.masked} · cut at ${stage.candidate.threshold} · fill ${(stage.candidate.features.fill * 100).toFixed(0)}% · ${stage.candidate.features.components} pieces · ${stage.volume.filled} cells · frame zoom ${stage.photo.frame?.zoom.toFixed(2)}`);
+const photo = stage?.photo ?? null;
+// A photo run holds the camera at the front so the reassembled face is what gets checked.
+const engine = createGistEngine({ gpu, target: colorTarget, shaders: { step: step.wgsl, points: points.wgsl }, aspect: () => width / height, random, count, photo, spin: withPhoto ? 0 : 0.35 });
+if (stage) engine.setPalette(stage.palette[0], stage.palette[1]);
 
 const gist = DEMO_GISTS[which];
 console.log('gist:', describeGist(gist));
@@ -79,7 +100,7 @@ async function snapshot(name: string) {
     image.data[i + 3] = 255;
   }
   context.putImageData(image, 0, 0);
-  writeFileSync(new URL(`../../../.verify-artifacts/gist-${which}-${name}.png`, import.meta.url), canvas.toBuffer('image/png'));
+  writeFileSync(new URL(`../../../.verify-artifacts/gist-${withPhoto ? `photo-${photoKind}` : which}-${name}.png`, import.meta.url), canvas.toBuffer('image/png'));
   return lit / (width * height);
 }
 
@@ -113,13 +134,18 @@ engine.setEnergy(1);
 advance(90);
 console.log('swirl: lit fraction', (await snapshot('swirl')).toFixed(3), await glowStats());
 
-engine.setGist(gist);
+if (stage?.masked) {
+  // The photo's own silhouette is the shape; the demo gist is not used.
+  engine.setVolume(stage.volume);
+} else {
+  engine.setGist(gist);
+}
 engine.setAttract(1);
 engine.setEnergy(0.15);
 advance(240);
 console.log('settled: lit fraction', (await snapshot('settled')).toFixed(3), await glowStats());
 
-const moved = applyMove(gist, applicableMoves(gist)[0].id);
+const moved = stage?.masked ? null : applyMove(gist, applicableMoves(gist)[0].id);
 if (moved) {
   engine.setGist(moved);
   advance(120);

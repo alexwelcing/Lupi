@@ -17,6 +17,7 @@ import {
 import { DEMO_GISTS, requestGist, type GistReply } from './gist/gistClient';
 import { startSculptLoop, type SculptEvent, type SculptLoopHandle } from './gist/sculptLoop';
 import { GistStage, moveWords, type StageLabel, type StageRenderer } from './gist/GistStage';
+import { chooseRecipe, stageFromPhoto, type RecipeOutcome, type VolumeStage } from './gist/volumeStage';
 import './scan.css';
 
 /**
@@ -94,12 +95,17 @@ export function ScanPage() {
   const [sculptEvents, setSculptEvents] = useState<SculptEvent[]>([]);
   const [sculpting, setSculpting] = useState(false);
   const [demo, setDemo] = useState<string | null>(() => demoFromLocation());
+  /** The photo's own shape: built on the device the moment the photo is ready, refined by Jev's recipe. */
+  const [volumeStage, setVolumeStage] = useState<VolumeStage | null>(null);
+  const [recipe, setRecipe] = useState<RecipeOutcome | null>(null);
+  const [recipeBusy, setRecipeBusy] = useState(false);
   const storeError = useStore((state) => state.error);
   const storeLoading = useStore((state) => state.loading);
   const cameraInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const sculpt = useRef<SculptLoopHandle | null>(null);
+  const stageRef = useRef<VolumeStage | null>(null);
   const id = useId();
 
   const candidates = useMemo(() => scanCandidates(), []);
@@ -178,11 +184,26 @@ export function ScanPage() {
       setResult(null);
       setSculptEvents([]);
       setGistState({ gist: null, status: 'pending' });
+      setRecipe(null);
       setPhase('scanning');
       track(ANALYTICS_EVENTS.SCAN_STARTED, { hasHint: hintText.trim().length > 0, bytes: prepared.blob.size, width: prepared.width, height: prepared.height });
 
-      const gistPromise = requestGist(prepared, hintText, controller.signal).then((reply: GistReply | null) => {
+      const gistPromise = requestGist(prepared, hintText, controller.signal).then(async (reply: GistReply | null) => {
         if (controller.signal.aborted) return;
+        // With a usable silhouette the shape is the photo's own; the model's
+        // gist supplies the label, and Jev judges the recipe over candidate masks.
+        if (reply?.gist && stageRef.current?.masked) {
+          setGistState({ gist: reply.gist, status: 'ready', model: reply.model, ms: reply.timing?.ms, cached: reply.cached, outlinePoints: reply.outline?.length ?? 0 });
+          setRecipeBusy(true);
+          const outcome = await chooseRecipe(prepared.pixels, reply.gist.label, controller.signal).catch(() => null);
+          if (controller.signal.aborted) return;
+          setRecipeBusy(false);
+          if (outcome?.configured) {
+            setRecipe(outcome);
+            setVolumeStage(outcome.stage);
+          }
+          return;
+        }
         if (reply?.gist) {
           // The measured step: the photo's own silhouette, as numbers. The
           // free aspect fit runs here, before Jev is asked anything.
@@ -262,6 +283,10 @@ export function ScanPage() {
           if (previous) URL.revokeObjectURL(previous.previewUrl);
           return prepared;
         });
+        // The shape, right now, from the photo alone: no network yet.
+        const stage = stageFromPhoto(prepared.pixels);
+        stageRef.current = stage;
+        setVolumeStage(stage);
         await scan(prepared, hint);
       } catch (caught) {
         setError(caught instanceof ScanError ? caught.message : 'Could not read that photo.');
@@ -301,6 +326,9 @@ export function ScanPage() {
     setDemo(null);
     setGistState({ gist: null, status: 'idle' });
     setSculptEvents([]);
+    setVolumeStage(null);
+    setRecipe(null);
+    stageRef.current = null;
     setImage((previous) => {
       if (previous) URL.revokeObjectURL(previous.previewUrl);
       return null;
@@ -316,6 +344,8 @@ export function ScanPage() {
 
   const runDemo = (name: string) => {
     abort.current?.abort();
+    setVolumeStage(null);
+    stageRef.current = null;
     setImage((previous) => {
       if (previous) URL.revokeObjectURL(previous.previewUrl);
       return null;
@@ -467,9 +497,11 @@ export function ScanPage() {
             photoUrl={image?.previewUrl ?? null}
             photoWidth={image?.width}
             photoHeight={image?.height}
-            photoPixels={image?.pixels ?? null}
+            photoPixels={volumeStage?.photo ?? image?.pixels ?? null}
             active={busy}
             gist={gist}
+            volume={volumeStage?.masked ? volumeStage.volume : null}
+            palette={volumeStage?.masked ? volumeStage.palette : null}
             settled={phase === 'done'}
             status={stageStatus}
             label={stageLabel}
@@ -658,7 +690,7 @@ export function ScanPage() {
           </div>
         )}
 
-        {phase === 'done' && (gist || identification) && (
+        {phase === 'done' && (gist || identification || volumeStage) && (
           <details className="scan-dev">
             <summary>Under the hood</summary>
             <dl>
@@ -673,6 +705,26 @@ export function ScanPage() {
                   : gistState.status === 'none'
                     ? 'no sketch came back'
                     : '—'}
+              </dd>
+              <dt>Shape</dt>
+              <dd>
+                {volumeStage?.masked
+                  ? `the photo's own silhouette, inflated: ${volumeStage.volume.filled.toLocaleString()} of ${(volumeStage.volume.n ** 3).toLocaleString()} cells · ${volumeStage.volume.depth} · fatness ${volumeStage.volume.fatness} · cut at ${volumeStage.candidate.threshold} · fill ${(volumeStage.candidate.features.fill * 100).toFixed(0)}% · ${volumeStage.candidate.features.components} piece${volumeStage.candidate.features.components === 1 ? '' : 's'} before cleanup`
+                  : volumeStage
+                    ? 'nothing stood out from the background; the model\u2019s primitives stand in'
+                    : demo
+                      ? 'hand-built primitives'
+                      : '—'}
+              </dd>
+              <dt>Recipe</dt>
+              <dd>
+                {recipeBusy
+                  ? 'asking Jev about the candidate silhouettes…'
+                  : recipe?.configured
+                    ? `${recipe.judged.length} silhouettes judged in parallel · winner cut at ${recipe.judged[0].threshold} reads ${percent(recipe.judged[0].reply.reads ?? 0)} · ${recipe.winner.depth?.choice ?? '—'} ${percent(recipe.winner.depth?.confidence ?? 0)} · ${recipe.winner.fatness?.choice ?? '—'} ${percent(recipe.winner.fatness?.confidence ?? 0)} · ${recipe.judged.map((entry) => `${entry.threshold}: ${percent(entry.reply.reads ?? 0)} ${entry.reply.depth?.choice ?? ''} ${formatMs(entry.reply.timing?.ms)}`).join(' · ')}`
+                    : volumeStage?.masked
+                      ? 'not judged (Jev off, or no answer)'
+                      : '—'}
               </dd>
               <dt>Silhouette</dt>
               <dd>

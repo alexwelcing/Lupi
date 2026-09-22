@@ -30,7 +30,7 @@ Core endpoints:
 - `POST /v1/render` — REST shortcut for `lupi.render_molecule_asset`
 - `POST /v1/switch/judge`, `POST /v1/viewer/command` — Jev (TypeSafe) judgments for the molecule switcher and the command palette; `{ configured: false }` without `TYPESAFE_API_KEY` (see `docs/jev-integration.md`)
 - `POST /v1/scan/identify` — photo → molecules: Claude vision identifies the subject and its materials, Jev ranks the gallery pool; `{ configured: false }` without `ANTHROPIC_API_KEY` (see `docs/scan-pipeline.md`)
-- `POST /v1/scan/gist`, `POST /v1/scan/sculpt` — photo → a shape (a label and a few blended primitives) for the particle stage, and one Jev sculpting judgment per call for the fast loop that refines it
+- `POST /v1/scan/gist`, `POST /v1/scan/sculpt`, `POST /v1/scan/recipe` — photo → a label and outline, one Jev sculpting judgment per call for the primitive fallback, and Jev's recipe (does this measured silhouette read as the subject; inflate, extrude, or revolve; how deep) for the photo's own inflated volume
 - `GET /v1/jobs/:jobId` — legacy-v0 render-job compatibility
 - `GET /assets/:assetId.:ext` — legacy-v0 R2 asset compatibility
 

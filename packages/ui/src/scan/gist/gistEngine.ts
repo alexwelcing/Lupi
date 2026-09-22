@@ -1,5 +1,5 @@
 import { compute, draw, frame, storage, type Compute, type Draw, type Gpu, type ShaderSource, type StorageBuffer, type Target } from 'vgpu';
-import { GIST_MAX_PRIMITIVES, type Gist, type GistPrimitive } from '@atlas/core/gist';
+import { GIST_MAX_PRIMITIVES, VOLUME_SIZE, type Gist, type GistPrimitive, type Volume } from '@atlas/core/gist';
 
 /**
  * The gist engine: a few thousand particles that whirl, then flow onto the
@@ -16,6 +16,10 @@ import { GIST_MAX_PRIMITIVES, type Gist, type GistPrimitive } from '@atlas/core/
 export interface GistEngine {
   /** Replace the shape. `null` keeps the particles whirling with nothing to settle on. */
   setGist(gist: Gist | null): void;
+  /** Replace the volume: the photo's own silhouette inflated. Unioned with the gist's primitives, if any. */
+  setVolume(volume: Volume | null): void;
+  /** The two colours the palette-wearing particles use (hex). */
+  setPalette(main: string, accent: string): void;
   /** Reseed every particle from a photo (a flat sheet of pixels facing the camera) or back onto the ring. */
   setPhoto(photo: PhotoPixels | null): void;
   /** Swirl strength target, 0..1. */
@@ -41,10 +45,12 @@ export interface GistEngineDeps {
   random?: () => number;
   /** Born from a photo when given; otherwise on the ring. */
   photo?: PhotoPixels | null;
+  /** Orbit speed in radians per second; 0 holds the camera at the front. */
+  spin?: number;
 }
 
 export const GIST_PARTICLE_COUNT = 60_000;
-export const PARTICLE_FLOATS = 12;
+export const PARTICLE_FLOATS = 16;
 export const PRIM_FLOATS = 24;
 const WORKGROUP = 64;
 const KIND_INDEX: Record<GistPrimitive['kind'], number> = { sphere: 0, ellipsoid: 1, box: 2, cylinder: 3, capsule: 4, cone: 5, torus: 6, lathe: 7, arc: 8 };
@@ -109,13 +115,16 @@ export interface PhotoPixels {
   data: Uint8ClampedArray | Uint8Array;
   /** 1 where the pixel belongs to the object; those particles carry the photo's colour onto the shape. */
   mask?: Uint8Array;
+  /** How the object is framed in the world: the sheet is scaled by `zoom` about `centre` (sheet units). */
+  frame?: { zoom: number; centre: [number, number] };
 }
+
+/** World size of the photo sheet at zoom 1; the volume builder uses the same numbers. */
+export const PHOTO_SHEET = { height: 2.6 };
 
 /** Colour weight for a particle born on background: mostly palette, a little of the photo. */
 const BACKGROUND_COLOR_WEIGHT = 70;
 
-/** How wide the photo sheet stands in world units; a little larger than the object so it fills the stage. */
-const PHOTO_SHEET_HEIGHT = 2.6;
 
 /**
  * Particles start on a whirling ring, the same one the kernel respawns onto,
@@ -126,8 +135,10 @@ export function seedParticles(count: number, random: () => number = Math.random,
   const data = new Float32Array(new ArrayBuffer(count * PARTICLE_FLOATS * 4));
   const view = new DataView(data.buffer);
   const aspect = photo ? photo.width / Math.max(photo.height, 1) : 1;
-  const sheetHeight = PHOTO_SHEET_HEIGHT;
+  const sheetHeight = PHOTO_SHEET.height;
   const sheetWidth = sheetHeight * aspect;
+  const zoom = photo?.frame?.zoom ?? 1;
+  const centre = photo?.frame?.centre ?? [0, 0];
   for (let index = 0; index < count; index += 1) {
     const base = index * PARTICLE_FLOATS;
     const seed = random();
@@ -137,11 +148,21 @@ export function seedParticles(count: number, random: () => number = Math.random,
       const px = Math.min(photo.width - 1, Math.floor(u * photo.width));
       const py = Math.min(photo.height - 1, Math.floor(v * photo.height));
       const at = (py * photo.width + px) * 4;
-      data[base] = (u - 0.5) * sheetWidth;
-      data[base + 1] = (0.5 - v) * sheetHeight;
+      const onObject = !photo.mask || photo.mask[py * photo.width + px] === 1;
+      const x = ((u - 0.5) * sheetWidth - centre[0]) * zoom;
+      const y = ((0.5 - v) * sheetHeight - centre[1]) * zoom;
+      data[base] = x;
+      data[base + 1] = y;
       data[base + 2] = (random() - 0.5) * 0.08;
-      const weight = !photo.mask || photo.mask[py * photo.width + px] ? 255 : BACKGROUND_COLOR_WEIGHT;
+      const weight = onObject ? 255 : BACKGROUND_COLOR_WEIGHT;
       view.setUint32((base + 11) * 4, (photo.data[at] | (photo.data[at + 1] << 8) | (photo.data[at + 2] << 16) | (weight << 24)) >>> 0, true);
+      // Home: the pixel's own place, a little in front, so the spring lands it on the front face there.
+      if (onObject) {
+        data[base + 12] = x;
+        data[base + 13] = y;
+        data[base + 14] = 0.9;
+        data[base + 15] = 1;
+      }
     } else {
       const ring = 1.15 + 0.45 * seed;
       const angle = random() * Math.PI * 2;
@@ -201,11 +222,15 @@ export function viewProjection(eye: [number, number, number], aspect: number, fo
   return out;
 }
 
-export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_COUNT, aspect = () => 1, random = Math.random, photo = null }: GistEngineDeps): GistEngine {
+export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_COUNT, aspect = () => 1, random = Math.random, photo = null, spin = 0.35 }: GistEngineDeps): GistEngine {
   const particles: StorageBuffer = storage(gpu, count * PARTICLE_FLOATS * 4, 'read-write');
   particles.write(seedParticles(count, random, photo));
   const prims: StorageBuffer = storage(gpu, GIST_MAX_PRIMITIVES * PRIM_FLOATS * 4, 'read');
   prims.write(packGist(null).data);
+  const volumeCells = VOLUME_SIZE * VOLUME_SIZE * VOLUME_SIZE;
+  const volumeBuffer: StorageBuffer = storage(gpu, volumeCells * 4, 'read');
+  volumeBuffer.write(new Float32Array(new ArrayBuffer(volumeCells * 4)).fill(4));
+  let volumeInfo = { origin: [0, 0, 0] as [number, number, number], cell: 1, n: VOLUME_SIZE, active: 0 };
 
   const state = { energy: 0, attract: 0, fade: 0 };
   const targets = { energy: 0, attract: 0, fade: 0 };
@@ -217,7 +242,7 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
   let disposed = false;
   const runSeed = random() * 100;
   const eyeFor = (time: number): [number, number, number] => {
-    const angle = time * 0.35;
+    const angle = time * spin;
     return [Math.sin(angle) * ORBIT_RADIUS, 1.1 + Math.sin(time * 0.31) * 0.3, Math.cos(angle) * ORBIT_RADIUS];
   };
   /** Key light rides above and to the left of the camera, so the lit side always faces the viewer. */
@@ -246,12 +271,29 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     };
   };
 
+  const stepParams = (time: number, dt: number) => ({
+    time,
+    dt,
+    energy: state.energy,
+    attract: primCount > 0 || volumeInfo.active ? state.attract : 0,
+    count,
+    primCount,
+    seed: runSeed,
+    pad: 0,
+    volumeOrigin: volumeInfo.origin,
+    volumeCell: volumeInfo.cell,
+    volumeN: volumeInfo.n,
+    volumeActive: volumeInfo.active,
+    pad2: 0,
+    pad3: 0,
+  });
   const step: Compute = compute(gpu, shaders.step, {
     label: 'Lupi gist step',
     set: {
-      params: { time: 0, dt: 0, energy: 0, attract: 0, count, primCount: 0, seed: runSeed, pad: 0 },
+      params: stepParams(0, 0),
       prims,
       particles,
+      volume: volumeBuffer,
     },
   });
   const points: Draw = draw(gpu, {
@@ -276,6 +318,27 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     particles,
     setPhoto(next) {
       particles.write(seedParticles(count, random, next));
+    },
+    setPalette(mainHex, accentHex) {
+      main = hexToRgb(mainHex);
+      accent = hexToRgb(accentHex);
+    },
+    setVolume(volume) {
+      if (!volume) {
+        volumeInfo = { ...volumeInfo, active: 0 };
+        return;
+      }
+      // The buffer is sized for VOLUME_SIZE³; a smaller grid is packed into its corner.
+      const n = Math.min(volume.n, VOLUME_SIZE);
+      const packed = new Float32Array(new ArrayBuffer(volumeCells * 4));
+      if (volume.n === VOLUME_SIZE) {
+        packed.set(volume.sdf);
+      } else {
+        packed.fill(4);
+        for (let z = 0; z < n; z += 1) for (let y = 0; y < n; y += 1) for (let x = 0; x < n; x += 1) packed[x + VOLUME_SIZE * (y + VOLUME_SIZE * z)] = volume.sdf[x + volume.n * (y + volume.n * z)];
+      }
+      volumeBuffer.write(packed);
+      volumeInfo = { origin: volume.origin, cell: volume.cell, n: VOLUME_SIZE, active: 1 };
     },
     setGist(gist) {
       const packed = packGist(gist);
@@ -307,7 +370,7 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
       ease('energy');
       ease('attract');
       ease('fade', 0.08);
-      step.set({ params: { time, dt, energy: state.energy, attract: primCount > 0 ? state.attract : 0, count, primCount, seed: runSeed, pad: 0 } });
+      step.set({ params: stepParams(time, dt) });
       step.dispatch(Math.ceil(count / WORKGROUP));
       points.set({ camera: cameraUniform(time) });
       frame(gpu, (pass) => pass.pass(target, points));

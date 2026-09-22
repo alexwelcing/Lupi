@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Gist } from '@atlas/core/gist';
+import type { Gist, Volume } from '@atlas/core/gist';
 import type { GistParticles } from './gistParticles';
 import type { PhotoPixels } from './gistEngine';
 import type { ScanSwirl } from '../swirl';
@@ -35,6 +35,10 @@ export interface GistStageProps {
   active: boolean;
   /** The shape to settle onto; null keeps whirling. */
   gist: Gist | null;
+  /** The photo's own silhouette inflated; when given, this is the shape and `gist` only supplies the label. */
+  volume?: Volume | null;
+  /** Colours for the particles that wear the palette; with a volume, the object's own. */
+  palette?: [string, string] | null;
   /** True once the result is on screen; the photo fades further so the shape owns the stage. */
   settled: boolean;
   status: { line: string; elapsedMs: number } | null;
@@ -68,7 +72,7 @@ function formatMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = null, active, gist, settled, status, label, onRenderer }: GistStageProps) {
+export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = null, active, gist, volume = null, palette = null, settled, status, label, onRenderer }: GistStageProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const particles = useRef<GistParticles | null>(null);
   const swirl = useRef<ScanSwirl | null>(null);
@@ -80,18 +84,22 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = nul
     setRendererState(next);
     onRenderer?.(next);
   };
-  const latest = useRef({ active, gist, settled });
-  latest.current = { active, gist, settled };
+  const latest = useRef({ active, gist, volume, palette, settled });
+  latest.current = { active, gist, volume, palette, settled };
   const seededPhoto = useRef<PhotoPixels | null>(null);
 
   const apply = () => {
-    const { active: isActive, gist: shape, settled: isSettled } = latest.current;
+    const { active: isActive, gist: shape, volume: field, palette: colours, settled: isSettled } = latest.current;
     const engine = particles.current;
     if (engine) {
-      engine.setFade(isActive || shape ? 1 : 0);
-      engine.setGist(shape);
-      engine.setAttract(shape ? 1 : 0);
-      engine.setEnergy(shape ? (isSettled ? 0.08 : 0.2) : isActive ? 1 : 0);
+      const hasShape = Boolean(field || shape);
+      engine.setFade(isActive || hasShape ? 1 : 0);
+      // With a volume the photo's silhouette is the shape; the gist's primitives only stand in without one.
+      engine.setVolume(field);
+      engine.setGist(field ? null : shape);
+      if (colours) engine.setPalette(colours[0], colours[1]);
+      engine.setAttract(hasShape ? 1 : 0);
+      engine.setEnergy(hasShape ? (isSettled ? 0.08 : 0.2) : isActive ? 1 : 0);
       return;
     }
     const ring = swirl.current;
@@ -140,10 +148,10 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = nul
   };
 
   useEffect(() => {
-    if (active || gist) ensure();
+    if (active || gist || volume) ensure();
     apply();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `apply` reads the latest props through a ref.
-  }, [active, gist, settled]);
+  }, [active, gist, volume, palette, settled]);
 
   // A new photo (a rescan, a different picture) reseeds the particles as that photo.
   useEffect(() => {
@@ -162,10 +170,10 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = nul
     [],
   );
 
-  const dimmed = active || gist !== null;
+  const dimmed = active || gist !== null || volume !== null;
   return (
     <div
-      className={`scan-stage gist-stage${active ? ' is-scanning' : ''}${gist ? ' has-gist' : ''}${settled ? ' is-done' : ''}`}
+      className={`scan-stage gist-stage${active ? ' is-scanning' : ''}${gist || volume ? ' has-gist' : ''}${settled ? ' is-done' : ''}`}
       data-renderer={renderer}
     >
       {photoUrl ? (

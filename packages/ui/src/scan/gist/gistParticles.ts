@@ -1,6 +1,6 @@
 /// <reference types="vgpu/client" />
 import { init, surface, type Gpu } from 'vgpu';
-import type { Gist } from '@atlas/core/gist';
+import type { Gist, Volume } from '@atlas/core/gist';
 import { GIST_PARTICLE_COUNT, createGistEngine, type GistEngine, type PhotoPixels } from './gistEngine';
 import stepShader from './gist-step.wgsl';
 import pointsShader from './gist-points.wgsl';
@@ -15,6 +15,9 @@ export interface GistParticles {
   setGist(gist: Gist | null): void;
   /** Reseed the particles from a photo, so the picture itself is what whirls into the shape. */
   setPhoto(photo: PhotoPixels | null): void;
+  /** The photo's silhouette inflated, as a signed distance grid; the shape the particles settle onto. */
+  setVolume(volume: Volume | null): void;
+  setPalette(main: string, accent: string): void;
   setEnergy(value: number): void;
   setAttract(value: number): void;
   setFade(value: number): void;
@@ -122,6 +125,14 @@ export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: 
       },
       setPhoto(next) {
         engine!.setPhoto(next);
+        wake();
+      },
+      setVolume(volume) {
+        engine!.setVolume(volume);
+        wake();
+      },
+      setPalette(main, accent) {
+        engine!.setPalette(main, accent);
         wake();
       },
       setEnergy(value) {

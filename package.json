@@ -57,7 +57,8 @@
     "test:jev": "tsx --test tools/jev/*.test.mjs",
     "bench:jev": "tsx tools/jev/benchmark.mjs",
     "scan:gist:headless": "tsx packages/ui/tools/gist-headless.mts",
-    "scan:sculpt:bench": "tsx apps/mcp-worker/tools/sculpt-bench.mts"
+    "scan:sculpt:bench": "tsx apps/mcp-worker/tools/sculpt-bench.mts",
+    "scan:recipe:bench": "tsx apps/mcp-worker/tools/recipe-bench.mts"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",

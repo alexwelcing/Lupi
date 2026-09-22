@@ -106,6 +106,59 @@ particles re-flow: the shape visibly morphs as Jev decides. The label shows
 the latest likeness and the judgment count; "Under the hood" lists every
 judgment with its move, confidence, likeness, and latency.
 
+### That tree, not a tree (2026-09-22, latest)
+
+The vocabulary approach can only ever make *a* tree. The photo already
+holds *that* tree, pixel by pixel, so the shape now comes from the photo
+itself, in the rawest form there is: a grid of bits, one per cell,
+occupied or not (`packages/core/src/gist/volume.ts`). No model names
+anything on the way to the shape.
+
+1. **Mask.** On the device, at up to 160 px: the border's median colour is
+   the background, pixels far from it are the object, the largest
+   connected piece is kept, small holes are closed (`cutMask` in
+   `volumeStage.ts`). Takes a few milliseconds.
+2. **Measure.** Aspect, fill, width top to bottom, mass by row and column,
+   pieces, symmetry, edge raggedness (`maskFeatures`). These numbers are
+   what Jev judges; it never sees pixels.
+3. **Inflate.** A 2D distance transform of the mask says how far each pixel
+   is from the silhouette's edge; the depth there follows a rounded
+   profile of that distance, the way a paper cut-out puffs up
+   (`buildVolume`, depth model `inflate`). `extrude` gives a constant
+   thickness for flat things, `revolve` spins each row into a disc for
+   things that are the same all the way around. The cells are then
+   turned into a signed distance grid with a separable 3D distance
+   transform: 64³, about 100 ms.
+4. **Settle.** The compute kernel samples the grid trilinearly and the
+   particles land on it. Every particle born on an object pixel keeps that
+   pixel's world position as its home and is drawn there, so the front
+   face reassembles as the photo, in 3D. Background particles fade to the
+   palette and wrap the sides and back.
+5. **Recipe, by Jev.** `POST /v1/scan/recipe` takes the subject (the gist
+   call's label) and one candidate silhouette's measurements and answers
+   three questions in one call: does this silhouette read as the subject
+   (a Noul), which depth model fits (a Choice), how deep compared with wide
+   (a Choice). The page cuts the mask at four contrasts, measures each,
+   fires four calls at once, keeps the silhouette that reads highest, and
+   rebuilds the volume with its depth and fatness. About 300 ms for the
+   whole wave.
+
+Measured against the live model on synthetic silhouettes
+(`pnpm scan:recipe:bench`): an oak tree silhouette read 0.88 and got
+`inflate` at 0.98; a wine bottle `revolve` at 1.00; a hardback book
+`extrude` at 1.00 and `thin` at 0.97; an apple `inflate`; and a stray
+corner fragment labelled "oak tree" read 0.43, so the mask judgment
+separates the object from a wrong cut. The headless tool renders a
+synthetic tree through the same path (`--photo=tree`): the crown's lumps
+and the trunk come out, with the leaf colours on the front.
+
+The shape is on screen before any network call returns: the volume is
+built the moment the photo is prepared, the label arrives with the gist
+call, and the recipe refines the volume a second or so later. The
+primitive vocabulary below is now the fallback for a photo where nothing
+stands out from the background (a full-frame texture, a screenshot), and
+for the demos.
+
 ### Three more ways in (2026-09-22, later)
 
 The vocabulary was the ceiling, so three different attacks on it:

@@ -4,9 +4,11 @@
 // to the surface: both 0..1, eased on the CPU, so the same kernel does the
 // whirl, the settle, and the morph when the gist changes underneath it.
 
-// 48 bytes. `nrm` is the surface normal where the particle last settled, for
+// 64 bytes. `nrm` is the surface normal where the particle last settled, for
 // shading; `color` is a packed RGBA8: the photo pixel this particle was born
-// from (alpha 255), or 0 when it has no photo and wears the palette.
+// from (alpha 255), or 0 when it has no photo and wears the palette; `home`
+// is where that pixel sits in the world, and a homed particle settles on the
+// shape at its own pixel, so the front face reassembles as the photo.
 struct Particle {
   pos: vec3f,
   seed: f32,
@@ -14,6 +16,8 @@ struct Particle {
   glow: f32,
   nrm: vec3f,
   color: u32,
+  home: vec3f,
+  homed: f32,
 }
 
 // 96 bytes: rot0..rot2 are the rows of the primitive's rotation matrix, so
@@ -43,11 +47,20 @@ struct Params {
   primCount: u32,
   seed: f32,
   pad: f32,
+  volumeOrigin: vec3f,
+  volumeCell: f32,
+  volumeN: u32,
+  volumeActive: u32,
+  pad2: u32,
+  pad3: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> prims: array<Prim>;
 @group(0) @binding(2) var<storage, read_write> particles: array<Particle>;
+// The rawest shape there is: a signed distance at every cell of an n³ grid,
+// built on the CPU from the photo's own silhouette. x fastest, then y, then z.
+@group(0) @binding(3) var<storage, read> volume: array<f32>;
 
 // Kinds, in the order `KIND_INDEX` packs them: sphere, ellipsoid, box,
 // cylinder, capsule, cone, torus, lathe, arc.
@@ -170,8 +183,34 @@ fn smin(a: f32, b: f32, k: f32) -> f32 {
   return mix(b, a, h) - k * h * (1.0 - h);
 }
 
+fn volumeAt(x: u32, y: u32, z: u32) -> f32 {
+  let n = params.volumeN;
+  return volume[x + n * (y + n * z)];
+}
+
+// Trilinear sample of the volume's signed distance; outside the grid, the
+// distance to the grid box is added so nothing far away sees a flat field.
+fn sdVolume(p: vec3f) -> f32 {
+  let n = params.volumeN;
+  let g = (p - params.volumeOrigin) / params.volumeCell - vec3f(0.5);
+  let c = clamp(g, vec3f(0.0), vec3f(f32(n) - 1.001));
+  let i0 = vec3u(floor(c));
+  let i1 = min(i0 + vec3u(1u), vec3u(n - 1u));
+  let f = c - floor(c);
+  let c00 = mix(volumeAt(i0.x, i0.y, i0.z), volumeAt(i1.x, i0.y, i0.z), f.x);
+  let c10 = mix(volumeAt(i0.x, i1.y, i0.z), volumeAt(i1.x, i1.y, i0.z), f.x);
+  let c01 = mix(volumeAt(i0.x, i0.y, i1.z), volumeAt(i1.x, i0.y, i1.z), f.x);
+  let c11 = mix(volumeAt(i0.x, i1.y, i1.z), volumeAt(i1.x, i1.y, i1.z), f.x);
+  let inner = mix(mix(c00, c10, f.y), mix(c01, c11, f.y), f.z);
+  let outside = length(max(g - c, c - g)) * params.volumeCell;
+  return inner + outside;
+}
+
 fn sdScene(p: vec3f) -> f32 {
   var d = 1e5;
+  if (params.volumeActive != 0u) {
+    d = sdVolume(p);
+  }
   for (var i = 0u; i < params.primCount; i++) {
     let prim = prims[i];
     if (prim.subtract != 0u) { continue; }
@@ -213,7 +252,12 @@ fn step(@builtin(global_invocation_id) id: vec3u) {
   let cosTheta = own.y * 2.0 - 1.0;
   let sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
   let phi = own.z * 6.2831853 + t * 0.12;
-  let anchor = vec3f(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi)) * 1.5;
+  var anchor = vec3f(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi)) * 1.5;
+  // With a photo volume the front face belongs to the homed pixels; everything
+  // else anchors behind, wrapping the sides and the back.
+  if (params.volumeActive != 0u && particle.homed < 0.5) {
+    anchor.z = -abs(anchor.z) - 0.2;
+  }
 
   // The swirl: a ring of particles whirling around the vertical axis, breathing in height.
   let radial = vec3f(p.x, 0.0, p.z);
@@ -232,7 +276,11 @@ fn step(@builtin(global_invocation_id) id: vec3u) {
   if (params.attract > 0.001) {
     let d = sdScene(p);
     let n = sceneNormal(p);
-    pull = -n * d * 9.0 + (anchor - p) * 0.5 + (hash33(vec3f(f32(i), t * 2.0, seed)) - vec3f(0.5)) * 0.15;
+    // A homed particle is drawn to its own pixel's place, so the photo's
+    // front face reassembles on the shape; the rest spread around it.
+    let goalPoint = mix(anchor, particle.home, particle.homed);
+    let homing = mix(0.5, 1.4, particle.homed);
+    pull = -n * d * 9.0 + (goalPoint - p) * homing + (hash33(vec3f(f32(i), t * 2.0, seed)) - vec3f(0.5)) * 0.15;
     glow = 1.0 - clamp(abs(d) * 5.0, 0.0, 1.0);
     nrm = normalize(mix(nrm, n, 0.35) + vec3f(1e-5));
   }

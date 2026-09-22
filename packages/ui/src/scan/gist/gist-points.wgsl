@@ -11,6 +11,8 @@ struct Particle {
   glow: f32,
   nrm: vec3f,
   color: u32,
+  home: vec3f,
+  homed: f32,
 }
 
 struct Camera {
