@@ -19,6 +19,8 @@ export interface GistParticles {
   setVolume(volume: Volume | null): void;
   setHomes(points: ColouredPoints | null): void;
   setSpin(rate: number): void;
+  setCameraSource(source: (() => { viewProjection: Float32Array; eye: [number, number, number] } | null) | null): void;
+  setDiscSize(size: number): void;
   setPalette(main: string, accent: string): void;
   setEnergy(value: number): void;
   setAttract(value: number): void;
@@ -139,6 +141,14 @@ export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: 
       },
       setSpin(rate) {
         engine!.setSpin(rate);
+        wake();
+      },
+      setCameraSource(source) {
+        engine!.setCameraSource(source);
+        wake();
+      },
+      setDiscSize(size) {
+        engine!.setDiscSize(size);
         wake();
       },
       setPalette(main, accent) {

@@ -253,6 +253,8 @@ export function ViewerScene({
   const useGpuBonds = useStore(s => s.useGpuBonds);
   const bondColorMode = useStore(s => s.bondColorMode);
   const atomScale = useStore(s => s.atomScale);
+  // The arrival stage holds this at 0 while particles assemble the molecule, then grows it to 1.
+  const arrival = useStore(s => s.arrival);
   const filterShellShape = useStore(s => s.filterShellShape);
   const filterShellPreset = useStore(s => s.filterShellPreset);
   const filterShellOpacity = useStore(s => s.filterShellOpacity);
@@ -495,7 +497,7 @@ export function ViewerScene({
               uniformColor={uniformAtomColor}
               elementColorOverrides={elementColorOverrides}
               atomColorSource={atomColorSource}
-              scale={atomScale}
+              scale={atomScale * arrival}
               loadedAtomCount={loadedAtomCount}
               hiddenAtomTypes={hiddenAtomTypes}
               atomTypeScales={atomTypeScales}
@@ -520,7 +522,7 @@ export function ViewerScene({
             uniformColor={uniformAtomColor}
             elementColorOverrides={elementColorOverrides}
             atomColorSource={atomColorSource}
-            scale={atomScale}
+            scale={atomScale * arrival}
             maxAtoms={deviceMaxAtoms}
             loadedAtomCount={loadedAtomCount}
             onSpatialHash={!playing && atomPickingEnabled ? setSpatialHash : undefined}

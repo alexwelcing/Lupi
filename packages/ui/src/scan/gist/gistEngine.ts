@@ -26,6 +26,14 @@ export interface GistEngine {
   setHomes(points: ColouredPoints | null): void;
   /** Camera orbit rate in radians per second; 0 holds the front view. */
   setSpin(rate: number): void;
+  /**
+   * Take the camera from elsewhere (the molecule viewer's, say), as a
+   * column-major view-projection into the engine's own space and the eye
+   * in that space, read every frame; `null` returns to the orbit.
+   */
+  setCameraSource(source: (() => { viewProjection: Float32Array; eye: [number, number, number] } | null) | null): void;
+  /** World size of a settled disc; the default suits a two-unit object. */
+  setDiscSize(size: number): void;
   /** The two colours the palette-wearing particles use (hex). */
   setPalette(main: string, accent: string): void;
   /** Reseed every particle from a photo (a flat sheet of pixels facing the camera) or back onto the ring. */
@@ -295,14 +303,17 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     const len = Math.hypot(...light) || 1;
     return [light[0] / len, light[1] / len, light[2] / len];
   };
+  let cameraSource: (() => { viewProjection: Float32Array; eye: [number, number, number] } | null) | null = null;
+  let discSize = DISC_SIZE;
   const cameraUniform = (time: number) => {
-    const eye = eyeFor(time);
+    const external = cameraSource?.() ?? null;
+    const eye = external?.eye ?? eyeFor(time);
     return {
-      viewProjection: viewProjection(eye, aspect()),
+      viewProjection: external?.viewProjection ?? viewProjection(eye, aspect()),
       main,
       aspect: aspect(),
       accent,
-      size: DISC_SIZE,
+      size: discSize,
       light: lightFor(eye),
       time,
       eye,
@@ -390,6 +401,12 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     },
     setSpin(rate) {
       spinRate = rate;
+    },
+    setCameraSource(source) {
+      cameraSource = source;
+    },
+    setDiscSize(size) {
+      discSize = Math.max(0.001, size);
     },
     setPalette(mainHex, accentHex) {
       main = hexToRgb(mainHex);

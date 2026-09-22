@@ -47,6 +47,8 @@ import {
 } from './science/scienceBundle';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
 import { ViewerCanvas } from './viewer/ViewerCanvas';
+import { ArrivalStage } from './viewer/ArrivalStage';
+import { CameraTap } from './viewer/cameraFeed';
 import { selectViewerFrames } from './viewer/artifactFrameSelection';
 import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
 import { xrStore } from './viewer/xrStore';
@@ -144,6 +146,12 @@ export function ViewerApp() {
   const isSavedViewRoute = Boolean(savedViewSlug);
   const isCopperSceneRoute = normalizedPath === '/scenes/1m-copper-lattice';
   const seoEducationKind = SEO_EDUCATION_ROUTES[normalizedPath] ?? null;
+
+  // An agent driving the viewer wants atoms at full size the moment a load
+  // resolves; the arrival is for people watching.
+  useEffect(() => {
+    if (isMcpViewerRoute) useStore.getState().setArrivalEnabled(false);
+  }, [isMcpViewerRoute]);
 
   // Route sync
   useEffect(() => {
@@ -710,7 +718,9 @@ export function ViewerApp() {
                 near={cameraNear}
               />
               <PresetLegacyBridge />
+              <CameraTap />
             </ViewerCanvas>
+            <ArrivalStage />
 
             {!isEmbeddedMobileViewer && import.meta.env.DEV && showDebugHud && <StateInspector />}
             {!isEmbeddedMobileViewer && <RendererWarningToast />}

@@ -15,7 +15,7 @@ import { DEMO_GISTS, FATNESS } from '../src/scan/gist/gistClient';
 import { DEFAULT_TOLERANCE, stageFromMask, stageFromPhoto } from '../src/scan/gist/volumeStage';
 import { SYNTHETIC_KINDS, syntheticPhoto, type SyntheticKind } from './synthetic-photos.mts';
 import { loadMaskFile, loadPhotoFile } from './photo-file.mts';
-import { alignPointsToMask, applyMove, applicableMoves, describeGist, packPoints, parseGlb, sampleMeshPoints, unpackPoints, type DepthModel } from '@atlas/core/gist';
+import { alignPointsToMask, applyMove, applicableMoves, atomDiscSize, atomsToPoints, describeGist, normalizePoints, packPoints, parseGlb, sampleMeshPoints, unpackPoints, type DepthModel } from '@atlas/core/gist';
 
 // The shaders have no imports, so their text is already complete WGSL.
 const step = { wgsl: readFileSync(fileURLToPath(new URL('../src/scan/gist/gist-step.wgsl', import.meta.url)), 'utf8') };
@@ -202,6 +202,65 @@ if (glbArg) {
   engine.setSpin(1.2);
   advance(60);
   console.log('turned: lit fraction', (await snapshot('turned')).toFixed(3));
+}
+
+// `--atoms=<n>` assembles a molecule the way the viewer's arrival stage does:
+// a made-up chain of C, N, O and H atoms becomes coloured shells of points,
+// the particles whirl, then fly to them bottom up.
+const atomsArg = process.argv.find((arg) => arg.startsWith('--atoms='))?.slice('--atoms='.length);
+if (atomsArg) {
+  const natoms = Math.max(1, Number(atomsArg));
+  const positionsList: number[] = [];
+  const typesList: number[] = [];
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (let atom = 0; atom < natoms; atom += 1) {
+    // A wandering backbone with hydrogens hanging off every other atom.
+    const heavy = atom % 3 !== 2;
+    typesList.push(heavy ? [6, 6, 7, 6, 8][Math.floor(random() * 5)] : 1);
+    if (heavy) {
+      x += 1.2 + random() * 0.4;
+      y += (random() - 0.5) * 1.6;
+      z += (random() - 0.5) * 1.6;
+      positionsList.push(x, y, z);
+    } else {
+      positionsList.push(x + (random() - 0.5) * 1.4, y + 0.9 + random() * 0.3, z + (random() - 0.5) * 1.4);
+    }
+  }
+  const frame = {
+    timestep: 0,
+    natoms,
+    boxBounds: new Float64Array(6),
+    boxTilt: new Float64Array(3),
+    triclinic: false,
+    columns: [],
+    ids: Int32Array.from({ length: natoms }, (_, index) => index + 1),
+    types: Int32Array.from(typesList),
+    typeSemantics: { kind: 'atomic-number' as const, provenance: 'procedural-symbol' as const },
+    distanceSemantics: { kind: 'angstrom' as const, provenance: 'procedural' as const },
+    positions: Float32Array.from(positionsList),
+    bonds: new Int32Array(0),
+    properties: new Map(),
+  };
+  const raw = atomsToPoints(frame as never, count, { random });
+  const normalized = normalizePoints(raw, 1.8);
+  const disc = atomDiscSize(raw, natoms, normalized.scale);
+  console.log(`atoms: ${natoms} atoms → ${raw.count} points · scale ${normalized.scale.toFixed(2)} Å per unit · disc ${disc.toFixed(4)}`);
+  engine.setDiscSize(disc);
+  engine.setSpin(0.2);
+  engine.setFade(1);
+  engine.setAttract(0);
+  engine.setEnergy(1);
+  advance(42);
+  console.log('atoms whirl: lit fraction', (await snapshot('atoms-whirl')).toFixed(3));
+  engine.setHomes(normalized.points);
+  engine.setAttract(1);
+  engine.setEnergy(0.1);
+  advance(70);
+  console.log('atoms calling: lit fraction', (await snapshot('atoms-calling')).toFixed(3));
+  advance(140);
+  console.log('atoms landed: lit fraction', (await snapshot('atoms-landed')).toFixed(3), await glowStats());
 }
 
 const moved = stage?.masked ? null : applyMove(gist, applicableMoves(gist)[0].id);
