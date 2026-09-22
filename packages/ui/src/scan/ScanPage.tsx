@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { Gist } from '@atlas/core/gist';
 import { useStore } from '../store';
 import { track, ANALYTICS_EVENTS } from '../analytics';
 import { SCAN_SEO, useSeo } from '../seo';
@@ -13,20 +14,35 @@ import {
   type ScanMolecule,
   type ScanResult,
 } from './identify';
-import type { ScanSwirl } from './swirl';
+import { DEMO_GISTS, requestGist, type GistReply } from './gist/gistClient';
+import { startSculptLoop, type SculptEvent, type SculptLoopHandle } from './gist/sculptLoop';
+import { GistStage, moveWords, type StageLabel, type StageRenderer } from './gist/GistStage';
 import './scan.css';
 
 /**
- * Point at something; get its molecules. The photo never leaves the page
- * until it has been downscaled; the swirl runs while the edge looks; the
- * answer materializes as cards you can open in 3D. Every number on screen
- * that came from a model is labeled as inference.
+ * Point at something; get its shape and its molecules.
+ *
+ * One photo starts two edge calls at once: the gist (a label and a few
+ * primitives, fast) and the identification (materials and molecules, a
+ * little slower). Particles whirl over the photo until the gist lands, then
+ * flow onto it and stay there while Jev sculpts the shape one judged move at
+ * a time. The molecule cards materialize underneath when the identification
+ * arrives. Every number on screen that came from a model is labeled as
+ * inference.
  */
 type Phase = 'idle' | 'preparing' | 'scanning' | 'done' | 'error' | 'unconfigured';
 
 type MoleculeOpen =
   | { kind: 'gallery'; candidate: ScanCandidate; fit: number | null }
   | { kind: 'pubchem'; name: string };
+
+interface GistState {
+  gist: Gist | null;
+  status: 'idle' | 'pending' | 'ready' | 'none';
+  model?: string;
+  ms?: number;
+  cached?: boolean;
+}
 
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
@@ -49,6 +65,12 @@ async function openPubChem(name: string): Promise<void> {
   await openPubChemMolecule({ name });
 }
 
+function demoFromLocation(): string | null {
+  if (typeof window === 'undefined') return null;
+  const demo = new URLSearchParams(window.location.search).get('demo');
+  return demo && DEMO_GISTS[demo] ? demo : null;
+}
+
 export function ScanPage() {
   useSeo(SCAN_SEO);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -59,62 +81,49 @@ export function ScanPage() {
   const [opening, setOpening] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [statusIndex, setStatusIndex] = useState(0);
-  const [renderer, setRenderer] = useState<'pending' | 'gpu' | 'css'>('pending');
+  const [renderer, setRenderer] = useState<StageRenderer>('pending');
   const [dragging, setDragging] = useState(false);
+  const [gistState, setGistState] = useState<GistState>({ gist: null, status: 'idle' });
+  const [sculptEvents, setSculptEvents] = useState<SculptEvent[]>([]);
+  const [sculpting, setSculpting] = useState(false);
+  const [demo, setDemo] = useState<string | null>(() => demoFromLocation());
   const storeError = useStore((state) => state.error);
   const storeLoading = useStore((state) => state.loading);
   const cameraInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const swirl = useRef<ScanSwirl | null>(null);
-  const swirlPending = useRef<Promise<void> | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const sculpt = useRef<SculptLoopHandle | null>(null);
   const id = useId();
 
   const candidates = useMemo(() => scanCandidates(), []);
   const candidateByKey = useMemo(() => new Map(candidates.map((candidate) => [candidate.key, candidate])), [candidates]);
 
-  /* ─── Swirl lifecycle ─── */
-  const ensureSwirl = useCallback(() => {
-    if (swirl.current || swirlPending.current || renderer === 'css') return;
-    const node = canvas.current;
-    if (!node) return;
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduced || !('gpu' in navigator)) {
-      setRenderer('css');
-      return;
-    }
-    swirlPending.current = import('./swirl')
-      .then(({ createScanSwirl }) => createScanSwirl(node, () => {
-        swirl.current = null;
-        setRenderer('css');
-      }))
-      .then((instance) => {
-        swirl.current = instance;
-        setRenderer('gpu');
-        if (phase === 'preparing' || phase === 'scanning') instance.setEnergy(1);
-      })
-      .catch(() => setRenderer('css'))
-      .finally(() => {
-        swirlPending.current = null;
-      });
-  }, [phase, renderer]);
+  const stopSculpt = useCallback(() => {
+    sculpt.current?.stop();
+    sculpt.current = null;
+    setSculpting(false);
+  }, []);
 
-  useEffect(() => {
-    if (phase === 'preparing' || phase === 'scanning') {
-      ensureSwirl();
-      swirl.current?.setEnergy(1);
-    } else if (phase === 'done' || phase === 'error') {
-      swirl.current?.reveal();
-    } else {
-      swirl.current?.setEnergy(0);
-    }
-  }, [phase, ensureSwirl]);
+  /* ─── Jev sculpts the gist, fast ─── */
+  const beginSculpt = useCallback(
+    (subject: string, gist: Gist) => {
+      stopSculpt();
+      setSculptEvents([]);
+      setSculpting(true);
+      sculpt.current = startSculptLoop({
+        subject,
+        gist,
+        onGist: (next) => setGistState((previous) => ({ ...previous, gist: next })),
+        onEvent: (event) => setSculptEvents((previous) => [...previous, event]),
+        onDone: () => setSculpting(false),
+      });
+    },
+    [stopSculpt],
+  );
 
   useEffect(
     () => () => {
-      swirl.current?.dispose();
-      swirl.current = null;
+      sculpt.current?.stop();
       abort.current?.abort();
     },
     [],
@@ -126,6 +135,17 @@ export function ScanPage() {
     },
     [image],
   );
+
+  /* ─── Demo mode: a hand-built gist, no photo, no keys ─── */
+  useEffect(() => {
+    if (!demo) return;
+    const gist = DEMO_GISTS[demo];
+    setGistState({ gist, status: 'ready' });
+    setPhase('done');
+    setResult(null);
+    beginSculpt(gist.label, gist);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per demo pick.
+  }, [demo]);
 
   /* ─── Scanning ticker ─── */
   useEffect(() => {
@@ -139,16 +159,30 @@ export function ScanPage() {
     return () => clearInterval(timer);
   }, [phase]);
 
-  /* ─── The pipeline ─── */
+  /* ─── The pipeline: gist and identification in parallel ─── */
   const scan = useCallback(
     async (prepared: PreparedImage, hintText: string) => {
       abort.current?.abort();
+      stopSculpt();
       const controller = new AbortController();
       abort.current = controller;
       setError(null);
       setResult(null);
+      setSculptEvents([]);
+      setGistState({ gist: null, status: 'pending' });
       setPhase('scanning');
       track(ANALYTICS_EVENTS.SCAN_STARTED, { hasHint: hintText.trim().length > 0, bytes: prepared.blob.size, width: prepared.width, height: prepared.height });
+
+      const gistPromise = requestGist(prepared, hintText, controller.signal).then((reply: GistReply | null) => {
+        if (controller.signal.aborted) return;
+        if (reply?.gist) {
+          setGistState({ gist: reply.gist, status: 'ready', model: reply.model, ms: reply.timing?.ms, cached: reply.cached });
+          beginSculpt(reply.gist.label, reply.gist);
+        } else {
+          setGistState({ gist: null, status: 'none' });
+        }
+      });
+
       try {
         const answer = await identifyScan({ image: prepared, hint: hintText, candidates }, controller.signal);
         if (controller.signal.aborted) return;
@@ -174,8 +208,9 @@ export function ScanPage() {
         setError(caught instanceof ScanError ? caught.message : 'Something went wrong while scanning.');
         setPhase('error');
       }
+      await gistPromise;
     },
-    [candidates],
+    [beginSculpt, candidates, stopSculpt],
   );
 
   const accept = useCallback(
@@ -186,6 +221,7 @@ export function ScanPage() {
         setPhase('error');
         return;
       }
+      setDemo(null);
       setPhase('preparing');
       setError(null);
       setResult(null);
@@ -226,16 +262,35 @@ export function ScanPage() {
 
   const reset = () => {
     abort.current?.abort();
+    stopSculpt();
     setPhase('idle');
     setResult(null);
     setError(null);
     setOpening(null);
+    setDemo(null);
+    setGistState({ gist: null, status: 'idle' });
+    setSculptEvents([]);
     setImage((previous) => {
       if (previous) URL.revokeObjectURL(previous.previewUrl);
       return null;
     });
     if (cameraInput.current) cameraInput.current.value = '';
     if (fileInput.current) fileInput.current.value = '';
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demo')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('demo');
+      window.history.replaceState({}, '', url);
+    }
+  };
+
+  const runDemo = (name: string) => {
+    abort.current?.abort();
+    setImage((previous) => {
+      if (previous) URL.revokeObjectURL(previous.previewUrl);
+      return null;
+    });
+    setError(null);
+    setDemo(name);
   };
 
   /* ─── Opening molecules ─── */
@@ -270,7 +325,32 @@ export function ScanPage() {
 
   const jevBest = result?.jev?.best && result.jev.best.confidence >= 0.3 ? candidateByKey.get(result.jev.best.key) ?? null : null;
   const busy = phase === 'preparing' || phase === 'scanning';
-  const showStage = image !== null;
+  const showStage = image !== null || demo !== null;
+  const gist = gistState.gist;
+  const latestLikeness = [...sculptEvents].reverse().find((event) => event.likeness !== null)?.likeness ?? null;
+  const lastApplied = [...sculptEvents].reverse().find((event) => event.applied)?.move ?? null;
+  const stageLabel: StageLabel | null = gist
+    ? {
+        text: gist.label,
+        confidence: gist.confidence,
+        likeness: latestLikeness,
+        judgments: sculptEvents.length,
+        lastMove: lastApplied,
+        sculpting,
+        model: sculptEvents[sculptEvents.length - 1]?.model,
+      }
+    : null;
+  const stageStatus = busy
+    ? {
+        line:
+          phase === 'preparing'
+            ? 'Getting the photo ready…'
+            : gistState.status === 'ready'
+              ? 'Now the molecules…'
+              : SCAN_STATUS_LINES[statusIndex],
+        elapsedMs: elapsed,
+      }
+    : null;
 
   return (
     <main id="main" className="student-home scan">
@@ -279,11 +359,11 @@ export function ScanPage() {
         <h1 id="scan-title">
           Point at anything.
           <br />
-          See what it&rsquo;s made of.
+          Watch it take shape.
         </h1>
         <p className="student-deck">
-          Eggs, a leather couch, your coffee. Take a photo and Lupi names the molecules, then opens them in 3D. The whole
-          thing runs at the edge; the photo is resized on your device and never stored.
+          Eggs, a screw, your coffee. Take a photo: particles whirl into its shape while Lupi names what it&rsquo;s made of,
+          molecule by molecule, and opens each one in 3D. The photo is resized on your device and never stored.
         </p>
       </section>
 
@@ -318,6 +398,21 @@ export function ScanPage() {
                 onChange={(event) => setHint(event.target.value)}
               />
             </label>
+            <p className="scan-demo-links">
+              No camera handy? Watch the particles find a shape:
+              {Object.keys(DEMO_GISTS).map((name) => (
+                <a
+                  key={name}
+                  href={`/scan?demo=${name}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    runDemo(name);
+                  }}
+                >
+                  {DEMO_GISTS[name].label}
+                </a>
+              ))}
+            </p>
             {phase === 'error' && error && <p className="finder-error" role="alert">{error}</p>}
             {phase === 'unconfigured' && (
               <p className="finder-error" role="alert">
@@ -337,16 +432,17 @@ export function ScanPage() {
         <input ref={fileInput} type="file" accept="image/*" hidden onChange={(event) => void accept(event.target.files?.[0])} />
 
         {showStage && (
-          <div className={`scan-stage${busy ? ' is-scanning' : ''}${phase === 'done' ? ' is-done' : ''}`} data-renderer={renderer}>
-            <img className="scan-photo" src={image.previewUrl} alt="" width={image.width} height={image.height} />
-            <canvas ref={canvas} className="scan-swirl" aria-hidden="true" />
-            {busy && (
-              <div className="scan-status" role="status">
-                <strong>{phase === 'preparing' ? 'Getting the photo ready…' : SCAN_STATUS_LINES[statusIndex]}</strong>
-                <span>{formatMs(elapsed)}</span>
-              </div>
-            )}
-          </div>
+          <GistStage
+            photoUrl={image?.previewUrl ?? null}
+            photoWidth={image?.width}
+            photoHeight={image?.height}
+            active={busy}
+            gist={gist}
+            settled={phase === 'done'}
+            status={stageStatus}
+            label={stageLabel}
+            onRenderer={setRenderer}
+          />
         )}
 
         {showStage && phase === 'error' && error && (
@@ -372,6 +468,20 @@ export function ScanPage() {
             <button type="button" className="student-secondary" onClick={reset}>
               Back
             </button>
+          </div>
+        )}
+
+        {demo && phase === 'done' && !identification && (
+          <div className="scan-panel scan-again">
+            <p>
+              A hand-built {DEMO_GISTS[demo].label}: the same shape vocabulary the model writes from a photo. With the edge keys
+              set, Jev sculpts it live.
+            </p>
+            <div className="scan-actions">
+              <button type="button" className="student-primary" onClick={reset}>
+                Scan something real
+              </button>
+            </div>
           </div>
         )}
 
@@ -511,37 +621,78 @@ export function ScanPage() {
                     </button>
                   </div>
                 </div>
-
-                <details className="scan-dev">
-                  <summary>Under the hood</summary>
-                  <dl>
-                    <dt>Vision</dt>
-                    <dd>
-                      {result?.model?.vision ?? '—'} · {formatMs(result?.timing?.visionMs)}
-                    </dd>
-                    <dt>Jev</dt>
-                    <dd>
-                      {result?.model?.jev ?? 'off'} · {formatMs(result?.timing?.jevMs)}
-                      {result?.jev?.intent ? ` · intent ${result.jev.intent.choice} ${percent(result.jev.intent.confidence)}` : ''}
-                    </dd>
-                    <dt>Round trip</dt>
-                    <dd>
-                      {formatMs(result?.timing?.totalMs)}
-                      {result?.cached ? ' · served from the edge cache' : ''}
-                    </dd>
-                    <dt>Gallery matches</dt>
-                    <dd>
-                      {matches.length} of {candidates.length} in the pool
-                      {matches.length > 0 && `: ${matches.map((match) => match.title).join(', ')}`}
-                    </dd>
-                    <dt>Photo</dt>
-                    <dd>{image ? `${image.width}×${image.height} · ${Math.round(image.blob.size / 1024)} KB JPEG` : '—'}</dd>
-                  </dl>
-                  <pre>{JSON.stringify(result, null, 2)}</pre>
-                </details>
               </>
             )}
           </div>
+        )}
+
+        {phase === 'done' && (gist || identification) && (
+          <details className="scan-dev">
+            <summary>Under the hood</summary>
+            <dl>
+              <dt>Stage</dt>
+              <dd>
+                {renderer === 'particles' ? 'vgpu compute particles' : renderer === 'swirl' ? 'vgpu swirl (particles unavailable)' : renderer === 'css' ? 'CSS fallback' : 'starting'}
+              </dd>
+              <dt>Gist</dt>
+              <dd>
+                {gist
+                  ? `${gist.primitives.length} primitive${gist.primitives.length === 1 ? '' : 's'} · ${gistState.model ?? (demo ? 'hand-built demo' : '—')} · ${formatMs(gistState.ms)}${gistState.cached ? ' · edge cache' : ''}`
+                  : gistState.status === 'none'
+                    ? 'no sketch came back'
+                    : '—'}
+              </dd>
+              <dt>Sculpting</dt>
+              <dd>
+                {sculptEvents.length === 0
+                  ? sculpting
+                    ? 'asking Jev…'
+                    : 'no judgments (Jev off, or nothing to judge)'
+                  : `${sculptEvents.length} judgments · ${sculptEvents.filter((event) => event.applied).length} applied · median ${formatMs(
+                      [...sculptEvents].map((event) => event.ms).sort((a, b) => a - b)[Math.floor(sculptEvents.length / 2)],
+                    )} each${sculptEvents[0]?.model ? ` · ${sculptEvents[0].model}` : ''}`}
+              </dd>
+              {result && (
+                <>
+                  <dt>Vision</dt>
+                  <dd>
+                    {result.model?.vision ?? '—'} · {formatMs(result.timing?.visionMs)}
+                  </dd>
+                  <dt>Jev</dt>
+                  <dd>
+                    {result.model?.jev ?? 'off'} · {formatMs(result.timing?.jevMs)}
+                    {result.jev?.intent ? ` · intent ${result.jev.intent.choice} ${percent(result.jev.intent.confidence)}` : ''}
+                  </dd>
+                  <dt>Round trip</dt>
+                  <dd>
+                    {formatMs(result.timing?.totalMs)}
+                    {result.cached ? ' · served from the edge cache' : ''}
+                  </dd>
+                  <dt>Gallery matches</dt>
+                  <dd>
+                    {matches.length} of {candidates.length} in the pool
+                    {matches.length > 0 && `: ${matches.map((match) => match.title).join(', ')}`}
+                  </dd>
+                </>
+              )}
+              <dt>Photo</dt>
+              <dd>{image ? `${image.width}×${image.height} · ${Math.round(image.blob.size / 1024)} KB JPEG` : 'none (demo)'}</dd>
+            </dl>
+            {sculptEvents.length > 0 && (
+              <ol className="scan-sculpt-log" aria-label="Sculpting judgments">
+                {sculptEvents.map((event) => (
+                  <li key={event.call} className={event.applied ? 'is-applied' : undefined}>
+                    <span>#{event.call}</span>
+                    <span>{event.applied ? moveWords(event.move) : `${moveWords(event.move)} (not applied)`}</span>
+                    <span>{percent(event.confidence)}</span>
+                    <span>{event.likeness === null ? '—' : `likeness ${percent(event.likeness)}`}</span>
+                    <span>{formatMs(event.ms)}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <pre>{JSON.stringify({ gist, result }, null, 2)}</pre>
+          </details>
         )}
       </section>
     </main>

@@ -22,6 +22,7 @@ import {
 import { routeScienceData } from './scienceData';
 import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } from './jev';
 import { SCAN_ROUTE, handleScanIdentify, scanConfigured, scanVisionModel } from './scan';
+import { GIST_ROUTE, SCULPT_ROUTE, handleScanGist, handleScanSculpt } from './gist';
 import {
   assessAsset,
   byteSourceFromUrl,
@@ -673,6 +674,14 @@ export async function handleRequest(
 
     if (url.pathname === SCAN_ROUTE) {
       return withCors(await handleScanIdentify(request, env), cors);
+    }
+
+    if (url.pathname === GIST_ROUTE) {
+      return withCors(await handleScanGist(request, env), cors);
+    }
+
+    if (url.pathname === SCULPT_ROUTE) {
+      return withCors(await handleScanSculpt(request, env), cors);
     }
 
     if (url.pathname === '/v1/render') {
@@ -2055,7 +2064,7 @@ function statusPayload(env: Env) {
     jev: { configured: jevConfigured(env), routes: [...JEV_ROUTES] },
     scan: {
       configured: scanConfigured(env),
-      route: SCAN_ROUTE,
+      routes: [SCAN_ROUTE, GIST_ROUTE, SCULPT_ROUTE],
       vision: scanConfigured(env) ? scanVisionModel(env) : null,
       jev: jevConfigured(env),
     },

@@ -44,6 +44,75 @@ three APIs and one gallery.
    lacks still opens. That is how the scanner pulls in more molecules than
    the 104 in the gallery.
 
+## The gist stage: a shape, fast, and Jev sculpting it
+
+A second, smaller call runs alongside the identification so a shape and a
+label land first. `POST /v1/scan/gist` asks Claude for the geometric
+essence of the photo as a handful of blended signed-distance primitives
+(`packages/core/src/gist/`): sphere, ellipsoid, box, cylinder, capsule,
+cone, torus, each with a centre, a size, a rotation, a blend radius, and a
+subtract flag, plus a label, a confidence, and two colours. At most twelve
+primitives, the first one the body. The vocabulary is small on purpose: the
+model writes one in a few hundred tokens, a compute shader evaluates it in a
+few dozen instructions, and Jev can judge a described edit to it in one
+call.
+
+On screen (`packages/ui/src/scan/gist/`), twelve thousand particles whirl
+over the photo from the moment it is picked. When the gist arrives they
+flow onto its surface and stay there, shimmering, while the camera orbits
+and the photo fades behind them. The label sits on top with the confidence,
+marked inferred. `gist-step.wgsl` is the vgpu compute kernel (a spring onto
+the surface, a weak pull toward each particle's own anchor direction so the
+poles fill in, a little shimmer); `gist-points.wgsl` draws the particles as
+soft discs; `gistEngine.ts` owns the buffers and the orbit and is
+runtime-neutral, so the same code runs headless (below). The vertex stage
+reads the particle storage buffer, which needs
+`maxStorageBuffersInVertexStage: 1` from the adapter; one that cannot grant
+it falls back to the fragment-only swirl, then to CSS.
+
+Then the fast loop. `POST /v1/scan/sculpt` takes the subject and the current
+gist, describes the shape in words (`describeGist`), lists the sculpting
+moves that apply to it (`applicableMoves`: flatten, stretch, widen, slim,
+soften or sharpen the joins, add a stem, a handle, a base, a dimple, hollow
+it, remove the last part), and asks Jev two questions in one System One
+call: a Choice over those moves plus `keep`, and a Noul for how much the
+shape reads as the subject. The browser (`sculptLoop.ts`) fires one every
+120 ms with two in flight, applies a chosen move at 0.45 confidence or above
+(`applyMove`, the same shared code), and asks again about the new shape. A
+judgment made against a shape that has since changed is dropped. The loop
+stops after two `keep`s at 0.6 or above, 24 calls, or 6 seconds, whichever
+comes first. Each applied move rewrites the primitive buffer, so the
+particles re-flow: the shape visibly morphs as Jev decides. The label shows
+the latest likeness and the judgment count; "Under the hood" lists every
+judgment with its move, confidence, likeness, and latency.
+
+The sculpt route has no cache (every call is a new shape) and a 1.2 second
+deadline with no retry: the next call is already on its way. Cost is one
+Jev judgment per call, about $0.0004; a full loop is a cent or two. Without
+`TYPESAFE_API_KEY` the route answers `{ configured: false }` and the loop
+stops after its first call.
+
+`/scan?demo=apple` (also `screw`, `mug`) runs the stage on a hand-built gist
+with no photo and no keys, which is the quickest way to see the particles
+find a shape. With the Jev key set, the demo gist gets sculpted too.
+
+### Seeing the stage without a browser
+
+`packages/ui/tools/gist-headless.mts` runs the engine on vgpu's portable software
+renderer, settles a demo gist, applies one move, and writes frames and
+particle statistics:
+
+```bash
+pnpm --filter @atlas/ui exec vgpu install-software-renderer   # once
+pnpm scan:gist:headless -- apple
+# .verify-artifacts/gist-apple-{swirl,settled,moved}.png
+```
+
+Mean glow near 0.8 means most particles sit on the surface; the settled
+apple, screw, and mug frames were checked this way on 2026-09-22. The same
+renderer lets `vgpu check` validate the WGSL against a real device
+(`VGPU_VALIDATE=require`).
+
 ## The swirl
 
 `packages/ui/src/scan/scan-swirl.wgsl` is a vgpu fullscreen effect
@@ -65,14 +134,14 @@ npx -y wrangler@4.110.0 secret put TYPESAFE_API_KEY    # Jev (docs/jev-integrati
 ```
 
 Locally both go in `apps/mcp-worker/.dev.vars`; the Vite dev server proxies
-`/v1/scan` to `wrangler dev` like `/v1/switch`. Optional: `ANTHROPIC_API_BASE`
+`/v1/scan` (identify, gist, and sculpt) to `wrangler dev` like `/v1/switch`. Optional: `ANTHROPIC_API_BASE`
 (a gateway) and `ANTHROPIC_VISION_MODEL` (default `claude-opus-5`).
 
 `/health` reports the state without revealing anything:
 
 ```bash
 curl -s https://lupi.live/health | jq .scan
-# { "configured": true, "route": "/v1/scan/identify", "vision": "claude-opus-5", "jev": true }
+# { "configured": true, "routes": ["/v1/scan/identify", "/v1/scan/gist", "/v1/scan/sculpt"], "vision": "claude-opus-5", "jev": true }
 ```
 
 Without `ANTHROPIC_API_KEY` the route answers `{ "configured": false }` and
@@ -114,6 +183,11 @@ WebP, GIF.
 }
 ```
 
+`POST /v1/scan/gist` takes the same `image` and `hint` and answers
+`{ configured, model, gist, timing: { ms } }`. `POST /v1/scan/sculpt` takes
+`{ subject, gist }` (at most 16 KB) and answers
+`{ configured, model, move: { id, confidence, probabilities }, likeness, moves, timing }`.
+
 Errors return the status with an `error` and a `reason`
 (`timeout`, `rate-limited`, `declined`, `invalid-response`, `network`,
 `http-<status>`). The page shows the message and offers a retry.
@@ -131,6 +205,11 @@ answer for an hour. Bump `SCAN_PROMPT_VERSION` when the instructions or the
 schema change.
 
 ## The page (`/scan`)
+
+- The stage first: particles whirl over the photo, take the gist's shape
+  when it lands (usually before the molecules), and keep morphing while
+  Jev sculpts. The label on the stage is the gist's, with its confidence,
+  Jev's likeness, and the judgment count.
 
 - Take a photo (`capture="environment"` on phones), choose an image, drop
   one, or paste one. An optional hint travels with it.

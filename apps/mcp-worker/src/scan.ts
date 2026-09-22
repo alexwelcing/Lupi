@@ -208,7 +208,7 @@ const SCAN_OUTPUT_SCHEMA = {
                 name: { type: 'string', maxLength: 60 },
                 formula: { type: 'string', maxLength: 40 },
                 role: { type: 'string', maxLength: 90 },
-                share: { type: ['number', 'null'], minimum: 0, maximum: 1 },
+                share: { anyOf: [{ type: 'number', minimum: 0, maximum: 1 }, { type: 'null' }] },
               },
             },
           },
@@ -219,6 +219,29 @@ const SCAN_OUTPUT_SCHEMA = {
     nothingToScan: { type: 'boolean' },
   },
 } as const;
+
+/**
+ * Structured outputs accept a JSON Schema subset: no numeric bounds, no
+ * string lengths, no array-length constraints. The schemas above keep those
+ * keywords as documentation for readers and for `normalize*`; this strips
+ * them from what is sent so the request is never rejected for a bound the
+ * normalizer enforces anyway.
+ */
+const UNSUPPORTED_SCHEMA_KEYWORDS = new Set(['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'pattern', 'minItems', 'maxItems', 'uniqueItems']);
+
+export function structuredOutputSchema(schema: unknown): Record<string, unknown> {
+  const strip = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(strip);
+    if (!node || typeof node !== 'object') return node;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) continue;
+      out[key] = strip(value);
+    }
+    return out;
+  };
+  return strip(schema) as Record<string, unknown>;
+}
 
 /** A model failure of any kind; mapped to a status the browser treats as "no answer". */
 export class ScanVisionError extends Error {
@@ -302,7 +325,7 @@ export interface VisionOutcome {
   fallback: boolean;
 }
 
-function anthropicClient(env: ScanEnv, fetcher?: typeof fetch): Anthropic {
+export function anthropicClient(env: ScanEnv, fetcher?: typeof fetch): Anthropic {
   return new Anthropic({
     apiKey: env.ANTHROPIC_API_KEY,
     baseURL: env.ANTHROPIC_API_BASE?.trim() || undefined,
@@ -330,7 +353,7 @@ export async function identifyWithVision(env: ScanEnv, request: ScanRequest, opt
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       system: SCAN_SYSTEM_PROMPT,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCAN_OUTPUT_SCHEMA as unknown as Record<string, unknown> } },
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: structuredOutputSchema(SCAN_OUTPUT_SCHEMA) } },
       messages: [
         {
           role: 'user',

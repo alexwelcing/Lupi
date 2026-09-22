@@ -55,7 +55,8 @@
     "clean": "turbo run clean",
     "demo:jev": "tsx tools/jev/demo.mjs",
     "test:jev": "tsx --test tools/jev/*.test.mjs",
-    "bench:jev": "tsx tools/jev/benchmark.mjs"
+    "bench:jev": "tsx tools/jev/benchmark.mjs",
+    "scan:gist:headless": "tsx packages/ui/tools/gist-headless.mts"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",

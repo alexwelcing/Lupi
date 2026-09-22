@@ -215,7 +215,10 @@ The photo scanner reuses the switch judgment. Claude turns a photo into a
 structured identification (subject, materials, molecules), the Worker
 matches those molecules to the gallery pool, and Jev answers the same
 `intent`, `best`, and `fit` questions with the identification as the query.
-The route, keys, and page are in [scan-pipeline.md](scan-pipeline.md).
+`POST /v1/scan/sculpt` is the fast loop on top: one Choice over a small set
+of named shape edits plus `keep`, and one Noul for likeness, fired every
+120 ms or so while the particle stage is on screen. The routes, keys, and
+page are in [scan-pipeline.md](scan-pipeline.md).
 
 ## Tuning
 

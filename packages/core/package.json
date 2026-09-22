@@ -11,7 +11,8 @@
     "./types": "./src/types.ts",
     "./glimbin": "./src/glimbin.ts",
     "./test-utils": "./src/test-utils.ts",
-    "./jev": "./src/jev/index.ts"
+    "./jev": "./src/jev/index.ts",
+    "./gist": "./src/gist/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
