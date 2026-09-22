@@ -1,11 +1,16 @@
-// Ask the live Jev for the recipe of a few synthetic silhouettes, through the
-// same edge handler the browser uses. Key from the environment or .dev.vars.
+// Ask the live Jev for the recipe of a few silhouettes, through the same edge
+// handler the browser uses. Key from the environment or .dev.vars.
 //
-//   pnpm scan:recipe:bench
+//   pnpm scan:recipe:bench                      five synthetic masks
+//   pnpm scan:recipe:bench -- --photos          the synthetic photos (mug, table, tv, cat, …), cut
+//                                               at every flood tolerance and judged in parallel,
+//                                               exactly as the page does it
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fillSmallHoles, largestComponent, maskFeatures } from '@atlas/core/gist';
 import { handleScanRecipe } from '../src/recipe';
+import { cutMask, MASK_TOLERANCES } from '../../../packages/ui/src/scan/gist/volumeStage';
+import { SYNTHETIC_KINDS, SYNTHETIC_SUBJECTS, syntheticPhoto } from '../../../packages/ui/tools/synthetic-photos.mts';
 
 function devVars(): Record<string, string> {
   try {
@@ -20,6 +25,31 @@ const env = { TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY ?? vars.TYPESAFE_AP
 if (!env.TYPESAFE_API_KEY) {
   console.error('No TYPESAFE_API_KEY.');
   process.exit(2);
+}
+
+type Reply = { reads?: number; depth?: { choice: string; confidence: number }; fatness?: { choice: string; confidence: number }; error?: string };
+const describe = (body: Reply) => `reads ${body.reads?.toFixed(2) ?? '—'} · ${body.depth?.choice ?? body.error} ${body.depth ? `(${body.depth.confidence.toFixed(2)})` : ''} · ${body.fatness?.choice ?? ''} ${body.fatness ? `(${body.fatness.confidence.toFixed(2)})` : ''}`;
+async function judge(subject: string, features: object): Promise<{ body: Reply; ms: number }> {
+  const started = performance.now();
+  const response = await handleScanRecipe(new Request('https://lupi.live/v1/scan/recipe', { method: 'POST', body: JSON.stringify({ subject, features }) }), env);
+  return { body: (await response.json()) as Reply, ms: Math.round(performance.now() - started) };
+}
+
+if (process.argv.includes('--photos')) {
+  const only = process.argv.find((arg) => arg.startsWith('--photos='))?.slice('--photos='.length).split(',');
+  const kinds = SYNTHETIC_KINDS.filter((kind) => !only || only.includes(kind));
+  await Promise.all(
+    kinds.map(async (kind) => {
+      const photo = syntheticPhoto(kind);
+      const subject = SYNTHETIC_SUBJECTS[kind];
+      const candidates = MASK_TOLERANCES.map((tolerance) => cutMask(photo, tolerance)).filter((c) => c.features.fill >= 0.02 && c.features.fill <= 0.92);
+      const judged = await Promise.all(candidates.map(async (candidate) => ({ candidate, ...(await judge(subject, { ...candidate.features, tolerance: candidate.tolerance })) })));
+      judged.sort((a, b) => (b.body.reads ?? 0) - (a.body.reads ?? 0));
+      console.log(`${kind.padEnd(6)} as "${subject}":`);
+      for (const entry of judged) console.log(`  t${String(entry.candidate.tolerance).padEnd(3)} fill ${(entry.candidate.features.fill * 100).toFixed(0).padStart(2)}% · ${describe(entry.body)} · ${entry.ms} ms`);
+    }),
+  );
+  process.exit(0);
 }
 
 const w = 128;
@@ -55,11 +85,7 @@ await Promise.all(
   cases.map(async ([name, subject]) => {
     const { mask, components } = largestComponent({ width: w, height: h, data: shape(name) });
     const features = maskFeatures(fillSmallHoles(mask), components);
-    const started = performance.now();
-    const response = await handleScanRecipe(new Request('https://lupi.live/v1/scan/recipe', { method: 'POST', body: JSON.stringify({ subject, features }) }), env);
-    const body = (await response.json()) as { reads?: number; depth?: { choice: string; confidence: number }; fatness?: { choice: string; confidence: number }; error?: string };
-    console.log(
-      `${name.padEnd(9)} as "${subject}": reads ${body.reads?.toFixed(2) ?? '—'} · ${body.depth?.choice ?? body.error} ${body.depth ? `(${body.depth.confidence.toFixed(2)})` : ''} · ${body.fatness?.choice ?? ''} ${body.fatness ? `(${body.fatness.confidence.toFixed(2)})` : ''} · ${Math.round(performance.now() - started)} ms`,
-    );
+    const { body, ms } = await judge(subject, features);
+    console.log(`${name.padEnd(9)} as "${subject}": ${describe(body)} · ${ms} ms`);
   }),
 );

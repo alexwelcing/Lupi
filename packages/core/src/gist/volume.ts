@@ -60,11 +60,18 @@ export interface Volume {
   sdf: Float32Array;
   /** Occupied cells. */
   filled: number;
+  /**
+   * The front face: half depth at each (x, y) column of the grid, x fastest,
+   * in world units; 0 where the column misses the object. A particle homed
+   * to a pixel springs straight to this depth at its pixel, no field needed.
+   */
+  front: Float32Array;
   depth: DepthModel;
   fatness: number;
 }
 
-export const VOLUME_SIZE = 64;
+/** Cells per side: a table leg six pixels wide on a 160 px photo spans about four cells. */
+export const VOLUME_SIZE = 96;
 export const PROFILE_BANDS_MASK = 12;
 
 /* ─── Masks ─── */
@@ -108,7 +115,7 @@ export function largestComponent(mask: MaskImage): { mask: MaskImage; components
 }
 
 /** Fill enclosed holes (a mug's handle opening stays because it touches the background... unless it does not; small holes are noise). */
-export function fillSmallHoles(mask: MaskImage, maxHoleFraction = 0.01): MaskImage {
+export function fillSmallHoles(mask: MaskImage, maxHoleFraction = 0.005): MaskImage {
   const { width, height, data } = mask;
   const outside = new Uint8Array(width * height);
   const stack: number[] = [];
@@ -224,9 +231,10 @@ export function maskFeatures(mask: MaskImage, components = 1, bands = PROFILE_BA
   let bandsCounted = 0;
   for (let band = 0; band < bands; band += 1) {
     if (rightAt[band] < leftAt[band]) continue;
-    const l = axis - leftAt[band];
-    const r = rightAt[band] - axis;
-    asym += Math.abs(l - r) / Math.max(l + r, 1);
+    // A band entirely to one side of the axis counts as fully asymmetric, never more.
+    const l = Math.max(0, axis - leftAt[band]);
+    const r = Math.max(0, rightAt[band] - axis);
+    asym += Math.min(1, Math.abs(l - r) / Math.max(l + r, 1));
     bandsCounted += 1;
   }
   return {
@@ -381,7 +389,7 @@ export function buildVolume(mask: MaskImage, options: VolumeOptions = {}): Volum
     }
   }
   if (right < left) {
-    return { n, origin: [-1, -1, -1], cell: 2 / n, bits: new Uint8Array((n * n * n) >> 3), sdf: new Float32Array(n * n * n).fill(2), filled: 0, depth, fatness };
+    return { n, origin: [-1, -1, -1], cell: 2 / n, bits: new Uint8Array((n * n * n) >> 3), sdf: new Float32Array(n * n * n).fill(2), filled: 0, front: new Float32Array(n * n), depth, fatness };
   }
   const worldX = (x: number) => ((x + 0.5) / width - 0.5) * sheet.width * zoom - centre[0] * zoom;
   const worldY = (y: number) => (0.5 - (y + 0.5) / height) * sheet.height * zoom - centre[1] * zoom;
@@ -402,34 +410,60 @@ export function buildVolume(mask: MaskImage, options: VolumeOptions = {}): Volum
   for (let index = 0; index < data.length; index += 1) if (data[index]) maxEdge = Math.max(maxEdge, edge[index]);
   maxEdge = Math.sqrt(maxEdge) || 1;
 
-  // Per row: the silhouette's axis and half-width, for revolving.
+  // Per row: the longest run of object pixels, for revolving. That run is
+  // the body; anything else on the row (a handle, a spout, an ear) is not
+  // spun with it but inflated on its own.
   const rowLeft = new Float32Array(height).fill(width);
   const rowRight = new Float32Array(height).fill(-1);
   for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      if (!data[y * width + x]) continue;
-      rowLeft[y] = Math.min(rowLeft[y], x);
-      rowRight[y] = Math.max(rowRight[y], x);
+    let x = 0;
+    while (x < width) {
+      if (!data[y * width + x]) {
+        x += 1;
+        continue;
+      }
+      const start = x;
+      while (x < width && data[y * width + x]) x += 1;
+      if (x - start > rowRight[y] - rowLeft[y]) {
+        rowLeft[y] = start;
+        rowRight[y] = x - 1;
+      }
     }
   }
+  // A revolved thing has one vertical axis: the median of the runs' centres,
+  // so a handle or a spout on a few rows cannot tilt it. Each row's radius is
+  // then the run's reach from that axis on its nearer side, which leaves the
+  // handle outside the disc, to be inflated on its own.
+  const centres: number[] = [];
+  for (let y = 0; y < height; y += 1) if (rowRight[y] >= rowLeft[y]) centres.push((rowLeft[y] + rowRight[y]) / 2);
+  centres.sort((a, b) => a - b);
+  const axis = centres[centres.length >> 1] ?? width / 2;
+  const rowHalf = new Float32Array(height);
+  for (let y = 0; y < height; y += 1) {
+    if (rowRight[y] < rowLeft[y]) continue;
+    rowHalf[y] = Math.max(0.5, Math.min(axis - rowLeft[y] + 0.5, rowRight[y] - axis + 0.5));
+  }
+  const inflated = (index: number): number => {
+    // A rounded profile: deep in the middle, shallow at the edge, capped by the object's width.
+    const d = Math.sqrt(edge[index]);
+    const rounded = Math.sqrt(Math.max(0, d * (2 * maxEdge - d)));
+    return Math.min(rounded * pixel * fatness, objectWidth * 0.6);
+  };
   const halfDepthAt = (x: number, y: number): number => {
     const index = y * width + x;
     if (!data[index]) return 0;
     switch (depth) {
       case 'extrude':
-        return Math.max(pixel, objectHeight * 0.05 * fatness);
+        // A slab: thin is a card, medium a loaf, round a block nearly as deep as it is wide.
+        return Math.max(pixel, Math.min(objectWidth, objectHeight) * fatness * fatness * 0.45);
       case 'revolve': {
-        const half = (rowRight[y] - rowLeft[y] + 1) / 2;
-        const axis = (rowLeft[y] + rowRight[y]) / 2;
+        const half = rowHalf[y];
         const dx = x - axis;
+        if (Math.abs(dx) > half) return inflated(index);
         return Math.sqrt(Math.max(0, half * half - dx * dx)) * pixel * Math.max(0.3, Math.min(1.4, fatness / 0.7));
       }
-      default: {
-        // A rounded profile: deep in the middle, shallow at the edge, capped by the object's width.
-        const d = Math.sqrt(edge[index]);
-        const rounded = Math.sqrt(Math.max(0, d * (2 * maxEdge - d)));
-        return Math.min(rounded * pixel * fatness, objectWidth * 0.6);
-      }
+      default:
+        return inflated(index);
     }
   };
 
@@ -440,6 +474,8 @@ export function buildVolume(mask: MaskImage, options: VolumeOptions = {}): Volum
   let filled = 0;
   const px = new Int32Array(n);
   const py = new Int32Array(n);
+  // Half depth per column, kept for the distance field's front and back faces.
+  const halfAt = new Float32Array(n * n);
   for (let gx = 0; gx < n; gx += 1) {
     const wx = origin[0] + (gx + 0.5) * cell;
     px[gx] = Math.round(((wx + centre[0] * zoom) / (sheet.width * zoom) + 0.5) * width - 0.5);
@@ -453,6 +489,7 @@ export function buildVolume(mask: MaskImage, options: VolumeOptions = {}): Volum
     for (let gx = 0; gx < n; gx += 1) {
       const x = px[gx];
       const half = x >= 0 && x < width && y >= 0 && y < height ? halfDepthAt(x, y) : 0;
+      halfAt[gx + n * gy] = half;
       for (let gz = 0; gz < n; gz += 1) {
         const wz = origin[2] + (gz + 0.5) * cell;
         const index = gx + n * (gy + n * gz);
@@ -472,13 +509,30 @@ export function buildVolume(mask: MaskImage, options: VolumeOptions = {}): Volum
   const insideDistance = new Float32Array(n * n * n);
   for (let index = 0; index < insideDistance.length; index += 1) insideDistance[index] = bits[index >> 3] & (1 << (index & 7)) ? INF : 0;
   squaredDistance3D(insideDistance, n);
+  // The distance transform of a bit grid is terraced on gentle slopes, and the
+  // front and back faces are exactly that. Over the object, the height field
+  // knows the true distance to those faces, so it is blended in: the smaller
+  // of the two distances wins, which keeps the lateral edges from the grid.
   const sdf = new Float32Array(n * n * n);
-  for (let index = 0; index < sdf.length; index += 1) {
-    const occupied = bits[index >> 3] & (1 << (index & 7));
-    sdf[index] = (occupied ? -Math.sqrt(insideDistance[index]) : Math.sqrt(outsideDistance[index])) * cell;
+  for (let gz = 0; gz < n; gz += 1) {
+    const wz = Math.abs(origin[2] + (gz + 0.5) * cell);
+    for (let gy = 0; gy < n; gy += 1) {
+      for (let gx = 0; gx < n; gx += 1) {
+        const index = gx + n * (gy + n * gz);
+        const occupied = bits[index >> 3] & (1 << (index & 7));
+        const grid = (occupied ? -Math.sqrt(insideDistance[index]) : Math.sqrt(outsideDistance[index])) * cell;
+        const half = halfAt[gx + n * gy];
+        if (half <= 0) {
+          sdf[index] = grid;
+          continue;
+        }
+        const face = wz - half;
+        sdf[index] = occupied ? Math.max(grid, face) : Math.min(grid, face);
+      }
+    }
   }
   void inside;
-  return { n, origin, cell, bits, sdf, filled, depth, fatness };
+  return { n, origin, cell, bits, sdf, filled, front: halfAt, depth, fatness };
 }
 
 /** Signed distance of the volume at a world point, trilinear; the shader's `sdVolume` on the CPU. */

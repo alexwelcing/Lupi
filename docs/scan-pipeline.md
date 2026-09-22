@@ -114,10 +114,20 @@ itself, in the rawest form there is: a grid of bits, one per cell,
 occupied or not (`packages/core/src/gist/volume.ts`). No model names
 anything on the way to the shape.
 
-1. **Mask.** On the device, at up to 160 px: the border's median colour is
-   the background, pixels far from it are the object, the largest
-   connected piece is kept, small holes are closed (`cutMask` in
-   `volumeStage.ts`). Takes a few milliseconds.
+1. **Mask.** On the device, at up to 160 px, by flooding the background
+   in from the border (`floodMask` in `packages/core/src/gist/segment.ts`).
+   A phone photo has at least two backgrounds, the wall and the surface
+   the thing stands on, each with a gradient and a shadow, so one
+   "background colour" cannot describe it; a flood can, because a gradient
+   is a chain of small steps and the object's edge is the one step too
+   big to take. The image is median-filtered first (grain goes, edges stay
+   sharp, and no in-between colours appear along an edge for the flood to
+   climb). The flood is seeded only from border pixels that look like
+   their own side, so a table's legs touching the bottom edge do not seed
+   it; an enclosed region the flood could not reach but which wears the
+   background's own colours (the wall through a mug's handle) is punched
+   back out. Then the largest connected piece is kept and small holes are
+   closed (`cutMask` in `volumeStage.ts`). About 30 ms.
 2. **Measure.** Aspect, fill, width top to bottom, mass by row and column,
    pieces, symmetry, edge raggedness (`maskFeatures`). These numbers are
    what Jev judges; it never sees pixels.
@@ -126,19 +136,29 @@ anything on the way to the shape.
    profile of that distance, the way a paper cut-out puffs up
    (`buildVolume`, depth model `inflate`). `extrude` gives a constant
    thickness for flat things, `revolve` spins each row into a disc for
-   things that are the same all the way around. The cells are then
+   things that are the same all the way around (about one vertical axis,
+   the median of the rows' run centres, so a handle on a few rows cannot
+   tilt it; the handle is inflated on its own). The cells are then
    turned into a signed distance grid with a separable 3D distance
-   transform: 64³, about 100 ms.
-4. **Settle.** The compute kernel samples the grid trilinearly and the
-   particles land on it. Every particle born on an object pixel keeps that
-   pixel's world position as its home and is drawn there, so the front
-   face reassembles as the photo, in 3D. Background particles fade to the
-   palette and wrap the sides and back.
+   transform, blended over the object with the height field's own
+   distance to the front and back faces so gentle slopes are not
+   terraced: 96³, about 100 ms. The volume also carries its front face,
+   the half depth at every column.
+4. **Settle.** Seven in ten particles are born on the object's own pixels
+   and keep that pixel's world position as their home; each springs
+   straight to its pixel at the front face's depth there, read from the
+   volume's front map, with no distance field to slide on. That is what
+   lets a table leg four cells wide hold its pixels as well as a wall
+   does: with the field spring alone, every particle homed to a leg
+   strayed. The other three in ten wear the object's mean colour, in
+   shadow, settle on the field and wrap the sides and back; they come
+   first in the buffer so the front face, drawn last, is the photo. Mean
+   drift from home after settling: 0.004 world units, no strays.
 5. **Recipe, by Jev.** `POST /v1/scan/recipe` takes the subject (the gist
    call's label) and one candidate silhouette's measurements and answers
    three questions in one call: does this silhouette read as the subject
    (a Noul), which depth model fits (a Choice), how deep compared with wide
-   (a Choice). The page cuts the mask at four contrasts, measures each,
+   (a Choice). The page cuts the mask at four flood tolerances, measures each,
    fires four calls at once, keeps the silhouette that reads highest, and
    rebuilds the volume with its depth and fatness. About 300 ms for the
    whole wave.
@@ -151,6 +171,22 @@ corner fragment labelled "oak tree" read 0.43, so the mask judgment
 separates the object from a wrong cut. The headless tool renders a
 synthetic tree through the same path (`--photo=tree`): the crown's lumps
 and the trunk come out, with the leaf colours on the front.
+
+Then the objects the user named (2026-09-22, later): a coffee mug, a
+table, a television, a cat, as synthetic photos with a wall, a surface,
+grain, and a picture on the screen (`packages/ui/tools/synthetic-photos.mts`,
+`pnpm scan:masks` shows each with its four cuts). The first thing they
+exposed was the mask: with one border colour every one of them swallowed
+the surface it stood on (the desk, the floor, the cabinet, the cushion),
+which is what led to the flood above. With the flood all four cut the
+same at every tolerance, one piece each, the mug's handle open. Jev's
+recipes (`pnpm scan:recipe:bench -- --photos`): television `extrude`
+0.98 `thin` 0.93; coffee mug `revolve` 1.00 `round`; cat `inflate` 0.99;
+table `extrude` 0.44 `medium` 0.49, honestly unsure, since a front view
+of a table is none of the three. The settled frames read as a dark red
+mug with its handle, a wooden table with four legs, a television showing
+its picture on a stand, and a ginger cat with ears and a tail
+(`--photo=mug --depth=revolve --fatness=round` and so on).
 
 The shape is on screen before any network call returns: the volume is
 built the moment the photo is prepared, the label arrives with the gist
@@ -269,9 +305,13 @@ pnpm scan:gist:headless -- apple --particles=60000
 ```
 
 Mean glow near 0.8 means most particles sit on the surface; the settled
-apple, screw, and mug frames were checked this way on 2026-09-22. The same
-renderer lets `vgpu check` validate the WGSL against a real device
-(`VGPU_VALIDATE=require`).
+apple, screw, and mug frames were checked this way on 2026-09-22. With
+`--photo=<kind>` (disc, tree, mug, table, tv, cat) the run seeds from a
+synthetic photo and settles onto its own volume; `--depth=` and
+`--fatness=` apply a recipe without Jev, `--grid=` changes the volume
+resolution, and `--drift` breaks the homed particles' drift down by row.
+The same renderer lets `vgpu check` validate the WGSL against a real
+device (`VGPU_VALIDATE=require`).
 
 ## The swirl
 

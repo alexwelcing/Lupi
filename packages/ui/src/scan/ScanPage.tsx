@@ -200,7 +200,12 @@ export function ScanPage() {
           setRecipeBusy(false);
           if (outcome?.configured) {
             setRecipe(outcome);
-            setVolumeStage(outcome.stage);
+            // The same cut keeps the same photo object, so the particles are
+            // not reseeded mid-settle; only the volume underneath them changes.
+            const current = stageRef.current;
+            const next = current && current.candidate.tolerance === outcome.stage.candidate.tolerance ? { ...outcome.stage, photo: current.photo } : outcome.stage;
+            stageRef.current = next;
+            setVolumeStage(next);
           }
           return;
         }
@@ -709,7 +714,7 @@ export function ScanPage() {
               <dt>Shape</dt>
               <dd>
                 {volumeStage?.masked
-                  ? `the photo's own silhouette, inflated: ${volumeStage.volume.filled.toLocaleString()} of ${(volumeStage.volume.n ** 3).toLocaleString()} cells · ${volumeStage.volume.depth} · fatness ${volumeStage.volume.fatness} · cut at ${volumeStage.candidate.threshold} · fill ${(volumeStage.candidate.features.fill * 100).toFixed(0)}% · ${volumeStage.candidate.features.components} piece${volumeStage.candidate.features.components === 1 ? '' : 's'} before cleanup`
+                  ? `the photo's own silhouette, inflated: ${volumeStage.volume.filled.toLocaleString()} of ${(volumeStage.volume.n ** 3).toLocaleString()} cells · ${volumeStage.volume.depth} · fatness ${volumeStage.volume.fatness} · cut at ${volumeStage.candidate.tolerance} · fill ${(volumeStage.candidate.features.fill * 100).toFixed(0)}% · ${volumeStage.candidate.features.components} piece${volumeStage.candidate.features.components === 1 ? '' : 's'} before cleanup`
                   : volumeStage
                     ? 'nothing stood out from the background; the model\u2019s primitives stand in'
                     : demo
@@ -721,7 +726,7 @@ export function ScanPage() {
                 {recipeBusy
                   ? 'asking Jev about the candidate silhouettes…'
                   : recipe?.configured
-                    ? `${recipe.judged.length} silhouettes judged in parallel · winner cut at ${recipe.judged[0].threshold} reads ${percent(recipe.judged[0].reply.reads ?? 0)} · ${recipe.winner.depth?.choice ?? '—'} ${percent(recipe.winner.depth?.confidence ?? 0)} · ${recipe.winner.fatness?.choice ?? '—'} ${percent(recipe.winner.fatness?.confidence ?? 0)} · ${recipe.judged.map((entry) => `${entry.threshold}: ${percent(entry.reply.reads ?? 0)} ${entry.reply.depth?.choice ?? ''} ${formatMs(entry.reply.timing?.ms)}`).join(' · ')}`
+                    ? `${recipe.judged.length} silhouettes judged in parallel · winner cut at ${recipe.judged[0].tolerance} reads ${percent(recipe.judged[0].reply.reads ?? 0)} · ${recipe.winner.depth?.choice ?? '—'} ${percent(recipe.winner.depth?.confidence ?? 0)} · ${recipe.winner.fatness?.choice ?? '—'} ${percent(recipe.winner.fatness?.confidence ?? 0)} · ${recipe.judged.map((entry) => `${entry.tolerance}: ${percent(entry.reply.reads ?? 0)} ${entry.reply.depth?.choice ?? ''} ${formatMs(entry.reply.timing?.ms)}`).join(' · ')}`
                     : volumeStage?.masked
                       ? 'not judged (Jev off, or no answer)'
                       : '—'}

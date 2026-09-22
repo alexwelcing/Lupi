@@ -1,9 +1,11 @@
 import {
   buildVolume,
   fillSmallHoles,
+  floodMask,
   frameMask,
   largestComponent,
   maskFeatures,
+  smoothRgb,
   type DepthModel,
   type MaskFeatures,
   type MaskImage,
@@ -15,11 +17,12 @@ import { FATNESS, requestRecipe, type RecipeReply } from './gistClient';
 /**
  * The photo's own shape, with no model in the loop: mask, clean, measure,
  * frame, inflate. Then, with Jev, the recipe: several masks at different
- * contrasts are measured and judged in parallel, the one that reads as the
+ * flood tolerances are measured and judged in parallel, the one that reads as the
  * subject wins, and its depth model and fatness rebuild the volume.
  */
 export interface MaskCandidate {
-  threshold: number;
+  /** The flood tolerance this mask was cut at. */
+  tolerance: number;
   mask: MaskImage;
   features: MaskFeatures;
 }
@@ -31,11 +34,11 @@ export interface VolumeStage {
   volume: Volume;
   /** True when a mask stood out from the background; false means the whole frame is the object. */
   masked: boolean;
-  /** The object's own colours: its mean, and a lighter accent of it, for the particles that wear the palette. */
+  /** The object's own colours: its mean, and that mean in shadow, for the particles that wear the palette. */
   palette: [string, string];
 }
 
-/** The mean colour of the object's pixels and a lighter accent, as hex. */
+/** The mean colour of the object's pixels and the same in shadow, as hex. */
 export function maskPalette(pixels: { width: number; height: number; data: Uint8ClampedArray | Uint8Array }, mask: Uint8Array): [string, string] {
   let r = 0;
   let g = 0;
@@ -50,49 +53,28 @@ export function maskPalette(pixels: { width: number; height: number; data: Uint8
   }
   if (count === 0) return ['#d5ef9c', '#84d7ff'];
   const hex = (value: number) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
+  // The accent is the same colour in shadow: the particles that wear the
+  // palette are the ones on the object's sides and back, and a lighter tint
+  // there reads as a halo, a darker one as the object turning away.
   const main = `#${hex(r / count)}${hex(g / count)}${hex(b / count)}`;
-  const accent = `#${hex((r / count) * 0.7 + 90)}${hex((g / count) * 0.7 + 90)}${hex((b / count) * 0.7 + 90)}`;
+  const accent = `#${hex((r / count) * 0.62)}${hex((g / count) * 0.62)}${hex((b / count) * 0.66)}`;
   return [main, accent];
 }
 
-/** Contrast thresholds the candidates are cut at; the middle one is the default before Jev answers. */
-export const MASK_THRESHOLDS = [55, 75, 100, 130];
-export const DEFAULT_THRESHOLD = 75;
+/**
+ * Flood tolerances the candidates are cut at: the largest colour step the
+ * background may take between neighbouring pixels. The second is the
+ * default before Jev answers; the loosest crosses most texture.
+ */
+export const MASK_TOLERANCES = [12, 20, 32, 48];
+export const DEFAULT_TOLERANCE = 20;
 
-/** Cut a mask at one contrast against the border's median colour, keep the largest piece, close small holes. */
-export function cutMask(pixels: { width: number; height: number; data: Uint8ClampedArray | Uint8Array }, threshold: number): MaskCandidate {
-  const { width, height, data } = pixels;
-  const reds: number[] = [];
-  const greens: number[] = [];
-  const blues: number[] = [];
-  const border = (x: number, y: number) => {
-    const at = (y * width + x) * 4;
-    reds.push(data[at]);
-    greens.push(data[at + 1]);
-    blues.push(data[at + 2]);
-  };
-  for (let x = 0; x < width; x += 1) {
-    border(x, 0);
-    border(x, height - 1);
-  }
-  for (let y = 1; y < height - 1; y += 1) {
-    border(0, y);
-    border(width - 1, y);
-  }
-  const median = (values: number[]) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
-  const bg = [median(reds), median(greens), median(blues)];
-  const raw = new Uint8Array(width * height);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const at = (y * width + x) * 4;
-      const distance = Math.abs(data[at] - bg[0]) + Math.abs(data[at + 1] - bg[1]) + Math.abs(data[at + 2] - bg[2]);
-      const centred = Math.hypot((x / width - 0.5) * 2, (y / height - 0.5) * 2) < 0.55;
-      if (distance > (centred ? threshold : threshold * 1.5)) raw[y * width + x] = 1;
-    }
-  }
-  const { mask, components } = largestComponent({ width, height, data: raw });
+/** Cut a mask by flooding the background in from the border, keep the largest piece, close small holes. */
+export function cutMask(pixels: { width: number; height: number; data: Uint8ClampedArray | Uint8Array }, tolerance: number, smoothed?: Float32Array): MaskCandidate {
+  const raw = floodMask(pixels, tolerance, smoothed);
+  const { mask, components } = largestComponent(raw);
   const cleaned = fillSmallHoles(mask);
-  return { threshold, mask: cleaned, features: maskFeatures(cleaned, components) };
+  return { tolerance, mask: cleaned, features: maskFeatures(cleaned, components) };
 }
 
 function usable(candidate: MaskCandidate): boolean {
@@ -100,18 +82,18 @@ function usable(candidate: MaskCandidate): boolean {
 }
 
 /** Everything the stage needs from a photo, right now, on the device. */
-export function stageFromPhoto(pixels: { width: number; height: number; data: Uint8ClampedArray | Uint8Array }, threshold = DEFAULT_THRESHOLD, depth: DepthModel = 'inflate', fatness = FATNESS.round): VolumeStage {
-  let candidate = cutMask(pixels, threshold);
+export function stageFromPhoto(pixels: { width: number; height: number; data: Uint8ClampedArray | Uint8Array }, tolerance = DEFAULT_TOLERANCE, depth: DepthModel = 'inflate', fatness = FATNESS.round, n?: number): VolumeStage {
+  let candidate = cutMask(pixels, tolerance);
   let masked = usable(candidate);
   if (!masked) {
     // Nothing stood out: the whole frame is the object.
     const all = new Uint8Array(pixels.width * pixels.height).fill(1);
-    candidate = { threshold, mask: { width: pixels.width, height: pixels.height, data: all }, features: maskFeatures({ width: pixels.width, height: pixels.height, data: all }, 1) };
+    candidate = { tolerance, mask: { width: pixels.width, height: pixels.height, data: all }, features: maskFeatures({ width: pixels.width, height: pixels.height, data: all }, 1) };
     masked = false;
   }
   const sheet = { width: (PHOTO_SHEET.height * pixels.width) / Math.max(pixels.height, 1), height: PHOTO_SHEET.height };
   const frame = frameMask(candidate.features, sheet);
-  const volume = buildVolume(candidate.mask, { depth, fatness, sheet, ...frame });
+  const volume = buildVolume(candidate.mask, { depth, fatness, sheet, n, ...frame });
   return {
     photo: { width: pixels.width, height: pixels.height, data: pixels.data, mask: candidate.mask.data, frame },
     candidate,
@@ -125,7 +107,7 @@ export interface RecipeOutcome {
   stage: VolumeStage;
   winner: RecipeReply;
   /** Every judgment, best first, for the dev panel. */
-  judged: Array<{ threshold: number; reply: RecipeReply; features: MaskFeatures }>;
+  judged: Array<{ tolerance: number; reply: RecipeReply; features: MaskFeatures }>;
   configured: boolean;
 }
 
@@ -139,17 +121,18 @@ export async function chooseRecipe(
   subject: string,
   signal?: AbortSignal,
 ): Promise<RecipeOutcome | null> {
-  const candidates = MASK_THRESHOLDS.map((threshold) => cutMask(pixels, threshold)).filter(usable);
+  const smoothed = smoothRgb(pixels);
+  const candidates = MASK_TOLERANCES.map((tolerance) => cutMask(pixels, tolerance, smoothed)).filter(usable);
   if (candidates.length === 0) return null;
-  const replies = await Promise.all(candidates.map((candidate) => requestRecipe(subject, { ...candidate.features, threshold: candidate.threshold }, signal)));
+  const replies = await Promise.all(candidates.map((candidate) => requestRecipe(subject, { ...candidate.features, tolerance: candidate.tolerance }, signal)));
   if (replies.some((reply) => reply?.configured === false)) return { stage: stageFromPhoto(pixels), winner: { configured: false }, judged: [], configured: false };
   const judged = candidates
-    .map((candidate, index) => ({ threshold: candidate.threshold, reply: replies[index], features: candidate.features }))
-    .filter((entry): entry is { threshold: number; reply: RecipeReply; features: MaskFeatures } => Boolean(entry.reply && typeof entry.reply.reads === 'number'))
+    .map((candidate, index) => ({ tolerance: candidate.tolerance, reply: replies[index], features: candidate.features }))
+    .filter((entry): entry is { tolerance: number; reply: RecipeReply; features: MaskFeatures } => Boolean(entry.reply && typeof entry.reply.reads === 'number'))
     .sort((a, b) => (b.reply.reads ?? 0) - (a.reply.reads ?? 0));
   if (judged.length === 0) return null;
   const best = judged[0];
   const depth = best.reply.depth?.choice ?? 'inflate';
   const fatness = FATNESS[best.reply.fatness?.choice ?? 'round'];
-  return { stage: stageFromPhoto(pixels, best.threshold, depth, fatness), winner: best.reply, judged, configured: true };
+  return { stage: stageFromPhoto(pixels, best.tolerance, depth, fatness), winner: best.reply, judged, configured: true };
 }

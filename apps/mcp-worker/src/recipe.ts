@@ -4,7 +4,7 @@
  * The shape of an object now comes from the photo itself (its mask,
  * inflated on the device), so the judgment left for the model is the
  * recipe: which depth model fits the subject (inflate, extrude, revolve),
- * how fat, and, over several candidate masks made at different contrasts,
+ * how fat, and, over several candidate masks made at different flood tolerances,
  * which silhouette actually reads as the subject. Jev never sees pixels; it
  * sees measurements: aspect, fill, the width profile top to bottom, where
  * the mass sits, how many pieces, how symmetric, how ragged the edge is.
@@ -30,8 +30,8 @@ export interface RecipeFeatures {
   components: number;
   symmetry: number;
   edginess: number;
-  /** Which contrast threshold made this mask, so the browser can tell candidates apart in logs. */
-  threshold?: number;
+  /** Which flood tolerance made this mask, so the browser can tell candidates apart in logs. */
+  tolerance?: number;
 }
 
 export interface RecipeRequest {
@@ -70,7 +70,7 @@ export function parseRecipeRequest(raw: unknown): RecipeRequest {
       components: typeof features.components === 'number' && Number.isFinite(features.components) ? Math.max(0, Math.min(999, Math.round(features.components))) : 1,
       symmetry: unit(features.symmetry, 1),
       edginess: unit(features.edginess),
-      threshold: typeof features.threshold === 'number' && Number.isFinite(features.threshold) ? features.threshold : undefined,
+      tolerance: typeof features.tolerance === 'number' && Number.isFinite(features.tolerance) ? features.tolerance : undefined,
     },
   };
 }
@@ -127,7 +127,7 @@ export interface RecipeResponse {
   reads?: number;
   depth?: { choice: 'inflate' | 'extrude' | 'revolve'; confidence: number; probabilities: Record<string, number> };
   fatness?: { choice: 'thin' | 'medium' | 'round'; confidence: number; probabilities: Record<string, number> };
-  threshold?: number;
+  tolerance?: number;
   timing?: { ms: number };
   error?: string;
 }
@@ -178,7 +178,7 @@ export async function handleScanRecipe(
         fatness && fatness.type === 'choice'
           ? { choice: fatness.choice as 'thin' | 'medium' | 'round', confidence: round3(fatness.confidence), probabilities: Object.fromEntries(Object.entries(fatness.probabilities).map(([key, value]) => [key, round3(value)])) }
           : undefined,
-      threshold: parsed.features.threshold,
+      tolerance: parsed.features.tolerance,
       timing: { ms: now() - started },
     };
     console.log(

@@ -61,6 +61,21 @@ struct Params {
 // The rawest shape there is: a signed distance at every cell of an n³ grid,
 // built on the CPU from the photo's own silhouette. x fastest, then y, then z.
 @group(0) @binding(3) var<storage, read> volume: array<f32>;
+// The volume's front face: half depth per (x, y) column, same grid, x fastest.
+@group(0) @binding(4) var<storage, read> front: array<f32>;
+
+// Bilinear front depth at a world (x, y); zero off the object.
+fn frontDepth(xy: vec2f) -> f32 {
+  let n = params.volumeN;
+  let g = (xy - params.volumeOrigin.xy) / params.volumeCell - vec2f(0.5);
+  let c = clamp(g, vec2f(0.0), vec2f(f32(n) - 1.001));
+  let i0 = vec2u(floor(c));
+  let i1 = min(i0 + vec2u(1u), vec2u(n - 1u));
+  let f = c - floor(c);
+  let a = mix(front[i0.x + n * i0.y], front[i1.x + n * i0.y], f.x);
+  let b = mix(front[i0.x + n * i1.y], front[i1.x + n * i1.y], f.x);
+  return mix(a, b, f.y);
+}
 
 // Kinds, in the order `KIND_INDEX` packs them: sphere, ellipsoid, box,
 // cylinder, capsule, cone, torus, lathe, arc.
@@ -225,7 +240,12 @@ fn sdScene(p: vec3f) -> f32 {
 }
 
 fn sceneNormal(p: vec3f) -> vec3f {
-  let e = 0.012;
+  // Over a sampled volume the step spans most of a cell, so the normal turns
+  // smoothly across the grid instead of snapping at every cell boundary.
+  var e = 0.012;
+  if (params.volumeActive != 0u) {
+    e = max(e, params.volumeCell * 0.75);
+  }
   let k = vec2f(1.0, -1.0);
   let n = k.xyy * sdScene(p + k.xyy * e) + k.yyx * sdScene(p + k.yyx * e) + k.yxy * sdScene(p + k.yxy * e) + k.xxx * sdScene(p + k.xxx * e);
   let len = length(n);
@@ -276,16 +296,25 @@ fn step(@builtin(global_invocation_id) id: vec3u) {
   if (params.attract > 0.001) {
     let d = sdScene(p);
     let n = sceneNormal(p);
-    // A homed particle is drawn to its own pixel's place, so the photo's
-    // front face reassembles on the shape; the rest spread around it.
-    let goalPoint = mix(anchor, particle.home, particle.homed);
-    let homing = mix(0.5, 1.4, particle.homed);
-    pull = -n * d * 9.0 + (goalPoint - p) * homing + (hash33(vec3f(f32(i), t * 2.0, seed)) - vec3f(0.5)) * 0.15;
-    glow = 1.0 - clamp(abs(d) * 5.0, 0.0, 1.0);
+    if (particle.homed > 0.5 && params.volumeActive != 0u) {
+      // A homed particle knows exactly where it belongs: its own pixel, at
+      // the front face's depth there. One stiff spring, no field to slide
+      // on, so a table leg four cells wide holds its pixels as well as a
+      // wall does. The field still gives the normal for shading.
+      let goalPoint = vec3f(particle.home.xy, frontDepth(particle.home.xy) + 0.004);
+      let away = goalPoint - p;
+      pull = away * 7.0 + (hash33(vec3f(f32(i), t * 2.0, seed)) - vec3f(0.5)) * 0.05;
+      glow = 1.0 - clamp(length(away) * 5.0, 0.0, 1.0);
+    } else {
+      pull = -n * d * 9.0 + (anchor - p) * 0.5 + (hash33(vec3f(f32(i), t * 2.0, seed)) - vec3f(0.5)) * 0.15;
+      glow = 1.0 - clamp(abs(d) * 5.0, 0.0, 1.0);
+    }
     nrm = normalize(mix(nrm, n, 0.35) + vec3f(1e-5));
   }
 
-  let goal = swirl * params.energy + pull * params.attract;
+  // A homed particle that has been caught stops whirling, or the residual
+  // swirl would push every pixel off its column, most of all near the axis.
+  let goal = swirl * params.energy * mix(1.0, 0.1, particle.homed * params.attract) + pull * params.attract;
   var vel = mix(particle.vel, goal, 0.18);
   var pos = p + vel * params.dt;
 

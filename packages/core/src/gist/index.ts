@@ -3,3 +3,4 @@ export * from './moves';
 export * from './profile';
 export * from './policy';
 export * from './volume';
+export * from './segment';

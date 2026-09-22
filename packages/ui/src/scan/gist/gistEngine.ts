@@ -123,7 +123,9 @@ export interface PhotoPixels {
 export const PHOTO_SHEET = { height: 2.6 };
 
 /** Colour weight for a particle born on background: mostly palette, a little of the photo. */
-const BACKGROUND_COLOR_WEIGHT = 70;
+const BACKGROUND_COLOR_WEIGHT = 40;
+/** Share of the particles born on the object's own pixels when a mask singles it out. */
+export const OBJECT_PARTICLE_SHARE = 0.7;
 
 
 /**
@@ -139,14 +141,35 @@ export function seedParticles(count: number, random: () => number = Math.random,
   const sheetWidth = sheetHeight * aspect;
   const zoom = photo?.frame?.zoom ?? 1;
   const centre = photo?.frame?.centre ?? [0, 0];
+  // With a mask, most particles are born on the object and the rest on the
+  // background, and the background ones come first in the buffer: the draw
+  // has no depth test, so what is drawn last is what is seen, and the front
+  // face must be the object's own pixels.
+  const objectPixels: number[] = [];
+  const backgroundPixels: number[] = [];
+  if (photo?.mask) {
+    for (let index = 0; index < photo.mask.length; index += 1) (photo.mask[index] === 1 ? objectPixels : backgroundPixels).push(index);
+  }
+  const weighted = objectPixels.length > 0 && backgroundPixels.length > 0;
+  const objectCount = weighted ? Math.round(count * OBJECT_PARTICLE_SHARE) : 0;
   for (let index = 0; index < count; index += 1) {
     const base = index * PARTICLE_FLOATS;
     const seed = random();
     if (photo) {
-      const u = random();
-      const v = random();
-      const px = Math.min(photo.width - 1, Math.floor(u * photo.width));
-      const py = Math.min(photo.height - 1, Math.floor(v * photo.height));
+      let px: number;
+      let py: number;
+      if (weighted) {
+        const pool = index >= count - objectCount ? objectPixels : backgroundPixels;
+        const pixel = pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
+        px = pixel % photo.width;
+        py = (pixel - px) / photo.width;
+      } else {
+        px = Math.min(photo.width - 1, Math.floor(random() * photo.width));
+        py = Math.min(photo.height - 1, Math.floor(random() * photo.height));
+      }
+      // Anywhere inside the pixel, so a few particles per pixel do not stack.
+      const u = (px + random()) / photo.width;
+      const v = (py + random()) / photo.height;
       const at = (py * photo.width + px) * 4;
       const onObject = !photo.mask || photo.mask[py * photo.width + px] === 1;
       const x = ((u - 0.5) * sheetWidth - centre[0]) * zoom;
@@ -230,6 +253,9 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
   const volumeCells = VOLUME_SIZE * VOLUME_SIZE * VOLUME_SIZE;
   const volumeBuffer: StorageBuffer = storage(gpu, volumeCells * 4, 'read');
   volumeBuffer.write(new Float32Array(new ArrayBuffer(volumeCells * 4)).fill(4));
+  // The front face of the volume, one half depth per (x, y) column.
+  const frontBuffer: StorageBuffer = storage(gpu, VOLUME_SIZE * VOLUME_SIZE * 4, 'read');
+  frontBuffer.write(new Float32Array(new ArrayBuffer(VOLUME_SIZE * VOLUME_SIZE * 4)));
   let volumeInfo = { origin: [0, 0, 0] as [number, number, number], cell: 1, n: VOLUME_SIZE, active: 0 };
 
   const state = { energy: 0, attract: 0, fade: 0 };
@@ -294,6 +320,7 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
       prims,
       particles,
       volume: volumeBuffer,
+      front: frontBuffer,
     },
   });
   const points: Draw = draw(gpu, {
@@ -338,6 +365,13 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
         for (let z = 0; z < n; z += 1) for (let y = 0; y < n; y += 1) for (let x = 0; x < n; x += 1) packed[x + VOLUME_SIZE * (y + VOLUME_SIZE * z)] = volume.sdf[x + volume.n * (y + volume.n * z)];
       }
       volumeBuffer.write(packed);
+      const front = new Float32Array(new ArrayBuffer(VOLUME_SIZE * VOLUME_SIZE * 4));
+      if (volume.n === VOLUME_SIZE) {
+        front.set(volume.front);
+      } else {
+        for (let y = 0; y < n; y += 1) for (let x = 0; x < n; x += 1) front[x + VOLUME_SIZE * y] = volume.front[x + volume.n * y];
+      }
+      frontBuffer.write(front);
       volumeInfo = { origin: volume.origin, cell: volume.cell, n: VOLUME_SIZE, active: 1 };
     },
     setGist(gist) {

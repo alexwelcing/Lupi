@@ -68,13 +68,16 @@ const PROJECTION_SCALE: f32 = 3.27;
   let photo = unpack4x8unorm(particle.color);
   var base = mix(camera.main, camera.accent, clamp(height * 0.45 + (hue - 0.5) * 0.5, 0.0, 1.0));
   base = mix(base, base * vec3f(1.08, 1.0, 0.92), height * 0.3);
-  base = mix(base, photo.rgb, photo.a * 0.85);
+  base = mix(base, photo.rgb, photo.a * 0.95);
   let n = normalize(particle.nrm + vec3f(1e-4));
   let toEye = normalize(camera.eye - particle.pos);
   let diffuse = 0.32 + 0.68 * max(dot(n, camera.light), 0.0);
-  let rim = pow(1.0 - max(dot(n, toEye), 0.0), 3.0) * 0.35;
+  let rim = pow(1.0 - max(dot(n, toEye), 0.0), 3.0) * 0.3;
   let speck = 0.5 + 0.5 * hue;
-  let lit = base * (diffuse * (0.85 + 0.3 * speck)) + camera.accent * rim + vec3f(0.12) * pow(max(dot(reflect(-camera.light, n), toEye), 0.0), 24.0);
+  // The rim and the highlight are tinted by the particle's own colour, so a
+  // dark red mug stays dark red and a black bezel stays black, not pastel.
+  let rimColor = mix(base, camera.accent, 0.3 * (1.0 - photo.a));
+  let lit = base * (diffuse * (0.85 + 0.3 * speck)) + rimColor * rim + (base * 0.5 + vec3f(0.04)) * pow(max(dot(reflect(-camera.light, n), toEye), 0.0), 24.0);
   // Airy pastel while whirling (the photo's own colours when it has them), shaded skin once settled.
   let airy = mix(mix(base, vec3f(1.0), 0.35), photo.rgb, photo.a * 0.9);
   out.tint = mix(airy, lit, settled);

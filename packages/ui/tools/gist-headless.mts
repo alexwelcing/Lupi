@@ -3,7 +3,7 @@
 // particle statistics. Needs the portable renderer once:
 //
 //   pnpm --filter @atlas/ui exec vgpu install-software-renderer
-//   pnpm scan:gist:headless -- apple --particles=60000 [--photo]   (or screw, mug, vase, banana)
+//   pnpm scan:gist:headless -- apple --particles=60000 [--photo=mug]   (or screw, mug, vase, banana; photo kinds: disc, tree, mug, table, tv, cat)
 //
 // Frames land in .verify-artifacts/gist-<name>-<stage>.png.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -11,9 +11,10 @@ import { fileURLToPath } from 'node:url';
 import { createCanvas } from 'canvas';
 import { init, target } from 'vgpu/node';
 import { createGistEngine, GIST_PARTICLE_COUNT, PARTICLE_FLOATS } from '../src/scan/gist/gistEngine';
-import { DEMO_GISTS } from '../src/scan/gist/gistClient';
-import { stageFromPhoto } from '../src/scan/gist/volumeStage';
-import { applyMove, applicableMoves, describeGist } from '@atlas/core/gist';
+import { DEMO_GISTS, FATNESS } from '../src/scan/gist/gistClient';
+import { DEFAULT_TOLERANCE, stageFromPhoto } from '../src/scan/gist/volumeStage';
+import { SYNTHETIC_KINDS, syntheticPhoto, type SyntheticKind } from './synthetic-photos.mts';
+import { applyMove, applicableMoves, describeGist, type DepthModel } from '@atlas/core/gist';
 
 // The shaders have no imports, so their text is already complete WGSL.
 const step = { wgsl: readFileSync(fileURLToPath(new URL('../src/scan/gist/gist-step.wgsl', import.meta.url)), 'utf8') };
@@ -32,48 +33,25 @@ const random = () => {
   seed = (seed * 1664525 + 1013904223) >>> 0;
   return seed / 4294967296;
 };
-// `--photo` seeds the particles from a synthetic picture: a warm disc on a
-// cool ground, or with `--photo=tree` a lumpy green crown on a brown trunk
-// against a pale sky. The photo's own silhouette then becomes the shape,
-// exactly as on the page: mask, clean, measure, frame, inflate.
+// `--photo=<kind>` seeds the particles from a synthetic picture (see
+// synthetic-photos.mts: disc, tree, mug, table, tv, cat). The photo's own
+// silhouette then becomes the shape, exactly as on the page: mask, clean,
+// measure, frame, inflate.
 const photoArg = process.argv.find((arg) => arg.startsWith('--photo'));
 const withPhoto = Boolean(photoArg);
-const photoKind = photoArg?.includes('=') ? photoArg.slice(photoArg.indexOf('=') + 1) : 'disc';
-const pixels = withPhoto
-  ? (() => {
-      const pw = 160;
-      const ph = 120;
-      const data = new Uint8ClampedArray(pw * ph * 4);
-      for (let y = 0; y < ph; y += 1) {
-        for (let x = 0; x < pw; x += 1) {
-          const i = (y * pw + x) * 4;
-          let rgb: [number, number, number];
-          if (photoKind === 'tree') {
-            const dx = (x - pw * 0.5) / (pw * 0.3);
-            const dy = (y - ph * 0.4) / (ph * 0.32);
-            const lump = Math.sin(x * 0.4) * 0.14 + Math.cos(y * 0.55) * 0.12;
-            const crown = dx * dx + dy * dy < 1 + lump;
-            const trunk = Math.abs(x - pw * 0.5) < 5 && y > ph * 0.55 && y < ph * 0.92;
-            const leaf = 0.55 + 0.45 * Math.abs(Math.sin(x * 1.3 + y * 0.7));
-            rgb = crown ? [40 * leaf, 120 * leaf + 30, 35 * leaf] : trunk ? [95, 62, 34] : [200 + 20 * (y / ph), 215, 235];
-          } else {
-            const dx = (x - pw * 0.5) / (pw * 0.28);
-            const dy = (y - ph * 0.55) / (ph * 0.38);
-            const inside = dx * dx + dy * dy < 1;
-            const shade = inside ? 0.6 + 0.4 * (1 - Math.hypot(dx + 0.3, dy + 0.3) / 1.6) : 0.2 + 0.15 * (y / ph);
-            rgb = [(inside ? 220 : 70) * shade, (inside ? 70 : 90) * shade, (inside ? 50 : 120) * shade];
-          }
-          data[i] = Math.round(rgb[0]);
-          data[i + 1] = Math.round(rgb[1]);
-          data[i + 2] = Math.round(rgb[2]);
-          data[i + 3] = 255;
-        }
-      }
-      return { width: pw, height: ph, data };
-    })()
-  : null;
-const stage = pixels ? stageFromPhoto(pixels) : null;
-if (stage) console.log(`stage: masked ${stage.masked} · cut at ${stage.candidate.threshold} · fill ${(stage.candidate.features.fill * 100).toFixed(0)}% · ${stage.candidate.features.components} pieces · ${stage.volume.filled} cells · frame zoom ${stage.photo.frame?.zoom.toFixed(2)}`);
+const photoKind = (photoArg?.includes('=') ? photoArg.slice(photoArg.indexOf('=') + 1) : 'disc') as SyntheticKind;
+if (withPhoto && !SYNTHETIC_KINDS.includes(photoKind)) {
+  console.error(`Unknown photo kind "${photoKind}"; try ${SYNTHETIC_KINDS.join(', ')}.`);
+  process.exit(2);
+}
+const pixels = withPhoto ? syntheticPhoto(photoKind) : null;
+// `--depth=inflate|extrude|revolve` and `--fatness=thin|medium|round` render a
+// photo with the recipe Jev would have chosen, without calling Jev.
+const depthArg = process.argv.find((arg) => arg.startsWith('--depth='))?.slice('--depth='.length) as DepthModel | undefined;
+const fatnessArg = process.argv.find((arg) => arg.startsWith('--fatness='))?.slice('--fatness='.length) as keyof typeof FATNESS | undefined;
+const gridArg = process.argv.find((arg) => arg.startsWith('--grid='));
+const stage = pixels ? stageFromPhoto(pixels, DEFAULT_TOLERANCE, depthArg ?? 'inflate', FATNESS[fatnessArg ?? 'round'], gridArg ? Number(gridArg.slice('--grid='.length)) : undefined) : null;
+if (stage) console.log(`stage: masked ${stage.masked} · grid ${stage.volume.n}³ · ${stage.volume.depth} · fatness ${stage.volume.fatness} · cut at ${stage.candidate.tolerance} · fill ${(stage.candidate.features.fill * 100).toFixed(0)}% · ${stage.candidate.features.components} pieces · ${stage.volume.filled} cells · frame zoom ${stage.photo.frame?.zoom.toFixed(2)}`);
 const photo = stage?.photo ?? null;
 // A photo run holds the camera at the front so the reassembled face is what gets checked.
 const engine = createGistEngine({ gpu, target: colorTarget, shaders: { step: step.wgsl, points: points.wgsl }, aspect: () => width / height, random, count, photo, spin: withPhoto ? 0 : 0.35 });
@@ -100,7 +78,7 @@ async function snapshot(name: string) {
     image.data[i + 3] = 255;
   }
   context.putImageData(image, 0, 0);
-  writeFileSync(new URL(`../../../.verify-artifacts/gist-${withPhoto ? `photo-${photoKind}` : which}-${name}.png`, import.meta.url), canvas.toBuffer('image/png'));
+  writeFileSync(new URL(`../../../.verify-artifacts/gist-${withPhoto ? `photo-${photoKind}${depthArg ? `-${depthArg}` : ''}` : which}-${name}.png`, import.meta.url), canvas.toBuffer('image/png'));
   return lit / (width * height);
 }
 
@@ -108,12 +86,48 @@ async function glowStats() {
   const raw = new Float32Array(await engine.particles.read());
   let glow = 0;
   let radius = 0;
+  let homed = 0;
+  let drift = 0;
+  let strayed = 0;
+  let behind = 0;
   for (let i = 0; i < count; i += 1) {
     const base = i * PARTICLE_FLOATS;
     glow += raw[base + 7];
     radius += Math.hypot(raw[base], raw[base + 1], raw[base + 2]);
+    if (raw[base + 15] > 0.5) {
+      // How far a homed particle sits from its own pixel's column, and whether it is on the far side.
+      homed += 1;
+      const away = Math.hypot(raw[base] - raw[base + 12], raw[base + 1] - raw[base + 13]);
+      drift += away;
+      if (away > 0.06) strayed += 1;
+      if (raw[base + 2] < -0.02) behind += 1;
+    }
   }
-  return { meanGlow: glow / count, meanRadius: radius / count };
+  const stats: Record<string, number> = { meanGlow: glow / count, meanRadius: radius / count };
+  if (homed) Object.assign(stats, { homed, meanDrift: drift / homed, strayedShare: strayed / homed, behindShare: behind / homed });
+  if (homed && process.argv.includes('--drift')) {
+    // Where the strays' homes are (by row of the sheet) and where the strays actually sit.
+    const bins = 8;
+    const rows = Array.from({ length: bins }, () => ({ homed: 0, strayed: 0, dx: 0, dy: 0, dz: 0, z: 0 }));
+    for (let i = 0; i < count; i += 1) {
+      const base = i * PARTICLE_FLOATS;
+      if (raw[base + 15] < 0.5) continue;
+      const bin = Math.max(0, Math.min(bins - 1, Math.floor(((raw[base + 13] + 1.5) / 3) * bins)));
+      rows[bin].homed += 1;
+      const away = Math.hypot(raw[base] - raw[base + 12], raw[base + 1] - raw[base + 13]);
+      if (away <= 0.06) continue;
+      rows[bin].strayed += 1;
+      rows[bin].dx += raw[base] - raw[base + 12];
+      rows[bin].dy += raw[base + 1] - raw[base + 13];
+      rows[bin].z += raw[base + 2];
+    }
+    for (const [bin, row] of rows.entries()) {
+      if (!row.homed) continue;
+      const y = ((bin + 0.5) / bins) * 3 - 1.5;
+      console.log(`  home y≈${y.toFixed(2).padStart(5)}: ${String(row.homed).padStart(6)} homed, ${String(row.strayed).padStart(5)} strayed${row.strayed ? ` · strays sit dx ${(row.dx / row.strayed).toFixed(2)} dy ${(row.dy / row.strayed).toFixed(2)} at z ${(row.z / row.strayed).toFixed(2)}` : ''}`);
+    }
+  }
+  return stats;
 }
 
 let now = 0;

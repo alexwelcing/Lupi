@@ -103,7 +103,7 @@ export interface RecipeReply {
   reads?: number;
   depth?: { choice: DepthModel; confidence: number; probabilities: Record<string, number> };
   fatness?: { choice: 'thin' | 'medium' | 'round'; confidence: number; probabilities: Record<string, number> };
-  threshold?: number;
+  tolerance?: number;
   timing?: { ms: number };
   error?: string;
 }
@@ -111,10 +111,10 @@ export interface RecipeReply {
 let recipeUnavailable = false;
 
 /** One recipe judgment for one candidate silhouette; the page fires several in parallel. */
-export async function requestRecipe(subject: string, features: MaskFeatures & { threshold?: number }, signal?: AbortSignal): Promise<RecipeReply | null> {
+export async function requestRecipe(subject: string, features: MaskFeatures & { tolerance?: number }, signal?: AbortSignal): Promise<RecipeReply | null> {
   if (recipeUnavailable) return { configured: false };
-  const { fill, aspect, profile, columns, rows, components, symmetry, edginess, threshold } = features;
-  const reply = await post<RecipeReply>(RECIPE_PATH, { subject, features: { fill, aspect, profile, columns, rows, components, symmetry, edginess, threshold } }, RECIPE_TIMEOUT_MS, signal);
+  const { fill, aspect, profile, columns, rows, components, symmetry, edginess, tolerance } = features;
+  const reply = await post<RecipeReply>(RECIPE_PATH, { subject, features: { fill, aspect, profile, columns, rows, components, symmetry, edginess, tolerance } }, RECIPE_TIMEOUT_MS, signal);
   if (reply?.configured === false) recipeUnavailable = true;
   return reply;
 }
