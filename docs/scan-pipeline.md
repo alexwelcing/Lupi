@@ -57,21 +57,41 @@ model writes one in a few hundred tokens, a compute shader evaluates it in a
 few dozen instructions, and Jev can judge a described edit to it in one
 call.
 
-On screen (`packages/ui/src/scan/gist/`), twelve thousand particles whirl
-over the photo from the moment it is picked. When the gist arrives they
+On screen (`packages/ui/src/scan/gist/`), sixty thousand particles whirl
+over the photo from the moment it is picked (`pickParticleCount`: 120k on
+a desktop with twelve or more cores, 30k on phones and low-power devices,
+`?particles=N` to override up to 400k). When the gist arrives they
 flow onto its surface and stay there, shimmering, while the camera orbits
 and the photo fades behind them. The label sits on top with the confidence,
 marked inferred. `gist-step.wgsl` is the vgpu compute kernel (a spring onto
 the surface, a weak pull toward each particle's own anchor direction so the
-poles fill in, a little shimmer); `gist-points.wgsl` draws the particles as
-soft discs; `gistEngine.ts` owns the buffers and the orbit and is
+poles fill in, a little shimmer; it keeps the surface normal it found);
+`gist-points.wgsl` draws the particles as small perspective-correct discs,
+airy and faint while whirling, then a shaded skin once settled: a key light
+that rides with the camera, a rim in the accent colour, a per-particle hue
+nudge, and a firmer disc edge so neighbours tile like a splat at rest; `gistEngine.ts` owns the buffers and the orbit and is
 runtime-neutral, so the same code runs headless (below). The vertex stage
 reads the particle storage buffer, which needs
 `maxStorageBuffersInVertexStage: 1` from the adapter; one that cannot grant
 it falls back to the fragment-only swirl, then to CSS.
 
-Then the fast loop. `POST /v1/scan/sculpt` takes the subject and the current
-gist, describes the shape in words (`describeGist`), lists the sculpting
+The photo reaches Jev as numbers, not vibes. The gist call also traces the
+object's outline in the picture (8 to 20 points, image fractions).
+`outlineProfile` turns that polygon into a width-per-height profile: twelve
+bands from the top of the object to the bottom, each the silhouette's width
+as a fraction of its height. `gistProfile` computes the same profile from
+the primitives on the CPU, with the same distance functions the shader
+uses. Two things follow. First, the free move: `fitProportions` scales the
+body sideways so the gist's aspect matches the photo's before Jev is asked
+anything (in the smoke run it took an apple body from 0.90 to 0.67 wide and
+the mismatch from 0.45 to 0.09). Second, every sculpt judgment carries
+`photo_profile`, `shape_profile`, and their mismatch in Jev's state, so
+"flatten" versus "stretch" is a measured call and Jev's judgment goes to
+the semantic moves: whether the subject wants a stem, a handle, a hollow.
+"Under the hood" shows both profiles and the mismatch per judgment.
+
+Then the fast loop. `POST /v1/scan/sculpt` takes the subject, the current
+gist, and the photo profile, describes the shape in words (`describeGist`), lists the sculpting
 moves that apply to it (`applicableMoves`: flatten, stretch, widen, slim,
 soften or sharpen the joins, add a stem, a handle, a base, a dimple, hollow
 it, remove the last part), and asks Jev two questions in one System One
@@ -96,6 +116,15 @@ stops after its first call.
 with no photo and no keys, which is the quickest way to see the particles
 find a shape. With the Jev key set, the demo gist gets sculpted too.
 
+### Sculpting against the real Jev from Node
+
+`pnpm scan:sculpt:bench -- apple --calls=12` runs the loop through the
+same edge handler the browser uses, with `TYPESAFE_API_KEY` from the
+environment or `apps/mcp-worker/.dev.vars`, applying moves the way the
+browser does and printing each judgment's move, confidence, likeness,
+mismatch, and latency. Pass `--profile=0.3,0.3,...` to supply a photo
+profile by hand. The key is never printed.
+
 ### Seeing the stage without a browser
 
 `packages/ui/tools/gist-headless.mts` runs the engine on vgpu's portable software
@@ -104,7 +133,7 @@ particle statistics:
 
 ```bash
 pnpm --filter @atlas/ui exec vgpu install-software-renderer   # once
-pnpm scan:gist:headless -- apple
+pnpm scan:gist:headless -- apple --particles=60000
 # .verify-artifacts/gist-apple-{swirl,settled,moved}.png
 ```
 

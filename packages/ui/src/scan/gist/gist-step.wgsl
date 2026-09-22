@@ -4,11 +4,15 @@
 // to the surface: both 0..1, eased on the CPU, so the same kernel does the
 // whirl, the settle, and the morph when the gist changes underneath it.
 
+// 48 bytes. `nrm` is the surface normal where the particle last settled, for
+// shading; `hue` is a per-particle colour nudge fixed at spawn.
 struct Particle {
   pos: vec3f,
   seed: f32,
   vel: vec3f,
   glow: f32,
+  nrm: vec3f,
+  hue: f32,
 }
 
 // 96 bytes: rot0..rot2 are the rows of the primitive's rotation matrix, so
@@ -176,11 +180,13 @@ fn step(@builtin(global_invocation_id) id: vec3u) {
   // anchor (which drifts, so the settled particles keep sliding), a shimmer.
   var pull = vec3f(0.0);
   var glow = 0.0;
+  var nrm = particle.nrm;
   if (params.attract > 0.001) {
     let d = sdScene(p);
     let n = sceneNormal(p);
     pull = -n * d * 9.0 + (anchor - p) * 0.5 + (hash33(vec3f(f32(i), t * 2.0, seed)) - vec3f(0.5)) * 0.15;
     glow = 1.0 - clamp(abs(d) * 5.0, 0.0, 1.0);
+    nrm = normalize(mix(nrm, n, 0.35) + vec3f(1e-5));
   }
 
   let goal = swirl * params.energy + pull * params.attract;
@@ -198,5 +204,6 @@ fn step(@builtin(global_invocation_id) id: vec3u) {
   particle.pos = pos;
   particle.vel = vel;
   particle.glow = mix(particle.glow, glow, 0.2);
+  particle.nrm = nrm;
   particles[i] = particle;
 }

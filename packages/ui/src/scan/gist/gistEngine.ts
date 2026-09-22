@@ -39,14 +39,16 @@ export interface GistEngineDeps {
   random?: () => number;
 }
 
-export const GIST_PARTICLE_COUNT = 12_000;
-export const PARTICLE_FLOATS = 8;
+export const GIST_PARTICLE_COUNT = 60_000;
+export const PARTICLE_FLOATS = 12;
 export const PRIM_FLOATS = 24;
 const WORKGROUP = 64;
 const KIND_INDEX: Record<GistPrimitive['kind'], number> = { sphere: 0, ellipsoid: 1, box: 2, cylinder: 3, capsule: 4, cone: 5, torus: 6 };
 const ORBIT_RADIUS = 4.6;
 const FOV_DEGREES = 34;
 const EASE = 0.06;
+/** Disc radius in world units at rest; with 60k particles on a 2-unit object the discs tile. */
+const DISC_SIZE = 0.011;
 
 export function hexToRgb(hex: string): [number, number, number] {
   const value = Number.parseInt(hex.replace('#', ''), 16);
@@ -103,7 +105,9 @@ export function seedParticles(count: number, random: () => number = Math.random)
     data[base + 1] = (random() - 0.5) * 1.5;
     data[base + 2] = Math.sin(angle) * ring;
     data[base + 3] = seed;
-    // vel = 0, glow = 0
+    // vel = 0, glow = 0; the normal starts pointing up, the hue is fixed at spawn.
+    data[base + 9] = 1;
+    data[base + 11] = random();
   }
   return data;
 }
@@ -167,9 +171,34 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
   let started = 0;
   let disposed = false;
   const runSeed = random() * 100;
-  const cameraFor = (time: number) => {
+  const eyeFor = (time: number): [number, number, number] => {
     const angle = time * 0.35;
-    return viewProjection([Math.sin(angle) * ORBIT_RADIUS, 1.1 + Math.sin(time * 0.31) * 0.3, Math.cos(angle) * ORBIT_RADIUS], aspect());
+    return [Math.sin(angle) * ORBIT_RADIUS, 1.1 + Math.sin(time * 0.31) * 0.3, Math.cos(angle) * ORBIT_RADIUS];
+  };
+  /** Key light rides above and to the left of the camera, so the lit side always faces the viewer. */
+  const lightFor = (eye: [number, number, number]): [number, number, number] => {
+    const angle = Math.atan2(eye[0], eye[2]) + 0.7;
+    const light: [number, number, number] = [Math.sin(angle) * 0.8, 0.9, Math.cos(angle) * 0.8];
+    const len = Math.hypot(...light) || 1;
+    return [light[0] / len, light[1] / len, light[2] / len];
+  };
+  const cameraUniform = (time: number) => {
+    const eye = eyeFor(time);
+    return {
+      viewProjection: viewProjection(eye, aspect()),
+      main,
+      aspect: aspect(),
+      accent,
+      size: DISC_SIZE,
+      light: lightFor(eye),
+      time,
+      eye,
+      attract: state.attract,
+      fade: state.fade,
+      pad0: 0,
+      pad1: 0,
+      pad2: 0,
+    };
   };
 
   const step: Compute = compute(gpu, shaders.step, {
@@ -187,7 +216,7 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     vertices: 6,
     blend: 'premultiplied',
     set: {
-      camera: { viewProjection: cameraFor(0), main, aspect: aspect(), accent, size: 0.012, time: 0, attract: 0, fade: 0, pad: 0 },
+      camera: cameraUniform(0),
       particles,
     },
   });
@@ -232,7 +261,7 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
       ease('fade', 0.08);
       step.set({ params: { time, dt, energy: state.energy, attract: primCount > 0 ? state.attract : 0, count, primCount, seed: runSeed, pad: 0 } });
       step.dispatch(Math.ceil(count / WORKGROUP));
-      points.set({ camera: { viewProjection: cameraFor(time), main, aspect: aspect(), accent, size: 0.012, time, attract: state.attract, fade: state.fade, pad: 0 } });
+      points.set({ camera: cameraUniform(time) });
       frame(gpu, (pass) => pass.pass(target, points));
       return state.fade > 0.001 || targets.fade > 0 || state.energy > 0.001 || targets.energy > 0;
     },

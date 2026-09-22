@@ -1,4 +1,4 @@
-import { normalizeGist, type Gist } from '@atlas/core/gist';
+import { normalizeGist, type Gist, type OutlinePoint } from '@atlas/core/gist';
 import type { PreparedImage } from '../identify';
 
 /**
@@ -15,6 +15,8 @@ export interface GistReply {
   configured: boolean;
   model?: string;
   gist?: Gist;
+  /** The object's silhouette in the photo, image fractions, (0, 0) top left. */
+  outline?: OutlinePoint[];
   timing?: { ms: number };
   cached?: boolean;
   error?: string;
@@ -27,6 +29,8 @@ export interface SculptReply {
   move?: { id: string; confidence: number; probabilities: Record<string, number> };
   likeness?: number;
   moves?: Array<{ id: string; description: string }>;
+  shapeProfile?: number[];
+  mismatch?: number | null;
   timing?: { ms: number };
   error?: string;
 }
@@ -79,9 +83,9 @@ export async function requestGist(image: PreparedImage, hint: string, signal?: A
 }
 
 /** One sculpting judgment. Null means no answer this round; the loop just asks again. */
-export async function requestSculpt(subject: string, gist: Gist, signal?: AbortSignal): Promise<SculptReply | null> {
+export async function requestSculpt(subject: string, gist: Gist, photoProfile: number[] | null, signal?: AbortSignal): Promise<SculptReply | null> {
   if (sculptUnavailable) return { configured: false };
-  const reply = await post<SculptReply>(SCULPT_PATH, { subject, gist }, SCULPT_TIMEOUT_MS, signal);
+  const reply = await post<SculptReply>(SCULPT_PATH, { subject, gist, photoProfile: photoProfile ?? undefined }, SCULPT_TIMEOUT_MS, signal);
   if (reply?.configured === false) sculptUnavailable = true;
   return reply;
 }

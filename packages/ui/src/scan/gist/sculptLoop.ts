@@ -18,6 +18,8 @@ export interface SculptEvent {
   move: string;
   confidence: number;
   likeness: number | null;
+  /** Distance between the shape's profile and the photo's at judgment time, when a photo profile was sent. */
+  mismatch: number | null;
   applied: boolean;
   ms: number;
   model?: string;
@@ -26,6 +28,8 @@ export interface SculptEvent {
 export interface SculptLoopOptions {
   subject: string;
   gist: Gist;
+  /** The photo's silhouette profile; with it, proportion moves are measured rather than guessed. */
+  photoProfile?: number[] | null;
   onGist: (gist: Gist, event: SculptEvent) => void;
   onEvent?: (event: SculptEvent) => void;
   onDone?: (reason: 'satisfied' | 'budget' | 'stopped' | 'unconfigured' | 'failed') => void;
@@ -85,7 +89,7 @@ export function startSculptLoop(options: SculptLoopOptions): SculptLoopHandle {
     const call = (calls += 1);
     pending += 1;
     const sent = performance.now();
-    const reply = await requestSculpt(options.subject, judged, controller.signal);
+    const reply = await requestSculpt(options.subject, judged, options.photoProfile ?? null, controller.signal);
     pending -= 1;
     if (stopped) return;
     const ms = performance.now() - sent;
@@ -104,6 +108,7 @@ export function startSculptLoop(options: SculptLoopOptions): SculptLoopHandle {
       move: reply.move.id,
       confidence: reply.move.confidence,
       likeness: typeof reply.likeness === 'number' ? reply.likeness : null,
+      mismatch: typeof reply.mismatch === 'number' ? reply.mismatch : null,
       applied: false,
       ms,
       model: reply.model,

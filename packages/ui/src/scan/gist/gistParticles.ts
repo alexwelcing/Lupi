@@ -1,7 +1,7 @@
 /// <reference types="vgpu/client" />
 import { init, surface, type Gpu } from 'vgpu';
 import type { Gist } from '@atlas/core/gist';
-import { createGistEngine, type GistEngine } from './gistEngine';
+import { GIST_PARTICLE_COUNT, createGistEngine, type GistEngine } from './gistEngine';
 import stepShader from './gist-step.wgsl';
 import pointsShader from './gist-points.wgsl';
 
@@ -17,6 +17,26 @@ export interface GistParticles {
   setAttract(value: number): void;
   setFade(value: number): void;
   dispose(): void;
+}
+
+/**
+ * How many particles to summon. Sixty thousand is the medium-high setting:
+ * dense enough to read as a skin on a 2-unit object at rest, cheap enough
+ * for an integrated GPU (the kernel is a few dozen distance evaluations per
+ * particle). Strong desktops get twice that, phones and low-power devices
+ * half. `?particles=N` overrides for tuning.
+ */
+export function pickParticleCount(): number {
+  if (typeof window === 'undefined') return GIST_PARTICLE_COUNT;
+  const override = Number(new URLSearchParams(window.location.search).get('particles'));
+  if (Number.isFinite(override) && override >= 1_000 && override <= 400_000) return Math.round(override);
+  const cores = navigator.hardwareConcurrency ?? 4;
+  const memory = (navigator as { deviceMemory?: number }).deviceMemory ?? 8;
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const mobile = coarse || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+  if (mobile || memory <= 4 || cores <= 4) return 30_000;
+  if (cores >= 12 && memory >= 8) return 120_000;
+  return GIST_PARTICLE_COUNT;
 }
 
 export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: () => void): Promise<GistParticles> {
@@ -68,6 +88,7 @@ export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: 
       gpu,
       target: canvasTarget,
       shaders: { step: stepShader, points: pointsShader },
+      count: pickParticleCount(),
       aspect: () => Math.max(canvas.clientWidth, 1) / Math.max(canvas.clientHeight, 1),
     });
     offError = gpu.onError(fail);

@@ -28,10 +28,14 @@ import {
   JevError,
   applicableMoves,
   describeGist,
+  gistProfile,
   normalizeGist,
+  profileMismatch,
+  profileWords,
   systemOne as coreSystemOne,
   type Gist,
   type JevQuestion,
+  type OutlinePoint,
 } from '@atlas/core';
 import { jevClientConfig, jevConfigured } from './jev';
 import {
@@ -72,17 +76,23 @@ Coordinates: Y is up. The whole object fits inside a cube 2 units across, centre
 - torus: size.x ring radius, size.y tube radius; it lies flat in XZ. Rotate 90 degrees about X to stand it up, like a mug handle.
 rotation is degrees about X, Y, Z. blend is how softly a part melts into the rest: 0 is a crisp seam, 0.3 is very soft. subtract carves the shape out instead of adding it (a dimple, the inside of a cup).
 
-Use the fewest primitives that give the gist: one body plus the parts that make it recognisable (a stem, a handle, a spout, legs). At most eight. The first primitive is the body and must not be subtractive. Name parts with one word. Give a short label for what it is, your confidence, and two hex colours: the thing's main colour and an accent. If there is no physical object in the photo, label it "nothing" with confidence 0 and give one small sphere.`;
+Use the fewest primitives that give the gist: one body plus the parts that make it recognisable (a stem, a handle, a spout, legs). At most eight. The first primitive is the body and must not be subtractive. Name parts with one word. Give a short label for what it is, your confidence, and two hex colours: the thing's main colour and an accent.
+
+Also trace the object's outline as it appears in this photo: 8 to 20 points in order around its silhouette, x and y as fractions of the image width and height with (0, 0) at the top left. Follow the real edges you see, including the stem, handle, or spout, so the outline's proportions are the photo's, not an ideal. If there is no physical object in the photo, label it "nothing" with confidence 0, give one small sphere, and an empty outline.`;
 
 const VECTOR_SCHEMA = { type: 'object', additionalProperties: false, required: ['x', 'y', 'z'], properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } } as const;
 
 const GIST_OUTPUT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['label', 'confidence', 'palette', 'primitives'],
+  required: ['label', 'confidence', 'palette', 'primitives', 'outline'],
   properties: {
     label: { type: 'string' },
     confidence: { type: 'number' },
+    outline: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: { x: { type: 'number' }, y: { type: 'number' } } },
+    },
     palette: {
       type: 'object',
       additionalProperties: false,
@@ -109,8 +119,29 @@ const GIST_OUTPUT_SCHEMA = {
   },
 } as const;
 
+export interface GistSketch {
+  gist: Gist;
+  /** The object's silhouette in the photo, image fractions, (0, 0) top left; empty when the model gave none. */
+  outline: OutlinePoint[];
+}
+
+const MAX_OUTLINE_POINTS = 32;
+
+export function normalizeOutline(raw: unknown): OutlinePoint[] {
+  if (!Array.isArray(raw)) return [];
+  const points: OutlinePoint[] = [];
+  for (const entry of raw.slice(0, MAX_OUTLINE_POINTS)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const x = Number((entry as { x?: unknown }).x);
+    const y = Number((entry as { y?: unknown }).y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    points.push([Math.max(0, Math.min(1, x)), Math.max(0, Math.min(1, y))]);
+  }
+  return points.length >= 3 ? points : [];
+}
+
 /** The model writes vectors as objects and the palette as fields; the gist wants arrays. */
-export function gistFromModelJson(raw: unknown): Gist | null {
+export function gistFromModelJson(raw: unknown): GistSketch | null {
   if (!raw || typeof raw !== 'object') return null;
   const body = raw as Record<string, unknown>;
   const vector = (value: unknown): [number, number, number] | undefined => {
@@ -119,7 +150,7 @@ export function gistFromModelJson(raw: unknown): Gist | null {
     return [Number(record.x), Number(record.y), Number(record.z)];
   };
   const palette = body.palette && typeof body.palette === 'object' ? (body.palette as Record<string, unknown>) : {};
-  return normalizeGist({
+  const gist = normalizeGist({
     label: body.label,
     confidence: body.confidence,
     palette: [palette.main, palette.accent],
@@ -131,10 +162,12 @@ export function gistFromModelJson(raw: unknown): Gist | null {
         })
       : [],
   });
+  return gist ? { gist, outline: normalizeOutline(body.outline) } : null;
 }
 
 export interface GistOutcome {
   gist: Gist;
+  outline: OutlinePoint[];
   model: string;
   usage: { inputTokens: number | null; outputTokens: number | null };
 }
@@ -182,10 +215,11 @@ export async function gistWithVision(env: ScanEnv, request: ScanRequest, options
   } catch {
     throw new ScanVisionError('The model returned malformed JSON.', 502, 'invalid-response');
   }
-  const gist = gistFromModelJson(parsed);
-  if (!gist) throw new ScanVisionError('The model returned an unusable sketch.', 502, 'invalid-response');
+  const sketch = gistFromModelJson(parsed);
+  if (!sketch) throw new ScanVisionError('The model returned an unusable sketch.', 502, 'invalid-response');
   return {
-    gist,
+    gist: sketch.gist,
+    outline: sketch.outline,
     model: message.model,
     usage: { inputTokens: message.usage?.input_tokens ?? null, outputTokens: message.usage?.output_tokens ?? null },
   };
@@ -195,6 +229,7 @@ export interface GistResponse {
   configured: boolean;
   model?: string;
   gist?: Gist;
+  outline?: OutlinePoint[];
   timing?: { ms: number };
   cached?: boolean;
   error?: string;
@@ -256,13 +291,14 @@ export async function handleScanGist(
     console.warn(JSON.stringify({ component: 'lupi_scan', stage: 'gist', model, reason: failure.reason, status: failure.status, ms: now() - started }));
     return jsonResponse({ configured: true, error: failure.message, reason: failure.reason } satisfies GistResponse, { status: failure.status });
   }
-  const response: GistResponse = { configured: true, model: outcome.model, gist: outcome.gist, timing: { ms: now() - started } };
+  const response: GistResponse = { configured: true, model: outcome.model, gist: outcome.gist, outline: outcome.outline, timing: { ms: now() - started } };
   console.log(
     JSON.stringify({
       component: 'lupi_scan',
       stage: 'gist',
       model: outcome.model,
       primitives: outcome.gist.primitives.length,
+      outlinePoints: outcome.outline.length,
       confidence: outcome.gist.confidence,
       hasHint: parsed.hint.length > 0,
       inputTokens: outcome.usage.inputTokens,
@@ -284,7 +320,11 @@ export async function handleScanGist(
 export interface SculptRequest {
   subject: string;
   gist: Gist;
+  /** The photo's silhouette widths, top to bottom, as fractions of its height; the measured truth. */
+  photoProfile: number[] | null;
 }
+
+const MAX_PROFILE_BANDS = 24;
 
 export class SculptRequestError extends Error {
   readonly status = 400;
@@ -301,23 +341,44 @@ export function parseSculptRequest(raw: unknown): SculptRequest {
   if (!subject) throw new SculptRequestError('"subject" is required.');
   const gist = normalizeGist(body.gist);
   if (!gist) throw new SculptRequestError('"gist" must be a gist with at least one solid primitive.');
-  return { subject, gist };
+  const photoProfile = Array.isArray(body.photoProfile)
+    ? body.photoProfile
+        .slice(0, MAX_PROFILE_BANDS)
+        .map((value) => (typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(4, value)) : 0))
+    : null;
+  return { subject, gist, photoProfile: photoProfile && photoProfile.length >= 3 ? photoProfile : null };
 }
 
-export function buildSculptQuestions(request: SculptRequest): { questions: Record<string, JevQuestion>; state: unknown } {
+export function buildSculptQuestions(request: SculptRequest): { questions: Record<string, JevQuestion>; state: unknown; shapeProfile: number[]; mismatch: number | null } {
   const moves = applicableMoves(request.gist);
   const criteria: Record<string, string> = { [GIST_KEEP_MOVE]: 'Keep the shape as it is: it already reads as the subject, or no listed edit would help.' };
   for (const move of moves) criteria[move.id] = move.description;
+  const shapeProfile = gistProfile(request.gist);
+  const mismatch = request.photoProfile ? profileMismatch(shapeProfile, request.photoProfile) : null;
+  const measured = request.photoProfile
+    ? {
+        photo_profile: profileWords(request.photoProfile),
+        shape_profile: profileWords(shapeProfile),
+        profile_mismatch: Number(mismatch!.toFixed(3)),
+        profile_note:
+          'Both profiles are silhouette widths from the top of the object to the bottom, as fractions of its height. photo_profile was measured from the photo and is the truth; shape_profile is the current shape from the front. A width in shape_profile larger than the photo means the shape is too wide at that height; smaller means too narrow.',
+      }
+    : {};
   return {
+    shapeProfile,
+    mismatch,
     state: {
       subject: request.subject,
       shape: describeGist(request.gist),
-      note: 'The shape is shown as a cloud of a few thousand particles settled onto its surface, seen from a slowly orbiting camera. Only the silhouette and proportions matter.',
+      ...measured,
+      note: 'The shape is shown as a cloud of particles settled onto its surface, seen from a slowly orbiting camera. Only the silhouette and proportions matter.',
     },
     questions: {
       move: {
         type: 'choice',
-        instructions: 'Which single edit to `shape` would make it read more like `subject` to a person glancing at it? Choose `keep` if it already reads as the subject or no edit listed helps.',
+        instructions: request.photoProfile
+          ? 'Which single edit to `shape` would make it read more like `subject` and bring `shape_profile` closer to `photo_profile`? Proportion edits should follow the measured profiles; part edits (a stem, a handle, a base, a dimple, a hollow) should follow what the subject needs. Choose `keep` if it already matches.'
+          : 'Which single edit to `shape` would make it read more like `subject` to a person glancing at it? Choose `keep` if it already reads as the subject or no edit listed helps.',
         criteria,
       },
       likeness: {
@@ -334,6 +395,9 @@ export interface SculptResponse {
   move?: { id: string; confidence: number; probabilities: Record<string, number> };
   likeness?: number;
   moves?: Array<{ id: string; description: string }>;
+  /** The shape's own profile, and how far it sits from the photo's when one was sent. */
+  shapeProfile?: number[];
+  mismatch?: number | null;
   timing?: { ms: number };
   error?: string;
 }
@@ -361,7 +425,7 @@ export async function handleScanSculpt(
 
   const now = options.now ?? Date.now;
   const started = now();
-  const { questions, state } = buildSculptQuestions(parsed);
+  const { questions, state, shapeProfile, mismatch } = buildSculptQuestions(parsed);
   try {
     const result = await coreSystemOne({ ...jevClientConfig(env, { timeoutMs: SCULPT_TIMEOUT_MS, fetcher: options.fetcher }), retries: 0 }, { state, questions });
     const move = result.answers.move;
@@ -379,6 +443,8 @@ export async function handleScanSculpt(
           : undefined,
       likeness: likeness && likeness.type === 'noul' ? round3(likeness.noul) : undefined,
       moves: applicableMoves(parsed.gist),
+      shapeProfile: shapeProfile.map((value) => Number(value.toFixed(3))),
+      mismatch: mismatch === null ? null : Number(mismatch.toFixed(3)),
       timing: { ms: now() - started },
     };
     console.log(
@@ -391,6 +457,8 @@ export async function handleScanSculpt(
         move: response.move?.id ?? null,
         confidence: response.move?.confidence ?? null,
         likeness: response.likeness ?? null,
+        measured: parsed.photoProfile !== null,
+        mismatch: response.mismatch ?? null,
         inputTokens: result.usage?.input_tokens ?? null,
         ms: response.timing?.ms,
       }),

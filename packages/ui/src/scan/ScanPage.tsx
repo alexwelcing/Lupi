@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { Gist } from '@atlas/core/gist';
+import { fitProportions, gistProfile, outlineProfile, profileMismatch, profileWords, type Gist } from '@atlas/core/gist';
 import { useStore } from '../store';
 import { track, ANALYTICS_EVENTS } from '../analytics';
 import { SCAN_SEO, useSeo } from '../seo';
@@ -42,6 +42,11 @@ interface GistState {
   model?: string;
   ms?: number;
   cached?: boolean;
+  /** Silhouette widths measured from the photo's outline, top to bottom; null without an outline. */
+  photoProfile?: number[] | null;
+  outlinePoints?: number;
+  /** True when the free aspect fit changed the gist before Jev saw it. */
+  fitted?: boolean;
 }
 
 function percent(value: number): string {
@@ -106,13 +111,14 @@ export function ScanPage() {
 
   /* ─── Jev sculpts the gist, fast ─── */
   const beginSculpt = useCallback(
-    (subject: string, gist: Gist) => {
+    (subject: string, gist: Gist, photoProfile: number[] | null = null) => {
       stopSculpt();
       setSculptEvents([]);
       setSculpting(true);
       sculpt.current = startSculptLoop({
         subject,
         gist,
+        photoProfile,
         onGist: (next) => setGistState((previous) => ({ ...previous, gist: next })),
         onEvent: (event) => setSculptEvents((previous) => [...previous, event]),
         onDone: () => setSculpting(false),
@@ -176,8 +182,21 @@ export function ScanPage() {
       const gistPromise = requestGist(prepared, hintText, controller.signal).then((reply: GistReply | null) => {
         if (controller.signal.aborted) return;
         if (reply?.gist) {
-          setGistState({ gist: reply.gist, status: 'ready', model: reply.model, ms: reply.timing?.ms, cached: reply.cached });
-          beginSculpt(reply.gist.label, reply.gist);
+          // The measured step: the photo's own silhouette, as numbers. The
+          // free aspect fit runs here, before Jev is asked anything.
+          const photoProfile = reply.outline && reply.outline.length >= 3 ? outlineProfile(reply.outline) : null;
+          const gist = photoProfile ? fitProportions(reply.gist, photoProfile) : reply.gist;
+          setGistState({
+            gist,
+            status: 'ready',
+            model: reply.model,
+            ms: reply.timing?.ms,
+            cached: reply.cached,
+            photoProfile,
+            outlinePoints: reply.outline?.length ?? 0,
+            fitted: gist !== reply.gist,
+          });
+          beginSculpt(gist.label, gist, photoProfile);
         } else {
           setGistState({ gist: null, status: 'none' });
         }
@@ -642,6 +661,14 @@ export function ScanPage() {
                     ? 'no sketch came back'
                     : '—'}
               </dd>
+              <dt>Silhouette</dt>
+              <dd>
+                {gistState.photoProfile && gist
+                  ? `photo ${profileWords(gistState.photoProfile)} · shape ${profileWords(gistProfile(gist))} · mismatch ${profileMismatch(gistProfile(gist), gistState.photoProfile).toFixed(3)}${gistState.fitted ? ' · aspect fitted before Jev' : ''} · ${gistState.outlinePoints} outline points`
+                  : demo
+                    ? 'no photo to measure against'
+                    : 'no outline came back; Jev judged by words alone'}
+              </dd>
               <dt>Sculpting</dt>
               <dd>
                 {sculptEvents.length === 0
@@ -685,7 +712,10 @@ export function ScanPage() {
                     <span>#{event.call}</span>
                     <span>{event.applied ? moveWords(event.move) : `${moveWords(event.move)} (not applied)`}</span>
                     <span>{percent(event.confidence)}</span>
-                    <span>{event.likeness === null ? '—' : `likeness ${percent(event.likeness)}`}</span>
+                    <span>
+                      {event.likeness === null ? '—' : `likeness ${percent(event.likeness)}`}
+                      {event.mismatch !== null && ` · mismatch ${event.mismatch.toFixed(2)}`}
+                    </span>
                     <span>{formatMs(event.ms)}</span>
                   </li>
                 ))}

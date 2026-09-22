@@ -1,13 +1,16 @@
-// Draws the gist particles as soft billboarded discs: six vertices per
-// instance, no geometry buffers. Colour comes from the gist's palette, mixed
-// by height, and brightened where a particle has settled onto the surface.
-// Premultiplied alpha over the photo.
+// Draws the gist particles as small shaded discs: six vertices per instance,
+// no geometry buffers, perspective-correct world size so the settled cloud
+// reads as a surface. Each settled particle carries the surface normal the
+// step kernel found, so a key light, a rim, and the gist's two colours give
+// the cloud the density and shading of a splat at rest. Premultiplied alpha.
 
 struct Particle {
   pos: vec3f,
   seed: f32,
   vel: vec3f,
   glow: f32,
+  nrm: vec3f,
+  hue: f32,
 }
 
 struct Camera {
@@ -16,10 +19,14 @@ struct Camera {
   aspect: f32,
   accent: vec3f,
   size: f32,
+  light: vec3f,
   time: f32,
+  eye: vec3f,
   attract: f32,
   fade: f32,
-  pad: f32,
+  pad0: f32,
+  pad1: f32,
+  pad2: f32,
 }
 
 @group(0) @binding(0) var<uniform> camera: Camera;
@@ -30,7 +37,12 @@ struct Out {
   @location(0) uv: vec2f,
   @location(1) tint: vec3f,
   @location(2) alpha: f32,
+  @location(3) settled: f32,
 }
+
+// Scale of the perspective divide for the vertical field of view, so a disc
+// keeps its world size: 1 / tan(fov / 2) for the 34 degree camera.
+const PROJECTION_SCALE: f32 = 3.27;
 
 @vertex fn vs(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Out {
   var corners = array<vec2f, 6>(
@@ -40,22 +52,38 @@ struct Out {
   let particle = particles[i];
   let clip = camera.viewProjection * vec4f(particle.pos, 1.0);
   let corner = corners[v];
-  let settled = mix(0.55, 1.0, particle.glow);
-  let size = camera.size * (0.7 + 0.6 * particle.seed) * mix(1.0, 0.8, camera.attract) * settled;
+  let settled = clamp(particle.glow, 0.0, 1.0) * camera.attract;
+  // Whirling particles are larger and airy; settled ones shrink into a dense skin.
+  let worldSize = camera.size * (0.75 + 0.5 * particle.seed) * mix(1.5, 1.0, settled);
   var out: Out;
-  out.position = clip + vec4f(corner * size * clip.w * vec2f(1.0 / max(camera.aspect, 1e-3), 1.0), 0.0, 0.0);
+  out.position = clip + vec4f(corner * worldSize * PROJECTION_SCALE * vec2f(1.0 / max(camera.aspect, 1e-3), 1.0), 0.0, 0.0);
   out.uv = corner;
+
   let height = clamp(particle.pos.y * 0.5 + 0.5, 0.0, 1.0);
-  let base = mix(camera.main, camera.accent, height * 0.7 + particle.seed * 0.3);
-  out.tint = mix(base, vec3f(1.0), particle.glow * 0.35);
-  out.alpha = (0.45 + 0.55 * particle.glow) * camera.fade;
+  // Two palette colours, a per-particle hue nudge, and a touch of warmth toward the top.
+  var base = mix(camera.main, camera.accent, clamp(height * 0.45 + (particle.hue - 0.5) * 0.5, 0.0, 1.0));
+  base = mix(base, base * vec3f(1.08, 1.0, 0.92), height * 0.3);
+  let n = normalize(particle.nrm + vec3f(1e-4));
+  let toEye = normalize(camera.eye - particle.pos);
+  let diffuse = 0.32 + 0.68 * max(dot(n, camera.light), 0.0);
+  let rim = pow(1.0 - max(dot(n, toEye), 0.0), 3.0) * 0.35;
+  let speck = 0.5 + 0.5 * particle.hue;
+  let lit = base * (diffuse * (0.85 + 0.3 * speck)) + camera.accent * rim + vec3f(0.12) * pow(max(dot(reflect(-camera.light, n), toEye), 0.0), 24.0);
+  // Airy pastel while whirling, shaded skin once settled.
+  let airy = mix(base, vec3f(1.0), 0.35);
+  out.tint = mix(airy, lit, settled);
+  // Thousands of airborne discs overlap, so each stays faint; the skin is nearly opaque.
+  out.alpha = mix(0.12, 0.95, settled) * camera.fade;
+  out.settled = settled;
   return out;
 }
 
-@fragment fn fs(@location(0) uv: vec2f, @location(1) tint: vec3f, @location(2) alpha: f32) -> @location(0) vec4f {
+@fragment fn fs(@location(0) uv: vec2f, @location(1) tint: vec3f, @location(2) alpha: f32, @location(3) settled: f32) -> @location(0) vec4f {
   let r = length(uv);
-  let disc = 1.0 - smoothstep(0.55, 1.0, r);
-  let core = exp(-r * r * 6.0);
-  let a = clamp((disc * 0.8 + core * 0.5) * alpha, 0.0, 1.0);
-  return vec4f((tint + vec3f(core * 0.25)) * a, a);
+  // A firmer edge once settled so neighbouring discs tile into a surface.
+  let edge = mix(0.45, 0.72, settled);
+  let disc = 1.0 - smoothstep(edge, 1.0, r);
+  let core = exp(-r * r * 5.0) * (1.0 - settled) * 0.5;
+  let a = clamp((disc + core) * alpha, 0.0, 1.0);
+  return vec4f((tint + vec3f(core * 0.3)) * a, a);
 }
