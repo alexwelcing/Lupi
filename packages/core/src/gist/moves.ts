@@ -24,7 +24,9 @@ export interface GistMove {
 }
 
 export const GIST_KEEP_MOVE = 'keep';
-export const GIST_MAX_MOVES = 8;
+/** Moves that only change proportions; the policy damps these once the measured mismatch is small. */
+export const GIST_PROPORTION_MOVES: readonly string[] = ['flatten', 'stretch', 'widen', 'slim'];
+export const GIST_MAX_MOVES = 12;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const scaleSize = (primitive: GistPrimitive, factors: [number, number, number]): void => {
@@ -44,22 +46,31 @@ const lastPart = (gist: Gist): GistPrimitive | null => {
   return null;
 };
 
-/** The moves Jev may choose from for this gist, at most `GIST_MAX_MOVES`, keep excluded. */
+/**
+ * The moves Jev may choose from for this gist, keep excluded. Proportion
+ * moves are small steps that can be repeated; the loop doubles them when
+ * the measured mismatch is large. Parts are offered only while absent, and
+ * only where they make sense on this body.
+ */
 export function applicableMoves(gist: Gist): GistMove[] {
   const body = gistBody(gist);
   const moves: GistMove[] = [
-    { id: 'flatten', description: 'Flatten the body top to bottom so it is squatter and wider than it is tall.' },
-    { id: 'stretch', description: 'Stretch the body vertically so it is taller and narrower.' },
-    { id: 'widen', description: 'Widen the body sideways in both horizontal directions.' },
-    { id: 'slim', description: 'Slim the body sideways so it is narrower.' },
+    { id: 'flatten', description: 'Flatten the body top to bottom so it is squatter and wider than it is tall (a small step; can be repeated).' },
+    { id: 'stretch', description: 'Stretch the body vertically so it is taller and narrower (a small step; can be repeated).' },
+    { id: 'widen', description: 'Widen the body sideways in both horizontal directions (a small step; can be repeated).' },
+    { id: 'slim', description: 'Slim the body sideways so it is narrower (a small step; can be repeated).' },
   ];
   if (body.blend < 0.3) moves.push({ id: 'soften', description: 'Soften every join so parts flow into each other with no seams.' });
   else moves.push({ id: 'sharpen', description: 'Sharpen the joins so parts meet crisply.' });
   const room = gist.primitives.length < GIST_MAX_PRIMITIVES;
   if (room && !hasPart(gist, 'stem')) moves.push({ id: 'add-stem', description: 'Add a short thin stem sticking up from the top of the body.' });
+  if (room && !hasPart(gist, 'neck')) moves.push({ id: 'add-neck', description: 'Add a narrow neck rising from the top of the body, like a bottle or a vase.' });
   if (room && !hasPart(gist, 'handle')) moves.push({ id: 'add-handle', description: 'Add a loop handle on one side of the body.' });
   if (room && !hasPart(gist, 'base')) moves.push({ id: 'add-base', description: 'Add a flat wide base under the body.' });
   if (room && !hasPart(gist, 'dimple')) moves.push({ id: 'dimple', description: 'Press a dimple into the top of the body.' });
+  if (room && !hasPart(gist, 'cap')) moves.push({ id: 'add-cap', description: 'Add a wide flat cap on top of the body, like a screw head, a lid, or a mushroom cap.' });
+  if (body.kind === 'cylinder' || body.kind === 'cone') moves.push({ id: 'taper', description: 'Taper the body so it narrows toward the top.' });
+  if (body.kind === 'box') moves.push({ id: 'round', description: 'Round the body off into a cylinder of the same size.' });
   if (room && !hasPart(gist, 'hollow') && (body.kind === 'cylinder' || body.kind === 'cone' || body.kind === 'box')) {
     moves.push({ id: 'hollow', description: 'Hollow the body out from the top, like a cup or a bowl.' });
   }
@@ -68,8 +79,15 @@ export function applicableMoves(gist: Gist): GistMove[] {
   return moves.slice(0, GIST_MAX_MOVES);
 }
 
-/** Apply a move by id. Returns null for `keep`, an unknown id, or a move the gist does not offer. */
-export function applyMove(gist: Gist, moveId: string): Gist | null {
+const powered = (factors: [number, number, number], strength: number): [number, number, number] =>
+  [factors[0] ** strength, factors[1] ** strength, factors[2] ** strength];
+
+/**
+ * Apply a move by id. `strength` scales proportion moves (2 doubles the
+ * step, for when the measured mismatch is large). Returns null for `keep`,
+ * an unknown id, or a move the gist does not offer.
+ */
+export function applyMove(gist: Gist, moveId: string, strength = 1): Gist | null {
   if (moveId === GIST_KEEP_MOVE) return null;
   if (!applicableMoves(gist).some((move) => move.id === moveId)) return null;
   const next = cloneGist(gist);
@@ -78,18 +96,58 @@ export function applyMove(gist: Gist, moveId: string): Gist | null {
   const top = bounds.max[1];
   const bottom = bounds.min[1];
   const halfWidth = Math.max(bounds.max[0] - bounds.min[0], bounds.max[2] - bounds.min[2]) / 2;
+  const step = Math.max(1, Math.min(3, strength));
+  // A sphere has one radius; a proportion move needs three, so it becomes an ellipsoid first.
+  if (body.kind === 'sphere' && GIST_PROPORTION_MOVES.includes(moveId)) {
+    body.kind = 'ellipsoid';
+    body.size = [body.size[0], body.size[0], body.size[0]];
+  }
   switch (moveId) {
     case 'flatten':
-      scaleSize(body, [1.08, 0.78, 1.08]);
+      scaleSize(body, powered([1.08, 0.78, 1.08], step));
       break;
     case 'stretch':
-      scaleSize(body, [0.92, 1.28, 0.92]);
+      scaleSize(body, powered([0.92, 1.28, 0.92], step));
       break;
     case 'widen':
-      scaleSize(body, [1.22, 1, 1.22]);
+      scaleSize(body, powered([1.22, 1, 1.22], step));
       break;
     case 'slim':
-      scaleSize(body, [0.82, 1, 0.82]);
+      scaleSize(body, powered([0.82, 1, 0.82], step));
+      break;
+    case 'round':
+      body.kind = 'cylinder';
+      body.size = [Math.max(body.size[0], body.size[2]), body.size[1], 0];
+      break;
+    case 'taper':
+      if (body.kind === 'cylinder') {
+        body.kind = 'cone';
+        body.size = [body.size[0], body.size[1], body.size[0] * 0.55];
+      } else {
+        body.size[2] = Math.max(0, body.size[2] * 0.55);
+      }
+      break;
+    case 'add-cap':
+      next.primitives.push({
+        kind: 'cylinder',
+        name: 'cap',
+        center: [0, top + 0.05, 0],
+        size: [Math.min(GIST_MAX_SIZE, Math.max(halfWidth * 1.6, 0.12)), 0.06, 0],
+        rotation: [0, 0, 0],
+        blend: 0.03,
+        subtract: false,
+      });
+      break;
+    case 'add-neck':
+      next.primitives.push({
+        kind: 'cylinder',
+        name: 'neck',
+        center: [0, top + (top - bottom) * 0.22, 0],
+        size: [Math.max(GIST_MIN_SIZE, halfWidth * 0.3), Math.max(0.1, (top - bottom) * 0.24), 0],
+        rotation: [0, 0, 0],
+        blend: 0.12,
+        subtract: false,
+      });
       break;
     case 'soften':
       for (const primitive of next.primitives) primitive.blend = clamp(primitive.blend + 0.12, 0, GIST_MAX_BLEND);
@@ -145,8 +203,8 @@ export function applyMove(gist: Gist, moveId: string): Gist | null {
       const inner: GistPrimitive = {
         ...body,
         name: 'hollow',
-        center: [body.center[0], body.center[1] + body.size[1] * 0.25, body.center[2]],
-        size: [body.size[0] * 0.82, body.size[1], body.kind === 'cone' ? body.size[2] * 0.82 : body.size[2] * 0.82],
+        center: [body.center[0], body.center[1] + body.size[1] * 0.18, body.center[2]],
+        size: [body.size[0] * 0.8, body.size[1], body.size[2] * 0.8],
         rotation: [...body.rotation] as [number, number, number],
         blend: 0.04,
         subtract: true,
@@ -201,6 +259,11 @@ function sizeWords(primitive: GistPrimitive): string {
 
 function placement(primitive: GistPrimitive, body: GistPrimitive): string {
   if (primitive === body) return 'at the centre';
+  if (primitive.subtract) {
+    if (primitive.name === 'hollow') return 'hollowing the body out from the top';
+    if (primitive.name === 'dimple') return 'pressed into the top of the body';
+    return 'carved into the body';
+  }
   const [dx, dy, dz] = [primitive.center[0] - body.center[0], primitive.center[1] - body.center[1], primitive.center[2] - body.center[2]];
   const parts: string[] = [];
   if (dy > 0.08) parts.push('above the body');

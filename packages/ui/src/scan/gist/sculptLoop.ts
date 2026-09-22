@@ -1,4 +1,4 @@
-import { GIST_KEEP_MOVE, applyMove, type Gist } from '@atlas/core/gist';
+import { applyMove, decideSculpt, type Gist, type SculptMemory } from '@atlas/core/gist';
 import { requestSculpt } from './gistClient';
 
 /**
@@ -37,7 +37,7 @@ export interface SculptLoopOptions {
   inFlight?: number;
   maxCalls?: number;
   maxMs?: number;
-  /** Apply a move only at or above this confidence. */
+  /** Apply a move at or above this confidence without waiting for a second vote. */
   minConfidence?: number;
 }
 
@@ -60,7 +60,7 @@ export function startSculptLoop(options: SculptLoopOptions): SculptLoopHandle {
   let version = 0;
   let pending = 0;
   let calls = 0;
-  let keeps = 0;
+  let memory: SculptMemory = { lastMove: null, keeps: 0 };
   let failures = 0;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -114,26 +114,24 @@ export function startSculptLoop(options: SculptLoopOptions): SculptLoopHandle {
       model: reply.model,
     };
     const stale = judgedVersion !== version;
-    if (reply.move.id === GIST_KEEP_MOVE) {
-      if (!stale) keeps += 1;
+    if (stale) {
+      // About a shape that has since changed; worth logging, never acting on.
       options.onEvent?.(event);
-      if (keeps >= 2 && reply.move.confidence >= 0.6) {
-        finish('satisfied');
-        return;
-      }
-    } else if (!stale && reply.move.confidence >= minConfidence) {
-      const next = applyMove(gist, reply.move.id);
+      return;
+    }
+    const verdict = decideSculpt({ move: reply.move, likeness: event.likeness, mismatch: event.mismatch }, memory, minConfidence);
+    memory = verdict.memory;
+    if (verdict.apply) {
+      const next = applyMove(gist, verdict.apply, verdict.strength);
       if (next) {
         gist = next;
         version += 1;
-        keeps = 0;
         event.applied = true;
         options.onGist(gist, event);
       }
-      options.onEvent?.(event);
-    } else {
-      options.onEvent?.(event);
     }
+    options.onEvent?.(event);
+    if (verdict.satisfied) finish('satisfied');
   };
 
   const schedule = () => {

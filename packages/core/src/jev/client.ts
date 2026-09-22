@@ -107,8 +107,15 @@ export function isPinnedModel(model: string): boolean {
 
 const inUnit = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 
+/** How far below the top probability a chosen label may sit. Measured
+ *  2026-09-22: on a thirteen-way Choice the model occasionally names a label
+ *  one hundredth under the leader (a near tie), which is an answer, not a
+ *  malformed one. */
+export const CHOICE_TIE_MARGIN = 0.05;
+
 /** A Choice answer is valid only when its labels are exactly the rubric's,
- *  probabilities are a finite distribution, and the chosen label wins it. */
+ *  probabilities are a finite distribution, and the chosen label leads it or
+ *  sits within `CHOICE_TIE_MARGIN` of the leader. */
 export function validChoice(answer: unknown, criteria: Record<string, unknown>): answer is JevChoiceAnswer {
   if (!answer || typeof answer !== 'object') return false;
   const candidate = answer as Partial<JevChoiceAnswer>;
@@ -121,7 +128,7 @@ export function validChoice(answer: unknown, criteria: Record<string, unknown>):
   if (!keys.every((key) => Object.hasOwn(probabilities, key) && inUnit(probabilities[key]))) return false;
   const values = Object.values(probabilities);
   const total = values.reduce((sum, value) => sum + value, 0);
-  return Math.abs(total - 1) <= 0.03 && probabilities[candidate.choice] >= Math.max(...values);
+  return Math.abs(total - 1) <= 0.03 && probabilities[candidate.choice] >= Math.max(...values) - CHOICE_TIE_MARGIN;
 }
 
 export function validNoul(answer: unknown): answer is JevNoulAnswer {

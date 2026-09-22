@@ -106,6 +106,48 @@ particles re-flow: the shape visibly morphs as Jev decides. The label shows
 the latest likeness and the judgment count; "Under the hood" lists every
 judgment with its move, confidence, likeness, and latency.
 
+### What the live model showed (2026-09-22)
+
+The loop was run against the live Jev from Node (`pnpm scan:sculpt:bench`)
+starting from deliberately wrong shapes, with and without a measured
+profile. Median latency was about 150 ms per judgment, 300 ms for the
+first. The findings shaped the decision rule in
+`packages/core/src/gist/policy.ts`:
+
+| Start | Subject | Profile | Calls | Path | Likeness |
+|---|---|---|---:|---|---:|
+| sphere | coffee mug | none | 3 | add-handle, keep, keep | 0.11 → 0.86 |
+| cylinder | apple | none | 13 | flatten ×2, add-stem, dimple, soften | 0.15 → 0.83 |
+| cylinder | coffee mug | measured | 9 | taper, add-handle, slim ×2, then settled | 0.33 → 0.81 |
+| box | wine bottle | measured | 5 | add-neck (double step), slim, then settled | 0.14 → 0.51 |
+| cylinder | wood screw | measured | 14 | taper, slim ×3, add-cap, then settled | 0.25 → 0.77 |
+| sphere | banana | none | 3 | add-stem, stretch, keep | 0.10 → 0.85 |
+| sphere | mushroom | none | 3 | add-cap (0.91), keep, keep | 0.23 → 0.83 |
+
+1. **Jev picks the right move from the first call, at low confidence.** A
+   twelve-way Choice spreads probability, so the winner sits at 0.25 to
+   0.40 even when it wins every call; a 0.45 confidence gate wasted ten
+   calls on the cylinder-apple. A move now applies when it is confident
+   or when it collects two votes for the current shape, consecutive or
+   not ("cap, slim, cap" lands the cap).
+2. **Likeness is well calibrated** and is the number to show: 0.11 before
+   a handle, 0.84 after; 0.92 for the hand-built apple. `keep` twice in a
+   row, or once at a likeness of 0.85, ends the loop.
+3. **Measured profiles do what they should.** With a profile, the loop
+   widens or slims until the mismatch is small, then switches to parts;
+   a mismatch above 0.3 doubles a proportion step so a box becomes a
+   bottle in one move. Below 0.12 a proportion vote is damped (the step
+   is coarser than the error left) and three damped votes in a row end
+   the loop.
+4. **The vocabulary decides the ceiling.** The bottle stalled at 0.51
+   because a box body is not a bottle, and the banana wanted a bend. The
+   `round`, `taper`, `add-neck`, and `add-cap` moves came out of these runs;
+   a sphere body now becomes an ellipsoid before a proportion move so it
+   stops shrinking under "stretch".
+5. **A near tie is an answer.** About one call in fourteen named a choice
+   a hundredth below the leading probability; the shared client now allows
+   a 0.05 margin instead of rejecting the reply.
+
 The sculpt route has no cache (every call is a new shape) and a 1.2 second
 deadline with no retry: the next call is already on its way. Cost is one
 Jev judgment per call, about $0.0004; a full loop is a cent or two. Without

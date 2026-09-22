@@ -9,7 +9,7 @@
 // applies chosen moves the way the browser does, and ends with the shape.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { applyMove, describeGist, gistProfile, profileWords, type Gist } from '@atlas/core/gist';
+import { applyMove, decideSculpt, describeGist, fitProportions, gistProfile, profileWords, type Gist, type SculptMemory } from '@atlas/core/gist';
 import { DEMO_GISTS } from '../../../packages/ui/src/scan/gist/gistClient';
 import { handleScanSculpt } from '../src/gist';
 
@@ -43,14 +43,31 @@ if (!env.TYPESAFE_API_KEY) {
   console.error('No TYPESAFE_API_KEY in the environment or apps/mcp-worker/.dev.vars.');
   process.exit(2);
 }
+const startArg = args.find((arg) => arg.startsWith('--start='))?.slice('--start='.length);
+const subjectArg = args.find((arg) => arg.startsWith('--subject='))?.slice('--subject='.length);
+const BARE: Record<string, Gist['primitives'][number]> = {
+  sphere: { kind: 'sphere', name: 'body', center: [0, 0, 0], size: [0.8, 0, 0], rotation: [0, 0, 0], blend: 0.1, subtract: false },
+  cylinder: { kind: 'cylinder', name: 'body', center: [0, 0, 0], size: [0.5, 0.8, 0], rotation: [0, 0, 0], blend: 0.1, subtract: false },
+  box: { kind: 'box', name: 'body', center: [0, 0, 0], size: [0.6, 0.6, 0.6], rotation: [0, 0, 0], blend: 0.1, subtract: false },
+};
 let gist: Gist = DEMO_GISTS[which] ?? DEMO_GISTS.apple;
-const subject = gist.label;
+// `--start=sphere` begins from a bare primitive so the loop has real work to do.
+if (startArg && BARE[startArg]) gist = { ...gist, primitives: [BARE[startArg]] };
+const subject = subjectArg ?? gist.label;
 console.log(`subject: ${subject}`);
 console.log(`start:   ${describeGist(gist)}`);
+if (photoProfile) {
+  // The browser fits the aspect for free before asking Jev; so does the bench.
+  const fitted = fitProportions(gist, photoProfile);
+  if (fitted !== gist) {
+    gist = fitted;
+    console.log(`fitted:  ${describeGist(gist)}`);
+  }
+}
 if (photoProfile) console.log(`photo:   ${profileWords(photoProfile)}`);
 console.log(`shape:   ${profileWords(gistProfile(gist))}`);
 
-let keeps = 0;
+let memory: SculptMemory = { lastMove: null, keeps: 0 };
 const latencies: number[] = [];
 for (let call = 1; call <= calls; call += 1) {
   const started = performance.now();
@@ -65,19 +82,16 @@ for (let call = 1; call <= calls; call += 1) {
     console.log(`#${call} ${response.status} ${body.error ?? 'no move'} (${ms} ms)`);
     continue;
   }
-  const next = body.move.id === 'keep' || body.move.confidence < 0.45 ? null : applyMove(gist, body.move.id);
+  const verdict = decideSculpt({ move: body.move, likeness: body.likeness ?? null, mismatch: body.mismatch ?? null }, memory);
+  memory = verdict.memory;
+  const next = verdict.apply ? applyMove(gist, verdict.apply, verdict.strength) : null;
   console.log(
-    `#${call} ${body.move.id.padEnd(14)} conf ${body.move.confidence.toFixed(2)} likeness ${(body.likeness ?? 0).toFixed(2)}${body.mismatch != null ? ` mismatch ${body.mismatch.toFixed(3)}` : ''} ${ms} ms${next ? ' · applied' : body.move.id === 'keep' ? ' · kept' : ' · below gate'}`,
+    `#${call} ${body.move.id.padEnd(14)} conf ${body.move.confidence.toFixed(2)} likeness ${(body.likeness ?? 0).toFixed(2)}${body.mismatch != null ? ` mismatch ${body.mismatch.toFixed(3)}` : ''} ${ms} ms${next ? ` · applied${verdict.strength > 1 ? ' x2' : ''}` : body.move.id === 'keep' ? ' · kept' : ' · first vote'}`,
   );
-  if (next) {
-    gist = next;
-    keeps = 0;
-  } else if (body.move.id === 'keep') {
-    keeps += 1;
-    if (keeps >= 2 && body.move.confidence >= 0.6) {
-      console.log('satisfied: two keeps in a row');
-      break;
-    }
+  if (next) gist = next;
+  if (verdict.satisfied) {
+    console.log('satisfied');
+    break;
   }
 }
 const sorted = [...latencies].sort((a, b) => a - b);

@@ -123,22 +123,30 @@ function smin(a: number, b: number, k: number): number {
   return b + (a - b) * h - k * h * (1 - h);
 }
 
-/** Signed distance of the whole gist at a world point; the shader's `sdScene`, on the CPU. */
-export function gistDistance(gist: Gist, point: Vec3, rows = gist.primitives.map((primitive) => rotationRows(primitive.rotation))): number {
+/**
+ * Signed distance of the whole gist at a world point; the shader's `sdScene`,
+ * on the CPU. `solidOnly` skips the carved parts: a hollow or a dimple is
+ * interior detail that leaves the outer silhouette alone, and a thin wall
+ * would otherwise slip between grid samples and read as a hole.
+ */
+export function gistDistance(gist: Gist, point: Vec3, rows = gist.primitives.map((primitive) => rotationRows(primitive.rotation)), solidOnly = false): number {
   let d = 1e5;
   gist.primitives.forEach((primitive, index) => {
     if (!primitive.subtract) d = smin(d, sdPrimitive(primitive, rows[index], point), primitive.blend);
   });
-  gist.primitives.forEach((primitive, index) => {
-    if (primitive.subtract) d = Math.max(d, -sdPrimitive(primitive, rows[index], point));
-  });
+  if (!solidOnly) {
+    gist.primitives.forEach((primitive, index) => {
+      if (primitive.subtract) d = Math.max(d, -sdPrimitive(primitive, rows[index], point));
+    });
+  }
   return d;
 }
 
 /**
  * Width profile of the gist seen from the front (looking along -Z), top
- * band first, widths as a fraction of the gist's height. A coarse grid is
- * enough: the profile is for comparing proportions, not for rendering.
+ * band first, widths as a fraction of the gist's height, from the solid
+ * parts only. A coarse grid is enough: the profile is for comparing
+ * proportions, not for rendering.
  */
 export function gistProfile(gist: Gist, bands = PROFILE_BANDS, samples = 48): number[] {
   const bounds = gistBounds(gist);
@@ -160,7 +168,7 @@ export function gistProfile(gist: Gist, bands = PROFILE_BANDS, samples = 48): nu
       let inside = false;
       for (let iz = 0; iz < samples && !inside; iz += 1) {
         const z = z0 + ((iz + 0.5) / samples) * (z1 - z0);
-        if (gistDistance(gist, [x, y, z], rows) <= 0) inside = true;
+        if (gistDistance(gist, [x, y, z], rows, true) <= 0) inside = true;
       }
       if (inside) {
         left = Math.min(left, x);
