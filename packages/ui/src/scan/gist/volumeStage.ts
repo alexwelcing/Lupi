@@ -136,3 +136,58 @@ export async function chooseRecipe(
   const fatness = FATNESS[best.reply.fatness?.choice ?? 'round'];
   return { stage: stageFromPhoto(pixels, best.tolerance, depth, fatness), winner: best.reply, judged, configured: true };
 }
+
+/**
+ * Decode a mask image (a data URL from SAM 3, white where the subject is)
+ * to the size of the particle pixels. Anything brighter than mid-grey and
+ * not transparent counts.
+ */
+export async function maskFromImage(dataUrl: string, width: number, height: number): Promise<MaskImage | null> {
+  if (typeof document === 'undefined') return null;
+  const bitmap = await new Promise<HTMLImageElement | null>((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = dataUrl;
+  });
+  if (!bitmap) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return null;
+  context.drawImage(bitmap, 0, 0, width, height);
+  const { data } = context.getImageData(0, 0, width, height);
+  const mask = new Uint8Array(width * height);
+  let on = 0;
+  for (let index = 0; index < mask.length; index += 1) {
+    const at = index * 4;
+    // SAM 3's masks come as a coloured overlay (red on white) or as black and
+    // white; either way the subject is the part that is not near-white.
+    const bright = (data[at] + data[at + 1] + data[at + 2]) / 3;
+    const saturated = Math.max(data[at], data[at + 1], data[at + 2]) - Math.min(data[at], data[at + 1], data[at + 2]);
+    if (data[at + 3] > 64 && (saturated > 60 || bright < 128)) {
+      mask[index] = 1;
+      on += 1;
+    }
+  }
+  if (on === 0) return null;
+  return { width, height, data: mask };
+}
+
+/** A stage from a mask made elsewhere (SAM 3), on the same photo, keeping the recipe. */
+export function stageFromMask(pixels: { width: number; height: number; data: Uint8ClampedArray | Uint8Array }, given: MaskImage, tolerance: number, depth: DepthModel = 'inflate', fatness = FATNESS.round): VolumeStage {
+  const { mask, components } = largestComponent(given);
+  const cleaned = fillSmallHoles(mask);
+  const candidate: MaskCandidate = { tolerance, mask: cleaned, features: maskFeatures(cleaned, components) };
+  const sheet = { width: (PHOTO_SHEET.height * pixels.width) / Math.max(pixels.height, 1), height: PHOTO_SHEET.height };
+  const frame = frameMask(candidate.features, sheet);
+  const volume = buildVolume(candidate.mask, { depth, fatness, sheet, ...frame });
+  return {
+    photo: { width: pixels.width, height: pixels.height, data: pixels.data, mask: candidate.mask.data, frame },
+    candidate,
+    volume,
+    masked: usable(candidate),
+    palette: maskPalette(pixels, candidate.mask.data),
+  };
+}

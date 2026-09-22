@@ -195,6 +195,71 @@ primitive vocabulary below is now the fallback for a photo where nothing
 stands out from the background (a full-frame texture, a screenshot), and
 for the demos.
 
+### The remote models, and watching them arrive (2026-09-22, latest)
+
+The device's cut and inflation are the first act, on screen in a frame.
+The later acts come from Hugging Face, through the edge, with the token
+never leaving it (`apps/mcp-worker/src/hf.ts` is a Gradio Space client and
+a Hub MCP client; `remote.ts` is the three routes). Every act is chosen by
+Jev and watched by the viewer, so nothing waits in the dark:
+
+1. **Plan** (`POST /v1/scan/plan`, ~150–600 ms). The edge checks which
+   Spaces are running (Hub API, cached a minute) and asks Jev, from the
+   subject and the silhouette's measurements, two Choices and a Noul: cut
+   from the device's mask or ask SAM 3; skip the rebuild or ask SAM 3D; how
+   much a turn would gain. On the synthetic photos: mug, cat, and table
+   get `sam3d` (0.96, 0.94, 0.82), the television gets `skip` (0.75, it is
+   flat), and the tree, whose edge is ragged, gets `sam3` first (0.89).
+2. **Segment** (`POST /v1/scan/segment`, ~3.5 s). SAM 3 on
+   `prithivMLmods/SAM3-Demo` (ZeroGPU), prompted with the subject, answers
+   with mask images; the page decodes the best one at the particle pixels'
+   size and recuts the volume under the same particles, so nothing jumps.
+   The mug came back as one mask, "coffee mug (0.96)".
+3. **Reconstruct** (`POST /v1/scan/reconstruct`, ~60 s, minutes when the
+   Space is cold). SAM 3D Objects on `dev-bjoern/sam3d-objects-mcp`
+   segments and rebuilds the subject as a vertex-coloured mesh: the mug
+   was 1.15 million faces and 23 MB, the cat 437 thousand and 8.7 MB. The
+   edge parses the GLB (`packages/core/src/gist/points.ts`, single
+   precision, nothing else allocated), samples the surface by area with
+   colours and face normals, and packs `lupi.points.v1`: 12 bytes a point,
+   703 kB for sixty thousand. The page never sees the mesh.
+4. **Align** (`align.ts`, on the device, milliseconds). That Space leaves
+   out SAM 3D's layout step, so the mesh arrives in the object's own
+   frame. The photo knows where the handle was: the points are turned
+   about the vertical axis, with and without a mirror, and the turn whose
+   projected silhouette matches the mask best wins (overlap with the
+   mask, the box's proportions, and where each row starts and ends, which
+   is what tells a cat facing left from one facing right). The mug landed
+   at 282° with the handle on the right; the cat at 132°, head to the
+   right as photographed.
+5. **Assemble.** Every particle gets one point as its home, with the
+   point's colour and normal (`homes`, a second storage buffer the step
+   kernel reads). The call goes out as a wave from the bottom of the
+   object to the top over about two and a half seconds, each particle
+   taking on its point's colour as it lands, so the flat cut-out is seen
+   being rebuilt in the round. Three seconds in, the camera starts to
+   orbit and shows the back. Points come far to near and are drawn in
+   that order, and a settled disc facing away from the eye fades, which
+   is what keeps the inside of the mug from bleeding through its front.
+
+Seen headless (`pnpm scan:gist:headless -- --photo=mug --depth=revolve
+--fatness=round --glb=.verify-artifacts/hf/sam3d-mug.glb`): the assembling
+frame is the mug mid-flight, the assembled frame is a hollow red mug with
+its handle, the turned frame shows the handle from the side. The cat
+assembles as a cat and turns to show its back. `pnpm scan:hf:bench` drives
+the same Spaces from Node (`--sam3`, `--sam3d`, `--plan`, `--mcp`), after
+`pnpm scan:photos:export` writes the JPEGs. The gaussian-splat Space
+(`fayyazio/sam3d-objects-gradio`) was tried and is broken upstream (its
+checkpoints are missing), so the mesh path is the one in use; a splat
+Space that works would drop straight in, since the points format already
+carries what a splat centre has.
+
+The Hub MCP server (`https://huggingface.co/mcp`, `HfMcpClient`) answers
+with the token too: repo search, repo details, the filesystem tools. It is
+there for agents and for a future plan step that discovers Spaces instead
+of naming them; the routes today name their Spaces by env
+(`HF_SAM3_SPACE`, `HF_SAM3D_SPACE`) with public defaults.
+
 ### Three more ways in (2026-09-22, later)
 
 The vocabulary was the ceiling, so three different attacks on it:
@@ -331,6 +396,7 @@ Both keys live only on the Worker. The browser never holds either.
 cd apps/mcp-worker
 npx -y wrangler@4.110.0 secret put ANTHROPIC_API_KEY   # vision
 npx -y wrangler@4.110.0 secret put TYPESAFE_API_KEY    # Jev (docs/jev-integration.md)
+npx -y wrangler@4.110.0 secret put HF_TOKEN            # Hugging Face: SAM 3, SAM 3D Objects, Hub MCP (fine-grained, inference only)
 ```
 
 Locally both go in `apps/mcp-worker/.dev.vars`; the Vite dev server proxies

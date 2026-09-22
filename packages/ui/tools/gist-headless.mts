@@ -14,7 +14,7 @@ import { createGistEngine, GIST_PARTICLE_COUNT, PARTICLE_FLOATS } from '../src/s
 import { DEMO_GISTS, FATNESS } from '../src/scan/gist/gistClient';
 import { DEFAULT_TOLERANCE, stageFromPhoto } from '../src/scan/gist/volumeStage';
 import { SYNTHETIC_KINDS, syntheticPhoto, type SyntheticKind } from './synthetic-photos.mts';
-import { applyMove, applicableMoves, describeGist, type DepthModel } from '@atlas/core/gist';
+import { alignPointsToMask, applyMove, applicableMoves, describeGist, packPoints, parseGlb, sampleMeshPoints, unpackPoints, type DepthModel } from '@atlas/core/gist';
 
 // The shaders have no imports, so their text is already complete WGSL.
 const step = { wgsl: readFileSync(fileURLToPath(new URL('../src/scan/gist/gist-step.wgsl', import.meta.url)), 'utf8') };
@@ -158,6 +158,40 @@ engine.setAttract(1);
 engine.setEnergy(0.15);
 advance(240);
 console.log('settled: lit fraction', (await snapshot('settled')).toFixed(3), await glowStats());
+
+// `--glb=<file>` assembles a reconstructed object (a SAM 3D Objects GLB, say)
+// on top of the settled photo: every particle flies to a sampled point of the
+// mesh, bottom up, then the camera turns to show it is round.
+const glbArg = process.argv.find((arg) => arg.startsWith('--glb='))?.slice('--glb='.length);
+if (glbArg) {
+  const mesh = parseGlb(readFileSync(glbArg).buffer as ArrayBuffer);
+  const orientArg = process.argv.find((arg) => arg.startsWith('--orient='))?.slice('--orient='.length);
+  const orient = orientArg ? (orientArg.split(',').map(Number) as [number, number, number]) : undefined;
+  const cloud = sampleMeshPoints(mesh, count, { random, orient });
+  const packed = packPoints(cloud);
+  console.log(`glb: ${mesh.vertexCount} vertices, ${mesh.indices ? mesh.indices.length / 3 : 0} triangles, ${mesh.colors ? 'coloured' : 'uncoloured'} → ${cloud.count} points, ${(packed.byteLength / 1024).toFixed(0)} kB packed · bounds ${cloud.min.map((v) => v.toFixed(2)).join(',')} .. ${cloud.max.map((v) => v.toFixed(2)).join(',')}`);
+  let homes = unpackPoints(packed);
+  if (stage?.masked && !process.argv.includes('--no-align')) {
+    // Turn the reconstruction to face the way the photo saw it.
+    const aligned = alignPointsToMask(homes, stage.candidate.mask);
+    homes = aligned.points;
+    const runnersUp = aligned.alignment.tried
+      .slice()
+      .sort((a, b) => b.overlap - a.overlap)
+      .slice(0, 3)
+      .map((entry) => `${Math.round((entry.yaw * 180) / Math.PI)}°${entry.mirrored ? ' mirrored' : ''} ${entry.overlap.toFixed(2)}`)
+      .join(' · ');
+    console.log(`aligned: yaw ${Math.round((aligned.alignment.yaw * 180) / Math.PI)}°${aligned.alignment.mirrored ? ' mirrored' : ''} · overlap ${aligned.alignment.overlap.toFixed(2)} · best three ${runnersUp}`);
+  }
+  engine.setHomes(homes);
+  advance(60);
+  console.log('assembling: lit fraction', (await snapshot('assembling')).toFixed(3));
+  advance(200);
+  console.log('assembled: lit fraction', (await snapshot('assembled')).toFixed(3), await glowStats());
+  engine.setSpin(1.2);
+  advance(60);
+  console.log('turned: lit fraction', (await snapshot('turned')).toFixed(3));
+}
 
 const moved = stage?.masked ? null : applyMove(gist, applicableMoves(gist)[0].id);
 if (moved) {

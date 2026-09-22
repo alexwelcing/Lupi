@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Gist, Volume } from '@atlas/core/gist';
+import type { ColouredPoints, Gist, Volume } from '@atlas/core/gist';
 import type { GistParticles } from './gistParticles';
 import type { PhotoPixels } from './gistEngine';
 import type { ScanSwirl } from '../swirl';
@@ -31,6 +31,10 @@ export interface GistStageProps {
   photoHeight?: number;
   /** The photo's pixels; when given, the particles are born as the photo and carry its colours. */
   photoPixels?: PhotoPixels | null;
+  /** A reconstructed object's coloured points: every particle flies to one, bottom up. */
+  points?: ColouredPoints | null;
+  /** Camera orbit rate, radians per second; 0 holds the photo's own view. */
+  spin?: number;
   /** True while a scan is in flight: the swirl runs and the photo dims. */
   active: boolean;
   /** The shape to settle onto; null keeps whirling. */
@@ -72,7 +76,7 @@ function formatMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = null, active, gist, volume = null, palette = null, settled, status, label, onRenderer }: GistStageProps) {
+export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = null, points = null, spin = 0, active, gist, volume = null, palette = null, settled, status, label, onRenderer }: GistStageProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const particles = useRef<GistParticles | null>(null);
   const swirl = useRef<ScanSwirl | null>(null);
@@ -84,20 +88,27 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = nul
     setRendererState(next);
     onRenderer?.(next);
   };
-  const latest = useRef({ active, gist, volume, palette, settled });
-  latest.current = { active, gist, volume, palette, settled };
+  const latest = useRef({ active, gist, volume, palette, settled, points, spin });
+  latest.current = { active, gist, volume, palette, settled, points, spin };
   const seededPhoto = useRef<PhotoPixels | null>(null);
+  const homedPoints = useRef<ColouredPoints | null>(null);
 
   const apply = () => {
-    const { active: isActive, gist: shape, volume: field, palette: colours, settled: isSettled } = latest.current;
+    const { active: isActive, gist: shape, volume: field, palette: colours, settled: isSettled, points: cloud, spin: rate } = latest.current;
     const engine = particles.current;
     if (engine) {
-      const hasShape = Boolean(field || shape);
+      const hasShape = Boolean(field || shape || cloud);
       engine.setFade(isActive || hasShape ? 1 : 0);
       // With a volume the photo's silhouette is the shape; the gist's primitives only stand in without one.
       engine.setVolume(field);
       engine.setGist(field ? null : shape);
       if (colours) engine.setPalette(colours[0], colours[1]);
+      // The reconstruction's points, once, when they arrive or go.
+      if (homedPoints.current !== cloud) {
+        homedPoints.current = cloud;
+        engine.setHomes(cloud);
+      }
+      engine.setSpin(rate);
       engine.setAttract(hasShape ? 1 : 0);
       engine.setEnergy(hasShape ? (isSettled ? 0.08 : 0.2) : isActive ? 1 : 0);
       return;
@@ -151,7 +162,7 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = nul
     if (active || gist || volume) ensure();
     apply();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `apply` reads the latest props through a ref.
-  }, [active, gist, volume, palette, settled]);
+  }, [active, gist, volume, palette, settled, points, spin]);
 
   // A new photo (a rescan, a different picture) reseeds the particles as that photo.
   useEffect(() => {

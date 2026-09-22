@@ -26,8 +26,8 @@ struct Camera {
   eye: vec3f,
   attract: f32,
   fade: f32,
-  pad0: f32,
-  pad1: f32,
+  homesActive: f32,
+  homesSince: f32,
   pad2: f32,
 }
 
@@ -65,6 +65,8 @@ const PROJECTION_SCALE: f32 = 3.27;
   // The per-particle hue nudge comes from the seed; the photo colour, when the
   // particle was born from a pixel, wins over the palette.
   let hue = fract(particle.seed * 7.31);
+  // The step kernel blends a reconstructed point's colour into `color` as the
+  // particle is called to it, so one buffer serves the vertex stage.
   let photo = unpack4x8unorm(particle.color);
   var base = mix(camera.main, camera.accent, clamp(height * 0.45 + (hue - 0.5) * 0.5, 0.0, 1.0));
   base = mix(base, base * vec3f(1.08, 1.0, 0.92), height * 0.3);
@@ -82,7 +84,10 @@ const PROJECTION_SCALE: f32 = 3.27;
   let airy = mix(mix(base, vec3f(1.0), 0.35), photo.rgb, photo.a * 0.9);
   out.tint = mix(airy, lit, settled);
   // Thousands of airborne discs overlap, so each stays faint; the skin is nearly opaque.
-  out.alpha = mix(mix(0.12, 0.5, photo.a), 0.95, settled) * camera.fade;
+  // A settled disc facing away from the eye fades: with no depth test, that
+  // is what keeps the back of a shape from bleeding through the front.
+  let facing = smoothstep(-0.35, 0.15, dot(n, toEye));
+  out.alpha = mix(mix(0.12, 0.5, photo.a), 0.95 * facing, settled) * camera.fade;
   out.settled = settled;
   return out;
 }

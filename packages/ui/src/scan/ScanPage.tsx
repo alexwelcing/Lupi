@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { fitProportions, gistProfile, latheFromProfile, outlineBodyProfile, outlineProfile, profileMismatch, profileWords, type Gist } from '@atlas/core/gist';
+import { alignPointsToMask, fitProportions, gistProfile, latheFromProfile, outlineBodyProfile, outlineProfile, profileMismatch, profileWords, type Alignment, type ColouredPoints, type Gist } from '@atlas/core/gist';
 import { useStore } from '../store';
 import { track, ANALYTICS_EVENTS } from '../analytics';
 import { SCAN_SEO, useSeo } from '../seo';
@@ -14,10 +14,33 @@ import {
   type ScanMolecule,
   type ScanResult,
 } from './identify';
-import { DEMO_GISTS, requestGist, type GistReply } from './gist/gistClient';
+import { DEMO_GISTS, requestGist, requestPlan, requestReconstruct, requestSegment, type GistReply, type PlanReply, type ReconstructReply, type SegmentReply } from './gist/gistClient';
 import { startSculptLoop, type SculptEvent, type SculptLoopHandle } from './gist/sculptLoop';
 import { GistStage, moveWords, type StageLabel, type StageRenderer } from './gist/GistStage';
-import { chooseRecipe, stageFromPhoto, type RecipeOutcome, type VolumeStage } from './gist/volumeStage';
+import { chooseRecipe, maskFromImage, stageFromMask, stageFromPhoto, type RecipeOutcome, type VolumeStage } from './gist/volumeStage';
+
+/**
+ * The remote acts, in order: Jev plans, SAM 3 confirms the mask, SAM 3D
+ * rebuilds the object, the particles assemble it and the camera turns. Each
+ * act is visible on the stage while it runs; the dev panel shows the rest.
+ */
+interface RemoteState {
+  act: 'idle' | 'planning' | 'segmenting' | 'reconstructing' | 'assembling' | 'done' | 'skipped' | 'failed';
+  plan: PlanReply | null;
+  segment: SegmentReply | null;
+  segmentApplied: boolean;
+  reconstruct: ReconstructReply | null;
+  alignment: Alignment | null;
+  startedAt: number;
+  note: string | null;
+}
+
+const REMOTE_IDLE: RemoteState = { act: 'idle', plan: null, segment: null, segmentApplied: false, reconstruct: null, alignment: null, startedAt: 0, note: null };
+/** Particles the reconstruction is sampled to on the edge: one per particle at the default count. */
+const RECONSTRUCT_POINTS = 60_000;
+/** How long after the assembly starts the camera begins to turn, and how fast. */
+const TURN_AFTER_MS = 3_200;
+const TURN_RATE = 0.28;
 import './scan.css';
 
 /**
@@ -99,6 +122,9 @@ export function ScanPage() {
   const [volumeStage, setVolumeStage] = useState<VolumeStage | null>(null);
   const [recipe, setRecipe] = useState<RecipeOutcome | null>(null);
   const [recipeBusy, setRecipeBusy] = useState(false);
+  const [remote, setRemote] = useState<RemoteState>(REMOTE_IDLE);
+  const [points, setPoints] = useState<ColouredPoints | null>(null);
+  const [spin, setSpin] = useState(0);
   const storeError = useStore((state) => state.error);
   const storeLoading = useStore((state) => state.loading);
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -115,6 +141,70 @@ export function ScanPage() {
     sculpt.current?.stop();
     sculpt.current = null;
     setSculpting(false);
+  }, []);
+
+  /* ─── The remote acts: Jev plans, SAM 3 masks, SAM 3D rebuilds, the particles assemble ─── */
+
+  const runRemote = useCallback(async (prepared: PreparedImage, subject: string, signal: AbortSignal) => {
+    const stage = stageRef.current;
+    if (!stage?.masked) return;
+    const startedAt = Date.now();
+    setRemote({ ...REMOTE_IDLE, act: 'planning', startedAt });
+    const plan = await requestPlan(subject, stage.candidate.features, { masked: stage.masked, pieces: stage.candidate.features.components }, signal).catch(() => null);
+    if (signal.aborted) return;
+    if (!plan || plan.configured === false || !plan.remote) {
+      setRemote((state) => ({ ...state, act: 'skipped', plan, note: !plan ? 'the plan call failed' : plan.configured === false ? 'Jev is off' : 'no Hugging Face token on the edge' }));
+      return;
+    }
+    setRemote((state) => ({ ...state, plan }));
+    const image = { mediaType: prepared.mediaType, data: prepared.base64 };
+
+    // Act one: SAM 3's mask, when Jev doubts the device's cut.
+    if (plan.mask?.choice === 'sam3' && plan.services?.sam3.stage === 'RUNNING') {
+      setRemote((state) => ({ ...state, act: 'segmenting' }));
+      const segment = await requestSegment(image, subject, signal).catch(() => null);
+      if (signal.aborted) return;
+      let applied = false;
+      const best = segment?.masks?.[0];
+      const current = stageRef.current;
+      if (best && current) {
+        const mask = await maskFromImage(best.image, current.photo.width, current.photo.height).catch(() => null);
+        if (signal.aborted) return;
+        if (mask) {
+          // Same photo object, so the particles hold; the volume under them is recut.
+          const next = { ...stageFromMask(current.photo, mask, current.candidate.tolerance, current.volume.depth, current.volume.fatness), photo: current.photo };
+          if (next.masked) {
+            stageRef.current = next;
+            setVolumeStage(next);
+            applied = true;
+          }
+        }
+      }
+      setRemote((state) => ({ ...state, segment, segmentApplied: applied }));
+    }
+
+    // Act two: SAM 3D's reconstruction, when the subject is worth a turn.
+    if (plan.reconstruct?.choice === 'sam3d' && plan.services?.sam3d.stage === 'RUNNING') {
+      setRemote((state) => ({ ...state, act: 'reconstructing' }));
+      const reconstruct = await requestReconstruct(image, subject, RECONSTRUCT_POINTS, signal).catch(() => null);
+      if (signal.aborted) return;
+      if (!reconstruct) {
+        setRemote((state) => ({ ...state, act: 'failed', note: 'SAM 3D did not answer' }));
+        return;
+      }
+      // Turn the reconstruction to face the way the photo saw it, then let every particle fly to its point.
+      const mask = stageRef.current?.candidate.mask;
+      const aligned = mask ? alignPointsToMask(reconstruct.points, mask) : null;
+      setRemote((state) => ({ ...state, act: 'assembling', reconstruct, alignment: aligned?.alignment ?? null }));
+      setPoints(aligned?.points ?? reconstruct.points);
+      window.setTimeout(() => {
+        if (signal.aborted) return;
+        setSpin(TURN_RATE);
+        setRemote((state) => (state.act === 'assembling' ? { ...state, act: 'done' } : state));
+      }, TURN_AFTER_MS);
+      return;
+    }
+    setRemote((state) => ({ ...state, act: 'done' }));
   }, []);
 
   /* ─── Jev sculpts the gist, fast ─── */
@@ -207,6 +297,7 @@ export function ScanPage() {
             stageRef.current = next;
             setVolumeStage(next);
           }
+          await runRemote(prepared, reply.gist.label, controller.signal);
           return;
         }
         if (reply?.gist) {
@@ -267,7 +358,7 @@ export function ScanPage() {
       }
       await gistPromise;
     },
-    [beginSculpt, candidates, stopSculpt],
+    [beginSculpt, candidates, runRemote, stopSculpt],
   );
 
   const accept = useCallback(
@@ -333,6 +424,9 @@ export function ScanPage() {
     setSculptEvents([]);
     setVolumeStage(null);
     setRecipe(null);
+    setRemote(REMOTE_IDLE);
+    setPoints(null);
+    setSpin(0);
     stageRef.current = null;
     setImage((previous) => {
       if (previous) URL.revokeObjectURL(previous.previewUrl);
@@ -350,6 +444,9 @@ export function ScanPage() {
   const runDemo = (name: string) => {
     abort.current?.abort();
     setVolumeStage(null);
+    setRemote(REMOTE_IDLE);
+    setPoints(null);
+    setSpin(0);
     stageRef.current = null;
     setImage((previous) => {
       if (previous) URL.revokeObjectURL(previous.previewUrl);
@@ -406,6 +503,16 @@ export function ScanPage() {
         model: sculptEvents[sculptEvents.length - 1]?.model,
       }
     : null;
+  // While the remote acts run, the stage says so: the viewer is watching the
+  // on-device shape hold, and should know something better is on its way.
+  const remoteLine =
+    remote.act === 'segmenting'
+      ? 'SAM 3 is checking the outline…'
+      : remote.act === 'reconstructing'
+        ? 'SAM 3D is rebuilding it in the round…'
+        : remote.act === 'assembling'
+          ? 'Assembling…'
+          : null;
   const stageStatus = busy
     ? {
         line:
@@ -416,7 +523,9 @@ export function ScanPage() {
               : SCAN_STATUS_LINES[statusIndex],
         elapsedMs: elapsed,
       }
-    : null;
+    : remoteLine
+      ? { line: remoteLine, elapsedMs: Date.now() - remote.startedAt }
+      : null;
 
   return (
     <main id="main" className="student-home scan">
@@ -503,6 +612,8 @@ export function ScanPage() {
             photoWidth={image?.width}
             photoHeight={image?.height}
             photoPixels={volumeStage?.photo ?? image?.pixels ?? null}
+            points={points}
+            spin={spin}
             active={busy}
             gist={gist}
             volume={volumeStage?.masked ? volumeStage.volume : null}
@@ -730,6 +841,38 @@ export function ScanPage() {
                     : volumeStage?.masked
                       ? 'not judged (Jev off, or no answer)'
                       : '—'}
+              </dd>
+              <dt>Plan</dt>
+              <dd>
+                {remote.act === 'planning'
+                  ? 'asking Jev whether the remote models are worth the wait…'
+                  : remote.plan?.configured
+                    ? `mask ${remote.plan.mask?.choice ?? '—'} ${percent(remote.plan.mask?.confidence ?? 0)} · reconstruct ${remote.plan.reconstruct?.choice ?? '—'} ${percent(remote.plan.reconstruct?.confidence ?? 0)} · a turn gains ${percent(remote.plan.gains ?? 0)} · SAM 3 ${remote.plan.services?.sam3.stage.toLowerCase() ?? '?'} on ${remote.plan.services?.sam3.hardware ?? '?'} · SAM 3D ${remote.plan.services?.sam3d.stage.toLowerCase() ?? '?'} on ${remote.plan.services?.sam3d.hardware ?? '?'} · ${formatMs(remote.plan.timing?.ms)}`
+                    : remote.act === 'skipped'
+                      ? `not planned: ${remote.note ?? 'no reason given'}`
+                      : '—'}
+              </dd>
+              <dt>SAM 3</dt>
+              <dd>
+                {remote.act === 'segmenting'
+                  ? 'asking SAM 3 for the subject’s mask…'
+                  : remote.segment
+                    ? `${remote.segment.masks?.length ?? 0} mask${(remote.segment.masks?.length ?? 0) === 1 ? '' : 's'} · best ${remote.segment.masks?.[0]?.label ?? '—'} · ${remote.segmentApplied ? 'the volume was recut from it' : 'kept the device’s cut'} · ${formatMs(remote.segment.timing?.ms)} via ${remote.segment.space ?? '?'}`
+                    : remote.plan?.mask?.choice === 'device'
+                      ? 'not asked: Jev trusted the device’s cut'
+                      : '—'}
+              </dd>
+              <dt>SAM 3D</dt>
+              <dd>
+                {remote.act === 'reconstructing'
+                  ? `SAM 3D Objects is rebuilding the subject… ${Math.round((Date.now() - remote.startedAt) / 1000)} s`
+                  : remote.reconstruct
+                    ? `${remote.reconstruct.triangles.toLocaleString()} triangles → ${remote.reconstruct.points.count.toLocaleString()} coloured points · turned ${remote.alignment ? `${Math.round((remote.alignment.yaw * 180) / Math.PI)}°${remote.alignment.mirrored ? ' mirrored' : ''} to match the photo (overlap ${remote.alignment.overlap.toFixed(2)})` : 'as it came'} · ${formatMs(remote.reconstruct.spaceMs ?? undefined)} on the Space, ${formatMs(remote.reconstruct.ms ?? undefined)} in all · ${remote.act === 'done' ? 'assembled, turning' : 'assembling'}`
+                    : remote.act === 'failed'
+                      ? `failed: ${remote.note ?? 'no detail'}`
+                      : remote.plan?.reconstruct?.choice === 'skip'
+                        ? 'not asked: Jev judged a turn not worth the wait'
+                        : '—'}
               </dd>
               <dt>Silhouette</dt>
               <dd>

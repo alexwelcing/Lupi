@@ -24,6 +24,7 @@ import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } fro
 import { SCAN_ROUTE, handleScanIdentify, scanConfigured, scanVisionModel } from './scan';
 import { GIST_ROUTE, SCULPT_ROUTE, handleScanGist, handleScanSculpt } from './gist';
 import { RECIPE_ROUTE, handleScanRecipe } from './recipe';
+import { PLAN_ROUTE, RECONSTRUCT_ROUTE, SEGMENT_ROUTE, handleScanPlan, handleScanReconstruct, handleScanSegment, remoteConfigured, remoteSpaces } from './remote';
 import {
   assessAsset,
   byteSourceFromUrl,
@@ -112,6 +113,10 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_API_BASE?: string;
   ANTHROPIC_VISION_MODEL?: string;
+  /** Hugging Face token for the scanner's remote models (Spaces, Hub MCP). `wrangler secret put HF_TOKEN`; never a var. */
+  HF_TOKEN?: string;
+  HF_SAM3_SPACE?: string;
+  HF_SAM3D_SPACE?: string;
   CF_VERSION_METADATA?: WorkerVersionMetadata;
 }
 
@@ -687,6 +692,15 @@ export async function handleRequest(
 
     if (url.pathname === RECIPE_ROUTE) {
       return withCors(await handleScanRecipe(request, env), cors);
+    }
+    if (url.pathname === PLAN_ROUTE) {
+      return withCors(await handleScanPlan(request, env), cors);
+    }
+    if (url.pathname === SEGMENT_ROUTE) {
+      return withCors(await handleScanSegment(request, env), cors);
+    }
+    if (url.pathname === RECONSTRUCT_ROUTE) {
+      return withCors(await handleScanReconstruct(request, env), cors);
     }
 
     if (url.pathname === '/v1/render') {
@@ -2069,9 +2083,10 @@ function statusPayload(env: Env) {
     jev: { configured: jevConfigured(env), routes: [...JEV_ROUTES] },
     scan: {
       configured: scanConfigured(env),
-      routes: [SCAN_ROUTE, GIST_ROUTE, SCULPT_ROUTE, RECIPE_ROUTE],
+      routes: [SCAN_ROUTE, GIST_ROUTE, SCULPT_ROUTE, RECIPE_ROUTE, PLAN_ROUTE, SEGMENT_ROUTE, RECONSTRUCT_ROUTE],
       vision: scanConfigured(env) ? scanVisionModel(env) : null,
       jev: jevConfigured(env),
+      remote: { configured: remoteConfigured(env), spaces: remoteSpaces(env) },
     },
     bindings: {
       webAssets: Boolean(env.WEB_ASSETS),

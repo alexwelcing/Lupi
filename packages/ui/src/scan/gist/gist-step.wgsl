@@ -51,8 +51,18 @@ struct Params {
   volumeCell: f32,
   volumeN: u32,
   volumeActive: u32,
-  pad2: u32,
-  pad3: u32,
+  homesActive: u32,
+  homesSince: f32,
+}
+
+// A 3D home per particle: a sampled point of a reconstructed object, with
+// its colour. When active, every particle flies to its own point, in a wave
+// from the bottom up, so the object is seen being assembled.
+struct Home {
+  pos: vec3f,
+  color: u32,
+  nrm: vec3f,
+  pad: f32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -63,6 +73,7 @@ struct Params {
 @group(0) @binding(3) var<storage, read> volume: array<f32>;
 // The volume's front face: half depth per (x, y) column, same grid, x fastest.
 @group(0) @binding(4) var<storage, read> front: array<f32>;
+@group(0) @binding(5) var<storage, read> homes: array<Home>;
 
 // Bilinear front depth at a world (x, y); zero off the object.
 fn frontDepth(xy: vec2f) -> f32 {
@@ -295,8 +306,27 @@ fn step(@builtin(global_invocation_id) id: vec3u) {
   var nrm = particle.nrm;
   if (params.attract > 0.001) {
     let d = sdScene(p);
-    let n = sceneNormal(p);
-    if (particle.homed > 0.5 && params.volumeActive != 0u) {
+    var n = sceneNormal(p);
+    // The assembly wave: a point low on the object is called first, one at
+    // the top last, over about two and a half seconds.
+    var assembled = 0.0;
+    if (params.homesActive != 0u) {
+      let order = clamp(homes[i].pos.y * 0.5 + 0.5, 0.0, 1.0);
+      assembled = smoothstep(0.0, 1.0, (t - params.homesSince) * 0.8 - order * 1.2);
+    }
+    if (assembled > 0.001) {
+      // Its own point of the reconstructed object, in three dimensions.
+      let goalPoint = homes[i].pos;
+      let away = goalPoint - p;
+      pull = away * mix(1.5, 5.0, assembled) + (hash33(vec3f(f32(i), t * 2.0, seed)) - vec3f(0.5)) * 0.04;
+      glow = 1.0 - clamp(length(away) * 5.0, 0.0, 1.0);
+      // The point carries the face normal it was sampled from.
+      n = normalize(homes[i].nrm + vec3f(0.0, 0.0, 1e-3));
+      // Take on the point's own colour as the flight ends, front and back alike.
+      let own = unpack4x8unorm(homes[i].color);
+      let worn = unpack4x8unorm(particle.color);
+      particle.color = pack4x8unorm(vec4f(mix(worn.rgb, own.rgb, 0.12 * assembled), max(worn.a, assembled)));
+    } else if (particle.homed > 0.5 && params.volumeActive != 0u) {
       // A homed particle knows exactly where it belongs: its own pixel, at
       // the front face's depth there. One stiff spring, no field to slide
       // on, so a table leg four cells wide holds its pixels as well as a

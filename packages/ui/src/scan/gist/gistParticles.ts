@@ -1,6 +1,6 @@
 /// <reference types="vgpu/client" />
 import { init, surface, type Gpu } from 'vgpu';
-import type { Gist, Volume } from '@atlas/core/gist';
+import type { ColouredPoints, Gist, Volume } from '@atlas/core/gist';
 import { GIST_PARTICLE_COUNT, createGistEngine, type GistEngine, type PhotoPixels } from './gistEngine';
 import stepShader from './gist-step.wgsl';
 import pointsShader from './gist-points.wgsl';
@@ -17,6 +17,8 @@ export interface GistParticles {
   setPhoto(photo: PhotoPixels | null): void;
   /** The photo's silhouette inflated, as a signed distance grid; the shape the particles settle onto. */
   setVolume(volume: Volume | null): void;
+  setHomes(points: ColouredPoints | null): void;
+  setSpin(rate: number): void;
   setPalette(main: string, accent: string): void;
   setEnergy(value: number): void;
   setAttract(value: number): void;
@@ -129,6 +131,14 @@ export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: 
       },
       setVolume(volume) {
         engine!.setVolume(volume);
+        wake();
+      },
+      setHomes(points) {
+        engine!.setHomes(points);
+        wake();
+      },
+      setSpin(rate) {
+        engine!.setSpin(rate);
         wake();
       },
       setPalette(main, accent) {

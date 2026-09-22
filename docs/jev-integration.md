@@ -209,6 +209,18 @@ on the held-out set it accepted 4 of 10 valid commands and executed 0 of 6
 invalid ones. The gate is conservative on purpose; widen it from the
 `lupi_jev` `route: "command"` log lines, not from the fixtures.
 
+## Route: `POST /v1/scan/plan`
+
+Jev decides whether the scanner's remote models are worth the viewer's
+wait. The state is the subject, the on-device cut measured (fill, aspect,
+width profile, symmetry, edge raggedness, pieces), and each remote
+service's cost and live status (SAM 3, about four seconds; SAM 3D Objects,
+about a minute). Three questions in one System One call: `mask`
+(`device` | `sam3`), `reconstruct` (`skip` | `sam3d`), and `gains`, a Noul
+for how much a 3D turn would show. Timeout 1.5 s, no retries; without
+`TYPESAFE_API_KEY` the route answers `{ configured: false, remote }` and
+the page skips the remote acts. See `docs/scan-pipeline.md`.
+
 ## Route: `POST /v1/scan/identify`
 
 The photo scanner reuses the switch judgment. Claude turns a photo into a

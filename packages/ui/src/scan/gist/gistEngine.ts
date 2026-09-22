@@ -1,5 +1,5 @@
 import { compute, draw, frame, storage, type Compute, type Draw, type Gpu, type ShaderSource, type StorageBuffer, type Target } from 'vgpu';
-import { GIST_MAX_PRIMITIVES, VOLUME_SIZE, type Gist, type GistPrimitive, type Volume } from '@atlas/core/gist';
+import { GIST_MAX_PRIMITIVES, VOLUME_SIZE, type ColouredPoints, type Gist, type GistPrimitive, type Volume } from '@atlas/core/gist';
 
 /**
  * The gist engine: a few thousand particles that whirl, then flow onto the
@@ -18,6 +18,14 @@ export interface GistEngine {
   setGist(gist: Gist | null): void;
   /** Replace the volume: the photo's own silhouette inflated. Unioned with the gist's primitives, if any. */
   setVolume(volume: Volume | null): void;
+  /**
+   * Give every particle a 3D point of a reconstructed object, with its
+   * colour, and start the assembly wave; `null` releases them back to the
+   * volume or gist. Fewer points than particles are shared round-robin.
+   */
+  setHomes(points: ColouredPoints | null): void;
+  /** Camera orbit rate in radians per second; 0 holds the front view. */
+  setSpin(rate: number): void;
   /** The two colours the palette-wearing particles use (hex). */
   setPalette(main: string, accent: string): void;
   /** Reseed every particle from a photo (a flat sheet of pixels facing the camera) or back onto the ring. */
@@ -51,6 +59,8 @@ export interface GistEngineDeps {
 
 export const GIST_PARTICLE_COUNT = 60_000;
 export const PARTICLE_FLOATS = 16;
+/** Floats per 3D home: position, packed colour, normal, pad. */
+export const HOME_FLOATS = 8;
 export const PRIM_FLOATS = 24;
 const WORKGROUP = 64;
 const KIND_INDEX: Record<GistPrimitive['kind'], number> = { sphere: 0, ellipsoid: 1, box: 2, cylinder: 3, capsule: 4, cone: 5, torus: 6, lathe: 7, arc: 8 };
@@ -257,6 +267,11 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
   const frontBuffer: StorageBuffer = storage(gpu, VOLUME_SIZE * VOLUME_SIZE * 4, 'read');
   frontBuffer.write(new Float32Array(new ArrayBuffer(VOLUME_SIZE * VOLUME_SIZE * 4)));
   let volumeInfo = { origin: [0, 0, 0] as [number, number, number], cell: 1, n: VOLUME_SIZE, active: 0 };
+  // One 3D home per particle (32 bytes: xyz, a packed colour, a normal), for a reconstructed object.
+  const homesBuffer: StorageBuffer = storage(gpu, count * HOME_FLOATS * 4, 'read');
+  homesBuffer.write(new Float32Array(new ArrayBuffer(count * HOME_FLOATS * 4)));
+  let homesInfo = { active: 0, since: 0 };
+  let clock = 0;
 
   const state = { energy: 0, attract: 0, fade: 0 };
   const targets = { energy: 0, attract: 0, fade: 0 };
@@ -267,9 +282,11 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
   let started = 0;
   let disposed = false;
   const runSeed = random() * 100;
+  // The orbit accumulates, so the rate can change without the camera jumping.
+  let spinRate = spin;
+  let orbit = 0;
   const eyeFor = (time: number): [number, number, number] => {
-    const angle = time * spin;
-    return [Math.sin(angle) * ORBIT_RADIUS, 1.1 + Math.sin(time * 0.31) * 0.3, Math.cos(angle) * ORBIT_RADIUS];
+    return [Math.sin(orbit) * ORBIT_RADIUS, 1.1 + Math.sin(time * 0.31) * 0.3, Math.cos(orbit) * ORBIT_RADIUS];
   };
   /** Key light rides above and to the left of the camera, so the lit side always faces the viewer. */
   const lightFor = (eye: [number, number, number]): [number, number, number] => {
@@ -291,8 +308,8 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
       eye,
       attract: state.attract,
       fade: state.fade,
-      pad0: 0,
-      pad1: 0,
+      homesActive: homesInfo.active,
+      homesSince: homesInfo.since,
       pad2: 0,
     };
   };
@@ -301,7 +318,7 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     time,
     dt,
     energy: state.energy,
-    attract: primCount > 0 || volumeInfo.active ? state.attract : 0,
+    attract: primCount > 0 || volumeInfo.active || homesInfo.active ? state.attract : 0,
     count,
     primCount,
     seed: runSeed,
@@ -310,8 +327,8 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     volumeCell: volumeInfo.cell,
     volumeN: volumeInfo.n,
     volumeActive: volumeInfo.active,
-    pad2: 0,
-    pad3: 0,
+    homesActive: homesInfo.active,
+    homesSince: homesInfo.since,
   });
   const step: Compute = compute(gpu, shaders.step, {
     label: 'Lupi gist step',
@@ -321,6 +338,7 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
       particles,
       volume: volumeBuffer,
       front: frontBuffer,
+      homes: homesBuffer,
     },
   });
   const points: Draw = draw(gpu, {
@@ -345,6 +363,33 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
     particles,
     setPhoto(next) {
       particles.write(seedParticles(count, random, next));
+    },
+    setHomes(pointsCloud) {
+      if (!pointsCloud || pointsCloud.count === 0) {
+        homesInfo = { active: 0, since: 0 };
+        return;
+      }
+      const data = new Float32Array(new ArrayBuffer(count * HOME_FLOATS * 4));
+      const view = new DataView(data.buffer);
+      for (let index = 0; index < count; index += 1) {
+        // Spread the particles over the points in order (the points come far
+        // to near, and so does the draw): a stride walk when there are more
+        // points than particles, a repeat when fewer.
+        const point = pointsCloud.count >= count ? Math.floor((index / count) * pointsCloud.count) : index % pointsCloud.count;
+        const base = index * HOME_FLOATS;
+        data[base] = pointsCloud.positions[point * 3];
+        data[base + 1] = pointsCloud.positions[point * 3 + 1];
+        data[base + 2] = pointsCloud.positions[point * 3 + 2];
+        view.setUint32((base + 3) * 4, (pointsCloud.colors[point * 3] | (pointsCloud.colors[point * 3 + 1] << 8) | (pointsCloud.colors[point * 3 + 2] << 16) | (255 << 24)) >>> 0, true);
+        data[base + 4] = pointsCloud.normals[point * 3] / 127;
+        data[base + 5] = pointsCloud.normals[point * 3 + 1] / 127;
+        data[base + 6] = pointsCloud.normals[point * 3 + 2] / 127;
+      }
+      homesBuffer.write(data);
+      homesInfo = { active: 1, since: clock };
+    },
+    setSpin(rate) {
+      spinRate = rate;
     },
     setPalette(mainHex, accentHex) {
       main = hexToRgb(mainHex);
@@ -401,6 +446,8 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
       const dt = Math.min(Math.max((now - previous) / 1000, 0), 0.05);
       previous = now;
       const time = (now - started) / 1000;
+      clock = time;
+      orbit += dt * spinRate;
       ease('energy');
       ease('attract');
       ease('fade', 0.08);

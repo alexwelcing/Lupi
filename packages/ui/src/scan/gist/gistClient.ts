@@ -1,4 +1,4 @@
-import { latheFromProfile, normalizeGist, type DepthModel, type Gist, type MaskFeatures, type OutlinePoint } from '@atlas/core/gist';
+import { latheFromProfile, normalizeGist, unpackPoints, type ColouredPoints, type DepthModel, type Gist, type MaskFeatures, type OutlinePoint } from '@atlas/core/gist';
 import type { PreparedImage } from '../identify';
 
 /**
@@ -176,3 +176,104 @@ export const DEMO_GISTS: Record<string, Gist> = {
     ],
   },
 };
+
+/* ─── Remote models, through the edge ─── */
+
+const PLAN_PATH = '/v1/scan/plan';
+const SEGMENT_PATH = '/v1/scan/segment';
+const RECONSTRUCT_PATH = '/v1/scan/reconstruct';
+const PLAN_TIMEOUT_MS = 4_000;
+const SEGMENT_TIMEOUT_MS = 70_000;
+const RECONSTRUCT_TIMEOUT_MS = 480_000;
+
+export interface ServiceState {
+  space: string;
+  stage: string;
+  hardware: string | null;
+}
+
+export interface PlanReply {
+  configured: boolean;
+  remote: boolean;
+  services?: { sam3: ServiceState; sam3d: ServiceState };
+  mask?: { choice: 'device' | 'sam3'; confidence: number; probabilities: Record<string, number> };
+  reconstruct?: { choice: 'skip' | 'sam3d'; confidence: number; probabilities: Record<string, number> };
+  gains?: number;
+  model?: string;
+  timing?: { ms: number };
+  error?: string;
+}
+
+let planUnavailable = false;
+
+/** Jev's plan for the remote models, from the silhouette's measurements and what is running. */
+export async function requestPlan(subject: string, features: MaskFeatures, device: { masked: boolean; pieces: number }, signal?: AbortSignal): Promise<PlanReply | null> {
+  if (planUnavailable) return { configured: false, remote: false };
+  const { fill, aspect, profile, columns, rows, components, symmetry, edginess } = features;
+  const reply = await post<PlanReply>(PLAN_PATH, { subject, features: { fill, aspect, profile, columns, rows, components, symmetry, edginess }, device }, PLAN_TIMEOUT_MS, signal);
+  if (reply?.configured === false) planUnavailable = true;
+  return reply;
+}
+
+export interface SegmentReply {
+  configured: boolean;
+  space?: string;
+  masks?: Array<{ label: string; score: number | null; image: string }>;
+  timing?: { ms: number };
+  error?: string;
+}
+
+/** SAM 3's concept mask for the subject, as small mask images (data URLs). */
+export async function requestSegment(image: { mediaType: string; data: string }, subject: string, signal?: AbortSignal): Promise<SegmentReply | null> {
+  return post<SegmentReply>(SEGMENT_PATH, { image, subject }, SEGMENT_TIMEOUT_MS, signal);
+}
+
+export interface ReconstructReply {
+  points: ColouredPoints;
+  space: string | null;
+  triangles: number;
+  spaceMs: number | null;
+  ms: number | null;
+  status: string | null;
+}
+
+/**
+ * SAM 3D Objects' reconstruction of the subject, already sampled on the edge
+ * into `lupi.points.v1`. Null when the edge is not configured or failed;
+ * throws on abort.
+ */
+export async function requestReconstruct(image: { mediaType: string; data: string }, subject: string, points: number, signal?: AbortSignal): Promise<ReconstructReply | null> {
+  if (typeof fetch !== 'function') return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RECONSTRUCT_TIMEOUT_MS);
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  try {
+    const response = await fetch(RECONSTRUCT_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/octet-stream, application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({ image, subject, points }),
+    });
+    if (!response.ok || !(response.headers.get('content-type') ?? '').includes('octet-stream')) return null;
+    const buffer = await response.arrayBuffer();
+    const numeric = (name: string) => {
+      const value = Number(response.headers.get(name));
+      return Number.isFinite(value) ? value : null;
+    };
+    return {
+      points: unpackPoints(buffer),
+      space: response.headers.get('x-lupi-space'),
+      triangles: numeric('x-lupi-triangles') ?? 0,
+      spaceMs: numeric('x-lupi-space-ms'),
+      ms: numeric('x-lupi-ms'),
+      status: response.headers.get('x-lupi-status'),
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return null;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
+}
