@@ -147,11 +147,13 @@ export function ViewerApp() {
   const isCopperSceneRoute = normalizedPath === '/scenes/1m-copper-lattice';
   const seoEducationKind = SEO_EDUCATION_ROUTES[normalizedPath] ?? null;
 
-  // An agent driving the viewer wants atoms at full size the moment a load
-  // resolves; the arrival is for people watching.
+  // An agent driving the viewer, or a batch export capturing snapshots on a
+  // timer, wants atoms at full size the moment a load resolves; the arrival
+  // is for people watching.
+  const isBatchExportRoute = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('batchExport') === 'true';
   useEffect(() => {
-    if (isMcpViewerRoute) useStore.getState().setArrivalEnabled(false);
-  }, [isMcpViewerRoute]);
+    if (isMcpViewerRoute || isBatchExportRoute) useStore.getState().setArrivalEnabled(false);
+  }, [isMcpViewerRoute, isBatchExportRoute]);
 
   // Route sync
   useEffect(() => {

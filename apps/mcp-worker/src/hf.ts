@@ -150,11 +150,22 @@ export async function gradioCall<T = unknown[]>(host: string, endpoint: string, 
   }
 }
 
-/** Fetch an output file a Space produced. */
+/**
+ * Fetch an output file a Space produced. The token goes only to the Space
+ * itself: a `url` on any other origin is refused, so a Space cannot hand
+ * back an address of its choosing and collect the credential.
+ */
 export async function gradioFetchFile(host: string, file: { url?: string; path?: string }, options: GradioOptions = {}): Promise<Response> {
   const fetcher = options.fetcher ?? fetch;
   const url = file.url ?? (file.path ? `${host}/gradio_api/file=${file.path}` : null);
   if (!url) throw new HfError('Output has neither url nor path.');
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    throw new HfError('Output url is not a valid URL.');
+  }
+  if (origin !== new URL(host).origin) throw new HfError(`Output url is on ${origin}, not the Space; refused.`);
   const response = await fetcher(url, { headers: authHeaders(options.token), signal: options.signal });
   if (!response.ok) throw new HfError(`Fetching ${url} answered ${response.status}.`, response.status);
   return response;

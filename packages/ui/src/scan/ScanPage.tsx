@@ -275,6 +275,11 @@ export function ScanPage() {
       setSculptEvents([]);
       setGistState({ gist: null, status: 'pending' });
       setRecipe(null);
+      // A new scan starts from the photo's own shape again: no reconstruction,
+      // no turn, no remote state from the last one, whatever the hint changes.
+      setRemote(REMOTE_IDLE);
+      setPoints(null);
+      setSpin(0);
       setPhase('scanning');
       track(ANALYTICS_EVENTS.SCAN_STARTED, { hasHint: hintText.trim().length > 0, bytes: prepared.blob.size, width: prepared.width, height: prepared.height });
 
