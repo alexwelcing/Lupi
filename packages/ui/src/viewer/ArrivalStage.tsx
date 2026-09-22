@@ -159,7 +159,23 @@ export function ArrivalStage() {
   };
 
   useEffect(() => {
+    // A browser can carry `navigator.gpu` and still have no adapter (headless
+    // Chromium, some VMs). Ask once, up front, so a molecule never waits on
+    // an engine that cannot start.
+    let disposed = false;
+    const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } }).gpu;
+    if (gpu?.requestAdapter) {
+      gpu
+        .requestAdapter()
+        .then((adapter) => {
+          if (!disposed && !adapter) useStore.getState().setArrivalEnabled(false);
+        })
+        .catch(() => {
+          if (!disposed) useStore.getState().setArrivalEnabled(false);
+        });
+    } else useStore.getState().setArrivalEnabled(false);
     return () => {
+      disposed = true;
       particles.current?.dispose();
       particles.current = null;
       useStore.getState().setArrival(1);
@@ -335,7 +351,7 @@ export function ArrivalStage() {
   if (!enabled) return null;
   const veilOn = phase === 'whirl' || phase === 'calling';
   return (
-    <>
+    <div className="lupi-arrival" aria-hidden={!captionOn}>
       <div className="lupi-arrival-veil" data-on={veilOn} aria-hidden />
       <canvas ref={canvas} className="lupi-arrival-canvas" aria-hidden data-testid="lupi-arrival-stage" />
       {caption && (
@@ -363,6 +379,6 @@ export function ArrivalStage() {
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }

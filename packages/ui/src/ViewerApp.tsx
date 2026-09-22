@@ -722,7 +722,6 @@ export function ViewerApp() {
               <PresetLegacyBridge />
               <CameraTap />
             </ViewerCanvas>
-            <ArrivalStage />
 
             {!isEmbeddedMobileViewer && import.meta.env.DEV && showDebugHud && <StateInspector />}
             {!isEmbeddedMobileViewer && <RendererWarningToast />}
@@ -784,6 +783,8 @@ export function ViewerApp() {
           </div>
         )}
 
+        {/* Over the viewport, beside it in the tree: the viewport's own canvas stays the only canvas it contains. */}
+        {file && <ArrivalStage />}
         {file && !isEmbeddedMobileViewer && <ViewerCommandDeck compact={isMobile} />}
         {file && !isEmbeddedMobileViewer && <PanelHost />}
 

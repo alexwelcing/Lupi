@@ -3,6 +3,13 @@
    things to see next. Everything sits inside the viewport, above the
    canvases, and takes no pointer events except the chips. */
 
+.lupi-arrival {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
 .lupi-arrival-veil {
   position: absolute;
   inset: 0;
