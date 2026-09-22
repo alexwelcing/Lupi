@@ -3,7 +3,7 @@
 // particle statistics. Needs the portable renderer once:
 //
 //   pnpm --filter @atlas/ui exec vgpu install-software-renderer
-//   pnpm scan:gist:headless -- apple --particles=60000   (or screw, mug)
+//   pnpm scan:gist:headless -- apple --particles=60000 [--photo]   (or screw, mug, vase, banana)
 //
 // Frames land in .verify-artifacts/gist-<name>-<stage>.png.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -30,7 +30,33 @@ const random = () => {
   seed = (seed * 1664525 + 1013904223) >>> 0;
   return seed / 4294967296;
 };
-const engine = createGistEngine({ gpu, target: colorTarget, shaders: { step: step.wgsl, points: points.wgsl }, aspect: () => width / height, random, count });
+// `--photo` seeds the particles from a synthetic picture (a warm disc on a
+// cool ground) so the dissolve-into-shape look can be checked without a camera.
+const withPhoto = process.argv.includes('--photo');
+const photo = withPhoto
+  ? (() => {
+      const pw = 160;
+      const ph = 120;
+      const data = new Uint8ClampedArray(pw * ph * 4);
+      const mask = new Uint8Array(pw * ph);
+      for (let y = 0; y < ph; y += 1) {
+        for (let x = 0; x < pw; x += 1) {
+          const i = (y * pw + x) * 4;
+          const dx = (x - pw * 0.5) / (pw * 0.28);
+          const dy = (y - ph * 0.55) / (ph * 0.38);
+          const inside = dx * dx + dy * dy < 1;
+          const shade = inside ? 0.6 + 0.4 * (1 - Math.hypot(dx + 0.3, dy + 0.3) / 1.6) : 0.2 + 0.15 * (y / ph);
+          data[i] = Math.round((inside ? 220 : 70) * shade);
+          data[i + 1] = Math.round((inside ? 70 : 90) * shade);
+          data[i + 2] = Math.round((inside ? 50 : 120) * shade);
+          data[i + 3] = 255;
+          mask[y * pw + x] = inside ? 1 : 0;
+        }
+      }
+      return { width: pw, height: ph, data, mask };
+    })()
+  : null;
+const engine = createGistEngine({ gpu, target: colorTarget, shaders: { step: step.wgsl, points: points.wgsl }, aspect: () => width / height, random, count, photo });
 
 const gist = DEMO_GISTS[which];
 console.log('gist:', describeGist(gist));
@@ -78,6 +104,11 @@ const advance = (frames: number) => {
 };
 
 engine.setFade(1);
+if (withPhoto) {
+  // The photo sheet, before the swirl takes it apart.
+  advance(2);
+  console.log('photo: lit fraction', (await snapshot('photo')).toFixed(3));
+}
 engine.setEnergy(1);
 advance(90);
 console.log('swirl: lit fraction', (await snapshot('swirl')).toFixed(3), await glowStats());

@@ -9,9 +9,12 @@
  * in a few hundred tokens, a compute shader can evaluate it in a few dozen
  * instructions, and Jev can judge a described edit to it in one call.
  */
-export type GistPrimitiveKind = 'sphere' | 'ellipsoid' | 'box' | 'cylinder' | 'capsule' | 'cone' | 'torus';
+export type GistPrimitiveKind = 'sphere' | 'ellipsoid' | 'box' | 'cylinder' | 'capsule' | 'cone' | 'torus' | 'lathe' | 'arc';
 
-export const GIST_PRIMITIVE_KINDS: readonly GistPrimitiveKind[] = ['sphere', 'ellipsoid', 'box', 'cylinder', 'capsule', 'cone', 'torus'];
+export const GIST_PRIMITIVE_KINDS: readonly GistPrimitiveKind[] = ['sphere', 'ellipsoid', 'box', 'cylinder', 'capsule', 'cone', 'torus', 'lathe', 'arc'];
+
+/** Radii a lathe carries, top to bottom; the same count as the silhouette profile's bands. */
+export const LATHE_BANDS = 12;
 
 export interface GistPrimitive {
   kind: GistPrimitiveKind;
@@ -21,10 +24,13 @@ export interface GistPrimitive {
   /**
    * sphere: [radius, -, -] · ellipsoid: radii · box: half extents ·
    * cylinder: [radius, half height, -] · capsule: [radius, half length, -] ·
-   * cone: [bottom radius, half height, top radius] · torus: [ring radius, tube radius, -].
-   * Cylinders, capsules, and cones stand along Y; a torus lies flat in XZ.
+   * cone: [bottom radius, half height, top radius] · torus: [ring radius, tube radius, -] ·
+   * lathe: [radius scale, half height, -] with `profile` · arc: [bend radius, tube radius, half angle in radians].
+   * Cylinders, capsules, cones, and lathes stand along Y; a torus lies flat in XZ; an arc bends in XY, opening upward.
    */
   size: [number, number, number];
+  /** Lathe only: `LATHE_BANDS` radii from the top of the body to the bottom, in world units; the outline revolved. */
+  profile?: number[];
   /** Degrees about X, Y, Z, applied in that order. */
   rotation: [number, number, number];
   /** Smooth-union radius joining this primitive to the rest: 0 hard, 0.4 very soft. */
@@ -71,7 +77,8 @@ export function normalizePrimitive(raw: unknown, index: number): GistPrimitive |
   const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim().toLowerCase().slice(0, 24) : index === 0 ? 'body' : `part ${index + 1}`;
   const size = triple(record.size, 0.3, GIST_MIN_SIZE, GIST_MAX_SIZE);
   if (kind === 'cone') size[2] = clamp(finite((record.size as unknown[] | undefined)?.[2], 0), 0, GIST_MAX_SIZE);
-  return {
+  if (kind === 'arc') size[2] = clamp(finite((record.size as unknown[] | undefined)?.[2], 1), 0.2, Math.PI);
+  const primitive: GistPrimitive = {
     kind,
     name,
     center: triple(record.center, 0, -GIST_MAX_OFFSET, GIST_MAX_OFFSET),
@@ -80,6 +87,32 @@ export function normalizePrimitive(raw: unknown, index: number): GistPrimitive |
     blend: clamp(finite(record.blend, 0.1), 0, GIST_MAX_BLEND),
     subtract: record.subtract === true,
   };
+  if (kind === 'lathe') {
+    const raw = Array.isArray(record.profile) ? record.profile : [];
+    const profile: number[] = [];
+    for (let band = 0; band < LATHE_BANDS; band += 1) profile.push(clamp(finite(raw[band], raw.length ? 0 : 0.3), 0, GIST_MAX_SIZE));
+    if (profile.every((radius) => radius < GIST_MIN_SIZE)) return null;
+    primitive.profile = profile;
+    primitive.size[0] = clamp(primitive.size[0], 0.2, 3);
+  }
+  return primitive;
+}
+
+/**
+ * A body turned from the photo's silhouette profile (widths as fractions of
+ * height, top to bottom). The exact outline the camera saw, as a solid of
+ * revolution, standing `height` tall.
+ */
+export function latheFromProfile(profile: number[], height = 1.8, name = 'body'): GistPrimitive {
+  const radii: number[] = [];
+  for (let band = 0; band < LATHE_BANDS; band += 1) {
+    const at = (band / (LATHE_BANDS - 1)) * (profile.length - 1);
+    const lower = Math.floor(at);
+    const upper = Math.min(profile.length - 1, lower + 1);
+    const width = profile[lower] + (profile[upper] - profile[lower]) * (at - lower);
+    radii.push(clamp((width / 2) * height, 0, GIST_MAX_SIZE));
+  }
+  return { kind: 'lathe', name, center: [0, 0, 0], size: [1, height / 2, 0], rotation: [0, 0, 0], blend: 0.08, subtract: false, profile: radii };
 }
 
 /** Coerce a model's JSON into a bounded gist. Returns null when there is no usable body. */
@@ -115,6 +148,7 @@ export function cloneGist(gist: Gist): Gist {
       center: [...primitive.center] as [number, number, number],
       size: [...primitive.size] as [number, number, number],
       rotation: [...primitive.rotation] as [number, number, number],
+      ...(primitive.profile ? { profile: [...primitive.profile] } : {}),
     })),
   };
 }
@@ -137,6 +171,13 @@ export function primitiveVolume(primitive: GistPrimitive): number {
       return (Math.PI * 2 * b * (a * a + a * c + c * c)) / 3;
     case 'torus':
       return 2 * Math.PI * Math.PI * a * b * b;
+    case 'lathe': {
+      const radii = primitive.profile ?? [];
+      const slice = (2 * b) / Math.max(radii.length, 1);
+      return radii.reduce((sum, radius) => sum + Math.PI * (radius * a) ** 2 * slice, 0);
+    }
+    case 'arc':
+      return Math.PI * b * b * (2 * c * a);
   }
 }
 
@@ -177,5 +218,11 @@ export function primitiveExtent(primitive: GistPrimitive): [number, number, numb
       return [Math.max(a, c), b, Math.max(a, c)];
     case 'torus':
       return [a + b, b, a + b];
+    case 'lathe': {
+      const widest = Math.max(...(primitive.profile ?? [0.3])) * a;
+      return [widest, b, widest];
+    }
+    case 'arc':
+      return [a * Math.sin(Math.min(c, Math.PI / 2)) + b, a + b, b];
   }
 }

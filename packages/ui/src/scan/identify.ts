@@ -24,7 +24,60 @@ export interface PreparedImage {
   mediaType: 'image/jpeg';
   width: number;
   height: number;
+  /** A small RGBA copy for the particle stage: the photo the particles are born from. */
+  pixels: { width: number; height: number; data: Uint8ClampedArray; mask: Uint8Array };
 }
+
+/**
+ * A rough object mask with no model: the background is whatever colour the
+ * photo's border mostly is, and a pixel belongs to the object when it sits
+ * far from that colour. Good enough on a table, a desk, or a wall, which is
+ * where phones get pointed; the particles born inside it carry the photo's
+ * colours onto the shape, the rest fade to the palette.
+ */
+export function photoMask(width: number, height: number, data: Uint8ClampedArray): Uint8Array {
+  const mask = new Uint8Array(width * height);
+  if (width < 4 || height < 4) return mask.fill(1);
+  const reds: number[] = [];
+  const greens: number[] = [];
+  const blues: number[] = [];
+  const border = (x: number, y: number) => {
+    const at = (y * width + x) * 4;
+    reds.push(data[at]);
+    greens.push(data[at + 1]);
+    blues.push(data[at + 2]);
+  };
+  for (let x = 0; x < width; x += 1) {
+    border(x, 0);
+    border(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    border(0, y);
+    border(width - 1, y);
+  }
+  const median = (values: number[]) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  const bg = [median(reds), median(greens), median(blues)];
+  let inside = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const at = (y * width + x) * 4;
+      const distance = Math.abs(data[at] - bg[0]) + Math.abs(data[at + 1] - bg[1]) + Math.abs(data[at + 2] - bg[2]);
+      // The centre of the frame needs less contrast to count: that is where the object usually is.
+      const centred = Math.hypot((x / width - 0.5) * 2, (y / height - 0.5) * 2) < 0.55;
+      if (distance > (centred ? 70 : 110)) {
+        mask[y * width + x] = 1;
+        inside += 1;
+      }
+    }
+  }
+  // A flat photo with nothing standing out, or one that is all object, gets no mask.
+  const share = inside / (width * height);
+  if (share < 0.04 || share > 0.9) return mask.fill(1);
+  return mask;
+}
+
+/** Long edge of the pixel copy the particles sample; 60k particles over 160×120 is a few per pixel. */
+const PIXELS_MAX_EDGE = 160;
 
 export interface ScanCandidate {
   key: string;
@@ -177,6 +230,15 @@ export async function prepareImage(source: Blob, maxEdge = SCAN_MAX_EDGE): Promi
   if ('close' in decoded) decoded.close();
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', SCAN_JPEG_QUALITY));
   if (!blob) throw new ScanError('Could not encode the photo.', 400);
+  const pixelScale = Math.min(1, PIXELS_MAX_EDGE / Math.max(width, height));
+  const pixelWidth = Math.max(1, Math.round(width * pixelScale));
+  const pixelHeight = Math.max(1, Math.round(height * pixelScale));
+  const small = document.createElement('canvas');
+  small.width = pixelWidth;
+  small.height = pixelHeight;
+  const smallContext = small.getContext('2d', { willReadFrequently: true });
+  smallContext?.drawImage(canvas, 0, 0, pixelWidth, pixelHeight);
+  const pixels = smallContext ? smallContext.getImageData(0, 0, pixelWidth, pixelHeight) : null;
   return {
     blob,
     previewUrl: URL.createObjectURL(blob),
@@ -184,6 +246,9 @@ export async function prepareImage(source: Blob, maxEdge = SCAN_MAX_EDGE): Promi
     mediaType: 'image/jpeg',
     width,
     height,
+    pixels: pixels
+      ? { width: pixelWidth, height: pixelHeight, data: pixels.data, mask: photoMask(pixelWidth, pixelHeight, pixels.data) }
+      : { width: 1, height: 1, data: new Uint8ClampedArray([128, 128, 128, 255]), mask: new Uint8Array([1]) },
   };
 }
 

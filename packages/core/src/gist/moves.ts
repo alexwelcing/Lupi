@@ -30,6 +30,17 @@ export const GIST_MAX_MOVES = 12;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const scaleSize = (primitive: GistPrimitive, factors: [number, number, number]): void => {
+  if (primitive.kind === 'lathe') {
+    // A lathe is its profile: width lives in the radius scale, height in the half height.
+    primitive.size[0] = clamp(primitive.size[0] * factors[0], 0.2, 3);
+    primitive.size[1] = clamp(primitive.size[1] * factors[1], GIST_MIN_SIZE, GIST_MAX_SIZE);
+    return;
+  }
+  if (primitive.kind === 'arc') {
+    primitive.size[0] = clamp(primitive.size[0] * factors[1], GIST_MIN_SIZE, GIST_MAX_SIZE);
+    primitive.size[1] = clamp(primitive.size[1] * factors[0], GIST_MIN_SIZE, GIST_MAX_SIZE);
+    return;
+  }
   for (let axis = 0; axis < 3; axis += 1) {
     if (primitive.kind === 'cone' && axis === 2) {
       primitive.size[2] = clamp(primitive.size[2] * factors[axis], 0, GIST_MAX_SIZE);
@@ -71,6 +82,10 @@ export function applicableMoves(gist: Gist): GistMove[] {
   if (room && !hasPart(gist, 'cap')) moves.push({ id: 'add-cap', description: 'Add a wide flat cap on top of the body, like a screw head, a lid, or a mushroom cap.' });
   if (body.kind === 'cylinder' || body.kind === 'cone') moves.push({ id: 'taper', description: 'Taper the body so it narrows toward the top.' });
   if (body.kind === 'box') moves.push({ id: 'round', description: 'Round the body off into a cylinder of the same size.' });
+  if (body.kind === 'cylinder' || body.kind === 'capsule' || body.kind === 'ellipsoid' || body.kind === 'cone') {
+    moves.push({ id: 'bend', description: 'Bend the body into a curve, like a banana, a horn, or a hook.' });
+  }
+  if (body.kind === 'arc') moves.push({ id: 'bend', description: 'Bend the body further into a tighter curve.' });
   if (room && !hasPart(gist, 'hollow') && (body.kind === 'cylinder' || body.kind === 'cone' || body.kind === 'box')) {
     moves.push({ id: 'hollow', description: 'Hollow the body out from the top, like a cup or a bowl.' });
   }
@@ -82,12 +97,45 @@ export function applicableMoves(gist: Gist): GistMove[] {
 const powered = (factors: [number, number, number], strength: number): [number, number, number] =>
   [factors[0] ** strength, factors[1] ** strength, factors[2] ** strength];
 
+/** What the photo measured, so a part can be sized from it instead of guessed. */
+export interface MoveContext {
+  /** Silhouette widths of the whole photo, top to bottom, as fractions of height. */
+  photoProfile?: number[] | null;
+  /** The body alone, same units; where the photo is wider than this, something sticks out. */
+  bodyProfile?: number[] | null;
+}
+
+/**
+ * Where the photo's silhouette bulges past the body on one side: the bands
+ * it spans and how far it sticks out, in fractions of the object's height.
+ */
+export function protrusion(context: MoveContext | undefined): { first: number; last: number; depth: number; bands: number } | null {
+  const photo = context?.photoProfile;
+  const body = context?.bodyProfile;
+  if (!photo || !body || photo.length === 0) return null;
+  const bands = Math.min(photo.length, body.length);
+  let first = -1;
+  let last = -1;
+  let depth = 0;
+  for (let band = 0; band < bands; band += 1) {
+    const extra = photo[band] - body[band];
+    if (extra > 0.06) {
+      if (first < 0) first = band;
+      last = band;
+      depth = Math.max(depth, extra);
+    }
+  }
+  if (first < 0 || last - first < 1) return null;
+  return { first, last, depth, bands };
+}
+
 /**
  * Apply a move by id. `strength` scales proportion moves (2 doubles the
- * step, for when the measured mismatch is large). Returns null for `keep`,
- * an unknown id, or a move the gist does not offer.
+ * step, for when the measured mismatch is large). `context` carries the
+ * photo's measurements so a handle lands where the silhouette bulges.
+ * Returns null for `keep`, an unknown id, or a move the gist does not offer.
  */
-export function applyMove(gist: Gist, moveId: string, strength = 1): Gist | null {
+export function applyMove(gist: Gist, moveId: string, strength = 1, context?: MoveContext): Gist | null {
   if (moveId === GIST_KEEP_MOVE) return null;
   if (!applicableMoves(gist).some((move) => move.id === moveId)) return null;
   const next = cloneGist(gist);
@@ -95,6 +143,7 @@ export function applyMove(gist: Gist, moveId: string, strength = 1): Gist | null
   const bounds = gistBounds(next);
   const top = bounds.max[1];
   const bottom = bounds.min[1];
+  const height = Math.max(top - bottom, 0.1);
   const halfWidth = Math.max(bounds.max[0] - bounds.min[0], bounds.max[2] - bounds.min[2]) / 2;
   const step = Math.max(1, Math.min(3, strength));
   // A sphere has one radius; a proportion move needs three, so it becomes an ellipsoid first.
@@ -118,6 +167,19 @@ export function applyMove(gist: Gist, moveId: string, strength = 1): Gist | null
     case 'round':
       body.kind = 'cylinder';
       body.size = [Math.max(body.size[0], body.size[2]), body.size[1], 0];
+      break;
+    case 'bend':
+      if (body.kind === 'arc') {
+        body.size[2] = Math.min(Math.PI * 0.85, body.size[2] * 1.3);
+      } else {
+        // A tube as long as the body was tall, bent through about a third of a turn, opening upward.
+        const halfLength = body.kind === 'ellipsoid' ? body.size[1] : body.size[1] + (body.kind === 'capsule' ? body.size[0] : 0);
+        const radius = body.kind === 'ellipsoid' ? Math.min(body.size[0], body.size[2]) * 0.6 : body.kind === 'cone' ? (body.size[0] + body.size[2]) / 2 : body.size[0];
+        const angle = 0.95;
+        body.kind = 'arc';
+        body.size = [Math.max(GIST_MIN_SIZE, halfLength / angle), Math.max(GIST_MIN_SIZE, radius), angle];
+        body.rotation = [0, 0, 180];
+      }
       break;
     case 'taper':
       if (body.kind === 'cylinder') {
@@ -166,17 +228,37 @@ export function applyMove(gist: Gist, moveId: string, strength = 1): Gist | null
         subtract: false,
       });
       break;
-    case 'add-handle':
-      next.primitives.push({
-        kind: 'torus',
-        name: 'handle',
-        center: [bounds.max[0] + 0.05, (top + bottom) / 2, 0],
-        size: [Math.max(0.12, (top - bottom) * 0.28), Math.max(GIST_MIN_SIZE, halfWidth * 0.08), 0],
-        rotation: [90, 0, 0],
-        blend: 0.06,
-        subtract: false,
-      });
+    case 'add-handle': {
+      const bulge = protrusion(context);
+      if (bulge) {
+        // Measured: the loop spans the bands where the photo bulges past the body,
+        // and reaches out as far as the bulge does.
+        const yTop = top - (bulge.first / bulge.bands) * height;
+        const yBottom = top - ((bulge.last + 1) / bulge.bands) * height;
+        const ring = Math.max(0.1, (yTop - yBottom) / 2);
+        const tube = Math.max(GIST_MIN_SIZE, Math.min(0.12, (bulge.depth * height) / 4));
+        next.primitives.push({
+          kind: 'torus',
+          name: 'handle',
+          center: [bounds.max[0] - tube, (yTop + yBottom) / 2, 0],
+          size: [Math.min(ring, Math.max(0.1, bulge.depth * height - tube)), tube, 0],
+          rotation: [90, 0, 0],
+          blend: 0.06,
+          subtract: false,
+        });
+      } else {
+        next.primitives.push({
+          kind: 'torus',
+          name: 'handle',
+          center: [bounds.max[0] + 0.05, (top + bottom) / 2, 0],
+          size: [Math.max(0.12, height * 0.28), Math.max(GIST_MIN_SIZE, halfWidth * 0.08), 0],
+          rotation: [90, 0, 0],
+          blend: 0.06,
+          subtract: false,
+        });
+      }
       break;
+    }
     case 'add-base':
       next.primitives.push({
         kind: 'cylinder',
@@ -234,6 +316,8 @@ const KIND_WORDS: Record<GistPrimitive['kind'], string> = {
   capsule: 'capsule',
   cone: 'cone',
   torus: 'ring',
+  lathe: 'turned body',
+  arc: 'bent tube',
 };
 
 function sizeWords(primitive: GistPrimitive): string {
@@ -254,6 +338,15 @@ function sizeWords(primitive: GistPrimitive): string {
       return `${fmt(a)} radius at the bottom, ${fmt(c)} at the top, ${fmt(b * 2)} tall`;
     case 'torus':
       return `ring radius ${fmt(a)}, tube radius ${fmt(b)}`;
+    case 'lathe': {
+      const radii = primitive.profile ?? [];
+      const widest = Math.max(...radii, 0) * a;
+      const top = (radii[0] ?? 0) * a;
+      const bottom = (radii[radii.length - 1] ?? 0) * a;
+      return `its outline revolved: ${fmt(widest * 2)} at the widest, ${fmt(top * 2)} at the top, ${fmt(bottom * 2)} at the bottom, ${fmt(b * 2)} tall`;
+    }
+    case 'arc':
+      return `bend radius ${fmt(a)}, tube radius ${fmt(b)}, curving through ${Math.round((c * 2 * 180) / Math.PI)} degrees`;
   }
 }
 

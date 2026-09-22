@@ -1,4 +1,4 @@
-import { normalizeGist, type Gist, type OutlinePoint } from '@atlas/core/gist';
+import { latheFromProfile, normalizeGist, type Gist, type OutlinePoint } from '@atlas/core/gist';
 import type { PreparedImage } from '../identify';
 
 /**
@@ -17,6 +17,8 @@ export interface GistReply {
   gist?: Gist;
   /** The object's silhouette in the photo, image fractions, (0, 0) top left. */
   outline?: OutlinePoint[];
+  /** Roughly the same all the way around a vertical axis: the outline can stand in for the body. */
+  revolved?: boolean;
   timing?: { ms: number };
   cached?: boolean;
   error?: string;
@@ -83,9 +85,11 @@ export async function requestGist(image: PreparedImage, hint: string, signal?: A
 }
 
 /** One sculpting judgment. Null means no answer this round; the loop just asks again. */
-export async function requestSculpt(subject: string, gist: Gist, photoProfile: number[] | null, signal?: AbortSignal): Promise<SculptReply | null> {
+export type SculptMode = 'choice' | 'nouls';
+
+export async function requestSculpt(subject: string, gist: Gist, photoProfile: number[] | null, signal?: AbortSignal, mode: SculptMode = 'choice'): Promise<SculptReply | null> {
   if (sculptUnavailable) return { configured: false };
-  const reply = await post<SculptReply>(SCULPT_PATH, { subject, gist, photoProfile: photoProfile ?? undefined }, SCULPT_TIMEOUT_MS, signal);
+  const reply = await post<SculptReply>(SCULPT_PATH, { subject, gist, photoProfile: photoProfile ?? undefined, mode }, SCULPT_TIMEOUT_MS, signal);
   if (reply?.configured === false) sculptUnavailable = true;
   return reply;
 }
@@ -114,6 +118,23 @@ export const DEMO_GISTS: Record<string, Gist> = {
       { kind: 'cone', name: 'tip', center: [0, -1.15, 0], size: [0.16, 0.16, 0], rotation: [0, 0, 0], blend: 0.05, subtract: false },
       { kind: 'cone', name: 'head', center: [0, 0.82, 0], size: [0.18, 0.13, 0.46], rotation: [0, 0, 0], blend: 0.03, subtract: false },
       { kind: 'box', name: 'slot', center: [0, 0.98, 0], size: [0.5, 0.06, 0.05], rotation: [0, 0, 0], blend: 0, subtract: true },
+    ],
+  },
+  banana: {
+    label: 'banana',
+    confidence: 1,
+    palette: ['#f2d23a', '#8a6a1c'],
+    primitives: [
+      { kind: 'arc', name: 'body', center: [0, 0.35, 0], size: [1.05, 0.2, 0.95], rotation: [0, 0, 180], blend: 0.08, subtract: false },
+      { kind: 'cylinder', name: 'stem', center: [-0.86, -0.32, 0], size: [0.06, 0.12, 0], rotation: [0, 0, 25], blend: 0.05, subtract: false },
+    ],
+  },
+  vase: {
+    label: 'vase',
+    confidence: 1,
+    palette: ['#5aa9c9', '#f0e6d2'],
+    primitives: [
+      latheFromProfile([0.28, 0.2, 0.18, 0.24, 0.42, 0.56, 0.62, 0.6, 0.52, 0.42, 0.34, 0.36]),
     ],
   },
   mug: {

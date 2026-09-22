@@ -16,6 +16,8 @@ import { GIST_MAX_PRIMITIVES, type Gist, type GistPrimitive } from '@atlas/core/
 export interface GistEngine {
   /** Replace the shape. `null` keeps the particles whirling with nothing to settle on. */
   setGist(gist: Gist | null): void;
+  /** Reseed every particle from a photo (a flat sheet of pixels facing the camera) or back onto the ring. */
+  setPhoto(photo: PhotoPixels | null): void;
   /** Swirl strength target, 0..1. */
   setEnergy(value: number): void;
   /** Pull-to-surface target, 0..1. */
@@ -37,13 +39,15 @@ export interface GistEngineDeps {
   aspect?: () => number;
   /** Deterministic runs (headless checks) pass their own generator. */
   random?: () => number;
+  /** Born from a photo when given; otherwise on the ring. */
+  photo?: PhotoPixels | null;
 }
 
 export const GIST_PARTICLE_COUNT = 60_000;
 export const PARTICLE_FLOATS = 12;
 export const PRIM_FLOATS = 24;
 const WORKGROUP = 64;
-const KIND_INDEX: Record<GistPrimitive['kind'], number> = { sphere: 0, ellipsoid: 1, box: 2, cylinder: 3, capsule: 4, cone: 5, torus: 6 };
+const KIND_INDEX: Record<GistPrimitive['kind'], number> = { sphere: 0, ellipsoid: 1, box: 2, cylinder: 3, capsule: 4, cone: 5, torus: 6, lathe: 7, arc: 8 };
 const ORBIT_RADIUS = 4.6;
 const FOV_DEGREES = 34;
 const EASE = 0.06;
@@ -84,30 +88,71 @@ export function packGist(gist: Gist | null): { data: Float32Array<ArrayBuffer>; 
     view.setUint32((base + 3) * 4, KIND_INDEX[primitive.kind], true);
     data.set(primitive.size, base + 4);
     data[base + 7] = primitive.blend;
-    const rows = rotationRows(primitive.rotation);
-    data.set(rows[0], base + 8);
-    data.set(rows[1], base + 12);
-    data.set(rows[2], base + 16);
+    if (primitive.kind === 'lathe') {
+      // A lathe stands upright; its twelve radii ride in the rotation slots.
+      data.set((primitive.profile ?? []).slice(0, 12), base + 8);
+    } else {
+      const rows = rotationRows(primitive.rotation);
+      data.set(rows[0], base + 8);
+      data.set(rows[1], base + 12);
+      data.set(rows[2], base + 16);
+    }
     view.setUint32((base + 20) * 4, primitive.subtract ? 1 : 0, true);
   });
   return { data, count: primitives.length };
 }
 
-/** Particles start on a whirling ring, the same one the kernel respawns onto. */
-export function seedParticles(count: number, random: () => number = Math.random): Float32Array<ArrayBuffer> {
+/** A small copy of the photo the particles are born from: RGBA bytes, row-major. */
+export interface PhotoPixels {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray | Uint8Array;
+  /** 1 where the pixel belongs to the object; those particles carry the photo's colour onto the shape. */
+  mask?: Uint8Array;
+}
+
+/** Colour weight for a particle born on background: mostly palette, a little of the photo. */
+const BACKGROUND_COLOR_WEIGHT = 70;
+
+/** How wide the photo sheet stands in world units; a little larger than the object so it fills the stage. */
+const PHOTO_SHEET_HEIGHT = 2.6;
+
+/**
+ * Particles start on a whirling ring, the same one the kernel respawns onto,
+ * or, with a photo, as the photo itself: each particle is born on a pixel of
+ * a flat sheet facing the camera and carries that pixel's colour with it.
+ */
+export function seedParticles(count: number, random: () => number = Math.random, photo: PhotoPixels | null = null): Float32Array<ArrayBuffer> {
   const data = new Float32Array(new ArrayBuffer(count * PARTICLE_FLOATS * 4));
+  const view = new DataView(data.buffer);
+  const aspect = photo ? photo.width / Math.max(photo.height, 1) : 1;
+  const sheetHeight = PHOTO_SHEET_HEIGHT;
+  const sheetWidth = sheetHeight * aspect;
   for (let index = 0; index < count; index += 1) {
     const base = index * PARTICLE_FLOATS;
     const seed = random();
-    const ring = 1.15 + 0.45 * seed;
-    const angle = random() * Math.PI * 2;
-    data[base] = Math.cos(angle) * ring;
-    data[base + 1] = (random() - 0.5) * 1.5;
-    data[base + 2] = Math.sin(angle) * ring;
+    if (photo) {
+      const u = random();
+      const v = random();
+      const px = Math.min(photo.width - 1, Math.floor(u * photo.width));
+      const py = Math.min(photo.height - 1, Math.floor(v * photo.height));
+      const at = (py * photo.width + px) * 4;
+      data[base] = (u - 0.5) * sheetWidth;
+      data[base + 1] = (0.5 - v) * sheetHeight;
+      data[base + 2] = (random() - 0.5) * 0.08;
+      const weight = !photo.mask || photo.mask[py * photo.width + px] ? 255 : BACKGROUND_COLOR_WEIGHT;
+      view.setUint32((base + 11) * 4, (photo.data[at] | (photo.data[at + 1] << 8) | (photo.data[at + 2] << 16) | (weight << 24)) >>> 0, true);
+    } else {
+      const ring = 1.15 + 0.45 * seed;
+      const angle = random() * Math.PI * 2;
+      data[base] = Math.cos(angle) * ring;
+      data[base + 1] = (random() - 0.5) * 1.5;
+      data[base + 2] = Math.sin(angle) * ring;
+      // color 0: no photo, wear the palette.
+    }
     data[base + 3] = seed;
-    // vel = 0, glow = 0; the normal starts pointing up, the hue is fixed at spawn.
+    // vel = 0, glow = 0; the normal starts pointing up.
     data[base + 9] = 1;
-    data[base + 11] = random();
   }
   return data;
 }
@@ -156,9 +201,9 @@ export function viewProjection(eye: [number, number, number], aspect: number, fo
   return out;
 }
 
-export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_COUNT, aspect = () => 1, random = Math.random }: GistEngineDeps): GistEngine {
+export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_COUNT, aspect = () => 1, random = Math.random, photo = null }: GistEngineDeps): GistEngine {
   const particles: StorageBuffer = storage(gpu, count * PARTICLE_FLOATS * 4, 'read-write');
-  particles.write(seedParticles(count, random));
+  particles.write(seedParticles(count, random, photo));
   const prims: StorageBuffer = storage(gpu, GIST_MAX_PRIMITIVES * PRIM_FLOATS * 4, 'read');
   prims.write(packGist(null).data);
 
@@ -229,6 +274,9 @@ export function createGistEngine({ gpu, target, shaders, count = GIST_PARTICLE_C
   return {
     state,
     particles,
+    setPhoto(next) {
+      particles.write(seedParticles(count, random, next));
+    },
     setGist(gist) {
       const packed = packGist(gist);
       prims.write(packed.data);

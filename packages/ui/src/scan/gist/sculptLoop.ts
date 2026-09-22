@@ -1,4 +1,4 @@
-import { applyMove, decideSculpt, type Gist, type SculptMemory } from '@atlas/core/gist';
+import { applyMove, decideSculpt, gistBody, gistProfile, type Gist, type SculptMemory } from '@atlas/core/gist';
 import { requestSculpt } from './gistClient';
 
 /**
@@ -122,7 +122,10 @@ export function startSculptLoop(options: SculptLoopOptions): SculptLoopHandle {
     const verdict = decideSculpt({ move: reply.move, likeness: event.likeness, mismatch: event.mismatch }, memory, minConfidence);
     memory = verdict.memory;
     if (verdict.apply) {
-      const next = applyMove(gist, verdict.apply, verdict.strength);
+      const context = options.photoProfile
+        ? { photoProfile: options.photoProfile, bodyProfile: gistProfile({ ...gist, primitives: [gistBody(gist)] }) }
+        : undefined;
+      const next = applyMove(gist, verdict.apply, verdict.strength, context);
       if (next) {
         gist = next;
         version += 1;

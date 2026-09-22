@@ -106,6 +106,42 @@ particles re-flow: the shape visibly morphs as Jev decides. The label shows
 the latest likeness and the judgment count; "Under the hood" lists every
 judgment with its move, confidence, likeness, and latency.
 
+### Three more ways in (2026-09-22, later)
+
+The vocabulary was the ceiling, so three different attacks on it:
+
+- **The profile is the body.** For anything roughly the same all the way
+  around its axis (the gist call now says `revolved`), the photo's outline
+  is turned directly into a `lathe` primitive: twelve radii, top to
+  bottom, the exact silhouette the camera saw. `outlineBodyProfile` takes
+  the shorter half-width at each band around the object's axis, so a
+  handle or a spout on one side is left out of the body and comes back as
+  a part. On the mug outline that put likeness at 0.62 before a single
+  judgment and 0.83 after Jev added the handle, with no proportion moves
+  needed. The handle itself is now sized from where the photo bulges past
+  the body (`protrusion` in `moves.ts`), which is what stopped the mismatch
+  jumping when a part lands.
+- **The photo dissolves into the shape.** Particles are born as the photo:
+  a flat sheet of its pixels facing the camera, each particle carrying its
+  pixel's colour, then the swirl takes the sheet apart and the pieces flow
+  onto the shape still wearing those colours. An on-device object mask
+  (`photoMask`: the border's median colour is the background, far-from-it
+  pixels are the object) keeps the table and the wall from muddying the
+  skin: background particles fade toward the palette. No model involved.
+- **A bend.** The `arc` primitive (a tube bent along a circle) and the
+  `bend` move turn a cylinder, capsule, ellipsoid, or cone into a banana,
+  a horn, a hook; the vision call can write arcs directly.
+
+One more experiment did not make the cut. A `nouls` sculpt mode asks one
+Noul per move ("this edit would make it read more like the subject") in a
+single call instead of a Choice. It is decisive (0.7 to 0.8 every time) but
+not calibrated: it said yes to widening a cylinder-apple seven times in a
+row until the body was 1.6 wide. The Choice mode's answers track likeness;
+the mode stays available on the route (`mode: "nouls"`) and the bench
+(`--mode=nouls`) for further tuning, and `choice` is the default.
+
+`/scan?demo=vase` shows a lathe body, `?demo=banana` an arc.
+
 ### What the live model showed (2026-09-22)
 
 The loop was run against the live Jev from Node (`pnpm scan:sculpt:bench`)
@@ -154,7 +190,7 @@ Jev judgment per call, about $0.0004; a full loop is a cent or two. Without
 `TYPESAFE_API_KEY` the route answers `{ configured: false }` and the loop
 stops after its first call.
 
-`/scan?demo=apple` (also `screw`, `mug`) runs the stage on a hand-built gist
+`/scan?demo=apple` (also `screw`, `mug`, `vase`, `banana`) runs the stage on a hand-built gist
 with no photo and no keys, which is the quickest way to see the particles
 find a shape. With the Jev key set, the demo gist gets sculpted too.
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { fitProportions, gistProfile, outlineProfile, profileMismatch, profileWords, type Gist } from '@atlas/core/gist';
+import { fitProportions, gistProfile, latheFromProfile, outlineBodyProfile, outlineProfile, profileMismatch, profileWords, type Gist } from '@atlas/core/gist';
 import { useStore } from '../store';
 import { track, ANALYTICS_EVENTS } from '../analytics';
 import { SCAN_SEO, useSeo } from '../seo';
@@ -47,6 +47,8 @@ interface GistState {
   outlinePoints?: number;
   /** True when the free aspect fit changed the gist before Jev saw it. */
   fitted?: boolean;
+  /** True when the body is the photo's outline revolved, not a primitive the model chose. */
+  revolved?: boolean;
 }
 
 function percent(value: number): string {
@@ -185,7 +187,16 @@ export function ScanPage() {
           // The measured step: the photo's own silhouette, as numbers. The
           // free aspect fit runs here, before Jev is asked anything.
           const photoProfile = reply.outline && reply.outline.length >= 3 ? outlineProfile(reply.outline) : null;
-          const gist = photoProfile ? fitProportions(reply.gist, photoProfile) : reply.gist;
+          // A revolved object gets the outline itself as its body: the exact
+          // silhouette the camera saw, turned on a lathe. Everything else
+          // keeps the model's body with its aspect fitted to the photo.
+          const bodyProfile = reply.revolved && reply.outline && reply.outline.length >= 3 ? outlineBodyProfile(reply.outline) : null;
+          const revolved = Boolean(bodyProfile && Math.max(...bodyProfile) > 0.05);
+          const gist: Gist = revolved
+            ? { ...reply.gist, primitives: [latheFromProfile(bodyProfile!), ...reply.gist.primitives.slice(1)] }
+            : photoProfile
+              ? fitProportions(reply.gist, photoProfile)
+              : reply.gist;
           setGistState({
             gist,
             status: 'ready',
@@ -194,7 +205,8 @@ export function ScanPage() {
             cached: reply.cached,
             photoProfile,
             outlinePoints: reply.outline?.length ?? 0,
-            fitted: gist !== reply.gist,
+            fitted: !revolved && gist !== reply.gist,
+            revolved,
           });
           beginSculpt(gist.label, gist, photoProfile);
         } else {
@@ -455,6 +467,7 @@ export function ScanPage() {
             photoUrl={image?.previewUrl ?? null}
             photoWidth={image?.width}
             photoHeight={image?.height}
+            photoPixels={image?.pixels ?? null}
             active={busy}
             gist={gist}
             settled={phase === 'done'}
@@ -664,7 +677,7 @@ export function ScanPage() {
               <dt>Silhouette</dt>
               <dd>
                 {gistState.photoProfile && gist
-                  ? `photo ${profileWords(gistState.photoProfile)} · shape ${profileWords(gistProfile(gist))} · mismatch ${profileMismatch(gistProfile(gist), gistState.photoProfile).toFixed(3)}${gistState.fitted ? ' · aspect fitted before Jev' : ''} · ${gistState.outlinePoints} outline points`
+                  ? `photo ${profileWords(gistState.photoProfile)} · shape ${profileWords(gistProfile(gist))} · mismatch ${profileMismatch(gistProfile(gist), gistState.photoProfile).toFixed(3)}${gistState.revolved ? ' · body is the outline revolved' : gistState.fitted ? ' · aspect fitted before Jev' : ''} · ${gistState.outlinePoints} outline points`
                   : demo
                     ? 'no photo to measure against'
                     : 'no outline came back; Jev judged by words alone'}

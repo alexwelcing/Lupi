@@ -52,6 +52,8 @@ export const SCULPT_MISMATCH_STRONG = 0.3;
 /** Below this measured mismatch a proportion move is noise: the step is coarser than the error
  *  left, and what remains is usually structural (a taper against straight sides), not a width. */
 export const SCULPT_MISMATCH_SETTLED = 0.12;
+/** At this likeness the shape already reads as the subject; proportion moves need a confident vote. */
+export const SCULPT_LIKENESS_READS = 0.8;
 
 export function decideSculpt(answer: SculptAnswer, memory: SculptMemory, gate = SCULPT_CONFIDENCE_GATE): SculptVerdict {
   const { id, confidence } = answer.move;
@@ -61,7 +63,10 @@ export function decideSculpt(answer: SculptAnswer, memory: SculptMemory, gate = 
     const satisfied = keeps >= 2 || (answer.likeness !== null && answer.likeness >= SCULPT_LIKENESS_SATISFIED);
     return { apply: null, strength, satisfied, memory: { lastMove: null, keeps } };
   }
-  const settledProportion = answer.mismatch !== null && answer.mismatch < SCULPT_MISMATCH_SETTLED && GIST_PROPORTION_MOVES.includes(id);
+  // Once the shape reads as the subject, or its silhouette matches the photo,
+  // a proportion vote is more likely to wreck it than improve it.
+  const reads = answer.likeness !== null && answer.likeness >= SCULPT_LIKENESS_READS;
+  const settledProportion = GIST_PROPORTION_MOVES.includes(id) && (reads || (answer.mismatch !== null && answer.mismatch < SCULPT_MISMATCH_SETTLED));
   if (settledProportion) {
     // The silhouette already matches the photo; only a confident vote moves it now,
     // and a run of damped votes means the shape is as good as this vocabulary gets.

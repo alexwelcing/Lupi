@@ -45,6 +45,51 @@ export function outlineProfile(points: OutlinePoint[], bands = PROFILE_BANDS): n
   return profile;
 }
 
+/**
+ * The body's own width profile, with one-sided protrusions removed. A mug's
+ * handle or a teapot's spout sticks out on one side only, so at each band
+ * the radius is the shorter of the two half-widths around the object's
+ * axis; revolving that gives the body without the handle, and the parts
+ * the model named add it back. Returns widths as fractions of height, top
+ * band first, like `outlineProfile`.
+ */
+export function outlineBodyProfile(points: OutlinePoint[], bands = PROFILE_BANDS): number[] | null {
+  if (points.length < 3) return null;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [, y] of points) {
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const height = maxY - minY;
+  if (!(height > 1e-6)) return null;
+  const spans: Array<[number, number] | null> = [];
+  for (let band = 0; band < bands; band += 1) {
+    const y = minY + ((band + 0.5) / bands) * height;
+    let left = Infinity;
+    let right = -Infinity;
+    for (let index = 0; index < points.length; index += 1) {
+      const [x0, y0] = points[index];
+      const [x1, y1] = points[(index + 1) % points.length];
+      if ((y0 <= y && y1 > y) || (y1 <= y && y0 > y)) {
+        const x = x0 + ((y - y0) / (y1 - y0)) * (x1 - x0);
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+      }
+    }
+    spans.push(Number.isFinite(left) && Number.isFinite(right) ? [left, right] : null);
+  }
+  // The axis is the median of the band midpoints: a handle shifts a few bands' midpoints, not most.
+  const midpoints = spans.filter((span): span is [number, number] => span !== null).map(([left, right]) => (left + right) / 2).sort((a, b) => a - b);
+  if (midpoints.length === 0) return null;
+  const axis = midpoints[Math.floor(midpoints.length / 2)];
+  return spans.map((span) => {
+    if (!span) return 0;
+    const radius = Math.max(0, Math.min(axis - span[0], span[1] - axis));
+    return (2 * radius) / height;
+  });
+}
+
 /* ─── CPU signed distance functions, mirroring gist-step.wgsl ─── */
 
 type Vec3 = [number, number, number];
@@ -113,6 +158,26 @@ function sdPrimitive(primitive: GistPrimitive, rows: [Vec3, Vec3, Vec3], world: 
     case 'torus': {
       const qx = Math.hypot(p[0], p[2]) - a;
       return Math.hypot(qx, p[1]) - b;
+    }
+    case 'lathe': {
+      const radii = primitive.profile ?? [];
+      if (radii.length === 0) return 1e5;
+      const t = Math.max(0, Math.min(1, (b - p[1]) / Math.max(2 * b, 1e-5))) * (radii.length - 1);
+      const lower = Math.floor(t);
+      const upper = Math.min(radii.length - 1, lower + 1);
+      const radius = (radii[lower] + (radii[upper] - radii[lower]) * (t - lower)) * a;
+      const dr = Math.hypot(p[0], p[2]) - radius;
+      const dy = Math.abs(p[1]) - b;
+      return Math.min(Math.max(dr, dy), 0) + Math.hypot(Math.max(dr, 0), Math.max(dy, 0));
+    }
+    case 'arc': {
+      // A tube bent along a circular arc of radius a in the XY plane, opening upward, half angle c.
+      const qx = Math.abs(p[0]);
+      const qy = p[1];
+      const sx = Math.sin(c);
+      const sy = Math.cos(c);
+      const d = sy * qx > sx * qy ? Math.hypot(qx - sx * a, qy - sy * a, p[2]) : Math.hypot(Math.hypot(qx, qy) - a, p[2]);
+      return d - b;
     }
   }
 }

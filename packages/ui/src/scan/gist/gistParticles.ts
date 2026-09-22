@@ -1,7 +1,7 @@
 /// <reference types="vgpu/client" />
 import { init, surface, type Gpu } from 'vgpu';
 import type { Gist } from '@atlas/core/gist';
-import { GIST_PARTICLE_COUNT, createGistEngine, type GistEngine } from './gistEngine';
+import { GIST_PARTICLE_COUNT, createGistEngine, type GistEngine, type PhotoPixels } from './gistEngine';
 import stepShader from './gist-step.wgsl';
 import pointsShader from './gist-points.wgsl';
 
@@ -13,6 +13,8 @@ import pointsShader from './gist-points.wgsl';
  */
 export interface GistParticles {
   setGist(gist: Gist | null): void;
+  /** Reseed the particles from a photo, so the picture itself is what whirls into the shape. */
+  setPhoto(photo: PhotoPixels | null): void;
   setEnergy(value: number): void;
   setAttract(value: number): void;
   setFade(value: number): void;
@@ -39,7 +41,7 @@ export function pickParticleCount(): number {
   return GIST_PARTICLE_COUNT;
 }
 
-export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: () => void): Promise<GistParticles> {
+export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: () => void, photo: PhotoPixels | null = null): Promise<GistParticles> {
   let gpu: Gpu | undefined;
   let canvasTarget: ReturnType<typeof surface> | undefined;
   let engine: GistEngine | undefined;
@@ -90,6 +92,7 @@ export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: 
       shaders: { step: stepShader, points: pointsShader },
       count: pickParticleCount(),
       aspect: () => Math.max(canvas.clientWidth, 1) / Math.max(canvas.clientHeight, 1),
+      photo,
     });
     offError = gpu.onError(fail);
     const failureRef = { current: fail as (() => void) | undefined };
@@ -115,6 +118,10 @@ export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: 
     return {
       setGist(gist) {
         engine!.setGist(gist);
+        wake();
+      },
+      setPhoto(next) {
+        engine!.setPhoto(next);
         wake();
       },
       setEnergy(value) {

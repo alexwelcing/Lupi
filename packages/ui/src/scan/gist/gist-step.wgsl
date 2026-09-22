@@ -5,19 +5,21 @@
 // whirl, the settle, and the morph when the gist changes underneath it.
 
 // 48 bytes. `nrm` is the surface normal where the particle last settled, for
-// shading; `hue` is a per-particle colour nudge fixed at spawn.
+// shading; `color` is a packed RGBA8: the photo pixel this particle was born
+// from (alpha 255), or 0 when it has no photo and wears the palette.
 struct Particle {
   pos: vec3f,
   seed: f32,
   vel: vec3f,
   glow: f32,
   nrm: vec3f,
-  hue: f32,
+  color: u32,
 }
 
 // 96 bytes: rot0..rot2 are the rows of the primitive's rotation matrix, so
 // building a mat3x3f from them as columns gives the inverse rotation that
-// takes a world point into the primitive's own frame.
+// takes a world point into the primitive's own frame. A lathe (kind 7)
+// stands upright and uses those twelve floats as its radii, top to bottom.
 struct Prim {
   center: vec3f,
   kind: u32,
@@ -48,7 +50,7 @@ struct Params {
 @group(0) @binding(2) var<storage, read_write> particles: array<Particle>;
 
 // Kinds, in the order `KIND_INDEX` packs them: sphere, ellipsoid, box,
-// cylinder, capsule, cone, torus.
+// cylinder, capsule, cone, torus, lathe, arc.
 
 fn hash13(p: vec3f) -> f32 {
   var q = fract(p * vec3f(0.1031, 0.1030, 0.0973));
@@ -102,7 +104,52 @@ fn sdTorus(p: vec3f, ring: f32, tube: f32) -> f32 {
   return length(q) - tube;
 }
 
+fn latheRadiusAt(prim: Prim, band: u32) -> f32 {
+  switch band {
+    case 0u: { return prim.rot0.x; }
+    case 1u: { return prim.rot0.y; }
+    case 2u: { return prim.rot0.z; }
+    case 3u: { return prim.rot0.w; }
+    case 4u: { return prim.rot1.x; }
+    case 5u: { return prim.rot1.y; }
+    case 6u: { return prim.rot1.z; }
+    case 7u: { return prim.rot1.w; }
+    case 8u: { return prim.rot2.x; }
+    case 9u: { return prim.rot2.y; }
+    case 10u: { return prim.rot2.z; }
+    default: { return prim.rot2.w; }
+  }
+}
+
+// A solid of revolution: the photo's outline turned around Y. Radii run top
+// to bottom; `scale` widens or slims the whole profile at once.
+fn sdLathe(prim: Prim, p: vec3f, scale: f32, halfHeight: f32) -> f32 {
+  let t = clamp((halfHeight - p.y) / max(2.0 * halfHeight, 1e-5), 0.0, 1.0) * 11.0;
+  let lower = u32(floor(t));
+  let radius = mix(latheRadiusAt(prim, lower), latheRadiusAt(prim, min(lower + 1u, 11u)), t - floor(t)) * scale;
+  let dr = length(p.xz) - radius;
+  let dy = abs(p.y) - halfHeight;
+  let d = vec2f(dr, dy);
+  return min(max(d.x, d.y), 0.0) + length(max(d, vec2f(0.0)));
+}
+
+// A tube bent along a circular arc in XY, opening upward: half angle `aperture`.
+fn sdArc(p: vec3f, ra: f32, rb: f32, aperture: f32) -> f32 {
+  let q = vec2f(abs(p.x), p.y);
+  let sc = vec2f(sin(aperture), cos(aperture));
+  var d: f32;
+  if (sc.y * q.x > sc.x * q.y) {
+    d = length(vec3f(q - sc * ra, p.z));
+  } else {
+    d = length(vec2f(length(q) - ra, p.z));
+  }
+  return d - rb;
+}
+
 fn sdPrim(prim: Prim, world: vec3f) -> f32 {
+  if (prim.kind == 7u) {
+    return sdLathe(prim, world - prim.center, prim.size.x, prim.size.y);
+  }
   let p = mat3x3f(prim.rot0.xyz, prim.rot1.xyz, prim.rot2.xyz) * (world - prim.center);
   let s = prim.size;
   switch prim.kind {
@@ -112,6 +159,7 @@ fn sdPrim(prim: Prim, world: vec3f) -> f32 {
     case 3u: { return sdCylinder(p, s.x, s.y); }
     case 4u: { return sdCapsule(p, s.x, s.y); }
     case 5u: { return sdCone(p, s.x, s.y, s.z); }
+    case 8u: { return sdArc(p, s.x, s.y, s.z); }
     default: { return sdTorus(p, s.x, s.y); }
   }
 }

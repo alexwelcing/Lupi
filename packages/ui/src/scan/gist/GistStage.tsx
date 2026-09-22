@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Gist } from '@atlas/core/gist';
 import type { GistParticles } from './gistParticles';
+import type { PhotoPixels } from './gistEngine';
 import type { ScanSwirl } from '../swirl';
 
 /**
@@ -28,6 +29,8 @@ export interface GistStageProps {
   photoUrl: string | null;
   photoWidth?: number;
   photoHeight?: number;
+  /** The photo's pixels; when given, the particles are born as the photo and carry its colours. */
+  photoPixels?: PhotoPixels | null;
   /** True while a scan is in flight: the swirl runs and the photo dims. */
   active: boolean;
   /** The shape to settle onto; null keeps whirling. */
@@ -65,7 +68,7 @@ function formatMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-export function GistStage({ photoUrl, photoWidth, photoHeight, active, gist, settled, status, label, onRenderer }: GistStageProps) {
+export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = null, active, gist, settled, status, label, onRenderer }: GistStageProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const particles = useRef<GistParticles | null>(null);
   const swirl = useRef<ScanSwirl | null>(null);
@@ -79,6 +82,7 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, active, gist, set
   };
   const latest = useRef({ active, gist, settled });
   latest.current = { active, gist, settled };
+  const seededPhoto = useRef<PhotoPixels | null>(null);
 
   const apply = () => {
     const { active: isActive, gist: shape, settled: isSettled } = latest.current;
@@ -118,11 +122,12 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, active, gist, set
           apply();
         })
         .catch(() => setRenderer('css'));
+    seededPhoto.current = photoPixels;
     pending.current = import('./gistParticles')
       .then(({ createGistParticles }) => createGistParticles(node, () => {
         particles.current = null;
         setRenderer('css');
-      }))
+      }, photoPixels))
       .then((instance) => {
         particles.current = instance;
         setRenderer('particles');
@@ -139,6 +144,13 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, active, gist, set
     apply();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `apply` reads the latest props through a ref.
   }, [active, gist, settled]);
+
+  // A new photo (a rescan, a different picture) reseeds the particles as that photo.
+  useEffect(() => {
+    if (!particles.current || seededPhoto.current === photoPixels) return;
+    seededPhoto.current = photoPixels;
+    particles.current.setPhoto(photoPixels);
+  }, [photoPixels]);
 
   useEffect(
     () => () => {

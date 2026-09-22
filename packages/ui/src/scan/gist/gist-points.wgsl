@@ -10,7 +10,7 @@ struct Particle {
   vel: vec3f,
   glow: f32,
   nrm: vec3f,
-  hue: f32,
+  color: u32,
 }
 
 struct Camera {
@@ -60,20 +60,24 @@ const PROJECTION_SCALE: f32 = 3.27;
   out.uv = corner;
 
   let height = clamp(particle.pos.y * 0.5 + 0.5, 0.0, 1.0);
-  // Two palette colours, a per-particle hue nudge, and a touch of warmth toward the top.
-  var base = mix(camera.main, camera.accent, clamp(height * 0.45 + (particle.hue - 0.5) * 0.5, 0.0, 1.0));
+  // The per-particle hue nudge comes from the seed; the photo colour, when the
+  // particle was born from a pixel, wins over the palette.
+  let hue = fract(particle.seed * 7.31);
+  let photo = unpack4x8unorm(particle.color);
+  var base = mix(camera.main, camera.accent, clamp(height * 0.45 + (hue - 0.5) * 0.5, 0.0, 1.0));
   base = mix(base, base * vec3f(1.08, 1.0, 0.92), height * 0.3);
+  base = mix(base, photo.rgb, photo.a * 0.85);
   let n = normalize(particle.nrm + vec3f(1e-4));
   let toEye = normalize(camera.eye - particle.pos);
   let diffuse = 0.32 + 0.68 * max(dot(n, camera.light), 0.0);
   let rim = pow(1.0 - max(dot(n, toEye), 0.0), 3.0) * 0.35;
-  let speck = 0.5 + 0.5 * particle.hue;
+  let speck = 0.5 + 0.5 * hue;
   let lit = base * (diffuse * (0.85 + 0.3 * speck)) + camera.accent * rim + vec3f(0.12) * pow(max(dot(reflect(-camera.light, n), toEye), 0.0), 24.0);
-  // Airy pastel while whirling, shaded skin once settled.
-  let airy = mix(base, vec3f(1.0), 0.35);
+  // Airy pastel while whirling (the photo's own colours when it has them), shaded skin once settled.
+  let airy = mix(mix(base, vec3f(1.0), 0.35), photo.rgb, photo.a * 0.9);
   out.tint = mix(airy, lit, settled);
   // Thousands of airborne discs overlap, so each stays faint; the skin is nearly opaque.
-  out.alpha = mix(0.12, 0.95, settled) * camera.fade;
+  out.alpha = mix(mix(0.12, 0.5, photo.a), 0.95, settled) * camera.fade;
   out.settled = settled;
   return out;
 }
