@@ -163,6 +163,34 @@ export function atomsToPoints(frame: Frame, count: number, options: AtomPointsOp
   return { count, positions, colors, normals, min, max };
 }
 
+/** Element symbols present in the frame, most numerous first; empty when it has no element identity. */
+export function elementSymbolsOf(frame: Pick<Frame, 'natoms' | 'types' | 'typeSemantics'>): Array<{ symbol: string; count: number }> {
+  const counts = new Map<number, number>();
+  const natoms = Math.min(frame.natoms, frame.types.length);
+  for (let atom = 0; atom < natoms; atom += 1) counts.set(frame.types[atom], (counts.get(frame.types[atom]) ?? 0) + 1);
+  const out: Array<{ symbol: string; count: number }> = [];
+  for (const [type, count] of counts) {
+    const atomicNumber = resolveAtomicNumber(frame, type);
+    const spec = atomicNumber === undefined ? null : ELEMENT_DATA[atomicNumber];
+    if (spec) out.push({ symbol: spec.symbol, count });
+  }
+  return out.sort((a, b) => b.count - a.count);
+}
+
+/** The frame's formula in Hill order (C, then H, then the rest alphabetically), or null without element identity. */
+export function formulaOf(frame: Pick<Frame, 'natoms' | 'types' | 'typeSemantics'>): string | null {
+  const symbols = elementSymbolsOf(frame);
+  if (symbols.length === 0) return null;
+  const bySymbol = new Map(symbols.map((entry) => [entry.symbol, entry.count]));
+  const order: string[] = [];
+  if (bySymbol.has('C')) {
+    order.push('C');
+    if (bySymbol.has('H')) order.push('H');
+  }
+  for (const symbol of [...bySymbol.keys()].sort()) if (!order.includes(symbol)) order.push(symbol);
+  return order.map((symbol) => `${symbol}${bySymbol.get(symbol) === 1 ? '' : bySymbol.get(symbol)}`).join('');
+}
+
 function randomDirection(random: () => number): [number, number, number] {
   const z = random() * 2 - 1;
   const angle = random() * Math.PI * 2;

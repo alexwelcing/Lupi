@@ -441,6 +441,11 @@ export interface AppState {
   arrival: number;
   /** Whether arrivals run at all: WebGPU present and motion not reduced. */
   arrivalEnabled: boolean;
+  /**
+   * What the arrival stage is doing, for the chrome: `whirl` and `calling`
+   * clear the room, `landed` lets it back in. Null when nothing is arriving.
+   */
+  arrivalPhase: 'whirl' | 'calling' | 'landed' | null;
   backgroundPreset: string;
   backgroundStyle: 'linear' | 'radial' | 'spotlight';
   backgroundMotionPaused: boolean;
@@ -759,6 +764,7 @@ export interface AppState {
   setArrival: (arrival: number) => void;
   /** Off for agent-driven viewers (the MCP route), where an export must never catch atoms mid-growth. */
   setArrivalEnabled: (enabled: boolean) => void;
+  setArrivalPhase: (phase: 'whirl' | 'calling' | 'landed' | null) => void;
   setBackgroundPreset: (preset: string) => void;
   setBackgroundStyle: (style: AppState['backgroundStyle']) => void;
   setBackgroundMotionPaused: (paused: boolean) => void;
@@ -939,6 +945,7 @@ const DEFAULTS = {
   activeBondDataset: null as string | null,
   atomScale: 1.0,
   arrival: 1,
+  arrivalPhase: null,
   arrivalEnabled: typeof navigator !== 'undefined' && 'gpu' in navigator && !(typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
   backgroundPreset: 'pub-figure-neutral',
   backgroundStyle: 'radial' as const,
@@ -1541,7 +1548,8 @@ export const useStore = create<AppState>()(
     setActiveBondDataset: (id: string | null) => set({ activeBondDataset: id }),
     setAtomScale: (atomScale) => set({ atomScale }),
     setArrival: (arrival) => set({ arrival: Math.max(0, Math.min(1, arrival)) }),
-    setArrivalEnabled: (arrivalEnabled) => set(arrivalEnabled ? { arrivalEnabled } : { arrivalEnabled, arrival: 1 }),
+    setArrivalEnabled: (arrivalEnabled) => set(arrivalEnabled ? { arrivalEnabled } : { arrivalEnabled, arrival: 1, arrivalPhase: null }),
+    setArrivalPhase: (arrivalPhase) => set({ arrivalPhase }),
     setBackgroundPreset: (backgroundPreset) => set({ backgroundPreset }),
     setBackgroundStyle: (backgroundStyle) => set({ backgroundStyle }),
     setBackgroundMotionPaused: (backgroundMotionPaused) => set({ backgroundMotionPaused }),

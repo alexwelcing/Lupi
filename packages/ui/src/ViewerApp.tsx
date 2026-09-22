@@ -601,6 +601,7 @@ export function ViewerApp() {
   const isBatchExport = new URLSearchParams(window.location.search).get('batchExport') === 'true';
   const mobileTimelineActive = isMobile && !!file && totalFrames > 1;
   const [uiStowed, setUiStowed] = useState(false);
+  const arrivalPhase = useStore((state) => state.arrivalPhase);
 
   const clearLoadedFile = useCallback(() => {
     // A streamed trajectory owns abort controllers, subscriptions, loader
@@ -622,6 +623,7 @@ export function ViewerApp() {
       data-file={!!file}
       data-timeline={mobileTimelineActive}
       data-ui-stowed={uiStowed}
+      data-arriving={arrivalPhase === 'whirl' || arrivalPhase === 'calling'}
       data-style-open={!uiStowed && activePanel === 'studio'}
       data-panel-open={!uiStowed && (Boolean(activePanel) || studyLensOpen)}
       style={{

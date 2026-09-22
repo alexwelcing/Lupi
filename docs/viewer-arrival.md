@@ -41,6 +41,41 @@ the same assembly wave, the same shaded discs.
   agent's export never catches atoms mid-growth. Exports build their own
   scene from the store's atom scale and are not affected either way.
 
+## The room
+
+The effect is only half of it; the other half is how the page brings it
+about, on a phone and on a desktop, without crowding and without stalling.
+
+- **The chrome clears.** While the particles whirl and fly, the app root
+  carries `data-arriving="true"` and the header slides up, the command deck
+  and panels slide out, the bucket and the gesture hint go quiet, exactly
+  as stowing does (`apps/web/src/styles/global.css`). It all comes back as
+  the atoms land. Nothing unmounts.
+- **A veil.** A radial darkening over the viewer (`.lupi-arrival-veil`)
+  deepens during the flight and lifts after, so the particles read on a
+  light background preset as well as a dark one, and the moment has room.
+- **A caption, in three beats.** The molecule's name appears as the whirl
+  starts, so the viewer knows what is coming. Its formula, atom count and
+  the gallery's one-line subtitle fade in as the atoms land. Half a second
+  later, three things to see next: gallery molecules chosen by domain,
+  shared elements and similar size (`viewer/related.ts`), as chips; a tap
+  opens one, and the particles fly from these atoms to those. The caption
+  lets go seven seconds after landing, or the moment the viewer touches the
+  scene. Bottom-centred, clear of the bucket on desktop and the deck on
+  mobile, higher again above a trajectory's timeline.
+- **Ins and outs.** Any touch, wheel or key during the flight lands the
+  atoms in a quarter of a second. A load that the particles already sit
+  through (the next molecule from the switcher, a chip, a search) lifts
+  them off into a whirl while it is in flight, so a network wait reads as
+  anticipation; if the load fails they settle back where they were. Reduced
+  motion, no WebGPU, the MCP viewer route, an engine failure or an
+  eight-second watchdog all show the atoms at once and the chrome never
+  moves.
+
+Nothing is pre-made for particular molecules: the name comes from the
+gallery entry or the file name, the formula from the atoms, the
+suggestions from the local index.
+
 ## Seeing it without a browser
 
 ```bash
