@@ -195,3 +195,59 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+/* The search's stage: a strip under the input where the particles form the
+   thing typed. Collapsed until there is something to form; the scanner's
+   stage styles are scaled down to fit a panel. */
+.switcher-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  max-height: 0;
+  opacity: 0;
+  margin: -10px 0 0;
+  transition: max-height 480ms cubic-bezier(.2, .85, .2, 1), opacity 320ms ease, margin 480ms cubic-bezier(.2, .85, .2, 1);
+}
+.switcher-stage[data-on='true'] {
+  max-height: 240px;
+  opacity: 1;
+  margin: 0;
+  border-color: var(--sw-line);
+}
+.switcher-stage .scan-stage,
+.switcher-stage .gist-stage {
+  min-height: 0;
+  max-height: none;
+  height: 200px;
+  border-radius: 10px;
+}
+.switcher-stage .scan-photo--empty {
+  min-height: 0;
+  height: 200px;
+}
+.switcher-stage .gist-label {
+  left: 10px;
+  bottom: 10px;
+  max-width: min(72%, 300px);
+  padding: 8px 10px;
+  gap: 2px;
+}
+.switcher-stage .gist-label-text {
+  font-size: 1.1rem;
+}
+.switcher-stage .gist-likeness {
+  margin-top: 3px;
+  font-size: 0.68rem;
+}
+.switcher-stage .gist-label .student-eyebrow {
+  font-size: 0.62rem;
+}
+.switcher-stage[data-compact='true'] .scan-stage,
+.switcher-stage[data-compact='true'] .gist-stage,
+.switcher-stage[data-compact='true'] .scan-photo--empty {
+  height: 150px;
+}
+.switcher-stage[data-compact='true'][data-on='true'] {
+  max-height: 180px;
+}

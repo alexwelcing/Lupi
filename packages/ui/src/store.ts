@@ -433,28 +433,6 @@ export interface AppState {
   bondRegistry: Record<string, BondDataset>;
   activeBondDataset: string | null;
   atomScale: number;
-  /**
-   * The molecule's arrival: 0 while its particles are still assembling it,
-   * 1 once the real atoms have grown in. Multiplies the rendered atom scale.
-   * Transient; never saved.
-   */
-  arrival: number;
-  /** Whether arrivals run at all: WebGPU present and motion not reduced. */
-  arrivalEnabled: boolean;
-  /**
-   * What the arrival stage is doing, for the chrome: `whirl` and `calling`
-   * clear the room, `landed` lets it back in. Null when nothing is arriving.
-   */
-  arrivalPhase: 'whirl' | 'calling' | 'landed' | null;
-  /**
-   * Armed by the Switch menu just before it opens a molecule, and only by
-   * it: the next `setFile` then arrives with particles. Every other way a
-   * molecule opens (a link, a gallery card, the scanner) shows the atoms
-   * directly. Consumed by `setFile`.
-   */
-  arrivalArmed: boolean;
-  /** Counts the arrivals `setFile` has started; the stage runs once per count. */
-  arrivalRun: number;
   backgroundPreset: string;
   backgroundStyle: 'linear' | 'radial' | 'spotlight';
   backgroundMotionPaused: boolean;
@@ -770,12 +748,6 @@ export interface AppState {
   registerBondDataset: (dataset: BondDataset) => void;
   setActiveBondDataset: (id: string | null) => void;
   setAtomScale: (scale: number) => void;
-  setArrival: (arrival: number) => void;
-  /** Off for agent-driven viewers (the MCP route), where an export must never catch atoms mid-growth. */
-  setArrivalEnabled: (enabled: boolean) => void;
-  setArrivalPhase: (phase: 'whirl' | 'calling' | 'landed' | null) => void;
-  /** The Switch menu calls this right before opening a molecule. */
-  armArrival: () => void;
   setBackgroundPreset: (preset: string) => void;
   setBackgroundStyle: (style: AppState['backgroundStyle']) => void;
   setBackgroundMotionPaused: (paused: boolean) => void;
@@ -955,11 +927,6 @@ const DEFAULTS = {
   bondRegistry: {} as Record<string, BondDataset>,
   activeBondDataset: null as string | null,
   atomScale: 1.0,
-  arrival: 1,
-  arrivalPhase: null,
-  arrivalArmed: false,
-  arrivalRun: 0,
-  arrivalEnabled: typeof navigator !== 'undefined' && 'gpu' in navigator && !(typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
   backgroundPreset: 'pub-figure-neutral',
   backgroundStyle: 'radial' as const,
   backgroundMotionPaused: false,
@@ -1326,13 +1293,6 @@ export const useStore = create<AppState>()(
 
       set({
         file,
-        // The atoms stay hidden until the arrival stage has assembled them;
-        // the stage sets this back to 1, and to 1 at once when it cannot run.
-        // The atoms are held until the particles land only when the Switch
-        // menu armed this load; any other load shows them at once.
-        arrival: get().arrivalArmed && get().arrivalEnabled && atomCount > 0 ? 0 : 1,
-        arrivalRun: get().arrivalArmed && get().arrivalEnabled && atomCount > 0 ? get().arrivalRun + 1 : get().arrivalRun,
-        arrivalArmed: false,
         // A freshly loaded file is no longer the saved view that was on screen.
         activeSavedView: null,
         ghostFile: null,
@@ -1564,10 +1524,6 @@ export const useStore = create<AppState>()(
     })),
     setActiveBondDataset: (id: string | null) => set({ activeBondDataset: id }),
     setAtomScale: (atomScale) => set({ atomScale }),
-    setArrival: (arrival) => set({ arrival: Math.max(0, Math.min(1, arrival)) }),
-    setArrivalEnabled: (arrivalEnabled) => set(arrivalEnabled ? { arrivalEnabled } : { arrivalEnabled, arrival: 1, arrivalPhase: null }),
-    setArrivalPhase: (arrivalPhase) => set({ arrivalPhase }),
-    armArrival: () => set({ arrivalArmed: true }),
     setBackgroundPreset: (backgroundPreset) => set({ backgroundPreset }),
     setBackgroundStyle: (backgroundStyle) => set({ backgroundStyle }),
     setBackgroundMotionPaused: (backgroundMotionPaused) => set({ backgroundMotionPaused }),
@@ -1680,9 +1636,6 @@ export const useStore = create<AppState>()(
     clearFile: () => set({
       file: null,
       ghostFile: null,
-      arrival: 1,
-      arrivalPhase: null,
-      arrivalArmed: false,
       frame: 0,
       playing: false,
       loading: false,
