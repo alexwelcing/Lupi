@@ -254,6 +254,29 @@ checkpoints are missing), so the mesh path is the one in use; a splat
 Space that works would drop straight in, since the points format already
 carries what a splat centre has.
 
+A real photo (2026-09-22): a long-haired grey cat on the back of a navy
+sofa under a floor lamp, dim, dark on dark. The device's flood cut did
+what the synthetic photos could not make it do: it merged the cat into the
+sofa back (18% fill, 9 pieces) and dropped the lamp. Jev's plan read those
+numbers and chose the SAM 3 mask at 0.98 and the rebuild at 0.88. SAM 3
+returned "cat (0.97)", a clean silhouette down to the tail, in 45 s while
+the Space was queued (3.5 s warm); "floor lamp (0.95)" in 28 s. SAM 3D
+rebuilt the cat in 56 s (510 k faces, 10 MB) and the lamp in 49 s (112 k
+faces). Headless, from the SAM 3 mask and the mesh
+(`--image=… --mask=… --glb=…`): the cut-out is the cat in its own grey
+fur, the assembled cloud is a 3D cat facing left as photographed (aligned
+at 306°), and the turned frame shows its back. The lamp's mask revolved
+into a drum shade wearing the photo's own pattern; SAM 3D then delivered a
+whole floor lamp, pole and base included, which the photo never shows, so
+the alignment score went negative (the mask has no base to match) and the
+assembled lamp stands smaller than its shade did. For a subject Jev
+recipes as `revolve` the alignment could be skipped, since a solid of
+revolution has no front; that is a one-line change waiting on a second
+such photo. Tools: `pnpm scan:photos:export -- --import=photo.jpg --as=name`
+brings a real photo in, `pnpm scan:masks -- --file=photo.jpg` shows its
+cuts, and `pnpm scan:hf:bench -- --photo=name --subject="…"` drives the
+Spaces on it.
+
 The Hub MCP server (`https://huggingface.co/mcp`, `HfMcpClient`) answers
 with the token too: repo search, repo details, the filesystem tools. It is
 there for agents and for a future plan step that discovers Spaces instead

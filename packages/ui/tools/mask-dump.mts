@@ -2,14 +2,17 @@
 // its mask cut at every contrast threshold, side by side, with the
 // measurements Jev would be asked about.
 //
-//   pnpm scan:masks            → .verify-artifacts/masks-<kind>.png
+//   pnpm scan:masks                      → .verify-artifacts/masks-<kind>.png
+//   pnpm scan:masks -- --file=photo.jpg  → .verify-artifacts/masks-file.png, a real photo
 import { writeFileSync } from 'node:fs';
 import { createCanvas } from 'canvas';
 import { cutMask, MASK_TOLERANCES, stageFromPhoto } from '../src/scan/gist/volumeStage';
-import { SYNTHETIC_KINDS, syntheticPhoto } from './synthetic-photos.mts';
+import { SYNTHETIC_KINDS, syntheticPhoto, type SyntheticPhoto } from './synthetic-photos.mts';
+import { loadPhotoFile } from './photo-file.mts';
 
-for (const kind of SYNTHETIC_KINDS) {
-  const photo = syntheticPhoto(kind);
+const fileArg = process.argv.find((arg) => arg.startsWith('--file='))?.slice('--file='.length);
+const cases: Array<[string, SyntheticPhoto]> = fileArg ? [['file', (await loadPhotoFile(fileArg)).pixels]] : SYNTHETIC_KINDS.map((kind) => [kind, syntheticPhoto(kind)]);
+for (const [kind, photo] of cases) {
   const canvas = createCanvas(photo.width * (1 + MASK_TOLERANCES.length), photo.height);
   const context = canvas.getContext('2d');
   const image = context.createImageData(photo.width, photo.height);

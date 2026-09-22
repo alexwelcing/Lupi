@@ -7,9 +7,29 @@ import { fileURLToPath } from 'node:url';
 import { createCanvas } from 'canvas';
 import { cutMask, DEFAULT_TOLERANCE } from '../src/scan/gist/volumeStage';
 import { SYNTHETIC_KINDS, syntheticPhoto } from './synthetic-photos.mts';
+import { loadPhotoFile } from './photo-file.mts';
 
 const out = fileURLToPath(new URL('../../../.verify-artifacts/hf/', import.meta.url));
 mkdirSync(out, { recursive: true });
+// `--import=<file> --as=<name>` brings a real photo in as photo-<name>.jpg (≤1024) with its device mask.
+const importArg = process.argv.find((arg) => arg.startsWith('--import='))?.slice('--import='.length);
+if (importArg) {
+  const name = process.argv.find((arg) => arg.startsWith('--as='))?.slice('--as='.length) ?? 'file';
+  const loaded = await loadPhotoFile(importArg);
+  writeFileSync(`${out}photo-${name}.jpg`, loaded.jpeg);
+  const cut = cutMask(loaded.pixels, DEFAULT_TOLERANCE);
+  const maskCanvas = createCanvas(cut.mask.width, cut.mask.height);
+  const maskContext = maskCanvas.getContext('2d');
+  const mask = maskContext.createImageData(cut.mask.width, cut.mask.height);
+  for (let index = 0; index < cut.mask.data.length; index += 1) {
+    const on = cut.mask.data[index] ? 255 : 0;
+    mask.data.set([on, on, on, 255], index * 4);
+  }
+  maskContext.putImageData(mask, 0, 0);
+  writeFileSync(`${out}mask-${name}.png`, maskCanvas.toBuffer('image/png'));
+  console.log(`imported ${importArg} as photo-${name}.jpg (${loaded.width}×${loaded.height}) · device cut fill ${(cut.features.fill * 100).toFixed(0)}% · ${cut.features.components} pieces`);
+  process.exit(0);
+}
 for (const kind of SYNTHETIC_KINDS) {
   const photo = syntheticPhoto(kind, 640, 480);
   const canvas = createCanvas(photo.width, photo.height);

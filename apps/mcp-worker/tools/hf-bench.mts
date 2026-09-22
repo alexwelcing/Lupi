@@ -54,9 +54,13 @@ if (args.includes('--plan')) {
   const vars = devVars();
   const env = { HF_TOKEN: token, TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY ?? vars.TYPESAFE_API_KEY };
   const kinds = (process.argv.find((arg) => arg.startsWith('--photos='))?.slice('--photos='.length) ?? photo).split(',');
+  const { SYNTHETIC_KINDS } = await import('../../../packages/ui/tools/synthetic-photos.mts');
+  const { loadPhotoFile } = await import('../../../packages/ui/tools/photo-file.mts');
   for (const kind of kinds) {
-    const cut = cutMask(syntheticPhoto(kind as never), DEFAULT_TOLERANCE);
-    const subjectFor = { mug: 'coffee mug', table: 'wooden table', tv: 'television', cat: 'cat', tree: 'oak tree', disc: 'red ball' }[kind] ?? kind;
+    // A synthetic photo by kind, or an imported real one (`photo-<kind>.jpg`).
+    const pixels = (SYNTHETIC_KINDS as string[]).includes(kind) ? syntheticPhoto(kind as never) : (await loadPhotoFile(`${dir}photo-${kind}.jpg`)).pixels;
+    const cut = cutMask(pixels, DEFAULT_TOLERANCE);
+    const subjectFor = args.find((arg) => arg.startsWith('--subject='))?.slice('--subject='.length) ?? { mug: 'coffee mug', table: 'wooden table', tv: 'television', cat: 'cat', tree: 'oak tree', disc: 'red ball' }[kind] ?? kind;
     const started = performance.now();
     const response = await handleScanPlan(new Request('https://lupi.live/v1/scan/plan', { method: 'POST', body: JSON.stringify({ subject: subjectFor, features: cut.features, device: { masked: true, pieces: cut.features.components } }) }), env);
     const body = (await response.json()) as { mask?: { choice: string; confidence: number }; reconstruct?: { choice: string; confidence: number }; gains?: number; services?: Record<string, { stage: string; hardware: string | null }>; error?: string };

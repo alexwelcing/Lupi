@@ -12,8 +12,9 @@ import { createCanvas } from 'canvas';
 import { init, target } from 'vgpu/node';
 import { createGistEngine, GIST_PARTICLE_COUNT, PARTICLE_FLOATS } from '../src/scan/gist/gistEngine';
 import { DEMO_GISTS, FATNESS } from '../src/scan/gist/gistClient';
-import { DEFAULT_TOLERANCE, stageFromPhoto } from '../src/scan/gist/volumeStage';
+import { DEFAULT_TOLERANCE, stageFromMask, stageFromPhoto } from '../src/scan/gist/volumeStage';
 import { SYNTHETIC_KINDS, syntheticPhoto, type SyntheticKind } from './synthetic-photos.mts';
+import { loadMaskFile, loadPhotoFile } from './photo-file.mts';
 import { alignPointsToMask, applyMove, applicableMoves, describeGist, packPoints, parseGlb, sampleMeshPoints, unpackPoints, type DepthModel } from '@atlas/core/gist';
 
 // The shaders have no imports, so their text is already complete WGSL.
@@ -38,19 +39,29 @@ const random = () => {
 // silhouette then becomes the shape, exactly as on the page: mask, clean,
 // measure, frame, inflate.
 const photoArg = process.argv.find((arg) => arg.startsWith('--photo'));
-const withPhoto = Boolean(photoArg);
-const photoKind = (photoArg?.includes('=') ? photoArg.slice(photoArg.indexOf('=') + 1) : 'disc') as SyntheticKind;
-if (withPhoto && !SYNTHETIC_KINDS.includes(photoKind)) {
+const withPhoto = Boolean(photoArg) || process.argv.some((arg) => arg.startsWith('--image='));
+const photoKind = (process.argv.some((arg) => arg.startsWith('--image=')) ? 'file' : photoArg?.includes('=') ? photoArg.slice(photoArg.indexOf('=') + 1) : 'disc') as SyntheticKind;
+if (withPhoto && photoKind !== ('file' as string) && !SYNTHETIC_KINDS.includes(photoKind)) {
   console.error(`Unknown photo kind "${photoKind}"; try ${SYNTHETIC_KINDS.join(', ')}.`);
   process.exit(2);
 }
-const pixels = withPhoto ? syntheticPhoto(photoKind) : null;
+// `--image=<file>` uses a real photo instead; the output name is `file`.
+const imageArg = process.argv.find((arg) => arg.startsWith('--image='))?.slice('--image='.length);
+const pixels = imageArg ? (await loadPhotoFile(imageArg)).pixels : withPhoto ? syntheticPhoto(photoKind) : null;
 // `--depth=inflate|extrude|revolve` and `--fatness=thin|medium|round` render a
 // photo with the recipe Jev would have chosen, without calling Jev.
 const depthArg = process.argv.find((arg) => arg.startsWith('--depth='))?.slice('--depth='.length) as DepthModel | undefined;
 const fatnessArg = process.argv.find((arg) => arg.startsWith('--fatness='))?.slice('--fatness='.length) as keyof typeof FATNESS | undefined;
 const gridArg = process.argv.find((arg) => arg.startsWith('--grid='));
-const stage = pixels ? stageFromPhoto(pixels, DEFAULT_TOLERANCE, depthArg ?? 'inflate', FATNESS[fatnessArg ?? 'round'], gridArg ? Number(gridArg.slice('--grid='.length)) : undefined) : null;
+// `--mask=<png>` cuts from a mask made elsewhere (SAM 3's, say) instead of the device's flood,
+// read the way the page reads it: the subject is whatever is not near-white.
+const maskArg = process.argv.find((arg) => arg.startsWith('--mask='))?.slice('--mask='.length);
+const givenMask = pixels && maskArg ? await loadMaskFile(maskArg, pixels.width, pixels.height) : null;
+const stage = pixels
+  ? givenMask
+    ? stageFromMask(pixels, givenMask, DEFAULT_TOLERANCE, depthArg ?? 'inflate', FATNESS[fatnessArg ?? 'round'])
+    : stageFromPhoto(pixels, DEFAULT_TOLERANCE, depthArg ?? 'inflate', FATNESS[fatnessArg ?? 'round'], gridArg ? Number(gridArg.slice('--grid='.length)) : undefined)
+  : null;
 if (stage) console.log(`stage: masked ${stage.masked} · grid ${stage.volume.n}³ · ${stage.volume.depth} · fatness ${stage.volume.fatness} · cut at ${stage.candidate.tolerance} · fill ${(stage.candidate.features.fill * 100).toFixed(0)}% · ${stage.candidate.features.components} pieces · ${stage.volume.filled} cells · frame zoom ${stage.photo.frame?.zoom.toFixed(2)}`);
 const photo = stage?.photo ?? null;
 // A photo run holds the camera at the front so the reassembled face is what gets checked.
