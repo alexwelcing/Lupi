@@ -1,6 +1,13 @@
 # The arrival: a molecule assembling in the viewer
 
-When a molecule opens in the viewer, sixty thousand particles whirl over
+**Only from the Switch menu.** A molecule opened any other way, from a
+link, a gallery card, the scanner or a saved view, shows its atoms at
+once. The Switch menu (and the "next" chips the caption offers after a
+switch) call `armArrival()` on the store just before opening; `setFile`
+starts an arrival only when armed, and consumes the arming. Nothing else
+in the app can start one.
+
+When a molecule opens from the Switch menu, sixty thousand particles whirl over
 the scene in the molecule's own colours, then fly to its atoms from the
 bottom up, each taking its element's colour as it lands, and the real atoms
 grow in underneath as the particles fade. When one molecule replaces

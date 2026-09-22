@@ -1,10 +1,16 @@
 /**
- * A molecule arrives: sixty thousand particles whirl over the viewer, then
- * fly to the atoms, bottom up, each taking its element's colour, and the
- * real atoms grow in underneath as the particles fade. When one molecule
- * replaces another, the particles are already sitting on the old atoms and
- * simply fly to the new ones; while the next one is still loading they
- * lift off and whirl, so a wait reads as anticipation, not a stall.
+ * A molecule arrives from the Switch menu: sixty thousand particles whirl
+ * over the viewer, then fly to the atoms, bottom up, each taking its
+ * element's colour, and the real atoms grow in underneath as the particles
+ * fade. When one molecule replaces another, the particles are already
+ * sitting on the old atoms and simply fly to the new ones; while the next
+ * one is still loading they lift off and whirl, so a wait reads as
+ * anticipation, not a stall.
+ *
+ * Only a switch does this. A molecule opened any other way (a link, a
+ * gallery card, the scanner, a saved view) shows its atoms directly; the
+ * Switch menu arms the store (`armArrival`) just before it opens, and
+ * `setFile` starts a run only when armed.
  *
  * The room is made for it. While the particles whirl and fly, the chrome
  * clears (`data-arriving` on the app root), a veil deepens the background
@@ -105,6 +111,9 @@ function captionFor(file: { name: string }, frame: Frame, galleryId: string | nu
 export function ArrivalStage() {
   const file = useStore((state) => state.file);
   const loading = useStore((state) => state.loading);
+  const armed = useStore((state) => state.arrivalArmed);
+  /** Counts up when `setFile` starts an arrival; only a switch does that. */
+  const run = useStore((state) => state.arrivalRun);
   const galleryId = useStore((state) => state.activeCardId);
   const enabled = useStore((state) => state.arrivalEnabled);
   const setArrival = useStore((state) => state.setArrival);
@@ -123,6 +132,7 @@ export function ArrivalStage() {
   const [detailOn, setDetailOn] = useState(false);
   const [nextOn, setNextOn] = useState(false);
   const skipRef = useRef<(() => void) | null>(null);
+  const handledRun = useRef(0);
 
   const setPhase = useCallback(
     (next: Phase) => {
@@ -183,16 +193,29 @@ export function ArrivalStage() {
     };
   }, []);
 
-  /* ─── The arrival itself ─── */
+  /* ─── A molecule that arrived some other way: the particles simply leave ─── */
   useEffect(() => {
     lastFile.current = file;
-    const frame = firstFrame(file);
-    if (!enabled || !frame || !file) {
+    if (useStore.getState().arrivalRun !== handledRun.current) return; // an arrival is about to run for this file
+    setArrival(1);
+    setPhase(null);
+    setCaptionOn(false);
+    particles.current?.setFade(0);
+  }, [file, setArrival, setPhase]);
+
+  /* ─── The arrival itself: once per run the Switch menu started ─── */
+  useEffect(() => {
+    if (run === 0 || run === handledRun.current) return;
+    handledRun.current = run;
+    const current = useStore.getState().file;
+    const frame = firstFrame(current);
+    if (!enabled || !frame || !current) {
       setArrival(1);
       setPhase(null);
       setCaptionOn(false);
       return;
     }
+    const file = current;
     let cancelled = false;
     const timers: number[] = [];
     let raf = 0;
@@ -287,14 +310,14 @@ export function ArrivalStage() {
       timers.forEach((timer) => window.clearTimeout(timer));
       cancelAnimationFrame(raf);
     };
-  }, [file, enabled, galleryId, setArrival, setPhase]);
+  }, [run, enabled, galleryId, setArrival, setPhase]);
 
-  /* ─── A load in progress: the particles lift off and whirl until it lands ─── */
+  /* ─── A switch in progress: the particles lift off and whirl until it lands ─── */
   useEffect(() => {
     if (!enabled) return;
     const engine = particles.current;
     if (!engine || !settledOnce.current) return;
-    if (loading) {
+    if (loading && armed) {
       engine.setFade(1);
       engine.setAttract(0);
       engine.setEnergy(1);
@@ -315,7 +338,7 @@ export function ArrivalStage() {
       }
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [loading, enabled, setPhase]);
+  }, [loading, armed, enabled, setPhase]);
 
   /* ─── Ins and outs: skip during the flight, let the caption go after ─── */
   useEffect(() => {
@@ -368,6 +391,8 @@ export function ArrivalStage() {
                   className="lupi-arrival-chip"
                   onClick={() => {
                     setCaptionOn(false);
+                    // A chip is a switch: this molecule's particles fly to the next one.
+                    useStore.getState().armArrival();
                     void candidate.open();
                   }}
                 >

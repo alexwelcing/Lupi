@@ -115,6 +115,8 @@ export function MoleculeSwitcher() {
       setOpening(candidate.key);
       setError(null);
       try {
+        // A switch is the one way a molecule arrives with particles.
+        useStore.getState().armArrival();
         await candidate.open();
         rememberSwitch(candidate);
       } catch (reason) {
