@@ -48,18 +48,29 @@ export function SwitchStage({ query, compact = false }: SwitchStageProps) {
   const abort = useRef<AbortController | null>(null);
   const sculpt = useRef<SculptLoopHandle | null>(null);
 
-  // The subject is the query once typing has paused.
+  // The subject is the query once typing has paused. Text that is not a
+  // thing (cleared, too short, a formula) drops the subject at once, so the
+  // stage collapses and nothing keeps working on the old word.
   useEffect(() => {
-    if (!isFormableQuery(query)) return;
+    if (!isFormableQuery(query)) {
+      setSubject(null);
+      return;
+    }
     const timer = window.setTimeout(() => setSubject(query.trim().toLowerCase()), SETTLE_MS);
     return () => window.clearTimeout(timer);
   }, [query]);
 
   useEffect(() => {
-    if (!subject || !available) return;
     abort.current?.abort();
     sculpt.current?.stop();
     sculpt.current = null;
+    if (!subject || !available) {
+      setBusy(false);
+      setGist(null);
+      setEvents([]);
+      setSculpting(false);
+      return;
+    }
     const controller = new AbortController();
     abort.current = controller;
     setBusy(true);
@@ -89,6 +100,8 @@ export function SwitchStage({ query, compact = false }: SwitchStageProps) {
       });
     return () => {
       controller.abort();
+      sculpt.current?.stop();
+      sculpt.current = null;
     };
   }, [subject, available]);
 
