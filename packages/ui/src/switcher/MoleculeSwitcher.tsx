@@ -6,6 +6,7 @@ import { ElementPicker } from './ElementPicker';
 import { applyJudgment, buildJudgePool, judgeSwitch, type SwitchJudgment } from './judgeSwitch';
 import { recentSwitches, rememberSwitch, subscribeRecent } from './recent';
 import { findSwitchCandidates, galleryCandidates, galleryPool, type SwitchCandidate } from './switchIndex';
+import { SwitchStage } from './SwitchStage';
 import './switcher.css';
 
 /**
@@ -194,6 +195,7 @@ export function MoleculeSwitcher() {
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={onKeyDown}
       />
+      <SwitchStage query={query} compact={isMobile} />
       <ElementPicker selected={elements} onToggle={toggleElement} />
       {elements.length > 0 && (
         <div className="switcher-chips" aria-live="polite">

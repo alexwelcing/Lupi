@@ -87,6 +87,22 @@ export async function requestGist(image: PreparedImage, hint: string, signal?: A
   return gist ? { ...reply, gist } : null;
 }
 
+/**
+ * A gist from a word or two, no photo: the molecule search's stage forms
+ * the thing typed while the results come in. Same route, same reply.
+ */
+export async function requestGistText(text: string, signal?: AbortSignal): Promise<GistReply | null> {
+  if (gistUnavailable) return { configured: false };
+  const reply = await post<GistReply>(GIST_PATH, { text: text.trim() }, GIST_TIMEOUT_MS, signal);
+  if (reply?.configured === false) {
+    gistUnavailable = true;
+    return reply;
+  }
+  if (!reply?.gist) return reply ? { ...reply, gist: undefined } : null;
+  const gist = normalizeGist(reply.gist);
+  return gist ? { ...reply, gist } : null;
+}
+
 /** One sculpting judgment. Null means no answer this round; the loop just asks again. */
 export type SculptMode = 'choice' | 'nouls';
 

@@ -39,6 +39,7 @@ import {
 } from '@atlas/core';
 import { jevClientConfig, jevConfigured } from './jev';
 import {
+  ScanRequestError,
   ScanVisionError,
   anthropicClient,
   parseScanRequest,
@@ -177,11 +178,44 @@ export interface GistOutcome {
   usage: { inputTokens: number | null; outputTokens: number | null };
 }
 
-export async function gistWithVision(env: ScanEnv, request: ScanRequest, options: { fetcher?: typeof fetch } = {}): Promise<GistOutcome> {
+/**
+ * What the gist is sketched from: a photo (the scanner), or just a word or
+ * two the person typed into the molecule search (the Switch menu), where
+ * the particles form the thing named while the results come in.
+ */
+export type GistInput = ScanRequest | { text: string };
+
+const MAX_TEXT_CHARS = 80;
+
+/** A text-only gist request: `{ text }` with no image. Anything else is a photo request. */
+export function parseGistRequest(raw: unknown): GistInput {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const body = raw as Record<string, unknown>;
+    if (body.image === undefined && typeof body.text === 'string') {
+      const text = body.text.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_CHARS);
+      if (!text) throw new ScanRequestError('"text" is empty.');
+      return { text };
+    }
+  }
+  return parseScanRequest(raw);
+}
+
+export async function gistWithVision(env: ScanEnv, request: GistInput, options: { fetcher?: typeof fetch } = {}): Promise<GistOutcome> {
   if (!scanConfigured(env)) throw new ScanVisionError('Vision is not configured.', 503, 'not-configured');
   const client = anthropicClient(env, options.fetcher);
   const model = scanVisionModel(env);
-  const userText = request.hint ? `Sketch the gist of this. The person added a hint: "${request.hint}".` : 'Sketch the gist of this.';
+  const fromText = 'text' in request;
+  const userText = fromText
+    ? `There is no photo. Someone typed "${request.text}" into a search. Sketch the gist of what that thing typically looks like, as one recognisable everyday object, so the particles can form it while the search runs. Label it with the plain name of the thing. Give an empty outline, since there is no photo to trace. If the text is not a physical thing (a formula, a feeling, nonsense), label it "nothing" with confidence 0 and one small sphere.`
+    : request.hint
+      ? `Sketch the gist of this. The person added a hint: "${request.hint}".`
+      : 'Sketch the gist of this.';
+  const content: Array<{ type: 'image'; source: { type: 'base64'; media_type: ScanRequest['image']['mediaType']; data: string } } | { type: 'text'; text: string }> = fromText
+    ? [{ type: 'text', text: userText }]
+    : [
+        { type: 'image', source: { type: 'base64', media_type: request.image.mediaType, data: request.image.data } },
+        { type: 'text', text: userText },
+      ];
   let message: BetaMessage;
   try {
     message = await client.beta.messages.create({
@@ -191,15 +225,7 @@ export async function gistWithVision(env: ScanEnv, request: ScanRequest, options
       fallbacks: 'default',
       system: GIST_SYSTEM_PROMPT,
       output_config: { effort: 'low', format: { type: 'json_schema', schema: structuredOutputSchema(GIST_OUTPUT_SCHEMA) } },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: request.image.mediaType, data: request.image.data } },
-            { type: 'text', text: userText },
-          ],
-        },
-      ],
+      messages: [{ role: 'user', content }],
     });
   } catch (error) {
     if (error instanceof APIConnectionTimeoutError) throw new ScanVisionError('Vision timed out.', 504, 'timeout');
@@ -268,9 +294,9 @@ export async function handleScanGist(
   if (Number.isFinite(declared) && declared > MAX_GIST_BODY_BYTES) return jsonResponse({ error: 'Request body too large.' }, { status: 413 });
   const raw = await request.arrayBuffer();
   if (raw.byteLength > MAX_GIST_BODY_BYTES) return jsonResponse({ error: 'Request body too large.' }, { status: 413 });
-  let parsed: ScanRequest;
+  let parsed: GistInput;
   try {
-    parsed = parseScanRequest(JSON.parse(new TextDecoder().decode(raw) || 'null'));
+    parsed = parseGistRequest(JSON.parse(new TextDecoder().decode(raw) || 'null'));
   } catch (error) {
     return jsonResponse({ error: error instanceof Error ? error.message : 'Invalid request.' }, { status: 400 });
   }
@@ -278,7 +304,7 @@ export async function handleScanGist(
 
   const now = options.now ?? Date.now;
   const model = scanVisionModel(env);
-  const canonical = JSON.stringify({ i: await sha256Hex(parsed.image.data), h: parsed.hint.toLowerCase(), m: model });
+  const canonical = 'text' in parsed ? JSON.stringify({ t: parsed.text.toLowerCase(), m: model }) : JSON.stringify({ i: await sha256Hex(parsed.image.data), h: parsed.hint.toLowerCase(), m: model });
   const cacheKey = new Request(`https://scan-cache.lupi.live/gist/${GIST_PROMPT_VERSION}/${await sha256Hex(canonical)}`);
   const cache = options.cache === undefined ? (globalThis as { caches?: { default?: Cache } }).caches?.default ?? null : options.cache;
   if (cache) {
@@ -308,7 +334,8 @@ export async function handleScanGist(
       outlinePoints: outcome.outline.length,
       revolved: outcome.revolved,
       confidence: outcome.gist.confidence,
-      hasHint: parsed.hint.length > 0,
+      from: 'text' in parsed ? 'text' : 'photo',
+      hasHint: 'hint' in parsed && parsed.hint.length > 0,
       inputTokens: outcome.usage.inputTokens,
       outputTokens: outcome.usage.outputTokens,
       ms: response.timing?.ms,

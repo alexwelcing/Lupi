@@ -283,6 +283,22 @@ there for agents and for a future plan step that discovers Spaces instead
 of naming them; the routes today name their Spaces by env
 (`HF_SAM3_SPACE`, `HF_SAM3D_SPACE`) with public defaults.
 
+### The search's stage: type "candy", the particles form candy (2026-09-22, latest)
+
+The particle stage's home in the app is the molecule search (the Switch
+menu), not the viewer. Type a word or two and, while the results come in,
+a strip under the search box whirls and settles into the thing named
+(`packages/ui/src/switcher/SwitchStage.tsx`): the text goes to
+`POST /v1/scan/gist` as `{ text }` with no photo, the model sketches what
+that thing typically looks like in the same primitive vocabulary, the
+particles form it, and Jev sculpts it closer over the next seconds with
+the likeness on the label. Picking a result opens the molecule exactly as
+before; a molecule never gets the effect. The strip skips formulas and
+elements (not things), waits for typing to pause (380 ms), and stays away
+for the session once the edge reports the sketcher is not configured, so
+a deployment without keys shows the plain search. The gist route caches a
+text sketch by its lowercased text for an hour, like a photo's by hash.
+
 ### Three more ways in (2026-09-22, later)
 
 The vocabulary was the ceiling, so three different attacks on it:
