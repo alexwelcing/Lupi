@@ -99,6 +99,52 @@ describe('POST /v1/switch/judge', () => {
     expect(big.candidates.filter((c) => c.fit)).toHaveLength(24);
   });
 
+  it('asks the property-ranking questions only when asked, with evidence in state', async () => {
+    const ranked = [
+      { ...CANDIDATES[0], evidence: { phase: 'solid', density: 1.23, water: 'soluble', bogus: 'x' } },
+      { key: 'gallery:al_polycrystal', title: 'Al Polycrystal', source: 'gallery', category: 'Metals & Alloys', evidence: { substance: 'aluminium', density: 2.7, phase: 'plasma' } },
+      { key: 'gallery:qr', title: 'Atom QR', source: 'gallery' },
+    ];
+    const plain = parseSwitchJudgeRequest({ query: 'metal for planes', candidates: ranked });
+    expect(plain.rank).toBe(false);
+    expect(Object.keys(buildSwitchQuestions(plain)).some((id) => id.startsWith('has:'))).toBe(false);
+    expect(parseSwitchJudgeRequest({ query: '', elements: ['C'], rank: true, candidates: ranked }).rank).toBe(false);
+
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.state.candidates[1]).toMatchObject({ substance: 'aluminium', density_g_per_cm3: 2.7 });
+      expect(body.state.candidates[1]).not.toHaveProperty('phase_at_25C');
+      expect(body.state.candidates[0]).toMatchObject({ phase_at_25C: 'solid', in_water: 'soluble' });
+      expect(Object.keys(body.questions)).toEqual(expect.arrayContaining(['rank_mode', 'rank_property', 'has:gallery:al_polycrystal', 'kind:gallery:caffeine']));
+      expect(JSON.stringify(body.questions)).not.toContain('planes');
+      expect(body.state.candidates[1].category).toBe('Metals & Alloys');
+      expect(Object.keys(body.questions).filter((id) => id.includes('gallery:qr'))).toEqual(['fit:gallery:qr']);
+      const modes = ['lookup', 'filter', 'most', 'least', 'none'];
+      const properties = ['molar_mass', 'size', 'density', 'melting_point', 'boiling_point', 'other'];
+      return jevReply({
+        intent: { type: 'choice', choice: 'material', probabilities: distribution('material', INTENTS), confidence: 0.8 },
+        best: { type: 'choice', choice: 'gallery:al_polycrystal', probabilities: distribution('gallery:al_polycrystal', ['none', 'gallery:caffeine', 'gallery:al_polycrystal', 'gallery:qr']), confidence: 0.8 },
+        'fit:gallery:caffeine': { type: 'noul', noul: 0.02 },
+        'fit:gallery:al_polycrystal': { type: 'noul', noul: 0.8 },
+        'fit:gallery:qr': { type: 'noul', noul: 0.01 },
+        rank_mode: { type: 'choice', choice: 'filter', probabilities: distribution('filter', modes), confidence: 0.72 },
+        rank_property: { type: 'choice', choice: 'other', probabilities: distribution('other', properties), confidence: 0.95 },
+        'has:gallery:caffeine': { type: 'noul', noul: 0.02 },
+        'kind:gallery:caffeine': { type: 'noul', noul: 0.03 },
+        'has:gallery:al_polycrystal': { type: 'noul', noul: 0.77 },
+        'kind:gallery:al_polycrystal': { type: 'noul', noul: 0.82 },
+      });
+    });
+    const response = await handleSwitchJudge(post({ query: 'metal for planes', rank: true, candidates: ranked }), { TYPESAFE_API_KEY: 'sk-test' }, { fetcher, cache: null });
+    expect(response.status).toBe(200);
+    expect((await response.json()).rank).toEqual({
+      mode: { choice: 'filter', confidence: 0.72, ranking: 0.975 },
+      property: { choice: 'other', confidence: 0.95 },
+      has: { 'gallery:caffeine': 0.02, 'gallery:al_polycrystal': 0.77 },
+      kind: { 'gallery:caffeine': 0.03, 'gallery:al_polycrystal': 0.82 },
+    });
+  });
+
   it('rejects a reply that skips a question or returns a partial distribution', async () => {
     const fetcher = vi.fn(async () => jevReply({ best: { type: 'choice', choice: 'omol:nval-12', probabilities: {}, confidence: 0.7 } }));
     const response = await handleSwitchJudge(post({ query: 'benzene', candidates: CANDIDATES }), { TYPESAFE_API_KEY: 'sk-test' }, { fetcher, cache: null });

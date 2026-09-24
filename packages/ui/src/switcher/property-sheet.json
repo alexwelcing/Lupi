@@ -1,0 +1,522 @@
+{
+ "schema": "lupi.property-sheet.v1",
+ "note": "Reference values for gallery entries: phase at 25 C and 1 atm; density in g/cm3 near 25 C in that phase; melting and boiling points in C at 1 atm (decomposition temperature where the compound decomposes on melting); behaviour in water. Typical handbook values (CRC Handbook, PubChem). A missing field means not known, never zero. Simulation and material entries carry the bulk substance they represent.",
+ "entries": {
+  "acetaldehyde": {
+   "phase": "gas",
+   "meltingPoint": -123,
+   "boilingPoint": 20.2,
+   "water": "miscible"
+  },
+  "acetic_anhydride": {
+   "phase": "liquid",
+   "density": 1.082,
+   "meltingPoint": -73,
+   "boilingPoint": 140,
+   "water": "reacts"
+  },
+  "acetone": {
+   "phase": "liquid",
+   "density": 0.784,
+   "meltingPoint": -95,
+   "boilingPoint": 56,
+   "water": "miscible"
+  },
+  "acetonitrile": {
+   "phase": "liquid",
+   "density": 0.786,
+   "meltingPoint": -45,
+   "boilingPoint": 82,
+   "water": "miscible"
+  },
+  "acetyl_chloride": {
+   "phase": "liquid",
+   "density": 1.104,
+   "meltingPoint": -112,
+   "boilingPoint": 52,
+   "water": "reacts"
+  },
+  "adenosine": {
+   "phase": "solid",
+   "meltingPoint": 235
+  },
+  "adrenaline": {
+   "phase": "solid",
+   "meltingPoint": 211
+  },
+  "al_polycrystal": {
+   "substance": "aluminium",
+   "phase": "solid",
+   "density": 2.7,
+   "meltingPoint": 660.3,
+   "boilingPoint": 2470,
+   "water": "insoluble"
+  },
+  "aspirin": {
+   "phase": "solid",
+   "density": 1.4,
+   "meltingPoint": 136,
+   "water": "slightly"
+  },
+  "benzaldehyde": {
+   "phase": "liquid",
+   "density": 1.044,
+   "meltingPoint": -26,
+   "boilingPoint": 179,
+   "water": "slightly"
+  },
+  "benzene": {
+   "phase": "liquid",
+   "density": 0.877,
+   "meltingPoint": 5.5,
+   "boilingPoint": 80.1,
+   "water": "insoluble"
+  },
+  "benzonitrile": {
+   "phase": "liquid",
+   "density": 1.0,
+   "meltingPoint": -13,
+   "boilingPoint": 191,
+   "water": "slightly"
+  },
+  "brilliant_diamond_macro": {
+   "substance": "diamond",
+   "phase": "solid",
+   "density": 3.51,
+   "water": "insoluble"
+  },
+  "bromobutane_1": {
+   "phase": "liquid",
+   "density": 1.276,
+   "meltingPoint": -112,
+   "boilingPoint": 101.6,
+   "water": "insoluble"
+  },
+  "c60_buckyball": {
+   "substance": "fullerene C60",
+   "phase": "solid",
+   "density": 1.65,
+   "water": "insoluble"
+  },
+  "caffeine": {
+   "phase": "solid",
+   "density": 1.23,
+   "meltingPoint": 235,
+   "water": "soluble"
+  },
+  "capsaicin": {
+   "phase": "solid",
+   "meltingPoint": 64
+  },
+  "cbd": {
+   "phase": "solid",
+   "meltingPoint": 66
+  },
+  "ceder_llzo_diffusion": {
+   "substance": "Li7La3Zr2O12 garnet solid electrolyte",
+   "phase": "solid",
+   "density": 5.1
+  },
+  "cholesterol": {
+   "phase": "solid",
+   "density": 1.05,
+   "meltingPoint": 148,
+   "water": "insoluble"
+  },
+  "cnt_6_6": {
+   "substance": "carbon nanotube",
+   "phase": "solid",
+   "water": "insoluble"
+  },
+  "cortisol": {
+   "phase": "solid",
+   "meltingPoint": 220
+  },
+  "coudert_mof_flexibility": {
+   "substance": "ZIF-8 metal-organic framework",
+   "phase": "solid",
+   "density": 0.95,
+   "water": "insoluble"
+  },
+  "creatine": {
+   "phase": "solid",
+   "density": 1.33,
+   "meltingPoint": 255
+  },
+  "cu_melt": {
+   "substance": "copper",
+   "phase": "solid",
+   "density": 8.96,
+   "meltingPoint": 1084.6,
+   "boilingPoint": 2562,
+   "water": "insoluble"
+  },
+  "cu_sinter": {
+   "substance": "copper",
+   "phase": "solid",
+   "density": 8.96,
+   "meltingPoint": 1084.6,
+   "boilingPoint": 2562,
+   "water": "insoluble"
+  },
+  "cu_solidify": {
+   "substance": "copper",
+   "phase": "solid",
+   "density": 8.96,
+   "meltingPoint": 1084.6,
+   "boilingPoint": 2562,
+   "water": "insoluble"
+  },
+  "curcumin": {
+   "phase": "solid",
+   "meltingPoint": 183
+  },
+  "curtin_hea_dislocation": {
+   "substance": "CrMnFeCoNi high-entropy alloy",
+   "phase": "solid",
+   "density": 8.0,
+   "water": "insoluble"
+  },
+  "cuzr_melt": {
+   "substance": "copper-zirconium metallic glass",
+   "phase": "solid",
+   "water": "insoluble"
+  },
+  "cyclohexanone": {
+   "phase": "liquid",
+   "density": 0.947,
+   "meltingPoint": -47,
+   "boilingPoint": 155.6,
+   "water": "soluble"
+  },
+  "diamond_crystal": {
+   "substance": "diamond",
+   "phase": "solid",
+   "density": 3.51,
+   "water": "insoluble"
+  },
+  "dimethyl_sulfide": {
+   "phase": "liquid",
+   "density": 0.846,
+   "meltingPoint": -98,
+   "boilingPoint": 37,
+   "water": "slightly"
+  },
+  "dmt": {
+   "phase": "solid",
+   "meltingPoint": 46
+  },
+  "dopamine": {
+   "phase": "solid",
+   "meltingPoint": 128
+  },
+  "elliott_gst_crystallization": {
+   "substance": "Ge2Sb2Te5 phase-change alloy",
+   "phase": "solid",
+   "density": 6.3,
+   "meltingPoint": 630,
+   "water": "insoluble"
+  },
+  "ethanethiol": {
+   "phase": "liquid",
+   "density": 0.839,
+   "meltingPoint": -148,
+   "boilingPoint": 35,
+   "water": "slightly"
+  },
+  "ethanol": {
+   "phase": "liquid",
+   "density": 0.789,
+   "meltingPoint": -114.1,
+   "boilingPoint": 78.4,
+   "water": "miscible"
+  },
+  "ethyl_acetate": {
+   "phase": "liquid",
+   "density": 0.902,
+   "meltingPoint": -84,
+   "boilingPoint": 77,
+   "water": "slightly"
+  },
+  "ethylene_oxide": {
+   "phase": "gas",
+   "meltingPoint": -111,
+   "boilingPoint": 10.7,
+   "water": "miscible"
+  },
+  "gaba": {
+   "phase": "solid",
+   "meltingPoint": 203
+  },
+  "geraniol": {
+   "phase": "liquid",
+   "density": 0.889,
+   "meltingPoint": -15,
+   "boilingPoint": 230,
+   "water": "slightly"
+  },
+  "glucose": {
+   "phase": "solid",
+   "density": 1.54,
+   "meltingPoint": 146,
+   "water": "soluble"
+  },
+  "graphene_ribbon": {
+   "substance": "graphene",
+   "phase": "solid",
+   "water": "insoluble"
+  },
+  "hfc_r125_research": {
+   "substance": "pentafluoroethane refrigerant",
+   "phase": "gas",
+   "meltingPoint": -103,
+   "boilingPoint": -48.5,
+   "water": "slightly"
+  },
+  "hfc_r32_research": {
+   "substance": "difluoromethane refrigerant",
+   "phase": "gas",
+   "meltingPoint": -136,
+   "boilingPoint": -51.7,
+   "water": "slightly"
+  },
+  "histamine": {
+   "phase": "solid",
+   "meltingPoint": 84,
+   "boilingPoint": 209.5
+  },
+  "ketamine": {
+   "phase": "solid",
+   "meltingPoint": 93
+  },
+  "lactic_acid": {
+   "phase": "liquid",
+   "density": 1.209,
+   "meltingPoint": 17,
+   "water": "miscible"
+  },
+  "limonene": {
+   "phase": "liquid",
+   "density": 0.841,
+   "meltingPoint": -74,
+   "boilingPoint": 176,
+   "water": "insoluble"
+  },
+  "linalool": {
+   "phase": "liquid",
+   "density": 0.858,
+   "meltingPoint": -20,
+   "boilingPoint": 198,
+   "water": "slightly"
+  },
+  "lsd": {
+   "phase": "solid",
+   "meltingPoint": 83
+  },
+  "melatonin": {
+   "phase": "solid",
+   "meltingPoint": 117
+  },
+  "menthol": {
+   "phase": "solid",
+   "density": 0.89,
+   "meltingPoint": 42.5,
+   "boilingPoint": 212,
+   "water": "slightly"
+  },
+  "mescaline": {
+   "phase": "solid",
+   "meltingPoint": 36
+  },
+  "mlip_lifepo4_li_channel": {
+   "substance": "lithium iron phosphate",
+   "phase": "solid",
+   "density": 3.6,
+   "water": "insoluble"
+  },
+  "mlip_mg_slip_playthrough": {
+   "substance": "magnesium",
+   "phase": "solid",
+   "density": 1.738,
+   "meltingPoint": 650,
+   "boilingPoint": 1091,
+   "water": "insoluble"
+  },
+  "mlip_ni_vacancy_playthrough": {
+   "substance": "nickel",
+   "phase": "solid",
+   "density": 8.908,
+   "meltingPoint": 1455,
+   "boilingPoint": 2913,
+   "water": "insoluble"
+  },
+  "nicotine": {
+   "phase": "liquid",
+   "density": 1.01,
+   "meltingPoint": -79,
+   "boilingPoint": 247,
+   "water": "miscible"
+  },
+  "nitrobenzene": {
+   "phase": "liquid",
+   "density": 1.199,
+   "meltingPoint": 5.7,
+   "boilingPoint": 211,
+   "water": "slightly"
+  },
+  "nitrous_oxide": {
+   "phase": "gas",
+   "density": 0.00198,
+   "meltingPoint": -90.9,
+   "boilingPoint": -88.5,
+   "water": "slightly"
+  },
+  "norepinephrine": {
+   "phase": "solid",
+   "meltingPoint": 217
+  },
+  "oxygen": {
+   "phase": "gas",
+   "density": 0.00143,
+   "meltingPoint": -218.8,
+   "boilingPoint": -183,
+   "water": "slightly"
+  },
+  "phenethylamine": {
+   "phase": "liquid",
+   "density": 0.962,
+   "meltingPoint": -60,
+   "boilingPoint": 195,
+   "water": "soluble"
+  },
+  "phenol": {
+   "phase": "solid",
+   "density": 1.07,
+   "meltingPoint": 40.5,
+   "boilingPoint": 181.7,
+   "water": "soluble"
+  },
+  "piperine": {
+   "phase": "solid",
+   "density": 1.193,
+   "meltingPoint": 130
+  },
+  "psilocybin": {
+   "phase": "solid",
+   "meltingPoint": 224
+  },
+  "quinine": {
+   "phase": "solid",
+   "meltingPoint": 177
+  },
+  "research_cu": {
+   "substance": "copper",
+   "phase": "solid",
+   "density": 8.96,
+   "meltingPoint": 1084.6,
+   "boilingPoint": 2562,
+   "water": "insoluble"
+  },
+  "research_fe": {
+   "substance": "iron",
+   "phase": "solid",
+   "density": 7.874,
+   "meltingPoint": 1538,
+   "boilingPoint": 2862,
+   "water": "insoluble"
+  },
+  "resveratrol": {
+   "phase": "solid",
+   "meltingPoint": 261
+  },
+  "rough_octahedron_diamond": {
+   "substance": "diamond",
+   "phase": "solid",
+   "density": 3.51,
+   "water": "insoluble"
+  },
+  "sand_w_cascade": {
+   "substance": "tungsten",
+   "phase": "solid",
+   "density": 19.25,
+   "meltingPoint": 3422,
+   "boilingPoint": 5555,
+   "water": "insoluble"
+  },
+  "serotonin": {
+   "phase": "solid",
+   "meltingPoint": 168
+  },
+  "sio2_glass": {
+   "substance": "silica glass",
+   "phase": "solid",
+   "density": 2.2,
+   "water": "insoluble"
+  },
+  "sodium_chloride": {
+   "substance": "table salt",
+   "phase": "solid",
+   "density": 2.165,
+   "meltingPoint": 801,
+   "boilingPoint": 1465,
+   "water": "soluble"
+  },
+  "sucrose": {
+   "phase": "solid",
+   "density": 1.587,
+   "meltingPoint": 186,
+   "water": "soluble"
+  },
+  "tert_butyl_chloride": {
+   "phase": "liquid",
+   "density": 0.851,
+   "meltingPoint": -26,
+   "boilingPoint": 51,
+   "water": "insoluble"
+  },
+  "theanine": {
+   "phase": "solid",
+   "meltingPoint": 207
+  },
+  "theobromine": {
+   "phase": "solid",
+   "density": 1.52,
+   "meltingPoint": 357,
+   "water": "slightly"
+  },
+  "this_is_water": {
+   "substance": "water",
+   "phase": "liquid",
+   "density": 0.997,
+   "meltingPoint": 0,
+   "boilingPoint": 100,
+   "water": "miscible"
+  },
+  "tryptophan": {
+   "phase": "solid",
+   "meltingPoint": 290
+  },
+  "vanillin": {
+   "phase": "solid",
+   "density": 1.056,
+   "meltingPoint": 81,
+   "boilingPoint": 285,
+   "water": "slightly"
+  },
+  "water": {
+   "phase": "liquid",
+   "density": 0.997,
+   "meltingPoint": 0,
+   "boilingPoint": 100,
+   "water": "miscible"
+  },
+  "water_cluster_64": {
+   "substance": "ice",
+   "phase": "solid",
+   "density": 0.917,
+   "meltingPoint": 0,
+   "boilingPoint": 100,
+   "water": "miscible"
+  }
+ }
+}

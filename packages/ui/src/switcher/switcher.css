@@ -163,6 +163,19 @@
   border-color: var(--sw-accent);
   color: var(--sw-accent);
 }
+/* A measured value is data, not a label: keep its case and use tabular digits. */
+.switcher-badge.is-measure {
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--sw-accent);
+  border-color: var(--sw-accent);
+}
+.switcher-badge.is-measure.is-inferred {
+  border-style: dashed;
+  color: var(--sw-muted);
+  border-color: #526253;
+}
 .switcher-error {
   margin: 0;
   color: #f4b8a8;

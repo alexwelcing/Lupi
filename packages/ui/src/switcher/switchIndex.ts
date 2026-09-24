@@ -1,7 +1,9 @@
+import { molarMass, parsePropertyEvidence, type PropertyEvidence, type RankProperty } from '@atlas/core';
 import { LOCAL_MOLECULES, scoreLocalMolecule, type LocalMolecule } from '../landing/moleculeIndex';
 import { elementsFromFormula, omolFacets, omolRecords, omolStructureUrl, type OmolRecord } from '../molecules/providers/omol';
 import { openPubChemMolecule, pubchemAutocomplete } from '../molecules/pubchemLoad';
 import { openMolecule } from '../viewer/openMolecule';
+import propertySheet from './property-sheet.json';
 
 /**
  * Candidate index for the molecule switcher. Everything here is local and
@@ -20,7 +22,36 @@ export interface SwitchCandidate {
   detail: string;
   /** Static preview art when the gallery has it. */
   image?: string;
+  /** Gallery shelf ("Metals & Alloys"), so a judgment can tell a molecule from a material. */
+  category?: string;
+  /** Reference properties from `property-sheet.json` (gallery entries only). */
+  evidence?: PropertyEvidence;
+  /** Molar mass computed from the formula, g/mol. */
+  molarMass?: number;
   open: () => Promise<void>;
+}
+
+const SHEET = (propertySheet as { entries: Record<string, unknown> }).entries;
+
+/** Reference evidence for a gallery id, sanitized the same way the edge does. */
+export function galleryEvidence(id: string): PropertyEvidence | undefined {
+  return parsePropertyEvidence(SHEET[id]);
+}
+
+/** The number a measured ranking sorts by, when this candidate has one. */
+export function measuredValue(candidate: SwitchCandidate, property: Exclude<RankProperty, 'other'>): number | undefined {
+  switch (property) {
+    case 'molar_mass':
+      return candidate.molarMass;
+    case 'size':
+      return candidate.atoms > 0 ? candidate.atoms : undefined;
+    case 'density':
+      return candidate.evidence?.density;
+    case 'melting_point':
+      return candidate.evidence?.meltingPoint;
+    case 'boiling_point':
+      return candidate.evidence?.boilingPoint;
+  }
 }
 
 export interface SwitchQuery {
@@ -50,6 +81,9 @@ function galleryCandidate(molecule: LocalMolecule): SwitchCandidate {
     source: 'gallery',
     detail: [molecule.formula, atomsLabel(molecule.atoms), molecule.domain].filter(Boolean).join(' · '),
     image: molecule.image,
+    category: molecule.domain,
+    evidence: galleryEvidence(molecule.id),
+    molarMass: molarMass(molecule.formula),
     open: async () => {
       const result = await openMolecule({ kind: 'gallery', id: molecule.id, history: 'push' });
       if (!result.ok) throw new Error(result.message);
@@ -66,6 +100,7 @@ function omolCandidate(record: OmolRecord): SwitchCandidate {
     atoms: record.natoms,
     source: 'omol',
     detail: `${atomsLabel(record.natoms)} · OMol25 DFT structure`,
+    molarMass: molarMass(record.formula),
     open: async () => {
       const result = await openMolecule({ kind: 'url', url: omolStructureUrl(record.id), title: `${record.formula} (OMol25)`, history: 'push' });
       if (!result.ok) throw new Error(result.message);

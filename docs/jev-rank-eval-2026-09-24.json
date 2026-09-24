@@ -1,0 +1,504 @@
+{
+  "summary": {
+    "date": "2026-09-24",
+    "cases": 18,
+    "pass": 18,
+    "pool": 103,
+    "withEvidence": 85,
+    "medianMs": 383
+  },
+  "rows": [
+    {
+      "query": "floats in water",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.98
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "density"
+      },
+      "top": [
+        "Ice/Water Cluster p=0.82",
+        "Limonene p=0.75",
+        "Linalool p=0.73",
+        "tert-Butyl Chloride p=0.72",
+        "Geraniol p=0.69"
+      ],
+      "ranked": 13,
+      "ms": 528,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "metal for planes",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.66,
+        "ranking": 0.77
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.97
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "top": [
+        "Al Polycrystal (Voronoi) p=0.76",
+        "Cantor Alloy Dislocation Glide p=0.61",
+        "Mg HCP Slip Playthrough p=0.53",
+        "Ni Vacancy Diffusion Playthrough p=0.5",
+        "Cu nanoparticle sintering p=0.5"
+      ],
+      "ranked": 5,
+      "ms": 423,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "heaviest metal",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.99,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.99
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "density"
+      },
+      "top": [
+        "Tungsten Collision Cascade 19.25",
+        "Cu(100) slab melting 8.96",
+        "Cu nanoparticle sintering 8.96",
+        "Liquid Cu rapid quench 8.96",
+        "Cu Potential Benchmark 8.96"
+      ],
+      "ranked": 11,
+      "ms": 441,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "lightest metal",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "least",
+        "confidence": 0.99,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.91
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "least",
+        "property": "density"
+      },
+      "top": [
+        "Mg HCP Slip Playthrough 1.738",
+        "Al Polycrystal (Voronoi) 2.7",
+        "Fe Potential Benchmark 7.874",
+        "Cantor Alloy Dislocation Glide 8",
+        "Ni Vacancy Diffusion Playthrough 8.908"
+      ],
+      "ranked": 11,
+      "ms": 378,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "most dense",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.99
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "density"
+      },
+      "top": [
+        "Tungsten Collision Cascade 19.25",
+        "Cu(100) slab melting 8.96",
+        "Cu nanoparticle sintering 8.96",
+        "Liquid Cu rapid quench 8.96",
+        "Cu Potential Benchmark 8.96"
+      ],
+      "ranked": 14,
+      "ms": 399,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "heaviest liquid",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.99,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.97
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "density"
+      },
+      "top": [
+        "1-Bromobutane 1.276",
+        "Lactic Acid 1.209",
+        "Nitrobenzene 1.199",
+        "Acetyl Chloride 1.104",
+        "Acetic Anhydride 1.082"
+      ],
+      "ranked": 23,
+      "ms": 365,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "lightest molecule",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "least",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "molar_mass",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "least",
+        "property": "molar_mass"
+      },
+      "top": [
+        "Water 18.02",
+        "Oxygen 32",
+        "Acetonitrile 41.05",
+        "Nitrous Oxide 44.01",
+        "Acetaldehyde 44.05"
+      ],
+      "ranked": 65,
+      "ms": 405,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "biggest molecule",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.98,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "size",
+        "confidence": 0.99
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "size"
+      },
+      "top": [
+        "Brilliant Diamond Macro 34513",
+        "Rough Octahedron Diamond 31381",
+        "SiO₂ Amorphous Silica 12000",
+        "ZIF-8 Gate-Opening Transition 540",
+        "Diamond Crystal 512"
+      ],
+      "ranked": 72,
+      "ms": 379,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "highest melting point",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "melting_point",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "melting_point"
+      },
+      "top": [
+        "Tungsten Collision Cascade 3422",
+        "Fe Potential Benchmark 1538",
+        "Ni Vacancy Diffusion Playthrough 1455",
+        "Cu(100) slab melting 1084.6",
+        "Cu nanoparticle sintering 1084.6"
+      ],
+      "ranked": 13,
+      "ms": 382,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "lowest boiling solvent",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "least",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "boiling_point",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "least",
+        "property": "boiling_point"
+      },
+      "top": [
+        "R32 Refrigerant · Research Payload -51.7",
+        "R125 Refrigerant · Research Payload -48.5",
+        "Ethylene Oxide 10.7",
+        "Acetaldehyde 20.2",
+        "Ethanethiol 35"
+      ],
+      "ranked": 27,
+      "ms": 403,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "hardest material",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.99,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "judged",
+        "direction": "most"
+      },
+      "top": [
+        "Rough Octahedron Diamond p=0.78",
+        "Diamond Crystal p=0.73",
+        "Brilliant Diamond Macro p=0.73"
+      ],
+      "ranked": 3,
+      "ms": 378,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "sweet",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.55,
+        "ranking": 0.71
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.99
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "top": [
+        "Sucrose p=0.93",
+        "Glucose p=0.9",
+        "Vanillin p=0.76",
+        "Menthol p=0.58"
+      ],
+      "ranked": 4,
+      "ms": 383,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "used in batteries",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "top": [
+        "LiFePO4 Ion Channel Playthrough p=0.8",
+        "LLZO Solid Electrolyte Ion Dynamics p=0.74"
+      ],
+      "ranked": 2,
+      "ms": 385,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "smells like citrus",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.73,
+        "ranking": 0.79
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "top": [
+        "Limonene p=0.82"
+      ],
+      "ranked": 1,
+      "ms": 376,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "gas at room temperature",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.97,
+        "ranking": 0.98
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.54
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "top": [
+        "Oxygen p=0.97",
+        "R125 Refrigerant · Research Payload p=0.96",
+        "R32 Refrigerant · Research Payload p=0.95",
+        "Ethylene Oxide p=0.95",
+        "Nitrous Oxide p=0.95"
+      ],
+      "ranked": 6,
+      "ms": 382,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "conducts electricity",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "top": [
+        "Cu Potential Benchmark p=0.92",
+        "Al Polycrystal (Voronoi) p=0.91",
+        "Liquid Cu rapid quench p=0.9",
+        "Cu nanoparticle sintering p=0.89",
+        "Tungsten Collision Cascade p=0.88"
+      ],
+      "ranked": 14,
+      "ms": 383,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "caffeine",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "lookup",
+        "confidence": 1,
+        "ranking": 0
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.85
+      },
+      "plan": null,
+      "top": [],
+      "ranked": 0,
+      "ms": 394,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "something sweet",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.66,
+        "ranking": 0.78
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "top": [
+        "Sucrose p=0.95",
+        "Glucose p=0.94",
+        "Vanillin p=0.76",
+        "Menthol p=0.55"
+      ],
+      "ranked": 4,
+      "ms": 374,
+      "model": "jev-1.13.0"
+    }
+  ]
+}
