@@ -108,6 +108,11 @@ Response:
 A `none` choice returns `best: null`. Errors return the status with an
 `error` field; the browser treats any non-2xx as "no judgment".
 
+With `rank: true` the same call also reads property questions ("floats in
+water", "heaviest metal", "metal for planes") and returns a `rank` block;
+candidates may carry `category` and reference `evidence`. See
+[jev-property-ranking.md](jev-property-ranking.md).
+
 ## What the live key showed (2026-09-19)
 
 With a real key in a local Worker, the switcher was driven end to end and

@@ -1,0 +1,884 @@
+{
+  "summary": {
+    "date": "2026-09-24",
+    "cases": 27,
+    "pass": 27,
+    "pool": 103,
+    "withEvidence": 85,
+    "medianMs": 401
+  },
+  "rows": [
+    {
+      "query": "floats in water",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.98,
+        "measured": 0.99
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "density"
+      },
+      "filters": [
+        "floats"
+      ],
+      "top": [
+        "Ice/Water Cluster m=0.953",
+        "Limonene m=0.953",
+        "tert-Butyl Chloride m=0.953",
+        "Linalool m=0.953",
+        "Ethyl Acetate m=0.953"
+      ],
+      "ranked": 12,
+      "ms": 621,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "metal for planes",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.68,
+        "ranking": 0.78
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.98,
+        "measured": 0.02
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "metal",
+        "aerospace",
+        "construction",
+        "solid_rt"
+      ],
+      "top": [
+        "Al Polycrystal (Voronoi) m=0.697",
+        "Mg HCP Slip Playthrough m=0.561",
+        "Fe Potential Benchmark m=0.065",
+        "Tungsten Collision Cascade m=0.062",
+        "Ni Vacancy Diffusion Playthrough m=0.053"
+      ],
+      "ranked": 8,
+      "ms": 394,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "heaviest metal",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.98,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.99,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "density"
+      },
+      "filters": [
+        "metal",
+        "solid_rt"
+      ],
+      "top": [
+        "Tungsten Collision Cascade 19.25 m=0.964",
+        "Cu(100) slab melting 8.96 m=0.974",
+        "Cu nanoparticle sintering 8.96 m=0.974",
+        "Liquid Cu rapid quench 8.96 m=0.946",
+        "Cu Potential Benchmark 8.96 m=0.974"
+      ],
+      "ranked": 12,
+      "ms": 399,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "lightest metal",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "least",
+        "confidence": 0.99,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.94,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "least",
+        "property": "density"
+      },
+      "filters": [
+        "metal"
+      ],
+      "top": [
+        "Mg HCP Slip Playthrough 1.738 m=0.981",
+        "Al Polycrystal (Voronoi) 2.7 m=0.971",
+        "Fe Potential Benchmark 7.874 m=0.971",
+        "Cantor Alloy Dislocation Glide 8 m=0.981",
+        "Ni Vacancy Diffusion Playthrough 8.908 m=0.981"
+      ],
+      "ranked": 12,
+      "ms": 403,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "most dense",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.99,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "density"
+      },
+      "filters": [],
+      "top": [
+        "Tungsten Collision Cascade 19.25",
+        "Cu(100) slab melting 8.96",
+        "Cu nanoparticle sintering 8.96",
+        "Liquid Cu rapid quench 8.96",
+        "Cu Potential Benchmark 8.96"
+      ],
+      "ranked": 15,
+      "ms": 401,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "heaviest liquid",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.99,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.99,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "density"
+      },
+      "filters": [
+        "liquid_rt"
+      ],
+      "top": [
+        "1-Bromobutane 1.276 m=0.99",
+        "Lactic Acid 1.209 m=0.99",
+        "Nitrobenzene 1.199 m=0.99",
+        "Acetyl Chloride 1.104 m=0.99",
+        "Acetic Anhydride 1.082 m=0.99"
+      ],
+      "ranked": 24,
+      "ms": 408,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "lightest molecule",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "least",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "molar_mass",
+        "confidence": 1,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "least",
+        "property": "molar_mass"
+      },
+      "filters": [],
+      "top": [
+        "Water 18.02",
+        "Oxygen 32",
+        "Acetonitrile 41.05",
+        "Nitrous Oxide 44.01",
+        "Acetaldehyde 44.05"
+      ],
+      "ranked": 66,
+      "ms": 399,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "biggest molecule",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.99,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "size",
+        "confidence": 0.99,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "size"
+      },
+      "filters": [],
+      "top": [
+        "Brilliant Diamond Macro 34513",
+        "Rough Octahedron Diamond 31381",
+        "SiO₂ Amorphous Silica 12000",
+        "ZIF-8 Gate-Opening Transition 540",
+        "Diamond Crystal 512"
+      ],
+      "ranked": 71,
+      "ms": 427,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "highest melting point",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "melting_point",
+        "confidence": 1,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "melting_point"
+      },
+      "filters": [
+        "high_melting"
+      ],
+      "top": [
+        "Tungsten Collision Cascade 3422 m=0.992",
+        "Fe Potential Benchmark 1538 m=0.992",
+        "Ni Vacancy Diffusion Playthrough 1455 m=0.992",
+        "Cu(100) slab melting 1084.6 m=0.992",
+        "Cu nanoparticle sintering 1084.6 m=0.992"
+      ],
+      "ranked": 17,
+      "ms": 394,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "lowest boiling solvent",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "least",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "boiling_point",
+        "confidence": 1,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "least",
+        "property": "boiling_point"
+      },
+      "filters": [
+        "solvent"
+      ],
+      "top": [
+        "Acetone 56 m=0.944",
+        "Ethyl Acetate 77 m=0.944",
+        "Ethanol 78.4 m=0.954",
+        "Benzene 80.1 m=0.888",
+        "Acetonitrile 82 m=0.944"
+      ],
+      "ranked": 10,
+      "ms": 383,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "hardest material",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.99,
+        "ranking": 0.99
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "judged",
+        "direction": "most"
+      },
+      "filters": [
+        "hard",
+        "solid_rt",
+        "construction"
+      ],
+      "top": [
+        "Rough Octahedron Diamond m=0.801",
+        "Brilliant Diamond Macro m=0.718",
+        "Diamond Crystal m=0.829",
+        "Carbon Nanotube m=0.235",
+        "Tungsten Collision Cascade m=0.815"
+      ],
+      "ranked": 12,
+      "ms": 404,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "sweet",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.59,
+        "ranking": 0.74
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.99,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "sweet",
+        "sugar",
+        "in_food"
+      ],
+      "top": [
+        "Sucrose m=0.916",
+        "Glucose m=0.871",
+        "Vanillin m=0.195"
+      ],
+      "ranked": 3,
+      "ms": 393,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "used in batteries",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "energy_storage"
+      ],
+      "top": [
+        "LiFePO4 Ion Channel Playthrough m=0.942",
+        "Z1 Path 16 · Li hop in C-Co-Li-Na-O-P m=0.75",
+        "LLZO Solid Electrolyte Ion Dynamics m=0.779"
+      ],
+      "ranked": 3,
+      "ms": 389,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "smells like citrus",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.72,
+        "ranking": 0.79
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "smell",
+        "flavor_fragrance",
+        "from_plants"
+      ],
+      "top": [
+        "Limonene m=0.817",
+        "Linalool m=0.776",
+        "Geraniol m=0.794",
+        "Vanillin m=0.809",
+        "Menthol m=0.794"
+      ],
+      "ranked": 19,
+      "ms": 447,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "gas at room temperature",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.98,
+        "ranking": 0.98
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.53,
+        "measured": 0.38
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "gas_rt"
+      ],
+      "top": [
+        "Oxygen m=0.99",
+        "R32 Refrigerant · Research Payload m=0.99",
+        "R125 Refrigerant · Research Payload m=0.99",
+        "Nitrous Oxide m=0.99",
+        "Ethylene Oxide m=0.99"
+      ],
+      "ranked": 6,
+      "ms": 422,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "conducts electricity",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 1,
+        "ranking": 1
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "conducts",
+        "electronics"
+      ],
+      "top": [
+        "1M Atom Scale Test m=0.9",
+        "Cu Potential Benchmark m=0.916",
+        "Cu nanoparticle sintering m=0.916",
+        "Cu(100) slab melting m=0.917",
+        "Liquid Cu rapid quench m=0.868"
+      ],
+      "ranked": 14,
+      "ms": 396,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "caffeine",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "lookup",
+        "confidence": 1,
+        "ranking": 0
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.86,
+        "measured": 0.12
+      },
+      "plan": null,
+      "filters": [],
+      "top": [],
+      "ranked": 0,
+      "ms": 412,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "flammable liquid that floats",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.92,
+        "ranking": 0.94
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.99,
+        "measured": 0.99
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "density"
+      },
+      "filters": [
+        "liquid_rt",
+        "floats",
+        "flammable",
+        "fuel"
+      ],
+      "top": [
+        "Benzene m=0.395",
+        "Ethyl Acetate m=0.074",
+        "Limonene m=0.07",
+        "Ethanethiol m=0.067",
+        "Geraniol m=0.066"
+      ],
+      "ranked": 8,
+      "ms": 371,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "psychoactive alkaloid",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.81,
+        "ranking": 0.86
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.99,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "psychoactive",
+        "alkaloid",
+        "from_plants"
+      ],
+      "top": [
+        "Caffeine m=0.785",
+        "Nicotine m=0.699",
+        "Theobromine m=0.726",
+        "Mescaline m=0.655",
+        "DMT m=0.426"
+      ],
+      "ranked": 9,
+      "ms": 393,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "toxic solvent",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.73,
+        "ranking": 0.8
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "solvent",
+        "toxic",
+        "industrial_chemical",
+        "synthetic"
+      ],
+      "top": [
+        "Benzene m=0.601",
+        "Acetonitrile m=0.637",
+        "Acetone m=0.46",
+        "Cyclohexanone m=0.367",
+        "Benzonitrile m=0.356"
+      ],
+      "ranked": 9,
+      "ms": 397,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "sweet thing from plants",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.37,
+        "ranking": 0.51
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": null,
+      "filters": [
+        "sweet",
+        "from_plants",
+        "in_food",
+        "flavor_fragrance",
+        "sugar"
+      ],
+      "top": [
+        "Sucrose m=0.54",
+        "Glucose m=0.38",
+        "Vanillin m=0.166"
+      ],
+      "ranked": 3,
+      "ms": 403,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "a gas",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.92,
+        "ranking": 0.94
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 0.72,
+        "measured": 0.22
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "gas_rt"
+      ],
+      "top": [
+        "Oxygen m=0.99",
+        "Nitrous Oxide m=0.99",
+        "R125 Refrigerant · Research Payload m=0.99",
+        "Ethylene Oxide m=0.99",
+        "R32 Refrigerant · Research Payload m=0.99"
+      ],
+      "ranked": 6,
+      "ms": 382,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "bitter medicine",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.55,
+        "ranking": 0.66
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "medicine",
+        "bitter"
+      ],
+      "top": [
+        "Quinine m=0.796",
+        "Aspirin m=0.648",
+        "Ketamine m=0.585",
+        "Adrenaline m=0.534",
+        "Melatonin m=0.529"
+      ],
+      "ranked": 15,
+      "ms": 402,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "lightest metal used in aircraft",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "least",
+        "confidence": 0.92,
+        "ranking": 0.94
+      },
+      "property": {
+        "choice": "density",
+        "confidence": 0.92,
+        "measured": 0.99
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "least",
+        "property": "density"
+      },
+      "filters": [
+        "metal",
+        "aerospace",
+        "solid_rt"
+      ],
+      "top": [
+        "Mg HCP Slip Playthrough 1.738 m=0.88",
+        "Al Polycrystal (Voronoi) 2.7 m=0.881"
+      ],
+      "ranked": 2,
+      "ms": 444,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "heaviest thing made in the human body",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.87,
+        "ranking": 0.9
+      },
+      "property": {
+        "choice": "molar_mass",
+        "confidence": 0.56,
+        "measured": 0.78
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "molar_mass"
+      },
+      "filters": [
+        "in_body"
+      ],
+      "top": [
+        "ATP 507.18 m=0.962",
+        "Cholesterol 386.66 m=0.944",
+        "Cortisol 362.47 m=0.944",
+        "Adenosine 267.25 m=0.944",
+        "Melatonin 232.28 m=0.944"
+      ],
+      "ranked": 27,
+      "ms": 397,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "highest boiling liquid that floats",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "most",
+        "confidence": 0.94,
+        "ranking": 0.98
+      },
+      "property": {
+        "choice": "boiling_point",
+        "confidence": 0.98,
+        "measured": 1
+      },
+      "plan": {
+        "kind": "measured",
+        "direction": "most",
+        "property": "boiling_point"
+      },
+      "filters": [
+        "liquid_rt",
+        "floats"
+      ],
+      "top": [
+        "Geraniol 230 m=0.945",
+        "Linalool 198 m=0.945",
+        "Limonene 176 m=0.945",
+        "Benzene 80.1 m=0.945",
+        "Ethyl Acetate 77 m=0.945"
+      ],
+      "ranked": 9,
+      "ms": 410,
+      "model": "jev-1.13.0"
+    },
+    {
+      "query": "something sweet",
+      "ok": true,
+      "failures": [],
+      "mode": {
+        "choice": "filter",
+        "confidence": 0.68,
+        "ranking": 0.79
+      },
+      "property": {
+        "choice": "other",
+        "confidence": 1,
+        "measured": 0
+      },
+      "plan": {
+        "kind": "filter",
+        "property": "other"
+      },
+      "filters": [
+        "sweet",
+        "in_food"
+      ],
+      "top": [
+        "Sucrose m=0.935",
+        "Glucose m=0.888",
+        "Vanillin m=0.745"
+      ],
+      "ranked": 3,
+      "ms": 402,
+      "model": "jev-1.13.0"
+    }
+  ]
+}

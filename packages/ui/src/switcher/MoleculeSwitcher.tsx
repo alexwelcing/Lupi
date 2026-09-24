@@ -3,7 +3,10 @@ import { useStore } from '../store';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { trackLibrarySearch } from '../library/trackLibrarySearch';
 import { ElementPicker } from './ElementPicker';
+import type { FacetId } from '@atlas/core';
 import { applyJudgment, buildJudgePool, judgeSwitch, type SwitchJudgment } from './judgeSwitch';
+import { FacetBar } from './FacetBar';
+import { EMPTY_CONTROLS, organize, rowBadge, rowReason, type FilterChip, type SearchControls, type SortSpec } from './searchPlan';
 import { recentSwitches, rememberSwitch, subscribeRecent } from './recent';
 import { findSwitchCandidates, galleryCandidates, galleryPool, type SwitchCandidate } from './switchIndex';
 import { SwitchStage } from './SwitchStage';
@@ -18,8 +21,14 @@ import './switcher.css';
  * keystroke away, and the last few switches sit at the top as chips. When
  * the edge has Jev configured, its judgment lands a moment later and
  * re-orders the list with a labeled best guess, which may be a molecule the
- * typed text never matched. Without it the deterministic list is the whole
- * feature.
+ * typed text never matched. It also reads property questions: "floats in
+ * water" filters, "heaviest metal" ranks by a measured density, "hardest"
+ * orders by Jev's own judgment, and each row then shows the value or
+ * probability that placed it. Jev's reading of the words shows up as
+ * removable filter chips over the library's checked-in facets, next to a
+ * picker and a sort that work without Jev at all (`searchPlan.ts`). Without
+ * Jev the deterministic list, the facet filters, and the sorts are the
+ * whole feature.
  */
 const LOCAL_DEBOUNCE_MS = 120;
 const JUDGE_DEBOUNCE_MS = 250;
@@ -44,6 +53,7 @@ export function MoleculeSwitcher() {
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [controls, setControls] = useState<SearchControls>(EMPTY_CONTROLS);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const searchGeneration = useRef(0);
@@ -51,6 +61,11 @@ export function MoleculeSwitcher() {
 
   const elementsKey = elements.join(',');
   const idle = !query.trim() && elements.length === 0;
+
+  // A removed Jev reading belongs to the words it was read from.
+  useEffect(() => {
+    setControls((previous) => (previous.dismissed.length ? { ...previous, dismissed: [] } : previous));
+  }, [query]);
 
   // Local candidates: immediate, deterministic.
   useEffect(() => {
@@ -89,7 +104,7 @@ export function MoleculeSwitcher() {
     const timer = setTimeout(() => {
       const shown = galleryCandidates({ query, elements, limit: RESULT_LIMIT });
       judgeSwitch(
-        { query: query.trim(), elements, candidates: buildJudgePool(shown, galleryPool(elements)), loaded: file ? { title: file.name } : null },
+        { query: query.trim(), elements, candidates: buildJudgePool(shown, galleryPool(elements)), loaded: file ? { title: file.name } : null, rank: true },
         controller.signal,
       )
         .then((result) => {
@@ -107,7 +122,19 @@ export function MoleculeSwitcher() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, elementsKey]);
 
-  const { ordered, bestKey, hint } = useMemo(() => applyJudgment(candidates, judgment, galleryPool(elements)), [candidates, judgment, elementsKey]);
+  const pool = useMemo(() => galleryPool(elements), [elementsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const poolKeys = useMemo(() => pool.map((candidate) => candidate.key), [pool]);
+  const organized = useMemo(() => organize(candidates, pool, judgment, controls), [candidates, pool, judgment, controls]);
+  const plain = useMemo(() => applyJudgment(candidates, judgment, pool), [candidates, judgment, pool]);
+  const ordered = organized ? organized.ordered.slice(0, RESULT_LIMIT) : plain.ordered;
+  const bestKey = organized ? null : plain.bestKey;
+  const hint = organized ? null : plain.hint;
+  const addFilter = (id: FacetId) => setControls((previous) => ({ ...previous, chips: previous.chips.includes(id) ? previous.chips : [...previous.chips, id] }));
+  const removeFilter = (chip: FilterChip) =>
+    setControls((previous) =>
+      chip.source === 'you' ? { ...previous, chips: previous.chips.filter((id) => id !== chip.id) } : { ...previous, dismissed: [...previous.dismissed, chip.id] },
+    );
+  const setSort = (sort: SortSpec | null) => setControls((previous) => ({ ...previous, sort }));
   const notAMolecule = judgment?.intent?.choice === 'not_a_molecule' && judgment.intent.confidence >= 0.8;
 
   const open = useCallback(
@@ -143,20 +170,21 @@ export function MoleculeSwitcher() {
       event.preventDefault();
       const pick = ordered[active] ?? ordered[0];
       if (pick) void open(pick);
-    } else if (event.key === 'Escape' && !idle) {
+    } else if (event.key === 'Escape' && (!idle || controls.chips.length || controls.sort)) {
       event.preventDefault();
       event.stopPropagation();
       setQuery('');
       setElements([]);
+      setControls(EMPTY_CONTROLS);
     }
   };
 
   const status = loading
     ? 'Searching…'
-    : idle
-      ? 'Familiar molecules. Type, or tap an element.'
+    : idle && !organized
+      ? 'Familiar molecules. Type, filter, or tap an element.'
       : `${ordered.length}${ordered.length >= RESULT_LIMIT ? '+' : ''} ${ordered.length === 1 ? 'match' : 'matches'}${elements.length ? ` containing ${elements.join(' + ')}` : ''}${
-          judgment?.configured ? ' · best guess by Jev (inferred)' : judging ? ' · asking for a best guess…' : ''
+          organized?.summary ? ` · ${organized.summary}` : judgment?.configured ? ' · best guess by Jev (inferred)' : judging ? ' · asking for a best guess…' : ''
         }`;
 
   return (
@@ -190,13 +218,22 @@ export function MoleculeSwitcher() {
         spellCheck={false}
         autoFocus
         value={query}
-        placeholder={isMobile ? "caffeine, C6H6, “something sweet”…" : "caffeine, C6H6, “something sweet”… Enter switches"}
+        placeholder={isMobile ? 'caffeine, C6H6, “floats in water”…' : 'caffeine, C6H6, “floats in water”, “heaviest metal”… Enter switches'}
         style={{ textOverflow: 'ellipsis' }}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={onKeyDown}
       />
       <SwitchStage query={query} compact={isMobile} />
       <ElementPicker selected={elements} onToggle={toggleElement} />
+      <FacetBar
+        filters={organized?.filters ?? controls.chips.map((id) => ({ id, source: 'you' as const, weight: 1 }))}
+        poolKeys={poolKeys}
+        sort={organized?.sort ?? controls.sort}
+        sortSource={organized?.sortSource ?? (controls.sort ? 'you' : null)}
+        onAdd={addFilter}
+        onRemove={removeFilter}
+        onSort={setSort}
+      />
       {elements.length > 0 && (
         <div className="switcher-chips" aria-live="polite">
           <span>
@@ -231,12 +268,17 @@ export function MoleculeSwitcher() {
             ? 'No direct match. Asking for a best guess…'
             : notAMolecule
               ? 'That does not read as a molecule request. Try a name, a formula, or an element.'
-              : 'No match in the gallery, OMol25, or PubChem names. Try fewer elements or a name.'}
+              : organized?.filters.length
+                ? 'Nothing in the library has all of these. Remove a filter to widen it.'
+                : 'No match in the gallery, OMol25, or PubChem names. Try fewer elements or a name.'}
         </p>
       ) : (
         <ul className="switcher-results" id={listId} role="listbox" aria-label="Molecules to switch to">
           {ordered.map((candidate, index) => {
-            const badge = candidate.key === bestKey ? 'Best guess' : SOURCE_LABEL[candidate.source];
+            const row = organized?.rows[candidate.key];
+            const measure = row && organized ? rowBadge(organized, row) : null;
+            const reason = row && organized ? rowReason(organized, row) : null;
+            const badge = measure?.text ?? (candidate.key === bestKey ? 'Best guess' : SOURCE_LABEL[candidate.source]);
             return (
               <li key={candidate.key} id={`${listId}-${index}`} role="option" aria-selected={index === active} className={index === active ? 'is-active' : undefined}>
                 <button
@@ -257,8 +299,16 @@ export function MoleculeSwitcher() {
                   <span className="switcher-text">
                     <strong>{candidate.title}</strong>
                     <small>{candidate.detail}</small>
+                    {reason && <small className="switcher-reason">{reason}</small>}
                   </span>
-                  {badge && <span className={`switcher-badge${candidate.key === bestKey ? ' is-best' : ''}`}>{badge}</span>}
+                  {badge && (
+                    <span
+                      className={`switcher-badge${candidate.key === bestKey ? ' is-best' : ''}${measure ? ` is-measure${measure.kind !== 'measured' ? ' is-inferred' : ''}` : ''}`}
+                      title={measure ? { measured: 'Measured or computed value', inferred: 'Judged by Jev (inferred), or no value to sort by', partial: 'Lacks one of the filters Jev read from your words' }[measure.kind] : undefined}
+                    >
+                      {badge}
+                    </span>
+                  )}
                 </button>
               </li>
             );

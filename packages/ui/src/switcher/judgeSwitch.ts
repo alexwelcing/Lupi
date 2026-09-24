@@ -1,3 +1,4 @@
+import type { PropertyRankJudgment } from '@atlas/core';
 import type { SwitchCandidate } from './switchIndex';
 
 /**
@@ -13,6 +14,8 @@ export interface SwitchJudgment {
   intent?: { choice: string; confidence: number };
   best?: { key: string; confidence: number } | null;
   fit?: Record<string, number>;
+  /** Property ranking ("floats in water", "heaviest metal"), when asked for. */
+  rank?: PropertyRankJudgment | null;
 }
 
 export const SWITCH_JUDGE_PATH = '/v1/switch/judge';
@@ -52,7 +55,14 @@ export function buildJudgePool(shown: SwitchCandidate[], pool: SwitchCandidate[]
 }
 
 export async function judgeSwitch(
-  request: { query: string; elements: string[]; candidates: Array<SwitchCandidate & { fit?: boolean }>; loaded?: { title: string; formula?: string } | null },
+  request: {
+    query: string;
+    elements: string[];
+    candidates: Array<SwitchCandidate & { fit?: boolean }>;
+    loaded?: { title: string; formula?: string } | null;
+    /** Also ask the property-ranking questions for every candidate. */
+    rank?: boolean;
+  },
   signal?: AbortSignal,
 ): Promise<SwitchJudgment | null> {
   if (unavailable || typeof fetch !== 'function') return null;
@@ -71,6 +81,7 @@ export async function judgeSwitch(
         query: request.query,
         elements: request.elements,
         loaded: request.loaded ?? null,
+        rank: request.rank === true && request.query.length > 0 ? true : undefined,
         candidates: request.candidates.slice(0, MAX_POOL).map((candidate) => ({
           key: candidate.key,
           title: candidate.title,
@@ -79,6 +90,8 @@ export async function judgeSwitch(
           atoms: candidate.atoms || undefined,
           source: candidate.source,
           fit: candidate.fit || undefined,
+          category: candidate.category,
+          evidence: request.rank ? candidate.evidence : undefined,
         })),
       }),
     });
@@ -113,7 +126,8 @@ export interface AppliedJudgment {
  * the typed text never matched it (it is pulled in from the pool). The rest
  * keep their deterministic order; only candidates Jev is fairly sure do not
  * fit move to the end. A best pick below the promotion threshold becomes a
- * hint rather than silently vanishing. Pure.
+ * hint rather than silently vanishing. Property rankings, facet filters,
+ * and sorts are `organize` in `searchPlan.ts`, which runs first. Pure.
  */
 export function applyJudgment(candidates: SwitchCandidate[], judgment: SwitchJudgment | null, pool: SwitchCandidate[] = []): AppliedJudgment {
   if (!judgment?.configured) return { ordered: candidates, bestKey: null, hint: null };

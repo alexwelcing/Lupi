@@ -108,3 +108,4 @@ export * from './jev';
 
 // --- Gist: the geometric essence of an object, for the scanner ----------
 export * from './gist';
+export * from './facets';

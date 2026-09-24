@@ -163,6 +163,19 @@
   border-color: var(--sw-accent);
   color: var(--sw-accent);
 }
+/* A measured value is data, not a label: keep its case and use tabular digits. */
+.switcher-badge.is-measure {
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--sw-accent);
+  border-color: var(--sw-accent);
+}
+.switcher-badge.is-measure.is-inferred {
+  border-style: dashed;
+  color: var(--sw-muted);
+  border-color: #526253;
+}
 .switcher-error {
   margin: 0;
   color: #f4b8a8;
@@ -250,4 +263,78 @@
 }
 .switcher-stage[data-compact='true'][data-on='true'] {
   max-height: 180px;
+}
+
+/* Organize bar: filters, the facet picker, and the sort. */
+.facet-bar {
+  display: grid;
+  gap: 6px;
+}
+.facet-row,
+.facet-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.facet-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--sw-line);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--sw-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.facet-chip small {
+  color: var(--sw-muted);
+  font-variant-numeric: tabular-nums;
+}
+.facet-chip.is-on {
+  border-color: var(--sw-accent);
+  color: var(--sw-accent);
+}
+/* Jev's reading of the words: visibly an inference, and removable. */
+.facet-chip.is-read {
+  border-style: dashed;
+}
+.facet-chip.facet-add {
+  color: var(--sw-muted);
+}
+.facet-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--sw-muted);
+  font-size: 12px;
+}
+.facet-sort select,
+.facet-direction {
+  padding: 2px 6px;
+  border: 1px solid var(--sw-line);
+  border-radius: 6px;
+  background: var(--sw-panel);
+  color: var(--sw-text);
+  font-size: 12px;
+}
+.facet-picker {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--sw-line);
+  border-radius: 8px;
+}
+.facet-group-label {
+  flex-basis: 100%;
+  color: var(--sw-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.switcher-reason {
+  color: var(--sw-accent);
+  opacity: 0.85;
 }

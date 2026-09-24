@@ -39,6 +39,15 @@ describe('switch candidate index', () => {
     expect(merged[0]?.title).toBe('Water');
   });
 
+  it('lists entries by a facet word before Jev answers, and carries evidence and molar mass', () => {
+    const metals = galleryCandidates({ query: 'metal', elements: [], limit: 50 }).map((candidate) => candidate.key);
+    expect(metals).toEqual(expect.arrayContaining(['gallery:al_polycrystal', 'gallery:sand_w_cascade']));
+    expect(metals).not.toContain('gallery:caffeine');
+    const [water] = galleryCandidates({ query: 'water', elements: [] });
+    expect(water.evidence).toMatchObject({ phase: 'liquid', density: 0.997 });
+    expect(water.molarMass).toBeCloseTo(18.02, 1);
+  });
+
   it('matches OMol25 by formula prefix or elements, smallest first', async () => {
     const byElements = await omolCandidates({ query: '', elements: ['C', 'O'] });
     expect(byElements.map((c) => c.title)).toEqual(['C2H6O']);

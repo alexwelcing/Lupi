@@ -6,6 +6,8 @@
  * tests.
  */
 
+import { FACETS, MEASURED_PROPERTIES } from '@atlas/core';
+
 export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
   'lupi.generate_molecule': {
     type: 'object',
@@ -64,6 +66,17 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
       elements: { type: 'array', items: { type: 'string' } },
       sources: { type: 'array', items: { type: 'string' } },
       limit: { type: 'number', minimum: 1, maximum: 50 },
+      facets: {
+        type: 'array',
+        description: 'Require every listed library facet (AND), from the checked-in library facts. Hits without facts are dropped.',
+        items: { type: 'string', enum: FACETS.map((facet) => facet.id) },
+      },
+      sortBy: {
+        type: 'string',
+        description: 'Sort by a measured property: molar mass from the formula, atom count, or reference density and transition temperatures. Hits without a value sort last.',
+        enum: Object.keys(MEASURED_PROPERTIES),
+      },
+      order: { type: 'string', enum: ['desc', 'asc'], description: 'Default desc (highest first).' },
     },
   },
 

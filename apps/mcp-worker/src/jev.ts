@@ -25,7 +25,18 @@ import {
   type JevQuestion,
   type JevRequest,
   type JevResult,
+  type PropertyEvidence,
+  type PropertyRankJudgment,
   type ViewerCommandDecision,
+  PROPERTY_RANK_PROMPT_VERSION,
+  FACTS_PROMPT_VERSION,
+  evidenceState,
+  parsePropertyEvidence,
+  propertyRankQuestions,
+  queryFacetQuestions,
+  readQueryFacets,
+  rankable,
+  readPropertyRankAnswers,
   VIEWER_COMMAND_PROMPT_VERSION,
   buildViewerCommandRequest,
   localViewerAction,
@@ -48,7 +59,7 @@ export const JEV_DEFAULT_MODEL = JEV_MODEL_LATEST;
 const JEV_TIMEOUT_MS = 1_500;
 const JEV_CACHE_TTL_SECONDS = 3_600;
 /** Bump when instructions or criteria change so cached judgments from the old prompt are not served. */
-export const JEV_PROMPT_VERSION = 'switch-v3-everyday';
+export const JEV_PROMPT_VERSION = `switch-v5-everyday+${PROPERTY_RANK_PROMPT_VERSION}+${FACTS_PROMPT_VERSION}`;
 const MAX_SWITCH_BODY_BYTES = 64 * 1024;
 /** Choice cardinality is 255; the whole gallery plus local matches fits. */
 const MAX_SWITCH_CANDIDATES = 160;
@@ -101,8 +112,12 @@ export interface SwitchCandidate {
   elements?: string[];
   atoms?: number;
   source: string;
+  /** Gallery shelf ("Metals & Alloys", "Atomized Media"): tells a molecule from a material or a demo. */
+  category?: string;
   /** Ask a per-candidate fit probability for this one (bounded). */
   fit?: boolean;
+  /** Reference properties (density, phase, ...) the ranking reads as evidence. */
+  evidence?: PropertyEvidence;
 }
 
 export interface SwitchJudgeRequest {
@@ -110,6 +125,8 @@ export interface SwitchJudgeRequest {
   elements: string[];
   candidates: SwitchCandidate[];
   loaded?: { title: string; formula?: string } | null;
+  /** Also ask the property-ranking questions ("floats in water", "heaviest metal") for every candidate. */
+  rank?: boolean;
 }
 
 export interface SwitchJudgeResponse {
@@ -118,6 +135,8 @@ export interface SwitchJudgeResponse {
   intent?: { choice: string; confidence: number };
   best?: { key: string; confidence: number } | null;
   fit?: Record<string, number>;
+  /** Present only when the request asked for ranking. */
+  rank?: PropertyRankJudgment | null;
   cached?: boolean;
 }
 
@@ -158,7 +177,9 @@ export function parseSwitchJudgeRequest(raw: unknown): SwitchJudgeRequest {
       elements: Array.isArray(candidate.elements) ? candidate.elements.filter((e): e is string => typeof e === 'string').slice(0, 20) : undefined,
       atoms: typeof candidate.atoms === 'number' && Number.isFinite(candidate.atoms) ? Math.round(candidate.atoms) : undefined,
       source: typeof candidate.source === 'string' ? candidate.source.slice(0, 20) : 'unknown',
+      category: typeof candidate.category === 'string' && candidate.category.trim() ? candidate.category.trim().slice(0, 40) : undefined,
       fit: candidate.fit === true && fitCount < MAX_FIT_CANDIDATES ? ((fitCount += 1), true) : undefined,
+      evidence: parsePropertyEvidence(candidate.evidence),
     });
   }
   if (fitCount === 0) candidates.slice(0, MAX_FIT_CANDIDATES).forEach((candidate) => { candidate.fit = true; });
@@ -167,7 +188,12 @@ export function parseSwitchJudgeRequest(raw: unknown): SwitchJudgeRequest {
   const loaded = body.loaded && typeof body.loaded === 'object' && typeof (body.loaded as { title?: unknown }).title === 'string'
     ? { title: String((body.loaded as { title: string }).title).slice(0, 120), formula: typeof (body.loaded as { formula?: unknown }).formula === 'string' ? String((body.loaded as { formula: string }).formula).slice(0, 60) : undefined }
     : null;
-  return { query, elements, candidates, loaded };
+  return { query, elements, candidates, loaded, rank: body.rank === true && query.length > 0 };
+}
+
+/** The candidates the ranking questions are asked about: known substances only. */
+function rankKeys(request: SwitchJudgeRequest): string[] {
+  return request.candidates.filter(rankable).map((candidate) => candidate.key);
 }
 
 /** The questions are constants; the request only fills `state`. */
@@ -198,6 +224,7 @@ export function buildSwitchQuestions(request: SwitchJudgeRequest): Record<string
       instructions: `The candidate with key \`${candidate.key}\` satisfies what \`request\` asks for.`,
     };
   }
+  if (request.rank) Object.assign(questions, propertyRankQuestions(rankKeys(request)), queryFacetQuestions());
   return questions;
 }
 
@@ -215,6 +242,8 @@ export function buildSwitchState(request: SwitchJudgeRequest): unknown {
       elements: candidate.elements ?? null,
       atoms: candidate.atoms ?? null,
       source: candidate.source,
+      ...(candidate.category ? { category: candidate.category } : {}),
+      ...evidenceState(candidate.evidence),
     })),
   };
 }
@@ -234,7 +263,12 @@ export function mapSwitchAnswers(request: SwitchJudgeRequest, result: JevResult)
     intent: intent && intent.type === 'choice' ? { choice: intent.choice, confidence: round3(intent.confidence) } : undefined,
     best: best && best.type === 'choice' && best.choice !== 'none' ? { key: best.choice, confidence: round3(best.confidence) } : null,
     fit,
+    ...(request.rank ? { rank: withAsks(readPropertyRankAnswers(result, rankKeys(request)), result) } : {}),
   };
+}
+
+function withAsks(rank: PropertyRankJudgment | null, result: JevResult): PropertyRankJudgment | null {
+  return rank ? { ...rank, asks: readQueryFacets(result) } : null;
 }
 
 function round3(value: number): number {
@@ -273,7 +307,13 @@ export async function handleSwitchJudge(
 
   if (!jevConfigured(env)) return jsonResponse({ configured: false } satisfies SwitchJudgeResponse);
 
-  const canonical = JSON.stringify({ q: parsed.query, e: parsed.elements, c: parsed.candidates.map((c) => c.key), l: parsed.loaded?.title ?? null });
+  const canonical = JSON.stringify({
+    q: parsed.query,
+    e: parsed.elements,
+    c: parsed.candidates.map((c) => [c.key, c.category ?? null, c.evidence ?? null]),
+    l: parsed.loaded?.title ?? null,
+    r: parsed.rank === true,
+  });
   const cacheKey = new Request(`https://jev-cache.lupi.live/switch/${JEV_PROMPT_VERSION}/${await sha256Hex(canonical)}`);
   const cache = options.cache === undefined ? (globalThis as { caches?: { default?: Cache } }).caches?.default ?? null : options.cache;
   if (cache) {
@@ -299,6 +339,11 @@ export async function handleSwitchJudge(
         intent: mapped.intent?.choice ?? null,
         intentConfidence: mapped.intent?.confidence ?? null,
         bestConfidence: mapped.best?.confidence ?? null,
+        rankMode: mapped.rank?.mode.choice ?? null,
+        rankModeConfidence: mapped.rank?.mode.confidence ?? null,
+        rankProperty: mapped.rank?.property.choice ?? null,
+        rankPropertyConfidence: mapped.rank?.property.confidence ?? null,
+        rankFacets: mapped.rank?.asks ? Object.keys(mapped.rank.asks).filter((id) => (mapped.rank!.asks![id] ?? 0) >= 0.7) : null,
         inputTokens: result.usage?.input_tokens ?? null,
         ms: (options.now ?? Date.now)() - started,
       }),

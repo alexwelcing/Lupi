@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { openMolecule } = vi.hoisted(() => ({ openMolecule: vi.fn(async () => ({ ok: true as const })) }));
@@ -33,9 +33,9 @@ describe('MoleculeSwitcher', () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ configured: false }), { headers: { 'content-type': 'application/json' } }));
     render(<MoleculeSwitcher />);
     const input = screen.getByRole('combobox', { name: 'Switch molecule' });
-    await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(5));
+    await waitFor(() => expect(within(screen.getByRole('listbox')).getAllByRole('option').length).toBeGreaterThan(5));
     fireEvent.change(input, { target: { value: 'benz' } });
-    await waitFor(() => expect(screen.getAllByRole('option')[0].textContent).toContain('Benzene'));
+    await waitFor(() => expect(within(screen.getByRole('listbox')).getAllByRole('option')[0].textContent).toContain('Benzene'));
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(openMolecule).toHaveBeenCalledWith({ kind: 'gallery', id: 'benzene', history: 'push' }));
   });
@@ -53,7 +53,7 @@ describe('MoleculeSwitcher', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nitrogen (N)' }));
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('containing N'));
     await waitFor(() => expect(screen.getByText('Best guess')).toBeTruthy(), { timeout: 3000 });
-    expect(screen.getAllByRole('option')[0].textContent).toContain('Best guess');
+    expect(within(screen.getByRole('listbox')).getAllByRole('option')[0].textContent).toContain('Best guess');
     expect(screen.getByRole('status').textContent).toContain('best guess by Jev (inferred)');
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear elements' }));
