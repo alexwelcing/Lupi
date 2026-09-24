@@ -29,9 +29,12 @@ import {
   type PropertyRankJudgment,
   type ViewerCommandDecision,
   PROPERTY_RANK_PROMPT_VERSION,
+  FACTS_PROMPT_VERSION,
   evidenceState,
   parsePropertyEvidence,
   propertyRankQuestions,
+  queryFacetQuestions,
+  readQueryFacets,
   rankable,
   readPropertyRankAnswers,
   VIEWER_COMMAND_PROMPT_VERSION,
@@ -56,7 +59,7 @@ export const JEV_DEFAULT_MODEL = JEV_MODEL_LATEST;
 const JEV_TIMEOUT_MS = 1_500;
 const JEV_CACHE_TTL_SECONDS = 3_600;
 /** Bump when instructions or criteria change so cached judgments from the old prompt are not served. */
-export const JEV_PROMPT_VERSION = `switch-v4-everyday+${PROPERTY_RANK_PROMPT_VERSION}`;
+export const JEV_PROMPT_VERSION = `switch-v5-everyday+${PROPERTY_RANK_PROMPT_VERSION}+${FACTS_PROMPT_VERSION}`;
 const MAX_SWITCH_BODY_BYTES = 64 * 1024;
 /** Choice cardinality is 255; the whole gallery plus local matches fits. */
 const MAX_SWITCH_CANDIDATES = 160;
@@ -221,7 +224,7 @@ export function buildSwitchQuestions(request: SwitchJudgeRequest): Record<string
       instructions: `The candidate with key \`${candidate.key}\` satisfies what \`request\` asks for.`,
     };
   }
-  if (request.rank) Object.assign(questions, propertyRankQuestions(rankKeys(request)));
+  if (request.rank) Object.assign(questions, propertyRankQuestions(rankKeys(request)), queryFacetQuestions());
   return questions;
 }
 
@@ -260,8 +263,12 @@ export function mapSwitchAnswers(request: SwitchJudgeRequest, result: JevResult)
     intent: intent && intent.type === 'choice' ? { choice: intent.choice, confidence: round3(intent.confidence) } : undefined,
     best: best && best.type === 'choice' && best.choice !== 'none' ? { key: best.choice, confidence: round3(best.confidence) } : null,
     fit,
-    ...(request.rank ? { rank: readPropertyRankAnswers(result, rankKeys(request)) } : {}),
+    ...(request.rank ? { rank: withAsks(readPropertyRankAnswers(result, rankKeys(request)), result) } : {}),
   };
+}
+
+function withAsks(rank: PropertyRankJudgment | null, result: JevResult): PropertyRankJudgment | null {
+  return rank ? { ...rank, asks: readQueryFacets(result) } : null;
 }
 
 function round3(value: number): number {
@@ -336,6 +343,7 @@ export async function handleSwitchJudge(
         rankModeConfidence: mapped.rank?.mode.confidence ?? null,
         rankProperty: mapped.rank?.property.choice ?? null,
         rankPropertyConfidence: mapped.rank?.property.confidence ?? null,
+        rankFacets: mapped.rank?.asks ? Object.keys(mapped.rank.asks).filter((id) => (mapped.rank!.asks![id] ?? 0) >= 0.7) : null,
         inputTokens: result.usage?.input_tokens ?? null,
         ms: (options.now ?? Date.now)() - started,
       }),

@@ -156,11 +156,14 @@ export interface PropertyRankJudgment {
   /** `ranking` is P(filter) + P(most) + P(least): how sure Jev is this is a
    *  property question at all, whichever shape. */
   mode: { choice: RankMode; confidence: number; ranking?: number };
-  property: { choice: RankProperty; confidence: number };
+  /** `measured` is 1 − P(other): how sure Jev is the request turns on some number. */
+  property: { choice: RankProperty; confidence: number; measured?: number };
   /** P(candidate does what the request says), by key. */
   has: Record<string, number>;
   /** P(candidate belongs to the group being compared), by key. */
   kind: Record<string, number>;
+  /** Facets from the library taxonomy the request asks for, by facet id (see `facets/`). */
+  asks?: Partial<Record<string, number>>;
 }
 
 const round3 = (value: number) => Math.round(value * 1000) / 1000;
@@ -182,7 +185,11 @@ export function readPropertyRankAnswers(result: JevResult, keys: string[]): Prop
   const probability = (label: RankMode) => (typeof mode.probabilities?.[label] === 'number' ? mode.probabilities[label] : 0);
   return {
     mode: { choice: mode.choice as RankMode, confidence: round3(mode.confidence), ranking: round3(probability('filter') + probability('most') + probability('least')) },
-    property: { choice: property.choice as RankProperty, confidence: round3(property.confidence) },
+    property: {
+      choice: property.choice as RankProperty,
+      confidence: round3(property.confidence),
+      measured: round3(1 - (typeof property.probabilities?.other === 'number' ? property.probabilities.other : 0)),
+    },
     has,
     kind,
   };
@@ -258,7 +265,11 @@ export function planPropertyRank(judgment: PropertyRankJudgment | null | undefin
   const ranking = judgment.mode.ranking ?? (isRankingMode(judgment.mode.choice) ? judgment.mode.confidence : 0);
   if (ranking < RANK_MODE_THRESHOLD) return null;
   const mode = judgment.mode.choice;
-  const property = judgment.property.confidence >= RANK_PROPERTY_THRESHOLD ? judgment.property.choice : 'other';
+  // "heaviest thing made in the human body": molar mass chosen every run at
+  // confidence 0.46 to 0.59, with "other" at only 0.19 to 0.30. The summed
+  // measured probability is the steadier gate, as the summed ranking one is.
+  const sure = judgment.property.confidence >= RANK_PROPERTY_THRESHOLD || (judgment.property.measured ?? 0) >= RANK_PROPERTY_THRESHOLD;
+  const property = sure ? judgment.property.choice : 'other';
   if (mode === 'filter') return { kind: 'filter', property };
   if (mode !== 'most' && mode !== 'least') return null;
   return property === 'other' ? { kind: 'judged', direction: mode } : { kind: 'measured', direction: mode, property };

@@ -36,7 +36,7 @@ export const MCP_TOOL_DEFINITIONS: McpToolManifestEntry[] = [
   },
   {
     name: 'lupi.search_molecules',
-    description: 'Search known molecule/catalog providers and return load specs agents can execute.',
+    description: 'Search known molecule/catalog providers and return load specs agents can execute. Filter by library facets ("metal", "floats", "aerospace") and sort by measured properties (molar_mass, size, density, melting_point, boiling_point); gallery hits carry their facts.',
     parameters: LUPI_MCP_SCHEMAS['lupi.search_molecules'],
   },
   {

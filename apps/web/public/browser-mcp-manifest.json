@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-09-20T13:50:52.209Z",
+  "generatedAt": "2026-09-24T11:55:01.794Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
@@ -144,7 +144,7 @@
     },
     {
       "name": "lupi.search_molecules",
-      "description": "Search known molecule/catalog providers and return load specs agents can execute.",
+      "description": "Search known molecule/catalog providers and return load specs agents can execute. Filter by library facets (\"metal\", \"floats\", \"aerospace\") and sort by measured properties (molar_mass, size, density, melting_point, boiling_point); gallery hits carry their facts.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -170,6 +170,80 @@
             "type": "number",
             "minimum": 1,
             "maximum": 50
+          },
+          "facets": {
+            "type": "array",
+            "description": "Require every listed library facet (AND), from the checked-in library facts. Hits without facts are dropped.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "metal",
+                "ceramic",
+                "carbon_form",
+                "framework",
+                "small_molecule",
+                "sugar",
+                "amino_acid",
+                "lipid_steroid",
+                "nucleotide",
+                "alkaloid",
+                "terpene",
+                "neurotransmitter",
+                "aromatic_ring",
+                "solvent",
+                "in_body",
+                "from_plants",
+                "in_food",
+                "mineral",
+                "synthetic",
+                "medicine",
+                "psychoactive",
+                "flavor_fragrance",
+                "energy_storage",
+                "fuel",
+                "aerospace",
+                "electronics",
+                "construction",
+                "jewelry",
+                "cooling",
+                "industrial_chemical",
+                "gas_rt",
+                "liquid_rt",
+                "solid_rt",
+                "floats",
+                "water_soluble",
+                "flammable",
+                "toxic",
+                "conducts",
+                "magnetic",
+                "hard",
+                "high_melting",
+                "sweet",
+                "bitter",
+                "smell",
+                "simulation",
+                "demo"
+              ]
+            }
+          },
+          "sortBy": {
+            "type": "string",
+            "description": "Sort by a measured property: molar mass from the formula, atom count, or reference density and transition temperatures. Hits without a value sort last.",
+            "enum": [
+              "molar_mass",
+              "size",
+              "density",
+              "melting_point",
+              "boiling_point"
+            ]
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "desc",
+              "asc"
+            ],
+            "description": "Default desc (highest first)."
           }
         }
       }

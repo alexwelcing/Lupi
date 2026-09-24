@@ -19,6 +19,7 @@ import { COLOR_SCHEMES, type ColorSchemeId } from './coloring';
 import { useFirebaseAuth } from './auth/useFirebaseAuth';
 import { MOLECULE_PROVIDERS, searchMolecules, type MoleculeHit, type MoleculeQuery, type MoleculeSourceId } from './molecules';
 import { MoleculeSearch } from './molecules/MoleculeSearch';
+import { organizeHits } from './molecules/organizeHits';
 import { nistCatalogUrl, nistDemoUrl } from './molecules/dataEndpoints';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
@@ -1303,8 +1304,11 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : 30;
       const query: MoleculeQuery = { text, elements, sources, limit };
 
-      const hits = await searchMolecules(query, MOLECULE_PROVIDERS);
-      transcript.push(`searched molecules: ${hits.length} hit(s) for "${text}"`);
+      const organizeArgs = { facets: Array.isArray(args.facets) ? args.facets : undefined, sortBy: args.sortBy, order: args.order };
+      const organizing = Boolean(organizeArgs.facets?.length || organizeArgs.sortBy);
+      // Facets and sorts need the whole candidate set, not the text-ranked top slice.
+      const hits = organizeHits(await searchMolecules(organizing ? { ...query, limit: 200 } : query, MOLECULE_PROVIDERS), organizeArgs);
+      transcript.push(`searched molecules: ${hits.length} hit(s) for "${text}"${organizing ? ' (organized by facets/sort)' : ''}`);
       return okResponse(request, transcript, {
         // Each hit carries a `load` spec the agent can act on next:
         //   { kind:'generate', ... } -> call lupi.generate_molecule with those args
@@ -1318,6 +1322,7 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
           formula: h.formula,
           elements: h.elements,
           tags: h.tags,
+          ...(h.facts ? { facts: h.facts } : {}),
           load: h.load,
         })),
         viewer: readViewerState(),

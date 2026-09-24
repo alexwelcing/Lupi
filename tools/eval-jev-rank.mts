@@ -3,9 +3,10 @@
  * eval-jev-rank.mts — labeled evaluation of the switcher's property ranking.
  *
  * Runs the real edge handler (`handleSwitchJudge` with `rank: true`) over the
- * same gallery pool and reference evidence the browser sends, applies the
- * shared plan and ranking, and checks each case's expected plan and top
- * results. Use it before changing an instruction, criterion, or threshold in
+ * same gallery pool and reference evidence the browser sends, then the
+ * switcher's own `organize` (facet filters from the checked-in library
+ * facts, the ranking plan, the sort), and checks each case's expected plan,
+ * filters, and top results. Use it before changing an instruction, criterion, or threshold in
  * `packages/core/src/jev/propertyRank.ts`.
  *
  *   TYPESAFE_API_KEY=... pnpm exec tsx tools/eval-jev-rank.mts
@@ -14,8 +15,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { molarMass, parsePropertyEvidence, planPropertyRank, rankByPlan, type PropertyEvidence, type RankPlan, type RankProperty } from '../packages/core/src/jev/propertyRank';
+import { molarMass, parsePropertyEvidence, planPropertyRank, type PropertyEvidence, type RankPlan } from '../packages/core/src/jev/propertyRank';
 import { handleSwitchJudge, type SwitchJudgeResponse } from '../apps/mcp-worker/src/jev';
+import { organize } from '../packages/ui/src/switcher/searchPlan';
+import type { SwitchCandidate } from '../packages/ui/src/switcher/switchIndex';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const JSON_OUT = process.argv.includes('--json');
@@ -42,6 +45,7 @@ interface PoolEntry {
   source: 'gallery';
   category: string;
   evidence?: PropertyEvidence;
+  molarMass?: number;
 }
 
 const POOL: PoolEntry[] = gallery
@@ -56,34 +60,31 @@ const POOL: PoolEntry[] = gallery
       source: 'gallery' as const,
       category: String(entry.domain),
       evidence: parsePropertyEvidence(sheet[id]),
+      molarMass: molarMass(nomenclature[id]?.molecularFormula),
     };
   });
 
-function measured(entry: PoolEntry, property: Exclude<RankProperty, 'other'>): number | undefined {
-  if (property === 'molar_mass') return molarMass(entry.formula);
-  if (property === 'size') return entry.atoms || undefined;
-  if (property === 'density') return entry.evidence?.density;
-  if (property === 'melting_point') return entry.evidence?.meltingPoint;
-  return entry.evidence?.boilingPoint;
-}
-
 interface Case {
   query: string;
-  /** Expected plan kind and, for measured plans, the property and direction. */
-  plan: RankPlan | null;
+  /** Expected plan kind and, for measured plans, the property and direction; 'any' when only the filters matter. */
+  plan: RankPlan | null | 'any';
+  /** Facets that must be among the filters Jev read. */
+  filters?: string[];
   /** Every one of these must appear in the top `within` rows. */
   top?: string[];
   within?: number;
   /** Each of these must appear somewhere in the ranked rows. */
   present?: string[];
+  /** None of these may appear in the top `within` rows (demoted is fine). */
+  notTop?: string[];
   /** None of these may appear anywhere in the ranked rows. */
   absent?: string[];
 }
 
 const g = (id: string) => `gallery:${id}`;
 const CASES: Case[] = [
-  // The floating liquids come back as a near tie (0.70 to 0.76), so only the leaders are pinned.
-  { query: 'floats in water', plan: { kind: 'filter', property: 'density' }, top: [g('water_cluster_64'), g('limonene')], within: 4, present: [g('benzene'), g('ethyl_acetate'), g('coudert_mof_flexibility')], absent: [g('sand_w_cascade'), g('sodium_chloride'), g('sucrose')] },
+  // Everything that floats ties on the facts (0.95, from the reference sheet); membership is the check, not order within the tie.
+  { query: 'floats in water', plan: { kind: 'filter', property: 'density' }, present: [g('water_cluster_64'), g('limonene'), g('benzene'), g('ethyl_acetate'), g('coudert_mof_flexibility')], absent: [g('sand_w_cascade'), g('sodium_chloride'), g('sucrose')] },
   { query: 'metal for planes', plan: { kind: 'filter', property: 'other' }, top: [g('al_polycrystal')], within: 1, absent: [g('water'), g('caffeine')] },
   { query: 'heaviest metal', plan: { kind: 'measured', direction: 'most', property: 'density' }, top: [g('sand_w_cascade')], within: 1 },
   { query: 'lightest metal', plan: { kind: 'measured', direction: 'least', property: 'density' }, top: [g('mlip_mg_slip_playthrough')], within: 1, absent: [g('oxygen'), g('water')] },
@@ -101,10 +102,22 @@ const CASES: Case[] = [
   { query: 'gas at room temperature', plan: { kind: 'filter', property: 'boiling_point' }, top: [g('oxygen'), g('nitrous_oxide')], within: 5, absent: [g('water'), g('sand_w_cascade')] },
   { query: 'conducts electricity', plan: { kind: 'filter', property: 'other' }, top: [g('research_cu')], within: 4, absent: [g('sucrose')] },
   { query: 'caffeine', plan: null },
+  // Compound requests: several conditions, read as facets over the checked-in facts.
+  { query: 'flammable liquid that floats', plan: 'any', filters: ['flammable', 'liquid_rt', 'floats'], top: [g('limonene'), g('benzene')], within: 4, absent: [g('water'), g('sand_w_cascade')], notTop: [g('ethanol')] },
+  { query: 'psychoactive alkaloid', plan: 'any', filters: ['psychoactive', 'alkaloid'], top: [g('caffeine'), g('nicotine')], within: 8, absent: [g('glucose'), g('dopamine')] },
+  { query: 'toxic solvent', plan: 'any', filters: ['toxic', 'solvent'], top: [g('benzene')], within: 5, absent: [g('water'), g('glucose')] },
+  { query: 'sweet thing from plants', plan: 'any', filters: ['sweet', 'from_plants'], top: [g('sucrose'), g('glucose')], within: 3, absent: [g('sand_w_cascade')] },
+  { query: 'a gas', plan: 'any', filters: ['gas_rt'], top: [g('oxygen'), g('nitrous_oxide')], within: 6, absent: [g('water'), g('ethanol')] },
+  { query: 'bitter medicine', plan: 'any', filters: ['bitter', 'medicine'], top: [g('quinine')], within: 4, absent: [g('sucrose')] },
+  { query: 'lightest metal used in aircraft', plan: { kind: 'measured', direction: 'least', property: 'density' }, filters: ['metal', 'aerospace'], top: [g('mlip_mg_slip_playthrough')], within: 1, absent: [g('sand_w_cascade')] },
+  // "heaviest thing" reads as molar mass or as a judged superlative from run to run; either orders the right three first.
+  { query: 'heaviest thing made in the human body', plan: 'any', filters: ['in_body'], top: [g('cholesterol')], within: 3, absent: [g('sand_w_cascade')] },
+  { query: 'highest boiling liquid that floats', plan: { kind: 'measured', direction: 'most', property: 'boiling_point' }, filters: ['liquid_rt', 'floats'], top: [g('geraniol')], within: 2, notTop: [g('water'), g('nitrobenzene')] },
   { query: 'something sweet', plan: { kind: 'filter', property: 'other' }, top: [g('sucrose'), g('glucose')], within: 3 },
 ];
 
-function samePlan(expected: RankPlan | null, actual: RankPlan | null): boolean {
+function samePlan(expected: RankPlan | null | 'any', actual: RankPlan | null): boolean {
+  if (expected === 'any') return true;
   if (!expected || !actual) return expected === actual;
   if (expected.kind !== actual.kind) return false;
   if (expected.kind === 'filter') return true; // the property of a filter only shapes the wording
@@ -126,19 +139,21 @@ for (const testCase of CASES) {
   latencies.push(ms);
   const body = (await response.json()) as SwitchJudgeResponse & { error?: string };
   const plan = planPropertyRank(body.rank ?? null);
-  const ranked = plan && body.rank
-    ? rankByPlan(POOL.map((entry) => ({ key: entry.key, value: plan.kind === 'measured' ? measured(entry, plan.property) : undefined })), plan, body.rank)
-    : [];
+  const organized = organize([], POOL as unknown as SwitchCandidate[], { ...body, configured: true });
+  const ranked = organized ? organized.ordered.map((candidate) => organized.rows[candidate.key]) : [];
   const keys = ranked.map((row) => row.key);
+  const filters = organized?.filters.map((chip) => chip.id) ?? [];
   const failures: string[] = [];
   if (!response.ok) failures.push(`http ${response.status}: ${body.error}`);
   if (!samePlan(testCase.plan, plan)) failures.push(`plan ${JSON.stringify(plan)}`);
+  for (const id of testCase.filters ?? []) if (!filters.includes(id)) failures.push(`filter ${id} not read (read: ${filters.join(', ') || 'none'})`);
   for (const key of testCase.top ?? []) if (!keys.slice(0, testCase.within ?? 3).includes(key)) failures.push(`${key} not in top ${testCase.within ?? 3}`);
   for (const key of testCase.present ?? []) if (!keys.includes(key)) failures.push(`${key} missing`);
+  for (const key of testCase.notTop ?? []) if (keys.slice(0, testCase.within ?? 3).includes(key)) failures.push(`${key} in top ${testCase.within ?? 3}`);
   for (const key of testCase.absent ?? []) if (keys.includes(key)) failures.push(`${key} ranked`);
   if (failures.length === 0) pass += 1;
   const title = (key: string) => POOL.find((entry) => entry.key === key)?.title ?? key;
-  const top = ranked.slice(0, 5).map((row) => `${title(row.key)}${row.value !== undefined ? ` ${row.value}` : ''}${row.probability !== undefined ? ` p=${row.probability}` : ''}`);
+  const top = ranked.slice(0, Number(process.env.TOP ?? 5)).map((row) => `${title(row.key)}${row.value !== undefined ? ` ${row.value}` : ''}${row.match !== undefined ? ` m=${row.match}` : row.probability !== undefined ? ` p=${row.probability}` : ''}`);
   rows.push({
     query: testCase.query,
     ok: failures.length === 0,
@@ -146,13 +161,14 @@ for (const testCase of CASES) {
     mode: body.rank?.mode ?? null,
     property: body.rank?.property ?? null,
     plan,
+    filters,
     top,
     ranked: ranked.length,
     ms,
     model: body.model,
   });
   if (!JSON_OUT) {
-    print(`${failures.length ? 'FAIL' : 'ok  '} ${testCase.query.padEnd(26)} ${String(body.rank?.mode.choice ?? '-').padEnd(7)} ${String(body.rank?.property.choice ?? '-').padEnd(14)} ${ms} ms  ${top.slice(0, 3).join(' | ')}`);
+    print(`${failures.length ? 'FAIL' : 'ok  '} ${testCase.query.padEnd(34)} ${String(body.rank?.mode.choice ?? '-').padEnd(7)} ${String(body.rank?.property.choice ?? '-').padEnd(14)} [${filters.join(',')}] ${ms} ms  ${top.slice(0, 3).join(' | ')}`);
     for (const failure of failures) print(`       ${failure}`);
   }
 }

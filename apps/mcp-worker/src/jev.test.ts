@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { queryFacetQuestions } from '@atlas/core';
 import { JEV_ROUTES, JevRequestError, buildSwitchQuestions, handleSwitchJudge, handleViewerCommand, mapSwitchAnswers, parseSwitchJudgeRequest, systemOne } from './jev';
 
 const CANDIDATES = [
@@ -115,7 +116,8 @@ describe('POST /v1/switch/judge', () => {
       expect(body.state.candidates[1]).toMatchObject({ substance: 'aluminium', density_g_per_cm3: 2.7 });
       expect(body.state.candidates[1]).not.toHaveProperty('phase_at_25C');
       expect(body.state.candidates[0]).toMatchObject({ phase_at_25C: 'solid', in_water: 'soluble' });
-      expect(Object.keys(body.questions)).toEqual(expect.arrayContaining(['rank_mode', 'rank_property', 'has:gallery:al_polycrystal', 'kind:gallery:caffeine']));
+      expect(Object.keys(body.questions)).toEqual(expect.arrayContaining(['rank_mode', 'rank_property', 'has:gallery:al_polycrystal', 'kind:gallery:caffeine', 'ask:aerospace']));
+      expect(body.questions).not.toHaveProperty('ask:small_molecule');
       expect(JSON.stringify(body.questions)).not.toContain('planes');
       expect(body.state.candidates[1].category).toBe('Metals & Alloys');
       expect(Object.keys(body.questions).filter((id) => id.includes('gallery:qr'))).toEqual(['fit:gallery:qr']);
@@ -133,13 +135,15 @@ describe('POST /v1/switch/judge', () => {
         'kind:gallery:caffeine': { type: 'noul', noul: 0.03 },
         'has:gallery:al_polycrystal': { type: 'noul', noul: 0.77 },
         'kind:gallery:al_polycrystal': { type: 'noul', noul: 0.82 },
+        ...Object.fromEntries(Object.keys(queryFacetQuestions()).map((id) => [id, { type: 'noul', noul: id === 'ask:metal' ? 0.97 : id === 'ask:aerospace' ? 0.96 : 0.1 }])),
       });
     });
     const response = await handleSwitchJudge(post({ query: 'metal for planes', rank: true, candidates: ranked }), { TYPESAFE_API_KEY: 'sk-test' }, { fetcher, cache: null });
     expect(response.status).toBe(200);
     expect((await response.json()).rank).toEqual({
       mode: { choice: 'filter', confidence: 0.72, ranking: 0.975 },
-      property: { choice: 'other', confidence: 0.95 },
+      property: { choice: 'other', confidence: 0.95, measured: 0.05 },
+      asks: { metal: 0.97, aerospace: 0.96 },
       has: { 'gallery:caffeine': 0.02, 'gallery:al_polycrystal': 0.77 },
       kind: { 'gallery:caffeine': 0.03, 'gallery:al_polycrystal': 0.82 },
     });

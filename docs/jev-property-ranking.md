@@ -97,8 +97,9 @@ median of 383 ms direct.
 ## Measured
 
 `tools/eval-jev-rank.mts` runs the real edge handler over the gallery pool
-and checks the plan and the leaders for 18 labeled queries.
-[Receipt](jev-rank-eval-2026-09-24.json): 18 of 18, median 383 ms.
+and checks the plan and the leaders for 18 labeled queries: 18 of 18,
+median 383 ms, on the first build. The same tool now runs 27 cases through the
+facet path; the current [receipt](jev-rank-eval-2026-09-24.json) is 27 of 27.
 
 ```bash
 TYPESAFE_API_KEY=... pnpm exec tsx tools/eval-jev-rank.mts
@@ -126,7 +127,7 @@ instruction or criterion only with a bump to
 
 ## Next
 
-- More substances with evidence. The OMol25 rows already get molar mass from
-  their formula but are not in Jev's pool; adding a curated materials shelf
-  (titanium, steel, lead, gold) would make "metal for planes" name titanium.
-- Expose the same ranking to agents through `lupi.search_molecules`.
+Superseded by the library facts layer: facet filters read from the typed
+words, a soft AND over checked-in facts, a sort control, and compound
+queries. See [library-facts.md](library-facts.md). The eval receipt now covers
+27 cases through that path.

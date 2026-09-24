@@ -74,7 +74,7 @@ describe('questions', () => {
     };
     expect(readPropertyRankAnswers({ model: 'jev-1.13.0', answers }, ['a'])).toEqual({
       mode: { choice: 'filter', confidence: 0.991, ranking: 0.72 },
-      property: { choice: 'density', confidence: 1 },
+      property: { choice: 'density', confidence: 1, measured: 1 },
       has: { a: 0.812 },
       kind: { a: 0.4 },
     });
@@ -90,6 +90,10 @@ describe('planning', () => {
     expect(planPropertyRank(judgment('lookup', 'other', {}, {}))).toBeNull();
     expect(planPropertyRank(judgment('most', 'density', {}, {}, 0.4))).toBeNull();
     expect(planPropertyRank(null)).toBeNull();
+    // Chosen at low confidence, but "other" is unlikely: still a measured plan.
+    const unsure = judgment('most', 'molar_mass', {}, {}, 0.99);
+    expect(planPropertyRank({ ...unsure, property: { choice: 'molar_mass', confidence: 0.46, measured: 0.7 } })).toEqual({ kind: 'measured', direction: 'most', property: 'molar_mass' });
+    expect(planPropertyRank({ ...unsure, property: { choice: 'molar_mass', confidence: 0.46, measured: 0.5 } })).toEqual({ kind: 'judged', direction: 'most' });
     // "sweet": the chosen label alone is under the gate; the summed ranking probability is not.
     const sweet = judgment('filter', 'other', {}, {}, 0.55);
     expect(planPropertyRank(sweet)).toBeNull();

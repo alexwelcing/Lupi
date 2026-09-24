@@ -1,9 +1,10 @@
-import { molarMass, parsePropertyEvidence, type PropertyEvidence, type RankProperty } from '@atlas/core';
+import { molarMass, parsePropertyEvidence, type PropertyEvidence } from '@atlas/core';
 import { LOCAL_MOLECULES, scoreLocalMolecule, type LocalMolecule } from '../landing/moleculeIndex';
 import { elementsFromFormula, omolFacets, omolRecords, omolStructureUrl, type OmolRecord } from '../molecules/providers/omol';
 import { openPubChemMolecule, pubchemAutocomplete } from '../molecules/pubchemLoad';
 import { openMolecule } from '../viewer/openMolecule';
 import propertySheet from './property-sheet.json';
+import { facetsOf } from '../library/libraryFacts';
 
 /**
  * Candidate index for the molecule switcher. Everything here is local and
@@ -36,22 +37,6 @@ const SHEET = (propertySheet as { entries: Record<string, unknown> }).entries;
 /** Reference evidence for a gallery id, sanitized the same way the edge does. */
 export function galleryEvidence(id: string): PropertyEvidence | undefined {
   return parsePropertyEvidence(SHEET[id]);
-}
-
-/** The number a measured ranking sorts by, when this candidate has one. */
-export function measuredValue(candidate: SwitchCandidate, property: Exclude<RankProperty, 'other'>): number | undefined {
-  switch (property) {
-    case 'molar_mass':
-      return candidate.molarMass;
-    case 'size':
-      return candidate.atoms > 0 ? candidate.atoms : undefined;
-    case 'density':
-      return candidate.evidence?.density;
-    case 'melting_point':
-      return candidate.evidence?.meltingPoint;
-    case 'boiling_point':
-      return candidate.evidence?.boilingPoint;
-  }
 }
 
 export interface SwitchQuery {
@@ -136,6 +121,15 @@ function hasAll(elements: string[], wanted: string[]): boolean {
  *  element filter: typing "water" with C and N selected still means water. */
 const EXPLICIT_MATCH_SCORE = 75;
 
+/** A typed word that names one of the entry's facets ("metal", "flammable")
+ *  is a weak match, so a facet word lists something before Jev answers. */
+const FACET_TEXT_SCORE = 20;
+function facetTextScore(key: string, query: string): number {
+  const q = query.toLowerCase();
+  if (q.length < 3) return 0;
+  return facetsOf(key).some((facet) => facet.label.toLowerCase().split(/[\s,]+/).some((word) => word.startsWith(q)) || facet.id === q) ? FACET_TEXT_SCORE : 0;
+}
+
 /** Gallery matches, instant. With elements selected, only entries whose formula
  *  is known can qualify, so an unlabeled material never masquerades as a match. */
 export function galleryCandidates({ query, elements, limit = GALLERY_LIMIT }: SwitchQuery): SwitchCandidate[] {
@@ -145,7 +139,7 @@ export function galleryCandidates({ query, elements, limit = GALLERY_LIMIT }: Sw
   if (!q) return filtered.slice(0, limit);
   const byKey = new Map(LOCAL_MOLECULES.map((molecule) => [`gallery:${molecule.id}`, molecule]));
   return all
-    .map((candidate, index) => ({ candidate, score: scoreLocalMolecule(byKey.get(candidate.key)!, q), index }))
+    .map((candidate, index) => ({ candidate, score: scoreLocalMolecule(byKey.get(candidate.key)!, q) || facetTextScore(candidate.key, q), index }))
     .filter((entry) => entry.score >= EXPLICIT_MATCH_SCORE || (entry.score > 0 && (!elements.length || hasAll(entry.candidate.elements, elements))))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, limit)

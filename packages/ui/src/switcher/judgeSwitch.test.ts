@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyJudgment, buildJudgePool, formatMeasure, judgeSwitch, resetJudgeAvailability } from './judgeSwitch';
+import { applyJudgment, buildJudgePool, judgeSwitch, resetJudgeAvailability } from './judgeSwitch';
 import type { SwitchCandidate } from './switchIndex';
 
 const candidate = (key: string): SwitchCandidate => ({ key, title: key, elements: [], atoms: 1, source: 'gallery', detail: '', open: async () => undefined });
@@ -34,37 +34,6 @@ describe('applyJudgment', () => {
     expect(bestKey).toBeNull();
     expect(hint?.key).toBe('c');
     expect(applyJudgment(list, { configured: true, best: { key: 'c', confidence: 0.1 }, fit: {} }).hint).toBeNull();
-  });
-});
-
-describe('property ranking', () => {
-  const material = (key: string, density?: number): SwitchCandidate => ({ ...candidate(key), evidence: density === undefined ? undefined : { density } });
-  const metals = [material('tungsten', 19.25), material('magnesium', 1.738), material('diamond', 3.51), material('aluminium', 2.7)];
-  const rank = (mode: string, property: string, has: Record<string, number>, kind: Record<string, number>) => ({
-    configured: true,
-    best: { key: 'diamond', confidence: 0.9 },
-    rank: { mode: { choice: mode, confidence: 0.99 }, property: { choice: property, confidence: 0.99 }, has, kind },
-  }) as never;
-
-  it('ranks the compared group by the reference value and labels each row', () => {
-    const applied = applyJudgment([], rank('least', 'density', {}, { tungsten: 0.7, magnesium: 0.84, aluminium: 0.82, diamond: 0.04 }), metals);
-    expect(applied.ordered.map((c) => c.key)).toEqual(['magnesium', 'aluminium', 'tungsten']);
-    expect(applied.bestKey).toBeNull();
-    expect(applied.ranking?.summary).toContain('density, lowest first');
-    expect(formatMeasure(applied.ranking!.plan, applied.ranking!.rows.magnesium)).toBe('1.74 g/cm³');
-    expect(formatMeasure({ kind: 'measured', direction: 'least', property: 'boiling_point' }, { key: 'o2', value: -183, basis: 'measured' })).toBe('−183 °C');
-    expect(formatMeasure({ kind: 'measured', direction: 'most', property: 'density' }, { key: 'cuzr', probability: 0.16, basis: 'inferred' })).toBe('no data');
-  });
-
-  it('filters by Jev and shows its probability', () => {
-    const applied = applyJudgment(metals, rank('filter', 'other', { aluminium: 0.77, magnesium: 0.57, tungsten: 0.1 }, {}), []);
-    expect(applied.ordered.map((c) => c.key)).toEqual(['aluminium', 'magnesium']);
-    expect(formatMeasure(applied.ranking!.plan, applied.ranking!.rows.aluminium)).toBe('Jev 77%');
-  });
-
-  it('falls back to the ordinary judgment for lookups and empty rankings', () => {
-    expect(applyJudgment(metals, rank('lookup', 'other', {}, {})).bestKey).toBe('diamond');
-    expect(applyJudgment(metals, rank('filter', 'other', { tungsten: 0.1 }, {})).ranking).toBeUndefined();
   });
 });
 
