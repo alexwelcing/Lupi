@@ -36,13 +36,14 @@ do not repeat them all locally. Local work runs the checks relevant to its diff.
 - [ ] `pnpm-lock.yaml` matches `package.json`.
 - [ ] CI uses pnpm 9, matching `packageManager`.
 - [ ] No retired `apps/lupi-studio` or nested research-site app is present.
-- [ ] The real `pnpm lint` gate and both production dependency audits run and
-      pass for this exact SHA in CI/release-package; their source definitions
-      alone are not evidence.
+- [ ] `pnpm lint` and both production dependency audits were run before
+      pushing when the change touched code or dependencies; no workflow runs
+      them.
 
 ## Viewer Verification
 
-Full regression belongs in CI. Candidate/public deployment checks use
+No workflow runs the browser suite. Run it before pushing when the change
+warrants it; against a deployed origin use
 `UI_TEST_URL=https://TARGET UI_TEST_EXPECT_HEALTH=true pnpm test:ui:release`.
 Historical rollback targets retain their own recorded suite, including full UI.
 
