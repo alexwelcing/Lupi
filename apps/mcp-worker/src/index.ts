@@ -109,12 +109,11 @@ export interface Env {
   TYPESAFE_API_KEY?: string;
   TYPESAFE_API_BASE?: string;
   TYPESAFE_MODEL?: string;
-  /** Anthropic key for the photo scanner's vision hop. `wrangler secret put ANTHROPIC_API_KEY`; never a var. */
-  ANTHROPIC_API_KEY?: string;
-  ANTHROPIC_API_BASE?: string;
-  ANTHROPIC_VISION_MODEL?: string;
-  /** Hugging Face token for the scanner's remote models (Spaces, Hub MCP). `wrangler secret put HF_TOKEN`; never a var. */
+  /** Hugging Face token for the scanner: vision (Inference Providers), Spaces, Hub MCP. `wrangler secret put HF_TOKEN`; never a var. */
   HF_TOKEN?: string;
+  HF_VISION_MODEL?: string;
+  HF_VISION_REASONING?: string;
+  HF_INFERENCE_BASE?: string;
   HF_SAM3_SPACE?: string;
   HF_SAM3D_SPACE?: string;
   CF_VERSION_METADATA?: WorkerVersionMetadata;

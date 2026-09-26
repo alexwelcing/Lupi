@@ -228,7 +228,8 @@ the page skips the remote acts. See `docs/scan-pipeline.md`.
 
 ## Route: `POST /v1/scan/identify`
 
-The photo scanner reuses the switch judgment. Claude turns a photo into a
+The photo scanner reuses the switch judgment. A Hugging Face vision model
+turns a photo into a
 structured identification (subject, materials, molecules), the Worker
 matches those molecules to the gallery pool, and Jev answers the same
 `intent`, `best`, and `fit` questions with the identification as the query.

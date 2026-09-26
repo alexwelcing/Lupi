@@ -17,17 +17,20 @@ three APIs and one gallery.
    pool: every directly openable gallery molecule as `{ key, title, formula,
    elements, atoms, source }`, the same candidate shape the molecule
    switcher sends to `/v1/switch/judge`.
-2. **Vision (Claude).** The Worker sends the photo to Claude through the
-   official SDK with a JSON schema on the output
-   (`apps/mcp-worker/src/scan.ts`). The answer is a structured
+2. **Vision (Hugging Face).** The Worker sends the photo to a small
+   reasoning VLM through Hugging Face Inference Providers, the Hub's
+   OpenAI-compatible router, with the same `HF_TOKEN` the Spaces use and a
+   strict JSON schema on the output (`apps/mcp-worker/src/vision.ts`,
+   prompts in `scan.ts`). The default is `Qwen/Qwen3.6-35B-A3B` (3B active
+   parameters, about $0.10 in and $0.95 out per million tokens). The answer is a structured
    identification: the subject with a confidence and a short likelihood
    distribution over what it could be, up to four materials with rough
    shares, up to four molecules per material with a formula and a
-   few-word role, the dominant elements, and one playful headline. Effort
-   is `low` so the answer lands in a few seconds; the server-side refusal
-   fallback is on so a policy decline never turns into a blank screen. A
+   few-word role, the dominant elements, and one playful headline.
+   Reasoning effort is `low` so the answer lands in a few seconds (a
+   provider that rejects the field is asked once more without it). A
    response that is not valid JSON in that shape is rejected.
-3. **Matching.** The Worker matches Claude's molecules to the gallery pool by
+3. **Matching.** The Worker matches the model's molecules to the gallery pool by
    normalized title, then by formula, with a short alias table (salt,
    sugar, H2O, buckyball, ...). Every match can open instantly.
 4. **Jev (TypeSafe System One).** The identification becomes the "query"
@@ -40,14 +43,14 @@ three APIs and one gallery.
    pool does not have; it only ranks.
 5. **Browser.** Each molecule card opens in 3D: a gallery match through
    `openMolecule({ kind: 'gallery' })`, anything else through PubChem by
-   name (`openPubChemMolecule`), so a molecule Claude named that the gallery
+   name (`openPubChemMolecule`), so a molecule the model named that the gallery
    lacks still opens. That is how the scanner pulls in more molecules than
    the 104 in the gallery.
 
 ## The gist stage: a shape, fast, and Jev sculpting it
 
 A second, smaller call runs alongside the identification so a shape and a
-label land first. `POST /v1/scan/gist` asks Claude for the geometric
+label land first. `POST /v1/scan/gist` asks the same vision model for the geometric
 essence of the photo as a handful of blended signed-distance primitives
 (`packages/core/src/gist/`): sphere, ellipsoid, box, cylinder, capsule,
 cone, torus, each with a centre, a size, a rotation, a blend radius, and a
@@ -429,27 +432,40 @@ conic-gradient ring stands in and the page is the same.
 
 ## Keys
 
-Both keys live only on the Worker. The browser never holds either.
+The keys live only on the Worker. The browser never holds any of them.
+One Hugging Face token covers vision and the Spaces; there is no Anthropic
+key any more.
 
 ```bash
 cd apps/mcp-worker
-npx -y wrangler@4.110.0 secret put ANTHROPIC_API_KEY   # vision
+npx -y wrangler@4.110.0 secret put HF_TOKEN            # Hugging Face: vision (Inference Providers), SAM 3, SAM 3D Objects, Hub MCP
 npx -y wrangler@4.110.0 secret put TYPESAFE_API_KEY    # Jev (docs/jev-integration.md)
-npx -y wrangler@4.110.0 secret put HF_TOKEN            # Hugging Face: SAM 3, SAM 3D Objects, Hub MCP (fine-grained, inference only)
 ```
 
-Locally both go in `apps/mcp-worker/.dev.vars`; the Vite dev server proxies
-`/v1/scan` (identify, gist, and sculpt) to `wrangler dev` like `/v1/switch`. Optional: `ANTHROPIC_API_BASE`
-(a gateway) and `ANTHROPIC_VISION_MODEL` (default `claude-opus-5`).
+The token must be allowed to "Make calls to Inference Providers" (a
+fine-grained token with that permission, or a read token); billing goes to
+the token's account or organization. Locally the keys go in
+`apps/mcp-worker/.dev.vars`; the Vite dev server proxies `/v1/scan`
+(identify, gist, and sculpt) to `wrangler dev` like `/v1/switch`. Optional
+vars:
+
+- `HF_VISION_MODEL` (default `Qwen/Qwen3.6-35B-A3B`): any image-capable
+  chat model on the router with structured output, e.g.
+  `Qwen/Qwen3-VL-235B-A22B-Instruct` (no reasoning, sharper eyes) or
+  `google/gemma-4-31B-it`. Append `:cheapest` or `:fastest` to steer the
+  router's provider choice. `GET https://router.huggingface.co/v1/models`
+  lists what is live, with prices and `supports_structured_output`.
+- `HF_VISION_REASONING`: `none`, `low` (default), `medium`, `high`.
+- `HF_INFERENCE_BASE`: a gateway in front of the router.
 
 `/health` reports the state without revealing anything:
 
 ```bash
 curl -s https://lupi.live/health | jq .scan
-# { "configured": true, "routes": ["/v1/scan/identify", "/v1/scan/gist", "/v1/scan/sculpt"], "vision": "claude-opus-5", "jev": true }
+# { "configured": true, "routes": ["/v1/scan/identify", "/v1/scan/gist", ...], "vision": "Qwen/Qwen3.6-35B-A3B", "jev": true, "remote": { ... } }
 ```
 
-Without `ANTHROPIC_API_KEY` the route answers `{ "configured": false }` and
+Without `HF_TOKEN` the route answers `{ "configured": false }` and
 the page says the scanner is not switched on. Without `TYPESAFE_API_KEY` the
 vision answer still comes back and `jev` is `null`.
 
@@ -469,7 +485,7 @@ WebP, GIF.
 ```json
 {
   "configured": true,
-  "model": { "vision": "claude-opus-5", "jev": "jev-1.13.0" },
+  "model": { "vision": "Qwen/Qwen3.6-35B-A3B", "jev": "jev-1.13.0" },
   "identification": {
     "subject": "A carton of eggs",
     "confidence": 0.94,
@@ -499,8 +515,7 @@ Errors return the status with an `error` and a `reason`
 
 ## What is logged
 
-One aggregate `lupi_scan` line per call: models, whether the fallback
-served, candidate and match counts, confidence, token usage, the two
+One aggregate `lupi_scan` line per call: models, candidate and match counts, confidence, token usage, the two
 latencies. Never the image, the hint, the subject, or any molecule name.
 Jev failures log under `lupi_jev` with `route: "scan"`.
 
@@ -533,8 +548,8 @@ contract. Nothing about the page depends on WebGPU.
 
 ## Tuning
 
-- Speed: `effort: 'low'` and `VISION_MAX_TOKENS` in `scan.ts` are the two
-  levers on the vision hop. The schema is tight on purpose; loosening it
+- Speed: `HF_VISION_REASONING`, `HF_VISION_MODEL` (a `:fastest` suffix),
+  and `VISION_MAX_TOKENS` in `scan.ts` are the levers on the vision hop. The schema is tight on purpose; loosening it
   costs seconds.
 - Jev thresholds: the page shows `best` at 0.3 and above; the switcher's
   0.6 promotion rule (`judgeSwitch.ts`) is a reasonable next step once

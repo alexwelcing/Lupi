@@ -1,7 +1,7 @@
 /**
  * The gist: a photo becomes a shape, and Jev sculpts it.
  *
- * `POST /v1/scan/gist` asks Claude for the geometric essence of what is in
+ * `POST /v1/scan/gist` asks the vision model (`vision.ts`) for the geometric essence of what is in
  * the photo: a label and a handful of blended primitives (`@atlas/core/gist`)
  * that a cloud of particles can settle into. It is a separate, smaller call
  * from `/v1/scan/identify` so the shape and its label land in front of the
@@ -17,13 +17,6 @@
  */
 
 import {
-  APIConnectionError,
-  APIConnectionTimeoutError,
-  APIError,
-  RateLimitError,
-} from '@anthropic-ai/sdk';
-import type { BetaMessage } from '@anthropic-ai/sdk/resources/beta/messages/messages';
-import {
   GIST_KEEP_MOVE,
   JevError,
   applicableMoves,
@@ -38,26 +31,18 @@ import {
   type OutlinePoint,
 } from '@atlas/core';
 import { jevClientConfig, jevConfigured } from './jev';
-import {
-  ScanRequestError,
-  ScanVisionError,
-  anthropicClient,
-  parseScanRequest,
-  scanConfigured,
-  scanVisionModel,
-  structuredOutputSchema,
-  type ScanEnv,
-  type ScanRequest,
-} from './scan';
+import { ScanRequestError, parseScanRequest, scanConfigured, scanVisionModel, type ScanEnv, type ScanRequest } from './scan';
+import { ScanVisionError, callVision } from './vision';
 
 export const GIST_ROUTE = '/v1/scan/gist';
 export const SCULPT_ROUTE = '/v1/scan/sculpt';
 /** Bump when the instructions or the schema change so cached gists from the old prompt are not served. */
-export const GIST_PROMPT_VERSION = 'gist-v1-primitives';
+export const GIST_PROMPT_VERSION = 'gist-v2-hf-primitives';
 export const SCULPT_PROMPT_VERSION = 'sculpt-v1-moves';
 const MAX_GIST_BODY_BYTES = 6 * 1024 * 1024;
 const MAX_SCULPT_BODY_BYTES = 16 * 1024;
-const GIST_MAX_TOKENS = 1_400;
+/** Room for the sketch (about 1,400 tokens) plus the model's low-effort reasoning. */
+const GIST_MAX_TOKENS = 3_584;
 const GIST_CACHE_TTL_SECONDS = 3_600;
 /** The loop wants an answer or nothing; a retry would arrive after the next call anyway. */
 const SCULPT_TIMEOUT_MS = 1_200;
@@ -201,60 +186,28 @@ export function parseGistRequest(raw: unknown): GistInput {
 }
 
 export async function gistWithVision(env: ScanEnv, request: GistInput, options: { fetcher?: typeof fetch } = {}): Promise<GistOutcome> {
-  if (!scanConfigured(env)) throw new ScanVisionError('Vision is not configured.', 503, 'not-configured');
-  const client = anthropicClient(env, options.fetcher);
-  const model = scanVisionModel(env);
   const fromText = 'text' in request;
   const userText = fromText
     ? `There is no photo. Someone typed "${request.text}" into a search. Sketch the gist of what that thing typically looks like, as one recognisable everyday object, so the particles can form it while the search runs. Label it with the plain name of the thing. Give an empty outline, since there is no photo to trace. If the text is not a physical thing (a formula, a feeling, nonsense), label it "nothing" with confidence 0 and one small sphere.`
     : request.hint
       ? `Sketch the gist of this. The person added a hint: "${request.hint}".`
       : 'Sketch the gist of this.';
-  const content: Array<{ type: 'image'; source: { type: 'base64'; media_type: ScanRequest['image']['mediaType']; data: string } } | { type: 'text'; text: string }> = fromText
-    ? [{ type: 'text', text: userText }]
-    : [
-        { type: 'image', source: { type: 'base64', media_type: request.image.mediaType, data: request.image.data } },
-        { type: 'text', text: userText },
-      ];
-  let message: BetaMessage;
-  try {
-    message = await client.beta.messages.create({
-      model,
-      max_tokens: GIST_MAX_TOKENS,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+  const reply = await callVision(
+    env,
+    {
       system: GIST_SYSTEM_PROMPT,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: structuredOutputSchema(GIST_OUTPUT_SCHEMA) } },
-      messages: [{ role: 'user', content }],
-    });
-  } catch (error) {
-    if (error instanceof APIConnectionTimeoutError) throw new ScanVisionError('Vision timed out.', 504, 'timeout');
-    if (error instanceof RateLimitError) throw new ScanVisionError('Vision is rate limited.', 429, 'rate-limited');
-    if (error instanceof APIError && typeof error.status === 'number') {
-      throw new ScanVisionError(`Vision request failed (${error.status}).`, error.status >= 500 ? 502 : error.status, `http-${error.status}`);
-    }
-    if (error instanceof APIConnectionError) throw new ScanVisionError('Vision is unreachable.', 504, 'network');
-    throw new ScanVisionError('Vision failed.', 502, 'network');
-  }
-  if (message.stop_reason === 'refusal') throw new ScanVisionError('The model declined to sketch this photo.', 422, 'declined');
-  if (message.stop_reason === 'max_tokens') throw new ScanVisionError('The sketch ran past its budget.', 502, 'invalid-response');
-  const block = message.content.find((entry): entry is Extract<BetaMessage['content'][number], { type: 'text' }> => entry.type === 'text');
-  if (!block) throw new ScanVisionError('The model returned no text.', 502, 'invalid-response');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(block.text);
-  } catch {
-    throw new ScanVisionError('The model returned malformed JSON.', 502, 'invalid-response');
-  }
-  const sketch = gistFromModelJson(parsed);
+      text: userText,
+      image: fromText ? undefined : request.image,
+      schemaName: 'scan_gist',
+      schema: GIST_OUTPUT_SCHEMA,
+      maxTokens: GIST_MAX_TOKENS,
+      task: fromText ? 'sketch this' : 'sketch this photo',
+    },
+    { fetcher: options.fetcher },
+  );
+  const sketch = gistFromModelJson(reply.json);
   if (!sketch) throw new ScanVisionError('The model returned an unusable sketch.', 502, 'invalid-response');
-  return {
-    gist: sketch.gist,
-    outline: sketch.outline,
-    revolved: sketch.revolved,
-    model: message.model,
-    usage: { inputTokens: message.usage?.input_tokens ?? null, outputTokens: message.usage?.output_tokens ?? null },
-  };
+  return { gist: sketch.gist, outline: sketch.outline, revolved: sketch.revolved, model: reply.model, usage: reply.usage };
 }
 
 export interface GistResponse {
