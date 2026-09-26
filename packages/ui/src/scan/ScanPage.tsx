@@ -596,7 +596,7 @@ export function ScanPage() {
             {phase === 'error' && error && <p className="finder-error" role="alert">{error}</p>}
             {phase === 'unconfigured' && (
               <p className="finder-error" role="alert">
-                The scanner is not switched on for this deployment yet. It needs an <code>ANTHROPIC_API_KEY</code> on the edge Worker.
+                The scanner is not switched on for this deployment yet. It needs an <code>HF_TOKEN</code> on the edge Worker.
               </p>
             )}
           </div>
@@ -647,7 +647,7 @@ export function ScanPage() {
         {showStage && phase === 'unconfigured' && (
           <div className="scan-panel scan-panel--error" role="alert">
             <p>
-              The scanner is not switched on for this deployment yet. It needs an <code>ANTHROPIC_API_KEY</code> on the edge
+              The scanner is not switched on for this deployment yet. It needs an <code>HF_TOKEN</code> on the edge
               Worker. See <code>docs/scan-pipeline.md</code>.
             </p>
             <button type="button" className="student-secondary" onClick={reset}>

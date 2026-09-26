@@ -4,24 +4,23 @@
  * `POST /v1/scan/identify` takes one photo and answers "what is this,
  * molecularly?" in two hops that the browser never sees separately:
  *
- *   1. Claude looks at the photo and returns a structured guess: what the
- *      subject is (with a likelihood distribution over a few candidates),
- *      the materials it is made of, and for each material the molecules that
- *      matter, with a formula and one line on why.
+ *   1. A vision model on Hugging Face (`vision.ts`) looks at the photo and
+ *      returns a structured guess: what the subject is (with a likelihood
+ *      distribution over a few candidates), the materials it is made of, and
+ *      for each material the molecules that matter, with a formula and one
+ *      line on why.
  *   2. Jev (TypeSafe System One) ranks the browser's gallery pool against
  *      that identification, exactly as it does for the molecule switcher
  *      (`jev.ts`): one `best` pick to open first, plus a per-candidate fit
- *      for the molecules Claude named that the gallery already has.
+ *      for the molecules the model named that the gallery already has.
  *
- * Keys live only on the Worker: `ANTHROPIC_API_KEY` for vision and
- * `TYPESAFE_API_KEY` for Jev. Without the vision key the route answers
- * `{ configured: false }`; without the Jev key the vision answer still comes
+ * Keys live only on the Worker: `HF_TOKEN` for vision (the same token the
+ * scanner's Spaces use) and `TYPESAFE_API_KEY` for Jev. Without the token
+ * the route answers `{ configured: false }`; without the Jev key the vision answer still comes
  * back and `jev` is `null`. The photo is never logged and never stored; the
  * edge cache is keyed on a hash of the bytes and holds the answer for an hour.
  */
 
-import Anthropic, { APIConnectionError, APIConnectionTimeoutError, APIError, RateLimitError } from '@anthropic-ai/sdk';
-import type { BetaBase64ImageSource, BetaMessage } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 import {
   JevError,
   buildSwitchQuestions,
@@ -34,37 +33,32 @@ import {
   type SwitchJudgeRequest,
   type SwitchJudgeResponse,
 } from './jev';
+import { ScanVisionError, callVision, visionConfigured, visionModel, type VisionEnv, type VisionMediaType } from './vision';
 
-export interface ScanEnv extends JevEnv {
-  /** Anthropic key for the vision hop. `wrangler secret put ANTHROPIC_API_KEY`; never a var. */
-  ANTHROPIC_API_KEY?: string;
-  /** Override for a gateway or a test server. */
-  ANTHROPIC_API_BASE?: string;
-  /** Pin a different Claude model for the vision hop. */
-  ANTHROPIC_VISION_MODEL?: string;
-}
+export { ScanVisionError, structuredOutputSchema } from './vision';
+
+/** `HF_TOKEN` (vision) and `TYPESAFE_API_KEY` (Jev); both `wrangler secret put`, never vars. */
+export interface ScanEnv extends JevEnv, VisionEnv {}
 
 export const SCAN_ROUTE = '/v1/scan/identify';
-export const SCAN_VISION_MODEL_DEFAULT = 'claude-opus-5';
-/** Bump when the instructions or the schema change so cached answers from the old prompt are not served. */
-export const SCAN_PROMPT_VERSION = 'scan-v1-materials';
+/** Bump when the instructions, the schema, or the vision provider change so cached answers from the old prompt are not served. */
+export const SCAN_PROMPT_VERSION = 'scan-v2-hf-materials';
 /** A 1024 px JPEG from the browser is well under 1 MB; this leaves room for a phone that skipped the downscale. */
 const MAX_SCAN_BODY_BYTES = 6 * 1024 * 1024;
 const MAX_IMAGE_BASE64_CHARS = 5 * 1024 * 1024;
 const MAX_HINT_CHARS = 200;
 const MAX_SCAN_CANDIDATES = 160;
 const MAX_FIT_CANDIDATES = 24;
-/** The swirl is fun for about this long; past it the answer is late, not magical. */
-const VISION_TIMEOUT_MS = 14_000;
-const VISION_MAX_TOKENS = 1_800;
+/** Room for the answer (about 1,800 tokens) plus the model's low-effort reasoning. */
+const VISION_MAX_TOKENS = 4_096;
 const SCAN_CACHE_TTL_SECONDS = 3_600;
-const IMAGE_MEDIA_TYPES = new Set<BetaBase64ImageSource['media_type']>(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const IMAGE_MEDIA_TYPES = new Set<VisionMediaType>(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const KEY_PATTERN = /^[A-Za-z0-9:_./-]{1,80}$/;
 
 /* ─── Request ─── */
 
 export interface ScanImage {
-  mediaType: BetaBase64ImageSource['media_type'];
+  mediaType: VisionMediaType;
   data: string;
 }
 
@@ -84,11 +78,11 @@ export class ScanRequestError extends Error {
 }
 
 export function scanConfigured(env: ScanEnv): boolean {
-  return typeof env.ANTHROPIC_API_KEY === 'string' && env.ANTHROPIC_API_KEY.trim().length > 0;
+  return visionConfigured(env);
 }
 
 export function scanVisionModel(env: ScanEnv): string {
-  return env.ANTHROPIC_VISION_MODEL?.trim() || SCAN_VISION_MODEL_DEFAULT;
+  return visionModel(env);
 }
 
 export function parseScanRequest(raw: unknown): ScanRequest {
@@ -98,7 +92,7 @@ export function parseScanRequest(raw: unknown): ScanRequest {
   if (!image || typeof image !== 'object') throw new ScanRequestError('"image" must be an object with mediaType and data.');
   const mediaType = (image as { mediaType?: unknown }).mediaType;
   const data = (image as { data?: unknown }).data;
-  if (typeof mediaType !== 'string' || !IMAGE_MEDIA_TYPES.has(mediaType as BetaBase64ImageSource['media_type'])) {
+  if (typeof mediaType !== 'string' || !IMAGE_MEDIA_TYPES.has(mediaType as VisionMediaType)) {
     throw new ScanRequestError('"image.mediaType" must be image/jpeg, image/png, image/webp, or image/gif.');
   }
   if (typeof data !== 'string' || data.length === 0) throw new ScanRequestError('"image.data" must be a base64 string.');
@@ -125,7 +119,7 @@ export function parseScanRequest(raw: unknown): ScanRequest {
       });
     }
   }
-  return { image: { mediaType: mediaType as BetaBase64ImageSource['media_type'], data: cleaned }, hint, candidates };
+  return { image: { mediaType: mediaType as VisionMediaType, data: cleaned }, hint, candidates };
 }
 
 /* ─── Vision ─── */
@@ -220,41 +214,6 @@ const SCAN_OUTPUT_SCHEMA = {
   },
 } as const;
 
-/**
- * Structured outputs accept a JSON Schema subset: no numeric bounds, no
- * string lengths, no array-length constraints. The schemas above keep those
- * keywords as documentation for readers and for `normalize*`; this strips
- * them from what is sent so the request is never rejected for a bound the
- * normalizer enforces anyway.
- */
-const UNSUPPORTED_SCHEMA_KEYWORDS = new Set(['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'pattern', 'minItems', 'maxItems', 'uniqueItems']);
-
-export function structuredOutputSchema(schema: unknown): Record<string, unknown> {
-  const strip = (node: unknown): unknown => {
-    if (Array.isArray(node)) return node.map(strip);
-    if (!node || typeof node !== 'object') return node;
-    const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-      if (UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) continue;
-      out[key] = strip(value);
-    }
-    return out;
-  };
-  return strip(schema) as Record<string, unknown>;
-}
-
-/** A model failure of any kind; mapped to a status the browser treats as "no answer". */
-export class ScanVisionError extends Error {
-  readonly status: number;
-  readonly reason: 'not-configured' | 'timeout' | 'network' | 'rate-limited' | 'declined' | 'invalid-response' | `http-${number}`;
-  constructor(message: string, status: number, reason: ScanVisionError['reason']) {
-    super(message);
-    this.name = 'ScanVisionError';
-    this.status = status;
-    this.reason = reason;
-  }
-}
-
 const inUnit = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 const clamp01 = (value: unknown, fallback = 0): number => (inUnit(value) ? value : fallback);
 const text = (value: unknown, max: number): string => (typeof value === 'string' ? value.trim().slice(0, max) : '');
@@ -321,78 +280,30 @@ export interface VisionOutcome {
   identification: ScanIdentification;
   model: string;
   usage: { inputTokens: number | null; outputTokens: number | null };
-  /** True when the server-side fallback served this answer instead of the requested model. */
-  fallback: boolean;
-}
-
-export function anthropicClient(env: ScanEnv, fetcher?: typeof fetch): Anthropic {
-  return new Anthropic({
-    apiKey: env.ANTHROPIC_API_KEY,
-    baseURL: env.ANTHROPIC_API_BASE?.trim() || undefined,
-    timeout: VISION_TIMEOUT_MS,
-    maxRetries: 1,
-    fetch: fetcher,
-  });
 }
 
 /** One vision call: photo in, validated identification out. */
 export async function identifyWithVision(env: ScanEnv, request: ScanRequest, options: { fetcher?: typeof fetch } = {}): Promise<VisionOutcome> {
-  if (!scanConfigured(env)) throw new ScanVisionError('Vision is not configured.', 503, 'not-configured');
-  const client = anthropicClient(env, options.fetcher);
-  const model = scanVisionModel(env);
   const userText = request.hint
     ? `What is this made of, molecularly? The person added a hint: "${request.hint}".`
     : 'What is this made of, molecularly?';
-  let message: BetaMessage;
-  try {
-    // Low effort keeps the answer under the swirl; the schema keeps it exact.
-    // The server-side fallback keeps a policy decline from turning into a blank screen.
-    message = await client.beta.messages.create({
-      model,
-      max_tokens: VISION_MAX_TOKENS,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+  // Low reasoning keeps the answer under the swirl; the schema keeps it exact.
+  const reply = await callVision(
+    env,
+    {
       system: SCAN_SYSTEM_PROMPT,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: structuredOutputSchema(SCAN_OUTPUT_SCHEMA) } },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: request.image.mediaType, data: request.image.data } },
-            { type: 'text', text: userText },
-          ],
-        },
-      ],
-    });
-  } catch (error) {
-    if (error instanceof APIConnectionTimeoutError) throw new ScanVisionError('Vision timed out.', 504, 'timeout');
-    if (error instanceof RateLimitError) throw new ScanVisionError('Vision is rate limited.', 429, 'rate-limited');
-    if (error instanceof APIError && typeof error.status === 'number') {
-      // Never surface the upstream body: it can carry account details.
-      throw new ScanVisionError(`Vision request failed (${error.status}).`, error.status >= 500 ? 502 : error.status, `http-${error.status}`);
-    }
-    if (error instanceof APIConnectionError) throw new ScanVisionError('Vision is unreachable.', 504, 'network');
-    throw new ScanVisionError('Vision failed.', 502, 'network');
-  }
-  if (message.stop_reason === 'refusal') throw new ScanVisionError('The model declined to describe this photo.', 422, 'declined');
-  if (message.stop_reason === 'max_tokens') throw new ScanVisionError('The answer ran past its budget.', 502, 'invalid-response');
-  const block = message.content.find((entry): entry is Extract<BetaMessage['content'][number], { type: 'text' }> => entry.type === 'text');
-  if (!block) throw new ScanVisionError('The model returned no text.', 502, 'invalid-response');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(block.text);
-  } catch {
-    throw new ScanVisionError('The model returned malformed JSON.', 502, 'invalid-response');
-  }
-  const identification = normalizeIdentification(parsed);
+      text: userText,
+      image: request.image,
+      schemaName: 'scan_identification',
+      schema: SCAN_OUTPUT_SCHEMA,
+      maxTokens: VISION_MAX_TOKENS,
+      task: 'describe this photo',
+    },
+    { fetcher: options.fetcher },
+  );
+  const identification = normalizeIdentification(reply.json);
   if (!identification) throw new ScanVisionError('The model returned an unusable answer.', 502, 'invalid-response');
-  const iterations = (message.usage as { iterations?: Array<{ type?: string }> }).iterations ?? [];
-  return {
-    identification,
-    model: message.model,
-    usage: { inputTokens: message.usage?.input_tokens ?? null, outputTokens: message.usage?.output_tokens ?? null },
-    fallback: iterations.some((iteration) => iteration.type === 'fallback_message'),
-  };
+  return { identification, model: reply.model, usage: reply.usage };
 }
 
 /* ─── Matching the answer to the gallery ─── */
@@ -450,7 +361,7 @@ function normalizeFormula(value: string): string {
 }
 
 export interface ScanMatch {
-  /** The molecule as Claude named it. */
+  /** The molecule as the vision model named it. */
   molecule: { name: string; formula: string; material: string };
   key: string;
   title: string;
@@ -459,7 +370,7 @@ export interface ScanMatch {
   matchedBy: 'title' | 'formula';
 }
 
-/** Which of Claude's molecules the gallery already has, by name then by formula. */
+/** Which of the model's molecules the gallery already has, by name then by formula. */
 export function matchMolecules(identification: ScanIdentification, candidates: SwitchCandidate[]): ScanMatch[] {
   const byTitle = new Map<string, SwitchCandidate>();
   const byFormula = new Map<string, SwitchCandidate>();
@@ -538,7 +449,7 @@ export interface ScanResponse {
   configured: boolean;
   model?: { vision: string; jev: string | null };
   identification?: ScanIdentification;
-  /** Claude's molecules the gallery can open immediately. */
+  /** The model's molecules the gallery can open immediately. */
   matches?: ScanMatch[];
   /** Jev's ranking of the gallery pool against the identification; null when Jev is off or failed. */
   jev?: { best: { key: string; confidence: number } | null; fit: Record<string, number>; intent?: { choice: string; confidence: number } } | null;
@@ -623,7 +534,6 @@ export async function handleScanIdentify(
       component: 'lupi_scan',
       stage: 'done',
       model: vision.model,
-      fallback: vision.fallback,
       jevModel: jev?.model ?? null,
       candidates: parsed.candidates.length,
       hasHint: parsed.hint.length > 0,
