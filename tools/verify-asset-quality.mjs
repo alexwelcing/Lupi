@@ -2,66 +2,93 @@
 /**
  * verify-asset-quality.mjs
  *
- * Visual validation of the `lupi.export_asset` MCP tool. Spins up the Vite
- * dev server, drives the bridge through Playwright, and saves the actual
- * PNG/JPEG/WebP/GLB bytes the deterministic bridge returns. USDZ is exercised
- * as a required fail-closed capability until its exporter is byte-stable.
+ * Visual validation of the `lupi.export_asset` MCP tool, per renderer
+ * backend. Serves the built app (apps/web/dist) or the Vite dev server, drives
+ * the bridge through Playwright in each browser lane (tools/lib/browser-lanes.mjs:
+ * `webgpu` = WebGPURenderer on a SwiftShader WebGPU adapter, `webgl2` = its
+ * WebGL2 fallback), and saves the actual PNG/JPEG/WebP/GLB bytes the
+ * deterministic bridge returns. USDZ is exercised as a required fail-closed
+ * capability until its exporter is byte-stable. Rasters are decoded in the
  * browser for dimensions, alpha, and appearance comparisons; model containers
- * are checked structurally. Exact returned bytes plus a viewer screenshot are
- * dropped under .verify-artifacts/asset-quality/<run>/ for human inspection.
+ * are checked structurally. Bytes are compared only within a backend: the two
+ * backends are separate execution classes, so the same spec must keep its
+ * specId and change its rendererFingerprint and artifactKey across them.
+ * Exact returned bytes plus a viewer screenshot are dropped under
+ * .verify-artifacts/asset-quality/<run>/<backend>/ for human inspection.
  *
  * Usage:
- *   node tools/verify-asset-quality.mjs
- *   node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/#/mcp
+ *   pnpm --filter @atlas/web build && node tools/verify-asset-quality.mjs
+ *   node tools/verify-asset-quality.mjs --backend=webgpu
+ *   node tools/verify-asset-quality.mjs --server=dev
+ *   node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/
  *   node tools/verify-asset-quality.mjs --skip-glb
  *   node tools/verify-asset-quality.mjs --skip-usdz
  */
 
 import { chromium } from 'playwright';
+import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import net from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { LANE_ARGS, chromiumExecutable } from './lib/browser-lanes.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const WEB_ROOT = resolve(REPO_ROOT, 'apps/web');
 const RUN_ID = new Date().toISOString().replace(/[:.]/g, '-');
-const ARTIFACTS = resolve(REPO_ROOT, '.verify-artifacts', 'asset-quality', RUN_ID);
+const ARTIFACTS_ROOT = resolve(REPO_ROOT, '.verify-artifacts', 'asset-quality', RUN_ID);
+const DIST_INDEX = resolve(WEB_ROOT, 'dist/index.html');
+/** Per-lane artifact directory and check-name prefix, set by runLane(). */
+let ARTIFACTS = ARTIFACTS_ROOT;
+let lanePrefix = '';
 
 const args = parseArgs(process.argv.slice(2));
 if (args.help || args.h) {
   console.log(`verify-asset-quality.mjs
 
 Usage:
-  node tools/verify-asset-quality.mjs
-  node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/#/mcp
+  node tools/verify-asset-quality.mjs [--backend=webgpu|webgl2|both] [--server=dist|dev]
+  node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/
   node tools/verify-asset-quality.mjs --skip-glb
   node tools/verify-asset-quality.mjs --skip-usdz
   node tools/verify-asset-quality.mjs --keep-server
+
+Options:
+  --backend=B    webgpu, webgl2 or both (default both). Each lane must report
+                 its backend through status().rendererBackend.
+  --server=S     dist (default: tools/serve-web.mjs over apps/web/dist; run
+                 pnpm --filter @atlas/web build first) or dev (Vite dev server).
+  --url=URL      Test an already-running app instead.
+  --chromium=P   Chromium binary (default: Chromium 1194 when installed).
 `);
   process.exit(0);
 }
 
-if (!existsSync(ARTIFACTS)) mkdirSync(ARTIFACTS, { recursive: true });
-
-const requireFromWeb = createRequire(resolve(WEB_ROOT, 'package.json'));
-const { createServer } = await import(pathToFileURL(requireFromWeb.resolve('vite')).href);
+if (!existsSync(ARTIFACTS_ROOT)) mkdirSync(ARTIFACTS_ROOT, { recursive: true });
 
 const skipGlb = args['skip-glb'] === true || args['skip-glb'] === 'true';
 const skipUsdz = args['skip-usdz'] === true || args['skip-usdz'] === 'true';
+const backendArg = typeof args.backend === 'string' ? args.backend : 'both';
+if (!['webgpu', 'webgl2', 'both'].includes(backendArg)) {
+  console.error(`--backend must be webgpu, webgl2 or both (received ${backendArg})`);
+  process.exit(2);
+}
+const BACKENDS = backendArg === 'both' ? ['webgpu', 'webgl2'] : [backendArg];
+const serverMode = args.server === 'dev' ? 'dev' : 'dist';
 
 let server = null;
 let browser = null;
 const checks = [];
-const report = { runId: RUN_ID, artifactsDir: ARTIFACTS, checks: [] };
+const report = { runId: RUN_ID, artifactsDir: ARTIFACTS_ROOT, backends: BACKENDS, lanes: {}, checks: [] };
 
 function log(...values) {
   console.log('[verify-asset-quality]', ...values);
 }
 
-function check(name, ok, detail = '') {
+function check(rawName, ok, detail = '') {
+  const name = `${lanePrefix}${rawName}`;
   const entry = { name, ok, detail };
   checks.push(entry);
   report.checks.push(entry);
@@ -529,7 +556,7 @@ async function runAssetFlow(page, label, request, options = {}) {
 
   if (!response.ok) {
     if (request.arguments?.format === 'usdz') {
-      report.usdzCapability = {
+      laneReport().usdzCapability = {
         supported: false,
         error: response.error?.message ?? 'unknown error',
         enableAfterProof: "Set BROWSER_RENDER_CAPABILITY_V1.formats.usdz to { enabled: true, alphaModes: ['not-applicable'] } in packages/ui/src/mcp/renderArtifactAdapter.ts.",
@@ -657,7 +684,7 @@ async function runAssetFlow(page, label, request, options = {}) {
       sanity.materialOk,
       sanity.reason ?? `materials=${sanity.materialCount ?? 0} missing=${sanity.missingMaterials?.join(',') || 'none'}`,
     );
-    report.usdzCapability = {
+    laneReport().usdzCapability = {
       supported: sanity.ok,
       entryCount: sanity.names?.length ?? 0,
       geometryCount: sanity.geometryCount ?? 0,
@@ -723,7 +750,7 @@ function assertSameArtifactIdentity(label, first, second) {
     `first=${first.asset.artifactDigest}/${first.buffer.length}B second=${second.asset.artifactDigest}/${second.buffer.length}B`,
   );
 
-  report.repeatArtifactIdentity = {
+  laneReport().repeatArtifactIdentity = {
     identityFields: Object.fromEntries(identityFields.map((field) => [field, first.asset[field]])),
     first: {
       artifactDigest: first.asset.artifactDigest,
@@ -775,222 +802,270 @@ async function buildProceduralLattice(page, atomCount, element, lattice) {
   );
 }
 
+function laneReport() {
+  const lane = lanePrefix.replace(/[[\] ]/g, '') || 'default';
+  report.lanes[lane] ??= {};
+  return report.lanes[lane];
+}
+
+/** Run every flow in one browser lane; returns the caffeine opaque artifact for cross-lane checks. */
+async function runLane(backend) {
+  lanePrefix = `[${backend}] `;
+  ARTIFACTS = join(ARTIFACTS_ROOT, backend);
+  mkdirSync(ARTIFACTS, { recursive: true });
+  const executablePath = chromiumExecutable(typeof args.chromium === 'string' ? args.chromium : undefined);
+  browser = await chromium.launch({
+    headless: !process.stdout.isTTY ? true : args.headless !== 'false',
+    ...(executablePath ? { executablePath } : {}),
+    args: [...LANE_ARGS[backend]],
+  });
+  let opaqueElement = null;
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      deviceScaleFactor: 1,
+    });
+    const page = await context.newPage();
+
+    page.on('pageerror', (err) => {
+      laneReport().pageErrors ??= [];
+      laneReport().pageErrors.push(err.message);
+      log(`${lanePrefix}[PAGE ERROR] ${err.message}`);
+    });
+
+    await page.goto(report.url, { waitUntil: 'domcontentloaded' });
+    log(`${lanePrefix}DOM loaded; waiting for MCP driver...`);
+    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 90_000 });
+    check('MCP driver ready', true);
+    await page.waitForFunction(() => window.__lupiViewerMcp.status().rendererBackend != null, null, { timeout: 90_000 });
+
+    const status = await page.evaluate(() => window.__lupiViewerMcp.status());
+    laneReport().driverStatus = status;
+    log(`${lanePrefix}driver status: toolCount=${status.toolCount} version=${status.version} backend=${status.rendererBackend}`);
+    check(
+      `viewer renders on the ${backend} backend`,
+      status.rendererBackend === backend,
+      `rendererBackend=${status.rendererBackend} executionClass=${status.rendererExecutionClass}`,
+    );
+
+    // Caffeine ----------------------------------------------------
+    const caffeine = await loadTemplate(page, 'Caffeine');
+    if (caffeine.ok) {
+      check('Caffeine template loads', true, `atoms=${caffeine.result?.molecule?.atomCount}`);
+
+      await executeToolAndSettle(page, 'Caffeine uses deterministic slate background', 'lupi.set_background', {
+        preset: 'slate',
+      });
+      await executeToolAndSettle(page, 'Caffeine uses element color scheme', 'lupi.set_viewer', {
+        colorScheme: 'element',
+        showBonds: false,
+      });
+      await executeToolAndSettle(page, 'Caffeine baseline material is matte', 'lupi.set_material', {
+        preset: 'matte',
+        intensity: 0.7,
+        texture: 'none',
+      });
+      await executeToolAndSettle(page, 'Caffeine baseline lighting applied', 'lupi.set_lighting', {
+        ambient: 0.7,
+        dir: 1.0,
+        rim: 0.25,
+        keyAzimuth: 35,
+        keyElevation: 45,
+      });
+
+      opaqueElement = await runAssetFlow(page, 'caffeine-png-opaque-256', {
+        id: 'caffeine-png-opaque-256',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 256, height: 256, transparent: false },
+      }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'opaque' });
+      const elementTransparent = await runAssetFlow(page, 'caffeine-png-transparent-element', {
+        id: 'caffeine-png-transparent-element',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 256, height: 256, transparent: true },
+      }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'transparent' });
+      const opaqueElementRepeat = await runAssetFlow(page, 'caffeine-png-opaque-256-repeat', {
+        id: 'caffeine-png-opaque-256-repeat',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 256, height: 256, transparent: false },
+      }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'opaque' });
+      assertSameArtifactIdentity(
+        'caffeine opaque PNG determinism',
+        opaqueElement,
+        opaqueElementRepeat,
+      );
+      await runAssetFlow(page, 'caffeine-png-1024', {
+        id: 'caffeine-png-1024',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 1024, height: 1024, transparent: false },
+      }, { targetWidth: 1024, targetHeight: 1024, alphaPolicy: 'opaque' });
+      await runAssetFlow(page, 'caffeine-jpeg-opaque', {
+        id: 'caffeine-jpeg-opaque',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'jpeg', width: 800, height: 600, transparent: false },
+      }, { targetWidth: 800, targetHeight: 600, alphaPolicy: 'opaque' });
+      await expectAssetRejection(page, 'caffeine: transparent JPEG is rejected before capture', {
+        id: 'caffeine-jpeg-transparent-rejected',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'jpeg', width: 256, height: 256, transparent: true, timeoutMs: 1000 },
+      }, /JPEG export does not support transparent output/i);
+      await runAssetFlow(page, 'caffeine-webp-opaque', {
+        id: 'caffeine-webp-opaque',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'webp', width: 600, height: 600, transparent: false },
+      }, { targetWidth: 600, targetHeight: 600, alphaPolicy: 'opaque' });
+      await runAssetFlow(page, 'caffeine-webp-transparent', {
+        id: 'caffeine-webp-transparent',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'webp', width: 600, height: 600, transparent: true },
+      }, { targetWidth: 600, targetHeight: 600, alphaPolicy: 'transparent' });
+
+      if (!skipGlb) {
+        await runAssetFlow(page, 'caffeine-glb', {
+          id: 'caffeine-glb',
+          tool: 'lupi.export_asset',
+          arguments: { format: 'glb' },
+        });
+      }
+      if (!skipUsdz) {
+        const rejection = await expectAssetRejection(page, 'caffeine-usdz: immutable lane fails closed', {
+          id: 'caffeine-usdz',
+          tool: 'lupi.export_asset',
+          arguments: { format: 'usdz' },
+        }, /USDZ remains available only as a non-addressed interactive export|unsupported/i);
+        laneReport().usdzCapability = {
+          supported: false,
+          deterministicArtifactLane: false,
+          error: rejection.error?.message ?? 'USDZ rejected as required',
+          reason: "three's USDZExporter (r186) embeds process-global allocation identifiers",
+        };
+      }
+
+      await executeToolAndSettle(page, 'Caffeine switches to uniform color scheme', 'lupi.set_viewer', {
+        colorScheme: 'uniform',
+      });
+      const uniformTransparent = await runAssetFlow(page, 'caffeine-png-transparent-uniform', {
+        id: 'caffeine-png-transparent-uniform',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 256, height: 256, transparent: true },
+      }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'transparent' });
+      await compareRasterAppearance(
+        page,
+        'element and uniform color schemes produce materially different pixels',
+        elementTransparent,
+        uniformTransparent,
+        { minimumMeanDelta: 5, minimumDifferingRatio: 0.1 },
+      );
+
+      await executeToolAndSettle(page, 'Caffeine switches to metallic material', 'lupi.set_material', {
+        preset: 'metallic',
+        intensity: 1.8,
+        texture: 'none',
+      });
+      await executeToolAndSettle(page, 'Caffeine switches to dramatic lighting', 'lupi.set_lighting', {
+        ambient: 0.05,
+        dir: 2.0,
+        rim: 1.5,
+        keyAzimuth: 120,
+        keyElevation: 18,
+        rimAzimuth: -70,
+        rimElevation: 35,
+      });
+      const metallicTransparent = await runAssetFlow(page, 'caffeine-png-transparent-metallic-lit', {
+        id: 'caffeine-png-transparent-metallic-lit',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 256, height: 256, transparent: true },
+      }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'transparent' });
+      await compareRasterAppearance(
+        page,
+        'material and lighting change produces materially different pixels',
+        uniformTransparent,
+        metallicTransparent,
+        { minimumMeanDelta: 2, minimumDifferingRatio: 0.05 },
+      );
+    } else {
+      check('Caffeine template loads', false, caffeine.error?.message ?? 'unknown error');
+    }
+
+    // Aspirin ------------------------------------------------------
+    const aspirin = await loadTemplate(page, 'Aspirin');
+    if (aspirin.ok) {
+      check('Aspirin template loads', true, `atoms=${aspirin.result?.molecule?.atomCount}`);
+      await executeToolAndSettle(page, 'Aspirin hides unsnapshotted live bonds', 'lupi.set_viewer', {
+        showBonds: false,
+      });
+      await runAssetFlow(page, 'aspirin-png', {
+        id: 'aspirin-png',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 800, height: 800, transparent: false },
+      }, { targetWidth: 800, targetHeight: 800, alphaPolicy: 'opaque' });
+    } else {
+      // Aspirin isn't in the local TEMPLATE_MOLECULES list; that is a known
+      // limitation, but we want to know. Surface the error rather than mask it.
+      log(`Aspirin template unavailable: ${aspirin.error?.message ?? 'unknown error'}`);
+    }
+
+    // Procedural FCC copper lattice --------------------------------
+    const lattice = await buildProceduralLattice(page, 5000, 'Cu', 'fcc');
+    if (lattice.ok) {
+      check('FCC Cu lattice loads', true, `atoms=${lattice.result?.molecule?.atomCount}`);
+      await executeToolAndSettle(page, 'FCC Cu hides unsnapshotted live bonds', 'lupi.set_viewer', {
+        showBonds: false,
+      });
+      await runAssetFlow(page, 'cu-fcc-png', {
+        id: 'cu-fcc-png',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 768, height: 768, transparent: false },
+      }, { targetWidth: 768, targetHeight: 768, alphaPolicy: 'opaque' });
+      if (!skipGlb) {
+        await runAssetFlow(page, 'cu-fcc-glb', {
+          id: 'cu-fcc-glb',
+          tool: 'lupi.export_asset',
+          arguments: { format: 'glb' },
+        });
+      }
+    } else {
+      check('FCC Cu lattice loads', false, lattice.error?.message ?? 'unknown error');
+    }
+
+    // Viewer screenshot (raw DOM) so a human can sanity-check the live frame
+    // the assets are taken from.
+    const screenshotPath = join(ARTIFACTS, 'viewer-screenshot.png');
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+    check('viewer screenshot captured', existsSync(screenshotPath));
+  } finally {
+    if (!args['keep-server']) await browser.close().catch(() => {});
+    browser = null;
+  }
+  return opaqueElement;
+}
+
 try {
   const externalUrl = process.env.VERIFY_URL || args.url;
-  const baseUrl = withTrailingSlash(externalUrl || await startPortlessVite());
+  const baseUrl = withTrailingSlash(externalUrl || (serverMode === 'dev' ? await startPortlessVite() : await startServeWeb()));
   report.url = `${baseUrl}#/mcp`;
   log(`target: ${report.url}`);
 
-  browser = await chromium.launch({
-    headless: !process.stdout.isTTY ? true : args.headless !== 'false',
-    args: ['--disable-webgpu', '--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
-  });
-
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 1,
-  });
-  const page = await context.newPage();
-
-  page.on('pageerror', (err) => {
-    report.pageErrors ??= [];
-    report.pageErrors.push(err.message);
-    log(`[PAGE ERROR] ${err.message}`);
-  });
-
-  await page.goto(report.url, { waitUntil: 'domcontentloaded' });
-  log('DOM loaded; waiting for MCP driver...');
-  await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 60_000 });
-  check('MCP driver ready', true);
-
-  const status = await page.evaluate(() => window.__lupiViewerMcp.status());
-  report.driverStatus = status;
-  log(`driver status: toolCount=${status.toolCount} version=${status.version}`);
-
-  // Caffeine ----------------------------------------------------
-  const caffeine = await loadTemplate(page, 'Caffeine');
-  if (caffeine.ok) {
-    check('Caffeine template loads', true, `atoms=${caffeine.result?.molecule?.atomCount}`);
-
-    await executeToolAndSettle(page, 'Caffeine uses deterministic slate background', 'lupi.set_background', {
-      preset: 'slate',
-    });
-    await executeToolAndSettle(page, 'Caffeine uses element color scheme', 'lupi.set_viewer', {
-      colorScheme: 'element',
-      showBonds: false,
-    });
-    await executeToolAndSettle(page, 'Caffeine baseline material is matte', 'lupi.set_material', {
-      preset: 'matte',
-      intensity: 0.7,
-      texture: 'none',
-    });
-    await executeToolAndSettle(page, 'Caffeine baseline lighting applied', 'lupi.set_lighting', {
-      ambient: 0.7,
-      dir: 1.0,
-      rim: 0.25,
-      keyAzimuth: 35,
-      keyElevation: 45,
-    });
-
-    const opaqueElement = await runAssetFlow(page, 'caffeine-png-opaque-256', {
-      id: 'caffeine-png-opaque-256',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 256, height: 256, transparent: false },
-    }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'opaque' });
-    const elementTransparent = await runAssetFlow(page, 'caffeine-png-transparent-element', {
-      id: 'caffeine-png-transparent-element',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 256, height: 256, transparent: true },
-    }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'transparent' });
-    const opaqueElementRepeat = await runAssetFlow(page, 'caffeine-png-opaque-256-repeat', {
-      id: 'caffeine-png-opaque-256-repeat',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 256, height: 256, transparent: false },
-    }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'opaque' });
-    assertSameArtifactIdentity(
-      'caffeine opaque PNG determinism',
-      opaqueElement,
-      opaqueElementRepeat,
-    );
-    await runAssetFlow(page, 'caffeine-png-1024', {
-      id: 'caffeine-png-1024',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 1024, height: 1024, transparent: false },
-    }, { targetWidth: 1024, targetHeight: 1024, alphaPolicy: 'opaque' });
-    await runAssetFlow(page, 'caffeine-jpeg-opaque', {
-      id: 'caffeine-jpeg-opaque',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'jpeg', width: 800, height: 600, transparent: false },
-    }, { targetWidth: 800, targetHeight: 600, alphaPolicy: 'opaque' });
-    await expectAssetRejection(page, 'caffeine: transparent JPEG is rejected before capture', {
-      id: 'caffeine-jpeg-transparent-rejected',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'jpeg', width: 256, height: 256, transparent: true, timeoutMs: 1000 },
-    }, /JPEG export does not support transparent output/i);
-    await runAssetFlow(page, 'caffeine-webp-opaque', {
-      id: 'caffeine-webp-opaque',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'webp', width: 600, height: 600, transparent: false },
-    }, { targetWidth: 600, targetHeight: 600, alphaPolicy: 'opaque' });
-    await runAssetFlow(page, 'caffeine-webp-transparent', {
-      id: 'caffeine-webp-transparent',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'webp', width: 600, height: 600, transparent: true },
-    }, { targetWidth: 600, targetHeight: 600, alphaPolicy: 'transparent' });
-
-    if (!skipGlb) {
-      await runAssetFlow(page, 'caffeine-glb', {
-        id: 'caffeine-glb',
-        tool: 'lupi.export_asset',
-        arguments: { format: 'glb' },
-      });
-    }
-    if (!skipUsdz) {
-      const rejection = await expectAssetRejection(page, 'caffeine-usdz: immutable lane fails closed', {
-        id: 'caffeine-usdz',
-        tool: 'lupi.export_asset',
-        arguments: { format: 'usdz' },
-      }, /USDZ remains available only as a non-addressed interactive export|unsupported/i);
-      report.usdzCapability = {
-        supported: false,
-        deterministicArtifactLane: false,
-        error: rejection.error?.message ?? 'USDZ rejected as required',
-        reason: 'Three r184 USDZExporter embeds process-global allocation identifiers',
-      };
-    }
-
-    await executeToolAndSettle(page, 'Caffeine switches to uniform color scheme', 'lupi.set_viewer', {
-      colorScheme: 'uniform',
-    });
-    const uniformTransparent = await runAssetFlow(page, 'caffeine-png-transparent-uniform', {
-      id: 'caffeine-png-transparent-uniform',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 256, height: 256, transparent: true },
-    }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'transparent' });
-    await compareRasterAppearance(
-      page,
-      'element and uniform color schemes produce materially different pixels',
-      elementTransparent,
-      uniformTransparent,
-      { minimumMeanDelta: 5, minimumDifferingRatio: 0.1 },
-    );
-
-    await executeToolAndSettle(page, 'Caffeine switches to metallic material', 'lupi.set_material', {
-      preset: 'metallic',
-      intensity: 1.8,
-      texture: 'none',
-    });
-    await executeToolAndSettle(page, 'Caffeine switches to dramatic lighting', 'lupi.set_lighting', {
-      ambient: 0.05,
-      dir: 2.0,
-      rim: 1.5,
-      keyAzimuth: 120,
-      keyElevation: 18,
-      rimAzimuth: -70,
-      rimElevation: 35,
-    });
-    const metallicTransparent = await runAssetFlow(page, 'caffeine-png-transparent-metallic-lit', {
-      id: 'caffeine-png-transparent-metallic-lit',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 256, height: 256, transparent: true },
-    }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'transparent' });
-    await compareRasterAppearance(
-      page,
-      'material and lighting change produces materially different pixels',
-      uniformTransparent,
-      metallicTransparent,
-      { minimumMeanDelta: 2, minimumDifferingRatio: 0.05 },
-    );
-  } else {
-    check('Caffeine template loads', false, caffeine.error?.message ?? 'unknown error');
+  const laneArtifacts = {};
+  for (const backend of BACKENDS) {
+    laneArtifacts[backend] = await runLane(backend);
   }
+  lanePrefix = '';
+  ARTIFACTS = ARTIFACTS_ROOT;
 
-  // Aspirin ------------------------------------------------------
-  const aspirin = await loadTemplate(page, 'Aspirin');
-  if (aspirin.ok) {
-    check('Aspirin template loads', true, `atoms=${aspirin.result?.molecule?.atomCount}`);
-    await executeToolAndSettle(page, 'Aspirin hides unsnapshotted live bonds', 'lupi.set_viewer', {
-      showBonds: false,
-    });
-    await runAssetFlow(page, 'aspirin-png', {
-      id: 'aspirin-png',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 800, height: 800, transparent: false },
-    }, { targetWidth: 800, targetHeight: 800, alphaPolicy: 'opaque' });
-  } else {
-    // Aspirin isn't in the local TEMPLATE_MOLECULES list; that is a known
-    // limitation, but we want to know. Surface the error rather than mask it.
-    log(`Aspirin template unavailable: ${aspirin.error?.message ?? 'unknown error'}`);
+  const webgpu = laneArtifacts.webgpu?.asset;
+  const webgl2 = laneArtifacts.webgl2?.asset;
+  if (webgpu && webgl2) {
+    check(
+      'one spec keeps its specId across the two backends',
+      webgpu.specId === webgl2.specId && webgpu.sourceContentDigest === webgl2.sourceContentDigest,
+      `webgpu=${webgpu.specId} webgl2=${webgl2.specId}`,
+    );
+    check(
+      'the two backends are separate execution classes (fingerprint and artifactKey differ)',
+      webgpu.rendererFingerprint !== webgl2.rendererFingerprint && webgpu.artifactKey !== webgl2.artifactKey,
+      `webgpu=${webgpu.artifactKey} webgl2=${webgl2.artifactKey}`,
+    );
   }
-
-  // Procedural FCC copper lattice --------------------------------
-  const lattice = await buildProceduralLattice(page, 5000, 'Cu', 'fcc');
-  if (lattice.ok) {
-    check('FCC Cu lattice loads', true, `atoms=${lattice.result?.molecule?.atomCount}`);
-    await executeToolAndSettle(page, 'FCC Cu hides unsnapshotted live bonds', 'lupi.set_viewer', {
-      showBonds: false,
-    });
-    await runAssetFlow(page, 'cu-fcc-png', {
-      id: 'cu-fcc-png',
-      tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 768, height: 768, transparent: false },
-    }, { targetWidth: 768, targetHeight: 768, alphaPolicy: 'opaque' });
-    if (!skipGlb) {
-      await runAssetFlow(page, 'cu-fcc-glb', {
-        id: 'cu-fcc-glb',
-        tool: 'lupi.export_asset',
-        arguments: { format: 'glb' },
-      });
-    }
-  } else {
-    check('FCC Cu lattice loads', false, lattice.error?.message ?? 'unknown error');
-  }
-
-  // Viewer screenshot (raw DOM) so a human can sanity-check the live frame
-  // the assets are taken from.
-  const screenshotPath = join(ARTIFACTS, 'viewer-screenshot.png');
-  await page.screenshot({ path: screenshotPath, fullPage: false });
-  check('viewer screenshot captured', existsSync(screenshotPath));
 } catch (err) {
   log(`EXCEPTION ${err?.message ?? String(err)}`);
   report.exception = err?.message ?? String(err);
@@ -1000,10 +1075,10 @@ try {
   if (server && !args['keep-server']) await server.close().catch(() => {});
 }
 
-const reportPath = join(ARTIFACTS, 'report.json');
+const reportPath = join(ARTIFACTS_ROOT, 'report.json');
 writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
 log(`report: ${reportPath}`);
-log(`artifacts: ${ARTIFACTS}`);
+log(`artifacts: ${ARTIFACTS_ROOT}`);
 
 const failed = checks.filter((c) => !c.ok);
 if (failed.length) {
@@ -1014,10 +1089,15 @@ if (failed.length) {
 log('all checks passed');
 
 async function startPortlessVite() {
+  const requireFromWeb = createRequire(resolve(WEB_ROOT, 'package.json'));
+  const { createServer } = await import(pathToFileURL(requireFromWeb.resolve('vite')).href);
   const port = await getFreePort();
   server = await createServer({
     root: WEB_ROOT,
     configFile: resolve(WEB_ROOT, 'vite.config.ts'),
+    // drei 11 ships a top-level await, which the default dependency
+    // pre-bundling target rejects.
+    optimizeDeps: { esbuildOptions: { target: 'esnext' } },
     server: {
       host: '127.0.0.1',
       port,
@@ -1030,6 +1110,44 @@ async function startPortlessVite() {
   const address = server.httpServer?.address();
   if (!address || typeof address === 'string') throw new Error('Vite did not expose a TCP address');
   return `http://127.0.0.1:${address.port}/`;
+}
+
+/** Serve apps/web/dist with tools/serve-web.mjs (the smoke harness's server). */
+async function startServeWeb() {
+  if (!existsSync(DIST_INDEX)) {
+    throw new Error('apps/web/dist is missing; run pnpm --filter @atlas/web build first, or pass --server=dev or --url.');
+  }
+  const port = await getFreePort();
+  const child = spawn(process.execPath, [join(REPO_ROOT, 'tools', 'serve-web.mjs')], {
+    cwd: REPO_ROOT,
+    env: { ...process.env, HOST: '127.0.0.1', PORT: String(port) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout.on('data', (chunk) => { output += chunk; });
+  child.stderr.on('data', (chunk) => { output += chunk; });
+  server = {
+    close: async () => {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    },
+  };
+  process.on('exit', () => {
+    if (child.exitCode === null) child.kill('SIGKILL');
+  });
+  // http://localhost is a secure context, which WebGPU requires.
+  const url = `http://localhost:${port}/`;
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) throw new Error(`serve-web exited (${child.exitCode}): ${output.trim().slice(-400)}`);
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      if (response.ok) return url;
+    } catch {
+      // not listening yet
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+  }
+  throw new Error(`serve-web did not answer at ${url}`);
 }
 
 function getFreePort() {

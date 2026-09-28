@@ -1,18 +1,26 @@
 #!/usr/bin/env node
 /**
- * Pinned browser render conformance and candidate-golden derivation.
+ * Pinned browser render conformance and candidate-golden derivation, per
+ * renderer backend (V2 profile: WebGPURenderer on WebGPU, or its WebGL2
+ * fallback; packages/ui/src/export/exportProfileV2.ts).
  *
  * This verifier deliberately keeps three statements separate:
- *   1. browser artifact conformance against a candidate or owner-approved fixture;
+ *   1. browser artifact conformance against the backend's candidate fixture
+ *      (tests/fixtures/render-artifact-v2/<backend>/);
  *   2. edge RenderRequestV1 schema/control-plane conformance;
  *   3. edge artifact parity, which remains NOT_CHECKED until an edge renderer
  *      actually returns identified bytes.
  *
+ * The two backends are separate execution classes: their bytes may differ, so
+ * each has its own candidate and bytes are never compared across them. The
+ * V1 (WebGL) fixtures stay archived read-only in tests/fixtures/render-artifact-v1/.
+ * V2 candidates are derived automatically (no owner approval gate); derive
+ * again whenever the renderer-validity digest changes.
+ *
  * Usage:
- *   pnpm verify:render-parity -- --derive-candidate
- *   pnpm verify:render-parity -- --refresh-approved-provenance
- *   pnpm verify:render-parity
- *   node tools/verify-render-parity.mjs --url=http://127.0.0.1:5173/ --repeat=10
+ *   pnpm verify:render-parity -- --backend=webgpu --derive-candidate
+ *   pnpm verify:render-parity -- --backend=webgl2
+ *   node tools/verify-render-parity.mjs --backend=webgpu --url=http://127.0.0.1:5173/ --repeat=10
  */
 
 import { chromium } from 'playwright';
@@ -22,6 +30,7 @@ import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
 } from 'node:fs';
@@ -29,13 +38,16 @@ import { createRequire } from 'node:module';
 import net from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { LANE_ARGS, chromiumExecutable } from './lib/browser-lanes.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const WEB_ROOT = resolve(REPO_ROOT, 'apps/web');
-const FIXTURE_ROOT = resolve(REPO_ROOT, 'tests/fixtures/render-artifact-v1');
-const SPEC_PATH = resolve(FIXTURE_ROOT, 'browser-synthetic-calibration.spec.json');
-const EDGE_FIXTURE_PATH = resolve(FIXTURE_ROOT, 'edge-opaque-atoms.request.json');
+const FIXTURE_ROOT_V2 = resolve(REPO_ROOT, 'tests/fixtures/render-artifact-v2');
+const SPEC_PATH = resolve(FIXTURE_ROOT_V2, 'browser-synthetic-calibration.spec.json');
+// The edge request contract (lupi.render-request.v1) did not change.
+const EDGE_FIXTURE_PATH = resolve(REPO_ROOT, 'tests/fixtures/render-artifact-v1/edge-opaque-atoms.request.json');
+const BACKENDS = Object.freeze(['webgpu', 'webgl2']);
 const RUN_ID = new Date().toISOString().replace(/[:.]/g, '-');
 const ARTIFACTS_DIR = resolve(REPO_ROOT, '.verify-artifacts', 'render-parity', RUN_ID);
 
@@ -47,8 +59,17 @@ const ARTIFACTS_DIR = resolve(REPO_ROOT, '.verify-artifacts', 'render-parity', R
  * test prose or committing a newly derived fixture must not invalidate the
  * renderer it is intended to describe.
  */
-const RENDERER_SOURCE_FILES_V1 = Object.freeze([
+const RENDERER_SOURCE_FILES_V2 = Object.freeze([
   'apps/web/vite.config.ts',
+  'packages/scene/src/framePhases.ts',
+  'packages/scene/src/tsl/impostorKit.ts',
+  'packages/scene/src/tsl/lupiUniforms.ts',
+  'packages/ui/src/export/exportProfileV2.ts',
+  'packages/ui/src/export/renderTargetReadback.ts',
+  'packages/ui/src/viewer/LupiCanvas.tsx',
+  'packages/ui/src/viewer/R3FCompat.tsx',
+  'packages/ui/src/viewer/createLupiRenderer.ts',
+  'packages/ui/src/viewer/webgpuCompat.ts',
   'packages/core/src/elements.ts',
   'packages/core/src/renderArtifact.ts',
   'packages/scene/src/AnomalyTracker.tsx',
@@ -118,59 +139,87 @@ const RENDERER_SOURCE_FILES_V1 = Object.freeze([
 ].sort());
 
 /**
- * Output-affecting renderer semantics from RendererFingerprintV1. Build
- * identity and runtime identity are deliberately excluded: the former creates
- * a commit/fixture self-reference, while the latter is checked independently
- * by the pinned Chromium + SwiftShader assertions below.
+ * Directories whose non-test sources are all renderer inputs: the TSL node
+ * materials (atoms, bonds, glyphs, backgrounds...). Scanning them keeps the
+ * validity gate complete as the port adds material files.
  */
-const RENDERER_BEHAVIOR_PROFILE_V1 = Object.freeze({
-  schemaVersion: 'lupi.renderer-behavior-profile.v1',
-  renderer: 'lupi-browser-webgl.v1',
-  rendererVersion: 'three-r184;bridge-0.3.0',
-  executionClass: 'browser-webgl-main-thread',
-  determinism: {
-    pixelRatio: 1,
-    alphaContext: true,
-    outputColorSpace: 'srgb',
-    rendererToneMapping: 'none',
-    postprocessPipeline: 'raw-scene-bypassed',
-    rasterEncoder: 'browser-canvas-native',
-    modelEncoder: 'three-exporters-r184',
-    axesOverlay: 'canvas-overlay-v1',
-  },
-  capability: {
-    version: 'lupi.render-capability.v1',
-    formats: {
-      png: { enabled: true, alphaModes: ['opaque', 'transparent'], maxWidth: 4096, maxHeight: 4096 },
-      jpeg: { enabled: true, alphaModes: ['opaque'], maxWidth: 4096, maxHeight: 4096 },
-      webp: { enabled: true, alphaModes: ['opaque', 'transparent'], maxWidth: 4096, maxHeight: 4096 },
-      glb: { enabled: true, alphaModes: ['not-applicable'] },
-      usdz: { enabled: false, alphaModes: [] },
-    },
-    layers: {
-      background: true,
-      atoms: true,
-      vectorGlyphs: true,
-      atomClusters: false,
-      bonds: true,
-      simulationCell: true,
-      filterShell: true,
-      moleculeShadow: true,
-      contactShadows: true,
-      ghostAtoms: false,
-      annotations: false,
-      knowledgeLabels: false,
-      selectionMarkers: false,
-      atomTrails: false,
-      axes: true,
-      scaleBar: false,
-    },
-  },
+const RENDERER_SOURCE_DIRS_V2 = Object.freeze([
+  'packages/scene/src/tsl',
+  'packages/ui/src/tsl',
+]);
+
+/** DETERMINISM_V2 plus the model encoder, as the adapter fingerprints them. */
+const DETERMINISM_V2 = Object.freeze({
+  pixelRatio: 1,
+  readback: 'render-target-async',
+  renderTarget: 'rgba16f-linear-premultiplied-samples0',
+  pixelEncode: 'cpu-linear-unpremultiply-srgb-oetf-round.v1',
+  rowOrder: 'top-left;destride-256;flip-webgl2',
+  alpha: 'straight',
+  rasterAlphaStorage: 'canvas2d-premultiplied-rgba8',
+  outputColorSpace: 'srgb',
+  rendererToneMapping: 'none',
+  postprocessPipeline: 'raw-scene-bypassed',
+  opaqueBackground: 'spec-gradient-scene-background',
+  rasterEncoder: 'browser-canvas-native',
+  axesOverlay: 'canvas-overlay-v1',
+  modelEncoder: 'three-exporters-r186',
 });
 
-const RENDERER_DEPENDENCIES_V1 = Object.freeze([
+const EXECUTION_CLASS_V2 = Object.freeze({
+  webgpu: 'browser-webgpu-main-thread',
+  webgl2: 'browser-webgpu-webgl2-main-thread',
+});
+
+/**
+ * Output-affecting renderer semantics from the V2 RendererFingerprint
+ * (exportProfileV2.ts), per backend. Build identity and runtime identity are
+ * deliberately excluded: the former creates a commit/fixture self-reference,
+ * while the latter is checked independently by the pinned Chromium +
+ * SwiftShader assertions below.
+ */
+function rendererBehaviorProfileV2(backend) {
+  return {
+    schemaVersion: 'lupi.renderer-behavior-profile.v2',
+    renderer: 'lupi-browser-webgpu.v2',
+    rendererVersion: 'three-r186;fiber-10.0.0-canary.14007b4;bridge-2026-09-28.asset-export',
+    executionClass: EXECUTION_CLASS_V2[backend],
+    determinism: DETERMINISM_V2,
+    capability: {
+      version: 'lupi.render-capability.v1',
+      formats: {
+        png: { enabled: true, alphaModes: ['opaque', 'transparent'], maxWidth: 4096, maxHeight: 4096 },
+        jpeg: { enabled: true, alphaModes: ['opaque'], maxWidth: 4096, maxHeight: 4096 },
+        webp: { enabled: true, alphaModes: ['opaque', 'transparent'], maxWidth: 4096, maxHeight: 4096 },
+        glb: { enabled: true, alphaModes: ['not-applicable'] },
+        usdz: { enabled: false, alphaModes: [] },
+      },
+      layers: {
+        background: true,
+        atoms: true,
+        vectorGlyphs: true,
+        atomClusters: false,
+        bonds: true,
+        simulationCell: true,
+        filterShell: true,
+        moleculeShadow: true,
+        contactShadows: true,
+        ghostAtoms: false,
+        annotations: false,
+        knowledgeLabels: false,
+        selectionMarkers: false,
+        atomTrails: false,
+        axes: true,
+        scaleBar: false,
+      },
+    },
+  };
+}
+
+const RENDERER_DEPENDENCIES_V2 = Object.freeze([
   '@react-three/drei',
   '@react-three/fiber',
+  '@react-three/tsl',
   '@vitejs/plugin-react',
   'react',
   'react-dom',
@@ -186,24 +235,35 @@ if (args.help || args.h) {
   console.log(`verify-render-parity.mjs
 
 Usage:
-  VITE_LUPI_BUILD_SHA=<40-hex-sha> pnpm verify:render-parity -- --derive-candidate
-  VITE_LUPI_BUILD_SHA=<40-hex-sha> pnpm verify:render-parity
-  VITE_LUPI_BUILD_SHA=<40-hex-sha> node tools/verify-render-parity.mjs --url=http://127.0.0.1:5173/ --repeat=10
+  VITE_LUPI_BUILD_SHA=<40-hex-sha> pnpm verify:render-parity -- --backend=webgpu --derive-candidate
+  VITE_LUPI_BUILD_SHA=<40-hex-sha> pnpm verify:render-parity -- --backend=webgl2
+  VITE_LUPI_BUILD_SHA=<40-hex-sha> node tools/verify-render-parity.mjs --backend=webgpu --url=http://127.0.0.1:5173/ --repeat=10
 
 Options:
-  --derive-candidate   Derive and write a candidate PNG and metrics from >=10 repeats.
+  --backend=B          webgpu or webgl2 (default webgl2): the browser lane
+                       (tools/lib/browser-lanes.mjs) and the candidate fixture
+                       directory. The viewer must report this backend.
+  --derive-candidate   Derive and write the backend's candidate PNG and metrics
+                       from >=10 repeats (automatic; no owner approval gate).
   --refresh-approved-provenance
                        Refresh renderer/source provenance only when every new
                        capture is byte-identical to the owner-approved golden.
   --validity-only      Print the current renderer-validity digest without launching a browser.
   --repeat=N           Repeat count; values below 10 are rejected (default: 10).
   --url=URL            Use an existing viewer server instead of starting Vite.
+  --chromium=PATH      Chromium binary (default: Chromium 1194 when installed).
   --keep-server        Leave the locally started browser/server open for inspection.
   --json               Print the final JSON report to stdout.
 `);
   process.exit(0);
 }
 
+const backend = typeof args.backend === 'string' ? args.backend : 'webgl2';
+if (!BACKENDS.includes(backend)) {
+  console.error(`--backend must be one of ${BACKENDS.join(', ')} (received ${backend}).`);
+  process.exit(2);
+}
+const FIXTURE_ROOT = resolve(FIXTURE_ROOT_V2, backend);
 const repeatCount = readRepeatCount(args.repeat);
 const deriveCandidate = args['derive-candidate'] === true || args['derive-candidate'] === 'true';
 const refreshApprovedProvenance = args['refresh-approved-provenance'] === true
@@ -243,7 +303,7 @@ const packageResolvers = [
   requireFromWeb,
   createRequire(resolve(REPO_ROOT, 'packages/ui/package.json')),
 ];
-const currentRendererValidity = computeRendererValidityV1(browserSpec, packageResolvers);
+const currentRendererValidity = computeRendererValidityV2(browserSpec, packageResolvers);
 const repositoryEvidence = inspectRepositoryEvidence();
 if (validityOnly) {
   console.log(JSON.stringify({
@@ -259,8 +319,9 @@ const { createServer: createViteServer } = await import(
 const failures = [];
 const checks = [];
 const report = {
-  schemaVersion: 'lupi.render-parity-report.v1',
+  schemaVersion: 'lupi.render-parity-report.v2',
   runId: RUN_ID,
+  backend,
   generatedAt: new Date().toISOString(),
   mode: deriveCandidate
     ? 'derive-candidate'
@@ -312,7 +373,7 @@ function check(name, ok, detail = '') {
 try {
   check(
     'renderer validity covers a non-empty curated source set',
-    currentRendererValidity.input.sourceFiles.length === RENDERER_SOURCE_FILES_V1.length
+    currentRendererValidity.input.sourceFiles.length >= RENDERER_SOURCE_FILES_V2.length
       && currentRendererValidity.input.sourceFiles.every((entry) => /^sha256:[0-9a-f]{64}$/.test(entry.sha256)),
     `${currentRendererValidity.input.sourceFiles.length} source files; ${currentRendererValidity.digest}`,
   );
@@ -352,17 +413,19 @@ try {
   const targetUrl = new URL(browserSpec.route.replace(/^\//, ''), baseUrl).href;
   report.browser.targetUrl = targetUrl;
 
-  const launchArguments = [...browserSpec.renderer.launchArguments];
+  const launchArguments = [...LANE_ARGS[backend], ...browserSpec.renderer.extraLaunchArguments];
+  const executablePath = chromiumExecutable(typeof args.chromium === 'string' ? args.chromium : undefined)
+    ?? chromium.executablePath();
   browser = await chromium.launch({
     headless: true,
-    executablePath: chromium.executablePath(),
+    executablePath,
     args: launchArguments,
   });
   report.browser.runtime = {
-    playwrightChromiumExecutable: chromium.executablePath(),
+    playwrightChromiumExecutable: executablePath,
     browserVersion: browser.version(),
     launchArguments,
-    requestedGraphics: browserSpec.renderer.graphics,
+    requestedGraphics: browserSpec.renderer.graphics[backend],
   };
 
   const context = await browser.newContext({
@@ -385,62 +448,76 @@ try {
     null,
     { timeout: 60_000 },
   );
-  // Do not call getContext until Fiber has initialized and sized its canvas:
-  // getContext on the early 300x150 DOM placeholder would create a default
-  // context and make the inspection itself mutate the state being measured.
+  // Wait until the viewer's WebGPURenderer has initialized, recorded its
+  // backend (window.__lupiRenderer) and sized its canvas.
   await page.waitForFunction(() => {
     const canvas = document.querySelector('#lupi-viewer-canvas canvas');
-    return canvas instanceof HTMLCanvasElement
+    return Boolean(window.__lupiRenderer?.backend)
+      && canvas instanceof HTMLCanvasElement
       && canvas.clientWidth > 0
       && canvas.clientHeight > 0
       && canvas.width === Math.round(canvas.clientWidth * window.devicePixelRatio)
       && canvas.height === Math.round(canvas.clientHeight * window.devicePixelRatio);
-  }, null, { timeout: 60_000 });
+  }, null, { timeout: 90_000 });
 
   const graphics = await page.evaluate(() => {
-    // @react-three/fiber applies the Canvas `id` to its wrapper element; the
-    // actual WebGL canvas is the descendant.
+    // R3F puts the viewer id on a wrapper; the canvas is its descendant.
     const viewerCanvas = document.querySelector('#lupi-viewer-canvas canvas');
-    const canvas = viewerCanvas instanceof HTMLCanvasElement
-      ? viewerCanvas
-      : document.createElement('canvas');
-    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-    if (!gl) return {
-      available: false,
-      viewerCanvasBound: false,
-      renderer: null,
-      vendor: null,
-      version: null,
-      contextAttributes: null,
-    };
-    const debug = gl.getExtension('WEBGL_debug_renderer_info');
+    const runtime = window.__lupiRenderer ?? null;
+    const canvas = viewerCanvas instanceof HTMLCanvasElement ? viewerCanvas : null;
+    // On the WebGL2 backend the canvas already holds the renderer's WebGL2
+    // context, so getContext returns that same context and changes nothing.
+    const gl = runtime?.backend === 'webgl2' && canvas ? canvas.getContext('webgl2') : null;
+    const debug = gl?.getExtension('WEBGL_debug_renderer_info') ?? null;
+    const identity = runtime?.backend === 'webgpu'
+      ? {
+        adapter: runtime.adapterInfo,
+        preferredCanvasFormat: runtime.preferredCanvasFormat,
+        compatibilityMode: runtime.compatibilityMode,
+      }
+      : gl
+        ? {
+          renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+          vendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+          version: gl.getParameter(gl.VERSION),
+          contextAttributes: gl.getContextAttributes(),
+        }
+        : null;
     return {
-      available: true,
-      viewerCanvasBound: canvas === viewerCanvas,
-      renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
-      vendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
-      version: gl.getParameter(gl.VERSION),
-      drawingBufferWidth: gl.drawingBufferWidth,
-      drawingBufferHeight: gl.drawingBufferHeight,
-      canvasClientWidth: canvas.clientWidth,
-      canvasClientHeight: canvas.clientHeight,
+      available: Boolean(runtime && canvas),
+      viewerCanvasBound: canvas !== null,
+      backend: runtime?.backend ?? null,
+      forced: runtime?.forced ?? null,
+      samples: runtime?.samples ?? null,
+      three: runtime?.three ?? null,
+      identity,
+      drawingBufferWidth: canvas?.width ?? 0,
+      drawingBufferHeight: canvas?.height ?? 0,
+      canvasClientWidth: canvas?.clientWidth ?? 0,
+      canvasClientHeight: canvas?.clientHeight ?? 0,
       devicePixelRatio: window.devicePixelRatio,
-      contextAttributes: gl.getContextAttributes(),
     };
   });
   report.browser.runtime.graphics = graphics;
-  check('pinned WebGL context is available', graphics.available, JSON.stringify(graphics));
+  check('viewer renderer runtime is recorded', graphics.available, JSON.stringify(graphics));
   check(
     'graphics evidence comes from the mounted viewer canvas',
     graphics.viewerCanvasBound === true,
     `viewerCanvasBound=${graphics.viewerCanvasBound}`,
   );
   check(
-    'viewer context matches pinned alpha/antialias semantics',
-    graphics.contextAttributes?.alpha === true
-      && graphics.contextAttributes?.antialias === false,
-    JSON.stringify(graphics.contextAttributes),
+    `viewer runs on the requested ${backend} backend`,
+    graphics.backend === backend,
+    `backend=${graphics.backend} forced=${graphics.forced}`,
   );
+  if (backend === 'webgl2') {
+    check(
+      'viewer WebGL2 context matches pinned alpha/antialias semantics',
+      graphics.identity?.contextAttributes?.alpha === true
+        && graphics.identity?.contextAttributes?.antialias === false,
+      JSON.stringify(graphics.identity?.contextAttributes ?? null),
+    );
+  }
   check(
     'viewer drawing buffer uses the pinned device pixel ratio',
     graphics.devicePixelRatio === browserSpec.viewport.deviceScaleFactor
@@ -450,9 +527,9 @@ try {
       + `client=${graphics.canvasClientWidth}x${graphics.canvasClientHeight}; dpr=${graphics.devicePixelRatio}`,
   );
   check(
-    'pinned WebGL renderer is SwiftShader',
-    /swiftshader/i.test(`${graphics.renderer ?? ''} ${graphics.vendor ?? ''}`),
-    `${graphics.vendor ?? 'unknown'} / ${graphics.renderer ?? 'unknown'}`,
+    'pinned GPU is SwiftShader',
+    /swiftshader/i.test(JSON.stringify(graphics.identity ?? {})),
+    JSON.stringify(graphics.identity ?? null),
   );
 
   const setupResults = [];
@@ -469,6 +546,12 @@ try {
 
   const driverStatus = await page.evaluate(() => window.__lupiViewerMcp.status());
   report.browser.driverStatus = driverStatus;
+  check(
+    'bridge status reports the lane backend and its execution class',
+    driverStatus.rendererBackend === backend
+      && driverStatus.rendererExecutionClass === EXECUTION_CLASS_V2[backend],
+    `rendererBackend=${driverStatus.rendererBackend} executionClass=${driverStatus.rendererExecutionClass}`,
+  );
   check(
     'candidate source is loaded and paused',
     driverStatus.moleculeLoaded === true
@@ -650,24 +733,18 @@ try {
     `expected=${fixture.derivation.environment.browserVersion} actual=${report.browser.runtime.browserVersion}`,
   );
   check(
-    'SwiftShader launch arguments match candidate derivation',
+    'lane launch arguments match candidate derivation',
     JSON.stringify(report.browser.runtime.launchArguments)
       === JSON.stringify(fixture.derivation.environment.launchArguments),
     report.browser.runtime.launchArguments.join(' '),
   );
-  for (const field of ['vendor', 'renderer', 'version']) {
-    check(
-      `SwiftShader ${field} matches candidate derivation`,
-      report.browser.runtime.graphics?.[field] === fixture.derivation.environment.graphics?.[field],
-      `expected=${fixture.derivation.environment.graphics?.[field] ?? 'missing'} `
-        + `actual=${report.browser.runtime.graphics?.[field] ?? 'missing'}`,
-    );
-  }
   check(
-    'viewer WebGL context attributes match candidate derivation',
-    JSON.stringify(report.browser.runtime.graphics?.contextAttributes)
-      === JSON.stringify(fixture.derivation.environment.graphics?.contextAttributes),
-    JSON.stringify(report.browser.runtime.graphics?.contextAttributes),
+    'renderer backend and GPU identity match candidate derivation',
+    fixture.derivation.environment.backend === backend
+      && JSON.stringify(report.browser.runtime.graphics?.identity ?? null)
+        === JSON.stringify(fixture.derivation.environment.graphics?.identity ?? null),
+    `expected=${JSON.stringify(fixture.derivation.environment.graphics?.identity ?? null)} `
+      + `actual=${JSON.stringify(report.browser.runtime.graphics?.identity ?? null)}`,
   );
 
   check(
@@ -751,7 +828,7 @@ try {
     report.edge.artifactParityReason,
   );
 
-  const finalRendererValidity = computeRendererValidityV1(browserSpec, packageResolvers);
+  const finalRendererValidity = computeRendererValidityV2(browserSpec, packageResolvers);
   check(
     'output-affecting renderer sources stayed unchanged during verification',
     finalRendererValidity.digest === currentRendererValidity.digest,
@@ -766,6 +843,7 @@ try {
     fullPage: false,
   });
   if ((deriveCandidate || refreshApprovedProvenance) && failures.length === 0 && pendingFixtureWrite) {
+    mkdirSync(FIXTURE_ROOT, { recursive: true });
     if (deriveCandidate) writeFileSync(candidatePath, pendingFixtureWrite.candidateBuffer);
     writeFileSync(metricsPath, `${JSON.stringify(pendingFixtureWrite.fixture, null, 2)}\n`);
     report.browser.fixtureWrite.committed = true;
@@ -1003,14 +1081,15 @@ function deriveFixture(captures, spec, runtime, rendererValidity, buildEvidence)
   }
 
   const fixture = {
-    schemaVersion: 'lupi.render-parity-metrics.v1',
+    schemaVersion: 'lupi.render-parity-metrics.v2',
     fixtureId: spec.id,
+    backend,
     approval: {
       status: 'candidate-unapproved',
       humanApproved: false,
       approvedBy: null,
       approvedAt: null,
-      note: 'Generated automatically from pinned local repeats. Human visual approval was not performed.',
+      note: 'Generated automatically from pinned local repeats. V2 candidates have no owner approval gate; derive again when the renderer-validity digest changes.',
     },
     artifact: {
       file: spec.candidateFile,
@@ -1056,7 +1135,8 @@ function deriveFixture(captures, spec, runtime, rendererValidity, buildEvidence)
         ]),
       ),
       environment: {
-        renderer: spec.renderer.graphics,
+        backend,
+        renderer: spec.renderer.graphics[backend],
         browser: 'Playwright Chromium from the repository lockfile',
         browserVersion: runtime.browserVersion,
         graphics: runtime.graphics,
@@ -1320,6 +1400,9 @@ async function startPortlessVite() {
   appServer = await createViteServer({
     root: WEB_ROOT,
     configFile: resolve(WEB_ROOT, 'vite.config.ts'),
+    // drei 11 ships a top-level await, which the default dependency
+    // pre-bundling target rejects.
+    optimizeDeps: { esbuildOptions: { target: 'esnext' } },
     server: {
       host: '127.0.0.1',
       port,
@@ -1348,11 +1431,24 @@ function getFreePort() {
   });
 }
 
-function computeRendererValidityV1(spec, packageRequires) {
-  const sourceFiles = RENDERER_SOURCE_FILES_V1.map((path) => {
+function rendererSourcePathsV2() {
+  const paths = new Set(RENDERER_SOURCE_FILES_V2);
+  for (const directory of RENDERER_SOURCE_DIRS_V2) {
+    const absolute = resolve(REPO_ROOT, directory);
+    if (!existsSync(absolute)) continue;
+    for (const name of readdirSync(absolute)) {
+      if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)) paths.add(`${directory}/${name}`);
+    }
+  }
+  return [...paths].sort();
+}
+
+function computeRendererValidityV2(spec, packageRequires) {
+  const sourceFiles = rendererSourcePathsV2().map((path) => {
     const absolutePath = resolve(REPO_ROOT, path);
     if (!existsSync(absolutePath)) {
-      throw new Error(`Renderer validity source is missing: ${path}`);
+      // A listed source a port package deleted: its absence is the input.
+      return { path, sha256: `sha256:${'0'.repeat(64)}`, absent: true };
     }
     // Git may materialize CRLF on Windows and LF in CI. Hash normalized source
     // text so repository-equivalent checkouts produce the same validity gate.
@@ -1360,14 +1456,15 @@ function computeRendererValidityV1(spec, packageRequires) {
     return { path, sha256: sha256(Buffer.from(normalizedSource, 'utf8')) };
   });
   const dependencyVersions = Object.fromEntries(
-    RENDERER_DEPENDENCIES_V1.map((name) => [name, resolveInstalledPackageVersion(packageRequires, name)]),
+    RENDERER_DEPENDENCIES_V2.map((name) => [name, resolveInstalledPackageVersion(packageRequires, name)]),
   );
   const input = {
-    schemaVersion: 'lupi.renderer-validity-input.v1',
+    schemaVersion: 'lupi.renderer-validity-input.v2',
     sourceNormalization: 'utf8-lf-v1',
     sourceFiles,
     dependencyVersions,
-    behavior: RENDERER_BEHAVIOR_PROFILE_V1,
+    behavior: rendererBehaviorProfileV2(backend),
+    laneArguments: [...LANE_ARGS[backend]],
     fixtureRenderInput: {
       id: spec.id,
       route: spec.route,
@@ -1379,7 +1476,7 @@ function computeRendererValidityV1(spec, packageRequires) {
     },
   };
   return {
-    scheme: 'lupi.renderer-validity-digest.v1',
+    scheme: 'lupi.renderer-validity-digest.v2',
     digest: sha256Canonical(input),
     input,
   };

@@ -17,9 +17,11 @@
  *        (three's USDZExporter itself needs DOM canvas for its texture
  *        pipeline, so the encode step is exercised in-browser only.)
  *
- * three r184's GLTFExporter assembles the GLB through FileReader/Blob, which
- * Node lacks (FileReader), so a minimal shim backed by blob.arrayBuffer() is
- * installed below.
+ * The model path is CPU-only (plain three meshes, no renderer), so it is the
+ * same on the WebGPU backend and the WebGL2 fallback. three's GLTFExporter
+ * (r186) assembles the GLB through FileReader/Blob, which Node lacks
+ * (FileReader), so a minimal shim backed by blob.arrayBuffer() is installed
+ * below.
  */
 
 import { performance } from 'node:perf_hooks';
