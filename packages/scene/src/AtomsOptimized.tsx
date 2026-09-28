@@ -1,49 +1,46 @@
 /**
- * <AtomsOptimized /> — Impostor Billboard Sphere Renderer
+ * <AtomsOptimized /> — ray-cast impostor sphere renderer
  *
- * Professional molecular visualization technique used by VMD, PyMOL, OVITO:
- * - 1 quad per atom (2 triangles) instead of 80-triangle sphere meshes
- * - Fragment shader ray-traces pixel-perfect spheres with correct depth
- * - GPU-side color lookup via palette textures — changing colormap is instant
- * - Per-instance data uploaded ONCE per frame change, not per animation frame
- * - 40× triangle reduction, zero per-frame CPU→GPU copies during orbit
+ * The technique VMD, PyMOL and OVITO use:
+ * - 1 quad per atom (2 triangles) instead of an 80-triangle sphere mesh
+ * - the fragment stage ray-casts a pixel-exact sphere and writes its depth
+ * - GPU-side colour lookup through palette textures: changing the colormap
+ *   is instant
+ * - per-instance data is uploaded once per frame change, never per animation
+ *   frame; interpolation between two frames is a GPU lerp by `uProgress`
+ *
+ * The material is a TSL node material (`tsl/atomImpostorMaterial.ts`) on the
+ * shared impostor kit (`tsl/impostorKit.ts`), so it compiles to WGSL on the
+ * WebGPU backend and GLSL on the WebGL2 fallback. The renderer output pass
+ * owns tone mapping and the sRGB encode (plan-final D14).
  *
  * Large-scene architecture (millions of atoms):
- * - Compact instance layout: 12 B position + 1 B type slot + 2 B property +
- *   1 B occlusion per atom. Radius, visibility and per-type scale live in a
- *   256-entry radius palette, so scaling or hiding atom types is a texture
- *   update rather than an O(n) buffer re-upload. Static molecules alias the
- *   interpolation target buffer to the position buffer (no second copy).
- * - The atom index is `gl_InstanceID` — instances are never compacted, hidden
- *   atoms are culled on the GPU by a zero palette radius.
+ * - Compact instance layout: 12 B position (plus 12 B target for
+ *   trajectories) and one normalized Uint8×4 word per atom
+ *   `[typeSlot, occlusion, propHi, propLo]` (plan-final D4). Radius,
+ *   visibility and per-type scale live in a 256-entry radius palette, so
+ *   scaling or hiding atom types is a texture update rather than an O(n)
+ *   buffer re-upload. Static molecules alias the interpolation target buffer
+ *   to the position buffer (no second copy).
+ * - The atom index is the instance index: instances are never compacted,
+ *   hidden atoms are culled on the GPU by a zero palette radius.
  * - Sub-pixel culling: atoms whose projected radius falls under a threshold
- *   collapse to a degenerate quad in the vertex shader (the far-LOD cluster
+ *   collapse to a degenerate quad in the vertex stage (the far-LOD cluster
  *   splats carry the silhouette instead).
- * - Quality tiers compile the fragment shader with or without image-based
- *   lighting; very large scenes drop to an analytic hemisphere model.
- * - When the browser exposes EXT_conservative_depth, the fragment shader
- *   declares `layout(depth_greater)` and the billboard sits on the front
- *   tangent plane, so the hardware keeps early-Z rejection even though the
- *   ray-cast sphere writes its own depth. Dense scenes with heavy overdraw
- *   skip most shading work for occluded fragments.
+ * - Quality tiers build separate materials with or without image-based
+ *   lighting; very large scenes drop to the analytic lighting model.
  *
- * The material is a RawShaderMaterial (GLSL ES 3.00): the `#extension`
- * directive must precede every non-preprocessor token, and Three's managed
- * prefix begins with precision statements. The shader therefore owns its
- * output color-space conversion, mirroring Three's rule (sRGB to the screen,
- * linear into render targets).
- *
- * Color architecture:
- * - Instance attributes store typeId (u8 slot) and propValue (u16 normalized)
- * - A 256×1 DataTexture (uPalette) maps typeId → RGB color
- * - A 256×1 DataTexture (uColormap) maps normalized property → RGB color
- * - Changing colormap/colorMode updates only tiny textures, not 1M atoms
+ * Colour architecture:
+ * - A 256×1 texture maps type slot → colour, another maps normalized
+ *   property → colour; both are updated in place (a few hundred bytes), never
+ *   per atom.
  */
 
-import { useRef, useMemo, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useRef, useMemo, useEffect, useLayoutEffect, useCallback, useId } from 'react';
 import { wrapDelta } from './interpolation';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
+import type { MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import { SpatialHash3D } from './SpatialHash';
 
@@ -51,6 +48,29 @@ import { COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
 import { DEFAULT_PROFILE, getElementProfile } from './materials';
 import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
 import { buildTypeRenderTable, typeRenderTablesEqual, type TypeRenderTable } from './typeRenderTable';
+import { LUPI_JOB, LUPI_PHASE } from './framePhases';
+import {
+  createLupiEnvBinding,
+  createLupiLightUniforms,
+  lightDirection,
+  materialPresetIndex,
+  syncLupiEnvBinding,
+} from './tsl/impostorKit';
+import {
+  ATOM_ATTR,
+  ATOM_DATA_OCCLUSION,
+  ATOM_DATA_PROP_HI,
+  ATOM_DATA_PROP_LO,
+  ATOM_DATA_SLOT,
+  ATOM_DATA_STRIDE,
+  ATOM_IMPOSTOR_QUAD_SCALE,
+  createAtomImpostorMaterial,
+  createAtomImpostorUniforms,
+  emptyEtchTexture,
+  quantizeAtomProp,
+  type AtomImpostorTextures,
+  type AtomImpostorUniforms,
+} from './tsl/atomImpostorMaterial';
 
 // ─── Types ───────────────────────────────────────────────────────────
 export type AtomQualityTier = 0 | 1 | 2;
@@ -168,7 +188,7 @@ export function disposeOwnedMaterialTextures(
   }
 }
 
-const IMPOSTOR_BOUND_RADIUS_SCALE = 1.3;
+const IMPOSTOR_BOUND_RADIUS_SCALE = ATOM_IMPOSTOR_QUAD_SCALE;
 
 export interface AtomInterpolationExtents {
   count: number;
@@ -305,532 +325,10 @@ export function buildTypeSlotLookup(
   return { dense, base: minRaw, sparse };
 }
 
-// ─── GLSL Shaders ────────────────────────────────────────────────────
-
-// Three.js exports `cube_uv_reflection_fragment` (and the `defines`-style
-// constants it needs) — including this chunk gives our shader the
-// `textureCubeUV(envMap, direction, roughness)` function that decodes the
-// octahedral-packed cubeUV atlas drei's <Environment> produces. This is
-// the same machinery MeshStandardMaterial uses for PMREM-prefiltered
-// scene.environment.
-const CUBE_UV_CHUNK = THREE.ShaderChunk.cube_uv_reflection_fragment;
-
-export const IMPOSTOR_VERTEX = /* glsl */ `
-  precision highp float;
-  precision highp int;
-  precision highp sampler2D;
-
-  // Quad corner in [-1, 1]
-  in vec3 position;
-  // Per-instance attributes. Type slot is an unsigned byte read as a float,
-  // property is a normalized u16, occlusion a normalized u8.
-  in vec3 instancePosition;
-  in vec3 instanceTargetPosition;
-  in float instanceTypeId;
-  in float instancePropValue;
-  in float instanceOcclusion;
-
-  uniform mat4 modelViewMatrix;
-  uniform mat4 projectionMatrix;
-
-  // Uniforms for GPU color lookup
-  uniform sampler2D uPalette;        // 256×1: typeId → color
-  uniform sampler2D uColormap;       // 256×1: propValue [0,1] → color
-  uniform sampler2D uRadiusPalette;  // 256×1 R32F: typeId → world radius (0 = hidden)
-  uniform int uColorMode;            // 0=type, 1=uniform, 2=property
-  uniform vec3 uUniformColor;
-  uniform float uProgress;           // 0..1 GPU lerp: instancePosition -> instanceTargetPosition
-  // Device pixels per world unit at unit view depth (perspective) or per
-  // world unit (orthographic). Drives sub-pixel culling and specular AA.
-  uniform float uPixelScale;
-  uniform int uOrthographic;
-  uniform float uCullPixelRadius;
-
-  // Passed to fragment
-  out vec3 vColor;
-  out vec2 vUv;
-  out vec3 vViewCenter;
-  out float vRadius;
-  out float vTypeId;
-  out float vPropValue;
-  out float vAtomId;
-  out float vPixelRadius;
-  out float vOcclusion;
-
-  void main() {
-    float slotU = (instanceTypeId + 0.5) / 256.0;
-    float radius = texture(uRadiusPalette, vec2(slotU, 0.5)).r;
-
-    // GPU-side frame interpolation: lerp current -> target by the global progress
-    // uniform. The CPU re-uploads the two position buffers only on a frame change,
-    // not per interpolation substep — uProgress alone sweeps the motion.
-    vec3 lerpedPos = mix(instancePosition, instanceTargetPosition, uProgress);
-    vec4 viewCenter4 = modelViewMatrix * vec4(lerpedPos, 1.0);
-
-    float viewDepth = max(-viewCenter4.z, 1e-4);
-    float pixelRadius = uOrthographic == 1
-      ? radius * uPixelScale
-      : radius * uPixelScale / viewDepth;
-
-    // Hidden types carry a zero palette radius. Sub-pixel atoms collapse to a
-    // degenerate clip-space point: no fragments, no shading, no depth writes.
-    if (radius <= 0.0 || pixelRadius < uCullPixelRadius) {
-      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-      vColor = vec3(0.0);
-      vUv = vec2(0.0);
-      vViewCenter = vec3(0.0);
-      vRadius = 0.0;
-      vTypeId = 0.0;
-      vPropValue = 0.0;
-      vAtomId = -1.0;
-      vPixelRadius = 0.0;
-      vOcclusion = 1.0;
-      return;
-    }
-
-    vTypeId = instanceTypeId;
-    vPropValue = instancePropValue;
-    vAtomId = float(gl_InstanceID);
-    vPixelRadius = pixelRadius;
-    vOcclusion = instanceOcclusion;
-
-    // ─── GPU-side color lookup ───
-    if (uColorMode == 2) {
-      // Property mode: sample colormap by normalized property value
-      vColor = texture(uColormap, vec2(instancePropValue, 0.5)).rgb;
-    } else if (uColorMode == 1) {
-      // Uniform mode
-      vColor = uUniformColor;
-    } else {
-      // Type mode: sample palette by typeId
-      vColor = texture(uPalette, vec2(slotU, 0.5)).rgb;
-    }
-
-    vUv = position.xy;
-    vRadius = radius;
-    vViewCenter = viewCenter4.xyz;
-
-    // Billboard: offset the quad corner in view space. The quad sits on the
-    // sphere's front tangent plane (center.z + radius, toward the camera) so
-    // every ray-cast hit is at or behind the rasterized quad depth — the
-    // invariant EXT_conservative_depth's depth_greater relies on.
-    vec3 viewPos = viewCenter4.xyz;
-    float expand = radius * 1.3;
-    viewPos.xy += position.xy * expand;
-    viewPos.z += radius;
-
-    gl_Position = projectionMatrix * vec4(viewPos, 1.0);
-  }
-`;
-
-export const IMPOSTOR_FRAGMENT = /* glsl */ `
-#ifdef LUPI_CONSERVATIVE_DEPTH
-#extension GL_EXT_conservative_depth : enable
-#endif
-  precision highp float;
-  precision highp int;
-  precision highp sampler2D;
-#ifdef LUPI_CONSERVATIVE_DEPTH
-  // The billboard is on the front tangent plane, so the sphere hit depth is
-  // always >= the interpolated quad depth. Declaring that lets the GPU keep
-  // early depth rejection despite the gl_FragDepth write.
-  layout (depth_greater) out highp float gl_FragDepth;
-#endif
-  #define texture2D texture
-  #define saturate(a) clamp(a, 0.0, 1.0)
-
-  in vec3 vColor;
-  in vec2 vUv;
-  in vec3 vViewCenter;
-  in float vRadius;
-  in float vTypeId;
-  in float vPropValue;
-  in float vAtomId;
-  in float vPixelRadius;
-  in float vOcclusion;
-
-  layout(location = 0) out highp vec4 pc_fragColor;
-  #define gl_FragColor pc_fragColor
-
-  uniform mat4 projectionMatrix;
-  // Etched annotation: a Canvas2D-rasterized text texture stamped onto the
-  // facing hemisphere of a single targeted atom. Activated when uHasEtch=1
-  // and the fragment's vAtomId matches uEtchAtomId. Uses the view-space
-  // normal as the stamp UV so the text always reads to camera (it follows
-  // the silhouette, not the world). The alpha channel of the texture
-  // darkens the surface to give an engraved feel.
-  uniform sampler2D tEtchTexture;
-  uniform float uEtchAtomId;
-  uniform int uHasEtch;
-  uniform int uTextureMode; // 0: none, 1: noise, 2: scratched
-  uniform int uColorMode; // 0=type, 1=uniform, 2=property — same scheme as vertex
-  uniform int uMaterialPreset; // 0: per-element (default), 1: matte, 2: metallic, 3: glass, 4: plastic
-  // 0..1: blend between per-element identity (0) and preset override (1).
-  // Lets Material Scenes partially preserve element character while
-  // applying a global look.
-  uniform float uMaterialIntensity;
-  // User-controllable rim light boost (additive over the material-driven rim).
-  uniform float uRimLight;
-  // Granular Surface Character overrides.
-  // uSurfaceRoughness and uSurfacePolish act as offsets to the active material profile.
-  uniform float uSurfaceRoughness;
-  uniform float uSurfacePolish;
-  uniform float uSurfaceClearcoat;
-  uniform vec3 uLightDir;
-  uniform vec3 uFillLightDir;
-  uniform vec3 uRimLightDir;
-  uniform vec3 uViewUp;
-  uniform vec3 uFillLightColor;
-  uniform vec3 uRimLightColor;
-  // 256×2 RGBA: row 0 = (metalness, roughness, anisotropy, subsurface),
-  //             row 1 = (emission r, emission g, emission b, intensity).
-  uniform sampler2D uMaterialPalette;
-  // IBL — single source of truth. tEnvMap is drei's <Environment> output:
-  // a PMREM-prefiltered, octahedral-packed cubeUV atlas (Three.js's
-  // CubeUVReflectionMapping). textureCubeUV (provided by the
-  // cube_uv_reflection_fragment chunk injected below) decodes it correctly,
-  // including roughness-based mip selection. uHasEnv=0 ('diagram' preset)
-  // falls back to an analytic hemisphere so atoms still read as solid.
-  uniform sampler2D tEnvMap;
-  uniform float uEnvIntensity;
-  uniform int uHasEnv;
-  // Per-atom occlusion strength (0 = ignore the occlusion attribute).
-  uniform float uOcclusionStrength;
-  // 1 when rendering straight to the sRGB canvas; 0 into linear targets.
-  uniform int uOutputSrgb;
-#if LUPI_QUALITY >= 1
-  // ENVMAP_TYPE_CUBE_UV gates Three.js's cube_uv_reflection_fragment chunk
-  // so its textureCubeUV() definition is visible to us. CUBEUV_TEXEL_*
-  // and CUBEUV_MAX_MIP are injected from the actual PMREM atlas dimensions.
-  // The chunk also requires the uniform
-  // be named "envMap" (not tEnvMap) — alias it.
-  #define ENVMAP_TYPE_CUBE_UV
-  #define envMap tEnvMap
-  ${CUBE_UV_CHUNK}
-#endif
-  // Property-driven emission strength. 0 disables; >0 makes atoms glow
-  // proportional to their normalized property value × colormap-mapped color.
-  uniform float uPropEmission;
-
-  // Three-light setup in view space
-  // Key, fill, and rim light dirs are dynamic and passed via uniforms.
-
-  // Simple pseudo-random noise function
-  float rand(vec2 co) {
-    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
-  }
-
-  vec4 sRGBTransferOETF( in vec4 value ) {
-    return vec4( mix( pow( value.rgb, vec3( 0.41666 ) ) * 1.055 - vec3( 0.055 ), value.rgb * 12.92, vec3( lessThanEqual( value.rgb, vec3( 0.0031308 ) ) ) ), value.a );
-  }
-
-  // Analytic studio environment used when no PMREM probe is installed (and
-  // by the fast tier). A cool sky / warm-neutral ground hemisphere plus a
-  // broad overhead softbox band gives metals and dielectrics a believable
-  // reflection without any texture fetch.
-  vec3 analyticEnvironment(vec3 dir, float roughness) {
-    float up = dot(dir, uViewUp);
-    vec3 sky = vec3(0.86, 0.90, 0.97);
-    vec3 horizon = vec3(0.62, 0.62, 0.64);
-    vec3 ground = vec3(0.30, 0.28, 0.27);
-    vec3 base = up >= 0.0 ? mix(horizon, sky, up) : mix(horizon, ground, -up);
-    // Softbox: a wide highlight band overhead, blurred by roughness.
-    float band = smoothstep(0.35, 0.95, up) * (1.0 - roughness * 0.7);
-    return base + vec3(0.55) * band;
-  }
-
-  void main() {
-    // Ray-sphere intersection in view space. The fragment lies on the front
-    // tangent plane (see the vertex shader).
-    float expand = vRadius * 1.3;
-    vec3 fragViewPos = vViewCenter + vec3(vUv * expand, vRadius);
-
-    vec3 rayDir = normalize(fragViewPos);
-    vec3 oc = -vViewCenter;
-
-    float b = dot(oc, rayDir);
-    float c = dot(oc, oc) - vRadius * vRadius;
-    float discriminant = b * b - c;
-
-    if (discriminant < 0.0) {
-      discard;
-    }
-
-    float t = -b - sqrt(discriminant);
-    vec3 hitPoint = rayDir * t;
-    vec3 normal = normalize(hitPoint - vViewCenter);
-
-    // ─── Material lookup ────────────────────────────────────────────
-    // Always sample per-element profile from the material palette first.
-    // Then, if a preset override is active (uMaterialPreset > 0), blend
-    // between per-element and preset based on uMaterialIntensity.
-    // This is the key upgrade: Material Scenes can partially preserve
-    // element character (Au still looks gold-ish on a partial Forge blend).
-    float metalness, roughness, subsurface;
-    vec3 emissionColor = vec3(0.0);
-    float emissionIntensity = 0.0;
-
-    // Step 1: per-element identity (always sampled)
-    vec2 paletteUv = vec2((vTypeId + 0.5) / 256.0, 0.25);
-    vec4 elemMat = texture2D(uMaterialPalette, paletteUv);
-    float elemMetal = elemMat.r;
-    float elemRough = elemMat.g;
-    float elemSSS   = elemMat.a;
-
-    vec4 e = texture2D(uMaterialPalette, vec2(paletteUv.x, 0.75));
-    emissionColor = e.rgb;
-    emissionIntensity = e.a;
-
-    // Step 2: preset override values
-    float presetMetal, presetRough, presetSSS;
-    if (uMaterialPreset == 1)      { presetMetal = 0.05; presetRough = 0.85; presetSSS = 0.0; }
-    else if (uMaterialPreset == 2) { presetMetal = 0.8;  presetRough = 0.2;  presetSSS = 0.0; }
-    else if (uMaterialPreset == 3) { presetMetal = 0.1;  presetRough = 0.1;  presetSSS = 0.4; }
-    else if (uMaterialPreset == 4) { presetMetal = 0.0;  presetRough = 0.4;  presetSSS = 0.0; }
-    else                           { presetMetal = elemMetal; presetRough = elemRough; presetSSS = elemSSS; }
-
-    // Step 3: blend by materialIntensity
-    metalness  = mix(elemMetal, presetMetal, uMaterialIntensity);
-    roughness  = mix(elemRough, presetRough, uMaterialIntensity);
-    subsurface = mix(elemSSS,   presetSSS,   uMaterialIntensity);
-
-    // Step 4: apply granular user offsets (Polish/Roughness)
-    metalness = clamp(metalness + uSurfacePolish, 0.0, 1.0);
-    roughness = clamp(roughness + uSurfaceRoughness, 0.0, 1.0);
-
-    // Step 5: specular anti-aliasing. On a sphere only a few pixels wide
-    // the normal sweeps the whole hemisphere inside one pixel; a sharp
-    // lobe then strobes as the camera moves. Widen the lobe as the atom's
-    // pixel footprint shrinks (geometric specular AA, footprint-driven).
-    float aaRoughness = clamp(1.6 / max(vPixelRadius, 1.0), 0.0, 0.6);
-    roughness = max(roughness, aaRoughness);
-
-    // ─── Cook-Torrance microfacet shading ───────────────────────────
-    //   - GGX D + Smith G + Schlick F microfacet specular
-    //   - Burley-style wrap diffuse for soft shadow rolloff
-    //   - Subsurface backlight: light "transmits" to the shadow side for
-    //     translucent atoms (H, O, noble gases) — they read as dewdrops
-    //     not painted balls
-    //   - Schlick fresnel ramps reflectivity at grazing — gives Cu/Au/Ag
-    //     the chrome-edge that distinguishes them from plastic
-    //
-    // We're in view space here, so the camera direction is +z from any
-    // fragment. That simplifies F/G calculations.
-    vec3 V = vec3(0.0, 0.0, 1.0); // view direction in view space, fragment-relative
-    vec3 L = uLightDir;
-    vec3 H = normalize(L + V);
-    float NoL = max(dot(normal, L), 0.0);
-    float NoV = max(dot(normal, V), 0.0);
-    float NoH = max(dot(normal, H), 0.0);
-    float LoH = max(dot(L, H), 0.0);
-
-    // Isotropic GGX. alpha grows with roughness² (the standard
-    // perceptually-linear remap).
-    float alpha = roughness * roughness;
-    float a2 = alpha * alpha;
-    float D_denom = (NoH * NoH) * (a2 - 1.0) + 1.0;
-    float D = a2 / max(3.14159 * D_denom * D_denom, 1e-6);
-
-    // Smith G (height-correlated approximation). Cheap.
-    float k = (alpha + 1.0) * (alpha + 1.0) / 8.0;
-    float G_V = NoV / (NoV * (1.0 - k) + k);
-    float G_L = NoL / (NoL * (1.0 - k) + k);
-    float G = G_V * G_L;
-
-    // Schlick fresnel. F0 is 0.04 for dielectrics (typical glass/plastic),
-    // base color for metals. The (1-F0)*(1-LoH)^5 ramp gives chrome the
-    // bright edge.
-    vec3 F0 = mix(vec3(0.04), vColor, metalness);
-    float fresnelRamp = pow(1.0 - LoH, 5.0);
-    vec3 F = F0 + (vec3(1.0) - F0) * fresnelRamp;
-
-    // Cook-Torrance specular term. The 4 NoL NoV in the denominator is
-    // standard; the max protects against divide-by-zero at silhouettes.
-    vec3 specular = (D * G) * F / max(4.0 * NoL * NoV, 1e-6);
-
-#if LUPI_QUALITY >= 2
-    // ─── Clearcoat ──────────────────────────────────────────────────
-    // A secondary specular lobe on top of the base material.
-    // Fixed low roughness, high F0 to simulate a polished resin/varnish layer.
-    float clearcoat = uSurfaceClearcoat;
-    if (clearcoat > 0.0) {
-      float ccRoughness = max(0.1, aaRoughness);
-      float ccAlpha = ccRoughness * ccRoughness;
-      float ccAlphaSq = ccAlpha * ccAlpha;
-      float ccD_denom = (NoH * NoH) * (ccAlphaSq - 1.0) + 1.0;
-      float ccD = ccAlphaSq / max(3.14159 * ccD_denom * ccD_denom, 1e-6);
-
-      float cck = (ccAlpha + 1.0) * (ccAlpha + 1.0) / 8.0;
-      float ccG_V = NoV / (NoV * (1.0 - cck) + cck);
-      float ccG_L = NoL / (NoL * (1.0 - cck) + cck);
-      float ccG = ccG_V * ccG_L;
-
-      // Clearcoat F0 is fixed at 0.04 (IOR ~1.5)
-      vec3 ccF0 = vec3(0.04);
-      vec3 ccF = ccF0 + (vec3(1.0) - ccF0) * fresnelRamp;
-
-      vec3 ccSpecular = (ccD * ccG) * ccF / max(4.0 * NoL * NoV, 1e-6);
-
-      // Add clearcoat specular, and energy conserve the base layer
-      specular = specular * (1.0 - ccF * clearcoat) + ccSpecular * clearcoat;
-    }
-#endif
-
-    // ─── Diffuse with subsurface ──────────────────────────────────────
-    // Burley wrap: smooths the shadow terminator. wrapHalf=1 is half-Lambert.
-    float wrapHalf = 0.5; // tuneable; higher = softer transition
-    float wrapNoL = max((dot(normal, L) + wrapHalf) / (1.0 + wrapHalf), 0.0);
-
-    // Subsurface backlight: when the normal points away from the light,
-    // simulate light transmitting through the material to the shadow side.
-    // This is what makes a dewdrop, milky glass, or noble-gas atom read as
-    // "lit from within" rather than as a painted shadow.
-    float backLight = max(dot(-normal, L), 0.0);
-    backLight = pow(backLight, 3.0) * subsurface;
-
-    // Combine: dielectric portion uses (1-F) energy conservation; metalness
-    // attenuates the diffuse term entirely (metals don't have diffuse).
-    vec3 kD = (vec3(1.0) - F) * (1.0 - metalness);
-
-    // Secondary fill light — wrap-shaded for consistency.
-    float wrapNoL2 = max((dot(normal, uFillLightDir) + wrapHalf) / (1.0 + wrapHalf), 0.0) * 0.3;
-
-    // Ambient floor — raised for metals since they have near-zero kD
-    // (no diffuse channel) and depend entirely on env reflections.
-    // When the PMREM probe is missing, metals would be invisible.
-    float ambient = 0.15 + subsurface * 0.15 + metalness * 0.25;
-
-    // Per-atom occlusion: buried atoms receive less ambient/environment light
-    // and a softer key light. This is view-independent and survives any
-    // zoom level, unlike screen-space AO.
-    float openness = mix(1.0, vOcclusion, uOcclusionStrength);
-    float directOcclusion = mix(1.0, vOcclusion, uOcclusionStrength * 0.5);
-
-    // Rim — Schlick-style fresnel rim for visual depth. Material-driven
-    // base + user-controllable uRimLight additive boost for depth separation.
-    float rim = pow(1.0 - NoV, 4.0);
-    float rimDirMask = max(dot(normal, uRimLightDir), 0.0);
-    float rimBase = mix(0.15, 0.5, metalness) + subsurface * 0.4;
-    // Base rim comes from all sides (white/vColor), extra rim light is directional and tinted
-    vec3 rimBaseColor = mix(vec3(1.0), vColor, metalness) * rim * rimBase;
-    vec3 rimDirColor = uRimLightColor * rim * uRimLight * rimDirMask;
-    vec3 rimColor = (rimBaseColor + rimDirColor) * openness;
-
-    // Apply texture based on uniform
-    vec3 texColor = vColor;
-#if LUPI_QUALITY >= 2
-    if (uTextureMode == 1) {
-      // Noise
-      float noiseVal = rand(vUv * 500.0);
-      texColor *= mix(0.7, 1.0, noiseVal);
-    } else if (uTextureMode == 2) {
-      // Scratched (procedural lines)
-      float line = rand(floor(vUv * 100.0));
-      if (line > 0.95 && rand(vUv * 50.0) > 0.5) {
-        texColor *= 0.5;
-      }
-    }
-#endif
-
-    // ─── Environment lighting ────────────────────────────────────────
-    // tEnvMap is drei's <Environment>, processed by Three's PMREMGenerator.
-    // textureCubeUV (from cube_uv_reflection_fragment) decodes the
-    // octahedral-packed atlas and selects the right mip from roughness.
-    // Specular probe: along reflection vector. Diffuse irradiance: along
-    // surface normal at near-max roughness (acts as a tinted ambient).
-    vec3 reflectVec = reflect(-V, normal);
-    vec3 envSpec;
-    vec3 envAvg;
-#if LUPI_QUALITY >= 1
-    if (uHasEnv == 1) {
-      // Roughness floor for the mip select: impostor-sphere normals vary
-      // fast across a pixel, so sampling the sharpest env mips on low-
-      // roughness metals aliased into a crawling shimmer under motion.
-      // Clamping to ~0.18 costs negligible sharpness, kills the strobe.
-      envSpec = textureCubeUV(tEnvMap, reflectVec, max(roughness, 0.18)).rgb * uEnvIntensity;
-      envAvg  = textureCubeUV(tEnvMap, normal,     1.0).rgb * uEnvIntensity;
-    } else {
-      envSpec = analyticEnvironment(reflectVec, max(roughness, 0.18));
-      envAvg  = analyticEnvironment(normal, 1.0) * 0.8;
-    }
-#else
-    envSpec = analyticEnvironment(reflectVec, max(roughness, 0.18));
-    envAvg  = analyticEnvironment(normal, 1.0) * 0.8;
-#endif
-
-    // Final combine — Cook-Torrance + Burley diffuse + subsurface backlight + rim + IBL + emission.
-    //   - Diffuse uses Burley wrap (wrapNoL) which softens the shadow line.
-    //   - kD = (1-F)(1-metalness) implements energy conservation: metals
-    //     have no diffuse contribution, dielectrics share energy with spec.
-    //   - IBL specular: F0 * envSpec gives metals a real-feeling environment
-    //     reflection that varies with viewing angle.
-    //   - IBL diffuse: envAvg as the ambient-irradiance color (tinted!).
-    //   - Specular is the full Cook-Torrance term × NoL.
-    //   - backLight × texColor gives translucent atoms a subtle glow on
-    //     the shadow side — dewdrop / glass / noble gas read.
-    //   - Rim is fresnel-driven, color-tinted by metalness.
-    //   - Emission: per-element baseline glow from the palette row 1.
-    vec3 envIrradiance = envAvg * (ambient + 0.4) * openness;
-    // Main directional light is considered white, fill light is tinted
-    vec3 diffuseIrradiance = envIrradiance
-      + vec3(1.0) * wrapNoL * 0.7 * directOcclusion
-      + uFillLightColor * wrapNoL2 * openness;
-    vec3 diffuseTerm = kD * texColor * diffuseIrradiance;
-    vec3 iblSpecular = F0 * envSpec * (0.5 + 0.5 * (1.0 - roughness)) * openness;
-    vec3 specularTerm = specular * NoL * 1.5 * directOcclusion;
-    vec3 backTerm = texColor * backLight * 0.6;
-    // Per-element emission baseline + property-driven emission boost.
-    //   - Baseline: per-element emission × intensity (radioactives glow).
-    //   - Property-driven: when in property color mode, atoms with high
-    //     normalized property emit additional light tinted by the colormap-
-    //     mapped color. Reads as "this atom is doing something."
-    vec3 emissive = emissionColor * emissionIntensity;
-    if (uColorMode == 2 && uPropEmission > 0.0) {
-      emissive += vColor * vPropValue * uPropEmission;
-    }
-    vec3 color = diffuseTerm + iblSpecular + specularTerm + backTerm + rimColor + emissive;
-
-    // ─── Minimum visibility floor ──────────────────────────────────
-    // Guarantee atoms are always distinguishable from the background,
-    // even when the env map fails to load or metallic BRDF zeroes out
-    // the diffuse channel. This is a perceptual safety net, not a
-    // physical term — it adds a tiny amount of base color so no atom
-    // ever renders as pure black.
-    vec3 minFloor = texColor * 0.08 * openness;
-    color = max(color, minFloor);
-
-    // ─── Etched annotation overlay ────────────────────────────────────
-    // Only the targeted atom executes this branch. We project the
-    // view-space normal into a stamp UV: the camera-facing pole maps to
-    // (0.5, 0.5), edges of the visible hemisphere fall outside [0,1].
-    // etchScale > 1.0 keeps the text inside a small central patch of the
-    // silhouette so it reads as a label, not a tattoo wrapping around.
-    if (uHasEtch == 1 && abs(vAtomId - uEtchAtomId) < 0.5) {
-      float etchScale = 1.5;
-      vec2 etchUv = vec2(normal.x * etchScale + 0.5, -normal.y * etchScale + 0.5);
-      if (etchUv.x > 0.0 && etchUv.x < 1.0 && etchUv.y > 0.0 && etchUv.y < 1.0) {
-        float etchAlpha = texture2D(tEtchTexture, etchUv).a;
-        // Darken where text is (engraved depth) plus a subtle warm tint so
-        // it reads as a stamped marker rather than a paint splotch.
-        vec3 engraved = color * 0.32;
-        color = mix(color, engraved, etchAlpha);
-      }
-    }
-
-    // Correct depth via projected hit point
-    vec4 clipPos = projectionMatrix * vec4(hitPoint, 1.0);
-    float ndcDepth = clipPos.z / clipPos.w;
-    gl_FragDepth = ndcDepth * 0.5 + 0.5;
-
-    gl_FragColor = vec4(color, 1.0);
-    // Output color space: Three applies sRGBTransferOETF when the target is
-    // the canvas and none into linear render targets. A raw material owns
-    // that rule itself (uOutputSrgb is set in onBeforeRender).
-    if (uOutputSrgb == 1) {
-      gl_FragColor = sRGBTransferOETF(gl_FragColor);
-    }
-  }
-`;
+// ─── Legacy GLSL helpers (Bonds.tsx only) ────────────────────────────
+// The GLSL bond impostor (Bonds.tsx, WP2) still imports these. The atom
+// layer no longer uses any of them; delete this section once the bond port
+// (tsl/bondImpostorMaterial.ts) stops importing them.
 
 export interface CubeUvShaderDefines {
   CUBEUV_TEXEL_WIDTH: number;
@@ -1006,13 +504,21 @@ export function rendererSupportsConservativeDepth(
   return supported;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────
+// ─── Palette textures ────────────────────────────────────────────────
+// Every palette is a 256-texel DataTexture read by type slot (or property)
+// in the vertex stage. The component owns one of each and rewrites its data
+// in place (`write*`), so the node materials never rebind a texture.
 
-/** Build a 256×1 RGBA DataTexture from a color lookup function */
-export function buildPaletteTexture(
+function paletteBytes(tex: THREE.DataTexture): Uint8Array {
+  return tex.image.data as Uint8Array;
+}
+
+/** Fill a 256×1 RGBA8 texture from a colour lookup (components 0..1). */
+export function writePaletteTexture(
+  tex: THREE.DataTexture,
   lookupFn: (index: number) => [number, number, number],
-): THREE.DataTexture {
-  const data = new Uint8Array(256 * 4);
+): void {
+  const data = paletteBytes(tex);
   for (let i = 0; i < 256; i++) {
     const [r, g, b] = lookupFn(i);
     data[i * 4]     = Math.round(r * 255);
@@ -1020,15 +526,35 @@ export function buildPaletteTexture(
     data[i * 4 + 2] = Math.round(b * 255);
     data[i * 4 + 3] = 255;
   }
-  const tex = new THREE.DataTexture(data, 256, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+}
+
+/** Build a 256×1 RGBA DataTexture from a color lookup function */
+export function buildPaletteTexture(
+  lookupFn: (index: number) => [number, number, number],
+): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat);
   // CPK/element palettes and scientific colormaps are authored as display
-  // (sRGB) values. Marking the texture lets Three decode samples into its
-  // Linear-sRGB working space before the BRDF operates on them.
+  // (sRGB) values. The sRGB texture format decodes them to linear in
+  // hardware before the BRDF operates on them.
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
+  writePaletteTexture(tex, lookupFn);
   return tex;
+}
+
+/** Fill a 256×1 R32F radius palette; non-finite or non-positive radii hide the slot. */
+export function writeRadiusPaletteTexture(
+  tex: THREE.DataTexture,
+  lookupFn: (slot: number) => number,
+): void {
+  const data = tex.image.data as Float32Array;
+  for (let slot = 0; slot < 256; slot += 1) {
+    const radius = lookupFn(slot);
+    data[slot] = Number.isFinite(radius) && radius > 0 ? radius : 0;
+  }
+  tex.needsUpdate = true;
 }
 
 /**
@@ -1039,23 +565,19 @@ export function buildPaletteTexture(
 export function buildRadiusPaletteTexture(
   lookupFn: (slot: number) => number,
 ): THREE.DataTexture {
-  const data = new Float32Array(256);
-  for (let slot = 0; slot < 256; slot += 1) {
-    const radius = lookupFn(slot);
-    data[slot] = Number.isFinite(radius) && radius > 0 ? radius : 0;
-  }
-  const tex = new THREE.DataTexture(data, 256, 1, THREE.RedFormat, THREE.FloatType);
+  const tex = new THREE.DataTexture(new Float32Array(256), 256, 1, THREE.RedFormat, THREE.FloatType);
   tex.colorSpace = THREE.NoColorSpace;
+  // Float textures are unfilterable on WebGPU; the shader uses textureLoad.
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.generateMipmaps = false;
-  tex.needsUpdate = true;
+  writeRadiusPaletteTexture(tex, lookupFn);
   return tex;
 }
 
 /**
  * World radius for one render slot given the viewer's scale controls.
- * Hidden types resolve to 0, which the vertex shader treats as "cull".
+ * Hidden types resolve to 0, which the vertex stage treats as "cull".
  */
 export function resolveSlotRadius(
   entry: { rawType: number; displayRadius: number } | undefined,
@@ -1069,21 +591,12 @@ export function resolveSlotRadius(
   return Number.isFinite(radius) && radius > 0 ? radius : 0;
 }
 
-/**
- * Build the per-element material palette texture. 256×2 RGBA:
- *   - row 0 (sampled at v=0.25): material params (metalness, roughness, anisotropy, subsurface)
- *   - row 1 (sampled at v=0.75): emission (r, g, b, intensity)
- *
- * Stored as 8-bit; both material params (0..1) and emission color (0..1)
- * fit. Emission intensity in alpha is also 0..1.
- *
- * Reads the entire periodic table from `materials/elementProfiles.ts`,
- * so adding a new element override there immediately reflects here.
- */
-export function buildMaterialPaletteTexture(
+/** Fill the 256×2 per-element material palette (see buildMaterialPaletteTexture). */
+export function writeMaterialPaletteTexture(
+  tex: THREE.DataTexture,
   atomicNumberForSlot?: (slot: number) => number | undefined,
-): THREE.DataTexture {
-  const data = new Uint8Array(256 * 2 * 4);
+): void {
+  const data = paletteBytes(tex);
   const resolveSlot = atomicNumberForSlot ?? ((slot: number) => slot);
   for (let slot = 0; slot < 256; slot += 1) {
     const atomicNumber = resolveSlot(slot);
@@ -1105,13 +618,30 @@ export function buildMaterialPaletteTexture(
     data[emissionBase + 2] = materialPaletteByte(profile.emission[2]);
     data[emissionBase + 3] = materialPaletteByte(profile.emissionIntensity);
   }
-  const tex = new THREE.DataTexture(data, 256, 2, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+}
+
+/**
+ * Build the per-element material palette texture. 256×2 RGBA:
+ *   - row 0: material params (metalness, roughness, anisotropy, subsurface)
+ *   - row 1: emission (r, g, b, intensity)
+ *
+ * Stored as 8-bit; both material params (0..1) and emission color (0..1)
+ * fit. Emission intensity in alpha is also 0..1.
+ *
+ * Reads the entire periodic table from `materials/elementProfiles.ts`,
+ * so adding a new element override there immediately reflects here.
+ */
+export function buildMaterialPaletteTexture(
+  atomicNumberForSlot?: (slot: number) => number | undefined,
+): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array(256 * 2 * 4), 256, 2, THREE.RGBAFormat);
   // Packed material coefficients and authored emission intensities are linear
   // data, not display colors. Never apply an sRGB transfer function here.
   tex.colorSpace = THREE.NoColorSpace;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
+  writeMaterialPaletteTexture(tex, atomicNumberForSlot);
   return tex;
 }
 
@@ -1119,11 +649,12 @@ function materialPaletteByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(Math.fround(value) * 255)));
 }
 
-/** Build a 256×1 RGBA DataTexture sampling a colormap over [0,1] */
-export function buildColormapTexture(
+/** Fill a 256×1 RGBA8 colormap texture sampling `mapFn` over [0,1]. */
+export function writeColormapTexture(
+  tex: THREE.DataTexture,
   mapFn: (t: number) => [number, number, number],
-): THREE.DataTexture {
-  const data = new Uint8Array(256 * 4);
+): void {
+  const data = paletteBytes(tex);
   for (let i = 0; i < 256; i++) {
     const t = i / 255;
     const [r, g, b] = mapFn(t);
@@ -1132,17 +663,26 @@ export function buildColormapTexture(
     data[i * 4 + 2] = Math.round(b * 255);
     data[i * 4 + 3] = 255;
   }
-  const tex = new THREE.DataTexture(data, 256, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+}
+
+/** Build a 256×1 RGBA DataTexture sampling a colormap over [0,1] */
+export function buildColormapTexture(
+  mapFn: (t: number) => [number, number, number],
+): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
+  writeColormapTexture(tex, mapFn);
   return tex;
 }
 
 // ─── Component ───────────────────────────────────────────────────────
 
 const MIN_CAPACITY = 50000;
+/** Longest wait for idle time before the picking spatial hash is built anyway. */
+const SPATIAL_HASH_IDLE_TIMEOUT_MS = 750;
 /** Capacity headroom shrinks for very large scenes: 20% of 10M atoms is a
  *  lot of memory to reserve for growth that rarely happens. */
 function capacityHeadroom(atomCount: number): number {
@@ -1152,6 +692,79 @@ function capacityHeadroom(atomCount: number): number {
 export const LUPI_ARTIFACT_LAYER_KEY = 'lupiArtifactLayer';
 export const LUPI_ARTIFACT_ATOMS_LAYER = 'atoms';
 export const LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY = 'lupiAppliedArtifactSpecId';
+
+/**
+ * What one atom layer's node materials share: the owned palette textures,
+ * the uniform bag, the light uniforms and the environment binding. The
+ * per-tier materials are built on first use and kept for the layer's life.
+ */
+export interface AtomImpostorResources {
+  textures: AtomImpostorTextures;
+  uniforms: AtomImpostorUniforms;
+  lights: ReturnType<typeof createLupiLightUniforms>;
+  env: ReturnType<typeof createLupiEnvBinding>;
+  /** Keyed by `atomMaterialKey(tier, interpolate)`. */
+  materials: Map<string, MeshBasicNodeMaterial>;
+}
+
+function atomMaterialKey(tier: AtomQualityTier, interpolate: boolean): string {
+  return `${tier}${interpolate ? ':lerp' : ''}`;
+}
+
+export function createAtomImpostorResources(): AtomImpostorResources {
+  const textures: AtomImpostorTextures = {
+    palette: buildPaletteTexture(() => DEFAULT_TYPE_COLOR),
+    colormap: buildColormapTexture((t) => [t, t, t]),
+    radiusPalette: buildRadiusPaletteTexture(() => 0),
+    materialPalette: buildMaterialPaletteTexture(),
+    etch: null,
+  };
+  return {
+    textures,
+    uniforms: createAtomImpostorUniforms(textures),
+    lights: createLupiLightUniforms(),
+    env: createLupiEnvBinding(),
+    materials: new Map(),
+  };
+}
+
+/**
+ * The layer's node material for one quality tier, static or interpolating
+ * (built once each). An interpolating material needs a geometry whose target
+ * positions are their own buffer (see tsl/atomImpostorMaterial.ts).
+ */
+export function atomMaterialForTier(
+  resources: AtomImpostorResources,
+  tier: AtomQualityTier,
+  interpolate = false,
+): MeshBasicNodeMaterial {
+  const key = atomMaterialKey(tier, interpolate);
+  let material = resources.materials.get(key);
+  if (!material) {
+    material = createAtomImpostorMaterial({
+      tier,
+      interpolate,
+      uniforms: resources.uniforms,
+      lights: resources.lights,
+      env: resources.env,
+    });
+    resources.materials.set(key, material);
+  }
+  return material;
+}
+
+/**
+ * Release the GPU resources of every tier's material and the owned palette
+ * textures. The etch texture and the scene environment belong to others.
+ * Three re-creates GPU resources on the next use, so a StrictMode replay may
+ * keep rendering with the same objects.
+ */
+export function disposeAtomImpostorResources(resources: AtomImpostorResources): void {
+  for (const material of resources.materials.values()) material.dispose();
+  disposeOwnedMaterialTextures(
+    resources.uniforms as unknown as Record<string, { value?: { dispose?: () => void } | null }>,
+  );
+}
 
 export function AtomsOptimized({
   frame,
@@ -1201,7 +814,8 @@ export function AtomsOptimized({
   const meshRef = useRef<THREE.Mesh>(null!);
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
   const atomCountRef = useRef(0);
-  const { scene, renderer } = useThree();
+  const scene = useThree((state) => state.scene);
+  const uniformsJobId = `${LUPI_JOB.atomsUniforms}:${useId()}`;
 
   // Large-scene callers intentionally remove the picking callback. Release
   // the previous scene's grid immediately rather than retaining it until the
@@ -1259,31 +873,21 @@ export function AtomsOptimized({
     // Per-instance attributes
     const posAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
     posAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instancePosition', posAttr);
+    geo.setAttribute(ATOM_ATTR.position, posAttr);
 
-    // Target positions (next frame, PBC-unwrapped). The vertex shader lerps
-    // instancePosition -> instanceTargetPosition by uProgress on the GPU.
-    // Static molecules alias the position attribute; a trajectory allocates
-    // its own target buffer on the first interpolable frame pair.
-    geo.setAttribute('instanceTargetPosition', posAttr);
+    // Target positions (next frame, PBC-unwrapped). The vertex stage lerps
+    // position -> target by uProgress on the GPU. Static molecules alias the
+    // position attribute; a trajectory allocates its own target buffer on the
+    // first interpolable frame pair.
+    geo.setAttribute(ATOM_ATTR.target, posAttr);
 
-    // Type slot (u8, read as an integer-valued float) — the shader does the
-    // color, material and radius lookups.
-    const typeAttr = new THREE.InstancedBufferAttribute(new Uint8Array(capacity), 1, false);
-    typeAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instanceTypeId', typeAttr);
-
-    // Normalized property value (u16 → [0,1]).
-    const propAttr = new THREE.InstancedBufferAttribute(new Uint16Array(capacity), 1, true);
-    propAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instancePropValue', propAttr);
-
-    // Per-atom openness (u8 → [0,1]); 255 = unoccluded.
-    const occlusionArray = new Uint8Array(capacity);
-    occlusionArray.fill(255);
-    const occAttr = new THREE.InstancedBufferAttribute(occlusionArray, 1, true);
-    occAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instanceOcclusion', occAttr);
+    // One normalized Uint8×4 word per atom: [typeSlot, occlusion, propHi,
+    // propLo] (unorm8x4 on WebGPU). Occlusion starts fully open (255).
+    const atomData = new Uint8Array(capacity * ATOM_DATA_STRIDE);
+    for (let i = ATOM_DATA_OCCLUSION; i < atomData.length; i += ATOM_DATA_STRIDE) atomData[i] = 255;
+    const dataAttr = new THREE.InstancedBufferAttribute(atomData, ATOM_DATA_STRIDE, true);
+    dataAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute(ATOM_ATTR.data, dataAttr);
 
     geo.instanceCount = 0;
     // Until the layout-effect upload installs the first exact bound, fail open
@@ -1298,82 +902,26 @@ export function AtomsOptimized({
 
   /** Lazily allocate the interpolation target buffer for trajectories. */
   const ensureTargetAttribute = useCallback((geo: THREE.InstancedBufferGeometry): THREE.InstancedBufferAttribute => {
-    const posAttr = geo.attributes.instancePosition as THREE.InstancedBufferAttribute;
-    const existing = geo.attributes.instanceTargetPosition as THREE.InstancedBufferAttribute;
+    const posAttr = geo.attributes[ATOM_ATTR.position] as THREE.InstancedBufferAttribute;
+    const existing = geo.attributes[ATOM_ATTR.target] as THREE.InstancedBufferAttribute;
     if (existing !== posAttr) return existing;
     const tgtAttr = new THREE.InstancedBufferAttribute(new Float32Array(posAttr.array.length), 3);
     tgtAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instanceTargetPosition', tgtAttr);
+    geo.setAttribute(ATOM_ATTR.target, tgtAttr);
     return tgtAttr;
   }, []);
 
-  // ─── Material: custom shader with GPU color lookup ─────────────────
-  const material = useMemo(() => {
-    const paletteTex = buildPaletteTexture(() => DEFAULT_TYPE_COLOR);
-    const colormapTex = buildColormapTexture((t) => [t, t, t]);
-    const materialPaletteTex = buildMaterialPaletteTexture();
-    const radiusPaletteTex = buildRadiusPaletteTexture(() => 0);
-
-    const mat = new THREE.RawShaderMaterial({
-      vertexShader: IMPOSTOR_VERTEX,
-      fragmentShader: IMPOSTOR_FRAGMENT,
-      glslVersion: THREE.GLSL3,
-      defines: { ...materialCubeUvDefines(EMPTY_CUBE_UV_DEFINES), LUPI_QUALITY: '2' },
-      uniforms: {
-        uPalette: { value: paletteTex },
-        uColormap: { value: colormapTex },
-        uRadiusPalette: { value: radiusPaletteTex },
-        uColorMode: { value: 0 },
-        uUniformColor: { value: new THREE.Vector3(0.6, 0.6, 0.6) },
-        uTextureMode: { value: 0 },
-        uMaterialPreset: { value: 0 },
-        uMaterialIntensity: { value: 0.0 },
-        uRimLight: { value: 0.0 },
-        uSurfaceRoughness: { value: 0.0 },
-        uSurfacePolish: { value: 0.0 },
-        uSurfaceClearcoat: { value: 0.0 },
-        uLightDir: { value: new THREE.Vector3(0.4, 0.7, 0.6) },
-        uProgress: { value: 0 },
-        uFillLightDir: { value: new THREE.Vector3(-0.3, -0.2, 0.8) },
-        uRimLightDir: { value: new THREE.Vector3(0.0, 0.0, -1.0) },
-        uViewUp: { value: new THREE.Vector3(0.0, 1.0, 0.0) },
-        uFillLightColor: { value: new THREE.Color('#8888ff') },
-        uRimLightColor: { value: new THREE.Color('#ffffff') },
-        // Static — periodic table doesn't change at runtime.
-        uMaterialPalette: { value: materialPaletteTex },
-        // PMREM env (synced from scene.environment via useFrame below).
-        tEnvMap: { value: null as THREE.Texture | null },
-        uEnvIntensity: { value: 1.0 },
-        uHasEnv: { value: 0 },
-        // Etched annotation — synced from props in the effect below.
-        tEtchTexture: { value: null as THREE.Texture | null },
-        uEtchAtomId: { value: -1 },
-        uHasEtch: { value: 0 },
-        // Property-driven emission strength
-        uPropEmission: { value: 0 },
-        // Screen-space footprint + culling
-        uPixelScale: { value: 1 },
-        uOrthographic: { value: 0 },
-        uCullPixelRadius: { value: 0 },
-        // Per-atom occlusion
-        uOcclusionStrength: { value: 0 },
-        // Output transfer function
-        uOutputSrgb: { value: 1 },
-      },
-      depthWrite: true,
-      depthTest: true,
-      transparent: false,
-      side: THREE.DoubleSide,
-    });
-    return mat;
-  }, []);
-
-  // ─── Compile-time quality + early-Z defines ───────────────────────
+  // ─── Material: node material per quality tier ─────────────────────
+  // Palettes, uniforms, lights and the environment binding are shared by the
+  // tiers, so switching tier swaps only the (cached) material. A frame pair
+  // that interpolates uses the lerping program; the upload below gives its
+  // geometry a separate target buffer in the same commit.
+  const resources = useMemo(() => createAtomImpostorResources(), []);
   const effectiveQualityTier = resolveAtomQualityTier(qualityTier, frame.natoms);
-  const conservativeDepth = useMemo(() => rendererSupportsConservativeDepth(renderer), [renderer]);
-  useLayoutEffect(() => {
-    syncAtomShaderDefines(material, effectiveQualityTier, conservativeDepth);
-  }, [material, effectiveQualityTier, conservativeDepth]);
+  const material = useMemo(
+    () => atomMaterialForTier(resources, effectiveQualityTier, canInterpolateToNextFrame),
+    [resources, effectiveQualityTier, canInterpolateToNextFrame],
+  );
 
   // ─── Property data ─────────────────────────────────────────────────
   const propData = useMemo(() => {
@@ -1422,70 +970,48 @@ export function AtomsOptimized({
     });
   }, [geometry]);
 
-  // ─── Update palette textures (instant — no atom iteration) ─────────
+  // ─── Palettes and look uniforms (instant — no atom iteration) ──────
   // This state participates in immutable raster identity. Apply it during the
   // commit phase so an ExportManager capture scheduled by the same Zustand
   // update cannot reach the next Fiber frame with the previous palette or
-  // material uniforms. A passive effect races the browser's rAF and allowed
-  // one artifactKey to produce stale grey pixels on its first export.
+  // material uniforms.
   useLayoutEffect(() => {
-    const uniforms = material.uniforms;
+    const u = resources.uniforms;
+    const lights = resources.lights;
 
-    // Update color mode uniform
-    uniforms.uColorMode.value = colorMode === 'property' ? 2 : colorMode === 'uniform' ? 1 : 0;
-
-    // Update texture mode uniform
-    let texMode = 0;
-    if (atomTexture === 'noise') texMode = 1;
-    if (atomTexture === 'scratched') texMode = 2;
-    uniforms.uTextureMode.value = texMode;
-
-    let matMode = 0;
-    if (materialPreset === 'matte') matMode = 1;
-    if (materialPreset === 'metallic') matMode = 2;
-    if (materialPreset === 'glass' || materialPreset === 'transmission') matMode = 3;
-    if (materialPreset === 'plastic') matMode = 4;
-    uniforms.uMaterialPreset.value = matMode;
-    uniforms.uMaterialIntensity.value = materialIntensity ?? 0.0;
-    uniforms.uRimLight.value = rimLightIntensity ?? 0.0;
-    syncSurfaceMaterialUniforms(uniforms as unknown as ScalarMaterialUniforms, {
+    u.uColorMode.value = colorMode === 'property' ? 2 : colorMode === 'uniform' ? 1 : 0;
+    u.uTextureMode.value = atomTexture === 'noise' ? 1 : atomTexture === 'scratched' ? 2 : 0;
+    u.uMaterialPreset.value = materialPresetIndex(materialPreset);
+    u.uMaterialIntensity.value = materialIntensity ?? 0.0;
+    lights.rimLight.value = rimLightIntensity ?? 0.0;
+    syncSurfaceMaterialUniforms(u, {
       surfaceRoughness,
       surfacePolish,
       surfaceClearcoat,
     });
 
-    uniforms.uPropEmission.value = propertyEmissionStrength;
-    uniforms.uCullPixelRadius.value = Number.isFinite(cullPixelRadius) ? Math.max(0, cullPixelRadius) : 0;
-    uniforms.uOcclusionStrength.value = occlusion
+    u.uPropEmission.value = propertyEmissionStrength;
+    u.uCullPixelRadius.value = Number.isFinite(cullPixelRadius) ? Math.max(0, cullPixelRadius) : 0;
+    u.uOcclusionStrength.value = occlusion
       ? Math.max(0, Math.min(1, occlusionStrength))
       : 0;
 
-    uniforms.uFillLightColor.value.set(fillLightColor);
-    uniforms.uRimLightColor.value.set(rimLightColor);
+    lights.fillLightColor.value.set(fillLightColor);
+    lights.rimLightColor.value.set(rimLightColor);
 
-    // Etched annotation sync. The texture itself is owned by the caller
-    // (App.tsx builds it from the active annotation text); we just point
-    // the uniform at it and flip the gating int. -1 atomId is the sentinel
-    // for "no etch" — fragments compare via abs(diff) < 0.5 so any value
-    // outside the live atom range trivially fails.
-    uniforms.tEtchTexture.value = etchTexture ?? null;
-    uniforms.uEtchAtomId.value = etchAtomId ?? -1;
-    uniforms.uHasEtch.value = (etchTexture && etchAtomId != null && etchAtomId >= 0) ? 1 : 0;
+    // Etched annotation. The texture is owned by the caller (App.tsx builds
+    // it from the active annotation text); -1 is the "no etch" atom id.
+    u.tEtchTexture.value = etchTexture ?? emptyEtchTexture();
+    u.uEtchAtomId.value = etchAtomId ?? -1;
+    u.uHasEtch.value = (etchTexture && etchAtomId != null && etchAtomId >= 0) ? 1 : 0;
 
-    if (colorMode === 'uniform') {
-      const color = new THREE.Color(uniformColor);
-      uniforms.uUniformColor.value.set(color.r, color.g, color.b);
-    }
+    if (colorMode === 'uniform') u.uUniformColor.value.set(uniformColor);
 
-    // Rebuild the 256×1 type palette (768 bytes, instant)
-    const oldPalette = uniforms.uPalette.value as THREE.DataTexture;
-
-    // Source the per-type palette from one of two places.
     if (atomColorSource === 'element') {
       // Element-natural colors from the periodic table data. Cu is warm, Au
       // is gold, O is red — no colormap mediation. Pairs with the per-element
       // material identity for a chemically-honest read.
-      uniforms.uPalette.value = buildPaletteTexture((slot) => {
+      writePaletteTexture(resources.textures.palette, (slot) => {
         const entry = typeRenderTable.entries[slot];
         if (!entry) return DEFAULT_TYPE_COLOR;
         const override = elementColorOverrides[entry.rawType];
@@ -1493,85 +1019,46 @@ export function AtomsOptimized({
       });
     } else {
       // 'colormap' — types mapped through the active colormap by rank.
-      // Generic, abstract; fine when chemistry isn't the point.
-      uniforms.uPalette.value = buildPaletteTexture((slot) => {
+      writePaletteTexture(resources.textures.palette, (slot) => {
         const t = typeRenderTable.entries.length > 1
           ? slot / (typeRenderTable.entries.length - 1)
           : 0.5;
         return mapFn(t);
       });
     }
-
-    oldPalette.dispose();
-
-    const oldMaterialPalette = uniforms.uMaterialPalette.value as THREE.DataTexture;
-    uniforms.uMaterialPalette.value = buildMaterialPaletteTexture(
+    writeMaterialPaletteTexture(
+      resources.textures.materialPalette,
       (slot) => typeRenderTable.entries[slot]?.atomicNumber,
     );
-    oldMaterialPalette.dispose();
-
-    // Rebuild the 256×1 colormap texture (768 bytes, instant)
-    const oldColormap = uniforms.uColormap.value as THREE.DataTexture;
-    uniforms.uColormap.value = buildColormapTexture(mapFn);
-    oldColormap.dispose();
-
-  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, material, typeRenderTable, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, cullPixelRadius, occlusion, occlusionStrength]);
+    writeColormapTexture(resources.textures.colormap, mapFn);
+  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, resources, typeRenderTable, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, cullPixelRadius, occlusion, occlusionStrength]);
 
   // ─── Radius palette: scale / visibility / per-type scale ──────────
-  // A 1 KB texture upload replaces the former O(n) instance rewrite whenever
-  // the user hides a type or drags the atom-scale slider.
+  // A 1 KB texture upload replaces an O(n) instance rewrite whenever the user
+  // hides a type or drags the atom-scale slider.
   useLayoutEffect(() => {
-    const uniforms = material.uniforms;
-    const oldRadiusPalette = uniforms.uRadiusPalette.value as THREE.DataTexture;
-    uniforms.uRadiusPalette.value = buildRadiusPaletteTexture((slot) => resolveSlotRadius(
+    writeRadiusPaletteTexture(resources.textures.radiusPalette, (slot) => resolveSlotRadius(
       typeRenderTable.entries[slot],
       scale,
       hiddenAtomTypes,
       atomTypeScales,
     ));
-    oldRadiusPalette.dispose();
     applyBoundingSphere();
-  }, [material, typeRenderTable, scale, hiddenAtomTypes, atomTypeScales, applyBoundingSphere]);
+  }, [resources, typeRenderTable, scale, hiddenAtomTypes, atomTypeScales, applyBoundingSphere]);
 
-  // ─── PMREM env sync and dynamic lighting ───────────────────────────────────────────────
-  // SceneLighting owns an explicit PMREM CubeUV target. Never hand the custom
-  // textureCubeUV shader a raw equirectangular texture: Three's built-in
-  // materials can prefilter one internally, but ShaderMaterial cannot.
-  // Light WORLD directions depend only on the azimuth/elevation props, so build
-  // them once per angle change (not per frame). Only the view-space transform is
-  // camera-dependent and stays in useFrame, reusing a single scratch vector — so
-  // the hot path does zero allocation and no trig.
-  const lightWorldDirs = useMemo(() => {
-    const dir = (azDeg: number, elDeg: number) => {
-      const az = (azDeg * Math.PI) / 180;
-      const el = (elDeg * Math.PI) / 180;
-      return new THREE.Vector3(
-        Math.cos(el) * Math.sin(az),
-        Math.sin(el),
-        Math.cos(el) * Math.cos(az),
-      ).normalize();
-    };
-    return {
-      key: dir(keyLightAzimuth ?? 40, keyLightElevation ?? 45),
-      fill: dir(fillLightAzimuth ?? -120, fillLightElevation ?? 10),
-      rim: dir(rimLightAzimuth ?? 160, rimLightElevation ?? 30),
-      up: new THREE.Vector3(0, 1, 0),
-    };
-  }, [keyLightAzimuth, keyLightElevation, fillLightAzimuth, fillLightElevation, rimLightAzimuth, rimLightElevation]);
-  const lightScratch = useMemo(() => new THREE.Vector3(), []);
+  // ─── Lights: world-space directions ───────────────────────────────
+  // The node graph converts them to view space with the camera it renders
+  // with, so nothing camera-dependent is computed here per frame.
+  useLayoutEffect(() => {
+    const lights = resources.lights;
+    lights.lightDir.value.copy(lightDirection(keyLightAzimuth ?? 40, keyLightElevation ?? 45));
+    lights.fillLightDir.value.copy(lightDirection(fillLightAzimuth ?? -120, fillLightElevation ?? 10));
+    lights.rimLightDir.value.copy(lightDirection(rimLightAzimuth ?? 160, rimLightElevation ?? 30));
+  }, [resources, keyLightAzimuth, keyLightElevation, fillLightAzimuth, fillLightElevation, rimLightAzimuth, rimLightElevation]);
 
-  useFrame(({ camera }) => {
-    const sceneEnvironment = (scene as any).environment as THREE.Texture | null;
-    const u = material.uniforms;
-    syncCubeUvEnvironment(material, sceneEnvironment);
-
-    // Transform the precomputed world dirs into view space (camera-relative) for
-    // the impostor shader. One scratch vector, reused — no per-frame allocation.
-    const inv = camera.matrixWorldInverse;
-    u.uLightDir.value.copy(lightScratch.copy(lightWorldDirs.key).transformDirection(inv));
-    u.uFillLightDir.value.copy(lightScratch.copy(lightWorldDirs.fill).transformDirection(inv));
-    u.uRimLightDir.value.copy(lightScratch.copy(lightWorldDirs.rim).transformDirection(inv));
-    u.uViewUp.value.copy(lightScratch.copy(lightWorldDirs.up).transformDirection(inv));
+  // ─── Per-frame uniforms (phase lupi-uniforms) ─────────────────────
+  useFrame(() => {
+    syncLupiEnvBinding(resources.env, scene);
 
     // GPU frame-interpolation progress. Read it live (display rate) from the
     // playback ref so motion is smooth regardless of the React state-sync FPS;
@@ -1583,51 +1070,43 @@ export function AtomsOptimized({
       : canInterpolateToNextFrame
         ? (interpolationFactor ?? 0)
         : 0;
-    u.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
-  });
-
-  // Per-draw state that depends on the active render target: output transfer
-  // function and the device-pixel scale used for culling and specular AA.
-  const drawingBufferScratch = useMemo(() => new THREE.Vector2(), []);
-  const onBeforeRender = useCallback((
-    drawRenderer: ImpostorDrawRenderer,
-    _scene: THREE.Scene,
-    camera: THREE.Camera,
-  ) => {
-    syncImpostorRenderTargetUniforms(material.uniforms, drawRenderer, camera, drawingBufferScratch);
-  }, [material, drawingBufferScratch]);
-  useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    mesh.onBeforeRender = onBeforeRender as THREE.Mesh['onBeforeRender'];
-    return () => {
-      if (mesh.onBeforeRender === onBeforeRender) mesh.onBeforeRender = () => {};
-    };
-  }, [onBeforeRender]);
+    resources.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
+  }, { phase: LUPI_PHASE.uniforms, id: uniformsJobId });
 
   // ─── Upload frame data to GPU (runs ONCE per frame change) ────────
-  const uploadedTypesRef = useRef<{ types: Int32Array | null; table: TypeRenderTable | null; count: number }>({
-    types: null, table: null, count: 0,
-  });
-  const uploadedOcclusionRef = useRef<Uint8Array | null>(null);
+  // Each record names the geometry it was written into: a capacity change
+  // replaces the geometry (zeroed buffers), which forces a full rewrite.
+  const uploadedTypesRef = useRef<{
+    geometry: THREE.InstancedBufferGeometry | null;
+    types: Int32Array | null;
+    table: TypeRenderTable | null;
+    count: number;
+  }>({ geometry: null, types: null, table: null, count: 0 });
+  const uploadedOcclusionRef = useRef<{
+    geometry: THREE.InstancedBufferGeometry | null;
+    occlusion: Uint8Array | null;
+  }>({ geometry: null, occlusion: null });
 
   const uploadFrame = useCallback(() => {
     // Picking is paused during trajectory playback. Do not spend an O(n) pass
     // rebuilding a spatial hash for every source frame when there is no
-    // consumer; rebuild once the callback returns on pause.
+    // consumer; rebuild once the callback returns on pause. The build waits
+    // for idle time, but at most SPATIAL_HASH_IDLE_TIMEOUT_MS: a continuously
+    // rendering canvas on a slow GPU may never go idle, and without the hash
+    // atom picking never arms.
     let cleanupIdle = () => {};
     if (onSpatialHash) {
-      const idleCallback = (typeof requestIdleCallback !== 'undefined')
-        ? requestIdleCallback
-        : (cb: () => void) => setTimeout(cb, 0);
-      const cancelIdle = (typeof cancelIdleCallback !== 'undefined')
-        ? cancelIdleCallback
-        : clearTimeout;
-      const idleId = idleCallback(() => {
+      const build = () => {
         spatialHashRef.current.build(frame.positions, frame.natoms);
         onSpatialHash(spatialHashRef.current);
-      });
-      cleanupIdle = () => cancelIdle(idleId as any);
+      };
+      if (typeof requestIdleCallback !== 'undefined') {
+        const idleId = requestIdleCallback(build, { timeout: SPATIAL_HASH_IDLE_TIMEOUT_MS });
+        cleanupIdle = () => cancelIdleCallback(idleId);
+      } else {
+        const timeoutId = setTimeout(build, 0);
+        cleanupIdle = () => clearTimeout(timeoutId);
+      }
     }
 
     const positions = frame.positions;
@@ -1645,14 +1124,12 @@ export function AtomsOptimized({
     // Instances map 1:1 onto atom indices; capacity clamps only the tail.
     const count = Math.min(renderAtomCount, capacity, Math.floor(positions.length / 3));
 
-    const posAttr = geometry.attributes.instancePosition as THREE.InstancedBufferAttribute;
+    const posAttr = geometry.attributes[ATOM_ATTR.position] as THREE.InstancedBufferAttribute;
     const posArr = posAttr.array as Float32Array;
-    const typeAttr = geometry.attributes.instanceTypeId as THREE.InstancedBufferAttribute;
-    const typeArr = typeAttr.array as Uint8Array;
-    const propAttr = geometry.attributes.instancePropValue as THREE.InstancedBufferAttribute;
-    const propArr = propAttr.array as Uint16Array;
-    const occAttr = geometry.attributes.instanceOcclusion as THREE.InstancedBufferAttribute;
-    const occArr = occAttr.array as Uint8Array;
+    // Read the array from the attribute on every upload: three may replace it.
+    const dataAttr = geometry.attributes[ATOM_ATTR.data] as THREE.InstancedBufferAttribute;
+    const dataArr = dataAttr.array as Uint8Array;
+    let atomDataChanged = false;
 
     // Positions: one bulk copy, then a tight bounds pass over the copy.
     posArr.set(positions.subarray(0, count * 3));
@@ -1679,50 +1156,58 @@ export function AtomsOptimized({
 
     // Interpolation targets: PBC-unwrapped on the SHORT arc across the cell
     // (unit-tested in interpolation.test.ts). hasBounds === false -> boxSize 0
-    // -> raw delta. Static frames alias the position buffer instead.
-    if (nextPos && nextPos.length >= count * 3) {
+    // -> raw delta. An interpolating frame pair always gets its own target
+    // buffer (the lerping program must never see an aliased one); static
+    // frames alias the position buffer instead.
+    if (canInterpolateToNextFrame) {
       const tgtAttr = ensureTargetAttribute(geometry);
       const tgtArr = tgtAttr.array as Float32Array;
-      const bx = hasBounds ? bsx : 0;
-      const by = hasBounds ? bsy : 0;
-      const bz = hasBounds ? bsz : 0;
-      for (let i = 0, end = count * 3; i < end; i += 3) {
-        const x = posArr[i];
-        const y = posArr[i + 1];
-        const z = posArr[i + 2];
-        const tx = x + wrapDelta(nextPos[i] - x, bx);
-        const ty = y + wrapDelta(nextPos[i + 1] - y, by);
-        const tz = z + wrapDelta(nextPos[i + 2] - z, bz);
-        tgtArr[i] = tx;
-        tgtArr[i + 1] = ty;
-        tgtArr[i + 2] = tz;
-        if (tx < minX) minX = tx;
-        if (tx > maxX) maxX = tx;
-        if (ty < minY) minY = ty;
-        if (ty > maxY) maxY = ty;
-        if (tz < minZ) minZ = tz;
-        if (tz > maxZ) maxZ = tz;
-      }
-      if (count > 0 && !(Number.isFinite(minX) && Number.isFinite(maxX)
-        && Number.isFinite(minY) && Number.isFinite(maxY)
-        && Number.isFinite(minZ) && Number.isFinite(maxZ))) {
-        boundsAreFinite = false;
+      if (nextPos && nextPos.length >= count * 3) {
+        const bx = hasBounds ? bsx : 0;
+        const by = hasBounds ? bsy : 0;
+        const bz = hasBounds ? bsz : 0;
+        for (let i = 0, end = count * 3; i < end; i += 3) {
+          const x = posArr[i];
+          const y = posArr[i + 1];
+          const z = posArr[i + 2];
+          const tx = x + wrapDelta(nextPos[i] - x, bx);
+          const ty = y + wrapDelta(nextPos[i + 1] - y, by);
+          const tz = z + wrapDelta(nextPos[i + 2] - z, bz);
+          tgtArr[i] = tx;
+          tgtArr[i + 1] = ty;
+          tgtArr[i + 2] = tz;
+          if (tx < minX) minX = tx;
+          if (tx > maxX) maxX = tx;
+          if (ty < minY) minY = ty;
+          if (ty > maxY) maxY = ty;
+          if (tz < minZ) minZ = tz;
+          if (tz > maxZ) maxZ = tz;
+        }
+        if (count > 0 && !(Number.isFinite(minX) && Number.isFinite(maxX)
+          && Number.isFinite(minY) && Number.isFinite(maxY)
+          && Number.isFinite(minZ) && Number.isFinite(maxZ))) {
+          boundsAreFinite = false;
+        }
+      } else {
+        // A next frame without every rendered atom yet: hold still.
+        tgtArr.set(posArr.subarray(0, count * 3));
       }
       markInstancedAttributeUpdateRange(tgtAttr, count * 3);
-    } else if (geometry.attributes.instanceTargetPosition !== posAttr) {
+    } else if (geometry.attributes[ATOM_ATTR.target] !== posAttr) {
       // Back to a static frame after a trajectory allocated its own target
       // buffer: mirror the positions so the GPU lerp is a no-op. (Re-aliasing
-      // would strand the detached attribute's GL buffer until dispose.)
-      const tgtAttr = geometry.attributes.instanceTargetPosition as THREE.InstancedBufferAttribute;
+      // would strand the detached attribute's GPU buffer until dispose.)
+      const tgtAttr = geometry.attributes[ATOM_ATTR.target] as THREE.InstancedBufferAttribute;
       (tgtAttr.array as Float32Array).set(posArr.subarray(0, count * 3));
       markInstancedAttributeUpdateRange(tgtAttr, count * 3);
     }
 
-    // Type slots: re-upload only when the raw type buffer or slot table
+    // Type slots: rewrite only when the raw type buffer or slot table
     // changed. Trajectory frames sharing a type array skip this entirely.
     const uploadedTypes = uploadedTypesRef.current;
     if (
-      uploadedTypes.types !== types
+      uploadedTypes.geometry !== geometry
+      || uploadedTypes.types !== types
       || uploadedTypes.table !== typeRenderTable
       || uploadedTypes.count !== count
     ) {
@@ -1733,40 +1218,46 @@ export function AtomsOptimized({
         for (let i = 0; i < count; i++) {
           const idx = types[i] - base;
           const slot = idx >= 0 && idx < dense.length ? dense[idx] : -1;
-          typeArr[i] = slot < 0 ? 0 : slot;
+          dataArr[i * ATOM_DATA_STRIDE + ATOM_DATA_SLOT] = slot < 0 ? 0 : slot;
         }
       } else {
         for (let i = 0; i < count; i++) {
-          typeArr[i] = lookup.sparse.get(types[i]) ?? 0;
+          dataArr[i * ATOM_DATA_STRIDE + ATOM_DATA_SLOT] = lookup.sparse.get(types[i]) ?? 0;
         }
       }
-      markInstancedAttributeUpdateRange(typeAttr, count);
-      uploadedTypesRef.current = { types, table: typeRenderTable, count };
+      atomDataChanged = true;
+      uploadedTypesRef.current = { geometry, types, table: typeRenderTable, count };
     }
 
-    // Normalized property value (current frame). Temporal color interpolation
-    // was dropped with the CPU position lerp — a negligible visual effect that
-    // coupled this loop to the live interpolation factor.
+    // Normalized property value (current frame), 16 bits split hi/lo.
+    // Temporal color interpolation was dropped with the CPU position lerp — a
+    // negligible visual effect that coupled this loop to the live
+    // interpolation factor.
     if (propData) {
       const invRange = pMax > pMin ? 1 / (pMax - pMin) : 0;
       for (let i = 0; i < count; i++) {
-        const t = invRange > 0 ? (propData[i] - pMin) * invRange : 0.5;
-        propArr[i] = t <= 0 ? 0 : t >= 1 ? 65535 : Math.round(t * 65535);
+        const prop = quantizeAtomProp(invRange > 0 ? (propData[i] - pMin) * invRange : 0.5);
+        const base = i * ATOM_DATA_STRIDE;
+        dataArr[base + ATOM_DATA_PROP_HI] = prop >> 8;
+        dataArr[base + ATOM_DATA_PROP_LO] = prop & 0xff;
       }
-      markInstancedAttributeUpdateRange(propAttr, count);
+      atomDataChanged = true;
     }
 
-    // Per-atom occlusion: bulk copy, or restore "fully open" after a scene
-    // that carried occlusion data.
+    // Per-atom occlusion: copy, or restore "fully open" after a scene that
+    // carried occlusion data.
+    const uploadedOcclusion = uploadedOcclusionRef.current;
     if (occlusion && occlusion.length >= count) {
-      occArr.set(occlusion.subarray(0, count));
-      markInstancedAttributeUpdateRange(occAttr, count);
-      uploadedOcclusionRef.current = occlusion;
-    } else if (uploadedOcclusionRef.current !== null) {
-      occArr.fill(255, 0, count);
-      markInstancedAttributeUpdateRange(occAttr, count);
-      uploadedOcclusionRef.current = null;
+      for (let i = 0; i < count; i++) dataArr[i * ATOM_DATA_STRIDE + ATOM_DATA_OCCLUSION] = occlusion[i];
+      atomDataChanged = true;
+      uploadedOcclusionRef.current = { geometry, occlusion };
+    } else if (uploadedOcclusion.geometry === geometry && uploadedOcclusion.occlusion !== null) {
+      for (let i = 0; i < count; i++) dataArr[i * ATOM_DATA_STRIDE + ATOM_DATA_OCCLUSION] = 255;
+      atomDataChanged = true;
+      uploadedOcclusionRef.current = { geometry, occlusion: null };
     }
+
+    if (atomDataChanged) markInstancedAttributeUpdateRange(dataAttr, count * ATOM_DATA_STRIDE);
 
     atomCountRef.current = count;
     geometry.instanceCount = count;
@@ -1792,30 +1283,29 @@ export function AtomsOptimized({
   // ExportManager consumes this only after the palette/material layout effect
   // and instance upload above have both committed. Store truth alone is not a
   // rendering receipt: the tagged Three mesh is the applied-scene receipt.
+  // Every tier's material carries it, so a tier switch keeps the receipt.
   useLayoutEffect(() => {
-    material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY] =
-      artifactSpecId ?? null;
-  }, [artifactSpecId, geometry, material, uploadFrame]);
+    for (const tierMaterial of resources.materials.values()) {
+      tierMaterial.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY] = artifactSpecId ?? null;
+    }
+  }, [artifactSpecId, geometry, material, resources, uploadFrame]);
 
   // Geometry is capacity-keyed and can be replaced while the component stays
   // mounted. Dispose only the retired geometry on a capacity change.
   useEffect(() => {
-    uploadedTypesRef.current = { types: null, table: null, count: 0 };
-    uploadedOcclusionRef.current = null;
     return () => geometry.dispose();
   }, [geometry]);
 
-  // Material and its palette textures are component-owned and intentionally
-  // stable across geometry growth. Their cleanup must run only when this
-  // stable material is retired (normally component unmount), never when a
-  // capacity-keyed geometry is replaced.
+  // Materials and their palette textures are component-owned and stable
+  // across geometry growth. Their cleanup runs only when the layer's
+  // resources retire (component unmount), never on a capacity change.
   useEffect(() => {
+    const spatialHash = spatialHashRef.current;
     return () => {
-      material.dispose();
-      disposeOwnedMaterialTextures(material.uniforms);
-      spatialHashRef.current.clear();
+      disposeAtomImpostorResources(resources);
+      spatialHash.clear();
     };
-  }, [material]);
+  }, [resources]);
 
   return (
     <mesh
