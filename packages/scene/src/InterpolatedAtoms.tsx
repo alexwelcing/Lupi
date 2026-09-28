@@ -7,7 +7,7 @@
  */
 
 import { useRef, useMemo, useEffect } from 'react';
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import type { Frame } from '@atlas/core/types';
 
 interface InterpolatedAtomsProps {
@@ -65,7 +65,7 @@ export function InterpolatedAtoms({
 
   // Cached geometry/material
   const geometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
-  const material = useMemo(() => new THREE.MeshPhysicalMaterial({
+  const material = useMemo(() => new THREE.MeshPhysicalNodeMaterial({
     metalness: 0.1,
     roughness: 0.5,
     clearcoat: 0.05,
