@@ -34,6 +34,23 @@ export interface PickedAtom {
   worldPosition: THREE.Vector3;
 }
 
+/**
+ * True when a pointer event belongs to the viewer canvas: its target is the
+ * canvas, or one of the canvas's own wrapper elements (R3F connects events,
+ * and OrbitControls captures the pointer, on the Canvas wrapper, so the
+ * pointerup/click after a press lands there), and the point is on the canvas.
+ * Clicks on UI panels over the canvas are not.
+ */
+function isViewerCanvasEvent(event: MouseEvent, canvas: HTMLCanvasElement): boolean {
+  const target = event.target;
+  if (target === canvas) return true;
+  const container = canvas.parentElement;
+  if (target !== container && target !== container?.parentElement) return false;
+  const rect = canvas.getBoundingClientRect();
+  return event.clientX >= rect.left && event.clientX <= rect.right
+    && event.clientY >= rect.top && event.clientY <= rect.bottom;
+}
+
 export function AtomPicker({
   frame,
   spatialHash,
@@ -156,9 +173,16 @@ export function AtomPicker({
   const handleMouseMove = useCallback((e: MouseEvent) => {
     // If the user is dragging the mouse (orbiting the camera), skip expensive raymarching!
     if (!enabled || e.buttons > 0) return;
-    // Hover only over the viewer canvas, not through UI panels above it.
-    if (e.target !== renderer.domElement) return;
-    
+    // Hover only over the viewer canvas, not through UI panels above it;
+    // leaving the canvas clears the hover.
+    if (!isViewerCanvasEvent(e, renderer.domElement as HTMLCanvasElement)) {
+      if (hoveredAtom !== null) {
+        setHoveredAtom(null);
+        onHover?.(null);
+      }
+      return;
+    }
+
     const picked = pickAtom(e.clientX, e.clientY);
 
     if (picked?.index !== hoveredAtom) {
@@ -177,7 +201,7 @@ export function AtomPicker({
   const handleClick = useCallback((e: MouseEvent) => {
     if (!enabled) return;
     // Strictly isolate viewer canvas clicks (prevent UI panel clicks from triggering deselection)
-    if (e.target !== renderer.domElement) return;
+    if (!isViewerCanvasEvent(e, renderer.domElement as HTMLCanvasElement)) return;
     
     // Distinguish click from drag (especially on mobile)
     const dx = e.clientX - pointerDownPosRef.current.x;
