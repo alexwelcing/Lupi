@@ -1,25 +1,15 @@
 /**
  * SceneLighting — the molecule's authored 3-point rig plus the HDRI
- * environment, made XR-aware.
+ * environment: an ambient term, a key directional, and — for small systems —
+ * fill / rim lights, with a PMREM environment for image-based reflections.
  *
- * Outside AR (desktop preview + VR skybox) this behaves exactly as before:
- * an ambient term, a key directional, and — for small systems — fill / rim
- * lights, with a PMREM <Environment> for image-based reflections.
- *
- * In an immersive-ar session where WebXR light-estimation is live
- * (arLightEstimationActive), two things change so the *real* surroundings —
- * e.g. a campfire — drive the look:
- *   - the static rig is pulled right down, so the estimated light + reflections
- *     dominate instead of being washed out by a fixed studio rig;
- *   - the static <Environment> is dropped entirely, because XRLightEstimation
- *     owns scene.environment with the live reflection map and the two must not
- *     fight over it.
+ * The PMREM comes from three/webgpu's PMREMGenerator, driven by the
+ * WebGPURenderer (WebGPU, or its WebGL2 backend).
  */
 import { useLayoutEffect } from 'react';
-import { useEnvironment } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
-import { useXR } from '@react-three/xr';
-import * as THREE from 'three';
+import { useEnvironment } from '@react-three/drei/webgpu';
+import { useThree } from '@react-three/fiber/webgpu';
+import { PMREMGenerator } from 'three/webgpu';
 import { useStore } from './store';
 import {
   installSceneEnvironmentPmrem,
@@ -32,12 +22,6 @@ import { installScientificStudioEnvironment } from './studioEnvironment';
 const RIG_RADIUS = 11.18;
 const DEG = Math.PI / 180;
 
-// How far the static rig is pulled down once the real world is lighting the
-// scene. Not zero, so the molecule never goes fully black if the estimate is
-// extremely dark; the light probe + reflections carry the rest.
-const AR_AMBIENT_FACTOR = 0.15;
-const AR_KEY_FACTOR = 0.1;
-
 /**
  * Load the exact Drei preset asset, prefilter it explicitly for the custom atom
  * BRDF, and tag the resulting CubeUV texture with its immutable asset identity.
@@ -46,13 +30,13 @@ const AR_KEY_FACTOR = 0.1;
  */
 function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
   const source = useEnvironment({ preset });
-  const { gl, scene } = useThree();
+  const { renderer, scene } = useThree();
   useLayoutEffect(() => installSceneEnvironmentPmrem(
     scene,
     source,
     preset,
-    () => new THREE.PMREMGenerator(gl),
-  ), [gl, preset, scene, source]);
+    () => new PMREMGenerator(renderer),
+  ), [renderer, preset, scene, source]);
 
   return null;
 }
@@ -64,11 +48,11 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
  * environment texture.
  */
 function LupiSoftboxEnvironment() {
-  const { gl, scene } = useThree();
+  const { renderer, scene } = useThree();
   useLayoutEffect(() => installScientificStudioEnvironment(
     scene,
-    () => new THREE.PMREMGenerator(gl),
-  ), [gl, scene]);
+    () => new PMREMGenerator(renderer),
+  ), [renderer, scene]);
 
   return null;
 }
@@ -84,11 +68,6 @@ function polarToCartesian(azimuthDeg: number, elevationDeg: number) {
 }
 
 export function SceneLighting() {
-  const mode = useXR(s => s.mode);
-  const estimationActive = useStore(s => s.arLightEstimationActive);
-  const isAR = mode === 'immersive-ar';
-  const arLit = isAR && estimationActive;
-
   const ambientLightIntensity = useStore(s => s.ambientLightIntensity);
   const dirLightIntensity = useStore(s => s.dirLightIntensity);
   const keyLightAzimuth = useStore(s => s.keyLightAzimuth);
@@ -102,8 +81,8 @@ export function SceneLighting() {
   const file = useStore(s => s.file);
   const environmentPreset = useStore(s => s.environmentPreset);
 
-  const ambient = arLit ? ambientLightIntensity * AR_AMBIENT_FACTOR : ambientLightIntensity;
-  const key = arLit ? dirLightIntensity * AR_KEY_FACTOR : dirLightIntensity;
+  const ambient = ambientLightIntensity;
+  const key = dirLightIntensity;
 
   const [kx, ky, kz] = polarToCartesian(keyLightAzimuth, keyLightElevation);
   const [fx, fy, fz] = polarToCartesian(fillLightAzimuth, fillLightElevation);
@@ -127,8 +106,8 @@ export function SceneLighting() {
           <directionalLight position={[rx, ry, rz]} intensity={key * 0.15} color={rimLightColor} />
         </>
       )}
-      {!isAR && finalEnv === 'softbox' && <LupiSoftboxEnvironment />}
-      {!isAR && finalEnv && finalEnv !== 'softbox' && <LupiEnvironment preset={finalEnv} />}
+      {finalEnv === 'softbox' && <LupiSoftboxEnvironment />}
+      {finalEnv && finalEnv !== 'softbox' && <LupiEnvironment preset={finalEnv} />}
     </>
   );
 }

@@ -85,7 +85,6 @@ const RENDERER_SOURCE_FILES_V1 = Object.freeze([
   'packages/ui/src/MoleculeShadow.tsx',
   'packages/ui/src/SceneLighting.tsx',
   'packages/ui/src/SelectionMarkers.tsx',
-  'packages/ui/src/SpatialAnchor.tsx',
   'packages/ui/src/ViewerApp.tsx',
   'packages/ui/src/app/AppBackground.tsx',
   'packages/ui/src/app/CameraManager.tsx',
@@ -116,10 +115,6 @@ const RENDERER_SOURCE_FILES_V1 = Object.freeze([
   'packages/ui/src/viewer/PresetLegacyBridge.tsx',
   'packages/ui/src/viewer/artifactFrameSelection.ts',
   'packages/ui/src/viewer/useViewerSceneModel.ts',
-  'packages/ui/src/xr/XREnvironmentDome.tsx',
-  'packages/ui/src/xr/XRLightEstimation.tsx',
-  'packages/ui/src/xr/XRControlPanel.tsx',
-  'packages/ui/src/xr/XRMoleculeInteraction.tsx',
 ].sort());
 
 /**
@@ -177,10 +172,7 @@ const RENDERER_BEHAVIOR_PROFILE_V1 = Object.freeze({
 const RENDERER_DEPENDENCIES_V1 = Object.freeze([
   '@react-three/drei',
   '@react-three/fiber',
-  '@react-three/postprocessing',
-  '@react-three/xr',
   '@vitejs/plugin-react',
-  'postprocessing',
   'react',
   'react-dom',
   'three',
@@ -1402,6 +1394,15 @@ function resolveInstalledPackageVersion(packageRequires, packageName) {
       entryPath = packageRequire.resolve(packageName);
       break;
     } catch {
+      // ESM-only packages (drei 11 exports no `require` condition) still have
+      // a manifest on the resolver's node_modules search path.
+      const manifestPath = (packageRequire.resolve.paths(packageName) ?? [])
+        .map((directory) => resolve(directory, packageName, 'package.json'))
+        .find((candidate) => existsSync(candidate));
+      if (manifestPath) {
+        entryPath = manifestPath;
+        break;
+      }
       // Try the next workspace resolver.
     }
   }

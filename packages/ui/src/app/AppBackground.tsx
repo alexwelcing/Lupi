@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
-import { useXR } from '@react-three/xr';
+import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import { getBackgroundFromColormap } from '@atlas/scene';
 import type { ColormapName } from '@atlas/core/types';
@@ -121,11 +120,6 @@ export function AppBackground({
 }) {
   const { scene } = useThree();
 
-  // Hook must be called unconditionally
-  const mode = useXR(state => state.mode);
-  const xrMode = mode as string | null;
-  const isImmersiveAR = xrMode === 'immersive-ar';
-  const isImmersiveVR = xrMode === 'immersive-vr';
   // A plain gradient can use scene.background, but its fine adjustments need
   // the same live shader as image backdrops. Never show inert adjustment UI.
   const adjusted = adjustments.opacity !== 1 || adjustments.brightness !== 1
@@ -137,7 +131,7 @@ export function AppBackground({
     top,
     bottom,
     style,
-    enabled: !isImmersiveAR && !procedural,
+    enabled: !procedural,
     projection: usesBackdropMesh ? 'dome' : 'scene-background',
     paused: adjustments.motionPaused,
     playbackRate: adjustments.motionSpeed,
@@ -145,9 +139,9 @@ export function AppBackground({
   });
 
   useEffect(() => {
-    if (isImmersiveAR || procedural) {
+    if (procedural) {
       scene.background = null;
-      scene.fog = procedural && !isImmersiveAR ? new THREE.FogExp2(bottom, 0.0007) : null;
+      scene.fog = new THREE.FogExp2(bottom, 0.0007);
       return () => {
         scene.background = null;
         scene.fog = null;
@@ -176,10 +170,10 @@ export function AppBackground({
       if (scene.background === texture) scene.background = null;
       scene.fog = null;
     };
-  }, [bottom, isImmersiveAR, media.kind, procedural, scene, texture, usesBackdropMesh]);
+  }, [bottom, media.kind, procedural, scene, texture, usesBackdropMesh]);
 
   if (procedural) {
-    const visible = !isImmersiveAR;
+    const visible = true;
     return (
       <group userData={{ [LUPI_EXPORT_LAYER_KEY]: LUPI_EXPORT_BACKGROUND_LAYER }}>
         <ProceduralBackground variant={procedural} top={top} bottom={bottom} visible={visible} paused={adjustments.motionPaused} speed={adjustments.motionSpeed} />
@@ -188,7 +182,7 @@ export function AppBackground({
     );
   }
 
-  if (usesBackdropMesh && texture && !isImmersiveAR && !isImmersiveVR) {
+  if (usesBackdropMesh && texture) {
     return (
       <BackdropVolume
         texture={texture}
