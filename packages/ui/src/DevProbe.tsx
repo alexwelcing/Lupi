@@ -8,9 +8,10 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import { useStore } from './store';
+import { getLupiRendererRuntime } from './viewer/createLupiRenderer';
 
 interface PerfWindowState {
   /** Instantaneous FPS, smoothed over the most recent ~250ms. */
@@ -127,14 +128,16 @@ export function DevProbe({ enabled = false }: DevProbeProps) {
     w.__atlas.three = {
       scene: three.scene,
       camera: three.camera,
-      gl: three.gl,
+      renderer: three.renderer,
+      // Kept for console pokes written against v9; the same WebGPURenderer.
+      gl: three.renderer,
       controls: three.controls,
       get state() { return three; },
     };
     w.__atlas.inspectScene = () => inspectSceneGraph(three.scene);
     w.__atlas.snapshot = () => {
       const state = useStore.getState();
-      const renderer = three.gl as THREE.WebGLRenderer;
+      const renderer = three.renderer;
       const size = new THREE.Vector2();
       renderer.getSize(size);
       return {
@@ -179,21 +182,23 @@ export function DevProbe({ enabled = false }: DevProbeProps) {
             clientWidth: renderer.domElement.clientWidth,
             clientHeight: renderer.domElement.clientHeight,
           },
+          backend: getLupiRendererRuntime()?.backend ?? null,
           memory: { ...renderer.info.memory },
           render: { ...renderer.info.render },
-          programs: renderer.info.programs?.length ?? 0,
+          // WebGPURenderer counts pipelines in info.memory, not info.programs.
+          programs: renderer.info.memory?.programs ?? 0,
         },
         scene: inspectSceneGraph(three.scene),
         instancedMeshes: inspectInstancedMeshes(three.scene),
         perf: w.__atlas.perf ?? null,
       };
     };
-    w.__atlas.resetRendererInfo = () => three.gl.info.reset();
+    w.__atlas.resetRendererInfo = () => three.renderer.info.reset();
     w.__lupi = w.__atlas;
     w.__lupi.inspectScene = w.__atlas.inspectScene;
     w.__lupi.snapshot = w.__atlas.snapshot;
     writeDiagnosticsPayload(w.__atlas.snapshot());
-    // Three.js DevTools picks the scene up via the WebGLRenderer hook
+    // Three.js DevTools picks the scene up via three's renderer hook
     // automatically; this is also a Needle/Three console handle.
 
     // Real-file loader for the verifier (and console pokes). Fetches the URL,

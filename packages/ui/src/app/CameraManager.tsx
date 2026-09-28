@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import { useStore } from '../store';
 import { viewportAspectFromSize } from '../cameraFit';

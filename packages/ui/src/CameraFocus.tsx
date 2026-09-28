@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { useStore } from './store';

@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { SpatialHash3D } from './SpatialHash';
@@ -42,7 +42,7 @@ export function AtomPicker({
   maxMeasureAtoms = 4,
   hiddenAtomTypes = new Set<number>(),
 }: AtomPickerProps) {
-  const { camera, scene, get, gl } = useThree();
+  const { camera, scene, get, renderer } = useThree();
   const [hoveredAtom, setHoveredAtom] = useState<number | null>(null);
   const [selectedAtoms, setSelectedAtoms] = useState<Set<number>>(new Set());
   const measureAtomsRef = useRef<number[]>([]); // For measurement mode
@@ -91,8 +91,8 @@ export function AtomPicker({
           // 2. Screen-space intersection (Solves the zoomed-out bug)
           atomPos.project(camera);
           const pointer = get().pointer;
-          const dxPixels = (atomPos.x - pointer.x) * gl.domElement.clientWidth / 2;
-          const dyPixels = (atomPos.y - pointer.y) * gl.domElement.clientHeight / 2;
+          const dxPixels = (atomPos.x - pointer.x) * renderer.domElement.clientWidth / 2;
+          const dyPixels = (atomPos.y - pointer.y) * renderer.domElement.clientHeight / 2;
           const screenDistPixels = Math.hypot(dxPixels, dyPixels);
           const minClickPixels = 15; // 15px forgiveness zone
           
@@ -139,7 +139,7 @@ export function AtomPicker({
     }
 
     return null;
-  }, [camera, frame.positions, frame.types, hiddenTypes, radius, gl, spatialHash]);
+  }, [camera, frame.positions, frame.types, hiddenTypes, radius, renderer, spatialHash]);
 
   // Mouse move handler
   const handleMouseMove = useCallback((e: MouseEvent) => {

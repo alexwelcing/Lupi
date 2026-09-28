@@ -18,7 +18,7 @@
  */
 
 import { useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import type { VectorFieldSpec } from '@atlas/core';

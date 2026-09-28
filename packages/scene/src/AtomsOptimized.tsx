@@ -42,7 +42,7 @@
 
 import { useRef, useMemo, useEffect, useLayoutEffect, useCallback } from 'react';
 import { wrapDelta } from './interpolation';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import { SpatialHash3D } from './SpatialHash';
@@ -942,9 +942,19 @@ export type ImpostorRenderTargetUniforms = Record<string, THREE.IUniform>;
  * the canvas or an XR target) and the device-pixel scale that turns a world
  * radius into a projected pixel radius (culling and specular AA).
  */
+/**
+ * What syncImpostorRenderTargetUniforms reads from the renderer: a structural
+ * subset shared by WebGPURenderer and the v9 WebGLRenderer.
+ */
+export interface ImpostorDrawRenderer {
+  getRenderTarget(): THREE.RenderTarget | null;
+  outputColorSpace: string;
+  getDrawingBufferSize(target: THREE.Vector2): THREE.Vector2;
+}
+
 export function syncImpostorRenderTargetUniforms(
   uniforms: ImpostorRenderTargetUniforms,
-  renderer: THREE.WebGLRenderer,
+  renderer: ImpostorDrawRenderer,
   camera: THREE.Camera,
   scratch: THREE.Vector2,
 ): void {
@@ -1191,7 +1201,7 @@ export function AtomsOptimized({
   const meshRef = useRef<THREE.Mesh>(null!);
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
   const atomCountRef = useRef(0);
-  const { scene, gl } = useThree();
+  const { scene, renderer } = useThree();
 
   // Large-scene callers intentionally remove the picking callback. Release
   // the previous scene's grid immediately rather than retaining it until the
@@ -1360,7 +1370,7 @@ export function AtomsOptimized({
 
   // ─── Compile-time quality + early-Z defines ───────────────────────
   const effectiveQualityTier = resolveAtomQualityTier(qualityTier, frame.natoms);
-  const conservativeDepth = useMemo(() => rendererSupportsConservativeDepth(gl), [gl]);
+  const conservativeDepth = useMemo(() => rendererSupportsConservativeDepth(renderer), [renderer]);
   useLayoutEffect(() => {
     syncAtomShaderDefines(material, effectiveQualityTier, conservativeDepth);
   }, [material, effectiveQualityTier, conservativeDepth]);
@@ -1580,11 +1590,11 @@ export function AtomsOptimized({
   // function and the device-pixel scale used for culling and specular AA.
   const drawingBufferScratch = useMemo(() => new THREE.Vector2(), []);
   const onBeforeRender = useCallback((
-    renderer: THREE.WebGLRenderer,
+    drawRenderer: ImpostorDrawRenderer,
     _scene: THREE.Scene,
     camera: THREE.Camera,
   ) => {
-    syncImpostorRenderTargetUniforms(material.uniforms, renderer, camera, drawingBufferScratch);
+    syncImpostorRenderTargetUniforms(material.uniforms, drawRenderer, camera, drawingBufferScratch);
   }, [material, drawingBufferScratch]);
   useLayoutEffect(() => {
     const mesh = meshRef.current;

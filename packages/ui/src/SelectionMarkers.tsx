@@ -3,8 +3,8 @@
  */
 
 import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Billboard } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber/webgpu';
+import { Billboard } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
@@ -96,9 +96,9 @@ function SelectedMarker({
     [radius],
   );
 
-  useFrame(({ clock }) => {
+  useFrame(({ elapsed }) => {
     if (!ringRef.current) return;
-    const pulse = 1 + Math.sin(clock.elapsedTime * 3.6) * 0.035;
+    const pulse = 1 + Math.sin(elapsed * 3.6) * 0.035;
     ringRef.current.scale.setScalar(pulse);
   });
 

@@ -1,7 +1,7 @@
 /**
  * BillionAtomsPage — the ?billion-atoms route: one billion atoms in view.
  *
- * A self-contained scale showcase (own Canvas, own controls — none of the
+ * A self-contained scale showcase (own LupiCanvas, own controls — none of the
  * viewer's file/store machinery) around <BillionAtomBlock/>: a procedural
  * 1,000,188,000-atom FCC copper block rendered through hierarchical
  * brick LOD, with an honest HUD that separates "atoms in scene" from
@@ -13,9 +13,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber/webgpu';
+import { OrbitControls } from '@react-three/drei/webgpu';
 import { BillionAtomBlock, type BillionAtomStats } from '@atlas/scene';
+import { LupiCanvas } from './viewer/LupiCanvas';
+import { detectRenderCapability } from './renderCapability';
 
 const QUALITY = {
   high: { maxAtomBricks: 32, label: 'High' },
@@ -81,6 +83,7 @@ function DevProbe() {
 }
 
 export default function BillionAtomsPage() {
+  const [capability] = useState(detectRenderCapability);
   const [quality, setQuality] = useState<QualityId>(defaultQuality);
   const [stats, setStats] = useState<BillionAtomStats | null>(null);
   const [hudOpen, setHudOpen] = useState(true);
@@ -97,27 +100,30 @@ export default function BillionAtomsPage() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a0c12', color: '#e8eef8' }}>
-      <Canvas
-        gl={{ antialias: false, powerPreference: 'high-performance' }}
-        camera={{ position: [1350, 950, 1750], near: 2, far: 40000, fov: 55 }}
-        dpr={[1, 1.5]}
-        style={{ touchAction: 'none' }}
-      >
-        <color attach="background" args={['#0a0c12']} />
-        <BillionAtomBlock
-          maxAtomBricks={QUALITY[quality].maxAtomBricks}
-          onStats={setStats}
-        />
-        <FrameTicker onFrame={onFrame} />
-        <DevProbe />
-        <OrbitControls
-          makeDefault
-          enableDamping
-          dampingFactor={0.08}
-          minDistance={40}
-          maxDistance={12000}
-        />
-      </Canvas>
+      <div style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
+        <LupiCanvas
+          id="lupi-billion-canvas"
+          capability={capability}
+          frameloop="always"
+          camera={{ position: [1350, 950, 1750], near: 2, far: 40000, fov: 55 }}
+          dpr={[1, 1.5]}
+          background="#0a0c12"
+        >
+          <BillionAtomBlock
+            maxAtomBricks={QUALITY[quality].maxAtomBricks}
+            onStats={setStats}
+          />
+          <FrameTicker onFrame={onFrame} />
+          <DevProbe />
+          <OrbitControls
+            makeDefault
+            enableDamping
+            dampingFactor={0.08}
+            minDistance={40}
+            maxDistance={12000}
+          />
+        </LupiCanvas>
+      </div>
 
       {/* ── HUD — collapsible so phones keep the view unobstructed ── */}
       <div style={{

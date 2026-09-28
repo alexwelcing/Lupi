@@ -1,7 +1,17 @@
-import { Billboard, Line, Text } from '@react-three/drei';
+import { Billboard, Line } from '@react-three/drei/webgpu';
+import { LupiText } from './labels/LupiText';
 import type { Frame } from '@atlas/core/types';
 import type { MolecularMeasurement } from './measurements';
 import { measurementValueLabel, resolveMolecularMeasurement } from './measurements';
+
+// drei 11's Line forwards unknown props to its Line2NodeMaterial as well as
+// the Line2 object, but its props type lists only the object's props.
+const MEASUREMENT_LINE_MATERIAL = {
+  transparent: true,
+  opacity: 0.94,
+  depthTest: false,
+  toneMapped: false,
+};
 
 export function MeasurementLayer({
   frame,
@@ -37,17 +47,14 @@ export function MeasurementLayer({
         points={points}
         color="#fbbf24"
         lineWidth={2.2}
-        transparent
-        opacity={0.94}
-        depthTest={false}
-        toneMapped={false}
+        {...MEASUREMENT_LINE_MATERIAL}
       />
       {resolved.atoms.map((atom, index) => (
         <Billboard
           key={`${atom.id}-${index}`}
           position={[atom.position[0], atom.position[1] + labelSize * 1.3, atom.position[2]]}
         >
-          <Text
+          <LupiText
             fontSize={labelSize * 0.7}
             color="#fbbf24"
             anchorX="center"
@@ -57,11 +64,11 @@ export function MeasurementLayer({
             renderOrder={100}
           >
             {String.fromCharCode(65 + index)}
-          </Text>
+          </LupiText>
         </Billboard>
       ))}
       <Billboard position={labelPosition}>
-        <Text
+        <LupiText
           fontSize={labelSize}
           color="#fff7d6"
           anchorX="center"
@@ -71,7 +78,7 @@ export function MeasurementLayer({
           renderOrder={101}
         >
           {measurementValueLabel(resolved)}
-        </Text>
+        </LupiText>
       </Billboard>
     </group>
   );

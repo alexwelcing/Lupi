@@ -29,7 +29,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Clusters } from './ClusterBuilder';
 

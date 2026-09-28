@@ -29,7 +29,7 @@
  */
 
 import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 
 // ── Lattice constants ────────────────────────────────────────────────
@@ -300,7 +300,7 @@ export function BillionAtomBlock({
     statsThrottle: -1,
   }), []);
 
-  useFrame(({ camera, clock }) => {
+  useFrame(({ camera, elapsed }) => {
     const { frustum, projScreen, sphere, dist, counts } = scratch;
     projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(projScreen);
@@ -353,7 +353,7 @@ export function BillionAtomBlock({
       t.texData[slot * 4 + 2] = bricks.coords[i * 3 + 2];
     }
 
-    const time = clock.elapsedTime;
+    const time = elapsed;
     for (let t = 0; t < 4; t++) {
       const tier = tiers[t];
       tier.texture.needsUpdate = true;

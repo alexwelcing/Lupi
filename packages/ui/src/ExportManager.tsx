@@ -2,9 +2,9 @@
  * ExportManager — Unified pipeline for image, MP4/WebM, GLB, and USDZ export.
  *
  * Architecture:
- *   Image:  Single-frame WebGL readback at arbitrary resolution.
+ *   Image:  Single-frame canvas readback at arbitrary resolution.
  *   Video:  MP4/WebM via the browser-native MediaRecorder recording
- *           `gl.domElement.captureStream(fps)`. MediaRecorder encodes natively,
+ *           `renderer.domElement.captureStream(fps)`. MediaRecorder encodes natively,
  *           off the main thread (no UI freeze), on every browser — mp4 on
  *           Safari/iOS, webm (vp9/vp8) on Chromium/Firefox. The capture loop only
  *           drives the camera/scene by wall-clock time; the canvas is recorded
@@ -17,7 +17,8 @@
  */
 
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber/webgpu';
+import { LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
 import { useStore, type ExportRequest } from './store';
 import {
   canInferCovalentBonds,
@@ -66,9 +67,9 @@ const SINGLE_TYPE_NORM_VALUE = 0.5;
 const MIN_NUMERIC_RANGE = 1e-6;
 
 // ─── Video Capture Loop Component ──────────────────────────────────
-// By isolating the priority=2 useFrame into a conditionally mounted component,
-// we prevent React Three Fiber from permanently disabling its native Priority 0
-// gl.render loop (which happens if any hooked component has priority > 0).
+// The loop is a conditionally mounted `update`-phase job (LUPI_JOB.videoDrive),
+// so it moves the camera before the default render of the same frame and never
+// takes rendering over (fiber v10 frame phases, plan-final D12).
 //
 // MediaRecorder records the canvas in REAL TIME (off the main thread), so this
 // loop drives the camera/scene purely by WALL-CLOCK progress — never by frame
@@ -177,7 +178,7 @@ function VideoCaptureLoop({
         recorderRef.current.stop();
       }
     }
-  }, 2); // Priority 2 execution!
+  }, { phase: 'update', id: LUPI_JOB.videoDrive });
 
   return null;
 }
@@ -216,7 +217,7 @@ function ImageCaptureFrameLifecycle({
   frameIndex: number;
   onFrameCaptured: () => void;
 }) {
-  const { gl, scene, camera, size, invalidate } = useThree();
+  const { renderer, scene, camera, size, invalidate } = useThree();
   const revisionRef = useRef(nextImageCaptureRevision++);
   const barrierRef = useRef(createFiberFrameCaptureBarrier(revisionRef.current));
   const transactionRef = useRef<PreparedImageCaptureTransaction | null>(null);
@@ -298,7 +299,7 @@ function ImageCaptureFrameLifecycle({
         backgroundTextureRef.current = createGradientEquirectTexture(
           canonicalBackground.top,
           canonicalBackground.bottom,
-          gl,
+          renderer,
           1024,
           canonicalBackground.style,
         );
@@ -307,7 +308,7 @@ function ImageCaptureFrameLifecycle({
       const targetWidth = request.resolution?.width || size.width;
       const targetHeight = request.resolution?.height || size.height;
       transactionRef.current = beginImageCaptureTransaction({
-        renderer: gl,
+        renderer,
         scene,
         camera,
         viewportWidth: size.width,
@@ -330,7 +331,7 @@ function ImageCaptureFrameLifecycle({
     }
 
     return restoreCaptureState;
-  }, [camera, failCapture, frameIndex, gl, invalidate, request, restoreCaptureState, scene, size.height, size.width]);
+  }, [camera, failCapture, frameIndex, renderer, invalidate, request, restoreCaptureState, scene, size.height, size.width]);
 
   useFrame(() => {
     const transaction = transactionRef.current;
@@ -346,7 +347,7 @@ function ImageCaptureFrameLifecycle({
       onFrameCaptured();
       failCapture(error);
     }
-  }, -0.5);
+  }, { phase: LUPI_PHASE.canonical, id: LUPI_JOB.exportCanonical });
 
   useFrame(() => {
     const transaction = transactionRef.current;
@@ -384,14 +385,14 @@ function ImageCaptureFrameLifecycle({
         // DataTextures and compiles the active ShaderMaterial program, then the
         // next Fiber frame re-applies camera-space uniforms before capture.
         transaction.clear();
-        gl.render(scene, camera);
+        renderer.render(scene, camera);
         invalidate();
         return;
       }
       if (!claimFiberFrameCapture(barrierRef.current, revisionRef.current)) return;
 
       transaction.clear();
-      gl.render(scene, camera);
+      renderer.render(scene, camera);
 
       const targetWidth = request.resolution?.width || size.width;
       const targetHeight = request.resolution?.height || size.height;
@@ -400,7 +401,7 @@ function ImageCaptureFrameLifecycle({
       captureCanvas.height = targetHeight;
       const captureContext = captureCanvas.getContext('2d');
       if (!captureContext) throw new Error('Image export could not create a 2D capture context.');
-      captureContext.drawImage(gl.domElement, 0, 0, targetWidth, targetHeight);
+      captureContext.drawImage(renderer.domElement, 0, 0, targetWidth, targetHeight);
       const contractAxes = request.artifactSpec?.layers.axes;
       if (contractAxes ?? useStore.getState().showAxes) {
         drawExportAxesOverlayV1(captureContext, camera, targetWidth, targetHeight);
@@ -446,13 +447,13 @@ function ImageCaptureFrameLifecycle({
       onFrameCaptured();
       failCapture(error);
     }
-  }, 100);
+  }, { phase: LUPI_PHASE.capture, id: LUPI_JOB.exportCapture });
 
   return null;
 }
 
 export function ExportManager() {
-  const { gl, camera, size, frameloop, setSize, setDpr, setFrameloop, invalidate } = useThree();
+  const { renderer, camera, size, frameloop, setSize, setDpr, setFrameloop, invalidate } = useThree();
   const exportRequest = useStore(s => s.exportRequest);
   const clearExportRequest = useStore(s => s.clearExportRequest);
   const file = useStore(s => s.file);
@@ -849,7 +850,7 @@ export function ExportManager() {
     // the composer at the old viewport aspect, and its final fullscreen pass then
     // stretches that across the new export buffer — the squished-molecule bug.
     // Routing through R3F keeps composer + camera + renderer on one aspect.
-    originalPixelRatio.current = gl.getPixelRatio();
+    originalPixelRatio.current = renderer.getPixelRatio();
     setDpr(1);
     setSize(width, height);
     if (camera instanceof THREE.PerspectiveCamera) {
@@ -874,7 +875,7 @@ export function ExportManager() {
       'video/webm;codecs=vp8',
       'video/webm',
     ];
-    const canvas = gl.domElement as HTMLCanvasElement;
+    const canvas = renderer.domElement as HTMLCanvasElement;
     const supportsRecorder =
       typeof MediaRecorder !== 'undefined' &&
       typeof MediaRecorder.isTypeSupported === 'function';
@@ -947,7 +948,7 @@ export function ExportManager() {
     // Kick the render loop: switching demand→always doesn't restart rAF on its own,
     // so without this the capture loop can stall before its first tick.
     invalidate();
-  }, [exportRequest, camera, gl, size, frameloop, clearExportRequest, setSize, setDpr, setFrameloop, invalidate, restoreAfterVideo]);
+  }, [exportRequest, camera, renderer, size, frameloop, clearExportRequest, setSize, setDpr, setFrameloop, invalidate, restoreAfterVideo]);
 
   // ─── Effect: Dispatch export actions ──────────────────────────
   // IMPORTANT: Only depend on exportRequest. We use refs for the handlers

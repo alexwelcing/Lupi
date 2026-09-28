@@ -9,7 +9,7 @@
  */
 
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
-import { Html } from '@react-three/drei';
+import { Html } from '@react-three/drei/webgpu';
 import type { Frame } from '@atlas/core/types';
 import {
   ELEMENT_DATA,

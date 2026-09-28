@@ -15,8 +15,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Html, Text, Billboard } from '@react-three/drei';
-import { useFrame, useThree } from '@react-three/fiber';
+import { Html, Billboard } from '@react-three/drei/webgpu';
+import { LupiText } from './labels/LupiText';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import { useStore, type KnowledgeLabel } from './store';
 import { selectVisibleLabels } from './knowledgeLabels/selectVisibleLabels';
@@ -353,7 +354,7 @@ function GlyphLabel({
   const tint = kind === 'sphere' ? '#8bd3ff' : kind === 'node' ? '#a0ffc8' : '#d8b4fe';
   return (
     <Billboard position={[pos[0], pos[1] + 1.4, pos[2]]} follow>
-      <Text
+      <LupiText
         fontSize={0.48}
         color={tint}
         anchorX="center"
@@ -363,7 +364,7 @@ function GlyphLabel({
         outlineOpacity={0.92}
       >
         {text}
-      </Text>
+      </LupiText>
     </Billboard>
   );
 }

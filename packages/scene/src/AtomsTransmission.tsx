@@ -23,8 +23,8 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
-import { MeshTransmissionMaterial } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber/webgpu';
+import { MeshTransmissionMaterial } from '@react-three/drei/webgpu';
 import type { ColormapName, Frame } from '@atlas/core/types';
 import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
 import { COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';

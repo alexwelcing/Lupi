@@ -16,7 +16,7 @@
 
 /// <reference path="./vite-env.d.ts" />
 import { useRef, useMemo, useEffect, useLayoutEffect, useState, useCallback } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import {
@@ -52,6 +52,7 @@ import {
   syncAtomShaderDefines,
   syncCubeUvEnvironment,
   syncImpostorRenderTargetUniforms,
+  type ImpostorDrawRenderer,
   type AtomQualityTier,
 } from './AtomsOptimized';
 
@@ -765,7 +766,7 @@ export function Bonds({
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   // ─── Material ──────────────────────────────────────────────────────
-  const { gl, scene } = useThree();
+  const { renderer, scene } = useThree();
   const material = useMemo(() => new THREE.RawShaderMaterial({
     vertexShader: BOND_IMPOSTOR_VERTEX,
     fragmentShader: BOND_IMPOSTOR_FRAGMENT,
@@ -804,7 +805,7 @@ export function Bonds({
   useEffect(() => () => material.dispose(), [material]);
 
   const effectiveQualityTier = resolveAtomQualityTier(qualityTier, frame.natoms);
-  const conservativeDepth = useMemo(() => rendererSupportsConservativeDepth(gl), [gl]);
+  const conservativeDepth = useMemo(() => rendererSupportsConservativeDepth(renderer), [renderer]);
   useLayoutEffect(() => {
     syncAtomShaderDefines(material, effectiveQualityTier, conservativeDepth);
   }, [material, effectiveQualityTier, conservativeDepth]);
@@ -863,8 +864,8 @@ export function Bonds({
     u.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
   });
 
-  const onBeforeRender = useCallback((renderer: THREE.WebGLRenderer, _scene: THREE.Scene, camera: THREE.Camera) => {
-    syncImpostorRenderTargetUniforms(material.uniforms, renderer, camera, drawingBufferScratch);
+  const onBeforeRender = useCallback((drawRenderer: ImpostorDrawRenderer, _scene: THREE.Scene, camera: THREE.Camera) => {
+    syncImpostorRenderTargetUniforms(material.uniforms, drawRenderer, camera, drawingBufferScratch);
   }, [material, drawingBufferScratch]);
   useLayoutEffect(() => {
     const mesh = meshRef.current;
