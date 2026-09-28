@@ -291,7 +291,7 @@ export default defineConfig(({ command }) => ({
     plugins: () => [wasm(), topLevelAwait()],
   },
   resolve: {
-    dedupe: ['three', '@react-three/fiber', '@react-three/drei', 'react', 'react-dom', 'zustand'],
+    dedupe: ['three', '@react-three/fiber', '@react-three/drei', '@react-three/tsl', 'react', 'react-dom', 'zustand'],
     alias: {
       '@atlas/core': path.resolve(__dirname, '../../packages/core/src'),
       '@atlas/parsers': path.resolve(__dirname, '../../packages/parsers/src'),
@@ -328,18 +328,19 @@ export default defineConfig(({ command }) => ({
           if (id.includes('park')) return 'env-park';
 
           if (id.includes('node_modules')) {
-            // Keep the optional node-material/WebGPU backend out of the normal
-            // viewer. Three's shared core remains in the existing vendor chunk.
+            // The viewer renders through WebGPURenderer (with its WebGL2
+            // fallback), so the node-material/WebGPU half of three is a viewer
+            // dependency now. Keep it in its own chunk next to three's shared
+            // core (three.core.js); neither may reach the landing entry.
             if (id.includes('/node_modules/three/')) {
-              if (/\/(nodes|renderers\/(common|webgpu|webgl-fallback))\//.test(id) || /three\.(webgpu|tsl)\.js$/.test(id)) return 'vendor-three-webgpu';
+              if (/\/(nodes|renderers\/(common|webgpu|webgl-fallback))\//.test(id) || /three\.(webgpu|webgpu\.nodes|tsl)\.js$/.test(id)) return 'vendor-three-webgpu';
               return 'vendor-three';
             }
-            // Keep the whole @react-three family (fiber/drei/xr) in one chunk:
+            // Keep the whole @react-three family (fiber/drei/tsl) in one chunk:
             // they cross-reference, so splitting drei out creates a circular
             // chunk. The real win for this stack is route-level lazy loading
             // (deferred Phase 1), not finer vendor slicing.
             if (id.includes('/node_modules/@react-three/')) return 'vendor-react-three';
-            if (id.includes('/node_modules/postprocessing/')) return 'vendor-postprocess';
             if (id.includes('/node_modules/@tanstack/')) return 'vendor-query';
             if (id.includes('/node_modules/zustand/')) return 'vendor-state';
             if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) return 'vendor-react';
