@@ -131,7 +131,6 @@ const RENDERER_BEHAVIOR_PROFILE_V1 = Object.freeze({
   determinism: {
     pixelRatio: 1,
     alphaContext: true,
-    preserveDrawingBuffer: true,
     outputColorSpace: 'srgb',
     rendererToneMapping: 'none',
     postprocessPipeline: 'raw-scene-bypassed',
@@ -437,9 +436,8 @@ try {
     `viewerCanvasBound=${graphics.viewerCanvasBound}`,
   );
   check(
-    'viewer context matches pinned alpha/capture/antialias semantics',
+    'viewer context matches pinned alpha/antialias semantics',
     graphics.contextAttributes?.alpha === true
-      && graphics.contextAttributes?.preserveDrawingBuffer === true
       && graphics.contextAttributes?.antialias === false,
     JSON.stringify(graphics.contextAttributes),
   );

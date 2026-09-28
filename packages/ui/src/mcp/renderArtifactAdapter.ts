@@ -397,7 +397,6 @@ export async function createBrowserRenderArtifactPlanV1(
     determinism: {
       pixelRatio: 1,
       alphaContext: true,
-      preserveDrawingBuffer: true,
       outputColorSpace: 'srgb',
       rendererToneMapping: 'none',
       postprocessPipeline: 'raw-scene-bypassed',
@@ -568,7 +567,6 @@ export function browserRendererRuntimeV1(): RenderJsonObjectV1 {
       alpha: attributes?.alpha ?? null,
       antialias: attributes?.antialias ?? null,
       premultipliedAlpha: attributes?.premultipliedAlpha ?? null,
-      preserveDrawingBuffer: attributes?.preserveDrawingBuffer ?? null,
     };
   } catch (error) {
     runtime.webgl = {
