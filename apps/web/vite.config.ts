@@ -332,9 +332,15 @@ export default defineConfig(({ command }) => ({
             // fallback), so the node-material/WebGPU half of three is a viewer
             // dependency now. Keep it in its own chunk next to three's shared
             // core (three.core.js); neither may reach the landing entry.
+            // Only the core builds go to vendor-three. The addons
+            // (examples/jsm) go with the WebGPU half because some import
+            // three/webgpu (drei's inspector runtime pulls in one that patches
+            // WebGPURenderer.prototype.init). With an addon in vendor-three,
+            // the two chunks imported each other and the viewer import threw a
+            // TDZ ReferenceError. Chunk imports now only run webgpu → core.
             if (id.includes('/node_modules/three/')) {
-              if (/\/(nodes|renderers\/(common|webgpu|webgl-fallback))\//.test(id) || /three\.(webgpu|webgpu\.nodes|tsl)\.js$/.test(id)) return 'vendor-three-webgpu';
-              return 'vendor-three';
+              if (/\/build\/three\.(core|module)(\.min)?\.js$/.test(id)) return 'vendor-three';
+              return 'vendor-three-webgpu';
             }
             // Keep the whole @react-three family (fiber/drei/tsl) in one chunk:
             // they cross-reference, so splitting drei out creates a circular
