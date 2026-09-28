@@ -473,7 +473,11 @@ function AllKinds() {
       await until('the trail to grow', () => {
         scene.traverse((object) => {
           const line = object as THREE.Line;
-          if (line.isLine && !(line as THREE.LineSegments).isLineSegments && line.visible && line.geometry.drawRange.count >= TRAIL_STEPS - 2) trailLine = line;
+          // A fresh geometry's draw range is Infinity until the trail sets it,
+          // so require a finite count (the capture raced a 2-point trail).
+          if (!line.isLine || (line as THREE.LineSegments).isLineSegments || !line.visible) return;
+          const count = line.geometry.drawRange.count;
+          if (Number.isFinite(count) && count >= TRAIL_STEPS - 2) trailLine = line;
         });
         return trailLine !== null;
       });

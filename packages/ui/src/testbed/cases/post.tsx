@@ -231,7 +231,8 @@ export default function PostCase() {
 
 /** The plate stays exact under every preset: the look leaves the background as configured. */
 function PlateProbe() {
-  useHarnessProbe('plate', [-2.4, 1.6, 0], { rgb: [16, 24, 23], tol: 3 });
+  // Inside the canvas on a portrait phone as well (half-width ≈ 1.14 there).
+  useHarnessProbe('plate', [-0.85, 1.95, 0], { rgb: [16, 24, 23], tol: 3 });
   return null;
 }
 
