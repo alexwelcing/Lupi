@@ -1,5 +1,6 @@
 import { defineConfig } from 'playwright/test';
 import base from './playwright.gpu-studio.config.mjs';
+import { LANE_ARGS } from './tools/lib/browser-lanes.mjs';
 
 export default defineConfig({
   ...base,
@@ -10,10 +11,12 @@ export default defineConfig({
     ...base.use,
     reducedMotion: 'no-preference',
     hasTouch: true,
-    // The software lane is the portable default. Opt in explicitly for a local
-    // native-adapter receipt; neither lane is physical-phone performance proof.
-    ...(process.env.LUPI_ACTION_GPU === 'native' ? {
-      launchOptions: { ...base.use.launchOptions, args: ['--enable-unsafe-webgpu'] },
-    } : {}),
+    // The software lane (lane G, tools/lib/browser-lanes.mjs) is the portable
+    // default. Opt in explicitly for a local native-adapter receipt; neither
+    // lane is physical-phone performance proof.
+    launchOptions: {
+      ...base.use.launchOptions,
+      args: process.env.LUPI_ACTION_GPU === 'native' ? ['--enable-unsafe-webgpu'] : [...LANE_ARGS.webgpu],
+    },
   },
 });

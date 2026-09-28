@@ -1,4 +1,5 @@
 import { defineConfig, devices } from 'playwright/test';
+import { LANE_ARGS } from './tools/lib/browser-lanes.mjs';
 
 const LOCAL_BASE_URL = 'http://127.0.0.1:4173';
 
@@ -52,7 +53,8 @@ export default defineConfig({
     video: 'off',
     launchOptions: {
       ...(browserExecutable ? { executablePath: browserExecutable } : {}),
-      args: ['--disable-webgpu', '--enable-unsafe-swiftshader'],
+      // Lane L: WebGPURenderer on its WebGL2 backend (tools/lib/browser-lanes.mjs).
+      args: [...LANE_ARGS.webgl2],
     },
   },
   projects: [

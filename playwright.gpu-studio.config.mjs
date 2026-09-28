@@ -1,5 +1,6 @@
 import { defineConfig } from "playwright/test";
 import base from "./playwright.config.mjs";
+import { LANE_ARGS } from "./tools/lib/browser-lanes.mjs";
 
 export default defineConfig({
   ...base,
@@ -15,12 +16,8 @@ export default defineConfig({
       args:
         process.env.LUPI_STUDIO_GPU === "native"
           ? ["--enable-unsafe-webgpu"]
-          : [
-              "--enable-unsafe-webgpu",
-              "--enable-unsafe-swiftshader",
-              "--use-webgpu-adapter=swiftshader",
-              "--use-angle=swiftshader",
-            ],
+          : // SwiftShader loses the device without the full lane-G set.
+            [...LANE_ARGS.webgpu],
     },
   },
 });
