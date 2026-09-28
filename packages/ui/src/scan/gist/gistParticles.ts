@@ -1,6 +1,7 @@
 /// <reference types="vgpu/client" />
 import { init, surface, type Gpu } from 'vgpu';
 import type { ColouredPoints, Gist, Volume } from '@atlas/core/gist';
+import { installWebGPUCompat } from '../../viewer/webgpuCompat';
 import { GIST_PARTICLE_COUNT, createGistEngine, type GistEngine, type PhotoPixels } from './gistEngine';
 import stepShader from './gist-step.wgsl';
 import pointsShader from './gist-points.wgsl';
@@ -88,6 +89,8 @@ export async function createGistParticles(canvas: HTMLCanvasElement, onFailure: 
   }
 
   try {
+    // The viewer's tolerant createView (three r186 swizzle shape); idempotent.
+    installWebGPUCompat();
     // The vertex stage reads the particle storage buffer; that needs one
     // storage buffer in the vertex stage, which is not in the default limits.
     // An adapter that cannot grant it fails here and the stage falls back.
