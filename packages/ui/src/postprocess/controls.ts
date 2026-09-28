@@ -1,4 +1,11 @@
-import { POSTPROCESS_PRESETS, type PostprocessPresetConfig, type PostprocessPresetId } from './presets';
+import {
+  POSTPROCESS_PRESETS,
+  reduceForMobile,
+  reduceForPlayback,
+  scalePreset,
+  type PostprocessPresetConfig,
+  type PostprocessPresetId,
+} from './presets';
 
 /** Overrides belong to one recipe. Changing recipes cannot accidentally inherit
  * a different recipe's focus or exposure. Legacy URL flags remain compatible. */
@@ -42,4 +49,21 @@ export function sanitizeEffectOverrides(input: unknown): EffectOverrides | null 
   }
   if (value.toneMapping === 'aces' || value.toneMapping === 'reinhard' || value.toneMapping === 'none') result.toneMapping = value.toneMapping;
   return result;
+}
+
+export interface ActivePostprocessInput {
+  presetId: PostprocessPresetId;
+  intensity: number;
+  overrides: EffectOverrides | null;
+  playing: boolean;
+  /** Phone/low-power budget (reduceForMobile), unless the user asked for full effects. */
+  reduced: boolean;
+}
+
+/** The recipe the viewer renders: preset + overrides, scaled by intensity,
+ *  cheapened for playback, then bounded by the device budget. */
+export function resolveActivePostprocess(input: ActivePostprocessInput): PostprocessPresetConfig {
+  const scaled = scalePreset(resolveEffects(input.presetId, input.overrides), input.intensity);
+  const playback = input.playing ? reduceForPlayback(scaled) : scaled;
+  return input.reduced ? reduceForMobile(playback) : playback;
 }
