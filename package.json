@@ -40,6 +40,7 @@
     "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
     "verify:asset-quality": "node tools/verify-asset-quality.mjs",
     "verify:render-parity": "node tools/verify-render-parity.mjs",
+    "verify:viewer-smoke": "node tools/verify-viewer-smoke.mjs",
     "verify:cloudflare-live": "node tools/verify-cloudflare-live.mjs",
     "verify:workflows": "node tools/run-actionlint.mjs",
     "verify:product-contract": "node tools/verify-product-contract.mjs",

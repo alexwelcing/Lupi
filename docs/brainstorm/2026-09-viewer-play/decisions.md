@@ -39,3 +39,13 @@ Answers to the open questions in [README.md §8](README.md#8-decisions-only-the-
 - **Prerequisites removed:** "Measure first" (device lab, telemetry, perf gate) and the metrics parts of the access contract no longer gate anything. Accessibility basics (keyboard route, reduced motion) stay as part of "it works".
 - **Order:** the port (R1–R12 in the v10 brief) comes first, with Export V2 and the GPU Studio fold inside it and XR removed. The feel ideas (motion kernel, flick, gestures, detents, arrival, poke ripple) are built on the ported engine rather than as separate v9 slices.
 - **Scope added back:** arcade-style games are eligible again.
+
+## Port decisions (2026-09-28, second round)
+
+| Question | Decision | Effect |
+|---|---|---|
+| GPU Studio | **Remove it now.** | The port deletes the GPU Studio modal; a Look can bring the snowglobe back later on the new engine. `/scan` and the action-light buttons keep working. |
+| Sign-off on looks and export images | **None. Ship, then the owner reports feedback.** | No before/after gallery, golden-image approval or pixel thresholds gate the merge. |
+| Testing | **Less testing; no new automated checks in CI.** | No new CI lanes or end-to-end specs. Existing CI stays green; tests that only assert removed internals are deleted or rewritten. The dual-backend smoke tool is a local check, not a CI gate. No real-phone checklist. |
+| Export background | **Exports use the view as configured in the viewer.** | Raster exports default to whatever background (and, where feasible, look) the user set in the viewer. |
+| Landing, labels, three version, axes gizmo | Decided by the lead under "it works". | All port work merges into this branch; 3D labels are canvas-texture sprites; ship on three 0.186.1; the axes gizmo becomes a small overlay. |
