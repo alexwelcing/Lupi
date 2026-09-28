@@ -1286,6 +1286,12 @@ button:focus:not(:focus-visible) {
     left: 10px;
     min-width: 106px;
   }
+  /* The axes gizmo (bottom right of the viewport) sits on the bucket's row,
+     above the horizontal command deck; with the deck stowed, or the style
+     sheet shrinking the viewport, it drops back to the corner. */
+  .lupine-app-root { --lupi-axes-gizmo-lift: calc(64px + env(safe-area-inset-bottom)); }
+  .lupine-app-root[data-ui-stowed='true'],
+  .lupine-app-root[data-style-open='true'] { --lupi-axes-gizmo-lift: 0px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

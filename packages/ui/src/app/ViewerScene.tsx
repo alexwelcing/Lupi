@@ -725,8 +725,10 @@ export function ViewerScene({
 
       {showAxes && (
         <AxesGizmo
-          alignment="bottom-left"
-          margin={[72, 72]}
+          // Bottom right: the Clear view pill and the phone command deck own
+          // the bottom-left corner (global.css lifts it above the deck).
+          alignment="bottom-right"
+          margin={[62, 62]}
           axisColors={['#ff4060', '#40ff80', '#4080ff']}
           labelColor="white"
         />

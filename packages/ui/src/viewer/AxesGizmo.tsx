@@ -18,8 +18,12 @@ import { Quaternion, Vector3 } from 'three';
 import { LUPI_JOB } from '@atlas/scene';
 
 export interface AxesGizmoProps {
-  alignment: 'bottom-left';
-  /** Offset of the gizmo centre from the aligned corner, CSS px. */
+  alignment: 'bottom-left' | 'bottom-right';
+  /**
+   * Offset of the gizmo centre from the aligned corner, CSS px. The page can
+   * raise it further with the `--lupi-axes-gizmo-lift` CSS variable (the phone
+   * layout lifts it above the command deck).
+   */
   margin: [number, number];
   /** X, Y, Z axis colours. */
   axisColors: [string, string, string];
@@ -64,10 +68,12 @@ function buildGizmo(props: AxesGizmoProps): GizmoNodes {
     role: 'img',
     'aria-label': 'Axes orientation',
   });
+  root.setAttribute('class', 'lupine-axes-gizmo');
+  const side = props.alignment === 'bottom-right' ? 'right' : 'left';
   Object.assign(root.style, {
     position: 'absolute',
-    left: `${props.margin[0] - CENTER}px`,
-    bottom: `${props.margin[1] - CENTER}px`,
+    [side]: `${props.margin[0] - CENTER}px`,
+    bottom: `calc(var(--lupi-axes-gizmo-lift, 0px) + ${props.margin[1] - CENTER}px)`,
     pointerEvents: 'none',
     overflow: 'visible',
     zIndex: '1',
