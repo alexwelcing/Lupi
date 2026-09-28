@@ -10,7 +10,9 @@
  * `/?testbed` alone lists the cases and publishes their ids in
  * `window.__lupiHarness.cases` (what `--cases=all` runs).
  *
- * Each rendering layer adds at most one case file and one line to CASES.
+ * Cases are discovered from `testbed/cases/*.tsx` (one lazy chunk each; the
+ * file name is the case id), so a rendering layer adds its case file without
+ * touching this router. Each layer adds at most one.
  */
 import { Suspense, useEffect, useRef, useState, type ComponentType } from 'react';
 import { useFrame } from '@react-three/fiber/webgpu';
@@ -32,11 +34,14 @@ interface HarnessCaseModule {
   default: ComponentType;
 }
 
-const CASES: Record<string, () => Promise<HarnessCaseModule>> = {
-  plate: () => import('./testbed/cases/plate'),
-};
+const CASES = new Map<string, () => Promise<HarnessCaseModule>>(
+  Object.entries(import.meta.glob<HarnessCaseModule>('./testbed/cases/*.tsx')).map(([path, load]) => [
+    path.slice(path.lastIndexOf('/') + 1, -'.tsx'.length),
+    load,
+  ]),
+);
 
-const CASE_IDS = Object.keys(CASES);
+const CASE_IDS = [...CASES.keys()].sort();
 
 const CAMERA = { position: [0, 0, 5] as [number, number, number], fov: 50, near: 0.1, far: 100 };
 
@@ -92,7 +97,7 @@ export function Testbed() {
 
   useEffect(() => {
     startHarness(caseId, CASE_IDS);
-    const load = CASES[caseId];
+    const load = CASES.get(caseId);
     if (!load) {
       if (caseId) harnessAssert('case exists', false, `unknown case "${caseId}"; known: ${CASE_IDS.join(', ')}`);
       harnessReady();
@@ -113,7 +118,7 @@ export function Testbed() {
     };
   }, [caseId]);
 
-  if (!CASES[caseId]) return <TestbedIndex unknown={caseId} />;
+  if (!CASES.has(caseId)) return <TestbedIndex unknown={caseId} />;
 
   return (
     <div style={PAGE_STYLE}>
