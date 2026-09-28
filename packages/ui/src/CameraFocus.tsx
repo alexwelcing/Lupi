@@ -1,10 +1,14 @@
 /**
  * <CameraFocus /> - smooth focus move for a clicked atom.
+ *
+ * Runs as the `lupi/camera-focus` job in the `update` phase: after input and
+ * controls, before the canonical/uniform phases and the default render.
  */
 
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
+import { LUPI_JOB } from '@atlas/scene';
 import type { Frame } from '@atlas/core/types';
 import { useStore } from './store';
 
@@ -20,7 +24,9 @@ interface CameraFocusProps {
 
 export function CameraFocus({ frame, enabled = true }: CameraFocusProps) {
   const selectedAtoms = useStore(s => s.selectedAtoms);
-  const { camera, controls, invalidate } = useThree();
+  const camera = useThree((state) => state.camera);
+  const controls = useThree((state) => state.controls);
+  const invalidate = useThree((state) => state.invalidate);
   const focusTargetRef = useRef<THREE.Vector3 | null>(null);
   const previousAtomRef = useRef<number | null>(null);
 
@@ -73,7 +79,7 @@ export function CameraFocus({ frame, enabled = true }: CameraFocusProps) {
       );
       focusTargetRef.current = null;
     }
-  });
+  }, { phase: 'update', id: LUPI_JOB.cameraFocus });
 
   return null;
 }

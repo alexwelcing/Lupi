@@ -80,9 +80,10 @@ async function ensurePage(deadlineAt) {
       '--disable-dev-shm-usage',
       '--disable-gpu-sandbox',
       '--renderer-process-limit=1',
-      // Headless WebGPU can render interactively but does not provide a
-      // dependable canvas readback for export_asset. The immutable PNG lane
-      // deliberately uses the proven WebGL/SwiftShader capture path.
+      // No WebGPU adapter: the viewer's WebGPURenderer runs its WebGL2
+      // backend on SwiftShader, so every artifact from this service is in the
+      // browser-webgpu-webgl2-main-thread execution class (exportProfileV2.ts)
+      // and never shares an artifactKey with a WebGPU-backend render.
       '--disable-webgpu',
       '--use-gl=angle',
       '--use-angle=swiftshader',

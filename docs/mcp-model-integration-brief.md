@@ -2,7 +2,7 @@
 
 This document is a handoff for a model or agent that needs to integrate with Lupi quickly and reliably. The browser-native bridge remains useful for visual QA and local viewer debugging, but the preferred production path is the Cloudflare MCP control plane in `apps/mcp-worker`; see `docs/cloudflare-mcp.md`.
 
-The browser route at `https://lupi.live/#/mcp` is still the compatibility fallback when you need to drive the real WebGL/WebGPU viewer.
+The browser route at `https://lupi.live/#/mcp` is still the compatibility fallback when you need to drive the real viewer. It renders through three's `WebGPURenderer`: on the WebGPU backend when the browser has an adapter, otherwise on its WebGL2 fallback. `status().rendererBackend` says which.
 
 ## Current judgment
 
@@ -188,7 +188,10 @@ Status shape:
 ```ts
 interface LupiMcpStatus {
   ready: true;
-  version: string;
+  version: string; // dated bridge release, e.g. '2026-09-28.asset-export'
+  rendererBackend: 'webgpu' | 'webgl2' | null; // null until the canvas has a renderer
+  webGPUSupported: boolean | null;
+  rendererExecutionClass: 'browser-webgpu-main-thread' | 'browser-webgpu-webgl2-main-thread' | null;
   toolCount: number;
   moleculeLoaded: boolean;
   atomCount: number;
@@ -206,9 +209,16 @@ distance inference. `showBondsEffective` is stricter: it becomes true only
 after a renderer backend has materialized at least one bond. Use `bondCount`
 and `bondSource` when a screenshot or visual handoff must prove rendered bonds.
 
+`rendererBackend` names the running backend. `rendererExecutionClass` is the
+artifact execution class that backend implies: the same export spec keeps its
+`specId` on both backends but gets a different `rendererFingerprint` and
+`artifactKey`, so never compare exported bytes across backends. Wait for a
+non-null `rendererBackend` before `lupi.export_asset`; the `lupi.status` tool
+returns the same three fields.
+
 ## Tool inventory
 
-There are currently 30 browser-viewer `lupi.*` tools. Always prefer
+There are currently 31 browser-viewer `lupi.*` tools. Always prefer
 `/browser-mcp-manifest.json` for their live schemas.
 
 Molecule and asset tools:
@@ -221,14 +231,14 @@ Molecule and asset tools:
 - `lupi.browse_collection` — page a remote OMol25 collection (`neutral-train`, `neutral-validation`, `all-train-preview`, `train-4m-preview`, `validation-preview`) through the same-origin dataset edge; exact `formula` or text `query`, at most 36 rows, source coordinates only, no bonds.
 - `lupi.set_viewer` — broad viewer patch for common style/camera settings.
 - `lupi.export_xyz` — return active frame XYZ text.
-- `lupi.export_asset` — return the active deterministic view as inline PNG/JPEG/WebP or GLB with `dataBase64`, `dataUrl`, `mimeType`, `filename`, and `byteLength`. USDZ stays outside the immutable-key lane until its serializer is byte-stable.
+- `lupi.export_asset` — return the active deterministic view as inline PNG/JPEG/WebP or GLB with `dataBase64`, `dataUrl`, `mimeType`, `filename`, and `byteLength`. Rasters are rendered from the raw scene into their own render target (the interactive post pipeline is bypassed) with the viewer's gradient background or transparency; see "Render artifact V2 truth" in `AGENTS.md`. USDZ stays outside the immutable-key lane until its serializer is byte-stable.
 - `lupi.viewer_state` — return current viewer state.
 - `lupi.assess_asset` — run a bounded fast assessment of active, URL, or envelope source evidence.
 - `lupi.knowledge_graph` — query active knowledge-graph labels.
 
 Core health:
 
-- `lupi.status` — report readiness and viewer health.
+- `lupi.status` — report readiness, viewer health, and the renderer backend.
 
 Trajectory and playback:
 

@@ -17,6 +17,9 @@ import {
   type AssessmentSource,
 } from '@atlas/assessment';
 import type { LupiMcpRequest, LupiMcpResponseResult, LupiMcpToolDefinition } from './types';
+import type { LupiMcpRendererStatus } from './driver';
+import { getLupiRendererRuntime } from '../viewer/createLupiRenderer';
+import { executionClassV2 } from '../export/exportProfileV2';
 import { MCP_TOOL_DEFINITIONS } from './toolManifest';
 import {
   FALLBACK_OMOL_COLLECTIONS,
@@ -652,12 +655,23 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
   };
 }
 
+/** The renderer fields of `lupi.status`, the driver's status() and state(). */
+export function readMcpRendererStatus(): LupiMcpRendererStatus {
+  const runtime = getLupiRendererRuntime();
+  return {
+    rendererBackend: runtime?.backend ?? null,
+    webGPUSupported: runtime ? runtime.backend === 'webgpu' : null,
+    rendererExecutionClass: runtime ? executionClassV2(runtime.backend) : null,
+  };
+}
+
 async function handleStatus(): Promise<LupiMcpResponseResult> {
   const state = useStore.getState();
   const frame = state.file?.trajectory.frames[state.frame];
   return {
     ready: true,
     version: LUPI_VIEWER_MCP_VERSION,
+    ...readMcpRendererStatus(),
     toolCount: MCP_TOOL_DEFINITIONS.length,
     moleculeLoaded: Boolean(state.file),
     atomCount: frame?.natoms ?? 0,

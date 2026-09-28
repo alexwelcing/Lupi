@@ -81,6 +81,13 @@ R2 write, reads the bytes back, and only then records `complete`. The per-job
 provenance receipt records those checks and the browser receipt as provenance;
 it does not upgrade the result to V1.
 
+The co-built browser lane launches Chromium with `--disable-webgpu`, so the
+viewer's `WebGPURenderer` runs on its WebGL2 backend. Its browser receipt
+(`rendererFingerprint`, `artifactKey`) therefore belongs to the
+`browser-webgpu-webgl2-main-thread` execution class of the browser renderer
+profile V2, and never matches a WebGPU-backend receipt for the same spec. See
+`docs/render-artifact-contract.md`.
+
 ## Run locally
 
 ```bash
@@ -166,7 +173,7 @@ public retrieval surface.
 - `lupi.get_asset`
 - `lupi.viewer_manifest`
 
-The browser manifest intentionally remains a separate 30-tool interactive
+The browser manifest intentionally remains a separate 31-tool interactive
 surface. A shared render specification does not imply a shared tool inventory.
 
 ## Resource shape and authorization boundary
@@ -201,6 +208,8 @@ actions activates `RenderRequestV1`.
 
 These lanes never imply one another. Source presence or a local Worker test is
 not deployment evidence; a configured legacy renderer is not V1 execution.
+The receipts above predate the WebGPURenderer port (browser renderer profile
+V2) and its archived V1 WebGL golden; they have not been re-run on the port.
 
 ## Next owner
 

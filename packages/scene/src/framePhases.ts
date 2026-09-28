@@ -33,11 +33,17 @@ export const LUPI_JOB = {
   envSync: 'lupi/env-sync',
   exportCanonical: 'lupi/export-canonical',
   exportCapture: 'lupi/export-capture',
+  /** Queued viewer captures (saved-view thumbnails) in `lupi-capture`. */
+  viewerCapture: 'lupi/viewer-capture',
   videoDrive: 'lupi/video-drive',
   axesGizmo: 'lupi/axes-gizmo',
   dofFocus: 'lupi/dof-focus',
   labelsFacing: 'lupi/labels-facing',
   contactShadow: 'lupi/contact-shadow',
+  /** Camera state sync (store presets, flythrough preview, clipping planes) in `update`. */
+  cameraSync: 'lupi/camera-sync',
+  /** The eased move to a clicked atom in `update`. */
+  cameraFocus: 'lupi/camera-focus',
   /** The testbed harness: probe projection and the readiness count. */
   harness: 'lupi/harness',
 } as const;

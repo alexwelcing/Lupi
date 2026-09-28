@@ -1,4 +1,5 @@
-export const LUPI_VIEWER_MCP_VERSION = '2026-07-07.asset-export';
+/** Dated bridge release; the mobile app accepts any dated asset-export release from 2026-07-07 on. */
+export const LUPI_VIEWER_MCP_VERSION = '2026-09-28.asset-export';
 export const MCP_RESPONSE_STORAGE_KEY = 'lupi.viewer.mcp.responses.v1';
 export const MCP_RESPONSE_EVENT = 'lupi:mcp:response';
 export const MCP_REQUEST_EVENT = 'lupi:mcp:request';

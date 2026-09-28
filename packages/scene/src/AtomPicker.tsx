@@ -1,12 +1,16 @@
 /**
  * <AtomPicker /> — Raycast-based atom selection
- * 
+ *
  * Uses spatial hash for O(1) closest-atom lookup instead of
- * O(n) iteration through all atoms.
+ * O(n) iteration through all atoms. Picking is CPU-only, so it behaves the
+ * same on the WebGPU backend and the WebGL2 fallback. The pointer is taken
+ * from each event's own client coordinates against the renderer's canvas,
+ * so a phone tap (which may arrive without a prior pointermove) picks where
+ * it landed.
  */
 
 import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
-import { useThree, useFrame } from '@react-three/fiber/webgpu';
+import { useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { SpatialHash3D } from './SpatialHash';
@@ -30,6 +34,23 @@ export interface PickedAtom {
   worldPosition: THREE.Vector3;
 }
 
+/**
+ * True when a pointer event belongs to the viewer canvas: its target is the
+ * canvas, or one of the canvas's own wrapper elements (R3F connects events,
+ * and OrbitControls captures the pointer, on the Canvas wrapper, so the
+ * pointerup/click after a press lands there), and the point is on the canvas.
+ * Clicks on UI panels over the canvas are not.
+ */
+function isViewerCanvasEvent(event: MouseEvent, canvas: HTMLCanvasElement): boolean {
+  const target = event.target;
+  if (target === canvas) return true;
+  const container = canvas.parentElement;
+  if (target !== container && target !== container?.parentElement) return false;
+  const rect = canvas.getBoundingClientRect();
+  return event.clientX >= rect.left && event.clientX <= rect.right
+    && event.clientY >= rect.top && event.clientY <= rect.bottom;
+}
+
 export function AtomPicker({
   frame,
   spatialHash,
@@ -42,7 +63,9 @@ export function AtomPicker({
   maxMeasureAtoms = 4,
   hiddenAtomTypes = new Set<number>(),
 }: AtomPickerProps) {
-  const { camera, scene, get, renderer } = useThree();
+  const camera = useThree((state) => state.camera);
+  const get = useThree((state) => state.get);
+  const renderer = useThree((state) => state.renderer);
   const [hoveredAtom, setHoveredAtom] = useState<number | null>(null);
   const [selectedAtoms, setSelectedAtoms] = useState<Set<number>>(new Set());
   const measureAtomsRef = useRef<number[]>([]); // For measurement mode
@@ -53,11 +76,17 @@ export function AtomPicker({
     [hiddenAtomTypesKey],
   );
 
-  // Pick atom at screen position
-  const pickAtom = useCallback((): PickedAtom | null => {
+  // Pick the atom under a client-space point (CSS px, as on pointer events).
+  const pickAtom = useCallback((clientX: number, clientY: number): PickedAtom | null => {
     const state = get();
-    const pointer = state.pointer;
     const raycaster = state.raycaster;
+    const canvas = renderer.domElement as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const pointer = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
 
     // Raycast into scene
     raycaster.setFromCamera(pointer, camera);
@@ -90,9 +119,8 @@ export function AtomPicker({
           
           // 2. Screen-space intersection (Solves the zoomed-out bug)
           atomPos.project(camera);
-          const pointer = get().pointer;
-          const dxPixels = (atomPos.x - pointer.x) * renderer.domElement.clientWidth / 2;
-          const dyPixels = (atomPos.y - pointer.y) * renderer.domElement.clientHeight / 2;
+          const dxPixels = (atomPos.x - pointer.x) * rect.width / 2;
+          const dyPixels = (atomPos.y - pointer.y) * rect.height / 2;
           const screenDistPixels = Math.hypot(dxPixels, dyPixels);
           const minClickPixels = 15; // 15px forgiveness zone
           
@@ -139,20 +167,29 @@ export function AtomPicker({
     }
 
     return null;
-  }, [camera, frame.positions, frame.types, hiddenTypes, radius, renderer, spatialHash]);
+  }, [camera, frame.positions, frame.types, get, hiddenTypes, radius, renderer, spatialHash]);
 
   // Mouse move handler
   const handleMouseMove = useCallback((e: MouseEvent) => {
     // If the user is dragging the mouse (orbiting the camera), skip expensive raymarching!
     if (!enabled || e.buttons > 0) return;
-    
-    const picked = pickAtom();
-    
+    // Hover only over the viewer canvas, not through UI panels above it;
+    // leaving the canvas clears the hover.
+    if (!isViewerCanvasEvent(e, renderer.domElement as HTMLCanvasElement)) {
+      if (hoveredAtom !== null) {
+        setHoveredAtom(null);
+        onHover?.(null);
+      }
+      return;
+    }
+
+    const picked = pickAtom(e.clientX, e.clientY);
+
     if (picked?.index !== hoveredAtom) {
       setHoveredAtom(picked?.index ?? null);
       onHover?.(picked?.index ?? null);
     }
-  }, [enabled, hoveredAtom, onHover, pickAtom, frame.types]);
+  }, [enabled, hoveredAtom, onHover, pickAtom, renderer]);
 
   // Pointer down tracking for distinguishing clicks from drags
   const pointerDownPosRef = useRef({ x: 0, y: 0 });
@@ -163,8 +200,8 @@ export function AtomPicker({
   // Click handler
   const handleClick = useCallback((e: MouseEvent) => {
     if (!enabled) return;
-    // Strictly isolate canvas clicks (prevent UI panel clicks from triggering deselection)
-    if (!(e.target instanceof HTMLCanvasElement)) return;
+    // Strictly isolate viewer canvas clicks (prevent UI panel clicks from triggering deselection)
+    if (!isViewerCanvasEvent(e, renderer.domElement as HTMLCanvasElement)) return;
     
     // Distinguish click from drag (especially on mobile)
     const dx = e.clientX - pointerDownPosRef.current.x;
@@ -173,7 +210,7 @@ export function AtomPicker({
       return; // It was a drag, ignore as a click
     }
     
-    const picked = pickAtom();
+    const picked = pickAtom(e.clientX, e.clientY);
     const index = picked?.index ?? null;
     
     onClick?.(index);
@@ -219,7 +256,7 @@ export function AtomPicker({
         onSelect?.([]);
       }
     }
-  }, [enabled, maxMeasureAtoms, onClick, onSelect, pickAtom, selectionMode]);
+  }, [enabled, maxMeasureAtoms, onClick, onSelect, pickAtom, renderer, selectionMode]);
 
   useEffect(() => {
     measureAtomsRef.current = [];

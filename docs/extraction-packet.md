@@ -119,7 +119,8 @@ Viewer-owned contracts:
 - API-key exchange API behavior
 - MCP/tool schemas for viewer control
 - URL serialization contract
-- screenshot/export artifact contract
+- screenshot/export artifact contract (browser renderer profile V2:
+  `packages/ui/src/export/exportProfileV2.ts`, `docs/render-artifact-contract.md`)
 
 ## Secrets And Infra
 

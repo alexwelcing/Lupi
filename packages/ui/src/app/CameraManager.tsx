@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
+import { LUPI_JOB } from '@atlas/scene';
 import { useStore } from '../store';
 import { viewportAspectFromSize } from '../cameraFit';
 
@@ -44,7 +45,8 @@ export function CameraManager({
     }
   }, [camera, center, distance, near]);
 
-  // Sync continuously during flythrough preview + keep clipping planes generous
+  // Sync continuously during flythrough preview + keep clipping planes generous.
+  // An `update`-phase job: after controls, before the default render.
   useFrame(() => {
     if (flythroughPreview) {
       const state = useStore.getState();
@@ -60,7 +62,7 @@ export function CameraManager({
     }
 
     applyPerspectiveProjection();
-  });
+  }, { phase: 'update', id: LUPI_JOB.cameraSync });
 
   // Sync with presets
   useEffect(() => {
