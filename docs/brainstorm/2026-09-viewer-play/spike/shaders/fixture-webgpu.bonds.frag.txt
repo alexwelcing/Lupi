@@ -1,0 +1,421 @@
+// Three.js r186 - Node System
+
+// global
+diagnostic( off, derivative_uniformity );
+
+
+// structs
+
+struct OutputStruct {
+	@location( 0 ) color: vec4<f32>,
+	@builtin( frag_depth ) depth : f32
+};
+var<private> output : OutputStruct;
+
+// uniforms
+
+struct objectStruct {
+	nodeUniform0 : f32,
+	nodeUniform2 : mat4x4<f32>,
+	nodeUniform3 : f32,
+	nodeUniform6 : f32,
+	nodeUniform7 : vec3<f32>,
+	nodeUniform8 : vec3<f32>,
+	nodeUniform9 : vec3<f32>,
+	nodeUniform10 : vec3<f32>,
+	nodeUniform11 : f32,
+	nodeUniform12 : f32,
+	nodeUniform16 : vec3<f32>,
+	nodeUniform17 : f32,
+	nodeUniform18 : vec3<f32>,
+	nodeUniform19 : f32,
+	nodeUniform20 : f32,
+	nodeUniform21 : f32
+};
+@binding( 0 ) @group( 1 )
+var<uniform> object : objectStruct;
+
+struct renderStruct {
+	cameraNear : f32,
+	cameraFar : f32,
+	cameraProjectionMatrix : mat4x4<f32>,
+	cameraViewMatrix : mat4x4<f32>,
+	nodeUniform14 : vec2<f32>,
+	nodeUniform15 : vec2<f32>
+};
+@binding( 0 ) @group( 0 )
+var<uniform> render : renderStruct;
+
+// vars
+var<private> nodeVar0 : vec3<f32>;
+var<private> nodeVar1 : bool;
+var<private> nodeVar9 : vec3<f32>;
+var<private> nodeVar10 : vec3<f32>;
+var<private> nodeVar11 : vec3<f32>;
+var<private> nodeVar12 : f32;
+var<private> nodeVar13 : vec3<f32>;
+var<private> nodeVar14 : vec3<f32>;
+var<private> nodeVar15 : vec3<f32>;
+var<private> nodeVar16 : vec3<f32>;
+var<private> nodeVar17 : f32;
+var<private> nodeVar18 : f32;
+var<private> nodeVar19 : vec3<f32>;
+var<private> nodeVar20 : vec3<f32>;
+var<private> nodeVar21 : f32;
+var<private> nodeVar22 : f32;
+var<private> nodeVar23 : f32;
+var<private> nodeVar24 : f32;
+var<private> nodeVar25 : f32;
+var<private> nodeVar26 : f32;
+var<private> nodeVar27 : f32;
+var<private> nodeVar28 : f32;
+var<private> nodeVar29 : f32;
+var<private> nodeVar30 : f32;
+var<private> nodeVar31 : f32;
+var<private> nodeVar32 : f32;
+var<private> nodeVar33 : f32;
+var<private> nodeVar34 : f32;
+var<private> nodeVar35 : f32;
+var<private> nodeVar36 : f32;
+var<private> nodeVar37 : f32;
+var<private> nodeVar38 : f32;
+var<private> nodeVar39 : vec3<f32>;
+var<private> nodeVar40 : vec3<f32>;
+var<private> nodeVar41 : f32;
+var<private> nodeVar42 : f32;
+var<private> nodeVar43 : f32;
+var<private> bondHit : vec4<f32>;
+var<private> bondHitPoint : vec3<f32>;
+var<private> bondHitZ : f32;
+var<private> nodeVar44 : f32;
+var<private> DiffuseColor : vec4<f32>;
+var<private> nodeVar45 : vec3<f32>;
+var<private> nodeVar46 : vec3<f32>;
+var<private> nodeVar47 : vec3<f32>;
+var<private> nodeVar48 : vec3<f32>;
+var<private> nodeVar49 : vec3<f32>;
+var<private> nodeVar50 : vec3<f32>;
+var<private> nodeVar51 : f32;
+var<private> nodeVar52 : vec3<f32>;
+var<private> nodeVar53 : vec3<f32>;
+var<private> nodeVar54 : vec3<f32>;
+var<private> nodeVar55 : vec3<f32>;
+var<private> nodeVar56 : f32;
+var<private> nodeVar57 : f32;
+var<private> nodeVar58 : f32;
+var<private> nodeVar59 : vec3<f32>;
+var<private> nodeVar60 : f32;
+var<private> nodeVar62 : f32;
+var<private> nodeVar63 : f32;
+var<private> nodeVar64 : f32;
+var<private> nodeVar65 : f32;
+var<private> nodeVar66 : f32;
+var<private> nodeVar67 : f32;
+var<private> nodeVar68 : f32;
+var<private> nodeVar69 : f32;
+var<private> nodeVar70 : f32;
+var<private> nodeVar71 : vec3<f32>;
+var<private> nodeVar72 : vec3<f32>;
+var<private> Output : vec4<f32>;
+var<private> nodeVar73 : vec4<f32>;
+
+// codes
+
+
+@fragment
+fn main( @location( 0 ) vBondViewPos : vec3<f32>,
+	@location( 1 ) vB : vec3<f32>,
+	@location( 2 ) vA : vec3<f32>,
+	@location( 3 ) vBondRadius : f32,
+	@location( 4 ) vColorA : vec3<f32>,
+	@location( 5 ) vColorB : vec3<f32>,
+	@location( 6 ) vBondPixelRadius : f32 ) -> OutputStruct {
+
+	// flow
+	// code
+
+	nodeVar1 = ( object.nodeUniform0 > 0.5 );
+
+	if ( nodeVar1 ) {
+
+		nodeVar0 = vec3<f32>( vBondViewPos.xy, 0.0 );
+
+	} else {
+
+		nodeVar0 = vec3<f32>( 0.0, 0.0, 0.0 );
+
+	}
+
+	nodeVar9 = nodeVar0;
+
+	if ( nodeVar1 ) {
+
+		nodeVar10 = vec3<f32>( 0.0, 0.0, -1.0 );
+
+	} else {
+
+		nodeVar10 = normalize( vBondViewPos );
+
+	}
+
+	nodeVar11 = nodeVar10;
+	nodeVar12 = length( ( vB - vA ) );
+	nodeVar13 = ( ( vB - vA ) / vec3<f32>( max( nodeVar12, 0.000001 ) ) );
+
+	if ( nodeVar1 ) {
+
+		nodeVar14 = vec3<f32>( vBondViewPos.xy, 0.0 );
+
+	} else {
+
+		nodeVar14 = vec3<f32>( 0.0, 0.0, 0.0 );
+
+	}
+
+	nodeVar15 = ( nodeVar14 - vA );
+
+	if ( nodeVar1 ) {
+
+		nodeVar16 = vec3<f32>( 0.0, 0.0, -1.0 );
+
+	} else {
+
+		nodeVar16 = normalize( vBondViewPos );
+
+	}
+
+	nodeVar17 = dot( nodeVar13, nodeVar16 );
+	nodeVar18 = dot( nodeVar13, nodeVar15 );
+	nodeVar19 = ( nodeVar16 - ( nodeVar13 * vec3<f32>( nodeVar17 ) ) );
+	nodeVar20 = ( nodeVar15 - ( nodeVar13 * vec3<f32>( nodeVar18 ) ) );
+	nodeVar21 = dot( nodeVar19, nodeVar19 );
+	nodeVar22 = dot( nodeVar19, nodeVar20 );
+	nodeVar23 = ( dot( nodeVar20, nodeVar20 ) - ( vBondRadius * vBondRadius ) );
+	nodeVar24 = -1.0;
+	nodeVar25 = 0.0;
+	nodeVar26 = 0.0;
+	nodeVar27 = 0.0;
+
+	if ( ( nodeVar21 > 1e-8 ) ) {
+
+		nodeVar28 = ( ( nodeVar22 * nodeVar22 ) - ( nodeVar21 * nodeVar23 ) );
+
+		if ( ( nodeVar28 >= 0.0 ) ) {
+
+			nodeVar29 = ( ( ( - nodeVar22 ) - sqrt( nodeVar28 ) ) / nodeVar21 );
+			nodeVar30 = ( nodeVar18 + ( nodeVar29 * nodeVar17 ) );
+
+			if ( ( ( nodeVar30 >= 0.0 ) && ( nodeVar30 <= nodeVar12 ) ) ) {
+
+				nodeVar24 = nodeVar29;
+				nodeVar25 = nodeVar30;
+				nodeVar27 = 1.0;
+				
+
+			}
+
+			
+
+		}
+
+		
+
+	}
+
+
+	if ( ( ( nodeVar27 < 0.5 ) && ( abs( nodeVar17 ) > 0.000001 ) ) ) {
+
+		nodeVar31 = ( ( - nodeVar18 ) / nodeVar17 );
+		nodeVar32 = ( ( nodeVar12 - nodeVar18 ) / nodeVar17 );
+		nodeVar33 = min( nodeVar31, nodeVar32 );
+		nodeVar34 = max( nodeVar31, nodeVar32 );
+
+		if ( ( nodeVar31 < nodeVar32 ) ) {
+
+			nodeVar35 = 0.0;
+
+		} else {
+
+			nodeVar35 = nodeVar12;
+
+		}
+
+		nodeVar36 = nodeVar35;
+
+		if ( ( nodeVar31 < nodeVar32 ) ) {
+
+			nodeVar37 = nodeVar12;
+
+		} else {
+
+			nodeVar37 = 0.0;
+
+		}
+
+		nodeVar38 = nodeVar37;
+		nodeVar39 = ( ( ( nodeVar14 + ( nodeVar16 * vec3<f32>( nodeVar33 ) ) ) - vA ) - ( nodeVar13 * vec3<f32>( nodeVar36 ) ) );
+		nodeVar40 = ( ( ( nodeVar14 + ( nodeVar16 * vec3<f32>( nodeVar34 ) ) ) - vA ) - ( nodeVar13 * vec3<f32>( nodeVar38 ) ) );
+		nodeVar41 = ( vBondRadius * vBondRadius );
+
+		if ( ( dot( nodeVar39, nodeVar39 ) <= nodeVar41 ) ) {
+
+			nodeVar24 = nodeVar33;
+			nodeVar25 = nodeVar36;
+
+			if ( ( nodeVar36 < 5e-7 ) ) {
+
+				nodeVar42 = -1.0;
+
+			} else {
+
+				nodeVar42 = 1.0;
+
+			}
+
+			nodeVar26 = nodeVar42;
+			
+
+		} else {
+
+
+			if ( ( dot( nodeVar40, nodeVar40 ) <= nodeVar41 ) ) {
+
+				nodeVar24 = nodeVar34;
+				nodeVar25 = nodeVar38;
+
+				if ( ( nodeVar38 < 5e-7 ) ) {
+
+					nodeVar43 = -1.0;
+
+				} else {
+
+					nodeVar43 = 1.0;
+
+				}
+
+				nodeVar26 = nodeVar43;
+				
+
+			}
+
+			
+
+		}
+
+		
+
+	}
+
+
+	if ( ( nodeVar24 <= 0.0 ) ) {
+
+		discard;
+		
+
+	}
+
+	bondHit = vec4<f32>( nodeVar24, nodeVar25, nodeVar26, nodeVar12 );
+	bondHitPoint = ( nodeVar9 + ( nodeVar11 * vec3<f32>( bondHit.x ) ) );
+	bondHitZ = bondHitPoint.z;
+
+	if ( nodeVar1 ) {
+
+		nodeVar44 = ( ( bondHitZ + render.cameraNear ) / ( render.cameraNear - render.cameraFar ) );
+
+	} else {
+
+		nodeVar44 = ( ( ( render.cameraNear + bondHitZ ) * render.cameraFar ) / ( ( render.cameraFar - render.cameraNear ) * bondHitZ ) );
+
+	}
+
+	output.depth = nodeVar44;
+	nodeVar45 = ( ( vB - vA ) / vec3<f32>( max( bondHit.w, 0.000001 ) ) );
+	nodeVar46 = normalize( ( ( bondHitPoint - vA ) - ( nodeVar45 * vec3<f32>( bondHit.y ) ) ) );
+
+	if ( ( abs( bondHit.z ) > 0.5 ) ) {
+
+		nodeVar47 = ( nodeVar45 * vec3<f32>( bondHit.z ) );
+
+	} else {
+
+		nodeVar47 = nodeVar46;
+
+	}
+
+	nodeVar48 = nodeVar47;
+
+	if ( ( ( bondHit.y / max( bondHit.w, 0.000001 ) ) < 0.5 ) ) {
+
+		nodeVar49 = vColorA;
+
+	} else {
+
+		nodeVar49 = vColorB;
+
+	}
+
+	nodeVar50 = nodeVar49;
+	nodeVar51 = clamp( object.nodeUniform6, 0.0, 1.0 );
+	nodeVar52 = mix( vec3<f32>( 0.04, 0.04, 0.04 ), nodeVar50, nodeVar51 );
+	nodeVar53 = normalize( ( object.nodeUniform7 + vec3<f32>( 0.0, 0.0, 1.0 ) ) );
+	nodeVar54 = ( nodeVar52 + ( ( vec3<f32>( 1.0, 1.0, 1.0 ) - nodeVar52 ) * vec3<f32>( pow( ( 1.0 - max( dot( object.nodeUniform7, nodeVar53 ), 0.0 ) ), 5.0 ) ) ) );
+	nodeVar56 = dot( nodeVar48, object.nodeUniform8 );
+
+	if ( ( nodeVar56 >= 0.0 ) ) {
+
+		nodeVar55 = mix( vec3<f32>( 0.62, 0.62, 0.64 ), vec3<f32>( 0.86, 0.9, 0.97 ), nodeVar56 );
+
+	} else {
+
+		nodeVar55 = mix( vec3<f32>( 0.62, 0.62, 0.64 ), vec3<f32>( 0.3, 0.28, 0.27 ), ( - nodeVar56 ) );
+
+	}
+
+	nodeVar57 = mix( 1.0, 1.0, 0.0 );
+	nodeVar58 = mix( 1.0, 1.0, ( 0.0 * 0.5 ) );
+	nodeVar60 = dot( reflect( ( - vec3<f32>( 0.0, 0.0, 1.0 ) ), nodeVar48 ), object.nodeUniform8 );
+
+	if ( ( nodeVar60 >= 0.0 ) ) {
+
+		nodeVar59 = mix( vec3<f32>( 0.62, 0.62, 0.64 ), vec3<f32>( 0.86, 0.9, 0.97 ), nodeVar60 );
+
+	} else {
+
+		nodeVar59 = mix( vec3<f32>( 0.62, 0.62, 0.64 ), vec3<f32>( 0.3, 0.28, 0.27 ), ( - nodeVar60 ) );
+
+	}
+
+	nodeVar62 = max( clamp( object.nodeUniform11, 0.0, 1.0 ), clamp( ( 1.6 / max( vBondPixelRadius, 1.0 ) ), 0.0, 0.6 ) );
+	nodeVar63 = ( nodeVar62 * nodeVar62 );
+	nodeVar64 = ( nodeVar63 * nodeVar63 );
+	nodeVar65 = max( dot( nodeVar48, nodeVar53 ), 0.0 );
+	nodeVar66 = ( ( ( nodeVar65 * nodeVar65 ) * ( nodeVar64 - 1.0 ) ) + 1.0 );
+	nodeVar67 = max( dot( nodeVar48, vec3<f32>( 0.0, 0.0, 1.0 ) ), 0.0 );
+	nodeVar68 = ( ( ( nodeVar63 + 1.0 ) * ( nodeVar63 + 1.0 ) ) / 8.0 );
+	nodeVar69 = max( dot( nodeVar48, object.nodeUniform7 ), 0.0 );
+	nodeVar70 = pow( ( 1.0 - nodeVar67 ), 4.0 );
+	nodeVar71 = max( ( ( ( ( ( ( ( ( vec3<f32>( 1.0, 1.0, 1.0 ) - nodeVar54 ) * vec3<f32>( ( 1.0 - nodeVar51 ) ) ) * nodeVar50 ) * ( ( ( ( ( ( nodeVar55 + ( vec3<f32>( 0.55, 0.55, 0.55 ) * vec3<f32>( ( smoothstep( 0.35, 0.95, nodeVar56 ) * ( 1.0 - ( 1.0 * 0.7 ) ) ) ) ) ) * vec3<f32>( 0.8 ) ) * vec3<f32>( ( ( ( 0.15 + ( 0.0 * 0.15 ) ) + ( nodeVar51 * 0.25 ) ) + 0.4 ) ) ) * vec3<f32>( nodeVar57 ) ) + ( ( ( vec3<f32>( 1.0, 1.0, 1.0 ) * vec3<f32>( max( ( ( dot( nodeVar48, object.nodeUniform7 ) + 0.5 ) / 1.5 ), 0.0 ) ) ) * vec3<f32>( 0.7 ) ) * vec3<f32>( nodeVar58 ) ) ) + ( ( object.nodeUniform9 * vec3<f32>( ( max( ( ( dot( nodeVar48, object.nodeUniform10 ) + 0.5 ) / 1.5 ), 0.0 ) * 0.3 ) ) ) * vec3<f32>( nodeVar57 ) ) ) ) + ( ( ( nodeVar52 * ( nodeVar59 + ( vec3<f32>( 0.55, 0.55, 0.55 ) * vec3<f32>( ( smoothstep( 0.35, 0.95, nodeVar60 ) * ( 1.0 - ( max( nodeVar62, 0.18 ) * 0.7 ) ) ) ) ) ) ) * vec3<f32>( ( ( ( 1.0 - nodeVar62 ) * 0.5 ) + 0.5 ) ) ) * vec3<f32>( nodeVar57 ) ) ) + ( ( ( ( ( nodeVar54 * vec3<f32>( ( ( nodeVar64 / max( ( ( nodeVar66 * nodeVar66 ) * 3.14159 ), 0.000001 ) ) * ( ( nodeVar67 / ( ( nodeVar67 * ( 1.0 - nodeVar68 ) ) + nodeVar68 ) ) * ( nodeVar69 / ( ( nodeVar69 * ( 1.0 - nodeVar68 ) ) + nodeVar68 ) ) ) ) ) ) / vec3<f32>( max( ( ( nodeVar69 * nodeVar67 ) * 4.0 ), 0.000001 ) ) ) * vec3<f32>( nodeVar69 ) ) * vec3<f32>( 1.5 ) ) * vec3<f32>( nodeVar58 ) ) ) + ( ( nodeVar50 * vec3<f32>( ( pow( max( dot( ( - nodeVar48 ), object.nodeUniform7 ), 0.0 ), 3.0 ) * 0.0 ) ) ) * vec3<f32>( 0.6 ) ) ) + ( ( ( ( mix( vec3<f32>( 1.0, 1.0, 1.0 ), nodeVar50, nodeVar51 ) * vec3<f32>( nodeVar70 ) ) * vec3<f32>( ( mix( 0.15, 0.5, nodeVar51 ) + ( 0.0 * 0.4 ) ) ) ) + ( ( ( object.nodeUniform16 * vec3<f32>( nodeVar70 ) ) * vec3<f32>( object.nodeUniform17 ) ) * vec3<f32>( max( dot( nodeVar48, object.nodeUniform18 ), 0.0 ) ) ) ) * vec3<f32>( nodeVar57 ) ) ), ( ( nodeVar50 * vec3<f32>( 0.08 ) ) * vec3<f32>( nodeVar57 ) ) );
+
+	if ( ( object.nodeUniform19 > 0.5 ) ) {
+
+		nodeVar72 = nodeVar50;
+
+	} else {
+
+		nodeVar72 = nodeVar71;
+
+	}
+
+	DiffuseColor = vec4<f32>( nodeVar72, 1.0 );
+	DiffuseColor.w = ( DiffuseColor.w * object.nodeUniform20 );
+	DiffuseColor.w = 1.0;
+	nodeVar73 = max( vec4<f32>( DiffuseColor.xyz, DiffuseColor.w ), vec4<f32>( 0.0 ) );
+	Output = nodeVar73;
+
+	// result
+
+	output.color = nodeVar73;
+
+	return output;
+
+}
