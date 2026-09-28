@@ -35,6 +35,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { attachLupiUniforms } from '@atlas/scene';
+import { markBackgroundMaterial } from '../postprocess/backgroundMask';
 
 type N = any;
 
@@ -111,7 +112,7 @@ export function createDomeMaterial(values: DomeMaterialValues): THREE.MeshBasicN
   material.name = 'lupi-panorama-dome';
   material.colorNode = colorNode;
   attachLupiUniforms(material, bag);
-  return material;
+  return markBackgroundMaterial(material);
 }
 
 export function domeUniforms(material: THREE.Material): DomeUniforms {

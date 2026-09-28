@@ -21,15 +21,23 @@
  * - Vignette offset/darkness  → the postprocessing library's default vignette,
  *   `rgb *= smoothstep(0.8, offset*0.799, |uv-0.5|*(darkness+offset))`
  * - ToneMapping ACES_FILMIC / REINHARD → renderOutput(ACESFilmic / Reinhard)
+ *
+ * The configured background stays out of the look: when the graph tone-maps
+ * or vignettes, the scene pass also writes content coverage (backgroundMask.ts)
+ * and each pixel gets back, in proportion to how much of it is background,
+ * the difference between its raw colour and what tone mapping and vignette
+ * alone would make of it. A plate pixel therefore shows its configured
+ * colour exactly, while glow and defocus spilling over it are kept.
  */
 import * as THREE from 'three/webgpu';
 import type { Camera, Node, PassNode, UniformNode } from 'three/webgpu';
-import { distance, float, renderOutput, smoothstep, uniform, uv, vec2, vec4 } from 'three/tsl';
+import { distance, float, mrt, output, renderOutput, smoothstep, uniform, uv, vec2, vec4 } from 'three/tsl';
 import { ao, type default as GTAONode } from 'three/examples/jsm/tsl/display/GTAONode.js';
 import { bloom, type default as BloomNode } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import { dof, type default as DepthOfFieldNode } from 'three/examples/jsm/tsl/display/DepthOfFieldNode.js';
 import { denoise } from 'three/examples/jsm/tsl/display/DenoiseNode.js';
 import type { PostprocessPresetConfig, PostStructure } from './presets';
+import { LUPI_CONTENT_OUTPUT, contentCoverage } from './backgroundMask';
 
 export interface PostChain {
   /** The pipeline's `outputNode` (linear, tone-mapped; the pipeline encodes sRGB). */
@@ -73,7 +81,19 @@ export function buildPostChain(
   const vignetteOffset = uniform(0.5);
   const vignetteDarkness = uniform(0.3);
 
-  let color: Node<'vec4'> = scenePass.getTextureNode('output');
+  // Tone mapping and vignette would restyle the background; keep it as set.
+  const keepBackground = structure.toneMapping !== 'none' || structure.vignette;
+  if (keepBackground) {
+    const passMrt = mrt({ output, [LUPI_CONTENT_OUTPUT]: contentCoverage() });
+    passMrt.setBlendMode(LUPI_CONTENT_OUTPUT, new THREE.BlendMode(THREE.MaterialBlending));
+    passMrt.setClearColor(LUPI_CONTENT_OUTPUT, 0x000000, 0);
+    scenePass.setMRT(passMrt);
+  } else {
+    scenePass.setMRT(null);
+  }
+
+  const raw: Node<'vec4'> = scenePass.getTextureNode('output');
+  let color: Node<'vec4'> = raw;
 
   let aoNode: GTAONode | null = null;
   if (structure.ao) {
@@ -103,18 +123,32 @@ export function buildPostChain(
     color = dofNode as unknown as Node<'vec4'>;
   }
 
-  if (structure.toneMapping !== 'none') {
-    // Tone map only; the working space stays linear. The pipeline's output
-    // transform encodes sRGB after the vignette.
-    color = renderOutput(color, TONE_MAPPING[structure.toneMapping], THREE.LinearSRGBColorSpace);
-  }
+  // Tone mapping then vignette: the "look" every pixel gets.
+  const look = (input: Node<'vec4'>): Node<'vec4'> => {
+    let styled = input;
+    if (structure.toneMapping !== 'none') {
+      // Tone map only; the working space stays linear. The pipeline's output
+      // transform encodes sRGB after the vignette.
+      styled = renderOutput(styled, TONE_MAPPING[structure.toneMapping], THREE.LinearSRGBColorSpace);
+    }
+    if (structure.vignette) {
+      // The postprocessing library's default vignette, written as
+      // 1 - smoothstep(lo, hi, x) so the edges stay ordered (lo < hi).
+      const radial = distance(uv(), vec2(0.5, 0.5)).mul(vignetteDarkness.add(vignetteOffset));
+      const falloff = float(1).sub(smoothstep(vignetteOffset.mul(0.799), float(0.8), radial));
+      styled = vec4(styled.rgb.mul(falloff), styled.a);
+    }
+    return styled;
+  };
 
-  if (structure.vignette) {
-    // The postprocessing library's default vignette, written as
-    // 1 - smoothstep(lo, hi, x) so the edges stay ordered (lo < hi).
-    const radial = distance(uv(), vec2(0.5, 0.5)).mul(vignetteDarkness.add(vignetteOffset));
-    const falloff = float(1).sub(smoothstep(vignetteOffset.mul(0.799), float(0.8), radial));
-    color = vec4(color.rgb.mul(falloff), color.a);
+  color = look(color);
+
+  if (keepBackground) {
+    // Undo the look on background coverage: raw - look(raw) is exactly what
+    // tone mapping and vignette took from an otherwise untouched pixel.
+    const content = scenePass.getTextureNode(LUPI_CONTENT_OUTPUT).r.clamp(0, 1);
+    const restore = raw.rgb.sub(look(raw).rgb).mul(float(1).sub(content));
+    color = vec4(color.rgb.add(restore).max(0), color.a);
   }
 
   const disposables: Array<{ dispose(): void } | null> = [aoNode, bloomNode, dofNode];

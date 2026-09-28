@@ -42,6 +42,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { attachLupiUniforms } from '@atlas/scene';
+import { markBackgroundMaterial } from '../postprocess/backgroundMask';
 import type { ProceduralBackgroundVariant } from '../backgroundPresets';
 
 // Graph-building code works on untyped nodes: the @types/three 0.186 node
@@ -229,7 +230,7 @@ export function createSkyMaterial(options: {
   material.name = `lupi-sky-${options.variant}`;
   material.colorNode = colorNode;
   attachLupiUniforms(material, bag);
-  return material;
+  return markBackgroundMaterial(material);
 }
 
 export function skyUniforms(material: THREE.Material): SkyUniforms {

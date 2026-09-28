@@ -10,6 +10,10 @@ import { SpriteNodeMaterial } from 'three/webgpu';
 import { float, instancedBufferAttribute } from 'three/tsl';
 import type { ProceduralBackgroundVariant } from './backgroundPresets';
 import { SKY_VARIANT_INDEX as VARIANT_INDEX, createSkyMaterial, skyUniforms } from './tsl/skyMaterial';
+import { LUPI_BACKGROUND_MATERIAL_KEY, markBackgroundMaterial } from './postprocess/backgroundMask';
+
+/** The field's line materials are background too (postprocess/backgroundMask.ts). */
+const BACKGROUND_MATERIAL_USER_DATA = { [LUPI_BACKGROUND_MATERIAL_KEY]: true };
 
 const TWO_PI = Math.PI * 2;
 
@@ -251,7 +255,7 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
     // typed-array buffer node per vertex, which stretches quads across points.
     material.positionNode = instancedBufferAttribute(new THREE.InstancedBufferAttribute(field.points, 3));
     material.scaleNode = float(pointSize * 0.47);
-    return material;
+    return markBackgroundMaterial(material);
   }, [field, pointSize]);
 
   useEffect(() => () => {
@@ -286,6 +290,7 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
           depthTest
           blending={THREE.AdditiveBlending}
           toneMapped={false}
+          userData={BACKGROUND_MATERIAL_USER_DATA}
         />
       </lineSegments>
       <lineSegments geometry={field.lines} scale={[1.018, 1.018, 1.018]}>
@@ -297,6 +302,7 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
           depthTest
           blending={THREE.AdditiveBlending}
           toneMapped={false}
+          userData={BACKGROUND_MATERIAL_USER_DATA}
         />
       </lineSegments>
       {field.points.length > 0 && (

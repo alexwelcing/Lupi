@@ -12,6 +12,7 @@
  * - unmounting the pipeline restores R3F's default render (the two no-post
  *   captures match);
  * - AO darkens the sphere contact (desktop tier);
+ * - the plate keeps its configured colour under every preset (probe);
  * - play/pause changes uniforms only: no graph rebuild, same pipeline, the
  *   image still changes (desktop tier);
  * - the registered passes (`state.passes.ao|bloom|dof`) match the config,
@@ -106,6 +107,12 @@ function meanDiff(a: Capture, b: Capture): number {
   return sum / ((a.data.length / 4) * 3);
 }
 
+/** RGB of the pixel 6 px in from the top-left corner (plate in every step). */
+function cornerPixel(c: Capture): [number, number, number] {
+  const i = (6 * c.width + 6) * 4;
+  return [c.data[i], c.data[i + 1], c.data[i + 2]];
+}
+
 /** Mean luma of a (2·half+1)² window centred on a capture pixel. */
 function windowLuma(c: Capture, cx: number, cy: number, half: number): number {
   let sum = 0;
@@ -160,8 +167,6 @@ export default function PostCase() {
 
   useHarnessProbe('left sphere', [-SPHERE_RADIUS, CONTACT[1], SPHERE_RADIUS], 'not-plate');
   useHarnessProbe('glow sphere', [GLOW[0], GLOW[1], 0.28], 'not-plate');
-  const finalConfig = steps[steps.length - 1].config;
-  const plateUntouched = finalConfig !== null && finalConfig.toneMapping === 'none' && !finalConfig.vignette.enabled && !finalConfig.bloom.enabled;
 
   useEffect(() => {
     release.current = harnessHold('post sequence');
@@ -210,7 +215,7 @@ export default function PostCase() {
   return (
     <>
       <PostScene />
-      {plateUntouched && <PlateProbe />}
+      <PlateProbe />
       {step.config && (
         <LupiPostPipeline
           config={step.config}
@@ -224,7 +229,7 @@ export default function PostCase() {
   );
 }
 
-/** Without tone mapping, vignette or glow, the plate stays exact. */
+/** The plate stays exact under every preset: the look leaves the background as configured. */
 function PlateProbe() {
   useHarnessProbe('plate', [-2.4, 1.6, 0], { rgb: [16, 24, 23], tol: 3 });
   return null;
@@ -266,6 +271,16 @@ function judge(records: Map<string, StepRecord>, camera: THREE.Camera, reduced: 
     const diff = record ? meanDiff(record.capture, none.capture) : Number.NaN;
     harnessAssert(`${id} changes the image against no post`, diff > 1, `mean |${id} - none| = ${diff.toFixed(2)}/255`);
   }
+  // The plate keeps its configured colour under every look: the corner, where
+  // the vignette is strongest, reads as the no-post plate.
+  for (const id of ['paper', 'studio', 'editorial', 'cinematic', 'diagram'] as const) {
+    const record = get(id);
+    const corner = record ? cornerPixel(record.capture) : null;
+    const plate = cornerPixel(none.capture);
+    const drift = corner ? Math.max(...corner.map((value, channel) => Math.abs(value - plate[channel]))) : Number.NaN;
+    harnessAssert(`${id} keeps the plate as configured`, drift <= 3, `corner ${corner?.join(',')} vs no post ${plate.join(',')}`);
+  }
+
   const diagram = get('diagram');
   const diagramDiff = diagram ? meanDiff(diagram.capture, none.capture) : Number.NaN;
   harnessAssert('diagram (no effects) matches no post', diagramDiff < 1, `mean |diagram - none| = ${diagramDiff.toFixed(2)}/255`);
