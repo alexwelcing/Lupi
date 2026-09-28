@@ -1,5 +1,7 @@
 # Lupi viewer: play, speed and visual power with pmndrs math and R3F v10 — two-round brainstorm, 2026-09-27
 
+> **Owner decisions (2026-09-28):** the open questions in section 8 are answered in [decisions.md](decisions.md), which overrides this report where they differ. In short: the R3F v10 port is the priority and goes straight to production; the bar is "it works" (no device perf program or metrics prerequisites); C60 first; home still until touched; audio off by default; arcade-style play is allowed; XR deferred; Export V2 cut at the platform swap; GPU Studio folds into Looks.
+
 **What this is.** You asked how the new pmndrs `math` library and recent React Three Fiber (R3F) releases could make Lupi's viewer and GPU viewer faster, better looking and more fun for a newcomer clicking, dragging and playing on a laptop or phone, through a wide brainstorm, a review, a second brainstorm and a second review. This folder is the result, written on the assumption you added: **Lupi upgrades to R3F v10 alpha**.
 
 Nothing in the Lupi codebase was changed, and no idea has been built or tried on a device. No real-device frame-rate or thermal data exists for any Lupi surface, so this report makes no measured performance claims; the [performance ledger](#34-performance-ledger) grades each expected gain or loss by its evidence. Motion described as decorative is **illustrative**: it never moves source atoms and never enters deterministic export.
@@ -21,6 +23,7 @@ Nothing in the Lupi codebase was changed, and no idea has been built or tried on
 | [round1-catalog.md](round1-catalog.md) | 180 round-1 ideas as 119 canonical ideas, C001–C119, with scores and critiques |
 | [round2/README.md](round2/README.md) and nine direction files | All 126 round-2 ideas, sorted by score, with judge critiques |
 | [verification.md](verification.md) | The 36-claim fact-check |
+| [decisions.md](decisions.md) | The owner's answers to section 8 (overrides this report) |
 
 `research/`, `round1-review.md` and `round1-catalog.md` predate the fact-check; where they disagree with [verification.md](verification.md) ([section 6](#6-fact-check-what-the-36-claim-verification-changed)), verification.md wins. `scratchpad/…` paths in verification.md and a few research notes point at the research sandbox's working files, which are not committed.
 
@@ -579,6 +582,8 @@ XR is decided at M2; the default is to defer it. **After the port:** Touch Field
 ---
 
 ## 8. Decisions only the owner can make
+
+**Answered on 2026-09-28: see [decisions.md](decisions.md).**
 
 1. **Motion on the home page.** The recommendation is one hero, still until touched, with zero canvases. That partly reverses the product reset's calm home.
 2. **The first molecule.** Water (the reset's choice), C60 or caffeine, A/B'd against the draft North Star.
