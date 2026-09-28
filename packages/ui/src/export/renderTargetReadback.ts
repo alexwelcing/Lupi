@@ -1,8 +1,8 @@
 /**
  * renderTargetReadback.ts — the export capture engine (plan-final §5.13, D10).
  *
- * WebGPURenderer has no preserveDrawingBuffer, so exports and thumbnails no
- * longer copy the canvas. They render the scene into a HalfFloat linear
+ * WebGPURenderer cannot keep its drawing buffer between frames, so exports and
+ * thumbnails no longer copy the canvas. They render the scene into a HalfFloat linear
  * render target and read it back asynchronously:
  *
  *   rt = new THREE.RenderTarget(w, h, { type: THREE.HalfFloatType, samples: 0 });
