@@ -31,6 +31,11 @@ function rendererImportRestrictions({ allow = [] } = {}) {
       message: 'Import drei from @react-three/drei/webgpu; the root entry is the WebGL build.',
     },
     { name: '@react-three/drei/legacy', message: 'Import drei from @react-three/drei/webgpu.' },
+    {
+      name: '@react-three/test-renderer',
+      message: 'Import the test renderer from @react-three/test-renderer/webgpu; the root entry mounts on the WebGL fiber entry.',
+    },
+    { name: '@react-three/test-renderer/legacy', message: 'Import the test renderer from @react-three/test-renderer/webgpu.' },
     { name: '@react-three/postprocessing', message: 'Removed in the R3F v10 port; use the TSL render pipeline.' },
     { name: 'postprocessing', message: 'Removed in the R3F v10 port; use the TSL render pipeline.' },
     { name: 'n8ao', message: 'Removed in the R3F v10 port; use the TSL render pipeline.' },

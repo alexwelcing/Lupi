@@ -1,5 +1,5 @@
 import React from 'react';
-import ReactThreeTestRenderer from '@react-three/test-renderer';
+import ReactThreeTestRenderer from '@react-three/test-renderer/webgpu';
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { Frame, VectorFieldSpec } from '@atlas/core';

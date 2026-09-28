@@ -1,6 +1,5 @@
-// @vitest-environment node
 import React from 'react';
-import ReactThreeTestRenderer from '@react-three/test-renderer';
+import ReactThreeTestRenderer from '@react-three/test-renderer/webgpu';
 import type { Frame } from '@atlas/core/types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
