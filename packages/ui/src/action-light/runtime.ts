@@ -1,4 +1,6 @@
+/// <reference types="vgpu/client" />
 import { effect, frame, init, surface, type Effect, type Gpu } from 'vgpu';
+import { installWebGPUCompat } from '../viewer/webgpuCompat';
 import shader from './action-light.wgsl';
 
 export interface ActionLight {
@@ -13,6 +15,7 @@ let unavailable = false;
 // frame loop or adapter request on page load; the last consumer owns teardown.
 export async function acquireActionLight(canvas: HTMLCanvasElement, onFailure: () => void): Promise<ActionLight> {
   if (unavailable) throw new Error('Action light unavailable');
+  installWebGPUCompat();
   const shared = await (pending ??= init({ powerPreference: 'low-power', label: 'Lupi action light' })
     .then(gpu => {
       try {
