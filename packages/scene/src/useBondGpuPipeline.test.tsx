@@ -4,15 +4,17 @@ import type { BondGpuComputeInput } from './useBondGpuPipeline';
 
 const renderer = vi.hoisted(() => {
   const initWebGPU = vi.fn();
+  const isWebGPUComputeUnavailable = vi.fn(() => false);
   const construct = vi.fn();
   const BondPipeline = vi.fn(function (this: unknown, options: unknown) {
     return construct(options);
   });
-  return { initWebGPU, construct, BondPipeline };
+  return { initWebGPU, isWebGPUComputeUnavailable, construct, BondPipeline };
 });
 
 vi.mock('@atlas/renderer', () => ({
   initWebGPU: renderer.initWebGPU,
+  isWebGPUComputeUnavailable: renderer.isWebGPUComputeUnavailable,
   BondPipeline: renderer.BondPipeline,
 }));
 
@@ -75,12 +77,23 @@ async function initialize(
 
 beforeEach(() => {
   renderer.initWebGPU.mockReset();
+  renderer.isWebGPUComputeUnavailable.mockReset();
+  renderer.isWebGPUComputeUnavailable.mockReturnValue(false);
   renderer.construct.mockReset();
   renderer.BondPipeline.mockClear();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('useBondGpuPipeline ownership', () => {
+  it('reports unsupported from the first render, with no handshake, when the page has no adapter', async () => {
+    renderer.isWebGPUComputeUnavailable.mockReturnValue(true);
+    const hook = renderHook(() => useBondGpuPipeline(true));
+    expect(hook.result.current).toMatchObject({ ready: false, unsupported: true });
+    await expect(hook.result.current.compute(input())).resolves.toBeNull();
+    expect(renderer.initWebGPU).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
   it('destroys the installed pipeline and device exactly once on unmount', async () => {
     const { unmount, gpuDevice, gpuPipeline } = await initialize();
     unmount();

@@ -1,4 +1,4 @@
-export { AtomPipeline, initWebGPU } from './pipeline/AtomPipeline';
+export { AtomPipeline, initWebGPU, isWebGPUComputeUnavailable } from './pipeline/AtomPipeline';
 export type { AtomPipelineOptions, FrameData, CameraUniforms, RenderState } from './pipeline/AtomPipeline';
 export { BondPipeline } from './pipeline/BondPipeline';
 export type { BondPipelineOptions, BondReadback } from './pipeline/BondPipeline';

@@ -94,3 +94,39 @@ describe('initWebGPU lifetime', () => {
     await expect(initWebGPU(100)).resolves.toBeNull();
   });
 });
+
+describe('initWebGPU without an adapter', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('returns at once, never waits for the timeout, and remembers the page has no adapter', async () => {
+    vi.useFakeTimers();
+    const requestAdapter = vi.fn().mockResolvedValue(null);
+    vi.stubGlobal('navigator', { gpu: { requestAdapter, getPreferredCanvasFormat: vi.fn() } });
+    const { initWebGPU, isWebGPUComputeUnavailable } = await import('./AtomPipeline');
+
+    expect(isWebGPUComputeUnavailable()).toBe(false);
+    await expect(initWebGPU(5000)).resolves.toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(isWebGPUComputeUnavailable()).toBe(true);
+    await expect(initWebGPU(5000)).resolves.toBeNull();
+    expect(requestAdapter).toHaveBeenCalledTimes(2); // high-performance, then default; once
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('treats a missing navigator.gpu as unavailable without a handshake', async () => {
+    vi.stubGlobal('navigator', {});
+    const { initWebGPU, isWebGPUComputeUnavailable } = await import('./AtomPipeline');
+    expect(isWebGPUComputeUnavailable()).toBe(true);
+    await expect(initWebGPU(100)).resolves.toBeNull();
+  });
+});
