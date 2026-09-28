@@ -53,15 +53,25 @@ Use the browser bridge for current artifact execution, visual QA, local viewer
 debugging, or eventual comparison with a real edge/backend output. Do not claim
 edge/browser artifact parity while edge V1 remains validation-only.
 
+The viewer renders through three's `WebGPURenderer` (three r186, React Three
+Fiber v10): on the WebGPU backend when the browser has an adapter, on its
+WebGL2 backend otherwise, or when the URL carries `?renderer=webgl2`.
+`status().rendererBackend` says which one is running. The Chromium flags for
+both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
+`LANE_ARGS.webgl2`); headless WebGPU on SwiftShader needs the whole
+`webgpu` set, or the device is lost within a few frames.
+
 ## Quick Start
 
-1. Start the dev server:
+1. Start the dev server, or serve a production build:
    ```bash
    pnpm dev
    # or
    pnpm --filter @atlas/web dev
+   # or
+   pnpm --filter @atlas/web build && PORT=4173 node tools/serve-web.mjs
    ```
-2. Open the viewer in a headless browser (Playwright, Puppeteer, etc.) at the root URL, e.g. `http://localhost:5173/` or `http://localhost:5173/#/mcp`.
+2. Open the viewer in a headless browser (Playwright, Puppeteer, etc.) at the root URL, e.g. `http://localhost:5173/` or `http://localhost:5173/#/mcp`. Launch Chromium with `LANE_ARGS.webgpu` or `LANE_ARGS.webgl2` from `tools/lib/browser-lanes.mjs`; WebGPU also needs a secure context (`localhost` or `127.0.0.1` count).
 3. Wait until the bridge is ready:
    ```js
    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true);
@@ -126,7 +136,10 @@ const status = await page.evaluate(() => window.__lupiViewerMcp.status());
 console.log(status);
 // {
 //   ready: true,
-//   version: '0.3.0',
+//   version: '2026-09-28.asset-export',
+//   rendererBackend: 'webgpu',          // or 'webgl2'; null before the canvas exists
+//   webGPUSupported: true,
+//   rendererExecutionClass: 'browser-webgpu-main-thread',
 //   toolCount: 31,
 //   moleculeLoaded: true,
 //   atomCount: 250000,
@@ -139,7 +152,9 @@ console.log(status);
 // }
 ```
 
-Poll until `ready === true` and `toolCount > 0` before sending commands.
+Poll until `ready === true` and `toolCount > 0` before sending commands, and
+until `rendererBackend` is non-null before an export. The `lupi.status` tool
+returns the same three renderer fields.
 
 ## Tool Manifest
 
@@ -214,36 +229,86 @@ Common recognized keywords:
 - `studio`, `paper`, `editorial`, `cinematic`, `diagram` — postprocess presets
 - `iso`, `top`, `side`, `front`, `free` — camera presets
 
-## Render artifact V1 truth
+## Render artifact V2 truth
 
-Contract strings use dot-separated versions: `lupi.render-request.v1`,
-`lupi.render-artifact-spec.v1`, and `lupi.render-delivery.v1`.
+Contract strings are unchanged and use dot-separated versions:
+`lupi.render-request.v1`, `lupi.render-artifact-spec.v1`, and
+`lupi.render-delivery.v1`. What changed with the WebGPURenderer port is the
+renderer that executes them: the browser renderer profile is V2
+(`packages/ui/src/export/exportProfileV2.ts`).
 
-The browser V1 candidate advertises PNG/JPEG/WebP/GLB, subject to exact
-format and active-state checks. JPEG is opaque only; GLB rejects raster
-dimensions and transparency. Raster capture uses the raw Three.js scene,
-pixel-ratio 1, sRGB output, no tone mapping, and no interactive postprocess.
-Opaque raster capture applies the finalized gradient spec directly rather than
-trusting asynchronous UI background state. Image, video, procedural, and
-backdrop-mesh backgrounds fail closed. Deterministic raster bonds also fail
-closed until the asynchronous bond result is snapshot-addressable; hide bonds
-before raster export. Model export may use its synchronous CPU bond path, but
-fails if inferred bonds hit the cap. USDZ remains available from the ordinary
-interactive export UI, but is not advertised by `lupi.export_asset`: Three r184
-embeds process-global object ids, so identical semantics do not yet produce
-identical USDZ bytes behind one artifact key.
+The browser candidate advertises PNG/JPEG/WebP/GLB, subject to exact format
+and active-state checks. JPEG is opaque only; GLB rejects raster dimensions and
+transparency.
+
+Raster capture never reads the canvas. It renders the raw Three.js scene with
+a copy of the artifact camera into its own HalfFloat render target at the
+requested size (no MSAA, pixel ratio 1, no renderer tone mapping) and reads it
+back asynchronously. On the CPU it de-strides WebGPU rows, flips WebGL2 rows,
+un-premultiplies in linear light, applies the sRGB OETF and rounds, so opaque
+pixels match the on-screen canvas and transparent output is straight alpha.
+The canvas keeps its size, and the live view does not flicker.
+
+- The interactive post pipeline (AO, bloom, depth of field, output tone
+  mapping, vignette) is bypassed. Exports show the raw scene with the viewer's
+  configured background. `postprocessPipeline: 'raw-scene-bypassed'` in the
+  fingerprint and `view.postprocess` in the spec both record this.
+- An opaque artifact applies the spec's finalized gradient directly as the
+  scene background, rather than trusting asynchronous UI background state. The
+  gradient covers every pixel. Image, video, procedural, and backdrop-mesh
+  backgrounds fail closed, and so does an adjusted gradient (opacity,
+  brightness, saturation, contrast, yaw, pitch), which the viewer draws through
+  the live backdrop mesh. Transparent output hides every background layer.
+  Interactive UI exports have no artifact identity, so they capture whatever
+  background the viewer shows, over the colour behind the canvas.
+- Transparent pixels pass through a 2D canvas on the way to the browser
+  encoder. The canvas stores them premultiplied in 8 bits, so very low alpha
+  loses colour precision. This is deterministic and recorded as
+  `rasterAlphaStorage`.
+- Deterministic raster bonds fail closed until the asynchronous bond result is
+  snapshot-addressable; hide bonds before raster export. Model export may use
+  its synchronous CPU bond path, but fails if inferred bonds hit the cap.
+- USDZ remains available from the ordinary interactive export UI (AR Quick
+  Look) but is not advertised by `lupi.export_asset`. three's USDZExporter
+  (r186) embeds process-global object ids, so identical semantics do not yet
+  produce identical USDZ bytes behind one artifact key.
+
+The WebGPU backend and the WebGL2 fallback are two execution classes:
+`browser-webgpu-main-thread` and `browser-webgpu-webgl2-main-thread`. The same
+spec keeps its `specId` on both, but gets a different `rendererFingerprint` and
+`artifactKey`, because the bytes may differ. Never compare bytes across
+backends. An export before the viewer canvas has created its renderer fails,
+because the backend is part of the identity.
 
 The four identities are deliberately different:
 
 - `specId` hashes finalized semantic intent and decoded source content.
-- `rendererFingerprint` hashes the build and execution class which can change bytes.
+- `rendererFingerprint` hashes the build and the execution class which can
+  change bytes. The V2 fingerprint includes:
+  - renderer `lupi-browser-webgpu.v2`
+  - `rendererVersion` `three-r186;fiber-<pin>;bridge-<version>`
+  - the backend's execution class
+  - the `DETERMINISM_V2` capture facts
+  - runtime facts: the WebGPU adapter, or the WebGL2 context strings;
+    compatibility mode; canvas samples; browser and platform; transmission
+    quality
+  - the advertised capability
 - `artifactKey` hashes `specId` plus `rendererFingerprint` and is the immutable
   cache/object identity for that execution class.
 - `artifactDigest` hashes the actual decoded output bytes.
 
-Delivery preferences do not affect any of them. The Cloudflare V1 path
+Delivery preferences do not affect any of them. The Cloudflare path
 currently validates only opaque PNG atom specs and returns
-`awaiting_renderer`; it does not execute, persist, or retrieve a V1 artifact.
+`awaiting_renderer`; it does not execute, persist, or retrieve an artifact.
+The containerized render backend (`apps/render-backend`) launches Chromium
+with `--disable-webgpu`, so its artifacts are in the WebGL2 execution class.
+
+The V1 (WebGL renderer) goldens stay archived read-only in
+`tests/fixtures/render-artifact-v1/`. V2 parity candidates live per backend in
+`tests/fixtures/render-artifact-v2/<backend>/`, and
+`pnpm verify:render-parity -- --backend=<webgpu|webgl2> --derive-candidate`
+derives them automatically. There is no owner approval gate. Derive them again
+whenever the tool reports a renderer-validity digest change.
 
 ## Verification Harness
 
@@ -264,12 +329,16 @@ The `--json` flag emits a machine-readable report to stdout. Non-zero exit code 
 ## Asset Quality Verification
 
 For visual and structural verification of `lupi.export_asset`, drive a real
-browser, render the advertised raster/model profiles, and inspect the bytes:
+browser in each backend lane, render the advertised raster/model profiles, and
+inspect the bytes:
 
 ```bash
-pnpm run verify:asset-quality
-# or, against an existing dev server:
-node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/#/mcp
+pnpm --filter @atlas/web build
+pnpm run verify:asset-quality                      # both lanes, built app
+node tools/verify-asset-quality.mjs --backend=webgpu
+node tools/verify-asset-quality.mjs --server=dev   # Vite dev server instead
+# or, against an existing server:
+node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/
 ```
 
 The verifier exercises fixed molecule and lattice cases with unsupported raster
@@ -284,9 +353,11 @@ mutations. It asserts, as applicable:
 - `dataUrl` MIME prefix matches the response `mimeType`
 - the on-disk file matches the round-tripped base64
 - color/material/lighting changes produce material image differences
+- each lane reports its backend, and the same spec keeps its `specId` across
+  the two lanes while its `rendererFingerprint` and `artifactKey` differ
 
 Artifacts (real rasters/models plus a viewer screenshot and JSON report) are written
-under `.verify-artifacts/asset-quality/<run>/` so a human can inspect them.
+under `.verify-artifacts/asset-quality/<run>/<backend>/` so a human can inspect them.
 Add `--skip-glb` to skip the model tier when iterating on raster formats.
 
 Use `node tools/inspect-glb.mjs <file.glb>` to dump scene/mesh contents of
@@ -294,15 +365,17 @@ an exported GLB without a browser.
 
 ## Common Failures
 
-| Symptom                                   | Likely cause                                                                                   | Fix                                                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `window.__lupiViewerMcp` is `undefined`   | Viewer not on a route that mounts the bridge.                                                  | Navigate to `/#/mcp` or wait for the route guard.                                                        |
-| `ready` is `false`                        | Store not hydrated or route guard is `false`.                                                  | Check `window.__lupiViewerMcpVersion` exists; wait a tick.                                               |
-| `No molecule is loaded`                   | Tool needs a file but none is loaded.                                                          | Run `lupi.generate_molecule` via `parseCommand` first, or load via URL.                                  |
-| Deterministic raster export rejects bonds | The live asynchronous bond result is not snapshot-addressable in V1.                           | Hide bonds, or use a model export only when its synchronous CPU bond path is intended.                   |
-| Background is rejected                    | Image/video/procedural/backdrop-mesh state is not directly applicable from the canonical spec. | Use the default dome/image projection with a static gradient preset, or request transparent output.      |
-| `Unsupported Lupi viewer MCP tool`        | Tool name typo or old manifest.                                                                | Compare against `/browser-mcp-manifest.json`; `/mcp-manifest.json` is the smaller edge-runtime contract. |
-| PubChem fetch fails                       | Network or CORS.                                                                               | Use a local template or SMILES that matches `TEMPLATE_MOLECULES`.                                        |
+| Symptom                                   | Likely cause                                                                                     | Fix                                                                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `window.__lupiViewerMcp` is `undefined`   | Viewer not on a route that mounts the bridge.                                                    | Navigate to `/#/mcp` or wait for the route guard.                                                        |
+| `ready` is `false`                        | Store not hydrated or route guard is `false`.                                                    | Check `window.__lupiViewerMcpVersion` exists; wait a tick.                                               |
+| `No molecule is loaded`                   | Tool needs a file but none is loaded.                                                            | Run `lupi.generate_molecule` via `parseCommand` first, or load via URL.                                  |
+| Deterministic raster export rejects bonds | The live asynchronous bond result is not snapshot-addressable yet.                               | Hide bonds, or use a model export only when its synchronous CPU bond path is intended.                   |
+| Background is rejected                    | Image/video/procedural/backdrop-mesh or adjusted-gradient state is not applicable from the spec. | Use the default dome/image projection with an unadjusted gradient preset, or request transparent output. |
+| `The viewer renderer has not started`     | Export issued before the canvas created its WebGPURenderer.                                      | Poll `status().rendererBackend` until it is non-null.                                                    |
+| `rendererBackend` is not the one expected | The lane lacks the WebGPU flags, or the URL has `?renderer=webgl2`.                              | Launch with `LANE_ARGS` from `tools/lib/browser-lanes.mjs`.                                              |
+| `Unsupported Lupi viewer MCP tool`        | Tool name typo or old manifest.                                                                  | Compare against `/browser-mcp-manifest.json`; `/mcp-manifest.json` is the smaller edge-runtime contract. |
+| PubChem fetch fails                       | Network or CORS.                                                                                 | Use a local template or SMILES that matches `TEMPLATE_MOLECULES`.                                        |
 
 ## Security Notes
 
@@ -334,9 +407,15 @@ pnpm run lint
 pnpm run verify:mcp-bridge
 pnpm run verify:asset-quality
 pnpm run verify:exports
-pnpm run verify:render-parity
+pnpm run verify:render-parity -- --backend=webgpu
+pnpm run verify:render-parity -- --backend=webgl2
 pnpm run test:ui
 ```
+
+`pnpm test:ui` runs the Playwright specs in the WebGL2 lane. The dual-backend
+browser check is local only (not in CI): build the web app, then run
+`pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
+--profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
 
 These are local/CI checks only. They do not prove a deployment, live API, or
 public-site revision; record those release-truth lanes separately.
