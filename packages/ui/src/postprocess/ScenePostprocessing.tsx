@@ -1,153 +1,20 @@
 /**
- * ScenePostprocessing — the new composer.
+ * ScenePostprocessing — the post stack host (plan-final §5.12).
  *
- * Single source of truth for the postprocess stack. Reads the active preset
- * from the store, scales it by the user's intensity, strips expensive passes
- * during playback, and renders an EffectComposer with stable keying so it
- * only remounts when the SET of enabled effects changes — not when the user
- * twiddles intensity.
+ * The postprocessing / @react-three/postprocessing EffectComposer (N8AO,
+ * bloom, depth of field, tone mapping, vignette) was removed with the move to
+ * WebGPURenderer. WP4 rebuilds the stack on the TSL render pipeline
+ * (`useRenderPipeline` from render/tsl.ts), driven by the same store preset,
+ * intensity and playback/mobile reductions (presets.ts, controls.ts).
  *
- * Replaces the old PostProcessingEffects function in App.tsx.
+ * Contract:
+ * - at most one `useRenderPipeline` in the app, here;
+ * - tone mapping only in the pipeline's `renderOutput`; `renderer.toneMapping`
+ *   stays NoToneMapping (configureViewerRenderer);
+ * - export capture does not go through the pipeline.
+ *
+ * Seed (WP0): no post-processing; the default render draws the scene.
  */
-
-import { useMemo, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import * as THREE from 'three';
-import { EffectComposer, N8AO, Bloom, ToneMapping, Vignette, DepthOfField } from '@react-three/postprocessing';
-import { ToneMappingMode, BlendFunction } from 'postprocessing';
-import { useXR } from '@react-three/xr';
-
-import { useStore } from '../store';
-import { scalePreset, reduceForPlayback, reduceForMobile, composerKey } from './presets';
-import { resolveEffects } from './controls';
-import { getDeviceTier } from '../deviceCapabilities';
-
-export function ScenePostprocessing() {
-  const presetId = useStore(s => s.postprocessPreset);
-  const intensity = useStore(s => s.postprocessIntensity);
-  const playing = useStore(s => s.playing);
-  const overrides = useStore(s => s.effectOverrides);
-  const fullEffects = useStore(s => s.fullSceneEffects);
-  const deviceTier = useMemo(getDeviceTier, []);
-
-  const mode = useXR(state => state.mode);
-  const isImmersive = mode === 'immersive-ar' || mode === 'immersive-vr';
-
-  if (isImmersive) return null;
-
-  const base = resolveEffects(presetId, overrides);
-  const scaled = scalePreset(base, intensity);
-  const playback = playing ? reduceForPlayback(scaled) : scaled;
-  const active = !fullEffects && (deviceTier === 'mobile' || deviceTier === 'low') ? reduceForMobile(playback) : playback;
-
-  return (
-    <EffectComposer
-      key={composerKey(active)}
-      multisampling={active.multisampling}
-    >
-      {active.ssao.enabled ? (
-        // N8AO derives normals from the depth buffer, so the ray-traced atom
-        // impostors (which write true sphere depth via gl_FragDepth) get
-        // correct ambient occlusion. The old SSAO effect read a NormalPass
-        // G-buffer instead — an override material that never runs the
-        // impostor shader — so it computed occlusion from garbage normals
-        // and peppered every sphere with dark speckle. Never reintroduce a
-        // normal-pass-based AO here without teaching the pass about
-        // impostors. aoRadius is world-space (Å): tuned for atom contact
-        // shadows, and the built-in Poisson denoise keeps surfaces clean.
-        <N8AO
-          aoRadius={active.ssao.radius}
-          intensity={active.ssao.intensity}
-          distanceFalloff={1}
-          aoSamples={16}
-          denoiseSamples={8}
-          denoiseRadius={12}
-          depthAwareUpsampling
-        />
-      ) : (<></>) as any}
-      {active.bloom.enabled ? (
-        <Bloom
-          intensity={active.bloom.intensity}
-          luminanceThreshold={active.bloom.threshold}
-          luminanceSmoothing={active.bloom.smoothing}
-          mipmapBlur
-        />
-      ) : (<></>) as any}
-      {active.dof.enabled ? (
-        <AutoFocusDof
-          bokehScale={active.dof.bokehScale}
-          focalLength={active.dof.focalLength}
-          focusDistance={active.dof.focusDistance}
-          focusRange={active.dof.focusRange}
-          auto={active.dof.auto}
-        />
-      ) : (<></>) as any}
-      {active.toneMapping !== 'none' ? (
-        <ToneMapping
-          mode={active.toneMapping === 'aces' ? ToneMappingMode.ACES_FILMIC : ToneMappingMode.REINHARD}
-        />
-      ) : (<></>) as any}
-      {active.vignette.enabled ? (
-        <Vignette
-          offset={active.vignette.offset}
-          darkness={active.vignette.darkness}
-          blendFunction={BlendFunction.NORMAL}
-        />
-      ) : (<></>) as any}
-    </EffectComposer>
-  );
-}
-
-/** DOF wrapper that lets postprocessing calculate focus in world units.
- *  The old path wrote a normalized focus distance; postprocessing 6 expects
- *  world-space distance, so target autofocus is the stable route. */
-function AutoFocusDof({
-  bokehScale,
-  focalLength,
-  focusDistance,
-  focusRange,
-  auto,
-}: {
-  bokehScale: number;
-  focalLength: number;
-  focusDistance: number;
-  focusRange: number;
-  auto: boolean;
-}) {
-  const { camera, controls } = useThree();
-  const ref = useRef<any>(null);
-  const targetRef = useRef(new THREE.Vector3());
-
-  useFrame(() => {
-    const effect = ref.current;
-    if (!effect) return;
-
-    effect.bokehScale = bokehScale;
-    if (!auto) {
-      effect.focusDistance = focusDistance;
-      if (effect.cocMaterial) effect.cocMaterial.focusRange = focusRange;
-      return;
-    }
-    const target = (controls as any)?.target as THREE.Vector3 | undefined;
-    if (!target || !effect.target) return;
-    targetRef.current.copy(target);
-    effect.target.copy(targetRef.current);
-    const dist = camera.position.distanceTo(target);
-    if (effect.cocMaterial) {
-      effect.cocMaterial.focusRange = Math.max(focusRange, Math.min(90, dist * 0.08));
-    }
-  });
-
-  return (
-    <DepthOfField
-      key={auto ? 'target-autofocus' : 'manual-focus'}
-      ref={ref}
-      target={auto ? targetRef.current : undefined}
-      focusDistance={focusDistance}
-      focusRange={focusRange}
-      focalLength={focalLength}
-      bokehScale={bokehScale}
-      height={480}
-    />
-  );
+export function ScenePostprocessing(): null {
+  return null;
 }
