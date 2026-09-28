@@ -18,17 +18,20 @@ three APIs and one gallery.
    elements, atoms, source }`, the same candidate shape the molecule
    switcher sends to `/v1/switch/judge`.
 2. **Vision (Hugging Face).** The Worker sends the photo to a small
-   reasoning VLM through Hugging Face Inference Providers, the Hub's
+   instruct VLM through Hugging Face Inference Providers, the Hub's
    OpenAI-compatible router, with the same `HF_TOKEN` the Spaces use and a
    strict JSON schema on the output (`apps/mcp-worker/src/vision.ts`,
-   prompts in `scan.ts`). The default is `Qwen/Qwen3.6-35B-A3B` (3B active
-   parameters, about $0.10 in and $0.95 out per million tokens). The answer is a structured
+   prompts in `scan.ts`). The default is `Qwen/Qwen3-VL-30B-A3B-Instruct:novita` (3B active
+   parameters, pinned to one provider). The first default, the reasoning
+   model `Qwen/Qwen3.6-35B-A3B`, ran past the 17-second deadline on every
+   call in production (2026-09-27). The answer is a structured
    identification: the subject with a confidence and a short likelihood
    distribution over what it could be, up to four materials with rough
    shares, up to four molecules per material with a formula and a
    few-word role, the dominant elements, and one playful headline.
-   Reasoning effort is `low` so the answer lands in a few seconds (a
-   provider that rejects the field is asked once more without it). A
+   No reasoning effort is requested by default, so the answer lands
+   well inside the deadline; a reasoning model can be switched on with
+   `HF_VISION_REASONING`. A
    response that is not valid JSON in that shape is rejected.
 3. **Matching.** The Worker matches the model's molecules to the gallery pool by
    normalized title, then by formula, with a short alias table (salt,
@@ -449,20 +452,21 @@ the token's account or organization. Locally the keys go in
 (identify, gist, and sculpt) to `wrangler dev` like `/v1/switch`. Optional
 vars:
 
-- `HF_VISION_MODEL` (default `Qwen/Qwen3.6-35B-A3B`): any image-capable
+- `HF_VISION_MODEL` (default `Qwen/Qwen3-VL-30B-A3B-Instruct:novita`): any image-capable
   chat model on the router with structured output, e.g.
   `Qwen/Qwen3-VL-235B-A22B-Instruct` (no reasoning, sharper eyes) or
   `google/gemma-4-31B-it`. Append `:cheapest` or `:fastest` to steer the
   router's provider choice. `GET https://router.huggingface.co/v1/models`
   lists what is live, with prices and `supports_structured_output`.
-- `HF_VISION_REASONING`: `none`, `low` (default), `medium`, `high`.
+- `HF_VISION_REASONING`: `none` (default; no `reasoning_effort` field is sent),
+  `low`, `medium`, `high`. Set it only with a reasoning model.
 - `HF_INFERENCE_BASE`: a gateway in front of the router.
 
 `/health` reports the state without revealing anything:
 
 ```bash
 curl -s https://lupi.live/health | jq .scan
-# { "configured": true, "routes": ["/v1/scan/identify", "/v1/scan/gist", ...], "vision": "Qwen/Qwen3.6-35B-A3B", "jev": true, "remote": { ... } }
+# { "configured": true, "routes": ["/v1/scan/identify", "/v1/scan/gist", ...], "vision": "Qwen/Qwen3-VL-30B-A3B-Instruct:novita", "jev": true, "remote": { ... } }
 ```
 
 Without `HF_TOKEN` the route answers `{ "configured": false }` and
@@ -485,7 +489,7 @@ WebP, GIF.
 ```json
 {
   "configured": true,
-  "model": { "vision": "Qwen/Qwen3.6-35B-A3B", "jev": "jev-1.13.0" },
+  "model": { "vision": "Qwen/Qwen3-VL-30B-A3B-Instruct:novita", "jev": "jev-1.13.0" },
   "identification": {
     "subject": "A carton of eggs",
     "confidence": 0.94,
