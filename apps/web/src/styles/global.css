@@ -272,6 +272,13 @@ input[type="range"]:not(.amped-ui-slider):not(.amped-slider)::-moz-range-thumb {
   outline-offset: 2px;
 }
 
+/* The viewer's accent is the home page's lime (owner decision, 2026-09-28):
+   chips, pressed states and focus rings inside the viewer use it. */
+.lupine-app-root { --lupi-accent: #d5ef9c; }
+.lupine-app-root :focus-visible { outline-color: var(--lupi-accent); }
+.lupine-app-root .lupine-btn:focus-visible { outline-color: var(--lupi-accent); }
+.lupine-app-root .lupine-select:focus-visible { box-shadow: 0 0 0 2px rgba(213, 239, 156, 0.28); }
+
 button:focus:not(:focus-visible) {
   outline: none;
 }
@@ -817,7 +824,7 @@ button:focus:not(:focus-visible) {
 }
 .lupine-ui-bucket:hover { border-color: rgba(75, 211, 214, .78); box-shadow: 0 16px 42px rgba(0,0,0,.52), 0 0 20px rgba(34,211,215,.12); }
 .lupine-ui-bucket:active { transform: scale(.95); }
-.lupine-ui-bucket:focus-visible { outline: 2px solid #67e8f9; outline-offset: 3px; }
+.lupine-ui-bucket:focus-visible { outline: 2px solid var(--lupi-accent, #d5ef9c); outline-offset: 3px; }
 .lupine-ui-bucket__orb {
   width: 34px;
   height: 34px;
@@ -921,17 +928,17 @@ button:focus:not(:focus-visible) {
 }
 
 .lupine-command-slot:active { transform: scale(0.97); }
-.lupine-command-slot:focus-visible { outline: 2px solid rgba(34, 211, 215, 0.82); outline-offset: -2px; }
+.lupine-command-slot:focus-visible { outline: 2px solid var(--lupi-accent, #d5ef9c); outline-offset: -2px; }
 
 .lupine-command-slot[aria-pressed='true'] {
-  color: #dffeff;
-  background: linear-gradient(90deg, rgba(34, 211, 215, 0.14), rgba(34, 211, 215, 0.045));
-  border-color: rgba(34, 211, 215, 0.34);
+  color: #f1f8e2;
+  background: linear-gradient(90deg, rgba(213, 239, 156, 0.14), rgba(213, 239, 156, 0.045));
+  border-color: rgba(213, 239, 156, 0.34);
 }
 
 .lupine-command-slot[aria-pressed='true']::before {
-  background: #22d3d7;
-  box-shadow: 0 0 10px rgba(34, 211, 215, 0.46);
+  background: var(--lupi-accent, #d5ef9c);
+  box-shadow: 0 0 10px rgba(213, 239, 156, 0.4);
 }
 
 .lupine-command-slot__icon { width: 20px; height: 20px; display: grid; place-items: center; }
@@ -1034,7 +1041,7 @@ button:focus:not(:focus-visible) {
   cursor: pointer;
 }
 .lupine-command-panel__close:hover { color: #f4f8fb; background: #111b25; border-color: #2b3c4c; }
-.lupine-command-panel__close:focus-visible { outline: 2px solid rgba(34, 211, 215, 0.82); outline-offset: -2px; }
+.lupine-command-panel__close:focus-visible { outline: 2px solid var(--lupi-accent, #d5ef9c); outline-offset: -2px; }
 .lupine-command-panel__body {
   flex: 1;
   min-height: 0;
@@ -1073,7 +1080,7 @@ button:focus:not(:focus-visible) {
 .lupine-command-panel[data-panel='studio'] {
   --scene-ink: #eff4e9;
   --scene-muted: #b6c7bd;
-  --scene-accent: #d5ebaa;
+  --scene-accent: var(--lupi-accent, #d5ef9c);
   --scene-border: #40564a;
   bottom: auto;
   max-height: calc(100% - 24px);
@@ -1158,7 +1165,7 @@ button:focus:not(:focus-visible) {
   .lupine-app-root .lupine-command-slot[data-command='camera'] { flex: 1.1; }
   .lupine-app-root .lupine-command-slot[data-command='elements'] { flex: 1.35; }
   .lupine-app-root .lupine-command-slot[aria-pressed='true'] { color: #e4f2c6; background: #2d4333; border-color: #617351; }
-  .lupine-app-root .lupine-command-slot[aria-pressed='true']::before { background: #d5ebaa; box-shadow: none; }
+  .lupine-app-root .lupine-command-slot[aria-pressed='true']::before { background: var(--lupi-accent); box-shadow: none; }
 }
 
 @media (max-height: 500px) and (min-width: 641px) and (max-width: 900px) {

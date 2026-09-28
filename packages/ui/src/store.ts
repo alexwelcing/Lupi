@@ -927,7 +927,8 @@ const DEFAULTS = {
   bondRegistry: {} as Record<string, BondDataset>,
   activeBondDataset: null as string | null,
   atomScale: 1.0,
-  backgroundPreset: 'pub-figure-neutral',
+  // The home page's dark sage plate (BG_PRESETS['sage-plate']).
+  backgroundPreset: 'sage-plate',
   backgroundStyle: 'radial' as const,
   backgroundMotionPaused: false,
   backgroundMotionSpeed: 1.0,
@@ -1287,7 +1288,7 @@ export const useStore = create<AppState>()(
         const avgRadius = typeCount > 0 ? totalRadius / typeCount : 0.5;
         if (diagonal / avgRadius > 150) {
           sparseAtomScale = Math.min(5, Math.max(2, diagonal / 200));
-          sparseBackgroundPreset = 'deep';
+          sparseBackgroundPreset = DEFAULTS.backgroundPreset;
         }
       }
 
@@ -2068,7 +2069,7 @@ function pickSceneDirective(atomCount: number): {
       preset: 'editorial',
       intensity: 0.92,
       materialScene: DEFAULT_SCENE_ID,
-      backgroundPreset: 'deep',
+      backgroundPreset: DEFAULTS.backgroundPreset,
       surfaceRoughness: -0.08,
       surfacePolish: 0.22,
       surfaceClearcoat: 0.18,
@@ -2085,7 +2086,7 @@ function pickSceneDirective(atomCount: number): {
       preset: 'studio',
       intensity: 1.0,
       materialScene: DEFAULT_SCENE_ID,
-      backgroundPreset: 'deep',
+      backgroundPreset: DEFAULTS.backgroundPreset,
       surfaceRoughness: -0.04,
       surfacePolish: 0.14,
       surfaceClearcoat: 0.12,

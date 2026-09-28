@@ -14,7 +14,7 @@ export type SceneLookId = typeof SCENE_LOOKS[number]['id'];
 export function sceneLookPatch(id: SceneLookId, atomCount: number) {
   const large = atomCount >= 25_000;
   return {
-    backgroundPreset: id === 'paper' ? 'white' : id === 'night' ? 'slate' : id === 'prism' ? 'midnight' : 'gallery-studio',
+    backgroundPreset: id === 'paper' ? 'white' : id === 'night' ? 'slate' : id === 'prism' ? 'midnight' : 'sage-plate',
     backgroundStyle: 'radial',
     backgroundBackdropShape: 'dome',
     backgroundBackdropPattern: 'image',

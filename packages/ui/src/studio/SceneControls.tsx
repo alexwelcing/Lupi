@@ -102,7 +102,7 @@ export function SceneControls() {
   const publicationPresets = useMemo(() => categoryPresets('Publication Contexts'), []);
   const signaturePresets = useMemo(() => categoryPresets('Signature Stills'), []);
   const gradientPresets = useMemo(
-    () => BG_GRADIENT_PRESETS.filter(preset => ['white', 'deep', 'void', 'fog', 'blueprint', 'warm'].includes(preset.id)),
+    () => BG_GRADIENT_PRESETS.filter(preset => ['sage-plate', 'white', 'deep', 'void', 'fog', 'blueprint', 'warm'].includes(preset.id)),
     [],
   );
   const worldLibraryGroups = useMemo(() => [

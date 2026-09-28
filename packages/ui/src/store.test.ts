@@ -477,7 +477,7 @@ describe('Store — File Loading', () => {
     expect(s.showCell).toBe(false);
     expect(s.showAxes).toBe(false);
     expect(s.postprocessPreset).toBe('paper');
-    expect(s.backgroundPreset).toBe('gallery-studio');
+    expect(s.backgroundPreset).toBe('sage-plate');
     expect(s.environmentPreset).toBe('softbox');
     expect(s.rimLightColor).toBe('#ffffff');
     expect(s.bloom).toBe(false);
