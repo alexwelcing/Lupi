@@ -67,7 +67,7 @@ import {
   createGradientEquirectTexture,
   type BackgroundGradientStyle,
 } from './equirectTexture';
-import { assertSceneEnvironmentReady } from './sceneEnvironment';
+import { assertSceneEnvironmentReady, sceneEnvironmentLoadFailed } from './sceneEnvironment';
 import {
   inspectArtifactAtomSceneReadiness,
   inspectArtifactVectorGlyphSceneReadiness,
@@ -365,7 +365,15 @@ function ImageCaptureFrameLifecycle({
     try {
       if (request.artifactSpec) {
         const lighting = request.artifactSpec.view.lighting as Record<string, unknown> | undefined;
-        assertSceneEnvironmentReady(scene.environment, lighting?.environment);
+        try {
+          assertSceneEnvironmentReady(scene.environment, lighting?.environment);
+        } catch (environmentError) {
+          // The HDR loads beside the scene. Wait for it (the export timeout
+          // is the fail-closed bound) unless its download already failed.
+          if (sceneEnvironmentLoadFailed(lighting?.environment)) throw environmentError;
+          invalidate();
+          return;
+        }
       }
       transaction.applyCanonicalState();
       markFiberFrameCaptureApplied(barrierRef.current, revisionRef.current);

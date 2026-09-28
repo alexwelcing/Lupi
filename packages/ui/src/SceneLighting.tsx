@@ -8,15 +8,17 @@
  * `scene.environment`: a CubeUV texture that node materials read directly and
  * that the impostor kit samples through `pmremTexture` (plan-final D13).
  */
-import { useLayoutEffect } from 'react';
-import { useLoader, useThree } from '@react-three/fiber/webgpu';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import { PMREMGenerator } from 'three/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { useStore } from './store';
 import {
+  clearSceneEnvironmentLoadFailure,
   environmentAssetUrl,
   installSceneEnvironmentPmrem,
+  markSceneEnvironmentLoadFailed,
   resolveSceneEnvironment,
   type DreiEnvironmentPreset,
 } from './sceneEnvironment';
@@ -27,24 +29,72 @@ const RIG_RADIUS = 11.18;
 const DEG = Math.PI / 180;
 
 /**
+ * The pinned HDRs, one download per URL for the page's lifetime. A failed
+ * download leaves the cache, so choosing the preset again retries it.
+ */
+const environmentSources = new Map<string, Promise<THREE.DataTexture>>();
+
+function loadEnvironmentSource(url: string): Promise<THREE.DataTexture> {
+  let pending = environmentSources.get(url);
+  if (!pending) {
+    pending = new HDRLoader().loadAsync(url).then((texture) => {
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.colorSpace = THREE.LinearSRGBColorSpace;
+      return texture;
+    });
+    pending.catch(() => environmentSources.delete(url));
+    environmentSources.set(url, pending);
+  }
+  return pending;
+}
+
+/**
  * Load the exact Drei preset asset (the pinned drei-assets HDR, through
  * three's HDRLoader rather than drei's deprecated RGBELoader path), prefilter
  * it explicitly for the custom atom BRDF, and tag the resulting CubeUV texture
- * with its immutable asset identity. Suspense controls loading; the tag
- * controls correctness. Export never treats an untagged/old environment as
- * capture-ready.
+ * with its immutable asset identity. The tag controls correctness: export
+ * never treats an untagged/old environment as capture-ready.
+ *
+ * The download runs beside the scene rather than through Suspense: until it
+ * arrives the molecule renders with the analytic environment, and a failed
+ * download (offline, a blocked CDN) leaves it that way instead of taking the
+ * canvas into its error boundary.
  */
 function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
-  const source = useLoader(HDRLoader, environmentAssetUrl(preset));
-  source.mapping = THREE.EquirectangularReflectionMapping;
-  source.colorSpace = THREE.LinearSRGBColorSpace;
   const { renderer, scene } = useThree();
-  useLayoutEffect(() => installSceneEnvironmentPmrem(
-    scene,
-    source,
-    preset,
-    () => new PMREMGenerator(renderer),
-  ), [renderer, preset, scene, source]);
+  const [source, setSource] = useState<{ preset: DreiEnvironmentPreset; texture: THREE.DataTexture } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadEnvironmentSource(environmentAssetUrl(preset)).then(
+      (texture) => {
+        if (cancelled) return;
+        clearSceneEnvironmentLoadFailure(preset);
+        setSource({ preset, texture });
+      },
+      (error: unknown) => {
+        if (cancelled) return;
+        markSceneEnvironmentLoadFailed(preset);
+        console.warn(
+          `[SceneLighting] Environment '${preset}' could not be loaded; rendering without image-based light.`,
+          error instanceof Error ? error.message : String(error),
+        );
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [preset]);
+
+  useLayoutEffect(() => {
+    if (!source || source.preset !== preset) return undefined;
+    return installSceneEnvironmentPmrem(
+      scene,
+      source.texture,
+      preset,
+      () => new PMREMGenerator(renderer),
+    );
+  }, [renderer, preset, scene, source]);
 
   return null;
 }

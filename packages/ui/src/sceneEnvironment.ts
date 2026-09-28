@@ -263,3 +263,25 @@ export function resolveSceneEnvironment(
 ): TexturedEnvironmentPreset | null {
   return environmentPreset === 'none' ? null : environmentPreset;
 }
+
+/**
+ * Presets whose HDR asset failed to load in this page. The viewer renders on
+ * without image-based light (the impostor kit falls back to its analytic
+ * environment); an artifact that asks for such an environment fails closed
+ * instead of waiting for it.
+ */
+const failedEnvironmentPresets = new Set<TexturedEnvironmentPreset>();
+
+export function markSceneEnvironmentLoadFailed(preset: TexturedEnvironmentPreset): void {
+  failedEnvironmentPresets.add(preset);
+}
+
+export function clearSceneEnvironmentLoadFailure(preset: TexturedEnvironmentPreset): void {
+  failedEnvironmentPresets.delete(preset);
+}
+
+export function sceneEnvironmentLoadFailed(expected: unknown): boolean {
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return false;
+  const preset = (expected as Record<string, unknown>).preset;
+  return typeof preset === 'string' && failedEnvironmentPresets.has(preset as TexturedEnvironmentPreset);
+}
