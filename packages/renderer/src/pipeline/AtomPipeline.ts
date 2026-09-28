@@ -420,6 +420,8 @@ export async function initWebGPU(
       }
 
       device.lost.then((info: any) => {
+        // destroy() on dispose also resolves `lost`; only a real loss is an error.
+        if (info?.reason === 'destroyed') return;
         console.error('[WebGPU] device lost:', info.message);
       });
       const format = (navigator as any).gpu.getPreferredCanvasFormat();
