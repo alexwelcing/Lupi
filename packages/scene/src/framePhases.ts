@@ -38,6 +38,8 @@ export const LUPI_JOB = {
   dofFocus: 'lupi/dof-focus',
   labelsFacing: 'lupi/labels-facing',
   contactShadow: 'lupi/contact-shadow',
+  /** The testbed harness: probe projection and the readiness count. */
+  harness: 'lupi/harness',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];
