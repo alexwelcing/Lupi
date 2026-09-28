@@ -579,6 +579,10 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
     }
     : state;
   const filename = `${baseName}-frame${planningState.frame + 1}.${extensionForExportAsset(format)}`;
+  // The renderer backend is part of the artifact identity. Right after a load
+  // the viewer canvas may still be initializing its renderer (WebGPU device
+  // setup takes a moment), so wait for it within the export timeout.
+  await waitForRendererRuntime(timeoutMs);
   const artifactPlan = await createBrowserRenderArtifactPlanV1(planningState, {
     format,
     ...(image
@@ -656,6 +660,14 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
 }
 
 /** The renderer fields of `lupi.status`, the driver's status() and state(). */
+/** Resolve once the viewer canvas has recorded its renderer, or after `timeoutMs` (the caller then fails with the adapter's message). */
+async function waitForRendererRuntime(timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!getLupiRendererRuntime() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 export function readMcpRendererStatus(): LupiMcpRendererStatus {
   const runtime = getLupiRendererRuntime();
   return {
