@@ -16,20 +16,33 @@
  *            32,000 atoms) renders.
  *   export   the MCP bridge (window.__lupiViewerMcp) returns a valid PNG of
  *            the requested size from lupi.export_asset with bonds hidden.
+ *   testbed  each `/?testbed&case=<id>` harness case (--cases) reports ready,
+ *            its assertions pass, its backend matches the lane, and every
+ *            probe pixel (median of a 3x3 patch) matches its expectation. In
+ *            the webgpu lane the plate case also runs with &renderer=webgl2.
+ *   churn    (desktop) the viewer canvas unmounts and remounts five times in
+ *            one document (history navigation away from ?sim=caffeine and
+ *            Back): at most one <canvas> per visit, no device-lost or
+ *            context-lost console message.
+ *   fallback a separate browser with neither WebGPU nor WebGL shows the
+ *            renderer fallback screen without an uncaught error (console
+ *            errors from the canvas error boundary are allowed here only).
+ *
+ * --level=boot reduces the viewer scenarios to: structure loads, canvas
+ * mounted and sized, no fallback screen, backend recorded. --level=full
+ * (default) adds the pixel, input and export checks.
  *
  * Every page's uncaught errors fail the run, as do console errors that are not
  * third-party resource noise. Rendering is judged from page screenshots of the
  * viewer canvas with all DOM chrome hidden (never readPixels), so the same
  * checks hold for WebGLRenderer, WebGPURenderer and its WebGL2 fallback.
  *
- * Lanes:
- *   webgl   Chromium without --enable-unsafe-webgpu, so navigator.gpu yields no
- *           adapter (on Linux). A WebGPURenderer app must fall back to WebGL2.
- *           If an adapter is found anyway (macOS/Windows), the lane relaunches
- *           with --disable-webgpu so it still exercises the fallback.
- *   webgpu  Chromium with --enable-unsafe-webgpu (SwiftShader adapter when
- *           headless). Needs a secure context, so the self-started server is
- *           addressed as http://localhost.
+ * Lanes (Chromium flags from tools/lib/browser-lanes.mjs):
+ *   webgl   no WebGPU adapter, so WebGPURenderer runs its WebGL2 backend.
+ *   webgpu  a SwiftShader WebGPU adapter (with the Vulkan flags that keep the
+ *           device alive). Needs a secure context, so the self-started server
+ *           is addressed as http://localhost.
+ *   nogpu   neither WebGPU nor WebGL; runs only the fallback scenario.
  *
  * The tool builds nothing. Build first: pnpm --filter @atlas/web build
  *
@@ -44,21 +57,27 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import net from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inflateSync } from 'node:zlib';
+import { crc32, deflateSync, inflateSync } from 'node:zlib';
+import { LANE_ARGS, chromiumExecutable } from './lib/browser-lanes.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const DIST_INDEX = resolve(REPO_ROOT, 'apps/web/dist/index.html');
 const GALLERY_DATA = resolve(REPO_ROOT, 'packages/ui/src/gallery-data.json');
-const DEFAULT_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
-const ALL_SCENARIOS = ['home', 'caffeine', 'c60', 'lattice', 'export'];
+const ALL_SCENARIOS = ['home', 'caffeine', 'c60', 'lattice', 'export', 'testbed', 'churn', 'fallback'];
 const PROFILE_SCENARIOS = {
-  desktop: ['home', 'caffeine', 'c60', 'lattice', 'export'],
-  // Export is device-independent bridge work; the phone lane covers layout,
+  desktop: ['home', 'caffeine', 'c60', 'lattice', 'export', 'testbed', 'churn', 'fallback'],
+  // Export and churn are device-independent; the phone lane covers layout,
   // touch input, DPR > 1 and the mobile tier instead.
-  phone: ['home', 'caffeine', 'c60', 'lattice'],
+  phone: ['home', 'caffeine', 'c60', 'lattice', 'testbed', 'fallback'],
 };
+/** Scenarios that run in a backend lane; `fallback` has its own no-GPU lane. */
+const LANE_SCENARIOS = ALL_SCENARIOS.filter((name) => name !== 'fallback');
+const LEVELS = ['boot', 'full'];
+const CHURN_ROUNDS = 5;
+/** The testbed plate (#101817) and the §5.15 probe judgements. */
+const PLATE_RGB = [16, 24, 23];
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -69,17 +88,22 @@ Usage:
   node tools/verify-viewer-smoke.mjs                      # both backends, both profiles
   node tools/verify-viewer-smoke.mjs --backend=webgl      # WebGL2 lane only
   node tools/verify-viewer-smoke.mjs --url=http://localhost:5173/ --backend=webgpu
+  node tools/verify-viewer-smoke.mjs --scenarios=testbed --cases=plate --strict-backend
 
 Options:
   --url=<url>            Test an already-running app instead of serving apps/web/dist.
-  --backend=<b>          webgl | webgpu | both (default: both).
+  --backend=<b>          webgl (alias webgl2) | webgpu | both (default: both).
   --profile=<p>          desktop | phone | both (default: both).
   --scenarios=<list>     Comma list from: ${ALL_SCENARIOS.join(', ')} (default: all).
+  --level=<l>            boot | full (default: full). boot: the viewer scenarios check only
+                         that the structure loads, the canvas mounts and the backend is recorded.
+  --cases=<list>         Testbed cases for the testbed scenario, comma separated, or all
+                         (default: all). <id>@webgl2 adds &renderer=webgl2 and expects WebGL2.
   --lattice=<galleryId>  Larger structure for the lattice scenario (default: al_polycrystal).
   --server=<mode>        serve-web (default, tools/serve-web.mjs) | preview (vite preview).
-  --executable=<path>    Chromium binary (default: ${DEFAULT_CHROMIUM} when present,
-                         else $PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, else Playwright's own).
-  --chrome-args=<a,b>    Extra Chromium flags, comma separated, added to every lane.
+  --executable=<path>    Chromium binary (default: Chromium 1194 when present, else
+                         $PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, else Playwright's own).
+  --chrome-args=<a,b>    Extra Chromium flags, comma separated, added to the backend lanes.
   --allow-console=<re>   Treat console errors matching this regular expression as known
                          noise (reported under ignoredConsoleErrors, not failed).
   --strict-backend       Fail when the app's actual renderer backend does not match the
@@ -113,7 +137,7 @@ const extraChromeArgs = typeof args['chrome-args'] === 'string'
   ? args['chrome-args'].split(',').map((value) => value.trim()).filter(Boolean)
   : [];
 
-const backends = listArg(args.backend, ['webgl', 'webgpu'], 'both');
+const backends = listArg(typeof args.backend === 'string' ? args.backend.replace(/\bwebgl2\b/g, 'webgl') : args.backend, ['webgl', 'webgpu'], 'both');
 const profiles = listArg(args.profile, ['desktop', 'phone'], 'both');
 const scenarioFilter = typeof args.scenarios === 'string'
   ? args.scenarios.split(',').map((value) => value.trim()).filter(Boolean)
@@ -121,6 +145,11 @@ const scenarioFilter = typeof args.scenarios === 'string'
 for (const name of scenarioFilter) {
   if (!ALL_SCENARIOS.includes(name)) usageError(`Unknown scenario "${name}". Use: ${ALL_SCENARIOS.join(', ')}`);
 }
+const level = typeof args.level === 'string' ? args.level : 'full';
+if (!LEVELS.includes(level)) usageError(`Unknown level "${level}". Use: ${LEVELS.join(', ')}`);
+const casesArg = typeof args.cases === 'string' && args.cases !== 'all'
+  ? args.cases.split(',').map((value) => value.trim()).filter(Boolean)
+  : 'all';
 
 const runId = stamp();
 const ARTIFACTS = typeof args.out === 'string'
@@ -128,12 +157,12 @@ const ARTIFACTS = typeof args.out === 'string'
   : resolve(REPO_ROOT, '.verify-artifacts', 'viewer-smoke', runId);
 mkdirSync(ARTIFACTS, { recursive: true });
 
-const executablePath = resolveExecutable();
+const executablePath = chromiumExecutable(typeof args.executable === 'string' ? args.executable : null);
 const gallery = loadGallery();
 
 const report = {
   tool: 'verify-viewer-smoke',
-  version: 1,
+  version: 2,
   runId,
   generatedAt: new Date().toISOString(),
   ok: false,
@@ -153,6 +182,8 @@ const report = {
     backends,
     profiles,
     scenarios: scenarioFilter,
+    level,
+    cases: casesArg,
     lattice: latticeId,
     strictBackend,
     reducedMotion,
@@ -187,9 +218,11 @@ async function main() {
     log(`[viewer-smoke] app: ${baseUrl}`);
     log(`[viewer-smoke] artifacts: ${ARTIFACTS}`);
 
-    for (const backend of backends) {
+    const lanes = scenarioFilter.some((name) => LANE_SCENARIOS.includes(name)) ? [...backends] : [];
+    if (scenarioFilter.includes('fallback')) lanes.push('nogpu');
+    for (const backend of lanes) {
       try {
-        report.lanes.push(await runLane(backend, baseUrl));
+        report.lanes.push(backend === 'nogpu' ? await runFallbackLane(baseUrl) : await runLane(backend, baseUrl));
       } catch (error) {
         // One lane failing to launch must not hide the other lane's result.
         report.failures.push(`${backend}: lane aborted: ${errorMessage(error)}`);
@@ -227,25 +260,17 @@ async function main() {
 async function runLane(backend, baseUrl) {
   const lane = {
     backend,
-    chromiumArgs: laneArgs(backend, false),
+    chromiumArgs: laneArgs(backend),
     preflight: null,
     actualBackend: null,
     backendMatch: null,
     profiles: [],
   };
   log(`\n[viewer-smoke] === lane ${backend} ===`);
-  let browser = await launch(lane.chromiumArgs);
+  const browser = await launch(lane.chromiumArgs);
   try {
     report.environment.browserVersion ??= browser.version();
     lane.preflight = await preflight(browser, baseUrl);
-    if (backend === 'webgl' && lane.preflight.adapter) {
-      // A lane that claims to test the WebGL2 fallback must not have an adapter.
-      await browser.close().catch(() => {});
-      lane.chromiumArgs = laneArgs(backend, true);
-      browser = await launch(lane.chromiumArgs);
-      lane.preflight = { ...(await preflight(browser, baseUrl)), escalatedToDisableWebgpu: true };
-      warn(`${backend}: a WebGPU adapter was available; relaunched with --disable-webgpu`);
-    }
     const preflightOk = backend === 'webgpu' ? Boolean(lane.preflight.adapter) : !lane.preflight.adapter;
     lane.preflight.ok = preflightOk;
     log(`  ${preflightOk ? 'OK ' : 'NO '} preflight: navigator.gpu=${lane.preflight.hasNavigatorGpu} adapter=${lane.preflight.adapter ? describeAdapter(lane.preflight.adapter) : 'none'} secureContext=${lane.preflight.secureContext}`);
@@ -259,7 +284,7 @@ async function runLane(backend, baseUrl) {
       const profileResult = { profile, scenarios: [] };
       lane.profiles.push(profileResult);
       for (const name of PROFILE_SCENARIOS[profile]) {
-        if (!scenarioFilter.includes(name)) continue;
+        if (!scenarioFilter.includes(name) || !LANE_SCENARIOS.includes(name)) continue;
         profileResult.scenarios.push(await runScenario(browser, { backend, profile, name, baseUrl, lane }));
       }
     }
@@ -279,11 +304,29 @@ async function runLane(backend, baseUrl) {
   return lane;
 }
 
-function laneArgs(backend, disableWebgpu) {
-  const base = ['--enable-unsafe-swiftshader'];
-  if (backend === 'webgpu') base.push('--enable-unsafe-webgpu');
-  if (backend === 'webgl' && disableWebgpu) base.push('--disable-webgpu');
-  return [...base, ...extraChromeArgs];
+function laneArgs(backend) {
+  return [...(backend === 'webgpu' ? LANE_ARGS.webgpu : LANE_ARGS.webgl2), ...extraChromeArgs];
+}
+
+/** The fallback scenario in a browser with neither WebGPU nor WebGL. */
+async function runFallbackLane(baseUrl) {
+  const lane = { backend: 'nogpu', chromiumArgs: [...LANE_ARGS.noGpu], preflight: null, actualBackend: null, backendMatch: null, profiles: [] };
+  log('\n[viewer-smoke] === lane nogpu ===');
+  const browser = await launch(lane.chromiumArgs);
+  try {
+    report.environment.browserVersion ??= browser.version();
+    lane.preflight = await preflight(browser, baseUrl);
+    lane.preflight.ok = !lane.preflight.adapter;
+    log(`  ${lane.preflight.ok ? 'OK ' : 'NO '} preflight: navigator.gpu=${lane.preflight.hasNavigatorGpu} adapter=${lane.preflight.adapter ? describeAdapter(lane.preflight.adapter) : 'none'}`);
+    if (!lane.preflight.ok) report.failures.push('nogpu: a WebGPU adapter is available in the no-GPU lane');
+    for (const profile of profiles) {
+      if (!PROFILE_SCENARIOS[profile].includes('fallback')) continue;
+      lane.profiles.push({ profile, scenarios: [await runScenario(browser, { backend: 'nogpu', profile, name: 'fallback', baseUrl, lane })] });
+    }
+  } finally {
+    await browser.close().catch(() => {});
+  }
+  return lane;
 }
 
 async function launch(chromiumArgs) {
@@ -381,7 +424,7 @@ async function runScenarioAttempt(browser, spec, attempt) {
 
   const context = await browser.newContext(contextOptions(spec.profile));
   const page = await context.newPage();
-  attachDiagnostics(page, spec.baseUrl, outcome.errors);
+  attachDiagnostics(page, spec.baseUrl, outcome.errors, spec.name);
   await stubThirdParty(page);
 
   try {
@@ -391,6 +434,9 @@ async function runScenarioAttempt(browser, spec, attempt) {
     else if (spec.name === 'c60') await scenarioStructure(ctx, { id: 'c60_buckyball', minForeground: 0.01 });
     else if (spec.name === 'lattice') await scenarioStructure(ctx, { id: latticeId, minForeground: 0.03, loadTimeout: Math.max(timeout, 120_000) });
     else if (spec.name === 'export') await scenarioExport(ctx);
+    else if (spec.name === 'testbed') await scenarioTestbed(ctx);
+    else if (spec.name === 'churn') await scenarioChurn(ctx);
+    else if (spec.name === 'fallback') await scenarioFallback(ctx);
   } catch (error) {
     outcome.exception = errorMessage(error);
     log(`  NO  exception: ${outcome.exception}`);
@@ -445,6 +491,12 @@ async function scenarioHome({ page, check, save, outcome }) {
       };
     }
   });
+  // The landing must not fetch the three/R3F stack (the zero-canvas home rule).
+  const viewerChunks = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (/\/vendor-(three|react-three)[^/]*\.js$/.test(path)) viewerChunks.push(path.split('/').pop());
+  });
   outcome.url = baseFor(page).href;
   await page.goto(outcome.url, { waitUntil: 'load', timeout });
   const heading = page.locator('h1').first();
@@ -466,6 +518,8 @@ async function scenarioHome({ page, check, save, outcome }) {
   outcome.data.home = state;
   check('home has zero <canvas> elements', state.canvases === 0, `${state.canvases} canvas`);
   check('home creates no WebGL/WebGPU context', state.gpuContexts.length === 0, state.gpuContexts.length ? state.gpuContexts.join(', ') : 'none');
+  outcome.data.home.viewerChunks = viewerChunks;
+  check('home requests no vendor-three* or vendor-react-three* chunk', viewerChunks.length === 0, viewerChunks.length ? viewerChunks.join(', ') : 'none');
   await save('home', await page.screenshot({ scale: 'css' }));
 }
 
@@ -474,6 +528,7 @@ async function scenarioCaffeine(ctx) {
   const entry = galleryEntry('caffeine');
   const canvas = await openStructure(ctx, entry);
   if (!canvas) return;
+  if (level === 'boot') return recordBackend(ctx);
 
   // (b) non-blank canvas with visible CPK atoms.
   const settled = await waitSettled(page, canvas, 0.01);
@@ -522,6 +577,7 @@ async function scenarioStructure(ctx, { id, minForeground, loadTimeout = timeout
   const entry = galleryEntry(id);
   const canvas = await openStructure(ctx, entry, loadTimeout);
   if (!canvas) return;
+  if (level === 'boot') return recordBackend(ctx);
   const settled = await waitSettled(page, canvas, minForeground, 30_000);
   outcome.data.settle = settled.meta;
   await save('render', settled.png);
@@ -541,6 +597,7 @@ async function scenarioExport(ctx) {
   const entry = galleryEntry('caffeine');
   const canvas = await openStructure(ctx, entry);
   if (!canvas) return;
+  if (level === 'boot') return recordBackend(ctx);
   await waitSettled(page, canvas, 0.01, 15_000);
   const width = 320;
   const height = 240;
@@ -584,6 +641,215 @@ async function scenarioExport(ctx) {
   const fraction = painted / (decoded.width * decoded.height);
   outcome.data.export.paintedFraction = fraction;
   check('PNG decodes with a painted molecule on a transparent ground', fraction > 0.005 && fraction < 0.99, `painted=${pct(fraction)}`);
+}
+
+/** Boot level: the backend the app reports for the mounted viewer canvas. */
+async function recordBackend({ page, spec, check, outcome }) {
+  // WebGPURenderer initializes asynchronously; the runtime record follows it.
+  await page.waitForFunction(() => Boolean(window.__lupiRenderer?.backend), null, { timeout: 15_000, polling: 250 }).catch(() => {});
+  const backend = await detectBackend(page);
+  outcome.data.backend = backend;
+  spec.lane.actualBackend ??= backend;
+  log(`  --  backend: ${backend.kind} via ${backend.source}`);
+  if (strictBackend) {
+    const expected = spec.backend === 'webgpu' ? 'webgpu' : 'webgl2';
+    check(`app renders through ${expected}`, backend.kind === expected, `${backend.kind} via ${backend.source}`);
+  }
+}
+
+async function scenarioTestbed(ctx) {
+  const cases = await testbedCases(ctx);
+  if (!cases) return;
+  ctx.outcome.data.testbed = [];
+  for (const item of cases) ctx.outcome.data.testbed.push(await runTestbedCase(ctx, item));
+}
+
+/** The requested cases; `all` reads the router's list from `/?testbed`. */
+async function testbedCases({ page, spec, check }) {
+  let ids = casesArg;
+  if (ids === 'all') {
+    await page.goto(new URL('?testbed', baseFor(page)).href, { waitUntil: 'commit', timeout });
+    const listed = await page.waitForFunction(
+      () => (window.__lupiHarness?.ready === true ? window.__lupiHarness.cases : null),
+      null,
+      { timeout, polling: 100 },
+    ).then((handle) => handle.jsonValue(), () => null);
+    if (!check('testbed lists its cases', Array.isArray(listed) && listed.length > 0, Array.isArray(listed) ? listed.join(', ') : 'no window.__lupiHarness.cases')) return null;
+    ids = listed;
+  }
+  const items = ids.map((id) => {
+    const [caseId, variant = null] = id.split('@');
+    return { id, caseId, variant, forced: variant === 'webgl2' };
+  });
+  // The reference case also proves ?renderer=webgl2 in the WebGPU lane.
+  if (spec.backend === 'webgpu' && items.some((item) => item.caseId === 'plate' && !item.variant) && !items.some((item) => item.id === 'plate@webgl2')) {
+    items.push({ id: 'plate@webgl2', caseId: 'plate', variant: 'webgl2', forced: true });
+  }
+  return items;
+}
+
+async function runTestbedCase({ page, spec, check, save, outcome }, item) {
+  const label = item.id;
+  const result = { id: label, url: '', ready: false };
+  if (item.variant && !item.forced) {
+    check(`${label}: known case variant`, false, `use <id> or <id>@webgl2, not @${item.variant}`);
+    return result;
+  }
+  result.url = new URL(`?testbed&case=${encodeURIComponent(item.caseId)}${item.forced ? '&renderer=webgl2' : ''}`, baseFor(page)).href;
+  outcome.url ||= result.url;
+  await page.goto(result.url, { waitUntil: 'commit', timeout });
+  const harness = await page.waitForFunction(
+    (id) => {
+      const state = window.__lupiHarness;
+      return state && state.case === id && state.ready === true ? state : null;
+    },
+    item.caseId,
+    { timeout, polling: 100 },
+  ).then((handle) => handle.jsonValue(), () => null);
+  if (!harness) {
+    const current = await page.evaluate(() => window.__lupiHarness ?? null).catch(() => null);
+    const alert = await rendererAlert(page);
+    check(`${label}: harness reports ready`, false, `${alert ? `renderer fallback: ${alert}; ` : ''}state=${JSON.stringify(current)?.slice(0, 300)}`);
+    return result;
+  }
+  result.ready = true;
+  result.backend = harness.backend;
+  result.assertions = harness.assertions;
+  check(`${label}: harness reports ready`, true);
+
+  const expected = item.forced || spec.backend !== 'webgpu' ? 'webgl2' : 'webgpu';
+  if (!item.forced) spec.lane.actualBackend ??= { kind: harness.backend ?? 'unknown', source: 'testbed harness' };
+  if (strictBackend || item.forced) check(`${label}: backend is ${expected}`, harness.backend === expected, `harness.backend=${harness.backend}`);
+  else if (harness.backend !== expected) warn(`${spec.backend}/${spec.profile}/testbed ${label}: backend ${harness.backend}, expected ${expected} (report only; pass --strict-backend to enforce)`);
+  for (const assertion of harness.assertions) check(`${label}: ${assertion.name}`, assertion.pass, assertion.detail ?? '');
+
+  const canvas = page.locator('#lupi-testbed-canvas canvas').first();
+  if (!(await canvas.isVisible().catch(() => false))) {
+    check(`${label}: testbed canvas is visible`, false);
+    return result;
+  }
+  await canvas.evaluate((node) => node.setAttribute('data-smoke-main', '1'));
+  const shot = await waitSettled(page, canvas, 0, 10_000);
+  result.screenshot = await save(`case-${label.replace(/[^a-z0-9-]+/gi, '-')}`, shot.png);
+  result.probes = harness.probes.map((probe) => judgeProbe(shot.image, probe));
+  for (const probe of result.probes) check(`${label}: probe ${probe.name}`, probe.pass, probe.detail);
+  return result;
+}
+
+/** A §5.15 probe: the median of the 3x3 patch at (x, y) CSS pixels of the canvas. */
+function judgeProbe(image, probe) {
+  const x = Math.round(probe.x);
+  const y = Math.round(probe.y);
+  const base = { name: probe.name, x, y, expect: probe.expect };
+  if (!(x >= 1 && y >= 1 && x < image.width - 1 && y < image.height - 1)) {
+    return { ...base, rgb: null, pass: false, detail: `(${x},${y}) is outside the ${image.width}x${image.height} canvas` };
+  }
+  const rgb = [0, 1, 2].map((channel) => {
+    const values = [];
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) values.push(image.data[((y + dy) * image.width + (x + dx)) * 4 + channel]);
+    }
+    values.sort((a, b) => a - b);
+    return values[4];
+  });
+  const pass = probeMatches(rgb, probe.expect);
+  return { ...base, rgb, pass, detail: `(${x},${y}) rgb=${rgb.join(',')} expect ${describeExpectation(probe.expect)}` };
+}
+
+function probeMatches([r, g, b], expect) {
+  const near = (target, tol) => Math.abs(r - target[0]) <= tol && Math.abs(g - target[1]) <= tol && Math.abs(b - target[2]) <= tol;
+  if (expect === 'plate') return near(PLATE_RGB, 6);
+  if (expect === 'not-plate') return !near(PLATE_RGB, 12);
+  if (Array.isArray(expect?.rgb)) return near(expect.rgb, Number(expect.tol ?? 0));
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  switch (expect?.family) {
+    case 'C': return max - min < 40 && (r + g + b) / 3 >= 60 && (r + g + b) / 3 <= 200;
+    case 'O': return r > g + 40 && r > b + 40;
+    case 'N': return b > r + 30 && b >= g;
+    case 'H': return min >= 170;
+    case 'S': return r > 150 && g > 120 && b < 110;
+    default: return false;
+  }
+}
+
+function describeExpectation(expect) {
+  if (typeof expect === 'string') return expect;
+  if (Array.isArray(expect?.rgb)) return `rgb ${expect.rgb.join(',')} ±${expect.tol ?? 0}`;
+  if (expect?.family) return `family ${expect.family}`;
+  return JSON.stringify(expect);
+}
+
+const LOST_MESSAGE = /device(?: was)? lost|lost the device|context[ _-]?lost|webglcontextlost/i;
+
+/**
+ * Mount and unmount the viewer canvas CHURN_ROUNDS times in one document: from
+ * `?sim=caffeine`, push `/library` (the molecule closes and the canvas
+ * unmounts), wait past LupiCanvas's deferred renderer disposal, then go Back.
+ */
+async function scenarioChurn(ctx) {
+  const { page, check, save, outcome } = ctx;
+  const lost = [];
+  page.on('console', (message) => {
+    if (LOST_MESSAGE.test(message.text())) lost.push(`${message.type()}: ${message.text().slice(0, 200)}`);
+  });
+  const entry = galleryEntry('caffeine');
+  const first = await openStructure(ctx, entry);
+  if (!first) return;
+  const visits = [];
+  for (let round = 1; round <= CHURN_ROUNDS; round += 1) {
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/library');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    const unmounted = await page.waitForFunction(() => !document.querySelector('.lupine-main-viewport canvas'), null, { timeout: 20_000, polling: 100 })
+      .then(() => true, () => false);
+    // R3F tears the root down after 500 ms and LupiCanvas disposes the
+    // renderer 250 ms later.
+    await page.waitForTimeout(1_200);
+    const away = await page.evaluate(() => ({ canvases: document.querySelectorAll('canvas').length, runtime: window.__lupiRenderer?.backend ?? null }));
+    await page.evaluate(() => window.history.back());
+    const remounted = await page.waitForFunction((expected) => {
+      const status = window.__lupiViewerMcp?.status?.();
+      const canvas = document.querySelector('.lupine-main-viewport canvas');
+      return Boolean(status?.moleculeLoaded && (expected == null || status.atomCount === expected) && canvas && window.__lupiRenderer?.backend);
+    }, entry.atoms, { timeout, polling: 250 }).then(() => true, () => false);
+    const visit = await page.evaluate(() => ({ canvases: document.querySelectorAll('canvas').length, runtime: window.__lupiRenderer?.backend ?? null }));
+    visits.push({ round, unmounted, awayCanvases: away.canvases, awayRuntime: away.runtime, remounted, canvases: visit.canvases, runtime: visit.runtime });
+    log(`  --  round ${round}: away unmounted=${unmounted} canvases=${away.canvases}; back remounted=${remounted} canvases=${visit.canvases} runtime=${visit.runtime}`);
+    if (!remounted) break;
+  }
+  outcome.data.churn = { visits, lost };
+  const complete = visits.length === CHURN_ROUNDS && visits.every((visit) => visit.unmounted && visit.remounted);
+  check(`viewer canvas unmounts and remounts ${CHURN_ROUNDS} times`, complete, visits.map((visit) => `${visit.round}:${visit.unmounted ? 'u' : '-'}${visit.remounted ? 'm' : '-'}`).join(' '));
+  check('at most one <canvas> on every viewer visit', visits.every((visit) => visit.canvases <= 1), visits.map((visit) => visit.canvases).join(','));
+  check('the renderer is released while away', visits.every((visit) => visit.awayCanvases === 0 && visit.awayRuntime === null), visits.map((visit) => `${visit.awayCanvases}/${visit.awayRuntime ?? '-'}`).join(','));
+  check('no device-lost or context-lost console message', lost.length === 0, lost.slice(0, 3).join(' | ') || 'none');
+  if (!complete) return;
+  const canvas = await mainCanvas(page);
+  if (!check('viewer canvas is present after churn', Boolean(canvas))) return;
+  await canvas.evaluate((node) => node.setAttribute('data-smoke-main', '1'));
+  if (level === 'boot') return recordBackend(ctx);
+  const settled = await waitSettled(page, canvas, 0.01, 20_000);
+  await save('render', settled.png);
+  const render = await assessRender(page, canvas, settled.image, 0.01);
+  outcome.data.render = render;
+  check('canvas is non-blank after churn', render.nonBlank, `canvas-contribution=${pct(render.canvasContribution)} luminanceStd=${render.luminanceStd.toFixed(1)}`);
+  await recordBackend(ctx);
+}
+
+/** No WebGPU and no WebGL: the viewer shows RendererFallback instead of a canvas. */
+async function scenarioFallback({ page, check, save, outcome }) {
+  outcome.url = new URL('?sim=caffeine', baseFor(page)).href;
+  await page.goto(outcome.url, { waitUntil: 'commit', timeout });
+  const fallback = page.locator('[data-testid="renderer-fallback"]').first();
+  const shown = await fallback.waitFor({ state: 'visible', timeout }).then(() => true, () => false);
+  const text = shown ? (await fallback.innerText().catch(() => '')).replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+  const canvases = await page.evaluate(() => document.querySelectorAll('canvas').length);
+  outcome.data.fallback = { shown, text, canvases };
+  check('renderer fallback screen is shown', shown, text);
+  check('no <canvas> remains behind the fallback', canvases === 0, `${canvases} canvas`);
+  await save('fallback', await page.screenshot({ scale: 'css' }));
 }
 
 // ---------------------------------------------------------------------------
@@ -677,6 +943,9 @@ async function cdpFor(page) {
  * pixel size. Raw CDP capture is used instead of page.screenshot(): software
  * renderers run the viewer at a few frames per second, and Playwright's extra
  * font/caret/animation-frame round trips more than double the capture time.
+ * The viewport is captured whole and cropped here: a clipped CDP capture
+ * drops the page's emulated device scale factor (the phone profile would run
+ * at DPR 1 after its first screenshot).
  */
 async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
   const box = await canvas.boundingBox();
@@ -686,7 +955,7 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
   const y = Math.max(0, Math.floor(box.y));
   const width = Math.max(1, Math.min(Math.floor(box.width), (viewport?.width ?? box.width) - x));
   const height = Math.max(1, Math.min(Math.floor(box.height), (viewport?.height ?? box.height) - y));
-  const dpr = await page.evaluate((text) => {
+  await page.evaluate((text) => {
     let style = document.getElementById('smoke-capture-style');
     if (!style) {
       style = document.createElement('style');
@@ -694,17 +963,13 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
       document.head.appendChild(style);
     }
     style.textContent = text;
-    return window.devicePixelRatio || 1;
   }, css);
   try {
     const client = await cdpFor(page);
-    const { data } = await withTimeout(
-      client.send('Page.captureScreenshot', { format: 'png', clip: { x, y, width, height, scale: 1 / dpr } }),
-      timeout,
-      'canvas capture',
-    );
-    const png = Buffer.from(data, 'base64');
-    return { png, image: decodePng(png) };
+    const { data } = await withTimeout(client.send('Page.captureScreenshot', { format: 'png' }), timeout, 'canvas capture');
+    const full = decodePng(Buffer.from(data, 'base64'));
+    const image = cropImage(full, { x, y, width, height }, full.width / (viewport?.width ?? full.width));
+    return { png: encodePng(image), image };
   } finally {
     await page.evaluate(() => document.getElementById('smoke-capture-style')?.remove()).catch(() => {});
   }
@@ -921,7 +1186,7 @@ async function stubThirdParty(page) {
   await page.route('https://raw.githack.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/octet-stream', body: NEUTRAL_HDR }).catch(() => {}));
 }
 
-function attachDiagnostics(page, baseUrl, errors) {
+function attachDiagnostics(page, baseUrl, errors, scenario) {
   const appOrigin = new URL(baseUrl).origin;
   page.on('pageerror', (error) => {
     errors.pageErrors.push(String(error?.stack ?? error?.message ?? error).split('\n').slice(0, 4).join(' | '));
@@ -936,7 +1201,7 @@ function attachDiagnostics(page, baseUrl, errors) {
       errors.consoleWarnings[key] = (errors.consoleWarnings[key] ?? 0) + 1;
       return;
     }
-    const ignored = ignoredConsoleError(text, location, appOrigin);
+    const ignored = ignoredConsoleError(text, location, appOrigin, scenario);
     if (ignored) errors.ignoredConsoleErrors.push({ text, location, reason: ignored });
     else errors.consoleErrors.push({ text, location });
   });
@@ -951,10 +1216,13 @@ function attachDiagnostics(page, baseUrl, errors) {
   });
 }
 
-function ignoredConsoleError(text, location, appOrigin) {
+function ignoredConsoleError(text, location, appOrigin, scenario) {
   // Third-party resource failures are environment noise (the stubs above abort
   // fonts); a failure on Lupi's own origin still fails the run.
   if (/^Failed to load resource/.test(text) && location && !location.startsWith(appOrigin)) return 'third-party resource';
+  // Without WebGPU or WebGL the renderer fails to start by design; React and
+  // the canvas error boundary log that on the way to the fallback screen.
+  if (scenario === 'fallback') return 'fallback scenario: error-boundary logging is expected';
   if (allowConsole?.test(text)) return `--allow-console ${allowConsole.source}`;
   return null;
 }
@@ -1053,6 +1321,43 @@ function decodePng(buffer) {
     data[i * 4 + 3] = alpha;
   }
   return { width, height, data };
+}
+
+/** The CSS-pixel rectangle `rect` of an image captured at `scale` image pixels per CSS pixel. */
+function cropImage(source, rect, scale) {
+  const data = new Uint8ClampedArray(rect.width * rect.height * 4);
+  for (let row = 0; row < rect.height; row += 1) {
+    const sy = Math.min(source.height - 1, Math.floor((rect.y + row + 0.5) * scale));
+    for (let column = 0; column < rect.width; column += 1) {
+      const sx = Math.min(source.width - 1, Math.floor((rect.x + column + 0.5) * scale));
+      const from = (sy * source.width + sx) * 4;
+      data.set(source.data.subarray(from, from + 4), (row * rect.width + column) * 4);
+    }
+  }
+  return { width: rect.width, height: rect.height, data };
+}
+
+/** RGBA8 image to PNG (filter 0, zlib). */
+function encodePng(image) {
+  const stride = image.width * 4;
+  const raw = Buffer.alloc((stride + 1) * image.height);
+  for (let row = 0; row < image.height; row += 1) {
+    Buffer.from(image.data.buffer, image.data.byteOffset + row * stride, stride).copy(raw, row * (stride + 1) + 1);
+  }
+  const chunk = (type, body) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(body.length, 0);
+    head.write(type, 4, 'ascii');
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])), 0);
+    return Buffer.concat([head, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(image.width, 0);
+  ihdr.writeUInt32BE(image.height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([PNG_SIGNATURE, chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
 const DIFF_THRESHOLD = 40;
@@ -1382,7 +1687,8 @@ function printSummary() {
   log('\n[viewer-smoke] summary');
   for (const lane of report.lanes) {
     const actual = lane.actualBackend ? `${lane.actualBackend.kind} (${lane.actualBackend.source})` : 'unknown';
-    log(`  lane ${lane.backend}: app rendered through ${actual}; adapter=${lane.preflight?.adapter ? describeAdapter(lane.preflight.adapter) : 'none'}`);
+    const rendered = lane.backend === 'nogpu' ? 'no renderer expected' : `app rendered through ${actual}`;
+    log(`  lane ${lane.backend}: ${rendered}; adapter=${lane.preflight?.adapter ? describeAdapter(lane.preflight.adapter) : 'none'}`);
     for (const profile of lane.profiles) {
       const line = profile.scenarios.map((scenario) => `${scenario.name}:${scenario.ok ? (scenario.flaky ? 'flaky' : 'ok') : 'FAIL'}`).join(' ');
       log(`    ${profile.profile.padEnd(7)} ${line}`);
@@ -1420,13 +1726,6 @@ function pickIdentities(result) {
   };
   visit(result, '', 0);
   return found;
-}
-
-function resolveExecutable() {
-  if (typeof args.executable === 'string') return args.executable;
-  if (existsSync(DEFAULT_CHROMIUM)) return DEFAULT_CHROMIUM;
-  const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim();
-  return fromEnv || null;
 }
 
 function describeAdapter(adapter) {
