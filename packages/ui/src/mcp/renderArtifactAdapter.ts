@@ -28,16 +28,26 @@ import {
 import { getBgMedia, BG_PRESETS } from '../backgroundPresets';
 import { getDefaultQualityTier } from '../deviceCapabilities';
 import { environmentAssetIdentity } from '../sceneEnvironment';
-import { REVISION as THREE_REVISION } from 'three';
 import type { AppState } from '../store';
 import {
   DECODED_RENDER_FRAME_MEDIA_TYPE_V3,
   computeDecodedRenderFrameDigestV3,
 } from '../renderArtifactSource';
+import {
+  BROWSER_RENDERER_ID_V2,
+  DETERMINISM_V2,
+  MODEL_ENCODER_V2,
+  executionClassV2,
+  rendererVersionV2,
+} from '../export/exportProfileV2';
+import {
+  getLupiRendererRuntime,
+  type LupiBackend,
+  type LupiRendererRuntime,
+} from '../viewer/createLupiRenderer';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
 import { activeTransmissionQualityV1 } from './transmissionRuntime';
 
-export const BROWSER_RENDERER_VERSION_V1 = 'lupi-browser-webgl.v1';
 export const BROWSER_RENDERER_MODULE_ID_V1 = '@atlas/ui/mcp/renderArtifactAdapter';
 
 const FULL_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
@@ -81,8 +91,12 @@ export interface BrowserRenderAdapterOptionsV1 {
    * provide this explicitly; production normally receives it from Vite.
    */
   buildSha?: string;
-  /** Test/embedded runtimes may provide a previously probed execution class. */
-  rendererRuntime?: RenderJsonObjectV1;
+  /**
+   * Test/embedded runtimes may provide the renderer record instead of the
+   * viewer canvas's (`getLupiRendererRuntime()`); its backend picks the
+   * execution class.
+   */
+  rendererRuntime?: LupiRendererRuntime;
   fetchAssetBytes?: (url: string) => Promise<ArrayBuffer>;
 }
 
@@ -164,9 +178,10 @@ export function resolveBrowserBuildIdentityV1(
 }
 
 /**
- * Snapshot the exact browser-framebuffer semantics supported by V1.
- * DOM-only overlays are intentionally absent. Active layers which cannot yet
- * be represented deterministically fail instead of receiving a false identity.
+ * Snapshot the exact semantics the V2 capture engine renders (a render-target
+ * readback of the raw scene; exportProfileV2.ts). DOM-only overlays are
+ * intentionally absent. Active layers which cannot yet be represented
+ * deterministically fail instead of receiving a false identity.
  */
 export async function createBrowserRenderArtifactPlanV1(
   state: AppState,
@@ -232,9 +247,10 @@ export async function createBrowserRenderArtifactPlanV1(
       rimColor: state.rimLightColor,
       environment: environmentAssetIdentity(state.environmentPreset),
     };
-    // ExportManager renders the raw scene directly. The interactive
-    // EffectComposer is intentionally bypassed, so these are fixed applied
-    // export semantics rather than the current UI postprocess controls.
+    // ExportManager renders the raw scene into its own render target. The
+    // interactive post pipeline is bypassed (DETERMINISM_V2), so these are
+    // fixed applied export semantics rather than the current UI postprocess
+    // controls.
     view.postprocess = {
       pipeline: 'raw-scene',
       toneMapping: 'none',
@@ -387,22 +403,17 @@ export async function createBrowserRenderArtifactPlanV1(
     injectedSha: import.meta.env.VITE_LUPI_BUILD_SHA,
     adapterSha: options.buildSha,
   });
+  const rendererRuntime = requireRendererRuntimeV2(options.rendererRuntime);
   const rendererFingerprint = await computeRendererFingerprintV1({
     version: RENDERER_FINGERPRINT_VERSION_V1,
-    renderer: BROWSER_RENDERER_VERSION_V1,
-    rendererVersion: `three-r${THREE_REVISION};bridge-${LUPI_VIEWER_MCP_VERSION}`,
+    renderer: BROWSER_RENDERER_ID_V2,
+    rendererVersion: rendererVersionV2(LUPI_VIEWER_MCP_VERSION, rendererRuntime.three),
     buildId: buildIdentity.buildId,
-    executionClass: 'browser-webgl-main-thread',
-    runtime: options.rendererRuntime ?? browserRendererRuntimeV1(),
+    executionClass: executionClassV2(rendererRuntime.backend),
+    runtime: browserRendererRuntimeV2(rendererRuntime),
     determinism: {
-      pixelRatio: 1,
-      alphaContext: true,
-      outputColorSpace: 'srgb',
-      rendererToneMapping: 'none',
-      postprocessPipeline: 'raw-scene-bypassed',
-      rasterEncoder: 'browser-canvas-native',
-      modelEncoder: `three-exporters-r${THREE_REVISION}`,
-      axesOverlay: 'canvas-overlay-v1',
+      ...DETERMINISM_V2,
+      modelEncoder: MODEL_ENCODER_V2,
       buildIdentity: {
         durability: buildIdentity.durability,
         source: buildIdentity.source,
@@ -439,11 +450,12 @@ async function canonicalBackgroundState(
   }
   const media = getBgMedia(preset);
   if (media.kind === 'video') {
-    throw new Error('Pause-to-phase video backgrounds are not supported by the V1 artifact contract.');
+    throw new Error('Pause-to-phase video backgrounds are not supported by the browser artifact contract.');
   }
   if (media.kind !== 'gradient') {
     throw new Error(
-      'Image backgrounds are not supported by the V1 browser artifact profile until capture can apply immutable image bytes directly.',
+      'Image backgrounds are not supported by the V2 browser artifact profile until capture can apply immutable image bytes directly; '
+      + 'use a gradient background preset or request transparent output.',
     );
   }
   const mediaState: RenderJsonObjectV1 = { kind: media.kind, projection: media.projection };
@@ -451,7 +463,22 @@ async function canonicalBackgroundState(
     || state.backgroundBackdropPattern !== 'image';
   if (usesBackdropMesh) {
     throw new Error(
-      'Backdrop-mesh backgrounds are not supported by the V1 browser artifact profile; use the default dome/image gradient projection.',
+      'Backdrop-mesh backgrounds are not supported by the V2 browser artifact profile; use the default dome/image gradient projection.',
+    );
+  }
+  // The viewer draws an adjusted gradient through the live backdrop mesh
+  // (AppBackground), which the capture cannot apply from the spec. Failing
+  // keeps the export identical to what the viewer shows (owner override O5).
+  const adjusted = state.backgroundOpacity !== 1
+    || state.backgroundBrightness !== 1
+    || state.backgroundSaturation !== 1
+    || state.backgroundContrast !== 1
+    || state.backgroundYawDegrees !== 0
+    || state.backgroundPitchDegrees !== 0;
+  if (adjusted) {
+    throw new Error(
+      'Adjusted backgrounds (opacity, brightness, saturation, contrast, yaw or pitch) are not supported by the V2 browser artifact profile; '
+      + 'reset the background adjustments or request transparent output.',
     );
   }
   const canonicalState: RenderJsonObjectV1 = {
@@ -532,31 +559,69 @@ export function canonicalArtifactCameraPlanesV1(
   };
 }
 
-export function browserRendererRuntimeV1(): RenderJsonObjectV1 {
+/**
+ * The renderer record the fingerprint needs. The backend is part of the
+ * execution class, so an export before the viewer canvas has created its
+ * renderer cannot be identified.
+ */
+function requireRendererRuntimeV2(provided?: LupiRendererRuntime): LupiRendererRuntime {
+  const runtime = provided ?? getLupiRendererRuntime();
+  if (!runtime) {
+    throw new Error(
+      'The viewer renderer has not started; its backend (WebGPU or the WebGL2 fallback) is part of the artifact identity.',
+    );
+  }
+  return runtime;
+}
+
+/**
+ * Runtime facts which can change bytes within an execution class: the GPU
+ * (the WebGPU adapter, or the WebGL2 context's renderer strings), the WebGPU
+ * compatibility mode, the canvas sample count, the browser, and the
+ * transmission quality the viewer mounted. The swizzle-compat retry and the
+ * raised buffer limits do not change bytes and are left out.
+ */
+export function browserRendererRuntimeV2(renderer: LupiRendererRuntime): RenderJsonObjectV1 {
   const runtime: Record<string, RenderJsonValueV1> = {
-    threeRevision: THREE_REVISION,
+    backend: renderer.backend,
+    threeRevision: renderer.three,
     // Build identity already addresses the source tree. A semantic module id
     // stays stable across Vite ports, hostnames, and local checkout paths.
     moduleId: BROWSER_RENDERER_MODULE_ID_V1,
     browserUserAgent: typeof navigator === 'undefined' ? 'unavailable' : navigator.userAgent,
     platform: typeof navigator === 'undefined' ? 'unavailable' : navigator.platform,
+    samples: renderer.samples,
     // The transmission renderer's tier-derived samples/resolution change
     // raster bytes; the mounted viewer reports the effective values so two
     // executions on different tiers never share an artifact key.
     transmission: activeTransmissionQualityV1(),
   };
-  if (typeof document === 'undefined') return runtime;
+  if (renderer.backend === 'webgpu') {
+    runtime.webgpu = {
+      adapter: renderer.adapterInfo ? { ...renderer.adapterInfo } : 'unavailable',
+      preferredCanvasFormat: renderer.preferredCanvasFormat ?? 'unavailable',
+      compatibilityMode: renderer.compatibilityMode,
+    };
+    return runtime;
+  }
+  runtime.webgl2 = probeWebGL2Context(renderer.backend);
+  return runtime;
+}
 
-  // R3F applies Canvas DOM props to its wrapper; the actual WebGL canvas is a
-  // descendant. Probe the context Three owns, never the wrapper element.
+/**
+ * On the WebGL2 backend the viewer canvas already holds a WebGL2 context, so
+ * `getContext('webgl2')` returns that same context and changes nothing. R3F
+ * puts the viewer id on a wrapper; the canvas is its descendant.
+ */
+function probeWebGL2Context(backend: LupiBackend): RenderJsonObjectV1 {
+  if (backend !== 'webgl2' || typeof document === 'undefined') return { status: 'unavailable' };
   const canvas = document.querySelector<HTMLCanvasElement>('#lupi-viewer-canvas canvas');
-  if (!canvas) return { ...runtime, webgl: { status: 'canvas-unavailable' } };
+  if (!canvas) return { status: 'canvas-unavailable' };
   try {
     const gl = canvas.getContext('webgl2');
-    if (!gl) return { ...runtime, webgl: { status: 'webgl2-unavailable' } };
+    if (!gl) return { status: 'context-unavailable' };
     const debug = gl.getExtension('WEBGL_debug_renderer_info');
-    const attributes = gl.getContextAttributes();
-    runtime.webgl = {
+    return {
       status: 'ready',
       version: String(gl.getParameter(gl.VERSION)),
       shadingLanguageVersion: String(gl.getParameter(gl.SHADING_LANGUAGE_VERSION)),
@@ -564,17 +629,10 @@ export function browserRendererRuntimeV1(): RenderJsonObjectV1 {
       renderer: String(gl.getParameter(gl.RENDERER)),
       unmaskedVendor: debug ? String(gl.getParameter(debug.UNMASKED_VENDOR_WEBGL)) : 'unavailable',
       unmaskedRenderer: debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : 'unavailable',
-      alpha: attributes?.alpha ?? null,
-      antialias: attributes?.antialias ?? null,
-      premultipliedAlpha: attributes?.premultipliedAlpha ?? null,
     };
   } catch (error) {
-    runtime.webgl = {
-      status: 'probe-failed',
-      error: error instanceof Error ? error.name : 'unknown',
-    };
+    return { status: 'probe-failed', error: error instanceof Error ? error.name : 'unknown' };
   }
-  return runtime;
 }
 
 async function digestCanonicalState(value: unknown): Promise<Sha256DigestV1> {
