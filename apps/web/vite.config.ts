@@ -304,6 +304,12 @@ export default defineConfig(({ command }) => ({
   },
   optimizeDeps: {
     exclude: ['atlas-parsers'],
+    // drei 11's `/webgpu` entry uses top-level await. Dependency pre-bundling
+    // defaults to an older browser target, where esbuild rejects TLA and the
+    // dev server cannot serve the viewer. Match the build target instead.
+    esbuildOptions: {
+      target: 'esnext',
+    },
   },
   build: {
     target: 'esnext',

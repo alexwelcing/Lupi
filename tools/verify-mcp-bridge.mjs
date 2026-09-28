@@ -14,6 +14,7 @@ import { createRequire } from 'node:module';
 import net from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { LANE_ARGS, chromiumExecutable } from './lib/browser-lanes.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -33,6 +34,8 @@ Usage:
 
 Options:
   --url=<url>          Point at an already-running dev server instead of starting Vite.
+  --backend=<b>        webgl2 (default) | webgpu: the Chromium lane from tools/lib/browser-lanes.mjs.
+  --executable=<path>  Chromium binary (default: Chromium 1194 when present, else Playwright's own).
   --json               Emit a machine-readable report to stdout and suppress human logs.
   --headless=<bool>    Force headless mode (default: true unless stdout is a TTY).
   --timeout=<ms>       Maximum time to wait for bridge readiness (default: 45000).
@@ -50,6 +53,11 @@ const headless = args.headless ?? !process.stdout.isTTY;
 const externalUrl = process.env.VERIFY_URL || args.url;
 const jsonMode = args.json === true || args.json === 'true';
 const runId = stamp();
+const backend = args.backend === 'webgpu' ? 'webgpu' : 'webgl2';
+if (args.backend && args.backend !== true && !['webgpu', 'webgl2', 'webgl'].includes(args.backend)) {
+  console.error(`Unknown --backend=${args.backend} (webgl2 | webgpu)`);
+  process.exit(2);
+}
 
 if (!existsSync(ARTIFACTS)) mkdirSync(ARTIFACTS, { recursive: true });
 
@@ -59,6 +67,7 @@ const failures = [];
 const report = {
   generatedAt: new Date().toISOString(),
   url: '',
+  backend,
   checks: [],
   consoleWarnings: [],
   pageErrors: [],
@@ -81,10 +90,13 @@ try {
   report.url = `${baseUrl}#/mcp`;
   log(`[verify-mcp-bridge] -> ${report.url}`);
 
+  const executablePath = chromiumExecutable(typeof args.executable === 'string' ? args.executable : undefined);
   browser = await chromium.launch({
     headless,
-    args: ['--disable-webgpu'],
+    args: LANE_ARGS[backend],
+    ...(executablePath ? { executablePath } : {}),
   });
+  log(`[verify-mcp-bridge] lane ${backend}${executablePath ? ` (${executablePath})` : ''}`);
 
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
