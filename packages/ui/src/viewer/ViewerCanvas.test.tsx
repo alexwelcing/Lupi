@@ -1,25 +1,11 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from 'vitest';
-import * as THREE from 'three';
-import {
-  configureViewerRenderer,
-  viewerDprRange,
-  VIEWER_GL_OPTIONS,
-} from './ViewerCanvas';
-
-vi.mock('@react-three/xr', () => ({
-  createXRStore: () => ({}),
-  XR: () => null,
-}));
+import { describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
+import { viewerDprRange } from './ViewerCanvas';
+import { configureViewerRenderer } from './createLupiRenderer';
 
 describe('ViewerCanvas renderer policy', () => {
-  it('keeps alpha enabled and bounds DPR by the detected device tier', () => {
-    expect(VIEWER_GL_OPTIONS).toMatchObject({
-      alpha: true,
-      antialias: false,
-      preserveDrawingBuffer: true,
-      powerPreference: 'high-performance',
-    });
+  it('bounds DPR by the detected device tier', () => {
     expect(viewerDprRange('mobile')).toEqual([1, 1.25]);
     expect(viewerDprRange('low')).toEqual([1, 1.25]);
     expect(viewerDprRange('desktop')).toEqual([1, 1.75]);
@@ -28,9 +14,9 @@ describe('ViewerCanvas renderer policy', () => {
 
   it('uses sRGB output without a second renderer tone-map pass', () => {
     const renderer = {
-      outputColorSpace: THREE.LinearSRGBColorSpace,
-      shadowMap: { type: THREE.BasicShadowMap },
-      toneMapping: THREE.ACESFilmicToneMapping,
+      outputColorSpace: THREE.LinearSRGBColorSpace as string,
+      shadowMap: { type: THREE.BasicShadowMap as THREE.ShadowMapType },
+      toneMapping: THREE.ACESFilmicToneMapping as THREE.ToneMapping,
       toneMappingExposure: 2,
     };
 

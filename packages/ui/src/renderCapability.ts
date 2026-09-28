@@ -7,13 +7,14 @@
  *   - no-canvas-webgl-fallback
  *   - no-offline-fallback-webgpu-init
  *
- * The main viewer (App.tsx) renders through @react-three/fiber's <Canvas>,
- * which is a WebGL2 renderer. WebGPU is only an OPTIONAL compute accelerator
- * for bond detection (AtomPipeline.initWebGPU) — it is never required to see
- * a molecule. So the real cold-mobile blank-screen cause is a WebGL context
- * that cannot be created (old iOS Safari, Android Firefox without GL, low-end
- * GPUs, or GPU blocklists). Before this module the canvas mounted regardless
- * and failed SILENTLY: a blank white rect, no error boundary, ~95% bounce.
+ * The viewer renders through three's WebGPURenderer (viewer/LupiCanvas.tsx):
+ * the WebGPU backend when the browser has an adapter, its WebGL2 backend
+ * otherwise. WebGL1 no longer suffices: the fallback backend is WebGL2-only.
+ * So the scene is renderable when WebGPU is exposed OR a WebGL2 context can
+ * be created. The cold-mobile blank-screen cause is a device with neither
+ * (old iOS Safari, Android Firefox without GL, low-end GPUs, GPU blocklists).
+ * Before this module the canvas mounted regardless and failed SILENTLY: a
+ * blank white rect, no error boundary, ~95% bounce.
  *
  * This module is the single source of truth for "can we render the scene?".
  * It prefers capability/feature detection over user-agent sniffing; UA is used
@@ -24,15 +25,19 @@
  */
 
 export type RenderBlockReason =
-  | 'no-webgl'        // WebGL2 (and WebGL1) context could not be created
-  | 'context-error'   // a real GL init throw bubbled up at mount
+  | 'no-webgl'        // neither WebGPU nor a WebGL2 context is available
+  | 'context-error'   // the renderer threw at mount (init, device or context)
   | 'none';           // renderable
 
 export interface RenderCapability {
-  /** True when the scene can be rendered (WebGL context obtainable). */
+  /** True when the scene can be rendered: WebGPU is exposed or a WebGL2
+   *  context can be created. LupiCanvas shows the fallback when false. */
+  canRender: boolean;
+  /** True when a WebGL2 context can be created (the WebGPURenderer fallback
+   *  backend). WebGL1 alone does not count. */
   canRenderWebGL: boolean;
-  /** True when the optional WebGPU compute accelerator is present. Never
-   *  required to view a molecule — only refines bond-detection performance. */
+  /** True when `navigator.gpu` is exposed. An adapter is not guaranteed; the
+   *  renderer factory falls back to WebGL2 when none is returned. */
   hasWebGPU: boolean;
   /** Why rendering is blocked, when it is. 'none' when renderable. */
   reason: RenderBlockReason;
@@ -57,10 +62,10 @@ function detectBrowser(): RenderCapability['browser'] {
   return 'other';
 }
 
-/** Attempt to obtain a WebGL2 (then WebGL1) context from a throwaway canvas.
- *  Returns true if either succeeds. Cleans up the context to avoid leaking a
- *  GL context (browsers cap live contexts, typically ~16). */
-function canCreateWebGLContext(): boolean {
+/** Attempt to obtain a WebGL2 context from a throwaway canvas. Cleans up the
+ *  context to avoid leaking a GL context (browsers cap live contexts,
+ *  typically ~16). */
+function canCreateWebGL2Context(): boolean {
   if (typeof document === 'undefined') return true; // SSR / non-DOM: assume capable
   let canvas: HTMLCanvasElement | null = null;
   try {
@@ -69,10 +74,7 @@ function canCreateWebGLContext(): boolean {
     // (SwiftShader) context still renders a molecule, just slowly — far better
     // than a blank screen. We only fall back when NO context can be made.
     const attrs: WebGLContextAttributes = { failIfMajorPerformanceCaveat: false };
-    const gl =
-      (canvas.getContext('webgl2', attrs) as WebGL2RenderingContext | null) ||
-      (canvas.getContext('webgl', attrs) as WebGLRenderingContext | null) ||
-      (canvas.getContext('experimental-webgl', attrs) as WebGLRenderingContext | null);
+    const gl = canvas.getContext('webgl2', attrs) as WebGL2RenderingContext | null;
     if (!gl) return false;
     // Proactively release the probe context so we don't burn one of the
     // browser's limited live-context slots before the real <Canvas> mounts.
@@ -87,8 +89,8 @@ function canCreateWebGLContext(): boolean {
   }
 }
 
-/** Detect the optional WebGPU accelerator without requesting an adapter
- *  (adapter request is async and unnecessary for the presence check). */
+/** Detect the WebGPU API without requesting an adapter (the adapter request
+ *  is async; the renderer factory makes it and falls back when it is null). */
 function hasWebGPUApi(): boolean {
   return typeof navigator !== 'undefined' && Boolean((navigator as any).gpu);
 }
@@ -98,11 +100,13 @@ function hasWebGPUApi(): boolean {
 export function detectRenderCapability(): RenderCapability {
   const browser = detectBrowser();
   const hasWebGPU = hasWebGPUApi();
-  const canRenderWebGL = canCreateWebGLContext();
+  const canRenderWebGL = canCreateWebGL2Context();
+  const canRender = hasWebGPU || canRenderWebGL;
   return {
+    canRender,
     canRenderWebGL,
     hasWebGPU,
-    reason: canRenderWebGL ? 'none' : 'no-webgl',
+    reason: canRender ? 'none' : 'no-webgl',
     browser,
   };
 }
@@ -115,16 +119,24 @@ export interface FallbackCopy {
   actionLabel?: string;
 }
 
-/** Branded, capability-accurate recovery copy. The viewer is WebGL-based, so
- *  the headline is about WebGL/graphics — NOT WebGPU, which is optional. UA
- *  only tailors the closest helpful next step. */
+/** Branded, capability-accurate recovery copy. The viewer needs WebGPU or
+ *  WebGL 2; the headline is about graphics, not either API. UA only tailors
+ *  the closest helpful next step. */
 export function fallbackCopyFor(cap: RenderCapability): FallbackCopy {
   const generic: FallbackCopy = {
     title: 'LUPI needs hardware graphics to render molecules',
-    body: 'Your browser could not start a WebGL graphics context. Open LUPI in the latest Chrome or Edge (desktop), or a browser with hardware acceleration enabled.',
+    body: 'Your browser could not start WebGPU or a WebGL 2 graphics context. Open LUPI in the latest Chrome or Edge (desktop), or a browser with hardware acceleration enabled.',
     actionHref: 'https://get.webgl.org/',
     actionLabel: 'Check your browser',
   };
+
+  if (cap.reason === 'context-error') {
+    return {
+      ...generic,
+      title: 'The 3D viewer could not start',
+      body: 'LUPI could not start a graphics renderer on this device. Try again, or open LUPI in the latest Chrome or Edge (desktop) with hardware acceleration enabled.',
+    };
+  }
 
   switch (cap.browser) {
     case 'ios-safari':
@@ -145,7 +157,7 @@ export function fallbackCopyFor(cap: RenderCapability): FallbackCopy {
     case 'safari':
       return {
         ...generic,
-        body: 'Your browser could not start a WebGL graphics context. Enable hardware acceleration, or open LUPI in the latest Chrome or Edge (desktop).',
+        body: 'Your browser could not start WebGPU or a WebGL 2 graphics context. Enable hardware acceleration, or open LUPI in the latest Chrome or Edge (desktop).',
       };
     default:
       return generic;

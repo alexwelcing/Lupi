@@ -1,11 +1,7 @@
 import type { ReactNode } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { XR } from '@react-three/xr';
-import * as THREE from 'three';
-import { CanvasErrorBoundary } from '../CanvasErrorBoundary';
 import { getDeviceTier, type DeviceTier } from '../deviceCapabilities';
 import type { RenderCapability } from '../renderCapability';
-import { xrStore } from './xrStore';
+import { LupiCanvas } from './LupiCanvas';
 
 interface ViewerCanvasProps {
   paused?: boolean;
@@ -23,34 +19,18 @@ const MAX_DPR_BY_DEVICE_TIER: Record<DeviceTier, number> = {
   high: 1.75,
 };
 
-export const VIEWER_GL_OPTIONS = {
-  alpha: true,
-  antialias: false,
-  preserveDrawingBuffer: true,
-  powerPreference: 'high-performance',
-} as const;
+/** DOM id of the element that wraps the viewer's canvas (`#lupi-viewer-canvas canvas`). */
+export const VIEWER_CANVAS_ID = 'lupi-viewer-canvas';
 
 export function viewerDprRange(tier: DeviceTier = getDeviceTier()): [number, number] {
   return [1, MAX_DPR_BY_DEVICE_TIER[tier]];
 }
 
-interface ViewerRendererConfigurationTarget {
-  outputColorSpace: string;
-  shadowMap: { type: THREE.ShadowMapType };
-  toneMapping: THREE.ToneMapping;
-  toneMappingExposure: number;
-}
-
-export function configureViewerRenderer(gl: ViewerRendererConfigurationTarget): void {
-  gl.outputColorSpace = THREE.SRGBColorSpace;
-  // The postprocess pipeline is the sole tone-map owner. Applying a renderer
-  // tone map here would process the scene twice and make exports drift.
-  gl.toneMapping = THREE.NoToneMapping;
-  gl.toneMappingExposure = 1;
-  // r182 deprecates PCFSoftShadowMap; PCFShadowMap is now soft.
-  gl.shadowMap.type = THREE.PCFShadowMap;
-}
-
+/**
+ * The main viewer canvas: LupiCanvas with the viewer's id, DPR table and
+ * camera. The renderer (WebGPURenderer, alpha on, antialias off), its look
+ * and its disposal all come from LupiCanvas and createLupiRenderer.
+ */
 export function ViewerCanvas({
   paused = false,
   capability,
@@ -59,31 +39,20 @@ export function ViewerCanvas({
   center,
   children,
 }: ViewerCanvasProps) {
-  const dpr = viewerDprRange();
-
   return (
-    <CanvasErrorBoundary capability={capability}>
-      <Canvas
-        frameloop={paused ? 'never' : 'always'}
-        id="lupi-viewer-canvas"
-        camera={{
-          position: [center[0], center[1], center[2] + cameraDistance],
-          fov: 50,
-          near: cameraNear,
-          far: Math.max(10000, cameraDistance * 100),
-        }}
-        gl={VIEWER_GL_OPTIONS}
-        dpr={dpr}
-        onCreated={({ gl }) => configureViewerRenderer(gl)}
-        style={{
-          background: 'transparent',
-          display: 'block',
-          width: '100%',
-          height: '100%',
-        }}
-      >
-        <XR store={xrStore}>{children}</XR>
-      </Canvas>
-    </CanvasErrorBoundary>
+    <LupiCanvas
+      id={VIEWER_CANVAS_ID}
+      capability={capability}
+      frameloop={paused ? 'never' : 'always'}
+      camera={{
+        position: [center[0], center[1], center[2] + cameraDistance],
+        fov: 50,
+        near: cameraNear,
+        far: Math.max(10000, cameraDistance * 100),
+      }}
+      dpr={viewerDprRange()}
+    >
+      {children}
+    </LupiCanvas>
   );
 }

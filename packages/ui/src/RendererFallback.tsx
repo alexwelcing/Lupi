@@ -1,7 +1,7 @@
 /**
  * RendererFallback.tsx — branded recovery banner shown INSTEAD of a blank
- * canvas when the device can't start a WebGL context (or the GL renderer
- * threw at init). Audit findings: ios-safari-webgpu-silent-fail,
+ * canvas when the device has neither WebGPU nor WebGL2 (or the renderer threw
+ * at init). Audit findings: ios-safari-webgpu-silent-fail,
  * android-firefox-no-webgpu-message, no-canvas-webgl-fallback.
  *
  * Accessibility: rendered as role="alert" so screen readers announce it; the
@@ -25,6 +25,7 @@ export function RendererFallback({
     <div
       role="alert"
       aria-live="assertive"
+      data-testid="renderer-fallback"
       style={{
         position: 'absolute',
         inset: 0,
