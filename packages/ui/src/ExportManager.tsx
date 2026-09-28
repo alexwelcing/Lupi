@@ -2,7 +2,9 @@
  * ExportManager — Unified pipeline for image, MP4/WebM, GLB, and USDZ export.
  *
  * Architecture:
- *   Image:  Single-frame canvas readback at arbitrary resolution.
+ *   Image:  One render of the scene into a render target at the requested
+ *           resolution, read back asynchronously (export/renderTargetReadback),
+ *           in the `lupi-capture` frame phase. The canvas is never resized.
  *   Video:  MP4/WebM via the browser-native MediaRecorder recording
  *           `renderer.domElement.captureStream(fps)`. MediaRecorder encodes natively,
  *           off the main thread (no UI freeze), on every browser — mp4 on
@@ -51,8 +53,16 @@ import {
   createFiberFrameCaptureBarrier,
   drawExportAxesOverlayV1,
   markFiberFrameCaptureApplied,
+  markFiberFrameCaptureWarmed,
   type PreparedImageCaptureTransaction,
 } from './export/renderCaptureState';
+import {
+  compileSceneForCapture,
+  readbackToCanvas,
+  renderSceneToPixels,
+  resolveViewerPlate,
+  ViewerCaptureService,
+} from './export/renderTargetReadback';
 import {
   createGradientEquirectTexture,
   type BackgroundGradientStyle,
@@ -203,10 +213,20 @@ function ImageCaptureFrame({
 }
 
 /**
- * Transient two-phase Fiber subscriber for deterministic raster capture.
- * Priority -0.5 runs after drei OrbitControls (-1) and before ordinary scene
- * hooks (0), re-applying the finalized camera. Priority 100 reads pixels after
- * atom/environment/interpolation uniforms have observed that camera.
+ * Transient Fiber subscriber for deterministic raster capture, driven by
+ * frame phases (no numeric priorities):
+ *
+ * - `lupi-canonical` (after controls, before uniform jobs) re-syncs the
+ *   capture camera from the finalized camera, and asserts the environment.
+ * - `lupi-capture` (after the default render) waits until the scene carries
+ *   the artifact revision, kicks `renderer.compileAsync` once, and on a later
+ *   frame renders into a render target at the requested size and reads it
+ *   back (renderTargetReadback). The canvas is never resized and the live
+ *   camera never moves, so the on-screen view is untouched.
+ *
+ * The capture renders the raw scene (the post pipeline is bypassed) with the
+ * background the viewer shows: the finalized artifact background, or the
+ * live scene background over the viewer plate, or none when transparent.
  */
 function ImageCaptureFrameLifecycle({
   request,
@@ -217,10 +237,15 @@ function ImageCaptureFrameLifecycle({
   frameIndex: number;
   onFrameCaptured: () => void;
 }) {
-  const { renderer, scene, camera, size, invalidate } = useThree();
+  const renderer = useThree((state) => state.renderer);
+  const scene = useThree((state) => state.scene);
+  const camera = useThree((state) => state.camera);
+  const invalidate = useThree((state) => state.invalidate);
+  const get = useThree((state) => state.get);
   const revisionRef = useRef(nextImageCaptureRevision++);
   const barrierRef = useRef(createFiberFrameCaptureBarrier(revisionRef.current));
   const transactionRef = useRef<PreparedImageCaptureTransaction | null>(null);
+  const targetSizeRef = useRef<{ width: number; height: number } | null>(null);
   const backgroundTextureRef = useRef<THREE.Texture | null>(null);
 
   const clearActiveRequest = useCallback(() => {
@@ -305,16 +330,17 @@ function ImageCaptureFrameLifecycle({
         );
       }
 
-      const targetWidth = request.resolution?.width || size.width;
-      const targetHeight = request.resolution?.height || size.height;
+      const liveSize = get().size;
+      const targetSize = {
+        width: captureDimension(request.resolution?.width, liveSize.width),
+        height: captureDimension(request.resolution?.height, liveSize.height),
+      };
+      targetSizeRef.current = targetSize;
       transactionRef.current = beginImageCaptureTransaction({
-        renderer,
         scene,
         camera,
-        viewportWidth: size.width,
-        viewportHeight: size.height,
-        targetWidth,
-        targetHeight,
+        targetWidth: targetSize.width,
+        targetHeight: targetSize.height,
         transparent: Boolean(request.transparent),
         appliedCamera,
         ...(backgroundTextureRef.current && canonicalBackground ? {
@@ -331,7 +357,7 @@ function ImageCaptureFrameLifecycle({
     }
 
     return restoreCaptureState;
-  }, [camera, failCapture, frameIndex, renderer, invalidate, request, restoreCaptureState, scene, size.height, size.width]);
+  }, [camera, failCapture, frameIndex, get, renderer, invalidate, request, restoreCaptureState, scene]);
 
   useFrame(() => {
     const transaction = transactionRef.current;
@@ -351,7 +377,8 @@ function ImageCaptureFrameLifecycle({
 
   useFrame(() => {
     const transaction = transactionRef.current;
-    if (!transaction) return;
+    const targetSize = targetSizeRef.current;
+    if (!transaction || !targetSize) return;
 
     try {
       if (request.artifactSpec?.layers.atoms) {
@@ -359,8 +386,8 @@ function ImageCaptureFrameLifecycle({
         const atomReadiness = inspectArtifactAtomSceneReadiness(scene, request.specId);
         if (!atomReadiness.ready) {
           // React/store intent can precede the Three scene commit. Keep the
-          // owned demand loop alive until every tagged atom mesh carries the
-          // exact artifact revision; the export timeout remains the fail-closed
+          // demand loop alive until every tagged atom mesh carries the exact
+          // artifact revision; the export timeout remains the fail-closed
           // bound if the scene can never apply it.
           invalidate();
           return;
@@ -370,49 +397,60 @@ function ImageCaptureFrameLifecycle({
         if (!request.specId) throw new Error('Artifact vector-glyph capture is missing its render spec revision.');
         const vectorReadiness = inspectArtifactVectorGlyphSceneReadiness(scene, request.specId);
         if (!vectorReadiness.ready) {
-          // Vector glyphs own a separate ShaderMaterial, colormap texture, and
-          // four instanced buffers. Their exact applied revision must be proven
-          // independently of the atom layer before immutable readback.
+          // Vector glyphs own a separate material, colormap texture, and
+          // four instanced buffers. Their exact applied revision must be
+          // proven independently of the atom layer before readback.
           invalidate();
           return;
         }
       }
 
-      if (claimFiberFrameWarmup(barrierRef.current, revisionRef.current)) {
-        // R3F state and Three resources committed in the same update as the
-        // export request need one owned draw before readback. This is an
-        // explicit GPU-application barrier: the warm-up uploads new palette
-        // DataTextures and compiles the active ShaderMaterial program, then the
-        // next Fiber frame re-applies camera-space uniforms before capture.
-        transaction.clear();
-        renderer.render(scene, camera);
+      const { width, height } = targetSize;
+      const barrier = barrierRef.current;
+      const revision = revisionRef.current;
+      if (claimFiberFrameWarmup(barrier, revision)) {
+        // Build the capture's pipelines and upload resources committed with
+        // the request before the capture frame (replaces v9's owned warm-up
+        // draw). The capture follows on a later frame, after every uniform
+        // job has seen the canonical state again.
+        const warmup = transaction.withCaptureScene(() => compileSceneForCapture({
+          renderer,
+          scene,
+          camera: transaction.camera,
+          width,
+          height,
+        }));
+        void warmup.finally(() => {
+          markFiberFrameCaptureWarmed(barrier, revision);
+          invalidate();
+        });
         invalidate();
         return;
       }
-      if (!claimFiberFrameCapture(barrierRef.current, revisionRef.current)) return;
-
-      transaction.clear();
-      renderer.render(scene, camera);
-
-      const targetWidth = request.resolution?.width || size.width;
-      const targetHeight = request.resolution?.height || size.height;
-      const captureCanvas = document.createElement('canvas');
-      captureCanvas.width = targetWidth;
-      captureCanvas.height = targetHeight;
-      const captureContext = captureCanvas.getContext('2d');
-      if (!captureContext) throw new Error('Image export could not create a 2D capture context.');
-      captureContext.drawImage(renderer.domElement, 0, 0, targetWidth, targetHeight);
-      const contractAxes = request.artifactSpec?.layers.axes;
-      if (contractAxes ?? useStore.getState().showAxes) {
-        drawExportAxesOverlayV1(captureContext, camera, targetWidth, targetHeight);
+      if (!claimFiberFrameCapture(barrier, revision)) {
+        invalidate();
+        return;
       }
 
-      // Readback is complete; release renderer/Fiber ownership before the
-      // browser's asynchronous canvas encoder starts.
+      const transparent = Boolean(request.transparent);
+      const captureCamera = transaction.camera;
+      // The render into the target and the scene restore both happen inside
+      // this call; only the readback resolves later.
+      const readback = transaction.withCaptureScene(() => renderSceneToPixels({
+        renderer,
+        scene,
+        camera: captureCamera,
+        width,
+        height,
+        transparent,
+        clearColor: resolveViewerPlate(renderer.domElement),
+      }));
+      const contractAxes = request.artifactSpec?.layers.axes;
+      const drawAxes = contractAxes ?? useStore.getState().showAxes;
+
+      // The scene is back to its live state; release the capture before the
+      // asynchronous readback and the browser's encoder.
       restoreCaptureState();
-      // Present the restored live scene immediately when Plan 028 moves the
-      // Canvas to demand mode; otherwise the export-sized frame can remain on
-      // screen until an unrelated interaction invalidates Fiber.
       invalidate();
       onFrameCaptured();
 
@@ -424,25 +462,31 @@ function ImageCaptureFrameLifecycle({
       const ext = format === 'jpeg' ? 'jpg' : format;
       const filename = `${request.baseName || 'LUPI-export'}-frame${frameIndex + 1}.${ext}`;
 
-      captureCanvas.toBlob(
-        (blob) => {
-          completeImageCaptureCallback(
-            () => {
-              if (blob) {
-                if (request.onComplete) request.onComplete(true, blob, filename);
-                else downloadBlob(blob, filename);
-              } else {
-                console.error('[ExportManager] toBlob returned null — canvas may be tainted or context lost');
-                request.onComplete?.(false);
-              }
-            },
-            clearActiveRequest,
-            (error) => console.error('[ExportManager] Image export delivery failed:', error),
-          );
-        },
-        mime,
-        quality,
-      );
+      readback.then((pixels) => {
+        const captureCanvas = readbackToCanvas(pixels);
+        const captureContext = captureCanvas.getContext('2d');
+        if (!captureContext) throw new Error('Image export could not create a 2D capture context.');
+        if (drawAxes) drawExportAxesOverlayV1(captureContext, captureCamera, width, height);
+        captureCanvas.toBlob(
+          (blob) => {
+            completeImageCaptureCallback(
+              () => {
+                if (blob) {
+                  if (request.onComplete) request.onComplete(true, blob, filename);
+                  else downloadBlob(blob, filename);
+                } else {
+                  console.error('[ExportManager] toBlob returned null for the captured image');
+                  request.onComplete?.(false);
+                }
+              },
+              clearActiveRequest,
+              (error) => console.error('[ExportManager] Image export delivery failed:', error),
+            );
+          },
+          mime,
+          quality,
+        );
+      }).catch(failCapture);
     } catch (error) {
       onFrameCaptured();
       failCapture(error);
@@ -450,6 +494,12 @@ function ImageCaptureFrameLifecycle({
   }, { phase: LUPI_PHASE.capture, id: LUPI_JOB.exportCapture });
 
   return null;
+}
+
+/** A requested export dimension, or the live canvas size, as a positive integer. */
+function captureDimension(requested: number | undefined, live: number): number {
+  const value = requested && Number.isFinite(requested) && requested > 0 ? requested : live;
+  return Math.max(1, Math.round(value));
 }
 
 export function ExportManager() {
@@ -465,7 +515,7 @@ export function ExportManager() {
   const onCompleteRef = useRef<((success: boolean, blob?: Blob, filename?: string) => void) | null>(null);
 
   // MediaRecorder pipeline state. MediaRecorder records `captureStream()` of the
-  // WebGL canvas natively, off the main thread — no UI freeze, works on every
+  // viewer canvas (WebGPU or its WebGL2 fallback) natively, off the main thread — no UI freeze, works on every
   // browser (mp4 on Safari/iOS, webm on Chromium/Firefox).
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]); // recorder chunks accumulated via ondataavailable
@@ -845,11 +895,9 @@ export function ExportManager() {
     };
 
     // Force DPR to 1 and size the engine THROUGH R3F (setDpr/setSize) rather than
-    // a raw gl.setSize(). The postprocessing EffectComposer only resizes its
-    // render targets when R3F's `size` state changes; a raw gl.setSize() leaves
-    // the composer at the old viewport aspect, and its final fullscreen pass then
-    // stretches that across the new export buffer — the squished-molecule bug.
-    // Routing through R3F keeps composer + camera + renderer on one aspect.
+    // a raw renderer.setSize(): R3F's `size` state drives the camera aspect and
+    // any render pipeline passes, so routing through it keeps pipeline, camera
+    // and renderer on one aspect. The recording is the canvas itself.
     originalPixelRatio.current = renderer.getPixelRatio();
     setDpr(1);
     setSize(width, height);
@@ -974,6 +1022,7 @@ export function ExportManager() {
 
   return (
     <>
+      <ViewerCaptureService />
       {exportRequest.type === 'image' && (
         <ImageCaptureFrame request={exportRequest} frameIndex={frame} />
       )}

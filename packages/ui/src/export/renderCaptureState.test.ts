@@ -5,12 +5,13 @@ import {
   LUPI_EXPORT_LAYER_KEY,
   applyBackgroundForOpaqueCapture,
   assertBrowserImageExportIntent,
+  beginImageCaptureTransaction,
   claimFiberFrameCapture,
   claimFiberFrameWarmup,
   completeImageCaptureCallback,
   createFiberFrameCaptureBarrier,
   markFiberFrameCaptureApplied,
-  runImageCaptureTransaction,
+  markFiberFrameCaptureWarmed,
   suppressBackgroundForTransparentCapture,
 } from './renderCaptureState';
 
@@ -26,7 +27,7 @@ describe('browser image export intent', () => {
 });
 
 describe('Fiber image capture revision barrier', () => {
-  it('captures exactly once and only after the requested revision was applied and warmed', () => {
+  it('captures exactly once, only after the revision was applied and its warm-up finished', () => {
     const barrier = createFiberFrameCaptureBarrier(7);
 
     expect(claimFiberFrameCapture(barrier, 7)).toBe(false);
@@ -36,8 +37,12 @@ describe('Fiber image capture revision barrier', () => {
 
     markFiberFrameCaptureApplied(barrier, 7);
     expect(claimFiberFrameCapture(barrier, 7)).toBe(false);
+    markFiberFrameCaptureWarmed(barrier, 7); // no warm-up started yet: ignored
+    expect(claimFiberFrameCapture(barrier, 7)).toBe(false);
     expect(claimFiberFrameWarmup(barrier, 7)).toBe(true);
     expect(claimFiberFrameWarmup(barrier, 7)).toBe(false);
+    expect(claimFiberFrameCapture(barrier, 7)).toBe(false); // warm-up still pending
+    markFiberFrameCaptureWarmed(barrier, 7);
     expect(claimFiberFrameCapture(barrier, 7)).toBe(true);
     expect(claimFiberFrameCapture(barrier, 7)).toBe(false);
   });
@@ -77,180 +82,102 @@ describe('transparent capture scene state', () => {
     expect(molecule.visible).toBe(true);
   });
 
-  it('restores renderer, camera, and background state after synchronous capture failure', () => {
-    const originalRenderTarget = { name: 'original-target' };
-    const originalBackground = new THREE.Color('#102030');
-    const originalFog = new THREE.Fog('#102030', 1, 10);
-    const scene = new THREE.Scene();
-    scene.background = originalBackground;
-    scene.fog = originalFog;
+  it('renders with a camera copy at the target aspect and never moves the live camera', () => {
+    const live = new THREE.PerspectiveCamera(50, 4 / 3, 0.1, 1000);
+    live.position.set(1, 2, 3);
+    live.lookAt(0, 0, 0);
+    live.updateMatrixWorld(true);
+    const livePosition = live.position.clone();
+    const liveQuaternion = live.quaternion.clone();
 
-    const background = new THREE.Group();
-    background.userData[LUPI_EXPORT_LAYER_KEY] = LUPI_EXPORT_BACKGROUND_LAYER;
-    scene.add(background);
-
-    let pixelRatio = 2;
-    let width = 800;
-    let height = 600;
-    let clearColor = new THREE.Color('#abcdef');
-    let clearAlpha = 0.75;
-    let renderTarget: typeof originalRenderTarget | null = originalRenderTarget;
-    let viewport = new THREE.Vector4(11, 22, 333, 444);
-    let scissor = new THREE.Vector4(7, 8, 90, 91);
-    let scissorTest = true;
-    const renderer = {
-      getPixelRatio: () => pixelRatio,
-      setPixelRatio: (value: number) => { pixelRatio = value; },
-      getClearColor: (target: THREE.Color) => target.copy(clearColor),
-      getClearAlpha: () => clearAlpha,
-      setClearColor: (value: THREE.ColorRepresentation, alpha?: number) => {
-        clearColor = new THREE.Color(value);
-        if (alpha !== undefined) clearAlpha = alpha;
-      },
-      getRenderTarget: () => renderTarget,
-      setRenderTarget: (value: typeof originalRenderTarget | null) => { renderTarget = value; },
-      getViewport: (target: THREE.Vector4) => target.copy(viewport),
-      setViewport: (x: number | THREE.Vector4, y?: number, nextWidth?: number, nextHeight?: number) => {
-        viewport = x instanceof THREE.Vector4
-          ? x.clone()
-          : new THREE.Vector4(x, y, nextWidth, nextHeight);
-      },
-      getScissor: (target: THREE.Vector4) => target.copy(scissor),
-      setScissor: (x: number | THREE.Vector4, y?: number, nextWidth?: number, nextHeight?: number) => {
-        scissor = x instanceof THREE.Vector4
-          ? x.clone()
-          : new THREE.Vector4(x, y, nextWidth, nextHeight);
-      },
-      getScissorTest: () => scissorTest,
-      setScissorTest: (enabled: boolean) => { scissorTest = enabled; },
-      clear: vi.fn(),
-      setSize: (nextWidth: number, nextHeight: number) => {
-        width = nextWidth;
-        height = nextHeight;
-      },
-    };
-    const camera = new THREE.PerspectiveCamera(50, 4 / 3, 0.1, 1000);
-    const originalAspect = camera.aspect;
-    const originalNear = camera.near;
-    const originalFar = camera.far;
-
-    expect(() => runImageCaptureTransaction({
-      renderer,
-      scene,
-      camera,
-      viewportWidth: width,
-      viewportHeight: height,
+    const transaction = beginImageCaptureTransaction({
+      scene: new THREE.Scene(),
+      camera: live,
       targetWidth: 1920,
       targetHeight: 1080,
-      transparent: true,
-      appliedCamera: {
-        position: [8, 9, 10],
-        target: [0, 0, 0],
-        fov: 42,
-        near: 0.025,
-        far: 25_000,
-      },
-    }, () => {
-      expect(pixelRatio).toBe(1);
-      expect([width, height]).toEqual([1920, 1080]);
-      expect(camera.aspect).toBe(1920 / 1080);
-      expect(camera.near).toBe(0.025);
-      expect(camera.far).toBe(25_000);
-      expect(clearAlpha).toBe(0);
-      expect(renderer.clear).toHaveBeenCalledWith(true, true, true);
-      expect(viewport.toArray()).toEqual([0, 0, 1920, 1080]);
-      expect(scissor.toArray()).toEqual([0, 0, 1920, 1080]);
-      expect(scissorTest).toBe(false);
-      expect(renderTarget).toBeNull();
-      expect(scene.background).toBeNull();
-      expect(scene.fog).toBeNull();
-      expect(background.visible).toBe(false);
-      throw new Error('capture failed');
-    })).toThrow('capture failed');
+      transparent: false,
+      appliedCamera: { position: [8, 9, 10], target: [0, 0, 0], fov: 42, near: 0.025, far: 25_000 },
+    });
+    const capture = transaction.camera as THREE.PerspectiveCamera;
 
-    expect(pixelRatio).toBe(2);
-    expect([width, height]).toEqual([800, 600]);
-    expect(camera.aspect).toBe(originalAspect);
-    expect(camera.near).toBe(originalNear);
-    expect(camera.far).toBe(originalFar);
-    expect(clearColor.getHexString()).toBe('abcdef');
-    expect(clearAlpha).toBe(0.75);
-    expect(renderTarget).toBe(originalRenderTarget);
-    expect(viewport.toArray()).toEqual([11, 22, 333, 444]);
-    expect(scissor.toArray()).toEqual([7, 8, 90, 91]);
-    expect(scissorTest).toBe(true);
-    expect(scene.background).toBe(originalBackground);
-    expect(scene.fog).toBe(originalFog);
-    expect(background.visible).toBe(true);
+    expect(capture).not.toBe(live);
+    expect(capture.aspect).toBe(1920 / 1080);
+    expect([capture.fov, capture.near, capture.far]).toEqual([42, 0.025, 25_000]);
+    expect(capture.position.toArray()).toEqual([8, 9, 10]);
+    expect(live.aspect).toBe(4 / 3);
+    expect([live.fov, live.near, live.far]).toEqual([50, 0.1, 1000]);
+    expect(live.position.equals(livePosition)).toBe(true);
+    expect(live.quaternion.equals(liveQuaternion)).toBe(true);
+
+    // Without a finalized camera the copy follows the live camera (for
+    // example after OrbitControls moved it) at the target aspect.
+    const follow = beginImageCaptureTransaction({
+      scene: new THREE.Scene(),
+      camera: live,
+      targetWidth: 100,
+      targetHeight: 60,
+      transparent: false,
+    });
+    live.position.set(4, 5, 6);
+    follow.applyCanonicalState();
+    const followed = follow.camera as THREE.PerspectiveCamera;
+    expect(followed.position.toArray()).toEqual([4, 5, 6]);
+    expect(followed.aspect).toBeCloseTo(100 / 60, 12);
+    expect(followed.fov).toBe(50);
+    follow.restore();
+    expect(() => follow.applyCanonicalState()).toThrow(/restored/);
+    expect(() => follow.withCaptureScene(() => undefined)).toThrow(/restored/);
   });
 
-  it('restores logical viewport size before DPR without a transient export-sized high-DPR buffer', () => {
+  it('suppresses backgrounds only inside a transparent capture render, also when it throws', () => {
     const scene = new THREE.Scene();
-    const originalRenderTarget = { name: 'live-target' };
-    let phase: 'capture' | 'restore' = 'capture';
-    const restoreCalls: string[] = [];
-    const renderer = {
-      getPixelRatio: () => 2,
-      setPixelRatio: (value: number) => {
-        if (phase === 'restore') restoreCalls.push(`setPixelRatio:${value}`);
-      },
-      getClearColor: (target: THREE.Color) => target.set('#abcdef'),
-      getClearAlpha: () => 0.75,
-      setClearColor: (value: THREE.ColorRepresentation, alpha?: number) => {
-        if (phase === 'restore') {
-          restoreCalls.push(`setClearColor:${new THREE.Color(value).getHexString()}:${alpha}`);
-        }
-      },
-      getRenderTarget: () => originalRenderTarget,
-      setRenderTarget: (value: typeof originalRenderTarget | null) => {
-        if (phase === 'restore') restoreCalls.push(`setRenderTarget:${value?.name ?? 'null'}`);
-      },
-      getViewport: (target: THREE.Vector4) => target.set(11, 22, 333, 444),
-      setViewport: (value: number | THREE.Vector4) => {
-        if (phase === 'restore' && value instanceof THREE.Vector4) {
-          restoreCalls.push(`setViewport:${value.toArray().join(',')}`);
-        }
-      },
-      getScissor: (target: THREE.Vector4) => target.set(7, 8, 90, 91),
-      setScissor: (value: number | THREE.Vector4) => {
-        if (phase === 'restore' && value instanceof THREE.Vector4) {
-          restoreCalls.push(`setScissor:${value.toArray().join(',')}`);
-        }
-      },
-      getScissorTest: () => true,
-      setScissorTest: (enabled: boolean) => {
-        if (phase === 'restore') restoreCalls.push(`setScissorTest:${enabled}`);
-      },
-      clear: vi.fn(),
-      setSize: (width: number, height: number, updateStyle?: boolean) => {
-        if (phase === 'restore') {
-          restoreCalls.push(`setSize:${width}x${height}:${updateStyle}`);
-        }
-      },
-    };
+    const originalBackground = new THREE.Color('#102030');
+    const originalFog = new THREE.Fog('#102030', 1, 10);
+    scene.background = originalBackground;
+    scene.fog = originalFog;
+    const backdrop = new THREE.Group();
+    backdrop.userData[LUPI_EXPORT_LAYER_KEY] = LUPI_EXPORT_BACKGROUND_LAYER;
+    scene.add(backdrop);
 
-    runImageCaptureTransaction({
-      renderer,
+    const transaction = beginImageCaptureTransaction({
       scene,
-      camera: new THREE.PerspectiveCamera(50, 4 / 3, 0.1, 1000),
-      viewportWidth: 800,
-      viewportHeight: 600,
-      targetWidth: 4096,
-      targetHeight: 4096,
-      transparent: false,
-    }, () => {
-      phase = 'restore';
+      camera: new THREE.PerspectiveCamera(),
+      targetWidth: 320,
+      targetHeight: 240,
+      transparent: true,
     });
+    expect(scene.background).toBe(originalBackground);
 
-    expect(restoreCalls).toEqual([
-      'setRenderTarget:live-target',
-      'setSize:800x600:false',
-      'setPixelRatio:2',
-      'setViewport:11,22,333,444',
-      'setScissor:7,8,90,91',
-      'setScissorTest:true',
-      'setClearColor:abcdef:0.75',
-    ]);
+    const seen = transaction.withCaptureScene(() => ({
+      background: scene.background,
+      fog: scene.fog,
+      backdropVisible: backdrop.visible,
+    }));
+    expect(seen).toEqual({ background: null, fog: null, backdropVisible: false });
+    expect(scene.background).toBe(originalBackground);
+    expect(scene.fog).toBe(originalFog);
+    expect(backdrop.visible).toBe(true);
+
+    expect(() => transaction.withCaptureScene(() => {
+      throw new Error('capture failed');
+    })).toThrow('capture failed');
+    expect(scene.background).toBe(originalBackground);
+    expect(scene.fog).toBe(originalFog);
+    expect(backdrop.visible).toBe(true);
+  });
+
+  it('keeps the live background for an opaque capture without a finalized one', () => {
+    const scene = new THREE.Scene();
+    const background = new THREE.Color('#101817');
+    scene.background = background;
+    const transaction = beginImageCaptureTransaction({
+      scene,
+      camera: new THREE.PerspectiveCamera(),
+      targetWidth: 64,
+      targetHeight: 64,
+      transparent: false,
+    });
+    expect(transaction.withCaptureScene(() => scene.background)).toBe(background);
   });
 
   it('applies the finalized opaque background and restores stale live state', () => {
@@ -282,54 +209,6 @@ describe('transparent capture scene state', () => {
     expect(scene.background).toBe(staleBackground);
     expect(scene.fog).toBe(staleFog);
     expect(staleBackdrop.visible).toBe(true);
-  });
-
-  it('explicitly clears an opaque first capture when ambient auto-clear is disabled', () => {
-    const scene = new THREE.Scene();
-    let clearAlpha = 0;
-    let framebufferAlpha = 0;
-    let renderTarget: object | null = null;
-    const renderer = {
-      // Mirrors EffectComposer's renderer policy. runImageCaptureTransaction
-      // must not rely on render() performing an implicit clear.
-      autoClear: false,
-      getPixelRatio: () => 1,
-      setPixelRatio: vi.fn(),
-      getClearColor: (target: THREE.Color) => target.set('#000000'),
-      getClearAlpha: () => clearAlpha,
-      setClearColor: (_value: THREE.ColorRepresentation, alpha?: number) => {
-        if (alpha !== undefined) clearAlpha = alpha;
-      },
-      getRenderTarget: () => renderTarget,
-      setRenderTarget: (value: object | null) => { renderTarget = value; },
-      getViewport: (target: THREE.Vector4) => target.set(0, 0, 800, 600),
-      setViewport: vi.fn(),
-      getScissor: (target: THREE.Vector4) => target.set(0, 0, 800, 600),
-      setScissor: vi.fn(),
-      getScissorTest: () => false,
-      setScissorTest: vi.fn(),
-      setSize: vi.fn(),
-      clear: vi.fn(() => { framebufferAlpha = clearAlpha; }),
-    };
-
-    runImageCaptureTransaction({
-      renderer,
-      scene,
-      camera: new THREE.PerspectiveCamera(50, 1, 0.1, 1000),
-      viewportWidth: 800,
-      viewportHeight: 600,
-      targetWidth: 256,
-      targetHeight: 256,
-      transparent: false,
-    }, () => {
-      // No scene background is ready yet. The explicit clear is the only
-      // operation which can establish an opaque framebuffer at this point.
-      expect(scene.background).toBeNull();
-      expect(renderer.autoClear).toBe(false);
-      expect(framebufferAlpha).toBe(1);
-    });
-
-    expect(renderer.clear).toHaveBeenCalledWith(true, true, true);
   });
 
   it('always cleans up after an asynchronous delivery callback throws', () => {

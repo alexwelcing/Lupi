@@ -7,30 +7,10 @@ import {
 export const LUPI_EXPORT_LAYER_KEY = 'lupiExportLayer';
 export const LUPI_EXPORT_BACKGROUND_LAYER = 'background';
 
-type ImageCaptureRenderer<TRenderTarget> = {
-  getPixelRatio(): number;
-  setPixelRatio(value: number): void;
-  getClearColor(target: THREE.Color): THREE.Color;
-  getClearAlpha(): number;
-  setClearColor(color: THREE.ColorRepresentation, alpha?: number): void;
-  getRenderTarget(): TRenderTarget | null;
-  setRenderTarget(target: TRenderTarget | null): void;
-  setSize(width: number, height: number, updateStyle?: boolean): void;
-  getViewport(target: THREE.Vector4): THREE.Vector4;
-  setViewport(x: number | THREE.Vector4, y?: number, width?: number, height?: number): void;
-  getScissor(target: THREE.Vector4): THREE.Vector4;
-  setScissor(x: number | THREE.Vector4, y?: number, width?: number, height?: number): void;
-  getScissorTest(): boolean;
-  setScissorTest(enabled: boolean): void;
-  clear(color?: boolean, depth?: boolean, stencil?: boolean): void;
-};
-
-export type ImageCaptureTransactionOptions<TRenderTarget> = {
-  renderer: ImageCaptureRenderer<TRenderTarget>;
+export type ImageCaptureTransactionOptions = {
   scene: THREE.Scene;
+  /** The live camera. The capture renders with a copy; this one never moves. */
   camera: THREE.Camera;
-  viewportWidth: number;
-  viewportHeight: number;
   targetWidth: number;
   targetHeight: number;
   transparent: boolean;
@@ -49,33 +29,49 @@ export type ImageCaptureTransactionOptions<TRenderTarget> = {
 };
 
 export interface PreparedImageCaptureTransaction {
-  /** Re-assert the finalized camera/renderer state inside a Fiber frame. */
+  /**
+   * The camera the capture renders with: a copy of the live camera at the
+   * target aspect, with the finalized artifact camera applied. Rendering
+   * with a copy keeps the on-screen view (and OrbitControls) untouched.
+   */
+  readonly camera: THREE.Camera;
+  /** Re-sync the capture camera from the live camera and the finalized camera (`lupi-canonical`). */
   applyCanonicalState(): void;
-  /** Select and clear the default framebuffer immediately before readback. */
-  clear(): void;
-  /** Restore the exact live renderer, camera, and scene state. Idempotent. */
+  /**
+   * Run a synchronous render with the capture's scene state: backgrounds
+   * suppressed for transparent output, or the finalized background for
+   * opaque output. The live scene state is restored before this returns,
+   * also when `render` throws, so the next default render never sees it.
+   */
+  withCaptureScene<T>(render: () => T): T;
+  /** End the transaction. Idempotent; later apply/withCaptureScene calls throw. */
   restore(): void;
 }
 
 export interface FiberFrameCaptureBarrier {
   readonly requestedRevision: number;
+  /** `lupi-canonical` applied the canonical state for this revision. */
   appliedRevision: number;
+  /** `lupi-capture` started the warm-up (renderer.compileAsync). */
+  warmupRevision: number;
+  /** The warm-up finished. */
   warmedRevision: number;
   capturedRevision: number;
 }
 
 /**
- * A tiny explicit handshake between the early and late phases of one Fiber
- * frame. The early phase applies the canonical camera. The first late phase
- * renders one owned warm-up frame so newly committed ShaderMaterial programs
- * and DataTextures reach WebGL. A later Fiber frame may then capture that
- * revision once, after the scene's ordinary `useFrame` hooks have synchronized
- * camera-space uniforms again.
+ * A tiny explicit handshake across Fiber frame phases (no numeric
+ * priorities). `lupi-canonical` applies the canonical camera after controls
+ * and before uniform jobs. The first `lupi-capture` pass (after the default
+ * render) kicks `renderer.compileAsync` for the capture, replacing v9's
+ * owned warm-up frame. A later `lupi-capture` pass captures that revision
+ * exactly once, after every uniform job has observed the canonical state.
  */
 export function createFiberFrameCaptureBarrier(revision: number): FiberFrameCaptureBarrier {
   return {
     requestedRevision: revision,
     appliedRevision: 0,
+    warmupRevision: 0,
     warmedRevision: 0,
     capturedRevision: 0,
   };
@@ -88,6 +84,7 @@ export function markFiberFrameCaptureApplied(
   if (revision === barrier.requestedRevision) barrier.appliedRevision = revision;
 }
 
+/** True once per revision, after it was applied: start the warm-up now. */
 export function claimFiberFrameWarmup(
   barrier: FiberFrameCaptureBarrier,
   revision: number,
@@ -95,12 +92,22 @@ export function claimFiberFrameWarmup(
   if (
     revision !== barrier.requestedRevision
     || barrier.appliedRevision !== revision
-    || barrier.warmedRevision === revision
+    || barrier.warmupRevision === revision
   ) {
     return false;
   }
-  barrier.warmedRevision = revision;
+  barrier.warmupRevision = revision;
   return true;
+}
+
+/** The warm-up started for `revision` has finished (resolved or failed). */
+export function markFiberFrameCaptureWarmed(
+  barrier: FiberFrameCaptureBarrier,
+  revision: number,
+): void {
+  if (revision === barrier.requestedRevision && barrier.warmupRevision === revision) {
+    barrier.warmedRevision = revision;
+  }
 }
 
 export function claimFiberFrameCapture(
@@ -208,186 +215,105 @@ export function applyBackgroundForOpaqueCapture(
 }
 
 /**
- * Stage an image capture without rendering it. Keeping the transaction open
- * lets ExportManager cross a real Fiber frame: camera controllers run first,
- * the canonical camera is re-applied, and camera-dependent `useFrame` uniforms
- * update before the final render/readback callback.
+ * Stage an image capture. Nothing on the renderer, the live camera or the
+ * scene changes until `withCaptureScene`, and that restores synchronously:
+ * captures render into their own target (renderTargetReadback), so the
+ * canvas keeps its size and the on-screen view never flickers.
  */
-export function beginImageCaptureTransaction<TRenderTarget>(
+export function beginImageCaptureTransaction(
   {
-    renderer,
     scene,
     camera,
-    viewportWidth,
-    viewportHeight,
     targetWidth,
     targetHeight,
     transparent,
     appliedCamera,
     appliedBackground,
-  }: ImageCaptureTransactionOptions<TRenderTarget>,
+  }: ImageCaptureTransactionOptions,
 ): PreparedImageCaptureTransaction {
-  const originalAspect = camera instanceof THREE.PerspectiveCamera ? camera.aspect : null;
-  const originalPosition = camera.position.clone();
-  const originalQuaternion = camera.quaternion.clone();
-  const originalFov = camera instanceof THREE.PerspectiveCamera ? camera.fov : null;
-  const originalNear = camera instanceof THREE.PerspectiveCamera ? camera.near : null;
-  const originalFar = camera instanceof THREE.PerspectiveCamera ? camera.far : null;
-  const originalPixelRatio = renderer.getPixelRatio();
-  const originalClearColor = new THREE.Color();
-  renderer.getClearColor(originalClearColor);
-  const originalClearAlpha = renderer.getClearAlpha();
-  const originalRenderTarget = renderer.getRenderTarget();
-  const originalViewport = renderer.getViewport(new THREE.Vector4()).clone();
-  const originalScissor = renderer.getScissor(new THREE.Vector4()).clone();
-  const originalScissorTest = renderer.getScissorTest();
-  let restoreBackground = () => {};
+  // A bare instance of the live camera's class; syncCaptureCamera copies it
+  // without children.
+  const captureCamera = new (camera.constructor as new () => THREE.Camera)();
+  const targetAspect = targetWidth / targetHeight;
   let restored = false;
-  let appliedBackgroundState: THREE.Scene['background'] = scene.background;
-  let appliedFogState: THREE.Scene['fog'] = scene.fog;
 
   const applyCanonicalState = () => {
     if (restored) {
       throw new Error('Cannot apply a restored image capture transaction.');
     }
-    renderer.setPixelRatio(1);
-    renderer.setSize(targetWidth, targetHeight, false);
-    renderer.setViewport(0, 0, targetWidth, targetHeight);
-    renderer.setScissor(0, 0, targetWidth, targetHeight);
-    renderer.setScissorTest(false);
-    if (camera instanceof THREE.PerspectiveCamera) {
-      camera.aspect = targetWidth / targetHeight;
-      if (appliedCamera) {
-        camera.fov = appliedCamera.fov;
-        camera.near = appliedCamera.near;
-        camera.far = appliedCamera.far;
-      }
-      camera.updateProjectionMatrix();
-    }
-    if (appliedCamera) {
-      camera.position.fromArray(appliedCamera.position);
-      camera.lookAt(new THREE.Vector3().fromArray(appliedCamera.target));
-      camera.updateMatrixWorld(true);
-    }
-
-    scene.background = appliedBackgroundState;
-    scene.fog = appliedFogState;
-    if (transparent) {
-      restoreBackground = suppressBackgroundForTransparentCapture(scene);
-      renderer.setClearColor(0x000000, 0);
-    } else {
-      if (appliedBackground) {
-        restoreBackground = applyBackgroundForOpaqueCapture(
-          scene,
-          appliedBackground.texture,
-          appliedBackground.fogColor,
-          appliedBackground.fogDensity,
-        );
-      }
-      renderer.setClearColor(new THREE.Color('#10131a'), 1);
-    }
-
-    appliedBackgroundState = scene.background;
-    appliedFogState = scene.fog;
-
-    renderer.setRenderTarget(null);
+    syncCaptureCamera(captureCamera, camera, targetAspect, appliedCamera);
   };
 
-  // Apply once during layout so the next invalidated Fiber frame starts from
-  // the requested viewport/background. The early frame callback re-applies the
-  // same canonical state after OrbitControls and before camera-space uniforms.
   applyCanonicalState();
 
   return {
-    applyCanonicalState() {
-      // Background suppression must only capture restore state once. Re-assert
-      // the already-created canonical scene state without nesting restorers.
-      if (restored) {
-        throw new Error('Cannot apply a restored image capture transaction.');
+    camera: captureCamera,
+    applyCanonicalState,
+    withCaptureScene<T>(render: () => T): T {
+      if (restored) throw new Error('Cannot render a restored image capture transaction.');
+      const restoreBackground = transparent
+        ? suppressBackgroundForTransparentCapture(scene)
+        : appliedBackground
+          ? applyBackgroundForOpaqueCapture(
+            scene,
+            appliedBackground.texture,
+            appliedBackground.fogColor,
+            appliedBackground.fogDensity,
+          )
+          : () => {};
+      try {
+        return render();
+      } finally {
+        restoreBackground();
       }
-      renderer.setPixelRatio(1);
-      renderer.setSize(targetWidth, targetHeight, false);
-      renderer.setViewport(0, 0, targetWidth, targetHeight);
-      renderer.setScissor(0, 0, targetWidth, targetHeight);
-      renderer.setScissorTest(false);
-      if (camera instanceof THREE.PerspectiveCamera) {
-        camera.aspect = targetWidth / targetHeight;
-        if (appliedCamera) {
-          camera.fov = appliedCamera.fov;
-          camera.near = appliedCamera.near;
-          camera.far = appliedCamera.far;
-        }
-        camera.updateProjectionMatrix();
-      }
-      if (appliedCamera) {
-        camera.position.fromArray(appliedCamera.position);
-        camera.lookAt(new THREE.Vector3().fromArray(appliedCamera.target));
-        camera.updateMatrixWorld(true);
-      }
-      scene.background = appliedBackgroundState;
-      scene.fog = appliedFogState;
-      renderer.setClearColor(transparent ? 0x000000 : new THREE.Color('#10131a'), transparent ? 0 : 1);
-      renderer.setRenderTarget(null);
-    },
-    clear() {
-      if (restored) throw new Error('Cannot clear a restored image capture transaction.');
-
-      renderer.setRenderTarget(null);
-      // EffectComposer deliberately leaves WebGLRenderer.autoClear disabled.
-      // An explicit clear makes artifact alpha independent of ambient state.
-      renderer.clear(true, true, true);
     },
     restore() {
-      if (restored) return;
       restored = true;
-      restoreBackground();
-      renderer.setRenderTarget(originalRenderTarget);
-      // Restore the logical viewport while capture DPR=1 is still active.
-      // Three's setPixelRatio() internally reapplies the current logical size;
-      // doing it first would transiently allocate the export-sized framebuffer
-      // (for example 4096x4096) at the live high-DPR setting.
-      renderer.setSize(viewportWidth, viewportHeight, false);
-      renderer.setPixelRatio(originalPixelRatio);
-      renderer.setViewport(originalViewport);
-      renderer.setScissor(originalScissor);
-      renderer.setScissorTest(originalScissorTest);
-      if (camera instanceof THREE.PerspectiveCamera && originalAspect !== null) {
-        camera.aspect = originalAspect;
-        if (originalFov !== null) camera.fov = originalFov;
-        if (originalNear !== null) camera.near = originalNear;
-        if (originalFar !== null) camera.far = originalFar;
-        camera.updateProjectionMatrix();
-      }
-      camera.position.copy(originalPosition);
-      camera.quaternion.copy(originalQuaternion);
-      camera.updateMatrixWorld(true);
-      renderer.setClearColor(originalClearColor, originalClearAlpha);
     },
   };
 }
 
 /**
- * Synchronous compatibility wrapper used by focused state tests and any
- * non-Fiber caller. Fiber image export uses beginImageCaptureTransaction.
+ * Copy the live camera (world transform, projection) into `target` for a
+ * capture of `aspect`, then apply the finalized artifact camera. A
+ * perspective camera keeps its vertical field of view, as the v9 export did.
  */
-export function runImageCaptureTransaction<TRenderTarget, TResult>(
-  options: ImageCaptureTransactionOptions<TRenderTarget>,
-  capture: () => TResult,
-): TResult {
-  const transaction = beginImageCaptureTransaction(options);
-  try {
-    transaction.clear();
-    return capture();
-  } finally {
-    transaction.restore();
+function syncCaptureCamera(
+  target: THREE.Camera,
+  live: THREE.Camera,
+  aspect: number,
+  appliedCamera: ImageCaptureTransactionOptions['appliedCamera'],
+): void {
+  target.copy(live, false);
+  live.updateMatrixWorld();
+  live.matrixWorld.decompose(target.position, target.quaternion, target.scale);
+  if (target instanceof THREE.PerspectiveCamera) {
+    target.aspect = aspect;
+    if (appliedCamera) {
+      target.fov = appliedCamera.fov;
+      target.near = appliedCamera.near;
+      target.far = appliedCamera.far;
+    }
+    target.updateProjectionMatrix();
+  } else if (target instanceof THREE.OrthographicCamera) {
+    const centerX = (target.left + target.right) / 2;
+    const halfHeight = (target.top - target.bottom) / 2;
+    target.left = centerX - halfHeight * aspect;
+    target.right = centerX + halfHeight * aspect;
+    target.updateProjectionMatrix();
   }
+  if (appliedCamera) {
+    target.position.fromArray(appliedCamera.position);
+    target.lookAt(new THREE.Vector3().fromArray(appliedCamera.target));
+  }
+  target.updateMatrixWorld(true);
 }
 
 /**
  * Draw the export-visible orientation indicator into the captured raster.
- * Drei's GizmoHelper is a separate HUD portal/useFrame pass, so a direct
- * `gl.render(scene, camera)` cannot capture it. Reconstructing the small axis
- * projection here keeps the artifact contract honest and deterministic.
+ * The on-screen gizmo is a DOM/SVG overlay (AxesGizmo), which a render of
+ * the scene cannot capture. Reconstructing the small axis projection here
+ * keeps the artifact contract honest and deterministic.
  */
 export function drawExportAxesOverlayV1(
   context: CanvasRenderingContext2D,
