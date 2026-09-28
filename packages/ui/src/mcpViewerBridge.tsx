@@ -26,7 +26,8 @@ import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { openMolecule } from './viewer/openMolecule';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
-import { createLupiMcpDriver, type LupiMcpStatus } from './mcp/driver';
+import { createLupiMcpDriver, type LupiMcpRendererStatus, type LupiMcpStatus } from './mcp/driver';
+import { getLupiRendererRuntime } from './viewer/createLupiRenderer';
 import {
   LUPI_VIEWER_MCP_VERSION,
   MAX_PERSISTED_EXPORT_CHARS,
@@ -1929,11 +1930,20 @@ function makeFrame(
   };
 }
 
+function readRendererStatus(): LupiMcpRendererStatus {
+  const runtime = getLupiRendererRuntime();
+  return {
+    rendererBackend: runtime?.backend ?? null,
+    webGPUSupported: runtime ? runtime.backend === 'webgpu' : null,
+  };
+}
+
 function readViewerState() {
   const state = useStore.getState();
   const frame = state.file?.trajectory.frames[state.frame];
   return {
     ready: true,
+    ...readRendererStatus(),
     fileName: state.file?.name ?? null,
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
@@ -1965,6 +1975,7 @@ function readMcpStatus(): LupiMcpStatus {
   return {
     ready: true,
     version: LUPI_VIEWER_MCP_VERSION,
+    ...readRendererStatus(),
     toolCount: listLupiMcpTools().length,
     moleculeLoaded: Boolean(state.file),
     atomCount: frame?.natoms ?? 0,
