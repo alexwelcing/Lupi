@@ -39,7 +39,11 @@ vi.mock('./bondWorker.ts?worker', () => ({
   },
 }));
 
+import type * as THREE from 'three';
+import type { MeshBasicNodeMaterial } from 'three/webgpu';
 import { Bonds } from './Bonds';
+import { BOND_ATTR, BOND_COLOR_STRIDE } from './tsl/bondImpostorMaterial';
+import { getLupiUniforms } from './tsl/lupiUniforms';
 
 function inferableFrame(): Frame {
   return {
@@ -123,6 +127,25 @@ describe('bond inference backend fallback', () => {
           count: 1,
         }),
       );
+
+      // The bond drawn by the node material: Uint8x4 normalized endpoint
+      // colours and no itemSize-1 8/16-bit attribute (D4).
+      const bondMesh = renderer.scene.findByType('Mesh').instance as THREE.Mesh<
+        THREE.InstancedBufferGeometry,
+        MeshBasicNodeMaterial
+      >;
+      expect(bondMesh.geometry.instanceCount).toBe(1);
+      expect(getLupiUniforms(bondMesh.material)?.uProgress).toBeDefined();
+      for (const name of [BOND_ATTR.colorStart, BOND_ATTR.colorEnd]) {
+        const colors = bondMesh.geometry.attributes[name];
+        expect(colors.array).toBeInstanceOf(Uint8Array);
+        expect(colors.itemSize).toBe(BOND_COLOR_STRIDE);
+        expect(colors.normalized).toBe(true);
+        expect(colors.array[3]).toBe(255);
+      }
+      const narrow = Object.entries(bondMesh.geometry.attributes).filter(([, attribute]) =>
+        attribute.itemSize === 1 && !(attribute.array instanceof Float32Array));
+      expect(narrow.map(([name]) => name)).toEqual([]);
 
       await renderer.update(render(new Set([6])));
       await vi.waitFor(() =>

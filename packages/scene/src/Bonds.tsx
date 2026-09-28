@@ -7,17 +7,19 @@
  *
  * Architecture:
  * - Bond detection → Web Worker / WebGPU (non-blocking)
- * - Rendering → one ray-cast cylinder impostor per bond (bondImpostor.ts):
- *   endpoints, radius and two endpoint colors per instance, frame
- *   interpolation on the GPU, exact depth, no radial segments
+ * - Rendering → one ray-cast cylinder impostor per bond, a TSL node material
+ *   (tsl/bondImpostorMaterial.ts) on the shared impostor kit: endpoints,
+ *   radius and two endpoint colors per instance, frame interpolation on the
+ *   GPU, exact depth, no radial segments; WGSL on WebGPU, GLSL on WebGL2
  * - GPU upload → endpoints gathered once per bond-set/frame change
  * - Toggle → instant visibility flip, no recomputation
  */
 
 /// <reference path="./vite-env.d.ts" />
-import { useRef, useMemo, useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import { useRef, useMemo, useEffect, useLayoutEffect, useState, useCallback, useId } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
+import type { MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import {
   framesShareAtomOrder,
@@ -37,24 +39,23 @@ import { useBondGpuPipeline } from './useBondGpuPipeline';
 import BondWorkerCtor from './bondWorker.ts?worker';
 import { resolveBondTopologyMode, shouldUseGpuBondInference } from './bondTopology';
 import { wrapDelta } from './interpolation';
+import { bondMaterialParams, createBondBoxGeometry } from './bondImpostor';
+import { markInstancedAttributeUpdateRange, resolveAtomQualityTier, type AtomQualityTier } from './AtomsOptimized';
+import { LUPI_JOB, LUPI_PHASE } from './framePhases';
 import {
-  BOND_IMPOSTOR_FRAGMENT,
-  BOND_IMPOSTOR_VERTEX,
-  bondMaterialParams,
-  createBondBoxGeometry,
-} from './bondImpostor';
+  createLupiEnvBinding,
+  createLupiLightUniforms,
+  lightDirection,
+  syncLupiEnvBinding,
+} from './tsl/impostorKit';
 import {
-  EMPTY_CUBE_UV_DEFINES,
-  markInstancedAttributeUpdateRange,
-  materialCubeUvDefines,
-  rendererSupportsConservativeDepth,
-  resolveAtomQualityTier,
-  syncAtomShaderDefines,
-  syncCubeUvEnvironment,
-  syncImpostorRenderTargetUniforms,
-  type ImpostorDrawRenderer,
-  type AtomQualityTier,
-} from './AtomsOptimized';
+  BOND_ATTR,
+  BOND_COLOR_STRIDE,
+  createBondImpostorMaterial,
+  createBondImpostorUniforms,
+  writeBondColor,
+  type BondImpostorUniforms,
+} from './tsl/bondImpostorMaterial';
 
 /**
  * Content-equality check for bond-pair Int32Arrays. Used by the bond-
@@ -143,6 +144,61 @@ export function filterHiddenTypeBonds(
     out += 1;
   }
   return { pairs: keptPairs, distances: keptDistances };
+}
+
+/**
+ * What one bond layer's node materials share: the uniform bag, the light
+ * uniforms and the environment binding. The per-tier materials (static and
+ * lerping) are built on first use and kept for the layer's life.
+ */
+export interface BondImpostorResources {
+  uniforms: BondImpostorUniforms;
+  lights: ReturnType<typeof createLupiLightUniforms>;
+  env: ReturnType<typeof createLupiEnvBinding>;
+  /** Keyed by tier plus `:lerp` for the interpolating program. */
+  materials: Map<string, MeshBasicNodeMaterial>;
+}
+
+export function createBondImpostorResources(): BondImpostorResources {
+  return {
+    uniforms: createBondImpostorUniforms(),
+    lights: createLupiLightUniforms(),
+    env: createLupiEnvBinding(),
+    materials: new Map(),
+  };
+}
+
+/**
+ * The layer's node material for one quality tier, static or interpolating
+ * (built once each). An interpolating material needs a geometry whose target
+ * endpoints are their own buffers (see tsl/bondImpostorMaterial.ts). A new
+ * material inherits the transparency of the ones already built.
+ */
+export function bondMaterialForTier(
+  resources: BondImpostorResources,
+  tier: AtomQualityTier,
+  interpolate = false,
+): MeshBasicNodeMaterial {
+  const key = `${tier}${interpolate ? ':lerp' : ''}`;
+  let material = resources.materials.get(key);
+  if (!material) {
+    const transparent = resources.materials.values().next().value?.transparent ?? false;
+    material = createBondImpostorMaterial({
+      tier,
+      interpolate,
+      uniforms: resources.uniforms,
+      lights: resources.lights,
+      env: resources.env,
+    });
+    material.transparent = transparent;
+    resources.materials.set(key, material);
+  }
+  return material;
+}
+
+/** Release every tier's material. The scene environment belongs to others. */
+export function disposeBondImpostorResources(resources: BondImpostorResources): void {
+  for (const material of resources.materials.values()) material.dispose();
 }
 
 interface BondsProps {
@@ -723,21 +779,23 @@ export function Bonds({
     startAttr.setUsage(THREE.DynamicDrawUsage);
     const endAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
     endAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instanceStart', startAttr);
-    geo.setAttribute('instanceEnd', endAttr);
-    // Static frames alias the interpolation targets; trajectories allocate
-    // their own target buffers on first use (see ensureTargetAttributes).
-    geo.setAttribute('instanceStartTarget', startAttr);
-    geo.setAttribute('instanceEndTarget', endAttr);
+    geo.setAttribute(BOND_ATTR.start, startAttr);
+    geo.setAttribute(BOND_ATTR.end, endAttr);
+    // Static frames alias the interpolation targets (the static program never
+    // reads them); trajectories allocate their own target buffers on first
+    // use (see ensureTargetAttributes).
+    geo.setAttribute(BOND_ATTR.startTarget, startAttr);
+    geo.setAttribute(BOND_ATTR.endTarget, endAttr);
     const radiusAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
     radiusAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instanceRadius', radiusAttr);
-    const colorStart = new THREE.InstancedBufferAttribute(new Uint8Array(capacity * 3), 3, true);
+    geo.setAttribute(BOND_ATTR.radius, radiusAttr);
+    // Display-sRGB endpoint colours, one normalized Uint8×4 word each (D4).
+    const colorStart = new THREE.InstancedBufferAttribute(new Uint8Array(capacity * BOND_COLOR_STRIDE), BOND_COLOR_STRIDE, true);
     colorStart.setUsage(THREE.DynamicDrawUsage);
-    const colorEnd = new THREE.InstancedBufferAttribute(new Uint8Array(capacity * 3), 3, true);
+    const colorEnd = new THREE.InstancedBufferAttribute(new Uint8Array(capacity * BOND_COLOR_STRIDE), BOND_COLOR_STRIDE, true);
     colorEnd.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instanceColorStart', colorStart);
-    geo.setAttribute('instanceColorEnd', colorEnd);
+    geo.setAttribute(BOND_ATTR.colorStart, colorStart);
+    geo.setAttribute(BOND_ATTR.colorEnd, colorEnd);
     geo.instanceCount = 0;
     // Bonds live inside the atom cloud; the atom mesh already frustum-culls
     // the same volume, so fail open here.
@@ -746,135 +804,88 @@ export function Bonds({
   }, [capacity]);
 
   const ensureTargetAttributes = useCallback((geo: THREE.InstancedBufferGeometry) => {
-    const startAttr = geo.attributes.instanceStart as THREE.InstancedBufferAttribute;
-    const endAttr = geo.attributes.instanceEnd as THREE.InstancedBufferAttribute;
-    let startTarget = geo.attributes.instanceStartTarget as THREE.InstancedBufferAttribute;
-    let endTarget = geo.attributes.instanceEndTarget as THREE.InstancedBufferAttribute;
+    const startAttr = geo.attributes[BOND_ATTR.start] as THREE.InstancedBufferAttribute;
+    const endAttr = geo.attributes[BOND_ATTR.end] as THREE.InstancedBufferAttribute;
+    let startTarget = geo.attributes[BOND_ATTR.startTarget] as THREE.InstancedBufferAttribute;
+    let endTarget = geo.attributes[BOND_ATTR.endTarget] as THREE.InstancedBufferAttribute;
     if (startTarget === startAttr) {
       startTarget = new THREE.InstancedBufferAttribute(new Float32Array(startAttr.array.length), 3);
       startTarget.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('instanceStartTarget', startTarget);
+      geo.setAttribute(BOND_ATTR.startTarget, startTarget);
     }
     if (endTarget === endAttr) {
       endTarget = new THREE.InstancedBufferAttribute(new Float32Array(endAttr.array.length), 3);
       endTarget.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('instanceEndTarget', endTarget);
+      geo.setAttribute(BOND_ATTR.endTarget, endTarget);
     }
     return { startTarget, endTarget };
   }, []);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
-  // ─── Material ──────────────────────────────────────────────────────
-  const { renderer, scene } = useThree();
-  const material = useMemo(() => new THREE.RawShaderMaterial({
-    vertexShader: BOND_IMPOSTOR_VERTEX,
-    fragmentShader: BOND_IMPOSTOR_FRAGMENT,
-    glslVersion: THREE.GLSL3,
-    defines: { ...materialCubeUvDefines(EMPTY_CUBE_UV_DEFINES), LUPI_QUALITY: '2' },
-    uniforms: {
-      uProgress: { value: 0 },
-      uPixelScale: { value: 1 },
-      uOrthographic: { value: 0 },
-      uCullPixelRadius: { value: 0 },
-      uBondFadeStart: { value: 60.0 },
-      uBondFadeEnd: { value: 200.0 },
-      uMetalness: { value: 0.35 },
-      uRoughness: { value: 0.45 },
-      uSurfaceRoughness: { value: 0 },
-      uSurfacePolish: { value: 0 },
-      uSurfaceClearcoat: { value: 0 },
-      uOpacity: { value: 1 },
-      uLightDir: { value: new THREE.Vector3(0.4, 0.7, 0.6) },
-      uFillLightDir: { value: new THREE.Vector3(-0.3, -0.2, 0.8) },
-      uRimLightDir: { value: new THREE.Vector3(0, 0, -1) },
-      uViewUp: { value: new THREE.Vector3(0, 1, 0) },
-      uFillLightColor: { value: new THREE.Color('#5577ff') },
-      uRimLightColor: { value: new THREE.Color('#ff7755') },
-      uRimLight: { value: 0.3 },
-      tEnvMap: { value: null as THREE.Texture | null },
-      uEnvIntensity: { value: 1 },
-      uHasEnv: { value: 0 },
-      uOutputSrgb: { value: 1 },
-    },
-    depthWrite: true,
-    depthTest: true,
-    transparent: false,
-    side: THREE.FrontSide,
-  }), []);
-  useEffect(() => () => material.dispose(), [material]);
-
+  // ─── Material: node material per quality tier ─────────────────────
+  // The uniform bag, lights and environment binding are shared by the tiers,
+  // so a tier switch swaps only the (cached) material. An interpolating frame
+  // pair uses the lerping program; the endpoint upload below gives its
+  // geometry separate target buffers in the same commit.
+  const scene = useThree((state) => state.scene);
+  const uniformsJobId = `${LUPI_JOB.bondsUniforms}:${useId()}`;
+  const resources = useMemo(() => createBondImpostorResources(), []);
   const effectiveQualityTier = resolveAtomQualityTier(qualityTier, frame.natoms);
-  const conservativeDepth = useMemo(() => rendererSupportsConservativeDepth(renderer), [renderer]);
-  useLayoutEffect(() => {
-    syncAtomShaderDefines(material, effectiveQualityTier, conservativeDepth);
-  }, [material, effectiveQualityTier, conservativeDepth]);
+  const material = useMemo(
+    () => bondMaterialForTier(resources, effectiveQualityTier, canInterpolateToNextFrame),
+    [resources, effectiveQualityTier, canInterpolateToNextFrame],
+  );
+  useEffect(() => () => disposeBondImpostorResources(resources), [resources]);
 
+  // Look uniforms and transparency, applied in the commit phase so an export
+  // capture scheduled by the same store update sees them.
   useLayoutEffect(() => {
-    const u = material.uniforms;
+    const u = resources.uniforms;
+    const lights = resources.lights;
     const params = bondMaterialParams(materialPreset);
     u.uMetalness.value = params.metalness;
     u.uRoughness.value = params.roughness;
-    u.uEnvIntensity.value = params.envIntensity;
+    resources.env.intensity.value = params.envIntensity;
     u.uSurfaceRoughness.value = surfaceRoughness;
     u.uSurfacePolish.value = surfacePolish;
     u.uSurfaceClearcoat.value = surfaceClearcoat;
-    u.uFillLightColor.value.set(fillLightColor);
-    u.uRimLightColor.value.set(rimLightColor);
-    u.uRimLight.value = rimLightIntensity;
+    lights.fillLightColor.value.set(fillLightColor);
+    lights.rimLightColor.value.set(rimLightColor);
+    lights.rimLight.value = rimLightIntensity;
     u.uOpacity.value = Math.max(0, Math.min(1, opacity));
     u.uCullPixelRadius.value = Number.isFinite(cullPixelRadius) ? Math.max(0, cullPixelRadius) : 0;
     const wantsTransparent = opacity < 1;
-    if (material.transparent !== wantsTransparent) {
-      material.transparent = wantsTransparent;
-      material.needsUpdate = true;
+    for (const tierMaterial of resources.materials.values()) {
+      if (tierMaterial.transparent !== wantsTransparent) {
+        tierMaterial.transparent = wantsTransparent;
+        tierMaterial.needsUpdate = true;
+      }
     }
-  }, [material, materialPreset, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, rimLightIntensity, opacity, cullPixelRadius]);
+  }, [resources, material, materialPreset, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, rimLightIntensity, opacity, cullPixelRadius]);
 
-  const lightWorldDirs = useMemo(() => {
-    const dir = (azDeg: number, elDeg: number) => {
-      const az = (azDeg * Math.PI) / 180;
-      const el = (elDeg * Math.PI) / 180;
-      return new THREE.Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).normalize();
-    };
-    return {
-      key: dir(keyLightAzimuth, keyLightElevation),
-      fill: dir(fillLightAzimuth, fillLightElevation),
-      rim: dir(rimLightAzimuth, rimLightElevation),
-      up: new THREE.Vector3(0, 1, 0),
-    };
-  }, [keyLightAzimuth, keyLightElevation, fillLightAzimuth, fillLightElevation, rimLightAzimuth, rimLightElevation]);
-  const lightScratch = useMemo(() => new THREE.Vector3(), []);
-  const drawingBufferScratch = useMemo(() => new THREE.Vector2(), []);
+  // Lights: world-space directions; the node graph converts them to view
+  // space with whichever camera renders.
+  useLayoutEffect(() => {
+    const lights = resources.lights;
+    lights.lightDir.value.copy(lightDirection(keyLightAzimuth, keyLightElevation));
+    lights.fillLightDir.value.copy(lightDirection(fillLightAzimuth, fillLightElevation));
+    lights.rimLightDir.value.copy(lightDirection(rimLightAzimuth, rimLightElevation));
+  }, [resources, keyLightAzimuth, keyLightElevation, fillLightAzimuth, fillLightElevation, rimLightAzimuth, rimLightElevation]);
 
-  useFrame(({ camera }) => {
-    const u = material.uniforms;
-    syncCubeUvEnvironment(material, (scene as { environment?: THREE.Texture | null }).environment ?? null);
-    const inv = camera.matrixWorldInverse;
-    u.uLightDir.value.copy(lightScratch.copy(lightWorldDirs.key).transformDirection(inv));
-    u.uFillLightDir.value.copy(lightScratch.copy(lightWorldDirs.fill).transformDirection(inv));
-    u.uRimLightDir.value.copy(lightScratch.copy(lightWorldDirs.rim).transformDirection(inv));
-    u.uViewUp.value.copy(lightScratch.copy(lightWorldDirs.up).transformDirection(inv));
+  // ─── Per-frame uniforms (phase lupi-uniforms) ─────────────────────
+  useFrame(() => {
+    syncLupiEnvBinding(resources.env, scene);
+    // Same progress as AtomsOptimized, so bond ends stay inside their atoms
+    // while a trajectory interpolates.
     const live = liveStateRef?.current;
     const prog = canInterpolateToNextFrame && live && frameIndex != null
       ? live.effectiveFrame - frameIndex
       : canInterpolateToNextFrame
         ? (interpolationFactor ?? 0)
         : 0;
-    u.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
-  });
-
-  const onBeforeRender = useCallback((drawRenderer: ImpostorDrawRenderer, _scene: THREE.Scene, camera: THREE.Camera) => {
-    syncImpostorRenderTargetUniforms(material.uniforms, drawRenderer, camera, drawingBufferScratch);
-  }, [material, drawingBufferScratch]);
-  useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    mesh.onBeforeRender = onBeforeRender as THREE.Mesh['onBeforeRender'];
-    return () => {
-      if (mesh.onBeforeRender === onBeforeRender) mesh.onBeforeRender = () => {};
-    };
-  }, [onBeforeRender]);
+    resources.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
+  }, { phase: LUPI_PHASE.uniforms, id: uniformsJobId });
 
   // ─── Property data ─────────────────────────────────────────────────
   const isPropMode = colorMode === 'property' && colorProperty;
@@ -903,16 +914,18 @@ export function Bonds({
     const lz = pbcBox ? pbcBox[5] - pbcBox[4] : 0;
     const minimumImage = periodic && !!pbcBox;
 
-    const startAttr = geometry.attributes.instanceStart as THREE.InstancedBufferAttribute;
-    const endAttr = geometry.attributes.instanceEnd as THREE.InstancedBufferAttribute;
+    const startAttr = geometry.attributes[BOND_ATTR.start] as THREE.InstancedBufferAttribute;
+    const endAttr = geometry.attributes[BOND_ATTR.end] as THREE.InstancedBufferAttribute;
     const startArr = startAttr.array as Float32Array;
     const endArr = endAttr.array as Float32Array;
     let startTargetArr: Float32Array | null = null;
     let endTargetArr: Float32Array | null = null;
     let startTarget: THREE.InstancedBufferAttribute | null = null;
     let endTarget: THREE.InstancedBufferAttribute | null = null;
-    const hasOwnTargets = geometry.attributes.instanceStartTarget !== startAttr;
-    if (nextPos || hasOwnTargets) {
+    // The lerping program (canInterpolateToNextFrame) must never draw an
+    // aliased target, even while the next frame is still short of atoms.
+    const hasOwnTargets = geometry.attributes[BOND_ATTR.startTarget] !== startAttr;
+    if (canInterpolateToNextFrame || hasOwnTargets) {
       const targets = ensureTargetAttributes(geometry);
       startTarget = targets.startTarget;
       endTarget = targets.endTarget;
@@ -1003,9 +1016,9 @@ export function Bonds({
       return;
     }
 
-    const radiusAttr = geometry.attributes.instanceRadius as THREE.InstancedBufferAttribute;
-    const colorStartAttr = geometry.attributes.instanceColorStart as THREE.InstancedBufferAttribute;
-    const colorEndAttr = geometry.attributes.instanceColorEnd as THREE.InstancedBufferAttribute;
+    const radiusAttr = geometry.attributes[BOND_ATTR.radius] as THREE.InstancedBufferAttribute;
+    const colorStartAttr = geometry.attributes[BOND_ATTR.colorStart] as THREE.InstancedBufferAttribute;
+    const colorEndAttr = geometry.attributes[BOND_ATTR.colorEnd] as THREE.InstancedBufferAttribute;
     const radiusArr = radiusAttr.array as Float32Array;
     const colorStartArr = colorStartAttr.array as Uint8Array;
     const colorEndArr = colorEndAttr.array as Uint8Array;
@@ -1061,12 +1074,6 @@ export function Bonds({
       distRange = distMax - distMin || 1;
     }
 
-    const writeColor = (target: Uint8Array, offset: number, rgb: readonly [number, number, number]) => {
-      target[offset] = Math.round(Math.max(0, Math.min(1, rgb[0])) * 255);
-      target[offset + 1] = Math.round(Math.max(0, Math.min(1, rgb[1])) * 255);
-      target[offset + 2] = Math.round(Math.max(0, Math.min(1, rgb[2])) * 255);
-    };
-
     for (let i = 0; i < drawCount; i++) {
       const a = bondPairs[i * 2];
       const b = bondPairs[i * 2 + 1];
@@ -1083,26 +1090,25 @@ export function Bonds({
       // Property mode scales the tube by the mean of both endpoints.
       radiusArr[i] = isPropMode ? radius * (0.2 + 1.8 * 0.5 * (normA + normB)) : radius;
 
-      const o = i * 3;
       if (bondColorMode === 'length' && bondDistances.length > i) {
         const rgb = mapFn((bondDistances[i] - distMin) / distRange);
-        writeColor(colorStartArr, o, rgb);
-        writeColor(colorEndArr, o, rgb);
+        writeBondColor(colorStartArr, i, rgb);
+        writeBondColor(colorEndArr, i, rgb);
       } else if (isPropMode && propData) {
-        writeColor(colorStartArr, o, mapFn(normA));
-        writeColor(colorEndArr, o, mapFn(normB));
+        writeBondColor(colorStartArr, i, mapFn(normA));
+        writeBondColor(colorEndArr, i, mapFn(normB));
       } else if (colorMode === 'uniform') {
-        writeColor(colorStartArr, o, uniformRgb);
-        writeColor(colorEndArr, o, uniformRgb);
+        writeBondColor(colorStartArr, i, uniformRgb);
+        writeBondColor(colorEndArr, i, uniformRgb);
       } else {
-        writeColor(colorStartArr, o, frame.types ? colorForType(frame.types[a]) : DEFAULT_TYPE_COLOR);
-        writeColor(colorEndArr, o, frame.types ? colorForType(frame.types[b]) : DEFAULT_TYPE_COLOR);
+        writeBondColor(colorStartArr, i, frame.types ? colorForType(frame.types[a]) : DEFAULT_TYPE_COLOR);
+        writeBondColor(colorEndArr, i, frame.types ? colorForType(frame.types[b]) : DEFAULT_TYPE_COLOR);
       }
     }
 
     markInstancedAttributeUpdateRange(radiusAttr, drawCount);
-    markInstancedAttributeUpdateRange(colorStartAttr, drawCount * 3);
-    markInstancedAttributeUpdateRange(colorEndAttr, drawCount * 3);
+    markInstancedAttributeUpdateRange(colorStartAttr, drawCount * BOND_COLOR_STRIDE);
+    markInstancedAttributeUpdateRange(colorEndAttr, drawCount * BOND_COLOR_STRIDE);
 
     lastAttrBondPairsRef.current = bondPairs;
     lastAttrGeometryRef.current = geometry;
