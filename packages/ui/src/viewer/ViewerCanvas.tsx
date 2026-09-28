@@ -4,7 +4,6 @@ import type { RenderCapability } from '../renderCapability';
 import { LupiCanvas } from './LupiCanvas';
 
 interface ViewerCanvasProps {
-  paused?: boolean;
   capability: RenderCapability;
   cameraDistance: number;
   cameraNear: number;
@@ -32,7 +31,6 @@ export function viewerDprRange(tier: DeviceTier = getDeviceTier()): [number, num
  * and its disposal all come from LupiCanvas and createLupiRenderer.
  */
 export function ViewerCanvas({
-  paused = false,
   capability,
   cameraDistance,
   cameraNear,
@@ -43,7 +41,7 @@ export function ViewerCanvas({
     <LupiCanvas
       id={VIEWER_CANVAS_ID}
       capability={capability}
-      frameloop={paused ? 'never' : 'always'}
+      frameloop="always"
       camera={{
         position: [center[0], center[1], center[2] + cameraDistance],
         fov: 50,

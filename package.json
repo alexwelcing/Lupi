@@ -101,8 +101,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@types/node": "^22.0.0",
-    "leva": "^0.10.1"
+    "@types/node": "^22.0.0"
   },
   "pnpm": {
     "overrides": {

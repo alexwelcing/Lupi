@@ -203,9 +203,6 @@ export async function createBrowserRenderArtifactPlanV1(
   if (state.anomalyTracking) {
     throw new Error('Disable anomaly camera tracking before creating a deterministic artifact.');
   }
-  if (state.arLightEstimationActive) {
-    throw new Error('Live AR light estimation cannot be assigned a deterministic browser artifact identity.');
-  }
   if (state.ghostFile) {
     throw new Error('The V1 browser artifact contract cannot export an active comparison trajectory.');
   }

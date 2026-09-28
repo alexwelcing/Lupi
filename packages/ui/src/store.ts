@@ -464,10 +464,6 @@ export interface AppState {
   dirLightIntensity: number;
   /** Rim / backlight intensity. Adds a backlit edge for depth separation. */
   rimLightIntensity: number;
-  /** Runtime-only: true while WebXR light-estimation is feeding real-world
-   *  lighting into the AR scene. Lets the static 3-point rig dim out so the
-   *  live environment dominates. Never serialized to the URL. */
-  arLightEstimationActive: boolean;
   atomTexture: 'none' | 'scratched' | 'noise';
   surfaceRoughness: number;
   surfacePolish: number;
@@ -767,7 +763,6 @@ export interface AppState {
   setFilterShellOpacity: (opacity: number) => void;
   setFilterShellRadius: (radius: number) => void;
   setEnvironmentPreset: (preset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none') => void;
-  setArLightEstimationActive: (active: boolean) => void;
   setMaterialPreset: (preset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission') => void;
   setMaterialScene: (sceneId: string) => void;
   setMaterialIntensity: (v: number) => void;
@@ -953,7 +948,6 @@ const DEFAULTS = {
   ambientLightIntensity: 0.5,
   dirLightIntensity: 1.5,
   rimLightIntensity: 0.3,
-  arLightEstimationActive: false,
   atomTexture: 'none' as const,
   surfaceRoughness: 0.0,
   surfacePolish: 0.0,
@@ -1590,7 +1584,6 @@ export const useStore = create<AppState>()(
       });
     },
 
-    setArLightEstimationActive: (arLightEstimationActive) => set({ arLightEstimationActive }),
     setAmbientLightIntensity: (ambientLightIntensity) => set({ ambientLightIntensity }),
     setDirLightIntensity: (dirLightIntensity) => set({ dirLightIntensity }),
     setRimLightIntensity: (rimLightIntensity) => set({ rimLightIntensity: Math.max(0, Math.min(2, rimLightIntensity)) }),
