@@ -109,7 +109,7 @@ test('phone touch, reduced motion, forced colors and 320px text reflow remain us
   await page.keyboard.press('Space');
   await expect(page.getByRole('button', { name: 'Undo remix' })).toBeEnabled();
   await page.getByRole('button', { name: 'Undo remix' }).click();
-  for (const button of [remix, page.getByRole('button', { name: 'All visual mods', exact: true }), page.getByRole('button', { name: 'Open GPU Studio' })]) {
+  for (const button of [remix, page.getByRole('button', { name: 'All visual mods', exact: true })]) {
     expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
   await remix.tap();

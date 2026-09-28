@@ -127,7 +127,6 @@ export function ViewerApp() {
   const [pathRoute, setPathRoute] = useState(currentPathRoute);
   const [isExportingQuickLook, setIsExportingQuickLook] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [gpuStudioOpen, setGpuStudioOpen] = useState(false);
   const [vectorStats, setVectorStats] = useState<VectorGlyphStats | null>(null);
   const [automaticLoadFailed, setAutomaticLoadFailed] = useState(false);
   const loadedSavedViewSlugRef = useRef<string | null>(null);
@@ -619,7 +618,7 @@ export function ViewerApp() {
         background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
       }}
     >
-      {!isEmbeddedMobileViewer && !gpuStudioOpen && (
+      {!isEmbeddedMobileViewer && (
         <GlobalShortcuts
           commandPaletteOpen={commandPaletteOpen}
           setCommandPaletteOpen={setCommandPaletteOpen}
@@ -630,7 +629,6 @@ export function ViewerApp() {
           <AppHeader
             isMobile={isMobile}
             clearLoadedFile={clearLoadedFile}
-            onStudioOpenChange={setGpuStudioOpen}
           />
         </div>
       )}
@@ -658,7 +656,6 @@ export function ViewerApp() {
             }
           `}</style>
             <ViewerCanvas
-              paused={gpuStudioOpen}
               capability={renderCapability}
               center={center}
               cameraDistance={cameraDistance}
