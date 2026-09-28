@@ -113,12 +113,11 @@ interface BudgetedContactShadowsProps {
 }
 
 /**
- * ContactShadows performs a full scene depth render followed by multiple blur
- * passes. Keep the authored 1024px result for small, paused molecules, reduce
- * the one-shot capture for medium scenes, and omit it once the atom layer is
- * dense enough that the extra scene pass competes with the molecule itself.
- * During playback `frames={0}` preserves the last captured texture without
- * continuously re-rendering the shadow map.
+ * The floor contact shadow is a CPU splat of the visible atoms (one blurred
+ * canvas per recompute; see LupiContactShadow). Keep the authored 1024px
+ * mask for small molecules, halve it for medium scenes, and omit it once the
+ * scene is dense enough that the splat would stall the main thread. During
+ * playback `frames={0}` keeps the last mask instead of re-splatting per frame.
  */
 const BudgetedContactShadows = memo(function BudgetedContactShadows({
   atomCount,
@@ -623,9 +622,6 @@ export function ViewerScene({
             const planeSize = Math.max(dx, dz) * 1.6;
             return (
               <BudgetedContactShadows
-                key={playing
-                  ? 'contact-shadows-playing'
-                  : `contact-shadows:${interpolatedFrameKey}:${atomScale}:${hiddenAtomTypesKey}`}
                 atomCount={currentFrame.natoms}
                 frame={interpolatedFrame ?? currentFrame}
                 hiddenAtomTypes={hiddenTypeSet}

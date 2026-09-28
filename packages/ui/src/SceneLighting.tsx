@@ -4,14 +4,18 @@
  * fill / rim lights, with a PMREM environment for image-based reflections.
  *
  * The PMREM comes from three/webgpu's PMREMGenerator, driven by the
- * WebGPURenderer (WebGPU, or its WebGL2 backend).
+ * WebGPURenderer (WebGPU, or its WebGL2 backend), and becomes
+ * `scene.environment`: a CubeUV texture that node materials read directly and
+ * that the impostor kit samples through `pmremTexture` (plan-final D13).
  */
 import { useLayoutEffect } from 'react';
-import { useEnvironment } from '@react-three/drei/webgpu';
-import { useThree } from '@react-three/fiber/webgpu';
+import { useLoader, useThree } from '@react-three/fiber/webgpu';
+import * as THREE from 'three';
 import { PMREMGenerator } from 'three/webgpu';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { useStore } from './store';
 import {
+  environmentAssetUrl,
   installSceneEnvironmentPmrem,
   resolveSceneEnvironment,
   type DreiEnvironmentPreset,
@@ -23,13 +27,17 @@ const RIG_RADIUS = 11.18;
 const DEG = Math.PI / 180;
 
 /**
- * Load the exact Drei preset asset, prefilter it explicitly for the custom atom
- * BRDF, and tag the resulting CubeUV texture with its immutable asset identity.
- * Suspense controls loading; the tag controls correctness. Export never treats
- * an untagged/old environment as capture-ready.
+ * Load the exact Drei preset asset (the pinned drei-assets HDR, through
+ * three's HDRLoader rather than drei's deprecated RGBELoader path), prefilter
+ * it explicitly for the custom atom BRDF, and tag the resulting CubeUV texture
+ * with its immutable asset identity. Suspense controls loading; the tag
+ * controls correctness. Export never treats an untagged/old environment as
+ * capture-ready.
  */
 function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
-  const source = useEnvironment({ preset });
+  const source = useLoader(HDRLoader, environmentAssetUrl(preset));
+  source.mapping = THREE.EquirectangularReflectionMapping;
+  source.colorSpace = THREE.LinearSRGBColorSpace;
   const { renderer, scene } = useThree();
   useLayoutEffect(() => installSceneEnvironmentPmrem(
     scene,

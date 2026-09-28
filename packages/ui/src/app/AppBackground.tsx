@@ -7,6 +7,7 @@ import { BG_PRESETS, getBgMedia, type BgMedia, type BgPreset } from '../backgrou
 import { useEquirectMediaTexture } from '../hooks/useEquirectMediaTexture';
 import type { BackgroundGradientStyle } from '../equirectTexture';
 import { ProceduralBackground, ProceduralMathField } from '../ProceduralBackground';
+import { createDomeMaterial, updateDomeMaterial, type DomePatternMode } from '../tsl/domeMaterial';
 import type { BackgroundBackdropPattern, BackgroundBackdropShape } from '../store';
 import {
   LUPI_EXPORT_BACKGROUND_LAYER,
@@ -45,54 +46,13 @@ export function resolveBackground(backgroundPreset: string, colormap: ColormapNa
   return { top: preset.top, bottom: preset.bottom, media: getBgMedia(preset), procedural: preset.procedural };
 }
 
-function patternMode(pattern: BackgroundBackdropPattern): number {
+function patternMode(pattern: BackgroundBackdropPattern): DomePatternMode {
   if (pattern === 'plain') return 1;
   if (pattern === 'grid') return 2;
   return 0;
 }
 
 const PANORAMA_DOME_RADIUS = 5000;
-
-const PANORAMA_VERTEX_SHADER = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const PANORAMA_FRAGMENT_SHADER = `
-  uniform sampler2D map;
-  uniform vec3 topColor;
-  uniform vec3 bottomColor;
-  uniform float opacity;
-  uniform float brightness;
-  uniform float saturation;
-  uniform float contrast;
-  uniform int patternMode;
-  varying vec2 vUv;
-
-  void main() {
-    vec4 texel = texture2D(map, vUv);
-    vec3 gradient = mix(bottomColor, topColor, smoothstep(0.0, 1.0, vUv.y));
-    vec3 color = patternMode == 0 ? texel.rgb : gradient;
-    if (patternMode == 2) {
-      vec2 cell = fract(vUv * vec2(24.0, 12.0));
-      float line = max(
-        max(1.0 - step(0.018, cell.x), step(0.982, cell.x)),
-        max(1.0 - step(0.024, cell.y), step(0.976, cell.y))
-      );
-      vec3 gridColor = mix(vec3(0.92, 0.98, 1.0), vec3(0.15, 0.86, 0.90), 0.45);
-      color = mix(color, gridColor, line * 0.42);
-    }
-    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    color = mix(vec3(luma), color, saturation);
-    color = (color - 0.5) * contrast + 0.5;
-    color *= brightness;
-    color = mix(bottomColor, color, opacity);
-    gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
-  }
-`;
 
 export function AppBackground({
   top,
@@ -232,37 +192,23 @@ function BackdropVolume({
     if (shape === 'dome') geo.scale(-1, 1, 1);
     return geo;
   }, [radius, shape]);
-  const material = useMemo(() => new THREE.ShaderMaterial({
-    uniforms: {
-      map: { value: texture },
-      topColor: { value: new THREE.Color(top) },
-      bottomColor: { value: new THREE.Color(bottom) },
-      opacity: { value: adjustments.opacity },
-      brightness: { value: adjustments.brightness },
-      saturation: { value: adjustments.saturation },
-      contrast: { value: adjustments.contrast },
-      patternMode: { value: patternMode(pattern) },
-    },
-    vertexShader: PANORAMA_VERTEX_SHADER,
-    fragmentShader: PANORAMA_FRAGMENT_SHADER,
-    side: THREE.DoubleSide,
-    transparent: false,
-    depthWrite: false,
-    depthTest: false,
-    toneMapped: false,
-    fog: false,
-  }), []);
+  const domeValues = {
+    map: texture,
+    top,
+    bottom,
+    opacity: adjustments.opacity,
+    brightness: adjustments.brightness,
+    saturation: adjustments.saturation,
+    contrast: adjustments.contrast,
+    patternMode: patternMode(pattern),
+  };
+  // Built once; every change after that is a uniform or texture swap.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const material = useMemo(() => createDomeMaterial(domeValues), []);
 
   useEffect(() => {
-    material.uniforms.map.value = texture;
-    material.uniforms.topColor.value.set(top);
-    material.uniforms.bottomColor.value.set(bottom);
-    material.uniforms.opacity.value = adjustments.opacity;
-    material.uniforms.brightness.value = adjustments.brightness;
-    material.uniforms.saturation.value = adjustments.saturation;
-    material.uniforms.contrast.value = adjustments.contrast;
-    material.uniforms.patternMode.value = patternMode(pattern);
-    material.needsUpdate = true;
+    updateDomeMaterial(material, domeValues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adjustments.brightness, adjustments.contrast, adjustments.opacity, adjustments.saturation, bottom, material, pattern, texture, top]);
 
   useEffect(() => () => {
@@ -291,11 +237,10 @@ function BackdropVolume({
     <mesh
       ref={meshRef}
       geometry={geometry}
+      material={material}
       frustumCulled={false}
       renderOrder={-1000}
       userData={{ [LUPI_EXPORT_LAYER_KEY]: LUPI_EXPORT_BACKGROUND_LAYER }}
-    >
-      <primitive object={material} attach="material" />
-    </mesh>
+    />
   );
 }
