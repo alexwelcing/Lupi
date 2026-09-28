@@ -48,7 +48,7 @@ describe('vision over Hugging Face Inference Providers', () => {
     expect((calls[0].init.headers as Record<string, string>).authorization).toBe('Bearer hf_test');
     const body = calls[0].body;
     expect(body.model).toBe(VISION_MODEL_DEFAULT);
-    expect(body.reasoning_effort).toBe('low');
+    expect(body.reasoning_effort).toBeUndefined();
     const format = body.response_format as { type: string; json_schema: { strict: boolean; schema: unknown } };
     expect(format.type).toBe('json_schema');
     expect(format.json_schema.strict).toBe(true);
@@ -62,14 +62,21 @@ describe('vision over Hugging Face Inference Providers', () => {
 
   it('asks once more without reasoning_effort when a provider rejects it', async () => {
     const { calls, fetcher } = recorder([new Response('bad param', { status: 400 }), completion('{"a":"ok"}')]);
-    await callVision({ HF_TOKEN: 'hf_test', HF_VISION_MODEL: 'some/vlm:cheapest' }, CALL, { fetcher });
+    await callVision({ HF_TOKEN: 'hf_test', HF_VISION_MODEL: 'some/vlm:cheapest', HF_VISION_REASONING: 'low' }, CALL, { fetcher });
     expect(calls).toHaveLength(2);
+    expect(calls[0].body.reasoning_effort).toBe('low');
     expect(calls[1].body.reasoning_effort).toBeUndefined();
     expect(calls[1].body.model).toBe('some/vlm:cheapest');
     expect(calls[1].body.messages).toEqual([
       { role: 'system', content: 'sys' },
       { role: 'user', content: 'what is this?' },
     ]);
+  });
+
+  it('does not retry a 400 when no reasoning_effort was sent', async () => {
+    const { calls, fetcher } = recorder([new Response('bad request', { status: 400 })]);
+    await expect(callVision({ HF_TOKEN: 'hf_test' }, CALL, { fetcher })).rejects.toMatchObject({ reason: 'http-400' });
+    expect(calls).toHaveLength(1);
   });
 
   it('maps failures to scan reasons without leaking the upstream body', async () => {
