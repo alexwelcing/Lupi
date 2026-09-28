@@ -1,7 +1,7 @@
 /** React ownership boundary for the optional WebGPU bond pipeline. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BondPipeline, initWebGPU } from '@atlas/renderer';
+import { BondPipeline, initWebGPU, isWebGPUComputeUnavailable } from '@atlas/renderer';
 import type { BondReadback } from '@atlas/renderer';
 
 const MIN_GRID_DIM = 32;
@@ -240,7 +240,9 @@ async function growPipeline(
 
 export function useBondGpuPipeline(enabled: boolean): UseBondGpuPipelineResult {
   const [ready, setReady] = useState(false);
-  const [unsupported, setUnsupported] = useState(false);
+  // A page known to have no WebGPU adapter reports unsupported from the
+  // first render, so the caller's CPU path dispatches without a GPU attempt.
+  const [unsupported, setUnsupported] = useState(() => enabled && isWebGPUComputeUnavailable());
   const stateRef = useRef<InternalState>({
     mounted: true,
     enabled: false,
@@ -276,6 +278,12 @@ export function useBondGpuPipeline(enabled: boolean): UseBondGpuPipelineResult {
     state.generation += 1;
     const generation = state.generation;
     setReady(false);
+    if (isWebGPUComputeUnavailable()) {
+      // Early exit: no adapter, so no handshake and no timeout to wait for.
+      state.initFailed = true;
+      setUnsupported(true);
+      return () => invalidateAndDestroy(state, generation);
+    }
     setUnsupported(false);
 
     void ensureInitialized(state, generation, INITIAL_MAX_ATOMS, INITIAL_MAX_BONDS).then((ok) => {
