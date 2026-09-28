@@ -442,11 +442,13 @@ try {
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   log(`target: ${targetUrl}`);
-  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // A cold Vite dev server optimizes dependencies (and may reload the page)
+  // on the first visit; SwiftShader lanes are slow to compile pipelines.
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.waitForFunction(
     () => window.__lupiViewerMcp?.ready === true,
     null,
-    { timeout: 60_000 },
+    { timeout: 180_000 },
   );
   // Wait until the viewer's WebGPURenderer has initialized, recorded its
   // backend (window.__lupiRenderer) and sized its canvas.

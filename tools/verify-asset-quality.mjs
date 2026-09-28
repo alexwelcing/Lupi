@@ -833,9 +833,10 @@ async function runLane(backend) {
       log(`${lanePrefix}[PAGE ERROR] ${err.message}`);
     });
 
-    await page.goto(report.url, { waitUntil: 'domcontentloaded' });
+    // A cold Vite dev server optimizes dependencies on the first visit.
+    await page.goto(report.url, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     log(`${lanePrefix}DOM loaded; waiting for MCP driver...`);
-    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 90_000 });
+    await page.waitForFunction(() => window.__lupiViewerMcp?.ready === true, null, { timeout: 180_000 });
     check('MCP driver ready', true);
     await page.waitForFunction(() => window.__lupiViewerMcp.status().rendererBackend != null, null, { timeout: 90_000 });
 
