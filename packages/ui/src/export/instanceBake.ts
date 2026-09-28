@@ -57,7 +57,6 @@ export function toExportSafeMaterial(
     emissive: anySrc.emissive?.clone?.() ?? new THREE.Color(0, 0, 0),
     emissiveIntensity: typeof anySrc.emissiveIntensity === 'number' ? anySrc.emissiveIntensity : 1.0,
   });
-  (mat as any).onBeforeCompile = undefined;
   return mat;
 }
 

@@ -136,9 +136,10 @@ const threeRendererImportsRule = {
 
 const lupiPlugin = { rules: { 'three-renderer-imports': threeRendererImportsRule } };
 
-// Warnings until WP10 promotes them to errors (plan §4.6, §4.7).
+// Errors since the port closed (plan §4.6, §4.7): fiber v10 frame jobs use
+// named phases, and WebGPURenderer compiles node materials only.
 const legacyRenderingPatterns = [
-  'warn',
+  'error',
   {
     selector: "CallExpression[callee.name='useFrame'][arguments.1.type=/^(Literal|UnaryExpression)$/]",
     message: 'Numeric useFrame priorities are reordered by fiber v10 and a positive one disables rendering; use { phase, id } from LUPI_PHASE/LUPI_JOB.',
