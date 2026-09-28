@@ -143,7 +143,7 @@ interface AtomsOptimizedProps {
    *  renderer lowers it further for very large atom counts. */
   qualityTier?: AtomQualityTier;
   /** Atoms whose projected radius is below this many device pixels are
-   *  culled in the vertex shader. 0 disables culling. */
+   *  culled in the vertex stage. 0 disables culling. */
   cullPixelRadius?: number;
   /** Per-atom openness (0 = fully buried, 255 = fully exposed), typically
    *  from `computeAtomOcclusion`. Null leaves every atom fully lit. */
