@@ -61,6 +61,33 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
 `LANE_ARGS.webgl2`); headless WebGPU on SwiftShader needs the whole
 `webgpu` set, or the device is lost within a few frames.
 
+### Viewer camera and play
+
+- **The Lupi camera rig replaces drei's OrbitControls in the viewer**
+  (`packages/ui/src/camera`). A drag turns 1:1, a flick coasts on the
+  molecule's inertia and clicks into a symmetry face (C60: "Pentagon face-on ·
+  5-fold axis"), a tap during a coast catches it, a tap picks an atom without
+  moving the camera, and a double-tap glides to it. `?controls=orbit` brings
+  the old OrbitControls back for this wave as an escape hatch.
+- **The store camera is written at rest.** `cameraPosition`, `cameraTarget`
+  and `cameraPreset` are written once, when the rig comes to rest, never per
+  frame. Anything else that moves the camera (MCP, CameraManager snaps, saved
+  views, flythrough, video) is adopted by the rig at once. Share URLs and
+  saved views therefore hold the settled, level pose.
+- **MCP camera tools stay instant.** `lupi.set_camera`,
+  `lupi.set_camera_preset` and `lupi.fit_camera` land on the call, with no
+  glide or coast. Only UI gestures, presets and Recenter animate.
+- **`window.__lupiPlay`** is the Play layer's handle for smoke plugins and
+  agents (installed in production, like `__lupiViewerMcp`): `state()` returns
+  `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame }`,
+  `emit(intent)` emits a Lupi intent as the UI would, `reset()` puts display
+  motion at rest, and `poke`, `flick`, `catch`, `scatter` and `stepDetent`
+  appear once the viewer has registered them. It never writes molecule data.
+- **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
+  half-strength display motion) or Still (nothing moves on its own; glides
+  cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and
+  haptics are off by default.
+
 ## Quick Start
 
 1. Start the dev server, or serve a production build:
@@ -265,6 +292,11 @@ The canvas keeps its size, and the live view does not flicker.
   encoder. The canvas stores them premultiplied in 8 bits, so very low alpha
   loses colour precision. This is deterministic and recorded as
   `rasterAlphaStorage`.
+- Display motion (the arrival, the poke ripple, Scatter) is illustrative and
+  never reaches an artifact: its master weight is zeroed inside every capture
+  render and suspended for the whole of a video recording, and the camera rig
+  settles and re-levels (y-up) before any capture reads the camera. An export
+  mid-ripple has the same `artifactDigest` as one taken at rest.
 - Deterministic raster bonds fail closed until the asynchronous bond result is
   snapshot-addressable; hide bonds before raster export. Model export may use
   its synchronous CPU bond path, but fails if inferred bonds hit the cap.
@@ -416,6 +448,10 @@ pnpm run test:ui
 browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
+Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
+first-minute, flick, hero, relay, settings, tap, toys) run with the built-in
+scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
+`--reduced-motion` checks the Still comfort level.
 
 These are local/CI checks only. They do not prove a deployment, live API, or
 public-site revision; record those release-truth lanes separately.

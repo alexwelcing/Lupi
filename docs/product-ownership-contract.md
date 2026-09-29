@@ -66,7 +66,7 @@ the reset went too far and amended the public surface as follows:
 
 Inside the viewer the controls are Learn, Style, Data, Camera, Export, and
 Elements, with Path only for an explicitly opened, source-bound reaction
-trajectory.
+trajectory, and one Play pill.
 
 Research execution is not a navigation item or a learner workflow. Retired
 research-execution URLs explain the separation and offer an external handoff
