@@ -72,6 +72,11 @@ import {
  *  the spatial-hash + neighbor scan entirely. Tuned conservatively so even
  *  fast-equilibrating MD won't drop a real bond change. */
 const BOND_RECOMPUTE_DISP_THRESHOLD = 0.05;
+
+/** Headroom over the bond criterion before a lagging inferred pair is hidden. */
+const STALE_BOND_SLACK = 1.1;
+/** Covalent radius assumed for a type with no element (the detectors' fallback). */
+const STALE_BOND_UNKNOWN_RADIUS = 1.5;
 const EMPTY_BOND_PAIRS = new Int32Array(0);
 const EMPTY_BOND_DISTANCES = new Float32Array(0);
 
@@ -317,6 +322,13 @@ export function Bonds({
   const workerBusyRef = useRef<boolean>(false);
   const pendingMsgRef = useRef<{ msg: Record<string, any>, transferList: ArrayBuffer[], requestId: number } | null>(null);
   const cpuDispatchGenRef = useRef(0);
+  // Worker results are applied newest-first, not only when they match the
+  // latest request: during playback the next frame's request is usually out
+  // before the previous reply lands, and a slow main thread would otherwise
+  // drop every reply and show no bonds until playback stops. Replies from
+  // before a molecule, parameter or visibility change stay rejected.
+  const cpuAcceptFromRef = useRef(1);
+  const cpuAppliedRef = useRef(0);
 
   // Auto-force GPU for big systems regardless of the user's toggle: at
   // hundreds of thousands of atoms the CPU worker is unusable (60+ seconds
@@ -393,8 +405,11 @@ export function Bonds({
 
     worker.onmessage = (e: MessageEvent) => {
       const { requestId, bondPairs: pairs, distances } = e.data;
-      const isFresh = typeof requestId === 'number' && requestId === cpuDispatchGenRef.current;
+      const isFresh = typeof requestId === 'number'
+        && requestId >= cpuAcceptFromRef.current
+        && requestId > cpuAppliedRef.current;
       if (isFresh) {
+        cpuAppliedRef.current = requestId;
         // pairs is Int32Array [a0,b0, a1,b1, ...]
         const nextPairs = pairs instanceof Int32Array ? pairs : pairs ? new Int32Array(pairs) : EMPTY_BOND_PAIRS;
         setBondPairs(nextPairs);
@@ -453,6 +468,7 @@ export function Bonds({
   useEffect(() => {
     if (gpuActive) {
       cpuDispatchGenRef.current += 1;
+      cpuAcceptFromRef.current = cpuDispatchGenRef.current + 1;
       pendingMsgRef.current = null;
       return; // GPU effect below owns dispatch in this mode.
     }
@@ -461,6 +477,7 @@ export function Bonds({
     // never rendered. The user explicitly toggled bonds off; respect it.
     if (!visible) {
       cpuDispatchGenRef.current += 1;
+      cpuAcceptFromRef.current = cpuDispatchGenRef.current + 1;
       pendingMsgRef.current = null;
       clearBondState();
       lastDispatchPositionsRef.current = null;
@@ -475,6 +492,7 @@ export function Bonds({
       // huge system; just leave bonds empty until the user lowers the cutoff
       // or the system. (Telemetry: gpuStatus already reads 'unsupported'.)
       cpuDispatchGenRef.current += 1;
+      cpuAcceptFromRef.current = cpuDispatchGenRef.current + 1;
       pendingMsgRef.current = null;
       clearBondState();
       lastDispatchPositionsRef.current = null;
@@ -486,6 +504,7 @@ export function Bonds({
     }
     if (!workerRef.current || !frame || frame.natoms < 2) {
       cpuDispatchGenRef.current += 1;
+      cpuAcceptFromRef.current = cpuDispatchGenRef.current + 1;
       pendingMsgRef.current = null;
       clearBondState();
       lastDispatchPositionsRef.current = null;
@@ -540,6 +559,9 @@ export function Bonds({
     const delay = isFrameChange ? 0 : 150;
     const requestId = cpuDispatchGenRef.current + 1;
     cpuDispatchGenRef.current = requestId;
+    // A playback step may show the previous frame's bonds until its own reply
+    // lands; anything else must wait for this request.
+    if (!isFrameChange || isMoleculeSwitch) cpuAcceptFromRef.current = requestId;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -914,6 +936,22 @@ export function Bonds({
     const lz = pbcBox ? pbcBox[5] - pbcBox[4] : 0;
     const minimumImage = periodic && !!pbcBox;
 
+    // Inferred pairs come from an earlier frame while a trajectory plays (the
+    // detection reply lands a frame or more later). A pair whose atoms no
+    // longer meet the bond criterion in the frame on screen collapses to
+    // nothing instead of drawing a stretched bond; the next detection
+    // catches up. Source topology is always drawn.
+    const radiusByType = topologyMode === 'infer' ? new Map<number, number>() : null;
+    const covalentRadiusOf = (type: number): number => {
+      let r = radiusByType!.get(type);
+      if (r === undefined) {
+        const atomicNumber = resolveAtomicNumber(frame, type);
+        r = atomicNumber === undefined ? STALE_BOND_UNKNOWN_RADIUS : getElementSpec(atomicNumber).radius;
+        radiusByType!.set(type, r);
+      }
+      return r;
+    };
+
     const startAttr = geometry.attributes[BOND_ATTR.start] as THREE.InstancedBufferAttribute;
     const endAttr = geometry.attributes[BOND_ATTR.end] as THREE.InstancedBufferAttribute;
     const startArr = startAttr.array as Float32Array;
@@ -945,11 +983,20 @@ export function Bonds({
         if (Math.abs(dz) > lz * 0.5) dz -= Math.sign(dz) * lz;
         bx = ax + dx; by = ay + dy; bz = az + dz;
       }
+      let stale = false;
+      if (radiusByType) {
+        const dx = bx - ax, dy = by - ay, dz = bz - az;
+        const limit = (covalentRadiusOf(frame.types[a]) + covalentRadiusOf(frame.types[b]) + tolerance) * STALE_BOND_SLACK;
+        if (dx * dx + dy * dy + dz * dz > limit * limit) {
+          stale = true;
+          bx = ax; by = ay; bz = az;
+        }
+      }
       const o = i * 3;
       startArr[o] = ax; startArr[o + 1] = ay; startArr[o + 2] = az;
       endArr[o] = bx; endArr[o + 1] = by; endArr[o + 2] = bz;
       if (startTargetArr && endTargetArr) {
-        if (nextPos) {
+        if (nextPos && !stale) {
           const nax = ax + wrapDelta(nextPos[a * 3] - ax, bsx);
           const nay = ay + wrapDelta(nextPos[a * 3 + 1] - ay, bsy);
           const naz = az + wrapDelta(nextPos[a * 3 + 2] - az, bsz);
@@ -970,7 +1017,7 @@ export function Bonds({
       markInstancedAttributeUpdateRange(startTarget, drawCount * 3);
       markInstancedAttributeUpdateRange(endTarget, drawCount * 3);
     }
-  }, [bondPairs, bondCount, capacity, geometry, frame, nextFrame, canInterpolateToNextFrame, periodic, cellBounds, ensureTargetAttributes]);
+  }, [bondPairs, bondCount, capacity, geometry, frame, nextFrame, canInterpolateToNextFrame, periodic, cellBounds, ensureTargetAttributes, topologyMode, tolerance]);
 
   // ─── Color + radius upload — runs on bond-set or scheme changes ───────
   // Bond-stability cache: a fresh Int32Array with identical contents (same
