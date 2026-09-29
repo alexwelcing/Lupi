@@ -49,6 +49,7 @@ import { DEFAULT_PROFILE, getElementProfile } from './materials';
 import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
 import { buildTypeRenderTable, typeRenderTablesEqual, type TypeRenderTable } from './typeRenderTable';
 import { LUPI_JOB, LUPI_PHASE } from './framePhases';
+import { isLupiDisplayMotionActive } from './tsl/displayMotion';
 import {
   createLupiEnvBinding,
   createLupiLightUniforms,
@@ -892,6 +893,11 @@ export function AtomsOptimized({
         ? (interpolationFactor ?? 0)
         : 0;
     resources.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
+
+    // Display motion can carry atoms outside the rest bound (the arrival
+    // cloud is 1.6× the radius): fail open while it is live.
+    const mesh = meshRef.current;
+    if (mesh) mesh.frustumCulled = !isLupiDisplayMotionActive();
   }, { phase: LUPI_PHASE.uniforms, id: uniformsJobId });
 
   // ─── Upload frame data to GPU (runs ONCE per frame change) ────────

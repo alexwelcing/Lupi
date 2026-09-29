@@ -1,0 +1,926 @@
+{
+  "schemaVersion": "lupi.render-parity-metrics.v2",
+  "fixtureId": "browser-synthetic-calibration-transparent-320-v2",
+  "backend": "webgpu",
+  "approval": {
+    "status": "candidate-unapproved",
+    "humanApproved": false,
+    "approvedBy": null,
+    "approvedAt": null,
+    "note": "Generated automatically from pinned local repeats. V2 candidates have no owner approval gate; derive again when the renderer-validity digest changes."
+  },
+  "artifact": {
+    "file": "browser-synthetic-calibration.candidate.png",
+    "sha256": "sha256:74691e5f6148f63e38d504b7c28fc60a0834ada23e6aecefa6f601a725a8edf5",
+    "artifactDigest": "sha256:74691e5f6148f63e38d504b7c28fc60a0834ada23e6aecefa6f601a725a8edf5",
+    "mimeType": "image/png",
+    "width": 320,
+    "height": 320,
+    "byteLength": 15510,
+    "stableIdentities": {
+      "contractVersion": "lupi.render-artifact-spec.v1",
+      "sourceContentDigest": "sha256:ef192db2a67fab3e3de07be2b432fb1fb5f9ed7ffe7e3a7715aa62ea1a2f8c7e",
+      "specId": "spec-sha256:97d78d172b2bd423d224f5f331c43e7bda1af66be231c886d710bf231f8295da"
+    },
+    "generationIdentities": {
+      "rendererFingerprint": "renderer-sha256:4ffabd88f79d0bb1474a42e5bf2b20193faaaf74c4e043d66657dd48cf51ad77",
+      "artifactKey": "artifact-sha256:ac875b431d69340b92ad6a242da685349ace7653e9f449565041bcbd6d843be1"
+    }
+  },
+  "rendererValidity": {
+    "scheme": "lupi.renderer-validity-digest.v2",
+    "digest": "sha256:7d20ba446beefca40d3441872c8427dc3eaeaac06ab9b6c4e821243cec81b100",
+    "input": {
+      "schemaVersion": "lupi.renderer-validity-input.v2",
+      "sourceNormalization": "utf8-lf-v1",
+      "sourceFiles": [
+        {
+          "path": "apps/web/vite.config.ts",
+          "sha256": "sha256:5c31b760e10b3c5105825f341ecf6d40beed64a5b4d78ad027f0b48cff2053f5"
+        },
+        {
+          "path": "packages/core/src/elements.ts",
+          "sha256": "sha256:e1042a4dc70694aa59e27faa51a9e01eab0840bc5a5bc60eabee42d1b000c6a5"
+        },
+        {
+          "path": "packages/core/src/renderArtifact.ts",
+          "sha256": "sha256:84c7f494d3b1fd40b7530740f7a6919b4cd58f32cb24dccc86fb0aff2b8a1d1a"
+        },
+        {
+          "path": "packages/scene/src/AnomalyTracker.tsx",
+          "sha256": "sha256:270329b6338247c2cdcb08cd7337867f69aef919c110855dd412f0b67f40dbc5"
+        },
+        {
+          "path": "packages/scene/src/AtomClusters.tsx",
+          "sha256": "sha256:7fb94a52ad6ced61b728a459bc927a39ccfc9a960f488e92065458745a5d49d7"
+        },
+        {
+          "path": "packages/scene/src/AtomPicker.tsx",
+          "sha256": "sha256:f537bc067788e6811d5903e6cfe68e72fc02f51d57ebecb0c6727821bb12e9d2"
+        },
+        {
+          "path": "packages/scene/src/AtomsOptimized.tsx",
+          "sha256": "sha256:f2facca980045fc88ca32386986e4826e965a62b0c7671e687bd10549f92ce9e"
+        },
+        {
+          "path": "packages/scene/src/Bonds.tsx",
+          "sha256": "sha256:8101e9e950322efc70379a467b2be34af50dde4c4c96890a7dfa66819568a919"
+        },
+        {
+          "path": "packages/scene/src/ClusterBuilder.ts",
+          "sha256": "sha256:80192176d8d7ce597a48d60fc0bcbb3f31624faff519e37e2fa440b02a044940"
+        },
+        {
+          "path": "packages/scene/src/SimulationCell.tsx",
+          "sha256": "sha256:941645ccad588bd75eaeb5a578d1fd2b29e3ad578f513b3398d90b6fcf77ffb0"
+        },
+        {
+          "path": "packages/scene/src/SpatialHash.ts",
+          "sha256": "sha256:0ae647148a778a46ab2d0d62b7579f73f2a28e880d05aa2478a56d4614cf9f79"
+        },
+        {
+          "path": "packages/scene/src/VectorGlyphs.tsx",
+          "sha256": "sha256:b2e70789fce07d258412f46d975d5fc3ca789aa09eddaf4edd36f1520108b535"
+        },
+        {
+          "path": "packages/scene/src/bondDetectCpu.ts",
+          "sha256": "sha256:bbf446d37ec4c16a992b4ece4c6ec6d469a0e0a53421aab72159d8160de93556"
+        },
+        {
+          "path": "packages/scene/src/bondReference.ts",
+          "sha256": "sha256:25ffce767d21ab6c0c20938cdc1b63681d1e70e7b8220ebf41216b1aa31473e0"
+        },
+        {
+          "path": "packages/scene/src/bondTopology.ts",
+          "sha256": "sha256:fb4d04a72aa2210c3830e3188a97faaf750def2c6872ecd8bdbd12218e8367ea"
+        },
+        {
+          "path": "packages/scene/src/bondWorker.ts",
+          "sha256": "sha256:0858e0dda2075791fb667eb4d86e56fc25548f59a293931995378c1aedd2191a"
+        },
+        {
+          "path": "packages/scene/src/constants.ts",
+          "sha256": "sha256:529b22d5f0a8cdde70eb3c3ce13f66d4b2c68a4a3469279e4d0fa8cd6650df92"
+        },
+        {
+          "path": "packages/scene/src/framePhases.ts",
+          "sha256": "sha256:2511bde2e658315f87b377fa4784479952ce9a4628815fd52560c951a491302f"
+        },
+        {
+          "path": "packages/scene/src/index.ts",
+          "sha256": "sha256:097ca6b3b6e93903d45dbb4023c7a96b2abf28829876d524a45fa407c1565d7b"
+        },
+        {
+          "path": "packages/scene/src/interpolation.ts",
+          "sha256": "sha256:72a31872c79a25773e7967dee873aecbefd55b27b8a261382507f702f1525415"
+        },
+        {
+          "path": "packages/scene/src/materials/ElementProfile.ts",
+          "sha256": "sha256:b597c27c9d5539eb87481de655ff93dbcef19a19fe11694f731726cd2b29a9aa"
+        },
+        {
+          "path": "packages/scene/src/materials/categoryProfiles.ts",
+          "sha256": "sha256:85969b2fc466d7defe9abb90a075e9347fb6aae57997266f2407bfb4221a9f6a"
+        },
+        {
+          "path": "packages/scene/src/materials/elementProfiles.ts",
+          "sha256": "sha256:07f6b1ca0bfc30ea61e0ce391006bfb80b65a2092938a742d844a891d332d496"
+        },
+        {
+          "path": "packages/scene/src/materials/index.ts",
+          "sha256": "sha256:381bd219843a96a7033abfd7939395f7f5a1cb748712a493d1431d31c276f3ba"
+        },
+        {
+          "path": "packages/scene/src/materials/scenes.ts",
+          "sha256": "sha256:f806b4a26aaf4df45c3f67e927eaecbf353fce76ec5245c118aa2c0be45b88fa"
+        },
+        {
+          "path": "packages/scene/src/tsl/atomImpostorMaterial.ts",
+          "sha256": "sha256:0d88cd6ccd0bb271966ffd3ca33e37a5d71f3bcb552c8cc2f58fa24fe2c82a02"
+        },
+        {
+          "path": "packages/scene/src/tsl/billionBrickMaterial.ts",
+          "sha256": "sha256:55bdc564bf9aa7558e084c4e0aef147ce89e46139b2d65bca5f4b3ce9196f24c"
+        },
+        {
+          "path": "packages/scene/src/tsl/bondImpostorMaterial.ts",
+          "sha256": "sha256:d6f2e157300d06e281f1f1c01264879a0359080a1405839a542388a418826631"
+        },
+        {
+          "path": "packages/scene/src/tsl/clusterSplatMaterial.ts",
+          "sha256": "sha256:453366195e89bfc265334baf728b122ceca9822637e48645f84eaa0e4e983ec4"
+        },
+        {
+          "path": "packages/scene/src/tsl/displayMotion.ts",
+          "sha256": "sha256:1e34b53df7b45bce4d54791da3b8499f3b59036c325dbc11da56098a009c281f"
+        },
+        {
+          "path": "packages/scene/src/tsl/displayMotionTwin.ts",
+          "sha256": "sha256:115d04c2ef87f649777267529a3ce9dab2a03c3dc18604388af58caaa8424774"
+        },
+        {
+          "path": "packages/scene/src/tsl/impostorKit.ts",
+          "sha256": "sha256:443a9c14b2a4848e6165935550f67bfcbbcec63a708a6c657871bab420f089d3"
+        },
+        {
+          "path": "packages/scene/src/tsl/lupiUniforms.ts",
+          "sha256": "sha256:96965be26efe837e5ad9ca3edee730c93561129752b6870300bb57a3c1820e1e"
+        },
+        {
+          "path": "packages/scene/src/tsl/vectorGlyphMaterial.ts",
+          "sha256": "sha256:ed052c7aa19f16613f96b3d32d640cf002c0240db79427dabbb17d10433ade60"
+        },
+        {
+          "path": "packages/scene/src/useBondGpuPipeline.ts",
+          "sha256": "sha256:55fac3efc2791192bc57a6d89ce45160208f0f22190c0754d4184a10731b2d3c"
+        },
+        {
+          "path": "packages/scene/src/useTimer.ts",
+          "sha256": "sha256:0bf5383fb6287400d9cc00e786e738da8742a6bb8b99717b75af3717cb27d408"
+        },
+        {
+          "path": "packages/ui/src/AnnotationsLayer.tsx",
+          "sha256": "sha256:4f69a21984d1cede9db73a156aec6f84e5bbafc23952bda1cee346de26a77b39"
+        },
+        {
+          "path": "packages/ui/src/AtomInfoHUD.tsx",
+          "sha256": "sha256:48ac23584e2d3bfca1ddcb7ed12e61a81e6992557c25020ba40f050361fddf6f"
+        },
+        {
+          "path": "packages/ui/src/AtomTrails.tsx",
+          "sha256": "sha256:2ba43fac6a8f598077214dddacd4222a4205f82d5143cbf3348a38789f23fa8e"
+        },
+        {
+          "path": "packages/ui/src/CameraFocus.tsx",
+          "sha256": "sha256:d76aabd4dd98a5f73762bc97906d4664c530d4e11acea51b3365607617857680"
+        },
+        {
+          "path": "packages/ui/src/ExportManager.tsx",
+          "sha256": "sha256:2cde5d7978f5d84c839120c941b06dd20a7d2c5a1322addd821b8b25d91ed55a"
+        },
+        {
+          "path": "packages/ui/src/GhostAtoms.tsx",
+          "sha256": "sha256:5ba8d34d94cadd0528b981b7a71bc3c4fef13dcbde633436ab047d1e5402a356"
+        },
+        {
+          "path": "packages/ui/src/KnowledgeLabelsLayer.tsx",
+          "sha256": "sha256:d782f346ed0aeca7a065a4600d98fadd24c91aee04f38308a824631683538b60"
+        },
+        {
+          "path": "packages/ui/src/MoleculeFilterShell.tsx",
+          "sha256": "sha256:905689fc9f9472dcec982374d2d4aad3ac597b1aa28e37c5d7fa1be85bd84951"
+        },
+        {
+          "path": "packages/ui/src/MoleculeShadow.tsx",
+          "sha256": "sha256:c44a5dfbaa466735cce63a9e88557cdf0d6e1ec1ad432563f783dc507b929915"
+        },
+        {
+          "path": "packages/ui/src/SceneLighting.tsx",
+          "sha256": "sha256:0e446eb4bbcb8fd0792d1876397b1dcc34dc97a2307ae70f278829e396db3161"
+        },
+        {
+          "path": "packages/ui/src/SelectionMarkers.tsx",
+          "sha256": "sha256:3ae27152ba08e32270575945a69e24277931ec88d844ae8dab932ad245c157f9"
+        },
+        {
+          "path": "packages/ui/src/ViewerApp.tsx",
+          "sha256": "sha256:2cd8ff40d33d73e161a947678219bdafb02459b7ae24013c498f6d25cbad20e5"
+        },
+        {
+          "path": "packages/ui/src/app/AppBackground.tsx",
+          "sha256": "sha256:dc205848188d2deadbf79e241023c894560625dca41d0fbe0be8ea4f660e9bb5"
+        },
+        {
+          "path": "packages/ui/src/app/CameraManager.tsx",
+          "sha256": "sha256:48715f0da761336bc6ff7dfcf0152457c89baebe206f71855f95d27133d88534"
+        },
+        {
+          "path": "packages/ui/src/app/ViewerScene.tsx",
+          "sha256": "sha256:93a33aeb26618c22b87799bd64e2765d163cea29c5df1bac68fd22f0dbfcc0bb"
+        },
+        {
+          "path": "packages/ui/src/backgroundPresets.ts",
+          "sha256": "sha256:2fcedb03881c2c763d08fc12cd0c3633e8d294bfd38ac14fac91244a8da5b3d2"
+        },
+        {
+          "path": "packages/ui/src/coloring/colorSchemes.ts",
+          "sha256": "sha256:8576c1661f6e5d63ad80a1b0441432cf38af9de1b148478cee7579f5ee1fb12e"
+        },
+        {
+          "path": "packages/ui/src/coloring/index.ts",
+          "sha256": "sha256:cd681a51b0518326b1ee68da8b98408a9bfff598d74db9cd8370af532abd0605"
+        },
+        {
+          "path": "packages/ui/src/deviceCapabilities.ts",
+          "sha256": "sha256:5edd759904acd77436bebf38c90d6d792f95904a2f04b814b6c2258b636fc857"
+        },
+        {
+          "path": "packages/ui/src/equirectTexture.ts",
+          "sha256": "sha256:896f482edfbf8b303d325b681479c188c15470e7a66ad63f654f5894343ffbcc"
+        },
+        {
+          "path": "packages/ui/src/export/USDZExportPipeline.ts",
+          "sha256": "sha256:dbc6866f988abdbed9c0b6921d55d8ffc3dffdd9bb33e775d14b3b82e05650b2"
+        },
+        {
+          "path": "packages/ui/src/export/artifactByteValidation.ts",
+          "sha256": "sha256:db46832a505033546afa457576a00dcb4a6343ba32a7945ae2714ceb30c17a8d"
+        },
+        {
+          "path": "packages/ui/src/export/exportProfileV2.ts",
+          "sha256": "sha256:4e38bd0afa00ad58b30daaeb7e84d9b16be2bf6a566463393946edec1bfd94f5"
+        },
+        {
+          "path": "packages/ui/src/export/exportSceneBuilder.ts",
+          "sha256": "sha256:703e7396e820eeac33d23202f4b26e5928b2ade1a2e1fb971c0a86ffb7390a87"
+        },
+        {
+          "path": "packages/ui/src/export/instanceBake.ts",
+          "sha256": "sha256:0f0c0237ac6876b5b3484bf57c95e193e41bf6302b2d11a11600c7e77952edb9"
+        },
+        {
+          "path": "packages/ui/src/export/renderCaptureState.ts",
+          "sha256": "sha256:03aa9201f82b8739515c588fea86e047cee0c5132e50300543c3ca4488b000cd"
+        },
+        {
+          "path": "packages/ui/src/export/renderTargetReadback.ts",
+          "sha256": "sha256:3b0299316ac60c01bee96d78c816fc1727522da7fedebc95dc24e1e32e81d5d0"
+        },
+        {
+          "path": "packages/ui/src/hooks/useEquirectMediaTexture.ts",
+          "sha256": "sha256:cade2e02f9455d7e6c5da33bca1502cb101ac2eee5a8ecbc3109e72388a9deac"
+        },
+        {
+          "path": "packages/ui/src/hooks/useSmoothFramePlayback.ts",
+          "sha256": "sha256:7b9af848ecbb57a0edcc2efcc89990968e17e6b258f75a97976c99300d1ea5ff"
+        },
+        {
+          "path": "packages/ui/src/mcp/protocol.ts",
+          "sha256": "sha256:dece2cccbf7325882beabb42200090190edebd06280c58ba53cf2f4ebb19a1a9"
+        },
+        {
+          "path": "packages/ui/src/mcp/renderArtifactAdapter.ts",
+          "sha256": "sha256:668fcd04c9d7e116f42fca16d1409efdf714e7496c1f16528dea8544b1cee3bf"
+        },
+        {
+          "path": "packages/ui/src/mcp/tools.ts",
+          "sha256": "sha256:c19bb2bf982708a3c037eec244390f00f01d484c0917ead680b1679e34160226"
+        },
+        {
+          "path": "packages/ui/src/mcpViewerBridge.tsx",
+          "sha256": "sha256:3f16f2e8136ab25f03da6aaa286f87ab84658e26fd6c030fe08a64ff47e4b2ad"
+        },
+        {
+          "path": "packages/ui/src/postprocess/ScenePostprocessing.tsx",
+          "sha256": "sha256:fb4eac5ef0e598bb08aba843328cb328241aa20af7c783d4e55ec83aa37ed147"
+        },
+        {
+          "path": "packages/ui/src/postprocess/presets.ts",
+          "sha256": "sha256:4964ab351b265cbf91c780332dfcc1dd1f13099e3421dc81731122965115bb30"
+        },
+        {
+          "path": "packages/ui/src/renderArtifactSource.ts",
+          "sha256": "sha256:27fecef9a225e793556b81dd3922c852e465f632eb483cb7770da46a563fb287"
+        },
+        {
+          "path": "packages/ui/src/renderCapability.ts",
+          "sha256": "sha256:c97f257ee90b7813a2f9ae2e7d6f748560d131da46201f99b9f3b28f78ba1754"
+        },
+        {
+          "path": "packages/ui/src/sceneEnvironment.ts",
+          "sha256": "sha256:7a7481d50fda6163d9ce401f0854d54c29461d3fc81e7defb3f5e8279254b374"
+        },
+        {
+          "path": "packages/ui/src/store.ts",
+          "sha256": "sha256:b7c77d79bd3f0d4e8e013cf040af5f3646ed9af862989ffa25edfb2257f88055"
+        },
+        {
+          "path": "packages/ui/src/tsl/domeMaterial.ts",
+          "sha256": "sha256:07543e554e7c734458813532e3a3c8ae39ddf6177e6a623f045e64721e2a60d4"
+        },
+        {
+          "path": "packages/ui/src/tsl/filterShellMaterial.ts",
+          "sha256": "sha256:9584cbcd2a9d423442e5abe0b5116d12cbbd80360fd639456247e07107bacda3"
+        },
+        {
+          "path": "packages/ui/src/tsl/skyMaterial.ts",
+          "sha256": "sha256:58438c3aa04cb7991837c690416e885ad7b91b4ad071f4340522fea29cba5300"
+        },
+        {
+          "path": "packages/ui/src/viewer/LupiCanvas.tsx",
+          "sha256": "sha256:772193f5456ba51ef35ed9e79e5af5a428034cc932c982847af58984acdd1f01"
+        },
+        {
+          "path": "packages/ui/src/viewer/PresetLegacyBridge.tsx",
+          "sha256": "sha256:66cdccec5cc86cd0a6dee0326c0b822ebf8410476d1d10a3c0604396d2e19881"
+        },
+        {
+          "path": "packages/ui/src/viewer/R3FCompat.tsx",
+          "sha256": "sha256:997cb752b61b41ebe4572e5a6f673520c4c666d1d44298c2bb8141b6333e53f5"
+        },
+        {
+          "path": "packages/ui/src/viewer/ViewerCanvas.tsx",
+          "sha256": "sha256:0757936d5a6ed60788b873f2d473c100fd11e626fc24ecaedcb828e99336ca63"
+        },
+        {
+          "path": "packages/ui/src/viewer/artifactFrameSelection.ts",
+          "sha256": "sha256:6ca935c5c4d970eaeec11af4195acb134abf38cb74d252cb9dbbc9cae25f82e4"
+        },
+        {
+          "path": "packages/ui/src/viewer/createLupiRenderer.ts",
+          "sha256": "sha256:5a210cbcc3dd9f4164b7ea95314529ea9768001647b8cae304bae0103c8900ba"
+        },
+        {
+          "path": "packages/ui/src/viewer/useViewerSceneModel.ts",
+          "sha256": "sha256:22f3d10bc3fb904ab350fc25dafbc2bd19e76deb770f98b85a406e4f1d54e933"
+        },
+        {
+          "path": "packages/ui/src/viewer/webgpuCompat.ts",
+          "sha256": "sha256:0b1897ced3d7284ae319419938874f46338f8819c2c6f5a2eeb9ad90cdfec753"
+        }
+      ],
+      "dependencyVersions": {
+        "@react-three/drei": "11.0.0-alpha.7",
+        "@react-three/fiber": "10.0.0-canary.14007b4",
+        "@react-three/tsl": "10.0.0-canary.14007b4",
+        "@vitejs/plugin-react": "4.7.0",
+        "react": "19.2.4",
+        "react-dom": "19.2.4",
+        "three": "0.186.1",
+        "vite": "6.4.1",
+        "vite-plugin-top-level-await": "1.6.0",
+        "vite-plugin-wasm": "3.5.0",
+        "zustand": "5.0.11"
+      },
+      "behavior": {
+        "schemaVersion": "lupi.renderer-behavior-profile.v2",
+        "renderer": "lupi-browser-webgpu.v2",
+        "rendererVersion": "three-r186;fiber-10.0.0-canary.14007b4;bridge-2026-09-28.asset-export",
+        "executionClass": "browser-webgpu-main-thread",
+        "determinism": {
+          "pixelRatio": 1,
+          "readback": "render-target-async",
+          "renderTarget": "rgba16f-linear-premultiplied-samples0",
+          "pixelEncode": "cpu-linear-unpremultiply-srgb-oetf-round.v1",
+          "rowOrder": "top-left;destride-256;flip-webgl2",
+          "alpha": "straight",
+          "rasterAlphaStorage": "canvas2d-premultiplied-rgba8",
+          "outputColorSpace": "srgb",
+          "rendererToneMapping": "none",
+          "postprocessPipeline": "raw-scene-bypassed",
+          "opaqueBackground": "spec-gradient-scene-background",
+          "rasterEncoder": "browser-canvas-native",
+          "axesOverlay": "canvas-overlay-v1",
+          "modelEncoder": "three-exporters-r186"
+        },
+        "capability": {
+          "version": "lupi.render-capability.v1",
+          "formats": {
+            "png": {
+              "enabled": true,
+              "alphaModes": [
+                "opaque",
+                "transparent"
+              ],
+              "maxWidth": 4096,
+              "maxHeight": 4096
+            },
+            "jpeg": {
+              "enabled": true,
+              "alphaModes": [
+                "opaque"
+              ],
+              "maxWidth": 4096,
+              "maxHeight": 4096
+            },
+            "webp": {
+              "enabled": true,
+              "alphaModes": [
+                "opaque",
+                "transparent"
+              ],
+              "maxWidth": 4096,
+              "maxHeight": 4096
+            },
+            "glb": {
+              "enabled": true,
+              "alphaModes": [
+                "not-applicable"
+              ]
+            },
+            "usdz": {
+              "enabled": false,
+              "alphaModes": []
+            }
+          },
+          "layers": {
+            "background": true,
+            "atoms": true,
+            "vectorGlyphs": true,
+            "atomClusters": false,
+            "bonds": true,
+            "simulationCell": true,
+            "filterShell": true,
+            "moleculeShadow": true,
+            "contactShadows": true,
+            "ghostAtoms": false,
+            "annotations": false,
+            "knowledgeLabels": false,
+            "selectionMarkers": false,
+            "atomTrails": false,
+            "axes": true,
+            "scaleBar": false
+          }
+        }
+      },
+      "laneArguments": [
+        "--enable-unsafe-webgpu",
+        "--enable-unsafe-swiftshader",
+        "--use-webgpu-adapter=swiftshader",
+        "--use-angle=swiftshader",
+        "--use-vulkan=swiftshader",
+        "--enable-features=Vulkan"
+      ],
+      "fixtureRenderInput": {
+        "id": "browser-synthetic-calibration-transparent-320-v2",
+        "route": "#/mcp",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "deviceScaleFactor": 1
+        },
+        "renderer": {
+          "browser": "playwright-chromium",
+          "graphics": {
+            "webgpu": "WebGPURenderer, WebGPU backend on a SwiftShader adapter (Vulkan)",
+            "webgl2": "WebGPURenderer, WebGL2 backend on SwiftShader (ANGLE)"
+          },
+          "laneArguments": "tools/lib/browser-lanes.mjs LANE_ARGS[<backend>]",
+          "extraLaunchArguments": [
+            "--force-device-scale-factor=1"
+          ]
+        },
+        "setup": [
+          {
+            "tool": "lupi.generate_molecule",
+            "arguments": {
+              "inputType": "xyz",
+              "input": "15\nSynthetic render-parity color and geometry calibration point set; intentionally not a chemical structure.\nC -2.40 -0.60 0.10\nN -1.80 0.90 -0.30\nO -0.80 1.65 0.40\nS 0.35 1.45 -0.60\nH 1.55 0.95 0.30\nC 2.45 -0.10 -0.20\nN 1.70 -1.20 0.50\nO 0.55 -1.65 -0.40\nH -0.80 -1.55 0.60\nC -1.85 -1.10 -0.50\nH -0.35 0.20 1.10\nO 0.80 0.20 1.00\nN 0.05 0.55 -1.20\nH 2.50 1.45 -0.90\nS -2.60 1.70 0.90",
+              "viewer": {
+                "showBonds": false,
+                "atomScale": 1.35,
+                "showCell": false,
+                "showAxes": false,
+                "cameraPreset": "iso"
+              }
+            }
+          },
+          {
+            "tool": "lupi.set_viewer",
+            "arguments": {
+              "showBonds": false,
+              "atomScale": 1.35,
+              "showCell": false,
+              "showAxes": false,
+              "colorScheme": "element",
+              "cameraPreset": "iso"
+            }
+          },
+          {
+            "tool": "lupi.set_background",
+            "arguments": {
+              "preset": "slate",
+              "motionPaused": true,
+              "opacity": 1,
+              "brightness": 1,
+              "saturation": 1,
+              "contrast": 1
+            }
+          },
+          {
+            "tool": "lupi.set_postprocess",
+            "arguments": {
+              "preset": "diagram",
+              "intensity": 0.65
+            }
+          },
+          {
+            "tool": "lupi.set_material",
+            "arguments": {
+              "preset": "matte",
+              "intensity": 0.7,
+              "texture": "none"
+            }
+          },
+          {
+            "tool": "lupi.set_lighting",
+            "arguments": {
+              "ambient": 0.7,
+              "dir": 1,
+              "rim": 0.25,
+              "keyAzimuth": 35,
+              "keyElevation": 45,
+              "rimAzimuth": -55,
+              "rimElevation": 30,
+              "fillColor": "#8aa8c8",
+              "rimColor": "#ffffff"
+            }
+          },
+          {
+            "tool": "lupi.set_camera_preset",
+            "arguments": {
+              "preset": "iso"
+            }
+          },
+          {
+            "tool": "lupi.fit_camera",
+            "arguments": {}
+          }
+        ],
+        "export": {
+          "tool": "lupi.export_asset",
+          "arguments": {
+            "format": "png",
+            "width": 320,
+            "height": 320,
+            "transparent": true,
+            "fitCamera": true,
+            "atomScale": 1.35,
+            "maxInlineBytes": 8388608,
+            "baseName": "render-parity-synthetic-calibration"
+          },
+          "baseName": "render-parity-synthetic-calibration-v2"
+        },
+        "expectedAtomCount": 15
+      }
+    },
+    "note": "Build identity and runtime identity are excluded. Runtime is pinned independently; generation fingerprint remains provenance only."
+  },
+  "expectedMetrics": {
+    "coverage": 0.0384570313,
+    "transparentFraction": 0.9615429688,
+    "opaqueFraction": 0.0384570313,
+    "alphaMean": 0.0384570313,
+    "bboxLeft": 0.3,
+    "bboxTop": 0.35625,
+    "bboxWidth": 0.371875,
+    "bboxHeight": 0.2625,
+    "centroidX": 0.4824069959,
+    "centroidY": 0.4774973019,
+    "meanRed": 0.6134904749,
+    "meanGreen": 0.5230872644,
+    "meanBlue": 0.4438861172,
+    "meanLuminance": 0.5365886641,
+    "paletteRed": 0.1693753174,
+    "paletteBlue": 0.1589639411,
+    "paletteNeutral": 0.3900457085
+  },
+  "tolerances": {
+    "rule": "Each tolerance is min(hard defect-detection cap, 2 * observed local repeat spread).",
+    "metrics": {
+      "coverage": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.025,
+        "multiplier": 2
+      },
+      "transparentFraction": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.025,
+        "multiplier": 2
+      },
+      "opaqueFraction": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.025,
+        "multiplier": 2
+      },
+      "alphaMean": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.02,
+        "multiplier": 2
+      },
+      "bboxLeft": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.015,
+        "multiplier": 2
+      },
+      "bboxTop": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.015,
+        "multiplier": 2
+      },
+      "bboxWidth": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.02,
+        "multiplier": 2
+      },
+      "bboxHeight": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.02,
+        "multiplier": 2
+      },
+      "centroidX": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.012,
+        "multiplier": 2
+      },
+      "centroidY": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.012,
+        "multiplier": 2
+      },
+      "meanRed": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.035,
+        "multiplier": 2
+      },
+      "meanGreen": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.035,
+        "multiplier": 2
+      },
+      "meanBlue": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.035,
+        "multiplier": 2
+      },
+      "meanLuminance": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.025,
+        "multiplier": 2
+      },
+      "paletteRed": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.035,
+        "multiplier": 2
+      },
+      "paletteBlue": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.035,
+        "multiplier": 2
+      },
+      "paletteNeutral": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.035,
+        "multiplier": 2
+      }
+    },
+    "comparison": {
+      "pixelRmse": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.025,
+        "multiplier": 2
+      },
+      "changedPixelRatio": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.06,
+        "multiplier": 2
+      },
+      "alphaMae": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.012,
+        "multiplier": 2
+      },
+      "silhouetteError": {
+        "value": 0,
+        "observedSpread": 0,
+        "observedMaxDeviation": 0,
+        "hardCap": 0.025,
+        "multiplier": 2
+      }
+    }
+  },
+  "derivation": {
+    "generatedAt": "2026-09-29T11:26:45.052Z",
+    "repeatCount": 10,
+    "medoidRepeat": 1,
+    "uniqueByteDigests": [
+      "sha256:74691e5f6148f63e38d504b7c28fc60a0834ada23e6aecefa6f601a725a8edf5"
+    ],
+    "observedMetricRanges": {
+      "coverage": [
+        0.0384570313,
+        0.0384570313
+      ],
+      "transparentFraction": [
+        0.9615429688,
+        0.9615429688
+      ],
+      "opaqueFraction": [
+        0.0384570313,
+        0.0384570313
+      ],
+      "alphaMean": [
+        0.0384570313,
+        0.0384570313
+      ],
+      "bboxLeft": [
+        0.3,
+        0.3
+      ],
+      "bboxTop": [
+        0.35625,
+        0.35625
+      ],
+      "bboxWidth": [
+        0.371875,
+        0.371875
+      ],
+      "bboxHeight": [
+        0.2625,
+        0.2625
+      ],
+      "centroidX": [
+        0.4824069959,
+        0.4824069959
+      ],
+      "centroidY": [
+        0.4774973019,
+        0.4774973019
+      ],
+      "meanRed": [
+        0.6134904749,
+        0.6134904749
+      ],
+      "meanGreen": [
+        0.5230872644,
+        0.5230872644
+      ],
+      "meanBlue": [
+        0.4438861172,
+        0.4438861172
+      ],
+      "meanLuminance": [
+        0.5365886641,
+        0.5365886641
+      ],
+      "paletteRed": [
+        0.1693753174,
+        0.1693753174
+      ],
+      "paletteBlue": [
+        0.1589639411,
+        0.1589639411
+      ],
+      "paletteNeutral": [
+        0.3900457085,
+        0.3900457085
+      ]
+    },
+    "observedComparisonRanges": {
+      "pixelRmse": [
+        0,
+        0
+      ],
+      "changedPixelRatio": [
+        0,
+        0
+      ],
+      "alphaMae": [
+        0,
+        0
+      ],
+      "silhouetteError": [
+        0,
+        0
+      ]
+    },
+    "environment": {
+      "backend": "webgpu",
+      "renderer": "WebGPURenderer, WebGPU backend on a SwiftShader adapter (Vulkan)",
+      "browser": "Playwright Chromium from the repository lockfile",
+      "browserVersion": "141.0.7390.37",
+      "graphics": {
+        "available": true,
+        "viewerCanvasBound": true,
+        "backend": "webgpu",
+        "forced": false,
+        "samples": 0,
+        "three": "186",
+        "identity": {
+          "adapter": {
+            "vendor": "google",
+            "architecture": "swiftshader",
+            "device": "",
+            "description": ""
+          },
+          "preferredCanvasFormat": "bgra8unorm",
+          "compatibilityMode": false
+        },
+        "drawingBufferWidth": 1280,
+        "drawingBufferHeight": 800,
+        "canvasClientWidth": 1280,
+        "canvasClientHeight": 800,
+        "devicePixelRatio": 1
+      },
+      "launchArguments": [
+        "--enable-unsafe-webgpu",
+        "--enable-unsafe-swiftshader",
+        "--use-webgpu-adapter=swiftshader",
+        "--use-angle=swiftshader",
+        "--use-vulkan=swiftshader",
+        "--enable-features=Vulkan",
+        "--force-device-scale-factor=1"
+      ],
+      "deviceScaleFactor": 1
+    },
+    "authority": {
+      "status": "dirty-worktree-mechanics-only",
+      "reason": "mechanics evidence only; CI is not true; worktree dirty; injected SHA matches HEAD",
+      "injectedBuildSha": "659e8da98e68e54297a4b2b9fff7d4a880e3a5ef",
+      "repositoryHeadSha": "659e8da98e68e54297a4b2b9fff7d4a880e3a5ef",
+      "worktreeClean": false,
+      "ci": false,
+      "cleanExactShaCiDerivation": "PENDING"
+    }
+  },
+  "sensitivityRequirements": {
+    "missingAtoms": "must be rejected",
+    "wrongPalette": "must be rejected",
+    "opaqueBackground": "must be rejected"
+  },
+  "edge": {
+    "schemaConformanceFixture": "edge-opaque-atoms.request.json",
+    "artifactParity": "NOT_CHECKED",
+    "note": "The edge seam validates requests but has no activated artifact-producing renderer."
+  }
+}
