@@ -220,8 +220,12 @@ export default {
     const mist = mistFrames.map((f) => fraction(h, f.image, rest.image));
     const t0 = armed?.t ?? presented[0]?.at ?? 0;
     // The driver lands it on the first frame whose motion clock passes 0.6 s;
-    // the recorder sees that one frame later.
+    // the recorder sees that one frame later. It can also see the release one
+    // frame late (the release runs on the first-frame mark, in the slowest
+    // frames), so the clock may already be one frame on: `early`.
     const due = released ? clockReaches(ticks, released.t, 0.6) : null;
+    const releaseTick = released ? (ticks.filter((tick) => tick < released.t).at(-1) ?? released.t) : null;
+    const early = released ? clockReaches(ticks, releaseTick, 0.6) : null;
     const tickGap = (t) => {
       const i = ticks.findIndex((tick) => tick >= t);
       return i > 0 ? ticks[i] - ticks[i - 1] : 0;
@@ -241,7 +245,7 @@ export default {
     check('the arrival is armed before the first frame', Boolean(armed) && armed.firstFrame === false, JSON.stringify(armed));
     check(
       'the arrival lands when its 0.6 s motion clock runs out',
-      due != null && landed != null && landed.t >= due && lateTicks <= 1,
+      due != null && early != null && landed != null && landed.t >= early && lateTicks <= 1,
       `landed ${landed && released ? Math.round(landed.t - released.t) : '?'} ms after release (wall), due ${due && released ? Math.round(due - released.t) : '?'} ms, ${lateTicks} late tick(s)`,
     );
     check('the screen shows the mist while the arrival is live', mist.some((d) => d > 0.01), `${mistFrames.length} presented frame(s) while live, max change ${h.pct(Math.max(0, ...mist))} vs the landed image`);
