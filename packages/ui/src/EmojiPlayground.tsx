@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { isClickSoundEnabled } from './lib/clickSound';
 
 // ─── Studio-Quality Spring Physics Hook ───────────────────────────────
 function useStudioSpring(targetValue: number, tension = 220, friction = 14) {
@@ -42,13 +43,21 @@ function useStudioSpring(targetValue: number, tension = 220, friction = 14) {
 }
 
 // ─── Advanced Physical Modeling Audio Synthesizer ─────────────────────
+// Silent unless the visitor turned Sound on in the viewer's Settings (the
+// shared `lupi.clickSound` preference): no route makes a sound by default.
+// One lazily created context, reused: a context per click runs into the
+// browser's cap on live AudioContexts.
+let sharedAudioContext: AudioContext | null = null;
+
 const playPhysicalSound = (type: 'leica_click' | 'relay_clank' | 'plasma_crackle' | 'needle_scrape') => {
+  if (!isClickSoundEnabled()) return;
   if (typeof window === 'undefined') return;
   const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContext) return;
 
   try {
-    const ctx = new AudioContext();
+    const ctx = sharedAudioContext ?? (sharedAudioContext = new AudioContext());
+    if (ctx.state === 'suspended') void ctx.resume();
     const now = ctx.currentTime;
 
     if (type === 'leica_click') {
