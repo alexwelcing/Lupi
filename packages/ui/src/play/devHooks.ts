@@ -3,7 +3,10 @@
  * plugins and agents (installed in production too, like __lupiViewerMcp).
  *
  *   __lupiPlay.state()  → { verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame }
- *   __lupiPlay.reset()  → emits play.reset
+ *   __lupiPlay.reset()  → emits play.reset (a registered 'reset' hook replaces this default)
+ *   __lupiPlay.emit(intent) → emits any intent, exactly as the UI would (lets a
+ *                         smoke plugin drive Scatter, Spin or a stroke before
+ *                         the pill that emits it exists)
  *   __lupiPlay.poke/flick/catch/scatter/stepDetent(...) once their owner registers them
  *
  * It only reads state and triggers the same intents as the UI; it never
@@ -11,14 +14,22 @@
  *
  * Contract file: additive edits only.
  */
-import { emitIntent } from '@atlas/scene';
+import { emitIntent, type LupiIntent } from '@atlas/scene';
 import { useStore } from '../store';
 import { getComfort, type Comfort } from '../motion/comfort';
 import { getCameraRig, type Vec3 } from '../camera/rigApi';
 import { hasFirstFrame } from '../relay/firstFrame';
 import { playStore, type PlayVerb } from './playStore';
 
-export type PlayDevHookName = 'rig' | 'motion' | 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent';
+export type PlayDevHookName =
+  | 'rig'
+  | 'motion'
+  | 'poke'
+  | 'flick'
+  | 'catch'
+  | 'scatter'
+  | 'stepDetent'
+  | 'reset';
 
 export interface PlayRigState {
   position: Vec3;
@@ -48,6 +59,7 @@ type DevHook = (...args: any[]) => any;
 export interface LupiPlayDevApi {
   state(): LupiPlayState;
   reset(): void;
+  emit(intent: LupiIntent): void;
   poke?: DevHook;
   flick?: DevHook;
   catch?: DevHook;
@@ -107,6 +119,8 @@ export function readPlayState(): LupiPlayState {
   };
 }
 
+const defaultReset = (): void => emitIntent({ type: 'play.reset' });
+
 function syncExposedHooks(): void {
   if (!api) return;
   for (const name of EXPOSED) {
@@ -114,6 +128,7 @@ function syncExposedHooks(): void {
     if (hook) api[name] = hook;
     else delete api[name];
   }
+  api.reset = hooks.get('reset') ?? defaultReset;
 }
 
 /** Install `window.__lupiPlay` (ref-counted); returns the uninstall. */
@@ -123,7 +138,8 @@ export function installPlayDevHooks(): () => void {
   if (installs === 1) {
     api = {
       state: readPlayState,
-      reset: () => emitIntent({ type: 'play.reset' }),
+      reset: defaultReset,
+      emit: (intent: LupiIntent) => emitIntent(intent),
     };
     syncExposedHooks();
     window.__lupiPlay = api;
@@ -140,7 +156,7 @@ export function installPlayDevHooks(): () => void {
   };
 }
 
-/** Register a named hook (`rig` and `motion` feed state(); the rest are exposed as methods). */
+/** Register a named hook (`rig` and `motion` feed state(); `reset` replaces the default; the rest are exposed as methods). */
 export function registerPlayDevHook(name: PlayDevHookName, fn: DevHook): () => void {
   hooks.set(name, fn);
   syncExposedHooks();
