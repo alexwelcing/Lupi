@@ -180,7 +180,12 @@ export default {
     const flick = await waitForFace(page, thrown);
     outcome.data.flick = flick;
     await save('coast', frames[1]);
-    check('a flick coasts, then clicks onto a face', flick.states.some((s) => /:coast/.test(s)) && flick.landed !== null && flick.ms <= 3_000, flick.states.join(' '));
+    if (options.reducedMotion) {
+      // Reduced motion is the Still comfort level: no coast, no spring, straight to the face.
+      check('under reduced motion a flick cuts straight to a face', flick.landed !== null && !flick.states.some((s) => /:(coast|approach|click)/.test(s)), flick.states.join(' '));
+    } else {
+      check('a flick coasts, then clicks onto a face', flick.states.some((s) => /:coast/.test(s)) && flick.landed !== null && flick.ms <= 3_000, flick.states.join(' '));
+    }
     await heroShot(page, save, 'flick-face');
 
     if (!touch) {
