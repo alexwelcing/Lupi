@@ -172,6 +172,43 @@ export class SpatialHash3D {
   }
 
   /**
+   * Visit every atom within `radius` of the point, in grid order (not sorted),
+   * without allocating: the same atoms `query` returns. For hot paths such as
+   * the picker's ray march.
+   */
+  forEachNear(x: number, y: number, z: number, radius: number, cb: (index: number, dist: number) => void): void {
+    if (this.count === 0 || !(radius > 0)) return;
+    const positions = this.positions;
+    const r2 = radius * radius;
+    const cx0 = Math.max(0, Math.floor((x - radius - this.minX) * this.invCellSize));
+    const cx1 = Math.min(this.dimX - 1, Math.floor((x + radius - this.minX) * this.invCellSize));
+    const cy0 = Math.max(0, Math.floor((y - radius - this.minY) * this.invCellSize));
+    const cy1 = Math.min(this.dimY - 1, Math.floor((y + radius - this.minY) * this.invCellSize));
+    const cz0 = Math.max(0, Math.floor((z - radius - this.minZ) * this.invCellSize));
+    const cz1 = Math.min(this.dimZ - 1, Math.floor((z + radius - this.minZ) * this.invCellSize));
+    if (cx0 > cx1 || cy0 > cy1 || cz0 > cz1) return;
+    const cellStart = this.cellStart;
+    const cellItems = this.cellItems;
+    const strideY = this.dimX;
+    const strideZ = this.dimX * this.dimY;
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cy = cy0; cy <= cy1; cy++) {
+        let cell = cx0 + cy * strideY + cz * strideZ;
+        for (let cx = cx0; cx <= cx1; cx++, cell++) {
+          for (let k = cellStart[cell], end = cellStart[cell + 1]; k < end; k++) {
+            const idx = cellItems[k];
+            const dx = positions[idx * 3] - x;
+            const dy = positions[idx * 3 + 1] - y;
+            const dz = positions[idx * 3 + 2] - z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq < r2) cb(idx, Math.sqrt(distSq));
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Find closest atom to point
    * Returns null if no atoms within maxRadius
    */
