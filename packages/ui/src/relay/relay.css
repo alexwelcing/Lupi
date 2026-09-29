@@ -154,8 +154,10 @@
 .lupi-relay__ring circle {
   fill: none;
   stroke: #d5ef9c;
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
+  /* A 1 px hairline in viewBox units (stage.ts sets it per size). Not
+     vector-effect: non-scaling-stroke, which makes Chromium lay the
+     pathLength dashes out in screen pixels and breaks the trace into dashes. */
+  stroke-width: var(--lupi-relay-hairline, 0.3);
 }
 .lupi-relay__trace {
   opacity: 0.32;

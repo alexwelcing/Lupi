@@ -184,6 +184,8 @@ function layout(relay: Relay): void {
     place(relay.stageEl, cx - size / 2, cy - size / 2, size, size);
     const ring = size * HERO_RING;
     place(relay.ring, cx - ring / 2, cy - ring / 2, ring, ring);
+    // One CSS pixel in the ring's 100-unit viewBox.
+    relay.ring.style.setProperty('--lupi-relay-hairline', (100 / Math.max(1, ring)).toFixed(4));
     below = cy + ring / 2;
   } else {
     const w = Math.min(width * PREVIEW_VW, PREVIEW_MAX_PX);

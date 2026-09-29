@@ -7,10 +7,13 @@
  *   instances; the second such rendered frame marks it (the first can still
  *   be a backend warm-up on WebGL2). Other chains (the arrival release,
  *   CameraToys' Object Facts) wait on this mark.
- * - With bonds on, the mark also waits for the bonds (they arrive a few
- *   frames after the atoms, from the bond pass), at most BOND_WAIT_FRAMES
- *   atom frames or BOND_WAIT_MS: the relay's ink cage has its bonds, so the
- *   lit cage it hands over to should too.
+ * - With bonds on, the mark also waits for the bonds (they arrive after the
+ *   atoms, from the bond worker or the GPU bond pass): at most
+ *   BOND_WAIT_FRAMES atom frames or BOND_WAIT_MS, and while the relay still
+ *   covers the page up to RELAY_BOND_WAIT_MS whatever the frame rate. The
+ *   relay's ink cage has its bonds, so the lit cage it hands over to should
+ *   too; the visitor can keep turning the drawing meanwhile. Without the
+ *   relay a long wait would only hold a plate over atoms already drawn.
  * - Fallback: 4 s after the file is set, whatever was drawn.
  *
  * The hand-off, when the visitor tapped the home page's drawing:
@@ -39,9 +42,15 @@ import { hasFirstFrame, markFirstFrame } from './firstFrame';
 
 const FIRST_FRAME_FALLBACK_MS = 4000;
 const FRAMES_TO_MARK = 2;
-/** Bonds usually land 3–5 frames after the atoms; never wait longer than this for them. */
+/** Without the relay, never wait longer than this for the bonds. */
 const BOND_WAIT_FRAMES = 10;
 const BOND_WAIT_MS = 600;
+/**
+ * Under the relay (time only: at 60 fps ten frames are 170 ms, and the bond
+ * worker's debounce alone is 150 ms). Measured on SwiftShader the bonds can
+ * take seconds; then the hand-off goes ahead without them.
+ */
+const RELAY_BOND_WAIT_MS = 1500;
 /** Rendered frames with the bonds reported, so they are really on screen. */
 const BOND_FRAMES_TO_MARK = 2;
 /** The relay's crossfade; the spin resumes once the cage is on screen. */
@@ -175,7 +184,11 @@ export function FirstFrameSignal(): null {
       if (count.frames === 1) count.since = performance.now();
       if (count.frames < FRAMES_TO_MARK) return;
       const { showBonds, lastBondCount } = useStore.getState();
-      if (showBonds && count.frames < BOND_WAIT_FRAMES && performance.now() - count.since < BOND_WAIT_MS) {
+      const waited = performance.now() - count.since;
+      const waitForBonds = isRelayActive()
+        ? waited < RELAY_BOND_WAIT_MS
+        : count.frames < BOND_WAIT_FRAMES && waited < BOND_WAIT_MS;
+      if (showBonds && waitForBonds) {
         if (lastBondCount > 0) count.bondFrames += 1;
         if (count.bondFrames < BOND_FRAMES_TO_MARK) return;
       }
