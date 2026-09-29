@@ -13,7 +13,7 @@ export type Vec3 = [number, number, number];
 export interface RelayBaton {
   galleryId: string;
   source: 'hero' | 'tile' | 'finder' | 'deeplink';
-  /** Unit view direction (camera from target) at hand-off, or null. */
+  /** Unit direction from the target to the camera, normalize(position − target), at hand-off; or null. */
   viewDir: Vec3 | null;
   /** The molecule's apparent spin about world +Y (rad/s). */
   bodyOmegaY: number;

@@ -22,10 +22,12 @@ export type LupiIntent =
   | { type: 'canvas.hoverEnd' }
   | { type: 'camera.gestureStart'; pointerType: PointerKind }
   | { type: 'camera.catch' }
+  /** The rig came to rest. `viewDir` = normalize(camera.position − target); `detentLabel` names the detent it clicked into. */
   | { type: 'camera.rest'; viewDir: Vec3; detentLabel: string | null; userMoved: boolean }
   | { type: 'camera.detentStep'; dx: -1 | 0 | 1; dy: -1 | 0 | 1 }
   | { type: 'camera.home' }
   | { type: 'camera.focusAtom'; atomIndex: number }
+  /** `factor` multiplies the camera distance (0.6 = 40 % closer), toward the point under the pointer. */
   | { type: 'camera.zoomToward'; clientX: number; clientY: number; factor: number }
   | { type: 'atom.tap'; atomIndex: number }
   | {

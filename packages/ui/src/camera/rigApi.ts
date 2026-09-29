@@ -23,13 +23,32 @@ export interface CameraPose {
 }
 
 export interface CoastModel {
+  /**
+   * Start from the release ω (world, rad/s). The molecule never moves in
+   * world, so at this moment its body frame is exactly its rest principal
+   * frame: a rigid-body model maps ω into the body frame with that fixed
+   * frame and needs no camera state.
+   */
   begin(omegaWorld: Vec3): void;
-  /** Advance by a fixed step; write the apparent body rotation increment (world) as [x,y,z,w]; return |ω| (rad/s). */
+  /**
+   * Advance by a fixed step; write the apparent body rotation increment (world) as [x,y,z,w]; return |ω| (rad/s).
+   *
+   * Composition: the rig applies each increment as
+   * `cameraQuat ← conj(dq) · cameraQuat` (the camera orbits the target by the
+   * inverse), so successive increments compose on the RIGHT of the molecule's
+   * apparent orientation (dq₁·dq₂⋯). A model that integrates body-frame
+   * increments δq (q ← q·δq from identity at begin) with principal frame P
+   * (Object Facts `principalQuat`, body → world) therefore returns
+   * dq = P·δq·P⁻¹, not the current-world increment P·q·δq·q⁻¹·P⁻¹. The two
+   * agree for a spherical top and differ for an asymmetric one. The isotropic
+   * default returns axisAngle(ω̂, |ω|·dt).
+   */
   step(dt: number, outDeltaQuat: [number, number, number, number]): number;
   stop(): void;
 }
 
 export interface Detent {
+  /** The view: unit direction from the target to the camera, normalize(position − target). */
   dir: Vec3;
   label: string;
   kind: 'ring-face' | 'plane-face' | 'plane-edge' | 'principal';
@@ -38,7 +57,13 @@ export interface Detent {
 
 export interface DetentProvider {
   readonly captureRadiusDeg: number;
+  /** `viewDir` is normalize(camera.position − target); `viewDirVelocity` is its d/dt (1/s). */
   capture(viewDir: Vec3, viewDirVelocity: Vec3 | null): Detent | null;
+  /**
+   * The adjacent detent for a `camera.detentStep`: `screenRight`/`screenUp`
+   * are the camera's world x/y axes, and (dx, dy) the intent's values
+   * (ArrowRight → dx = +1, ArrowUp → dy = +1).
+   */
   step(viewDir: Vec3, screenRight: Vec3, screenUp: Vec3, dx: number, dy: number): Detent | null;
 }
 

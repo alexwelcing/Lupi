@@ -15,7 +15,7 @@ export interface BuckyStage {
   getPose(): BuckyPose;
   /** The molecule's apparent spin about world +Y (rad/s). */
   getBodyOmegaY(): number;
-  /** Unit view direction (camera from target). */
+  /** Unit direction from the target to the camera, normalize(position − target) (the baton's `viewDir`). */
   viewDir(): Vec3;
   destroy(): void;
 }
