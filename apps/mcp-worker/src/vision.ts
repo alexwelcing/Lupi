@@ -8,11 +8,15 @@
  * under a strict JSON schema, and the router picks the provider (append
  * `:cheapest` or `:fastest` to the model id to steer it).
  *
- * The default model is a small reasoning VLM (`Qwen/Qwen3.6-35B-A3B`, 3B
- * active parameters, about $0.10 in and $0.95 out per million tokens).
- * Reasoning is kept at `low` so the answer still lands under the swirl; a
- * provider that rejects the `reasoning_effort` field is asked once more
- * without it.
+ * The default model is a small instruct VLM pinned to one provider
+ * (`Qwen/Qwen3-VL-30B-A3B-Instruct:novita`, 3B active parameters). The
+ * earlier default, the reasoning model `Qwen/Qwen3.6-35B-A3B`, ran past the
+ * 17-second deadline on every call in production, and the unpinned
+ * `:fastest` route timed out on photos. Reasoning defaults to `none`, and
+ * `none` sends no `reasoning_effort` field at all, so a non-reasoning model
+ * never costs a rejected request and a retry. Set `HF_VISION_REASONING` to
+ * `low` or higher for a reasoning model; a provider that rejects the field
+ * is asked once more without it.
  *
  * Nothing here knows what a molecule or a primitive is; `scan.ts` and
  * `gist.ts` bring the prompts and schemas and validate what comes back.
@@ -23,13 +27,14 @@ import { hfConfigured, type HfEnv } from './hf';
 export interface VisionEnv extends HfEnv {
   /** Pin a different vision model on the router, e.g. `Qwen/Qwen3-VL-235B-A22B-Instruct:cheapest`. */
   HF_VISION_MODEL?: string;
-  /** `none`, `low` (default), `medium`, or `high`: how long the model may think before answering. */
+  /** `none` (default, sends no field), `low`, `medium`, or `high`: how long a reasoning model may think before answering. */
   HF_VISION_REASONING?: string;
   /** Override the router for a gateway or a test server. */
   HF_INFERENCE_BASE?: string;
 }
 
-export const VISION_MODEL_DEFAULT = 'Qwen/Qwen3.6-35B-A3B';
+export const VISION_MODEL_DEFAULT = 'Qwen/Qwen3-VL-30B-A3B-Instruct:novita';
+export const VISION_REASONING_DEFAULT = 'none';
 export const VISION_BASE_DEFAULT = 'https://router.huggingface.co/v1';
 const REASONING_LEVELS = new Set(['none', 'low', 'medium', 'high']);
 /** The browser gives up at 20 s; this leaves room for the Jev hop and the response. */
@@ -46,8 +51,8 @@ export function visionModel(env: VisionEnv): string {
 }
 
 export function visionReasoning(env: VisionEnv): string {
-  const value = env.HF_VISION_REASONING?.trim().toLowerCase() || 'low';
-  return REASONING_LEVELS.has(value) ? value : 'low';
+  const value = env.HF_VISION_REASONING?.trim().toLowerCase() || VISION_REASONING_DEFAULT;
+  return REASONING_LEVELS.has(value) ? value : VISION_REASONING_DEFAULT;
 }
 
 /** A model failure of any kind; mapped to a status the browser treats as "no answer". */
@@ -152,7 +157,7 @@ export async function callVision(env: VisionEnv, call: VisionCall, options: { fe
     ],
     response_format: { type: 'json_schema', json_schema: { name: call.schemaName, strict: true, schema: structuredOutputSchema(call.schema) } },
   };
-  body.reasoning_effort = reasoning;
+  if (reasoning !== 'none') body.reasoning_effort = reasoning;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? VISION_TIMEOUT_MS);
@@ -166,7 +171,7 @@ export async function callVision(env: VisionEnv, call: VisionCall, options: { fe
   let response: Response;
   try {
     response = await post(body);
-    if (response.status === 400 || response.status === 422) {
+    if ('reasoning_effort' in body && (response.status === 400 || response.status === 422)) {
       // Not every provider takes `reasoning_effort`; ask once more without it.
       await response.body?.cancel().catch(() => undefined);
       const { reasoning_effort: _dropped, ...plain } = body;
