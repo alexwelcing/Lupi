@@ -285,6 +285,9 @@ function syncCaptureCamera(
   appliedCamera: ImageCaptureTransactionOptions['appliedCamera'],
 ): void {
   target.copy(live, false);
+  // Captures are always level: whatever a live toy did to `up`, the artifact
+  // camera looks at its target with world +Y up.
+  target.up.set(0, 1, 0);
   live.updateMatrixWorld();
   live.matrixWorld.decompose(target.position, target.quaternion, target.scale);
   if (target instanceof THREE.PerspectiveCamera) {

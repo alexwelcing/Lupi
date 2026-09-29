@@ -20,7 +20,7 @@
 
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber/webgpu';
-import { LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
+import { LUPI_JOB, LUPI_PHASE, beginRecording, runPrepareCapture } from '@atlas/scene';
 import { useStore, type ExportRequest } from './store';
 import {
   canInferCovalentBonds,
@@ -336,6 +336,9 @@ function ImageCaptureFrameLifecycle({
         height: captureDimension(request.resolution?.height, liveSize.height),
       };
       targetSizeRef.current = targetSize;
+      // Toys settle first (a coasting camera re-levels) so the transaction
+      // copies a resting camera.
+      runPrepareCapture();
       transactionRef.current = beginImageCaptureTransaction({
         scene,
         camera,
@@ -375,6 +378,7 @@ function ImageCaptureFrameLifecycle({
           return;
         }
       }
+      runPrepareCapture();
       transaction.applyCanonicalState();
       markFiberFrameCaptureApplied(barrierRef.current, revisionRef.current);
     } catch (error) {
@@ -538,6 +542,8 @@ export function ExportManager() {
   const originalSize = useRef<{ width: number; height: number; aspect: number } | null>(null);
   const originalStoreState = useRef<{ bondTolerance: number; atomScale: number; frame: number } | null>(null);
   const originalFrameloop = useRef<'always' | 'demand' | 'never' | null>(null);
+  // The recording guards' stop (the camera rig resumes, display motion un-suspends).
+  const recordingRestoreRef = useRef<(() => void) | null>(null);
 
   // Shared scene/camera/size/store restore after a video export. Reused for both
   // the success and failure paths of the MediaRecorder capture.
@@ -577,6 +583,9 @@ export function ExportManager() {
       originalFrameloop.current = null;
     }
     clearExportRequest();
+    const stopRecordingGuards = recordingRestoreRef.current;
+    recordingRestoreRef.current = null;
+    stopRecordingGuards?.();
   }, [camera, file, setSize, setDpr, setFrameloop, clearExportRequest]);
 
   // Stable ref so the VideoCaptureLoop always calls the freshest restore closure.
@@ -918,6 +927,10 @@ export function ExportManager() {
     // restoreAfterVideo returns to that exact value on every exit path.
     originalFrameloop.current = frameloop;
     setFrameloop('always');
+    // Toys stand down for the whole recording: the rig settles and suspends,
+    // display motion stays at rest. restoreAfterVideo stops them on every exit.
+    recordingRestoreRef.current?.();
+    recordingRestoreRef.current = beginRecording();
 
     // ── MediaRecorder (single durable path) ───────────────────────────
     // Pick the best supported container/codec, preferring MP4 (Safari/iOS) then

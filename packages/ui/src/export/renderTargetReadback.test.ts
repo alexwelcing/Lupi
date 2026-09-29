@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DataUtils } from 'three';
-import { decodeHalfFloatReadback, halfToFloat, srgbOETF } from './renderTargetReadback';
+import type * as THREE from 'three/webgpu';
+import { registerCaptureGuard } from '@atlas/scene';
+import { decodeHalfFloatReadback, halfToFloat, renderSceneToPixels, srgbOETF } from './renderTargetReadback';
 
 const half = (value: number) => DataUtils.toHalfFloat(value);
 
@@ -102,5 +104,32 @@ describe('decodeHalfFloatReadback', () => {
     const view = new Uint16Array(buffer.buffer, 2, source.length);
     expect(pixel(decodeHalfFloatReadback(view, 1, 1, false), 1, 0, 0)).toEqual([255, 255, 255, 255]);
     expect(() => decodeHalfFloatReadback(new Uint16Array(3), 1, 1, false)).toThrow(/needs 8/);
+  });
+});
+
+describe('renderSceneToPixels capture guards', () => {
+  it('holds guards around the render and restores them even when the render throws', async () => {
+    const log: string[] = [];
+    const off = registerCaptureGuard({ begin: () => (log.push('begin'), () => log.push('restore')) });
+    const renderer = {
+      backend: { isWebGPUBackend: true },
+      autoClear: true, autoClearColor: true, autoClearDepth: true, autoClearStencil: true,
+      getRenderTarget: () => null, getActiveCubeFace: () => 0, getActiveMipmapLevel: () => 0, getMRT: () => null,
+      getClearColor: (color: { set: (hex: number) => unknown }) => color.set(0),
+      getClearAlpha: () => 1,
+      setRenderTarget: () => log.push('setRenderTarget'), setMRT: () => {}, setClearColor: () => {},
+      render: () => {
+        log.push('render');
+        throw new Error('render failed');
+      },
+    } as unknown as THREE.WebGPURenderer;
+    try {
+      await expect(renderSceneToPixels({
+        renderer, scene: {} as THREE.Scene, camera: {} as THREE.Camera, width: 2, height: 2, transparent: true,
+      })).rejects.toThrow('render failed');
+    } finally {
+      off();
+    }
+    expect(log).toEqual(['setRenderTarget', 'begin', 'render', 'restore', 'setRenderTarget']);
   });
 });
