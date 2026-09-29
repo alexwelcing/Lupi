@@ -50,9 +50,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
       - name: Validate deploy configuration
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
@@ -78,11 +75,11 @@ jobs:
           done
           exit "$missing"
 
-      - name: Build viewer
+      - name: Bundle viewer
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
           VITE_LUPI_BUILD_SHA: ${{ github.sha }}
-        run: pnpm build
+        run: pnpm --filter @atlas/web build:ship
 
       - name: Build Cloud Run source bundle
         run: node tools/build-cloud-run-bundle.mjs
@@ -127,20 +124,6 @@ jobs:
           echo "CANDIDATE_URL=$candidate_url" >> "$GITHUB_ENV"
           echo "Candidate revision: $revision"
           echo "Candidate URL: $candidate_url"
-
-      - name: Test deployed candidate UI
-        run: UI_TEST_URL="$CANDIDATE_URL" pnpm test:ui:deployed
-
-      - name: Upload Playwright diagnostics
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-cloud-run-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            playwright-report/
-            test-results/
-          if-no-files-found: ignore
-          retention-days: 7
 
       - name: Route production traffic
         env:

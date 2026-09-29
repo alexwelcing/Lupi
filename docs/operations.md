@@ -32,10 +32,9 @@ once if absent (`pnpm exec playwright install --with-deps chromium`). For
 workflow-only edits, run `pnpm verify:workflows`, not another full app build or
 dependency audit.
 
-These are scoped Local-lane inputs only; retain command results and source
-identity. Full lint, production audits, builds and regression remain blocking
-in exact-SHA CI and release-package. Do not rerun an exhaustive local audit just
-because a trusted exact-SHA CI audit already passed, or count CI as local proof.
+There is no CI gate (see [CI trigger policy](ci-trigger-policy.md)); these
+and the broader checks below are run before pushing, locally or by the agent
+making the change.
 
 `pnpm test:ui` starts `tools/serve-web.mjs` against `apps/web/dist` and checks
 the production build. For a deployed preview or direct Worker URL, run only
@@ -73,24 +72,8 @@ same dump compatibility contract used by the viewer.
 
 ## CI
 
-Workflow:
-
-```text
-.github/workflows/ci.yml
-```
-
-Current CI does:
-
-- install pnpm 9
-- install dependencies
-- test and verify the product/release contracts
-- run the real workspace lint gate and both production dependency audits
-- build the workspace
-- run tests
-- run the live-verifier unit suite
-- install Chromium and run the production Playwright UI suite
-- run the standalone Cloud Functions tests
-- fail if regenerated NIST catalog output drifts
+There is no merge gate. The only workflows are deploys; see
+[CI trigger policy](ci-trigger-policy.md). Verification happens before a push.
 
 ## Deploy
 

@@ -1,9 +1,15 @@
 name: Cloudflare production
 
-# A merge to main is the release. Build the web app and the edge Worker,
-# deploy with the pinned Wrangler, then confirm https://lupi.live reports the
-# deployed commit. The previous owner-only, six-input controller and its
-# weekly reconciliation were retired on 2026-09-20 by owner decision.
+# A push to main is the release, and this is the whole pipeline: bundle the
+# web app, deploy the edge Worker with the pinned Wrangler, confirm
+# https://lupi.live reports the pushed commit. No lint, no typecheck, no
+# tests; code is verified before it is pushed, not by a runner afterwards.
+# The bundle step runs `build:ship`, which skips `tsc`. Every package "build"
+# in this workspace is a typecheck with no output, so nothing else is needed
+# to produce bytes. A newer push cancels an older in-flight run, so the latest
+# commit is always the one racing to production.
+# The previous owner-only controller and weekly reconciliation were retired
+# on 2026-09-20, and the merge-gating CI on 2026-09-21, by owner decision.
 
 on:
   push:
@@ -13,7 +19,7 @@ on:
 
 concurrency:
   group: lupi-cloudflare-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -36,7 +42,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     environment: lupi-production-write-v2
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -54,13 +60,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build web app and edge Worker
+      - name: Bundle web app
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.LUPI_FIREBASE_WEB_API_KEY }}
           VITE_LUPI_BUILD_SHA: ${{ github.sha }}
         run: |
           test -n "$VITE_FIREBASE_API_KEY"
-          pnpm build
+          pnpm --filter @atlas/web build:ship
 
       - name: Install the pinned Wrangler
         run: npm ci --ignore-scripts --omit=dev --prefix .github/wrangler-runtime

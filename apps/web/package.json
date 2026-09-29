@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs",
+    "build:ship": "tsx ../../tools/generate-mcp-manifest.ts && vite build && node ../../scripts/generate-seo-routes.mjs",
     "lint": "eslint .",
     "test": "vitest run vite.config.test.ts",
     "preview": "vite preview"

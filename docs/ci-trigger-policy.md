@@ -1,5 +1,15 @@
 # CI trigger policy
 
-The August 2026 CI-noise audit found no duplicate event pair to prune. `LUPI CI` runs on relevant pull-request paths, on relevant pushes to `main`, and by explicit operator dispatch. Production Cloudflare release is manual and approval-bound; the reconciliation workflow is retained because both its weekly read-only check and post-release reconciliation produce distinct release-control evidence. The render-backend deploy remains path-filtered to `main`.
+**As of 2026-09-21 there is no CI gate.** Code is verified before it is
+pushed, in the agent or local loop, and a push to `main` is the release.
 
-The recurring high-severity audit failure was dependency state, not a trigger defect: main now pins patched `fast-uri` 3.1.5. Do not weaken or retry the production dependency gate to hide an advisory.
+| Workflow | Runs when | What it does |
+| --- | --- | --- |
+| `deploy-cloudflare.yml` | every push to `main`, dispatch | bundle the web app (`build:ship`, no typecheck), deploy the Worker, confirm `https://lupi.live/health` reports the commit; about 90 seconds; a newer push cancels an older run |
+| `deploy-render-backend.yml` | path-filtered pushes to `main`, dispatch | Cloud Build and Cloud Run rollout of the render backend |
+| `deploy-viewer.yml` | dispatch only | manual Cloud Run fallback for the viewer |
+
+There is no lint, typecheck, unit, browser, audit, or contract workflow.
+`pnpm lint`, `pnpm build`, `pnpm test`, `pnpm test:ui`, `pnpm audit` and the
+`verify:*` scripts remain available to run locally or from an agent before
+pushing. Do not add a workflow that runs between a push and production.

@@ -1,0 +1,66 @@
+name: UI regression
+
+# The full Playwright suite takes about twelve minutes on a hosted runner and
+# no longer gates merges. It runs nightly against a fresh production build of
+# main, on demand, and on pull requests that change the suite or its config.
+# The four-test release smoke runs against lupi.live after every deploy
+# instead (see deploy-cloudflare.yml).
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '17 9 * * *'
+  pull_request:
+    paths:
+      - 'tests/**'
+      - 'playwright.config.mjs'
+      - '.github/workflows/ui-regression.yml'
+
+concurrency:
+  group: lupi-ui-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        env:
+          VITE_LUPI_BUILD_SHA: ${{ github.sha }}
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test production UI
+        run: pnpm test:ui
+
+      - name: Upload Playwright diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7

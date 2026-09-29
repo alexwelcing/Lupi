@@ -1,0 +1,68 @@
+name: Dependency audit
+
+# The production dependency audits used to sit inside the merge gate, cost
+# about three minutes per push, and failed unrelated pull requests whenever a
+# new advisory landed. They now run when a manifest or lockfile changes,
+# weekly, and on demand. Both audits read the lockfiles directly, so nothing
+# is installed here.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '23 8 * * 1'
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/*/package.json'
+      - 'packages/*/package.json'
+      - 'functions/package.json'
+      - 'functions/package-lock.json'
+      - '.github/wrangler-runtime/package.json'
+      - '.github/wrangler-runtime/package-lock.json'
+      - '.github/workflows/dependency-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/*/package.json'
+      - 'packages/*/package.json'
+      - 'functions/package.json'
+      - 'functions/package-lock.json'
+      - '.github/wrangler-runtime/package.json'
+      - '.github/wrangler-runtime/package-lock.json'
+      - '.github/workflows/dependency-audit.yml'
+
+concurrency:
+  group: lupi-dependency-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Gate root production dependencies
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm audit --prod --audit-level high
+
+      - name: Gate Cloud Functions production dependencies
+        working-directory: functions
+        run: npm audit --omit=dev --audit-level=high

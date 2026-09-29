@@ -149,9 +149,10 @@ external authority were configured or active.
 
 ### Proportionate testing
 
-- Full `pnpm test:ui` regression coverage remains blocking in CI, including
-  the complete visual workbench, accessibility/reflow, security checks, native
-  gallery coverage, and high-resolution/multi-format exports.
+- Since 2026-09-21 no workflow gates a merge or a deploy. `pnpm test:ui`
+  (the complete visual workbench, accessibility/reflow, security checks,
+  native gallery coverage, and high-resolution/multi-format exports) is a
+  local tool run before pushing, when the change warrants it.
 - Candidate and public verification use the four tests in
   `tests/ui/release-smoke.spec.ts`: Worker health; desktop discovery, learning,
   menus and a real small PNG; mobile scene controls with atom-color Remix/Undo;
