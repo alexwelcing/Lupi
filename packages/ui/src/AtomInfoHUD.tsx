@@ -45,8 +45,9 @@ const scratchCardView = new Vector3();
 
 /**
  * Top-left (px) of the desktop card for an atom of world `radius` at the Html
- * group's position: above the atom's screen disc, or below it when the card
- * does not fit above; clamped into the canvas horizontally.
+ * group's position: above or below the atom's screen disc (the side away from
+ * the canvas centre when both fit), never over it; clamped into the canvas
+ * horizontally.
  */
 function anchoredCardPosition(
   object: Object3D,
@@ -74,7 +75,9 @@ function anchoredCardPosition(
   const below = cy + r + CARD_GAP_PX;
   const fitsAbove = above >= CARD_TOP_RESERVE_PX;
   const fitsBelow = below + height <= size.height - CARD_EDGE_PX;
-  return [left, fitsAbove || !fitsBelow ? above : below];
+  // Prefer the side away from the canvas centre (where the rest of the structure is).
+  if (fitsBelow && (cy > halfH || !fitsAbove)) return [left, below];
+  return [left, above];
 }
 
 const FONT_SANS = "'IBM Plex Sans', Inter, ui-sans-serif, system-ui, sans-serif";
