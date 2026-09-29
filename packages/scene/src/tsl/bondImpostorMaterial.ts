@@ -8,6 +8,8 @@
  * impostor kit's `lupiSurface`. Port of the v9 GLSL BOND_IMPOSTOR_VERTEX /
  * BOND_IMPOSTOR_FRAGMENT (bondImpostor.ts before the port):
  * - the `uProgress` GPU lerp between two endpoint buffers per end;
+ * - the display-motion offset (tsl/displayMotion.ts) on both ends, the same
+ *   closed form and seed as the atoms, so bonds follow them;
  * - the two-tone split at the geometric midpoint;
  * - the distance fade (`uBondFadeStart`/`uBondFadeEnd`) times `uOpacity`;
  * - degenerate, sub-pixel and fully faded bonds collapse to a degenerate
@@ -54,6 +56,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
+import { lupiDisplayOffset } from './displayMotion';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
@@ -166,8 +169,13 @@ export function createBondImpostorMaterial({
   // ── Vertex stage ────────────────────────────────────────────────────
   const start: N = attribute(BOND_ATTR.start, 'vec3');
   const end: N = attribute(BOND_ATTR.end, 'vec3');
-  const a: N = interpolate ? mix(start, attribute(BOND_ATTR.startTarget, 'vec3'), u.uProgress) : start;
-  const b: N = interpolate ? mix(end, attribute(BOND_ATTR.endTarget, 'vec3'), u.uProgress) : end;
+  const restA: N = interpolate ? mix(start, attribute(BOND_ATTR.startTarget, 'vec3'), u.uProgress) : start;
+  const restB: N = interpolate ? mix(end, attribute(BOND_ATTR.endTarget, 'vec3'), u.uProgress) : end;
+  // Display-only motion: each end is a bit-exact copy of its atom's position,
+  // so the same closed form and seed move it with the atom (a collapsed stale
+  // bond, b = a, stays degenerate). Exactly zero at rest and in captures.
+  const a: N = restA.add(lupiDisplayOffset(restA, start));
+  const b: N = restB.add(lupiDisplayOffset(restB, end));
   const viewA: N = modelViewMatrix.mul(vec4(a, 1.0)).xyz;
   const viewB: N = modelViewMatrix.mul(vec4(b, 1.0)).xyz;
   const axis: N = viewB.sub(viewA);
