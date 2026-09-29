@@ -35,7 +35,9 @@
 }
 .bucky-hero[data-opening] .bucky-hero__stage {
   cursor: progress;
-  opacity: 0.72;
+  /* The relay carries the drawing from here to the sage stage: no double. */
+  opacity: 0;
+  transition: none;
 }
 .bucky-hero__caption {
   display: grid;

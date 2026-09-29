@@ -51,6 +51,8 @@ export interface BuckyStageOptions {
   onDetent?(label: string): void;
   /** Total degrees turned by hand so far (drags only: a release's coast and settle do not count). */
   onSpinDegrees?(total: number): void;
+  /** After every redraw (a drag, a coast, a settle, setPose): the relay mirrors the pose into the baton. */
+  onPoseChange?(): void;
 }
 
 /** What the stage is doing, mirrored on the host as `data-bucky-state` (the smoke plugin reads it). */
@@ -104,6 +106,16 @@ const TWO_PI = Math.PI * 2;
 const SAMPLE_COUNT = 16;
 
 let stageSerial = 0;
+
+/**
+ * The host size (px) at which the drawing puts `pxPerAngstrom` screen pixels
+ * per Å on the ball: the relay sizes its stage so the drawing matches the
+ * viewer's fitted C60 when the lit cage takes over.
+ */
+export function buckyStageSizeFor(pxPerAngstrom: number): number {
+  const unitsPerAngstrom = (CENTER * FILL) / (C60_HERO.radius + ATOM_R);
+  return (pxPerAngstrom * VIEW) / unitsPerAngstrom;
+}
 
 const DETENTS: readonly C60HeroDetent[] = [...C60_HERO.detents].sort((a, b) => a.azimuth - b.azimuth);
 
@@ -305,6 +317,7 @@ export function createBuckyStage(host: HTMLElement, opts: BuckyStageOptions): Bu
         layer.appendChild(items[order[k]]);
       }
     }
+    opts.onPoseChange?.();
   }
 
   function schedule(): void {

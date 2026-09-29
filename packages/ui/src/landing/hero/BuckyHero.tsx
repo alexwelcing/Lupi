@@ -62,6 +62,7 @@ export function BuckyHero() {
     if (!host || !stage || openingRef.current) return;
     openingRef.current = true;
     setOpening(true);
+    prefetch(); // a tap is intent too (a phone never hovers)
     setBaton({
       galleryId: GALLERY_ID,
       source: 'hero',
@@ -75,7 +76,7 @@ export function BuckyHero() {
         openingRef.current = false;
         setOpening(false);
       });
-  }, []);
+  }, [prefetch]);
 
   const showFace = useCallback((label: string) => {
     if (label !== 'Hexagon' && label !== 'Pentagon') return;
