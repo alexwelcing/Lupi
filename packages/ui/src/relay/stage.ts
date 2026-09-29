@@ -198,10 +198,21 @@ function layout(relay: Relay): void {
   relay.wait.style.top = `${below + 40}px`;
 }
 
-/** FLIP: start over `from` (the tapped drawing or tile image) and glide into place. */
-function flip(relay: Relay, from: DOMRect): void {
+/**
+ * FLIP: start over `from` (the tapped drawing or tile image) and glide into
+ * place. Without a rect to grow from (a library card), the stage fades in
+ * over the same time instead of popping over the page.
+ */
+function flip(relay: Relay, from: DOMRect | null): void {
   const to = relay.stageEl.getBoundingClientRect();
-  if (!(to.width > 0) || !(from.width > 0)) return;
+  if (!from || !(to.width > 0) || !(from.width > 0)) {
+    try {
+      relay.layer.animate([{ opacity: 0 }, { opacity: 1 }], { duration: BACKDROP_MS, easing: 'ease-out' });
+    } catch {
+      /* no Web Animations: the stage simply appears */
+    }
+    return;
+  }
   const dx = from.left + from.width / 2 - (to.left + to.width / 2);
   const dy = from.top + from.height / 2 - (to.top + to.height / 2);
   const scale = from.width / to.width;
@@ -387,7 +398,7 @@ function begin({ baton, fromRect }: { baton: RelayBaton; fromRect: DOMRect | nul
   layout(relay);
   if (hero) mountHero(relay);
   else mountPreview(relay);
-  if (fromRect && !still) flip(relay, fromRect);
+  if (!still) flip(relay, fromRect);
 
   relay.timers.push(setTimeout(() => relay.ring.setAttribute('data-on', ''), RING_AT_MS));
   relay.timers.push(setTimeout(() => showWait(relay), WAIT_AT_MS));
