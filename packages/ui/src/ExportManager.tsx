@@ -431,6 +431,9 @@ function ImageCaptureFrameLifecycle({
           camera: transaction.camera,
           width,
           height,
+          // Capture only once every pipeline is ready (a skipped draw would
+          // export an image without the atoms); the export timeout bounds it.
+          timeoutMs: null,
         }));
         void warmup.finally(() => {
           markFiberFrameCaptureWarmed(barrier, revision);
