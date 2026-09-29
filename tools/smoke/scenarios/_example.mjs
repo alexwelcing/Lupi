@@ -51,6 +51,8 @@
  *              PNG Buffers: what the screen showed at .t ms (screencast; .frameT
  *              says when that frame was presented, so repeats are visible)
  *   readPlay(page)  -> window.__lupiPlay?.state() or null
+ *   playEmit(page, intent)  -> emits a Lupi intent as the UI would
+ *              (window.__lupiPlay.emit); false when the hooks are absent
  */
 
 export default {

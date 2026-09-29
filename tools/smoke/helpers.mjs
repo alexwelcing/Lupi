@@ -547,6 +547,22 @@ async function readPlay(page) {
   return page.evaluate(() => window.__lupiPlay?.state?.() ?? null).catch(() => null);
 }
 
+/**
+ * Emit a Lupi intent exactly as the UI would (window.__lupiPlay.emit), e.g.
+ * { type: 'play.spin' } before the pill that emits it exists. Resolves false
+ * when the Play hooks are absent.
+ */
+async function playEmit(page, intent) {
+  return page
+    .evaluate((value) => {
+      const play = window.__lupiPlay;
+      if (typeof play?.emit !== 'function') return false;
+      play.emit(value);
+      return true;
+    }, intent)
+    .catch(() => false);
+}
+
 // ---------------------------------------------------------------------------
 // Pixel analysis (pure Node; screenshots only, never readPixels)
 // ---------------------------------------------------------------------------
@@ -909,6 +925,7 @@ export {
   twoFingerDrag,
   sampleFrames,
   readPlay,
+  playEmit,
   PNG_SIGNATURE,
   decodePng,
   cropImage,
