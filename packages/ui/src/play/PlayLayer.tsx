@@ -15,7 +15,7 @@
  * - The arrival is armed in a layout effect on the file (before the first
  *   render): `t0` follows the clock, so the first frame already shows the
  *   mist. It releases on the file's first frame (+120 ms behind the relay
- *   stage), or 1 s after arming.
+ *   stage), or 1 s after arming (4.5 s behind the relay stage).
  * - Any pointerdown, key or wheel lands the arrival instantly, synchronously
  *   in the capture phase, before any pick (`installArrivalCancel`).
  *
@@ -73,6 +73,12 @@ const ARRIVAL_D = { standard: 0.6, gentle: 0.3 } as const;
 const RELAY_RELEASE_MS = 120;
 /** The release fallback when no first frame is reported. */
 const RELEASE_FALLBACK_MS = 1000;
+/**
+ * Behind the relay stage the fallback waits out FirstFrameSignal's own 4 s
+ * fallback: the hand-off can hold for the bonds (up to 1.5 s after the first
+ * atom frame), and an arrival released under the stage would play unseen.
+ */
+const RELAY_RELEASE_FALLBACK_MS = 4500;
 /** Poke ripple amplitude at Standard (Å); Gentle halves it, Still skips it. */
 const POKE_AMPLITUDE = DISPLAY_MOTION_TUNING.rippleAmplitude;
 /** Stirring (Poke latched): amplitude, and at most one ripple per 60 ms and 10 px. */
@@ -374,7 +380,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       if (key === trajectory) onFirst();
     });
     if (hasFirstFrame(trajectory)) onFirst();
-    const fallback = setTimeout(release, RELEASE_FALLBACK_MS);
+    const fallback = setTimeout(release, behindRelay ? RELAY_RELEASE_FALLBACK_MS : RELEASE_FALLBACK_MS);
     return () => {
       offFirst();
       clearTimeout(fallback);
