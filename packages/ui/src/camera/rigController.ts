@@ -331,6 +331,16 @@ export class RigController implements LupiCameraRigApi {
   setCoastModel(model: CoastModel | null): void {
     const next = model ?? this.defaultCoast;
     if (next === this.coast) return;
+    if (this.mode === 'coast' && !this.tail && this.coast === this.defaultCoast && next !== this.defaultCoast) {
+      // A molecule's model arriving mid-coast (the hero's spin carried into
+      // 3D before its Object Facts are ready) takes the spin over rather
+      // than stopping it dead. The isotropic coast's ω axis is fixed in
+      // world, so the handed-over ω is exact.
+      this.coast.stop();
+      this.coast = next;
+      next.begin([this.omegaAxis.x * this.omega, this.omegaAxis.y * this.omega, this.omegaAxis.z * this.omega]);
+      return;
+    }
     if (this.mode === 'coast' && !this.tail) {
       this.coast.stop();
       this.omega = 0;

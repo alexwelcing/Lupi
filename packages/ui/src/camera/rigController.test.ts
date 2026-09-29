@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import type { LupiIntent } from '@atlas/scene';
 import { RigController, type RigHost, type RigStorePatch } from './rigController';
-import type { Vec3 } from './rigApi';
+import type { CoastModel, Vec3 } from './rigApi';
+import { createIsotropicCoast } from './isotropicCoast';
 
 function makeRig({ coast = true, glides = true }: { coast?: boolean; glides?: boolean } = {}) {
   const store = { position: [0, 0, 10] as Vec3, target: [0, 0, 0] as Vec3, preset: 'iso' };
@@ -163,5 +164,20 @@ describe('RigController', () => {
     rig.catch();
     expect(rig.isMoving()).toBe(false);
     expect(intents.some((i) => i.type === 'camera.catch')).toBe(true);
+  });
+
+  it('hands a coast in flight to a model registered mid-coast', () => {
+    const { rig } = makeRig();
+    rig.fling([0, 4, 0]);
+    for (let i = 0; i < 6; i += 1) rig.frame(1 / 60);
+    const inner = createIsotropicCoast();
+    const begun: Vec3[] = [];
+    const model: CoastModel = { ...inner, begin: (w) => { begun.push(w); inner.begin(w); } };
+    rig.setCoastModel(model);
+    expect(begun).toHaveLength(1);
+    expect(begun[0][0]).toBeCloseTo(0, 6);
+    expect(begun[0][1]).toBeGreaterThan(3);
+    expect(begun[0][2]).toBeCloseTo(0, 6);
+    expect(rig.isMoving()).toBe(true);
   });
 });
