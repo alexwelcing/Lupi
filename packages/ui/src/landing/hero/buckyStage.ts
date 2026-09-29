@@ -39,6 +39,12 @@ export interface BuckyStage {
   getBodyOmegaY(): number;
   /** Unit direction from the target to the camera, normalize(position − target) (the baton's `viewDir`). */
   viewDir(): Vec3;
+  /**
+   * Draw in perspective from `distance` Å (the viewer's fitted camera
+   * distance), or orthographic (null, the default). The relay eases into the
+   * viewer's perspective so the drawing hands over to the lit cage exactly.
+   */
+  setPerspective(distance: number | null): void;
   destroy(): void;
 }
 
@@ -53,6 +59,8 @@ export interface BuckyStageOptions {
   onSpinDegrees?(total: number): void;
   /** After every redraw (a drag, a coast, a settle, setPose): the relay mirrors the pose into the baton. */
   onPoseChange?(): void;
+  /** Camera distance (Å) for a perspective drawing; orthographic when absent. */
+  perspective?: number;
 }
 
 /** What the stage is doing, mirrored on the host as `data-bucky-state` (the smoke plugin reads it). */
@@ -226,6 +234,9 @@ export function createBuckyStage(host: HTMLElement, opts: BuckyStageOptions): Bu
   const sx = new Float64Array(atomCount);
   const sy = new Float64Array(atomCount);
   const sz = new Float64Array(atomCount);
+  /** Perspective magnification per atom (1 when orthographic). */
+  const sk = new Float64Array(atomCount).fill(1);
+  let perspective = opts.perspective && opts.perspective > 0 ? opts.perspective : 0;
   const depth = new Float64Array(itemCount);
   const order: number[] = [];
   for (let i = 0; i < itemCount; i += 1) order.push(i);
@@ -271,9 +282,11 @@ export function createBuckyStage(host: HTMLElement, opts: BuckyStageOptions): Bu
       const px = positions[3 * i];
       const py = positions[3 * i + 1];
       const pz = positions[3 * i + 2];
-      sx[i] = CENTER + scale * (px * xx + pz * xz);
-      sy[i] = CENTER - scale * (px * yx + py * yy + pz * yz);
       sz[i] = px * zx + py * zy + pz * zz;
+      // Perspective (the relay): a camera `perspective` Å from the centre, like the viewer's.
+      sk[i] = perspective > 0 ? perspective / Math.max(1e-3, perspective - sz[i]) : 1;
+      sx[i] = CENTER + scale * sk[i] * (px * xx + pz * xz);
+      sy[i] = CENTER - scale * sk[i] * (px * yx + py * yy + pz * yz);
     }
     const span = 2 * radius;
     for (let i = 0; i < atomCount; i += 1) {
@@ -282,7 +295,7 @@ export function createBuckyStage(host: HTMLElement, opts: BuckyStageOptions): Bu
       const circle = circles[i];
       circle.setAttribute('cx', sx[i].toFixed(2));
       circle.setAttribute('cy', sy[i].toFixed(2));
-      circle.setAttribute('r', (scale * ATOM_R * (0.88 + 0.2 * near)).toFixed(2));
+      circle.setAttribute('r', (scale * ATOM_R * sk[i] * (0.88 + 0.2 * near)).toFixed(2));
       circle.setAttribute('opacity', (0.3 + 0.7 * near).toFixed(3));
     }
     for (let b = 0; b < bondCount; b += 1) {
@@ -612,6 +625,12 @@ export function createBuckyStage(host: HTMLElement, opts: BuckyStageOptions): Bu
     viewDir() {
       const c = Math.cos(el);
       return [c * Math.sin(az), Math.sin(el), c * Math.cos(az)];
+    },
+    setPerspective(distance) {
+      const next = distance && distance > 0 ? distance : 0;
+      if (next === perspective) return;
+      perspective = next;
+      draw();
     },
     destroy() {
       destroyed = true;

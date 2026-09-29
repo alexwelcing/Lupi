@@ -63,12 +63,13 @@ const C60_HALF_DIAGONAL = (() => {
 })();
 
 /**
- * Screen pixels per Å on C60's atom-centre shell once the viewer has fitted
- * it to a `width` × `height` canvas (store.fitCameraView → cameraFit.ts):
- * the same content radius, padding, field of view and aspect rule, and the
- * shell's perspective silhouette, so the drawing hands over at the cage's size.
+ * How the viewer will frame C60 on a `width` × `height` canvas
+ * (store.fitCameraView → cameraFit.ts: the same content radius, padding,
+ * field of view and aspect rule): the camera distance (Å) and the screen
+ * pixels per Å at the centre plane. The drawing is sized and put in
+ * perspective from it, so it hands over at the cage's size and shape.
  */
-function c60PixelsPerAngstrom(width: number, height: number): number {
+function c60ViewerFit(width: number, height: number): { distance: number; pxPerAngstrom: number } {
   const fov = useStore.getState().cameraFov;
   const vertical = ((Number.isFinite(fov) && fov > 0 ? fov : 50) * Math.PI) / 360;
   const horizontal = Math.atan(Math.tan(vertical) * (width / height));
@@ -76,17 +77,19 @@ function c60PixelsPerAngstrom(width: number, height: number): number {
   const limitingPx = (horizontal < vertical ? width : height) / 2;
   const contentRadius = (C60_HALF_DIAGONAL + (ELEMENT_DATA[6]?.displayRadius ?? 0.38)) * DEFAULT_CAMERA_FIT_PADDING;
   const distance = contentRadius / Math.sin(limiting);
-  const shell = C60_HERO.radius;
-  const silhouette = shell / Math.sqrt(distance * distance - shell * shell);
-  return ((silhouette / Math.tan(limiting)) * limitingPx) / shell;
+  return { distance, pxPerAngstrom: limitingPx / (distance * Math.tan(limiting)) };
+}
+
+/** MOTION.glide's step response normalised to reach 1 at FLIP_MS: the FLIP's shape. */
+function glideProgress(ms: number): number {
+  if (ms >= FLIP_MS) return 1;
+  return stepResponse(MOTION.glide, Math.max(0, ms) / 1000) / stepResponse(MOTION.glide, FLIP_MS / 1000);
 }
 
 /** A `linear()` easing sampled from MOTION.glide's step response over FLIP_MS (or a close cubic). */
 const GLIDE_EASING = (() => {
-  const seconds = FLIP_MS / 1000;
-  const end = stepResponse(MOTION.glide, seconds);
   const points: string[] = [];
-  for (let i = 0; i <= 16; i += 1) points.push((stepResponse(MOTION.glide, (i / 16) * seconds) / end).toFixed(4));
+  for (let i = 0; i <= 16; i += 1) points.push(glideProgress((i / 16) * FLIP_MS).toFixed(4));
   const linear = `linear(${points.join(', ')})`;
   try {
     if (typeof CSS !== 'undefined' && CSS.supports?.('animation-timing-function', linear)) return linear;
@@ -106,6 +109,10 @@ interface Relay {
   face: HTMLParagraphElement;
   wait: HTMLDivElement;
   stage: BuckyStage | null;
+  /** The viewer's fitted camera distance (Å) the hero drawing is put in perspective from. */
+  distance: number;
+  /** The drawing is still easing from the hero's orthographic view into that perspective. */
+  easing: boolean;
   timers: Array<ReturnType<typeof setTimeout>>;
   cleanup: Array<() => void>;
 }
@@ -170,7 +177,10 @@ function layout(relay: Relay): void {
   const cy = height / 2;
   let below: number;
   if (relay.hero) {
-    const size = buckyStageSizeFor(c60PixelsPerAngstrom(width, height));
+    const fit = c60ViewerFit(width, height);
+    const size = buckyStageSizeFor(fit.pxPerAngstrom);
+    relay.distance = fit.distance;
+    if (relay.stage && !relay.easing) relay.stage.setPerspective(fit.distance);
     place(relay.stageEl, cx - size / 2, cy - size / 2, size, size);
     const ring = size * HERO_RING;
     place(relay.ring, cx - ring / 2, cy - ring / 2, ring, ring);
@@ -249,6 +259,7 @@ function mountHero(relay: Relay): void {
     },
   });
   relay.stage = stage;
+  easeIntoPerspective(relay);
   // Nothing under the relay scrolls: every swipe on the ball turns it.
   stageEl.style.touchAction = 'none';
   if (document.activeElement instanceof HTMLElement && document.activeElement.classList.contains('bucky-hero__stage')) {
@@ -256,6 +267,37 @@ function mountHero(relay: Relay): void {
     stageEl.tabIndex = -1;
     stageEl.focus({ preventScroll: true });
   }
+}
+
+/**
+ * The home page draws the ball orthographically; the viewer sees it from a
+ * camera a few radii away. While the drawing swells into place (FLIP_MS, the
+ * same glide), the perspective eases in, so at the hand-off the drawing and
+ * the lit cage share their shape as well as their pose and size.
+ */
+function easeIntoPerspective(relay: Relay): void {
+  const stage = relay.stage;
+  if (!stage) return;
+  if (relay.layer.dataset.still !== undefined) {
+    stage.setPerspective(relay.distance);
+    return;
+  }
+  relay.easing = true;
+  const started = performance.now();
+  let frame = 0;
+  const step = () => {
+    frame = 0;
+    if (current !== relay || !relay.stage) return;
+    const progress = glideProgress(performance.now() - started);
+    // Ease 1/distance from 0 (orthographic) to the viewer's.
+    relay.stage.setPerspective(progress >= 1 ? relay.distance : progress > 1e-3 ? relay.distance / progress : null);
+    if (progress >= 1) relay.easing = false;
+    else frame = requestAnimationFrame(step);
+  };
+  frame = requestAnimationFrame(step);
+  relay.cleanup.push(() => {
+    if (frame) cancelAnimationFrame(frame);
+  });
 }
 
 function mountPreview(relay: Relay): void {
@@ -323,7 +365,21 @@ function begin({ baton, fromRect }: { baton: RelayBaton; fromRect: DOMRect | nul
   wait.append(copy, retry);
   layer.append(backdrop, stageEl, ring, face, wait);
 
-  const relay: Relay = { baton, hero, layer, backdrop, stageEl, ring, face, wait, stage: null, timers: [], cleanup: [] };
+  const relay: Relay = {
+    baton,
+    hero,
+    layer,
+    backdrop,
+    stageEl,
+    ring,
+    face,
+    wait,
+    stage: null,
+    distance: 0,
+    easing: false,
+    timers: [],
+    cleanup: [],
+  };
   current = relay;
   document.body.appendChild(layer);
   layout(relay);
