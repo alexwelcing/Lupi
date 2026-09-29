@@ -1,9 +1,32 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
+import { shallow } from 'zustand/shallow';
 import { LUPI_JOB } from '@atlas/scene';
 import { useStore } from '../store';
 import { viewportAspectFromSize } from '../cameraFit';
+import { consumeCameraGlideRequest, getCameraRig } from '../camera/rigApi';
+import { glidesAnimate } from '../motion/comfort';
+
+type Vec3 = [number, number, number];
+
+function within(v: THREE.Vector3, a: Vec3, eps = 1e-6): boolean {
+  return Math.abs(v.x - a[0]) <= eps && Math.abs(v.y - a[1]) <= eps && Math.abs(v.z - a[2]) <= eps;
+}
+
+const scratchForward = new THREE.Vector3();
+const scratchToTarget = new THREE.Vector3();
+
+/** True when the live camera already shows this store pose (the rig wrote it at rest). */
+function liveMatchesStore(camera: THREE.Camera, target: THREE.Vector3 | undefined, position: Vec3, storeTarget: Vec3): boolean {
+  if (!within(camera.position, position)) return false;
+  if (target) return within(target, storeTarget);
+  scratchToTarget.set(storeTarget[0] - position[0], storeTarget[1] - position[1], storeTarget[2] - position[2]);
+  const length = scratchToTarget.length();
+  if (length < 1e-9) return true;
+  scratchForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  return scratchForward.dot(scratchToTarget) / length > 1 - 1e-9;
+}
 
 export function CameraManager({
   fileId,
@@ -64,41 +87,38 @@ export function CameraManager({
     applyPerspectiveProjection();
   }, { phase: 'update', id: LUPI_JOB.cameraSync });
 
-  // Sync with presets
+  // One subscription for the whole store camera. Store writes stay instant
+  // snaps (MCP, saved views, URL decode, gallery loads, the resize refit),
+  // except UI writes wrapped in withCameraGlide(), which the rig animates.
+  // The rig's own write at rest already matches the live camera: projection only.
   useEffect(() => {
     const unsub = useStore.subscribe(
-      (s) => s.cameraPreset,
+      (s) => [s.cameraPosition, s.cameraTarget, s.cameraFov, s.cameraPreset] as const,
       () => {
-        const { cameraPosition, cameraTarget } = useStore.getState();
+        const { cameraPosition, cameraTarget, cameraFov } = useStore.getState();
+        const animate = consumeCameraGlideRequest();
+        const target = controls?.target as THREE.Vector3 | undefined;
+        if (liveMatchesStore(camera, target, cameraPosition, cameraTarget)) {
+          applyPerspectiveProjection(cameraFov);
+          return;
+        }
+        const rig = getCameraRig();
+        if (animate && rig && controls?.enabled !== false && glidesAnimate()) {
+          applyPerspectiveProjection(cameraFov);
+          rig.glideTo({ position: cameraPosition, target: cameraTarget });
+          return;
+        }
         camera.position.set(...cameraPosition);
         camera.lookAt(...cameraTarget);
-        applyPerspectiveProjection();
-        if (controls && controls.target) {
-          controls.target.set(...cameraTarget);
+        applyPerspectiveProjection(cameraFov);
+        if (target) {
+          target.set(...cameraTarget);
           controls.update();
         }
-      }
+      },
+      { equalityFn: shallow },
     );
     return unsub;
-  }, [camera, controls, applyPerspectiveProjection]);
-
-  useEffect(() => {
-    const applyStoredCamera = () => {
-      const { cameraPosition, cameraTarget, cameraFov } = useStore.getState();
-      camera.position.set(...cameraPosition);
-      camera.lookAt(...cameraTarget);
-      applyPerspectiveProjection(cameraFov);
-      if (controls && controls.target) {
-        controls.target.set(...cameraTarget);
-        controls.update();
-      }
-    };
-    const unsubs = [
-      useStore.subscribe((s) => s.cameraPosition, applyStoredCamera),
-      useStore.subscribe((s) => s.cameraTarget, applyStoredCamera),
-      useStore.subscribe((s) => s.cameraFov, applyStoredCamera),
-    ];
-    return () => unsubs.forEach((unsub) => unsub());
   }, [camera, controls, applyPerspectiveProjection]);
 
   // R3F owns the real Canvas layout and updates this size on every resize.

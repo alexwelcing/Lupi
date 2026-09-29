@@ -4,6 +4,7 @@ import { SCENE_LOOKS, currentSceneLook, sceneLookPatch } from './sceneLooks';
 import { MOD_SECTIONS, SceneModControls, SceneToggle, StructureGuideMods, type ModSection } from './SceneModControls';
 import { remixScene, snapshotRemix, type RemixSnapshot } from './sceneRemix';
 import { LupiActionButton } from './LupiActionButton';
+import { withCameraGlide } from './camera/rigApi';
 import { IconBack, IconControls, IconRecenter, IconRemix, IconTick, IconUndo } from './icons';
 export type StudioDeckMode = 'molecule' | 'scene';
 
@@ -73,7 +74,7 @@ export function StudioControlDeck({ mode: _mode }: { mode: StudioDeckMode }) {
       {section === 'Atoms' && <StructureGuideMods />}
     </div>}
     <div className="scene-controls__actions">
-      <button type="button" className="scene-controls__button" onClick={() => useStore.getState().fitCameraView()}><IconRecenter /> Recenter</button>
+      <button type="button" className="scene-controls__button" onClick={() => withCameraGlide(() => useStore.getState().fitCameraView())}><IconRecenter /> Recenter</button>
       <LupiActionButton className="scene-controls__button scene-controls__button--primary"
         aria-expanded={adjusting} aria-controls={adjusting ? 'scene-adjustments' : undefined} onClick={event => {
           setAdjusting(value => !value);
