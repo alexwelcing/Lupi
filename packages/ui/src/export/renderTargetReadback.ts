@@ -158,12 +158,8 @@ export interface CompileSceneForCaptureOptions {
   camera: THREE.Camera;
   width: number;
   height: number;
-  /**
-   * Resolve anyway after this long (default 3 s). `null` waits until every
-   * pipeline is built: three r186 skips a draw whose pipeline is still
-   * compiling, so a capture after a timed-out warm-up can miss whole layers.
-   */
-  timeoutMs?: number | null;
+  /** Resolve anyway after this long (a warm-up must never block a capture). */
+  timeoutMs?: number;
 }
 
 /**
@@ -197,10 +193,6 @@ export async function compileSceneForCapture(options: CompileSceneForCaptureOpti
     warmups.delete(settled);
     releaseCaptureTarget(target);
   });
-  if (timeoutMs === null) {
-    await settled;
-    return;
-  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([

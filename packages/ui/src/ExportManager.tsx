@@ -57,7 +57,6 @@ import {
   type PreparedImageCaptureTransaction,
 } from './export/renderCaptureState';
 import {
-  compileSceneForCapture,
   readbackToCanvas,
   renderSceneToPixels,
   resolveViewerPlate,
@@ -219,10 +218,11 @@ function ImageCaptureFrame({
  * - `lupi-canonical` (after controls, before uniform jobs) re-syncs the
  *   capture camera from the finalized camera, and asserts the environment.
  * - `lupi-capture` (after the default render) waits until the scene carries
- *   the artifact revision, kicks `renderer.compileAsync` once, and on a later
- *   frame renders into a render target at the requested size and reads it
- *   back (renderTargetReadback). The canvas is never resized and the live
- *   camera never moves, so the on-screen view is untouched.
+ *   the artifact revision and, one frame later (after the uniform jobs saw
+ *   the canonical state), renders into a render target at the requested
+ *   size and reads it back (renderTargetReadback). The canvas is never
+ *   resized and the live camera never moves, so the on-screen view is
+ *   untouched.
  *
  * The capture renders the raw scene (the post pipeline is bypassed) with the
  * background the viewer shows: the finalized artifact background, or the
@@ -421,24 +421,13 @@ function ImageCaptureFrameLifecycle({
       const barrier = barrierRef.current;
       const revision = revisionRef.current;
       if (claimFiberFrameWarmup(barrier, revision)) {
-        // Build the capture's pipelines and upload resources committed with
-        // the request before the capture frame (replaces v9's owned warm-up
-        // draw). The capture follows on a later frame, after every uniform
-        // job has seen the canonical state again.
-        const warmup = transaction.withCaptureScene(() => compileSceneForCapture({
-          renderer,
-          scene,
-          camera: transaction.camera,
-          width,
-          height,
-          // Capture only once every pipeline is ready (a skipped draw would
-          // export an image without the atoms); the export timeout bounds it.
-          timeoutMs: null,
-        }));
-        void warmup.finally(() => {
-          markFiberFrameCaptureWarmed(barrier, revision);
-          invalidate();
-        });
+        // The capture follows on a later frame, after every uniform job has
+        // seen the canonical state again. No renderer.compileAsync warm-up:
+        // three r186 skips any draw whose pipeline is still compiling
+        // asynchronously, so a capture behind a slow warm-up lost whole
+        // layers (the atoms of a transparent capture on SwiftShader WebGPU).
+        // The capture render builds missing pipelines synchronously instead.
+        markFiberFrameCaptureWarmed(barrier, revision);
         invalidate();
         return;
       }
