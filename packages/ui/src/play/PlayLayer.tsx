@@ -402,8 +402,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     const normal = new THREE.Vector3();
 
     const poke = (atomIndex: number): number => {
-      const { frame: current, center: c } = live.current;
-      if (!(atomIndex >= 0 && atomIndex < current.natoms)) return -1;
+      const { frame: current, center: c, transmissionActive: glass } = live.current;
+      // The transmission renderer has no impostor graph: its atoms would stay put.
+      if (glass || !(atomIndex >= 0 && atomIndex < current.natoms)) return -1;
       adoptScene(current, c);
       const p = current.positions;
       return addRipple([p[atomIndex * 3], p[atomIndex * 3 + 1], p[atomIndex * 3 + 2]], POKE_AMPLITUDE * displayMotionScale());
@@ -424,7 +425,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     const stroke = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
       if (phase === 'end') return;
       const amplitude = STROKE_AMPLITUDE * displayMotionScale();
-      if (!(amplitude > 0)) return;
+      if (!(amplitude > 0) || live.current.transmissionActive) return;
       const t = performance.now();
       const last = driver.lastStroke;
       if (phase === 'move' && (t - last.t < STROKE_MIN_MS || Math.hypot(clientX - last.x, clientY - last.y) < STROKE_MIN_PX)) return;
