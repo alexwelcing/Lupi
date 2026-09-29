@@ -17,6 +17,8 @@ import {
   libraryRedirectTarget,
   SEO_EDUCATION_ROUTES,
 } from '@atlas/ui/viewer/viewerRoutes';
+import { RelayPlate } from '@atlas/ui/relay/RelayPlate';
+import { deepLinkGalleryId } from '@atlas/ui/relay/preview';
 
 /**
  * Entry router. The marketing landing and the 3D viewer are two separately
@@ -97,34 +99,34 @@ function withProviders(node: ReactNode) {
   );
 }
 
-/** Brand splash shown while the viewer chunk (three/R3F) downloads. */
+/**
+ * Shown while the viewer chunk (three/R3F) downloads when no relay covers the
+ * page (deep links, saved views, other routes): the viewer's own sage plate
+ * with the lime mark, and for `?sim=<id>` the molecule's flat preview, laid
+ * out exactly like the viewer's "Opening…" plate that follows it.
+ */
 function Splash() {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'grid',
-        placeItems: 'center',
-        background: '#020204',
-        color: '#7dd3fc',
-        fontFamily: 'system-ui, sans-serif',
-        letterSpacing: '0.04em',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 22,
-          fontWeight: 800,
-          opacity: 0.9,
-          animation: 'lupiSplashPulse 1.4s ease-in-out infinite',
-        }}
-      >
-        Lupi
-      </div>
-      <style>{`@keyframes lupiSplashPulse { 0%,100% { opacity: 0.45 } 50% { opacity: 0.95 } }`}</style>
-    </div>
-  );
+  const opening = params.has('sim') || params.has('load') || params.has('molecule');
+  return <RelayPlate galleryId={deepLinkGalleryId()} copy={opening ? 'Opening…' : undefined} label="Loading Lupi" />;
+}
+
+/** The relay stage (packages/ui/src/relay/stage.ts) covering the page from a tap until the first frame. */
+const RELAY_SELECTOR = '[data-lupi-relay]:not([data-ending])';
+
+let viewerPrefetched = false;
+
+/**
+ * Warm the viewer once a visitor shows intent (the hero's first real spin or
+ * hover dwell, a tile or finder pick): the same modules the real loads use,
+ * so they come from cache. Skipped on Save-Data and 2G connections.
+ */
+function prefetchViewer() {
+  if (viewerPrefetched) return;
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (connection?.saveData || /2g/.test(connection?.effectiveType ?? '')) return;
+  viewerPrefetched = true;
+  void import('@atlas/ui/App').catch(() => undefined);
+  void import('@atlas/ui/viewer/openMolecule').catch(() => undefined);
 }
 
 function renderError(stage: string, err: any) {
@@ -148,13 +150,18 @@ function renderError(stage: string, err: any) {
   );
 }
 
-/** Load and mount the full 3D viewer (App). Shows the splash while it downloads. */
+/**
+ * Load and mount the full 3D viewer (App). Shows the splash while it
+ * downloads, unless the relay already covers the page: then what is under it
+ * stays until the viewer replaces it, and the relay hands over at the first frame.
+ */
 async function mountViewer() {
-  root.render(<Splash />);
+  if (!document.querySelector(RELAY_SELECTOR)) root.render(<Splash />);
   try {
     const mod = await import('@atlas/ui/App');
     root.render(withProviders(<mod.default />));
   } catch (err) {
+    document.querySelector('[data-lupi-relay]')?.remove();
     renderError('Viewer import', err);
   }
 }
@@ -167,7 +174,7 @@ async function mountLanding() {
     // imports in this chunk, so the landing paints as soon as the module loads.
     root.render(
       <QueryClientProvider client={queryClient}>
-        <LandingShell onEnterViewer={mountViewer} />
+        <LandingShell onEnterViewer={mountViewer} onPrefetchViewer={prefetchViewer} />
       </QueryClientProvider>,
     );
   } catch (err) {
