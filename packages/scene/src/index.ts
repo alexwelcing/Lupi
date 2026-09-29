@@ -52,6 +52,24 @@ export type { BillionAtomStats } from './BillionAtomBlock';
 export { LUPI_PHASE, LUPI_JOB, installLupiPhases } from './framePhases';
 export type { LupiPhase, LupiJobId } from './framePhases';
 
+// The intent bus and the capture guards (wave-1 contracts)
+export {
+  emitIntent,
+  onIntent,
+  registerCanvasInputSource,
+  isCanvasInputSourceActive,
+  subscribeCanvasInputSource,
+} from './intents';
+export type { LupiIntent, LupiIntentOf, LupiIntentType, PointerKind } from './intents';
+export {
+  registerCaptureGuard,
+  runPrepareCapture,
+  beginCaptureRender,
+  registerRecordingGuard,
+  beginRecording,
+} from './captureGuards';
+export type { CaptureGuard } from './captureGuards';
+
 // TSL: the node-material uniform bag and the impostor shading kit
 export {
   LUPI_UNIFORMS_KEY,
@@ -77,6 +95,7 @@ export {
   viewRay,
 } from './tsl/impostorKit';
 export type { LupiEnvBinding, LupiLightUniforms, LupiSurfaceInput } from './tsl/impostorKit';
+export * from './tsl/displayMotion';
 
 // Shared constants
 export {
