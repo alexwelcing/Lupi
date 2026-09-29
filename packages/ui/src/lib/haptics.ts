@@ -5,8 +5,8 @@
  * Opt-in and OFF by default, like the click sound (lib/clickSound.ts): state is
  * module-local (the hot path reads a plain boolean, no React), persisted to
  * localStorage 'lupi.haptics', and observable via {@link subscribeHaptics}.
- * Where the platform has no vibration (iOS Safari, most desktops that lack the
- * API) every call is a no-op and Settings says so.
+ * Where nothing can vibrate (iOS Safari has no API; desktops expose it with no
+ * motor behind it) every call is a no-op and Settings says so.
  *
  * A tick is at most {@link MAX_TICK_MS} long, and at most
  * {@link MAX_TICKS_PER_SECOND} fire in any one-second window: a burst of
@@ -56,9 +56,20 @@ export function subscribeHaptics(listener: (value: boolean) => void): () => void
   };
 }
 
-/** True where the platform exposes the Vibration API. */
+/**
+ * True where a tick can be felt: the platform exposes the Vibration API and
+ * the device has a touch screen. Desktop Chrome and Edge expose
+ * `navigator.vibrate` with no motor behind it, so a mouse-only device reports
+ * false and Settings says "Not supported on this device" instead of offering a
+ * switch that does nothing.
+ */
 export function isHapticsSupported(): boolean {
-  return typeof navigator !== 'undefined' && typeof (navigator as { vibrate?: unknown }).vibrate === 'function';
+  if (typeof navigator === 'undefined' || typeof (navigator as { vibrate?: unknown }).vibrate !== 'function') return false;
+  try {
+    return typeof matchMedia !== 'function' || matchMedia('(any-pointer: coarse)').matches;
+  } catch {
+    return true;
+  }
 }
 
 function now(): number {

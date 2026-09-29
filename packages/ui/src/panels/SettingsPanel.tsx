@@ -1,8 +1,9 @@
 /**
- * SettingsPanel — persistence-backed viewer settings: per-atom-type visibility
- * and radius for the loaded file, playback speed/loop mode, and the device
- * preferences: Sound, Haptics and Motion, then the remember toggle and the
- * reset to defaults.
+ * SettingsPanel — persistence-backed viewer settings. First the device's
+ * Sound, Haptics and Motion (the Play tray's "Settings…" leads here for
+ * these, so they sit at the top, visible without scrolling), then per-atom-type
+ * visibility and radius for the loaded file, playback speed/loop mode, and the
+ * remember toggle with the reset to defaults.
  *
  * No props. The atom-type, playback and remember settings read/write the
  * global store. Sound (lib/clickSound.ts), Haptics (lib/haptics.ts) and Motion
@@ -113,6 +114,29 @@ export function SettingsPanel(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0' }}>
+      <ControlGroup title="Sound and motion" wide>
+        <div style={prefRowStyle}>
+          <PrefText title="Sound" detail="Soft clicks when a view snaps onto a face, an atom ripples, or a button is pressed." />
+          <ToggleSwitch label="Sound" checked={soundOn} onChange={toggleSound} />
+        </div>
+        <div style={prefRowStyle}>
+          <PrefText
+            title="Haptics"
+            detail={hapticsSupported ? 'A light tap when a view snaps onto a face, is caught, or flips.' : 'Not supported on this device'}
+          />
+          <ToggleSwitch
+            label="Haptics"
+            checked={hapticsOn && hapticsSupported}
+            disabled={!hapticsSupported}
+            onChange={toggleHaptics}
+          />
+        </div>
+        <div style={{ ...prefRowStyle, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <PrefText title="Motion" detail={motionDetail} />
+          <MotionRadios value={comfort} onChange={setComfort} />
+        </div>
+      </ControlGroup>
+
       <ControlGroup title="Atom types" wide>
         {!file ? (
           <div style={emptyHintStyle}>Load a molecule or run to manage its atom types.</div>
@@ -187,26 +211,6 @@ export function SettingsPanel(): JSX.Element {
       </ControlGroup>
 
       <ControlGroup title="Preferences" wide>
-        <div style={prefRowStyle}>
-          <PrefText title="Sound" detail="Soft clicks when a view snaps onto a face, on resets and on button presses." />
-          <ToggleSwitch label="Sound" checked={soundOn} onChange={toggleSound} />
-        </div>
-        <div style={prefRowStyle}>
-          <PrefText
-            title="Haptics"
-            detail={hapticsSupported ? 'A light tap when a view snaps onto a face, is caught, or flips.' : 'Not supported on this device'}
-          />
-          <ToggleSwitch
-            label="Haptics"
-            checked={hapticsOn && hapticsSupported}
-            disabled={!hapticsSupported}
-            onChange={toggleHaptics}
-          />
-        </div>
-        <div style={{ ...prefRowStyle, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-          <PrefText title="Motion" detail={motionDetail} />
-          <MotionRadios value={comfort} onChange={setComfort} />
-        </div>
         <div style={prefRowStyle}>
           <PrefText
             title="Remember settings on this device"
