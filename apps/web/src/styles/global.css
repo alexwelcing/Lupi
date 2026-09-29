@@ -968,8 +968,8 @@ button:focus:not(:focus-visible) {
   height: 30px;
   flex-shrink: 0;
   border-radius: 2px;
-  background: linear-gradient(180deg, #22d3d7, #118b9b);
-  box-shadow: 0 0 12px rgba(34, 211, 215, 0.28);
+  background: var(--lupi-accent, #d5ef9c);
+  box-shadow: 0 0 12px rgba(213, 239, 156, 0.22);
 }
 .lupine-command-section-label {
   color: #607184;
