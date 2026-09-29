@@ -5,6 +5,7 @@
 import { lazy, memo, Suspense } from 'react';
 import { StudioControlDeck } from './StudioControlDeck';
 import { useStore, type AppState, type ViewerControlMode } from './store';
+import { withCameraGlide } from './camera/rigApi';
 const FigureExportPanel = lazy(() =>
   import('./panels/FigureExportPanel').then(module => ({
     default: module.FigureExportPanel,
@@ -90,7 +91,7 @@ function CameraCommandSurface() {
               className="lupine-camera-preset"
               aria-label={`${preset.label} camera view`}
               aria-pressed={cameraPreset === preset.id}
-              onClick={() => setCameraPreset(preset.id)}
+              onClick={() => withCameraGlide(() => setCameraPreset(preset.id))}
             >
               <span>{preset.code}</span>
               <small>{preset.label}</small>
@@ -100,7 +101,7 @@ function CameraCommandSurface() {
             type="button"
             className="lupine-camera-preset"
             aria-label="Fit camera to molecule"
-            onClick={fitCameraView}
+            onClick={() => withCameraGlide(fitCameraView)}
           >
             <span>FIT</span>
             <small>Recenter</small>
