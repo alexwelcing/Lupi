@@ -9,8 +9,9 @@
  *   home     `/` loads with zero <canvas> elements and creates no WebGL/WebGPU
  *            context (the zero-canvas home rule).
  *   caffeine `/?sim=caffeine` renders a non-blank canvas with visible CPK
- *            atoms; a drag (mouse on desktop, touch on phone) rotates the view;
- *            clicking (tapping) an atom opens the atom-info card.
+ *            atoms; a drag (mouse on desktop, touch on the phones) that holds
+ *            still before release rotates the view; clicking (tapping) an atom
+ *            opens the atom-info card.
  *   c60      `/?sim=c60_buckyball` renders a non-blank canvas with atoms.
  *   lattice  a larger crystal-lattice gallery entry (default al_polycrystal,
  *            32,000 atoms) renders.
@@ -27,6 +28,16 @@
  *   fallback a separate browser with neither WebGPU nor WebGL shows the
  *            renderer fallback screen without an uncaught error (console
  *            errors from the canvas error boundary are allowed here only).
+ *
+ * Scenario plugins: every tools/smoke/scenarios/*.mjs whose name does not
+ * start with `_` is imported at startup and runs like a built-in scenario
+ * (listed by --help, selected by --scenarios, reported in report.json). See
+ * tools/smoke/scenarios/_example.mjs for the shape; plugins get the shared
+ * helpers of tools/smoke/helpers.mjs as their second argument.
+ *
+ * Profiles: desktop (1024x640, DPR 1, mouse), phone (Pixel 7, touch) and
+ * phone390 (390x844, DPR 3, iPhone 13 user agent, touch; the phone scenario
+ * list). --profile=both is desktop + phone, --profile=all adds phone390.
  *
  * --level=boot reduces the viewer scenarios to: structure loads, canvas
  * mounted and sized, no fallback screen, backend recorded. --level=full
@@ -53,11 +64,12 @@
 
 import { chromium, devices } from 'playwright';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LANE_ARGS, chromiumExecutable } from './lib/browser-lanes.mjs';
+import * as smokeHelpers from './smoke/helpers.mjs';
 import {
   PNG_SIGNATURE,
   assessRender,
@@ -70,6 +82,7 @@ import {
   diffImages,
   errorMessage,
   galleryEntry,
+  isTouchProfile,
   mainCanvas,
   mouseDrag,
   openStructure,
@@ -85,14 +98,25 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const DIST_INDEX = resolve(REPO_ROOT, 'apps/web/dist/index.html');
+const SCENARIO_DIR = resolve(__dirname, 'smoke', 'scenarios');
 
-const ALL_SCENARIOS = ['home', 'caffeine', 'c60', 'lattice', 'export', 'testbed', 'churn', 'fallback'];
-const PROFILE_SCENARIOS = {
+const PROFILES = ['desktop', 'phone', 'phone390'];
+const PLUGIN_LANES = ['webgl', 'webgpu'];
+const BUILTIN_SCENARIOS = ['home', 'caffeine', 'c60', 'lattice', 'export', 'testbed', 'churn', 'fallback'];
+const BUILTIN_PROFILE_SCENARIOS = {
   desktop: ['home', 'caffeine', 'c60', 'lattice', 'export', 'testbed', 'churn', 'fallback'],
   // Export and churn are device-independent; the phone lane covers layout,
   // touch input, DPR > 1 and the mobile tier instead.
   phone: ['home', 'caffeine', 'c60', 'lattice', 'testbed', 'fallback'],
+  phone390: ['home', 'caffeine', 'c60', 'lattice', 'testbed', 'fallback'],
 };
+/** Scenario plugins from tools/smoke/scenarios/*.mjs, by name. */
+const PLUGINS = new Map((await loadPlugins()).map((plugin) => [plugin.name, plugin]));
+const ALL_SCENARIOS = [...BUILTIN_SCENARIOS, ...PLUGINS.keys()];
+const PROFILE_SCENARIOS = Object.fromEntries(PROFILES.map((profile) => [
+  profile,
+  [...BUILTIN_PROFILE_SCENARIOS[profile], ...[...PLUGINS.values()].filter((plugin) => plugin.profiles.includes(profile)).map((plugin) => plugin.name)],
+]));
 /** Scenarios that run in a backend lane; `fallback` has its own no-GPU lane. */
 const LANE_SCENARIOS = ALL_SCENARIOS.filter((name) => name !== 'fallback');
 const LEVELS = ['boot', 'full'];
@@ -114,8 +138,11 @@ Usage:
 Options:
   --url=<url>            Test an already-running app instead of serving apps/web/dist.
   --backend=<b>          webgl (alias webgl2) | webgpu | both (default: both).
-  --profile=<p>          desktop | phone | both (default: both).
-  --scenarios=<list>     Comma list from: ${ALL_SCENARIOS.join(', ')} (default: all).
+  --profile=<p>          desktop | phone | phone390 | both | all, or a comma list (default: both).
+                         both = desktop,phone; all = desktop,phone,phone390. phone390 is
+                         390x844 at DPR 3 with an iPhone 13 user agent and touch.
+  --scenarios=<list>     Comma list from: ${ALL_SCENARIOS.join(', ')} (default: all,
+                         plugins included).
   --level=<l>            boot | full (default: full). boot: the viewer scenarios check only
                          that the structure loads, the canvas mounts and the backend is recorded.
   --cases=<list>         Testbed cases for the testbed scenario, comma separated, or all
@@ -136,6 +163,9 @@ Options:
   --headless=<bool>      Default true.
   --json                 Print the JSON report to stdout instead of human logs.
   --help                 Show this message.
+
+Scenario plugins (tools/smoke/scenarios/*.mjs; names starting with _ are skipped):
+${describePlugins()}
 
 Environment:
   VERIFY_URL             Same as --url.
@@ -159,7 +189,7 @@ const extraChromeArgs = typeof args['chrome-args'] === 'string'
   : [];
 
 const backends = listArg(typeof args.backend === 'string' ? args.backend.replace(/\bwebgl2\b/g, 'webgl') : args.backend, ['webgl', 'webgpu'], 'both');
-const profiles = listArg(args.profile, ['desktop', 'phone'], 'both');
+const profiles = profileArg(args.profile);
 const scenarioFilter = typeof args.scenarios === 'string'
   ? args.scenarios.split(',').map((value) => value.trim()).filter(Boolean)
   : ALL_SCENARIOS;
@@ -168,6 +198,8 @@ for (const name of scenarioFilter) {
 }
 const level = typeof args.level === 'string' ? args.level : 'full';
 if (!LEVELS.includes(level)) usageError(`Unknown level "${level}". Use: ${LEVELS.join(', ')}`);
+/** Handed to every scenario (built-in and plugin) as ctx.options. */
+const scenarioOptions = Object.freeze({ level, reducedMotion: reducedMotion === 'reduce', strictBackend, timeout });
 const casesArg = typeof args.cases === 'string' && args.cases !== 'all'
   ? args.cases.split(',').map((value) => value.trim()).filter(Boolean)
   : 'all';
@@ -213,6 +245,7 @@ const report = {
     headless,
     extraChromeArgs,
     allowConsole: allowConsole?.source ?? null,
+    plugins: [...PLUGINS.values()].map(({ name, file, profiles: only, lanes }) => ({ name, file, profiles: only, lanes })),
   },
   lanes: [],
   summary: null,
@@ -276,6 +309,88 @@ async function main() {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario plugins
+// ---------------------------------------------------------------------------
+
+/**
+ * Import every tools/smoke/scenarios/*.mjs whose name does not start with `_`.
+ * Each default-exports { name, profiles, lanes?, description?, run(ctx, h) }
+ * (see _example.mjs). A missing directory means no plugins; a plugin that
+ * fails to load or has the wrong shape is a usage error.
+ */
+async function loadPlugins() {
+  if (!existsSync(SCENARIO_DIR)) return [];
+  const files = readdirSync(SCENARIO_DIR).filter((file) => file.endsWith('.mjs') && !file.startsWith('_')).sort();
+  const plugins = [];
+  for (const file of files) {
+    const path = join(SCENARIO_DIR, file);
+    const label = relative(REPO_ROOT, path);
+    let plugin;
+    try {
+      plugin = (await import(pathToFileURL(path).href)).default;
+    } catch (error) {
+      usageError(`scenario plugin ${label} failed to load: ${errorMessage(error)}`);
+    }
+    const problem = pluginProblem(plugin, plugins);
+    if (problem) usageError(`scenario plugin ${label}: ${problem}`);
+    const lanes = plugin.lanes == null ? null : [...new Set(plugin.lanes.map((lane) => (lane === 'webgl2' ? 'webgl' : lane)))];
+    plugins.push({
+      name: plugin.name,
+      profiles: [...new Set(plugin.profiles)],
+      lanes,
+      description: typeof plugin.description === 'string' ? plugin.description : '',
+      run: plugin.run,
+      file: label,
+    });
+  }
+  return plugins;
+}
+
+async function runPlugin(ctx) {
+  await PLUGINS.get(ctx.spec.name).run(ctx, smokeHelpers);
+  // Plugin-only runs still prove the lane's backend (--strict-backend judges it
+  // per lane): record what the viewer canvas the plugin opened rendered through.
+  if (!ctx.spec.lane.actualBackend) {
+    const backend = await detectBackend(ctx.page);
+    if (backend.kind !== 'unknown') ctx.spec.lane.actualBackend = { ...backend, source: `${backend.source} (plugin ${ctx.spec.name})` };
+  }
+}
+
+function pluginProblem(plugin, loaded) {
+  if (!plugin || typeof plugin !== 'object') return 'no default export object';
+  if (typeof plugin.name !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/i.test(plugin.name)) return `name must match /^[a-z0-9][a-z0-9_-]*$/i (got ${JSON.stringify(plugin.name)})`;
+  if (BUILTIN_SCENARIOS.includes(plugin.name)) return `name "${plugin.name}" is a built-in scenario`;
+  const twin = loaded.find((other) => other.name === plugin.name);
+  if (twin) return `name "${plugin.name}" is already used by ${twin.file}`;
+  if (!Array.isArray(plugin.profiles) || plugin.profiles.length === 0 || !plugin.profiles.every((profile) => PROFILES.includes(profile))) {
+    return `profiles must be a non-empty array of ${PROFILES.join(', ')} (got ${JSON.stringify(plugin.profiles)})`;
+  }
+  if (plugin.lanes != null && (!Array.isArray(plugin.lanes) || plugin.lanes.length === 0 || !plugin.lanes.every((lane) => [...PLUGIN_LANES, 'webgl2'].includes(lane)))) {
+    return `lanes, when given, must be a non-empty array of ${PLUGIN_LANES.join(', ')} (got ${JSON.stringify(plugin.lanes)})`;
+  }
+  if (typeof plugin.run !== 'function') return 'run(ctx, h) must be a function';
+  return null;
+}
+
+function describePlugins() {
+  if (PLUGINS.size === 0) return '  (none)';
+  const width = Math.max(...[...PLUGINS.keys()].map((name) => name.length));
+  return [...PLUGINS.values()].map((plugin) => {
+    const where = `${plugin.profiles.join(',')}; lanes ${(plugin.lanes ?? PLUGIN_LANES).join(',')}`;
+    return `  ${plugin.name.padEnd(width)}  ${where}  (${plugin.file})${plugin.description ? `\n  ${' '.repeat(width)}  ${plugin.description}` : ''}`;
+  }).join('\n');
+}
+
+/** --profile: both (default) = desktop,phone; all = every profile; or a comma list. */
+function profileArg(value) {
+  if (value === undefined || value === true || value === 'both') return ['desktop', 'phone'];
+  if (value === 'all') return [...PROFILES];
+  const list = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  for (const item of list) if (!PROFILES.includes(item)) usageError(`Unknown profile "${item}"; use ${PROFILES.join(', ')}, both or all`);
+  return [...new Set(list)];
+}
+
+// ---------------------------------------------------------------------------
 // Lanes and scenarios
 // ---------------------------------------------------------------------------
 
@@ -307,6 +422,7 @@ async function runLane(backend, baseUrl) {
       lane.profiles.push(profileResult);
       for (const name of PROFILE_SCENARIOS[profile]) {
         if (!scenarioFilter.includes(name) || !LANE_SCENARIOS.includes(name)) continue;
+        if (PLUGINS.get(name)?.lanes?.includes(backend) === false) continue;
         profileResult.scenarios.push(await runScenario(browser, { backend, profile, name, baseUrl, lane }));
       }
     }
@@ -450,7 +566,7 @@ async function runScenarioAttempt(browser, spec, attempt) {
   await stubThirdParty(page);
 
   try {
-    const ctx = { page, spec, check, save, outcome };
+    const ctx = { page, spec, check, save, outcome, options: scenarioOptions, log };
     if (spec.name === 'home') await scenarioHome(ctx);
     else if (spec.name === 'caffeine') await scenarioCaffeine(ctx);
     else if (spec.name === 'c60') await scenarioStructure(ctx, { id: 'c60_buckyball', minForeground: 0.01 });
@@ -459,6 +575,8 @@ async function runScenarioAttempt(browser, spec, attempt) {
     else if (spec.name === 'testbed') await scenarioTestbed(ctx);
     else if (spec.name === 'churn') await scenarioChurn(ctx);
     else if (spec.name === 'fallback') await scenarioFallback(ctx);
+    else if (PLUGINS.has(spec.name)) await runPlugin(ctx);
+    else throw new Error(`no runner for scenario "${spec.name}"`);
   } catch (error) {
     outcome.exception = errorMessage(error);
     log(`  NO  exception: ${outcome.exception}`);
@@ -575,17 +693,18 @@ async function scenarioCaffeine(ctx) {
   const idle = await captureCanvas(page, canvas);
   const idleDiff = diffImages(settled.image, idle.image);
   const start = await canvasPoint(page, canvas, 0.5, 0.55);
-  if (spec.profile === 'phone') await touchDrag(page, start, { dx: 140, dy: 30 });
-  else await mouseDrag(page, start, { dx: 220, dy: 40 });
+  // Hold still before release so the drag cannot turn into a coast.
+  if (isTouchProfile(spec.profile)) await touchDrag(page, start, { dx: 140, dy: 30 }, { holdMs: 150 });
+  else await mouseDrag(page, start, { dx: 220, dy: 40 }, { holdMs: 150 });
   await page.waitForTimeout(600);
   const rotated = await waitSettled(page, canvas, 0.01, 8_000);
   await save('rotated', rotated.png);
   const rotateDiff = diffImages(settled.image, rotated.image);
   const area = settled.image.width * settled.image.height;
   const needed = Math.max(0.005 * area, 0.2 * render.foregroundPixels, 3 * idleDiff.changed + 200);
-  outcome.data.rotate = { input: spec.profile === 'phone' ? 'touch' : 'mouse', start, idleChanged: idleDiff.changed, rotateChanged: rotateDiff.changed, needed: Math.round(needed) };
+  outcome.data.rotate = { input: isTouchProfile(spec.profile) ? 'touch' : 'mouse', start, idleChanged: idleDiff.changed, rotateChanged: rotateDiff.changed, needed: Math.round(needed) };
   check(
-    `${spec.profile === 'phone' ? 'touch' : 'mouse'} drag rotates the view`,
+    `${isTouchProfile(spec.profile) ? 'touch' : 'mouse'} drag rotates the view`,
     rotateDiff.changed >= needed,
     `changed=${rotateDiff.changed}px idle=${idleDiff.changed}px need>=${Math.round(needed)}px`,
   );
@@ -883,6 +1002,19 @@ function contextOptions(profile) {
   if (profile === 'phone') {
     const { defaultBrowserType: _ignored, ...pixel } = devices['Pixel 7'];
     return { ...pixel, ...common };
+  }
+  if (profile === 'phone390') {
+    // The 390 px one-thumb phone: iPhone 13 screen and user agent, with the
+    // full 844 px height (no simulated Safari toolbar).
+    return {
+      viewport: { width: 390, height: 844 },
+      screen: { width: 390, height: 844 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+      userAgent: devices['iPhone 13'].userAgent,
+      ...common,
+    };
   }
   // The release-smoke desktop size: software renderers manage a few frames a
   // second here, so a larger viewport only slows every capture down.

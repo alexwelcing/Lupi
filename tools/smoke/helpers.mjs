@@ -276,35 +276,6 @@ async function canvasPoint(page, canvas, fx, fy) {
   return { x: Math.round(hit.x), y: Math.round(hit.y) };
 }
 
-async function mouseDrag(page, start, { dx, dy }) {
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  const steps = 16;
-  for (let i = 1; i <= steps; i += 1) {
-    await page.mouse.move(start.x + (dx * i) / steps, start.y + (dy * i) / steps);
-    await page.waitForTimeout(16);
-  }
-  await page.mouse.up();
-}
-
-async function touchDrag(page, start, { dx, dy }) {
-  const client = await page.context().newCDPSession(page);
-  try {
-    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: start.x, y: start.y, id: 1 }] });
-    const steps = 16;
-    for (let i = 1; i <= steps; i += 1) {
-      await client.send('Input.dispatchTouchEvent', {
-        type: 'touchMove',
-        touchPoints: [{ x: start.x + (dx * i) / steps, y: start.y + (dy * i) / steps, id: 1 }],
-      });
-      await page.waitForTimeout(16);
-    }
-    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  } finally {
-    await client.detach().catch(() => {});
-  }
-}
-
 async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
   const box = await canvas.boundingBox();
   const candidates = atomCandidates(image, 8);
@@ -317,7 +288,7 @@ async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
       tried.push({ ...point, skipped: 'covered by DOM chrome' });
       continue;
     }
-    if (spec.profile === 'phone') await page.touchscreen.tap(point.x, point.y);
+    if (isTouchProfile(spec.profile)) await page.touchscreen.tap(point.x, point.y);
     else await page.mouse.click(point.x, point.y);
     const shown = await card.first().waitFor({ state: 'visible', timeout: 4_000 }).then(() => true, () => false);
     tried.push({ ...point, shown });
@@ -327,15 +298,253 @@ async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
         layout: node.getAttribute('data-layout'),
         text: node.textContent.replace(/\s+/g, ' ').trim().slice(0, 120),
       }));
-      outcome.data.pick = { input: spec.profile === 'phone' ? 'tap' : 'click', tried, card: info };
+      outcome.data.pick = { input: isTouchProfile(spec.profile) ? 'tap' : 'click', tried, card: info };
       await save('picked', await page.screenshot({ scale: 'css' }));
-      check(`${spec.profile === 'phone' ? 'tapping' : 'clicking'} an atom opens the atom-info card`, true, `atom #${info.atomIndex} (${info.layout}) after ${tried.length} attempt(s): ${info.text.slice(0, 60)}`);
+      check(`${isTouchProfile(spec.profile) ? 'tapping' : 'clicking'} an atom opens the atom-info card`, true, `atom #${info.atomIndex} (${info.layout}) after ${tried.length} attempt(s): ${info.text.slice(0, 60)}`);
       return;
     }
   }
-  outcome.data.pick = { input: spec.profile === 'phone' ? 'tap' : 'click', tried, candidates: candidates.length };
+  outcome.data.pick = { input: isTouchProfile(spec.profile) ? 'tap' : 'click', tried, candidates: candidates.length };
   await save('pick-failed', await page.screenshot({ scale: 'css' }));
-  check(`${spec.profile === 'phone' ? 'tapping' : 'clicking'} an atom opens the atom-info card`, false, `no card after ${tried.length} attempt(s) on ${candidates.length} candidate(s)`);
+  check(`${isTouchProfile(spec.profile) ? 'tapping' : 'clicking'} an atom opens the atom-info card`, false, `no card after ${tried.length} attempt(s) on ${candidates.length} candidate(s)`);
+}
+
+// ---------------------------------------------------------------------------
+// Gestures
+//
+// Drags pace their moves in real time (16 moves 16 ms apart, each awaited),
+// wait until the page has handled the last move, then HOLD STILL for holdMs
+// before releasing, so a drag cannot become a coast: the release is holdMs
+// after the last move by event.timeStamp and by wall clock. No moves are sent
+// during the hold (a real finger or mouse held still sends none either; touch
+// moves that do not move are dropped by Chromium anyway).
+//
+// Flicks release at speed. Every event carries a planned CDP timestamp and is
+// dispatched on schedule without waiting for the page, so event.timeStamp
+// shows the intended speed even when a software renderer keeps the main
+// thread busy and the events arrive in a burst. A rig must therefore measure
+// release velocity from event.timeStamp, never from performance.now() at
+// handling time.
+//
+// Touch gestures (touchDrag, touchFlick, pinch, twoFingerDrag) need a context
+// with hasTouch (the phone and phone390 profiles).
+// ---------------------------------------------------------------------------
+
+const DRAG_STEPS = 16;
+const DRAG_STEP_MS = 16;
+
+/** True for the touch device profiles (phone, phone390). */
+function isTouchProfile(profile) {
+  return profile === 'phone' || profile === 'phone390';
+}
+
+/** Epoch milliseconds with sub-millisecond resolution (CDP timestamps are epoch seconds). */
+function epochMs() {
+  return performance.timeOrigin + performance.now();
+}
+
+/** Resolve once the page's main thread has run a frame, i.e. handled the input queued before it. */
+async function inputHandled(page) {
+  await withTimeout(page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done()))), 5_000, 'input settle').catch(() => {});
+}
+
+async function touchEvent(client, type, points, timestampMs) {
+  return client.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : points.map((point, index) => ({ x: point.x, y: point.y, id: index + 1 })),
+    ...(timestampMs == null ? {} : { timestamp: timestampMs / 1000 }),
+  });
+}
+
+/** Press at start, move by {dx, dy} in 16 steps 16 ms apart, hold still holdMs, release. */
+async function mouseDrag(page, start, { dx, dy }, { holdMs = 150 } = {}) {
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  for (let i = 1; i <= DRAG_STEPS; i += 1) {
+    await page.mouse.move(start.x + (dx * i) / DRAG_STEPS, start.y + (dy * i) / DRAG_STEPS);
+    await page.waitForTimeout(DRAG_STEP_MS);
+  }
+  if (holdMs > 0) {
+    await inputHandled(page);
+    await page.waitForTimeout(holdMs);
+  }
+  await page.mouse.up();
+}
+
+/** One finger: touch at start, move by {dx, dy} in 16 steps 16 ms apart, hold still holdMs, lift. */
+async function touchDrag(page, start, { dx, dy }, { holdMs = 150 } = {}) {
+  const points = (i) => [{ x: start.x + (dx * i) / DRAG_STEPS, y: start.y + (dy * i) / DRAG_STEPS }];
+  await touchStroke(page, points, { holdMs });
+}
+
+/** Two fingers `gap` px apart (horizontally) move together by {dx, dy}, hold still holdMs, lift. */
+async function twoFingerDrag(page, start, { dx, dy }, { gap = 80, holdMs = 150 } = {}) {
+  const points = (i) => {
+    const x = start.x + (dx * i) / DRAG_STEPS;
+    const y = start.y + (dy * i) / DRAG_STEPS;
+    return [{ x: x - gap / 2, y }, { x: x + gap / 2, y }];
+  };
+  await touchStroke(page, points, { holdMs });
+}
+
+/**
+ * Two fingers centred on `center`, `fromPx` apart, spread (or close) to `toPx`
+ * apart over `ms`, hold still holdMs, lift. `angle` (degrees) turns the finger
+ * axis from horizontal.
+ */
+async function pinch(page, center, { fromPx = 80, toPx = 220, ms = 256, holdMs = 150, angle = 0 } = {}) {
+  const steps = Math.max(4, Math.round(ms / DRAG_STEP_MS));
+  const ux = Math.cos((angle * Math.PI) / 180);
+  const uy = Math.sin((angle * Math.PI) / 180);
+  const points = (i) => {
+    const half = (fromPx + ((toPx - fromPx) * i) / steps) / 2;
+    return [{ x: center.x - ux * half, y: center.y - uy * half }, { x: center.x + ux * half, y: center.y + uy * half }];
+  };
+  await touchStroke(page, points, { holdMs, steps, stepMs: ms / steps });
+}
+
+/** Touch down at points(0), move through points(1..steps) in real time, hold, lift. */
+async function touchStroke(page, points, { holdMs = 150, steps = DRAG_STEPS, stepMs = DRAG_STEP_MS } = {}) {
+  const client = await cdpFor(page);
+  await touchEvent(client, 'touchStart', points(0));
+  for (let i = 1; i <= steps; i += 1) {
+    await touchEvent(client, 'touchMove', points(i));
+    await page.waitForTimeout(stepMs);
+  }
+  if (holdMs > 0) {
+    await inputHandled(page);
+    await page.waitForTimeout(holdMs);
+  }
+  await touchEvent(client, 'touchEnd', []);
+}
+
+/**
+ * Play timed events (`at` ms from now) on schedule with planned timestamps,
+ * without waiting for the page between them; resolves when all are acknowledged.
+ */
+async function playTimed(events, send) {
+  const origin = epochMs();
+  const pending = [];
+  for (const event of events) {
+    const wait = origin + event.at - epochMs();
+    if (wait > 1) await sleep(wait);
+    pending.push(send(event, origin + event.at));
+  }
+  await Promise.all(pending);
+}
+
+function flickPlan(start, { dx, dy }, ms) {
+  const steps = Math.max(4, Math.round(ms / DRAG_STEP_MS));
+  const plan = [{ type: 'down', at: 0, x: start.x, y: start.y }];
+  for (let i = 1; i <= steps; i += 1) plan.push({ type: 'move', at: (ms * i) / steps, x: start.x + (dx * i) / steps, y: start.y + (dy * i) / steps });
+  // Lift half a frame after the last move: released at full speed.
+  plan.push({ type: 'up', at: ms + 8, x: start.x + dx, y: start.y + dy });
+  return plan;
+}
+
+/** Press at start and throw the pointer by {dx, dy} in `ms`, releasing at speed. */
+async function mouseFlick(page, start, { dx, dy }, { ms = 120 } = {}) {
+  const client = await cdpFor(page);
+  await page.mouse.move(start.x, start.y);
+  const type = { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased' };
+  await playTimed(flickPlan(start, { dx, dy }, ms), (event, at) => client.send('Input.dispatchMouseEvent', {
+    type: type[event.type],
+    x: event.x,
+    y: event.y,
+    button: 'left',
+    buttons: event.type === 'up' ? 0 : 1,
+    clickCount: event.type === 'move' ? 0 : 1,
+    timestamp: at / 1000,
+  }));
+}
+
+/** One finger thrown by {dx, dy} in `ms`, lifting at speed. */
+async function touchFlick(page, start, { dx, dy }, { ms = 120 } = {}) {
+  const client = await cdpFor(page);
+  const type = { down: 'touchStart', move: 'touchMove', up: 'touchEnd' };
+  await playTimed(flickPlan(start, { dx, dy }, ms), (event, at) => touchEvent(client, type[event.type], [event], at));
+}
+
+// ---------------------------------------------------------------------------
+// Frames and play state
+// ---------------------------------------------------------------------------
+
+/**
+ * What the screen showed, every `every` ms for `ms`: floor(ms / every) + 1
+ * full-viewport PNG Buffers (CSS-pixel size, DOM chrome visible; decode with
+ * decodePng()).
+ *
+ * Frames come from a CDP screencast, so every frame the page presents is seen
+ * at the rate it presents them (software renderers manage a few per second;
+ * polled screenshots would add seconds each). The timeline starts at the first
+ * presented frame; slot i holds the latest frame presented at or before
+ * i * every ms, so a page that presents nothing new repeats its last frame.
+ * Each Buffer carries `t` (the slot, ms) and `frameT` (when the frame it shows
+ * was presented, ms, <= t): count distinct `frameT` values for distinct frames.
+ * One sampleFrames per page at a time.
+ */
+async function sampleFrames(page, { ms = 500, every = 50 } = {}) {
+  const client = await cdpFor(page);
+  const step = Math.max(1, every);
+  const count = Math.max(1, Math.floor(ms / step) + 1);
+  const presented = [];
+  let wake = null;
+  const onFrame = ({ data, metadata, sessionId }) => {
+    client.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+    const at = Number.isFinite(metadata?.timestamp) ? metadata.timestamp * 1000 : Date.now();
+    presented.push({ at, png: Buffer.from(data, 'base64') });
+    wake?.();
+  };
+  const nextFrame = (maxMs) => new Promise((done) => {
+    const timer = setTimeout(done, maxMs);
+    wake = () => {
+      clearTimeout(timer);
+      done();
+    };
+  });
+  const viewport = page.viewportSize();
+  client.on('Page.screencastFrame', onFrame);
+  try {
+    await client.send('Page.startScreencast', {
+      format: 'png',
+      everyNthFrame: 1,
+      ...(viewport ? { maxWidth: viewport.width, maxHeight: viewport.height } : {}),
+    });
+    if (presented.length === 0) await nextFrame(Math.min(timeout, 15_000));
+    if (presented.length === 0) {
+      // Nothing presented yet: seed the timeline with a forced capture.
+      const { data } = await withTimeout(client.send('Page.captureScreenshot', { format: 'png' }), timeout, 'frame capture');
+      presented.push({ at: Date.now(), png: Buffer.from(data, 'base64') });
+    }
+    const origin = presented[0].at;
+    const end = origin + (count - 1) * step;
+    while (Date.now() < end) await nextFrame(end - Date.now());
+    // Frames reach us a few ms after they are presented.
+    await sleep(100);
+  } finally {
+    wake = null;
+    client.off('Page.screencastFrame', onFrame);
+    await client.send('Page.stopScreencast').catch(() => {});
+  }
+  presented.sort((a, b) => a.at - b.at);
+  const origin = presented[0].at;
+  const frames = [];
+  let shown = 0;
+  for (let i = 0; i < count; i += 1) {
+    const t = i * step;
+    while (shown + 1 < presented.length && presented[shown + 1].at - origin <= t) shown += 1;
+    const source = presented[shown].png;
+    const png = Buffer.from(source.buffer, source.byteOffset, source.length);
+    png.t = t;
+    png.frameT = Math.round(presented[shown].at - origin);
+    frames.push(png);
+  }
+  return frames;
+}
+
+/** The Play store's state (window.__lupiPlay.state()), or null when it is absent. */
+async function readPlay(page) {
+  return page.evaluate(() => window.__lupiPlay?.state?.() ?? null).catch(() => null);
 }
 
 // ---------------------------------------------------------------------------
@@ -690,9 +899,16 @@ export {
   assessRender,
   detectBackend,
   canvasPoint,
+  pickAtom,
+  isTouchProfile,
   mouseDrag,
   touchDrag,
-  pickAtom,
+  mouseFlick,
+  touchFlick,
+  pinch,
+  twoFingerDrag,
+  sampleFrames,
+  readPlay,
   PNG_SIGNATURE,
   decodePng,
   cropImage,
