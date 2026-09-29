@@ -261,6 +261,10 @@ interface BondsProps {
   atomColorSource?: 'colormap' | 'element';
   /** Raw types hidden by the owner viewer. Bonds touching them are removed. */
   hiddenAtomTypes?: ReadonlySet<number>;
+  /** Identity of the loaded source (the owner passes the file's trajectory
+   *  object). Frames of one trajectory share it; a new value is a different
+   *  molecule even when its atom count and types match the previous one. */
+  sourceKey?: object | null;
   /** Telemetry hook — reports the bonds actually left after visibility
    *  filtering, not merely the raw inference result. Used by visual readiness
    *  and the dev HUD; safe to omit. */
@@ -310,6 +314,7 @@ export function Bonds({
   inferenceAllowed: precomputedInferenceAllowed,
   atomColorSource = 'colormap',
   hiddenAtomTypes = new Set<number>(),
+  sourceKey,
   onBondsUpdate,
   onGpuStatusChange,
 }: BondsProps) {
@@ -448,6 +453,7 @@ export function Bonds({
   // user loaded a completely different system. All cached dispatch state
   // must be invalidated to prevent stale bonds from persisting.
   const prevNatomsRef = useRef<number>(0);
+  const prevSourceKeyRef = useRef<object | null | undefined>(undefined);
   // Snapshot of the positions array we last actually dispatched bond
   // detection on. Lets us skip dispatch when atoms have only jittered
   // (sub-threshold motion) — bond topology doesn't change for ~0.05 Å
@@ -518,17 +524,21 @@ export function Bonds({
     const isFrameChange = frame !== prevFrameRef.current;
     prevFrameRef.current = frame;
 
-    // Detect molecule switch: natoms changed OR the positions buffer is a
-    // different TypedArray (covers same-size molecules). A trajectory's
-    // frames share their positions buffer during playback, but a gallery
-    // load always allocates fresh arrays.
+    // Detect a molecule switch: a new source (a same-size molecule with the
+    // same types still arrives with a new trajectory), a different atom count,
+    // or different type content or semantics. Frames of one trajectory keep
+    // the same source, so playback steps are not switches.
     const typeInterpretationChanged = lastDispatchTypesRef.current !== null && (
       !atomTypesContentEqual(frame.types, lastDispatchTypesRef.current) ||
       typeSemanticsKey !== lastDispatchTypeSemanticsKeyRef.current
     );
-    const isMoleculeSwitch = frame.natoms !== prevNatomsRef.current || typeInterpretationChanged;
+    const sourceChanged = sourceKey !== prevSourceKeyRef.current;
+    prevSourceKeyRef.current = sourceKey;
+    const isMoleculeSwitch = frame.natoms !== prevNatomsRef.current || typeInterpretationChanged || sourceChanged;
     prevNatomsRef.current = frame.natoms;
     if (isMoleculeSwitch) {
+      // The previous molecule's pairs index atoms of a different structure.
+      clearBondState();
       lastDispatchPositionsRef.current = null;
       lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
@@ -627,7 +637,7 @@ export function Bonds({
         debounceRef.current = null;
       }
     };
-  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, typeSemanticsKey]);
+  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, typeSemanticsKey, sourceKey]);
 
   // ─── GPU dispatch ──────────────────────────────────────────────────
   // Runs only when gpuActive is true. Mirrors the worker effect's contract:

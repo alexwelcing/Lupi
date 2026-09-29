@@ -607,6 +607,7 @@ export function ViewerScene({
             inferenceAllowed={bondRenderPlan.inferenceAllowed}
             atomColorSource={atomColorSource}
             hiddenAtomTypes={hiddenAtomTypes}
+            sourceKey={file?.trajectory ?? null}
             onBondsUpdate={(info) => useStore.getState().reportBondsUpdate(info.source, info.count)}
             onGpuStatusChange={(status) => useStore.getState().setGpuBondsStatus(status)}
           />}
