@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { LOCAL_MOLECULES, type LocalMolecule } from './moleculeIndex';
-import { openLocalMolecule } from './MoleculeFinder';
+import { openLocalMolecule, previewRectIn } from './MoleculeFinder';
+import { LandingIntentContext } from './landingIntent';
 
 const FIRST_PAGE = 48;
 
@@ -13,11 +14,13 @@ function atomsLabel(atoms: number): string {
 /**
  * Dense wall of every molecule that opens with one click. Tiles are plain
  * links (`/?sim=<id>`) so they work before hydration and in crawlers, but a
- * click loads in place so the viewer takes over without a full navigation.
+ * click loads in place so the viewer takes over without a full navigation,
+ * the tile's preview growing into the sage relay stage on the way.
  */
 export function MoleculeWall() {
   const [expanded, setExpanded] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
+  const intent = useContext(LandingIntentContext);
   const shown = expanded ? LOCAL_MOLECULES : LOCAL_MOLECULES.slice(0, FIRST_PAGE);
 
   const open = (event: React.MouseEvent<HTMLAnchorElement>, molecule: LocalMolecule) => {
@@ -25,7 +28,12 @@ export function MoleculeWall() {
     event.preventDefault();
     if (opening) return;
     setOpening(molecule.id);
-    openLocalMolecule(molecule.id).catch(() => undefined).finally(() => setOpening(null));
+    // A tap is intent: fetch the viewer while the molecule loads.
+    intent.prefetchViewer();
+    // The relay grows the tile's preview into the sage stage.
+    openLocalMolecule(molecule.id, { source: 'tile', fromRect: previewRectIn(event.currentTarget) })
+      .catch(() => undefined)
+      .finally(() => setOpening(null));
   };
 
   return (

@@ -1,0 +1,267 @@
+/* The relay and its sage plates: every surface between a tap (or a deep link)
+   and the viewer's first frame is the viewer's own sage plate, never a dark
+   splash. Plates centre the molecule's flat preview with a hairline lime
+   ring under it; the relay (relay/stage.ts) carries the tapped drawing.
+   The ring sits in the same place with or without a preview (and in
+   apps/web/index.html's static splash), so it never jumps between steps. */
+
+.lupi-plate {
+  --lupi-plate-preview: min(86vw, 480px);
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: #101817;
+  color: #aabbb1;
+  font:
+    500 0.8125rem/1.35 system-ui,
+    sans-serif;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.12s ease;
+}
+.lupi-plate[data-in-viewport] {
+  position: absolute;
+}
+.lupi-plate[data-fading] {
+  opacity: 0;
+}
+.lupi-plate__preview {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--lupi-plate-preview);
+  height: auto;
+  aspect-ratio: 400 / 270;
+  transform: translate(-50%, -50%);
+}
+/* The previews carry their own near-sage backing rectangle; feather its
+   edges so no box shows on the plate. */
+.lupi-plate__preview,
+.lupi-relay__stage[data-kind='preview'] img {
+  -webkit-mask-image: radial-gradient(farthest-side, #000 78%, transparent 100%);
+  mask-image: radial-gradient(farthest-side, #000 78%, transparent 100%);
+}
+.lupi-plate__foot {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: calc(50% + var(--lupi-plate-preview) * 0.3375 + 18px);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+/* The lime mark: a hairline ring with one arc travelling round it. */
+.lupi-ring {
+  display: block;
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+}
+.lupi-ring circle {
+  fill: none;
+  stroke: #d5ef9c;
+  stroke-width: 1.25;
+}
+.lupi-ring__track {
+  opacity: 0.2;
+}
+.lupi-ring__arc {
+  stroke-dasharray: 22 78;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lupi-ring-turn 1.4s linear infinite;
+}
+@keyframes lupi-ring-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The relay layer: outside #root, above everything, until the first frame. */
+.lupi-relay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  color: #aabbb1;
+  font:
+    500 0.8125rem/1.35 system-ui,
+    sans-serif;
+  letter-spacing: 0.02em;
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.12s ease;
+}
+.lupi-relay[data-ending] {
+  opacity: 0;
+  pointer-events: none;
+}
+.lupi-relay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: #101817;
+}
+.lupi-relay__stage {
+  position: absolute;
+  transform-origin: 50% 50%;
+  outline: none;
+}
+.lupi-relay__stage[data-kind='hero'] {
+  border-radius: 50%;
+  /* The hero's faint lime pool, carried along with the drawing. */
+  background: radial-gradient(closest-side, #d5ef9c12, #d5ef9c05 70%, transparent);
+  cursor: grab;
+}
+.lupi-relay__stage[data-kind='hero'][data-bucky-state='drag'] {
+  cursor: grabbing;
+}
+.lupi-relay__stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* A tile's relay carries the plate's own ring (it appears at 1.2 s). */
+.lupi-relay__mark {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.lupi-relay__mark[data-on] {
+  opacity: 1;
+}
+.lupi-relay[data-still] .lupi-ring__arc {
+  animation: none;
+}
+.lupi-relay__ring {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  transform: rotate(-90deg);
+  transition: opacity 0.3s ease;
+}
+.lupi-relay__ring[data-on] {
+  opacity: 1;
+}
+.lupi-relay__ring circle {
+  fill: none;
+  stroke: #d5ef9c;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.lupi-relay__trace {
+  opacity: 0.32;
+  stroke-dasharray: 100 100;
+  stroke-dashoffset: 100;
+}
+.lupi-relay__ring[data-on] .lupi-relay__trace {
+  animation: lupi-relay-trace 0.9s cubic-bezier(0.3, 0.7, 0.2, 1) forwards;
+}
+.lupi-relay__runner {
+  opacity: 0;
+  stroke-dasharray: 6 94;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+.lupi-relay__ring[data-on] .lupi-relay__runner {
+  animation:
+    lupi-relay-show 0.3s ease 0.8s forwards,
+    lupi-ring-turn 2.8s linear 0.8s infinite;
+}
+@keyframes lupi-relay-trace {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes lupi-relay-show {
+  to {
+    opacity: 0.9;
+  }
+}
+.lupi-relay__face {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  margin: 0;
+  text-align: center;
+  color: #d5ef9c;
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+  pointer-events: none;
+}
+.lupi-relay__face[data-on] {
+  opacity: 1;
+  transform: none;
+}
+.lupi-relay__wait {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+  font-size: 0.9rem;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s linear 0.3s;
+  pointer-events: none;
+}
+.lupi-relay__wait[data-on] {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  pointer-events: auto;
+}
+.lupi-relay__wait p {
+  margin: 0;
+}
+.lupi-relay__retry {
+  font: 600 0.875rem/1 system-ui, sans-serif;
+  color: #101817;
+  background: #d5ef9c;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+.lupi-relay__retry:focus-visible {
+  outline: 2px solid #d5ef9c;
+  outline-offset: 3px;
+}
+
+/* Still (and reduced motion): nothing travels; the ring is simply there. */
+.lupi-relay[data-still] .lupi-relay__trace {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+.lupi-relay[data-still] .lupi-relay__runner {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lupi-ring__arc {
+    animation: none;
+  }
+  .lupi-plate,
+  .lupi-relay,
+  .lupi-relay__mark,
+  .lupi-relay__ring,
+  .lupi-relay__face,
+  .lupi-relay__wait {
+    transition-duration: 0.01s;
+  }
+}

@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { openPubChemMolecule, pubchemAutocomplete, PUBCHEM_COMPOUND_COUNT_LABEL } from '../molecules/pubchemLoad';
 import { LOCAL_MOLECULES, searchLocalMolecules, type LocalMolecule } from './moleculeIndex';
-import type { RelayBaton } from '../relay/baton';
+import { LandingIntentContext } from './landingIntent';
+import { beginRelay, endRelay, peekBaton, setBaton, type RelayBaton } from '../relay/baton';
+import { hasFirstFrame } from '../relay/firstFrame';
+// The relay stage registers itself here, in the landing chunk (no three).
+import '../relay/stage';
 
 /**
  * The landing page's first fast path: one search box, results on the first
@@ -26,17 +30,53 @@ const PUBCHEM_DEBOUNCE_MS = 150;
 const LOCAL_LIMIT = 6;
 const PUBCHEM_LIMIT = 8;
 
+let relaySerial = 0;
+
+/**
+ * Open a gallery molecule from the landing (or the library) in place. The
+ * sage relay covers the page from this call until the viewer's first frame:
+ * it grows `fromRect` (the tapped drawing or tile image) into the stage. The
+ * home page's drawing leaves a baton with its pose first; any other opener
+ * gets a fresh one.
+ */
 export function openLocalMolecule(
   id: string,
   opts?: { source?: RelayBaton['source']; fromRect?: DOMRect | null },
 ): Promise<void> {
-  void opts; // The relay stage (sage from tap to first frame) will use these.
+  const source = opts?.source ?? 'finder';
+  const held = peekBaton();
+  let baton: RelayBaton;
+  if (held && held.galleryId === id && held.source === source) {
+    baton = held;
+  } else {
+    baton = { galleryId: id, source, viewDir: null, bodyOmegaY: 0, t: performance.now() };
+    setBaton(baton); // replaces a stale pose for another opener
+  }
+  const serial = (relaySerial += 1);
+  const endMine = () => {
+    if (serial === relaySerial) endRelay();
+  };
+  beginRelay({ baton, fromRect: opts?.fromRect ?? null });
   // Code-split: the gallery loader drags in the streaming/MLIP machinery,
   // which the landing bundle must not pay for until a pick happens.
-  return import('../viewer/openMolecule').then(async ({ openMolecule }) => {
-    const result = await openMolecule({ kind: 'gallery', id, history: 'push' });
-    if (!result.ok) throw new Error(result.message);
-  });
+  return import('../viewer/openMolecule')
+    .then(async ({ openMolecule }) => {
+      const result = await openMolecule({ kind: 'gallery', id, history: 'push' });
+      if (!result.ok) throw new Error(result.message);
+      // Already on screen (nothing will draw a first frame for it): hand back now.
+      const shown = useStore.getState().file?.trajectory;
+      if (!shown || hasFirstFrame(shown)) endMine();
+    })
+    .catch((error: unknown) => {
+      endMine();
+      throw error;
+    });
+}
+
+/** The preview image inside a clicked row or tile: where the relay grows from. */
+export function previewRectIn(element: Element | null | undefined): DOMRect | null {
+  const art = element?.querySelector('img, .wall-mark, .finder-glyph');
+  return art ? art.getBoundingClientRect() : null;
 }
 
 function formatAtoms(atoms: number): string {
@@ -77,6 +117,7 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
   const error = useStore((state) => state.error);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const intent = useContext(LandingIntentContext);
 
   const local = useMemo(() => searchLocalMolecules(query, LOCAL_LIMIT), [query]);
   const results = useMemo(() => mergeFinderResults(query, local, remote), [query, local, remote]);
@@ -104,12 +145,14 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
   }, [query]);
 
   const open = useCallback(
-    async (result: FinderResult) => {
+    async (result: FinderResult, fromRect: DOMRect | null = null) => {
       if (opening) return;
       setOpening(result.key);
       onOpen?.(result);
+      // A pick is intent: fetch the viewer while the molecule loads.
+      intent.prefetchViewer();
       try {
-        if (result.kind === 'local') await openLocalMolecule(result.molecule.id);
+        if (result.kind === 'local') await openLocalMolecule(result.molecule.id, { source: 'finder', fromRect });
         else await openPubChemMolecule({ name: result.name });
       } catch {
         // The store carries the readable error; keep the finder usable.
@@ -117,7 +160,7 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
         setOpening(null);
       }
     },
-    [onOpen, opening],
+    [intent, onOpen, opening],
   );
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -129,8 +172,9 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
       setActive((i) => Math.max(i - 1, 0));
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      const pick = results[active] ?? results[0];
-      if (pick) void open(pick);
+      const index = results[active] ? active : 0;
+      const pick = results[index];
+      if (pick) void open(pick, previewRectIn(document.getElementById(`${listId}-${index}`)));
     } else if (event.key === 'Escape') {
       setQuery('');
     }
@@ -185,7 +229,7 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
               <button
                 type="button"
                 onMouseEnter={() => setActive(index)}
-                onClick={() => void open(result)}
+                onClick={(event) => void open(result, previewRectIn(event.currentTarget))}
                 disabled={busy}
               >
                 {result.kind === 'local' && result.molecule.image ? (
