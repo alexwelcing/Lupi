@@ -7,6 +7,9 @@
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
+# pnpm reads every patchedDependencies file before a filtered install.
+!patches
+!patches/**
 
 !packages
 !packages/core
