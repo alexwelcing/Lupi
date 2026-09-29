@@ -63,8 +63,13 @@
   gap: 6px;
   white-space: nowrap;
   transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+/* Out first, then in: the caption and the face name never sit on each other. */
+.bucky-hero__name:not([data-hidden]),
+.bucky-hero__flash[data-on] {
+  transition-delay: 0.12s;
 }
 .bucky-hero__name {
   gap: 0;

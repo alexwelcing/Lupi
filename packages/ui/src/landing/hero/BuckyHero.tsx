@@ -47,6 +47,7 @@ export function BuckyHero() {
   const openingRef = useRef(false);
   const [flash, setFlash] = useState<{ face: Face; n: number } | null>(null);
   const [flashOn, setFlashOn] = useState(false);
+  const flashOnRef = useRef(false);
   const [opening, setOpening] = useState(false);
 
   const prefetch = useCallback(() => {
@@ -80,10 +81,27 @@ export function BuckyHero() {
     if (label !== 'Hexagon' && label !== 'Pentagon') return;
     flashCount.current += 1;
     setFlash({ face: label, n: flashCount.current });
+    flashOnRef.current = true;
     setFlashOn(true);
     if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => setFlashOn(false), FLASH_MS);
+    flashTimer.current = setTimeout(() => {
+      flashOnRef.current = false;
+      setFlashOn(false);
+    }, FLASH_MS);
   }, []);
+
+  /** A new turn by hand retires the last face name, so the next one reads fresh. */
+  const onSpin = useCallback(
+    (total: number) => {
+      if (flashOnRef.current) {
+        flashOnRef.current = false;
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        setFlashOn(false);
+      }
+      if (total >= PREFETCH_SPIN_DEG) prefetch();
+    },
+    [prefetch],
+  );
 
   useEffect(() => {
     const host = hostRef.current;
@@ -93,16 +111,14 @@ export function BuckyHero() {
       interactive: true,
       onTap: open,
       onDetent: showFace,
-      onSpinDegrees: (total) => {
-        if (total >= PREFETCH_SPIN_DEG) prefetch();
-      },
+      onSpinDegrees: onSpin,
     });
     stageRef.current = stage;
     return () => {
       stage.destroy();
       stageRef.current = null;
     };
-  }, [open, prefetch, showFace]);
+  }, [open, onSpin, showFace]);
 
   useEffect(
     () => () => {
