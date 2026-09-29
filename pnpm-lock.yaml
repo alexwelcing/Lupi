@@ -22,6 +22,11 @@ overrides:
 
 packageExtensionsChecksum: fb48dd5b49e7aa63c5606b541ffdd242
 
+patchedDependencies:
+  '@react-three/drei@11.0.0-alpha.7':
+    hash: 347ejbagmhn4ecr6ufafarkdc4
+    path: patches/@react-three__drei@11.0.0-alpha.7.patch
+
 importers:
 
   .:
@@ -317,7 +322,7 @@ importers:
         version: link:../../packages/ui
       '@react-three/drei':
         specifier: 11.0.0-alpha.7
-        version: 11.0.0-alpha.7(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
+        version: 11.0.0-alpha.7(patch_hash=347ejbagmhn4ecr6ufafarkdc4)(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
       '@react-three/fiber':
         specifier: 10.0.0-canary.14007b4
         version: 10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
@@ -459,7 +464,7 @@ importers:
         version: link:../renderer
       '@react-three/drei':
         specifier: 11.0.0-alpha.7
-        version: 11.0.0-alpha.7(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
+        version: 11.0.0-alpha.7(patch_hash=347ejbagmhn4ecr6ufafarkdc4)(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
       '@react-three/fiber':
         specifier: 10.0.0-canary.14007b4
         version: 10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
@@ -511,7 +516,7 @@ importers:
         version: link:../ui-core
       '@react-three/drei':
         specifier: 11.0.0-alpha.7
-        version: 11.0.0-alpha.7(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
+        version: 11.0.0-alpha.7(patch_hash=347ejbagmhn4ecr6ufafarkdc4)(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
       '@react-three/fiber':
         specifier: 10.0.0-canary.14007b4
         version: 10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
@@ -9793,7 +9798,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  '@react-three/drei@11.0.0-alpha.7(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)':
+  '@react-three/drei@11.0.0-alpha.7(patch_hash=347ejbagmhn4ecr6ufafarkdc4)(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(@types/three@0.186.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)':
     dependencies:
       '@babel/runtime': 7.28.6
       '@mediapipe/tasks-vision': 0.10.17
