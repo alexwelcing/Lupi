@@ -1,5 +1,3 @@
-import { vi } from 'vitest';
-
 // Polyfill HTMLCanvasElement.getContext('2d') for JSDOM. JSDOM auto-
 // loads the optional `canvas` npm package via require('canvas'), but
 // pnpm's hoisting puts the package outside JSDOM's resolution path so
@@ -51,14 +49,6 @@ if (typeof HTMLCanvasElement !== 'undefined') {
     return stub as unknown as CanvasRenderingContext2D;
   } as typeof HTMLCanvasElement.prototype.getContext;
 }
-
-// Mock WebXR useXR from @react-three/xr
-vi.mock('@react-three/xr', () => ({
-  useXR: vi.fn((selector) => {
-    const mockState = { mode: 'inline' };
-    return selector ? selector(mockState) : mockState;
-  })
-}));
 
 // Mock ResizeObserver
 globalThis.ResizeObserver = class ResizeObserver {

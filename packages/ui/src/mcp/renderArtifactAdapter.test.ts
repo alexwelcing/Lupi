@@ -1,14 +1,52 @@
-import { describe, expect, it } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Frame, Trajectory } from '@atlas/core';
 import { useStore, type LoadedFile } from '../store';
+import type { LupiRendererRuntime } from '../viewer/createLupiRenderer';
+import { EXECUTION_CLASS_V2, FIBER_VERSION_V2 } from '../export/exportProfileV2';
 import { reportActiveTransmissionQuality } from './transmissionRuntime';
 import {
-  browserRendererRuntimeV1,
+  browserRendererRuntimeV2,
   canonicalArtifactCameraPlanesV1,
   createBrowserRenderArtifactPlanV1,
   createInlineBrowserDeliveryV1,
   resolveBrowserBuildIdentityV1,
 } from './renderArtifactAdapter';
+
+const { WEBGPU_RUNTIME, WEBGL2_RUNTIME, renderer } = vi.hoisted(() => {
+  const webgpu: LupiRendererRuntime = {
+    backend: 'webgpu',
+    forced: false,
+    adapterInfo: { vendor: 'google', architecture: 'swiftshader', device: '', description: 'SwiftShader' },
+    preferredCanvasFormat: 'bgra8unorm',
+    requestedLimits: {},
+    compatibilityMode: false,
+    samples: 0,
+    compat: { swizzleRetry: false },
+    three: '186',
+  };
+  return {
+    WEBGPU_RUNTIME: webgpu,
+    WEBGL2_RUNTIME: {
+      ...webgpu,
+      backend: 'webgl2',
+      adapterInfo: null,
+      preferredCanvasFormat: null,
+      compatibilityMode: null,
+    } satisfies LupiRendererRuntime,
+    // The viewer's renderer record; null = no renderer has been created yet.
+    renderer: { runtime: webgpu as LupiRendererRuntime | null },
+  };
+});
+vi.mock('../viewer/createLupiRenderer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../viewer/createLupiRenderer')>()),
+  getLupiRendererRuntime: () => renderer.runtime,
+}));
+
+afterEach(() => {
+  renderer.runtime = WEBGPU_RUNTIME;
+});
 
 const TEST_BUILD_SHA = '0123456789abcdef0123456789abcdef01234567';
 const NEXT_BUILD_SHA = '89abcdef0123456789abcdef0123456789abcdef';
@@ -175,7 +213,7 @@ describe('browser render artifact adapter', () => {
     });
   });
 
-  it('uses an origin-free module id and probes the descendant R3F canvas', () => {
+  it('uses an origin-free module id and probes the descendant canvas on the WebGL2 backend', () => {
     const wrapper = document.createElement('div');
     wrapper.id = 'lupi-viewer-canvas';
     const canvas = document.createElement('canvas');
@@ -183,33 +221,72 @@ describe('browser render artifact adapter', () => {
     wrapper.append(canvas);
     document.body.append(wrapper);
     try {
-      const runtime = browserRendererRuntimeV1();
+      const runtime = browserRendererRuntimeV2(WEBGL2_RUNTIME);
       expect(runtime).toMatchObject({
+        backend: 'webgl2',
         moduleId: '@atlas/ui/mcp/renderArtifactAdapter',
-        webgl: { status: 'webgl2-unavailable' },
+        webgl2: { status: 'context-unavailable' },
       });
       expect(runtime).not.toHaveProperty('moduleUrl');
+      expect(browserRendererRuntimeV2(WEBGPU_RUNTIME)).toMatchObject({
+        backend: 'webgpu',
+        webgpu: { adapter: { description: 'SwiftShader' }, compatibilityMode: false },
+      });
     } finally {
       wrapper.remove();
     }
   });
 
+  it('gives each backend its own execution class, fingerprint and artifact key', async () => {
+    const webgpu = await plan();
+    renderer.runtime = WEBGL2_RUNTIME;
+    const webgl2 = await createBrowserRenderArtifactPlanV1(useStore.getState(), {
+      format: 'png', width: 320, height: 240, transparent: false,
+      delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
+    });
+    expect(EXECUTION_CLASS_V2).toEqual({
+      webgpu: 'browser-webgpu-main-thread',
+      webgl2: 'browser-webgpu-webgl2-main-thread',
+    });
+    expect(webgl2.specId).toBe(webgpu.specId);
+    expect(webgl2.rendererFingerprint).not.toBe(webgpu.rendererFingerprint);
+    expect(webgl2.artifactKey).not.toBe(webgpu.artifactKey);
+  });
+
+  it('refuses an identity before the viewer renderer exists', async () => {
+    await plan();
+    renderer.runtime = null;
+    await expect(createBrowserRenderArtifactPlanV1(useStore.getState(), {
+      format: 'png', width: 320, height: 240, transparent: false,
+      delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
+    })).rejects.toThrow(/renderer has not started/);
+  });
+
+  it('pins the fiber version the viewer depends on', () => {
+    const manifest = ['package.json', 'packages/ui/package.json']
+      .map((path) => resolve(process.cwd(), path))
+      .filter((path) => existsSync(path))
+      .map((path) => JSON.parse(readFileSync(path, 'utf8')))
+      .find((candidate) => candidate.name === '@atlas/ui');
+    expect(manifest?.dependencies['@react-three/fiber']).toBe(FIBER_VERSION_V2);
+  });
+
   it('fingerprints the effective transmission quality reported by the viewer', () => {
-    expect(browserRendererRuntimeV1()).toMatchObject({ transmission: 'inactive' });
+    expect(browserRendererRuntimeV2(WEBGPU_RUNTIME)).toMatchObject({ transmission: 'inactive' });
     try {
       // Byte-changing execution state: two tiers must produce two runtimes.
       reportActiveTransmissionQuality({ samples: 4, resolution: 256 });
-      expect(browserRendererRuntimeV1()).toMatchObject({
+      expect(browserRendererRuntimeV2(WEBGPU_RUNTIME)).toMatchObject({
         transmission: { samples: 4, resolution: 256 },
       });
       reportActiveTransmissionQuality({ samples: 6, resolution: 512 });
-      expect(browserRendererRuntimeV1()).toMatchObject({
+      expect(browserRendererRuntimeV2(WEBGPU_RUNTIME)).toMatchObject({
         transmission: { samples: 6, resolution: 512 },
       });
     } finally {
       reportActiveTransmissionQuality(null);
     }
-    expect(browserRendererRuntimeV1()).toMatchObject({ transmission: 'inactive' });
+    expect(browserRendererRuntimeV2(WEBGPU_RUNTIME)).toMatchObject({ transmission: 'inactive' });
   });
 });
 

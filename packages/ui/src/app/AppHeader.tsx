@@ -2,16 +2,13 @@ import { memo } from 'react';
 import { useStore } from '../store';
 import { SavedViewButton } from '../SavedViewButton';
 import { LupiAgentDock } from '../LupiAgentDock';
-import { GpuStudioLaunch } from '../gpu-studio/GpuStudioLaunch';
 
 export const AppHeader = memo(function AppHeader({
   isMobile,
   clearLoadedFile,
-  onStudioOpenChange,
 }: {
   isMobile: boolean;
   clearLoadedFile: () => void;
-  onStudioOpenChange: (open: boolean) => void;
 }) {
   const fileName = useStore(state => state.file?.name ?? '');
   const atomCount = useStore(state => state.file?.trajectory.frames.find(Boolean)?.natoms ?? 0);
@@ -64,7 +61,6 @@ export const AppHeader = memo(function AppHeader({
         )}
       </div>
       {fileName && <SavedViewButton compact={isMobile} />}
-      {fileName && <GpuStudioLaunch onOpenChange={onStudioOpenChange} />}
       <LupiAgentDock compact={isMobile} />
     </header>
   );

@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export type SceneEnvironmentPreset =
   | 'city'
   | 'studio'
@@ -15,6 +17,8 @@ export type SceneEnvironmentPreset =
 export type DreiEnvironmentPreset = Exclude<SceneEnvironmentPreset, 'none' | 'softbox'>;
 
 export const DREI_ENVIRONMENT_ASSET_REVISION = '456060a26bbeb8fdf79326f224b6d99b8bcce736';
+/** Where the pinned drei-assets HDRs live (the same URLs drei's presets use). */
+export const DREI_ENVIRONMENT_ASSET_ROOT = `https://raw.githack.com/pmndrs/drei-assets/${DREI_ENVIRONMENT_ASSET_REVISION}/hdri/`;
 export const DREI_ENVIRONMENT_FILES: Record<DreiEnvironmentPreset, string> = {
   city: 'potsdamer_platz_1k.hdr',
   dawn: 'kiara_1_dawn_1k.hdr',
@@ -51,6 +55,10 @@ export type SceneEnvironmentSpecIdentity =
   | SceneEnvironmentAssetIdentity;
 
 export const LUPI_ENVIRONMENT_IDENTITY_KEY = 'lupiEnvironmentIdentity';
+
+export function environmentAssetUrl(preset: DreiEnvironmentPreset): string {
+  return `${DREI_ENVIRONMENT_ASSET_ROOT}${DREI_ENVIRONMENT_FILES[preset]}`;
+}
 
 export function environmentAssetIdentity(
   preset: SceneEnvironmentPreset,
@@ -91,9 +99,67 @@ interface ScenePmremTarget {
 }
 
 interface ScenePmremGenerator {
-  compileEquirectangularShader(): void;
   fromEquirectangular(source: THREE.Texture): ScenePmremTarget;
   dispose(): void;
+}
+
+/**
+ * The smallest equirect source three's PMREMGenerator sizes correctly
+ * (three documents 64×32; it derives the cube size from width / 4).
+ */
+export const PMREM_MIN_SOURCE_WIDTH = 64;
+export const PMREM_MIN_SOURCE_HEIGHT = 32;
+
+type PixelArray = Uint8Array | Uint16Array | Float32Array;
+
+function isPixelArray(value: unknown): value is PixelArray {
+  return value instanceof Uint8Array || value instanceof Uint16Array || value instanceof Float32Array;
+}
+
+/**
+ * A tiny equirect (a 1×1 fallback HDR, a truncated download) makes three's
+ * PMREMGenerator size its cube from `width / 4` and allocate a degenerate
+ * 336×1 atlas. Resample such a data texture (nearest, so a constant stays
+ * exactly constant) to the minimum size PMREM handles; larger or non-data
+ * sources pass through. The caller disposes `texture` when `owned`.
+ */
+export function preparePmremSource(source: THREE.Texture): { texture: THREE.Texture; owned: boolean } {
+  const image = source.image as { width?: unknown; height?: unknown; data?: unknown } | undefined;
+  const width = typeof image?.width === 'number' ? image.width : 0;
+  const height = typeof image?.height === 'number' ? image.height : 0;
+  if (!(source as THREE.DataTexture).isDataTexture || !isPixelArray(image?.data) || width < 1 || height < 1) {
+    return { texture: source, owned: false };
+  }
+  if (width >= PMREM_MIN_SOURCE_WIDTH && height >= PMREM_MIN_SOURCE_HEIGHT) {
+    return { texture: source, owned: false };
+  }
+  const data = image.data;
+  const channels = Math.round(data.length / (width * height));
+  if (channels < 1 || channels * width * height !== data.length) return { texture: source, owned: false };
+
+  const outWidth = Math.max(PMREM_MIN_SOURCE_WIDTH, width);
+  const outHeight = Math.max(PMREM_MIN_SOURCE_HEIGHT, height);
+  const out = new (data.constructor as { new (length: number): PixelArray })(outWidth * outHeight * channels);
+  for (let y = 0; y < outHeight; y += 1) {
+    const sy = Math.min(height - 1, Math.floor((y * height) / outHeight));
+    for (let x = 0; x < outWidth; x += 1) {
+      const sx = Math.min(width - 1, Math.floor((x * width) / outWidth));
+      const from = (sy * width + sx) * channels;
+      const to = (y * outWidth + x) * channels;
+      for (let c = 0; c < channels; c += 1) out[to + c] = data[from + c];
+    }
+  }
+  const resized = new THREE.DataTexture(out, outWidth, outHeight, source.format as THREE.PixelFormat, source.type);
+  resized.mapping = source.mapping;
+  resized.colorSpace = source.colorSpace;
+  resized.flipY = source.flipY;
+  resized.wrapS = source.wrapS;
+  resized.wrapT = source.wrapT;
+  resized.minFilter = THREE.LinearFilter;
+  resized.magFilter = THREE.LinearFilter;
+  resized.generateMipmaps = false;
+  resized.needsUpdate = true;
+  return { texture: resized, owned: true };
 }
 
 /**
@@ -108,14 +174,15 @@ export function installSceneEnvironmentPmrem(
   createGenerator: () => ScenePmremGenerator,
 ): () => void {
   const previous = scene.environment;
+  const prepared = preparePmremSource(source);
   const generator = createGenerator();
   let target: ScenePmremTarget | null = null;
   try {
-    generator.compileEquirectangularShader();
-    target = generator.fromEquirectangular(source);
+    target = generator.fromEquirectangular(prepared.texture);
   } finally {
     // The generated target is self-contained; generator shaders can go now.
     generator.dispose();
+    if (prepared.owned) prepared.texture.dispose();
   }
 
   const texture = target.texture;
@@ -196,4 +263,25 @@ export function resolveSceneEnvironment(
 ): TexturedEnvironmentPreset | null {
   return environmentPreset === 'none' ? null : environmentPreset;
 }
-import * as THREE from 'three';
+
+/**
+ * Presets whose HDR asset failed to load in this page. The viewer renders on
+ * without image-based light (the impostor kit falls back to its analytic
+ * environment); an artifact that asks for such an environment fails closed
+ * instead of waiting for it.
+ */
+const failedEnvironmentPresets = new Set<TexturedEnvironmentPreset>();
+
+export function markSceneEnvironmentLoadFailed(preset: TexturedEnvironmentPreset): void {
+  failedEnvironmentPresets.add(preset);
+}
+
+export function clearSceneEnvironmentLoadFailure(preset: TexturedEnvironmentPreset): void {
+  failedEnvironmentPresets.delete(preset);
+}
+
+export function sceneEnvironmentLoadFailed(expected: unknown): boolean {
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return false;
+  const preset = (expected as Record<string, unknown>).preset;
+  return typeof preset === 'string' && failedEnvironmentPresets.has(preset as TexturedEnvironmentPreset);
+}

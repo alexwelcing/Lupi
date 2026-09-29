@@ -6,6 +6,11 @@ Decision owner: Alex Welcing (`@alexwelcing`), repository owner
 
 Prepared: 2026-07-19
 
+Browser renderer profile: **V2** (WebGPURenderer port, 2026-09-28). The
+request, spec and delivery contracts below are unchanged (`*.v1`); only the
+browser renderer that executes them, and therefore its renderer fingerprint,
+changed. See [Browser renderer profile V2](#browser-renderer-profile-v2).
+
 This contract defines the boundary between a requested Lupi view, the renderer
 that executes it, the immutable bytes that result, and the mechanism that
 delivers those bytes. It complements the
@@ -59,15 +64,15 @@ merge, deploy, or public-release claim.
 
 The browser and edge manifests are intentionally different contracts.
 
-| Capability              | Browser viewer V1 candidate                                                                                                                                                             | Cloudflare edge                                                                                                            |
+| Capability              | Browser viewer (renderer profile V2)                                                                                                                                                    | Cloudflare edge                                                                                                            |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Runtime                 | Mounted WebGL viewer with an active, fully decoded frame                                                                                                                                | Browser-free Worker control plane                                                                                          |
-| Tool surface            | 30-tool browser manifest and viewer-control bridge                                                                                                                                      | Seven outcome-oriented MCP tools plus REST compatibility routes                                                             |
+| Runtime                 | Mounted WebGPURenderer viewer (WebGPU backend, or its WebGL2 fallback) with an active, fully decoded frame                                                                              | Browser-free Worker control plane                                                                                          |
+| Tool surface            | 31-tool browser manifest and viewer-control bridge                                                                                                                                      | Seven outcome-oriented MCP tools plus REST compatibility routes                                                             |
 | V1 execution            | Executes locally in the browser                                                                                                                                                         | **Validation only**; always returns `awaiting_renderer` and withholds renderer/artifact/job/cache identities               |
 | Raster formats          | PNG and WebP with opaque or transparent alpha; JPEG opaque only; exact dimensions 64-4096                                                                                               | Opaque PNG only in the advertised submission capability; no V1 pixel executor exists                                       |
-| Model formats           | Deterministic GLB with `alpha: 'not-applicable'`; raster dimensions and `transparent` are rejected. USDZ is disabled in the immutable-key lane because Three r184 embeds process-global ids. | Unsupported                                                                                                                |
-| Applied raster pipeline | Raw Three.js scene, pixel ratio 1, sRGB output, no renderer tone mapping or interactive postprocess, plus the versioned canvas axes overlay when enabled                                | Declared in the accepted V1 spec, but not executed                                                                         |
-| Backgrounds             | Opaque raster requires a canonical gradient that capture applies directly; image, video, procedural, and backdrop-mesh backgrounds fail closed. Transparent raster disables background. | Background layer is unsupported in the initial V1 profile                                                                  |
+| Model formats           | Deterministic GLB with `alpha: 'not-applicable'`; raster dimensions and `transparent` are rejected. USDZ is disabled in the immutable-key lane because three's USDZExporter (r186) embeds process-global ids. | Unsupported                                                                                                                |
+| Applied raster pipeline | Raw Three.js scene rendered into a HalfFloat render target (no MSAA, pixel ratio 1), CPU linear un-premultiply + sRGB encode, no renderer tone mapping or interactive postprocess, plus the versioned canvas axes overlay when enabled | Declared in the accepted V1 spec, but not executed                                                                         |
+| Backgrounds             | Opaque raster requires a canonical, unadjusted gradient that capture applies directly; image, video, procedural, backdrop-mesh and adjusted backgrounds fail closed. Transparent raster disables background. | Background layer is unsupported in the initial V1 profile                                                                  |
 | Bonds                   | Model export may use the synchronous CPU export path. Deterministic raster bonds fail closed because the live asynchronous bond result is not snapshot-addressable.                     | Unsupported                                                                                                                |
 | Delivery                | Inline base64/data URL or user download; no durable ownership is implied                                                                                                                | V1 remains validation-only. A separately named authenticated legacy-v0 lane may use synchronous HTTP plus private R2 job/provenance/artifact routes |
 
@@ -210,12 +215,73 @@ Those identifiers answer useful operational questions, but they are not V1
 must remain visibly namespaced as `legacy-v0` rather than being upgraded by
 relabeling.
 
+### Browser renderer profile V2
+
+The browser viewer renders through three's `WebGPURenderer` (three r186, React
+Three Fiber v10). The profile lives in
+`packages/ui/src/export/exportProfileV2.ts`.
+
+- **Two execution classes.** `browser-webgpu-main-thread` (WebGPU backend) and
+  `browser-webgpu-webgl2-main-thread` (the renderer's WebGL2 fallback, used
+  when the browser has no WebGPU adapter or the page asks for
+  `?renderer=webgl2`). The same spec keeps its `specId` on both. Its
+  `rendererFingerprint` and `artifactKey` differ, because the bytes may differ.
+  Bytes are never compared across the two classes. The containerized render
+  backend runs Chromium with `--disable-webgpu`, so its artifacts belong to the
+  WebGL2 class.
+- **Fingerprint fields.** The V2 renderer fingerprint contains:
+  - renderer `lupi-browser-webgpu.v2`
+  - `rendererVersion` `three-r<rev>;fiber-<pin>;bridge-<bridge version>`
+  - the backend's execution class
+  - the `DETERMINISM_V2` capture facts
+  - the model encoder
+  - the build identity
+  - runtime facts: the WebGPU adapter, or the WebGL2 context's renderer
+    strings; WebGPU compatibility mode; canvas sample count; browser user
+    agent and platform; the transmission quality the viewer mounted
+  - the advertised capability
+- **Fields left out.** The swizzle compatibility retry and the raised buffer
+  limits do not change bytes and are not in the fingerprint.
+- **No renderer yet.** An export before the viewer has created its renderer
+  fails, because the backend is part of the identity.
+- **Capture.** A raster capture never reads the canvas. The raw scene is
+  rendered with a copy of the artifact camera into a HalfFloat linear render
+  target at the requested size, with samples 0, and read back asynchronously.
+  The CPU then:
+  - removes WebGPU's 256-byte row padding;
+  - flips WebGL2's bottom-left rows;
+  - un-premultiplies in linear light;
+  - applies the sRGB OETF and rounds.
+
+  Opaque pixels match the on-screen canvas; transparent output is straight
+  alpha. The canvas keeps its size, and the live camera never moves.
+- **WYSIWYG, with one exception.** The owner's rule is that exports use the
+  view the user configured. The raster uses the viewer's configured gradient
+  background, or none when transparent. The interactive post pipeline (AO,
+  bloom, depth of field, output tone mapping, vignette) is **not** yet part of
+  the export: `postprocessPipeline: 'raw-scene-bypassed'` records that, and so
+  does `view.postprocess`.
+- **Opaque clear colour.** Opaque artifacts draw the spec gradient as the
+  scene background, which covers every pixel, so the clear colour never
+  reaches artifact bytes. Interactive (non-artifact) UI exports capture
+  whatever background the viewer shows, over the colour behind the canvas.
+- **Transparent precision.** The browser encoders receive the pixels through
+  a 2D canvas, which stores them premultiplied in 8 bits. Very low alpha
+  therefore loses colour precision. This is deterministic, and the fingerprint
+  records it as `rasterAlphaStorage`.
+- **Goldens.** The V1 (WebGL renderer) goldens stay archived read-only in
+  `tests/fixtures/render-artifact-v1/`. V2 parity candidates are derived
+  automatically per backend into `tests/fixtures/render-artifact-v2/<backend>/`
+  with `verify-render-parity.mjs --backend=<backend> --derive-candidate`. There
+  is no owner approval gate; automated derivation is still not a visual
+  approval.
+
 ## Format and byte-validation rules
 
 The receiver decodes base64 once, applies a configured maximum before storage,
 and validates the bytes independently of renderer-declared metadata.
 
-| Format | Required MIME and structure                                                        | Browser V1 candidate           | Edge RenderRequestV1                                       |
+| Format | Required MIME and structure                                                        | Browser (profile V2)           | Edge RenderRequestV1                                       |
 | ------ | ---------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------- |
 | PNG    | `image/png`; PNG signature, valid IHDR/decode, exact dimensions                    | Opaque or verified transparent | Accepts opaque atom-only spec for validation; no execution |
 | JPEG   | `image/jpeg`; valid JPEG structure and exact dimensions                            | Opaque only                    | Unsupported                                                |
@@ -241,7 +307,7 @@ and browser encoder variability need their own canonical specification.
 - `transparent` requires straight, non-premultiplied output alpha, at least one
   non-transparent content pixel, and at least one transparent pixel when the
   rendered bounds do not fill the frame.
-- Clearing the WebGL canvas alpha is not proof of transparency. Scene
+- Clearing the canvas or render-target alpha is not proof of transparency. Scene
   background textures, environment domes, procedural backdrops, fog, ground,
   shadows, filter shells, and postprocess passes remain visible layers unless
   the specification includes or suppresses them explicitly.
@@ -252,8 +318,10 @@ and browser encoder variability need their own canonical specification.
 
 ### Color
 
-- The current browser V1 raster profile fixes `outputColorSpace: 'srgb'` in
+- The browser raster profile fixes `outputColorSpace: 'srgb'` in
   `view.postprocess`; the renderer fingerprint also records this ownership.
+  In profile V2 the renderer stores linear light in a HalfFloat target and the
+  sRGB encoding happens once, on the CPU, after linear un-premultiplication.
 - Encoder/browser engine revisions which may change emitted bytes belong in the
   renderer fingerprint. A future profile must version any different transfer,
   primaries, or embedded-profile policy instead of silently changing V1.
@@ -265,9 +333,10 @@ and browser encoder variability need their own canonical specification.
 
 ### Tone
 
-- Browser V1 export fixes `pipeline: 'raw-scene'`, `toneMapping: 'none'`, and
-  `multisampling: 0`. Capture bypasses the interactive EffectComposer and
-  renders the raw Three.js scene exactly once.
+- Browser export fixes `pipeline: 'raw-scene'`, `toneMapping: 'none'`, and
+  `multisampling: 0`. Capture bypasses the interactive post pipeline
+  (`useRenderPipeline`) and renders the raw Three.js scene into its own render
+  target exactly once.
 - Interactive postprocess presets are therefore not silently represented as
   exported pixels. A future postprocessed artifact profile needs its own
   canonical fields, renderer fingerprint, structural tests, and visual proof.

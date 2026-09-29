@@ -16,7 +16,24 @@ export interface LupiMcpPublicToolDefinition {
   parameters?: unknown;
 }
 
-export interface LupiMcpStatus {
+/** The WebGPURenderer backend the viewer runs on (plan-final §5.1). */
+export type LupiMcpRendererBackend = 'webgpu' | 'webgl2';
+
+/**
+ * Renderer fields of status(), state() and the `lupi.status` tool. All are
+ * null until the viewer canvas has created its renderer. `webGPUSupported`
+ * mirrors fiber's `state.webGPUSupported`: true on the WebGPU backend, false
+ * on the WebGL2 backend (a missing adapter or `?renderer=webgl2`).
+ * `rendererExecutionClass` is the export execution class the backend implies
+ * (exportProfileV2.ts): artifacts from the two classes never share a key.
+ */
+export interface LupiMcpRendererStatus {
+  rendererBackend: LupiMcpRendererBackend | null;
+  webGPUSupported: boolean | null;
+  rendererExecutionClass: 'browser-webgpu-main-thread' | 'browser-webgpu-webgl2-main-thread' | null;
+}
+
+export interface LupiMcpStatus extends LupiMcpRendererStatus {
   ready: true;
   version: string;
   toolCount: number;

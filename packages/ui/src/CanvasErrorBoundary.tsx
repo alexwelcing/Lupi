@@ -1,7 +1,10 @@
 /**
- * CanvasErrorBoundary.tsx — wraps the @react-three/fiber <Canvas> so a
- * WebGL/renderer init throw shows a branded fallback instead of a white/black
- * rect. Audit findings: ios-safari-webgpu-silent-fail, no-canvas-webgl-fallback.
+ * CanvasErrorBoundary.tsx — wraps the @react-three/fiber <Canvas> (inside
+ * LupiCanvas) so a renderer init throw shows a branded fallback instead of a
+ * white/black rect. With WebGPURenderer, a failed WebGPU init falls back to
+ * WebGL2 inside three; what reaches this boundary is "no WebGL2 either" (or a
+ * factory/device throw), and it is always reported as `context-error`.
+ * Audit findings: ios-safari-webgpu-silent-fail, no-canvas-webgl-fallback.
  *
  * The existing in-file ErrorBoundary in App.tsx is scoped to side PANELS and
  * renders panel-shaped error text — wrong shape and wrong copy for a viewport
@@ -40,9 +43,11 @@ export class CanvasErrorBoundary extends Component<Props, State> {
     console.error('[canvas] renderer init failed:', error?.message ?? error);
     // The silent-blank-canvas bounce was previously invisible to analytics —
     // render_failed was defined but never fired. Emit it here, the one place a
-    // real WebGL/WebGPU init throw is caught, so the funnel can see it.
+    // real WebGL/WebGPU init throw is caught, so the funnel can see it. The
+    // capability probe said renderable (or the canvas would not have mounted),
+    // so a throw here is always a context error.
     track(ANALYTICS_EVENTS.RENDER_FAILED, {
-      reason: this.props.capability.reason,
+      reason: 'context-error',
       message: error?.message ?? String(error),
     });
   }
@@ -55,13 +60,13 @@ export class CanvasErrorBoundary extends Component<Props, State> {
     if (this.state.failed) {
       return (
         <RendererFallback
-          copy={fallbackCopyFor(this.props.capability)}
+          copy={fallbackCopyFor({ ...this.props.capability, reason: 'context-error' })}
           onRetry={this.handleRetry}
         />
       );
     }
-    // resetKey remounts the entire subtree on retry so R3F rebuilds the GL
-    // context from scratch rather than reusing a lost one.
+    // resetKey remounts the entire subtree on retry so R3F rebuilds the
+    // renderer from scratch rather than reusing a lost device or context.
     return <div key={this.state.resetKey} style={{ width: '100%', height: '100%' }}>{this.props.children}</div>;
   }
 }

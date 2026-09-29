@@ -225,12 +225,15 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
         : ownsActiveView && activeSavedView
           ? activeSavedView.slug
           : cleanSlug;
+      // The card image is rendered in the viewer's next capture frame; saving
+      // goes ahead without one after a short timeout or a failed capture.
+      const thumbnail = await captureViewerThumbnail();
       const result = await saveCurrentMolecularView({
         title,
         slug: targetSlug,
         user,
         visibility,
-        thumbnail: captureViewerThumbnail(),
+        thumbnail,
         forceNewSlug: asNew,
       });
       setSavedUrl(result.url);

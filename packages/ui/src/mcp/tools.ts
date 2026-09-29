@@ -17,6 +17,9 @@ import {
   type AssessmentSource,
 } from '@atlas/assessment';
 import type { LupiMcpRequest, LupiMcpResponseResult, LupiMcpToolDefinition } from './types';
+import type { LupiMcpRendererStatus } from './driver';
+import { getLupiRendererRuntime } from '../viewer/createLupiRenderer';
+import { executionClassV2 } from '../export/exportProfileV2';
 import { MCP_TOOL_DEFINITIONS } from './toolManifest';
 import {
   FALLBACK_OMOL_COLLECTIONS,
@@ -517,22 +520,44 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
       baseName,
   };
 
-  let plannedCameraPosition = state.cameraPosition;
-  let plannedCameraTarget = state.cameraTarget;
-  let plannedAtomScale = state.atomScale;
-  let shouldFit = false;
-
   if (image) {
-    const currentFrame = state.file.trajectory.frames[state.frame];
-    if (!currentFrame) throw new Error(`Frame ${state.frame} is unavailable.`);
-    const natoms = currentFrame.natoms;
     if (args.fitCamera !== undefined && typeof args.fitCamera !== 'boolean') {
       throw new Error('lupi.export_asset fitCamera must be a boolean.');
     }
+    if (args.atomScale !== undefined && (
+      typeof args.atomScale !== 'number'
+      || !Number.isFinite(args.atomScale)
+      || args.atomScale < 0.1
+      || args.atomScale > 8
+    )) {
+      throw new Error('lupi.export_asset atomScale must be a finite number from 0.1 through 8.');
+    }
+  }
+
+  // The renderer backend is part of the artifact identity, and the viewer
+  // corrects its provisional camera fit when the canvas first measures itself.
+  // Right after a load both may still be pending (WebGPU device setup takes a
+  // moment), and a late refit would move the camera under the planned
+  // snapshot. Plan from the viewer's state once it has settled.
+  await waitForViewerReady(timeoutMs);
+  const viewState = useStore.getState();
+  if (viewState.file !== state.file || !viewState.file) {
+    throw new Error('The loaded molecule changed before the export started; retry lupi.export_asset.');
+  }
+
+  let plannedCameraPosition = viewState.cameraPosition;
+  let plannedCameraTarget = viewState.cameraTarget;
+  let plannedAtomScale = viewState.atomScale;
+  let shouldFit = false;
+
+  if (image) {
+    const currentFrame = viewState.file.trajectory.frames[viewState.frame];
+    if (!currentFrame) throw new Error(`Frame ${viewState.frame} is unavailable.`);
+    const natoms = currentFrame.natoms;
     const desiredFit = args.fitCamera as boolean | undefined;
     shouldFit = desiredFit ?? natoms < 5000;
     if (shouldFit) {
-      const { min, max } = state.file.trajectory.globalBounds;
+      const { min, max } = viewState.file.trajectory.globalBounds;
       const center: [number, number, number] = [
         (min[0] + max[0]) / 2,
         (min[1] + max[1]) / 2,
@@ -545,14 +570,6 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
       ) * 1.4;
       plannedCameraPosition = [center[0], center[1], center[2] + distance];
       plannedCameraTarget = center;
-    }
-    if (args.atomScale !== undefined && (
-      typeof args.atomScale !== 'number'
-      || !Number.isFinite(args.atomScale)
-      || args.atomScale < 0.1
-      || args.atomScale > 8
-    )) {
-      throw new Error('lupi.export_asset atomScale must be a finite number from 0.1 through 8.');
     }
     const desiredScale = args.atomScale as number | undefined;
     if (desiredScale !== undefined) {
@@ -569,12 +586,12 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
   // fail without leaving a fitted camera or boosted atom scale behind.
   const planningState = image
     ? {
-      ...state,
+      ...viewState,
       cameraPosition: plannedCameraPosition,
       cameraTarget: plannedCameraTarget,
       atomScale: plannedAtomScale,
     }
-    : state;
+    : viewState;
   const filename = `${baseName}-frame${planningState.frame + 1}.${extensionForExportAsset(format)}`;
   const artifactPlan = await createBrowserRenderArtifactPlanV1(planningState, {
     format,
@@ -652,12 +669,40 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
   };
 }
 
+/**
+ * Resolve once the viewer canvas has recorded its renderer and measured its
+ * viewport (CameraManager stores the aspect and corrects the provisional fit
+ * in the same effect), or after `timeoutMs` (the caller then fails with the
+ * adapter's or the exporter's message).
+ */
+async function waitForViewerReady(timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const ready = () => {
+    const aspect = useStore.getState().cameraViewportAspect;
+    return Boolean(getLupiRendererRuntime()) && Number.isFinite(aspect) && aspect > 0;
+  };
+  while (!ready() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+/** The renderer fields of `lupi.status`, the driver's status() and state(). */
+export function readMcpRendererStatus(): LupiMcpRendererStatus {
+  const runtime = getLupiRendererRuntime();
+  return {
+    rendererBackend: runtime?.backend ?? null,
+    webGPUSupported: runtime ? runtime.backend === 'webgpu' : null,
+    rendererExecutionClass: runtime ? executionClassV2(runtime.backend) : null,
+  };
+}
+
 async function handleStatus(): Promise<LupiMcpResponseResult> {
   const state = useStore.getState();
   const frame = state.file?.trajectory.frames[state.frame];
   return {
     ready: true,
     version: LUPI_VIEWER_MCP_VERSION,
+    ...readMcpRendererStatus(),
     toolCount: MCP_TOOL_DEFINITIONS.length,
     moleculeLoaded: Boolean(state.file),
     atomCount: frame?.natoms ?? 0,

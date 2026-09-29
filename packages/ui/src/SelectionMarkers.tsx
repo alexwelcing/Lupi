@@ -1,13 +1,27 @@
 /**
  * <SelectionMarkers /> - subtle selected and hover feedback for atoms.
+ *
+ * Camera-facing rings (drei `Billboard`) with plain basic materials, which
+ * WebGPURenderer draws through their node equivalents on both backends. The
+ * selected ring pulses unless the user prefers reduced motion.
  */
 
-import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Billboard } from '@react-three/drei';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber/webgpu';
+import { Billboard } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
+import { useMediaQuery } from './hooks/useMediaQuery';
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+/** A ring geometry that is disposed when it is replaced or unmounted. */
+function useRingGeometry(inner: number, outer: number, segments: number): THREE.RingGeometry {
+  const geometry = useMemo(() => new THREE.RingGeometry(inner, outer, segments), [inner, outer, segments]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return geometry;
+}
 
 interface SelectionMarkersProps {
   frame: Frame;
@@ -91,14 +105,12 @@ function SelectedMarker({
   radius: number;
 }) {
   const ringRef = useRef<THREE.Mesh>(null);
-  const ringGeo = useMemo(
-    () => new THREE.RingGeometry(radius * 0.94, radius * 1.06, 72),
-    [radius],
-  );
+  const ringGeo = useRingGeometry(radius * 0.94, radius * 1.06, 72);
+  const reducedMotion = useMediaQuery(REDUCED_MOTION_QUERY);
 
-  useFrame(({ clock }) => {
+  useFrame(({ elapsed }) => {
     if (!ringRef.current) return;
-    const pulse = 1 + Math.sin(clock.elapsedTime * 3.6) * 0.035;
+    const pulse = reducedMotion ? 1 : 1 + Math.sin(elapsed * 3.6) * 0.035;
     ringRef.current.scale.setScalar(pulse);
   });
 
@@ -125,10 +137,7 @@ function HoverMarker({
   position: [number, number, number];
   radius: number;
 }) {
-  const ringGeo = useMemo(
-    () => new THREE.RingGeometry(radius * 0.98, radius * 1.02, 48),
-    [radius],
-  );
+  const ringGeo = useRingGeometry(radius * 0.98, radius * 1.02, 48);
   return (
     <Billboard position={position}>
       <mesh geometry={ringGeo}>
@@ -152,10 +161,7 @@ function NeighborMarker({
   position: [number, number, number];
   radius: number;
 }) {
-  const ringGeo = useMemo(
-    () => new THREE.RingGeometry(radius * 0.92, radius * 1.08, 64),
-    [radius],
-  );
+  const ringGeo = useRingGeometry(radius * 0.92, radius * 1.08, 64);
   return (
     <Billboard position={position}>
       <mesh geometry={ringGeo}>

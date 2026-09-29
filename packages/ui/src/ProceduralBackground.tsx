@@ -1,21 +1,26 @@
+/**
+ * ProceduralBackground — the procedural mathematical backgrounds: a sky
+ * sphere that follows the camera (node material, tsl/skyMaterial.ts) and a
+ * sparse line/point field around the molecule.
+ */
 import { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
+import { SpriteNodeMaterial } from 'three/webgpu';
+import { float, instancedBufferAttribute } from 'three/tsl';
 import type { ProceduralBackgroundVariant } from './backgroundPresets';
+import { SKY_VARIANT_INDEX as VARIANT_INDEX, createSkyMaterial, skyUniforms } from './tsl/skyMaterial';
+import { LUPI_BACKGROUND_MATERIAL_KEY, markBackgroundMaterial } from './postprocess/backgroundMask';
 
-const VARIANT_INDEX: Record<ProceduralBackgroundVariant, number> = {
-  'manifold-field': 0,
-  'hopf-current': 1,
-  'harmonic-bloom': 2,
-  'reaction-lattice': 3,
-  'moire-crystal': 4,
-};
+/** The field's line materials are background too (postprocess/backgroundMask.ts). */
+const BACKGROUND_MATERIAL_USER_DATA = { [LUPI_BACKGROUND_MATERIAL_KEY]: true };
 
 const TWO_PI = Math.PI * 2;
 
 type FieldGeometry = {
   lines: THREE.BufferGeometry;
-  points: THREE.BufferGeometry;
+  /** Point positions (xyz), drawn as instanced sprites: WebGPU has no point size. */
+  points: Float32Array;
   primary: string;
   secondary: string;
   point: string;
@@ -81,8 +86,7 @@ function makeGeometry(linePositions: number[], pointPositions: number[], variant
     filteredPoints.push(p.x, p.y, p.z);
   }
 
-  const points = new THREE.BufferGeometry();
-  points.setAttribute('position', new THREE.Float32BufferAttribute(filteredPoints, 3));
+  const points = new Float32Array(filteredPoints);
 
   const palette: Record<ProceduralBackgroundVariant, Omit<FieldGeometry, 'lines' | 'points'>> = {
     'manifold-field': { primary: '#84fbff', secondary: '#f0a85b', point: '#8662ff', lineOpacity: 0.18, pointOpacity: 0.18 },
@@ -179,128 +183,6 @@ function buildFieldGeometry(variant: ProceduralBackgroundVariant, radius: number
   return makeGeometry(linePositions, pointPositions, variant);
 }
 
-const vertexShader = /* glsl */ `
-  varying vec3 vDirection;
-
-  void main() {
-    vDirection = normalize(position);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const fragmentShader = /* glsl */ `
-  precision highp float;
-
-  uniform float uTime;
-  uniform int uVariant;
-  uniform vec3 uTop;
-  uniform vec3 uBottom;
-  varying vec3 vDirection;
-
-  mat2 rotate2d(float a) {
-    float s = sin(a);
-    float c = cos(a);
-    return mat2(c, -s, s, c);
-  }
-
-  float hash(vec3 p) {
-    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
-  }
-
-  float noise(vec3 p) {
-    vec3 i = floor(p);
-    vec3 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float n000 = hash(i);
-    float n100 = hash(i + vec3(1.0, 0.0, 0.0));
-    float n010 = hash(i + vec3(0.0, 1.0, 0.0));
-    float n110 = hash(i + vec3(1.0, 1.0, 0.0));
-    float n001 = hash(i + vec3(0.0, 0.0, 1.0));
-    float n101 = hash(i + vec3(1.0, 0.0, 1.0));
-    float n011 = hash(i + vec3(0.0, 1.0, 1.0));
-    float n111 = hash(i + vec3(1.0, 1.0, 1.0));
-    float nxy0 = mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y);
-    float nxy1 = mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y);
-    return mix(nxy0, nxy1, f.z);
-  }
-
-  float fbm(vec3 p) {
-    float value = 0.0;
-    float amp = 0.5;
-    for (int i = 0; i < 4; i++) {
-      value += amp * noise(p);
-      p = p * 2.03 + vec3(9.17, 2.31, 5.73);
-      amp *= 0.5;
-    }
-    return value;
-  }
-
-  float gyroid(vec3 p) {
-    return dot(sin(p), cos(p.zxy));
-  }
-
-  float line(float value, float width) {
-    return 1.0 - smoothstep(0.0, width, abs(value));
-  }
-
-  vec3 finish(vec3 color, vec3 d) {
-    color *= mix(0.58, 1.0, smoothstep(-0.98, 0.70, d.z));
-    color = clamp(color, 0.0, 1.7);
-    color = color / (1.0 + color * 0.38);
-    return pow(color, vec3(0.92));
-  }
-
-  float variantField(vec3 p, int variant, float t) {
-    if (variant == 1) {
-      float lon = atan(p.z, p.x);
-      float lat = atan(p.y, length(p.xz));
-      return line(sin(12.0 * lon + 10.0 * lat + t * 1.75), 0.10) + line(length(p.xz) - 0.72, 0.12) * 0.55;
-    }
-    if (variant == 2) {
-      float wave = sin(4.0 * p.x + t) + sin(5.0 * p.y - t * 0.7) + sin(6.0 * p.z + t * 0.5);
-      return smoothstep(1.0, 2.35, wave) + line(sin(7.0 * wave), 0.11) * 0.35;
-    }
-    if (variant == 3) {
-      float cells = fbm(p * 3.2 + vec3(t * 0.2, -t * 0.15, t * 0.1));
-      return line(sin(18.0 * cells + gyroid(p * 1.4)), 0.18);
-    }
-    if (variant == 4) {
-      float a = sin(8.0 * dot(p, normalize(vec3(1.0, 0.2, 0.4))) + t);
-      float b = sin(8.4 * dot(p, normalize(vec3(-0.5, 0.9, 0.2))) - t * 0.8);
-      float c = sin(7.6 * dot(p, normalize(vec3(0.35, 0.5, -0.8))) + t * 0.5);
-      return line(a, 0.08) * 0.36 + line(b, 0.08) * 0.34 + smoothstep(0.82, 0.995, abs(a * b * c)) * 0.58;
-    }
-    return line(gyroid(p * 2.2 + vec3(t * 0.5, -t * 0.3, t * 0.2)), 0.17) * (0.55 + fbm(p * 1.6) * 0.5);
-  }
-
-  void main() {
-    vec3 d = normalize(vDirection);
-    float t = uTime * 0.085;
-    vec3 base = mix(uBottom, uTop, 0.48 + d.y * 0.42) * (0.70 + pow(max(0.0, 1.0 - abs(d.y)), 1.35) * 0.14);
-    vec3 color = base;
-
-    vec3 p = d * 2.35;
-    p.xy = rotate2d(t * 0.25) * p.xy;
-    p.yz = rotate2d(-t * 0.16) * p.yz;
-    float field = variantField(p, uVariant, t);
-    float mist = fbm(p * 1.3 + vec3(t * 0.2, -t * 0.1, t * 0.08));
-    color += vec3(0.10, 0.90, 1.0) * field * (0.30 + 0.35 * mist);
-    color += vec3(1.0, 0.62, 0.24) * pow(field, 2.2) * 0.28;
-    color += vec3(0.50, 0.34, 1.0) * smoothstep(0.65, 0.96, mist) * 0.18;
-
-    for (int i = 0; i < 10; i++) {
-      float depth = 0.72 + float(i) * 0.38;
-      vec3 q = d * depth + vec3(sin(depth + t), cos(depth * 0.7 - t), sin(depth * 0.5)) * 0.10;
-      float density = variantField(q, uVariant, t) * smoothstep(0.5, 1.2, depth) * (1.0 - smoothstep(4.8, 5.6, depth));
-      color += mix(vec3(0.12, 0.90, 1.0), vec3(0.78, 0.48, 1.0), float(i) / 9.0) * density * 0.035;
-    }
-
-    float stars = smoothstep(0.988, 0.997, noise(d * 180.0 + vec3(11.0, 7.0, 3.0)));
-    color += vec3(0.72, 0.92, 1.0) * stars * 0.18;
-    gl_FragColor = vec4(finish(color, d), 1.0);
-  }
-`;
-
 type ProceduralBackgroundProps = {
   variant: ProceduralBackgroundVariant;
   top: string;
@@ -312,36 +194,28 @@ type ProceduralBackgroundProps = {
 
 export function ProceduralBackground({ variant, top, bottom, visible = true, paused = false, speed = 1 }: ProceduralBackgroundProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uVariant: { value: VARIANT_INDEX[variant] },
-    uTop: { value: new THREE.Color(top) },
-    uBottom: { value: new THREE.Color(bottom) },
-  }), []);
+  const time = useRef(0);
+  // One material per variant: the variant is baked into the node graph.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const material = useMemo(() => createSkyMaterial({ variant, top, bottom }), [variant]);
+
+  useEffect(() => () => material.dispose(), [material]);
 
   useEffect(() => {
-    uniforms.uVariant.value = VARIANT_INDEX[variant] ?? 0;
-    uniforms.uTop.value.set(top);
-    uniforms.uBottom.value.set(bottom);
-  }, [bottom, top, uniforms, variant]);
+    const bag = skyUniforms(material);
+    bag.uTop.value.set(top);
+    bag.uBottom.value.set(bottom);
+  }, [bottom, material, top]);
 
   useFrame((state, delta) => {
-    if (!paused && visible) uniforms.uTime.value += Math.min(delta, .1) * speed;
+    if (!paused && visible) time.current += Math.min(delta, .1) * speed;
+    skyUniforms(material).uTime.value = time.current;
     meshRef.current?.position.copy(state.camera.position);
   });
 
   return (
-    <mesh ref={meshRef} renderOrder={-1000} frustumCulled={false} visible={visible} scale={[500, 500, 500]}>
+    <mesh ref={meshRef} material={material} renderOrder={-1000} frustumCulled={false} visible={visible} scale={[500, 500, 500]}>
       <sphereGeometry args={[1, 128, 64]} />
-      <shaderMaterial
-        uniforms={uniforms}
-        vertexShader={vertexShader}
-        fragmentShader={fragmentShader}
-        side={THREE.BackSide}
-        depthWrite={false}
-        depthTest={false}
-        toneMapped={false}
-      />
     </mesh>
   );
 }
@@ -359,14 +233,36 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
   const time = useRef(0);
   const groupRef = useRef<THREE.Group>(null);
   const lineMaterialRef = useRef<THREE.LineBasicMaterial>(null);
-  const pointMaterialRef = useRef<THREE.PointsMaterial>(null);
   const safeRadius = Math.max(18, Math.min(radius, 420));
   const field = useMemo(() => buildFieldGeometry(variant, safeRadius), [safeRadius, variant]);
+  const pointSize = Math.max(0.16, safeRadius * 0.010);
+  // WebGPU draws THREE.Points at 1 px, so the field's points are instanced
+  // billboard sprites. PointsMaterial's attenuated size (px = size·H/2/depth)
+  // equals a world quad of size·tan(fov/2); at the viewer's ~50° that is ≈ size/2.
+  const pointMaterial = useMemo(() => {
+    const material = new SpriteNodeMaterial({
+      color: field.point,
+      transparent: true,
+      opacity: field.pointOpacity,
+      sizeAttenuation: true,
+      depthWrite: false,
+      depthTest: true,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      fog: false,
+    });
+    // An InstancedBufferAttribute (not the raw array): three r186 steps a
+    // typed-array buffer node per vertex, which stretches quads across points.
+    material.positionNode = instancedBufferAttribute(new THREE.InstancedBufferAttribute(field.points, 3));
+    material.scaleNode = float(pointSize * 0.47);
+    return markBackgroundMaterial(material);
+  }, [field, pointSize]);
 
   useEffect(() => () => {
     field.lines.dispose();
-    field.points.dispose();
   }, [field]);
+
+  useEffect(() => () => pointMaterial.dispose(), [pointMaterial]);
 
   useFrame((_state, delta) => {
     if (!paused && visible) time.current += Math.min(delta, .1) * speed;
@@ -379,7 +275,7 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
     }
     const pulse = 0.86 + 0.14 * Math.sin(t * 0.55 + index);
     if (lineMaterialRef.current) lineMaterialRef.current.opacity = field.lineOpacity * pulse;
-    if (pointMaterialRef.current) pointMaterialRef.current.opacity = field.pointOpacity * (0.80 + 0.20 * pulse);
+    pointMaterial.opacity = field.pointOpacity * (0.80 + 0.20 * pulse);
   });
 
   return (
@@ -394,6 +290,7 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
           depthTest
           blending={THREE.AdditiveBlending}
           toneMapped={false}
+          userData={BACKGROUND_MATERIAL_USER_DATA}
         />
       </lineSegments>
       <lineSegments geometry={field.lines} scale={[1.018, 1.018, 1.018]}>
@@ -405,22 +302,12 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
           depthTest
           blending={THREE.AdditiveBlending}
           toneMapped={false}
+          userData={BACKGROUND_MATERIAL_USER_DATA}
         />
       </lineSegments>
-      <points geometry={field.points}>
-        <pointsMaterial
-          ref={pointMaterialRef}
-          color={field.point}
-          transparent
-          opacity={field.pointOpacity}
-          size={Math.max(0.16, safeRadius * 0.010)}
-          sizeAttenuation
-          depthWrite={false}
-          depthTest
-          blending={THREE.AdditiveBlending}
-          toneMapped={false}
-        />
-      </points>
+      {field.points.length > 0 && (
+        <sprite material={pointMaterial} count={field.points.length / 3} frustumCulled={false} />
+      )}
     </group>
   );
 }

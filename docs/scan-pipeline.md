@@ -433,6 +433,13 @@ one submitted frame before the page trusts it, and stops its own loop once
 nothing is left to draw. Without WebGPU, or with reduced motion, a CSS
 conic-gradient ring stands in and the page is the same.
 
+Since the viewer moved to three r186 and `WebGPURenderer` (September 2026),
+the swirl and the gist particles still run on their own vgpu 0.4.0 devices,
+never the viewer's. Before each `init` they install the viewer's tolerant
+`GPUTexture.createView` (`packages/ui/src/viewer/webgpuCompat.ts`), so the
+page and a viewer opened from it share one patched prototype. Without WebGPU
+(the WebGL2 lane) the stage reports `data-renderer="css"`.
+
 ## Keys
 
 The keys live only on the Worker. The browser never holds any of them.

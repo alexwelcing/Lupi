@@ -464,10 +464,6 @@ export interface AppState {
   dirLightIntensity: number;
   /** Rim / backlight intensity. Adds a backlit edge for depth separation. */
   rimLightIntensity: number;
-  /** Runtime-only: true while WebXR light-estimation is feeding real-world
-   *  lighting into the AR scene. Lets the static 3-point rig dim out so the
-   *  live environment dominates. Never serialized to the URL. */
-  arLightEstimationActive: boolean;
   atomTexture: 'none' | 'scratched' | 'noise';
   surfaceRoughness: number;
   surfacePolish: number;
@@ -767,7 +763,6 @@ export interface AppState {
   setFilterShellOpacity: (opacity: number) => void;
   setFilterShellRadius: (radius: number) => void;
   setEnvironmentPreset: (preset: 'city' | 'studio' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'softbox' | 'park' | 'none') => void;
-  setArLightEstimationActive: (active: boolean) => void;
   setMaterialPreset: (preset: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission') => void;
   setMaterialScene: (sceneId: string) => void;
   setMaterialIntensity: (v: number) => void;
@@ -927,7 +922,8 @@ const DEFAULTS = {
   bondRegistry: {} as Record<string, BondDataset>,
   activeBondDataset: null as string | null,
   atomScale: 1.0,
-  backgroundPreset: 'pub-figure-neutral',
+  // The home page's dark sage plate (BG_PRESETS['sage-plate']).
+  backgroundPreset: 'sage-plate',
   backgroundStyle: 'radial' as const,
   backgroundMotionPaused: false,
   backgroundMotionSpeed: 1.0,
@@ -952,7 +948,6 @@ const DEFAULTS = {
   ambientLightIntensity: 0.5,
   dirLightIntensity: 1.5,
   rimLightIntensity: 0.3,
-  arLightEstimationActive: false,
   atomTexture: 'none' as const,
   surfaceRoughness: 0.0,
   surfacePolish: 0.0,
@@ -1287,7 +1282,7 @@ export const useStore = create<AppState>()(
         const avgRadius = typeCount > 0 ? totalRadius / typeCount : 0.5;
         if (diagonal / avgRadius > 150) {
           sparseAtomScale = Math.min(5, Math.max(2, diagonal / 200));
-          sparseBackgroundPreset = 'deep';
+          sparseBackgroundPreset = DEFAULTS.backgroundPreset;
         }
       }
 
@@ -1589,7 +1584,6 @@ export const useStore = create<AppState>()(
       });
     },
 
-    setArLightEstimationActive: (arLightEstimationActive) => set({ arLightEstimationActive }),
     setAmbientLightIntensity: (ambientLightIntensity) => set({ ambientLightIntensity }),
     setDirLightIntensity: (dirLightIntensity) => set({ dirLightIntensity }),
     setRimLightIntensity: (rimLightIntensity) => set({ rimLightIntensity: Math.max(0, Math.min(2, rimLightIntensity)) }),
@@ -2068,7 +2062,7 @@ function pickSceneDirective(atomCount: number): {
       preset: 'editorial',
       intensity: 0.92,
       materialScene: DEFAULT_SCENE_ID,
-      backgroundPreset: 'deep',
+      backgroundPreset: DEFAULTS.backgroundPreset,
       surfaceRoughness: -0.08,
       surfacePolish: 0.22,
       surfaceClearcoat: 0.18,
@@ -2085,7 +2079,7 @@ function pickSceneDirective(atomCount: number): {
       preset: 'studio',
       intensity: 1.0,
       materialScene: DEFAULT_SCENE_ID,
-      backgroundPreset: 'deep',
+      backgroundPreset: DEFAULTS.backgroundPreset,
       surfaceRoughness: -0.04,
       surfacePolish: 0.14,
       surfaceClearcoat: 0.12,

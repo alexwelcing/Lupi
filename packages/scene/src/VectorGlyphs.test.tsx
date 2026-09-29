@@ -1,13 +1,22 @@
 import React from 'react';
-import ReactThreeTestRenderer from '@react-three/test-renderer';
+import ReactThreeTestRenderer from '@react-three/test-renderer/webgpu';
 import { describe, expect, it } from 'vitest';
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import type { Frame, VectorFieldSpec } from '@atlas/core';
 import {
   LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
   LUPI_ARTIFACT_LAYER_KEY,
 } from './AtomsOptimized';
 import { LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER, VectorGlyphs } from './VectorGlyphs';
+import { readLupiUniform } from './tsl/lupiUniforms';
+
+type GlyphMesh = THREE.Mesh<THREE.InstancedBufferGeometry, THREE.MeshBasicNodeMaterial>;
+
+function colormapOf(material: THREE.Material): THREE.DataTexture {
+  const texture = readLupiUniform<THREE.DataTexture>(material, 'uColormap');
+  if (!texture) throw new Error('vector glyph material has no uColormap in its uniform bag');
+  return texture;
+}
 
 const FIELD: VectorFieldSpec = {
   id: 'v',
@@ -60,21 +69,17 @@ describe('VectorGlyphs immutable artifact receipt', () => {
     );
 
     try {
-      const initialMesh = renderer.scene.findByType('Mesh')
-        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+      const initialMesh = renderer.scene.findByType('Mesh').instance as GlyphMesh;
       const material = initialMesh.material;
-      const colormapTexture = material.uniforms.uColormap.value as THREE.DataTexture;
+      const colormapTexture = colormapOf(material);
       const initialColormap = Array.from(
         colormapTexture.image.data as Uint8Array,
       );
 
+      expect(material).toBeInstanceOf(THREE.MeshBasicNodeMaterial);
       expect(colormapTexture.colorSpace).toBe(THREE.SRGBColorSpace);
       expect(material.depthTest).toBe(false);
       expect(material.depthWrite).toBe(false);
-      expect(material.fragmentShader).toContain('#include <colorspace_fragment>');
-      expect(material.fragmentShader.indexOf('#include <colorspace_fragment>')).toBeGreaterThan(
-        material.fragmentShader.indexOf('gl_FragColor = vec4(vColor * edge, 1.0);'),
-      );
       expect(initialMesh.userData[LUPI_ARTIFACT_LAYER_KEY]).toBe(
         LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER,
       );
@@ -86,11 +91,8 @@ describe('VectorGlyphs immutable artifact receipt', () => {
       )).toEqual([0, 1, 2, 3, 4, 5]);
 
       await renderer.update(renderGlyphs(vectorFrame(1), 'plasma', 'spec-b'));
-      const updatedMesh = renderer.scene.findByType('Mesh')
-        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
-      const updatedColormap = Array.from(
-        (updatedMesh.material.uniforms.uColormap.value as THREE.DataTexture).image.data as Uint8Array,
-      );
+      const updatedMesh = renderer.scene.findByType('Mesh').instance as GlyphMesh;
+      const updatedColormap = Array.from(colormapOf(updatedMesh.material).image.data as Uint8Array);
 
       expect(updatedMesh.material).toBe(material);
       expect(updatedMesh.geometry.instanceCount).toBe(2);
@@ -102,8 +104,7 @@ describe('VectorGlyphs immutable artifact receipt', () => {
       expect(updatedColormap).not.toEqual(initialColormap);
 
       await renderer.update(renderGlyphs(vectorFrame(1), 'plasma', 'spec-hidden', new Set([1])));
-      const hiddenMesh = renderer.scene.findByType('Mesh')
-        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+      const hiddenMesh = renderer.scene.findByType('Mesh').instance as GlyphMesh;
       expect(hiddenMesh.geometry.instanceCount).toBe(0);
       expect(hiddenMesh.material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY]).toBe('spec-hidden');
     } finally {
@@ -140,8 +141,7 @@ describe('VectorGlyphs frame identity guard', () => {
     }));
 
     try {
-      const mesh = renderer.scene.findByType('Mesh')
-        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+      const mesh = renderer.scene.findByType('Mesh').instance as GlyphMesh;
       const targetPositions = mesh.geometry.attributes.instanceTargetPosition
         .array as Float32Array;
       const targetVectors = mesh.geometry.attributes.instanceTargetVector

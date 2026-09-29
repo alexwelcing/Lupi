@@ -1,153 +1,168 @@
 /**
- * ScenePostprocessing — the new composer.
+ * ScenePostprocessing — the post stack host (plan-final §5.12).
  *
- * Single source of truth for the postprocess stack. Reads the active preset
- * from the store, scales it by the user's intensity, strips expensive passes
- * during playback, and renders an EffectComposer with stable keying so it
- * only remounts when the SET of enabled effects changes — not when the user
- * twiddles intensity.
+ * Reads the active preset from the store, scales it by the user's intensity,
+ * cheapens it during playback and bounds it on phones (controls.ts), and
+ * renders it as one TSL render pipeline (`useRenderPipeline` from
+ * render/tsl.ts; the graph is postPipeline.ts).
  *
- * Replaces the old PostProcessingEffects function in App.tsx.
+ * Contract:
+ * - at most one `useRenderPipeline` in the app, here;
+ * - tone mapping only in the pipeline's `renderOutput`; `renderer.toneMapping`
+ *   stays NoToneMapping (configureViewerRenderer), and the pipeline's output
+ *   transform is the single sRGB encode;
+ * - export capture does not go through the pipeline (it renders the scene
+ *   directly);
+ * - the graph is rebuilt only when the SET of effects (or the tone-mapping
+ *   mode) changes. Strengths are uniforms, so the intensity knob and
+ *   play/pause never rebuild; playback only drops the scene pass's MSAA.
  */
-
-import { useMemo, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import * as THREE from 'three';
-import { EffectComposer, N8AO, Bloom, ToneMapping, Vignette, DepthOfField } from '@react-three/postprocessing';
-import { ToneMappingMode, BlendFunction } from 'postprocessing';
-import { useXR } from '@react-three/xr';
-
+import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useFrame, useStore as useFiberStore } from '@react-three/fiber/webgpu';
+import { LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
+import type { Node, PassNode, Vector3 } from 'three/webgpu';
 import { useStore } from '../store';
-import { scalePreset, reduceForPlayback, reduceForMobile, composerKey } from './presets';
-import { resolveEffects } from './controls';
-import { getDeviceTier } from '../deviceCapabilities';
+import { getDeviceTier, type DeviceTier } from '../deviceCapabilities';
+import { useRenderPipeline } from '../render/tsl';
+import { resolveActivePostprocess } from './controls';
+import { postStructure, postStructureKey, scenePassSamples, type PostprocessPresetConfig } from './presets';
+import { applyPostParams, autofocus, buildPostChain, type PostChain } from './postPipeline';
 
-export function ScenePostprocessing() {
-  const presetId = useStore(s => s.postprocessPreset);
-  const intensity = useStore(s => s.postprocessIntensity);
-  const playing = useStore(s => s.playing);
-  const overrides = useStore(s => s.effectOverrides);
-  const fullEffects = useStore(s => s.fullSceneEffects);
-  const deviceTier = useMemo(getDeviceTier, []);
+/**
+ * Changes each time this module is (re)evaluated in dev. Under Vite HMR an
+ * edit here or in postPipeline.ts re-runs this module, and the pipeline
+ * callback does not re-run on its own, so the token is part of the rebuild
+ * key. Empty in production builds.
+ */
+const HMR_TOKEN = import.meta.env.DEV ? `|dev${Date.now()}` : '';
 
-  const mode = useXR(state => state.mode);
-  const isImmersive = mode === 'immersive-ar' || mode === 'immersive-vr';
-
-  if (isImmersive) return null;
-
-  const base = resolveEffects(presetId, overrides);
-  const scaled = scalePreset(base, intensity);
-  const playback = playing ? reduceForPlayback(scaled) : scaled;
-  const active = !fullEffects && (deviceTier === 'mobile' || deviceTier === 'low') ? reduceForMobile(playback) : playback;
-
-  return (
-    <EffectComposer
-      key={composerKey(active)}
-      multisampling={active.multisampling}
-    >
-      {active.ssao.enabled ? (
-        // N8AO derives normals from the depth buffer, so the ray-traced atom
-        // impostors (which write true sphere depth via gl_FragDepth) get
-        // correct ambient occlusion. The old SSAO effect read a NormalPass
-        // G-buffer instead — an override material that never runs the
-        // impostor shader — so it computed occlusion from garbage normals
-        // and peppered every sphere with dark speckle. Never reintroduce a
-        // normal-pass-based AO here without teaching the pass about
-        // impostors. aoRadius is world-space (Å): tuned for atom contact
-        // shadows, and the built-in Poisson denoise keeps surfaces clean.
-        <N8AO
-          aoRadius={active.ssao.radius}
-          intensity={active.ssao.intensity}
-          distanceFalloff={1}
-          aoSamples={16}
-          denoiseSamples={8}
-          denoiseRadius={12}
-          depthAwareUpsampling
-        />
-      ) : (<></>) as any}
-      {active.bloom.enabled ? (
-        <Bloom
-          intensity={active.bloom.intensity}
-          luminanceThreshold={active.bloom.threshold}
-          luminanceSmoothing={active.bloom.smoothing}
-          mipmapBlur
-        />
-      ) : (<></>) as any}
-      {active.dof.enabled ? (
-        <AutoFocusDof
-          bokehScale={active.dof.bokehScale}
-          focalLength={active.dof.focalLength}
-          focusDistance={active.dof.focusDistance}
-          focusRange={active.dof.focusRange}
-          auto={active.dof.auto}
-        />
-      ) : (<></>) as any}
-      {active.toneMapping !== 'none' ? (
-        <ToneMapping
-          mode={active.toneMapping === 'aces' ? ToneMappingMode.ACES_FILMIC : ToneMappingMode.REINHARD}
-        />
-      ) : (<></>) as any}
-      {active.vignette.enabled ? (
-        <Vignette
-          offset={active.vignette.offset}
-          darkness={active.vignette.darkness}
-          blendFunction={BlendFunction.NORMAL}
-        />
-      ) : (<></>) as any}
-    </EffectComposer>
-  );
+/** Tiers that get the phone budget (no AO, bloom or DOF; MSAA ≤ 2). */
+export function isReducedPostTier(tier: DeviceTier): boolean {
+  return tier === 'mobile' || tier === 'low';
 }
 
-/** DOF wrapper that lets postprocessing calculate focus in world units.
- *  The old path wrote a normalized focus distance; postprocessing 6 expects
- *  world-space distance, so target autofocus is the stable route. */
-function AutoFocusDof({
-  bokehScale,
-  focalLength,
-  focusDistance,
-  focusRange,
-  auto,
-}: {
-  bokehScale: number;
-  focalLength: number;
-  focusDistance: number;
-  focusRange: number;
-  auto: boolean;
-}) {
-  const { camera, controls } = useThree();
-  const ref = useRef<any>(null);
-  const targetRef = useRef(new THREE.Vector3());
+/** AO resolution: half on phones and low-power devices (when full effects force it on). */
+export function aoResolutionScaleFor(tier: DeviceTier): number {
+  return isReducedPostTier(tier) ? 0.5 : 1;
+}
 
-  useFrame(() => {
-    const effect = ref.current;
-    if (!effect) return;
+export function ScenePostprocessing() {
+  const presetId = useStore((s) => s.postprocessPreset);
+  const intensity = useStore((s) => s.postprocessIntensity);
+  const playing = useStore((s) => s.playing);
+  const overrides = useStore((s) => s.effectOverrides);
+  const fullEffects = useStore((s) => s.fullSceneEffects);
+  const deviceTier = useMemo(getDeviceTier, []);
 
-    effect.bokehScale = bokehScale;
-    if (!auto) {
-      effect.focusDistance = focusDistance;
-      if (effect.cocMaterial) effect.cocMaterial.focusRange = focusRange;
-      return;
-    }
-    const target = (controls as any)?.target as THREE.Vector3 | undefined;
-    if (!target || !effect.target) return;
-    targetRef.current.copy(target);
-    effect.target.copy(targetRef.current);
-    const dist = camera.position.distanceTo(target);
-    if (effect.cocMaterial) {
-      effect.cocMaterial.focusRange = Math.max(focusRange, Math.min(90, dist * 0.08));
-    }
+  const config = useMemo(
+    () => resolveActivePostprocess({
+      presetId,
+      intensity,
+      overrides,
+      playing,
+      reduced: !fullEffects && isReducedPostTier(deviceTier),
+    }),
+    [presetId, intensity, overrides, playing, fullEffects, deviceTier],
+  );
+
+  return <LupiPostPipeline config={config} aoResolutionScale={aoResolutionScaleFor(deviceTier)} />;
+}
+
+export interface LupiPostPipelineProps {
+  /** The resolved recipe (resolveActivePostprocess). */
+  config: PostprocessPresetConfig;
+  /** GTAO resolution scale (1 = full). */
+  aoResolutionScale?: number;
+  /** Called after each graph build (tests count rebuilds). */
+  onBuild?: (chain: PostChain) => void;
+}
+
+/**
+ * The render pipeline for one resolved config. Mounting it routes R3F's
+ * default render through the pipeline; unmounting it restores the default
+ * render (`reset()`).
+ */
+export function LupiPostPipeline({ config, aoResolutionScale = 1, onBuild }: LupiPostPipelineProps) {
+  const store = useFiberStore();
+  const structure = postStructure(config);
+  const key = `${postStructureKey(structure)}|ao×${aoResolutionScale}${HMR_TOKEN}`;
+  const samples = scenePassSamples(config);
+
+  // Latest inputs for the pipeline callback. Written in a layout effect that
+  // runs before useRenderPipeline's own (effects run in declaration order).
+  const latest = useRef({ config, structure, key, samples, aoResolutionScale, onBuild });
+  useLayoutEffect(() => {
+    latest.current = { config, structure, key, samples, aoResolutionScale, onBuild };
   });
 
-  return (
-    <DepthOfField
-      key={auto ? 'target-autofocus' : 'manual-focus'}
-      ref={ref}
-      target={auto ? targetRef.current : undefined}
-      focusDistance={focusDistance}
-      focusRange={focusRange}
-      focalLength={focalLength}
-      bokehScale={bokehScale}
-      height={480}
-    />
+  const chainRef = useRef<PostChain | null>(null);
+  const builtKey = useRef<string | null>(null);
+
+  const { rebuild, reset, passes } = useRenderPipeline((state) => {
+    const input = latest.current;
+    chainRef.current?.dispose();
+    chainRef.current = null;
+    const scenePass = state.passes.scenePass;
+    setScenePassSamples(scenePass, input.samples);
+    const chain = buildPostChain(scenePass, state.camera, input.structure, { aoResolutionScale: input.aoResolutionScale });
+    applyPostParams(chain, input.config);
+    chainRef.current = chain;
+    builtKey.current = input.key;
+    state.renderPipeline.outputColorTransform = true;
+    state.renderPipeline.outputNode = chain.output;
+    input.onBuild?.(chain);
+    // `undefined` entries clear a disabled effect from state.passes (the hook
+    // merges this record over the previous one); its type omits undefined.
+    return chain.passes as Record<string, Node>;
+  });
+
+  // A new set of effects: rebuild the graph (the only rebuild path).
+  useLayoutEffect(() => {
+    if (builtKey.current !== null && builtKey.current !== key) rebuild();
+  }, [key, rebuild]);
+
+  // Strengths, focus and vignette: uniforms only.
+  useLayoutEffect(() => {
+    if (chainRef.current) applyPostParams(chainRef.current, config);
+  }, [config]);
+
+  // MSAA follows play/pause without a rebuild (only for graphs that do not read depth).
+  const scenePass = passes.scenePass;
+  useLayoutEffect(() => {
+    if (scenePass) setScenePassSamples(scenePass, samples);
+  }, [scenePass, samples]);
+
+  // Unmount: back to R3F's default render.
+  useLayoutEffect(
+    () => () => {
+      chainRef.current?.dispose();
+      chainRef.current = null;
+      builtKey.current = null;
+      store.getState().renderPipeline?.dispose();
+      reset();
+    },
+    [reset, store],
   );
+
+  useFrame(
+    (state) => {
+      const chain = chainRef.current;
+      const active = latest.current.config;
+      if (!chain?.dof || !active.dof.auto) return;
+      const target = (state.controls as { target?: Vector3 } | null)?.target;
+      if (!target) {
+        applyPostParams(chain, active);
+        return;
+      }
+      autofocus(chain, active, state.camera.position.distanceTo(target));
+    },
+    { phase: LUPI_PHASE.uniforms, id: LUPI_JOB.dofFocus },
+  );
+
+  return null;
+}
+
+function setScenePassSamples(scenePass: PassNode, samples: number): void {
+  scenePass.options.samples = samples;
+  scenePass.renderTarget.samples = samples;
 }

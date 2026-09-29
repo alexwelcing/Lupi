@@ -16,6 +16,26 @@ const EQUIRECT_ASPECT = 2;
 export type BackgroundGradientStyle = 'linear' | 'radial' | 'spotlight';
 
 /**
+ * The renderer surface these helpers read: WebGPURenderer exposes
+ * `getMaxAnisotropy()` directly (its `capabilities` has no such method, and
+ * the WebGPU backend only answers after init).
+ */
+export interface AnisotropyRenderer {
+  getMaxAnisotropy(): number;
+}
+
+/** The renderer's maximum anisotropy, or 1 when it cannot answer yet. */
+export function maxAnisotropy(renderer: AnisotropyRenderer | null | undefined): number {
+  if (!renderer) return 1;
+  try {
+    const value = renderer.getMaxAnisotropy();
+    return Number.isFinite(value) && value >= 1 ? value : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * Apply high-quality sampling settings for use as an equirectangular
  * panorama background. Safe to call on a texture that has already
  * been uploaded — sets `needsUpdate` so the GPU re-uploads with the
@@ -23,7 +43,7 @@ export type BackgroundGradientStyle = 'linear' | 'radial' | 'spotlight';
  */
 export function configureEquirectTexture(
   texture: THREE.Texture,
-  renderer?: THREE.WebGLRenderer,
+  renderer?: AnisotropyRenderer,
 ): THREE.Texture {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -33,7 +53,7 @@ export function configureEquirectTexture(
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   if (renderer) {
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texture.anisotropy = maxAnisotropy(renderer);
   }
   texture.needsUpdate = true;
   return texture;
@@ -46,7 +66,7 @@ export function configureEquirectTexture(
  */
 export function configureEquirectVideoTexture(
   texture: THREE.VideoTexture,
-  renderer?: THREE.WebGLRenderer,
+  renderer?: AnisotropyRenderer,
 ): THREE.VideoTexture {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -56,7 +76,7 @@ export function configureEquirectVideoTexture(
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
   if (renderer) {
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texture.anisotropy = maxAnisotropy(renderer);
   }
   texture.needsUpdate = true;
   return texture;
@@ -69,7 +89,7 @@ export function configureEquirectVideoTexture(
  */
 export function configureEquirectDomeTexture(
   texture: THREE.Texture,
-  renderer?: THREE.WebGLRenderer,
+  renderer?: AnisotropyRenderer,
 ): THREE.Texture {
   texture.mapping = THREE.UVMapping;
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -84,7 +104,7 @@ export function configureEquirectDomeTexture(
     texture.minFilter = THREE.LinearMipmapLinearFilter;
   }
   if (renderer) {
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texture.anisotropy = maxAnisotropy(renderer);
   }
   texture.needsUpdate = true;
   return texture;
@@ -98,7 +118,7 @@ export function configureEquirectDomeTexture(
 export function createGradientEquirectTexture(
   top: string,
   bottom: string,
-  renderer?: THREE.WebGLRenderer,
+  renderer?: AnisotropyRenderer,
   height = 1024,
   style: BackgroundGradientStyle = 'linear',
 ): THREE.CanvasTexture {

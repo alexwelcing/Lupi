@@ -6,9 +6,9 @@
  *
  *   - tag    : drei <Html> frosted-glass card + thin SVG leader line.
  *              Best for readability; occluded by atoms in front.
- *   - glyph  : drei <Text> SDF, billboarded, floating directly above the
+ *   - glyph  : <LupiText>, billboarded, floating directly above the
  *              atom. Minimal — big monospace, no chrome.
- *   - halo   : a 3D ring of <Text> instances orbiting the atom in world
+ *   - halo   : a 3D ring of <LupiText> instances orbiting the atom in world
  *              space, slowly rotating. Reads as a sci-fi callout.
  *   - etched : text rasterized to a Canvas2D texture, sampled inside the
  *              atom impostor's fragment shader (via a per-atom mask), so
@@ -21,9 +21,10 @@
  */
 
 import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
-import { Html, Text, Billboard } from '@react-three/drei';
+import { Html, Billboard } from '@react-three/drei/webgpu';
+import { LupiText } from './labels/LupiText';
 import type { Frame } from '@atlas/core/types';
 
 export interface AnnotationItem {
@@ -135,7 +136,7 @@ function TagAnnotation({
 }
 
 // ─── Style 2: Glyph ───────────────────────────────────────────────────
-// drei <Text> (SDF) floating above the atom, billboarded toward the
+// <LupiText> floating above the atom, billboarded toward the
 // camera. No leader, no chrome — just text. Reads as an inline editor
 // label rather than an annotation card.
 function GlyphAnnotation({
@@ -147,7 +148,7 @@ function GlyphAnnotation({
 }) {
   return (
     <Billboard position={[pos[0], pos[1] + 1.6, pos[2]]} follow lockX={false} lockY={false} lockZ={false}>
-      <Text
+      <LupiText
         fontSize={0.55}
         color="#e6f0ff"
         anchorX="center"
@@ -158,7 +159,7 @@ function GlyphAnnotation({
         // Slight emissive feel via subtle outline + bright color
       >
         {text}
-      </Text>
+      </LupiText>
     </Billboard>
   );
 }
@@ -166,7 +167,7 @@ function GlyphAnnotation({
 // ─── Style 3: Halo ────────────────────────────────────────────────────
 // 3D text characters arranged tangentially around a ring at the atom's
 // position. The ring rotates slowly via useFrame. Each character is its
-// own <Text> placed on a ring radius. For >12 chars we duplicate to fill
+// own <LupiText> placed on a ring radius. For >12 chars we duplicate to fill
 // the ring; for very short strings we space them out.
 function HaloAnnotation({
   pos,
@@ -193,7 +194,7 @@ function HaloAnnotation({
           const cx = Math.cos(angle) * radius;
           const cz = Math.sin(angle) * radius;
           return (
-            <Text
+            <LupiText
               key={i}
               position={[cx, 0, cz]}
               rotation={[0, -angle - Math.PI / 2, 0]}
@@ -205,7 +206,7 @@ function HaloAnnotation({
               outlineColor="#08101c"
             >
               {c}
-            </Text>
+            </LupiText>
           );
         })}
       </group>
@@ -235,7 +236,7 @@ function EtchedAnnotation({
 }) {
   return (
     <Billboard position={[pos[0] + 1.2, pos[1] + 0.4, pos[2]]}>
-      <Text
+      <LupiText
         fontSize={0.22}
         color="#7ec8ff"
         anchorX="left"
@@ -244,7 +245,7 @@ function EtchedAnnotation({
         outlineColor="#0a1424"
       >
         {`◇ ${text}`}
-      </Text>
+      </LupiText>
     </Billboard>
   );
 }

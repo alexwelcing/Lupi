@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { BgMedia } from '../backgroundPresets';
 import {
@@ -58,7 +58,7 @@ export function useEquirectMediaTexture({
   paused = false,
   playbackRate = 1,
 }: UseEquirectMediaTextureArgs): THREE.Texture | null {
-  const { gl, invalidate } = useThree();
+  const { renderer, invalidate } = useThree();
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const activeVideoTextureRef = useRef<THREE.VideoTexture | null>(null);
   const activeVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -155,22 +155,22 @@ export function useEquirectMediaTexture({
 
     const configureStaticTexture = (nextTexture: THREE.Texture) => {
       if (projection === 'dome') {
-        return configureEquirectDomeTexture(nextTexture, gl);
+        return configureEquirectDomeTexture(nextTexture, renderer);
       }
-      return configureEquirectTexture(nextTexture, gl);
+      return configureEquirectTexture(nextTexture, renderer);
     };
 
     const configureVideoTexture = (nextTexture: THREE.VideoTexture) => {
       if (projection === 'dome') {
-        return configureEquirectDomeTexture(nextTexture, gl) as THREE.VideoTexture;
+        return configureEquirectDomeTexture(nextTexture, renderer) as THREE.VideoTexture;
       }
-      return configureEquirectVideoTexture(nextTexture, gl);
+      return configureEquirectVideoTexture(nextTexture, renderer);
     };
 
     const createFallbackGradient = () => {
-      const gradientTexture = createGradientEquirectTexture(top, bottom, gl, 1024, style);
+      const gradientTexture = createGradientEquirectTexture(top, bottom, renderer, 1024, style);
       if (projection === 'dome') {
-        configureEquirectDomeTexture(gradientTexture, gl);
+        configureEquirectDomeTexture(gradientTexture, renderer);
       }
       return gradientTexture;
     };
@@ -288,7 +288,7 @@ export function useEquirectMediaTexture({
         video.load();
       }
     };
-  }, [bottom, enabled, gl, invalidate, logPrefix, mediaForEffect, mediaKey, projection, style, top]);
+  }, [bottom, enabled, renderer, invalidate, logPrefix, mediaForEffect, mediaKey, projection, style, top]);
 
   return texture;
 }

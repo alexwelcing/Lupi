@@ -1,0 +1,723 @@
+[
+  {
+    "name": "fixture-webgpu-persp",
+    "kind": "gpu",
+    "query": "backend=webgpu",
+    "ready": true,
+    "ms": 1537,
+    "backend": "webgpu",
+    "path": "webgpu-own-device",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 2.72,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgpu-ortho",
+    "kind": "gpu",
+    "query": "backend=webgpu",
+    "ready": true,
+    "ms": 1408,
+    "backend": "webgpu",
+    "path": "webgpu-own-device",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298725,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8475,
+    "edgeMismatchPct": 5.05,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgpu-persp-a2c",
+    "kind": "gpu",
+    "query": "backend=webgpu&a2c=1",
+    "ready": true,
+    "ms": 1483,
+    "backend": "webgpu",
+    "path": "webgpu-own-device",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 7.97,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgpu-persp-NODEPTH-control",
+    "kind": "gpu",
+    "query": "backend=webgpu&nodepth=1",
+    "ready": true,
+    "ms": 1532,
+    "backend": "webgpu",
+    "path": "webgpu-own-device",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 336,
+    "interiorMismatchPct": 0.1125,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 5.69,
+    "topConfusions": [
+      [
+        "bondEnd->atom4",
+        229
+      ],
+      [
+        "bondStart->atom4",
+        58
+      ],
+      [
+        "atom4->bondStart",
+        19
+      ],
+      [
+        "atom1->atom3",
+        18
+      ],
+      [
+        "atom3->atom2",
+        11
+      ]
+    ],
+    "expectMatch": false,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-fallback-persp",
+    "kind": "gl",
+    "query": "backend=auto",
+    "ready": true,
+    "ms": 1396,
+    "backend": "webgl2",
+    "path": "webgl2-fallback",
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 2.65,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-fallback-ortho",
+    "kind": "gl",
+    "query": "backend=auto",
+    "ready": true,
+    "ms": 1368,
+    "backend": "webgl2",
+    "path": "webgl2-fallback",
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ],
+    "size": "640x480",
+    "interiorPixels": 298725,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8475,
+    "edgeMismatchPct": 5.14,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-fallback-persp-a2c",
+    "kind": "gl",
+    "query": "backend=auto&a2c=1",
+    "ready": true,
+    "ms": 1355,
+    "backend": "webgl2",
+    "path": "webgl2-fallback",
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 8.81,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-fallback-persp-NODEPTH-control",
+    "kind": "gl",
+    "query": "backend=auto&nodepth=1",
+    "ready": true,
+    "ms": 1321,
+    "backend": "webgl2",
+    "path": "webgl2-fallback",
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 336,
+    "interiorMismatchPct": 0.1125,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 5.62,
+    "topConfusions": [
+      [
+        "bondEnd->atom4",
+        229
+      ],
+      [
+        "bondStart->atom4",
+        58
+      ],
+      [
+        "atom4->bondStart",
+        19
+      ],
+      [
+        "atom1->atom3",
+        18
+      ],
+      [
+        "atom3->atom2",
+        11
+      ]
+    ],
+    "expectMatch": false,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-forced-persp",
+    "kind": "gpu",
+    "query": "backend=webgl",
+    "ready": true,
+    "ms": 1583,
+    "backend": "webgl2",
+    "path": "webgl2-forced",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 2.65,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-forced-ortho",
+    "kind": "gpu",
+    "query": "backend=webgl",
+    "ready": true,
+    "ms": 1524,
+    "backend": "webgl2",
+    "path": "webgl2-forced",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298725,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8475,
+    "edgeMismatchPct": 5.14,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-forced-persp-a2c",
+    "kind": "gpu",
+    "query": "backend=webgl&a2c=1",
+    "ready": true,
+    "ms": 1357,
+    "backend": "webgl2",
+    "path": "webgl2-forced",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 0,
+    "interiorMismatchPct": 0,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 8.81,
+    "topConfusions": [],
+    "expectMatch": true,
+    "pass": true
+  },
+  {
+    "name": "fixture-webgl2-forced-persp-NODEPTH-control",
+    "kind": "gpu",
+    "query": "backend=webgl&nodepth=1",
+    "ready": true,
+    "ms": 1442,
+    "backend": "webgl2",
+    "path": "webgl2-forced",
+    "errors": [],
+    "size": "640x480",
+    "interiorPixels": 298664,
+    "interiorMismatch": 336,
+    "interiorMismatchPct": 0.1125,
+    "edgePixels": 8536,
+    "edgeMismatchPct": 5.62,
+    "topConfusions": [
+      [
+        "bondEnd->atom4",
+        229
+      ],
+      [
+        "bondStart->atom4",
+        58
+      ],
+      [
+        "atom4->bondStart",
+        19
+      ],
+      [
+        "atom1->atom3",
+        18
+      ],
+      [
+        "atom3->atom2",
+        11
+      ]
+    ],
+    "expectMatch": false,
+    "pass": true
+  },
+  {
+    "name": "caffeine-webgpu",
+    "kind": "gpu",
+    "query": "bare=1&scene=caffeine&backend=webgpu",
+    "ready": true,
+    "ms": 1754,
+    "frames": 13,
+    "backend": "webgpu",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgpu-own-device",
+      "requested": "webgpu",
+      "adapterInfo": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "description": "",
+        "device": ""
+      },
+      "limits": {
+        "maxBufferSize": 1073741824,
+        "maxStorageBufferBindingSize": 1073741824,
+        "maxStorageBuffersInVertexStage": 10
+      },
+      "compatibilityMode": false,
+      "webGPUSupported": true,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 24,
+      "bonds": 25,
+      "scene": "caffeine",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0,
+      "swizzleShimActive": true
+    },
+    "errors": []
+  },
+  {
+    "name": "caffeine-webgl2",
+    "kind": "gl",
+    "query": "bare=1&scene=caffeine&backend=auto",
+    "ready": true,
+    "ms": 1595,
+    "frames": 10,
+    "backend": "webgl2",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgl2-fallback",
+      "requested": "auto",
+      "compatibilityMode": null,
+      "webGPUSupported": false,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 24,
+      "bonds": 25,
+      "scene": "caffeine",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0,
+      "swizzleShimActive": true
+    },
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ]
+  },
+  {
+    "name": "caffeine-webgpu-ortho",
+    "kind": "gpu",
+    "query": "bare=1&scene=caffeine&backend=webgpu&camera=ortho",
+    "ready": true,
+    "ms": 1724,
+    "frames": 14,
+    "backend": "webgpu",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgpu-own-device",
+      "requested": "webgpu",
+      "adapterInfo": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "description": "",
+        "device": ""
+      },
+      "limits": {
+        "maxBufferSize": 1073741824,
+        "maxStorageBufferBindingSize": 1073741824,
+        "maxStorageBuffersInVertexStage": 10
+      },
+      "compatibilityMode": false,
+      "webGPUSupported": true,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 24,
+      "bonds": 25,
+      "scene": "caffeine",
+      "camera": "ortho",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0,
+      "swizzleShimActive": true
+    },
+    "errors": []
+  },
+  {
+    "name": "caffeine-webgl2-ortho",
+    "kind": "gl",
+    "query": "bare=1&scene=caffeine&backend=auto&camera=ortho",
+    "ready": true,
+    "ms": 1672,
+    "frames": 11,
+    "backend": "webgl2",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgl2-fallback",
+      "requested": "auto",
+      "compatibilityMode": null,
+      "webGPUSupported": false,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 24,
+      "bonds": 25,
+      "scene": "caffeine",
+      "camera": "ortho",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0,
+      "swizzleShimActive": true
+    },
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ]
+  },
+  {
+    "name": "cloud100k-webgpu",
+    "kind": "gpu",
+    "query": "bare=1&scene=cloud&n=100000&progress=0.35&backend=webgpu",
+    "ready": true,
+    "ms": 25674,
+    "frames": 9,
+    "backend": "webgpu",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgpu-own-device",
+      "requested": "webgpu",
+      "adapterInfo": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "description": "",
+        "device": ""
+      },
+      "limits": {
+        "maxBufferSize": 1073741824,
+        "maxStorageBufferBindingSize": 1073741824,
+        "maxStorageBuffersInVertexStage": 10
+      },
+      "compatibilityMode": false,
+      "webGPUSupported": true,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 100000,
+      "bonds": 0,
+      "scene": "cloud",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0.35,
+      "swizzleShimActive": true
+    },
+    "errors": []
+  },
+  {
+    "name": "cloud100k-webgl2",
+    "kind": "gl",
+    "query": "bare=1&scene=cloud&n=100000&progress=0.35&backend=auto",
+    "ready": true,
+    "ms": 17882,
+    "frames": 8,
+    "backend": "webgl2",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgl2-fallback",
+      "requested": "auto",
+      "compatibilityMode": null,
+      "webGPUSupported": false,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 100000,
+      "bonds": 0,
+      "scene": "cloud",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0.35,
+      "swizzleShimActive": true
+    },
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ]
+  },
+  {
+    "name": "cloud1m-webgpu",
+    "kind": "gpu",
+    "query": "bare=1&scene=cloud&n=1000000&progress=0.35&backend=webgpu",
+    "ready": false,
+    "ms": 278376,
+    "frames": 8,
+    "backend": "webgpu",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgpu-own-device",
+      "requested": "webgpu",
+      "adapterInfo": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "description": "",
+        "device": ""
+      },
+      "limits": {
+        "maxBufferSize": 1073741824,
+        "maxStorageBufferBindingSize": 1073741824,
+        "maxStorageBuffersInVertexStage": 10
+      },
+      "compatibilityMode": false,
+      "webGPUSupported": true,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 1000000,
+      "bonds": 0,
+      "scene": "cloud",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0.35,
+      "swizzleShimActive": true
+    },
+    "errors": []
+  },
+  {
+    "name": "cloud1m-webgl2",
+    "kind": "gl",
+    "query": "bare=1&scene=cloud&n=1000000&progress=0.35&backend=auto",
+    "ready": false,
+    "ms": 236881,
+    "frames": 9,
+    "backend": "webgl2",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgl2-fallback",
+      "requested": "auto",
+      "compatibilityMode": null,
+      "webGPUSupported": false,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 1000000,
+      "bonds": 0,
+      "scene": "cloud",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0.35,
+      "swizzleShimActive": true
+    },
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ]
+  },
+  {
+    "name": "caffeine-webgpu-legacyattrs",
+    "kind": "gpu",
+    "query": "bare=1&scene=caffeine&backend=webgpu&legacy=1",
+    "ready": false,
+    "ms": 180626,
+    "frames": 2,
+    "backend": "webgpu",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgpu-own-device",
+      "requested": "webgpu",
+      "adapterInfo": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "description": "",
+        "device": ""
+      },
+      "limits": {
+        "maxBufferSize": 1073741824,
+        "maxStorageBufferBindingSize": 1073741824,
+        "maxStorageBuffersInVertexStage": 10
+      },
+      "compatibilityMode": false,
+      "webGPUSupported": true,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 24,
+      "bonds": 25,
+      "scene": "caffeine",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": true,
+      "progress": 0,
+      "swizzleShimActive": true
+    },
+    "errors": [
+      "285ms f1 Uncaught TypeError: Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': Failed to read the 'buffers' property from 'GPUVertexState': Failed to read the 'attributes' property from 'GPUVertexBufferLayout': Failed to read the 'format' property from 'GPUVertexAttribute': Required member is undefined.",
+      "[error] THREE.WebGPUAttributeUtils: Vertex format not supported yet.",
+      "[pageerror] Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': Failed to read the 'buffers' property from 'GPUVertexState': Failed to read the 'attributes' property from 'GPUVertexBufferLayout': Failed to read the 'format' property from 'GPUVertexAttribute': Required member is undefined.",
+      "[warning] [Scheduler] Root \"spike-canvas\" not found; invalidation ignored."
+    ]
+  },
+  {
+    "name": "caffeine-webgl2-legacyattrs",
+    "kind": "gl",
+    "query": "bare=1&scene=caffeine&backend=auto&legacy=1",
+    "ready": true,
+    "ms": 1700,
+    "frames": 12,
+    "backend": "webgl2",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgl2-fallback",
+      "requested": "auto",
+      "compatibilityMode": null,
+      "webGPUSupported": false,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 24,
+      "bonds": 25,
+      "scene": "caffeine",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": true,
+      "progress": 0,
+      "swizzleShimActive": true
+    },
+    "errors": [
+      "[warning] Failed to create WebGPU Context Provider"
+    ]
+  },
+  {
+    "name": "phone-caffeine-webgpu",
+    "kind": "gpu",
+    "query": "bare=1&scene=caffeine&backend=webgpu",
+    "ready": true,
+    "ms": 1289,
+    "frames": 16,
+    "backend": "webgpu",
+    "info": {
+      "toneMappingBeforeOnCreated": 4,
+      "rendererPath": "webgpu-own-device",
+      "requested": "webgpu",
+      "adapterInfo": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "description": "",
+        "device": ""
+      },
+      "limits": {
+        "maxBufferSize": 1073741824,
+        "maxStorageBufferBindingSize": 1073741824,
+        "maxStorageBuffersInVertexStage": 10
+      },
+      "compatibilityMode": false,
+      "webGPUSupported": true,
+      "samples": 4,
+      "toneMapping": 0,
+      "outputColorSpace": "srgb",
+      "atoms": 24,
+      "bonds": 25,
+      "scene": "caffeine",
+      "camera": "persp",
+      "flat": false,
+      "writeDepth": true,
+      "a2c": false,
+      "antialias": true,
+      "legacy": false,
+      "progress": 0,
+      "swizzleShimActive": true
+    },
+    "errors": []
+  }
+]

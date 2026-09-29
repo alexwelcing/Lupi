@@ -6,9 +6,10 @@
  * compute outputs). Built on the same architecture as <AtomsOptimized />:
  *
  * - 1 quad per glyph (2 triangles), instanced — 100k arrows ≈ 200k tris
- * - The quad is oriented along the vector in world space and rotated
- *   about that axis to face the camera (a "cylindrical billboard"), then
- *   the fragment shader carves an anti-aliased shaft + head silhouette
+ * - The quad is oriented along the vector and rotated about that axis to
+ *   face the camera (a "cylindrical billboard"), then the fragment carves
+ *   the shaft + head silhouette (TSL node material:
+ *   tsl/vectorGlyphMaterial.ts)
  * - Magnitude → color via the same 256×1 colormap-texture trick
  * - GPU cross-frame interpolation: position AND vector lerp by uProgress,
  *   uploaded once per frame change, swept at display rate
@@ -17,9 +18,9 @@
  *   per-arrow length cap at 3× that reference
  */
 
-import { useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
+import { useMemo, useEffect, useId, useLayoutEffect, useRef, useCallback } from 'react';
+import { useFrame } from '@react-three/fiber/webgpu';
+import * as THREE from 'three/webgpu';
 import type { Frame, ColormapName } from '@atlas/core/types';
 import type { VectorFieldSpec } from '@atlas/core';
 import {
@@ -34,6 +35,13 @@ import {
   LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
   LUPI_ARTIFACT_LAYER_KEY,
 } from './AtomsOptimized';
+import { LUPI_JOB, LUPI_PHASE } from './framePhases';
+import {
+  GLYPH_ATTR,
+  GLYPH_COLORMAP_SIZE,
+  createGlyphColormapTexture,
+  createVectorGlyphMaterial,
+} from './tsl/vectorGlyphMaterial';
 
 export interface VectorGlyphStats {
   /** p95 magnitude used as the color/scale reference. */
@@ -69,77 +77,14 @@ interface VectorGlyphsProps {
   artifactSpecId?: string;
 }
 
-const VERTEX = /* glsl */ `
-  attribute vec3 instancePosition;
-  attribute vec3 instanceTargetPosition;
-  attribute vec3 instanceVector;
-  attribute vec3 instanceTargetVector;
-
-  uniform float uProgress;   // 0..1 frame interpolation
-  uniform float uScale;      // world length per magnitude unit
-  uniform float uMaxLen;     // world-length cap per arrow
-  uniform float uWidth;      // arrow half-width at the head, world units
-  uniform vec2  uMagRange;   // magnitude -> colormap normalization
-  uniform sampler2D uColormap;
-
-  varying vec3 vColor;
-  varying vec2 vUv;          // x in [-1,1] across, y in [0,1] along
-  varying float vLen;        // final world length (0 kills the glyph)
-
-  void main() {
-    vec3 P = mix(instancePosition, instanceTargetPosition, uProgress);
-    vec3 V = mix(instanceVector, instanceTargetVector, uProgress);
-    float mag = length(V);
-
-    float t = clamp((mag - uMagRange.x) / max(uMagRange.y - uMagRange.x, 1e-20), 0.0, 1.0);
-    vColor = texture2D(uColormap, vec2(t, 0.5)).rgb;
-
-    float len = min(mag * uScale, uMaxLen);
-    vLen = len;
-    vUv = vec2(position.x, position.y);
-
-    vec3 axis = mag > 1e-12 ? V / mag : vec3(0.0, 0.0, 1.0);
-
-    // Cylindrical billboard: rotate the ribbon about the arrow axis so
-    // its face points at the camera. Degenerates only when the axis runs
-    // straight into the camera — then any side vector works.
-    vec3 toCam = cameraPosition - P;
-    vec3 side = cross(axis, toCam);
-    float sideLen = length(side);
-    side = sideLen > 1e-6 ? side / sideLen : normalize(cross(axis, vec3(0.0, 1.0, 0.01)));
-
-    // Width tapers with very short arrows so tiny vectors don't read as blobs.
-    float w = uWidth * clamp(len / max(uMaxLen * 0.35, 1e-6), 0.35, 1.0);
-
-    vec3 world = P + axis * (position.y * len) + side * (position.x * w);
-    gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
-  }
-`;
-
-const FRAGMENT = /* glsl */ `
-  precision highp float;
-  varying vec3 vColor;
-  varying vec2 vUv;
-  varying float vLen;
-
-  void main() {
-    if (vLen <= 1e-6) discard;
-
-    // Arrow silhouette in ribbon space: shaft up to y=0.62, head 0.62..1.
-    float ax = abs(vUv.x);
-    float inShaft = step(ax, 0.22) * step(vUv.y, 0.62);
-    float headHalf = (1.0 - vUv.y) / 0.38;        // 1 at head base -> 0 at tip
-    float inHead = step(0.62, vUv.y) * step(ax, headHalf);
-    if (inShaft + inHead < 0.5) discard;
-
-    // Cheap shading: darken toward the ribbon edge for a rounded read.
-    float edge = 1.0 - 0.35 * smoothstep(0.0, 1.0, ax / max(headHalf, 0.22));
-    gl_FragColor = vec4(vColor * edge, 1.0);
-    #include <colorspace_fragment>
-  }
-`;
-
 const MIN_CAPACITY = 1024;
+
+const GLYPH_ATTRIBUTES = [
+  GLYPH_ATTR.position,
+  GLYPH_ATTR.target,
+  GLYPH_ATTR.vector,
+  GLYPH_ATTR.targetVector,
+] as const;
 
 export const LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER = 'vectorGlyphs';
 
@@ -183,7 +128,7 @@ export function VectorGlyphs({
     geo.setAttribute('position', new THREE.BufferAttribute(quadPos, 3));
     geo.setIndex(new THREE.BufferAttribute(new Uint16Array([0, 1, 2, 0, 2, 3]), 1));
 
-    for (const name of ['instancePosition', 'instanceTargetPosition', 'instanceVector', 'instanceTargetVector']) {
+    for (const name of GLYPH_ATTRIBUTES) {
       const attr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
       attr.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute(name, attr);
@@ -192,40 +137,24 @@ export function VectorGlyphs({
     return geo;
   }, [capacity]);
 
-  const material = useMemo(() => {
-    const colormapTex = new THREE.DataTexture(new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat);
-    colormapTex.colorSpace = THREE.SRGBColorSpace;
-    colormapTex.needsUpdate = true;
-    return new THREE.ShaderMaterial({
-      vertexShader: VERTEX,
-      fragmentShader: FRAGMENT,
-      uniforms: {
-        uProgress: { value: 0 },
-        uScale: { value: 1 },
-        uMaxLen: { value: 3 },
-        uWidth: { value: 0.25 },
-        uMagRange: { value: new THREE.Vector2(0, 1) },
-        uColormap: { value: colormapTex },
-      },
-      // Vector fields are an analytical overlay. With depth testing enabled,
-      // arrows begin at atom centers and dense systems hide nearly every
-      // shaft inside the atom cloud. A sparse deterministic sample rendered
-      // above the structure keeps direction and magnitude readable at the
-      // compact viewport sizes used by the Codex preview and mobile viewer.
-      depthWrite: false,
-      depthTest: false,
-      transparent: false,
-      side: THREE.DoubleSide,
-    });
-  }, []);
+  // Vector fields are an analytical overlay. With depth testing enabled,
+  // arrows begin at atom centers and dense systems hide nearly every shaft
+  // inside the atom cloud. A sparse deterministic sample rendered above the
+  // structure keeps direction and magnitude readable at the compact viewport
+  // sizes used by the Codex preview and mobile viewer (the material draws
+  // with depthTest/depthWrite off).
+  const { material, uniforms } = useMemo(
+    () => createVectorGlyphMaterial(createGlyphColormapTexture()),
+    [],
+  );
 
   useEffect(() => () => {
     geometry.dispose();
   }, [geometry]);
   useEffect(() => () => {
-    (material.uniforms.uColormap.value as THREE.Texture)?.dispose();
+    uniforms.uColormap.value?.dispose();
     material.dispose();
-  }, [material]);
+  }, [material, uniforms]);
 
   // ─── Colormap texture (256×1, instant to rebuild) ──────────────────
   // Colormap pixels participate in immutable raster identity. Apply the
@@ -233,17 +162,17 @@ export function VectorGlyphs({
   // in the same update cannot reach Fiber with the previous colormap bytes.
   useLayoutEffect(() => {
     const mapFn = COLORMAPS[colormap] ?? COLORMAPS.viridis;
-    const tex = material.uniforms.uColormap.value as THREE.DataTexture;
+    const tex = uniforms.uColormap.value as THREE.DataTexture;
     const data = tex.image.data as Uint8Array;
-    for (let i = 0; i < 256; i++) {
-      const [r, g, b] = mapFn(i / 255);
+    for (let i = 0; i < GLYPH_COLORMAP_SIZE; i++) {
+      const [r, g, b] = mapFn(i / (GLYPH_COLORMAP_SIZE - 1));
       data[i * 4] = Math.round(r * 255);
       data[i * 4 + 1] = Math.round(g * 255);
       data[i * 4 + 2] = Math.round(b * 255);
       data[i * 4 + 3] = 255;
     }
     tex.needsUpdate = true;
-  }, [colormap, material]);
+  }, [colormap, uniforms]);
 
   // ─── Upload glyph data (once per frame/field change) ────────────────
   const uploadGlyphs = useCallback(() => {
@@ -272,10 +201,10 @@ export function VectorGlyphs({
     }
     const targetLen = Math.min(Math.max(0.035 * diag, 1.2), 8.0) * scale;
     const worldPerMag = ref > 0 ? targetLen / ref : 0;
-    material.uniforms.uScale.value = worldPerMag;
-    material.uniforms.uMaxLen.value = targetLen * 3;
-    material.uniforms.uWidth.value = targetLen * 0.14;
-    material.uniforms.uMagRange.value.set(0, ref > 0 ? ref : 1);
+    uniforms.uScale.value = worldPerMag;
+    uniforms.uMaxLen.value = targetLen * 3;
+    uniforms.uWidth.value = targetLen * 0.14;
+    uniforms.uMagRange.value.set(0, ref > 0 ? ref : 1);
 
     const nextComps = canInterpolateToNextFrame ? getVectorComponents(nextFrame!, field) : null;
     const nextPos = canInterpolateToNextFrame ? nextFrame!.positions : null;
@@ -287,10 +216,10 @@ export function VectorGlyphs({
       bsz = frame.boxBounds[5] - frame.boxBounds[4];
     }
 
-    const posArr = (geometry.attributes.instancePosition as THREE.InstancedBufferAttribute).array as Float32Array;
-    const tgtArr = (geometry.attributes.instanceTargetPosition as THREE.InstancedBufferAttribute).array as Float32Array;
-    const vecArr = (geometry.attributes.instanceVector as THREE.InstancedBufferAttribute).array as Float32Array;
-    const tvecArr = (geometry.attributes.instanceTargetVector as THREE.InstancedBufferAttribute).array as Float32Array;
+    const posArr = (geometry.attributes[GLYPH_ATTR.position] as THREE.InstancedBufferAttribute).array as Float32Array;
+    const tgtArr = (geometry.attributes[GLYPH_ATTR.target] as THREE.InstancedBufferAttribute).array as Float32Array;
+    const vecArr = (geometry.attributes[GLYPH_ATTR.vector] as THREE.InstancedBufferAttribute).array as Float32Array;
+    const tvecArr = (geometry.attributes[GLYPH_ATTR.targetVector] as THREE.InstancedBufferAttribute).array as Float32Array;
 
     // Deterministic stride so the sampled subset is identical every frame.
     const stride = density >= 1 ? 1 : Math.max(1, Math.round(1 / Math.max(density, 1e-3)));
@@ -332,7 +261,7 @@ export function VectorGlyphs({
     }
 
     geometry.instanceCount = shown;
-    for (const name of ['instancePosition', 'instanceTargetPosition', 'instanceVector', 'instanceTargetVector']) {
+    for (const name of GLYPH_ATTRIBUTES) {
       (geometry.attributes[name] as THREE.InstancedBufferAttribute).needsUpdate = true;
     }
 
@@ -342,7 +271,7 @@ export function VectorGlyphs({
       magMax: magMax === -Infinity ? 0 : magMax,
       shownCount: shown,
     });
-  }, [frame, nextFrame, canInterpolateToNextFrame, field, scale, density, hiddenAtomTypes, capacity, geometry, material, onStats]);
+  }, [frame, nextFrame, canInterpolateToNextFrame, field, scale, density, hiddenAtomTypes, capacity, geometry, uniforms, onStats]);
 
   // Positions, vectors, density, visibility, and scale are all addressed by
   // the artifact spec/source digest. Upload them during the commit phase; a
@@ -360,7 +289,9 @@ export function VectorGlyphs({
       artifactSpecId ?? null;
   }, [artifactSpecId, geometry, material, uploadGlyphs, colormap]);
 
-  // Live interpolation progress — identical contract to AtomsOptimized.
+  // Live interpolation progress — identical contract to AtomsOptimized. The
+  // job id is per instance: the scheduler keys jobs by id.
+  const uniformsJobId = `${LUPI_JOB.glyphsUniforms}:${useId()}`;
   useFrame(() => {
     const live = liveStateRef?.current;
     const prog = canInterpolateToNextFrame && live && frameIndex != null
@@ -368,8 +299,8 @@ export function VectorGlyphs({
       : canInterpolateToNextFrame
         ? interpolationFactor
         : 0;
-    material.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
-  });
+    uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
+  }, { phase: LUPI_PHASE.uniforms, id: uniformsJobId });
 
   return (
     <mesh

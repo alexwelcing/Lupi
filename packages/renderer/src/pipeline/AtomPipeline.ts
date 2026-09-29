@@ -359,18 +359,38 @@ function extractFrustumPlanes(m: Float32Array): Float32Array[] {
 export const WEBGPU_INIT_TIMEOUT_MS = 5000;
 
 /**
+ * Set once the page is known to have no WebGPU adapter (no `navigator.gpu`,
+ * or `requestAdapter()` resolved null twice). That does not change during a
+ * page's life, so later callers skip the handshake entirely.
+ */
+let webGPUAdapterUnavailable = false;
+
+/**
+ * True when the optional WebGPU compute path is known to be unavailable, so
+ * callers can choose the CPU path synchronously (no handshake, no timeout).
+ * False means "unknown or available": `initWebGPU` still decides.
+ */
+export function isWebGPUComputeUnavailable(): boolean {
+  if (webGPUAdapterUnavailable) return true;
+  if (typeof navigator === 'undefined' || !(navigator as any).gpu) {
+    webGPUAdapterUnavailable = true;
+    console.info('[WebGPU] not available — bonds use the CPU worker');
+    return true;
+  }
+  return false;
+}
+
+/**
  * Initialize the optional WebGPU compute device. Returns `null` (never throws)
  * when WebGPU is unavailable, no adapter/device can be acquired, OR the whole
  * handshake exceeds `timeoutMs` — all of which are treated by callers as a
- * graceful fall back to the CPU spatial-hash path.
+ * graceful fall back to the CPU spatial-hash path. A page without an adapter
+ * returns at once (no timeout wait) and is remembered as such.
  */
 export async function initWebGPU(
   timeoutMs: number = WEBGPU_INIT_TIMEOUT_MS,
 ): Promise<{ device: GPUDevice; format: GPUTextureFormat } | null> {
-  if (!(navigator as any).gpu) {
-    console.warn('WebGPU not supported — falling back');
-    return null;
-  }
+  if (isWebGPUComputeUnavailable()) return null;
 
   let timedOut = false;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -388,11 +408,13 @@ export async function initWebGPU(
         powerPreference: 'high-performance',
       });
       if (!adapter) {
-        console.warn('[WebGPU] No high-performance adapter; trying default');
         adapter = await (navigator as any).gpu.requestAdapter();
       }
       if (!adapter) {
-        console.warn('[WebGPU] No adapter found');
+        // Early exit: no adapter is a fact about this page, not a slow
+        // driver. The caller falls back to the CPU at once.
+        webGPUAdapterUnavailable = true;
+        console.info('[WebGPU] no adapter — bonds use the CPU worker');
         return null;
       }
 
@@ -420,6 +442,8 @@ export async function initWebGPU(
       }
 
       device.lost.then((info: any) => {
+        // destroy() on dispose also resolves `lost`; only a real loss is an error.
+        if (info?.reason === 'destroyed') return;
         console.error('[WebGPU] device lost:', info.message);
       });
       const format = (navigator as any).gpu.getPreferredCanvasFormat();
@@ -433,8 +457,8 @@ export async function initWebGPU(
 
   const result = await Promise.race([handshake, timeout]);
   if (!timedOut && timeoutId !== undefined) clearTimeout(timeoutId);
-  if (!result) {
-    console.warn(`WebGPU init exceeded ${timeoutMs}ms or failed — falling back to CPU bonds`);
+  if (timedOut) {
+    console.warn(`WebGPU init exceeded ${timeoutMs}ms — falling back to CPU bonds`);
   }
   return result;
 }

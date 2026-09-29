@@ -41,4 +41,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
   readonly url: string;
+  /** Vite's lazy `import.meta.glob`: module path → loader. */
+  glob<Module = unknown>(pattern: string | readonly string[]): Record<string, () => Promise<Module>>;
 }

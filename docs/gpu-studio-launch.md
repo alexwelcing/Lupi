@@ -1,158 +1,50 @@
-# GPU Studio preview
+# GPU Studio (removed)
 
-GPU Studio is an opt-in viewer feature using **Vercel Labs vgpu 0.4.0**,
-not a remote/virtual GPU service. Open a molecule, then choose **GPU Studio**
-in the header (the compact button says **GPU** on phones).
+GPU Studio was removed in the React-Three-Fiber v10 / three r186 port
+(September 2026). It will come back as a **Look** in the main viewer rather
+than as a separate modal.
 
-## Product boundary
+## What it was
 
-- Three visual looks: **Snowglobe** (the creative default), **Studio light** and **Graphic contours**. All execute
-  the authored `atom-surface.wgsl` function through `vgpu/three` `tslExports`
-  and Three.js r184 node materials on its WebGPU backend.
-- One owned snapshot of the selected source frame; playback pauses. All atoms
-  in that frame are included. Bonds, annotations, property fields and other
-  regular-viewer layers are intentionally excluded and the UI says so.
-- Contours are decorative sphere shading, not electron density, orbitals,
-  energies, a simulated result or evidence of material properties. Existing
-  element/type semantics determine the color key; opaque type IDs stay opaque.
-- This is an atoms-only lighting preview, not an exact saved-view/export
-  mode. Save and Export continue to belong to the normal viewer.
-- Up to 5,000 fully loaded atoms. Larger, incomplete or invalid frames get an
-  explanation and a return action; they are never silently truncated.
-- No external textures, new data providers, remote GPU jobs or research UI.
+An opt-in, atoms-only preview behind a **GPU Studio** header button. It
+copied the current frame (up to 5,000 atoms), opened a modal dialog with its
+own vgpu 0.4.0 device and its own three `WebGPURenderer`, and shaded each
+sphere with `atom-surface.wgsl` through `vgpu/three` `tslExports`: the
+**Snowglobe**, **Studio light** and **Graphic contours** finishes, with shake,
+light angle, atom focus and phone-motion controls. While it was open the
+regular viewer paused its render loop and suspended its global shortcuts.
 
-## Loading and lifecycle
+## Why it went
 
-The regular viewer remains WebGL2. Only opening GPU Studio imports vgpu and
-the separate `vendor-three-webgpu` bundle. The home route mounts no renderer.
-The regular canvas stays mounted to preserve its camera, with its render loop
-paused while the native modal dialog is open. Global viewer shortcuts are
-suspended; Escape and Back return focus to the launch button.
+The port moves the regular viewer itself onto `WebGPURenderer` (WebGPU, with
+its WebGL2 fallback) and node materials. A second renderer and device beside
+the viewer's is no longer the only way to get WebGPU shading, and the modal's
+pause/resume handshake with the viewer canvas was a standing source of
+lifecycle bugs. Keeping it working through the port would have meant porting
+it twice.
 
-Studio is event-rendered unless the user chooses Rotate or stirs a snowglobe.
-Snow motion decays to a complete stop in roughly nine seconds; hidden pages
-settle immediately. Rotation is off by
-default, including with reduced motion. DPR is capped at 1.5. Closing stops
-animation, disconnects controls/resize handlers, disposes geometries/materials,
-and destroys the owned GPU device. Late asynchronous initialization is canceled
-and disposed; startup has a 20-second timeout. Device loss and shader/adapter
-failure produce a closable fallback, never a false WebGPU-active badge.
+## What was removed
 
-## Pocket universe: snowglobe material
+- `packages/ui/src/gpu-studio/**` (launch dialog, runtime, snapshot, snow
+  motion, `atom-surface.wgsl`, styles and unit tests)
+- the header launch button and the viewer's pause/resume and shortcut
+  suspension while Studio was open
+- `playwright.gpu-studio.config.mjs`, `tests/ui/gpu-studio.spec.ts` and
+  `tests/ui/gpu-studio.webgpu.spec.ts`
 
-Each sphere shades a miniature interior with 28 analytic glitter trajectories,
-depth attenuation, a refracted view ray, a snow bed and pearlescent glass highlights.
-The WGSL runs through the existing vgpu/Three integration: no particle DOM,
-additional renderer/device, dependencies, external textures or coordinate edits.
-This is an illustrative material, not a particle solver or molecular dynamics.
+## What stays
 
-- **Shake it** injects bounded visual inertia; dragging the canvas also stirs it.
-- **Settle snow** returns the interiors to rest. Finish changes stop the snow loop.
-- Reduced motion uses a single new still composition per button press, with no
-  drag-driven snow animation or phone-sensor control.
-- **Enable phone motion** requests permission only from the explicit click.
-  Sampling stays local, is throttled, ignores hidden-page and invalid samples,
-  and stops on opt-out, finish change, close, or GPU failure. No usable sensor
-  data within five seconds produces an honest fallback. No secure context,
-  denial, and unsupported devices retain the button/drag alternatives.
-- Phone motion requires a supporting browser and secure context; a desktop
-  sensor mock is not physical iPhone/Android acceptance.
+- vgpu 0.4.0 remains a dependency: the `/scan` swirl and gist particles and
+  the action-light buttons still create their own small vgpu devices (see
+  `docs/scan-pipeline.md` and `packages/ui/src/action-light/`).
+- `pnpm test:action-light` runs the action-light shader check on the WebGPU
+  software lane (`tools/lib/browser-lanes.mjs`); its config now extends
+  `playwright.config.mjs` directly.
 
-The dedicated GPU check now compares resting/shaken/animated pixels, verifies
-reduced-motion stillness, checks phone-width layout and releases the owned
-device. Set `LUPI_STUDIO_GPU=native` to use a native local adapter explicitly;
-the portable software adapter remains the default. Neither is phone FPS proof.
+## Coming back as a Look
 
-## Refinement pass — September 5, 2026
-
-- Specimen-first layout: the molecule name and canvas lead, with a compact
-  three-part control rail. Resizable type-role tokens replace fixed-pixel text;
-  the phone layout stacks without horizontal scrolling.
-- Locally generated 128px softbox environment, softer physical-material
-  highlights and quieter contour spacing. No additional package or HDR fetch.
-  The environment render target is owned and disposed with the preview.
-- **Light angle** moves the key light and environment rotation. The native
-  slider supports keyboard arrows/Home/End and announces degrees. It has a
-  scoped focus ring and styling independent of the app's legacy blue sliders.
-- **Atom focus** emphasizes one source type while dimming, not hiding, the
-  others. Counts come from the copied frame, not a formula lookup. Pressing the
-  same type again or **All atoms** restores the full presentation.
-- Resizing preserves viewing direction and relative zoom; **Reset view** still
-  explicitly refits the camera. Finish, lighting and focus never write back to
-  the molecule or regular-viewer state. Rotation remains opt-in.
-
-Implementation follows Three's local
-[RoomEnvironment lighting setup](https://threejs.org/docs/pages/RoomEnvironment.html)
-using the installed r184 WebGPU PMREM implementation.
-
-Refinement verification: UI TypeScript and production build passed; scoped lint
-passed; three focused unit-test files / 12 tests passed, including control
-wiring, source-coordinate preservation, truthful missing-frame labels and
-cleanup. All six production-browser regression checks passed (1.7 minutes),
-covering unsupported WebGPU, 320px text spacing, student navigation and a real
-PNG export. In-app browser checks observed real new shader pixels, oxygen
-focus, keyboard light changes, reopening, and 390px/1280px layouts. Production
-rendering was also checked; only the pre-existing Three.Clock deprecation
-warning appeared. The dedicated headless GPU lane remains
-adapter-blocked as documented below; its new focus assertions are not claimed
-as executed. The preceding candidate's CI audit is confirmed failed on the
-existing 19 dependency findings, including six high-severity findings.
-
-## Verification
-
-- Frozen lockfile install, UI TypeScript, production web build: passed.
-- Snapshot, launch lifecycle, viewer policy: 3 files / 10 tests passed.
-- Vite build configuration: 4 tests passed.
-- Scoped lint: passed. The Vite config retains three pre-existing warnings.
-- In-app browser: actual WebGPU pixels observed for both looks, desktop and
-  390px phone layout. Initial framing/lighting and focus recovery were refined
-  through visual and interaction checks.
-- Production student regression: all four student-surface checks passed,
-  including a downloaded PNG. The two final dedicated fallback tests passed
-  in 54.7 seconds: keyboard focus/Escape/reopen and 320px text-spacing reflow.
-- Production bundle, connected in-app browser: WebGPU ready and actual pixels
-  confirmed for Studio light and Graphic contours. Rotate/Stop and return/reopen
-  also worked. This is separate from the dev-server visual checks above.
-- Dedicated headless WebGPU lane: **blocked by adapter availability** on this
-  Windows host. Both bundled headless/full Chromium and the newer installed
-  Chromium failed to obtain an adapter even with explicit software flags.
-  Lazy-loading assertions passed before the readiness gate; pixel-difference
-  and live device-count assertions did **not** execute and are not claimed passed.
-- The additional production audit request returned no result and was canceled.
-  This does not supersede or clear the preceding CI audit failure.
-
-Run the normal unsupported-device and reflow checks with:
-
-```sh
-pnpm exec playwright test tests/ui/gpu-studio.spec.ts
-```
-
-Run actual WGSL execution, pixel-difference, lazy-loading and device-lifecycle
-acceptance separately (requires the full Playwright Chromium binary):
-
-```sh
-pnpm exec playwright test --config playwright.gpu-studio.config.mjs
-```
-
-This explicit lane uses Chromium's software WebGPU adapter. It is shader
-execution evidence, not hardware performance proof. The default CI browser
-continues to disable WebGPU and verifies the unsupported path; its configuration
-has not been silently changed to assume device support.
-
-The observed production optional chunks are about 175.66 kB gzip for Three's
-WebGPU backend plus 5.89 kB gzip for the vgpu integration/shader runtime. These
-are bundle sizes, not download timing or FPS measurements. The existing large
-regular-viewer and XR bundles remain a separate optimization task.
-
-## Release truth
-
-This extends PR #93 on `codex/focused-student-product`. It does not change
-`main`, deploy a website, prove a live API or close the production-reset
-nonconformities. The preceding PR candidate failed CI's production dependency
-audit on existing findings; those gates remain in force. Release still needs
-the exact candidate's CI and the owner-authorized deployment/rollback chain.
-
-Implementation references:
-[vgpu Three.js guide](https://github.com/vercel-labs/vgpu/blob/main/apps/docs/content/docs/guides/threejs.md),
-[Chromium WebGPU test flags](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/web_tests/FlagSpecificConfig),
-[Playwright full Chromium headless mode](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
+The snowglobe returns as a Look on the main atom layer: a TSL branch of the
+atom impostor material with the mood uniforms, and "shake" as a Play verb
+driven by a frame job. It will run in the main canvas on both backends, so it
+needs `atom-surface.wgsl` ported to a TSL `Fn` (vgpu's `wgslFn` path is
+WebGPU-only). The source is in git history before the port's removal commit.

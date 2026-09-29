@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 

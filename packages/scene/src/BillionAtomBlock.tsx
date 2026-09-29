@@ -26,11 +26,21 @@
  * copper reads as continuous metal. This is a procedural scale testbed
  * (perfect lattice + stylized thermal motion), not a simulation, and
  * callers should label it as such.
+ *
+ * The four tiers share one TSL node-material factory
+ * (tsl/billionBrickMaterial.ts), specialized per tier at build time.
  */
 
-import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber/webgpu';
+import * as THREE from 'three/webgpu';
+import {
+  createBillionBrickMaterial,
+  createBillionBrickSharedUniforms,
+  createBrickSlotTexture,
+  type BillionBrickSharedUniforms,
+  type BillionLattice,
+} from './tsl/billionBrickMaterial';
 
 // ── Lattice constants ────────────────────────────────────────────────
 export const CELLS_PER_AXIS = 630;
@@ -74,151 +84,25 @@ const TIERS = [
 
 const BRICK_TEX_SIZE = 128; // 16,384 slots ≥ TOTAL_BRICKS
 
-const VERTEX = /* glsl */ `
-  precision highp float;
-  precision highp int;
-
-  uniform sampler2D uBrickTex;   // RGBA32F: active brick coords per slot
-  uniform int   uItemsPerBrick;
-  uniform int   uChunk;          // cells per splat axis; 0 = atom mode
-  uniform float uTime;
-  uniform vec3  uHalfExtent;     // block half-size for centering
-
-  out vec3 vColor;
-  out vec2 vUv;
-  out vec3 vViewCenter;
-
-  const float A = ${LATTICE_A};
-  const int BRICK_CELLS = ${BRICK_CELLS};
-  const float ATOM_RADIUS = 1.28;
-
-  // FCC basis, units of the cell edge.
-  const vec3 BASIS[4] = vec3[4](
-    vec3(0.0, 0.0, 0.0),
-    vec3(0.5, 0.5, 0.0),
-    vec3(0.5, 0.0, 0.5),
-    vec3(0.0, 0.5, 0.5)
-  );
-
-  // Wang-style integer hash → [0,1). Deterministic per atom id, so the
-  // "thermal" displacement field is stable frame to frame.
-  float hash1(uint x) {
-    x = (x ^ 61u) ^ (x >> 16);
-    x *= 9u;
-    x = x ^ (x >> 4);
-    x *= 0x27d4eb2du;
-    x = x ^ (x >> 15);
-    return float(x & 0x00ffffffu) / 16777216.0;
-  }
-
-  void main() {
-    int slot = gl_InstanceID / uItemsPerBrick;
-    int item = gl_InstanceID - slot * uItemsPerBrick;
-
-    ivec2 texel = ivec2(slot % ${BRICK_TEX_SIZE}, slot / ${BRICK_TEX_SIZE});
-    vec3 brick = texelFetch(uBrickTex, texel, 0).xyz;   // brick coords (0..20)
-
-    vec3 center;
-    float radius;
-    uint seed;
-
-    if (uChunk == 0) {
-      // ── Atom mode: item → cell + FCC basis site ──
-      int cell = item >> 2;
-      int basis = item & 3;
-      int cx = cell % BRICK_CELLS;
-      int cy = (cell / BRICK_CELLS) % BRICK_CELLS;
-      int cz = cell / (BRICK_CELLS * BRICK_CELLS);
-
-      vec3 cellCoord = brick * float(BRICK_CELLS) + vec3(cx, cy, cz);
-      center = (cellCoord + BASIS[basis]) * A;
-
-      // Global atom id → deterministic thermal displacement, animated.
-      seed = uint(item) * 2654435761u
-           ^ uint(brick.x + brick.y * 21.0 + brick.z * 441.0) * 40503u;
-      float hx = hash1(seed);
-      float hy = hash1(seed ^ 0x68bc21ebu);
-      float hz = hash1(seed ^ 0x2c1b3c6du);
-      float ph = hash1(seed ^ 0x5f356495u) * 6.2831853;
-      // ~0.1 Å RMS displacement, slow shimmer — reads as 300 K copper.
-      float wob = 0.6 + 0.4 * sin(uTime * 2.1 + ph);
-      center += (vec3(hx, hy, hz) - 0.5) * 0.24 * wob;
-      radius = ATOM_RADIUS;
-    } else {
-      // ── Splat mode: item → chunk of uChunk³ cells ──
-      int perAxis = BRICK_CELLS / uChunk;
-      int sx = item % perAxis;
-      int sy = (item / perAxis) % perAxis;
-      int sz = item / (perAxis * perAxis);
-
-      vec3 chunkOrigin = (brick * float(BRICK_CELLS) + vec3(sx, sy, sz) * float(uChunk)) * A;
-      float edge = float(uChunk) * A;
-      center = chunkOrigin + vec3(edge * 0.5);
-      // Slightly under the half-diagonal so neighboring splats interlock
-      // into a continuous surface instead of over-inflating the block.
-      radius = edge * 0.62;
-      seed = uint(item) * 1103515245u
-           ^ uint(brick.x + brick.y * 21.0 + brick.z * 441.0) * 12820163u;
-    }
-
-    center -= uHalfExtent;
-
-    // Copper with a per-atom/per-chunk mottle so aggregation doesn't read
-    // as a flat texture. Slight green-blue pull in the crevice tone.
-    float tone = 0.82 + 0.18 * hash1(seed ^ 0x9e3779b9u);
-    vColor = vec3(0.885, 0.505, 0.322) * tone;
-
-    vUv = position.xy;
-
-    vec4 viewCenter = modelViewMatrix * vec4(center, 1.0);
-    vViewCenter = viewCenter.xyz;
-
-    vec3 viewPos = viewCenter.xyz;
-    viewPos.xy += position.xy * radius * 1.12;
-    gl_Position = projectionMatrix * vec4(viewPos, 1.0);
-  }
-`;
-
-const FRAGMENT = /* glsl */ `
-  uniform vec3 uFogColor;
-  uniform float uFogDensity;
-
-  in vec3 vColor;
-  in vec2 vUv;
-  in vec3 vViewCenter;
-
-  layout(location = 0) out vec4 outColor;
-
-  void main() {
-    float r2 = dot(vUv, vUv);
-    if (r2 > 1.0) discard;
-
-    // Impostor sphere normal + cheap key/fill/rim shading.
-    float nz = sqrt(max(1.0 - r2, 0.0));
-    vec3 n = vec3(vUv, nz);
-    float key = max(dot(n, normalize(vec3(0.42, 0.62, 0.66))), 0.0);
-    float fill = max(dot(n, normalize(vec3(-0.5, -0.15, 0.6))), 0.0);
-    float rim = pow(1.0 - nz, 2.4);
-    vec3 shaded = vColor * (0.22 + 0.75 * key + 0.18 * fill) + vec3(0.9, 0.6, 0.45) * rim * 0.22;
-
-    // Exponential-squared depth fog for scale reading — far aggregate
-    // tiers sink toward the backdrop instead of aliasing.
-    float depth = length(vViewCenter);
-    float fog = 1.0 - exp(-uFogDensity * uFogDensity * depth * depth);
-    outColor = vec4(mix(shaded, uFogColor, clamp(fog, 0.0, 1.0)), 1.0);
-  }
-`;
+const LATTICE: BillionLattice = {
+  latticeA: LATTICE_A,
+  brickCells: BRICK_CELLS,
+  bricksPerAxis: BRICKS_PER_AXIS,
+  brickTexSize: BRICK_TEX_SIZE,
+  blockEdge: BLOCK_EDGE,
+};
 
 interface TierRuntime {
   mesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
+  material: THREE.MeshBasicNodeMaterial;
   geometry: THREE.InstancedBufferGeometry;
   texData: Float32Array;
   texture: THREE.DataTexture;
   itemsPerBrick: number;
 }
 
-function makeTier(chunk: number, itemsPerBrick: number, fogColor: THREE.Color): TierRuntime {
+/** One LOD tier: a shared quad, instanced per active brick item, and its node material. */
+function makeTier(chunk: number, itemsPerBrick: number, shared: BillionBrickSharedUniforms): TierRuntime {
   const geometry = new THREE.InstancedBufferGeometry();
   const quad = new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]);
   geometry.setAttribute('position', new THREE.BufferAttribute(quad, 3));
@@ -227,28 +111,13 @@ function makeTier(chunk: number, itemsPerBrick: number, fogColor: THREE.Color): 
   // The block spans world space regardless of which bricks are active.
   geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), BLOCK_EDGE);
 
-  const texData = new Float32Array(BRICK_TEX_SIZE * BRICK_TEX_SIZE * 4);
-  const texture = new THREE.DataTexture(
-    texData, BRICK_TEX_SIZE, BRICK_TEX_SIZE, THREE.RGBAFormat, THREE.FloatType,
-  );
-  texture.needsUpdate = true;
-
-  const material = new THREE.ShaderMaterial({
-    glslVersion: THREE.GLSL3,
-    vertexShader: VERTEX,
-    fragmentShader: FRAGMENT,
-    uniforms: {
-      uBrickTex: { value: texture },
-      uItemsPerBrick: { value: itemsPerBrick },
-      uChunk: { value: chunk },
-      uTime: { value: 0 },
-      uHalfExtent: { value: new THREE.Vector3(BLOCK_EDGE / 2, BLOCK_EDGE / 2, BLOCK_EDGE / 2) },
-      uFogColor: { value: fogColor },
-      uFogDensity: { value: 0.00028 },
-    },
-    depthWrite: true,
-    depthTest: true,
-    side: THREE.DoubleSide,
+  const { texture, data: texData } = createBrickSlotTexture(BRICK_TEX_SIZE);
+  const { material } = createBillionBrickMaterial({
+    chunk,
+    itemsPerBrick,
+    lattice: LATTICE,
+    brickTexture: texture,
+    shared,
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -262,12 +131,20 @@ export function BillionAtomBlock({
   onStats,
 }: BillionAtomBlockProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const fogColor = useMemo(() => new THREE.Color('#0a0c12'), []);
+  // Time and fog are shared by the four tier materials.
+  const shared = useMemo(() => createBillionBrickSharedUniforms('#0a0c12'), []);
 
   const tiers = useMemo(
-    () => TIERS.map((t) => makeTier(t.chunk, t.itemsPerBrick, fogColor)),
-    [fogColor],
+    () => TIERS.map((t) => makeTier(t.chunk, t.itemsPerBrick, shared)),
+    [shared],
   );
+  useEffect(() => () => {
+    for (const tier of tiers) {
+      tier.geometry.dispose();
+      tier.material.dispose();
+      tier.texture.dispose();
+    }
+  }, [tiers]);
 
   // Brick centers, world space (centered block) — built once, 9,261 entries.
   const bricks = useMemo(() => {
@@ -300,7 +177,7 @@ export function BillionAtomBlock({
     statsThrottle: -1,
   }), []);
 
-  useFrame(({ camera, clock }) => {
+  useFrame(({ camera, elapsed }) => {
     const { frustum, projScreen, sphere, dist, counts } = scratch;
     projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(projScreen);
@@ -353,12 +230,12 @@ export function BillionAtomBlock({
       t.texData[slot * 4 + 2] = bricks.coords[i * 3 + 2];
     }
 
-    const time = clock.elapsedTime;
+    const time = elapsed;
+    shared.uTime.value = time;
     for (let t = 0; t < 4; t++) {
       const tier = tiers[t];
       tier.texture.needsUpdate = true;
       tier.geometry.instanceCount = counts[t] * tier.itemsPerBrick;
-      tier.material.uniforms.uTime.value = time;
     }
 
     if (onStats && time - scratch.statsThrottle > 0.25) {
@@ -380,7 +257,6 @@ export function BillionAtomBlock({
   return (
     <group ref={groupRef}>
       {tiers.map((t, i) => (
-        // eslint-disable-next-line react/no-unknown-property
         <primitive key={i} object={t.mesh} />
       ))}
     </group>

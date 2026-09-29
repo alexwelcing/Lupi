@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, useEffect } from 'react';
-import { GizmoHelper, GizmoViewport, ContactShadows, OrbitControls } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import { useStore } from '../store';
 import { useSmoothFramePlayback, type InterpolatedFrameState } from '../hooks/useSmoothFramePlayback';
@@ -41,13 +41,12 @@ import { CameraFocus } from '../CameraFocus';
 import { AtomTrails } from '../AtomTrails';
 import { MoleculeFilterShell } from '../MoleculeFilterShell';
 import { MoleculeShadow } from '../MoleculeShadow';
-import { SpatialAnchor } from '../SpatialAnchor';
+import { LupiContactShadow } from '../LupiContactShadow';
+import { AxesGizmo } from '../viewer/AxesGizmo';
 import { SceneLighting } from '../SceneLighting';
 import { ScenePostprocessing } from '../postprocess/ScenePostprocessing';
 import { ExportManager } from '../ExportManager';
 import { USDZExportHelper } from '../export/USDZExportPipeline';
-import { XREnvironmentDome } from '../xr/XREnvironmentDome';
-import { XRLightEstimation } from '../xr/XRLightEstimation';
 import { track, ANALYTICS_EVENTS } from '../analytics';
 import { AppBackground, type BackgroundAssetAdjustments } from './AppBackground';
 
@@ -102,6 +101,8 @@ function maxCovalentRadiusForFrame(frame: Frame): number | undefined {
 
 interface BudgetedContactShadowsProps {
   atomCount: number;
+  frame: Frame;
+  hiddenAtomTypes: ReadonlySet<number>;
   centerX: number;
   centerY: number;
   centerZ: number;
@@ -112,15 +113,16 @@ interface BudgetedContactShadowsProps {
 }
 
 /**
- * ContactShadows performs a full scene depth render followed by multiple blur
- * passes. Keep the authored 1024px result for small, paused molecules, reduce
- * the one-shot capture for medium scenes, and omit it once the atom layer is
- * dense enough that the extra scene pass competes with the molecule itself.
- * During playback `frames={0}` preserves the last captured texture without
- * continuously re-rendering the shadow map.
+ * The floor contact shadow is a CPU splat of the visible atoms (one blurred
+ * canvas per recompute; see LupiContactShadow). Keep the authored 1024px
+ * mask for small molecules, halve it for medium scenes, and omit it once the
+ * scene is dense enough that the splat would stall the main thread. During
+ * playback `frames={0}` keeps the last mask instead of re-splatting per frame.
  */
 const BudgetedContactShadows = memo(function BudgetedContactShadows({
   atomCount,
+  frame,
+  hiddenAtomTypes,
   centerX,
   centerY,
   centerZ,
@@ -132,7 +134,7 @@ const BudgetedContactShadows = memo(function BudgetedContactShadows({
   if (atomCount > CONTACT_SHADOW_MAX_ATOM_LIMIT) return null;
 
   return (
-    <ContactShadows
+    <LupiContactShadow
       position={[centerX, centerY - 0.05, centerZ]}
       scale={planeSize}
       blur={2.4}
@@ -141,6 +143,8 @@ const BudgetedContactShadows = memo(function BudgetedContactShadows({
       resolution={atomCount <= CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT ? 1024 : 512}
       frames={playing ? 0 : 1}
       color="#04060c"
+      frame={frame}
+      hiddenAtomTypes={hiddenAtomTypes}
     />
   );
 });
@@ -456,12 +460,10 @@ export function ViewerScene({
         backdropPattern={backdropPattern}
         backdropRadius={backdropRadius}
       />
-      <XREnvironmentDome media={bgMedia} top={bgTop} bottom={bgBottom} style={bgStyle} adjustments={bgAdjustments} disabled={!!bgProcedural} />
-      <XRLightEstimation />
       <SceneLighting />
 
       {currentFrame && (
-        <SpatialAnchor cameraDistance={cameraDistance}>
+        <group>
           <MoleculeFilterShell
             center={center}
             radius={filterShellBaseRadius}
@@ -605,6 +607,7 @@ export function ViewerScene({
             inferenceAllowed={bondRenderPlan.inferenceAllowed}
             atomColorSource={atomColorSource}
             hiddenAtomTypes={hiddenAtomTypes}
+            sourceKey={file?.trajectory ?? null}
             onBondsUpdate={(info) => useStore.getState().reportBondsUpdate(info.source, info.count)}
             onGpuStatusChange={(status) => useStore.getState().setGpuBondsStatus(status)}
           />}
@@ -620,10 +623,9 @@ export function ViewerScene({
             const planeSize = Math.max(dx, dz) * 1.6;
             return (
               <BudgetedContactShadows
-                key={playing
-                  ? 'contact-shadows-playing'
-                  : `contact-shadows:${interpolatedFrameKey}:${atomScale}:${hiddenAtomTypesKey}`}
                 atomCount={currentFrame.natoms}
+                frame={interpolatedFrame ?? currentFrame}
+                hiddenAtomTypes={hiddenTypeSet}
                 centerX={cx}
                 centerY={cy}
                 centerZ={cz}
@@ -719,13 +721,18 @@ export function ViewerScene({
               }}
             />
           )}
-        </SpatialAnchor>
+        </group>
       )}
 
       {showAxes && (
-        <GizmoHelper alignment="bottom-left" margin={[72, 72]}>
-          <GizmoViewport axisColors={['#ff4060', '#40ff80', '#4080ff']} labelColor="white" />
-        </GizmoHelper>
+        <AxesGizmo
+          // Bottom right: the Clear view pill and the phone command deck own
+          // the bottom-left corner (global.css lifts it above the deck).
+          alignment="bottom-right"
+          margin={[62, 62]}
+          axisColors={['#ff4060', '#40ff80', '#4080ff']}
+          labelColor="white"
+        />
       )}
 
       <OrbitControls

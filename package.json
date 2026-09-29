@@ -22,6 +22,7 @@
     "test:ui": "playwright test",
     "test:ui:release": "playwright test tests/ui/release-smoke.spec.ts",
     "test:ui:deployed": "node tools/require-deployed-ui-url.mjs && playwright test --grep @deployed-smoke",
+    "test:action-light": "playwright test -c playwright.action-light.config.mjs",
     "test:rust": "cd packages/parsers/wasm && cargo test",
     "audit:nomenclature": "node tools/audit-gallery-nomenclature.mjs",
     "audit:gallery-claims": "node tools/audit-gallery-claims.mjs",
@@ -40,6 +41,8 @@
     "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
     "verify:asset-quality": "node tools/verify-asset-quality.mjs",
     "verify:render-parity": "node tools/verify-render-parity.mjs",
+    "verify:viewer-smoke": "node tools/verify-viewer-smoke.mjs",
+    "verify:dual-backend": "node tools/verify-viewer-smoke.mjs --backend=both --profile=both --strict-backend",
     "verify:cloudflare-live": "node tools/verify-cloudflare-live.mjs",
     "verify:workflows": "node tools/run-actionlint.mjs",
     "verify:product-contract": "node tools/verify-product-contract.mjs",
@@ -70,7 +73,8 @@
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",
     "@gltf-transform/extensions": "^4.3.0",
-    "@react-three/test-renderer": "^9.1.0",
+    "@react-three/fiber": "10.0.0-canary.14007b4",
+    "@react-three/test-renderer": "10.0.0-canary.14007b4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "19.2.14",
@@ -84,7 +88,7 @@
     "jsqr": "^1.4.0",
     "playwright": "^1.59.1",
     "qrcode": "^1.5.4",
-    "three": "^0.184.0",
+    "three": "0.186.1",
     "turbo": "^2.3.0",
     "tsx": "^4.20.0",
     "typescript": "^5.6.0",
@@ -97,8 +101,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@types/node": "^22.0.0",
-    "leva": "^0.10.1"
+    "@types/node": "^22.0.0"
   },
   "pnpm": {
     "overrides": {
@@ -114,7 +117,8 @@
       "postcss@8.5.8": "8.5.20",
       "protobufjs@7.6.1": "7.6.3",
       "sharp@0.35.0": "0.35.4",
-      "websocket-driver@0.7.4": "0.7.5"
+      "websocket-driver@0.7.4": "0.7.5",
+      "three": "0.186.1"
     },
     "auditConfig": {
       "ignoreCves": [
@@ -138,12 +142,10 @@
         "peerDependencies": {
           "react": ">=18"
         }
-      },
-      "@iwer/devui": {
-        "dependencies": {
-          "zustand": "^4.5.5"
-        }
       }
+    },
+    "patchedDependencies": {
+      "@react-three/drei@11.0.0-alpha.7": "patches/@react-three__drei@11.0.0-alpha.7.patch"
     }
   }
 }

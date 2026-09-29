@@ -49,7 +49,6 @@ import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerS
 import { ViewerCanvas } from './viewer/ViewerCanvas';
 import { selectViewerFrames } from './viewer/artifactFrameSelection';
 import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
-import { xrStore } from './viewer/xrStore';
 
 import { McpViewerBridge, McpViewerHarness } from './mcpViewerBridge';
 import { BatchAssetGenerator } from './BatchAssetGenerator';
@@ -62,7 +61,6 @@ import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
 import { detectRenderCapability } from './renderCapability';
 import { PanelHost } from './PanelHost';
 import { StudyLensPanel } from './StudyLensPanel';
-import { XREntryButton } from './xr/XREntryButton';
 
 import {
   useSmoothFramePlayback,
@@ -95,7 +93,6 @@ import { StateInspector } from './StateInspector';
 import { LabelPerfHUD } from './LabelPerfHUD';
 import { PropertyLegendHUD } from './PropertyLegendHUD';
 import { DevProbe } from './DevProbe';
-import { Perf } from 'r3f-perf';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 
 const EMPTY_TRAJECTORY_FRAMES: Array<import('@atlas/core/types').Frame | undefined> = [];
@@ -130,7 +127,6 @@ export function ViewerApp() {
   const [pathRoute, setPathRoute] = useState(currentPathRoute);
   const [isExportingQuickLook, setIsExportingQuickLook] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [gpuStudioOpen, setGpuStudioOpen] = useState(false);
   const [vectorStats, setVectorStats] = useState<VectorGlyphStats | null>(null);
   const [automaticLoadFailed, setAutomaticLoadFailed] = useState(false);
   const loadedSavedViewSlugRef = useRef<string | null>(null);
@@ -622,7 +618,7 @@ export function ViewerApp() {
         background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
       }}
     >
-      {!isEmbeddedMobileViewer && !gpuStudioOpen && (
+      {!isEmbeddedMobileViewer && (
         <GlobalShortcuts
           commandPaletteOpen={commandPaletteOpen}
           setCommandPaletteOpen={setCommandPaletteOpen}
@@ -633,7 +629,6 @@ export function ViewerApp() {
           <AppHeader
             isMobile={isMobile}
             clearLoadedFile={clearLoadedFile}
-            onStudioOpenChange={setGpuStudioOpen}
           />
         </div>
       )}
@@ -661,15 +656,11 @@ export function ViewerApp() {
             }
           `}</style>
             <ViewerCanvas
-              paused={gpuStudioOpen}
               capability={renderCapability}
               center={center}
               cameraDistance={cameraDistance}
               cameraNear={cameraNear}
             >
-              {import.meta.env.DEV && showDebugHud && (
-                <Perf position="top-left" logsPerSecond={4} matrixUpdate />
-              )}
               {(import.meta.env.DEV || showDebugHud) && <DevProbe enabled={showDebugHud} />}
               <ViewerScene
                 file={file}
@@ -756,18 +747,6 @@ export function ViewerApp() {
                 isMobile={isMobile}
                 canSelectAtoms={(rawCurrentFrame?.natoms ?? 0) <= MAX_INTERACTIVE_PICKING_ATOMS}
               />
-            )}
-            {file && !isEmbeddedMobileViewer && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: isMobile ? 72 : 84,
-                  left: 18,
-                  zIndex: 149,
-                }}
-              >
-                <XREntryButton store={xrStore} />
-              </div>
             )}
           </div>
         )}

@@ -1,0 +1,181 @@
+#version 300 es
+
+// Three.js r186 - Node System
+
+
+// extensions
+
+
+// precision
+
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+precision highp sampler3D;
+precision highp samplerCube;
+precision highp sampler2DArray;
+
+precision highp usampler2D;
+precision highp usampler3D;
+precision highp usamplerCube;
+precision highp usampler2DArray;
+
+precision highp isampler2D;
+precision highp isampler3D;
+precision highp isamplerCube;
+precision highp isampler2DArray;
+
+precision highp sampler2DShadow;
+precision highp sampler2DArrayShadow;
+precision highp samplerCubeShadow;
+
+
+// structs
+
+
+
+
+
+// uniforms
+
+layout( std140 ) uniform render {
+	float cameraNear;
+	float cameraFar;
+	mat4 cameraProjectionMatrix;
+	mat4 cameraViewMatrix;
+	vec2 nodeUniform19;
+	vec2 nodeUniform20;
+};
+
+layout( std140 ) uniform object {
+	mat4 nodeUniform1;
+	float nodeUniform2;
+	uint nodeUniform4;
+	float nodeUniform5;
+	uint nodeUniform9;
+	uint nodeUniform11;
+	vec3 nodeUniform12;
+	vec3 nodeUniform13;
+	float nodeUniform14;
+	vec3 nodeUniform15;
+	vec3 nodeUniform16;
+	float nodeUniform17;
+	vec3 nodeUniform21;
+	float nodeUniform22;
+	vec3 nodeUniform23;
+	float nodeUniform24;
+	float nodeUniform25;
+	float nodeUniform26;
+	float nodeUniform27;
+};
+uniform sampler2D nodeUniform3;
+uniform sampler2D nodeUniform10;
+
+// varyings
+out vec3 vViewCenter;
+out vec2 vUv;
+out float vRadius;
+out float vSlot;
+out vec3 vColor;
+out float vOcclusion;
+out float vPixelRadius;
+out float vAtomId;
+
+
+// attributes
+layout( location = 0 ) in vec3 instancePosition;
+layout( location = 1 ) in vec3 instanceTargetPosition;
+layout( location = 2 ) in vec3 position;
+layout( location = 3 ) in vec4 instancePacked;
+
+
+// vars
+mat4 modelViewMatrix;
+ivec2 nodeVar0;
+ivec2 nodeVar1;
+bool nodeVar2;
+float nodeVar3;
+ivec2 nodeVar20;
+ivec2 nodeVar21;
+bool nodeVar22;
+vec4 nodeVar23;
+float nodeVar34;
+vec4 nodeVar49;
+
+// codes
+
+
+void main() {
+
+	// transforms
+	
+
+	// flow
+	// code
+
+	modelViewMatrix = ( cameraViewMatrix * nodeUniform1 );
+	vViewCenter = ( modelViewMatrix * vec4( mix( instancePosition, instanceTargetPosition, nodeUniform2 ), 1.0 ) ).xyz;
+	vUv = position.xy;
+	nodeVar0 = ivec2( int( round( ( instancePacked.x * 255.0 ) ) ), 0 );
+	nodeVar2 = bool( nodeUniform4 );
+
+	if ( nodeVar2 ) {
+
+		nodeVar1 = ivec2( nodeVar0.x, ( ( int( textureSize( nodeUniform3, 0 ).y ) - nodeVar0.y ) - 1 ) );
+
+	} else {
+
+		nodeVar1 = nodeVar0;
+
+	}
+
+	nodeVar3 = texelFetch( nodeUniform3, nodeVar1, int( 0 ) ).x;
+	vRadius = nodeVar3;
+	vSlot = float( int( round( ( instancePacked.x * 255.0 ) ) ) );
+	nodeVar20 = ivec2( int( round( ( instancePacked.x * 255.0 ) ) ), 0 );
+	nodeVar22 = bool( nodeUniform11 );
+
+	if ( nodeVar22 ) {
+
+		nodeVar21 = ivec2( nodeVar20.x, ( ( int( textureSize( nodeUniform10, 0 ).y ) - nodeVar20.y ) - 1 ) );
+
+	} else {
+
+		nodeVar21 = nodeVar20;
+
+	}
+
+	nodeVar23 = texelFetch( nodeUniform10, nodeVar21, int( 0 ) );
+	vColor = nodeVar23.xyz;
+	vOcclusion = instancePacked.y;
+
+	if ( ( nodeUniform17 > 0.5 ) ) {
+
+		nodeVar34 = ( nodeVar3 * ( ( abs( cameraProjectionMatrix[ 1u ].y ) * nodeUniform19.y ) * 0.5 ) );
+
+	} else {
+
+		nodeVar34 = ( ( nodeVar3 * ( ( abs( cameraProjectionMatrix[ 1u ].y ) * nodeUniform20.y ) * 0.5 ) ) / max( ( - ( modelViewMatrix * vec4( mix( instancePosition, instanceTargetPosition, nodeUniform2 ), 1.0 ) ).xyz.z ), 0.0001 ) );
+
+	}
+
+	vPixelRadius = nodeVar34;
+	vAtomId = float( uint( gl_InstanceID ) );
+
+	if ( ( ( nodeVar3 <= 0.0 ) || ( nodeVar34 < nodeUniform27 ) ) ) {
+
+		nodeVar49 = vec4( 2.0, 2.0, 2.0, 1.0 );
+
+	} else {
+
+		nodeVar49 = ( cameraProjectionMatrix * vec4( vec3( ( ( modelViewMatrix * vec4( mix( instancePosition, instanceTargetPosition, nodeUniform2 ), 1.0 ) ).xyz.xy + ( position.xy * vec2( ( nodeVar3 * 1.3 ) ) ) ), ( ( modelViewMatrix * vec4( mix( instancePosition, instanceTargetPosition, nodeUniform2 ), 1.0 ) ).xyz.z + nodeVar3 ) ), 1.0 ) );
+
+	}
+
+
+	// result
+	gl_Position = nodeVar49;
+
+	gl_PointSize = 1.0;
+
+}

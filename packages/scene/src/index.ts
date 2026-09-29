@@ -31,7 +31,6 @@ export type {
 export { AtomClusters } from './AtomClusters';
 export { buildClusters, MAX_GRID_DIM, clusterCellRadius } from './ClusterBuilder';
 export type { Clusters } from './ClusterBuilder';
-export { InterpolatedAtoms } from './InterpolatedAtoms';
 export { SimulationCell } from './SimulationCell';
 export { Bonds, DEFAULT_CUTOFFS, buildTypeCutoffs } from './Bonds';
 export { resolveBondTopologyMode, validateSourceBondTopology } from './bondTopology';
@@ -48,6 +47,36 @@ export {
   ATOMS_PER_BRICK as BILLION_BLOCK_ATOMS_PER_BRICK,
 } from './BillionAtomBlock';
 export type { BillionAtomStats } from './BillionAtomBlock';
+
+// Frame phases (R3F v10 scheduler) and job ids
+export { LUPI_PHASE, LUPI_JOB, installLupiPhases } from './framePhases';
+export type { LupiPhase, LupiJobId } from './framePhases';
+
+// TSL: the node-material uniform bag and the impostor shading kit
+export {
+  LUPI_UNIFORMS_KEY,
+  LUPI_SHADER_TAG_KEY,
+  attachLupiUniforms,
+  getLupiUniforms,
+  readLupiUniform,
+} from './tsl/lupiUniforms';
+export type { LupiUniformBag } from './tsl/lupiUniforms';
+export {
+  analyticEnvironment,
+  cappedCylinderNormal,
+  createLupiEnvBinding,
+  createLupiLightUniforms,
+  depthFromViewZ,
+  impostorDepthPrelude,
+  lightDirection,
+  lupiSurface,
+  orthographicFlag,
+  rayCappedCylinder,
+  raySphere,
+  syncLupiEnvBinding,
+  viewRay,
+} from './tsl/impostorKit';
+export type { LupiEnvBinding, LupiLightUniforms, LupiSurfaceInput } from './tsl/impostorKit';
 
 // Shared constants
 export {

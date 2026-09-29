@@ -1,36 +1,56 @@
-// @vitest-environment node
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import ReactThreeTestRenderer from '@react-three/test-renderer';
+import ReactThreeTestRenderer from '@react-three/test-renderer/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
+import type { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   AtomsOptimized,
-  IMPOSTOR_FRAGMENT,
   LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
   LUPI_ARTIFACT_ATOMS_LAYER,
   LUPI_ARTIFACT_LAYER_KEY,
   QUALITY_TIER_FULL_ATOM_LIMIT,
   QUALITY_TIER_IBL_ATOM_LIMIT,
+  atomMaterialForTier,
   buildColormapTexture,
   buildMaterialPaletteTexture,
   buildPaletteTexture,
   buildRadiusPaletteTexture,
   buildTypeSlotLookup,
-  cubeUvShaderDefinesForAtlas,
-  rendererSupportsConservativeDepth,
+  createAtomImpostorResources,
+  disposeAtomImpostorResources,
   resolveAtomQualityTier,
   resolveSlotRadius,
-  syncAtomShaderDefines,
   createAtomInterpolationBoundingSphere,
   disposeOwnedMaterialTextures,
   markInstancedAttributeUpdateRange,
-  materialCubeUvDefines,
   resolveLoadedAtomCount,
   syncSurfaceMaterialUniforms,
-  syncCubeUvEnvironment,
+  writePaletteTexture,
 } from './AtomsOptimized';
+import {
+  ATOM_ATTR,
+  ATOM_DATA_OCCLUSION,
+  ATOM_DATA_SLOT,
+  packAtomData,
+  unpackAtomProp,
+} from './tsl/atomImpostorMaterial';
+import { getLupiUniforms, LUPI_UNIFORMS_KEY } from './tsl/lupiUniforms';
 import { buildTypeRenderTable } from './typeRenderTable';
+
+type AtomMesh = THREE.Mesh<THREE.InstancedBufferGeometry, MeshBasicNodeMaterial>;
+
+/** No itemSize-1 8/16-bit attribute: WebGPU has no such vertex format (D4, K22). */
+function narrowScalarAttributes(geometry: THREE.BufferGeometry): string[] {
+  return Object.entries(geometry.attributes)
+    .filter(([, attribute]) => attribute.itemSize === 1 && (
+      attribute.array instanceof Uint8Array
+      || attribute.array instanceof Int8Array
+      || attribute.array instanceof Uint16Array
+      || attribute.array instanceof Int16Array
+    ))
+    .map(([name]) => name);
+}
 
 function makeFrame(): Frame {
   return {
@@ -50,7 +70,7 @@ function makeFrame(): Frame {
 }
 
 describe('AtomsOptimized material resource policy', () => {
-  it('declares display color lookups as sRGB, keeps packed material data linear, and converts shader output', () => {
+  it('declares display color lookups as sRGB and keeps packed material data linear', () => {
     const palette = buildPaletteTexture(() => [0.5, 0.25, 0.75]);
     const colormap = buildColormapTexture(() => [0.1, 0.2, 0.3]);
     const material = buildMaterialPaletteTexture();
@@ -62,19 +82,60 @@ describe('AtomsOptimized material resource policy', () => {
     // Float32-to-byte path (178, not the double-precision half-step 179) so
     // an element-slot remap cannot silently invalidate approved pixels.
     expect((material.image.data as Uint8Array)[6 * 4 + 1]).toBe(178);
-    expect(IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = vec4(color, 1.0);')).toBeGreaterThan(-1);
-    // The raw material owns its output transfer function: sRGB encode after
-    // the final color is assembled, gated by the render-target uniform.
-    expect(IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = sRGBTransferOETF(gl_FragColor);')).toBeGreaterThan(
-      IMPOSTOR_FRAGMENT.indexOf('gl_FragColor = vec4(color, 1.0);'),
-    );
-    // The conservative-depth extension directive must be the first
-    // non-comment token so ANGLE accepts it in ESSL 3.00.
-    expect(IMPOSTOR_FRAGMENT.trimStart().startsWith('#ifdef LUPI_CONSERVATIVE_DEPTH\n#extension GL_EXT_conservative_depth')).toBe(true);
+
+    // Palettes are rewritten in place: the texture identity never changes.
+    const version = palette.version;
+    writePaletteTexture(palette, () => [1, 0, 0]);
+    expect((palette.image.data as Uint8Array).slice(0, 4)).toEqual(new Uint8Array([255, 0, 0, 255]));
+    expect(palette.version).toBeGreaterThan(version);
 
     palette.dispose();
     colormap.dispose();
     material.dispose();
+  });
+
+  it('packs type slot, occlusion and a 16-bit property into one Uint8x4 word', () => {
+    const out = new Uint8Array(8);
+    for (const prop of [0, 1 / 65535, 0.25, 0.5, 0.7071, 1]) {
+      packAtomData(out, 1, 7, 0.5, prop);
+      expect(out[4 + ATOM_DATA_SLOT]).toBe(7);
+      expect(out[4 + ATOM_DATA_OCCLUSION]).toBe(128);
+      expect(Math.abs(unpackAtomProp(out, 1) - prop)).toBeLessThanOrEqual(1 / 65535);
+    }
+    packAtomData(out, 0, 300, 2, Number.NaN);
+    expect(Array.from(out.slice(0, 4))).toEqual([255, 255, 0, 0]);
+  });
+
+  it('builds one node material per tier over shared uniforms and palettes', () => {
+    const resources = createAtomImpostorResources();
+    const tier0 = atomMaterialForTier(resources, 0);
+    const tier2 = atomMaterialForTier(resources, 2);
+    expect(atomMaterialForTier(resources, 0)).toBe(tier0);
+    expect(tier2).not.toBe(tier0);
+    for (const material of [tier0, atomMaterialForTier(resources, 1), tier2]) {
+      expect((material as { isMeshBasicNodeMaterial?: boolean }).isMeshBasicNodeMaterial).toBe(true);
+      expect(material.vertexNode).toBeTruthy();
+      expect(material.depthNode).toBeTruthy();
+      expect(material.colorNode).toBeTruthy();
+      expect(material.userData[LUPI_UNIFORMS_KEY]).toBe(resources.uniforms);
+    }
+    const bag = getLupiUniforms(tier2)!;
+    for (const key of [
+      'uProgress', 'uColorMode', 'uUniformColor', 'uTextureMode', 'uMaterialPreset',
+      'uMaterialIntensity', 'uSurfaceRoughness', 'uSurfacePolish', 'uSurfaceClearcoat',
+      'uPropEmission', 'uEtchAtomId', 'uHasEtch', 'uCullPixelRadius', 'uOcclusionStrength',
+      'uPalette', 'uColormap', 'uRadiusPalette', 'uMaterialPalette', 'tEtchTexture',
+    ]) {
+      expect(bag[key], key).toBeDefined();
+    }
+    expect(bag.uPalette.value).toBe(resources.textures.palette);
+    expect(bag.uRadiusPalette.value).toBe(resources.textures.radiusPalette);
+
+    const materialDispose = vi.spyOn(tier2, 'dispose');
+    const paletteDispose = vi.spyOn(resources.textures.palette, 'dispose');
+    disposeAtomImpostorResources(resources);
+    expect(materialDispose).toHaveBeenCalledOnce();
+    expect(paletteDispose).toHaveBeenCalledOnce();
   });
 
   it('uses current Three update ranges and replaces stale spans exactly', () => {
@@ -92,62 +153,6 @@ describe('AtomsOptimized material resource policy', () => {
     markInstancedAttributeUpdateRange(attribute, 0);
     expect(attribute.updateRanges).toEqual([]);
     expect(attribute.version).toBe(2);
-  });
-
-  it('derives Three r184 CubeUV lookup defines from the real PMREM atlas', () => {
-    expect(cubeUvShaderDefinesForAtlas(768, 1024)).toEqual({
-      CUBEUV_TEXEL_WIDTH: 1 / 768,
-      CUBEUV_TEXEL_HEIGHT: 1 / 1024,
-      CUBEUV_MAX_MIP: 8,
-    });
-    expect(materialCubeUvDefines(cubeUvShaderDefinesForAtlas(1, 1))).toEqual({
-      CUBEUV_TEXEL_WIDTH: '1.0',
-      CUBEUV_TEXEL_HEIGHT: '1.0',
-      CUBEUV_MAX_MIP: '0.0',
-    });
-    expect(materialCubeUvDefines(cubeUvShaderDefinesForAtlas(768, 1024))).toEqual({
-      CUBEUV_TEXEL_WIDTH: String(1 / 768),
-      CUBEUV_TEXEL_HEIGHT: String(1 / 1024),
-      CUBEUV_MAX_MIP: '8.0',
-    });
-  });
-
-  it('recompiles the atom shader only when the CubeUV atlas dimensions change', () => {
-    const material = new THREE.ShaderMaterial({
-      defines: { ...cubeUvShaderDefinesForAtlas(1, 1) },
-      uniforms: {
-        tEnvMap: { value: null },
-        uHasEnv: { value: 0 },
-      },
-    });
-    const texture = new THREE.Texture({ width: 768, height: 1024 });
-    texture.mapping = THREE.CubeUVReflectionMapping;
-
-    syncCubeUvEnvironment(material, texture);
-    const compiledVersion = material.version;
-    expect(material.uniforms.tEnvMap.value).toBe(texture);
-    expect(material.uniforms.uHasEnv.value).toBe(1);
-    expect(material.defines).toMatchObject({
-      CUBEUV_TEXEL_WIDTH: String(1 / 768),
-      CUBEUV_TEXEL_HEIGHT: String(1 / 1024),
-      CUBEUV_MAX_MIP: '8.0',
-    });
-
-    const sameSizeTexture = new THREE.Texture({ width: 768, height: 1024 });
-    sameSizeTexture.mapping = THREE.CubeUVReflectionMapping;
-    syncCubeUvEnvironment(material, sameSizeTexture);
-    expect(material.version).toBe(compiledVersion);
-    expect(material.uniforms.tEnvMap.value).toBe(sameSizeTexture);
-
-    const resized = new THREE.Texture({ width: 384, height: 512 });
-    resized.mapping = THREE.CubeUVReflectionMapping;
-    syncCubeUvEnvironment(material, resized);
-    expect(material.version).toBe(compiledVersion + 1);
-
-    material.dispose();
-    texture.dispose();
-    sameSizeTexture.dispose();
-    resized.dispose();
   });
 
   it('synchronizes every surface-character uniform, including clearcoat', () => {
@@ -202,30 +207,6 @@ describe('AtomsOptimized material resource policy', () => {
     expect(resolveAtomQualityTier(undefined, 10)).toBe(2);
   });
 
-  it('flags a recompile only when quality or early-Z defines change', () => {
-    const material = new THREE.ShaderMaterial({ defines: { LUPI_QUALITY: '2' } });
-    const version = material.version;
-    expect(syncAtomShaderDefines(material, 2, false)).toBe(false);
-    expect(material.version).toBe(version);
-    expect(syncAtomShaderDefines(material, 1, true)).toBe(true);
-    expect(material.defines).toMatchObject({ LUPI_QUALITY: '1', LUPI_CONSERVATIVE_DEPTH: '1' });
-    expect(syncAtomShaderDefines(material, 1, false)).toBe(true);
-    expect(material.defines.LUPI_CONSERVATIVE_DEPTH).toBeUndefined();
-    material.dispose();
-  });
-
-  it('probes EXT_conservative_depth once per context and fails closed', () => {
-    const getExtension = vi.fn((name: string) => (name === 'EXT_conservative_depth' ? {} : null));
-    const context = { getExtension };
-    const renderer = { getContext: () => context };
-    expect(rendererSupportsConservativeDepth(renderer)).toBe(true);
-    expect(rendererSupportsConservativeDepth(renderer)).toBe(true);
-    expect(getExtension).toHaveBeenCalledTimes(1);
-    expect(rendererSupportsConservativeDepth({ getContext: () => ({ getExtension: () => null }) })).toBe(false);
-    expect(rendererSupportsConservativeDepth({ getContext: () => { throw new Error('lost'); } })).toBe(false);
-    expect(rendererSupportsConservativeDepth(null)).toBe(false);
-  });
-
   it('resolves per-slot radii from scale, per-type scale and visibility', () => {
     const entry = { rawType: 3, displayRadius: 0.5 };
     expect(resolveSlotRadius(entry, 2)).toBeCloseTo(1);
@@ -271,14 +252,24 @@ describe('AtomsOptimized material resource policy', () => {
     let didUnmount = false;
 
     try {
-      const atomMesh = renderer.scene.findByType('Mesh')
-        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+      const atomMesh = renderer.scene.findByType('Mesh').instance as AtomMesh;
       expect(atomMesh.userData[LUPI_ARTIFACT_LAYER_KEY]).toBe(LUPI_ARTIFACT_ATOMS_LAYER);
       const initialGeometry = atomMesh.geometry;
       const material = atomMesh.material;
-      const palette = material.uniforms.uPalette.value as THREE.Texture;
-      const colormap = material.uniforms.uColormap.value as THREE.Texture;
-      const materialPalette = material.uniforms.uMaterialPalette.value as THREE.Texture;
+      const bag = getLupiUniforms(material)!;
+      const palette = bag.uPalette.value as THREE.Texture;
+      const colormap = bag.uColormap.value as THREE.Texture;
+      const materialPalette = bag.uMaterialPalette.value as THREE.Texture;
+
+      // D4: one normalized Uint8x4 word per atom, float positions, and no
+      // itemSize-1 8/16-bit attribute anywhere.
+      const data = initialGeometry.attributes[ATOM_ATTR.data] as THREE.InstancedBufferAttribute;
+      expect(data.array).toBeInstanceOf(Uint8Array);
+      expect(data.itemSize).toBe(4);
+      expect(data.normalized).toBe(true);
+      expect(initialGeometry.attributes[ATOM_ATTR.position].array).toBeInstanceOf(Float32Array);
+      expect(initialGeometry.attributes[ATOM_ATTR.target]).toBe(initialGeometry.attributes[ATOM_ATTR.position]);
+      expect(narrowScalarAttributes(initialGeometry)).toEqual([]);
 
       const geometryDispose = vi.spyOn(initialGeometry, 'dispose');
       const materialDispose = vi.spyOn(material, 'dispose');
@@ -290,14 +281,13 @@ describe('AtomsOptimized material resource policy', () => {
       // the artifact receipt. Hidden atoms stay in the instance buffer and are
       // culled on the GPU by a zero radius in the radius palette.
       expect(initialGeometry.instanceCount).toBe(1);
-      const radiusPalette = material.uniforms.uRadiusPalette.value as THREE.DataTexture;
+      const radiusPalette = bag.uRadiusPalette.value as THREE.DataTexture;
       expect((radiusPalette.image.data as Float32Array)[0]).toBe(0);
       expect(material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY]).toBe(artifactSpecId);
 
       await renderer.update(renderAtoms(2));
 
-      const grownMesh = renderer.scene.findByType('Mesh')
-        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+      const grownMesh = renderer.scene.findByType('Mesh').instance as AtomMesh;
       expect(grownMesh.geometry).not.toBe(initialGeometry);
       expect(grownMesh.material).toBe(material);
       expect(geometryDispose).toHaveBeenCalled();
@@ -305,7 +295,11 @@ describe('AtomsOptimized material resource policy', () => {
       expect(paletteDispose).not.toHaveBeenCalled();
       expect(colormapDispose).not.toHaveBeenCalled();
       expect(materialPaletteDispose).not.toHaveBeenCalled();
+      expect(bag.uPalette.value).toBe(palette);
       expect(material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY]).toBe(artifactSpecId);
+      // The grown geometry got the type slot rewritten into its fresh buffer.
+      const grownData = grownMesh.geometry.attributes[ATOM_ATTR.data].array as Uint8Array;
+      expect(grownData[ATOM_DATA_OCCLUSION]).toBe(255);
 
       await renderer.unmount();
       didUnmount = true;
@@ -353,9 +347,8 @@ describe('AtomsOptimized frame identity guard', () => {
     }));
 
     try {
-      const mesh = renderer.scene.findByType('Mesh')
-        .instance as THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
-      const targetPositions = mesh.geometry.attributes.instanceTargetPosition
+      const mesh = renderer.scene.findByType('Mesh').instance as AtomMesh;
+      const targetPositions = mesh.geometry.attributes[ATOM_ATTR.target]
         .array as Float32Array;
       expect(Array.from(targetPositions.slice(0, 6))).toEqual(expectedTargets);
     } finally {

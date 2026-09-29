@@ -15,6 +15,7 @@ const requiredFiles = new Set([
   "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "patches/@react-three__drei@11.0.0-alpha.7.patch",
   "apps/mobile/app.config.ts",
   "apps/mobile/app.json",
   "apps/mobile/.gitignore",
@@ -106,7 +107,8 @@ for (const { path } of files) {
   const atAllowedRoot =
     requiredFiles.has(path) ||
     path.startsWith("apps/mobile/") ||
-    path.startsWith("packages/core/");
+    path.startsWith("packages/core/") ||
+    path.startsWith("patches/");
   if (!atAllowedRoot) violations.push(`unexpected root path ${path}`);
   if (segments.some((segment) => forbiddenSegments.has(segment))) {
     violations.push(`forbidden generated path ${path}`);

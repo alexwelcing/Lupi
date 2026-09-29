@@ -1,0 +1,194 @@
+#version 300 es
+
+// Three.js r186 - Node System
+
+
+// extensions
+
+
+// precision
+
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+precision highp sampler3D;
+precision highp samplerCube;
+precision highp sampler2DArray;
+
+precision highp usampler2D;
+precision highp usampler3D;
+precision highp usamplerCube;
+precision highp usampler2DArray;
+
+precision highp isampler2D;
+precision highp isampler3D;
+precision highp isamplerCube;
+precision highp isampler2DArray;
+
+precision highp sampler2DShadow;
+precision highp sampler2DArrayShadow;
+precision highp samplerCubeShadow;
+
+
+// structs
+
+
+
+
+
+// uniforms
+
+layout( std140 ) uniform render {
+	float cameraNear;
+	float cameraFar;
+	mat4 cameraProjectionMatrix;
+	mat4 cameraViewMatrix;
+	vec2 nodeUniform14;
+	vec2 nodeUniform15;
+};
+
+layout( std140 ) uniform object {
+	float nodeUniform0;
+	mat4 nodeUniform2;
+	float nodeUniform3;
+	float nodeUniform6;
+	vec3 nodeUniform7;
+	vec3 nodeUniform8;
+	vec3 nodeUniform9;
+	vec3 nodeUniform10;
+	float nodeUniform11;
+	float nodeUniform12;
+	vec3 nodeUniform16;
+	float nodeUniform17;
+	vec3 nodeUniform18;
+	float nodeUniform19;
+	float nodeUniform20;
+	float nodeUniform21;
+};
+
+
+// varyings
+out vec3 vBondViewPos;
+out vec3 vB;
+out vec3 vA;
+out float vBondRadius;
+out vec3 vColorA;
+out vec3 vColorB;
+out float vBondPixelRadius;
+
+
+// attributes
+layout( location = 0 ) in vec3 instanceStart;
+layout( location = 1 ) in vec3 instanceStartTarget;
+layout( location = 2 ) in vec3 instanceEnd;
+layout( location = 3 ) in vec3 instanceEndTarget;
+layout( location = 4 ) in vec3 position;
+layout( location = 5 ) in float instanceRadius;
+layout( location = 6 ) in vec4 instanceColorStart;
+layout( location = 7 ) in vec4 instanceColorEnd;
+
+
+// vars
+mat4 modelViewMatrix;
+vec3 nodeVar2;
+float nodeVar3;
+vec3 nodeVar4;
+vec3 nodeVar5;
+vec3 nodeVar6;
+float nodeVar7;
+vec3 nodeVar8;
+float nodeVar61;
+vec4 nodeVar74;
+vec3 nodeVar75;
+vec3 nodeVar76;
+vec3 nodeVar77;
+float nodeVar78;
+
+// codes
+vec3 sRGBTransferEOTF ( vec3 color ) {
+
+	
+
+
+	return mix( pow( ( ( color * vec3( 0.9478672986 ) ) + vec3( 0.0521327014 ) ), vec3( 2.4 ) ), ( color * vec3( 0.0773993808 ) ), vec3( lessThanEqual( color, vec3( 0.04045 ) ) ) );
+
+}
+
+
+
+void main() {
+
+	// transforms
+	
+
+	// flow
+	// code
+
+	modelViewMatrix = ( cameraViewMatrix * nodeUniform2 );
+	nodeVar2 = ( ( modelViewMatrix * vec4( mix( instanceEnd, instanceEndTarget, nodeUniform3 ), 1.0 ) ).xyz - ( modelViewMatrix * vec4( mix( instanceStart, instanceStartTarget, nodeUniform3 ), 1.0 ) ).xyz );
+	nodeVar3 = length( nodeVar2 );
+	nodeVar4 = ( nodeVar2 / vec3( max( nodeVar3, 0.000001 ) ) );
+
+	if ( ( abs( nodeVar4.y ) < 0.99 ) ) {
+
+		nodeVar5 = vec3( 0.0, 1.0, 0.0 );
+
+	} else {
+
+		nodeVar5 = vec3( 1.0, 0.0, 0.0 );
+
+	}
+
+	nodeVar6 = normalize( cross( nodeVar4, nodeVar5 ) );
+	nodeVar7 = ( instanceRadius * 1.05 );
+	nodeVar8 = ( ( mix( ( modelViewMatrix * vec4( mix( instanceStart, instanceStartTarget, nodeUniform3 ), 1.0 ) ).xyz, ( modelViewMatrix * vec4( mix( instanceEnd, instanceEndTarget, nodeUniform3 ), 1.0 ) ).xyz, ( ( position.y * 0.5 ) + 0.5 ) ) + ( nodeVar6 * vec3( ( position.x * nodeVar7 ) ) ) ) + ( cross( nodeVar6, nodeVar4 ) * vec3( ( position.z * nodeVar7 ) ) ) );
+	vBondViewPos = nodeVar8;
+	vB = ( modelViewMatrix * vec4( mix( instanceEnd, instanceEndTarget, nodeUniform3 ), 1.0 ) ).xyz;
+	vA = ( modelViewMatrix * vec4( mix( instanceStart, instanceStartTarget, nodeUniform3 ), 1.0 ) ).xyz;
+	vBondRadius = instanceRadius;
+	vColorA = sRGBTransferEOTF( instanceColorStart.xyz );
+	vColorB = sRGBTransferEOTF( instanceColorEnd.xyz );
+
+	if ( ( nodeUniform12 > 0.5 ) ) {
+
+		nodeVar61 = ( instanceRadius * ( ( abs( cameraProjectionMatrix[ 1u ].y ) * nodeUniform14.y ) * 0.5 ) );
+
+	} else {
+
+		nodeVar61 = ( ( instanceRadius * ( ( abs( cameraProjectionMatrix[ 1u ].y ) * nodeUniform15.y ) * 0.5 ) ) / max( ( - ( ( ( modelViewMatrix * vec4( mix( instanceStart, instanceStartTarget, nodeUniform3 ), 1.0 ) ).xyz + ( modelViewMatrix * vec4( mix( instanceEnd, instanceEndTarget, nodeUniform3 ), 1.0 ) ).xyz ) * vec3( 0.5 ) ).z ), 0.0001 ) );
+
+	}
+
+	vBondPixelRadius = nodeVar61;
+
+	if ( ( ( ( nodeVar3 <= 0.000001 ) || ( instanceRadius <= 0.0 ) ) || ( nodeVar61 < nodeUniform21 ) ) ) {
+
+		nodeVar74 = vec4( 2.0, 2.0, 2.0, 1.0 );
+
+	} else {
+
+		nodeVar75 = ( nodeVar2 / vec3( max( nodeVar3, 0.000001 ) ) );
+
+		if ( ( abs( nodeVar75.y ) < 0.99 ) ) {
+
+			nodeVar76 = vec3( 0.0, 1.0, 0.0 );
+
+		} else {
+
+			nodeVar76 = vec3( 1.0, 0.0, 0.0 );
+
+		}
+
+		nodeVar77 = normalize( cross( nodeVar75, nodeVar76 ) );
+		nodeVar78 = ( instanceRadius * 1.05 );
+		nodeVar74 = ( cameraProjectionMatrix * vec4( ( ( mix( ( modelViewMatrix * vec4( mix( instanceStart, instanceStartTarget, nodeUniform3 ), 1.0 ) ).xyz, ( modelViewMatrix * vec4( mix( instanceEnd, instanceEndTarget, nodeUniform3 ), 1.0 ) ).xyz, ( ( position.y * 0.5 ) + 0.5 ) ) + ( nodeVar77 * vec3( ( position.x * nodeVar78 ) ) ) ) + ( cross( nodeVar77, nodeVar75 ) * vec3( ( position.z * nodeVar78 ) ) ) ), 1.0 ) );
+
+	}
+
+
+	// result
+	gl_Position = nodeVar74;
+
+	gl_PointSize = 1.0;
+
+}

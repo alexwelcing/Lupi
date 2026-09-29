@@ -1,28 +1,24 @@
 /**
  * SceneLighting — the molecule's authored 3-point rig plus the HDRI
- * environment, made XR-aware.
+ * environment: an ambient term, a key directional, and — for small systems —
+ * fill / rim lights, with a PMREM environment for image-based reflections.
  *
- * Outside AR (desktop preview + VR skybox) this behaves exactly as before:
- * an ambient term, a key directional, and — for small systems — fill / rim
- * lights, with a PMREM <Environment> for image-based reflections.
- *
- * In an immersive-ar session where WebXR light-estimation is live
- * (arLightEstimationActive), two things change so the *real* surroundings —
- * e.g. a campfire — drive the look:
- *   - the static rig is pulled right down, so the estimated light + reflections
- *     dominate instead of being washed out by a fixed studio rig;
- *   - the static <Environment> is dropped entirely, because XRLightEstimation
- *     owns scene.environment with the live reflection map and the two must not
- *     fight over it.
+ * The PMREM comes from three/webgpu's PMREMGenerator, driven by the
+ * WebGPURenderer (WebGPU, or its WebGL2 backend), and becomes
+ * `scene.environment`: a CubeUV texture that node materials read directly and
+ * that the impostor kit samples through `pmremTexture` (plan-final D13).
  */
-import { useLayoutEffect } from 'react';
-import { useEnvironment } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
-import { useXR } from '@react-three/xr';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
+import { PMREMGenerator } from 'three/webgpu';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { useStore } from './store';
 import {
+  clearSceneEnvironmentLoadFailure,
+  environmentAssetUrl,
   installSceneEnvironmentPmrem,
+  markSceneEnvironmentLoadFailed,
   resolveSceneEnvironment,
   type DreiEnvironmentPreset,
 } from './sceneEnvironment';
@@ -32,27 +28,73 @@ import { installScientificStudioEnvironment } from './studioEnvironment';
 const RIG_RADIUS = 11.18;
 const DEG = Math.PI / 180;
 
-// How far the static rig is pulled down once the real world is lighting the
-// scene. Not zero, so the molecule never goes fully black if the estimate is
-// extremely dark; the light probe + reflections carry the rest.
-const AR_AMBIENT_FACTOR = 0.15;
-const AR_KEY_FACTOR = 0.1;
+/**
+ * The pinned HDRs, one download per URL for the page's lifetime. A failed
+ * download leaves the cache, so choosing the preset again retries it.
+ */
+const environmentSources = new Map<string, Promise<THREE.DataTexture>>();
+
+function loadEnvironmentSource(url: string): Promise<THREE.DataTexture> {
+  let pending = environmentSources.get(url);
+  if (!pending) {
+    pending = new HDRLoader().loadAsync(url).then((texture) => {
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.colorSpace = THREE.LinearSRGBColorSpace;
+      return texture;
+    });
+    pending.catch(() => environmentSources.delete(url));
+    environmentSources.set(url, pending);
+  }
+  return pending;
+}
 
 /**
- * Load the exact Drei preset asset, prefilter it explicitly for the custom atom
- * BRDF, and tag the resulting CubeUV texture with its immutable asset identity.
- * Suspense controls loading; the tag controls correctness. Export never treats
- * an untagged/old environment as capture-ready.
+ * Load the exact Drei preset asset (the pinned drei-assets HDR, through
+ * three's HDRLoader rather than drei's deprecated RGBELoader path), prefilter
+ * it explicitly for the custom atom BRDF, and tag the resulting CubeUV texture
+ * with its immutable asset identity. The tag controls correctness: export
+ * never treats an untagged/old environment as capture-ready.
+ *
+ * The download runs beside the scene rather than through Suspense: until it
+ * arrives the molecule renders with the analytic environment, and a failed
+ * download (offline, a blocked CDN) leaves it that way instead of taking the
+ * canvas into its error boundary.
  */
 function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
-  const source = useEnvironment({ preset });
-  const { gl, scene } = useThree();
-  useLayoutEffect(() => installSceneEnvironmentPmrem(
-    scene,
-    source,
-    preset,
-    () => new THREE.PMREMGenerator(gl),
-  ), [gl, preset, scene, source]);
+  const { renderer, scene } = useThree();
+  const [source, setSource] = useState<{ preset: DreiEnvironmentPreset; texture: THREE.DataTexture } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadEnvironmentSource(environmentAssetUrl(preset)).then(
+      (texture) => {
+        if (cancelled) return;
+        clearSceneEnvironmentLoadFailure(preset);
+        setSource({ preset, texture });
+      },
+      (error: unknown) => {
+        if (cancelled) return;
+        markSceneEnvironmentLoadFailed(preset);
+        console.warn(
+          `[SceneLighting] Environment '${preset}' could not be loaded; rendering without image-based light.`,
+          error instanceof Error ? error.message : String(error),
+        );
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [preset]);
+
+  useLayoutEffect(() => {
+    if (!source || source.preset !== preset) return undefined;
+    return installSceneEnvironmentPmrem(
+      scene,
+      source.texture,
+      preset,
+      () => new PMREMGenerator(renderer),
+    );
+  }, [renderer, preset, scene, source]);
 
   return null;
 }
@@ -64,11 +106,11 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
  * environment texture.
  */
 function LupiSoftboxEnvironment() {
-  const { gl, scene } = useThree();
+  const { renderer, scene } = useThree();
   useLayoutEffect(() => installScientificStudioEnvironment(
     scene,
-    () => new THREE.PMREMGenerator(gl),
-  ), [gl, scene]);
+    () => new PMREMGenerator(renderer),
+  ), [renderer, scene]);
 
   return null;
 }
@@ -84,11 +126,6 @@ function polarToCartesian(azimuthDeg: number, elevationDeg: number) {
 }
 
 export function SceneLighting() {
-  const mode = useXR(s => s.mode);
-  const estimationActive = useStore(s => s.arLightEstimationActive);
-  const isAR = mode === 'immersive-ar';
-  const arLit = isAR && estimationActive;
-
   const ambientLightIntensity = useStore(s => s.ambientLightIntensity);
   const dirLightIntensity = useStore(s => s.dirLightIntensity);
   const keyLightAzimuth = useStore(s => s.keyLightAzimuth);
@@ -102,8 +139,8 @@ export function SceneLighting() {
   const file = useStore(s => s.file);
   const environmentPreset = useStore(s => s.environmentPreset);
 
-  const ambient = arLit ? ambientLightIntensity * AR_AMBIENT_FACTOR : ambientLightIntensity;
-  const key = arLit ? dirLightIntensity * AR_KEY_FACTOR : dirLightIntensity;
+  const ambient = ambientLightIntensity;
+  const key = dirLightIntensity;
 
   const [kx, ky, kz] = polarToCartesian(keyLightAzimuth, keyLightElevation);
   const [fx, fy, fz] = polarToCartesian(fillLightAzimuth, fillLightElevation);
@@ -127,8 +164,8 @@ export function SceneLighting() {
           <directionalLight position={[rx, ry, rz]} intensity={key * 0.15} color={rimLightColor} />
         </>
       )}
-      {!isAR && finalEnv === 'softbox' && <LupiSoftboxEnvironment />}
-      {!isAR && finalEnv && finalEnv !== 'softbox' && <LupiEnvironment preset={finalEnv} />}
+      {finalEnv === 'softbox' && <LupiSoftboxEnvironment />}
+      {finalEnv && finalEnv !== 'softbox' && <LupiEnvironment preset={finalEnv} />}
     </>
   );
 }

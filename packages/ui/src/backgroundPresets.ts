@@ -1,7 +1,7 @@
 /**
- * Background presets — shared definition used by the studio Scene controls and
- * the immersive XRControlPanel. Extracted to its own module to avoid circular
- * dependencies between App.tsx ↔ xr/*.tsx.
+ * Background presets — shared definition used by the studio Scene controls
+ * and the viewer scene. Kept in its own module to avoid circular
+ * dependencies with App.tsx.
  */
 
 import motionLoopManifestJson from '../../../tools/lupi-motion-loops.json';
@@ -252,7 +252,12 @@ const WORLD_PRESETS: Record<string, BgPreset> = Object.fromEntries(
   ]),
 );
 
+/** The viewer's default plate: the home page's dark sage, flat. */
+export const SAGE_PLATE_PRESET_ID = 'sage-plate';
+export const SAGE_PLATE_COLOR = '#101817';
+
 export const BG_PRESETS: Record<string, BgPreset> = {
+  [SAGE_PLATE_PRESET_ID]: { top: SAGE_PLATE_COLOR, bottom: SAGE_PLATE_COLOR, label: 'Sage Plate', category: 'gradient' },
   // ── Solid gradients (legacy) ──
   void:      { top: '#000000', bottom: '#000000', label: 'Void', category: 'gradient' },
   deep:      { top: '#080a14', bottom: '#000000', label: 'Deep Field', category: 'gradient' },

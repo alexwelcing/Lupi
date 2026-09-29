@@ -414,6 +414,7 @@ for (const requiredRule of [
   "!.npmrc",
   "!pnpm-lock.yaml",
   "!pnpm-workspace.yaml",
+  "!patches/**",
   "!apps/mobile/app/**",
   "!apps/mobile/.eas/**",
   "!apps/mobile/.maestro/**",

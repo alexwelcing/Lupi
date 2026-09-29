@@ -1,5 +1,6 @@
 /// <reference types="vgpu/client" />
 import { effect, frame, init, surface, type Effect, type Gpu } from 'vgpu';
+import { installWebGPUCompat } from '../viewer/webgpuCompat';
 import shader from './scan-swirl.wgsl';
 
 /**
@@ -86,6 +87,9 @@ export async function createScanSwirl(canvas: HTMLCanvasElement, onFailure: () =
   };
 
   try {
+    // The same tolerant createView the viewer's renderer uses (three r186 /
+    // Chromium swizzle shape); idempotent and free where the browser agrees.
+    installWebGPUCompat();
     gpu = await init({ powerPreference: 'high-performance', label: 'Lupi scan swirl' });
     field = effect(gpu, shader, { label: 'Lupi scan swirl' });
     target = surface(gpu, canvas, { dpr: [1, 2], alphaMode: 'premultiplied', clearColor: [0, 0, 0, 0] });

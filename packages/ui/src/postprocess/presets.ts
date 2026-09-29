@@ -1,10 +1,13 @@
 /**
  * Postprocess presets — directorial looks, not a kitchen sink.
  *
- * Each preset is a coherent recipe: a curated combination of SSAO + Bloom
- * + DOF + Vignette + ToneMapping that's been tuned to read as a single
- * artistic intent. The user picks one and adjusts a single intensity
- * knob that scales the whole look proportionally.
+ * Each preset is a coherent recipe: a curated combination of ambient
+ * occlusion + Bloom + DOF + Vignette + ToneMapping that's been tuned to read
+ * as a single artistic intent. The user picks one and adjusts a single
+ * intensity knob that scales the whole look proportionally.
+ *
+ * ScenePostprocessing renders the recipe as one TSL render pipeline
+ * (postPipeline.ts); the values here keep their v9 meaning and scale.
  *
  * Legacy individual sliders still exist under "Advanced" for power users,
  * but they're not the primary UX anymore.
@@ -27,8 +30,9 @@ export interface PostprocessPresetConfig {
    *  heavy (+DOF). Communicated to the user as a tier badge. */
   performanceTier: 'fast' | 'balanced' | 'heavy';
 
-  /** N8AO parameters. `intensity` is the AO strength multiplier (~1 = subtle,
-   *  2+ = heavy); `radius` is the world-space AO radius in scene units (Å) —
+  /** Ambient occlusion (GTAO, normals reconstructed from depth). `intensity`
+   *  is the AO strength (the occlusion exponent: ~1 = subtle, 2+ = heavy,
+   *  0 = none); `radius` is the world-space AO radius in scene units (Å) —
    *  sized for contact shadows between touching atoms. */
   ssao: { enabled: boolean; intensity: number; radius: number };
   bloom: { enabled: boolean; intensity: number; threshold: number; smoothing: number };
@@ -42,7 +46,8 @@ export interface PostprocessPresetConfig {
   };
   vignette: { enabled: boolean; offset: number; darkness: number };
   toneMapping: 'aces' | 'reinhard' | 'none';
-  /** MSAA samples for the composer when not playing. 0 disables. */
+  /** MSAA samples for the scene pass when not playing. 0 disables. A graph
+   *  that reads depth (AO, DOF) renders without MSAA (postPipeline.ts). */
   multisampling: 0 | 2 | 4 | 8;
   /** HDRI environment for IBL. The atom impostor shader and bond
    *  MeshPhysicalMaterial both sample this — single source of truth.
@@ -170,11 +175,11 @@ export function scalePreset(preset: PostprocessPresetConfig, intensity: number):
 /** Strip expensive passes for playback. Tone mapping survives because it's
  *  cheap and required for color fidelity; everything else costs frames. */
 export function reduceForPlayback(preset: PostprocessPresetConfig): PostprocessPresetConfig {
-  // Keep the enabled SET identical to the paused state so composerKey()
-  // is stable — toggling effects on play caused a full EffectComposer
-  // remount (one-frame black flash) every play/pause. Instead we only
-  // cheapen parameters (prop-level, no remount): drop MSAA and soften
-  // the expensive passes while the trajectory animates.
+  // Keep the enabled SET identical to the paused state so the pipeline
+  // structure (postStructureKey) is stable — rebuilding the graph on play
+  // would recompile it on every play/pause. Instead we only cheapen
+  // parameters (uniforms, no rebuild): drop MSAA and soften the expensive
+  // passes while the trajectory animates.
   return {
     ...preset,
     ssao: { ...preset.ssao, intensity: preset.ssao.intensity * 0.5 },
@@ -184,14 +189,47 @@ export function reduceForPlayback(preset: PostprocessPresetConfig): PostprocessP
   };
 }
 
-/** Stable composer key — only changes when the SET of enabled effects
- *  changes. Effect parameter changes flow through props without remount. */
-export function composerKey(preset: PostprocessPresetConfig): string {
+/** The part of a config that decides the graph's shape. */
+export interface PostStructure {
+  ao: boolean;
+  bloom: boolean;
+  dof: boolean;
+  vignette: boolean;
+  toneMapping: PostprocessPresetConfig['toneMapping'];
+}
+
+export function postStructure(config: PostprocessPresetConfig): PostStructure {
+  return {
+    ao: config.ssao.enabled,
+    bloom: config.bloom.enabled,
+    dof: config.dof.enabled,
+    vignette: config.vignette.enabled,
+    toneMapping: config.toneMapping,
+  };
+}
+
+/** Changes only when the graph must be rebuilt (the set of effects or the tone-mapping mode). */
+export function postStructureKey(structure: PostStructure): string {
   return [
-    preset.ssao.enabled ? 'ao' : '_',
-    preset.bloom.enabled ? 'bl' : '_',
-    preset.dof.enabled ? (preset.dof.auto ? 'dof-auto' : 'dof') : '_',
-    preset.vignette.enabled ? 'vg' : '_',
-    preset.toneMapping,
+    structure.ao ? 'ao' : '_',
+    structure.bloom ? 'bl' : '_',
+    structure.dof ? 'dof' : '_',
+    structure.vignette ? 'vg' : '_',
+    structure.toneMapping,
   ].join('|');
+}
+
+/**
+ * True when the graph samples the scene pass's depth (AO and DOF do). Such a
+ * graph renders the scene pass without MSAA: the sample count of a depth
+ * texture is baked into the shaders that read it, so it cannot follow
+ * play/pause, and a multisampled depth read is not portable across backends.
+ */
+export function postReadsDepth(structure: PostStructure): boolean {
+  return structure.ao || structure.dof;
+}
+
+/** MSAA samples for the scene pass: the preset's, unless the graph reads depth. */
+export function scenePassSamples(config: PostprocessPresetConfig): number {
+  return postReadsDepth(postStructure(config)) ? 0 : config.multisampling;
 }

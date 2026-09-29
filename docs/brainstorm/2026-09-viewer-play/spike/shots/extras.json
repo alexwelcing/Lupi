@@ -1,0 +1,101 @@
+[
+  {
+    "name": "cloud1m-webgpu",
+    "ready": true,
+    "ms": 117378,
+    "backend": "webgpu",
+    "frames": 4,
+    "readyAtMs": 474,
+    "errors": [],
+    "differs": null,
+    "logs": []
+  },
+  {
+    "name": "cloud1m-webgl2",
+    "ready": true,
+    "ms": 34680,
+    "backend": "webgl2",
+    "frames": 4,
+    "readyAtMs": 728,
+    "errors": [],
+    "differs": null,
+    "logs": []
+  },
+  {
+    "name": "animate-webgpu",
+    "ready": true,
+    "ms": 1263,
+    "backend": "webgpu",
+    "frames": 42,
+    "readyAtMs": 1123,
+    "errors": [],
+    "differs": true,
+    "logs": []
+  },
+  {
+    "name": "animate-webgl2",
+    "ready": true,
+    "ms": 1181,
+    "backend": "webgl2",
+    "frames": 34,
+    "readyAtMs": 1177,
+    "errors": [],
+    "differs": true,
+    "logs": []
+  },
+  {
+    "name": "highlight-webgpu",
+    "ready": true,
+    "ms": 1238,
+    "backend": "webgpu",
+    "frames": 9,
+    "readyAtMs": 1228,
+    "errors": [],
+    "differs": null,
+    "logs": []
+  },
+  {
+    "name": "highlight-webgl2",
+    "ready": true,
+    "ms": 1250,
+    "backend": "webgl2",
+    "frames": 8,
+    "readyAtMs": 1246,
+    "errors": [],
+    "differs": null,
+    "logs": []
+  },
+  {
+    "name": "cull-webgpu",
+    "ready": true,
+    "ms": 20853,
+    "backend": "webgpu",
+    "frames": 9,
+    "readyAtMs": 17635,
+    "errors": [],
+    "differs": null,
+    "logs": []
+  },
+  {
+    "name": "fixture-noaa-webgpu",
+    "ready": true,
+    "ms": 706,
+    "backend": "webgpu",
+    "frames": 9,
+    "readyAtMs": 676,
+    "errors": [],
+    "differs": null,
+    "logs": []
+  },
+  {
+    "name": "fixture-noaa-webgl2",
+    "ready": true,
+    "ms": 804,
+    "backend": "webgl2",
+    "frames": 9,
+    "readyAtMs": 780,
+    "errors": [],
+    "differs": null,
+    "logs": []
+  }
+]

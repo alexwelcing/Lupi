@@ -207,7 +207,7 @@ export function restoreInstancedMeshes(swaps: InstancedSwap[]) {
 }
 
 import { useEffect } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber/webgpu';
 
 export function USDZExportHelper({ trigger, onComplete }: { trigger: boolean, onComplete: () => void }) {
   const { scene } = useThree();

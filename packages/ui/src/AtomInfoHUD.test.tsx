@@ -5,7 +5,7 @@ import { createMockFrame } from '@atlas/core/test-utils';
 import { AtomInfoHUD } from './AtomInfoHUD';
 import { resetStore } from './test-utils';
 
-vi.mock('@react-three/drei', () => ({
+vi.mock('@react-three/drei/webgpu', () => ({
   Html: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 

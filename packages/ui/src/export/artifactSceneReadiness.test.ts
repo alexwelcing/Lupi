@@ -20,7 +20,7 @@ function addArtifactMesh(
 ) {
   const geometry = new THREE.InstancedBufferGeometry();
   geometry.instanceCount = instanceCount;
-  const material = new THREE.ShaderMaterial();
+  const material = new THREE.MeshBasicMaterial();
   material.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY] = specId;
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData[LUPI_ARTIFACT_LAYER_KEY] = layer;

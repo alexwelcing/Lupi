@@ -1,0 +1,24 @@
+diff --git a/webgpu/index.mjs b/webgpu/index.mjs
+index d52491bdd96765b4541ef4b2a6412fae37a360ce..8d67c6d292604ee98504d8a85e28e5fc35adcde4 100644
+--- a/webgpu/index.mjs
++++ b/webgpu/index.mjs
+@@ -1202,11 +1202,17 @@ class TransmissionLightingModel extends PhysicalLightingModel {
+           temporalDistortionUniform
+         );
+         const noiseInput = position.mul(distortionScaleUniform).add(temporalOffset);
+-        const distortionNormal = select(
++        // Lupi patch: compile the distortion noise only for a material built
++        // with distortion on (set distortion before the first render, or set
++        // needsUpdate after turning it on), and evaluate it once, before the
++        // sample loop. SwiftShader's WebGL2 path in Chromium 147 spends
++        // minutes and gigabytes compiling the MaterialX fractal noise, even
++        // behind the runtime distortion > 0 branch.
++        const distortionNormal = distortionUniform.value > 0 ? select(
+           distortionUniform.greaterThan(0),
+           mx_fractal_noise_vec3(noiseInput, int(4), float(2), float(0.5)).mul(distortionUniform),
+           vec3(0)
+-        );
++        ).toVar("distortionNormal") : vec3(0);
+         const thicknessSmear = thickness.mul(max(pow(roughness, 0.33), anisotropicBlurUniform));
+         Loop(sampleCount, ({ i }) => {
+           const fi = float(i);

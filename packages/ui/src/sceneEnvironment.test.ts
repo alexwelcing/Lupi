@@ -9,6 +9,9 @@ import {
   environmentAssetIdentity,
   installSceneEnvironmentPmrem,
   markSceneEnvironmentReady,
+  PMREM_MIN_SOURCE_HEIGHT,
+  PMREM_MIN_SOURCE_WIDTH,
+  preparePmremSource,
 } from './sceneEnvironment';
 import {
   SCIENTIFIC_STUDIO_RIG,
@@ -127,7 +130,6 @@ describe('scene PMREM lifecycle ownership', () => {
     generated.colorSpace = THREE.LinearSRGBColorSpace;
     const disposeTarget = vi.fn();
     const generator = {
-      compileEquirectangularShader: vi.fn(),
       fromEquirectangular: vi.fn(() => ({ texture: generated, dispose: disposeTarget })),
       dispose: vi.fn(),
     };
@@ -145,6 +147,40 @@ describe('scene PMREM lifecycle ownership', () => {
     }
   });
 
+  it('resamples a tiny equirect source so PMREM sizes a real atlas', () => {
+    // The 1×1 fallback HDR (as the smoke harness serves) must not reach
+    // PMREMGenerator as-is: it would size a 336×1 atlas.
+    const half = new Uint16Array([0x3c00, 0x3800, 0x3400, 0x3c00]);
+    const tiny = new THREE.DataTexture(half, 1, 1, THREE.RGBAFormat, THREE.HalfFloatType);
+    tiny.mapping = THREE.EquirectangularReflectionMapping;
+    tiny.colorSpace = THREE.LinearSRGBColorSpace;
+    const prepared = preparePmremSource(tiny);
+    expect(prepared.owned).toBe(true);
+    const image = prepared.texture.image as { width: number; height: number; data: Uint16Array };
+    expect([image.width, image.height]).toEqual([PMREM_MIN_SOURCE_WIDTH, PMREM_MIN_SOURCE_HEIGHT]);
+    expect(image.data).toBeInstanceOf(Uint16Array);
+    expect(Array.from(image.data.slice(-4))).toEqual(Array.from(half));
+    expect(prepared.texture.mapping).toBe(THREE.EquirectangularReflectionMapping);
+    expect(prepared.texture.type).toBe(THREE.HalfFloatType);
+
+    const large = new THREE.DataTexture(new Float32Array(64 * 32 * 4), 64, 32, THREE.RGBAFormat, THREE.FloatType);
+    expect(preparePmremSource(large)).toEqual({ texture: large, owned: false });
+
+    const disposeTarget = vi.fn();
+    const generated = new THREE.Texture({ width: 336, height: 64 });
+    const generator = {
+      fromEquirectangular: vi.fn(() => ({ texture: generated, dispose: disposeTarget })),
+      dispose: vi.fn(),
+    };
+    const scene = new THREE.Scene();
+    const cleanup = installSceneEnvironmentPmrem(scene, tiny, 'studio', () => generator);
+    const used = (generator.fromEquirectangular.mock.calls[0] as unknown as [THREE.Texture])[0];
+    expect(used).not.toBe(tiny);
+    expect((used.image as { width: number }).width).toBe(PMREM_MIN_SOURCE_WIDTH);
+    expect(scene.environment).toBe(generated);
+    cleanup();
+  });
+
   it('commits in the effect transaction and restores/disposes exactly once', () => {
     const scene = new THREE.Scene();
     const previous = new THREE.Texture();
@@ -155,13 +191,11 @@ describe('scene PMREM lifecycle ownership', () => {
     generated.colorSpace = THREE.LinearSRGBColorSpace;
     const disposeTarget = vi.fn();
     const generator = {
-      compileEquirectangularShader: vi.fn(),
       fromEquirectangular: vi.fn(() => ({ texture: generated, dispose: disposeTarget })),
       dispose: vi.fn(),
     };
 
     const cleanup = installSceneEnvironmentPmrem(scene, source, 'studio', () => generator);
-    expect(generator.compileEquirectangularShader).toHaveBeenCalledOnce();
     expect(generator.fromEquirectangular).toHaveBeenCalledWith(source);
     expect(generator.dispose).toHaveBeenCalledOnce();
     expect(scene.environment).toBe(generated);

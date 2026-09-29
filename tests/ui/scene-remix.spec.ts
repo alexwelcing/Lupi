@@ -40,8 +40,9 @@ test('mobile Remix, undo, sphere shader, and the full visual workbench are live'
   const sphere = () => page.evaluate(() => {
     let found: null | { opacity: number; wireframe: boolean; shader: boolean } = null;
     (window as any).__lupi.three.scene.traverse((node: any) => {
-      if (node.material?.uniforms?.uAccent && node.material?.uniforms?.uOpacity) {
-        found = { opacity: node.material.uniforms.uOpacity.value, wireframe: node.material.wireframe, shader: node.material.fragmentShader.includes('fresnel') };
+      const bag = node.material?.userData?.lupiUniforms;
+      if (bag?.uAccent && bag?.uOpacity) {
+        found = { opacity: bag.uOpacity.value, wireframe: node.material.wireframe, shader: node.material.userData.lupiShader === 'fresnel' };
       }
     });
     return found;
@@ -62,14 +63,14 @@ test('mobile Remix, undo, sphere shader, and the full visual workbench are live'
   await page.keyboard.press('Home');
   await expect.poll(() => page.evaluate(() => {
     let brightness = -1;
-    (window as any).__lupi.three.scene.traverse((node: any) => { if (node.material?.uniforms?.brightness) brightness = node.material.uniforms.brightness.value; });
+    (window as any).__lupi.three.scene.traverse((node: any) => { if (node.material?.userData?.lupiUniforms?.brightness) brightness = node.material.userData.lupiUniforms.brightness.value; });
     return brightness;
   })).toBe(.35);
   await library.selectOption('hopf-current');
   await page.getByRole('checkbox', { name: 'Animate background' }).uncheck();
   const time = () => page.evaluate(() => {
     let value = -1;
-    (window as any).__lupi.three.scene.traverse((node: any) => { if (node.material?.uniforms?.uTime) value = node.material.uniforms.uTime.value; });
+    (window as any).__lupi.three.scene.traverse((node: any) => { if (node.material?.userData?.lupiUniforms?.uTime) value = node.material.userData.lupiUniforms.uTime.value; });
     return value;
   });
   const pausedTime = await time();
