@@ -3,13 +3,15 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { Quaternion, Vector3 } from 'three';
+import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import type { LupiIntent } from '@atlas/scene';
 import { getAtomicNumberBySymbol } from '@atlas/core/elements';
 import { computeObjectFacts, type ObjectFactsV1 } from '@atlas/core/objectFacts';
 import type { Frame } from '@atlas/core/types';
 import { TrueSpinCoast } from './trueSpinCoast';
 import { SymmetryDetents } from './symmetryDetents';
 import { objectFactsForFile } from './objectFactsForFile';
+import { RigController, type RigHost } from './rigController';
 import type { Vec3 } from './rigApi';
 
 const GALLERY = join(dirname(fileURLToPath(import.meta.url)), '../../../../apps/web/public/gallery/curated');
@@ -184,6 +186,50 @@ describe('SymmetryDetents', () => {
       expect(angleDeg(hit!.dir, view)).toBeGreaterThan(4);
       const upHit = detents.step(view, r, u, 0, 1);
       expect(upHit && dot(upHit.dir, u)).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('a C60 flick on the camera rig', () => {
+  it('flows into a face (no yank, no hard brake) and rests exactly face-on with its name', () => {
+    for (const dir of directions(16, 17)) {
+      const intents: LupiIntent[] = [];
+      const host: RigHost = {
+        readStore: () => ({ position: [0, 3, 16] as Vec3, target: [0, 0, 0] as Vec3, preset: 'iso' }),
+        writeStore: () => {},
+        emit: (intent) => intents.push(intent),
+        coastEnabled: () => true,
+        glidesAnimate: () => true,
+        viewport: () => ({ left: 0, top: 0, width: 1024, height: 640 }),
+      };
+      const camera = new PerspectiveCamera(50, 1.6);
+      camera.position.set(0, 3, 16);
+      camera.lookAt(0, 0, 0);
+      const rig = new RigController(camera, host, { target: [0, 0, 0] });
+      rig.setCoastModel(new TrueSpinCoast(C60));
+      rig.setDetentProvider(new SymmetryDetents(C60));
+      rig.fling([dir[0] * 6, dir[1] * 6, dir[2] * 6]);
+      const dt = 1 / 60;
+      const last = rig.viewDir();
+      let speed = 0;
+      let captured = -1;
+      for (let t = 0; rig.isBusy() && t < 4; t += dt) {
+        const was = rig.mode;
+        rig.frame(dt);
+        const next = rig.viewDir().angleTo(last) / dt;
+        last.copy(rig.viewDir());
+        if (was === 'coast' && rig.mode === 'detent') captured = speed;
+        else if (captured >= 0 && rig.mode === 'detent') {
+          expect(next).toBeLessThan(captured + 0.1); // it does not speed up to reach the face
+          expect(speed - next).toBeLessThan(0.45); // rad/s per frame: no yank, no hard brake
+        }
+        speed = next;
+      }
+      expect(rig.isBusy()).toBe(false);
+      const view = rig.viewDir();
+      const rest = intents.find((i): i is Extract<LupiIntent, { type: 'camera.rest' }> => i.type === 'camera.rest');
+      const face = C60.detents.find((d) => d.label === rest?.detentLabel && view.angleTo(new Vector3(...d.dir)) < 1e-4);
+      expect(face).toBeDefined();
     }
   });
 });
