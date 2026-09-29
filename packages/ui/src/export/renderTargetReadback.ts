@@ -27,7 +27,7 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three/webgpu';
-import { LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
+import { LUPI_JOB, LUPI_PHASE, beginCaptureRender, runPrepareCapture } from '@atlas/scene';
 import type { SavedViewThumbnail } from '../savedViews';
 import type { LupiBackend } from '../viewer/createLupiRenderer';
 
@@ -97,6 +97,9 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   const previousAutoClearStencil = renderer.autoClearStencil;
   const previousClearColor = renderer.getClearColor(new THREE.Color());
   const previousClearAlpha = renderer.getClearAlpha();
+  // Capture guards (display motion, …) hold toys at rest for exactly this
+  // render; their restores run LIFO first thing in the finally.
+  let restoreGuards = () => {};
 
   try {
     renderer.setRenderTarget(target);
@@ -107,11 +110,13 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
     renderer.autoClearStencil = true;
     if (transparent) renderer.setClearColor(0x000000, 0);
     else renderer.setClearColor(options.clearColor ?? previousClearColor, 1);
+    restoreGuards = beginCaptureRender();
     renderer.render(scene, camera);
   } catch (error) {
     target.dispose();
     throw error;
   } finally {
+    restoreGuards();
     renderer.setClearColor(previousClearColor, previousClearAlpha);
     renderer.autoClear = previousAutoClear;
     renderer.autoClearColor = previousAutoClearColor;
@@ -392,6 +397,8 @@ export function ViewerCaptureService(): null {
     (state) => {
       const queue = queueRef.current;
       if (queue.length === 0) return;
+      // Settle toys (a coasting camera re-levels) before any task reads the camera.
+      runPrepareCapture();
       const context: ViewerCaptureContext = {
         renderer: state.renderer,
         scene: state.scene,
