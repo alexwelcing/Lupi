@@ -10,8 +10,10 @@
  *      the arrival shows only while it runs). The first toy of a session
  *      spells it out: "Illustrative motion, your atoms haven't moved".
  *   2. a flash (detent label, "Caught", "Flip!") until it expires;
- *   3. the teaching line on a first visit, until the first gesture, an atom
- *      tap or 10 s after the first frame;
+ *   3. the teaching line on a first visit, from the file's first frame
+ *      until the first gesture, an atom tap or 10 s later. It waits for
+ *      the frame so that a first visit reads the arrival's label and then
+ *      the line, instead of line, label, line again;
  *   4. nothing (the segment collapses).
  *   Each shown text stays at least 1 s, except that the honesty label
  *   always shows at once.
@@ -43,7 +45,7 @@ export interface PlayPillProps {
 const STATUS_MIN_MS = 1000;
 /** Ripple and scatter keep their honesty label this long after they end (ms). */
 const TOY_HOLD_MS = 1500;
-/** The teaching line shows at most this long after the first frame (ms). */
+/** The teaching line starts at the first frame and shows at most this long (ms). */
 const TEACH_MS = 10_000;
 /** Poke unlatches after this long without a stroke (ms). */
 const POKE_IDLE_MS = 30_000;
@@ -132,7 +134,7 @@ function usePillStatus(teachText: string, stowed: boolean, teachDeadline: number
     if (displaced) desired = { kind: 'displaced', text: h.long ? LONG_LABEL : SHORT_LABEL };
     else if (!isStowed && play.flash && play.flash.until > t) {
       desired = { kind: 'flash', text: play.flash.text, flashKind: play.flash.kind };
-    } else if (!isStowed && !play.teachSeen && (deadline === null || t < deadline)) {
+    } else if (!isStowed && !play.teachSeen && deadline !== null && t < deadline) {
       desired = { kind: 'teach', text };
     } else desired = EMPTY_STATUS;
 
@@ -202,7 +204,7 @@ function useMatch(query: string): boolean {
   return matches;
 }
 
-/** 10 s after the file's first frame (from mount when it already rendered). */
+/** 10 s after the file's first frame (from mount when it already rendered); null until then. */
 function useTeachDeadline(): number | null {
   const trajectory = useStore((state) => state.file?.trajectory ?? null);
   const [deadline, setDeadline] = useState<number | null>(null);

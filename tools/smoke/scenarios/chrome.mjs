@@ -10,7 +10,8 @@
  * 2. With the axes gizmo on, the pill clears the deck, the header capsule
  *    and the gizmo (and sits above the deck on a phone), also while the
  *    first toy's long honesty label shows, and in 844x390 landscape.
- * 3. `p` opens the tray (role=menu, items >= 44 px, inside the viewport);
+ * 3. `p` opens the tray (role=menu, items >= 44 px, inside the viewport,
+ *    over no part of a visible gizmo; clear of the header in landscape);
  *    Escape closes it. The Play segment opens it too.
  * 4. Poke latches from the tray: the pill reads "Poke", the viewport gets
  *    its lime inset, and the x unlatches.
@@ -110,7 +111,8 @@ export default {
     check('the stow button keeps its name, inside the pill', (await pill.getByRole('button', { name: 'Stow viewer controls' }).count()) === 1 && (await stow.getAttribute('aria-pressed')) === 'false');
     // A software renderer can take longer than the line's 10 s to get here:
     // read the page-side timeline, not the current text.
-    await page.waitForFunction(() => window.__chromeRec?.log.some((e) => /Drag to spin/.test(e.text ?? '')), null, { timeout: 12_000 }).catch(() => {});
+    // The line starts at the first frame, after the arrival's label.
+    await page.waitForFunction(() => window.__chromeRec?.log.some((e) => /Drag to spin/.test(e.text ?? '')), null, { timeout: 20_000 }).catch(() => {});
     const rec = await page.evaluate(() => window.__chromeRec);
     outcome.data.statusLog = rec.log;
     const pickVerb = touch ? /Drag to spin · Tap an atom/ : /Drag to spin · Click an atom/;
@@ -141,6 +143,7 @@ export default {
     outcome.data.layout.tray = trayLayout.tray;
     check('tray items are at least 44 px tall', items.length >= 9 && items.every((height) => height >= 44), `heights ${items.join(',')}`);
     check('the tray stays inside the viewport', Boolean(trayLayout.tray) && trayLayout.tray.y >= 0 && trayLayout.tray.x + trayLayout.tray.w <= trayLayout.viewport.w, round(trayLayout.tray));
+    check('the tray covers no part of a visible axes gizmo', !overlaps(trayLayout.tray, trayLayout.gizmo), `tray ${round(trayLayout.tray)} gizmo ${round(trayLayout.gizmo)}`);
     await save('tray', await page.screenshot({ scale: 'css' }));
     await page.keyboard.press('Escape');
     check('Escape closes the tray', await menu.waitFor({ state: 'detached', timeout: 3_000 }).then(() => true, () => false));
@@ -206,7 +209,7 @@ export default {
       await menu.waitFor({ state: 'visible', timeout: 3_000 }).catch(() => {});
       await settled(menu);
       const landTray = await layout(page);
-      check('landscape: the tray fits the viewport', Boolean(landTray.tray) && landTray.tray.y >= 0 && landTray.tray.y + landTray.tray.h <= land.viewport.h, round(landTray.tray));
+      check('landscape: the tray fits the viewport, clear of the header', Boolean(landTray.tray) && landTray.tray.y >= 0 && landTray.tray.y + landTray.tray.h <= land.viewport.h && !overlaps(landTray.tray, landTray.header), `tray ${round(landTray.tray)} header ${round(landTray.header)}`);
       await save('landscape-tray', await page.screenshot({ scale: 'css' }));
       await page.keyboard.press('Escape');
     }

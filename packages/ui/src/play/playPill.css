@@ -248,6 +248,18 @@
     --lupi-axes-gizmo-lift: calc(120px + env(safe-area-inset-bottom));
   }
   .lupine-app-root:not([data-ui-stowed='true']):has(.lupine-axes-gizmo) .lupi-play-pill { max-width: calc(100vw - 20px); }
+  /* The tray spans the row, flush with the deck, over the gizmo's corner;
+     the gizmo steps aside while it is open (a red X peeking past the
+     tray's edge reads as a close badge). */
+  .lupi-play-tray { width: calc(100vw - 20px); }
+  .lupi-play-tray__row { grid-template-columns: 76px repeat(3, minmax(0, 1fr)); }
+  .lupi-play-pill .lupi-play-tray__item { padding: 4px 6px; }
+  .lupine-app-root:has(.lupi-play-tray) .lupine-axes-gizmo { visibility: hidden; }
+}
+
+/* Short landscape: a tighter tray keeps clear of the header capsule. */
+@media (max-height: 500px) and (max-width: 900px) {
+  .lupi-play-tray { bottom: calc(100% + 6px); gap: 3px; padding: 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
