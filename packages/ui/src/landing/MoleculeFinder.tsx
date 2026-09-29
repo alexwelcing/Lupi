@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store';
 import { openPubChemMolecule, pubchemAutocomplete, PUBCHEM_COMPOUND_COUNT_LABEL } from '../molecules/pubchemLoad';
 import { LOCAL_MOLECULES, searchLocalMolecules, type LocalMolecule } from './moleculeIndex';
+import type { RelayBaton } from '../relay/baton';
 
 /**
  * The landing page's first fast path: one search box, results on the first
@@ -25,7 +26,11 @@ const PUBCHEM_DEBOUNCE_MS = 150;
 const LOCAL_LIMIT = 6;
 const PUBCHEM_LIMIT = 8;
 
-export function openLocalMolecule(id: string): Promise<void> {
+export function openLocalMolecule(
+  id: string,
+  opts?: { source?: RelayBaton['source']; fromRect?: DOMRect | null },
+): Promise<void> {
+  void opts; // The relay stage (sage from tap to first frame) will use these.
   // Code-split: the gallery loader drags in the streaming/MLIP machinery,
   // which the landing bundle must not pay for until a pick happens.
   return import('../viewer/openMolecule').then(async ({ openMolecule }) => {

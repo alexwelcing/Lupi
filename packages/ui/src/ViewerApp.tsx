@@ -19,7 +19,6 @@ import {
 import { detectFrameVectorFields } from '@atlas/core';
 import type { VectorGlyphStats } from '@atlas/scene';
 
-import { LandingPage } from './LandingPage';
 import { SceneLandingPage } from './landing/SceneLandingPage';
 import { SeoEducationPage } from './landing/SeoEducationPage';
 import {
@@ -94,6 +93,11 @@ import { LabelPerfHUD } from './LabelPerfHUD';
 import { PropertyLegendHUD } from './PropertyLegendHUD';
 import { DevProbe } from './DevProbe';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
+import { emitIntent } from '@atlas/scene';
+import { PlayPill } from './play/PlayPill';
+import { LandingFallback } from './relay/LandingFallback';
+import { FirstFrameOverlay } from './relay/FirstFrameOverlay';
+import { withCameraGlide } from './camera/rigApi';
 
 const EMPTY_TRAJECTORY_FRAMES: Array<import('@atlas/core/types').Frame | undefined> = [];
 
@@ -615,7 +619,7 @@ export function ViewerApp() {
       style={{
         height: file || isEmbeddedMobileViewer ? '100dvh' : 'auto',
         overflow: file || isEmbeddedMobileViewer ? 'hidden' : 'visible',
-        background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#020204',
+        background: file ? `linear-gradient(180deg, ${bg.top}, ${bg.bottom})` : '#101817',
       }}
     >
       {!isEmbeddedMobileViewer && (
@@ -702,6 +706,7 @@ export function ViewerApp() {
               />
               <PresetLegacyBridge />
             </ViewerCanvas>
+            <FirstFrameOverlay />
 
             {!isEmbeddedMobileViewer && import.meta.env.DEV && showDebugHud && <StateInspector />}
             {!isEmbeddedMobileViewer && <RendererWarningToast />}
@@ -755,25 +760,7 @@ export function ViewerApp() {
         {file && !isEmbeddedMobileViewer && <PanelHost />}
 
         {file && !isEmbeddedMobileViewer && (
-          <button
-            type="button"
-            className="lupine-ui-bucket"
-            data-stowed={uiStowed}
-            aria-label={uiStowed ? 'Restore viewer controls' : 'Stow viewer controls'}
-            aria-pressed={uiStowed}
-            title={uiStowed ? 'Restore controls' : 'Stow all controls'}
-            onClick={() => setUiStowed(value => !value)}
-          >
-            <span className="lupine-ui-bucket__orb" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-            <span className="lupine-ui-bucket__label">{uiStowed ? 'Restore' : 'Clear view'}</span>
-            <span className="lupine-ui-bucket__count" aria-hidden="true">
-              {uiStowed ? 'UI' : '↓'}
-            </span>
-          </button>
+          <PlayPill uiStowed={uiStowed} setUiStowed={setUiStowed} />
         )}
 
         {!file && !isEmbeddedMobileViewer && (
@@ -787,7 +774,7 @@ export function ViewerApp() {
             ) : seoEducationKind ? (
               <SeoEducationPage kind={seoEducationKind} />
             ) : (
-              <LandingPage />
+              <LandingFallback />
             )}
           </div>
         )}
@@ -940,32 +927,53 @@ export function ViewerApp() {
               onSelect: () => setActivePanel('flythrough'),
             },
             {
+              id: 'settings-panel',
+              label: 'Open settings',
+              group: 'Panels',
+              onSelect: () => setActivePanel('settings'),
+            },
+            {
+              id: 'play-tray',
+              label: 'Open Play',
+              group: 'Scene',
+              shortcut: 'P',
+              disabled: !file,
+              onSelect: () => emitIntent({ type: 'play.toggleTray', source: 'palette' }),
+            },
+            {
+              id: 'play-reset',
+              label: 'Reset illustrative motion',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => emitIntent({ type: 'play.reset' }),
+            },
+            {
               id: 'camera-top',
               label: 'Camera top view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => useStore.getState().setCameraPreset('top'),
+              onSelect: () => withCameraGlide(() => useStore.getState().setCameraPreset('top')),
             },
             {
               id: 'camera-side',
               label: 'Camera side view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => useStore.getState().setCameraPreset('side'),
+              onSelect: () => withCameraGlide(() => useStore.getState().setCameraPreset('side')),
             },
             {
               id: 'camera-front',
               label: 'Camera front view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => useStore.getState().setCameraPreset('front'),
+              onSelect: () => withCameraGlide(() => useStore.getState().setCameraPreset('front')),
             },
             {
               id: 'camera-iso',
               label: 'Camera isometric view',
               group: 'Camera',
               disabled: !file,
-              onSelect: () => useStore.getState().setCameraPreset('iso'),
+              onSelect: () => withCameraGlide(() => useStore.getState().setCameraPreset('iso')),
             },
             {
               id: 'toggle-bonds',

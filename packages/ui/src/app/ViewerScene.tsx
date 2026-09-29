@@ -16,7 +16,7 @@ import {
 import { reportActiveTransmissionQuality } from '../mcp/transmissionRuntime';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
 import { Bonds } from '@atlas/scene/Bonds';
-import { validateSourceBondTopology } from '@atlas/scene';
+import { emitIntent, validateSourceBondTopology } from '@atlas/scene';
 import { SimulationCell } from '@atlas/scene/SimulationCell';
 import { VectorGlyphs, type VectorGlyphStats } from '@atlas/scene';
 import {
@@ -38,6 +38,9 @@ import {
   requiredMeasurementAtoms,
 } from '../measurements';
 import { CameraFocus } from '../CameraFocus';
+import { PlayLayer } from '../play/PlayLayer';
+import { CameraToys } from '../camera/CameraToys';
+import { markCanvasSelection } from '../camera/selectionSource';
 import { AtomTrails } from '../AtomTrails';
 import { MoleculeFilterShell } from '../MoleculeFilterShell';
 import { MoleculeShadow } from '../MoleculeShadow';
@@ -671,6 +674,13 @@ export function ViewerScene({
             )}
           />
           <CameraFocus frame={currentFrame} enabled={!flythroughPreview} />
+          <PlayLayer
+            frame={currentFrame}
+            center={center}
+            transmissionActive={transmissionActive}
+            playing={playing}
+          />
+          <CameraToys frame={currentFrame} />
           <AtomTrails
             frame={currentFrame}
             frameKey={interpolatedFrameKey}
@@ -684,15 +694,17 @@ export function ViewerScene({
               spatialHash={spatialHash}
               hiddenAtomTypes={hiddenAtomTypes}
               enabled={!measurementTool || Boolean(measurementFrame)}
-              onClick={(atomIndex) => {
+              onClick={(atomIndex, info?: { shiftKey: boolean }) => {
                 if (atomIndex == null) return;
-                const isAnnotate = !measurementTool && (window as any).__atlasShiftHeld === true;
+                const isAnnotate = !measurementTool
+                  && (info?.shiftKey ?? (window as any).__atlasShiftHeld === true);
                 if (isAnnotate) {
                   const text = window.prompt('Annotation text', `atom #${atomIndex}`);
                   if (text && text.trim()) {
                     useStore.getState().addAnnotation(atomIndex, text.trim());
                   }
                 }
+                if (!isAnnotate && !measurementTool) emitIntent({ type: 'atom.tap', atomIndex });
               }}
               onHover={(atomIndex) => useStore.getState().setHoveredAtom(atomIndex)}
               selectionMode={measurementTool ? 'measure' : 'single'}
@@ -700,6 +712,7 @@ export function ViewerScene({
               onSelect={(indices) => {
                 const state = useStore.getState();
                 if (!measurementTool) {
+                  markCanvasSelection();
                   state.setSelectedAtoms(indices);
                   return;
                 }

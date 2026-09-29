@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { getDeviceTier, type DeviceTier } from '../deviceCapabilities';
 import type { RenderCapability } from '../renderCapability';
 import { LupiCanvas } from './LupiCanvas';
+import { FirstFrameSignal } from '../relay/FirstFrameSignal';
 
 interface ViewerCanvasProps {
   capability: RenderCapability;
@@ -51,6 +52,7 @@ export function ViewerCanvas({
       dpr={viewerDprRange()}
     >
       {children}
+      <FirstFrameSignal />
     </LupiCanvas>
   );
 }
