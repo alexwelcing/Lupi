@@ -13,7 +13,7 @@
  * writes `comfort.ts`, never the viewer store, URLs or saved views.
  */
 import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { emitIntent } from '@atlas/scene';
+import { emitIntent, isCanvasInputSourceActive } from '@atlas/scene';
 import { useStore } from '../store';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
 import { cue } from './feedback';
@@ -87,6 +87,9 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
       const target = event.target as Node | null;
       if (!target) return;
       if (menuRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      // A right click on the canvas toggles the tray itself (play.toggleTray
+      // on release): closing it here would only reopen it.
+      if (event.button === 2 && target instanceof HTMLCanvasElement && isCanvasInputSourceActive()) return;
       closeRef.current();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
