@@ -118,9 +118,11 @@ async function storeCamera(page) {
   return { position: json.cp3 ?? [0, 0, 50], target: json.ct ?? [0, 0, 0] };
 }
 
+const FLICK_DX = { touch: 100, mouse: 130 };
+
 async function flick(page, h, touch, start) {
-  if (touch) await h.touchFlick(page, start, { dx: 100, dy: 0 }, { ms: 100 });
-  else await h.mouseFlick(page, start, { dx: 130, dy: 0 }, { ms: 100 });
+  if (touch) await h.touchFlick(page, start, { dx: FLICK_DX.touch, dy: 0 }, { ms: 100 });
+  else await h.mouseFlick(page, start, { dx: FLICK_DX.mouse, dy: 0 }, { ms: 100 });
 }
 
 export default {
@@ -194,7 +196,9 @@ export default {
     if (shown.length > 2) await save('flick-mid', shown[Math.floor(shown.length / 2)]);
     await save('flick-rest', (await h.captureCanvas(page, canvas)).png);
     if (still) {
-      check('Still: a flick does not coast', changeSpan <= 250 && !settle.timedOut, `screen changed over ${changeSpan} ms`);
+      // The drag itself turns pi rad per canvas height; anything beyond it would be a coast.
+      const dragged = deg((Math.PI * (touch ? FLICK_DX.touch : FLICK_DX.mouse)) / (await canvas.boundingBox()).height);
+      check('Still: a flick turns only as far as it was dragged (no coast)', Math.abs(coasted - dragged) < 0.5 && !settle.timedOut, `turned ${coasted.toFixed(2)} deg, dragged ${dragged.toFixed(2)} deg`);
     } else {
       check('a flick keeps turning after release (screen changes over >= 400 ms)', changeSpan >= 400 && settleMs >= 300, `changed over ${changeSpan} ms in ${shown.length} presented frames; the rig moved ${Math.round(settleMs)} ms`);
       check('the flick comes to rest in under 4 s', !settle.timedOut && settleMs < 4_000, `moved for ${Math.round(settleMs)} ms (first moving frame to rest), turned ${coasted.toFixed(0)} deg net`);
