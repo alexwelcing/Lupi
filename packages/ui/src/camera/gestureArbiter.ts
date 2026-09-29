@@ -384,7 +384,13 @@ export interface GestureArbiter {
   dispose(): void;
 }
 
-const CLICK_SWALLOW_MS = 400;
+/**
+ * A drag's or a catch's click is swallowed. The click arrives after the
+ * pointerup, and on a busy main thread (a software renderer, a slow phone)
+ * that can be seconds later, so the window is long; any new pointerdown ends
+ * it, because a click always follows its own pointerdown.
+ */
+const CLICK_SWALLOW_MS = 3_000;
 const ELEMENT_STYLES = ['touch-action', 'user-select', '-webkit-user-select', '-webkit-touch-callout'] as const;
 
 function pointerKind(type: string): PointerKind {
@@ -454,10 +460,14 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
     machine.hoverEnd();
   };
 
+  // Any new press, anywhere, starts a new click sequence.
+  const onAnyPointerDown = () => {
+    swallowClickUntil = 0;
+  };
+
   const onPointerDown = (e: PointerEvent) => {
     if (!isCanvasTarget(e.target)) return;
     if (e.pointerType === 'mouse' && e.button > 2) return;
-    swallowClickUntil = 0;
     const { tracked, caught } = machine.down(normalize(e));
     if (!tracked) return;
     try {
@@ -576,6 +586,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   element.addEventListener('contextmenu', onContextMenu);
   element.addEventListener('gesturestart', onGestureStart);
   element.addEventListener('gesturechange', onGestureChange);
+  window.addEventListener('pointerdown', onAnyPointerDown, true);
   window.addEventListener('click', onClickCapture, true);
   window.addEventListener('blur', onBlur);
   document.addEventListener('visibilitychange', onVisibility);
@@ -595,6 +606,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
       element.removeEventListener('contextmenu', onContextMenu);
       element.removeEventListener('gesturestart', onGestureStart);
       element.removeEventListener('gesturechange', onGestureChange);
+      window.removeEventListener('pointerdown', onAnyPointerDown, true);
       window.removeEventListener('click', onClickCapture, true);
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onVisibility);

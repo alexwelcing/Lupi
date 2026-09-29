@@ -155,7 +155,7 @@ describe('RigController', () => {
     expect(camera.quaternion.equals(q)).toBe(true);
   });
 
-  it('catches a coast, relevels and swallows nothing else', () => {
+  it('catches a coast and announces the catch', () => {
     const { rig, intents } = makeRig();
     rig.fling([0, 4, 0]);
     rig.frame(1 / 60);
