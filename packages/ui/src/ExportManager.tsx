@@ -1041,6 +1041,14 @@ export function ExportManager() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportRequest]);
 
+  // Leaving the viewer mid-recording must not leave the toys suspended
+  // (display motion's suspend flag is module state and outlives this mount).
+  useEffect(() => () => {
+    const stopRecordingGuards = recordingRestoreRef.current;
+    recordingRestoreRef.current = null;
+    stopRecordingGuards?.();
+  }, []);
+
   return (
     <>
       <ViewerCaptureService />
