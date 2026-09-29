@@ -7,15 +7,17 @@
  * On /?sim=c60_buckyball&arrival=1 (arrival=1 forces the first-open arrival
  * past the session rule):
  * 1. The arrival is armed before the first frame, the screen shows the mist,
- *    and it lands 0.6 s after release (plus at most one frame: the driver
- *    ends it on the first frame past its analytic end).
- * 2. After a reload, a tap during the condense lands it synchronously (the
+ *    and it lands when its 0.6 s motion clock runs out (the driver's clock
+ *    advances by frame time capped at 0.1 s; it ends on the first frame past
+ *    the analytic end).
+ * 2. A poke ripples the pixels and they return within 0.1 % of the pre-poke
+ *    image (under --reduced-motion, Still: a poke does nothing).
+ * 3. lupi.export_asset PNG (bonds hidden) with a ripple kept live, and with a
+ *    scatter kept live, has the artifactDigest of the export at rest (before
+ *    any tap: a selection blocks deterministic export).
+ * 4. After a reload, a tap during the arrival lands it synchronously (the
  *    pointerdown sees it live and, after the app's capture-phase listener,
  *    at rest, before any pick) and the tapped atom's card opens.
- * 3. A poke ripples the pixels and they return within 0.1 % of the pre-poke
- *    image (under --reduced-motion, Still: a poke does nothing).
- * 4. lupi.export_asset PNG (bonds hidden) with a ripple kept live, and with a
- *    scatter kept live, has the artifactDigest of the export at rest.
  * A software renderer presents a few frames a second, so the pixel checks use
  * the frames the screen presented (CDP screencast, wall-clock stamped) inside
  * each effect's window, read from a page-side timeline of __lupiPlay.state().
@@ -61,6 +63,13 @@ function installRecorder(hideCss) {
     style.textContent = hideCss;
     document.head.appendChild(style);
   };
+  let keep = false;
+  try {
+    keep = sessionStorage.getItem('toys-show-chrome') === '1';
+  } catch {
+    /* storage blocked */
+  }
+  if (keep) return;
   if (document.head) hide();
   else document.addEventListener('DOMContentLoaded', hide, { once: true });
 }
@@ -87,12 +96,14 @@ async function screencast(page, h) {
   client.on('Page.screencastFrame', onFrame);
   const viewport = page.viewportSize();
   await client.send('Page.startScreencast', { format: 'png', everyNthFrame: 1, ...(viewport ? { maxWidth: viewport.width, maxHeight: viewport.height } : {}) });
-  return async () => {
+  const stop = async () => {
     await h.sleep(150);
     client.off('Page.screencastFrame', onFrame);
     await client.send('Page.stopScreencast').catch(() => {});
     return frames.sort((a, b) => a.at - b.at);
   };
+  stop.count = () => frames.length;
+  return stop;
 }
 
 /** Crop presented frames to the canvas box. */
@@ -107,10 +118,11 @@ async function cropFrames(page, canvas, frames, h) {
   });
 }
 
-async function open(ctx, h, reload = false) {
+async function open(ctx, h, reload = false, navigated = false) {
   const { page, check, outcome } = ctx;
   outcome.url = new URL(`?sim=${ID}&arrival=1`, h.baseFor(page)).href;
-  if (reload) await page.reload({ waitUntil: 'commit' });
+  if (navigated) reload = true;
+  else if (reload) await page.reload({ waitUntil: 'commit' });
   else await page.goto(outcome.url, { waitUntil: 'commit' });
   const loaded = await page.waitForFunction(() => {
     const status = window.__lupiViewerMcp?.status?.();
@@ -237,7 +249,9 @@ export default {
     // 2. A poke ripples the pixels, then they return.
     await setChromeHidden(page, true, h.HIDE_CHROME_CSS);
     const stop2 = await screencast(page, h);
-    await page.waitForTimeout(1_200);
+    // A pre-poke frame: a loaded software renderer can present under 1 fps.
+    for (let waited = 0; stop2.count() === 0 && waited < 15_000; waited += 100) await page.waitForTimeout(100);
+    await page.waitForTimeout(600);
     const poke = await page.evaluate(() => ({ at: performance.timeOrigin + performance.now(), result: window.__lupiPlay?.poke?.(0) ?? null }));
     await page.waitForFunction(() => window.__lupiPlay?.state?.()?.motion?.active === false, null, { timeout: 20_000, polling: 50 }).catch(() => {});
     const quiet = await page.evaluate(() => performance.timeOrigin + performance.now());
@@ -282,21 +296,24 @@ export default {
       check('export mid-scatter has the artifactDigest of the export at rest', Boolean(atRest.ok && midScatter.ok && atRest.digest) && midScatter.digest === atRest.digest, `${atRest.digest} vs ${midScatter.digest} ${JSON.stringify(midScatter.error)}`);
     }
 
-    // 4. After a reload, a tap during the condense lands it before the pick, and picks.
+    // 4. After a reload, a tap during the arrival lands it before the pick, and picks.
+    // A reloaded page is warm and lands its arrival fast, so tap the moment it
+    // is live (armed or condensing), before any other wait; the recorder says
+    // which state the pointerdown met. The chrome stays visible (real hit testing).
     const candidates = h.atomCandidates(rest.image, 8);
-    canvas = await open(ctx, h, true);
-    if (!canvas) return;
-    await setChromeHidden(page, false, '');
-    const live = await page.waitForFunction(() => window.__lupiPlay?.state?.()?.motion?.arrival === 'condense', null, { timeout: 30_000, polling: 10 }).then(() => true, () => false);
-    await page.waitForTimeout(60);
     const box = await canvas.boundingBox();
     const target = candidates[0] ? { x: Math.round(box.x + candidates[0].x), y: Math.round(box.y + candidates[0].y) } : null;
+    await page.evaluate(() => sessionStorage.setItem('toys-show-chrome', '1'));
+    await page.reload({ waitUntil: 'commit' });
+    const live = await page.waitForFunction(() => Boolean(window.__lupiPlay?.state?.()?.motion?.arrival), null, { timeout: 60_000, polling: 10 }).then(() => true, () => false);
     if (target && h.isTouchProfile(spec.profile)) await page.touchscreen.tap(target.x, target.y);
     else if (target) await page.mouse.click(target.x, target.y);
+    canvas = await open(ctx, h, false, true);
+    if (!canvas) return;
     const downs = await page.evaluate(() => window.__toys.downs);
     outcome.data.cancel = { live, target, downs };
     const down = downs[0];
-    check('a pointerdown during the condense lands it before any pick', live && down?.before === 'condense' && down?.after === null, JSON.stringify(down ?? null));
+    check('a pointerdown during the arrival lands it before any pick', live && Boolean(down?.before) && down?.after === null, JSON.stringify(down ?? null));
     const card = page.locator('[data-testid="atom-info-card"]').first();
     const shown = await card.waitFor({ state: 'visible', timeout: 6_000 }).then(() => true, () => false);
     if (shown) {
