@@ -1,15 +1,18 @@
 /**
  * <AtomInfoHUD /> - data card for the clicked atom.
  *
- * Desktop: a compact card anchored just above the atom, rendered at a constant
- * screen size so it stays legible at any zoom.
+ * Desktop: a compact card anchored just above the atom (below it when there is
+ * no room above), rendered at a constant screen size so it stays legible at any
+ * zoom. It never covers the atom it describes: the ripple on a tapped atom
+ * stays visible, and a double-click on it reaches the canvas and glides there.
  * Phone: the same content docks as a sheet under the header (full width, larger
  * type, 44px close target) instead of floating over the molecule, where a
  * world-anchored card scales unpredictably and drifts off-screen.
  */
 
-import { useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Html } from '@react-three/drei/webgpu';
+import { Vector3, type Camera, type Object3D } from 'three';
 import type { Frame } from '@atlas/core/types';
 import {
   ELEMENT_DATA,
@@ -28,6 +31,51 @@ const MAX_KNOWLEDGE_ROWS = 4;
 
 /** Header (64px + safe area on phones) plus breathing room. */
 const MOBILE_DOCK_TOP = 'calc(76px + env(safe-area-inset-top))';
+
+/** Desktop card: fixed width, a gap from the atom's edge, and room kept for the header. */
+const CARD_WIDTH_PX = 248;
+const CARD_GAP_PX = 12;
+const CARD_EDGE_PX = 8;
+const CARD_TOP_RESERVE_PX = 72;
+/** Height assumed before the card has laid out (generous, so a first frame never covers the atom). */
+const CARD_HEIGHT_GUESS_PX = 320;
+
+const scratchCardAnchor = new Vector3();
+const scratchCardView = new Vector3();
+
+/**
+ * Top-left (px) of the desktop card for an atom of world `radius` at the Html
+ * group's position: above the atom's screen disc, or below it when the card
+ * does not fit above; clamped into the canvas horizontally.
+ */
+function anchoredCardPosition(
+  object: Object3D,
+  camera: Camera,
+  size: { width: number; height: number },
+  radius: number,
+  card: HTMLElement | null,
+): [number, number] {
+  const anchor = scratchCardAnchor.setFromMatrixPosition(object.matrixWorld);
+  const view = scratchCardView.copy(anchor).applyMatrix4(camera.matrixWorldInverse);
+  anchor.project(camera);
+  const halfW = size.width / 2;
+  const halfH = size.height / 2;
+  const cx = anchor.x * halfW + halfW;
+  const cy = -anchor.y * halfH + halfH;
+  const focal = camera.projectionMatrix.elements[5];
+  const perspective = (camera as { isPerspectiveCamera?: boolean }).isPerspectiveCamera === true;
+  const depth = -view.z;
+  const r = perspective ? (depth > 1e-6 ? (radius * focal * halfH) / depth : 0) : radius * focal * halfH;
+  const width = card?.offsetWidth || CARD_WIDTH_PX;
+  const height = card?.offsetHeight || CARD_HEIGHT_GUESS_PX;
+  const maxLeft = size.width - width - CARD_EDGE_PX;
+  const left = maxLeft >= CARD_EDGE_PX ? Math.min(maxLeft, Math.max(CARD_EDGE_PX, cx - width / 2)) : cx - width / 2;
+  const above = cy - r - CARD_GAP_PX - height;
+  const below = cy + r + CARD_GAP_PX;
+  const fitsAbove = above >= CARD_TOP_RESERVE_PX;
+  const fitsBelow = below + height <= size.height - CARD_EDGE_PX;
+  return [left, fitsAbove || !fitsBelow ? above : below];
+}
 
 const FONT_SANS = "'IBM Plex Sans', Inter, ui-sans-serif, system-ui, sans-serif";
 const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -58,6 +106,13 @@ export function AtomInfoHUD({
   const showNeighbors = useStore(s => s.showNeighbors);
   const setShowNeighbors = useStore(s => s.setShowNeighbors);
   const setHighlightedNeighbors = useStore(s => s.setHighlightedNeighbors);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const radiusRef = useRef(0);
+  const placeCard = useCallback(
+    (object: Object3D, camera: Camera, size: { width: number; height: number }) =>
+      anchoredCardPosition(object, camera, size, radiusRef.current, cardRef.current),
+    [],
+  );
   const validAtomIndex = atomIndex != null && atomIndex >= 0 && atomIndex < frame.natoms;
   const nodeLabel = validAtomIndex
     ? knowledgeLabels.find((l) => l.kind === 'node' && l.atomIndex === atomIndex)
@@ -85,6 +140,7 @@ export function AtomInfoHUD({
   const typeLabel = resolveTypeLabel(frame, type);
   const typeColor = resolveTypeColor(frame, type);
   const displayRadius = resolveTypeDisplayRadius(frame, type);
+  radiusRef.current = displayRadius;
   const coordinateUnit = hasAngstromDistances(frame) ? 'Å' : 'source units';
   const properties = getPropertyRows(frame, atomIndex, activeProperty);
   const knowledge = getKnowledgeRows(knowledgeLabels, frame, atomIndex);
@@ -96,6 +152,7 @@ export function AtomInfoHUD({
 
   const card = (
     <div
+      ref={cardRef}
       data-testid="atom-info-card"
       data-atom-index={atomIndex}
       data-layout={isMobile ? 'sheet' : 'anchored'}
@@ -329,8 +386,8 @@ export function AtomInfoHUD({
 
   return (
     <Html
-      position={[x, y + displayRadius * 1.75 + 0.45, z]}
-      center
+      position={[x, y, z]}
+      calculatePosition={placeCard}
       style={{ pointerEvents: 'auto' }}
     >
       {card}
