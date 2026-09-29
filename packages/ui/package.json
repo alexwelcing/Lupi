@@ -9,6 +9,8 @@
     ".": "./src/App.tsx",
     "./App": "./src/App.tsx",
     "./store": "./src/store.ts",
+    "./viewer/LupiCanvas": "./src/viewer/LupiCanvas.tsx",
+    "./renderCapability": "./src/renderCapability.ts",
     "./FileDropZone": "./src/FileDropZone.tsx",
     "./panels/StylePanel": "./src/panels/StylePanel.tsx",
     "./panels/EffectsPanel": "./src/panels/EffectsPanel.tsx",

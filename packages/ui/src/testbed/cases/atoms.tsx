@@ -259,7 +259,7 @@ function AttributeAudit() {
     const frame = requestAnimationFrame(() => {
       const narrow: string[] = [];
       let atomData = 0;
-      scene.traverse((object) => {
+      scene.traverse((object: THREE.Object3D) => {
         const geometry = (object as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
         if (!geometry?.attributes) return;
         for (const [name, attribute] of Object.entries(geometry.attributes)) {

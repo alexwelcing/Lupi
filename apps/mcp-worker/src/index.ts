@@ -20,6 +20,7 @@ import {
   type RenderRequestSpecV1,
 } from '@atlas/core';
 import { routeScienceData } from './scienceData';
+import { CHATGPT_MCP_PATH, handleChatGptMcp } from './chatgpt';
 import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } from './jev';
 import { SCAN_ROUTE, handleScanIdentify, scanConfigured, scanVisionModel } from './scan';
 import { GIST_ROUTE, SCULPT_ROUTE, handleScanGist, handleScanSculpt } from './gist';
@@ -615,6 +616,7 @@ export async function handleRequest(
   ctx: { waitUntil?: (promise: Promise<unknown>) => void } = {},
 ): Promise<Response> {
   const url = new URL(request.url);
+  if (url.pathname === CHATGPT_MCP_PATH) return handleChatGptMcp(request, env);
   const cors = corsHeaders(request, env);
 
   if (request.method === 'OPTIONS') {

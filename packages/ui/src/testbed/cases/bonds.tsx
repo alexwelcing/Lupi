@@ -331,7 +331,7 @@ function AttributeAudit() {
       const narrow: string[] = [];
       const wrongColors: string[] = [];
       let bondMeshes = 0;
-      scene.traverse((object) => {
+      scene.traverse((object: THREE.Object3D) => {
         const geometry = (object as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
         if (!geometry?.attributes) return;
         for (const [name, attribute] of Object.entries(geometry.attributes)) {

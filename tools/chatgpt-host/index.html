@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lupi Live — Development MCP host</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f3f4f1;color:#203329;font:15px/1.5 system-ui,sans-serif}.shell{max-width:900px;margin:auto;padding:28px 24px 70px}.eyebrow{color:#627067;text-transform:uppercase;font-size:11px;font-weight:650;letter-spacing:.13em}h1{font-size:29px;line-height:1.15;margin:8px 0 12px;letter-spacing:-.04em}p{margin:8px 0;color:#637168}.notice{border-left:3px solid #698373;padding-left:13px;font-size:13px}.tools{margin:24px 0 20px;padding:18px;background:#fff;border:1px solid #d8dfd8;border-radius:14px}label{display:block;font-weight:550;font-size:13px;margin-bottom:7px}.input-row{display:flex;gap:8px}input[type=text]{flex:1;min-width:80px;border:1px solid #bfcac1;border-radius:8px;padding:11px;font:inherit;background:#fff;color:#203329}button{font:inherit;cursor:pointer;border:1px solid #bdc8bf;border-radius:8px;padding:9px 12px;background:#f7f9f6;color:#294734}button.primary{background:#244b36;color:white;border-color:#244b36}button:disabled{opacity:.45;cursor:default}.check{font-weight:400;display:flex;align-items:center;gap:6px;margin:12px 0 0;color:#647066;font-size:12px}.followups{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}.followups button{font-size:12px}.status{font-size:13px;min-height:24px;margin-top:12px}.status[data-error=true]{color:#aa3232}.card-wrap{margin:22px 0}.card-label{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 8px;font-size:12px;color:#67786c}.card-label button{font-size:11px;padding:4px 8px}.card-wrap[data-active=true] .card-label{color:#254f35}.widget{display:block;width:100%;height:750px;border:1px solid #d5ded7;border-radius:18px;background:#fff}details.developer{margin-top:20px;color:#667168;font-size:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#e9eee8;border:1px solid #d7dfd5;border-radius:8px;padding:12px;font:11px/1.6 ui-monospace,monospace}.empty{padding:40px 24px;border:1px dashed #cbd4cc;border-radius:14px;text-align:center}.candidate{margin:10px 8px 0 0}.card-wrap.expanded{position:fixed;inset:0;margin:0;padding:10px;z-index:10;background:#eff3ec;overflow:auto}.card-wrap.expanded .widget{height:calc(100vh - 56px)!important}a{color:#29543c}@media(max-width:600px){.shell{padding:20px 10px 40px}h1{font-size:25px}.tools{padding:13px}.notice{font-size:12px}.input-row button{padding:8px;font-size:13px}.card-label{font-size:11px}.widget{border-radius:14px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header><div class="eyebrow">Lupi Live · Integration lab</div><h1>Development MCP host</h1><p class="notice">This local page tests the actual Lupi MCP server and its embedded viewer using the MCP Apps SDK. It is not ChatGPT and does not prove installation or rendering in ChatGPT.</p></header>
+    <section class="tools">
+      <form id="molecule-form"><label for="molecule-query">Retrieve a molecule from PubChem</label><div class="input-row"><input id="molecule-query" name="query" type="text" value="L-theanine" maxlength="200" required autocomplete="off" /><button class="primary" id="show-button" type="submit" disabled>Show molecule</button></div><label class="check"><input id="fresh-lookup" type="checkbox" checked />Fresh PubChem lookup (bypass the Lupi cache)</label></form>
+      <div class="followups"><button id="highlight-button" type="button" disabled>Highlight nitrogen in selected card</button><button id="co2-button" type="button" disabled>Show carbon dioxide</button><button id="reopen-button" type="button" disabled>Reopen selected result</button></div>
+      <div id="host-status" class="status" role="status">Connecting to local MCP server…</div><div id="candidates"></div>
+    </section>
+    <section id="cards" aria-label="Molecule result cards"><div class="empty"><strong>A source record, then an interactive structure.</strong><p>Start with L-theanine. The host will resolve its PubChem identity and open the returned UI resource.</p></div></section>
+    <details class="developer"><summary>Model context received from the selected card</summary><pre id="model-context">No card interaction yet.</pre></details>
+  </main>
+  <script type="module" src="/host.js"></script>
+</body>
+</html>

@@ -53,6 +53,25 @@ pnpm dev
 
 Open `http://localhost:5173`.
 
+## Lupi Live in ChatGPT (development)
+
+The plugin adapter resolves public PubChem names or CIDs and opens the returned
+structure in an embedded Lupi viewer. It exposes `resolve_molecule` and
+`show_molecule` at `/chatgpt/mcp`, with a portable package in `plugins/lupi-live`.
+The first acceptance workflow is L-theanine (CID 439378), then nitrogen
+highlighting with source atom IDs preserved.
+
+```bash
+pnpm chatgpt:build
+pnpm chatgpt:test
+pnpm chatgpt:dev
+```
+
+See the [plugin development and release guide](docs/chatgpt-plugin.md) for the
+local SDK host, verification receipts, package builder, and actual ChatGPT
+acceptance steps. Local rendering and packaging do not establish installation,
+deployment, directory approval, or publication.
+
 ## iPhone development
 
 The Expo SDK 57 app lives in `apps/mobile`. Room uses a custom native Viro/ARKit
@@ -129,6 +148,7 @@ custom domain or public product. See the
 - [docs/extraction-packet.md](docs/extraction-packet.md): original split plan
 - [docs/api-keys.md](docs/api-keys.md): legacy API-key backend inventory and Plan 026 target
 - [docs/lupi-mcp-roadmap.md](docs/lupi-mcp-roadmap.md): agent/MCP roadmap
+- [docs/chatgpt-plugin.md](docs/chatgpt-plugin.md): Lupi Live plugin implementation, verification, and release guide
 - [docs/operations.md](docs/operations.md): local, CI, deploy, and live checks
 - [docs/deploy-cutover.md](docs/deploy-cutover.md): production deploy split
 - [docs/release-checklist.md](docs/release-checklist.md): cutover checklist

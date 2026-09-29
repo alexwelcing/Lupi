@@ -16,18 +16,22 @@ const WATER_RECORD = {
       id: { id: { cid: 962 } },
       atoms: { aid: [1, 2, 3], element: [8, 1, 1] },
       bonds: { aid1: [1, 1], aid2: [2, 3], order: [1, 1] },
-      coords: [{ conformers: [{ x: [0, 0.76, -0.76], y: [0, 0.59, 0.59], z: [0, 0, 0] }] }],
+      coords: [{ type: [2, 5, 10], aid: [1, 2, 3], conformers: [{ x: [0, 0.76, -0.76], y: [0, 0.59, 0.59], z: [0, 0, 0] }] }],
     },
   ],
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: status === 404 ? 'Not Found' : 'OK',
-    json: async () => body,
-  } as unknown as Response;
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+const WATER_PROPERTIES = { PropertyTable: { Properties: [{ CID: 962, Title: 'Water', MolecularFormula: 'H2O' }] } };
+
+function waterResponse(input: unknown): Response {
+  const url = String(input);
+  if (url.includes('/cids/')) return jsonResponse({ IdentifierList: { CID: [962] } });
+  if (url.includes('/property/')) return jsonResponse(WATER_PROPERTIES);
+  return jsonResponse(WATER_RECORD);
 }
 
 describe('frameFromPubChemRecord', () => {
@@ -44,15 +48,17 @@ describe('frameFromPubChemRecord', () => {
     expect(frame.boxBounds[1]).toBeCloseTo(0.76 + 2, 5);
     expect(frame.typeSemantics?.kind).toBe('atomic-number');
     expect(frame.distanceSemantics?.kind).toBe('angstrom');
+    expect(frame.identity).toEqual({ kind: 'source-id', unique: true });
   });
 
   it('flattens 2D records onto z = 0 and rejects records without coordinates', () => {
     const flat = {
-      PC_Compounds: [{ atoms: { aid: [1], element: [6] }, coords: [{ conformers: [{ x: [1], y: [2] }] }] }],
+      PC_Compounds: [{ id: { id: { cid: 1 } }, atoms: { aid: [1], element: [6] }, coords: [{ type: [1, 5, 255], aid: [1], conformers: [{ x: [1], y: [2] }] }] }],
     };
     const { frame } = frameFromPubChemRecord(flat, false);
     expect(Array.from(frame.positions)).toEqual([1, 2, 0]);
-    expect(() => frameFromPubChemRecord({ PC_Compounds: [{ atoms: { element: [6] } }] }, true)).toThrow(/coordinates/);
+    expect(frame.distanceSemantics?.kind).toBe('unknown');
+    expect(() => frameFromPubChemRecord({ PC_Compounds: [{ id: { id: { cid: 1 } }, atoms: { aid: [1], element: [6] } }] }, true)).toThrow(/coordinates/);
   });
 });
 
@@ -93,24 +99,31 @@ describe('network paths', () => {
   });
 
   it('falls back from the 3D conformer to the 2D record on 404', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({}, 404))
-      .mockResolvedValueOnce(jsonResponse(WATER_RECORD));
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('record_type=3d')) return jsonResponse({}, 404);
+      if (url.includes('record_type=2d')) return jsonResponse({ PC_Compounds: [{
+        ...WATER_RECORD.PC_Compounds[0],
+        coords: [{ type: [1, 5, 255], aid: [1, 2, 3], conformers: [{ x: [0, 0.76, -0.76], y: [0, 0.59, 0.59] }] }],
+      }] });
+      return waterResponse(input);
+    });
     const structure = await fetchPubChemCompound({ name: 'water' });
     expect(structure.is3d).toBe(false);
     expect(structure.frame.natoms).toBe(3);
-    expect(String(fetchMock.mock.calls[0][0])).toContain('record_type=3d');
-    expect(String(fetchMock.mock.calls[1][0])).toMatch(/record\/JSON$/);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/name/water/cids/JSON');
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('record_type=2d'))).toBe(true);
+    expect(structure.molecule.coordinateUnits).toBe('depiction');
   });
 
   it('loads the compound into the store and reflects it in the URL', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(WATER_RECORD));
+    fetchMock.mockImplementation(async (input) => waterResponse(input));
     window.history.replaceState({}, '', '/?sim=caffeine');
     const result = await openPubChemMolecule({ name: 'water' });
     expect(result).toEqual({ name: 'Water', atomCount: 3, cid: 962 });
     const file = useStore.getState().file;
     expect(file?.name).toBe('Water');
-    expect(file?.sourceUrl).toBe('pubchem://name/water');
+    expect(file?.sourceUrl).toBe('pubchem://cid/962');
     expect(file?.trajectory.atomTypes).toEqual([1, 8]);
     const params = new URLSearchParams(window.location.search);
     expect(params.get('molecule')).toBe('water');

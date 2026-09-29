@@ -1,0 +1,92 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "lupi-live",
+  "version": "0.1.0",
+  "description": "Explore public PubChem molecules with the interactive Lupi Live viewer.",
+  "author": {
+    "name": "Lupine Science, Inc.",
+    "url": "https://lupi.live"
+  },
+  "homepage": "https://lupi.live",
+  "repository": "https://github.com/alexwelcing/Lupi",
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["molecules", "chemistry", "PubChem", "3D", "education"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Lupi Live",
+        "shortDescription": "Explore molecules in ChatGPT",
+        "longDescription": "Retrieve a public molecule by PubChem name or CID, inspect its atoms and source bonds, rotate and zoom, and highlight an element. Each result identifies the compound and its PubChem source and labels whether its coordinates are 2D or 3D. Public molecule viewing does not require a separate Lupi account. This initial release supports public PubChem structures and viewing; it does not perform simulations, open private structure files, or create scientific findings.",
+        "developerName": "Lupine Science, Inc.",
+        "capabilities": ["Retrieve PubChem molecules", "View molecular structures", "Highlight atoms"],
+        "websiteURL": "https://lupi.live",
+        "defaultPrompt": [
+          "Show me L-theanine from PubChem.",
+          "Show PubChem CID 439378 and highlight the nitrogen atoms.",
+          "Show carbon dioxide from PubChem in 3D."
+        ],
+        "brandColor": "#12394A",
+        "composerIcon": "./assets/lupi-icon.png",
+        "logo": "./assets/lupi-icon.png"
+      },
+      "onboardingSkill": "./skills/explore-molecules/SKILL.md",
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Fresh third-party retrieval of the launch molecule. Record the returned record URL, retrieval timestamp, cache status, compound identity, and interactive result.",
+              "prompt": "Lupi, show me L-theanine from PubChem using a fresh lookup.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve with cacheMode refresh, retrieve PubChem CID 439378, then render that returned structure reference. Show the compound identity, PubChem source, and coordinate dimension. Rotation and zoom work. No bundled gallery structure substitutes for the fetched record."
+            },
+            {
+              "description": "An outcome-only request selects the molecule workflow without naming Lupi.",
+              "prompt": "Show L-theanine in 3D.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve the name through PubChem and render the returned structure. Identify CID 439378. Label the source coordinate dimension accurately; do not describe a 2D fallback as 3D."
+            },
+            {
+              "description": "Direct PubChem identifier lookup reaches the same source compound.",
+              "prompt": "Show PubChem CID 439378 and let me rotate it.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve query cid:439378, render the resulting structure reference, and expose direct rotation and zoom with the correct PubChem attribution."
+            },
+            {
+              "description": "After the first sentence produces a molecule card, send the second sentence as a follow-up. Record whether the host opens a new card or updates an existing one.",
+              "prompt": "Show L-theanine from PubChem. Then highlight its nitrogen atoms.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "The follow-up reuses the resolved structureRef for CID 439378 and calls show_molecule with view.highlightElements containing N. Only source nitrogen atom IDs are highlighted. Identity is preserved even if the host creates a new card."
+            },
+            {
+              "description": "A second third-party record demonstrates that retrieval is not hard-coded to the launch example.",
+              "prompt": "Show carbon dioxide from PubChem.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve and retrieve the carbon dioxide record, render its source atoms and bonds, and show agreeing identity and source information in the card and model-readable result."
+            }
+          ],
+          "negative": [
+            {
+              "description": "A nonexistent PubChem name returns an explicit not-found result without rendering invented geometry.",
+              "prompt": "Show the PubChem molecule lupi-review-nonexistent-439378-zzzz.",
+              "expected_behavior": "Report not found. Do not substitute a gallery asset or call show_molecule without a successfully resolved structure reference."
+            },
+            {
+              "description": "The request deliberately leaves stereoisomer identity undecided.",
+              "prompt": "Show me a theanine stereoisomer, but do not choose L or D for me.",
+              "expected_behavior": "Ask which stereoisomer the user wants before rendering. If the source returns multiple candidates, offer source-labeled choices and do not silently choose a CID."
+            },
+            {
+              "description": "Saved-molecule deletion is outside the public viewer tool surface.",
+              "prompt": "Delete all my saved molecules.",
+              "expected_behavior": "Explain that this release cannot delete saved molecules. Do not attempt a destructive action or claim that anything was deleted."
+            }
+          ]
+        },
+        "commerce": false
+      },
+      "publication": {
+        "release_notes": "Initial development package for public PubChem name/CID lookup, source-attributed molecular viewing, and atom highlighting. Host installation, live route verification, review, and publication remain to be completed; see the repository's ChatGPT plugin guide."
+      }
+    }
+  }
+}

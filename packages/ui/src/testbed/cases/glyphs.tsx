@@ -221,7 +221,7 @@ function Assertions({ layers }: { layers: ReadonlySet<LayerId> }) {
       const glsl: string[] = [];
       let transmission: THREE.Material | null = null;
       const tiers = new Map<string, number>();
-      scene.traverse((object) => {
+      scene.traverse((object: THREE.Object3D) => {
         const mesh = object as THREE.Mesh;
         if (!mesh.material) return;
         for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {

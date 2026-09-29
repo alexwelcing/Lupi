@@ -51,6 +51,11 @@
     "cloudflare:dev": "pnpm --filter @atlas/mcp-worker dev",
     "cloudflare:deploy": "pnpm --filter @atlas/mcp-worker run deploy",
     "cloudflare:test": "pnpm --filter @atlas/mcp-worker test",
+    "chatgpt:build": "pnpm --filter @atlas/chatgpt-widget build && pnpm --filter @atlas/mcp-worker build",
+    "chatgpt:test": "pnpm --filter @atlas/core exec vitest run src/pubchem.test.ts && pnpm --filter @atlas/ui exec vitest run src/molecules/pubchemLoad.test.ts && pnpm --filter @atlas/scene exec vitest run src/Bonds.source.test.tsx src/Bonds.fallback.test.tsx && pnpm --filter @atlas/chatgpt-widget test && pnpm --filter @atlas/mcp-worker exec vitest run src/chatgpt.test.ts src/index.test.ts",
+    "chatgpt:dev": "node --import tsx tools/serve-chatgpt-plugin.mts",
+    "chatgpt:verify": "node --import tsx tools/verify-chatgpt-plugin.mts",
+    "chatgpt:package": "node tools/package-chatgpt-plugin.mjs",
     "mcp:worker:dev": "pnpm --filter @atlas/mcp-worker dev",
     "mcp:worker:deploy": "pnpm --filter @atlas/mcp-worker run deploy",
     "mcp:worker:test": "pnpm --filter @atlas/mcp-worker test",
@@ -71,6 +76,9 @@
     "scan:hf:bench": "tsx apps/mcp-worker/tools/hf-bench.mts"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/core": "2.2.0",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
     "@gltf-transform/core": "^4.3.0",
     "@gltf-transform/extensions": "^4.3.0",
     "@react-three/fiber": "10.0.0-canary.14007b4",
@@ -94,6 +102,8 @@
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.5",
+    "vite": "^6.0.0",
+    "zod": "4.6.5",
     "yaml": "^2.9.0"
   },
   "packageManager": "pnpm@9.0.0",

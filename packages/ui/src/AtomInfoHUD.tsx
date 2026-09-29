@@ -10,6 +10,7 @@
 
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
 import { Html } from '@react-three/drei/webgpu';
+import type { Camera, Object3D } from 'three/webgpu';
 import type { Frame } from '@atlas/core/types';
 import {
   ELEMENT_DATA,
@@ -319,7 +320,7 @@ export function AtomInfoHUD({
       <Html
         position={[x, y, z]}
         center={false}
-        calculatePosition={(_object, _camera, size) => [size.width / 2, 0]}
+        calculatePosition={(_object: Object3D, _camera: Camera, size: { width: number; height: number }) => [size.width / 2, 0]}
         style={{ pointerEvents: 'auto', left: 0, top: MOBILE_DOCK_TOP, transform: 'translateX(-50%)' }}
       >
         {card}

@@ -471,7 +471,7 @@ function AllKinds() {
       await show({ ...base, kind: 'trails' });
       let trailLine: THREE.Line | null = null;
       await until('the trail to grow', () => {
-        scene.traverse((object) => {
+        scene.traverse((object: THREE.Object3D) => {
           const line = object as THREE.Line;
           // A fresh geometry's draw range is Infinity until the trail sets it,
           // so require a finite count (the capture raced a 2-point trail).
