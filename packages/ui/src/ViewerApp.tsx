@@ -14,7 +14,6 @@ import { useStore, initSettingsPersistence } from './store';
 import {
   getMaxSafeAtomCount,
   getDefaultQualityTier,
-  MAX_INTERACTIVE_PICKING_ATOMS,
 } from './deviceCapabilities';
 import { detectFrameVectorFields } from '@atlas/core';
 import type { VectorGlyphStats } from '@atlas/scene';
@@ -75,7 +74,6 @@ import { ViewerCommandDeck } from './app/ViewerCommandDeck';
 import { PlaybackStatus } from './app/PlaybackStatus';
 import { PlaybackScrubber } from './app/PlaybackScrubber';
 import { PlaybackSpeedControl } from './app/PlaybackSpeedControl';
-import { ViewerGestureHint } from './app/ViewerGestureHint';
 import { RendererWarningToast } from './app/RendererWarningToast';
 import { GlobalShortcuts } from './app/GlobalShortcuts';
 import { useSavedViewQuerySync } from './app/useSavedViewQuerySync';
@@ -743,14 +741,9 @@ export function ViewerApp() {
                 colormap={colormap}
                 activeVectorField={activeVectorField}
                 vectorStats={vectorStats}
-                bottomOffset={isMobile ? 96 : 44}
-              />
-            )}
-
-            {file && !isEmbeddedMobileViewer && (
-              <ViewerGestureHint
-                isMobile={isMobile}
-                canSelectAtoms={(rawCurrentFrame?.natoms ?? 0) <= MAX_INTERACTIVE_PICKING_ATOMS}
+                // Above the Play pill's row (and, on desktop, the lifted
+                // scale bar): the pill owns the bottom-left corner.
+                bottomOffset={isMobile ? 118 : 100}
               />
             )}
           </div>
@@ -930,6 +923,8 @@ export function ViewerApp() {
               id: 'settings-panel',
               label: 'Open settings',
               group: 'Panels',
+              // Panels mount with a molecule (PanelHost needs a file).
+              disabled: !file,
               onSelect: () => setActivePanel('settings'),
             },
             {
