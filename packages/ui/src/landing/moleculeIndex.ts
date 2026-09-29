@@ -30,11 +30,11 @@ export interface LocalMolecule {
 /** Ids with preview art in apps/web/public/learn (tools/build-gallery-previews.mjs). */
 const PREVIEW_IDS = new Set<string>(previews.ids);
 
-/** Molecules most visitors recognize; they lead the wall. */
+/** Molecules most visitors recognize; they lead the wall. C60 first: it is the home page's hero. */
 export const QUICK_PICK_IDS = [
-  'caffeine', 'water', 'aspirin', 'glucose', 'ethanol', 'benzene', 'dopamine', 'serotonin',
-  'adrenaline', 'melatonin', 'cholesterol', 'sucrose', 'vanillin', 'menthol', 'capsaicin',
-  'limonene', 'resveratrol', 'theobromine', 'c60_buckyball', 'graphene_ribbon', 'diamond_crystal',
+  'c60_buckyball', 'caffeine', 'water', 'aspirin', 'glucose', 'ethanol', 'benzene', 'dopamine',
+  'serotonin', 'adrenaline', 'melatonin', 'cholesterol', 'sucrose', 'vanillin', 'menthol',
+  'capsaicin', 'limonene', 'resveratrol', 'theobromine', 'graphene_ribbon', 'diamond_crystal',
   'cnt_6_6', 'phenol', 'acetone',
 ];
 

@@ -3,12 +3,14 @@ import { GallerySection } from './GallerySection';
 import { LandingFooter } from './LandingFooter';
 import { MoleculeFinder } from './MoleculeFinder';
 import { MoleculeWall } from './MoleculeWall';
+import { BuckyHero } from './hero/BuckyHero';
 import { HOME_SEO, useSeo } from '../seo';
 import './student-home.css';
 
 /**
  * Search first, then a wall of molecules, then the guided starter set. The
- * only prose left is what a visitor needs to get into a structure.
+ * only prose left is what a visitor needs to get into a structure. Beside the
+ * heading, a still ink buckyball to spin, and to tap into 3D.
  */
 export function LandingPage() {
   useSeo(HOME_SEO);
@@ -20,6 +22,7 @@ export function LandingPage() {
           <br />
           Big discoveries.
         </h1>
+        <BuckyHero />
         <MoleculeFinder />
         <p className="student-scan-callout">
           <a className="student-secondary" href="/scan">
