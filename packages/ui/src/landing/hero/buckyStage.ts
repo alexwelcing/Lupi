@@ -21,7 +21,7 @@
  */
 import { wrapAngle } from 'math';
 import { MOTION, createSpring1, isSettled, springTo } from '@atlas/core/motion';
-import { coastEnabled, getComfort } from '../../motion/comfort';
+import { coastEnabled, getComfort, subscribeComfort } from '../../motion/comfort';
 import { C60_HERO, type C60HeroDetent } from './c60Hero.data';
 
 export type Vec3 = [number, number, number];
@@ -364,6 +364,13 @@ export function createBuckyStage(host: HTMLElement, opts: BuckyStageOptions): Bu
     if (announce && targetLabel) opts.onDetent?.(targetLabel);
   }
 
+  // Still applies to a turn already running: land it on its face at once.
+  const unsubscribeComfort = subscribeComfort((comfort) => {
+    if (comfort !== 'still' || !moving()) return;
+    stop();
+    land(true);
+  });
+
   function advance(dt: number): void {
     if (state === 'coast') {
       const remaining = (targetAz - az) * Math.exp(-dt / coastTau);
@@ -635,6 +642,7 @@ export function createBuckyStage(host: HTMLElement, opts: BuckyStageOptions): Bu
     destroy() {
       destroyed = true;
       stop();
+      unsubscribeComfort();
       host.removeEventListener('pointerdown', onPointerDown);
       host.removeEventListener('pointermove', onPointerMove);
       host.removeEventListener('pointerup', onPointerUp);

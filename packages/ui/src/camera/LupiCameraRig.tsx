@@ -24,7 +24,7 @@ import {
   registerRecordingGuard,
 } from '@atlas/scene';
 import { useStore, type AppState } from '../store';
-import { coastEnabled, getComfort, glidesAnimate } from '../motion/comfort';
+import { coastEnabled, getComfort, glidesAnimate, subscribeComfort } from '../motion/comfort';
 import { playStore } from '../play/playStore';
 import { registerPlayDevHook, type PlayRigState } from '../play/devHooks';
 import { cue } from '../play/feedback';
@@ -135,6 +135,12 @@ export function LupiCameraRig({ center, minDistance, maxDistance, enabled, onFir
         return rig.isMoving();
       }),
       onIntent('camera.zoomToward', ({ clientX, clientY, factor }) => rig.zoomToward(clientX, clientY, factor)),
+      // A calmer Motion level applies to motion already running: Gentle ends a
+      // coast, Still cuts every glide and coast to its rest pose.
+      subscribeComfort((comfort) => {
+        if (comfort === 'still') rig.settleNow();
+        else if (comfort === 'gentle') rig.stopCoast();
+      }),
     ];
     return () => {
       for (const cleanup of cleanups.reverse()) cleanup();

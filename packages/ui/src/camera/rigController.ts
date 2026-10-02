@@ -533,6 +533,17 @@ export class RigController implements LupiCameraRigApi {
     this.controls.dispatchEvent({ type: 'start' });
   }
 
+  /** End a coast without a catch (no flash, no cue): the visitor chose a calmer Motion level. */
+  stopCoast(): void {
+    if (this.mode !== 'coast') return;
+    this.coast.stop();
+    this.tail = false;
+    this.omega = 0;
+    this.mode = 'idle';
+    this.dirty = true;
+    this.settleOrientation(MOTION.snap, 0.25);
+  }
+
   catch(): void {
     const wasMoving = this.isMoving();
     if (this.mode === 'coast') {

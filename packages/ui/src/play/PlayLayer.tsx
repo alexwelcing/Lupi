@@ -44,7 +44,7 @@ import {
 } from '@atlas/scene';
 import { useStore } from '../store';
 import type { Vec3 } from '../camera/rigApi';
-import { displayMotionScale, getComfort, type Comfort } from '../motion/comfort';
+import { displayMotionScale, getComfort, subscribeComfort, type Comfort } from '../motion/comfort';
 import { isRelayActive, peekBaton } from '../relay/baton';
 import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { cue } from './feedback';
@@ -463,6 +463,10 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         scatter();
       }),
       onIntent('play.reset', () => resetDisplayMotion()),
+      // Still stops the arrival, ripples and Scatter already running.
+      subscribeComfort((comfort) => {
+        if (comfort === 'still') resetDisplayMotion();
+      }),
       registerPlayDevHook('motion', () => ({
         active: M.uMotionWeight.value > 0,
         weight: M.uMotionWeight.value,
