@@ -113,7 +113,9 @@ check(
 check(
   rootPackageJson.pnpm?.overrides?.["picomatch@4.0.3"] === "4.0.5" &&
     rootPackageJson.pnpm?.overrides?.["brace-expansion@1.1.14"] === "1.1.18" &&
-    rootPackageJson.pnpm?.overrides?.["brace-expansion@5.0.7"] === "5.0.9" &&
+    rootPackageJson.pnpm?.overrides?.["brace-expansion@5.0.7"] === "5.0.12" &&
+    rootPackageJson.pnpm?.overrides?.["brace-expansion@5.0.9"] === "5.0.12" &&
+    rootPackageJson.pnpm?.overrides?.["@grpc/grpc-js@1.14.4"] === "1.14.5" &&
     rootPackageJson.pnpm?.overrides?.["js-yaml@4.3.0"] === "4.3.2" &&
     rootPackageJson.pnpm?.overrides?.["js-yaml@4.3.1"] === "4.3.2" &&
     rootPackageJson.pnpm?.overrides?.["@xmldom/xmldom@0.8.13"] === "0.8.15" &&
@@ -125,8 +127,13 @@ check(
 );
 check(
   JSON.stringify(rootPackageJson.pnpm?.auditConfig?.ignoreCves) ===
-    JSON.stringify(["CVE-2025-71329", "CVE-2025-71330"]),
-  "The unpatched Metro image parser exceptions stay exact and reviewable",
+    JSON.stringify([
+      "CVE-2025-71329",
+      "CVE-2025-71330",
+      "CVE-2026-85393",
+      "CVE-2026-101916",
+    ]),
+  "The unpatched image parser, node-forge and Firestore gRPC exceptions stay exact and reviewable",
 );
 check(
   packageJson.scripts?.["inspect:eas-archive"]?.includes(

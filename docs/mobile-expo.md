@@ -390,6 +390,11 @@ while the exception remains. Remove both exceptions as soon as Metro adopts a
 fixed release. The root audit must continue to run with optional dependencies
 included; do not replace it with `--no-optional` to make the graph smaller.
 
+Two later exceptions are documented in `docs/dependency-security-baseline.md`:
+`CVE-2026-85393` (`node-forge`, no patched release; reached here only through
+Expo CLI code-signing tooling) and `CVE-2026-101916` (`@grpc/grpc-js@1.9.16`
+under Firestore's Node.js build). Neither is reachable from the native app.
+
 ## Running on an iPhone with Expo Go
 
 ### Prerequisites
