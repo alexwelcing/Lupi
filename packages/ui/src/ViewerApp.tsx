@@ -662,6 +662,7 @@ export function ViewerApp() {
               center={center}
               cameraDistance={cameraDistance}
               cameraNear={cameraNear}
+              atomCount={currentFrame?.natoms ?? 0}
             >
               {(import.meta.env.DEV || showDebugHud) && <DevProbe enabled={showDebugHud} />}
               <ViewerScene

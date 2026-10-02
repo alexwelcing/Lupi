@@ -5,11 +5,16 @@ import { viewerDprRange } from './ViewerCanvas';
 import { configureViewerRenderer } from './createLupiRenderer';
 
 describe('ViewerCanvas renderer policy', () => {
-  it('bounds DPR by the detected device tier', () => {
-    expect(viewerDprRange('mobile')).toEqual([1, 1.25]);
-    expect(viewerDprRange('low')).toEqual([1, 1.25]);
-    expect(viewerDprRange('desktop')).toEqual([1, 1.75]);
-    expect(viewerDprRange('high')).toEqual([1, 1.75]);
+  it('bounds DPR by the detected device tier and the structure size', () => {
+    expect(viewerDprRange('mobile')).toEqual([1, 3]);
+    expect(viewerDprRange('mobile', 50_000)).toEqual([1, 3]);
+    expect(viewerDprRange('mobile', 50_001)).toEqual([1, 2]);
+    expect(viewerDprRange('mobile', 400_001)).toEqual([1, 1.5]);
+    expect(viewerDprRange('low', 60)).toEqual([1, 2]);
+    expect(viewerDprRange('low', 1_000_000)).toEqual([1, 1.25]);
+    expect(viewerDprRange('desktop', 60)).toEqual([1, 2]);
+    expect(viewerDprRange('desktop', 400_000)).toEqual([1, 2]);
+    expect(viewerDprRange('high', 2_000_000)).toEqual([1, 1.5]);
   });
 
   it('uses sRGB output without a second renderer tone-map pass', () => {
