@@ -24,6 +24,7 @@ import { nistCatalogUrl, nistDemoUrl } from './molecules/dataEndpoints';
 import { recognizeLupiUrlPayload } from './lupiUrlRecognition';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 import { openMolecule } from './viewer/openMolecule';
+import { getCameraRig } from './camera/rigApi';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools, readMcpRendererStatus } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
 import { createLupiMcpDriver, type LupiMcpRendererStatus, type LupiMcpStatus } from './mcp/driver';
@@ -1218,6 +1219,8 @@ async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<Lup
     }
 
     if (request.tool === 'lupi.viewer_state') {
+      // The rig writes the store camera at rest: mid-coast it still holds the pose before the flick.
+      getCameraRig()?.settleNow();
       return okResponse(request, transcript, { viewer: readViewerState() });
     }
 
