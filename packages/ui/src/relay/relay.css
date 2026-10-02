@@ -3,10 +3,12 @@
    splash. Plates centre the molecule's flat preview with a hairline lime
    ring under it; the relay (relay/stage.ts) carries the tapped drawing.
    The ring sits in the same place with or without a preview (and in
-   apps/web/index.html's static splash), so it never jumps between steps. */
+   apps/web/index.html's static splash), so it never jumps between steps.
+   The preview leaves 150px of height for the ring and its copy, so a
+   landscape phone keeps them on screen (relay/stage.ts does the same). */
 
 .lupi-plate {
-  --lupi-plate-preview: min(86vw, 480px);
+  --lupi-plate-preview: min(86vw, 480px, (100vh - 150px) / 0.675);
   position: fixed;
   inset: 0;
   z-index: 1;
@@ -19,6 +21,11 @@
   pointer-events: none;
   opacity: 1;
   transition: opacity 0.12s ease;
+}
+@supports (height: 100dvh) {
+  .lupi-plate {
+    --lupi-plate-preview: min(86vw, 480px, (100dvh - 150px) / 0.675);
+  }
 }
 .lupi-plate[data-in-viewport] {
   position: absolute;

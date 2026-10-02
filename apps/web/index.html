@@ -42,7 +42,10 @@
     #lupi-splash { position: fixed; inset: 0; background: #101817; }
     #lupi-splash svg {
       position: absolute; left: 50%; width: 22px; height: 22px; margin-left: -11px; overflow: visible;
-      top: calc(50% + min(86vw, 480px) * 0.3375 + 18px);
+      top: calc(50% + min(86vw, 480px, (100vh - 150px) / 0.675) * 0.3375 + 18px);
+    }
+    @supports (height: 100dvh) {
+      #lupi-splash svg { top: calc(50% + min(86vw, 480px, (100dvh - 150px) / 0.675) * 0.3375 + 18px); }
     }
     #lupi-splash circle { fill: none; stroke: #d5ef9c; stroke-width: 1.25; }
     #lupi-splash .track { opacity: .2; }

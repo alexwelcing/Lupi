@@ -43,6 +43,8 @@ const WATCH_MS = 500;
 const PREVIEW_ASPECT = 270 / 400;
 const PREVIEW_MAX_PX = 480;
 const PREVIEW_VW = 0.86;
+/** Height kept free around the preview for the ring and its copy (a landscape phone): relay.css's 150px. */
+const PREVIEW_ROOM_PX = 150;
 /** The traced ring sits just outside the drawn ball (which fills 84 % of its box). */
 const HERO_RING = 0.94;
 const PLATE_RING_PX = 22;
@@ -188,14 +190,15 @@ function layout(relay: Relay): void {
     relay.ring.style.setProperty('--lupi-relay-hairline', (100 / Math.max(1, ring)).toFixed(4));
     below = cy + ring / 2;
   } else {
-    const w = Math.min(width * PREVIEW_VW, PREVIEW_MAX_PX);
+    const w = Math.max(0, Math.min(width * PREVIEW_VW, PREVIEW_MAX_PX, (height - PREVIEW_ROOM_PX) / PREVIEW_ASPECT));
     const h = w * PREVIEW_ASPECT;
     place(relay.stageEl, cx - w / 2, cy - h / 2, w, h);
     place(relay.ring, cx - PLATE_RING_PX / 2, cy + h / 2 + 18, PLATE_RING_PX, PLATE_RING_PX);
     below = cy + h / 2 + 18 + PLATE_RING_PX;
   }
   relay.face.style.top = `${below + 10}px`;
-  relay.wait.style.top = `${below + 40}px`;
+  // Retry stays on screen, over the drawing's foot if the window is short.
+  relay.wait.style.top = `${Math.max(0, Math.min(below + 40, height - relay.wait.offsetHeight - 16))}px`;
 }
 
 /**
