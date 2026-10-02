@@ -58,7 +58,8 @@ Fiber v10): on the WebGPU backend when the browser has an adapter, on its
 WebGL2 backend otherwise, or when the URL carries `?renderer=webgl2`.
 `status().rendererBackend` says which one is running. The canvas DPR follows
 the device up to a cap that shrinks for big structures (`viewerDprRange`:
-phones up to 3 and desktops up to 2 for at most 50k atoms). The post pipeline
+phones up to 3 and desktops up to 2 for at most 50k atoms; a phone on the
+WebGL2 backend stays at 2 at most). The post pipeline
 ends with FXAA on the display-referred image. That FXAA pass is the only
 anti-aliasing the impostor silhouettes get in the live view, on both backends
 and every preset. The Chromium flags for
