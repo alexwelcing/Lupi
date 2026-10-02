@@ -21,6 +21,9 @@
  *   - one finger orbits (strokes with Poke);
  *   - two fingers pinch-zoom about their midpoint and pan (orbit with Poke);
  *   - three or more are ignored.
+ * - Overlays in the canvas wrapper (drei <Html> labels and cards): a wheel
+ *   zooms unless the overlay scrolls; a press off their controls drags once
+ *   it passes the slop, and below it stays the overlay's click.
  * - Release velocity comes from the event timestamps (releaseVelocity.ts). A
  *   cancel, a lost capture, a window blur or a hidden tab never coasts.
  */
@@ -392,6 +395,9 @@ export interface GestureArbiter {
  */
 const CLICK_SWALLOW_MS = 3_000;
 const ELEMENT_STYLES = ['touch-action', 'user-select', '-webkit-user-select', '-webkit-touch-callout'] as const;
+/** Controls inside an overlay keep their presses. */
+const OVERLAY_CONTROLS =
+  'button, a[href], input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="slider"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="switch"]';
 
 function pointerKind(type: string): PointerKind {
   return type === 'touch' || type === 'pen' ? type : 'mouse';
@@ -447,6 +453,26 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   const isCanvasTarget = (target: EventTarget | null): boolean =>
     target === element || (canvas !== null && (target === canvas || target === canvas.parentElement));
 
+  // drei <Html> overlays (knowledge labels, annotation cards, the atom card)
+  // portal into this same element. A wheel over one zooms unless something
+  // in it scrolls. A press on one (not on a control) stays the overlay's,
+  // so its click lands, until it moves past the slop; then it is a canvas
+  // drag from the press point.
+  const overlayPresses = new Map<number, GesturePointer>();
+  const isOverlayTarget = (target: EventTarget | null): target is Element => {
+    if (!(target instanceof Element) || isCanvasTarget(target) || !element.contains(target)) return false;
+    const control = target.closest(OVERLAY_CONTROLS);
+    return !control || !element.contains(control);
+  };
+  const scrollsWithin = (target: Element): boolean => {
+    for (let node: Element | null = target; node && node !== element; node = node.parentElement) {
+      if (node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1) continue;
+      const style = getComputedStyle(node);
+      if (/auto|scroll/.test(`${style.overflowX} ${style.overflowY}`)) return true;
+    }
+    return false;
+  };
+
   const normalize = (e: PointerEvent, samples?: readonly PointerSample[]): GesturePointer => {
     const button = pressButton(e, mac);
     return {
@@ -480,26 +506,43 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
     swallowClickUntil = 0;
   };
 
-  const onPointerDown = (e: PointerEvent) => {
-    if (!isCanvasTarget(e.target)) return;
-    if (e.pointerType === 'mouse' && e.button > 2) return;
-    const { tracked, caught } = machine.down(normalize(e));
-    if (!tracked) return;
+  /** The machine takes a press: capture it, mark it, end hover. */
+  const take = (down: GesturePointer): boolean => {
+    const { tracked, caught } = machine.down(down);
+    if (!tracked) return false;
     try {
-      element.setPointerCapture(e.pointerId);
+      element.setPointerCapture(down.id);
     } catch {
       /* the pointer is already gone */
     }
-    const kind = pointerKind(e.pointerType);
-    if (kind !== 'mouse') {
-      touchIds.add(e.pointerId);
-      marks?.down(e.pointerId, e.clientX, e.clientY);
+    if (down.pointerType !== 'mouse') {
+      touchIds.add(down.id);
+      marks?.down(down.id, down.x, down.y);
     }
-    if (caught) marks?.catchAt(e.clientX, e.clientY);
-    if (kind === 'mouse') endHover();
+    if (caught) marks?.catchAt(down.x, down.y);
+    if (down.pointerType === 'mouse') endHover();
+    return true;
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button > 2) return;
+    if (isCanvasTarget(e.target)) {
+      take(normalize(e));
+      return;
+    }
+    const down = normalize(e);
+    if (isOverlayTarget(e.target) && (down.pointerType !== 'mouse' || down.button === 0)) overlayPresses.set(e.pointerId, down);
   };
 
   const onPointerMove = (e: PointerEvent) => {
+    const overlayPress = overlayPresses.get(e.pointerId);
+    if (overlayPress && e.buttons === 0) {
+      overlayPresses.delete(e.pointerId); // released where we could not see it
+    } else if (overlayPress) {
+      if (Math.hypot(e.clientX - overlayPress.x, e.clientY - overlayPress.y) <= GESTURE.slopPx[overlayPress.pointerType]) return;
+      overlayPresses.delete(e.pointerId);
+      if (!take(overlayPress)) return;
+    }
     if (machine.isTracking(e.pointerId)) {
       machine.move(normalize(e, coalesced(e)));
       if (e.pointerType !== 'mouse') marks?.move(e.pointerId, e.clientX, e.clientY);
@@ -533,8 +576,14 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
     }
   };
 
-  const onPointerUp = (e: PointerEvent) => finish(e, false);
-  const onPointerCancel = (e: PointerEvent) => finish(e, true);
+  const onPointerUp = (e: PointerEvent) => {
+    overlayPresses.delete(e.pointerId);
+    finish(e, false);
+  };
+  const onPointerCancel = (e: PointerEvent) => {
+    overlayPresses.delete(e.pointerId);
+    finish(e, true);
+  };
   const onLostCapture = (e: PointerEvent) => {
     if (machine.isTracking(e.pointerId)) finish(e, true);
   };
@@ -556,7 +605,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   const viewportHeight = () => element.getBoundingClientRect().height || window.innerHeight || 800;
 
   const onWheel = (e: WheelEvent) => {
-    if (!isCanvasTarget(e.target)) {
+    if (!isCanvasTarget(e.target) && !(e.target instanceof Element && element.contains(e.target) && !scrollsWithin(e.target))) {
       // Never page-zoom the viewer (a trackpad pinch over a card is ctrl+wheel).
       if (e.ctrlKey) e.preventDefault();
       return;
@@ -590,6 +639,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   };
 
   const onBlur = () => {
+    overlayPresses.clear();
     machine.cancelAll();
     marks?.clear();
   };
