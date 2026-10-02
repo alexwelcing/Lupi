@@ -290,6 +290,9 @@ export class RigController implements LupiCameraRigApi {
   private readonly vTmp2 = new Vector3();
   private readonly vTmp3 = new Vector3();
   private readonly vTmp4 = new Vector3();
+  private readonly vRest = new Vector3();
+  private readonly vRestRight = new Vector3();
+  private readonly vRestPosition = new Vector3();
   private readonly anchor = new Vector3();
 
   constructor(camera: Camera, host: RigHost, { tokens = GESTURE, target }: { tokens?: GestureTokens; target?: Vec3 } = {}) {
@@ -790,21 +793,46 @@ export class RigController implements LupiCameraRigApi {
     return this.levelForCurrent(this.qLevel, RIG.poleDot) ? quaternionAngle(this.orientation, this.qLevel) : 0;
   }
 
+  /**
+   * The rest pose for the current view: a position, and the orientation
+   * Object3D.lookAt gives there (what a store snap of it shows). Within the
+   * pole cap y-up no longer says which way the picture turns, so rather than
+   * spin it there, a rolled camera moves to the cap's edge on the side where
+   * lookAt keeps its right axis (a tilt of a few degrees at most).
+   */
+  private restPose(position: Vector3, out: Quaternion): Vector3 {
+    const view = this.viewDir(this.vRest);
+    position.copy(view).multiplyScalar(this.distance).add(this.target);
+    const level = this.levelQuaternion(position, this.target, this.qTmp);
+    if (Math.abs(view.y) > RIG.poleDot && quaternionAngle(this.orientation, level) > RIG.rollEpsilon) {
+      const right = this.vRestRight.set(1, 0, 0).applyQuaternion(this.orientation).setY(0);
+      if (right.lengthSq() > EPS2) {
+        right.normalize();
+        // lookAt's right axis is Ŷ × view, and Ŷ × (right × Ŷ) = right.
+        const pole = Math.sign(view.y) * RIG.poleDot;
+        view
+          .set(-right.z, 0, right.x)
+          .multiplyScalar(Math.sqrt(1 - RIG.poleDot * RIG.poleDot))
+          .addScaledVector(Y_AXIS, pole);
+        position.copy(view).multiplyScalar(this.distance).add(this.target);
+        this.levelQuaternion(position, this.target, level);
+      }
+    }
+    out.copy(level);
+    return position;
+  }
+
   /** Cut to the exact level pose (what a store snap of this pose would show). */
   private cutLevel(): void {
-    const view = this.viewDir(this.vTmp3);
-    if (Math.abs(view.y) > RIG.poleDot) {
-      this.writePose();
-      return;
-    }
-    const position = view.multiplyScalar(this.distance).add(this.target);
-    this.levelQuaternion(position, this.target, this.orientation);
-    this.writePoseExact(position);
+    this.writePoseExact(this.restPose(this.vRestPosition, this.orientation));
   }
 
   /** At the end of motion: relevel with a glide if rolled, else cut exactly level. */
   private settleOrientation(token: MotionToken = MOTION.glide, minS = 0.3): void {
-    const roll = this.rollAngle();
+    // The level pose for the current view direction (the camera object may
+    // not carry this frame's orientation yet).
+    const toPosition = this.restPose(new Vector3(), this.qLevel);
+    const roll = quaternionAngle(this.orientation, this.qLevel);
     if (roll <= RIG.rollEpsilon) {
       if (this.mode === 'idle' && this.dirty) this.cutLevel();
       return;
@@ -813,10 +841,8 @@ export class RigController implements LupiCameraRigApi {
     g.kind = 'relevel';
     this.currentPose(g.from);
     copyGlidePose(g.to, g.from);
-    // The level pose for the current view direction (the camera object may
-    // not carry this frame's orientation yet).
-    g.toPosition = this.viewDir(new Vector3()).multiplyScalar(this.distance).add(this.target);
-    this.levelQuaternion(g.toPosition, this.target, g.to.orientation);
+    g.toPosition = toPosition;
+    g.to.orientation.copy(this.qLevel);
     g.label = null;
     g.userMoved = true;
     g.onDone = null;

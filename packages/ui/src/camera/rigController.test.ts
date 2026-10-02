@@ -156,6 +156,24 @@ describe('RigController', () => {
     expect(camera.quaternion.equals(q)).toBe(true);
   });
 
+  it('rests inside the pole cap on the pose a store snap reproduces', () => {
+    const { rig, camera, writes } = makeRig();
+    camera.rotateZ(0.5); // rolled, then tumbled up onto the pole
+    camera.updateMatrixWorld();
+    rig.frame(1 / 60); // adopted
+    rig.fling([3.2, 0, 0]);
+    for (let i = 0; i < 2000 && Math.abs(rig.viewDir().y) <= 0.999; i += 1) rig.frame(1 / 240);
+    expect(Math.abs(rig.viewDir().y)).toBeGreaterThan(0.999);
+    const before = camera.quaternion.clone();
+    rig.settleNow();
+    expect(writes).toHaveLength(1);
+    const snap = new PerspectiveCamera();
+    snap.position.fromArray(writes[0].cameraPosition);
+    snap.lookAt(new Vector3().fromArray(writes[0].cameraTarget));
+    expect(camera.quaternion.angleTo(snap.quaternion)).toBeLessThan(1e-6);
+    expect(camera.quaternion.angleTo(before)).toBeLessThan(0.1); // a tilt, not a spin
+  });
+
   it('catches a coast and announces the catch', () => {
     const { rig, intents } = makeRig();
     rig.fling([0, 4, 0]);
