@@ -296,7 +296,11 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   block of premultiplied linear texels into the tile's rectangle of an
   output-sized target, in a fixed order with f32 sums. Each texel is first
   clamped as the screen would show it, so a highlight cannot bleed. Only the
-  output-sized target is read back. Thumbnails use the same path.
+  output-sized target is read back. Thumbnails use the same path. Peak
+  capture memory is one tile target plus the output target and its readback.
+  A 4096 x 4096 export needs about 1.3x what it needed without
+  supersampling; every export up to 2048 px needs less than that
+  un-supersampled 4096 x 4096 capture did.
 - A scene with a screen-space transmission material (the true-transmission
   atoms) is not tiled, because its refraction samples a buffer of the whole
   view: it renders one target at `min(3, floor(4096 / longest side))`, so
