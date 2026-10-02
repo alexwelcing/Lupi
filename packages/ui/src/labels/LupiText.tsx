@@ -13,7 +13,7 @@
  * +Z; call sites billboard it with drei's `<Billboard>`.
  *
  * - Size: `fontSize` is the em height in world units. The texture holds
- *   64 px per em × min(devicePixelRatio, 2) (fewer when a very long label
+ *   64 px per em × min(devicePixelRatio, 3) (fewer when a very long label
  *   would exceed the texture size limit), with no mipmaps and linear filtering.
  * - Anchors: `anchorX`/`anchorY` place the text block (not its outline) the
  *   way troika does: left/center/right and top/middle/bottom of the block.
@@ -49,6 +49,8 @@ export interface LupiTextProps {
 
 /** Texture pixels per em at devicePixelRatio 1. */
 export const LABEL_PX_PER_EM = 64;
+/** Highest devicePixelRatio a label texture follows (phones are 3x). */
+export const LABEL_MAX_PIXEL_RATIO = 3;
 /** Line advance in ems (close to troika's `lineHeight: 'normal'`). */
 export const LABEL_LINE_HEIGHT = 1.2;
 /** Largest canvas side; longer labels are rasterized at fewer pixels per em. */
@@ -112,7 +114,7 @@ function outlineEmFor(width: number | string | undefined, fontSize: number): num
 
 function labelPixelRatio(): number {
   const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
-  return Math.min(Math.max(dpr, 1), 2);
+  return Math.min(Math.max(dpr, 1), LABEL_MAX_PIXEL_RATIO);
 }
 
 function specKey(spec: LabelRasterSpec): string {

@@ -167,9 +167,9 @@ export function buildPostChain(
   // FXAA on the display-referred image. The encoded image goes to the canvas
   // as 8-bit anyway, so it is held in an RGBA8 target: the canvas's own
   // precision at half the memory and bandwidth of a HalfFloat one, which
-  // matters at phone DPR.
+  // matters at phone DPR. A full-screen pass needs no depth buffer.
   const display = renderOutput(color, THREE.NoToneMapping, THREE.SRGBColorSpace);
-  const displayTexture = rtt(display, null, null, { type: THREE.UnsignedByteType });
+  const displayTexture = rtt(display, null, null, { type: THREE.UnsignedByteType, depthBuffer: false });
   const aaNode = fxaa(displayTexture);
 
   const disposables: Array<{ dispose(): void } | null> = [aoNode, bloomNode, dofNode, aaNode, displayTexture];
