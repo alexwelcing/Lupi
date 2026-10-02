@@ -112,3 +112,18 @@ export function beginRecording(): () => void {
     runRestores(stops, 'recording stop');
   };
 }
+
+/**
+ * Render-target property a capture sets to its supersampling factor (target
+ * texels per output pixel on each side; renderTargetReadback). Layers drawn
+ * as 1-texel lines read it in `onBeforeRender` so their exported weight does
+ * not thin out with the factor.
+ */
+export const CAPTURE_TEXEL_SCALE_KEY = 'lupiCaptureTexelScale';
+
+/** The capture texel scale of a render target, or null outside a capture. */
+export function captureTexelScale(target: unknown): number | null {
+  if (!target || typeof target !== 'object') return null;
+  const scale = (target as Record<string, unknown>)[CAPTURE_TEXEL_SCALE_KEY];
+  return typeof scale === 'number' && Number.isFinite(scale) && scale > 0 ? scale : null;
+}

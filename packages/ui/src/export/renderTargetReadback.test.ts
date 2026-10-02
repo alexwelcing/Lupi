@@ -3,9 +3,8 @@ import { DataUtils } from 'three';
 import type * as THREE from 'three/webgpu';
 import { registerCaptureGuard } from '@atlas/scene';
 import {
-  captureSupersampleFactor,
+  captureSupersamplePlan,
   decodeHalfFloatReadback,
-  decodeSupersampledHalfFloatReadback,
   halfToFloat,
   renderSceneToPixels,
   srgbOETF,
@@ -114,48 +113,30 @@ describe('decodeHalfFloatReadback', () => {
   });
 });
 
-describe('decodeSupersampledHalfFloatReadback', () => {
-  it('box-averages premultiplied linear blocks; uniform blocks decode exactly as one texel', () => {
-    const grey = [0.2158605, 0.2158605, 0.2158605, 1];
-    const orange = [0.5, 0.108, 0, 0.5];
-    const red = [1, 0, 0, 1];
-    const clear = [0, 0, 0, 0];
-    // 2× of a 3×1 image: grey block, orange block, a half-covered red edge.
-    const rows = [
-      [grey, grey, orange, orange, red, clear],
-      [grey, grey, orange, orange, red, clear],
-    ];
-    const rgba = decodeSupersampledHalfFloatReadback(readback(rows, 256), 3, 1, 2, false);
-    expect(pixel(rgba, 3, 0, 0)).toEqual(pixel(decodeHalfFloatReadback(readback([[grey]], 8), 1, 1, false), 1, 0, 0));
-    expect(pixel(rgba, 3, 0, 0)).toEqual([128, 128, 128, 255]);
-    expect(pixel(rgba, 3, 1, 0)).toEqual([255, 128, 0, 128]);
-    // Straight alpha: the edge keeps red's colour at half coverage, no dark fringe.
-    expect(pixel(rgba, 3, 2, 0)).toEqual([255, 0, 0, 128]);
+describe('captureSupersamplePlan', () => {
+  it('is 3× in one tile up to 1365 px and 2× above, never a tile over 4096 texels', () => {
+    expect(captureSupersamplePlan(320, 200)).toEqual({ factor: 3, columns: 1, rows: 1, tileWidth: 320, tileHeight: 200 });
+    expect(captureSupersamplePlan(1365, 1024)).toEqual({ factor: 3, columns: 1, rows: 1, tileWidth: 1365, tileHeight: 1024 });
+    expect(captureSupersamplePlan(1366, 768)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 1366, tileHeight: 768 });
+    expect(captureSupersamplePlan(2048, 2048)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 2048, tileHeight: 2048 });
+    // The UI's PNG download: four equal 1080 px tiles (2160 texels each).
+    expect(captureSupersamplePlan(2160, 2160)).toEqual({ factor: 2, columns: 2, rows: 2, tileWidth: 1080, tileHeight: 1080 });
+    // Equal tiles; the last column runs one pixel past the image.
+    expect(captureSupersamplePlan(2161, 100)).toEqual({ factor: 2, columns: 2, rows: 1, tileWidth: 1081, tileHeight: 100 });
+    expect(captureSupersamplePlan(4096, 4096)).toEqual({ factor: 2, columns: 2, rows: 2, tileWidth: 2048, tileHeight: 2048 });
+    for (const [w, h] of [[64, 64], [1365, 1365], [1366, 1366], [2049, 3000], [4096, 4096]]) {
+      const plan = captureSupersamplePlan(w, h);
+      expect(plan.tileWidth * plan.factor).toBeLessThanOrEqual(4096);
+      expect(plan.tileHeight * plan.factor).toBeLessThanOrEqual(4096);
+      expect(plan.tileWidth * plan.columns).toBeGreaterThanOrEqual(w);
+      expect(plan.tileHeight * plan.rows).toBeGreaterThanOrEqual(h);
+    }
   });
 
-  it('flips WebGL2 rows and clamps each texel before averaging (no highlight bleed)', () => {
-    const white = [1, 1, 1, 1];
-    const black = [0, 0, 0, 1];
-    const hot = [8, 8, 8, 1];
-    const rows = [
-      [black, black, white, white], // bottom row in GL order
-      [hot, black, white, white], // top row
-    ];
-    const rgba = decodeSupersampledHalfFloatReadback(readback(rows, 4 * 8), 2, 1, 2, true);
-    // One clamped white texel in four black ones: linear 0.25, not 2.
-    expect(pixel(rgba, 2, 0, 0)).toEqual([137, 137, 137, 255]);
-    expect(pixel(rgba, 2, 1, 0)).toEqual([255, 255, 255, 255]);
-  });
-});
-
-describe('captureSupersampleFactor', () => {
-  it('is 3 for ordinary sizes and never exceeds a 4096 side', () => {
-    expect(captureSupersampleFactor(320, 200)).toBe(3);
-    expect(captureSupersampleFactor(1024, 1024)).toBe(3);
-    expect(captureSupersampleFactor(1366, 768)).toBe(2);
-    expect(captureSupersampleFactor(2048, 2048)).toBe(2);
-    expect(captureSupersampleFactor(2049, 100)).toBe(1);
-    expect(captureSupersampleFactor(4096, 4096)).toBe(1);
+  it('keeps an untiled capture in one target of at most 4096 texels', () => {
+    expect(captureSupersamplePlan(320, 200, false)).toEqual({ factor: 3, columns: 1, rows: 1, tileWidth: 320, tileHeight: 200 });
+    expect(captureSupersamplePlan(2048, 1024, false)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 2048, tileHeight: 1024 });
+    expect(captureSupersamplePlan(2160, 2160, false)).toEqual({ factor: 1, columns: 1, rows: 1, tileWidth: 2160, tileHeight: 2160 });
   });
 });
 

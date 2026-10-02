@@ -36,13 +36,16 @@ export type ExecutionClassV2 = (typeof EXECUTION_CLASS_V2)[LupiBackend];
  * How a V2 raster is produced (the capture engine in renderTargetReadback.ts
  * and ExportManager). Every field is part of the renderer fingerprint.
  *
- * - The scene renders into a HalfFloat linear render target with no MSAA,
+ * - The scene renders into HalfFloat linear render targets with no MSAA,
  *   read back asynchronously; the canvas is never read.
- * - The target is supersampled: `factor` = min(3, floor(4096 / longest
- *   side)) times the requested size on each side (1 above 2048), and the CPU
- *   box-averages each factor×factor block of premultiplied linear texels,
- *   each clamped as the screen shows it, in a fixed order. That is what
- *   anti-aliases impostor silhouettes, which MSAA cannot.
+ * - It is supersampled: `factor` times the requested size on each side, 3 up
+ *   to 1365 px and 2 above, in equal view-offset tiles of at most 4096 texels
+ *   a side. A GPU pass box-averages each factor×factor block of premultiplied
+ *   linear texels, each clamped as the screen shows it, in a fixed order (f32
+ *   sums, stored as HalfFloat) into an output-sized target. That is what
+ *   anti-aliases impostor silhouettes, which MSAA cannot. A scene with a
+ *   screen-space transmission material is not tiled: one target, factor
+ *   min(3, floor(4096 / longest side)).
  * - The CPU then un-premultiplies in linear light, applies the sRGB OETF and
  *   rounds, so flat regions match the canvas and transparent output is
  *   straight alpha.
@@ -60,7 +63,7 @@ export const DETERMINISM_V2 = {
   pixelRatio: 1,
   readback: 'render-target-async',
   renderTarget: 'rgba16f-linear-premultiplied-samples0',
-  supersample: 'ssaa-box-premultiplied-clamped.v1;factor=min(3,floor(4096/max(w,h)))',
+  supersample: 'ssaa-box-premultiplied-clamped.v2;factor=max(w,h)<=1365?3:2;tiles=view-offset<=4096;gpu-f32-sum-rgba16f;untiled-transmission=min(3,floor(4096/max(w,h)))',
   pixelEncode: 'cpu-linear-unpremultiply-srgb-oetf-round.v1',
   rowOrder: 'top-left;destride-256;flip-webgl2',
   alpha: 'straight',

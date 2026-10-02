@@ -67,6 +67,8 @@ export {
   beginCaptureRender,
   registerRecordingGuard,
   beginRecording,
+  CAPTURE_TEXEL_SCALE_KEY,
+  captureTexelScale,
 } from './captureGuards';
 export type { CaptureGuard } from './captureGuards';
 

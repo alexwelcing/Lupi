@@ -278,24 +278,34 @@ and active-state checks. JPEG is opaque only; GLB rejects raster dimensions and
 transparency.
 
 Raster capture never reads the canvas. It renders the raw Three.js scene with
-a copy of the artifact camera into its own HalfFloat render target,
-supersampled (no MSAA, pixel ratio 1, no renderer tone mapping), and reads it
-back asynchronously. On the CPU it de-strides WebGPU rows, flips WebGL2 rows,
-box-averages the supersampled blocks, un-premultiplies in linear light,
-applies the sRGB OETF and rounds. Flat regions therefore match the on-screen
-canvas, and transparent output is straight alpha. The canvas keeps its size,
-and the live view does not flicker.
+a copy of the artifact camera into its own HalfFloat render targets,
+supersampled (no MSAA, pixel ratio 1, no renderer tone mapping), and reads the
+result back asynchronously. On the CPU it de-strides WebGPU rows, flips WebGL2
+rows, un-premultiplies in linear light, applies the sRGB OETF and rounds. Flat
+regions therefore match the on-screen canvas, and transparent output is
+straight alpha. The canvas keeps its size, and the live view does not flicker.
 
 - Supersampling is what anti-aliases exported edges. Atoms and bonds are
   ray-cast impostors that discard outside their silhouette, and MSAA cannot
-  smooth that. The target is `factor` times the requested size on each side,
-  where `factor = min(3, floor(4096 / longest side))`: 3 up to 1365 px, 2 up
-  to 2048 px, and 1 above that. So the target is never larger than a 4096 px
-  side, the biggest raster an export can ask for anyway. Each factor x factor
-  block of premultiplied linear texels is averaged in a fixed order. Each texel
-  is first clamped as the screen would show it, so a highlight cannot bleed.
-  Thumbnails use the same path. `supersample` in the fingerprint's
-  determinism facts records the rule.
+  smooth that. The scene renders at `factor` times the requested size on each
+  side: 3 up to 1365 px on the longest side, 2 above, for every size up to
+  4096 (the UI's 2160 px PNG included). It renders in equal tiles of at most
+  4096 texels a side (one tile up to 2048 px), each with a view offset of the
+  capture camera, into one reused tile target, so no target is larger than a
+  4096 px side. After each tile a GPU pass box-averages every factor x factor
+  block of premultiplied linear texels into the tile's rectangle of an
+  output-sized target, in a fixed order with f32 sums. Each texel is first
+  clamped as the screen would show it, so a highlight cannot bleed. Only the
+  output-sized target is read back. Thumbnails use the same path.
+- A scene with a screen-space transmission material (the true-transmission
+  atoms) is not tiled, because its refraction samples a buffer of the whole
+  view: it renders one target at `min(3, floor(4096 / longest side))`, so
+  exports above 2048 px with transmission are not supersampled. `supersample`
+  in the fingerprint's determinism facts records the rule.
+- The simulation cell is drawn as 1-texel lines. The capture marks its tile
+  target with the factor, and the cell scales its opacity by it, so an
+  exported cell keeps the weight of a 1 px line (in the live view the cell
+  scales by the canvas DPR over 1.25 instead).
 
 - The interactive post pipeline (AO, bloom, depth of field, output tone
   mapping, vignette) is bypassed. Exports show the raw scene with the viewer's

@@ -2,14 +2,33 @@
  * renderTargetReadback.ts — the export capture engine (plan-final §5.13, D10).
  *
  * WebGPURenderer cannot keep its drawing buffer between frames, so exports and
- * thumbnails never copy the canvas. They render the scene into a HalfFloat
- * linear render target at the requested size (the canvas is not resized, so
- * the live view never flickers) and read it back asynchronously:
+ * thumbnails never copy the canvas. They render the scene into HalfFloat
+ * linear render targets of their own (the canvas is not resized, so the live
+ * view never flickers) and read the result back asynchronously.
  *
- *   rt = new THREE.RenderTarget(w, h, { type: THREE.HalfFloatType, samples: 0 });
- *   prev = renderer.getRenderTarget(); renderer.setRenderTarget(rt);
- *   renderer.render(scene, camera); renderer.setRenderTarget(prev);   // synchronous restore
- *   u16 = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h); rt.dispose();
+ * Supersampling (captureSupersamplePlan): the scene is rendered at `factor`
+ * times the requested size on each side, 3 up to 1365 px and 2 above, in
+ * equal tiles of at most 4096 texels a side (one tile up to 2048 px). Each
+ * tile renders with a view offset of the capture camera into one reused
+ * HalfFloat tile target; a GPU pass then box-averages every factor×factor
+ * block of premultiplied linear texels (each clamped as the screen shows it,
+ * summed in a fixed order in f32) into its rectangle of an output-sized
+ * HalfFloat target, which is read back once. Atoms and bonds are ray-cast
+ * impostors whose silhouettes no MSAA can smooth, so this is what
+ * anti-aliases exported edges; averaging premultiplied colour keeps
+ * transparent edges straight-alpha correct, and integer factors with a fixed
+ * order keep it deterministic per execution class. A scene with a
+ * screen-space transmission material (its refraction samples a buffer of the
+ * whole view) is not tiled: one target, factor min(3, floor(4096 / longest
+ * side)), so 1 above 2048 px.
+ *
+ *   tile = new THREE.RenderTarget(tw·f, th·f, { type: HalfFloatType, samples: 0 });
+ *   out  = new THREE.RenderTarget(w, h, { type: HalfFloatType, depthBuffer: false });
+ *   for each tile: camera.setViewOffset(w·f, h·f, x·f, y·f, tw·f, th·f);
+ *     renderer.setRenderTarget(tile); renderer.render(scene, camera);
+ *     renderer.setRenderTarget(out); downsample.render(renderer);  // its rectangle only
+ *   restore the camera and renderer synchronously, then
+ *   u16 = await renderer.readRenderTargetPixelsAsync(out, 0, 0, w, h);
  *
  * then decode on the CPU (lead probe L3):
  * - WebGPU rows are padded to 256 bytes (the last row is not) and top-left;
@@ -17,16 +36,7 @@
  * - Pixels are premultiplied linear colour, so un-premultiply in linear, then
  *   sRGB-encode and round. One code path for opaque and transparent output.
  *
- * Supersampling: the target is `factor` times the requested size on each
- * side (captureSupersampleFactor: 3, or 2, or 1 for very large requests, so
- * the target never exceeds 4096 on a side) and the CPU box-averages each
- * factor×factor block of premultiplied linear texels before it un-premultiplies.
- * Atoms and bonds are ray-cast impostors whose silhouettes no MSAA can smooth,
- * so this is what anti-aliases exported edges; averaging premultiplied colour
- * keeps transparent edges straight-alpha correct. Integer factors and a fixed
- * summation order keep it deterministic per execution class.
- *
- * The render target bypasses the post pipeline and the renderer's output
+ * The render targets bypass the post pipeline and the renderer's output
  * transform (DETERMINISM_V2: raw scene, straight alpha, sRGB OETF on the CPU).
  *
  * Captures run inside the frame loop, in the `lupi-capture` phase after the
@@ -36,7 +46,8 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three/webgpu';
-import { LUPI_JOB, LUPI_PHASE, beginCaptureRender, runPrepareCapture } from '@atlas/scene';
+import { Discard, Fn, If, clamp, int, ivec2, screenCoordinate, texture, textureLoad, uniform, vec3, vec4 } from 'three/tsl';
+import { CAPTURE_TEXEL_SCALE_KEY, LUPI_JOB, LUPI_PHASE, beginCaptureRender, runPrepareCapture } from '@atlas/scene';
 import type { SavedViewThumbnail } from '../savedViews';
 import type { LupiBackend } from '../viewer/createLupiRenderer';
 
@@ -61,23 +72,50 @@ export interface RenderSceneToPixelsOptions {
    * draws. Defaults to the renderer's clear colour, made opaque.
    */
   clearColor?: THREE.ColorRepresentation;
-  /** Supersampling factor; defaults to captureSupersampleFactor(width, height). */
-  supersample?: number;
 }
 
 /** Largest supersampling factor (3×3 samples per output pixel). */
 export const CAPTURE_SUPERSAMPLE_MAX_FACTOR = 3;
 /**
- * Largest side of a supersampled capture target: the largest raster an export
- * may request anyway (BROWSER_RENDER_CAPABILITY_V1), so supersampling never
- * allocates a bigger target than an un-supersampled 4096² export already does.
+ * Largest side of a capture's tile target, in texels: the largest raster an
+ * export may request anyway (BROWSER_RENDER_CAPABILITY_V1), so supersampling
+ * never allocates a bigger target than an un-supersampled 4096² export does.
  */
-export const CAPTURE_SUPERSAMPLE_MAX_SIDE = 4096;
+export const CAPTURE_TILE_MAX_SIDE = 4096;
 
-/** The capture's supersampling factor: min(3, floor(4096 / longest side)), at least 1. */
-export function captureSupersampleFactor(width: number, height: number): number {
-  const longest = Math.max(1, Math.floor(width), Math.floor(height));
-  return Math.max(1, Math.min(CAPTURE_SUPERSAMPLE_MAX_FACTOR, Math.floor(CAPTURE_SUPERSAMPLE_MAX_SIDE / longest)));
+/**
+ * How a capture is supersampled: `factor` texels per output pixel on each
+ * side, rendered as `columns` × `rows` equal tiles of `tileWidth` ×
+ * `tileHeight` output pixels (the last column and row may run past the
+ * image; what falls outside is never written).
+ */
+export interface CaptureSupersamplePlan {
+  factor: number;
+  columns: number;
+  rows: number;
+  tileWidth: number;
+  tileHeight: number;
+}
+
+/**
+ * The supersampling plan for a w×h capture. Tiled: factor 3 while one 4096
+ * tile holds it (up to 1365 px), else 2, in as few equal tiles of at most 4096
+ * texels a side as cover it (one up to 2048 px). Untiled (`tileable` false):
+ * one target, factor min(3, floor(4096 / longest side)), at least 1.
+ */
+export function captureSupersamplePlan(width: number, height: number, tileable = true): CaptureSupersamplePlan {
+  const w = Math.max(1, Math.floor(width));
+  const h = Math.max(1, Math.floor(height));
+  const fit = Math.floor(CAPTURE_TILE_MAX_SIDE / Math.max(w, h));
+  if (!tileable) {
+    const factor = Math.max(1, Math.min(CAPTURE_SUPERSAMPLE_MAX_FACTOR, fit));
+    return { factor, columns: 1, rows: 1, tileWidth: w, tileHeight: h };
+  }
+  const factor = fit >= CAPTURE_SUPERSAMPLE_MAX_FACTOR ? CAPTURE_SUPERSAMPLE_MAX_FACTOR : 2;
+  const maxTile = Math.floor(CAPTURE_TILE_MAX_SIDE / factor);
+  const columns = Math.ceil(w / maxTile);
+  const rows = Math.ceil(h / maxTile);
+  return { factor, columns, rows, tileWidth: Math.ceil(w / columns), tileHeight: Math.ceil(h / rows) };
 }
 
 /** The viewer plate (dark sage), used when the page behind the canvas has no colour. */
@@ -95,13 +133,6 @@ const BYTES_PER_HALF_TEXEL = 8;
 const ROW_ALIGNMENT = 256;
 
 /**
- * Render `scene` with `camera` into a w×h HalfFloat render target and read it
- * back as straight-alpha sRGB bytes (top-left origin). The render and the
- * restore of every renderer setting it touches happen synchronously in the
- * call, before the first await, so a caller in the `lupi-capture` phase can
- * swap scene state around the call and restore it right after.
- */
-/**
  * Warm-up compiles still running. three r186's `compileAsync` creates its
  * pipelines one render object at a time between awaits, and reads the depth
  * format from the render context it shares with every capture target of the
@@ -118,23 +149,38 @@ function releaseCaptureTarget(target: THREE.RenderTarget): void {
   else void Promise.allSettled([...warmups]).then(() => target.dispose());
 }
 
+/**
+ * Render `scene` with `camera`, supersampled (captureSupersamplePlan), and
+ * read it back as straight-alpha w×h sRGB bytes (top-left origin). Every
+ * render, and the restore of every renderer and camera setting it touches,
+ * happens synchronously in the call, before the first await, so a caller in
+ * the `lupi-capture` phase can swap scene state around the call and restore
+ * it right after.
+ */
 export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): Promise<RasterReadback> {
   const { renderer, scene, camera, width, height, transparent } = options;
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
     throw new Error(`renderSceneToPixels: invalid size ${width}x${height}.`);
   }
   const backend = rendererBackendOf(renderer);
-  const factor = options.supersample ?? captureSupersampleFactor(width, height);
-  if (!Number.isInteger(factor) || factor < 1) {
-    throw new Error(`renderSceneToPixels: invalid supersampling factor ${factor}.`);
-  }
-  const targetWidth = width * factor;
-  const targetHeight = height * factor;
-  const target = new THREE.RenderTarget(targetWidth, targetHeight, {
+  const plan = captureSupersamplePlan(width, height, canTileCapture(scene, camera));
+  const { factor, columns, rows, tileWidth, tileHeight } = plan;
+  const tiled = columns > 1 || rows > 1;
+  const tile = new THREE.RenderTarget(tileWidth * factor, tileHeight * factor, {
     type: THREE.HalfFloatType,
     samples: 0,
     depthBuffer: true,
   });
+  // Hairline layers (the simulation cell) keep their exported weight by it.
+  (tile as unknown as Record<string, unknown>)[CAPTURE_TEXEL_SCALE_KEY] = factor;
+  // factor 1 reads the tile itself (one tile, the requested size).
+  const output = factor === 1
+    ? tile
+    : new THREE.RenderTarget(width, height, { type: THREE.HalfFloatType, samples: 0, depthBuffer: false });
+  const release = () => {
+    releaseCaptureTarget(tile);
+    if (output !== tile) releaseCaptureTarget(output);
+  };
 
   const previousTarget = renderer.getRenderTarget();
   const previousCubeFace = renderer.getActiveCubeFace();
@@ -146,26 +192,55 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   const previousAutoClearStencil = renderer.autoClearStencil;
   const previousClearColor = renderer.getClearColor(new THREE.Color());
   const previousClearAlpha = renderer.getClearAlpha();
-  // Capture guards (display motion, …) hold toys at rest for exactly this
-  // render; their restores run LIFO first thing in the finally.
+  const restoreCamera = tiled ? saveCameraView(camera as ViewOffsetCamera) : () => {};
+  // Capture guards (display motion, …) hold toys at rest for exactly these
+  // renders; their restores run LIFO first thing in the finally.
   let restoreGuards = () => {};
 
   try {
-    renderer.setRenderTarget(target);
+    renderer.setRenderTarget(tile);
     renderer.setMRT(null);
-    renderer.autoClear = true;
     renderer.autoClearColor = true;
     renderer.autoClearDepth = true;
     renderer.autoClearStencil = true;
     if (transparent) renderer.setClearColor(0x000000, 0);
     else renderer.setClearColor(options.clearColor ?? previousClearColor, 1);
     restoreGuards = beginCaptureRender();
-    renderer.render(scene, camera);
+    // Tiles in a fixed order, row by row; each is rendered, then reduced into
+    // its rectangle of the output before the next one reuses the tile target.
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const x = column * tileWidth;
+        const y = row * tileHeight;
+        if (tiled) {
+          (camera as ViewOffsetCamera).setViewOffset(
+            width * factor,
+            height * factor,
+            x * factor,
+            y * factor,
+            tileWidth * factor,
+            tileHeight * factor,
+          );
+        }
+        if (row > 0 || column > 0) renderer.setRenderTarget(tile);
+        renderer.autoClear = true;
+        renderer.render(scene, camera);
+        if (output === tile) continue;
+        const reduce = captureDownsampler(factor, tile.texture);
+        reduce.source.value = tile.texture;
+        reduce.origin.value.set(x, y);
+        reduce.extent.value.set(Math.min(tileWidth, width - x), Math.min(tileHeight, height - y));
+        renderer.setRenderTarget(output);
+        renderer.autoClear = false;
+        reduce.quad.render(renderer);
+      }
+    }
   } catch (error) {
-    releaseCaptureTarget(target);
+    release();
     throw error;
   } finally {
     restoreGuards();
+    restoreCamera();
     renderer.setClearColor(previousClearColor, previousClearAlpha);
     renderer.autoClear = previousAutoClear;
     renderer.autoClearColor = previousAutoClearColor;
@@ -176,14 +251,110 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   }
 
   try {
-    const data = await renderer.readRenderTargetPixelsAsync(target, 0, 0, targetWidth, targetHeight);
-    const rgba = factor === 1
-      ? decodeHalfFloatReadback(data, width, height, backend === 'webgl2')
-      : decodeSupersampledHalfFloatReadback(data, width, height, factor, backend === 'webgl2');
+    const data = await renderer.readRenderTargetPixelsAsync(output, 0, 0, width, height);
+    const rgba = decodeHalfFloatReadback(data, width, height, backend === 'webgl2');
     return { width, height, rgba, backend };
   } finally {
-    releaseCaptureTarget(target);
+    release();
   }
+}
+
+type ViewOffsetCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
+
+/**
+ * Whether a capture may be tiled: the camera takes a view offset (and has
+ * none of its own), and nothing visible samples a screen-space buffer of the
+ * whole view. drei's MeshTransmissionMaterial (the true-transmission atoms)
+ * refracts a buffer rendered beside the scene, and physical transmission
+ * reads the render's own opaque pass; under a tile's view offset either would
+ * sample the wrong part of the picture.
+ */
+function canTileCapture(scene: THREE.Object3D, camera: THREE.Camera): boolean {
+  const viewCamera = camera as Partial<ViewOffsetCamera>;
+  if (!(camera instanceof THREE.PerspectiveCamera || camera instanceof THREE.OrthographicCamera)) return false;
+  if (viewCamera.view?.enabled) return false;
+  let screenSpace = false;
+  if (typeof scene.traverseVisible === 'function') {
+    scene.traverseVisible((object) => {
+      if (screenSpace) return;
+      const material = (object as THREE.Mesh).material;
+      const materials = Array.isArray(material) ? material : material ? [material] : [];
+      screenSpace = materials.some((entry) => {
+        const candidate = entry as THREE.Material & { isMeshTransmissionMaterial?: boolean; transmission?: number };
+        return candidate.isMeshTransmissionMaterial === true || (candidate.transmission ?? 0) > 0;
+      });
+    });
+  }
+  return !screenSpace;
+}
+
+/** Saves the camera's view offset (and aspect); the returned restore puts both back. */
+function saveCameraView(camera: ViewOffsetCamera): () => void {
+  const view = camera.view ? { ...camera.view } : null;
+  const aspect = camera instanceof THREE.PerspectiveCamera ? camera.aspect : null;
+  return () => {
+    camera.view = view;
+    if (aspect !== null && camera instanceof THREE.PerspectiveCamera) camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+  };
+}
+
+interface CaptureDownsampler {
+  quad: THREE.QuadMesh;
+  source: { value: THREE.Texture };
+  /** The tile's top-left output pixel. */
+  origin: { value: THREE.Vector2 };
+  /** Output pixels the tile covers inside the image. */
+  extent: { value: THREE.Vector2 };
+}
+
+const downsamplers = new Map<number, CaptureDownsampler>();
+
+/**
+ * The GPU reduction for one factor: a full-target quad that keeps only the
+ * tile's rectangle of the output and writes, per output pixel, the mean of
+ * its factor×factor block of tile texels. Each texel is first clamped as the
+ * screen would show it (alpha to 0..1, colour to 0..alpha), so an over-range
+ * highlight cannot bleed into its neighbours; the sum runs in a fixed order
+ * in f32 and is stored as HalfFloat, premultiplied and linear, for the CPU
+ * decode. screenCoordinate and the tile texel rows are both top-left on
+ * either backend (three flips them on WebGL2).
+ */
+function captureDownsampler(factor: number, initial: THREE.Texture): CaptureDownsampler {
+  const cached = downsamplers.get(factor);
+  if (cached) return cached;
+  const source: any = texture(initial);
+  const origin: any = uniform(new THREE.Vector2());
+  const extent: any = uniform(new THREE.Vector2(1, 1));
+  const material = new THREE.NodeMaterial();
+  material.name = `lupi-capture-downsample-${factor}x`;
+  material.fragmentNode = (Fn(() => {
+    const local: any = (screenCoordinate as any).xy.sub(origin).toVar();
+    If(
+      local.x.lessThan(0).or(local.y.lessThan(0)).or(local.x.greaterThanEqual(extent.x)).or(local.y.greaterThanEqual(extent.y)),
+      () => {
+        Discard();
+      },
+    );
+    const base: any = (ivec2(local) as any).mul(int(factor)).toVar();
+    let sum: any = vec4(0);
+    for (let dy = 0; dy < factor; dy += 1) {
+      for (let dx = 0; dx < factor; dx += 1) {
+        const texel: any = (textureLoad(source, base.add(ivec2(dx, dy))) as any).toVar();
+        const alpha: any = clamp(texel.a, 0, 1);
+        sum = sum.add(vec4(texel.rgb.max(vec3(0)).min(vec3(alpha)), alpha));
+      }
+    }
+    return sum.mul(1 / (factor * factor));
+  }) as any)();
+  material.depthTest = false;
+  material.depthWrite = false;
+  material.blending = THREE.NoBlending;
+  material.fog = false;
+  material.toneMapped = false;
+  const downsampler: CaptureDownsampler = { quad: new THREE.QuadMesh(material), source, origin, extent };
+  downsamplers.set(factor, downsampler);
+  return downsampler;
 }
 
 export interface CompileSceneForCaptureOptions {
@@ -292,86 +463,6 @@ export function decodeHalfFloatReadback(
   return out;
 }
 
-/**
- * decodeHalfFloatReadback for a target `factor` times the output size on each
- * side: each output pixel box-averages its factor×factor block of
- * premultiplied linear texels (rows top to bottom, texels left to right;
- * each texel clamped as the screen shows it), then un-premultiplies,
- * sRGB-encodes and rounds as the 1× decode does. A block of identical texels
- * decodes exactly as that texel alone.
- */
-export function decodeSupersampledHalfFloatReadback(
-  data: ArrayBufferView,
-  width: number,
-  height: number,
-  factor: number,
-  flipY: boolean,
-): Uint8ClampedArray {
-  if (factor === 1) return decodeHalfFloatReadback(data, width, height, flipY);
-  const sourceWidth = width * factor;
-  const sourceHeight = height * factor;
-  const rowBytes = sourceWidth * BYTES_PER_HALF_TEXEL;
-  const tightBytes = rowBytes * sourceHeight;
-  const stride = data.byteLength === tightBytes ? rowBytes : Math.ceil(rowBytes / ROW_ALIGNMENT) * ROW_ALIGNMENT;
-  const expectedBytes = stride * (sourceHeight - 1) + rowBytes;
-  if (data.byteLength < expectedBytes || data.byteOffset % 2 !== 0) {
-    throw new Error(
-      `Render target readback is ${data.byteLength} bytes; ${sourceWidth}x${sourceHeight} RGBA16F needs ${expectedBytes} (stride ${stride}).`,
-    );
-  }
-  const halves = new Uint16Array(data.buffer, data.byteOffset, Math.floor(data.byteLength / 2));
-  const strideHalves = stride / 2;
-  const toFloat = halfFloatTable();
-  const samples = factor * factor;
-  const out = new Uint8ClampedArray(width * height * 4);
-  // Running sums for one output row (premultiplied linear RGBA).
-  const sums = new Float64Array(width * 4);
-
-  for (let row = 0; row < height; row += 1) {
-    sums.fill(0);
-    for (let sub = 0; sub < factor; sub += 1) {
-      const sourceRowTopDown = row * factor + sub;
-      const sourceRow = flipY ? sourceHeight - 1 - sourceRowTopDown : sourceRowTopDown;
-      let source = sourceRow * strideHalves;
-      for (let x = 0; x < width; x += 1) {
-        const sum = x * 4;
-        for (let k = 0; k < factor; k += 1, source += 4) {
-          // Each texel as the screen would show it: alpha in 0..1, colour in
-          // 0..alpha (clamp01 of the straight colour, premultiplied again), so
-          // an over-range highlight cannot bleed into its neighbours.
-          const a = clamp01(toFloat[halves[source + 3]]);
-          sums[sum] += clampTo(toFloat[halves[source]], a);
-          sums[sum + 1] += clampTo(toFloat[halves[source + 1]], a);
-          sums[sum + 2] += clampTo(toFloat[halves[source + 2]], a);
-          sums[sum + 3] += a;
-        }
-      }
-    }
-    let target = row * width * 4;
-    for (let x = 0; x < width; x += 1, target += 4) {
-      const sum = x * 4;
-      const alpha = clamp01(sums[sum + 3] / samples);
-      if (alpha <= 0) continue;
-      out[target] = Math.round(srgbOETF(clamp01(sums[sum] / samples / alpha)) * 255);
-      out[target + 1] = Math.round(srgbOETF(clamp01(sums[sum + 1] / samples / alpha)) * 255);
-      out[target + 2] = Math.round(srgbOETF(clamp01(sums[sum + 2] / samples / alpha)) * 255);
-      out[target + 3] = Math.round(alpha * 255);
-    }
-  }
-  return out;
-}
-
-let halfTable: Float32Array | null = null;
-
-/** Half bits → float (exact: every binary16 value is a binary32 value), built once. */
-function halfFloatTable(): Float32Array {
-  if (halfTable) return halfTable;
-  const table = new Float32Array(0x10000);
-  for (let bits = 0; bits < 0x10000; bits += 1) table[bits] = halfToFloat(bits);
-  halfTable = table;
-  return table;
-}
-
 /** The sRGB transfer function (linear 0..1 → encoded 0..1). Input is clamped. */
 export function srgbOETF(x: number): number {
   const linear = clamp01(x);
@@ -399,11 +490,6 @@ function opaqueEncodeTable(): Uint8Array {
   }
   opaqueTable = table;
   return table;
-}
-
-/** `value` clamped to 0..max (max ≥ 0); NaN becomes 0. */
-function clampTo(value: number, max: number): number {
-  return value > 0 ? (value < max ? value : max) : 0;
 }
 
 function clamp01(value: number): number {
