@@ -17,6 +17,13 @@ describe('ViewerCanvas renderer policy', () => {
     expect(viewerDprRange('high', 2_000_000)).toEqual([1, 1.5]);
   });
 
+  it('keeps a phone on the WebGL2 backend at most at DPR 2', () => {
+    expect(viewerDprRange('mobile', 60, 'webgpu')).toEqual([1, 3]);
+    expect(viewerDprRange('mobile', 60, 'webgl2')).toEqual([1, 2]);
+    expect(viewerDprRange('mobile', 1_000_000, 'webgl2')).toEqual([1, 1.5]);
+    expect(viewerDprRange('desktop', 60, 'webgl2')).toEqual([1, 2]);
+  });
+
   it('uses sRGB output without a second renderer tone-map pass', () => {
     const renderer = {
       outputColorSpace: THREE.LinearSRGBColorSpace as string,

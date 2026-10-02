@@ -48,8 +48,11 @@ export interface LupiCanvasProps {
   /** Scene background colour (the Canvas `background` prop). */
   background?: THREE.ColorRepresentation;
   children: ReactNode;
-  /** Called once the renderer is initialized and configured. */
-  onRuntime?: (runtime: LupiRendererRuntime) => void;
+  /**
+   * Called once the renderer is initialized and configured, before the first
+   * frame; `root.setDpr` resizes the canvas before anything is drawn.
+   */
+  onRuntime?: (runtime: LupiRendererRuntime, root: { setDpr(dpr: [number, number] | number): void }) => void;
 }
 
 const FILL_STYLE = { width: '100%', height: '100%' } as const;
@@ -96,7 +99,7 @@ export function LupiCanvas({
             if (renderer.domElement instanceof HTMLCanvasElement) canvasesRef.current.add(renderer.domElement);
             const runtime = recordLupiRendererRuntime(renderer);
             setBackend(runtime.backend);
-            onRuntime?.(runtime);
+            onRuntime?.(runtime, state);
           }}
           style={{
             background: 'transparent',

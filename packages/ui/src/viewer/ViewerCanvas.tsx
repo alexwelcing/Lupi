@@ -1,7 +1,8 @@
-import { useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getDeviceTier, type DeviceTier } from '../deviceCapabilities';
 import type { RenderCapability } from '../renderCapability';
 import { LupiCanvas } from './LupiCanvas';
+import type { LupiBackend, LupiRendererRuntime } from './createLupiRenderer';
 import { FirstFrameSignal } from '../relay/FirstFrameSignal';
 
 interface ViewerCanvasProps {
@@ -28,6 +29,13 @@ const MAX_DPR_BY_DEVICE_TIER: Record<DeviceTier, readonly [small: number, large:
   high: [2, 2, 1.5],
 };
 
+/**
+ * A phone on the WebGL2 backend has no WebGPU: an older browser or a weaker
+ * GPU (iOS Safari 26 and current Android Chrome run WebGPU). Its canvas stays
+ * at most 2x; FXAA still smooths the silhouettes.
+ */
+export const WEBGL2_PHONE_MAX_DPR = 2;
+
 /** Up to this many atoms a structure is small (ViewerScene's large-scene threshold). */
 export const DPR_SMALL_STRUCTURE_ATOMS = 50_000;
 /** Above this many atoms a structure is very large (the atoms' full-quality limit). */
@@ -36,12 +44,20 @@ export const DPR_LARGE_STRUCTURE_ATOMS = 400_000;
 /** DOM id of the element that wraps the viewer's canvas (`#lupi-viewer-canvas canvas`). */
 export const VIEWER_CANVAS_ID = 'lupi-viewer-canvas';
 
-/** The viewer's DPR range: [1, the tier's cap for this structure size]. */
-export function viewerDprRange(tier: DeviceTier = getDeviceTier(), atomCount = 0): [number, number] {
+/**
+ * The viewer's DPR range: [1, the tier's cap for this structure size], and at
+ * most WEBGL2_PHONE_MAX_DPR for a phone on the WebGL2 backend. `backend` is
+ * null until the renderer has started.
+ */
+export function viewerDprRange(
+  tier: DeviceTier = getDeviceTier(),
+  atomCount = 0,
+  backend: LupiBackend | null = null,
+): [number, number] {
   const [small, large, huge] = MAX_DPR_BY_DEVICE_TIER[tier];
   const count = Number.isFinite(atomCount) ? atomCount : 0;
   const max = count <= DPR_SMALL_STRUCTURE_ATOMS ? small : count <= DPR_LARGE_STRUCTURE_ATOMS ? large : huge;
-  return [1, max];
+  return [1, backend === 'webgl2' && tier === 'mobile' ? Math.min(max, WEBGL2_PHONE_MAX_DPR) : max];
 }
 
 /**
@@ -58,7 +74,19 @@ export function ViewerCanvas({
   children,
 }: ViewerCanvasProps) {
   const tier = useMemo(getDeviceTier, []);
-  const dpr = useMemo(() => viewerDprRange(tier, atomCount), [tier, atomCount]);
+  const [backend, setBackend] = useState<LupiBackend | null>(null);
+  const dpr = useMemo(() => viewerDprRange(tier, atomCount, backend), [tier, atomCount, backend]);
+  const atomCountRef = useRef(atomCount);
+  atomCountRef.current = atomCount;
+  // The backend is known once the renderer has started, before the first
+  // frame: apply its cap to the canvas at once, then keep the prop in step.
+  const onRuntime = useCallback(
+    (runtime: LupiRendererRuntime, root: { setDpr(dpr: [number, number] | number): void }) => {
+      root.setDpr(viewerDprRange(tier, atomCountRef.current, runtime.backend));
+      setBackend(runtime.backend);
+    },
+    [tier],
+  );
   return (
     <LupiCanvas
       id={VIEWER_CANVAS_ID}
@@ -71,6 +99,7 @@ export function ViewerCanvas({
         far: Math.max(10000, cameraDistance * 100),
       }}
       dpr={dpr}
+      onRuntime={onRuntime}
     >
       {children}
       <FirstFrameSignal />
