@@ -47,6 +47,8 @@ Windows and Linux checkouts.
 | npm `1123492` | `protobufjs` | `7.6.1` -> `7.6.3` | moderate | public web: `firebase -> @firebase/firestore -> @grpc/proto-loader -> protobufjs` | Reachable through saved-view and other Firestore behavior. | Upgraded Firebase to `12.16.0`; constrained only vulnerable `protobufjs@7.6.1` to the fixed patch admitted by the proto-loader range. No known advisory remains. |
 | `GHSA-c2c7-rcm5-vvqj` | `picomatch` | `4.0.3` -> `4.0.5` | high | Expo/React Native build tooling through `tinyglobby` | Build-time only; Lupi does not accept remote glob expressions. | Constrained only the resolved vulnerable `4.0.3` source version to patched `4.0.5`. |
 | `GHSA-mh99-v99m-4gvg`, `GHSA-rgw5-rvv9-x895` | `brace-expansion` | `1.1.14` -> `1.1.18`; `5.0.7` -> `5.0.9` | high | Expo CLI/config build tooling through `glob` and `minimatch` | Build-time only; patterns originate in repository and Expo configuration. | Constrained only the two resolved vulnerable source versions to compatible patched releases. |
+| `GHSA-qhr7-859c-m2p7`, `GHSA-6j4f-fj2g-mc7p` | `brace-expansion` | `5.0.9` -> `5.0.12` | high | Expo CLI/config build tooling through `glob` and `minimatch` | Build-time only; patterns originate in repository and Expo configuration. | Constrained the resolved `5.0.9` (and the earlier `5.0.7` key) to `5.0.12`, admitted by `minimatch`'s `^5.0.5`. No known advisory remains on this path. |
+| `GHSA-m9gg-hp2v-232j` | `@grpc/grpc-js` | `1.14.4` -> `1.14.5` | high | `apps/lupine-app`: `firebase-admin -> @google-cloud/firestore -> google-gax -> @grpc/grpc-js` | Server-side Firestore client in the Lupine app. | Constrained only the resolved `1.14.4` to patched `1.14.5`, admitted by `google-gax`'s `^1.10.9`. The browser Firestore path is a retained exception below. |
 | `GHSA-5p4m-2wfm-xmqj` | `js-yaml` | `4.3.0` -> `4.3.1` | high | Expo CLI display/build tooling through `@expo/xcpretty` | Build-time only; no app or service endpoint parses attacker-supplied YAML through this path. | Constrained only the resolved vulnerable `4.3.0` source version to patched `4.3.1`. |
 | `GHSA-2v37-7h3g-55p8` | `nanoid` | `3.3.17` -> `3.3.18` | high | Mobile/web navigation runtime through Expo Router; CSS build tooling through PostCSS | Expo Router's reachable calls use the default generator and never pass an attacker-controlled custom size of zero; Lupi has no first-party custom zero-size call. | Constrained only the resolved `3.3.17` source version to patched `3.3.18`, closing the production dependency audit and future transitive-use risk. |
 
@@ -70,6 +72,23 @@ Both CVEs are listed exactly in `pnpm.auditConfig.ignoreCves`; no package-wide
 or severity exception is used. Remove both entries as soon as Metro selects a
 fixed `image-size` release, or immediately if this reachability boundary
 changes.
+
+`CVE-2026-101916` (`GHSA-m9gg-hp2v-232j`) remains for `@grpc/grpc-js@1.9.16`,
+which `firebase -> @firebase/firestore` pins with `~1.9.0` (still true in
+`@firebase/firestore@4.17.2`). The advisory lists no fixed `1.9.x` release, and
+a newer minor is outside the parent's range. The package is required only by
+Firestore's Node.js builds; the web app bundles the browser build, which uses
+WebChannel, and the built `apps/web/dist` contains no gRPC code. The advisory
+concerns `getAuthContext` on a gRPC server, which Lupi never runs. The other
+resolved path (`firebase-admin`, `1.14.4`) is patched by an override above.
+Remove the entry when Firestore admits a fixed release.
+
+`CVE-2026-85393` (`GHSA-86w9-cpqp-85rv`) affects RSA PKCS#1 v1.5 signature
+verification in `node-forge@1.4.0`, and GitHub lists no patched release. It is
+present through `apps/lupine-app -> firebase-admin@12.7.0`, which calls only
+`forge.pki.privateKeyFromPem` to validate its own service-account key, and
+through Expo CLI code-signing build tooling. Neither path verifies a signature
+supplied by a visitor. Remove the entry as soon as a fixed release exists.
 
 pnpm 9 expands every advisory path across the combined Expo/R3F peer graph and
 exceeds Node's default 4 GiB heap before applying CVE exceptions. CI and the
