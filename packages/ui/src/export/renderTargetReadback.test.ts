@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { DataUtils } from 'three';
 import type * as THREE from 'three/webgpu';
 import { registerCaptureGuard } from '@atlas/scene';
-import { decodeHalfFloatReadback, halfToFloat, renderSceneToPixels, srgbOETF } from './renderTargetReadback';
+import {
+  captureSupersampleFactor,
+  decodeHalfFloatReadback,
+  decodeSupersampledHalfFloatReadback,
+  halfToFloat,
+  renderSceneToPixels,
+  srgbOETF,
+} from './renderTargetReadback';
 
 const half = (value: number) => DataUtils.toHalfFloat(value);
 
@@ -104,6 +111,51 @@ describe('decodeHalfFloatReadback', () => {
     const view = new Uint16Array(buffer.buffer, 2, source.length);
     expect(pixel(decodeHalfFloatReadback(view, 1, 1, false), 1, 0, 0)).toEqual([255, 255, 255, 255]);
     expect(() => decodeHalfFloatReadback(new Uint16Array(3), 1, 1, false)).toThrow(/needs 8/);
+  });
+});
+
+describe('decodeSupersampledHalfFloatReadback', () => {
+  it('box-averages premultiplied linear blocks; uniform blocks decode exactly as one texel', () => {
+    const grey = [0.2158605, 0.2158605, 0.2158605, 1];
+    const orange = [0.5, 0.108, 0, 0.5];
+    const red = [1, 0, 0, 1];
+    const clear = [0, 0, 0, 0];
+    // 2× of a 3×1 image: grey block, orange block, a half-covered red edge.
+    const rows = [
+      [grey, grey, orange, orange, red, clear],
+      [grey, grey, orange, orange, red, clear],
+    ];
+    const rgba = decodeSupersampledHalfFloatReadback(readback(rows, 256), 3, 1, 2, false);
+    expect(pixel(rgba, 3, 0, 0)).toEqual(pixel(decodeHalfFloatReadback(readback([[grey]], 8), 1, 1, false), 1, 0, 0));
+    expect(pixel(rgba, 3, 0, 0)).toEqual([128, 128, 128, 255]);
+    expect(pixel(rgba, 3, 1, 0)).toEqual([255, 128, 0, 128]);
+    // Straight alpha: the edge keeps red's colour at half coverage, no dark fringe.
+    expect(pixel(rgba, 3, 2, 0)).toEqual([255, 0, 0, 128]);
+  });
+
+  it('flips WebGL2 rows and clamps each texel before averaging (no highlight bleed)', () => {
+    const white = [1, 1, 1, 1];
+    const black = [0, 0, 0, 1];
+    const hot = [8, 8, 8, 1];
+    const rows = [
+      [black, black, white, white], // bottom row in GL order
+      [hot, black, white, white], // top row
+    ];
+    const rgba = decodeSupersampledHalfFloatReadback(readback(rows, 4 * 8), 2, 1, 2, true);
+    // One clamped white texel in four black ones: linear 0.25, not 2.
+    expect(pixel(rgba, 2, 0, 0)).toEqual([137, 137, 137, 255]);
+    expect(pixel(rgba, 2, 1, 0)).toEqual([255, 255, 255, 255]);
+  });
+});
+
+describe('captureSupersampleFactor', () => {
+  it('is 3 for ordinary sizes and never exceeds a 4096 side', () => {
+    expect(captureSupersampleFactor(320, 200)).toBe(3);
+    expect(captureSupersampleFactor(1024, 1024)).toBe(3);
+    expect(captureSupersampleFactor(1366, 768)).toBe(2);
+    expect(captureSupersampleFactor(2048, 2048)).toBe(2);
+    expect(captureSupersampleFactor(2049, 100)).toBe(1);
+    expect(captureSupersampleFactor(4096, 4096)).toBe(1);
   });
 });
 

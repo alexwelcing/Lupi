@@ -274,12 +274,24 @@ and active-state checks. JPEG is opaque only; GLB rejects raster dimensions and
 transparency.
 
 Raster capture never reads the canvas. It renders the raw Three.js scene with
-a copy of the artifact camera into its own HalfFloat render target at the
-requested size (no MSAA, pixel ratio 1, no renderer tone mapping) and reads it
+a copy of the artifact camera into its own HalfFloat render target,
+supersampled (no MSAA, pixel ratio 1, no renderer tone mapping), and reads it
 back asynchronously. On the CPU it de-strides WebGPU rows, flips WebGL2 rows,
-un-premultiplies in linear light, applies the sRGB OETF and rounds, so opaque
-pixels match the on-screen canvas and transparent output is straight alpha.
-The canvas keeps its size, and the live view does not flicker.
+box-averages the supersampled blocks, un-premultiplies in linear light,
+applies the sRGB OETF and rounds. Flat regions therefore match the on-screen
+canvas, and transparent output is straight alpha. The canvas keeps its size,
+and the live view does not flicker.
+
+- Supersampling is what anti-aliases exported edges. Atoms and bonds are
+  ray-cast impostors that discard outside their silhouette, and MSAA cannot
+  smooth that. The target is `factor` times the requested size on each side,
+  where `factor = min(3, floor(4096 / longest side))`: 3 up to 1365 px, 2 up
+  to 2048 px, and 1 above that. So the target is never larger than a 4096 px
+  side, the biggest raster an export can ask for anyway. Each factor x factor
+  block of premultiplied linear texels is averaged in a fixed order. Each texel
+  is first clamped as the screen would show it, so a highlight cannot bleed.
+  Thumbnails use the same path. `supersample` in the fingerprint's
+  determinism facts records the rule.
 
 - The interactive post pipeline (AO, bloom, depth of field, output tone
   mapping, vignette) is bypassed. Exports show the raw scene with the viewer's

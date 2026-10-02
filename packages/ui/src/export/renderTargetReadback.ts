@@ -17,6 +17,15 @@
  * - Pixels are premultiplied linear colour, so un-premultiply in linear, then
  *   sRGB-encode and round. One code path for opaque and transparent output.
  *
+ * Supersampling: the target is `factor` times the requested size on each
+ * side (captureSupersampleFactor: 3, or 2, or 1 for very large requests, so
+ * the target never exceeds 4096 on a side) and the CPU box-averages each
+ * factor×factor block of premultiplied linear texels before it un-premultiplies.
+ * Atoms and bonds are ray-cast impostors whose silhouettes no MSAA can smooth,
+ * so this is what anti-aliases exported edges; averaging premultiplied colour
+ * keeps transparent edges straight-alpha correct. Integer factors and a fixed
+ * summation order keep it deterministic per execution class.
+ *
  * The render target bypasses the post pipeline and the renderer's output
  * transform (DETERMINISM_V2: raw scene, straight alpha, sRGB OETF on the CPU).
  *
@@ -52,6 +61,23 @@ export interface RenderSceneToPixelsOptions {
    * draws. Defaults to the renderer's clear colour, made opaque.
    */
   clearColor?: THREE.ColorRepresentation;
+  /** Supersampling factor; defaults to captureSupersampleFactor(width, height). */
+  supersample?: number;
+}
+
+/** Largest supersampling factor (3×3 samples per output pixel). */
+export const CAPTURE_SUPERSAMPLE_MAX_FACTOR = 3;
+/**
+ * Largest side of a supersampled capture target: the largest raster an export
+ * may request anyway (BROWSER_RENDER_CAPABILITY_V1), so supersampling never
+ * allocates a bigger target than an un-supersampled 4096² export already does.
+ */
+export const CAPTURE_SUPERSAMPLE_MAX_SIDE = 4096;
+
+/** The capture's supersampling factor: min(3, floor(4096 / longest side)), at least 1. */
+export function captureSupersampleFactor(width: number, height: number): number {
+  const longest = Math.max(1, Math.floor(width), Math.floor(height));
+  return Math.max(1, Math.min(CAPTURE_SUPERSAMPLE_MAX_FACTOR, Math.floor(CAPTURE_SUPERSAMPLE_MAX_SIDE / longest)));
 }
 
 /** The viewer plate (dark sage), used when the page behind the canvas has no colour. */
@@ -98,7 +124,13 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
     throw new Error(`renderSceneToPixels: invalid size ${width}x${height}.`);
   }
   const backend = rendererBackendOf(renderer);
-  const target = new THREE.RenderTarget(width, height, {
+  const factor = options.supersample ?? captureSupersampleFactor(width, height);
+  if (!Number.isInteger(factor) || factor < 1) {
+    throw new Error(`renderSceneToPixels: invalid supersampling factor ${factor}.`);
+  }
+  const targetWidth = width * factor;
+  const targetHeight = height * factor;
+  const target = new THREE.RenderTarget(targetWidth, targetHeight, {
     type: THREE.HalfFloatType,
     samples: 0,
     depthBuffer: true,
@@ -144,8 +176,10 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   }
 
   try {
-    const data = await renderer.readRenderTargetPixelsAsync(target, 0, 0, width, height);
-    const rgba = decodeHalfFloatReadback(data, width, height, backend === 'webgl2');
+    const data = await renderer.readRenderTargetPixelsAsync(target, 0, 0, targetWidth, targetHeight);
+    const rgba = factor === 1
+      ? decodeHalfFloatReadback(data, width, height, backend === 'webgl2')
+      : decodeSupersampledHalfFloatReadback(data, width, height, factor, backend === 'webgl2');
     return { width, height, rgba, backend };
   } finally {
     releaseCaptureTarget(target);
@@ -258,6 +292,86 @@ export function decodeHalfFloatReadback(
   return out;
 }
 
+/**
+ * decodeHalfFloatReadback for a target `factor` times the output size on each
+ * side: each output pixel box-averages its factor×factor block of
+ * premultiplied linear texels (rows top to bottom, texels left to right;
+ * each texel clamped as the screen shows it), then un-premultiplies,
+ * sRGB-encodes and rounds as the 1× decode does. A block of identical texels
+ * decodes exactly as that texel alone.
+ */
+export function decodeSupersampledHalfFloatReadback(
+  data: ArrayBufferView,
+  width: number,
+  height: number,
+  factor: number,
+  flipY: boolean,
+): Uint8ClampedArray {
+  if (factor === 1) return decodeHalfFloatReadback(data, width, height, flipY);
+  const sourceWidth = width * factor;
+  const sourceHeight = height * factor;
+  const rowBytes = sourceWidth * BYTES_PER_HALF_TEXEL;
+  const tightBytes = rowBytes * sourceHeight;
+  const stride = data.byteLength === tightBytes ? rowBytes : Math.ceil(rowBytes / ROW_ALIGNMENT) * ROW_ALIGNMENT;
+  const expectedBytes = stride * (sourceHeight - 1) + rowBytes;
+  if (data.byteLength < expectedBytes || data.byteOffset % 2 !== 0) {
+    throw new Error(
+      `Render target readback is ${data.byteLength} bytes; ${sourceWidth}x${sourceHeight} RGBA16F needs ${expectedBytes} (stride ${stride}).`,
+    );
+  }
+  const halves = new Uint16Array(data.buffer, data.byteOffset, Math.floor(data.byteLength / 2));
+  const strideHalves = stride / 2;
+  const toFloat = halfFloatTable();
+  const samples = factor * factor;
+  const out = new Uint8ClampedArray(width * height * 4);
+  // Running sums for one output row (premultiplied linear RGBA).
+  const sums = new Float64Array(width * 4);
+
+  for (let row = 0; row < height; row += 1) {
+    sums.fill(0);
+    for (let sub = 0; sub < factor; sub += 1) {
+      const sourceRowTopDown = row * factor + sub;
+      const sourceRow = flipY ? sourceHeight - 1 - sourceRowTopDown : sourceRowTopDown;
+      let source = sourceRow * strideHalves;
+      for (let x = 0; x < width; x += 1) {
+        const sum = x * 4;
+        for (let k = 0; k < factor; k += 1, source += 4) {
+          // Each texel as the screen would show it: alpha in 0..1, colour in
+          // 0..alpha (clamp01 of the straight colour, premultiplied again), so
+          // an over-range highlight cannot bleed into its neighbours.
+          const a = clamp01(toFloat[halves[source + 3]]);
+          sums[sum] += clampTo(toFloat[halves[source]], a);
+          sums[sum + 1] += clampTo(toFloat[halves[source + 1]], a);
+          sums[sum + 2] += clampTo(toFloat[halves[source + 2]], a);
+          sums[sum + 3] += a;
+        }
+      }
+    }
+    let target = row * width * 4;
+    for (let x = 0; x < width; x += 1, target += 4) {
+      const sum = x * 4;
+      const alpha = clamp01(sums[sum + 3] / samples);
+      if (alpha <= 0) continue;
+      out[target] = Math.round(srgbOETF(clamp01(sums[sum] / samples / alpha)) * 255);
+      out[target + 1] = Math.round(srgbOETF(clamp01(sums[sum + 1] / samples / alpha)) * 255);
+      out[target + 2] = Math.round(srgbOETF(clamp01(sums[sum + 2] / samples / alpha)) * 255);
+      out[target + 3] = Math.round(alpha * 255);
+    }
+  }
+  return out;
+}
+
+let halfTable: Float32Array | null = null;
+
+/** Half bits → float (exact: every binary16 value is a binary32 value), built once. */
+function halfFloatTable(): Float32Array {
+  if (halfTable) return halfTable;
+  const table = new Float32Array(0x10000);
+  for (let bits = 0; bits < 0x10000; bits += 1) table[bits] = halfToFloat(bits);
+  halfTable = table;
+  return table;
+}
+
 /** The sRGB transfer function (linear 0..1 → encoded 0..1). Input is clamped. */
 export function srgbOETF(x: number): number {
   const linear = clamp01(x);
@@ -285,6 +399,11 @@ function opaqueEncodeTable(): Uint8Array {
   }
   opaqueTable = table;
   return table;
+}
+
+/** `value` clamped to 0..max (max ≥ 0); NaN becomes 0. */
+function clampTo(value: number, max: number): number {
+  return value > 0 ? (value < max ? value : max) : 0;
 }
 
 function clamp01(value: number): number {
