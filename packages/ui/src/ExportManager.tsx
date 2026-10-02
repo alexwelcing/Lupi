@@ -878,6 +878,12 @@ export function ExportManager() {
     onCompleteRef.current = req.onComplete || null;
     requestRef.current = req;
 
+    // Toys stand down for the whole recording: the rig settles and suspends,
+    // display motion stays at rest. restoreAfterVideo stops them on every exit.
+    // First, so the pose below is the settled one, not a glide's mid-flight.
+    recordingRestoreRef.current?.();
+    recordingRestoreRef.current = beginRecording();
+
     // Capture the camera pose to restore after capture. The flythrough
     // path drives position AND fov every tick, so both video modes need
     // this — previously only orbit captured, leaving the viewport stuck
@@ -919,10 +925,6 @@ export function ExportManager() {
     // restoreAfterVideo returns to that exact value on every exit path.
     originalFrameloop.current = frameloop;
     setFrameloop('always');
-    // Toys stand down for the whole recording: the rig settles and suspends,
-    // display motion stays at rest. restoreAfterVideo stops them on every exit.
-    recordingRestoreRef.current?.();
-    recordingRestoreRef.current = beginRecording();
 
     // ── MediaRecorder (single durable path) ───────────────────────────
     // Pick the best supported container/codec, preferring MP4 (Safari/iOS) then
