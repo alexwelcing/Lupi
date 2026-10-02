@@ -405,6 +405,11 @@ function isMacLike(): boolean {
   }
 }
 
+/** A press's button as the arbiter reads it: a Mac ctrl+left click is a right click (2). */
+export function pressButton(e: Pick<PointerEvent, 'button' | 'ctrlKey' | 'pointerType'>, mac = isMacLike()): number {
+  return mac && e.button === 0 && e.ctrlKey && e.pointerType === 'mouse' ? 2 : e.button;
+}
+
 /** Wheel delta → distance factor: a notch is ~15 %, a trackpad pinch (ctrl) is finer-grained but 4x. */
 export function wheelZoomFactor(deltaY: number, deltaMode: number, ctrlKey: boolean, viewportHeight: number): number {
   const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? viewportHeight : 1;
@@ -443,8 +448,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
     target === element || (canvas !== null && (target === canvas || target === canvas.parentElement));
 
   const normalize = (e: PointerEvent, samples?: readonly PointerSample[]): GesturePointer => {
-    let button = e.button;
-    if (mac && button === 0 && e.ctrlKey && e.pointerType === 'mouse') button = 2;
+    const button = pressButton(e, mac);
     return {
       id: e.pointerId,
       pointerType: pointerKind(e.pointerType),

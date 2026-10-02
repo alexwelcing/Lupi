@@ -15,6 +15,7 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { emitIntent, isCanvasInputSourceActive } from '@atlas/scene';
 import { useStore } from '../store';
+import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
 import { cue } from './feedback';
 import { playStore, usePlayStore, type PlayVerb } from './playStore';
@@ -88,8 +89,8 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
       if (!target) return;
       if (menuRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
       // A right click on the canvas toggles the tray itself (play.toggleTray
-      // on release): closing it here would only reopen it.
-      if (event.button === 2 && target instanceof HTMLCanvasElement && isCanvasInputSourceActive()) return;
+      // on release): closing it here would only reopen it. A Mac ctrl+click is one.
+      if (pressButton(event) === 2 && target instanceof HTMLCanvasElement && isCanvasInputSourceActive()) return;
       closeRef.current();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
