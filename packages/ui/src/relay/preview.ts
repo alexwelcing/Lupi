@@ -15,6 +15,12 @@ export function previewUrl(id: string | null | undefined): string | null {
   return `/learn/${id}.svg`;
 }
 
+/** A deep link ViewerApp will open: it ignores a blank `sim`, `load` or `molecule`. */
+export function opensMolecule(search: string = typeof window === 'undefined' ? '' : window.location.search): boolean {
+  const params = new URLSearchParams(search);
+  return Boolean(params.get('sim') || params.get('load') || (params.get('molecule') ?? '').trim());
+}
+
 /** The gallery id a deep link opens (`?sim=<id>`), or null. */
 export function deepLinkGalleryId(search: string = typeof window === 'undefined' ? '' : window.location.search): string | null {
   const id = new URLSearchParams(search).get('sim');

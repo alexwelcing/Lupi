@@ -7,12 +7,7 @@
  */
 import { LandingPage } from '../LandingPage';
 import { RelayPlate } from './RelayPlate';
-import { deepLinkGalleryId } from './preview';
-
-function opensMolecule(search: string): boolean {
-  const params = new URLSearchParams(search);
-  return params.has('sim') || params.has('load') || params.has('molecule');
-}
+import { deepLinkGalleryId, opensMolecule } from './preview';
 
 export function LandingFallback() {
   const search = typeof window === 'undefined' ? '' : window.location.search;

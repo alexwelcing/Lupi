@@ -18,7 +18,7 @@ import {
   SEO_EDUCATION_ROUTES,
 } from '@atlas/ui/viewer/viewerRoutes';
 import { RelayPlate } from '@atlas/ui/relay/RelayPlate';
-import { deepLinkGalleryId } from '@atlas/ui/relay/preview';
+import { deepLinkGalleryId, opensMolecule } from '@atlas/ui/relay/preview';
 
 /**
  * Entry router. The marketing landing and the 3D viewer are two separately
@@ -106,7 +106,7 @@ function withProviders(node: ReactNode) {
  * out exactly like the viewer's "Opening…" plate that follows it.
  */
 function Splash() {
-  const opening = params.has('sim') || params.has('load') || params.has('molecule');
+  const opening = opensMolecule();
   return <RelayPlate galleryId={deepLinkGalleryId()} copy={opening ? 'Opening…' : undefined} label="Loading Lupi" />;
 }
 
