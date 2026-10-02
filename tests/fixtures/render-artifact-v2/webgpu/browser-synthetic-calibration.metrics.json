@@ -11,25 +11,25 @@
   },
   "artifact": {
     "file": "browser-synthetic-calibration.candidate.png",
-    "sha256": "sha256:0900f265ab40e98af5344a60a2f8d4c580b7b87481e3b7d3b02ee03560745538",
-    "artifactDigest": "sha256:0900f265ab40e98af5344a60a2f8d4c580b7b87481e3b7d3b02ee03560745538",
+    "sha256": "sha256:6f1bbd26c6a7e94da9bfc8519bceac44d1a835e52e9aefd371bd03a50ff26230",
+    "artifactDigest": "sha256:6f1bbd26c6a7e94da9bfc8519bceac44d1a835e52e9aefd371bd03a50ff26230",
     "mimeType": "image/png",
     "width": 320,
     "height": 320,
-    "byteLength": 17186,
+    "byteLength": 17180,
     "stableIdentities": {
       "contractVersion": "lupi.render-artifact-spec.v1",
       "sourceContentDigest": "sha256:ef192db2a67fab3e3de07be2b432fb1fb5f9ed7ffe7e3a7715aa62ea1a2f8c7e",
       "specId": "spec-sha256:97d78d172b2bd423d224f5f331c43e7bda1af66be231c886d710bf231f8295da"
     },
     "generationIdentities": {
-      "rendererFingerprint": "renderer-sha256:46eb7d813e9a198a9baf03ba2356318780bb880add36d1546ab79197ea864db4",
-      "artifactKey": "artifact-sha256:f84b2471a0ec73c2daee1708f019201709b3a90953a26455c00e559ca01dd728"
+      "rendererFingerprint": "renderer-sha256:f8dd2fa17773e7ab89bc588d9a69106a73a21a58c1635423f2398962eefa7f21",
+      "artifactKey": "artifact-sha256:a52291ca3aea0209e0fe174fd2b1a6080075bb61f8d3db5e74f5518551495a9b"
     }
   },
   "rendererValidity": {
     "scheme": "lupi.renderer-validity-digest.v2",
-    "digest": "sha256:ce3353e17766d2df73707ad3e31d043cd2792c0a3cb1f61e1563176f2b82a646",
+    "digest": "sha256:7697702d0dfb93d49376d1ef88ebc77d81de24a6515be621507bcd5898b6eafd",
     "input": {
       "schemaVersion": "lupi.renderer-validity-input.v2",
       "sourceNormalization": "utf8-lf-v1",
@@ -72,7 +72,7 @@
         },
         {
           "path": "packages/scene/src/SimulationCell.tsx",
-          "sha256": "sha256:941645ccad588bd75eaeb5a578d1fd2b29e3ad578f513b3398d90b6fcf77ffb0"
+          "sha256": "sha256:d633e12f1fef44bafa4a56f6c0951cffc98fbf9fd0bd8abb102010a1a9499b13"
         },
         {
           "path": "packages/scene/src/SpatialHash.ts",
@@ -100,7 +100,7 @@
         },
         {
           "path": "packages/scene/src/captureGuards.ts",
-          "sha256": "sha256:df073b87b8810cb44b8e779080c489d1d51d187bacabf29d3788c9f915c96adc"
+          "sha256": "sha256:ef4d39fd8f5a377d3d388550df76b805c7e1273c723531de209a667e7929c0ba"
         },
         {
           "path": "packages/scene/src/constants.ts",
@@ -112,7 +112,7 @@
         },
         {
           "path": "packages/scene/src/index.ts",
-          "sha256": "sha256:097ca6b3b6e93903d45dbb4023c7a96b2abf28829876d524a45fa407c1565d7b"
+          "sha256": "sha256:a286526bb52336ed750c608fe6424337f69c498b43487861efea222ce27f71fd"
         },
         {
           "path": "packages/scene/src/interpolation.ts",
@@ -228,7 +228,7 @@
         },
         {
           "path": "packages/ui/src/ViewerApp.tsx",
-          "sha256": "sha256:4697d66c02c1cc7d8f062f5f1923b64af79f262e42a1702703c760cc36644545"
+          "sha256": "sha256:03af008703188784f3a33e3fb2613417eadd29792417fac6a4b2e22145c95273"
         },
         {
           "path": "packages/ui/src/app/AppBackground.tsx",
@@ -280,7 +280,7 @@
         },
         {
           "path": "packages/ui/src/export/exportProfileV2.ts",
-          "sha256": "sha256:df7c0aa1f409e87d46df84794ab93d9f52d1bbec155b45afcf464e9191d957c1"
+          "sha256": "sha256:f90130ca1e4e6f4969a30199e8e00eeea1d12152197f0a2868ce355e9674d852"
         },
         {
           "path": "packages/ui/src/export/exportSceneBuilder.ts",
@@ -296,7 +296,7 @@
         },
         {
           "path": "packages/ui/src/export/renderTargetReadback.ts",
-          "sha256": "sha256:cdd1097ca4b2cd1f3294a0c4ff2b3b1f80f39a2bd6f7514378402c9ced40e550"
+          "sha256": "sha256:8aea827ede85cbdc17c2b2c6f67bab9648facdd78d6af565acbd3270ef813b35"
         },
         {
           "path": "packages/ui/src/hooks/useEquirectMediaTexture.ts",
@@ -376,7 +376,7 @@
         },
         {
           "path": "packages/ui/src/viewer/ViewerCanvas.tsx",
-          "sha256": "sha256:5b4c767f15f268073621d5e3b8103138312384f03f6c93fba5e3fa009a5f4e50"
+          "sha256": "sha256:39e495e225eb01fea2a0f20b1b8f6c01e7ce04b1063ec39af3ae698105bfc245"
         },
         {
           "path": "packages/ui/src/viewer/artifactFrameSelection.ts",
@@ -623,10 +623,10 @@
     "bboxHeight": 0.26875,
     "centroidX": 0.4824714588,
     "centroidY": 0.4773907127,
-    "meanRed": 0.614370968,
-    "meanGreen": 0.5240909642,
-    "meanBlue": 0.4440793076,
-    "meanLuminance": 0.5375076514,
+    "meanRed": 0.6143653269,
+    "meanGreen": 0.5241056676,
+    "meanBlue": 0.4440797523,
+    "meanLuminance": 0.5375170001,
     "paletteRed": 0.169251966,
     "paletteBlue": 0.159195611,
     "paletteNeutral": 0.3891856133
@@ -786,11 +786,11 @@
     }
   },
   "derivation": {
-    "generatedAt": "2026-10-02T20:13:26.192Z",
+    "generatedAt": "2026-10-02T21:37:34.777Z",
     "repeatCount": 10,
     "medoidRepeat": 1,
     "uniqueByteDigests": [
-      "sha256:0900f265ab40e98af5344a60a2f8d4c580b7b87481e3b7d3b02ee03560745538"
+      "sha256:6f1bbd26c6a7e94da9bfc8519bceac44d1a835e52e9aefd371bd03a50ff26230"
     ],
     "observedMetricRanges": {
       "coverage": [
@@ -834,20 +834,20 @@
         0.4773907127
       ],
       "meanRed": [
-        0.614370968,
-        0.614370968
+        0.6143653269,
+        0.6143653269
       ],
       "meanGreen": [
-        0.5240909642,
-        0.5240909642
+        0.5241056676,
+        0.5241056676
       ],
       "meanBlue": [
-        0.4440793076,
-        0.4440793076
+        0.4440797523,
+        0.4440797523
       ],
       "meanLuminance": [
-        0.5375076514,
-        0.5375076514
+        0.5375170001,
+        0.5375170001
       ],
       "paletteRed": [
         0.169251966,
@@ -922,8 +922,8 @@
     "authority": {
       "status": "dirty-worktree-mechanics-only",
       "reason": "mechanics evidence only; CI is not true; worktree clean; injected SHA matches HEAD",
-      "injectedBuildSha": "31adffcf77ae735daa23b17c480b19636bd4ece4",
-      "repositoryHeadSha": "31adffcf77ae735daa23b17c480b19636bd4ece4",
+      "injectedBuildSha": "bf8abcbeaca3a3fb95a81c405683550b3446c89e",
+      "repositoryHeadSha": "bf8abcbeaca3a3fb95a81c405683550b3446c89e",
       "worktreeClean": true,
       "ci": false,
       "cleanExactShaCiDerivation": "PENDING"
