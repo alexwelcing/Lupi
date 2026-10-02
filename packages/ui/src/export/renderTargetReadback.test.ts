@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { DataUtils } from 'three';
 import type * as THREE from 'three/webgpu';
 import { registerCaptureGuard } from '@atlas/scene';
-import { decodeHalfFloatReadback, halfToFloat, renderSceneToPixels, srgbOETF } from './renderTargetReadback';
+import {
+  captureSupersamplePlan,
+  decodeHalfFloatReadback,
+  halfToFloat,
+  renderSceneToPixels,
+  srgbOETF,
+} from './renderTargetReadback';
 
 const half = (value: number) => DataUtils.toHalfFloat(value);
 
@@ -104,6 +110,33 @@ describe('decodeHalfFloatReadback', () => {
     const view = new Uint16Array(buffer.buffer, 2, source.length);
     expect(pixel(decodeHalfFloatReadback(view, 1, 1, false), 1, 0, 0)).toEqual([255, 255, 255, 255]);
     expect(() => decodeHalfFloatReadback(new Uint16Array(3), 1, 1, false)).toThrow(/needs 8/);
+  });
+});
+
+describe('captureSupersamplePlan', () => {
+  it('is 3× in one tile up to 1365 px and 2× above, never a tile over 4096 texels', () => {
+    expect(captureSupersamplePlan(320, 200)).toEqual({ factor: 3, columns: 1, rows: 1, tileWidth: 320, tileHeight: 200 });
+    expect(captureSupersamplePlan(1365, 1024)).toEqual({ factor: 3, columns: 1, rows: 1, tileWidth: 1365, tileHeight: 1024 });
+    expect(captureSupersamplePlan(1366, 768)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 1366, tileHeight: 768 });
+    expect(captureSupersamplePlan(2048, 2048)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 2048, tileHeight: 2048 });
+    // The UI's PNG download: four equal 1080 px tiles (2160 texels each).
+    expect(captureSupersamplePlan(2160, 2160)).toEqual({ factor: 2, columns: 2, rows: 2, tileWidth: 1080, tileHeight: 1080 });
+    // Equal tiles; the last column runs one pixel past the image.
+    expect(captureSupersamplePlan(2161, 100)).toEqual({ factor: 2, columns: 2, rows: 1, tileWidth: 1081, tileHeight: 100 });
+    expect(captureSupersamplePlan(4096, 4096)).toEqual({ factor: 2, columns: 2, rows: 2, tileWidth: 2048, tileHeight: 2048 });
+    for (const [w, h] of [[64, 64], [1365, 1365], [1366, 1366], [2049, 3000], [4096, 4096]]) {
+      const plan = captureSupersamplePlan(w, h);
+      expect(plan.tileWidth * plan.factor).toBeLessThanOrEqual(4096);
+      expect(plan.tileHeight * plan.factor).toBeLessThanOrEqual(4096);
+      expect(plan.tileWidth * plan.columns).toBeGreaterThanOrEqual(w);
+      expect(plan.tileHeight * plan.rows).toBeGreaterThanOrEqual(h);
+    }
+  });
+
+  it('keeps an untiled capture in one target of at most 4096 texels', () => {
+    expect(captureSupersamplePlan(320, 200, false)).toEqual({ factor: 3, columns: 1, rows: 1, tileWidth: 320, tileHeight: 200 });
+    expect(captureSupersamplePlan(2048, 1024, false)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 2048, tileHeight: 1024 });
+    expect(captureSupersamplePlan(2160, 2160, false)).toEqual({ factor: 1, columns: 1, rows: 1, tileWidth: 2160, tileHeight: 2160 });
   });
 });
 

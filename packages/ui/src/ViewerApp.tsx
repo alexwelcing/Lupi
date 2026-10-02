@@ -44,7 +44,7 @@ import {
   scienceGalleryIdForPathIndex,
 } from './science/scienceBundle';
 import { getBackdropRadiusLimit, useViewerSceneModel } from './viewer/useViewerSceneModel';
-import { ViewerCanvas } from './viewer/ViewerCanvas';
+import { ViewerCanvas, budgetAtomCount } from './viewer/ViewerCanvas';
 import { selectViewerFrames } from './viewer/artifactFrameSelection';
 import { PresetLegacyBridge } from './viewer/PresetLegacyBridge';
 
@@ -524,6 +524,18 @@ export function ViewerApp() {
   }
   if (rawCurrentFrame) lastResidentRef.current.frame = rawCurrentFrame;
   const currentFrame = file ? (rawCurrentFrame ?? lastResidentRef.current.frame) : undefined;
+  // The canvas DPR budget's atom count, held per trajectory once a frame is
+  // resident, so a varying atom count never resizes the canvas mid-playback.
+  const dprBudgetRef = useRef<{
+    trajectory: import('@atlas/core/types').Trajectory | undefined;
+    count: number;
+  }>({ trajectory: undefined, count: 0 });
+  if (dprBudgetRef.current.trajectory !== file?.trajectory) {
+    dprBudgetRef.current = { trajectory: file?.trajectory, count: 0 };
+  }
+  if (file && dprBudgetRef.current.count === 0) {
+    dprBudgetRef.current.count = budgetAtomCount(file.trajectory.frames, currentFrame);
+  }
   // An immutable raster artifact always draws its addressed integer source
   // frame. This render-time override closes the pause->export race where the
   // playback hook's RAF ref/passive synchronization can still describe a
@@ -662,6 +674,7 @@ export function ViewerApp() {
               center={center}
               cameraDistance={cameraDistance}
               cameraNear={cameraNear}
+              atomCount={dprBudgetRef.current.count}
             >
               {(import.meta.env.DEV || showDebugHud) && <DevProbe enabled={showDebugHud} />}
               <ViewerScene

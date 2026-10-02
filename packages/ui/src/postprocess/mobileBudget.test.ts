@@ -12,7 +12,7 @@ describe('mobile postprocess budget', () => {
     expect(mobile.ssao.enabled).toBe(false);
     expect(mobile.bloom.enabled).toBe(false);
     expect(mobile.dof.enabled).toBe(false);
-    expect(mobile.multisampling).toBe(2);
+    expect(mobile.multisampling).toBe(0);
     expect(mobile.toneMapping).toBe(preset.toneMapping);
     expect(preset).toEqual(before);
   });
@@ -23,7 +23,7 @@ describe('mobile postprocess budget', () => {
       const playing = resolveActivePostprocess({ ...input, playing: true });
       expect(postStructureKey(postStructure(playing))).toBe(postStructureKey(postStructure(paused)));
       expect(scenePassSamples(playing)).toBe(0);
-      expect(scenePassSamples(paused)).toBe(paused.ssao.enabled || paused.dof.enabled ? 0 : Math.min(preset.multisampling, reduced ? 2 : 8));
+      expect(scenePassSamples(paused)).toBe(paused.ssao.enabled || paused.dof.enabled || reduced ? 0 : preset.multisampling);
     }
   });
 });

@@ -71,7 +71,7 @@ The browser and edge manifests are intentionally different contracts.
 | V1 execution            | Executes locally in the browser                                                                                                                                                         | **Validation only**; always returns `awaiting_renderer` and withholds renderer/artifact/job/cache identities               |
 | Raster formats          | PNG and WebP with opaque or transparent alpha; JPEG opaque only; exact dimensions 64-4096                                                                                               | Opaque PNG only in the advertised submission capability; no V1 pixel executor exists                                       |
 | Model formats           | Deterministic GLB with `alpha: 'not-applicable'`; raster dimensions and `transparent` are rejected. USDZ is disabled in the immutable-key lane because three's USDZExporter (r186) embeds process-global ids. | Unsupported                                                                                                                |
-| Applied raster pipeline | Raw Three.js scene rendered into a HalfFloat render target (no MSAA, pixel ratio 1), CPU linear un-premultiply + sRGB encode, no renderer tone mapping or interactive postprocess, plus the versioned canvas axes overlay when enabled | Declared in the accepted V1 spec, but not executed                                                                         |
+| Applied raster pipeline | Raw Three.js scene rendered supersampled into HalfFloat render targets (no MSAA, pixel ratio 1; factor 3 up to 1365 px, else 2, in view-offset tiles of at most 4096 texels; untiled with transmission), GPU box average of premultiplied linear texels, CPU linear un-premultiply + sRGB encode, no renderer tone mapping or interactive postprocess, plus the versioned canvas axes overlay when enabled | Declared in the accepted V1 spec, but not executed                                                                         |
 | Backgrounds             | Opaque raster requires a canonical, unadjusted gradient that capture applies directly; image, video, procedural, backdrop-mesh and adjusted backgrounds fail closed. Transparent raster disables background. | Background layer is unsupported in the initial V1 profile                                                                  |
 | Bonds                   | Model export may use the synchronous CPU export path. Deterministic raster bonds fail closed because the live asynchronous bond result is not snapshot-addressable.                     | Unsupported                                                                                                                |
 | Delivery                | Inline base64/data URL or user download; no durable ownership is implied                                                                                                                | V1 remains validation-only. A separately named authenticated legacy-v0 lane may use synchronous HTTP plus private R2 job/provenance/artifact routes |
@@ -245,16 +245,28 @@ Three Fiber v10). The profile lives in
 - **No renderer yet.** An export before the viewer has created its renderer
   fails, because the backend is part of the identity.
 - **Capture.** A raster capture never reads the canvas. The raw scene is
-  rendered with a copy of the artifact camera into a HalfFloat linear render
-  target at the requested size, with samples 0, and read back asynchronously.
-  The CPU then:
+  rendered with a copy of the artifact camera, supersampled, into HalfFloat
+  linear render targets with samples 0:
+  - the factor is 3 up to 1365 px on the longest side and 2 above;
+  - the supersampled image is rendered in equal tiles of at most 4096 texels
+    a side (one tile up to 2048 px), each with a view offset of the capture
+    camera, into one reused tile target;
+  - after each tile, a GPU pass box-averages every factor×factor block of
+    premultiplied linear texels, each clamped as the screen shows it (alpha
+    to 0..1, colour to 0..alpha), in a fixed order with f32 sums, into the
+    tile's rectangle of an output-sized HalfFloat target;
+  - a scene with a screen-space transmission material is not tiled: one
+    target, factor min(3, floor(4096 / longest side)), so 1 above 2048 px.
+
+  The output target is read back asynchronously, and the CPU then:
   - removes WebGPU's 256-byte row padding;
   - flips WebGL2's bottom-left rows;
   - un-premultiplies in linear light;
   - applies the sRGB OETF and rounds.
 
-  Opaque pixels match the on-screen canvas; transparent output is straight
-  alpha. The canvas keeps its size, and the live camera never moves.
+  Flat regions match the on-screen canvas; transparent output is straight
+  alpha, and impostor silhouettes are anti-aliased by the supersampling. The
+  canvas keeps its size, and the live camera never moves.
 - **WYSIWYG, with one exception.** The owner's rule is that exports use the
   view the user configured. The raster uses the viewer's configured gradient
   background, or none when transparent. The interactive post pipeline (AO,

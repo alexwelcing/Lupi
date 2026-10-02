@@ -12,7 +12,7 @@
  *   one encode); anchorX left / anchorY top place the block beside the
  *   anchor; a depth-tested label is hidden behind a nearer sphere, while
  *   depthTest={false} draws over it; the texture is sRGB, unmipmapped and
- *   64 px/em × min(devicePixelRatio, 2);
+ *   64 px/em × min(devicePixelRatio, 3);
  * - measurement: the line colour on the line, the value label and the A/B
  *   letters; annotations glyph and halo; knowledge glyph; selection ring;
  * - DOM: the annotation tag, the knowledge card and the atom-info card
@@ -29,7 +29,7 @@ import * as THREE from 'three/webgpu';
 import type { Frame } from '@atlas/core/types';
 import { ELEMENT_DATA, resolveTypeDisplayRadius } from '@atlas/core';
 import { LUPI_PHASE } from '@atlas/scene';
-import { LABEL_LINE_HEIGHT, LABEL_PX_PER_EM, LupiText } from '../../labels/LupiText';
+import { LABEL_LINE_HEIGHT, LABEL_MAX_PIXEL_RATIO, LABEL_PX_PER_EM, LupiText } from '../../labels/LupiText';
 import { MeasurementLayer } from '../../MeasurementLayer';
 import { AnnotationsLayer, type AnnotationItem } from '../../AnnotationsLayer';
 import { KnowledgeLabelsLayer } from '../../KnowledgeLabelsLayer';
@@ -320,10 +320,10 @@ function judgeText(c: Capture, camera: THREE.Camera, scene: THREE.Object3D): voi
   const material = mesh?.material as THREE.MeshBasicNodeMaterial | undefined;
   const map = material?.map as THREE.CanvasTexture | null | undefined;
   const image = map?.image as HTMLCanvasElement | undefined;
-  const pxPerEm = LABEL_PX_PER_EM * Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
+  const pxPerEm = LABEL_PX_PER_EM * Math.min(Math.max(window.devicePixelRatio || 1, 1), LABEL_MAX_PIXEL_RATIO);
   const expectedHeight = Math.ceil(LABEL_LINE_HEIGHT * pxPerEm + 4);
   harnessAssert(
-    'label texture: sRGB, no mipmaps, 64 px/em × min(DPR, 2)',
+    'label texture: sRGB, no mipmaps, 64 px/em × min(DPR, 3)',
     Boolean(map) &&
       map!.colorSpace === THREE.SRGBColorSpace &&
       map!.generateMipmaps === false &&

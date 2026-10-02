@@ -9,8 +9,9 @@
  * Contract:
  * - at most one `useRenderPipeline` in the app, here;
  * - tone mapping only in the pipeline's `renderOutput`; `renderer.toneMapping`
- *   stays NoToneMapping (configureViewerRenderer), and the pipeline's output
- *   transform is the single sRGB encode;
+ *   stays NoToneMapping (configureViewerRenderer); the chain's own sRGB encode
+ *   (before FXAA) is the single encode, so the pipeline's output transform is
+ *   off;
  * - export capture does not go through the pipeline (it renders the scene
  *   directly);
  * - the graph is rebuilt only when the SET of effects (or the tone-mapping
@@ -36,7 +37,7 @@ import { applyPostParams, autofocus, buildPostChain, type PostChain } from './po
  */
 const HMR_TOKEN = import.meta.env.DEV ? `|dev${Date.now()}` : '';
 
-/** Tiers that get the phone budget (no AO, bloom or DOF; MSAA ≤ 2). */
+/** Tiers that get the phone budget (no AO, bloom, DOF or MSAA; FXAA stays). */
 export function isReducedPostTier(tier: DeviceTier): boolean {
   return tier === 'mobile' || tier === 'low';
 }
@@ -108,7 +109,8 @@ export function LupiPostPipeline({ config, aoResolutionScale = 1, onBuild }: Lup
     applyPostParams(chain, input.config);
     chainRef.current = chain;
     builtKey.current = input.key;
-    state.renderPipeline.outputColorTransform = true;
+    // The chain ends display-referred (its own sRGB encode, then FXAA).
+    state.renderPipeline.outputColorTransform = false;
     state.renderPipeline.outputNode = chain.output;
     input.onBuild?.(chain);
     // `undefined` entries clear a disabled effect from state.passes (the hook
