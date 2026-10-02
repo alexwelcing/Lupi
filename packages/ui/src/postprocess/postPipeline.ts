@@ -5,12 +5,20 @@
  * mode); every strength, radius and focus value is a uniform, so preset
  * tweaks, the intensity knob and play/pause never rebuild it.
  *
- * Chain (the v9 order; every step in linear light):
+ * Chain (the v9 order; every step up to the encode in linear light):
  *   scene pass → GTAO (depth-reconstructed normals, denoised) → bloom →
- *   depth of field → tone mapping (renderOutput, linear out) → vignette
- * The pipeline's own output transform (`outputColorTransform = true`, with
- * the renderer at NoToneMapping) is then the single sRGB encode (plan-final
- * D14), so the renderer never tone-maps and nothing encodes twice.
+ *   depth of field → tone mapping (renderOutput, linear out) → vignette →
+ *   sRGB encode → FXAA
+ * The chain ends display-referred: its own renderOutput is the single sRGB
+ * encode (plan-final D14), the pipeline runs with `outputColorTransform =
+ * false` and the renderer at NoToneMapping, so nothing tone-maps or encodes
+ * twice.
+ *
+ * FXAA runs last, on the encoded image (it judges edges by perceptual luma).
+ * It is the only anti-aliasing the atoms and bonds get: they are ray-cast
+ * impostors that discard outside their silhouette and write their own depth,
+ * so MSAA (when the graph allows it at all) never smooths their edges. It runs
+ * on every preset, both backends and the phone budget alike.
  *
  * v9 → port parameter map:
  * - N8AO `aoRadius` (Å)       → GTAO `radius` (view-space units = Å)
@@ -36,11 +44,15 @@ import { ao, type default as GTAONode } from 'three/examples/jsm/tsl/display/GTA
 import { bloom, type default as BloomNode } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import { dof, type default as DepthOfFieldNode } from 'three/examples/jsm/tsl/display/DepthOfFieldNode.js';
 import { denoise } from 'three/examples/jsm/tsl/display/DenoiseNode.js';
+import { fxaa } from 'three/examples/jsm/tsl/display/FXAANode.js';
 import type { PostprocessPresetConfig, PostStructure } from './presets';
 import { LUPI_CONTENT_OUTPUT, contentCoverage } from './backgroundMask';
 
 export interface PostChain {
-  /** The pipeline's `outputNode` (linear, tone-mapped; the pipeline encodes sRGB). */
+  /**
+   * The pipeline's `outputNode`: display-referred (sRGB-encoded) and
+   * anti-aliased. Use with `outputColorTransform = false`.
+   */
   output: Node;
   /**
    * What the pipeline callback registers in `state.passes`. A disabled effect
@@ -151,14 +163,21 @@ export function buildPostChain(
     color = vec4(color.rgb.add(restore).max(0), color.a);
   }
 
-  const disposables: Array<{ dispose(): void } | null> = [aoNode, bloomNode, dofNode];
+  // The single sRGB encode (no tone mapping here: the look did that), then
+  // FXAA on the display-referred image.
+  const display = renderOutput(color, THREE.NoToneMapping, THREE.SRGBColorSpace);
+  const aaNode = fxaa(display);
+
+  const disposables: Array<{ dispose(): void } | null> = [aoNode, bloomNode, dofNode, aaNode];
+  // fxaa() renders its input into its own RTT node, which it does not dispose.
+  disposables.push(aaNode.textureNode as unknown as { dispose(): void });
   // dof() renders a non-texture input into its own RTT node; a texture input
   // (the scene pass's own output) is used as is and is not ours to dispose.
   const dofInput = dofNode?.textureNode as unknown as { isRTTNode?: boolean; dispose(): void } | undefined;
   if (dofInput?.isRTTNode) disposables.push(dofInput);
 
   return {
-    output: color,
+    output: aaNode,
     passes: {
       ao: aoNode ?? undefined,
       bloom: bloomNode ?? undefined,

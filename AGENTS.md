@@ -56,7 +56,12 @@ edge/browser artifact parity while edge V1 remains validation-only.
 The viewer renders through three's `WebGPURenderer` (three r186, React Three
 Fiber v10): on the WebGPU backend when the browser has an adapter, on its
 WebGL2 backend otherwise, or when the URL carries `?renderer=webgl2`.
-`status().rendererBackend` says which one is running. The Chromium flags for
+`status().rendererBackend` says which one is running. The canvas DPR follows
+the device up to a cap that shrinks for big structures (`viewerDprRange`:
+phones up to 3 and desktops up to 2 for at most 50k atoms). The post pipeline
+ends with FXAA on the display-referred image. That FXAA pass is the only
+anti-aliasing the impostor silhouettes get in the live view, on both backends
+and every preset. The Chromium flags for
 both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
 `LANE_ARGS.webgl2`); headless WebGPU on SwiftShader needs the whole
 `webgpu` set, or the device is lost within a few frames.
