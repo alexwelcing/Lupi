@@ -8,7 +8,7 @@
 
 :root {
   /* ─── Color Tokens ─── */
-  --bg-root: #000000;
+  --bg-root: #101817;
   --bg-surface: #0a0a0a;
   --bg-elevated: #141414;
   --bg-glass: rgba(10, 10, 10, 0.92);
@@ -802,50 +802,6 @@ button:focus:not(:focus-visible) {
   border-radius: 14px;
 }
 
-.lupine-ui-bucket {
-  position: absolute;
-  bottom: 14px;
-  left: 14px;
-  z-index: 260;
-  min-width: 112px;
-  height: 46px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 5px 9px 5px 6px;
-  color: #d9f9fa;
-  background: linear-gradient(145deg, rgba(13, 25, 33, .96), rgba(5, 10, 15, .98));
-  border: 1px solid rgba(75, 211, 214, .38);
-  border-radius: 16px;
-  box-shadow: 0 14px 36px rgba(0,0,0,.46), inset 0 1px rgba(255,255,255,.06);
-  cursor: pointer;
-  transform-origin: 22px 23px;
-  transition: width 260ms ease, transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-}
-.lupine-ui-bucket:hover { border-color: rgba(75, 211, 214, .78); box-shadow: 0 16px 42px rgba(0,0,0,.52), 0 0 20px rgba(34,211,215,.12); }
-.lupine-ui-bucket:active { transform: scale(.95); }
-.lupine-ui-bucket:focus-visible { outline: 2px solid var(--lupi-accent, #d5ef9c); outline-offset: 3px; }
-.lupine-ui-bucket__orb {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  position: relative;
-  border-radius: 12px;
-  background: radial-gradient(circle at 35% 30%, #49e1dc, #168b98 58%, #07333d);
-  box-shadow: 0 0 18px rgba(34,211,215,.26), inset 0 1px 1px rgba(255,255,255,.35);
-  overflow: hidden;
-}
-.lupine-ui-bucket__orb span { position: absolute; width: 5px; height: 5px; border: 1px solid rgba(255,255,255,.82); border-radius: 2px; transition: transform 480ms cubic-bezier(.2,1.4,.3,1); }
-.lupine-ui-bucket__orb span:nth-child(1) { transform: translate(-8px, -5px) rotate(12deg); }
-.lupine-ui-bucket__orb span:nth-child(2) { transform: translate(7px, -3px) rotate(-18deg); }
-.lupine-ui-bucket__orb span:nth-child(3) { transform: translate(0, 8px) rotate(45deg); }
-.lupine-ui-bucket[data-stowed='true'] .lupine-ui-bucket__orb span { transform: translate(0, 1px) rotate(180deg); }
-.lupine-ui-bucket[data-stowed='true'] .lupine-ui-bucket__orb { animation: lupi-bucket-breathe 2.4s ease-in-out infinite; }
-.lupine-ui-bucket__label { font-size: 11px; font-weight: 760; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; }
-.lupine-ui-bucket__count { color: #5ee7e2; font-family: var(--font-mono); font-size: 10px; font-weight: 800; }
-@keyframes lupi-bucket-breathe { 50% { box-shadow: 0 0 28px rgba(34,211,215,.48), inset 0 1px 1px rgba(255,255,255,.35); transform: rotate(-3deg) scale(1.04); } }
 
 /* Everything returns to its exact previous state: stowing only transforms the
    chrome, it never unmounts panels or mutates the viewer store. */
@@ -855,8 +811,6 @@ button:focus:not(:focus-visible) {
 .lupine-app-root[data-ui-stowed='true'] #viewer-study-panel { opacity: 0; pointer-events: none; }
 .lupine-app-root[data-ui-stowed='true'] .lupine-viewer-chrome--timeline { opacity: 0; transform: translateY(110%); pointer-events: none; }
 .lupine-command-deck, .lupine-command-panel, .lupine-viewer-chrome--timeline, #viewer-study-panel { transition: opacity 220ms ease, transform 420ms cubic-bezier(.2,.85,.2,1); }
-.lupine-app-root[data-timeline='true'] .lupine-ui-bucket { bottom: calc(76px + env(safe-area-inset-bottom)); }
-.lupine-app-root[data-ui-stowed='true'] .lupine-ui-bucket { bottom: calc(14px + env(safe-area-inset-bottom)); }
 
 
 .lupine-status-bar__readout {
@@ -1014,8 +968,8 @@ button:focus:not(:focus-visible) {
   height: 30px;
   flex-shrink: 0;
   border-radius: 2px;
-  background: linear-gradient(180deg, #22d3d7, #118b9b);
-  box-shadow: 0 0 12px rgba(34, 211, 215, 0.28);
+  background: var(--lupi-accent, #d5ef9c);
+  box-shadow: 0 0 12px rgba(213, 239, 156, 0.22);
 }
 .lupine-command-section-label {
   color: #607184;
@@ -1144,7 +1098,6 @@ button:focus:not(:focus-visible) {
 .scene-mod-fieldset:disabled { opacity: .5; }
 .scene-mod-fieldset legend { padding-inline: 4px; color: var(--scene-muted); }
 .scene-controls select:focus-visible, .scene-controls summary:focus-visible { outline: 2px solid var(--scene-accent); outline-offset: 3px; }
-.lupine-app-root[data-style-open='true'] [data-testid='viewer-gesture-hint'] { display: none !important; }
 
 @media (min-width: 641px) and (min-height: 501px) {
   .lupine-app-root[data-style-open='true'] .lupine-main-viewport { right: calc(clamp(336px, 31vw, 388px) + 96px) !important; }
@@ -1154,11 +1107,6 @@ button:focus:not(:focus-visible) {
   .lupine-app-root { --scene-sheet-height: min(360px, 48dvh); --scene-sheet-bottom: calc(76px + env(safe-area-inset-bottom)); }
   .lupine-app-root .lupine-command-panel[data-panel='studio'] { top: auto; bottom: var(--scene-sheet-bottom); height: var(--scene-sheet-height); max-height: var(--scene-sheet-height); border-radius: 20px; }
   .lupine-app-root[data-style-open='true'] .lupine-main-viewport { bottom: calc(var(--scene-sheet-height) + var(--scene-sheet-bottom) + 8px) !important; top: calc(64px + env(safe-area-inset-top)) !important; }
-  .lupine-app-root[data-style-open='true'] .lupine-ui-bucket { visibility: hidden; pointer-events: none; }
-  /* Any open panel owns the bottom of a phone screen: the Clear view bucket and
-     the gesture hint would otherwise float over its content. */
-  .lupine-app-root[data-panel-open='true'] .lupine-ui-bucket { visibility: hidden; pointer-events: none; }
-  .lupine-app-root[data-panel-open='true'] .lupine-gesture-hint { display: none !important; } /* inline display: flex on the hint */
   .lupine-app-root .scene-controls__button { white-space: nowrap; min-width: 0; padding: 9px 10px; font-size: 13px; }
   .lupine-app-root .lupine-command-deck { bottom: calc(8px + env(safe-area-inset-bottom)); width: calc(100% - 20px); max-width: 420px; border-radius: 14px; background: #14241e; border-color: #40564a; gap: 0; }
   .lupine-app-root .lupine-command-slot { flex: 1; width: auto; min-width: 44px; min-height: 52px; }
@@ -1285,15 +1233,7 @@ button:focus:not(:focus-visible) {
     transform: translate(50%, 140%) scale(.82);
     pointer-events: none;
   }
-  /* Keep the expanded bucket on its own row above the horizontal command
-     deck. When controls are stowed, the more-specific rule above returns the
-     bucket to the bottom safe area. */
-  .lupine-ui-bucket {
-    bottom: calc(76px + env(safe-area-inset-bottom));
-    left: 10px;
-    min-width: 106px;
-  }
-  /* The axes gizmo (bottom right of the viewport) sits on the bucket's row,
+  /* The axes gizmo (bottom right of the viewport) sits on the Play pill's row,
      above the horizontal command deck; with the deck stowed, or the style
      sheet shrinking the viewport, it drops back to the corner. */
   .lupine-app-root { --lupi-axes-gizmo-lift: calc(64px + env(safe-area-inset-bottom)); }
@@ -1302,9 +1242,6 @@ button:focus:not(:focus-visible) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lupine-ui-bucket,
-  .lupine-ui-bucket__orb,
-  .lupine-ui-bucket__orb span,
   .lupine-viewer-chrome--header,
   .lupine-viewer-chrome--timeline { animation: none !important; transition-duration: 1ms !important; }
 }

@@ -11,6 +11,8 @@
  * - surface roughness/polish/clearcoat offsets; per-atom occlusion;
  * - the etched-annotation stamp and (tier 2) the noise/scratched textures;
  * - the `uProgress` GPU lerp between two instance position buffers;
+ * - the display-motion offset (tsl/displayMotion.ts) on the centre: arrival,
+ *   ripple and scatter, exactly zero at rest and in every capture;
  * - hidden types (zero palette radius) and sub-pixel atoms collapse to a
  *   degenerate vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -69,6 +71,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
+import { lupiDisplayOffset } from './displayMotion';
 import {
   blendMaterialPreset,
   impostorDepthPrelude,
@@ -258,9 +261,13 @@ export function createAtomImpostorMaterial({
   const materialParams: N = textureLoad(u.uMaterialPalette, ivec2(slot, int(0)));
   const emissionParams: N = textureLoad(u.uMaterialPalette, ivec2(slot, int(1)));
 
-  const center: N = interpolate
-    ? mix(attribute(ATOM_ATTR.position, 'vec3'), attribute(ATOM_ATTR.target, 'vec3'), u.uProgress)
-    : attribute(ATOM_ATTR.position, 'vec3');
+  const rawPosition: N = attribute(ATOM_ATTR.position, 'vec3');
+  const restCenter: N = interpolate
+    ? mix(rawPosition, attribute(ATOM_ATTR.target, 'vec3'), u.uProgress)
+    : rawPosition;
+  // Display-only motion (arrival, ripple, scatter): exactly zero at rest and
+  // in every capture; everything below follows the displaced centre.
+  const center: N = restCenter.add(lupiDisplayOffset(restCenter, rawPosition));
   const viewCenter: N = modelViewMatrix.mul(vec4(center, 1.0)).xyz;
   const viewDepth: N = max(viewCenter.z.negate(), 1e-4);
   // Device pixels per world unit at unit depth: |P[1][1]| × target height / 2.

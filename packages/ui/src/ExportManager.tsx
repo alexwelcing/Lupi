@@ -20,7 +20,7 @@
 
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber/webgpu';
-import { LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
+import { LUPI_JOB, LUPI_PHASE, beginRecording, runPrepareCapture } from '@atlas/scene';
 import { useStore, type ExportRequest } from './store';
 import {
   canInferCovalentBonds,
@@ -57,7 +57,6 @@ import {
   type PreparedImageCaptureTransaction,
 } from './export/renderCaptureState';
 import {
-  compileSceneForCapture,
   readbackToCanvas,
   renderSceneToPixels,
   resolveViewerPlate,
@@ -219,10 +218,11 @@ function ImageCaptureFrame({
  * - `lupi-canonical` (after controls, before uniform jobs) re-syncs the
  *   capture camera from the finalized camera, and asserts the environment.
  * - `lupi-capture` (after the default render) waits until the scene carries
- *   the artifact revision, kicks `renderer.compileAsync` once, and on a later
- *   frame renders into a render target at the requested size and reads it
- *   back (renderTargetReadback). The canvas is never resized and the live
- *   camera never moves, so the on-screen view is untouched.
+ *   the artifact revision and, one frame later (after the uniform jobs saw
+ *   the canonical state), renders into a render target at the requested
+ *   size and reads it back (renderTargetReadback). The canvas is never
+ *   resized and the live camera never moves, so the on-screen view is
+ *   untouched.
  *
  * The capture renders the raw scene (the post pipeline is bypassed) with the
  * background the viewer shows: the finalized artifact background, or the
@@ -336,6 +336,9 @@ function ImageCaptureFrameLifecycle({
         height: captureDimension(request.resolution?.height, liveSize.height),
       };
       targetSizeRef.current = targetSize;
+      // Toys settle first (a coasting camera re-levels) so the transaction
+      // copies a resting camera.
+      runPrepareCapture();
       transactionRef.current = beginImageCaptureTransaction({
         scene,
         camera,
@@ -375,6 +378,7 @@ function ImageCaptureFrameLifecycle({
           return;
         }
       }
+      runPrepareCapture();
       transaction.applyCanonicalState();
       markFiberFrameCaptureApplied(barrierRef.current, revisionRef.current);
     } catch (error) {
@@ -417,21 +421,13 @@ function ImageCaptureFrameLifecycle({
       const barrier = barrierRef.current;
       const revision = revisionRef.current;
       if (claimFiberFrameWarmup(barrier, revision)) {
-        // Build the capture's pipelines and upload resources committed with
-        // the request before the capture frame (replaces v9's owned warm-up
-        // draw). The capture follows on a later frame, after every uniform
-        // job has seen the canonical state again.
-        const warmup = transaction.withCaptureScene(() => compileSceneForCapture({
-          renderer,
-          scene,
-          camera: transaction.camera,
-          width,
-          height,
-        }));
-        void warmup.finally(() => {
-          markFiberFrameCaptureWarmed(barrier, revision);
-          invalidate();
-        });
+        // The capture follows on a later frame, after every uniform job has
+        // seen the canonical state again. No renderer.compileAsync warm-up:
+        // three r186 skips any draw whose pipeline is still compiling
+        // asynchronously, so a capture behind a slow warm-up lost whole
+        // layers (the atoms of a transparent capture on SwiftShader WebGPU).
+        // The capture render builds missing pipelines synchronously instead.
+        markFiberFrameCaptureWarmed(barrier, revision);
         invalidate();
         return;
       }
@@ -538,6 +534,8 @@ export function ExportManager() {
   const originalSize = useRef<{ width: number; height: number; aspect: number } | null>(null);
   const originalStoreState = useRef<{ bondTolerance: number; atomScale: number; frame: number } | null>(null);
   const originalFrameloop = useRef<'always' | 'demand' | 'never' | null>(null);
+  // The recording guards' stop (the camera rig resumes, display motion un-suspends).
+  const recordingRestoreRef = useRef<(() => void) | null>(null);
 
   // Shared scene/camera/size/store restore after a video export. Reused for both
   // the success and failure paths of the MediaRecorder capture.
@@ -577,6 +575,9 @@ export function ExportManager() {
       originalFrameloop.current = null;
     }
     clearExportRequest();
+    const stopRecordingGuards = recordingRestoreRef.current;
+    recordingRestoreRef.current = null;
+    stopRecordingGuards?.();
   }, [camera, file, setSize, setDpr, setFrameloop, clearExportRequest]);
 
   // Stable ref so the VideoCaptureLoop always calls the freshest restore closure.
@@ -877,6 +878,12 @@ export function ExportManager() {
     onCompleteRef.current = req.onComplete || null;
     requestRef.current = req;
 
+    // Toys stand down for the whole recording: the rig settles and suspends,
+    // display motion stays at rest. restoreAfterVideo stops them on every exit.
+    // First, so the pose below is the settled one, not a glide's mid-flight.
+    recordingRestoreRef.current?.();
+    recordingRestoreRef.current = beginRecording();
+
     // Capture the camera pose to restore after capture. The flythrough
     // path drives position AND fov every tick, so both video modes need
     // this — previously only orbit captured, leaving the viewport stuck
@@ -1027,6 +1034,14 @@ export function ExportManager() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportRequest]);
+
+  // Leaving the viewer mid-recording must not leave the toys suspended
+  // (display motion's suspend flag is module state and outlives this mount).
+  useEffect(() => () => {
+    const stopRecordingGuards = recordingRestoreRef.current;
+    recordingRestoreRef.current = null;
+    stopRecordingGuards?.();
+  }, []);
 
   return (
     <>

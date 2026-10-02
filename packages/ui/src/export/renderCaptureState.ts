@@ -52,7 +52,7 @@ export interface FiberFrameCaptureBarrier {
   readonly requestedRevision: number;
   /** `lupi-canonical` applied the canonical state for this revision. */
   appliedRevision: number;
-  /** `lupi-capture` started the warm-up (renderer.compileAsync). */
+  /** `lupi-capture` saw this revision applied (the frame before the capture). */
   warmupRevision: number;
   /** The warm-up finished. */
   warmedRevision: number;
@@ -63,9 +63,10 @@ export interface FiberFrameCaptureBarrier {
  * A tiny explicit handshake across Fiber frame phases (no numeric
  * priorities). `lupi-canonical` applies the canonical camera after controls
  * and before uniform jobs. The first `lupi-capture` pass (after the default
- * render) kicks `renderer.compileAsync` for the capture, replacing v9's
- * owned warm-up frame. A later `lupi-capture` pass captures that revision
- * exactly once, after every uniform job has observed the canonical state.
+ * render) marks the warm-up frame, replacing v9's owned warm-up draw (the
+ * capture render builds its pipelines synchronously). A later `lupi-capture`
+ * pass captures that revision exactly once, after every uniform job has
+ * observed the canonical state.
  */
 export function createFiberFrameCaptureBarrier(revision: number): FiberFrameCaptureBarrier {
   return {
@@ -285,6 +286,9 @@ function syncCaptureCamera(
   appliedCamera: ImageCaptureTransactionOptions['appliedCamera'],
 ): void {
   target.copy(live, false);
+  // Captures are always level: whatever a live toy did to `up`, the artifact
+  // camera looks at its target with world +Y up.
+  target.up.set(0, 1, 0);
   live.updateMatrixWorld();
   live.matrixWorld.decompose(target.position, target.quaternion, target.scale);
   if (target instanceof THREE.PerspectiveCamera) {

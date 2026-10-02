@@ -27,7 +27,7 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three/webgpu';
-import { LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
+import { LUPI_JOB, LUPI_PHASE, beginCaptureRender, runPrepareCapture } from '@atlas/scene';
 import type { SavedViewThumbnail } from '../savedViews';
 import type { LupiBackend } from '../viewer/createLupiRenderer';
 
@@ -75,6 +75,23 @@ const ROW_ALIGNMENT = 256;
  * call, before the first await, so a caller in the `lupi-capture` phase can
  * swap scene state around the call and restore it right after.
  */
+/**
+ * Warm-up compiles still running. three r186's `compileAsync` creates its
+ * pipelines one render object at a time between awaits, and reads the depth
+ * format from the render context it shares with every capture target of the
+ * same attachment state, i.e. from whichever target used it last. Disposing
+ * that target while a compile is still running (a warm-up outlives its 3 s
+ * timeout on a slow device) leaves the format undefined: "Async render
+ * pipeline creation failed … GPUDepthStencilState format". Capture targets
+ * therefore outlive every warm-up in flight when they are released.
+ */
+const warmups = new Set<Promise<void>>();
+
+function releaseCaptureTarget(target: THREE.RenderTarget): void {
+  if (warmups.size === 0) target.dispose();
+  else void Promise.allSettled([...warmups]).then(() => target.dispose());
+}
+
 export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): Promise<RasterReadback> {
   const { renderer, scene, camera, width, height, transparent } = options;
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
@@ -97,6 +114,9 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   const previousAutoClearStencil = renderer.autoClearStencil;
   const previousClearColor = renderer.getClearColor(new THREE.Color());
   const previousClearAlpha = renderer.getClearAlpha();
+  // Capture guards (display motion, …) hold toys at rest for exactly this
+  // render; their restores run LIFO first thing in the finally.
+  let restoreGuards = () => {};
 
   try {
     renderer.setRenderTarget(target);
@@ -107,11 +127,13 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
     renderer.autoClearStencil = true;
     if (transparent) renderer.setClearColor(0x000000, 0);
     else renderer.setClearColor(options.clearColor ?? previousClearColor, 1);
+    restoreGuards = beginCaptureRender();
     renderer.render(scene, camera);
   } catch (error) {
-    target.dispose();
+    releaseCaptureTarget(target);
     throw error;
   } finally {
+    restoreGuards();
     renderer.setClearColor(previousClearColor, previousClearAlpha);
     renderer.autoClear = previousAutoClear;
     renderer.autoClearColor = previousAutoClearColor;
@@ -126,7 +148,7 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
     const rgba = decodeHalfFloatReadback(data, width, height, backend === 'webgl2');
     return { width, height, rgba, backend };
   } finally {
-    target.dispose();
+    releaseCaptureTarget(target);
   }
 }
 
@@ -165,17 +187,22 @@ export async function compileSceneForCapture(options: CompileSceneForCaptureOpti
   } finally {
     renderer.setRenderTarget(previousTarget, previousCubeFace, previousMipmapLevel);
   }
+  const settled: Promise<void> = compiling.then(() => undefined, () => undefined);
+  warmups.add(settled);
+  void settled.then(() => {
+    warmups.delete(settled);
+    releaseCaptureTarget(target);
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      compiling.catch(() => undefined),
+      settled,
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, timeoutMs);
       }),
     ]);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
-    target.dispose();
   }
 }
 
@@ -392,6 +419,8 @@ export function ViewerCaptureService(): null {
     (state) => {
       const queue = queueRef.current;
       if (queue.length === 0) return;
+      // Settle toys (a coasting camera re-levels) before any task reads the camera.
+      runPrepareCapture();
       const context: ViewerCaptureContext = {
         renderer: state.renderer,
         scene: state.scene,

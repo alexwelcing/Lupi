@@ -6,8 +6,10 @@ settings:
 
 overrides:
   brace-expansion@1.1.14: 1.1.18
-  brace-expansion@5.0.7: 5.0.9
+  brace-expansion@5.0.7: 5.0.12
+  brace-expansion@5.0.9: 5.0.12
   fast-uri: 3.1.7
+  '@grpc/grpc-js@1.14.4': 1.14.5
   '@xmldom/xmldom@0.8.13': 0.8.15
   '@xmldom/xmldom@0.9.10': 0.9.12
   js-yaml@4.3.0: 4.3.2
@@ -408,6 +410,10 @@ importers:
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(jsdom@29.1.1(canvas@3.2.3))(vite@6.4.1(@types/node@22.19.15)(jiti@1.21.7)(lightningcss@1.33.0)(terser@5.46.1)(tsx@4.23.11)(yaml@2.9.0))
 
   packages/core:
+    dependencies:
+      math:
+        specifier: 0.1.0
+        version: 0.1.0
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -535,6 +541,9 @@ importers:
       firebase:
         specifier: ^12.16.0
         version: 12.16.0
+      math:
+        specifier: 0.1.0
+        version: 0.1.0
       mp4-muxer:
         specifier: ^5.2.2
         version: 5.2.2
@@ -1917,8 +1926,8 @@ packages:
     resolution: {integrity: sha512-W98gTQOAntEeEQ7/pZxSQXxfUO5CiQcXJRsxBpUa6UU25n8YN/VtogPBi0H+MAmUrn/6bY/sBhFansoWEsr2/g==}
     engines: {node: '>=18'}
 
-  '@grpc/grpc-js@1.14.4':
-    resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
+  '@grpc/grpc-js@1.14.5':
+    resolution: {integrity: sha512-7VZM+SVdEcUUqSQeNI3zM8Qs/BhQKZndPo2h5VkYkAM8Iz0wJIa8mKV5ekQGqG8UUsnkQ0NMxIxwkIHYvj0qOw==}
     engines: {node: '>=12.10.0'}
 
   '@grpc/grpc-js@1.9.16':
@@ -3769,8 +3778,8 @@ packages:
   brace-expansion@1.1.18:
     resolution: {integrity: sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==}
 
-  brace-expansion@5.0.9:
-    resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
+  brace-expansion@5.0.12:
+    resolution: {integrity: sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==}
     engines: {node: 20 || >=22}
 
   braces@3.0.3:
@@ -5578,6 +5587,9 @@ packages:
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
+
+  math@0.1.0:
+    resolution: {integrity: sha512-hq5KkLblFiR8OO8ZYqPK02mBqrXuxJ6hwvhL3ZM9OFkAR82/20n4H768SWl4yVVrufh8VijEm42D4V9N8hDa2g==}
 
   mdn-data@2.27.1:
     resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
@@ -9136,7 +9148,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@grpc/grpc-js@1.14.4':
+  '@grpc/grpc-js@1.14.5':
     dependencies:
       '@grpc/proto-loader': 0.8.1
       '@js-sdsl/ordered-map': 4.4.2
@@ -11239,7 +11251,7 @@ snapshots:
       balanced-match: 1.0.2
       concat-map: 0.0.1
 
-  brace-expansion@5.0.9:
+  brace-expansion@5.0.12:
     dependencies:
       balanced-match: 4.0.4
 
@@ -12749,7 +12761,7 @@ snapshots:
 
   google-gax@4.6.1:
     dependencies:
-      '@grpc/grpc-js': 1.14.4
+      '@grpc/grpc-js': 1.14.5
       '@grpc/proto-loader': 0.7.15
       '@types/long': 4.0.2
       abort-controller: 3.0.0
@@ -13411,6 +13423,8 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
+  math@0.1.0: {}
+
   mdn-data@2.27.1: {}
 
   media-typer@1.1.1: {}
@@ -13640,7 +13654,7 @@ snapshots:
 
   minimatch@10.2.5:
     dependencies:
-      brace-expansion: 5.0.9
+      brace-expansion: 5.0.12
 
   minimatch@3.1.5:
     dependencies:

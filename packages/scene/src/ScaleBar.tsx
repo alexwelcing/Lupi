@@ -53,10 +53,13 @@ export function ScaleBar({
 
   if (!visible) return null;
 
-  // Position styles
+  // Position styles. The page can raise a bottom-anchored bar with the
+  // `--lupi-scalebar-lift` CSS variable (the Play pill owns the desktop
+  // bottom-left corner below it).
+  const liftedBottom = 'calc(24px + var(--lupi-scalebar-lift, 0px))';
   const positionStyles: Record<string, React.CSSProperties> = {
-    'bottom-left': { left: 24, bottom: 24 },
-    'bottom-right': { right: 24, bottom: 24 },
+    'bottom-left': { left: 24, bottom: liftedBottom },
+    'bottom-right': { right: 24, bottom: liftedBottom },
     'top-left': { left: 24, top: 24 },
     'top-right': { right: 24, top: 24 },
   };

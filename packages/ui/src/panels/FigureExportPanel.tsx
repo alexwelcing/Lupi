@@ -8,6 +8,7 @@ import { ELEMENT_DATA, hasCompleteElementMapping, resolveAtomicNumber } from '@a
 import { IconClose } from '../icons';
 import { createKeyframe, type FlythroughSequence } from '../flythrough';
 import { useStore } from '../store';
+import { getCameraRig } from '../camera/rigApi';
 import { buildMoleculeStudyFacts, renderStudySheetHtml, studySheetFileName } from '../studyFacts';
 
 type ExportStatus =
@@ -220,8 +221,6 @@ export function FigureExportPanel({
   const frame = useStore(s => s.frame);
   const triggerExport = useStore(s => s.triggerExport);
   const setShowScaleBar = useStore(s => s.setShowScaleBar);
-  const cameraPosition = useStore(s => s.cameraPosition);
-  const cameraTarget = useStore(s => s.cameraTarget);
   const selectedAtoms = useStore(s => s.selectedAtoms);
   const measurement = useStore(s => s.measurement);
   const lastBondCount = useStore(s => s.lastBondCount);
@@ -382,6 +381,9 @@ export function FigureExportPanel({
   const runVideoExport = useCallback(
     (motion: 'rotate' | 'flythrough') => {
       if (!file || !hasVideoExport) return;
+      // The rig writes the store camera at rest: mid-coast it still holds the pose before the flick.
+      getCameraRig()?.settleNow();
+      const { cameraPosition, cameraTarget } = useStore.getState();
       const label = motion === 'rotate' ? 'MP4 rotate' : 'MP4 auto flythrough';
       setStatus({ kind: 'working', label: `Recording ${label}` });
       triggerExport({
@@ -406,7 +408,7 @@ export function FigureExportPanel({
         },
       });
     },
-    [cameraPosition, cameraTarget, file, hasVideoExport, triggerExport],
+    [file, hasVideoExport, triggerExport],
   );
 
   const busy = status.kind === 'working';

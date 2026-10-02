@@ -6,7 +6,9 @@
  * visuals, and state serialization.
  */
 
+import { runPrepareCapture } from '@atlas/scene';
 import { useStore, type BackgroundBackdropShape, type BackgroundBackdropPattern, type ExportRequest } from '../store';
+import { getCameraRig } from '../camera/rigApi';
 import {
   assessAsset,
   byteSourceFromUrl,
@@ -448,6 +450,8 @@ async function handleRemoveAnnotation(request: LupiMcpRequest): Promise<LupiMcpR
 }
 
 async function handleEncodeViewUrl(): Promise<LupiMcpResponseResult> {
+  // The rig writes the store camera at rest: mid-coast it still holds the pose before the flick.
+  getCameraRig()?.settleNow();
   const token = useStore.getState().encodeToURL();
   return { url: `${window.location.origin}${window.location.pathname}?s=${token}` };
 }
@@ -540,6 +544,8 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
   // moment), and a late refit would move the camera under the planned
   // snapshot. Plan from the viewer's state once it has settled.
   await waitForViewerReady(timeoutMs);
+  // Settle toys first (a coasting camera writes its pose to the store), as the capture will.
+  runPrepareCapture();
   const viewState = useStore.getState();
   if (viewState.file !== state.file || !viewState.file) {
     throw new Error('The loaded molecule changed before the export started; retry lupi.export_asset.');

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { emitIntent } from '@atlas/scene';
 import { useStore } from '../store';
 
 export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPaletteOpen: (open: boolean) => void) {
@@ -23,14 +24,38 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
       const currentFile = state.file;
       const isResearch = Boolean(currentFile?.name?.startsWith('research_') || currentFile?.sourceUrl?.includes('/research/'));
 
+      const noModifiers = !e.metaKey && !e.ctrlKey && !e.altKey;
+      // A single structure has no frames to step: the arrows hop between
+      // symmetric views instead (trajectories keep frame stepping). While a
+      // panel is open the arrows keep their default (scrolling it).
+      const sceneOwnsKeys = Boolean(currentFile) && !state.activePanel && !state.studyLensOpen;
+      const staticStructure = sceneOwnsKeys && (currentFile?.trajectory.totalFrames ?? 0) <= 1;
+
       if (e.key === ' ' && !isResearch) { e.preventDefault(); state.togglePlay(); }
-      if (e.key === 'ArrowRight') state.nextFrame();
-      if (e.key === 'ArrowLeft') state.prevFrame();
+      if (staticStructure && noModifiers && e.key.startsWith('Arrow')) {
+        const dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+        const dy = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+        if (dx !== 0 || dy !== 0) {
+          e.preventDefault();
+          emitIntent({ type: 'camera.detentStep', dx, dy });
+        }
+      } else {
+        if (e.key === 'ArrowRight') state.nextFrame();
+        if (e.key === 'ArrowLeft') state.prevFrame();
+      }
+      if (e.key === 'Home' && sceneOwnsKeys && noModifiers) {
+        e.preventDefault();
+        emitIntent({ type: 'camera.home' });
+      }
+      if (e.key.toLowerCase() === 'p' && currentFile && noModifiers && !e.shiftKey) {
+        emitIntent({ type: 'play.toggleTray', source: 'key' });
+      }
       if (e.key === 'Escape') {
         state.setActivePanel(null);
         state.setStudioDeck(null);
         state.setViewMenuOpen(false);
         state.setStudyLensOpen(false);
+        emitIntent({ type: 'play.reset' });
       }
       if (!e.metaKey && !e.ctrlKey && !e.altKey && ['1', '2', '3', '4', '5', '6', '7'].includes(e.key)) {
         e.preventDefault();

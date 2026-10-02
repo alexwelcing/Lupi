@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useEffect } from 'react';
+import { memo, useCallback, useMemo, useState, useEffect } from 'react';
 import { OrbitControls } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import { useStore } from '../store';
@@ -16,7 +16,7 @@ import {
 import { reportActiveTransmissionQuality } from '../mcp/transmissionRuntime';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
 import { Bonds } from '@atlas/scene/Bonds';
-import { validateSourceBondTopology } from '@atlas/scene';
+import { emitIntent, validateSourceBondTopology } from '@atlas/scene';
 import { SimulationCell } from '@atlas/scene/SimulationCell';
 import { VectorGlyphs, type VectorGlyphStats } from '@atlas/scene';
 import {
@@ -38,6 +38,10 @@ import {
   requiredMeasurementAtoms,
 } from '../measurements';
 import { CameraFocus } from '../CameraFocus';
+import { PlayLayer } from '../play/PlayLayer';
+import { CameraToys } from '../camera/CameraToys';
+import { LupiCameraRig } from '../camera/LupiCameraRig';
+import { markCanvasSelection } from '../camera/selectionSource';
 import { AtomTrails } from '../AtomTrails';
 import { MoleculeFilterShell } from '../MoleculeFilterShell';
 import { MoleculeShadow } from '../MoleculeShadow';
@@ -56,6 +60,13 @@ import type { MutableRefObject } from 'react';
 import type { SpatialHash3D } from '@atlas/scene/SpatialHash';
 import type { BgMedia, BgPreset } from '../backgroundPresets';
 import { MAX_INTERACTIVE_PICKING_ATOMS } from '../deviceCapabilities';
+
+/**
+ * `?controls=orbit` brings back drei's OrbitControls in place of the Lupi
+ * camera rig (the wave-1 escape hatch). Read once, at module load.
+ */
+const ORBIT_FALLBACK = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('controls') === 'orbit';
 
 const CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT = 5_000;
 const CONTACT_SHADOW_MAX_ATOM_LIMIT = 50_000;
@@ -251,6 +262,16 @@ export function ViewerScene({
   const showCell = useStore(s => s.showCell);
   const showAxes = useStore(s => s.showAxes);
   const flythroughPreview = useStore(s => s.flythroughPreview);
+  // Analytics: the first time a visitor moves the camera on each file.
+  const trackInteraction = useCallback(() => {
+    const f = useStore.getState().file;
+    if (f && interactedForFileRef.current !== f.name) {
+      interactedForFileRef.current = f.name;
+      track(ANALYTICS_EVENTS.MOLECULE_INTERACTED, {
+        atoms: f.trajectory.frames[0]?.natoms ?? 0,
+      });
+    }
+  }, [interactedForFileRef]);
   const playing = useStore(s => s.playing);
   const showBonds = useStore(s => s.showBonds);
   const bondTolerance = useStore(s => s.bondTolerance);
@@ -671,6 +692,13 @@ export function ViewerScene({
             )}
           />
           <CameraFocus frame={currentFrame} enabled={!flythroughPreview} />
+          <PlayLayer
+            frame={currentFrame}
+            center={center}
+            transmissionActive={transmissionActive}
+            playing={playing}
+          />
+          <CameraToys frame={currentFrame} />
           <AtomTrails
             frame={currentFrame}
             frameKey={interpolatedFrameKey}
@@ -684,15 +712,17 @@ export function ViewerScene({
               spatialHash={spatialHash}
               hiddenAtomTypes={hiddenAtomTypes}
               enabled={!measurementTool || Boolean(measurementFrame)}
-              onClick={(atomIndex) => {
+              onClick={(atomIndex, info?: { shiftKey: boolean }) => {
                 if (atomIndex == null) return;
-                const isAnnotate = !measurementTool && (window as any).__atlasShiftHeld === true;
+                const isAnnotate = !measurementTool
+                  && (info?.shiftKey ?? (window as any).__atlasShiftHeld === true);
                 if (isAnnotate) {
                   const text = window.prompt('Annotation text', `atom #${atomIndex}`);
                   if (text && text.trim()) {
                     useStore.getState().addAnnotation(atomIndex, text.trim());
                   }
                 }
+                if (!isAnnotate && !measurementTool) emitIntent({ type: 'atom.tap', atomIndex });
               }}
               onHover={(atomIndex) => useStore.getState().setHoveredAtom(atomIndex)}
               selectionMode={measurementTool ? 'measure' : 'single'}
@@ -700,6 +730,7 @@ export function ViewerScene({
               onSelect={(indices) => {
                 const state = useStore.getState();
                 if (!measurementTool) {
+                  markCanvasSelection();
                   state.setSelectedAtoms(indices);
                   return;
                 }
@@ -735,35 +766,37 @@ export function ViewerScene({
         />
       )}
 
-      <OrbitControls
-        makeDefault
-        enabled={!flythroughPreview}
-        target={center}
-        enableDamping
-        dampingFactor={0.08}
-        rotateSpeed={0.5}
-        panSpeed={0.4}
-        zoomSpeed={0.8}
-        minDistance={cameraMinDistance}
-        maxDistance={cameraDistance * 6}
-        onStart={() => {
-          const f = useStore.getState().file;
-          if (f && interactedForFileRef.current !== f.name) {
-            interactedForFileRef.current = f.name;
-            track(ANALYTICS_EVENTS.MOLECULE_INTERACTED, {
-              atoms: f.trajectory.frames[0]?.natoms ?? 0,
-            });
-          }
-        }}
-        onEnd={(e: any) => {
-          if (e?.target?.object && e?.target?.target) {
-            useStore.getState().setCameraState(
-              e.target.object.position.toArray(),
-              e.target.target.toArray(),
-            );
-          }
-        }}
-      />
+      {ORBIT_FALLBACK ? (
+        <OrbitControls
+          makeDefault
+          enabled={!flythroughPreview}
+          target={center}
+          enableDamping
+          dampingFactor={0.08}
+          rotateSpeed={0.5}
+          panSpeed={0.4}
+          zoomSpeed={0.8}
+          minDistance={cameraMinDistance}
+          maxDistance={cameraDistance * 6}
+          onStart={trackInteraction}
+          onEnd={(e: any) => {
+            if (e?.target?.object && e?.target?.target) {
+              useStore.getState().setCameraState(
+                e.target.object.position.toArray(),
+                e.target.target.toArray(),
+              );
+            }
+          }}
+        />
+      ) : (
+        <LupiCameraRig
+          center={center}
+          minDistance={cameraMinDistance}
+          maxDistance={cameraDistance * 6}
+          enabled={!flythroughPreview}
+          onFirstInteraction={trackInteraction}
+        />
+      )}
 
       <ScenePostprocessing />
     </>

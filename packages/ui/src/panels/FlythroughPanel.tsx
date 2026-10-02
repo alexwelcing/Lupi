@@ -17,6 +17,13 @@ import {
   type EasingType, type FlythroughKeyframe,
 } from '../flythrough';
 import { Slider } from '../controls';
+import { getCameraRig } from '../camera/rigApi';
+
+/** The store camera, settled first: the rig writes it at rest, so mid-coast it still holds the pose before the flick. */
+function settledCamera() {
+  getCameraRig()?.settleNow();
+  return useStore.getState();
+}
 
 // ─── Icons ────────────────────────────────────────────────────────────
 const IconPlus = () => (
@@ -83,8 +90,6 @@ export function FlythroughPanel({
 } = {}) {
   const setActivePanel = useStore((state) => state.setActivePanel);
   const flythrough = useStore((state) => state.flythrough);
-  const cameraPosition = useStore((state) => state.cameraPosition);
-  const cameraTarget = useStore((state) => state.cameraTarget);
   const cameraFov = useStore((state) => state.cameraFov);
   const triggerExport = useStore((state) => state.triggerExport);
   const setFlythrough = useStore(s => s.setFlythrough);
@@ -145,6 +150,7 @@ export function FlythroughPanel({
   }, [flythroughPreview, flythrough, cameraFov, setFlythroughPreview, setFlythroughTime]);
 
   const handleAddKeyframe = useCallback(() => {
+    const { cameraPosition, cameraTarget } = settledCamera();
     const kf = createKeyframe(
       [...cameraPosition] as [number, number, number],
       [...cameraTarget] as [number, number, number],
@@ -161,7 +167,7 @@ export function FlythroughPanel({
     } else {
       addFlythroughKeyframe(kf);
     }
-  }, [cameraPosition, cameraTarget, flythrough, setFlythrough, addFlythroughKeyframe]);
+  }, [flythrough, setFlythrough, addFlythroughKeyframe]);
 
   const handleCopyShareLink = useCallback(() => {
     if (!flythrough) return;
@@ -235,8 +241,9 @@ export function FlythroughPanel({
     if (!file) return;
 
     // Start with current camera
-    const startPos = [...useStore.getState().cameraPosition] as [number, number, number];
-    const startTarget = [...useStore.getState().cameraTarget] as [number, number, number];
+    const { cameraPosition, cameraTarget } = settledCamera();
+    const startPos = [...cameraPosition] as [number, number, number];
+    const startTarget = [...cameraTarget] as [number, number, number];
     const seq = createDefaultSequence(startPos, startTarget);
     seq.keyframes[0].label = "Auto Start";
     seq.keyframes[0].easing = 'ease-in-out'; // Smooth start
@@ -395,9 +402,10 @@ export function FlythroughPanel({
               onUpdate={(patch) => updateFlythroughKeyframe(i, patch)}
               onRemove={() => removeFlythroughKeyframe(i)}
               onRecapture={() => {
+                const { cameraPosition, cameraTarget } = settledCamera();
                 updateFlythroughKeyframe(i, {
-                  position: [...useStore.getState().cameraPosition] as [number, number, number],
-                  target: [...useStore.getState().cameraTarget] as [number, number, number],
+                  position: [...cameraPosition] as [number, number, number],
+                  target: [...cameraTarget] as [number, number, number],
                 });
               }}
               onJumpTo={() => {

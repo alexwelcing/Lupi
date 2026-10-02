@@ -25,6 +25,7 @@ The viewer now runs on React Three Fiber v10 alpha (`10.0.0-canary.14007b4`), `@
 
 ## Known follow-ups
 
+- **Wave 1 (the Buckyball Minute)** shipped on top of this port: the Lupi camera rig, the ink C60 hero, the no-splash relay, display motion and the one Play pill. Its status, tuning points, known limits and wave-2 queue are in [wave1-status.md](wave1-status.md).
 - **Exports don't include the post look yet.** The molecule in an export is the raw scene, not tone-mapped or AO'd as it is on screen. This is queued as a separate task.
 - **three r187** (due 2026-10-21) fixes a GL program leak on the WebGL2 fallback in long sessions. Bump to it and recheck environment lighting, because PMREMs become cube render targets.
 - **fiber canary teardown warning.** If the viewer unmounts while `renderer.init()` is still pending, fiber logs "[R3F] Error while unmounting root", from a null `state.xr`. It's rare, harmless for users, and needs an upstream fix.

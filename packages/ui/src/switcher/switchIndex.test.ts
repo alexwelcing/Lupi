@@ -23,7 +23,7 @@ import { findSwitchCandidates, galleryCandidates, mergeCandidates, omolCandidate
 describe('switch candidate index', () => {
   it('lists familiar gallery molecules first with no query and filters by element AND', () => {
     const all = galleryCandidates({ query: '', elements: [] });
-    expect(all[0].title).toBe('Caffeine');
+    expect(all[0].title).toBe('Buckminsterfullerene'); // QUICK_PICK_IDS lead with C60, the home hero
     const withN = galleryCandidates({ query: '', elements: ['N', 'O'], limit: 50 });
     expect(withN.length).toBeGreaterThan(0);
     expect(withN.every((c) => c.elements.includes('N') && c.elements.includes('O'))).toBe(true);

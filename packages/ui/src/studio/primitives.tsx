@@ -175,6 +175,9 @@ export function SegmentButton({
   );
 }
 
+/** The house lime (#d5ef9c): the slider's filled track and its thumb. */
+const SLIDER_ACCENT = '#d5ef9c';
+
 export function CompactSlider({
   label,
   value,
@@ -218,8 +221,11 @@ export function CompactSlider({
         style={{
           width: '100%',
           height: 4,
-          accentColor: '#1edce0',
-          background: `linear-gradient(90deg, #1edce0 0%, #1edce0 ${percent * 100}%, rgba(71,85,105,0.7) ${percent * 100}%, rgba(71,85,105,0.7) 100%)`,
+          accentColor: SLIDER_ACCENT,
+          background: `linear-gradient(90deg, ${SLIDER_ACCENT} 0%, ${SLIDER_ACCENT} ${percent * 100}%, rgba(71,85,105,0.7) ${percent * 100}%, rgba(71,85,105,0.7) 100%)`,
+          // The global range thumb reads these (pseudo-elements inherit them).
+          ['--accent' as string]: SLIDER_ACCENT,
+          ['--accent-soft' as string]: 'rgba(213, 239, 156, 0.24)',
         }}
       />
     </label>

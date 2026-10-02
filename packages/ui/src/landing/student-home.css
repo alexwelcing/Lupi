@@ -517,10 +517,23 @@
   }
 }
 /* ---- Search-first hero ---- */
+/* Desktop: heading, finder and scan link on the left; the ink buckyball
+   (hero/hero.css) beside them. At <=800px it stacks between the heading and
+   the finder, small enough that the finder stays in the first viewport. */
 .student-hero--finder {
-  grid-template-columns: 1fr;
-  gap: 32px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 32px 56px;
+  align-items: start;
   padding-block: 56px 40px;
+}
+.student-hero--finder > * {
+  grid-column: 1;
+}
+.student-hero--finder > .bucky-hero {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  /* Pinned to the top: centred, it slid down as finder results grew row 2. */
+  align-self: start;
 }
 .student-hero--finder h1 {
   font-size: 3rem;
@@ -768,7 +781,13 @@
 }
 @media (max-width: 800px) {
   .student-hero--finder {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
     padding-block: 32px 28px;
+  }
+  .student-hero--finder > .bucky-hero {
+    grid-column: 1;
+    grid-row: auto;
   }
   .student-hero--finder h1 {
     font-size: 2.5rem;

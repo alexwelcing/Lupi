@@ -46,6 +46,12 @@ export const LUPI_JOB = {
   cameraFocus: 'lupi/camera-focus',
   /** The testbed harness: probe projection and the readiness count. */
   harness: 'lupi/harness',
+  /** The Lupi camera rig (drag, coast, glide, detents) in fiber's `update` phase. */
+  cameraRig: 'lupi/camera-rig',
+  /** Display-only motion (arrival, ripple, scatter) uniforms in `lupi-uniforms`. */
+  displayMotion: 'lupi/display-motion',
+  /** The first rendered frame of a file, in `lupi-capture`. */
+  firstFrame: 'lupi/first-frame',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];

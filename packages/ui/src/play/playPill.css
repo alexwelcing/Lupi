@@ -1,0 +1,269 @@
+/* playPill.css — the one Play pill [● Play] [status] [stow] and its tray.
+   Desktop: bottom-left. Phone (the viewer's MOBILE_MEDIA_QUERY, portrait and
+   short landscape): on its own row above the horizontal command deck, in the
+   old Clear view bucket's slot. */
+
+/* The scale bar sits above the pill on desktop (ScaleBar reads the lift). */
+.lupine-app-root { --lupi-scalebar-lift: 56px; }
+
+.lupi-play-pill {
+  --lupi-pill-ink: #e4f2c6;
+  --lupi-pill-muted: #a7b9a1;
+  --lupi-pill-lime: var(--lupi-accent, #d5ef9c);
+  --lupi-pill-divider: rgba(213, 239, 156, 0.14);
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  z-index: 260;
+  display: flex;
+  align-items: stretch;
+  height: 46px;
+  max-width: calc(100vw - 28px);
+  color: var(--lupi-pill-ink);
+  background: linear-gradient(180deg, rgba(27, 44, 37, 0.97), rgba(16, 27, 23, 0.97)), #14241e;
+  border: 1px solid #40564a;
+  border-radius: 23px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  line-height: 1.2;
+  transition: bottom 420ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+.lupi-play-pill :where(button) {
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.lupi-play-pill :where(button):focus-visible { outline: 2px solid var(--lupi-pill-lime); outline-offset: -3px; }
+.lupi-play-pill[data-stowed='true'] { bottom: calc(14px + env(safe-area-inset-bottom)); }
+
+/* ● Play (or "Poke ×" while latched) */
+.lupi-play-pill__play { display: flex; align-items: stretch; flex: 0 0 auto; border-radius: 22px 0 0 22px; }
+.lupi-play-pill__play-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 70px;
+  padding: 0 14px 0 15px;
+  border-radius: 22px 0 0 22px;
+  font-size: 13px;
+  font-weight: 680;
+  letter-spacing: 0.01em;
+  transition: background-color 120ms ease-out;
+}
+.lupi-play-pill__play-button:hover,
+.lupi-play-pill[data-tray-open='true'] .lupi-play-pill__play-button { background: rgba(213, 239, 156, 0.1); }
+.lupi-play-pill__play-button:active { background: rgba(213, 239, 156, 0.16); }
+.lupi-play-pill__dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--lupi-pill-lime);
+  box-shadow: 0 0 10px rgba(213, 239, 156, 0.55);
+}
+.lupi-play-pill__play[data-poke] { background: rgba(213, 239, 156, 0.15); }
+.lupi-play-pill__play[data-poke] .lupi-play-pill__play-button { padding-right: 4px; color: var(--lupi-pill-lime); }
+.lupi-play-pill__play[data-poke] .lupi-play-pill__dot { box-shadow: 0 0 0 3px rgba(213, 239, 156, 0.22), 0 0 12px rgba(213, 239, 156, 0.7); }
+.lupi-play-pill__unlatch {
+  width: 38px;
+  flex: 0 0 auto;
+  color: var(--lupi-pill-lime);
+  font-size: 19px;
+  line-height: 1;
+}
+.lupi-play-pill__unlatch:hover { background: rgba(213, 239, 156, 0.12); }
+
+/* Status: honesty label, flash, teaching line, or collapsed */
+.lupi-play-pill__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 260px;
+  padding: 0 12px;
+  overflow: hidden;
+  color: var(--lupi-pill-muted);
+  font-size: 12px;
+  font-weight: 560;
+  opacity: 1;
+  transition: max-width 220ms cubic-bezier(0.2, 0.85, 0.2, 1), padding 220ms ease, opacity 160ms ease;
+}
+.lupi-play-pill__play + .lupi-play-pill__status:not([data-empty='true']) { border-left: 1px solid var(--lupi-pill-divider); }
+.lupi-play-pill__status[data-empty='true'] { max-width: 0; padding: 0; opacity: 0; }
+.lupi-play-pill__status-text {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.lupi-play-pill__status[data-kind='displaced'] { color: #f1f8e2; }
+.lupi-play-pill__status[data-kind='displaced'] .lupi-play-pill__status-text { font-style: italic; }
+.lupi-play-pill__status[data-kind='flash'] { color: var(--lupi-pill-lime); font-weight: 650; }
+.lupi-play-pill__sep { flex: 0 0 auto; color: var(--lupi-pill-muted); }
+.lupi-play-pill__reset {
+  align-self: stretch;
+  flex: 0 0 auto;
+  min-width: 44px;
+  padding: 0 2px;
+  color: var(--lupi-pill-lime);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* Stow: "Clear view" / "Restore" (icon only on a phone) */
+.lupi-play-pill__stow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-width: 46px;
+  padding: 0 15px 0 12px;
+  border-left: 1px solid var(--lupi-pill-divider);
+  border-radius: 0 22px 22px 0;
+  color: var(--lupi-pill-muted);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 120ms ease-out, background-color 120ms ease-out;
+}
+.lupi-play-pill__stow:hover { color: var(--lupi-pill-ink); background: rgba(255, 255, 255, 0.04); }
+.lupi-play-pill__stow-icon { flex: 0 0 auto; }
+.lupi-play-pill[data-stowed='true'] .lupi-play-pill__status[data-empty='true'] + .lupi-play-pill__stow {
+  border-left: 0;
+  border-radius: 22px;
+  padding: 0 15px 0 14px;
+}
+.lupi-play-pill[data-stowed='true'] .lupi-play-pill__stow { color: var(--lupi-pill-lime); }
+
+/* The tray, anchored above the pill */
+.lupi-play-tray {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100dvh - 140px);
+  padding: 8px;
+  overflow-y: auto;
+  color: var(--lupi-pill-ink);
+  background: #14241e;
+  border: 1px solid #40564a;
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform-origin: 30px 100%;
+  animation: lupi-play-tray-in 190ms cubic-bezier(0.2, 0.9, 0.25, 1.12);
+}
+@keyframes lupi-play-tray-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+}
+.lupi-play-tray__row {
+  display: grid;
+  grid-template-columns: 76px repeat(3, minmax(70px, 1fr));
+  align-items: center;
+  gap: 4px;
+}
+.lupi-play-tray__row--end .lupi-play-tray__item { grid-column: 2 / -1; }
+.lupi-play-tray__label {
+  padding-left: 6px;
+  color: #8fa48a;
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.lupi-play-pill .lupi-play-tray__item {
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  min-height: 44px;
+  padding: 4px 10px;
+  color: var(--lupi-pill-ink);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 620;
+  text-align: center;
+  white-space: nowrap;
+  transition: background-color 100ms ease-out, color 100ms ease-out;
+}
+.lupi-play-pill .lupi-play-tray__item:hover:not([aria-disabled='true']) { background: rgba(213, 239, 156, 0.1); }
+.lupi-play-pill .lupi-play-tray__item:focus-visible { outline: 2px solid var(--lupi-pill-lime); outline-offset: -2px; }
+.lupi-play-pill .lupi-play-tray__item[aria-checked='true'] { color: #101817; background: var(--lupi-pill-lime); }
+.lupi-play-pill .lupi-play-tray__item[aria-disabled='true'] { color: #7f917b; cursor: not-allowed; }
+.lupi-play-tray__hint { color: #8fa48a; font-size: 9px; font-weight: 520; }
+
+/* Poke latched: a thin lime inset edge on the viewport (above the canvas). */
+.lupine-main-viewport[data-poke]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--lupi-accent, #d5ef9c), inset 0 0 22px rgba(213, 239, 156, 0.16);
+}
+
+/* With the axes gizmo on (bottom right), the pill stops short of it. */
+.lupine-app-root:has(.lupine-axes-gizmo) .lupi-play-pill { max-width: calc(100vw - 150px); }
+
+@media (max-width: 640px), (max-height: 500px) and (max-width: 900px) {
+  /* The deck covers the scale bar's corner; stowed, the bar clears the pill. */
+  .lupine-app-root { --lupi-scalebar-lift: 0px; }
+  .lupine-app-root[data-ui-stowed='true'] { --lupi-scalebar-lift: 56px; }
+  .lupi-play-pill {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    left: 10px;
+    max-width: calc(100vw - 20px);
+  }
+  .lupi-play-pill[data-stowed='true'] { bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .lupine-app-root:has(.lupine-axes-gizmo) .lupi-play-pill { max-width: calc(100vw - 126px); }
+  .lupi-play-pill__status { max-width: none; }
+  .lupi-play-pill__stow-label { display: none; }
+  .lupi-play-pill__stow { padding: 0 14px 0 12px; }
+  /* An open panel or style sheet owns the bottom of a phone screen (opening
+     one also puts every toy at rest, so nothing displaced goes unlabelled). */
+  .lupine-app-root[data-panel-open='true'] .lupi-play-pill,
+  .lupine-app-root[data-style-open='true'] .lupi-play-pill { visibility: hidden; pointer-events: none; }
+}
+
+/* Phone portrait: the pill's row is too narrow to share with the axes gizmo
+   once the status speaks, so the gizmo rides one row higher (global.css
+   drops it back to the corner when the chrome is stowed or the style sheet
+   is open). Landscape has room on the row. */
+@media (max-width: 640px) {
+  .lupine-app-root[data-file='true']:not([data-ui-stowed='true']):not([data-style-open='true']) {
+    --lupi-axes-gizmo-lift: calc(120px + env(safe-area-inset-bottom));
+  }
+  .lupine-app-root:not([data-ui-stowed='true']):has(.lupine-axes-gizmo) .lupi-play-pill { max-width: calc(100vw - 20px); }
+  /* The tray spans the row, flush with the deck, over the gizmo's corner;
+     the gizmo steps aside while it is open (a red X peeking past the
+     tray's edge reads as a close badge). */
+  .lupi-play-tray { width: calc(100vw - 20px); }
+  .lupi-play-tray__row { grid-template-columns: 76px repeat(3, minmax(0, 1fr)); }
+  .lupi-play-pill .lupi-play-tray__item { padding: 4px 6px; }
+  .lupine-app-root:has(.lupi-play-tray) .lupine-axes-gizmo { visibility: hidden; }
+}
+
+/* Short landscape: a tighter tray keeps clear of the header capsule. */
+@media (max-height: 500px) and (max-width: 900px) {
+  .lupi-play-tray { bottom: calc(100% + 6px); gap: 3px; padding: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lupi-play-pill,
+  .lupi-play-pill *,
+  .lupi-play-tray { animation: none !important; transition-duration: 1ms !important; }
+}
