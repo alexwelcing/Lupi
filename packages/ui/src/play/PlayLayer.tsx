@@ -348,7 +348,13 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     }),
     [],
   );
-  useEffect(() => () => resetDisplayMotion(), []);
+  useEffect(
+    () => () => {
+      resetDisplayMotion();
+      radiusCache.frame = null; // do not keep the last file's Frame alive
+    },
+    [],
+  );
 
   // Arm the arrival before the first render of a newly opened file.
   useLayoutEffect(() => {
