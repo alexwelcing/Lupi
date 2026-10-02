@@ -23,13 +23,13 @@
       "specId": "spec-sha256:97d78d172b2bd423d224f5f331c43e7bda1af66be231c886d710bf231f8295da"
     },
     "generationIdentities": {
-      "rendererFingerprint": "renderer-sha256:d9849ced850081d6842b60618f6aaf347a1b18576ed4d025f9b93d3a3b4dc48e",
-      "artifactKey": "artifact-sha256:11d32314743fa12b62eb218f2f73924a676d62d2a83b3d6a94de731fb044b0d3"
+      "rendererFingerprint": "renderer-sha256:f14f86be1a27fa24e4563883515228acf33a5c16490cd311bd86d5bcf1b100b4",
+      "artifactKey": "artifact-sha256:8982052ca73f72c32423171ed256ae51d884a2b442bb61ff0bb889ce79ea9946"
     }
   },
   "rendererValidity": {
     "scheme": "lupi.renderer-validity-digest.v2",
-    "digest": "sha256:5c642f5713d059b30a5d664dd389ad174994cb2929748f05480a7d81cc112425",
+    "digest": "sha256:f0f0a2280cfe78b15e9f0f2b54264766d1e9cf819f327c8fee30ce74efb130ca",
     "input": {
       "schemaVersion": "lupi.renderer-validity-input.v2",
       "sourceNormalization": "utf8-lf-v1",
@@ -56,7 +56,7 @@
         },
         {
           "path": "packages/scene/src/AtomPicker.tsx",
-          "sha256": "sha256:f537bc067788e6811d5903e6cfe68e72fc02f51d57ebecb0c6727821bb12e9d2"
+          "sha256": "sha256:4faa41409050ee6f10bbf8aca7700161d5aac355ea728f6d8dc98d6308b6d8d6"
         },
         {
           "path": "packages/scene/src/AtomsOptimized.tsx",
@@ -76,7 +76,7 @@
         },
         {
           "path": "packages/scene/src/SpatialHash.ts",
-          "sha256": "sha256:0ae647148a778a46ab2d0d62b7579f73f2a28e880d05aa2478a56d4614cf9f79"
+          "sha256": "sha256:6531c063453f60fa49c539fd33346cbc9083b33607dcb67c7ca3f6b5285a4ba7"
         },
         {
           "path": "packages/scene/src/VectorGlyphs.tsx",
@@ -97,6 +97,10 @@
         {
           "path": "packages/scene/src/bondWorker.ts",
           "sha256": "sha256:0858e0dda2075791fb667eb4d86e56fc25548f59a293931995378c1aedd2191a"
+        },
+        {
+          "path": "packages/scene/src/captureGuards.ts",
+          "sha256": "sha256:df073b87b8810cb44b8e779080c489d1d51d187bacabf29d3788c9f915c96adc"
         },
         {
           "path": "packages/scene/src/constants.ts",
@@ -184,7 +188,7 @@
         },
         {
           "path": "packages/ui/src/AtomInfoHUD.tsx",
-          "sha256": "sha256:48ac23584e2d3bfca1ddcb7ed12e61a81e6992557c25020ba40f050361fddf6f"
+          "sha256": "sha256:651f9a87e783a3cc85003dfa2b585bd315f730c04cb9d1da44f7d1b1b7fead64"
         },
         {
           "path": "packages/ui/src/AtomTrails.tsx",
@@ -192,11 +196,11 @@
         },
         {
           "path": "packages/ui/src/CameraFocus.tsx",
-          "sha256": "sha256:d76aabd4dd98a5f73762bc97906d4664c530d4e11acea51b3365607617857680"
+          "sha256": "sha256:06fa75ef03ab9e5f621007788c4c4965249631ad0f7aa56bc9cfebe311fb8071"
         },
         {
           "path": "packages/ui/src/ExportManager.tsx",
-          "sha256": "sha256:2cde5d7978f5d84c839120c941b06dd20a7d2c5a1322addd821b8b25d91ed55a"
+          "sha256": "sha256:e1244ec6ae47ac56d218c45b577091ec3f61ada58a63b531311b64fd6e1fafd4"
         },
         {
           "path": "packages/ui/src/GhostAtoms.tsx",
@@ -224,7 +228,7 @@
         },
         {
           "path": "packages/ui/src/ViewerApp.tsx",
-          "sha256": "sha256:2cd8ff40d33d73e161a947678219bdafb02459b7ae24013c498f6d25cbad20e5"
+          "sha256": "sha256:b44abe63f6622a07ba1e4b67e7945bd3b8700971eba6da7ef9b54f7641d9708f"
         },
         {
           "path": "packages/ui/src/app/AppBackground.tsx",
@@ -232,15 +236,23 @@
         },
         {
           "path": "packages/ui/src/app/CameraManager.tsx",
-          "sha256": "sha256:48715f0da761336bc6ff7dfcf0152457c89baebe206f71855f95d27133d88534"
+          "sha256": "sha256:5d5ff58263a45fa11aa58b01016bc8d8dfdeae585722f62ae929f8e658fb915a"
         },
         {
           "path": "packages/ui/src/app/ViewerScene.tsx",
-          "sha256": "sha256:93a33aeb26618c22b87799bd64e2765d163cea29c5df1bac68fd22f0dbfcc0bb"
+          "sha256": "sha256:2bee395282fff9506bca2a4c66331bd5a90de96f8639a50fd99ad92e81d3e94b"
         },
         {
           "path": "packages/ui/src/backgroundPresets.ts",
           "sha256": "sha256:2fcedb03881c2c763d08fc12cd0c3633e8d294bfd38ac14fac91244a8da5b3d2"
+        },
+        {
+          "path": "packages/ui/src/camera/LupiCameraRig.tsx",
+          "sha256": "sha256:d6cc24da32029d2e199e2083ea3a387345f40cdd996285b3b83624909d0b9878"
+        },
+        {
+          "path": "packages/ui/src/camera/rigController.ts",
+          "sha256": "sha256:c727554ccf9401e07536700aee79c885f5549e2f1eb0274611868f5611f2d0b0"
         },
         {
           "path": "packages/ui/src/coloring/colorSchemes.ts",
@@ -280,11 +292,11 @@
         },
         {
           "path": "packages/ui/src/export/renderCaptureState.ts",
-          "sha256": "sha256:03aa9201f82b8739515c588fea86e047cee0c5132e50300543c3ca4488b000cd"
+          "sha256": "sha256:10089b5464ccf406938bf60848e6ccb9d3c77ef26380d51c4f21e3c74e435ca5"
         },
         {
           "path": "packages/ui/src/export/renderTargetReadback.ts",
-          "sha256": "sha256:3b0299316ac60c01bee96d78c816fc1727522da7fedebc95dc24e1e32e81d5d0"
+          "sha256": "sha256:086b7ac54b7686eb4dae0d7199f6b11c372e6df2e7b69e5567d7d0106ab87400"
         },
         {
           "path": "packages/ui/src/hooks/useEquirectMediaTexture.ts",
@@ -304,11 +316,15 @@
         },
         {
           "path": "packages/ui/src/mcp/tools.ts",
-          "sha256": "sha256:c19bb2bf982708a3c037eec244390f00f01d484c0917ead680b1679e34160226"
+          "sha256": "sha256:994a5b832dde6e34d8340ed874dfc31bd9c0661cec1f7a7749c47db3d13003d9"
         },
         {
           "path": "packages/ui/src/mcpViewerBridge.tsx",
-          "sha256": "sha256:3f16f2e8136ab25f03da6aaa286f87ab84658e26fd6c030fe08a64ff47e4b2ad"
+          "sha256": "sha256:e390297f55834fee10444f9784678bfc9f74b9ad2f9f233d83f936444672b215"
+        },
+        {
+          "path": "packages/ui/src/play/PlayLayer.tsx",
+          "sha256": "sha256:a74a3735eccbf3df8b8ec4106724d5691528fc6d04400f0093ef1b68a0f103b0"
         },
         {
           "path": "packages/ui/src/postprocess/ScenePostprocessing.tsx",
@@ -766,7 +782,7 @@
     }
   },
   "derivation": {
-    "generatedAt": "2026-09-29T11:30:49.590Z",
+    "generatedAt": "2026-10-02T13:41:32.943Z",
     "repeatCount": 10,
     "medoidRepeat": 1,
     "uniqueByteDigests": [
@@ -905,8 +921,8 @@
     "authority": {
       "status": "dirty-worktree-mechanics-only",
       "reason": "mechanics evidence only; CI is not true; worktree dirty; injected SHA matches HEAD",
-      "injectedBuildSha": "659e8da98e68e54297a4b2b9fff7d4a880e3a5ef",
-      "repositoryHeadSha": "659e8da98e68e54297a4b2b9fff7d4a880e3a5ef",
+      "injectedBuildSha": "a90b6c570c5d8bae9b5468d59bbef4de7b1fb16f",
+      "repositoryHeadSha": "a90b6c570c5d8bae9b5468d59bbef4de7b1fb16f",
       "worktreeClean": false,
       "ci": false,
       "cleanExactShaCiDerivation": "PENDING"
