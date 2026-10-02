@@ -35,6 +35,8 @@ describe('shouldPlayArrival', () => {
       { hash: '#/mcp?mcpCommand=iso' },
       { hash: '#/embed/mobile' },
       { search: '?sim=c60_buckyball&mcpCommand=iso' },
+      { search: '?mcp&sim=c60_buckyball' },
+      { hash: '#/?command=iso' },
       { search: '?batchExport=true' },
       { search: '?s=abc' },
       { hash: '#/view/my-view' },

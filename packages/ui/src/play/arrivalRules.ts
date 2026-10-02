@@ -48,6 +48,14 @@ function hashRoute(hash: string): string {
   return (route.split('?')[0] || '/').toLowerCase();
 }
 
+/** The page's query: `search`, then the hash route's own query (the MCP bridge reads both). */
+function pageParams(input: ArrivalRuleInput): URLSearchParams {
+  const params = new URLSearchParams(input.search);
+  const query = input.hash.indexOf('?');
+  if (query >= 0) new URLSearchParams(input.hash.slice(query + 1)).forEach((value, key) => params.set(key, value));
+  return params;
+}
+
 function isSavedViewPath(path: string): boolean {
   return path.startsWith('/view/');
 }
@@ -63,18 +71,19 @@ function sceneAllows(input: ArrivalRuleInput): boolean {
   if (input.transmissionActive || input.playing) return false;
   const route = hashRoute(input.hash);
   if (route === '/mcp' || route.startsWith('/mcp/') || route.startsWith('/embed')) return false;
+  if (pageParams(input).has('mcp')) return false; // `?mcp` is the MCP route too
   return true;
 }
 
 /** The arrival for a molecule that just opened, or null. */
 export function shouldPlayArrival(input: ArrivalRuleInput): ArrivalMode | null {
-  const params = new URLSearchParams(input.search);
+  const params = pageParams(input);
   const flag = params.get('arrival');
   if (flag === '0') return null;
   const forced = flag === '1';
 
   if (!sceneAllows(input)) return null;
-  if (params.has('mcpCommand') || params.get('batchExport') === 'true' || params.has('s')) return null;
+  if (params.has('mcpCommand') || params.has('command') || params.get('batchExport') === 'true' || params.has('s')) return null;
   if (isSavedViewPath(hashRoute(input.hash)) || isSavedViewPath((input.pathname ?? '/').toLowerCase())) return null;
   if (!forced) {
     if (input.comfort === 'still') return null;
