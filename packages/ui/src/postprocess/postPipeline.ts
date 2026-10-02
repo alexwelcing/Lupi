@@ -39,7 +39,7 @@
  */
 import * as THREE from 'three/webgpu';
 import type { Camera, Node, PassNode, UniformNode } from 'three/webgpu';
-import { distance, float, mrt, output, renderOutput, smoothstep, uniform, uv, vec2, vec4 } from 'three/tsl';
+import { distance, float, mrt, output, renderOutput, rtt, smoothstep, uniform, uv, vec2, vec4 } from 'three/tsl';
 import { ao, type default as GTAONode } from 'three/examples/jsm/tsl/display/GTAONode.js';
 import { bloom, type default as BloomNode } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import { dof, type default as DepthOfFieldNode } from 'three/examples/jsm/tsl/display/DepthOfFieldNode.js';
@@ -164,13 +164,15 @@ export function buildPostChain(
   }
 
   // The single sRGB encode (no tone mapping here: the look did that), then
-  // FXAA on the display-referred image.
+  // FXAA on the display-referred image. The encoded image goes to the canvas
+  // as 8-bit anyway, so it is held in an RGBA8 target: the canvas's own
+  // precision at half the memory and bandwidth of a HalfFloat one, which
+  // matters at phone DPR.
   const display = renderOutput(color, THREE.NoToneMapping, THREE.SRGBColorSpace);
-  const aaNode = fxaa(display);
+  const displayTexture = rtt(display, null, null, { type: THREE.UnsignedByteType });
+  const aaNode = fxaa(displayTexture);
 
-  const disposables: Array<{ dispose(): void } | null> = [aoNode, bloomNode, dofNode, aaNode];
-  // fxaa() renders its input into its own RTT node, which it does not dispose.
-  disposables.push(aaNode.textureNode as unknown as { dispose(): void });
+  const disposables: Array<{ dispose(): void } | null> = [aoNode, bloomNode, dofNode, aaNode, displayTexture];
   // dof() renders a non-texture input into its own RTT node; a texture input
   // (the scene pass's own output) is used as is and is not ours to dispose.
   const dofInput = dofNode?.textureNode as unknown as { isRTTNode?: boolean; dispose(): void } | undefined;
