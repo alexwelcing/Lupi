@@ -23,13 +23,13 @@
       "specId": "spec-sha256:97d78d172b2bd423d224f5f331c43e7bda1af66be231c886d710bf231f8295da"
     },
     "generationIdentities": {
-      "rendererFingerprint": "renderer-sha256:1aba8027ad36cdffad6df9086356b40524fbc000642a5ba70264853e8f515ea3",
-      "artifactKey": "artifact-sha256:920abd81cd9abf2aa6760df1b81592b9b88cce1f74516a1e9266e614eec73303"
+      "rendererFingerprint": "renderer-sha256:46eb7d813e9a198a9baf03ba2356318780bb880add36d1546ab79197ea864db4",
+      "artifactKey": "artifact-sha256:f84b2471a0ec73c2daee1708f019201709b3a90953a26455c00e559ca01dd728"
     }
   },
   "rendererValidity": {
     "scheme": "lupi.renderer-validity-digest.v2",
-    "digest": "sha256:130843f851c4484dc48cf21c6958e22b3e88c6cb8c83a4cb80a0b926afa2bb05",
+    "digest": "sha256:ce3353e17766d2df73707ad3e31d043cd2792c0a3cb1f61e1563176f2b82a646",
     "input": {
       "schemaVersion": "lupi.renderer-validity-input.v2",
       "sourceNormalization": "utf8-lf-v1",
@@ -364,7 +364,7 @@
         },
         {
           "path": "packages/ui/src/viewer/LupiCanvas.tsx",
-          "sha256": "sha256:772193f5456ba51ef35ed9e79e5af5a428034cc932c982847af58984acdd1f01"
+          "sha256": "sha256:42aec5c96ae2a9fde30870eeb60cc20434b466544d767fae360b95781b223786"
         },
         {
           "path": "packages/ui/src/viewer/PresetLegacyBridge.tsx",
@@ -376,7 +376,7 @@
         },
         {
           "path": "packages/ui/src/viewer/ViewerCanvas.tsx",
-          "sha256": "sha256:bee3748e93f75f13aa77d42ea89ee17acc9c425979332efe9d9e6a71425e4e23"
+          "sha256": "sha256:5b4c767f15f268073621d5e3b8103138312384f03f6c93fba5e3fa009a5f4e50"
         },
         {
           "path": "packages/ui/src/viewer/artifactFrameSelection.ts",
@@ -786,7 +786,7 @@
     }
   },
   "derivation": {
-    "generatedAt": "2026-10-02T18:26:04.054Z",
+    "generatedAt": "2026-10-02T20:13:26.192Z",
     "repeatCount": 10,
     "medoidRepeat": 1,
     "uniqueByteDigests": [
@@ -922,8 +922,8 @@
     "authority": {
       "status": "dirty-worktree-mechanics-only",
       "reason": "mechanics evidence only; CI is not true; worktree clean; injected SHA matches HEAD",
-      "injectedBuildSha": "4265af40becb645046b02defb572be17144d35d3",
-      "repositoryHeadSha": "4265af40becb645046b02defb572be17144d35d3",
+      "injectedBuildSha": "31adffcf77ae735daa23b17c480b19636bd4ece4",
+      "repositoryHeadSha": "31adffcf77ae735daa23b17c480b19636bd4ece4",
       "worktreeClean": true,
       "ci": false,
       "cleanExactShaCiDerivation": "PENDING"
