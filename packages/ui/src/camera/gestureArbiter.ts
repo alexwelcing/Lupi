@@ -427,6 +427,17 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   let hoverX = 0;
   let hoverY = 0;
   let gestureScale = 1;
+  // Touch and pen pointers the machine took. iOS and iPadOS fire GestureEvents
+  // for a touch pinch too; while a finger is down the pinch is the pointer
+  // path's, and a second zoom from gesturechange would overshoot.
+  const touchIds = new Set<number>();
+  const touchDown = (): boolean => {
+    for (const id of touchIds) {
+      if (machine.isTracking(id)) return true;
+      touchIds.delete(id);
+    }
+    return false;
+  };
 
   const isCanvasTarget = (target: EventTarget | null): boolean =>
     target === element || (canvas !== null && (target === canvas || target === canvas.parentElement));
@@ -476,7 +487,10 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
       /* the pointer is already gone */
     }
     const kind = pointerKind(e.pointerType);
-    if (kind !== 'mouse') marks?.down(e.pointerId, e.clientX, e.clientY);
+    if (kind !== 'mouse') {
+      touchIds.add(e.pointerId);
+      marks?.down(e.pointerId, e.clientX, e.clientY);
+    }
     if (caught) marks?.catchAt(e.clientX, e.clientY);
     if (kind === 'mouse') endHover();
   };
@@ -552,7 +566,9 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
     if (isCanvasTarget(e.target)) e.preventDefault();
   };
 
-  // Safari trackpad pinch arrives as GestureEvents, not ctrl+wheel.
+  // Safari trackpad pinch arrives as GestureEvents, not ctrl+wheel. A touch
+  // pinch on iOS and iPadOS fires them as well; that one zooms through the
+  // pointers, so a gesture is ignored while a finger is down.
   type SafariGesture = Event & { scale: number; clientX: number; clientY: number };
   const onGestureStart = (e: Event) => {
     e.preventDefault();
@@ -565,6 +581,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
     if (!(g.scale > 0)) return;
     const factor = gestureScale / g.scale;
     gestureScale = g.scale;
+    if (touchDown()) return;
     if (Number.isFinite(factor) && factor !== 1) onZoom(factor, g.clientX, g.clientY);
   };
 
