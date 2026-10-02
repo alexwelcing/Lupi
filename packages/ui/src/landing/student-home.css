@@ -532,7 +532,8 @@
 .student-hero--finder > .bucky-hero {
   grid-column: 2;
   grid-row: 1 / span 3;
-  align-self: center;
+  /* Pinned to the top: centred, it slid down as finder results grew row 2. */
+  align-self: start;
 }
 .student-hero--finder h1 {
   font-size: 3rem;
