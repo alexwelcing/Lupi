@@ -15,6 +15,7 @@ export const REQUIRED_VIEWER_TOOLS = [
   "lupi.encode_view_url",
 ] as const;
 export const GALLERY_VIEWER_TOOL = "lupi.open_gallery_example" as const;
+export const OMOL25_VIEWER_TOOL = "lupi.load_molecule_url" as const;
 
 export interface ViewerCompatibilityResult {
   compatible: boolean;

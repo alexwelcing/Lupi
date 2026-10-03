@@ -74,6 +74,7 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 
 function fallbackViewerName(load: MoleculeLoadInput): string {
   if (load.inputType === "xyz") return "Imported structure";
+  if (load.inputType === "omol25") return `OMol25 row ${load.input.split("/")[1]}`;
   if (load.inputType === "procedural") {
     return load.element ? `${load.element} structure` : "Generated structure";
   }

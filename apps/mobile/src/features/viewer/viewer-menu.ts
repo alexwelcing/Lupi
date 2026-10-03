@@ -37,6 +37,15 @@ const CAMERA_ACTIONS = [
 ] as const;
 
 const APPEARANCE_ACTIONS = [
+  commandAction("appearance-lit", "Lit", "lupi.set_viewer", {
+    inkStyle: "off",
+  }),
+  commandAction("appearance-illustrate", "Illustrate", "lupi.set_viewer", {
+    inkStyle: "flat",
+  }),
+  commandAction("appearance-sketch", "Sketch", "lupi.set_viewer", {
+    inkStyle: "hatch",
+  }),
   commandAction("appearance-studio", "Studio", "lupi.set_viewer", {
     backgroundPreset: "studio",
     postprocessPreset: "studio",
@@ -83,7 +92,7 @@ export const VIEWER_MENUS: Record<ViewerMenuId, ViewerMenuDefinition> = {
   appearance: {
     id: "appearance",
     title: "Appearance",
-    message: "Choose a background and rendering style.",
+    message: "Choose a Lupi look or background.",
     actions: APPEARANCE_ACTIONS,
   },
   more: {

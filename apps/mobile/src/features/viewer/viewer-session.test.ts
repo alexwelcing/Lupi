@@ -54,6 +54,13 @@ test("keeps generated molecule inputs on the generator bridge command", () => {
   );
 });
 
+test("loads an OMol25 row only through Lupi's trusted source URL", () => {
+  assert.deepEqual(initialViewerCommand({ inputType: "omol25", input: "neutral-train/7", atomCount: 3 }), {
+    tool: "lupi.load_molecule_url",
+    arguments: { url: "https://lupi.live/v1/datasets/omol25/neutral-train/structures/7.xyz" },
+  });
+});
+
 test("a full viewer reload clears the execution key and replays the selected molecule", () => {
   const moleculeKey = "template:8:caffeine";
   let executionKey: string | null = moleculeKey;
