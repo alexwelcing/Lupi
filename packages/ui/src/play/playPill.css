@@ -237,7 +237,9 @@
   align-items: center;
   gap: 4px;
 }
-.lupi-play-tray__row--end .lupi-play-tray__item { grid-column: 2 / -1; }
+/* Last row: Replay ↗ under the first option, Settings… across the rest. */
+.lupi-play-tray__row--end .lupi-play-tray__item:first-child { grid-column: 2; }
+.lupi-play-tray__row--end .lupi-play-tray__item:last-child { grid-column: 3 / -1; }
 /* One finger: five verbs on two lines beside one label. */
 .lupi-play-tray__row--verbs .lupi-play-tray__label { grid-row: span 2; align-self: start; padding-top: 16px; }
 .lupi-play-tray__label {

@@ -6,7 +6,7 @@
  *                Burst · Heat
  *   Try          Scatter · Spin · Reset
  *   Motion       Standard · Gentle · Still
- *                Settings…
+ *                Replay ↗ · Settings…
  *
  * A `role="menu"` anchored above the pill. Arrow keys, Home and End move
  * between items, Enter and Space activate, Escape (or Tab, or a tap outside)
@@ -19,6 +19,7 @@ import { useStore } from '../store';
 import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
 import { cue } from './feedback';
+import { openReplaySheet } from '../replay/actions';
 import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
 
 export interface PlayTrayProps {
@@ -119,6 +120,11 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
     emitIntent({ type: intent });
     if (intent === 'play.reset') cue('reset');
     onClose({ restoreFocus: true });
+  };
+  // Instant Replay: the last moment (or this view) as a link and a clip.
+  const openReplay = () => {
+    onClose();
+    openReplaySheet();
   };
   const openSettings = () => {
     // The store subscription in PlayPill closes the tray as the panel opens.
@@ -222,6 +228,13 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
         ))}
       </div>
       <div role="none" className="lupi-play-tray__row lupi-play-tray__row--end">
+        <TrayItem
+          role="menuitem"
+          title={still ? 'Share this view as a link (R)' : 'Replay the last moment: a live link and a 9:16 clip (R)'}
+          onSelect={openReplay}
+        >
+          {still ? 'Share ↗' : 'Replay ↗'}
+        </TrayItem>
         <TrayItem role="menuitem" onSelect={openSettings}>
           Settings…
         </TrayItem>
