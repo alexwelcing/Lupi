@@ -33,6 +33,8 @@ import { useStore, type KnowledgeLabel } from './store';
 import { humanizeCategory } from './periodic-table/ElementDetailCard';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import { setViewOccluder } from './camera/viewInset';
+import { MOLECULAR_RECIPE_ID, filterPerceivedBonds } from '@atlas/core/bonds';
+import { atomBondPartners, getPerceivedBonds, resolveFrameRecipe, type AtomBondPartner } from './bonds/perceivedBonds';
 import { atomRestPoint, useDisplayFollower } from './play/displayFollow';
 
 /** The phone sheet's id among the overlays the live view makes room for. */
@@ -132,6 +134,12 @@ export function AtomInfoHUD({
   const showNeighbors = useStore(s => s.showNeighbors);
   const setShowNeighbors = useStore(s => s.setShowNeighbors);
   const setHighlightedNeighbors = useStore(s => s.setHighlightedNeighbors);
+  const showBonds = useStore(s => s.showBonds);
+  const bondProfile = useStore(s => s.bondProfile);
+  const bondTolerance = useStore(s => s.bondTolerance);
+  const showBondContacts = useStore(s => s.showBondContacts);
+  const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
+  const frameCount = useStore(s => s.file?.trajectory.totalFrames ?? 1);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const radiusRef = useRef(0);
   const [expanded, setExpanded] = useState(phoneSheetExpanded);
@@ -229,6 +237,27 @@ export function AtomInfoHUD({
   const properties = getPropertyRows(frame, atomIndex, activeProperty);
   const knowledge = getKnowledgeRows(knowledgeLabels, frame, atomIndex);
   const nodePath = nodeLabel?.nodeId ? formatNodePath(nodeLabel.nodeId) : undefined;
+  // Molecular frames: this atom's drawn partners, from the same graph and filter as the view.
+  let bondRows: { label: string; value: string }[] = [];
+  if (showBonds && resolveFrameRecipe(frame, { profile: bondProfile, frameCount }) === MOLECULAR_RECIPE_ID) {
+    const perceived = getPerceivedBonds(frame, { recipe: MOLECULAR_RECIPE_ID, tolerance: bondTolerance });
+    if (perceived) {
+      const drawn = filterPerceivedBonds(perceived, {
+        types: frame.types,
+        hiddenTypes: new Set(hiddenAtomTypes),
+        showContacts: showBondContacts,
+      });
+      const partners = atomBondPartners(drawn, atomIndex);
+      const list = (rows: AtomBondPartner[]) => rows
+        .map((p) => `${atomLabel(frame, p.atom)} ${p.distance.toFixed(2)} Å`)
+        .join(' · ');
+      bondRows = [
+        partners.covalent.length > 0 ? { label: 'Bonded to', value: `${list(partners.covalent)} (inferred)` } : null,
+        partners.coordination.length > 0 ? { label: 'Coordinated to', value: `${list(partners.coordination)} (inferred)` } : null,
+        partners.ionicContact.length > 0 ? { label: 'Ionic contacts', value: list(partners.ionicContact) } : null,
+      ].filter((row): row is { label: string; value: string } => row !== null);
+    }
+  }
 
   const scale = isMobile ? 1.15 : 1;
   const label = { fontSize: 9.5 * scale };
@@ -460,6 +489,17 @@ export function AtomInfoHUD({
             </div>
           </Section>
 
+          {/* Inferred bonds (molecular recipe) */}
+          {bondRows.length > 0 && (
+            <Section title="Bonds" titleStyle={label}>
+              <div data-testid="atom-card-bonds" style={{ display: 'grid', gap: 4 }}>
+                {bondRows.map((row) => (
+                  <KeyValueRow key={row.label} label={row.label} value={row.value} labelStyle={label} valueStyle={value} wrap />
+                ))}
+              </div>
+            </Section>
+          )}
+
           {/* Per-atom properties */}
           {properties.length > 0 && (
             <Section title="Properties" titleStyle={label}>
@@ -683,16 +723,27 @@ function Stat({
   );
 }
 
+/** "C3": element symbol (or type label) and atom index. */
+function atomLabel(frame: Frame, atom: number): string {
+  const type = frame.types[atom];
+  const z = resolveAtomicNumber(frame, type);
+  const symbol = z !== undefined ? ELEMENT_DATA[z]?.symbol : undefined;
+  return `${symbol ?? resolveTypeLabel(frame, type)}${atom}`;
+}
+
 function KeyValueRow({
   label,
   value,
   labelStyle,
   valueStyle,
+  wrap = false,
 }: {
   label: string;
   value: string;
   labelStyle: CSSProperties;
   valueStyle: CSSProperties;
+  /** Let a long value (a bond list) wrap instead of ellipsizing. */
+  wrap?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, minWidth: 0 }}>
@@ -717,8 +768,9 @@ function KeyValueRow({
           fontWeight: 600,
           textAlign: 'right',
           overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          textOverflow: wrap ? undefined : 'ellipsis',
+          whiteSpace: wrap ? 'normal' : 'nowrap',
+          overflowWrap: wrap ? 'anywhere' : undefined,
         }}
       >
         {value}

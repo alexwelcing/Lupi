@@ -44,6 +44,21 @@ export function cisplatin(center: number[] = [0, 0, 0]): Atom[] {
   return atoms;
 }
 
+/** K⁺ chelated by two O of a methanesulfonate (H omitted); S sits 3.32 Å from K. */
+export function potassiumSulfonate(): Atom[] {
+  const t = 1 / Math.sqrt(3);
+  const dirs = [[t, t, t], [t, -t, -t], [-t, t, -t], [-t, -t, t]];
+  const at = (s: string, v: number[], r: number): Atom => [s, v[0] * r, v[1] * r, v[2] * r];
+  return [
+    ['S', 0, 0, 0],
+    at('O', dirs[0], 1.45),
+    at('O', dirs[1], 1.45),
+    at('O', dirs[2], 1.45),
+    at('C', dirs[3], 1.77),
+    ['K', 3.319, 0, 0],
+  ];
+}
+
 export function xyzText(atoms: readonly Atom[], comment: string): string {
   return [
     String(atoms.length),

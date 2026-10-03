@@ -11,6 +11,7 @@
  */
 import { canInferCovalentBonds, resolveAtomicNumber } from '@atlas/core';
 import {
+  BOND_KIND,
   ELEMENT_CLASS,
   MOLECULAR_RECIPE_MAX_ATOMS,
   covalentRadius,
@@ -19,6 +20,7 @@ import {
   selectBondRecipe,
   type BondProfile,
   type BondRecipeId,
+  type DrawnBonds,
   type PerceivedBonds,
 } from '@atlas/core/bonds';
 import type { Frame } from '@atlas/core/types';
@@ -145,4 +147,40 @@ export function molecularBondStubReach(frame: PerceiveFrame, tolerance: number):
     maxR = Math.max(maxR, covalentRadius(z));
   }
   return 2 * maxR + tolerance;
+}
+
+export interface AtomBondPartner {
+  atom: number;
+  distance: number;
+}
+
+/** One atom's drawn partners by kind, nearest first (the atom card's rows). */
+export function atomBondPartners(
+  drawn: Pick<DrawnBonds, 'count' | 'pairs' | 'kinds' | 'distances'>,
+  atomIndex: number,
+): { covalent: AtomBondPartner[]; coordination: AtomBondPartner[]; ionicContact: AtomBondPartner[] } {
+  const out = { covalent: [] as AtomBondPartner[], coordination: [] as AtomBondPartner[], ionicContact: [] as AtomBondPartner[] };
+  for (let k = 0; k < drawn.count; k += 1) {
+    const i = drawn.pairs[2 * k];
+    const j = drawn.pairs[2 * k + 1];
+    if (i !== atomIndex && j !== atomIndex) continue;
+    const partner = { atom: i === atomIndex ? j : i, distance: drawn.distances[k] };
+    const kind = drawn.kinds[k];
+    (kind === BOND_KIND.coordination ? out.coordination : kind === BOND_KIND.ionicContact ? out.ionicContact : out.covalent).push(partner);
+  }
+  const byDistance = (a: AtomBondPartner, b: AtomBondPartner) => a.distance - b.distance || a.atom - b.atom;
+  out.covalent.sort(byDistance);
+  out.coordination.sort(byDistance);
+  out.ionicContact.sort(byDistance);
+  return out;
+}
+
+/** Covalent and coordination pairs of an unfiltered result (Object Facts' graph; contacts are not bonds). */
+export function molecularBondPairs(p: PerceivedBonds): Int32Array {
+  const out: number[] = [];
+  for (let k = 0; k < p.count; k += 1) {
+    if (p.kinds[k] === BOND_KIND.ionicContact) continue;
+    out.push(p.pairs[2 * k], p.pairs[2 * k + 1]);
+  }
+  return Int32Array.from(out);
 }
