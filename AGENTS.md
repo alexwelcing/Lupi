@@ -88,10 +88,21 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   glide or coast. Only UI gestures, presets and Recenter animate.
 - **`window.__lupiPlay`** is the Play layer's handle for smoke plugins and
   agents (installed in production, like `__lupiViewerMcp`): `state()` returns
-  `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame }`,
+  `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame,
+  frames, frameDemand }`,
   `emit(intent)` emits a Lupi intent as the UI would, `reset()` puts display
   motion at rest, and `poke`, `flick`, `catch`, `scatter` and `stepDetent`
   appear once the viewer has registered them. It never writes molecule data.
+- **Quiet Idle.** The viewer canvas renders on demand: a still view draws
+  no frames. Anything that changes the picture asks for frames (store writes,
+  gestures, the rig, display motion, playback, flythrough, async bonds and
+  environment loads, MCP commands), and animators keep the loop awake until
+  they settle (`packages/scene/src/frameDemand.ts`). A drifting procedural
+  background or a halo annotation draws at 24 fps; a selection ring pulses
+  for 2.4 s and rests. `__lupiPlay.state().frames` counts drawn frames (read
+  it twice on a still view: it should not move) and `.frameDemand.awakeBy`
+  names what keeps the loop awake. `?frameloop=always` renders continuously
+  again. Exports and video force their own frames.
 - **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
   half-strength display motion) or Still (nothing moves on its own; glides
   cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and

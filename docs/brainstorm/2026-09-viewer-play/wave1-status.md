@@ -77,7 +77,7 @@ Wave 1 is the first change a visitor can feel. The R3F v10 port ([port-status.md
 ## Wave-2 queue
 
 - Real-device pass: iPhone Safari, Android Chrome, a mid-range laptop GPU. Retune the coast, capture and ripple values from the table above.
-- Quiet Idle (demand frames), now that motion has analytic ends and `rig.isMoving()`.
+- ~~Quiet Idle (demand frames)~~: built in wave 2 (the viewer renders on demand; see AGENTS.md, "Quiet Idle").
 - Upright detent roll and FOV narrowing (this needs an up/roll field in the store, saved views, URLs and artifact specs).
 - The rest of Object Facts: hull, rest faces, dice, a libmsym bake, and worker facts for large files.
 - The rest of the gesture constitution: long-press loupe and tray, twist-to-roll, two-finger trackpad orbit, a left-handed mirror, cooperative gestures for embeds.
