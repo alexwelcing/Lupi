@@ -15,8 +15,12 @@ import {
   GLB_INSTANCE_MEMORY_BUDGET_BYTES,
   USDZ_BAKE_MEMORY_BUDGET_BYTES,
   USDZ_TRIANGLE_BUDGET,
+  bondDashSegments,
   type ExportFrameData,
 } from './exportSceneBuilder';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
+import { getPerceivedBonds } from '../bonds/perceivedBonds';
+import { cisplatin, frameFromAtoms, sodiumHexaaqua } from '../bonds/bondFixtures.test-utils';
 import { bakeInstancedMeshesForExport } from './instanceBake';
 import { restoreInstancedMeshes } from './USDZExportPipeline';
 
@@ -589,5 +593,80 @@ describe('bakeInstancedMeshesForExport', () => {
     expect(scene.getObjectByName('atoms-type-1')).toBe(mesh);
     expect(scene.getObjectByName('atoms-type-1_baked')).toBeUndefined();
     geo.dispose();
+  });
+});
+
+describe('molecular bond export', () => {
+  it('dashes and dots from each end toward the middle, solid bonds in one piece', () => {
+    expect(bondDashSegments(1.1, 0)).toEqual([[0, 1.1]]);
+    // Coordination (0.30 Å period, 60 % on) at 2.05 Å: the middle dash spans the centre.
+    const coordination = bondDashSegments(2.05, 1);
+    expect(coordination).toHaveLength(7);
+    expect(coordination[0][0]).toBe(0);
+    expect(coordination[3][0]).toBeCloseTo(0.9);
+    expect(coordination[3][1]).toBeCloseTo(1.15);
+    // Contacts (0.16 Å period, 45 % on) at 2.40 Å: 8 dots from each end.
+    const contact = bondDashSegments(2.4, 2);
+    expect(contact).toHaveLength(16);
+    expect(contact[contact.length - 1][1]).toBeCloseTo(2.4);
+    for (const [from, to] of contact) expect(to - from).toBeLessThanOrEqual(0.16 * 0.45 + 1e-9);
+  });
+
+  it('a [Na(H₂O)₆]⁺ frame (with cisplatin beside it) yields the three named meshes with deterministic segments and provenance', async () => {
+    const parsed = frameFromAtoms([...sodiumHexaaqua(), ...cisplatin([12, 0, 0])], 'charge=1 multiplicity=1');
+    const frame: ExportFrameData = { natoms: parsed.natoms, positions: parsed.positions, types: parsed.types };
+    const perceived = getPerceivedBonds(parsed, { recipe: MOLECULAR_RECIPE_ID, tolerance: 0.45 })!;
+    const build = () => buildExportScene(frame, {
+      format: 'glb',
+      displayRadiusForType: () => 0.3,
+      resolveAtomColor: () => [0.5, 0.5, 0.5],
+      showBonds: true,
+      perceivedBonds: perceived,
+      showBondContacts: true,
+    });
+    const result = await build();
+    const covalent = result.scene.getObjectByName('lupi-bonds-covalent') as THREE.InstancedMesh;
+    const coordination = result.scene.getObjectByName('lupi-bonds-coordination') as THREE.InstancedMesh;
+    const contacts = result.scene.getObjectByName('lupi-contacts-ionic') as THREE.InstancedMesh;
+    // 12 O–H + 6 N–H sticks; 2 Pt–N (7 dashes) + 2 Pt–Cl (8); 6 Na···O (16 dots).
+    expect(covalent.count).toBe(18);
+    expect(coordination.count).toBe(30);
+    expect(contacts.count).toBe(96);
+    expect(result.bondCount).toBe(28);
+    expect(result.scene.getObjectByName('bonds')).toBeUndefined();
+    expect(contacts.userData).toEqual({
+      lupiBondRecipe: 'lupi-bonds.molecular.v1',
+      lupiBondKind: 'ionicContact',
+      lupiProvenance: 'inferred',
+    });
+    expect(coordination.userData.lupiBondKind).toBe('coordination');
+    expect(covalent.userData.lupiBondKind).toBe('covalent');
+
+    const again = await build();
+    const m1 = new THREE.Matrix4();
+    const m2 = new THREE.Matrix4();
+    for (const name of ['lupi-bonds-covalent', 'lupi-bonds-coordination', 'lupi-contacts-ionic']) {
+      const a = result.scene.getObjectByName(name) as THREE.InstancedMesh;
+      const b = again.scene.getObjectByName(name) as THREE.InstancedMesh;
+      expect(b.count).toBe(a.count);
+      for (let k = 0; k < a.count; k += 1) {
+        a.getMatrixAt(k, m1);
+        b.getMatrixAt(k, m2);
+        expect(m2.elements).toEqual(m1.elements);
+      }
+    }
+
+    const withoutContacts = await buildExportScene(frame, {
+      format: 'glb',
+      displayRadiusForType: () => 0.3,
+      resolveAtomColor: () => [0.5, 0.5, 0.5],
+      showBonds: true,
+      perceivedBonds: perceived,
+      showBondContacts: false,
+    });
+    expect(withoutContacts.scene.getObjectByName('lupi-contacts-ionic')).toBeUndefined();
+    disposeExportScene(result.scene);
+    disposeExportScene(again.scene);
+    disposeExportScene(withoutContacts.scene);
   });
 });

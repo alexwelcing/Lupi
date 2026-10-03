@@ -73,6 +73,8 @@ import {
   type BackgroundGradientStyle,
 } from './equirectTexture';
 import { assertSceneEnvironmentReady, sceneEnvironmentLoadFailed } from './sceneEnvironment';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
+import { getPerceivedBonds, resolveFrameRecipe } from './bonds/perceivedBonds';
 import { captureLookFromSpec, resolveCaptureLook } from './export/captureLook';
 import {
   inspectArtifactAtomSceneReadiness,
@@ -817,6 +819,17 @@ export function ExportManager() {
         }
       }
 
+      // A molecular frame exports the graph the view draws (same cache, same filter).
+      const bondRecipe = mayInferBonds
+        ? resolveFrameRecipe(currentFrame, {
+          profile: state.bondProfile,
+          frameCount: currentFile.trajectory.totalFrames ?? currentFile.trajectory.frames.length,
+        })
+        : null;
+      const perceivedBonds = bondRecipe === MOLECULAR_RECIPE_ID
+        ? getPerceivedBonds(currentFrame, { recipe: MOLECULAR_RECIPE_ID, tolerance: state.bondTolerance ?? 0.45 })
+        : null;
+
       const framing = isUsdZ
         ? computeUsdzFraming(currentFrame, state.hiddenAtomTypes)
         : { center: [0, 0, 0] as [number, number, number], arScale: 1 };
@@ -840,6 +853,8 @@ export function ExportManager() {
         surfaceRoughness: state.surfaceRoughness || 0.0,
         showBonds: state.showBonds && (hasSourceBonds || mayInferBonds),
         bondTolerance: state.bondTolerance ?? 0.45,
+        perceivedBonds,
+        showBondContacts: state.showBondContacts,
         covalentRadii,
         bondTypes,
         center: framing.center,
