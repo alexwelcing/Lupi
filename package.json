@@ -36,7 +36,7 @@
     "check:library-facts": "tsx tools/enrich-library.mts --check",
     "report:library-facts": "tsx tools/enrich-library.mts --report",
     "eval:jev-rank": "tsx tools/eval-jev-rank.mts",
-    "verify:exports": "node tools/verify-exports.mjs",
+    "verify:exports": "tsx tools/verify-exports.mjs",
     "verify:streaming-ux": "node tools/verify-streaming-ux.mjs",
     "verify:mcp-bridge": "node tools/verify-mcp-bridge.mjs",
     "verify:asset-quality": "node tools/verify-asset-quality.mjs",
