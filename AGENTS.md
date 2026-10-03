@@ -126,7 +126,9 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   and, for Sketch, pen hatching (`packages/scene/src/tsl/inkLook.ts`, mixed
   into both impostors by one weight). It is a Look, not toy motion: the
   store's `inkStyle` (`off`, `flat`, `hatch`) and `inkWeight` ride share URLs
-  (`ink`, `iw`), saved views and `lupi.set_viewer`; while ink is on the post
+  (`ink`, `iw` in the `s=` state), saved views and `lupi.set_viewer`, and
+  replay and Remix links add a top-level `ink=f|h`; a Foil finish steps
+  aside under ink (a drawing carries no foil); while ink is on the post
   recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
   stays); exports draw it and their spec records `view.ink`. Changes fade
   (480 ms); every capture renders the configured look, never a fade.

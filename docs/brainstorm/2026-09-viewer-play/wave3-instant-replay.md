@@ -91,10 +91,10 @@ A chat preview of a viewer link to a gallery molecule that has a `/m` page now s
 - **Recording takes over the canvas.** While the clip records, the live canvas is briefly resized to 9:16 under the sheet's veil, as the video export always did. The sheet's preview shows the frames as they are composed.
 - **Fallback without labels.** If a browser cannot draw the viewer canvas into the clip compositor, the clip records the canvas itself, without the burned-in labels (the console says so).
 - **What a replay does not carry:**
-  - the sender's Look (background, material), on purpose: it plays in the visitor's own view;
+  - the sender's hand-tuned Look (background, material): it plays in the visitor's own view. Since the merge, the link does carry the sender's Remix code (`remix=`, when the look is exactly a code) and the Illustrate look (`ink=f|h`);
   - trajectory playback (a moment records the frame it started on, not playback);
   - the sender's selection and atom card.
 - **Unfurls are for gallery molecules with a `/m` page only.** A `/?load=` link still unfurls with the generic card. The unfurl image is the molecule's card, not the moment's hero frame.
 - **Moment thresholds are first guesses,** like everything else in this wave. So is the pill offer's length.
 - **A takeover mid-tumble** rights the camera with a short glide. A takeover during the first frames can briefly show the gallery fit before the moment's first pose.
-- **Not built:** a storyboard of stills for reduced motion (Still opens on the last pose instead), the remix or look code in links, toy-only Remix rolls, and analytics events.
+- **Not built:** a storyboard of stills for reduced motion (Still opens on the last pose instead), toy-only Remix rolls, and analytics events.
