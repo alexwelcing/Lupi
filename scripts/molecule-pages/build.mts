@@ -41,8 +41,21 @@ export function loadMoleculeSite(repoRoot: string): MoleculeSite {
   };
 }
 
-export function pageContext(site: MoleculeSite, opts: { appEntry?: string; cards: boolean }): PageContext {
-  return { origin: site.origin, appEntry: opts.appEntry, cards: opts.cards, defaultImage: site.defaultImage };
+export function pageContext(site: MoleculeSite, opts: { appEntry?: string; warm?: string[]; cards: boolean }): PageContext {
+  return { origin: site.origin, appEntry: opts.appEntry, warm: opts.warm, cards: opts.cards, defaultImage: site.defaultImage };
+}
+
+/** The viewer chunks a visitor about to open 3D will need (Vite's chunk names, hashed). */
+const VIEWER_CHUNK = /^(App|openMolecule|vendor-three|vendor-three-webgpu|vendor-react-three|vendor-react|vendor-state)-[\w-]+\.(js|css)$/;
+
+export function viewerChunks(distRoot: string): string[] {
+  const dir = path.join(distRoot, 'assets');
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((name) => VIEWER_CHUNK.test(name))
+    .sort()
+    .map((name) => `/assets/${name}`);
 }
 
 export function moleculePageHtml(site: MoleculeSite, template: string, id: string, ctx: PageContext): string | null {
@@ -119,7 +132,7 @@ export async function writeMoleculeSite(repoRoot: string, distRoot: string): Pro
   }
   const cards = report.cards === site.records.length;
   if (!cards && report.cards > 0) report.failures.push('some cards failed to rasterise; pages use the site card');
-  const ctx = pageContext(site, { appEntry, cards });
+  const ctx = pageContext(site, { appEntry, warm: viewerChunks(distRoot), cards });
 
   for (const record of site.records) {
     fs.writeFileSync(path.join(pagesDir, `${record.id}.html`), moleculePageHtml(site, template, record.id, ctx)!);

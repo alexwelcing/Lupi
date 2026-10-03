@@ -10,6 +10,10 @@ Publication version: student-surface-2026-09-04. Maintained in this repository, 
 Explore the curated collection, open a model or local XYZ/LAMMPS file, inspect, learn, export, and optionally sign in to save a shareable view.
 https://lupi.live/study/organic-functional-groups
 
+## Molecule pages
+Every curated small molecule has a zero-canvas page with its ink drawing, PubChem-backed identity, handbook values and a link into 3D: https://lupi.live/m/<id> (index: https://lupi.live/m/, list: https://lupi.live/m/manifest.json).
+Share card: https://lupi.live/og/m/<id>.png (1200x630). Desk models: https://lupi.live/ar/<id>.usdz and .glb.
+
 ## Agent interface
 Edge manifest: https://lupi.live/mcp-manifest.json
 Browser manifest: https://lupi.live/browser-mcp-manifest.json

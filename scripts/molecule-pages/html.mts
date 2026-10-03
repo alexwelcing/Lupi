@@ -25,6 +25,8 @@ export interface PageContext {
   origin: string;
   /** The viewer's entry module (warmed when a visitor shows intent). */
   appEntry?: string;
+  /** The viewer's heavy chunks, prefetched on intent. */
+  warm?: string[];
   /** False when the card PNGs could not be rasterised: og:image falls back to the site card. */
   cards: boolean;
   defaultImage: string;
@@ -224,6 +226,7 @@ export function moleculePageData(record: MoleculeRecord, ctx: PageContext): Mole
     glb: desk.glb,
     ink: moleculeInkPath(record.id),
     appEntry: ctx.appEntry,
+    warm: ctx.warm,
   };
 }
 

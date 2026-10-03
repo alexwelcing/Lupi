@@ -20,7 +20,13 @@ pnpm cloudflare:dev
 Core endpoints:
 
 - `GET /` — built Lupi web app from Workers static assets
-- `GET /view/:slug` — saved-view social/share HTML
+- `GET /view/:slug` — saved-view social/share HTML; a view of a gallery
+  molecule unfurls with that molecule's ink card (`/og/m/<id>.png`, matched
+  through `/m/manifest.json`)
+- `GET /m/:id`, `GET /m/` — zero-canvas molecule pages and their index, static
+  HTML written by the web build (`scripts/generate-molecule-pages.mts`) with
+  per-molecule Open Graph cards (`/og/m/<id>.png`), ink drawings
+  (`/og/m/<id>-ink.svg`) and desk models (`/ar/<id>.usdz`, `/ar/<id>.glb`)
 - `POST /collectAnalytics` — first-party analytics edge collector
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)

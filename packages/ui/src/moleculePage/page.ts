@@ -37,6 +37,8 @@ export interface MoleculePageData {
   ink: string;
   /** The viewer's entry module, warmed on intent. */
   appEntry?: string;
+  /** The viewer's heavy chunks (three, the App), prefetched on intent into the HTTP cache. */
+  warm?: string[];
 }
 
 const BATON_KEY = 'lupi.relay.baton';
@@ -136,10 +138,15 @@ export function mountMoleculePage(): void {
   const warm = () => {
     if (warmed || !data.appEntry || saveData()) return;
     warmed = true;
-    const link = document.createElement('link');
-    link.rel = 'modulepreload';
-    link.href = data.appEntry;
-    document.head.appendChild(link);
+    const add = (rel: string, href: string) => {
+      const link = document.createElement('link');
+      link.rel = rel;
+      link.href = href;
+      if (rel === 'prefetch' && href.endsWith('.js')) link.as = 'script';
+      document.head.appendChild(link);
+    };
+    add('modulepreload', data.appEntry);
+    for (const href of data.warm ?? []) add('prefetch', href);
   };
 
   const showFlash = (label: string) => {
