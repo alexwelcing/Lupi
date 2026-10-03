@@ -131,7 +131,9 @@ export function replayLink(token: string, href: string = typeof window !== 'unde
   const ink = inkParamValue();
   if (ink) params.set(INK_PARAM, ink);
   params.set('replay', token);
-  return `${url.origin}/?${params.toString()}${hash}`;
+  // `/play` is Worker-first, so a gallery molecule's link unfurls with its card.
+  const path = params.has('sim') ? '/play' : '/';
+  return `${url.origin}${path}?${params.toString()}${hash}`;
 }
 
 /** The molecule's own page (/m/<id>) when it has one, for the clip's end card. */

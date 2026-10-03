@@ -837,17 +837,26 @@ export async function handleRequest(
       return json({ error: 'Asset route not found', path: url.pathname }, { status: 404, headers: cors });
     }
 
-    // A link preview of a viewer link (`/?sim=<id>`, an Instant Replay's
+    // A link preview of a viewer link (`?sim=<id>`, an Instant Replay's
     // `&replay=`) unfurls with that molecule's ink card instead of the
     // generic one. Only link-preview robots get this page; people get the app.
+    // Static assets answer `/` before the Worker runs (the release package
+    // keeps `/` asset-first), so the app shares these links as `/play?…`, a
+    // Worker-first path that sends people on to `/?…`.
     if (
-      url.pathname === '/'
+      (url.pathname === '/' || url.pathname === '/play')
       && (request.method === 'GET' || request.method === 'HEAD')
       && url.searchParams.get('open') !== '1'
       && isLinkPreviewRobot(request)
     ) {
       const unfurl = await renderViewerLinkUnfurl(request, env);
       if (unfurl) return withCors(unfurl, cors);
+    }
+    if (url.pathname === '/play' && (request.method === 'GET' || request.method === 'HEAD')) {
+      return withCors(new Response(null, {
+        status: 302,
+        headers: { location: `${url.origin}/${url.search}`, 'cache-control': 'no-store' },
+      }), cors);
     }
 
     if (env.WEB_ASSETS && (request.method === 'GET' || request.method === 'HEAD')) {
@@ -2781,7 +2790,7 @@ async function renderViewerLinkUnfurl(request: Request, env: Env): Promise<Respo
     pageTitle: `${title} | Lupi`,
     // Replay links are personal moments: previews yes, search results no.
     robots: replay ? 'noindex,nofollow,max-image-preview:large' : 'index,follow,max-image-preview:large',
-    shareUrl: replay ? `${origin}/?${url.searchParams.toString()}` : `${origin}/m/${page.id}`,
+    shareUrl: replay ? `${origin}/play?${url.searchParams.toString()}` : `${origin}/m/${page.id}`,
     title,
   };
   const headers = new Headers({

@@ -23,6 +23,9 @@ Core endpoints:
 - `GET /view/:slug` — saved-view social/share HTML; a view of a gallery
   molecule unfurls with that molecule's ink card (`/og/m/<id>.png`, matched
   through `/m/manifest.json`)
+- `GET /play?sim=<id>…` — the shareable form of a viewer link (Instant
+  Replay, Remix): link-preview robots get the molecule's ink-card unfurl,
+  people are redirected to `/?…` (`/` itself stays asset-first)
 - `GET /m/:id`, `GET /m/` — zero-canvas molecule pages and their index, static
   HTML written by the web build (`scripts/generate-molecule-pages.mts`) with
   per-molecule Open Graph cards (`/og/m/<id>.png`), ink drawings

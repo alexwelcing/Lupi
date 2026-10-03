@@ -37,7 +37,9 @@ export function remixLink(code: RemixCode, href: string = typeof window !== 'und
   // A code over the Illustrate look shares as the drawing (the code alone is lit).
   const ink = inkParamValue();
   if (ink) params.set(INK_PARAM, ink);
-  return `${url.origin}/?${params.toString()}${hash}`;
+  // `/play` is Worker-first, so a gallery molecule's link unfurls with its card.
+  const path = params.has('sim') ? '/play' : '/';
+  return `${url.origin}${path}?${params.toString()}${hash}`;
 }
 
 let pending: RemixCodeParse | null = null;

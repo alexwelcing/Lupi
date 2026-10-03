@@ -45,7 +45,7 @@ Detailed write-ups, with their own tuning tables:
 - **The offer.** After a good flick, a chain of three named faces, a Spin flip or a toy moment, the pill shows **Replay ↗** for 7 s (one more segment of the same pill). **R**, the Play tray's last row and the palette open it at any time; with no moment they share the current view.
 - **The sheet.** The live link is ready at once (Copy, Share): `replay=` holds the moment, about 0.5 to 1.5 KB, with nothing stored. A 9:16 clip records straight away (720×1280 on phones, 1080×1920 on desktop), labelled "Illustrative motion · lupi.live" on every frame, with the face names as they flashed, and ends on a sage "Your turn" card. Then "Share clip + link" and "Save clip".
 - **Receiving.** The link opens the molecule at the moment's first pose and plays it in the visitor's own 3D view, reframed for their screen. Standard plays on its own, Gentle waits for **▶ Watch**, and Still opens on the last pose. Any touch takes over; **Skip** jumps to the end. It ends on "Your turn · flick it", and a toy moment latches that toy.
-- **Link previews.** A viewer link `/?sim=<id>` for a molecule with an `/m` page now unfurls with its ink card. This closes the wave-2 generic-card limit. A replay's title reads "A shared replay: <name>".
+- **Link previews.** Replay and Remix links to a molecule with an `/m` page are shared as `/play?sim=<id>…` (a Worker-first path; people are redirected to `/?…`) and unfurl with its ink card. This closes the wave-2 generic-card limit. A replay's title reads "A shared replay: <name>".
 - **Motion: Still.** The offer reads **Share ↗**, the link opens on the final pose, and no clip is made.
 
 ### Remix codes and Foil

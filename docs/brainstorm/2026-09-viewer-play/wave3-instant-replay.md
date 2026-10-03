@@ -69,7 +69,7 @@ A chat preview of a viewer link to a gallery molecule that has a `/m` page now s
 3. **Caffeine, Play › Burst.** Pop it a few times and let it settle. Replay ↗, then **Share clip + link** into Messages on the iPhone. Check that the clip carries "Illustrative motion" and ends on "Your turn". On the receiving side, Burst should be latched.
 4. **Play › Spin on caffeine** (the flip), and three arrow-key hops on C60 (the chain).
 5. **Motion: Still** on both ends. The offer should read Share ↗, the link should open on the pose, and nothing should move. Then Gentle on the receiving end: ▶ Watch should be needed.
-6. **A link pasted into a chat** (`/?sim=caffeine&replay=…`). The preview should be the caffeine ink card titled "A shared replay: Caffeine".
+6. **A link pasted into a chat** (`/play?sim=caffeine&replay=…`; `/play` is Worker-first and sends people on to `/?…`). The preview should be the caffeine ink card titled "A shared replay: Caffeine".
 
 ## Tuning points
 

@@ -74,8 +74,10 @@ function MysteryMark() {
  */
 export function DailyCard() {
   const [now, setNow] = useState(() => new Date());
-  const [art, setArt] = useState<string | null>(null);
+  // Keyed by its day, so yesterday's drawing never shows under today's number.
+  const [loaded, setLoaded] = useState<{ day: string; markup: string } | null>(null);
   const today = localDateKey(now);
+  const art = loaded?.day === today ? loaded.markup : null;
   const started = dayNumber(today) >= 0;
 
   useEffect(() => {
@@ -103,7 +105,7 @@ export function DailyCard() {
         const markup = solvedToday
           ? inkSvgMarkup(file.model, pose, { idPrefix: 'daily-card', attrs })
           : silhouetteSvg(file.model, pose, { ...attrs, 'aria-hidden': 'true' });
-        if (!cancelled) setArt(markup);
+        if (!cancelled) setLoaded({ day: today, markup });
       } catch {
         /* offline or not built: the generic mark stays */
       }
