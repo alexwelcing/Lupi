@@ -278,10 +278,10 @@
 
 /* Phone portrait: the pill's row is too narrow to share with the axes gizmo
    once the status speaks, so the gizmo rides one row higher (global.css
-   drops it back to the corner when the chrome is stowed or the style sheet
-   is open). Landscape has room on the row. */
+   drops it back to the corner when the chrome is stowed, and hides it under
+   an open phone sheet). Landscape has room on the row. */
 @media (max-width: 640px) {
-  .lupine-app-root[data-file='true']:not([data-ui-stowed='true']):not([data-style-open='true']) {
+  .lupine-app-root[data-file='true']:not([data-ui-stowed='true']) {
     --lupi-axes-gizmo-lift: calc(120px + env(safe-area-inset-bottom));
   }
   .lupine-app-root:not([data-ui-stowed='true']):has(.lupine-axes-gizmo) .lupi-play-pill { max-width: calc(100vw - 20px); }

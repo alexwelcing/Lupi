@@ -765,7 +765,7 @@ export function ViewerApp() {
         )}
 
         {file && !isEmbeddedMobileViewer && <ViewerCommandDeck compact={isMobile} />}
-        {file && !isEmbeddedMobileViewer && <PanelHost />}
+        {file && !isEmbeddedMobileViewer && <PanelHost stowed={uiStowed} />}
 
         {file && !isEmbeddedMobileViewer && (
           <PlayPill uiStowed={uiStowed} setUiStowed={setUiStowed} />

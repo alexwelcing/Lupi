@@ -140,9 +140,11 @@ export function CameraManager({
     // fit against a square viewport. Correct it once. Afterwards setFile uses
     // the stored real aspect itself; metadata/streaming file replacements do
     // not refit, and orientation changes respect a user-positioned free camera.
-    // Opening/closing the mobile style workbench changes the actual canvas
+    // Opening/closing the desktop Style column changes the actual canvas
     // rectangle. Refit in the same viewing direction so the model stays useful
-    // above the sheet. Unrelated free-camera viewport changes remain untouched.
+    // beside it. (Phone sheets float over a full-bleed canvas and never resize
+    // it; the display-only view inset makes their room.) Unrelated free-camera
+    // viewport changes remain untouched.
     const styleLayoutChanged = aspectChanged && (state.activePanel === 'studio' || previousLayoutHadStyle.current);
     if (file && (!hadViewportAspect || styleLayoutChanged || (aspectChanged && state.cameraPreset !== 'free'))) {
       useStore.getState().fitCameraView();
