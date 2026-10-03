@@ -457,10 +457,14 @@ export function ViewerScene({
 
   // The frame's bond rule. Molecular frames get their graph synchronously
   // from the shared cache (the atom card, MCP and exports read the same one).
+  // Resolved only while bonds can be drawn: the rule scans every atom of each
+  // new frame, which a large trajectory with bonds hidden should not pay.
   const frameCount = file?.trajectory.totalFrames ?? file?.trajectory.frames.length ?? 0;
   const bondRecipe = useMemo(
-    () => (renderedFrame ? resolveFrameRecipe(renderedFrame, { profile: bondProfile, frameCount }) : null),
-    [renderedFrame, bondProfile, frameCount],
+    () => (bondRenderPlan.available && renderedFrame
+      ? resolveFrameRecipe(renderedFrame, { profile: bondProfile, frameCount })
+      : null),
+    [bondRenderPlan.available, renderedFrame, bondProfile, frameCount],
   );
   const perceivedBonds = useMemo(
     () => (bondRenderPlan.available && renderedFrame && bondRecipe === MOLECULAR_RECIPE_ID
