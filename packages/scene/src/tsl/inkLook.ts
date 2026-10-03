@@ -349,13 +349,15 @@ export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node
     const screen: N = projected.mul(pixelScale).toVar();
     const spacing = max(unit.mul(T.hatchSpacing), 2.0).toVar();
     const dark = float(1).sub(value).toVar();
+    // A right hand's hatching: single strokes run "/" (view y is up), the
+    // cross strokes "\\" over them in the deepest shade.
     const single = strokes(
-      screen.x.add(screen.y).mul(0.70710678),
+      screen.x.sub(screen.y).mul(0.70710678),
       smoothstep(T.hatchSingle[0], T.hatchSingle[1], dark),
       spacing,
     );
     const cross = strokes(
-      screen.x.sub(screen.y).mul(0.70710678),
+      screen.x.add(screen.y).mul(0.70710678),
       smoothstep(T.hatchCross[0], T.hatchCross[1], dark),
       spacing,
     );
