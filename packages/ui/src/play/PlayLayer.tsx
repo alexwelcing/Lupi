@@ -381,6 +381,16 @@ function wallNow(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+let glassNoticeAt = -Infinity;
+
+/** The refractive-glass renderer has no offset graph: say so (at most every 4 s) instead of doing nothing. */
+function glassNotice(): void {
+  const t = wallNow();
+  if (t - glassNoticeAt < 4000) return;
+  glassNoticeAt = t;
+  playStore.getState().flashText('Toys rest with Refractive glass', 'info', 1800);
+}
+
 /** Tell the pill the heat level (throttled unless `force`). */
 function publishHeat(force: boolean): void {
   const t = wallNow();
@@ -784,6 +794,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     const tugGrab = (clientX: number, clientY: number, atomIndex: number | null, point?: Vec3): boolean => {
       const { frame: current, center: c, transmissionActive: glass } = live.current;
       const scale = displayMotionScale();
+      if (glass) glassNotice();
       if (!(scale > 0) || glass) return false;
       adoptScene(current, c);
       const atom = atomIndex ?? (point ? -1 : atomAt(clientX, clientY));
@@ -841,7 +852,10 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     // Burst latched: a tap pops the atoms outward from the tap point.
     const burstAt = (origin: Vec3): boolean => {
       const { frame: current, center: c, transmissionActive: glass } = live.current;
-      if (glass) return false;
+      if (glass) {
+        glassNotice();
+        return false;
+      }
       adoptScene(current, c);
       return addBurst(origin, displayMotionScale(), getComfort() === 'gentle') >= 0;
     };
@@ -855,6 +869,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
 
     // Heat latched: hold to warm (rubbing warms faster), let go to cool.
     const heatStart = (): boolean => {
+      if (live.current.transmissionActive) glassNotice();
       if (!(displayMotionScale() > 0) || live.current.transmissionActive) return false;
       heat.held = true;
       heat.active = true;
