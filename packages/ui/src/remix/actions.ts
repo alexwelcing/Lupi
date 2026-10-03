@@ -19,7 +19,7 @@ import { getComfort } from '../motion/comfort';
 import { playStore } from '../play/playStore';
 import { cue } from '../play/feedback';
 import { FOIL_LABEL, remixFoil, type FoilKind, type RemixCode } from './code';
-import { morphLook } from './lookMorph';
+import { lookMorphTarget, morphLook } from './lookMorph';
 import { remixStore, type AppliedRemix } from './remixStore';
 
 export type RemixSource = 'tray' | 'pill' | 'key' | 'shake' | 'sheet' | 'paste' | 'link' | 'deck' | 'palette';
@@ -60,8 +60,15 @@ function notifyHistory(): void {
 function pushHistory(state: AppState): void {
   const key = historyKey();
   const history = histories.get(key) ?? [];
+  // Mid-morph the store holds an in-between look: remember where it was going.
+  const snapshot = snapshotRemix(state, true);
+  const going = lookMorphTarget() as Record<string, unknown> | null;
+  if (going) {
+    const record = snapshot as unknown as Record<string, unknown>;
+    for (const name of Object.keys(record)) if (name in going) record[name] = going[name];
+  }
   histories.set(key, [...history.slice(-(MAX_HISTORY - 1)), {
-    snapshot: snapshotRemix(state, true),
+    snapshot,
     applied: remixStore.getState().applied,
   }]);
   notifyHistory();

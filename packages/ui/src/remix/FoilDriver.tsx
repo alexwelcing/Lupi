@@ -28,7 +28,7 @@ import {
 import type { Frame } from '@atlas/core/types';
 import { useStore } from '../store';
 import { getComfort } from '../motion/comfort';
-import { remixStore, shownFinish } from './remixStore';
+import { remixStore, shownFinish, type RemixState } from './remixStore';
 import type { FoilKind } from './code';
 
 /** The reveal sweep and the fade-out (ms). */
@@ -37,6 +37,8 @@ const FOIL_FADE_OUT_MS = 300;
 
 interface FoilAnimation {
   finish: FoilKind | null;
+  /** What revealed the finish (a code, by when it landed, or the visitor's choice). */
+  reveal: string | null;
   /** performance.now() when the current sweep or fade began; null at rest. */
   sweepStart: number | null;
   fadeStart: number | null;
@@ -74,7 +76,7 @@ function keyLightWorld(azimuthDeg: number, elevationDeg: number): THREE.Vector3 
 
 export function FoilDriver(): null {
   const { camera } = useThree();
-  const anim = useRef<FoilAnimation>({ finish: null, sweepStart: null, fadeStart: null });
+  const anim = useRef<FoilAnimation>({ finish: null, reveal: null, sweepStart: null, fadeStart: null });
   const trajectory = useStore((state) => state.file?.trajectory ?? null);
 
   // The sweep's extent follows the molecule.
@@ -94,9 +96,13 @@ export function FoilDriver(): null {
 
   // The finish on screen follows the Remix store.
   useEffect(() => {
-    const apply = (finish: FoilKind | null) => {
+    const apply = (state: RemixState) => {
+      const finish = shownFinish(state);
+      // Each new Foil code sweeps again, even with the same finish as before.
+      const reveal = !finish ? null : state.chosenFinish ? `chosen:${finish}` : `code:${state.applied?.at ?? 0}`;
       const a = anim.current;
-      if (finish === a.finish) return;
+      if (finish === a.finish && reveal === a.reveal) return;
+      a.reveal = reveal;
       const still = getComfort() === 'still';
       if (finish) {
         a.finish = finish;
@@ -118,8 +124,8 @@ export function FoilDriver(): null {
       }
       requestLupiFrames();
     };
-    apply(shownFinish(remixStore.getState()));
-    const off = remixStore.subscribe((state) => apply(shownFinish(state)));
+    apply(remixStore.getState());
+    const off = remixStore.subscribe((state) => apply(state));
     return () => {
       off();
       ATOM_FOIL.uFoilFinish.value = 0;

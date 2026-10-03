@@ -24,7 +24,7 @@ import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
 import { cue } from './feedback';
 import { openReplaySheet } from '../replay/actions';
-import { openRemixSheet, rollRemix } from '../remix/actions';
+import { openRemixSheet, rollRemix, undoRemix } from '../remix/actions';
 import { FOIL_LABEL, FOIL_ODDS_TEXT } from '../remix/code';
 import { useRemixStore } from '../remix/remixStore';
 import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
@@ -185,6 +185,14 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
       case 'Tab':
         event.preventDefault();
         onClose({ restoreFocus: true });
+        break;
+      case 'm':
+      case 'M':
+        // M rolls a Remix (Shift+M steps back), as it does outside the tray.
+        if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) break;
+        event.preventDefault();
+        if (event.shiftKey) undoRemix();
+        else rollRemix('tray');
         break;
       default:
         break;

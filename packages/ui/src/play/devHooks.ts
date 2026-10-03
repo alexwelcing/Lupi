@@ -20,6 +20,9 @@
  *                         ({ moment, keys, events, bytes, link }); replay('watch')
  *                         starts a waiting shared replay; replay('moment') offers
  *                         the last 4 s as a moment
+ *   __lupiPlay.remix()   → Remix: { code, foil, finish, status, morphing };
+ *                         remix('roll') rolls, remix('undo') steps back,
+ *                         remix('r1-K7QDM') applies a code
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -47,7 +50,8 @@ export type PlayDevHookName =
   | 'tug'
   | 'heat'
   | 'viewInset'
-  | 'replay';
+  | 'replay'
+  | 'remix';
 
 export interface PlayRigState {
   position: Vec3;
@@ -96,6 +100,7 @@ export interface LupiPlayDevApi {
   heat?: DevHook;
   viewInset?: DevHook;
   replay?: DevHook;
+  remix?: DevHook;
 }
 
 declare global {
@@ -105,8 +110,8 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset' | 'replay';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset', 'replay'];
+type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset' | 'replay' | 'remix';
+const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset', 'replay', 'remix'];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 

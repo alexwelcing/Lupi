@@ -21,7 +21,8 @@
  *   any other backdrop change switches at the midpoint.
  *
  * Motion comfort: Still cuts (the patch lands at once); Gentle and Standard
- * morph (it is a cross-fade of light and colour, not a moving object).
+ * morph (it is a cross-fade of light and colour, not a moving object). A
+ * hidden tab cuts too (it draws no animation frames).
  *
  * Anyone else writing a key mid-morph (a slider, MCP, a saved view) takes
  * that key over: the morph stops touching it. The last frame writes the
@@ -90,6 +91,8 @@ interface Channel {
 }
 
 interface Morph {
+  /** Where the morph is going (the whole patch). */
+  target: LookPatch;
   channels: Channel[];
   start: number;
   duration: number;
@@ -125,6 +128,11 @@ export function subscribeLookMorph(listener: (event: LookMorphEvent) => void): (
 /** True while a look morph runs. */
 export function isLookMorphing(): boolean {
   return active !== null;
+}
+
+/** Where a running morph is going (null when none runs). */
+export function lookMorphTarget(): LookPatch | null {
+  return active?.target ?? null;
 }
 
 /** The running morph's eased progress 0..1 (1 when none runs). */
@@ -206,7 +214,9 @@ export function morphLook(patch: LookPatch, options: { duration?: number; onDone
   cancelLookMorph();
   const state = useStore.getState();
   const duration = options.duration ?? LOOK_MORPH_MS;
-  if (getComfort() === 'still' || typeof requestAnimationFrame !== 'function' || duration <= 0) {
+  // A hidden tab draws no animation frames: the look lands at once there too.
+  const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  if (getComfort() === 'still' || hidden || typeof requestAnimationFrame !== 'function' || duration <= 0) {
     useStore.setState(patch);
     options.onDone?.();
     return;
@@ -278,6 +288,7 @@ export function morphLook(patch: LookPatch, options: { duration?: number; onDone
   }
 
   const morph: Morph = {
+    target: patch,
     channels,
     start: now(),
     duration,

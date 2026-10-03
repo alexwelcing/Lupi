@@ -28,7 +28,6 @@ import {
   parseRemixCode,
   remixFoil,
   remixParseMessage,
-  type FoilKind,
 } from './code';
 import {
   applyRemixCode,
@@ -41,7 +40,7 @@ import {
   undoRemix,
 } from './actions';
 import { remixLink } from './links';
-import { remixStore, selectableFinishes, shownFinish, useRemixStore } from './remixStore';
+import { remixStore, selectableFinishes, shownFinish, useRemixStore, type ChosenFinish } from './remixStore';
 import { disableShake, enableShake, shakeSupported } from './shake';
 import './remixSheet.css';
 
@@ -177,7 +176,7 @@ function RemixSheetBody() {
   };
   const onShare = () => {
     if (!code) return;
-    const text = `My Lupi look: ${code.text}${finish && applied?.foil ? ` (${FOIL_LABEL[finish]} foil)` : ''}`;
+    const text = `My Lupi look: ${code.text}${applied?.foil ? ` (${FOIL_LABEL[applied.foil]} foil)` : ''}`;
     if (!navigator.share) {
       onCopyLink();
       return;
@@ -195,7 +194,7 @@ function RemixSheetBody() {
     setTyped('');
     applyRemixCode(parse.code, 'sheet');
   };
-  const chooseFinish = (kind: FoilKind | null) => remixStore.getState().setChosenFinish(kind);
+  const chooseFinish = (kind: ChosenFinish) => remixStore.getState().setChosenFinish(kind);
   const onShake = (on: boolean) => {
     if (on) void enableShake();
     else disableShake();
@@ -304,6 +303,16 @@ function RemixSheetBody() {
             title={applied?.foil ? `This code’s own finish: ${FOIL_LABEL[applied.foil]}` : 'Only codes that carry a foil show one'}
           >
             {applied?.foil ? `Code’s · ${FOIL_LABEL[applied.foil]}` : 'From the code'}
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={chosenFinish === 'off'}
+            className="lupi-remix-sheet__chip"
+            onClick={() => chooseFinish(chosenFinish === 'off' ? null : 'off')}
+            title="No finish, even on a Foil code"
+          >
+            Off
           </button>
           {FOIL_KINDS.map((kind) => {
             const available = selectable.includes(kind);

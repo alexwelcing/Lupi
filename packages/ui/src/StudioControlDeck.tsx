@@ -16,6 +16,7 @@ import {
 } from './remix/actions';
 import { FOIL_LABEL, FOIL_ODDS_TEXT } from './remix/code';
 import { remixStore, useRemixStore } from './remix/remixStore';
+import { morphLook } from './remix/lookMorph';
 export type StudioDeckMode = 'molecule' | 'scene';
 
 // Remix history lives in remix/actions (per molecule, like before): it
@@ -56,7 +57,7 @@ export function StudioControlDeck({ mode: _mode }: { mode: StudioDeckMode }) {
       <div className="scene-controls__looks" role="group" aria-label="Scene looks">
         {SCENE_LOOKS.map(item => <button key={item.id} type="button" className="scene-look" data-look={item.id}
           aria-label={`${item.label} look`} aria-pressed={look === item.id}
-          onClick={() => useStore.setState(sceneLookPatch(item.id, useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0))}>
+          onClick={() => morphLook(sceneLookPatch(item.id, useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0))}>
           <span className="scene-look__sample" aria-hidden="true"><i /><i /><i /></span>
           <strong>{item.label}{look === item.id && <IconTick />}</strong>
           <small>{item.description}</small>

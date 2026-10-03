@@ -15,11 +15,12 @@
 import { useEffect } from 'react';
 import { useStore } from '../store';
 import { playStore } from '../play/playStore';
-import { findRemixCodeInText, remixParseMessage } from './code';
-import { applyRemixCode, remixCodeStatus, rollRemix } from './actions';
-import { isLookMorphing } from './lookMorph';
+import { findRemixCodeInText, parseRemixCode, remixParseMessage } from './code';
+import { applyRemixCode, remixCodeStatus, rollRemix, undoRemix } from './actions';
+import { registerPlayDevHook } from '../play/devHooks';
+import { isLookMorphing, subscribeLookMorph } from './lookMorph';
 import { takePendingRemix } from './links';
-import { remixStore } from './remixStore';
+import { remixStore, shownFinish } from './remixStore';
 import { remixPatchForCode } from '../sceneRemix';
 import { resumeShake, setShakeHandler } from './shake';
 
@@ -68,6 +69,21 @@ export function RemixDriver(): null {
     [],
   );
 
+  // A morph ends with no store write after its last frame: check the code then.
+  useEffect(
+    () => subscribeLookMorph((event) => {
+      if (event.phase !== 'end') return;
+      // A morph cancelled by the next roll also ends: wait until the caller
+      // has started the next one (or landed its patch) before judging.
+      queueMicrotask(() => {
+        if (isLookMorphing()) return;
+        const remix = remixStore.getState();
+        if (remix.applied && remixCodeStatus(useStore.getState(), remix.applied) === 'gone') remix.setApplied(null);
+      });
+    }),
+    [],
+  );
+
   // A pasted code applies its look.
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
@@ -82,6 +98,28 @@ export function RemixDriver(): null {
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
   }, []);
+
+  // `__lupiPlay.remix()` for agents and the owner's console.
+  useEffect(
+    () => registerPlayDevHook('remix', (command?: string) => {
+      if (command === 'roll') rollRemix('palette');
+      else if (command === 'undo') undoRemix();
+      else if (typeof command === 'string') {
+        const parse = parseRemixCode(command);
+        if (!parse.ok) return { error: remixParseMessage(parse) };
+        applyRemixCode(parse.code, 'paste');
+      }
+      const remix = remixStore.getState();
+      return {
+        code: remix.applied?.code.text ?? null,
+        foil: remix.applied?.foil ?? null,
+        finish: shownFinish(remix),
+        status: remixCodeStatus(useStore.getState(), remix.applied),
+        morphing: isLookMorphing(),
+      };
+    }),
+    [],
+  );
 
   // Shake to roll, when it is on.
   useEffect(() => {

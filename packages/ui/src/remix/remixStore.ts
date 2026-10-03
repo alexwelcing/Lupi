@@ -24,11 +24,14 @@ export interface AppliedRemix {
 
 export type ShakeState = 'off' | 'arming' | 'on' | 'denied' | 'unsupported';
 
+/** A finish the visitor picked: one of the three, `off` (none, even on a Foil code), or null (the code's own). */
+export type ChosenFinish = FoilKind | 'off' | null;
+
 export interface RemixState {
   /** The last code applied (cleared when its look is replaced). */
   applied: AppliedRemix | null;
-  /** A finish the visitor picked themselves (shown when no code carries one). */
-  chosenFinish: FoilKind | null;
+  /** A finish the visitor picked themselves; null follows the code. */
+  chosenFinish: ChosenFinish;
   /** Finishes rolled on this device (they stay selectable). */
   found: FoilKind[];
   /** Every finish selectable without rolling it first. */
@@ -44,7 +47,7 @@ export interface RemixState {
   /** performance.now() of the last roll (the pill's "Roll again" window). */
   rolledAt: number | null;
   setApplied(applied: AppliedRemix | null): void;
-  setChosenFinish(finish: FoilKind | null): void;
+  setChosenFinish(finish: ChosenFinish): void;
   markFound(finish: FoilKind): void;
   setShowAllFinishes(value: boolean): void;
   setKeepColors(value: boolean): void;
@@ -148,9 +151,10 @@ export function useRemixStore<T>(selector: (state: RemixState) => T): T {
   return useStore(remixStore, selector);
 }
 
-/** The finish on screen: the code's own, else the visitor's choice. */
+/** The finish on screen: the visitor's choice (`off` hides it), else the code's own. */
 export function shownFinish(state: Pick<RemixState, 'applied' | 'chosenFinish'>): FoilKind | null {
-  return state.applied?.foil ?? state.chosenFinish;
+  if (state.chosenFinish === 'off') return null;
+  return state.chosenFinish ?? state.applied?.foil ?? null;
 }
 
 /** Finishes the visitor may pick directly (found ones, or all with the setting). */
