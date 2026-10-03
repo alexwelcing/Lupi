@@ -18,6 +18,8 @@
  *   capture;
  * - the hover, selection and grab glow and the heat tint (tsl/atomGlow.ts):
  *   a lime rim and a small swell, exactly absent in every capture;
+ * - the Foil finishes of a Remix code (tsl/atomFoil.ts): Holo, Gold leaf
+ *   and Pearl on the rims and highlights, exactly absent in every capture;
  * - hidden types (zero palette radius) and sub-pixel atoms collapse to a
  *   degenerate vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -82,6 +84,7 @@ import {
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
 import { lupiDisplayOffset } from './displayMotion';
 import { lupiAtomGlow, lupiAtomGlowStrength, lupiAtomSwell } from './atomGlow';
+import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import { CONTACT_OCCLUSION_NEIGHBORS, CONTACT_TEXTURE_WIDTH } from '../atomContactOcclusion';
 import {
   blendMaterialPreset,
@@ -353,6 +356,8 @@ export function createAtomImpostorMaterial({
   // carries the atom away (an arrival, a scatter), and is whole at rest and in
   // every capture (the offset is exactly zero there).
   const vContactFade: N = varying(smoothstep(0.08, 0.8, length(displayOffset)).oneMinus(), 'vContactFade');
+  // The Foil reveal (x revealed, y the passing glint); constant once revealed.
+  const vFoilSweep: N = varying(lupiFoilSweep(viewCenter), 'vFoilSweep');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // The hit is built once and first materialized by the depth prelude, which
@@ -474,11 +479,21 @@ export function createAtomImpostorMaterial({
     const targeted = u.uHasEtch.greaterThan(0.5).and(abs(vAtomId.sub(u.uEtchAtomId)).lessThan(0.5));
     const etchAlpha = (texture(u.tEtchTexture, clamp(etchUv, 0.0, 1.0)) as N).a;
     const etch = select(targeted.and(inside), etchAlpha, float(0.0));
-    const shaded: N = mix(lit, lit.mul(0.32), etch);
-    // Hover / selection / grab rim and the heat tint (zero in captures).
+    const etched: N = mix(lit, lit.mul(0.32), etch);
     const toEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate()));
-    const glow = lupiAtomGlow(vGlow, dot(normal, toEye));
-    return vec4(shaded.add(glow), 1.0);
+    const facing: N = dot(normal, toEye).toVar();
+    // A Remix code's Foil finish (exactly `etched` without one, and in captures).
+    const shaded: N = lupiFoilFinish({
+      lit: etched,
+      normal,
+      facing,
+      keyLightDir: lights.lightDir,
+      pixelRadius: vPixelRadius,
+      sweep: vFoilSweep,
+    });
+    // Hover / selection / grab rim and the heat tint (zero in captures).
+    const glow = lupiAtomGlow(vGlow, facing);
+    return vec4((shaded as N).add(glow), 1.0);
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

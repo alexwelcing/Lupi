@@ -148,6 +148,39 @@
   text-underline-offset: 3px;
 }
 
+/* Instant Replay: "Replay ↗" after a moment, "▶ Watch" / "Skip" on a shared
+   replay. One more segment of the same pill; it eases in, never bounces. */
+.lupi-play-pill__replay {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 44px;
+  padding: 0 13px;
+  border-left: 1px solid var(--lupi-pill-divider);
+  color: var(--lupi-pill-lime);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  animation: lupi-pill-replay-in 220ms cubic-bezier(0.2, 0.85, 0.2, 1);
+  transition: background-color 120ms ease-out;
+}
+.lupi-play-pill__replay:hover { background: rgba(213, 239, 156, 0.1); }
+.lupi-play-pill__replay:active { background: rgba(213, 239, 156, 0.16); }
+.lupi-play-pill__replay[data-replay='offer'] {
+  background: rgba(213, 239, 156, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(213, 239, 156, 0.18);
+}
+.lupi-play-pill__replay[data-replay='skip'] { color: var(--lupi-pill-muted); font-weight: 650; }
+.lupi-play-pill__replay-icon { font-size: 12px; line-height: 1; }
+@keyframes lupi-pill-replay-in {
+  from { opacity: 0; max-width: 0; padding-left: 0; padding-right: 0; }
+  to { opacity: 1; max-width: 140px; }
+}
+.lupi-play-pill__status[data-kind='replay'] { color: var(--lupi-pill-ink); }
+.lupi-play-pill__status[data-flash='turn'] .lupi-play-pill__status-text { font-weight: 720; }
+
 /* Stow: "Clear view" / "Restore" (icon only on a phone) */
 .lupi-play-pill__stow {
   display: flex;
@@ -174,6 +207,55 @@
   padding: 0 15px 0 14px;
 }
 .lupi-play-pill[data-stowed='true'] .lupi-play-pill__stow { color: var(--lupi-pill-lime); }
+
+/* Remix: "⟳ Again" after a roll, then a Foil finish's chip (its cosmetic
+   badge). A Foil wears its finish as a 1.5 px border: a conic rainbow
+   (Holo), gold leaf, or nacre (Pearl), static. */
+.lupi-play-pill__remix {
+  --lupi-foil-edge: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 13px;
+  color: var(--lupi-pill-lime);
+  background:
+    linear-gradient(rgba(20, 36, 30, 0.98), rgba(20, 36, 30, 0.98)) padding-box,
+    var(--lupi-foil-edge) border-box;
+  border: 1.5px solid transparent;
+  border-left-color: #2c3d35;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  animation: lupi-pill-replay-in 220ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+.lupi-play-pill__remix:hover { filter: brightness(1.12); }
+.lupi-play-pill__remix-icon { font-size: 14px; line-height: 1; }
+.lupi-play-pill__remix[data-foil] { border-radius: 14px; margin: 0 3px; }
+.lupi-play-pill__remix[data-foil='holo'] {
+  --lupi-foil-edge: conic-gradient(from 200deg, #ff9de6, #9df3ff, #d5ef9c, #ffe59d, #c7a6ff, #ff9de6);
+  color: #f2e9ff;
+}
+.lupi-play-pill__remix[data-foil='gold'] {
+  --lupi-foil-edge: linear-gradient(135deg, #fff2c4, #c99a3c 35%, #f7e1a1 55%, #9c7128 80%, #fff2c4);
+  color: #f7e1a1;
+}
+.lupi-play-pill__remix[data-foil='pearl'] {
+  --lupi-foil-edge: conic-gradient(from 120deg, #fff6f8, #e3efff, #f1ffe9, #fff0e2, #f6ecff, #fff6f8);
+  color: #fbf6f7;
+}
+.lupi-play-pill__status[data-flash='foil'] .lupi-play-pill__status-text {
+  background: linear-gradient(90deg, #ffd1f1, #c8f6ff, #e8f7c4, #ffefc2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 720;
+}
+.lupi-play-pill__status[data-flash='remix'] .lupi-play-pill__status-text { font-variant-numeric: tabular-nums; }
 
 /* The tray, anchored above the pill */
 .lupi-play-tray {
@@ -204,7 +286,9 @@
   align-items: center;
   gap: 4px;
 }
-.lupi-play-tray__row--end .lupi-play-tray__item { grid-column: 2 / -1; }
+/* Last row: Replay ↗ under the first option, Settings… across the rest. */
+.lupi-play-tray__row--end .lupi-play-tray__item:first-child { grid-column: 2; }
+.lupi-play-tray__row--end .lupi-play-tray__item:last-child { grid-column: 3 / -1; }
 /* One finger: five verbs on two lines beside one label. */
 .lupi-play-tray__row--verbs .lupi-play-tray__label { grid-row: span 2; align-self: start; padding-top: 16px; }
 .lupi-play-tray__label {
@@ -236,6 +320,26 @@
 .lupi-play-pill .lupi-play-tray__item[aria-checked='true'] { color: #101817; background: var(--lupi-pill-lime); }
 .lupi-play-pill .lupi-play-tray__item[aria-disabled='true'] { color: #7f917b; cursor: not-allowed; }
 .lupi-play-tray__hint { color: #8fa48a; font-size: 9px; font-weight: 520; }
+/* Look: Remix ⟳ under the first option, the code across the rest, the
+   published odds under both. A Foil code wears its finish as its border. */
+.lupi-play-tray__row--look > button:nth-of-type(2) { grid-column: 3 / -1; }
+.lupi-play-tray__note {
+  grid-column: 2 / -1;
+  padding: 0 6px 2px;
+  color: #8fa48a;
+  font-size: 10.5px;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+}
+.lupi-play-tray__code { font: 680 13px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.03em; }
+.lupi-play-tray__foil { color: inherit; opacity: 0.85; }
+.lupi-play-pill .lupi-play-tray__item[data-foil] {
+  background: linear-gradient(#18291f, #18291f) padding-box, var(--lupi-foil-edge) border-box;
+  border: 1.5px solid transparent;
+}
+.lupi-play-pill .lupi-play-tray__item[data-foil='holo'] { --lupi-foil-edge: conic-gradient(from 200deg, #ff9de6, #9df3ff, #d5ef9c, #ffe59d, #c7a6ff, #ff9de6); }
+.lupi-play-pill .lupi-play-tray__item[data-foil='gold'] { --lupi-foil-edge: linear-gradient(135deg, #fff2c4, #c99a3c 35%, #f7e1a1 55%, #9c7128 80%, #fff2c4); }
+.lupi-play-pill .lupi-play-tray__item[data-foil='pearl'] { --lupi-foil-edge: conic-gradient(from 120deg, #fff6f8, #e3efff, #f1ffe9, #fff0e2, #f6ecff, #fff6f8); }
 
 /* A verb latched: a thin lime inset edge on the viewport (above the canvas);
    it glows warm while Heat is held. */
@@ -269,6 +373,9 @@
   .lupine-app-root:has(.lupine-axes-gizmo) .lupi-play-pill { max-width: calc(100vw - 126px); }
   .lupi-play-pill__status { max-width: none; }
   .lupi-play-pill__stow-label { display: none; }
+  /* "⟳ Again" is the icon alone on a phone row; a Foil chip keeps its name. */
+  .lupi-play-pill__remix[data-remix='again'] .lupi-play-pill__remix-label { display: none; }
+  .lupi-play-pill__remix { padding: 0 12px; }
   .lupi-play-pill__stow { padding: 0 14px 0 12px; }
   /* An open panel or style sheet owns the bottom of a phone screen (opening
      one also puts every toy at rest, so nothing displaced goes unlabelled). */

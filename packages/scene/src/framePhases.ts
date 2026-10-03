@@ -64,6 +64,14 @@ export const LUPI_JOB = {
   viewInset: 'lupi/view-inset',
   /** Overlays (labels, rings, the card anchor, trails) riding display motion, in `lupi-overlays`. */
   displayFollow: 'lupi/display-follow',
+  /** Instant Replay's clip: compose each recorded frame and its labels, in `lupi-capture`. */
+  clipComposite: 'lupi/clip-composite',
+  /** Instant Replay's recorder: the camera pose of each drawn frame, in `lupi-capture`. */
+  replayRecord: 'lupi/replay-record',
+  /** A shared replay playing in this view (camera and toys), in `update`. */
+  replayPlay: 'lupi/replay-play',
+  /** A Remix code's Foil finish: level fades and the reveal sweep, in `lupi-uniforms`. */
+  atomFoil: 'lupi/atom-foil',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];

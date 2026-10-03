@@ -549,6 +549,7 @@ export class RigController implements LupiCameraRigApi {
     this.userMoved = true;
     this.dirty = true;
     this.controls.dispatchEvent({ type: 'start' });
+    this.host.emit({ type: 'camera.fling', omega: w });
   }
 
   /** End a coast without a catch (no flash, no cue): the visitor chose a calmer Motion level. */

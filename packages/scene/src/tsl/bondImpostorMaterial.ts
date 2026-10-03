@@ -64,6 +64,7 @@ import {
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
 import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
 import { ATOM_GLOW } from './atomGlow';
+import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
@@ -239,6 +240,7 @@ export function createBondImpostorMaterial({
   const vColorB: N = varying(sRGBTransferEOTF(attribute(BOND_ATTR.colorEnd, 'vec4').rgb), 'vBondColorB');
   const vPixelRadius: N = varying(pixelRadius, 'vBondPixelRadius');
   const vStrain: N = varying(strain, 'vBondStrain');
+  const vFoilSweep: N = varying(lupiFoilSweep(mid), 'vBondFoilSweep');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // Distance fade (LOD): far bonds thin out before the vertex cull drops them.
@@ -299,7 +301,18 @@ export function createBondImpostorMaterial({
       env,
       tier,
     ) as N).toVar();
-    return vec4(lit, u.uOpacity.mul(fadeAt(hit.z)));
+    // Foil: gilded edges and the same finish as the atoms (none in captures).
+    const toEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate()));
+    const finished: N = lupiFoilFinish({
+      lit,
+      normal,
+      facing: dot(normal, toEye),
+      keyLightDir: lights.lightDir,
+      pixelRadius: vPixelRadius,
+      sweep: vFoilSweep,
+      bond: true,
+    });
+    return vec4(finished, u.uOpacity.mul(fadeAt(hit.z)));
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

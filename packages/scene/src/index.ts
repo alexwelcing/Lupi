@@ -91,7 +91,7 @@ export {
   CAPTURE_TEXEL_SCALE_KEY,
   captureTexelScale,
 } from './captureGuards';
-export type { CaptureGuard } from './captureGuards';
+export type { CaptureGuard, RecordingGuard, RecordingOptions } from './captureGuards';
 
 // TSL: the node-material uniform bag and the impostor shading kit
 export {
@@ -122,6 +122,7 @@ export * from './tsl/displayMotion';
 export { displayOffsetTwin, readTwinState, restTwinState } from './tsl/displayMotionTwin';
 export type { DisplayMotionTwinState, TwinTermScales, TwinVec3 } from './tsl/displayMotionTwin';
 export * from './tsl/atomGlow';
+export * from './tsl/atomFoil';
 
 // Shared constants
 export {

@@ -22,6 +22,13 @@
  *                         the overlays riding display motion (labels, rings, the
  *                         card anchor, measurements, trails); all displaced
  *                         counts are 0 and maxOffset is 0 at rest
+ *   __lupiPlay.replay()  → Instant Replay: the offered (or last) moment as a tape
+ *                         ({ moment, keys, events, bytes, link }); replay('watch')
+ *                         starts a waiting shared replay; replay('moment') offers
+ *                         the last 4 s as a moment
+ *   __lupiPlay.remix()   → Remix: { code, foil, finish, status, morphing };
+ *                         remix('roll') rolls, remix('undo') steps back,
+ *                         remix('r1-K7QDM') applies a code
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -49,7 +56,9 @@ export type PlayDevHookName =
   | 'tug'
   | 'heat'
   | 'viewInset'
-  | 'follow';
+  | 'follow'
+  | 'replay'
+  | 'remix';
 
 export interface PlayRigState {
   position: Vec3;
@@ -98,6 +107,8 @@ export interface LupiPlayDevApi {
   heat?: DevHook;
   viewInset?: DevHook;
   follow?: DevHook;
+  replay?: DevHook;
+  remix?: DevHook;
 }
 
 declare global {
@@ -107,8 +118,33 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset' | 'follow';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset', 'follow'];
+type ExposedHookName =
+  | 'poke'
+  | 'flick'
+  | 'catch'
+  | 'scatter'
+  | 'stepDetent'
+  | 'burst'
+  | 'tug'
+  | 'heat'
+  | 'viewInset'
+  | 'follow'
+  | 'replay'
+  | 'remix';
+const EXPOSED: ReadonlyArray<ExposedHookName> = [
+  'poke',
+  'flick',
+  'catch',
+  'scatter',
+  'stepDetent',
+  'burst',
+  'tug',
+  'heat',
+  'viewInset',
+  'follow',
+  'replay',
+  'remix',
+];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 

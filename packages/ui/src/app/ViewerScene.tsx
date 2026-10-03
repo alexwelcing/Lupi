@@ -47,6 +47,9 @@ import { PlayLayer } from '../play/PlayLayer';
 import { DisplayFollowDriver } from '../play/displayFollow';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
 import { CameraToys } from '../camera/CameraToys';
+import { ReplayDirector } from '../replay/ReplayDirector';
+import { FoilDriver } from '../remix/FoilDriver';
+import { RemixBackdropFade } from '../remix/RemixBackdropFade';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
 import { ViewInsetDriver } from '../camera/ViewInsetDriver';
 import { markCanvasSelection } from '../camera/selectionSource';
@@ -579,6 +582,7 @@ export function ViewerScene({
         backdropPattern={backdropPattern}
         backdropRadius={backdropRadius}
       />
+      <RemixBackdropFade />
       <SceneLighting />
 
       {currentFrame && (
@@ -802,7 +806,9 @@ export function ViewerScene({
             selectedAtoms={visibleSelectedAtoms}
             enabled={!transmissionActive}
           />
+          <FoilDriver />
           <CameraToys frame={currentFrame} />
+          <ReplayDirector frame={currentFrame} center={center} />
           <AtomTrails
             frame={currentFrame}
             frameKey={interpolatedFrameKey}

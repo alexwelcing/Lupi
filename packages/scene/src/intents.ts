@@ -22,6 +22,8 @@ export type LupiIntent =
   | { type: 'canvas.hoverEnd' }
   | { type: 'camera.gestureStart'; pointerType: PointerKind }
   | { type: 'camera.catch' }
+  /** A coast began (a flick, Spin, a carried hero spin): `omega` is the molecule's apparent ω in world space (rad/s). */
+  | { type: 'camera.fling'; omega: Vec3 }
   /** The rig came to rest. `viewDir` = normalize(camera.position − target); `detentLabel` names the detent it clicked into. */
   | { type: 'camera.rest'; viewDir: Vec3; detentLabel: string | null; userMoved: boolean }
   | { type: 'camera.detentStep'; dx: -1 | 0 | 1; dy: -1 | 0 | 1 }
