@@ -10,6 +10,7 @@ import { EMPTY_CONTROLS, organize, rowBadge, rowReason, type FilterChip, type Se
 import { recentSwitches, rememberSwitch, subscribeRecent } from './recent';
 import { findSwitchCandidates, galleryCandidates, galleryPool, type SwitchCandidate } from './switchIndex';
 import { SwitchStage } from './SwitchStage';
+import { preloadInkTiles } from '../landing/inkTiles';
 import './switcher.css';
 
 /**
@@ -62,6 +63,8 @@ export function MoleculeSwitcher() {
   const elementsKey = elements.join(',');
   const idle = !query.trim() && elements.length === 0;
 
+  // Ink rows hand over their drawing's pose; the poses arrive at idle.
+  useEffect(() => preloadInkTiles(), []);
   // A removed Jev reading belongs to the words it was read from.
   useEffect(() => {
     setControls((previous) => (previous.dismissed.length ? { ...previous, dismissed: [] } : previous));

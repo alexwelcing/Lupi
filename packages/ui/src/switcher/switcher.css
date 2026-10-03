@@ -130,6 +130,13 @@
   color: var(--sw-accent);
   font-size: 18px;
 }
+/* Ink rows: the molecule's own drawing on the sage plate (landing/inkTiles.ts). */
+.switcher-results img[src*='-ink.svg'] {
+  box-sizing: border-box;
+  padding: 1px;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 42%, #1a2722, #101817 72%);
+}
 .switcher-text {
   display: grid;
   min-width: 0;
