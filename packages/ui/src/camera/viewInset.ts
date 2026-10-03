@@ -58,7 +58,11 @@ export const IDENTITY_FRAMING: Readonly<ViewFraming> = Object.freeze({ x: 0, y: 
 
 /** Breathing room (CSS px) between the free area and what bounds it. */
 export const FREE_GAP_PX = 12;
-/** A free area narrower or shorter than this (CSS px) is no room at all: the view stays put. */
+/**
+ * A free area narrower or shorter than this (CSS px) is barely room: the
+ * molecule still goes there (so dragging a sheet up keeps it moving
+ * smoothly), framed as if the area were this big, partly behind the overlay.
+ */
 export const MIN_FREE_PX = 96;
 /** The view never shrinks the molecule below this share of its size. */
 export const MIN_SCALE = 0.42;
@@ -246,21 +250,49 @@ export function largestFreeRect(bounds: ScreenRect, blockers: ReadonlyArray<Scre
   return best;
 }
 
+/** An overlay edge this close (CSS px) to the canvas edge reaches it: a sheet's side gutters are no room. */
+const EDGE_SNAP_PX = 24;
+
+function snapToEdges(rect: ScreenRect, canvas: ScreenRect): ScreenRect {
+  return {
+    left: rect.left - canvas.left <= EDGE_SNAP_PX ? Math.min(rect.left, canvas.left) : rect.left,
+    top: rect.top - canvas.top <= EDGE_SNAP_PX ? Math.min(rect.top, canvas.top) : rect.top,
+    right: canvas.right - rect.right <= EDGE_SNAP_PX ? Math.max(rect.right, canvas.right) : rect.right,
+    bottom: canvas.bottom - rect.bottom <= EDGE_SNAP_PX ? Math.max(rect.bottom, canvas.bottom) : rect.bottom,
+  };
+}
+
 /** The free area (client px) the overlays and chrome leave on the canvas, inset by the gap; null when there is none. */
 export function freeArea(
   canvas: ScreenRect,
   overlays: ReadonlyArray<ScreenRect>,
   chrome: ReadonlyArray<ScreenRect>,
 ): ScreenRect | null {
-  const rect = largestFreeRect(canvas, [...overlays, ...chrome]);
+  const blockers = [...overlays, ...chrome].map((rect) => snapToEdges(rect, canvas));
+  const rect = largestFreeRect(canvas, blockers);
   if (!rect) return null;
-  const inset = {
-    left: rect.left + FREE_GAP_PX,
-    top: rect.top + FREE_GAP_PX,
-    right: rect.right - FREE_GAP_PX,
-    bottom: rect.bottom - FREE_GAP_PX,
+  // The gap never collapses a thin strip: it keeps a pixel either way.
+  const gapX = Math.max(0, Math.min(FREE_GAP_PX, (rect.right - rect.left - 1) / 2));
+  const gapY = Math.max(0, Math.min(FREE_GAP_PX, (rect.bottom - rect.top - 1) / 2));
+  return { left: rect.left + gapX, top: rect.top + gapY, right: rect.right - gapX, bottom: rect.bottom - gapY };
+}
+
+/** Whether a free area is real room (at least MIN_FREE_PX each way). */
+export function hasRoom(free: ScreenRect | null): boolean {
+  return !!free && free.right - free.left >= MIN_FREE_PX && free.bottom - free.top >= MIN_FREE_PX;
+}
+
+/** A free area grown about its centre to at least MIN_FREE_PX each way, kept on the canvas. */
+function atLeastRoom(free: ScreenRect, canvas: ScreenRect): ScreenRect {
+  const grow = (lo: number, hi: number, min: number, max: number): [number, number] => {
+    const size = hi - lo;
+    if (size >= MIN_FREE_PX) return [lo, hi];
+    const centre = clamp((lo + hi) / 2, min + MIN_FREE_PX / 2, max - MIN_FREE_PX / 2);
+    return [centre - MIN_FREE_PX / 2, centre + MIN_FREE_PX / 2];
   };
-  return inset.right > inset.left && inset.bottom > inset.top ? inset : null;
+  const [left, right] = grow(free.left, free.right, canvas.left, canvas.right);
+  const [top, bottom] = grow(free.top, free.bottom, canvas.top, canvas.bottom);
+  return { left, top, right, bottom };
 }
 
 function isShown(element: Element): boolean {
@@ -271,8 +303,9 @@ function isShown(element: Element): boolean {
 
 /**
  * The fixed chrome that floats over the canvas on a phone (the header
- * capsule, the Play pill, the command deck), as client rects. Hidden or
- * stowed chrome does not count.
+ * capsule, the Play pill, the command deck), as client rects. Each counts as
+ * a full-width band: the space beside a capsule is no place for a molecule.
+ * Hidden or stowed chrome does not count.
  */
 export function chromeRects(root: ParentNode = document): ScreenRect[] {
   const rects: ScreenRect[] = [];
@@ -281,7 +314,7 @@ export function chromeRects(root: ParentNode = document): ScreenRect[] {
     if (!element) continue;
     const rect = element.getBoundingClientRect();
     if (!(rect.width > 0) || !(rect.height > 0) || !isShown(element)) continue;
-    rects.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+    rects.push({ left: -1e6, top: rect.top, right: 1e6, bottom: rect.bottom });
   }
   return rects;
 }
@@ -311,16 +344,18 @@ export interface FramingInput {
  * The framing that puts the molecule in the free area: shrunk to fit (never
  * grown, never below MIN_SCALE), then moved the least that brings it into the
  * middle of the free area. Only the part of the molecule on the canvas counts,
- * so a molecule zoomed past the edges fits what was visible. Identity when the
- * free area is missing or too small to be worth moving into.
+ * so a molecule zoomed past the edges fits what was visible. A sliver of room
+ * counts as MIN_FREE_PX (continuity while a sheet is dragged up); no room at
+ * all is identity.
  */
 export function insetFraming({ canvas, free, subject }: FramingInput): ViewFraming {
   const width = canvas.right - canvas.left;
   const height = canvas.bottom - canvas.top;
-  if (!(width > 0) || !(height > 0) || !free) return { ...IDENTITY_FRAMING };
-  const freeWidth = free.right - free.left;
-  const freeHeight = free.bottom - free.top;
-  if (!(freeWidth >= MIN_FREE_PX) || !(freeHeight >= MIN_FREE_PX)) return { ...IDENTITY_FRAMING };
+  if (!(width > 0) || !(height > 0) || !free || !validRect(free)) return { ...IDENTITY_FRAMING };
+  if (width < MIN_FREE_PX || height < MIN_FREE_PX) return { ...IDENTITY_FRAMING };
+  const room = atLeastRoom(free, canvas);
+  const freeWidth = room.right - room.left;
+  const freeHeight = room.bottom - room.top;
   const seen = (subject && validRect(subject) ? clip(subject, canvas) : null) ?? canvas;
   const subjectWidth = seen.right - seen.left;
   const subjectHeight = seen.bottom - seen.top;
@@ -334,8 +369,8 @@ export function insetFraming({ canvas, free, subject }: FramingInput): ViewFrami
   // The molecule's centre once scaled about the canvas centre.
   const sx = cx + scale * ((seen.left + seen.right) / 2 - cx);
   const sy = cy + scale * ((seen.top + seen.bottom) / 2 - cy);
-  const nx = settleInto(sx, scale * subjectWidth, free.left, free.right);
-  const ny = settleInto(sy, scale * subjectHeight, free.top, free.bottom);
+  const nx = settleInto(sx, scale * subjectWidth, room.left, room.right);
+  const ny = settleInto(sy, scale * subjectHeight, room.top, room.bottom);
   const x = clamp(nx - sx, -width * MAX_SHIFT_FRACTION, width * MAX_SHIFT_FRACTION);
   const y = clamp(ny - sy, -height * MAX_SHIFT_FRACTION, height * MAX_SHIFT_FRACTION);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scale)) return { ...IDENTITY_FRAMING };

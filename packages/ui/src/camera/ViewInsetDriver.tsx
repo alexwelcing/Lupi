@@ -30,12 +30,14 @@ import { OrthographicCamera, PerspectiveCamera, Vector3, type Camera } from 'thr
 import { MOTION, createSpring1, isSettled, springTo, type Spring1 } from '@atlas/core/motion';
 import { LUPI_JOB, keepLupiAwake, registerRecordingGuard, requestLupiFrames } from '@atlas/scene';
 import { glidesAnimate } from '../motion/comfort';
+import { useStore } from '../store';
 import { registerPlayDevHook } from '../play/devHooks';
 import { GESTURE } from './gestureTokens';
 import {
   IDENTITY_FRAMING,
   chromeRects,
   freeArea,
+  hasRoom,
   insetFraming,
   isIdentityFraming,
   occluderTracking,
@@ -82,60 +84,141 @@ export interface SubjectBounds {
   max: ArrayLike<number>;
 }
 
-const scratchCorner = new Vector3();
+const scratchPoint = new Vector3();
+/** At most this many atoms are projected to find the molecule on screen (an even sample of bigger files). */
+const SUBJECT_SAMPLES = 4096;
 
 /**
- * The structure's screen rectangle (client px) at identity framing: its
- * padded bounding box's corners through the camera's own projection, without
- * any view offset. Null when a corner is behind the camera (the molecule
- * surrounds it) or nothing is known; the whole canvas then stands in.
+ * Projects world points through the camera's own projection, without any view
+ * offset, into client px, and grows a box around them. `add` returns false
+ * for a point behind the camera (the molecule surrounds it).
  */
-function subjectRect(camera: Camera, bounds: SubjectBounds | null | undefined, canvas: ScreenRect): ScreenRect | null {
-  if (!bounds || bounds.min.length < 3 || bounds.max.length < 3) return null;
-  const width = canvas.right - canvas.left;
-  const height = canvas.bottom - canvas.top;
-  if (!(width > 0) || !(height > 0)) return null;
-  camera.updateMatrixWorld();
-  const toView = camera.matrixWorldInverse;
-  let left = Infinity;
-  let top = Infinity;
-  let right = -Infinity;
-  let bottom = -Infinity;
-  for (let corner = 0; corner < 8; corner += 1) {
-    scratchCorner
-      .set(
-        corner & 1 ? bounds.max[0] + SUBJECT_PAD : bounds.min[0] - SUBJECT_PAD,
-        corner & 2 ? bounds.max[1] + SUBJECT_PAD : bounds.min[1] - SUBJECT_PAD,
-        corner & 4 ? bounds.max[2] + SUBJECT_PAD : bounds.min[2] - SUBJECT_PAD,
-      )
-      .applyMatrix4(toView);
+class ScreenBox {
+  left = Infinity;
+  top = Infinity;
+  right = -Infinity;
+  bottom = -Infinity;
+  nearest = Infinity;
+  private readonly width: number;
+  private readonly height: number;
+
+  constructor(
+    private readonly camera: Camera,
+    private readonly canvas: ScreenRect,
+  ) {
+    this.width = canvas.right - canvas.left;
+    this.height = canvas.bottom - canvas.top;
+  }
+
+  add(x: number, y: number, z: number): boolean {
+    const camera = this.camera;
+    const view = scratchPoint.set(x, y, z).applyMatrix4(camera.matrixWorldInverse);
     let ndcX: number;
     let ndcY: number;
     if (camera instanceof PerspectiveCamera) {
-      const depth = -scratchCorner.z;
-      if (!(depth > 1e-6)) return null;
+      const depth = -view.z;
+      if (!(depth > 1e-6)) return false;
       const tanHalf = Math.tan((camera.fov * Math.PI) / 360) / (camera.zoom || 1);
-      ndcY = scratchCorner.y / depth / tanHalf;
-      ndcX = scratchCorner.x / depth / (tanHalf * (width / height));
+      ndcY = view.y / depth / tanHalf;
+      ndcX = view.x / depth / (tanHalf * (this.width / this.height));
+      this.nearest = Math.min(this.nearest, depth);
     } else if (camera instanceof OrthographicCamera) {
       const zoom = camera.zoom || 1;
       const dx = (camera.right - camera.left) / (2 * zoom);
       const dy = (camera.top - camera.bottom) / (2 * zoom);
-      if (!(dx > 0) || !(dy > 0)) return null;
-      ndcX = (scratchCorner.x - (camera.right + camera.left) / 2) / dx;
-      ndcY = (scratchCorner.y - (camera.top + camera.bottom) / 2) / dy;
+      if (!(dx > 0) || !(dy > 0)) return false;
+      ndcX = (view.x - (camera.right + camera.left) / 2) / dx;
+      ndcY = (view.y - (camera.top + camera.bottom) / 2) / dy;
     } else {
-      return null;
+      return false;
     }
-    const x = canvas.left + ((ndcX + 1) / 2) * width;
-    const y = canvas.top + ((1 - ndcY) / 2) * height;
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    left = Math.min(left, x);
-    right = Math.max(right, x);
-    top = Math.min(top, y);
-    bottom = Math.max(bottom, y);
+    const px = this.canvas.left + ((ndcX + 1) / 2) * this.width;
+    const py = this.canvas.top + ((1 - ndcY) / 2) * this.height;
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
+    this.left = Math.min(this.left, px);
+    this.right = Math.max(this.right, px);
+    this.top = Math.min(this.top, py);
+    this.bottom = Math.max(this.bottom, py);
+    return true;
   }
-  return right > left && bottom > top ? { left, top, right, bottom } : null;
+
+  /** CSS px a world length `pad` spans at the nearest point seen (the largest it gets on screen). */
+  padPx(pad: number): number {
+    const camera = this.camera;
+    if (camera instanceof PerspectiveCamera && Number.isFinite(this.nearest)) {
+      const tanHalf = Math.tan((camera.fov * Math.PI) / 360) / (camera.zoom || 1);
+      return (pad / (this.nearest * tanHalf)) * (this.height / 2);
+    }
+    if (camera instanceof OrthographicCamera) {
+      const dy = (camera.top - camera.bottom) / (2 * (camera.zoom || 1));
+      return dy > 0 ? (pad / dy) * (this.height / 2) : 0;
+    }
+    return 0;
+  }
+
+  rect(padPx = 0): ScreenRect | null {
+    if (!(this.right >= this.left) || !(this.bottom >= this.top)) return null;
+    return {
+      left: this.left - padPx,
+      top: this.top - padPx,
+      right: this.right + padPx,
+      bottom: this.bottom + padPx,
+    };
+  }
+}
+
+/**
+ * The molecule's screen rectangle (client px) at identity framing: the
+ * frame's atoms (an even sample of big files) through the camera's own
+ * projection, padded by about one drawn atom; the padded world bounds when the
+ * frame's coordinates are not at hand. Null when part of it is behind the
+ * camera (the molecule surrounds it) or nothing is known; the whole canvas
+ * then stands in.
+ */
+function subjectRect(
+  camera: Camera,
+  positions: ArrayLike<number> | null | undefined,
+  bounds: SubjectBounds | null | undefined,
+  canvas: ScreenRect,
+): ScreenRect | null {
+  if (!(canvas.right > canvas.left) || !(canvas.bottom > canvas.top)) return null;
+  camera.updateMatrixWorld();
+  const box = new ScreenBox(camera, canvas);
+  const atoms = positions ? Math.floor(positions.length / 3) : 0;
+  if (positions && atoms > 0) {
+    const stride = Math.max(1, Math.ceil(atoms / SUBJECT_SAMPLES));
+    for (let atom = 0; atom < atoms; atom += stride) {
+      const i = atom * 3;
+      const x = positions[i];
+      const y = positions[i + 1];
+      const z = positions[i + 2];
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+      if (!box.add(x, y, z)) return null;
+    }
+    const rect = box.rect(box.padPx(SUBJECT_PAD));
+    if (rect && rect.right > rect.left && rect.bottom > rect.top) return rect;
+  }
+  if (!bounds || bounds.min.length < 3 || bounds.max.length < 3) return null;
+  const corners = new ScreenBox(camera, canvas);
+  for (let corner = 0; corner < 8; corner += 1) {
+    const added = corners.add(
+      corner & 1 ? bounds.max[0] + SUBJECT_PAD : bounds.min[0] - SUBJECT_PAD,
+      corner & 2 ? bounds.max[1] + SUBJECT_PAD : bounds.min[1] - SUBJECT_PAD,
+      corner & 4 ? bounds.max[2] + SUBJECT_PAD : bounds.min[2] - SUBJECT_PAD,
+    );
+    if (!added) return null;
+  }
+  return corners.rect();
+}
+
+/** The positions of the frame on screen, when the store has them. */
+function framePositions(): ArrayLike<number> | null {
+  const { file, frame } = useStore.getState();
+  const frames = file?.trajectory.frames;
+  if (!frames?.length) return null;
+  const index = Math.min(frames.length - 1, Math.max(0, Math.floor(Number.isFinite(frame) ? frame : 0)));
+  const positions = frames[index]?.positions;
+  return positions && positions.length >= 3 ? positions : null;
 }
 
 interface FramingSprings {
@@ -268,10 +351,19 @@ export function ViewInsetDriver({ bounds }: { bounds?: SubjectBounds | null }) {
         else {
           const rect = canvas.getBoundingClientRect();
           const canvasRect = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+          const chrome = chromeRects();
+          let free = freeArea(canvasRect, overlays.map((overlay) => overlay.rect), chrome);
+          // The atom card over an open sheet can leave no room between them:
+          // then the molecule makes room for the sheet alone, under the card.
+          if (!hasRoom(free) && overlays.some((overlay) => overlay.tapBorn)) {
+            const sheets = overlays.filter((overlay) => !overlay.tapBorn).map((overlay) => overlay.rect);
+            const roomy = sheets.length > 0 ? freeArea(canvasRect, sheets, chrome) : null;
+            if (hasRoom(roomy)) free = roomy;
+          }
           st.target = insetFraming({
             canvas: canvasRect,
-            free: freeArea(canvasRect, overlays.map((overlay) => overlay.rect), chromeRects()),
-            subject: subjectRect(camera, boundsRef.current, canvasRect),
+            free,
+            subject: subjectRect(camera, framePositions(), boundsRef.current, canvasRect),
           });
         }
       }
