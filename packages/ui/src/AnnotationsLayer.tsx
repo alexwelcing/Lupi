@@ -20,8 +20,10 @@
  * frame so labels move with playback — no stale-position lag.
  */
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber/webgpu';
+import { keepLupiAwake } from '@atlas/scene';
+import { useComfort } from './motion/comfort';
 import * as THREE from 'three';
 import { Html, Billboard } from '@react-three/drei/webgpu';
 import { LupiText } from './labels/LupiText';
@@ -168,7 +170,9 @@ function GlyphAnnotation({
 // 3D text characters arranged tangentially around a ring at the atom's
 // position. The ring rotates slowly via useFrame. Each character is its
 // own <LupiText> placed on a ring radius. For >12 chars we duplicate to fill
-// the ring; for very short strings we space them out.
+// the ring; for very short strings we space them out. The turn is ambient
+// motion (Quiet Idle draws it at 24 fps when nothing else moves, by the wall
+// clock); Motion "Still" holds the ring.
 function HaloAnnotation({
   pos,
   text,
@@ -182,8 +186,19 @@ function HaloAnnotation({
   const display = text.length < 8 ? text.padEnd(text.length + 4, ' ').repeat(2).slice(0, 16) : text.slice(0, 24);
   const chars = useMemo(() => Array.from(display), [display]);
 
-  useFrame((_, delta) => {
-    if (groupRef.current) groupRef.current.rotation.y += delta * 0.4;
+  const turning = useComfort() !== 'still';
+  const lastWall = useRef(-1);
+
+  useEffect(
+    () => (turning ? keepLupiAwake('annotation-halo', () => true, { ambient: true }) : undefined),
+    [turning],
+  );
+
+  useFrame(() => {
+    const now = performance.now();
+    const step = turning && lastWall.current >= 0 ? Math.min(0.1, Math.max(0, (now - lastWall.current) / 1000)) : 0;
+    lastWall.current = turning ? now : -1;
+    if (groupRef.current) groupRef.current.rotation.y += step * 0.4;
   });
 
   return (

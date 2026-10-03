@@ -2,8 +2,9 @@
  * <SelectionMarkers /> - subtle selected and hover feedback for atoms.
  *
  * Camera-facing rings (drei `Billboard`) with plain basic materials, which
- * WebGPURenderer draws through their node equivalents on both backends. The
- * selected ring pulses unless the user prefers reduced motion.
+ * WebGPURenderer draws through their node equivalents on both backends. A
+ * newly selected ring pulses a few times and comes to rest (Quiet Idle: a
+ * still view draws nothing); Gentle halves the pulse and Still skips it.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -12,9 +13,13 @@ import { Billboard } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
-import { useMediaQuery } from './hooks/useMediaQuery';
+import { keepLupiAwake } from '@atlas/scene';
+import { displayMotionScale } from './motion/comfort';
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+/** The selection pulse: 3.6 rad/s, ±3.5 %, fading to rest over this many seconds. */
+const PULSE_SECONDS = 2.4;
+const PULSE_OMEGA = 3.6;
+const PULSE_AMPLITUDE = 0.035;
 
 /** A ring geometry that is disposed when it is replaced or unmounted. */
 function useRingGeometry(inner: number, outer: number, segments: number): THREE.RingGeometry {
@@ -106,12 +111,21 @@ function SelectedMarker({
 }) {
   const ringRef = useRef<THREE.Mesh>(null);
   const ringGeo = useRingGeometry(radius * 0.94, radius * 1.06, 72);
-  const reducedMotion = useMediaQuery(REDUCED_MOTION_QUERY);
+  // The marker mounts with its selection: the pulse runs from here.
+  const pulse = useRef({ start: -1, amplitude: 0 });
 
-  useFrame(({ elapsed }) => {
+  useEffect(() => {
+    pulse.current = { start: performance.now(), amplitude: PULSE_AMPLITUDE * displayMotionScale() };
+    if (!(pulse.current.amplitude > 0)) return undefined;
+    return keepLupiAwake('selection-pulse', () => performance.now() - pulse.current.start < PULSE_SECONDS * 1000);
+  }, []);
+
+  useFrame(() => {
     if (!ringRef.current) return;
-    const pulse = reducedMotion ? 1 : 1 + Math.sin(elapsed * 3.6) * 0.035;
-    ringRef.current.scale.setScalar(pulse);
+    const { start, amplitude } = pulse.current;
+    const t = start < 0 ? PULSE_SECONDS : (performance.now() - start) / 1000;
+    const fade = t < PULSE_SECONDS ? (1 - t / PULSE_SECONDS) ** 2 : 0;
+    ringRef.current.scale.setScalar(1 + Math.sin(t * PULSE_OMEGA) * amplitude * fade);
   });
 
   return (
