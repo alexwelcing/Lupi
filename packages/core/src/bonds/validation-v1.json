@@ -1,0 +1,1281 @@
+{
+  "schema": "lupi.bonds-validation.v1",
+  "recipe": "lupi-bonds.molecular.v1",
+  "dataset": "colabfit/OMol25_neutral_validation",
+  "rows": 27697,
+  "generatedAt": "2026-10-03T17:38:06.337Z",
+  "tolerance": 0.45,
+  "pass": true,
+  "targets": {
+    "multiBondH": 0,
+    "overValent": 0,
+    "covalentIonSticks": 0,
+    "deterministic": true,
+    "p99Ms": 5
+  },
+  "hard": {
+    "multiBondH": 0,
+    "overValent": 0,
+    "covalentIonSticks": 0,
+    "deterministic": true,
+    "p99Ms": 2.037
+  },
+  "definitions": {
+    "multiBondH": "rows with an H bonded (covalent or coordination) to more than one partner, except the strategy's B–H–B bridges, η²-H₂ hydrogens and hydrides bridging two metals (counted in reported.allowedMultiPartnerH)",
+    "overValent": "rows with an H, C, N, O or halogen over the v1 cap (H 1, with the same allowed exceptions; C 4; N 4; O 3; F 1; Cl/Br/I ≤ 7 and ≤ 1 non-O/F partner)",
+    "covalentIonSticks": "covalent or coordination lines touching Li, Na, K, Rb, Cs, Fr, Mg, Ca, Sr, Ba or Ra",
+    "deterministic": "sha256 over every row output (pairs, kinds, lengths, excess, evidence, counts) equal on a second run and with a shuffled grid insertion order",
+    "p99Ms": "p99 of one perceiveBonds call on 3000 clusters of 350 atoms packed from neutral-validation rows (Node v22.22.2)"
+  },
+  "parameters": {
+    "contactMargin": 0.35,
+    "hapticRatio": 1.15,
+    "metalMetalSlack": 0.25,
+    "metalHydrideSlack": 0.3,
+    "oxygenCap": 3,
+    "ionCapDelta": 0,
+    "covalentRadii": "Cordero 2008 (Pyykkö fallback), the viewer table",
+    "highSpinRadii": {
+      "Mn": 1.61,
+      "Fe": 1.52,
+      "Co": 1.5
+    },
+    "ionRadii": {
+      "source": "Shannon 1976 effective ionic radii, CN6",
+      "values": {
+        "Li": 0.76,
+        "Na": 1.02,
+        "Mg": 0.72,
+        "K": 1.38,
+        "Ca": 1,
+        "Rb": 1.52,
+        "Sr": 1.18,
+        "Cs": 1.67,
+        "Ba": 1.35,
+        "Fr": 1.8,
+        "Ra": 1.48
+      }
+    },
+    "donorRadii": {
+      "source": "Lupi choice from published anion radii: O, F, Cl, Br, I, S Shannon 1976 CN6; N Shannon CN4; P Pauling",
+      "values": {
+        "N": 1.46,
+        "O": 1.4,
+        "F": 1.33,
+        "P": 2.12,
+        "S": 1.84,
+        "Cl": 1.81,
+        "Br": 1.96,
+        "I": 2.2
+      }
+    },
+    "maxIonContactA": 4.35,
+    "ionCoordinationCaps": {
+      "Li": 6,
+      "Na": 8,
+      "Mg": 6,
+      "K": 10,
+      "Ca": 8,
+      "Rb": 12,
+      "Sr": 10,
+      "Cs": 12,
+      "Ba": 12,
+      "Fr": 12,
+      "Ra": 12
+    }
+  },
+  "reported": {
+    "ionContactHistogram": {
+      "K": {
+        "0": 81,
+        "1": 110,
+        "2": 213,
+        "3": 165,
+        "4": 62,
+        "5": 13,
+        "6": 1,
+        "7": 1,
+        "8": 1
+      },
+      "Mg": {
+        "0": 14,
+        "1": 37,
+        "2": 89,
+        "3": 81,
+        "4": 25
+      },
+      "Na": {
+        "0": 61,
+        "1": 102,
+        "2": 142,
+        "3": 75,
+        "4": 15,
+        "5": 3
+      },
+      "Li": {
+        "0": 83,
+        "1": 123,
+        "2": 209,
+        "3": 86,
+        "4": 8,
+        "5": 5
+      },
+      "Ca": {
+        "0": 124,
+        "1": 85,
+        "2": 26,
+        "3": 12
+      }
+    },
+    "ions": 2052,
+    "isolatedIons": 363,
+    "ionsWithContactPct": 82.31,
+    "contactPartners": {
+      "O": 2826,
+      "N": 479,
+      "Cl": 59,
+      "S": 131,
+      "F": 116,
+      "P": 20,
+      "I": 6,
+      "Br": 1
+    },
+    "saltRows": 1684,
+    "mullikenIntegralityFailPct": 3.7,
+    "mullikenFragments": 56197,
+    "mullikenIntegralityFailPctDistanceRecipe": 2.63,
+    "mullikenIntegralityFailPctRowsWithoutIons": 3.15,
+    "mullikenIntegralityFailPctRowsWithoutIonsDistanceRecipe": 2.54,
+    "mullikenSplitRowsWithoutIons": {
+      "rowsWorse": 215,
+      "rowsBetter": 2,
+      "reasonsInWorseRows": {
+        "hydrogenSinglePartner": 143,
+        "valenceCap": 111,
+        "acuteAngle": 33,
+        "hydrogenPair": 1
+      }
+    },
+    "mullikenNote": "Share of covalent fragments (≥ 2 atoms, joined by covalent or coordination lines) whose Mulliken sum is more than 0.25 from an integer. Mulliken under-reports s-block charges (Ca often +1.2–1.5), so a correctly separated salt counter-ion leaves a non-integral anion; rows without ions isolate the split itself.",
+    "rowsChangedPct": 11.46,
+    "rowsChanged": 3173,
+    "rowsWithDifferentPairsPct": 11.17,
+    "p50Ms": 0.736,
+    "p95Ms": 1.222,
+    "timing350Atoms": {
+      "samples": 3000,
+      "p50": 0.736,
+      "p95": 1.222,
+      "p99": 2.037,
+      "max": 5.849
+    },
+    "timingRows": {
+      "samples": 27697,
+      "p50": 0.122,
+      "p95": 0.3,
+      "p99": 0.467,
+      "max": 3.271
+    },
+    "kinds": {
+      "covalent": 1246960,
+      "coordination": 0,
+      "ionicContact": 3638
+    },
+    "removedByReason": {
+      "hydrogenSinglePartner": 955,
+      "ionDonorPrecedence": 679,
+      "valenceCap": 746,
+      "acuteAngle": 637,
+      "hydrogenPair": 14
+    },
+    "bridgedBoraneRows": 0,
+    "allowedMultiPartnerH": {},
+    "bridgingH": 0,
+    "longBondRows": 3559,
+    "longBonds": 7150,
+    "nearMissPairs": 14612,
+    "clashRows": 0,
+    "ionCarbonCloseRows": 1364,
+    "multiFragmentRows": 12582,
+    "truncatedRows": 0,
+    "baselineDistanceRecipe": {
+      "multiBondHRowsPct": 6.93,
+      "hydrogenPairRowsPct": 0.06,
+      "overValentRowsPct": 8.84,
+      "overValentRowsClassicCapsPct": 9.76,
+      "saltRowsWithIonSticksPct": 97.68,
+      "covalentIonSticks": 10313,
+      "covalent": 1259536
+    }
+  },
+  "handCheck": {
+    "0": {
+      "formula": "C26H31N3O5S3",
+      "atoms": 68,
+      "dataId": "orbnet_denali",
+      "counts": {
+        "covalent": 72,
+        "coordination": 0,
+        "ionicContact": 0,
+        "long": 0,
+        "removed": 0,
+        "nearMiss": 2,
+        "clashes": 0,
+        "fragments": 2,
+        "bridgingH": 0,
+        "ionCarbonClose": 0
+      },
+      "ionContacts": {},
+      "removed": {}
+    },
+    "196": {
+      "formula": "C15H19LiN2O7S3",
+      "atoms": 47,
+      "dataId": "orbnet_denali",
+      "counts": {
+        "covalent": 47,
+        "coordination": 0,
+        "ionicContact": 1,
+        "long": 0,
+        "removed": 1,
+        "nearMiss": 3,
+        "clashes": 0,
+        "fragments": 2,
+        "bridgingH": 0,
+        "ionCarbonClose": 1
+      },
+      "ionContacts": {
+        "Li27": [
+          "N24 1.76 Å"
+        ]
+      },
+      "removed": {
+        "ionDonorPrecedence": [
+          "S23–Li27 2.76 Å"
+        ]
+      }
+    },
+    "245": {
+      "formula": "C2H4FN3OS",
+      "atoms": 12,
+      "dataId": "ani2x",
+      "counts": {
+        "covalent": 10,
+        "coordination": 0,
+        "ionicContact": 0,
+        "long": 0,
+        "removed": 0,
+        "nearMiss": 0,
+        "clashes": 0,
+        "fragments": 2,
+        "bridgingH": 0,
+        "ionCarbonClose": 0
+      },
+      "ionContacts": {},
+      "removed": {}
+    },
+    "273": {
+      "formula": "C21H15KN4O4S",
+      "atoms": 46,
+      "dataId": "orbnet_denali",
+      "counts": {
+        "covalent": 48,
+        "coordination": 0,
+        "ionicContact": 1,
+        "long": 0,
+        "removed": 1,
+        "nearMiss": 0,
+        "clashes": 0,
+        "fragments": 2,
+        "bridgingH": 0,
+        "ionCarbonClose": 0
+      },
+      "ionContacts": {
+        "K30": [
+          "O21 2.13 Å"
+        ]
+      },
+      "removed": {
+        "ionDonorPrecedence": [
+          "S20–K30 3.33 Å"
+        ]
+      }
+    },
+    "357": {
+      "formula": "C13H14MgN2O9S2",
+      "atoms": 41,
+      "dataId": "orbnet_denali",
+      "counts": {
+        "covalent": 41,
+        "coordination": 0,
+        "ionicContact": 2,
+        "long": 0,
+        "removed": 0,
+        "nearMiss": 2,
+        "clashes": 0,
+        "fragments": 2,
+        "bridgingH": 0,
+        "ionCarbonClose": 0
+      },
+      "ionContacts": {
+        "Mg26": [
+          "O2 1.70 Å",
+          "S6 2.43 Å"
+        ]
+      },
+      "removed": {}
+    },
+    "1008": {
+      "formula": "C4H14N4OS3",
+      "atoms": 26,
+      "dataId": "ani2x",
+      "counts": {
+        "covalent": 26,
+        "coordination": 0,
+        "ionicContact": 0,
+        "long": 1,
+        "removed": 0,
+        "nearMiss": 1,
+        "clashes": 0,
+        "fragments": 1,
+        "bridgingH": 0,
+        "ionCarbonClose": 0
+      },
+      "ionContacts": {},
+      "removed": {}
+    },
+    "1239": {
+      "formula": "C23H35CaNO4",
+      "atoms": 64,
+      "dataId": "orbnet_denali",
+      "counts": {
+        "covalent": 63,
+        "coordination": 0,
+        "ionicContact": 0,
+        "long": 0,
+        "removed": 0,
+        "nearMiss": 0,
+        "clashes": 0,
+        "fragments": 2,
+        "bridgingH": 0,
+        "ionCarbonClose": 1
+      },
+      "ionContacts": {},
+      "removed": {}
+    }
+  },
+  "sensitivity": {
+    "contactMargin": [
+      {
+        "value": 0.25,
+        "v1": false,
+        "rowsChangedVsV1": 102,
+        "rowsChangedVsV1Pct": 0.37,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3528,
+        "ionsWithContactPct": 81.14,
+        "isolatedIons": 387,
+        "meanContactsPerIon": 1.719,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 636,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 0.35,
+        "v1": true,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 0.45,
+        "v1": false,
+        "rowsChangedVsV1": 120,
+        "rowsChangedVsV1Pct": 0.43,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3765,
+        "ionsWithContactPct": 83.72,
+        "isolatedIons": 334,
+        "meanContactsPerIon": 1.835,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 705,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      }
+    ],
+    "hapticRatio": [
+      {
+        "value": 1.1,
+        "v1": false,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 1.15,
+        "v1": true,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 1.2,
+        "v1": false,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      }
+    ],
+    "oxygenCap": [
+      {
+        "value": 2,
+        "v1": false,
+        "rowsChangedVsV1": 187,
+        "rowsChangedVsV1Pct": 0.68,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246771,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 935,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.75
+      },
+      {
+        "value": 3,
+        "v1": true,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      }
+    ],
+    "ionCapDelta": [
+      {
+        "value": -2,
+        "v1": false,
+        "rowsChangedVsV1": 5,
+        "rowsChangedVsV1Pct": 0.02,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3633,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.77,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14,
+          "ionCoordinationCap": 5
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 0,
+        "v1": true,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 2,
+        "v1": false,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      }
+    ],
+    "metalMetalSlack": [
+      {
+        "value": 0.15,
+        "v1": false,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 0.25,
+        "v1": true,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 0.35,
+        "v1": false,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      }
+    ],
+    "metalHydrideSlack": [
+      {
+        "value": 0.2,
+        "v1": false,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 0.3,
+        "v1": true,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      },
+      {
+        "value": 0.4,
+        "v1": false,
+        "rowsChangedVsV1": 0,
+        "rowsChangedVsV1Pct": 0,
+        "multiBondHRows": 0,
+        "overValentRows": 0,
+        "covalentIonSticks": 0,
+        "ionicContacts": 3638,
+        "ionsWithContactPct": 82.31,
+        "isolatedIons": 363,
+        "meanContactsPerIon": 1.773,
+        "covalent": 1246960,
+        "coordination": 0,
+        "removedByReason": {
+          "hydrogenSinglePartner": 955,
+          "ionDonorPrecedence": 679,
+          "valenceCap": 746,
+          "acuteAngle": 637,
+          "hydrogenPair": 14
+        },
+        "mullikenIntegralityFailPct": 3.7
+      }
+    ]
+  },
+  "supplementary": {
+    "dataset": "colabfit/OMol25_validation",
+    "rows": 3000,
+    "note": "Charged, open-shell and transition-metal rows the neutral split lacks; reported only, not a release target.",
+    "chargedRows": 1757,
+    "openShellRows": 271,
+    "metalRows": 341,
+    "saltRows": 172,
+    "molecular": {
+      "multiBondHRows": 0,
+      "allowedMultiPartnerH": {
+        "eta2H2": 7
+      },
+      "bridgedBoraneRows": 0,
+      "overValentRows": 0,
+      "overValentByElement": {},
+      "covalentIonSticks": 0,
+      "kinds": {
+        "covalent": 292159,
+        "coordination": 1715,
+        "ionicContact": 546
+      },
+      "ionsWithContactPct": 68.06,
+      "isolatedIons": 84,
+      "removedByReason": {
+        "hydrogenMetalContact": 47,
+        "acuteAngle": 107,
+        "hapticTrim": 129,
+        "hydrogenSinglePartner": 222,
+        "valenceCap": 56,
+        "ionDonorPrecedence": 54,
+        "hydrogenPair": 38
+      },
+      "clashRows": 0,
+      "mullikenIntegralityFailPct": 11.25
+    },
+    "distance": {
+      "multiBondHRowsPct": 6.13,
+      "overValentRowsPct": 8.3,
+      "saltRowsWithIonSticksPct": 94.19,
+      "mullikenIntegralityFailPct": 10.45
+    },
+    "rowsChangedPct": 19.8,
+    "timingRowsOf300PlusAtoms": {
+      "samples": 28,
+      "p50": 0.619,
+      "p95": 1.063,
+      "p99": 2.595,
+      "max": 2.595
+    },
+    "sensitivity": {
+      "contactMargin": [
+        {
+          "value": 0.25,
+          "v1": false,
+          "rowsChangedVsV1": 25,
+          "rowsChangedVsV1Pct": 0.83,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 514,
+          "ionsWithContactPct": 65.78,
+          "isolatedIons": 90,
+          "meanContactsPerIon": 1.954,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 42,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 0.35,
+          "v1": true,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 0.45,
+          "v1": false,
+          "rowsChangedVsV1": 23,
+          "rowsChangedVsV1Pct": 0.77,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 572,
+          "ionsWithContactPct": 69.58,
+          "isolatedIons": 80,
+          "meanContactsPerIon": 2.175,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 61,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        }
+      ],
+      "hapticRatio": [
+        {
+          "value": 1.1,
+          "v1": false,
+          "rowsChangedVsV1": 22,
+          "rowsChangedVsV1Pct": 0.73,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1685,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 159,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 1.15,
+          "v1": true,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 1.2,
+          "v1": false,
+          "rowsChangedVsV1": 22,
+          "rowsChangedVsV1Pct": 0.73,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1740,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 104,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        }
+      ],
+      "oxygenCap": [
+        {
+          "value": 2,
+          "v1": false,
+          "rowsChangedVsV1": 28,
+          "rowsChangedVsV1Pct": 0.93,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292124,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 91,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.34
+        },
+        {
+          "value": 3,
+          "v1": true,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        }
+      ],
+      "ionCapDelta": [
+        {
+          "value": -2,
+          "v1": false,
+          "rowsChangedVsV1": 21,
+          "rowsChangedVsV1Pct": 0.7,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 519,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 1.973,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "ionCoordinationCap": 27,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 0,
+          "v1": true,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 2,
+          "v1": false,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        }
+      ],
+      "metalMetalSlack": [
+        {
+          "value": 0.15,
+          "v1": false,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 0.25,
+          "v1": true,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 0.35,
+          "v1": false,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        }
+      ],
+      "metalHydrideSlack": [
+        {
+          "value": 0.2,
+          "v1": false,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 40,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 0.3,
+          "v1": true,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 47,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        },
+        {
+          "value": 0.4,
+          "v1": false,
+          "rowsChangedVsV1": 0,
+          "rowsChangedVsV1Pct": 0,
+          "multiBondHRows": 0,
+          "overValentRows": 0,
+          "covalentIonSticks": 0,
+          "ionicContacts": 546,
+          "ionsWithContactPct": 68.06,
+          "isolatedIons": 84,
+          "meanContactsPerIon": 2.076,
+          "covalent": 292159,
+          "coordination": 1715,
+          "removedByReason": {
+            "hydrogenMetalContact": 57,
+            "acuteAngle": 107,
+            "hapticTrim": 129,
+            "hydrogenSinglePartner": 222,
+            "valenceCap": 56,
+            "ionDonorPrecedence": 54,
+            "hydrogenPair": 38
+          },
+          "mullikenIntegralityFailPct": 11.25
+        }
+      ]
+    }
+  },
+  "gallery": {
+    "files": 73,
+    "identicalPairs": true,
+    "definition": "gallery-data.json .xyz entries of ≤ 2,000 atoms: lupi-bonds.distance.v1 gives the same pairs as the viewer's CPU rule on every frame (up to 50 per file)",
+    "autoRecipe": {
+      "lupi-bonds.distance.v1": 73
+    },
+    "molecularIdenticalFiles": 73,
+    "molecularChangedFiles": [],
+    "otherXyzContent": {
+      "files": 5,
+      "identicalPairs": true,
+      "molecularChangedFiles": 3
+    }
+  },
+  "changes": [],
+  "runSeconds": 106
+}

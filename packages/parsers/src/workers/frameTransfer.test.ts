@@ -4,9 +4,12 @@ import {
   extractFrameIdentity,
   extractFrameProperties,
   extractFrameTypeSemantics,
+  frameProvenanceFields,
   lammpsDataSemantics,
   xyzFrameMetadata,
 } from './frameTransfer';
+import { hydrateWorkerFrame } from '../index';
+import { parseXyzText } from '../xyzParser';
 
 describe('parser worker frame transfer', () => {
   it('serializes canonical Map properties and transfers their backing buffers', () => {
@@ -63,6 +66,35 @@ describe('parser worker frame transfer', () => {
       typeSemantics: { kind: 'atomic-number', provenance: 'xyz-element-token' },
       distanceSemantics: { kind: 'angstrom', provenance: 'format-convention' },
     });
+  });
+
+  it('round-trips chemistry, sourceRecord and periodic through a structured clone and hydration', () => {
+    const text = '1\nOMol25 validation-preview row=2 | collection=validation-preview | method=ωB97M-V | charge=1 | '
+      + 'multiplicity=3 | charge_source=record | data_id=metal_complexes | max_force_eV_per_A=0.41 | license=CC-BY-4.0\nPr 0 0 0\n';
+    const parsed = parseXyzText(text).frames[0];
+    const message = structuredClone({
+      ...parsed,
+      properties: extractFrameProperties(parsed, []),
+      ...frameProvenanceFields(parsed),
+    });
+    const hydrated = hydrateWorkerFrame(message);
+    expect(hydrated.chemistry).toEqual({ totalCharge: 1, spinMultiplicity: 3, source: 'record', domain: 'metal_complexes' });
+    expect(hydrated.sourceRecord).toEqual(parsed.sourceRecord);
+    expect(hydrated.sourceRecord?.maxForceEvPerA).toBe(0.41);
+    expect(hydrated.periodic).toBe(false);
+  });
+
+  it('drops malformed provenance and leaves frames from other parsers without the fields', () => {
+    expect(frameProvenanceFields({})).toEqual({});
+    expect(frameProvenanceFields({
+      chemistry: { totalCharge: 0, spinMultiplicity: 1, source: 'guessed', domain: null },
+      sourceRecord: { dataset: 'qm9' },
+      periodic: 'no',
+    })).toEqual({});
+    expect(frameProvenanceFields({ periodic: true })).toEqual({ periodic: true });
+    expect(frameProvenanceFields({
+      chemistry: { totalCharge: 1.5, spinMultiplicity: '2', source: 'file-declared', domain: 7 },
+    })).toEqual({ chemistry: { totalCharge: null, spinMultiplicity: null, source: 'file-declared', domain: null } });
   });
 
   it('keeps LAMMPS data distances unknown and distinguishes complete Masses inference', () => {

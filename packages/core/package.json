@@ -15,7 +15,9 @@
     "./gist": "./src/gist/index.ts",
     "./motion": "./src/motion/index.ts",
     "./motion/stepResponse": "./src/motion/stepResponse.ts",
-    "./objectFacts": "./src/objectFacts/index.ts"
+    "./objectFacts": "./src/objectFacts/index.ts",
+    "./bonds": "./src/bonds/index.ts",
+    "./omol25": "./src/omol25/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

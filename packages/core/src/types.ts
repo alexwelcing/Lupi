@@ -85,6 +85,36 @@ export type DistanceSemantics =
       provenance: 'lammps-dump' | 'lammps-data' | 'legacy-unknown';
     };
 
+/**
+ * Where a frame's total charge and spin multiplicity came from: the source
+ * record itself, the definition of the split it belongs to (OMol25's neutral
+ * training set has no metadata column), a file that declared `charge=`, or
+ * nowhere (the record's metadata was missing or truncated).
+ */
+export type ChemistrySource = 'record' | 'split-definition' | 'file-declared' | 'unavailable';
+
+/** Molecular charge and spin a file declares. Spin is 2S+1, never S or 2S. */
+export interface FrameChemistry {
+  totalCharge: number | null;
+  spinMultiplicity: number | null;
+  source: ChemistrySource;
+  /** OMol25 `data_id` (subset label such as `spice`), when the file names one. */
+  domain: string | null;
+}
+
+/** The OMol25 record an XYZ frame was cut from, read from its comment line. */
+export interface FrameSourceRecord {
+  dataset: 'omol25';
+  collection: string | null;
+  row: number | null;
+  method: string | null;
+  energyEv: number | null;
+  maxForceEvPerA: number | null;
+  homoLumoGapEv: number | null;
+  license: string | null;
+  source: string | null;
+}
+
 export interface Frame {
   timestep: number;
   natoms: number;
@@ -98,8 +128,16 @@ export interface Frame {
   typeSemantics?: AtomTypeSemantics;
   distanceSemantics?: DistanceSemantics;
   positions: Float32Array;  // Flat: [x0,y0,z0, x1,y1,z1, ...]
-  bonds: Int32Array;        // Flat: [a1,b1, a2,b2, ...]
+  bonds: Int32Array;        // Flat: [a1,b1, a2,b2, ...] — source bonds only; inferred bonds never land here
   properties: Map<string, Float32Array>;
+  // The three fields below are provenance, not content: none of them enters
+  // the decoded-frame digest.
+  /** Declared charge/spin; present only when the file declares chemistry. */
+  chemistry?: FrameChemistry;
+  /** Present when the XYZ comment names an OMol25 record. */
+  sourceRecord?: FrameSourceRecord;
+  /** XYZ parser only: true iff the comment has `Lattice=`. Undefined elsewhere. */
+  periodic?: boolean;
 }
 
 /** A loaded trajectory (multiple frames) */

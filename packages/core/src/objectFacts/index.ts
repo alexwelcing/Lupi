@@ -1,4 +1,4 @@
-import { computeBonds, type BondGraph } from './bonds';
+import { bondGraphFromPairs, computeBonds, type BondGraph } from './bonds';
 import { buildDetents, captureRadiusFor, coveringRadiusDeg } from './detents';
 import { computeInertia, computePlanarity } from './inertia';
 import { findRingFaces, type RingFace } from './rings';
@@ -35,9 +35,11 @@ export function computeObjectFacts(input: ObjectFactsInput, options?: ObjectFact
   let rings: RingFace[] = [];
   let bonds: BondGraph = { pairs: [], adjacency: [] };
   if (natoms <= OBJECT_FACTS_RING_LIMIT) {
-    bonds = computeBonds(atomicNumbers, rel, natoms);
+    bonds = options?.bondPairs
+      ? bondGraphFromPairs(options.bondPairs, natoms)
+      : computeBonds(atomicNumbers, rel, natoms);
     rings = findRingFaces(rel, bonds, { planeNormal: planarity.planeNormal, fallbackNormal: axes[2] });
-    methods.push('ring faces (shortest cycles per bond)');
+    methods.push(options?.bondPairs ? 'ring faces (shortest cycles per supplied bond)' : 'ring faces (shortest cycles per bond)');
   }
 
   let symmetryAxes: SymmetryAxis[] = [];

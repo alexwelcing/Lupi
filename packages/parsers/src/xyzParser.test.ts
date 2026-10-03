@@ -89,6 +89,60 @@ describe('xyzParser', () => {
     expected.forEach((value, index) => expect(frames[0].positions[index]).toBeCloseTo(value, 6));
   });
 
+  const OMOL_COMMENT = 'OMol25 neutral-validation row=812 | collection=neutral-validation | formula=C2H6O | '
+    + 'configuration_id=CO_1 | property_id=PO_1 | method=ωB97M-V | charge=0 | multiplicity=1 | charge_source=record | '
+    + 'data_id=spice | energy_eV=-4210.5 | max_force_eV_per_A=2.81 | homo_lumo_gap_eV=8.34 | coordinates=source | '
+    + 'bonds=not-provided | license=CC-BY-4.0 | source=colabfit/OMol25_neutral_validation';
+  const ATOMS = 'O 0.0 0.0 0.1173\nH 0.0 0.7572 -0.4692\nH 0.0 -0.7572 -0.4692\n';
+
+  it('reads an OMol25 comment into chemistry, sourceRecord and periodic=false', () => {
+    const frame = parseXyzText(`3\n${OMOL_COMMENT}\n${ATOMS}`).frames[0];
+    expect(frame.chemistry).toEqual({ totalCharge: 0, spinMultiplicity: 1, source: 'record', domain: 'spice' });
+    expect(frame.sourceRecord).toEqual({
+      dataset: 'omol25',
+      collection: 'neutral-validation',
+      row: 812,
+      method: 'ωB97M-V',
+      energyEv: -4210.5,
+      maxForceEvPerA: 2.81,
+      homoLumoGapEv: 8.34,
+      license: 'CC-BY-4.0',
+      source: 'colabfit/OMol25_neutral_validation',
+    });
+    expect(frame.periodic).toBe(false);
+    expect(frame.timestep).toBe(0);
+  });
+
+  it('keeps positions, types and properties identical with and without the new keys', () => {
+    const plain = parseXyzText(`3\nwater\n${ATOMS}`).frames[0];
+    const declared = parseXyzText(`3\n${OMOL_COMMENT}\n${ATOMS}`).frames[0];
+    expect(Array.from(declared.positions)).toEqual(Array.from(plain.positions));
+    expect(Array.from(declared.types)).toEqual(Array.from(plain.types));
+    expect(declared.properties).toEqual(plain.properties);
+    expect(declared.properties.size).toBe(0);
+    expect(declared.columns).toEqual(plain.columns);
+    expect(plain.chemistry).toBeUndefined();
+    expect(plain.sourceRecord).toBeUndefined();
+    expect(plain.periodic).toBe(false);
+  });
+
+  it('never reads a bare spin=, marks charge= alone as file-declared, and Lattice= as periodic', () => {
+    expect(parseXyzText(`3\nspin=2 note\n${ATOMS}`).frames[0].chemistry).toBeUndefined();
+    expect(parseXyzText(`3\ncharge=-1 spin=2\n${ATOMS}`).frames[0].chemistry)
+      .toEqual({ totalCharge: -1, spinMultiplicity: null, source: 'file-declared', domain: null });
+    expect(parseXyzText(`3\nspin_multiplicity=3\n${ATOMS}`).frames[0].chemistry)
+      .toEqual({ totalCharge: null, spinMultiplicity: 3, source: 'file-declared', domain: null });
+    expect(parseXyzText(`3\ncharge_source=unavailable data_id=elytes\n${ATOMS}`).frames[0].chemistry)
+      .toEqual({ totalCharge: null, spinMultiplicity: null, source: 'unavailable', domain: 'elytes' });
+    // Out-of-range or non-integer values are not chemistry.
+    expect(parseXyzText(`3\ncharge=0.5 multiplicity=0\n${ATOMS}`).frames[0].chemistry).toBeUndefined();
+    expect(parseXyzText(`3\ncharge=21\n${ATOMS}`).frames[0].chemistry).toBeUndefined();
+    const periodic = parseXyzText(`3\nLattice="10 0 0 0 10 0 0 0 10" charge=0\n${ATOMS}`).frames[0];
+    expect(periodic.periodic).toBe(true);
+    expect(periodic.sourceRecord).toBeUndefined();
+    expect(parseXyzText(`3\n12\n${ATOMS}`).frames[0].periodic).toBe(false);
+  });
+
   it('reports progress per frame and honors maxFrames', () => {
     const seen: number[] = [];
     const { frames } = parseXyzText('1\na\nC 0 0 0\n1\nb\nC 1 0 0\n1\nc\nC 2 0 0\n', {
