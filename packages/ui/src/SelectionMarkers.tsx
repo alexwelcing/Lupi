@@ -43,6 +43,8 @@ interface SelectionMarkersProps {
   highlightedNeighbors?: Set<number>;
   /** Whether to dim non-neighbor atoms when a node is selected/hovered. */
   dimNonNeighbors?: boolean;
+  /** Draw the hover ring (off where the impostor's own glow marks the hovered atom). */
+  showHoverRing?: boolean;
 }
 
 export function SelectionMarkers({
@@ -52,6 +54,7 @@ export function SelectionMarkers({
   typeRadii,
   highlightedNeighbors = new Set(),
   dimNonNeighbors = false,
+  showHoverRing = true,
 }: SelectionMarkersProps) {
   const radiusFor = (atomIndex: number): number => {
     if (atomIndex < 0 || atomIndex >= frame.natoms) return 0.5;
@@ -94,7 +97,7 @@ export function SelectionMarkers({
           />
         );
       })}
-      {hoveredAtom != null && !selectedAtoms.includes(hoveredAtom) && (() => {
+      {showHoverRing && hoveredAtom != null && !selectedAtoms.includes(hoveredAtom) && (() => {
         const pos = positionOf(hoveredAtom);
         if (!pos) return null;
         return <HoverMarker position={pos} radius={radiusFor(hoveredAtom) * 1.20} />;

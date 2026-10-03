@@ -673,9 +673,10 @@ export function ViewerScene({
           <SelectionMarkers
             frame={currentFrame}
             selectedAtoms={visibleSelectedAtoms}
+            hoveredAtom={visibleHoveredAtom}
             // The impostor's own glow marks the hovered atom; the glass
             // renderer has none, so it keeps the hover ring.
-            hoveredAtom={transmissionActive ? visibleHoveredAtom : null}
+            showHoverRing={transmissionActive}
             highlightedNeighbors={visibleHighlightedNeighbors}
             dimNonNeighbors={dimNonNeighbors}
           />
