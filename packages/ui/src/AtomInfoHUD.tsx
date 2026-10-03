@@ -723,12 +723,12 @@ function Stat({
   );
 }
 
-/** "C3": element symbol (or type label) and atom index. */
+/** "C3": element symbol (or type label) and the atom's id, as the card shows it. */
 function atomLabel(frame: Frame, atom: number): string {
   const type = frame.types[atom];
   const z = resolveAtomicNumber(frame, type);
   const symbol = z !== undefined ? ELEMENT_DATA[z]?.symbol : undefined;
-  return `${symbol ?? resolveTypeLabel(frame, type)}${atom}`;
+  return `${symbol ?? resolveTypeLabel(frame, type)}${frame.ids[atom] ?? atom}`;
 }
 
 function KeyValueRow({
