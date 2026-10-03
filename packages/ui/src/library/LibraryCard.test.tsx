@@ -24,7 +24,9 @@ const research: MoleculeHit = {
 
 describe('describeHitTruth', () => {
   it('never claims bonds for OMol25 and distinguishes NIST demos from procedural crystals', () => {
-    expect(describeHitTruth({ id: '1', source: 'omol', title: 'C6H6', load: { kind: 'url', url: '/x.xyz' } })).toMatch(/no bonds/i);
+    expect(describeHitTruth({ id: '1', source: 'omol', title: 'C6H6', load: { kind: 'url', url: '/x.xyz' } })).toBe(
+      'Source DFT coordinates, charge and spin. OMol25 supplies no bonds; Lupi infers them and labels them.',
+    );
     expect(describeHitTruth({ id: '2', source: 'nist', title: 'Cu', load: { kind: 'url', url: '/nist/demo.lammpstrj' } })).toMatch(/demo trajectory/i);
     expect(
       describeHitTruth({ id: '3', source: 'nist', title: 'Cu', load: { kind: 'generate', inputType: 'procedural', input: 'Cu fcc' } }),

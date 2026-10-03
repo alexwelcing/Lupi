@@ -8,7 +8,7 @@ import { applyJudgment, buildJudgePool, judgeSwitch, type SwitchJudgment } from 
 import { FacetBar } from './FacetBar';
 import { EMPTY_CONTROLS, organize, rowBadge, rowReason, type FilterChip, type SearchControls, type SortSpec } from './searchPlan';
 import { recentSwitches, rememberSwitch, subscribeRecent } from './recent';
-import { findSwitchCandidates, galleryCandidates, galleryPool, type SwitchCandidate } from './switchIndex';
+import { findSwitchCandidates, galleryCandidates, galleryPool, omolPickCandidates, type SwitchCandidate } from './switchIndex';
 import { SwitchStage } from './SwitchStage';
 import { preloadInkTiles } from '../landing/inkTiles';
 import './switcher.css';
@@ -62,6 +62,7 @@ export function MoleculeSwitcher() {
 
   const elementsKey = elements.join(',');
   const idle = !query.trim() && elements.length === 0;
+  const omolPicks = useMemo(() => omolPickCandidates(), []);
 
   // Ink rows hand over their drawing's pose; the poses arrive at idle.
   useEffect(() => preloadInkTiles(), []);
@@ -319,6 +320,33 @@ export function MoleculeSwitcher() {
             );
           })}
         </ul>
+      )}
+      {idle && !organized && omolPicks.length > 0 && (
+        <>
+          <p className="switcher-status" id={`${listId}-omol`}>
+            From OMol25 · today’s featured DFT structures
+          </p>
+          <ul className="switcher-results" aria-labelledby={`${listId}-omol`}>
+            {omolPicks.map((candidate) => (
+              <li key={candidate.key}>
+                <button
+                  type="button"
+                  onClick={() => void open(candidate)}
+                  disabled={opening !== null}
+                  aria-busy={opening === candidate.key}
+                  aria-label={`Switch to ${candidate.title}`}
+                >
+                  <img src={candidate.image} alt="" width="40" height="40" loading="lazy" decoding="async" />
+                  <span className="switcher-text">
+                    <strong>{candidate.title}</strong>
+                    <small>{candidate.detail}</small>
+                  </span>
+                  <span className="switcher-badge">OMol25</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );

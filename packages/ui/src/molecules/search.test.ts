@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { rankHits, scoreHit, searchMolecules, textScore } from './search';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PROVIDER_TIMEOUT_MS, rankHits, scoreHit, searchMolecules, textScore } from './search';
 import type { MoleculeHit, MoleculeProvider } from './types';
 
 function hit(over: Partial<MoleculeHit> & { id: string; title: string }): MoleculeHit {
@@ -93,5 +93,39 @@ describe('searchMolecules', () => {
     const many = Array.from({ length: 50 }, (_, i) => hit({ id: `g${i}`, title: `g${i}`, source: 'gallery' }));
     const res = await searchMolecules({ text: '', limit: 5 }, [provider('gallery', many)]);
     expect(res).toHaveLength(5);
+  });
+
+  describe('a provider that never answers', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('is left out after 6,000 ms instead of blocking the others', async () => {
+      vi.useFakeTimers();
+      const hanging: MoleculeProvider = { id: 'omol', label: 'omol', isAvailable: () => true, search: () => new Promise(() => undefined) };
+      let settled: MoleculeHit[] | null = null;
+      void searchMolecules({ text: 'water' }, [provider('gallery', [hit({ id: 'g1', title: 'Water' })]), hanging]).then((res) => {
+        settled = res;
+      });
+      expect(PROVIDER_TIMEOUT_MS).toBe(6_000);
+      await vi.advanceTimersByTimeAsync(5_999);
+      expect(settled).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled!.map((h) => h.id)).toEqual(['g1']);
+    });
+  });
+});
+
+describe('source tie-break', () => {
+  it('puts OMol25 ahead of NIST, saved views and PubChem at equal relevance', () => {
+    const ranked = rankHits(
+      [
+        hit({ id: 'p', title: 'Same', source: 'pubchem' }),
+        hit({ id: 'n', title: 'Same', source: 'nist' }),
+        hit({ id: 's', title: 'Same', source: 'saved' }),
+        hit({ id: 'o', title: 'Same', source: 'omol' }),
+        hit({ id: 'g', title: 'Same', source: 'gallery' }),
+      ],
+      { text: '' },
+    );
+    expect(ranked.map((h) => h.source)).toEqual(['gallery', 'omol', 'saved', 'nist', 'pubchem']);
   });
 });

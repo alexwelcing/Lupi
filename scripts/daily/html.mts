@@ -60,6 +60,7 @@ function topBar(): string {
   <nav aria-label="Site">
     <a href="${DAILY_HOME_PATH}" aria-current="page">Daily</a>
     <a href="/m/">All molecules</a>
+    <a href="/library/omol25">OMol25</a>
     <a href="/library">Library</a>
   </nav>
 </header>`;

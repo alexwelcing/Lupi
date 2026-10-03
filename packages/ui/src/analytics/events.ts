@@ -19,7 +19,13 @@ export const ANALYTICS_EVENTS = {
   /** Acquisition: app shell mounted for a (possibly cold) visitor. */
   APP_LANDED: 'app_landed',
 
-  /** Activation: a molecule/trajectory finished loading and is viewable. */
+  /**
+   * Activation: a molecule/trajectory finished loading and is viewable.
+   * `source` classifies the URL ('omol25' for OMol25 rows and picks);
+   * `entry` names the surface that opened it, when one marked it
+   * ('home-shelf' | 'home-surprise' | 'finder' | 'library' | 'switcher' |
+   * 'palette', see openEntry.ts).
+   */
   MOLECULE_LOADED: 'molecule_loaded',
 
   /**

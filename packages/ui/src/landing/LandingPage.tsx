@@ -4,15 +4,16 @@ import { GallerySection } from './GallerySection';
 import { LandingFooter } from './LandingFooter';
 import { MoleculeFinder } from './MoleculeFinder';
 import { MoleculeWall } from './MoleculeWall';
+import { OmolShelf } from './OmolShelf';
 import { BuckyHero } from './hero/BuckyHero';
 import { HOME_SEO, useSeo } from '../seo';
 import './student-home.css';
 
 /**
- * Search first, then today's Lupi Daily, a wall of molecules and the guided
- * starter set. The only prose left is what a visitor needs to get into a
- * structure. Beside the heading, a still ink buckyball to spin, and to tap
- * into 3D.
+ * Search first, then today's OMol25 picks, today's Lupi Daily, a wall of
+ * molecules and the guided starter set. The only prose left is what a
+ * visitor needs to get into a structure. Beside the heading, a still ink
+ * buckyball to spin, and to tap into 3D.
  */
 export function LandingPage() {
   useSeo(HOME_SEO);
@@ -33,6 +34,7 @@ export function LandingPage() {
           <span className="student-caption">Eggs, a leather couch, your coffee: see what it&rsquo;s made of.</span>
         </p>
       </section>
+      <OmolShelf />
       <DailyCard />
       <MoleculeWall />
       <GallerySection />

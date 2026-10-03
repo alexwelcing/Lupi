@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import { markOpenEntry } from '../analytics/openEntry';
 import type { MoleculeHit } from '../molecules/types';
 
 /**
@@ -57,6 +58,7 @@ export async function openLibraryHit(hit: MoleculeHit, handoff: LibraryHandoff |
     }
     return;
   }
+  if (hit.source === 'omol') markOpenEntry('library');
   // Code-split: the load path pulls in the streaming loader, which the Library
   // chunk must not pay for until a pick happens.
   const { loadMoleculeHit } = await import('../molecules/load');

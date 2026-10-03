@@ -74,7 +74,9 @@ body.mp {
 }
 .mp-top nav {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 18px;
   font-size: 0.875rem;
 }
 .mp-top nav a {

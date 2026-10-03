@@ -40,6 +40,24 @@ describe('MoleculeSwitcher', () => {
     await waitFor(() => expect(openMolecule).toHaveBeenCalledWith({ kind: 'gallery', id: 'benzene', history: 'push' }));
   });
 
+  it('keeps a separate From OMol25 group of today’s picks while idle', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ configured: false }), { headers: { 'content-type': 'application/json' } }));
+    render(<MoleculeSwitcher />);
+    const group = await screen.findByRole('list', { name: /From OMol25/ });
+    const buttons = within(group).getAllByRole('button');
+    expect(buttons).toHaveLength(4);
+    expect(within(screen.getByRole('listbox')).queryAllByRole('option').some((o) => o.textContent?.includes('(OMol25)'))).toBe(false);
+    fireEvent.click(buttons[0]);
+    await waitFor(() => expect(openMolecule).toHaveBeenCalledTimes(1));
+    expect(openMolecule.mock.calls[0][0]).toMatchObject({
+      kind: 'url',
+      url: expect.stringMatching(/^\/datasets\/omol25\/featured\/omol25_nv_\d+\.xyz$/),
+      title: expect.stringMatching(/ \(OMol25\)$/),
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Switch molecule' }), { target: { value: 'benz' } });
+    await waitFor(() => expect(screen.queryByRole('list', { name: /From OMol25/ })).toBeNull());
+  });
+
   it('filters by clicked elements and re-orders when Jev returns a confident best guess', async () => {
     fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body));

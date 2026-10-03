@@ -2,11 +2,25 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from 'playwright/test';
 
 test('student collection is bounded, has real previews, and recovers from no matches', async ({ page }) => {
+  // The OMol25 shelf is bundled: the home page asks neither the dataset edge nor Hugging Face.
+  const datasetRequests: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/v1/datasets/') || url.pathname.startsWith('/datasets/omol25/') || /huggingface\.co$/.test(url.hostname)) {
+      datasetRequests.push(url.href);
+    }
+  });
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Small structures.Big discoveries.');
   const cards = page.locator('.student-card');
   await expect(cards).toHaveCount(12);
   await expect(page.locator('canvas')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'From Open Molecules 2025', exact: true })).toBeVisible();
+  await expect(page.locator('.omol-shelf a.omol-tile')).toHaveCount(6);
+  await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'OMol25' })).toHaveAttribute(
+    'href',
+    '/library/omol25',
+  );
   for (const image of await cards.locator('img').all()) {
     await image.scrollIntoViewIfNeeded();
     await expect
@@ -20,6 +34,7 @@ test('student collection is bounded, has real previews, and recovers from no mat
   await page.getByRole('button', { name: 'Clear filters' }).click();
   await expect(cards).toHaveCount(12);
   await expect(page.getByRole('navigation', { name: 'Primary' })).not.toContainText(/research|MLIP/i);
+  expect(datasetRequests).toEqual([]);
 });
 
 test('homepage and learning guide reflow at 320px with increased text spacing', async ({ page }) => {
@@ -57,6 +72,10 @@ test('retired research entry points explain the boundary without mounting a rend
     await expect(page.getByRole('link', { name: 'Explore the learning collection' })).toHaveAttribute(
       'href',
       '/',
+    );
+    await expect(page.getByRole('link', { name: 'Browse OMol25 in the Library' })).toHaveAttribute(
+      'href',
+      '/library/omol25',
     );
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,follow');
     await expect(page.locator('canvas')).toHaveCount(0);
