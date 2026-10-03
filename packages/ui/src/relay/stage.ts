@@ -9,6 +9,12 @@
  *   baton, so the 3D cage takes over at the pose the visitor left and keeps a
  *   live spin going (FirstFrameSignal).
  * - Tiles and finder rows grow their flat preview into the same sage stage.
+ *   An ink tile grows its own ink drawing instead, to the size the viewer
+ *   will draw the molecule at, from the pose the viewer opens on. Once its
+ *   model is in (fetched as the finger reached the tile), the drawing turns
+ *   like the hero's while the viewer loads, and every turn goes into the
+ *   baton. The 3D view then opens in ink at that pose and the light comes on
+ *   (ink/InkLookDriver.tsx).
  * - At 1.2 s a hairline lime ring traces the stage; at 10 s the stage says it
  *   is still loading and offers Retry (a plain deep link).
  * - end(): pointer-events off at once, a 120 ms fade, then the layer is gone.
@@ -23,12 +29,15 @@ import { ELEMENT_DATA } from '@atlas/core';
 import { MOTION, stepResponse } from '@atlas/core/motion';
 import { DEFAULT_CAMERA_FIT_PADDING } from '../cameraFit';
 import { useStore } from '../store';
-import { glidesAnimate } from '../motion/comfort';
+import { getComfort, glidesAnimate } from '../motion/comfort';
 import { buckyStageSizeFor, createBuckyStage, type BuckyStage } from '../landing/hero/buckyStage';
 import { C60_HERO } from '../landing/hero/c60Hero.data';
 import { registerRelayImpl, setBaton, type RelayBaton } from './baton';
 import { FIRST_FRAME_EVENT } from './firstFrame';
 import { previewUrl } from './preview';
+import { inkModelFor, inkTileFor, inkTileFromModel, inkTileSrc, loadInkModel, type InkTile } from '../landing/inkTiles';
+import { createInkStage, type InkStage } from '../moleculePage/inkStage';
+import type { InkModel } from '../moleculePage/ink';
 import './relay.css';
 
 const HERO_ID = 'c60_buckyball';
@@ -49,6 +58,11 @@ const PREVIEW_ROOM_PX = 150;
 const HERO_RING = 0.94;
 const PLATE_RING_PX = 22;
 const FALLBACK_SELECTOR = '[data-testid="renderer-fallback"]';
+
+/** The ink drawings' viewBox share the molecule's widest turn fills (moleculePage/ink.ts INK_VIEW, FILL). */
+const INK_DRAWING_FILL = 0.88;
+/** The ink drawing never grows past this share of the window's short side. */
+const INK_MAX_SHARE = 0.96;
 
 /** C60's bounds half-diagonal (Å): the viewer's fit sphere before the atom radius and padding. */
 const C60_HALF_DIAGONAL = (() => {
@@ -72,13 +86,18 @@ const C60_HALF_DIAGONAL = (() => {
  * perspective from it, so it hands over at the cage's size and shape.
  */
 function c60ViewerFit(width: number, height: number): { distance: number; pxPerAngstrom: number } {
+  return viewerFitFor(width, height, C60_HALF_DIAGONAL + (ELEMENT_DATA[6]?.displayRadius ?? 0.38));
+}
+
+/** The same fit for any molecule, from its content radius before padding (Å). */
+function viewerFitFor(width: number, height: number, contentRadius: number): { distance: number; pxPerAngstrom: number } {
   const fov = useStore.getState().cameraFov;
   const vertical = ((Number.isFinite(fov) && fov > 0 ? fov : 50) * Math.PI) / 360;
   const horizontal = Math.atan(Math.tan(vertical) * (width / height));
   const limiting = Math.min(vertical, horizontal);
   const limitingPx = (horizontal < vertical ? width : height) / 2;
-  const contentRadius = (C60_HALF_DIAGONAL + (ELEMENT_DATA[6]?.displayRadius ?? 0.38)) * DEFAULT_CAMERA_FIT_PADDING;
-  const distance = contentRadius / Math.sin(limiting);
+  const padded = Math.max(1e-3, contentRadius) * DEFAULT_CAMERA_FIT_PADDING;
+  const distance = padded / Math.sin(limiting);
   return { distance, pxPerAngstrom: limitingPx / (distance * Math.tan(limiting)) };
 }
 
@@ -104,6 +123,11 @@ const GLIDE_EASING = (() => {
 interface Relay {
   baton: RelayBaton;
   hero: boolean;
+  /** An ink tile's drawing and hand-off data (null for a flat preview). */
+  inkSrc: string | null;
+  inkTile: InkTile | null;
+  /** The ink tile's spinnable drawing, once its model is in. */
+  inkStage: InkStage | null;
   layer: HTMLDivElement;
   backdrop: HTMLDivElement;
   stageEl: HTMLDivElement;
@@ -189,6 +213,19 @@ function layout(relay: Relay): void {
     // One CSS pixel in the ring's 100-unit viewBox.
     relay.ring.style.setProperty('--lupi-relay-hairline', (100 / Math.max(1, ring)).toFixed(4));
     below = cy + ring / 2;
+  } else if (relay.inkSrc) {
+    // The drawing at the size the viewer will fit the molecule (its widest
+    // turn fills 88 % of the square), or a plate-sized square before the
+    // manifest has said.
+    const short = Math.min(width, height);
+    const tile = relay.inkTile;
+    const size = tile
+      ? Math.min(short * INK_MAX_SHARE, (viewerFitFor(width, height, tile.fit).pxPerAngstrom * tile.inkRadius) / INK_DRAWING_FILL * 2)
+      : Math.min(short * 0.8, PREVIEW_MAX_PX);
+    place(relay.stageEl, cx - size / 2, cy - size / 2, size, size);
+    const foot = Math.min(cy + (size * INK_DRAWING_FILL) / 2 + 14, height - PLATE_RING_PX - 40);
+    place(relay.ring, cx - PLATE_RING_PX / 2, foot, PLATE_RING_PX, PLATE_RING_PX);
+    below = foot + PLATE_RING_PX;
   } else {
     const w = Math.max(0, Math.min(width * PREVIEW_VW, PREVIEW_MAX_PX, (height - PREVIEW_ROOM_PX) / PREVIEW_ASPECT));
     const h = w * PREVIEW_ASPECT;
@@ -316,7 +353,87 @@ function easeIntoPerspective(relay: Relay): void {
   });
 }
 
+let inkStageSerial = 0;
+
+/**
+ * An ink tile's drawing becomes the hero's kind of stage: drag turns it 1:1,
+ * a flick coasts and clicks onto a ring or axis view, and every turn is
+ * mirrored into the baton, so the 3D view takes over at the pose the
+ * visitor left, with their spin.
+ */
+function mountInkStage(relay: Relay, model: InkModel): void {
+  const { stageEl, baton } = relay;
+  stageEl.replaceChildren();
+  stageEl.dataset.kind = 'ink';
+  stageEl.setAttribute('role', 'img');
+  stageEl.setAttribute('aria-label', 'Molecule drawing, opening in 3D. Drag to turn it while it loads.');
+  let faceTimer: ReturnType<typeof setTimeout> | null = null;
+  relay.cleanup.push(() => {
+    if (faceTimer) clearTimeout(faceTimer);
+  });
+  const mirror = () => {
+    if (!relay.inkStage || current !== relay) return;
+    setBaton({
+      ...relay.baton,
+      viewDir: relay.inkStage.viewDir(),
+      bodyOmegaY: relay.inkStage.getBodyOmegaY(),
+      t: performance.now(),
+    });
+  };
+  relay.inkStage = createInkStage(stageEl, {
+    model,
+    pose: poseFromViewDir(baton.viewDir) ?? model.opening,
+    interactive: true,
+    idPrefix: `lupi-relay-ink-${(inkStageSerial += 1)}`,
+    comfort: getComfort,
+    onTap() {
+      /* already opening */
+    },
+    onDetent(label) {
+      relay.face.textContent = label;
+      relay.face.dataset.on = '';
+      if (faceTimer) clearTimeout(faceTimer);
+      faceTimer = setTimeout(() => delete relay.face.dataset.on, FACE_FLASH_MS);
+    },
+    onSpinDegrees() {
+      delete relay.face.dataset.on;
+    },
+    onPoseChange: mirror,
+  });
+  // The pose the drawing opens on is the one the viewer will take.
+  mirror();
+  // Nothing under the relay scrolls: every swipe on the drawing turns it.
+  stageEl.style.touchAction = 'none';
+}
+
 function mountPreview(relay: Relay): void {
+  if (relay.inkSrc) {
+    const id = relay.baton.galleryId;
+    const model = inkModelFor(id);
+    if (model) {
+      relay.inkTile ??= inkTileFromModel(model);
+      layout(relay);
+      mountInkStage(relay, model);
+      return;
+    }
+    // The drawing as the tile showed it until its model arrives, then the turning stage.
+    relay.stageEl.dataset.kind = 'ink';
+    const img = document.createElement('img');
+    img.alt = '';
+    img.decoding = 'async';
+    img.src = relay.inkSrc;
+    img.addEventListener('error', () => img.remove(), { once: true });
+    relay.stageEl.appendChild(img);
+    void loadInkModel(id).then((loaded) => {
+      if (!loaded || current !== relay || relay.inkStage) return;
+      if (!relay.inkTile) {
+        relay.inkTile = inkTileFromModel(loaded);
+        layout(relay);
+      }
+      mountInkStage(relay, loaded);
+    });
+    return;
+  }
   relay.stageEl.dataset.kind = 'preview';
   const src = previewUrl(relay.baton.galleryId);
   if (!src) return;
@@ -345,6 +462,8 @@ function removeNow(relay: Relay | null): void {
   teardown(relay);
   relay.stage?.destroy();
   relay.stage = null;
+  relay.inkStage?.destroy();
+  relay.inkStage = null;
   relay.layer.remove();
   if (current === relay) current = null;
   if (fading === relay) fading = null;
@@ -356,6 +475,7 @@ function begin({ baton, fromRect }: { baton: RelayBaton; fromRect: DOMRect | nul
   removeNow(fading);
   const still = !glidesAnimate();
   const hero = baton.source === 'hero' && baton.galleryId === HERO_ID;
+  const inkSrc = !hero && baton.ink ? inkTileSrc(baton.galleryId) : null;
 
   const layer = el('div', 'lupi-relay');
   layer.setAttribute('data-lupi-relay', '');
@@ -384,6 +504,9 @@ function begin({ baton, fromRect }: { baton: RelayBaton; fromRect: DOMRect | nul
   const relay: Relay = {
     baton,
     hero,
+    inkSrc,
+    inkTile: inkSrc ? inkTileFor(baton.galleryId) : null,
+    inkStage: null,
     layer,
     backdrop,
     stageEl,

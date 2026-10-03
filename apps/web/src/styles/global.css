@@ -1065,6 +1065,15 @@ button:focus:not(:focus-visible) {
 .scene-look__sample i:nth-child(3) { width: 16px; height: 16px; left: calc(50% - 33px); top: 30px; }
 .scene-look[data-look='paper'] i { box-shadow: 2px 4px 6px #52645830; }
 .scene-look[data-look='night'] i { filter: contrast(1.2); }
+/* Illustrate and Sketch: the sample is drawn, flat colour or hatching, in ink. */
+.scene-look[data-look='ink'] .scene-look__sample { background: #101817; }
+.scene-look[data-look='ink'] .scene-look__sample i { box-shadow: none; border: 2px solid #0c1211; background: radial-gradient(circle at 34% 30%, #f3f5ef 0 12%, #b9c0b6 13% 54%, #66726b 55%); }
+.scene-look[data-look='ink'] .scene-look__sample i:nth-child(2) { background: radial-gradient(circle at 34% 30%, #fff1ec 0 12%, #e2584a 13% 54%, #8f362b 55%); }
+.scene-look[data-look='sketch'] .scene-look__sample { background: #e7ebe3; }
+.scene-look[data-look='sketch'] .scene-look__sample i { box-shadow: none; border: 1.5px solid #0c1211; background: linear-gradient(135deg, transparent 52%, #0c121108 52%), repeating-linear-gradient(45deg, transparent 0 3px, #0c121159 3px 4px) 60% 60% / 100% 100% no-repeat, radial-gradient(circle at 34% 30%, #fbfcf8 0 34%, #dfe4dc 35%); }
+.scene-look[data-look='sketch'] .scene-look__sample i:nth-child(2) { background: repeating-linear-gradient(45deg, transparent 0 3px, #0c121159 3px 4px) 60% 60% / 100% 100% no-repeat, radial-gradient(circle at 34% 30%, #fff6f3 0 34%, #f3c2b8 35%); }
+.scene-mod-plates { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.scene-mod-plates .scene-controls__button[aria-pressed='true'] { border-color: var(--scene-accent); box-shadow: 0 0 0 1px var(--scene-accent); }
 .scene-controls__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; position: sticky; bottom: 0; background: #14241e; padding-block: 4px; }
 .scene-controls__button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 9px 12px; color: var(--scene-ink); background: #233b2f; border: 1px solid var(--scene-border); border-radius: 9px; font: inherit; cursor: pointer; touch-action: manipulation; }
 .scene-controls__button > svg { flex-shrink: 0; }
@@ -1080,9 +1089,17 @@ button:focus:not(:focus-visible) {
 .scene-remix-bar { display: grid; grid-template-columns: 1fr auto; gap: 8px; position: sticky; top: 0; z-index: 3; background: #14241e; padding-block: 6px; }
 .scene-remix { --action-fill: linear-gradient(115deg, #d7eba5, #e4dab4 65%, #d9bfe7); --action-edge: #ebdd9a; min-height: 52px; border: 1px solid var(--action-edge); border-radius: 15px; color: #242c27; background: var(--action-fill); font: 650 1rem/1.3 var(--font-body, system-ui); cursor: pointer; touch-action: manipulation; box-shadow: inset 0 1px 0 #ffffff88, 0 3px 16px #b8dac518; }
 .scene-remix .lupi-action__content > svg { width: 24px; height: 24px; }
+/* The look's Remix code under the button: tap for the Remix sheet. A Foil
+   code wears its finish as its border. */
+.scene-remix-code { margin-top: -6px; justify-content: center; font: 680 .86rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .03em; }
+.scene-remix-code[data-foil] { border: 1.5px solid transparent; background: linear-gradient(#14241e, #14241e) padding-box, var(--lupi-foil-edge) border-box; }
+.scene-remix-code[data-foil='holo'] { --lupi-foil-edge: conic-gradient(from 200deg, #ff9de6, #9df3ff, #d5ef9c, #ffe59d, #c7a6ff, #ff9de6); }
+.scene-remix-code[data-foil='gold'] { --lupi-foil-edge: linear-gradient(135deg, #fff2c4, #c99a3c 35%, #f7e1a1 55%, #9c7128 80%, #fff2c4); }
+.scene-remix-code[data-foil='pearl'] { --lupi-foil-edge: conic-gradient(from 120deg, #fff6f8, #e3efff, #f1ffe9, #fff0e2, #f6ecff, #fff6f8); }
 .scene-controls button:disabled { opacity: .4; cursor: default; }
 .scene-controls__announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.scene-mod-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; padding: 4px; background: #0c1c17; border-radius: 12px; position: sticky; top: 68px; z-index: 2; }
+/* One row however many categories there are: a wrapped nav doubles the sticky chrome over the mods. */
+.scene-mod-nav { display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 3px; padding: 4px; background: #0c1c17; border-radius: 12px; position: sticky; top: 68px; z-index: 2; }
 .scene-mod-nav button { min-width: 0; min-height: 44px; padding: 4px 0; font: 500 .75rem/1.4 var(--font-body, system-ui); color: var(--scene-muted); border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; overflow-wrap: anywhere; }
 .scene-mod-nav button[aria-pressed='true'] { background: #2b4236; color: #f0efdc; border-color: #627752; }
 .scene-mod-fields { display: grid; gap: 10px; min-width: 0; }
@@ -1104,9 +1121,9 @@ button:focus:not(:focus-visible) {
 }
 
 @media (max-width: 640px), (max-height: 500px) and (max-width: 900px) {
-  .lupine-app-root { --scene-sheet-height: min(360px, 48dvh); --scene-sheet-bottom: calc(76px + env(safe-area-inset-bottom)); }
-  .lupine-app-root .lupine-command-panel[data-panel='studio'] { top: auto; bottom: var(--scene-sheet-bottom); height: var(--scene-sheet-height); max-height: var(--scene-sheet-height); border-radius: 20px; }
-  .lupine-app-root[data-style-open='true'] .lupine-main-viewport { bottom: calc(var(--scene-sheet-height) + var(--scene-sheet-bottom) + 8px) !important; top: calc(64px + env(safe-area-inset-top)) !important; }
+  /* The Style sheet floats over a full-bleed canvas like every phone panel
+     (the phone sheet rules below); the molecule moves into the room above
+     it instead of the canvas resizing. */
   .lupine-app-root .scene-controls__button { white-space: nowrap; min-width: 0; padding: 9px 10px; font-size: 13px; }
   .lupine-app-root .lupine-command-deck { bottom: calc(8px + env(safe-area-inset-bottom)); width: calc(100% - 20px); max-width: 420px; border-radius: 14px; background: #14241e; border-color: #40564a; gap: 0; }
   .lupine-app-root .lupine-command-slot { flex: 1; width: auto; min-width: 44px; min-height: 52px; }
@@ -1117,13 +1134,18 @@ button:focus:not(:focus-visible) {
 }
 
 @media (max-height: 500px) and (min-width: 641px) and (max-width: 900px) {
-  .lupine-app-root { --scene-landscape-width: min(340px, 44vw); }
-  .lupine-app-root .lupine-command-panel[data-panel='studio'] { top: 64px; left: auto; width: var(--scene-landscape-width); bottom: var(--scene-sheet-bottom); height: auto; max-height: none; }
   .lupine-app-root .scene-controls__button { font-size: 12px; padding: 8px; gap: 5px; }
-  .lupine-app-root[data-style-open='true'] .lupine-main-viewport { right: calc(var(--scene-landscape-width) + 16px) !important; bottom: var(--scene-sheet-bottom) !important; }
   .scene-controls { gap: 8px; padding: 10px; }
   .scene-controls__intro, .scene-controls > .scene-controls__hint { display: none; }
   .scene-look__sample { height: 36px; }
+}
+
+/* A landscape phone's side column is too short for sticky rows above and
+   below the looks (together they cover every look); keep them in flow. */
+@media (max-height: 500px) and (max-width: 900px) and (orientation: landscape) {
+  .scene-controls .scene-remix-bar,
+  .scene-controls .scene-controls__actions { position: static; }
+  .scene-controls .scene-mod-nav { top: 0; }
 }
 
 .lupine-camera-command { min-height: 100%; display: flex; flex-direction: column; }
@@ -1223,6 +1245,125 @@ button:focus:not(:focus-visible) {
   }
 }
 
+/* Phone sheets. Every panel (Learn, Style, Data, Camera, Export, Switch,
+   Settings, Path) floats over a full-bleed canvas instead of covering it or
+   resizing it. Each declares the area it covers, and the molecule moves (and
+   shrinks to fit) into the room left above or beside it, display only
+   (packages/ui/src/camera/viewInset.ts). Portrait: a bottom sheet over the
+   command deck with a handle and three detents (Peek, Half, Full; the height
+   comes from --lupi-sheet-height, set by usePhoneSheet). Landscape: a column
+   on the right. Desktop is unchanged. */
+.lupi-sheet-handle { display: none; }
+
+@media (max-width: 640px) and (orientation: portrait) {
+  .lupine-app-root { --lupi-sheet-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .lupine-app-root .lupine-command-panel,
+  .lupine-app-root .lupine-command-panel[data-panel='studio'],
+  .lupine-app-root .lupine-command-panel[data-panel='elements'],
+  .lupine-app-root .lupi-study-panel {
+    top: auto;
+    right: 8px;
+    /* Above the deck, or above the on-screen keyboard when it is up. */
+    bottom: max(var(--lupi-sheet-bottom), calc(var(--lupi-sheet-lift, 0px) + 8px));
+    left: 8px;
+    width: auto;
+    max-width: none;
+    height: var(--lupi-sheet-height, min(380px, 46dvh));
+    max-height: none;
+    border-radius: 20px;
+    animation: lupi-sheet-rise 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+    transition:
+      height 300ms cubic-bezier(0.2, 0.85, 0.2, 1),
+      max-height 300ms cubic-bezier(0.2, 0.85, 0.2, 1),
+      bottom 240ms cubic-bezier(0.2, 0.85, 0.2, 1),
+      opacity 220ms ease,
+      transform 420ms cubic-bezier(0.2, 0.85, 0.2, 1);
+  }
+  /* A short panel (Data without a thermo log) keeps its own height under the detent. */
+  .lupine-app-root .lupine-command-panel[data-auto-height='true'] {
+    height: auto;
+    max-height: var(--lupi-sheet-height, min(380px, 46dvh));
+  }
+  /* While a finger drags the handle the height follows it exactly. */
+  .lupine-app-root [data-sheet='sheet'][data-sheet-dragging='true'] { transition: opacity 220ms ease, transform 420ms cubic-bezier(0.2, 0.85, 0.2, 1); }
+  .lupine-app-root [data-sheet-dragging='true'] * { user-select: none; -webkit-user-select: none; }
+  /* Motion: Still (or the OS reduced-motion setting): the sheet cuts. */
+  .lupine-app-root [data-sheet='sheet'][data-sheet-cut='true'] { animation: none; transition: none; }
+  .lupine-app-root[data-ui-stowed='true'] .lupine-command-panel,
+  .lupine-app-root[data-ui-stowed='true'] .lupi-study-panel { transform: translateY(115%); }
+
+  /* The header is the sheet's grip (the handle sits in its top edge). */
+  .lupine-app-root .lupine-command-panel__header {
+    min-height: 54px;
+    padding-top: 16px;
+    touch-action: none;
+  }
+  .lupi-sheet-handle {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    z-index: 3;
+    width: 96px;
+    height: 22px;
+    margin: 0 0 0 -48px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    color: inherit;
+    background: none;
+    border: 0;
+    border-radius: 0 0 12px 12px;
+    cursor: grab;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .lupi-sheet-handle::before {
+    content: '';
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(213, 239, 156, 0.38);
+    transition: background-color 120ms ease-out, width 160ms cubic-bezier(0.2, 0.85, 0.2, 1);
+  }
+  .lupi-sheet-handle:hover::before,
+  [data-sheet-dragging='true'] .lupi-sheet-handle::before { width: 52px; background: var(--lupi-accent, #d5ef9c); }
+  [data-sheet-dragging='true'] .lupi-sheet-handle { cursor: grabbing; }
+  .lupi-sheet-handle:focus-visible { outline: 2px solid var(--lupi-accent, #d5ef9c); outline-offset: -3px; }
+  /* At Peek a panel shows its header and a first row: its foot fades to say there is more. */
+  .lupine-app-root [data-detent='peek'] .lupine-command-panel__body,
+  .lupine-app-root [data-detent='peek'] .lupi-study-panel__body {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  }
+  @keyframes lupi-sheet-rise {
+    from { opacity: 0; transform: translateY(32px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@media (max-height: 500px) and (max-width: 900px) and (orientation: landscape) {
+  .lupine-app-root { --lupi-side-width: min(340px, 44vw); }
+  .lupine-app-root .lupine-command-panel,
+  .lupine-app-root .lupine-command-panel[data-panel='studio'],
+  .lupine-app-root .lupine-command-panel[data-panel='elements'],
+  .lupine-app-root .lupi-study-panel {
+    top: calc(64px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    left: auto;
+    width: var(--lupi-side-width);
+    max-width: none;
+    height: auto;
+    max-height: none;
+    border-radius: 16px;
+  }
+  .lupine-app-root .lupine-command-panel[data-auto-height='true'] {
+    bottom: auto;
+    max-height: calc(100% - 140px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .lupine-app-root[data-ui-stowed='true'] .lupi-study-panel { transform: translateX(110%); }
+}
+
 @media (max-width: 640px), (max-height: 500px) and (max-width: 900px) {
   .lupine-app-root[data-file='true'] .lupine-status-bar {
     max-width: calc(100% - 24px);
@@ -1234,11 +1375,12 @@ button:focus:not(:focus-visible) {
     pointer-events: none;
   }
   /* The axes gizmo (bottom right of the viewport) sits on the Play pill's row,
-     above the horizontal command deck; with the deck stowed, or the style
-     sheet shrinking the viewport, it drops back to the corner. */
+     above the horizontal command deck; with the deck stowed it drops back to
+     the corner. An open phone sheet covers its corner (and has moved the
+     molecule away from it), so it steps aside until the sheet closes. */
   .lupine-app-root { --lupi-axes-gizmo-lift: calc(64px + env(safe-area-inset-bottom)); }
-  .lupine-app-root[data-ui-stowed='true'],
-  .lupine-app-root[data-style-open='true'] { --lupi-axes-gizmo-lift: 0px; }
+  .lupine-app-root[data-ui-stowed='true'] { --lupi-axes-gizmo-lift: 0px; }
+  .lupine-app-root[data-panel-open='true'] .lupine-axes-gizmo { visibility: hidden; }
 }
 
 @media (prefers-reduced-motion: reduce) {

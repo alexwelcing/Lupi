@@ -8,8 +8,10 @@ import { COLOR_SCHEMES, SCHEME_ORDER } from './coloring';
 import { POSTPROCESS_PRESETS, PRESET_ORDER } from './postprocess/presets';
 import { resolveEffects, type EffectOverrides } from './postprocess/controls';
 import { getDeviceTier } from './deviceCapabilities';
+import { chooseInkStyle } from './ink/illustrate';
+import { PAPER_PLATE_PRESET_ID, SAGE_PLATE_PRESET_ID } from './backgroundPresets';
 
-export const MOD_SECTIONS = ['Atoms', 'Backdrop', 'Light', 'Sphere', 'Effects'] as const;
+export const MOD_SECTIONS = ['Atoms', 'Ink', 'Backdrop', 'Light', 'Sphere', 'Effects'] as const;
 export type ModSection = typeof MOD_SECTIONS[number];
 type KeysOf<T> = { [K in keyof AppState]: AppState[K] extends T ? K : never }[keyof AppState];
 type Option = readonly [string, string];
@@ -112,6 +114,34 @@ function AtomMods() {
         <Range field="vectorDensity" label="Arrow density" min={.01} max={1} /></>}
       <p className="scene-controls__hint">Arrows show loaded data, not a decorative force field.</p>
     </details>}
+  </>;
+}
+
+/** The Illustrate look: shading, line weight and the plate it is drawn on. */
+function InkMods() {
+  const style = useStore(s => s.inkStyle);
+  const preset = useStore(s => s.backgroundPreset);
+  const transmission = useStore(s => s.materialPreset === 'transmission');
+  return <>
+    <p className="scene-controls__hint">Draw the molecule like the Lupi drawings: flat colour or pen hatching, with ink at every edge.
+      Ink is a look, so exports and shared links keep it. The data never changes.</p>
+    <label className="scene-mod-select"><span>Drawing</span><select aria-label="Ink drawing" value={style}
+      onChange={e => chooseInkStyle(e.target.value as AppState['inkStyle'])}>
+      <option value="off">Off (lit)</option>
+      <option value="flat">Flat colour</option>
+      <option value="hatch">Hatched</option>
+    </select></label>
+    {style !== 'off' && <>
+      <Range field="inkWeight" label="Ink weight" min={.4} max={2.5} step={.05} />
+      <div className="scene-mod-plates" role="group" aria-label="Plate">
+        <button type="button" className="scene-controls__button" aria-pressed={preset === SAGE_PLATE_PRESET_ID}
+          onClick={() => useStore.getState().setBackgroundPreset(SAGE_PLATE_PRESET_ID)}>Sage plate</button>
+        <button type="button" className="scene-controls__button" aria-pressed={preset === PAPER_PLATE_PRESET_ID}
+          onClick={() => useStore.getState().setBackgroundPreset(PAPER_PLATE_PRESET_ID)}>Paper plate</button>
+      </div>
+      <p className="scene-controls__hint">While ink is on, the effect recipe rests: the drawing shades itself, and turning ink off brings the recipe back.</p>
+    </>}
+    {transmission && <p className="scene-controls__hint">Refractive glass draws real spheres, which take no ink: choosing a drawing sets the finish to plastic.</p>}
   </>;
 }
 
@@ -233,7 +263,7 @@ function EffectMods() {
 
 export function SceneModControls({ section }: { section: ModSection }) {
   return <div className="scene-mod-fields" role="region" aria-label={`${section} visual settings`}>
-    {section === 'Atoms' ? <AtomMods /> : section === 'Backdrop' ? <BackdropMods /> : section === 'Light' ? <LightMods /> : section === 'Sphere' ? <SphereMods /> : <EffectMods />}
+    {section === 'Atoms' ? <AtomMods /> : section === 'Ink' ? <InkMods /> : section === 'Backdrop' ? <BackdropMods /> : section === 'Light' ? <LightMods /> : section === 'Sphere' ? <SphereMods /> : <EffectMods />}
   </div>;
 }
 

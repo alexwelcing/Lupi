@@ -14,7 +14,7 @@ import {
 import { requestLupiFrames, validateSourceBondTopology } from '@atlas/scene';
 import type { NistCatalogEntry, NistSummary } from '@atlas/nist';
 import { filterCatalog, loadNistCatalog, summarize } from '@atlas/nist';
-import { useStore, type LoadedFile } from './store';
+import { useStore, type InkStyle, type LoadedFile } from './store';
 import { COLOR_SCHEMES, type ColorSchemeId } from './coloring';
 import { useFirebaseAuth } from './auth/useFirebaseAuth';
 import { MOLECULE_PROVIDERS, searchMolecules, type MoleculeHit, type MoleculeQuery, type MoleculeSourceId } from './molecules';
@@ -78,6 +78,8 @@ interface ViewerPatch extends Record<string, unknown> {
   cameraPreset?: CameraPreset;
   bondTolerance?: number;
   bondColorMode?: BondColorMode;
+  inkStyle?: InkStyle;
+  inkWeight?: number;
 }
 
 interface MoleculeAtom {
@@ -1969,6 +1971,8 @@ function readViewerState() {
     playbackSpeed: state.playbackSpeed,
     backgroundPreset: state.backgroundPreset,
     postprocessPreset: state.postprocessPreset,
+    inkStyle: state.inkStyle,
+    inkWeight: state.inkWeight,
     colorScheme: state.colorScheme,
     colorMode: state.colorMode,
     colorProperty: state.colorProperty,
@@ -2062,6 +2066,8 @@ function applyViewerPatch(patch: ViewerPatch, transcript: string[]) {
   if (patch.showAxes !== undefined) next.showAxes = patch.showAxes;
   if (patch.backgroundPreset !== undefined) next.backgroundPreset = patch.backgroundPreset;
   if (patch.postprocessPreset !== undefined) next.postprocessPreset = patch.postprocessPreset;
+  if (patch.inkStyle !== undefined) next.inkStyle = patch.inkStyle;
+  if (patch.inkWeight !== undefined) next.inkWeight = clamp(patch.inkWeight, 0.4, 2.5);
 
   if (Object.keys(next).length > 0) {
     useStore.setState(next);
@@ -2081,6 +2087,17 @@ function readBondColorMode(value: unknown): BondColorMode | undefined {
   return undefined;
 }
 
+/** The Illustrate look from an MCP argument: 'off' | 'flat' | 'hatch' (also true/false, 'ink', 'sketch'). */
+function readInkStyle(value: unknown): InkStyle | undefined {
+  if (value === true) return 'flat';
+  if (value === false) return 'off';
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (raw === 'off' || raw === 'lit' || raw === 'none') return 'off';
+  if (raw === 'flat' || raw === 'ink' || raw === 'illustrate' || raw === 'on') return 'flat';
+  if (raw === 'hatch' || raw === 'hatched' || raw === 'sketch') return 'hatch';
+  return undefined;
+}
+
 function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   const patch: ViewerPatch = {};
   const showBonds = readBoolean(args.showBonds);
@@ -2096,8 +2113,12 @@ function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   const cameraPreset = readCameraPreset(args.cameraPreset ?? args.camera);
   const bondTolerance = readNumber(args.bondTolerance);
   const bondColorMode = readBondColorMode(args.bondColorMode);
+  const inkStyle = readInkStyle(args.inkStyle ?? args.ink);
+  const inkWeight = readNumber(args.inkWeight);
 
   if (showBonds !== undefined) patch.showBonds = showBonds;
+  if (inkStyle !== undefined) patch.inkStyle = inkStyle;
+  if (inkWeight !== undefined) patch.inkWeight = inkWeight;
   if (atomScale !== undefined) patch.atomScale = atomScale;
   if (bondTolerance !== undefined) patch.bondTolerance = bondTolerance;
   if (bondColorMode !== undefined) patch.bondColorMode = bondColorMode;
@@ -2220,6 +2241,10 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\beditorial\b/.test(normalized)) patch.postprocessPreset = 'editorial';
   if (/\bcinematic\b/.test(normalized)) patch.postprocessPreset = 'cinematic';
   if (/\bdiagram\b/.test(normalized)) patch.postprocessPreset = 'diagram';
+  // The Illustrate look: "ink", "illustrate", "hatched"/"sketch", "lit".
+  if (/\b(ink|inked|illustrate|illustrated)\b/.test(normalized)) patch.inkStyle = 'flat';
+  if (/\b(hatch|hatched|hatching|sketch)\b/.test(normalized)) patch.inkStyle = 'hatch';
+  if (/\b(no\s+ink|ink\s+off|lit)\b/.test(normalized)) patch.inkStyle = 'off';
   if (/\bproperty\b/.test(normalized)) patch.colorScheme = 'property';
   if (/\bcolorway\b/.test(normalized) || /\bfamily\b/.test(normalized)) patch.colorScheme = 'colorway';
   if (/\belement\b/.test(normalized)) patch.colorScheme = 'element';

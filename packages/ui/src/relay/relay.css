@@ -134,6 +134,15 @@
   width: 100%;
   height: 100%;
 }
+/* An ink tile's drawing, carried in at the size the 3D view will draw it,
+   in the hero's faint lime pool. */
+.lupi-relay__stage[data-kind='ink'] {
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #d5ef9c12, #d5ef9c05 70%, transparent);
+}
+.lupi-relay__stage[data-kind='ink'] img {
+  object-fit: contain;
+}
 /* A tile's relay carries the plate's own ring (it appears at 1.2 s). */
 .lupi-relay__mark {
   position: absolute;

@@ -53,6 +53,7 @@ export function ScenePostprocessing() {
   const playing = useStore((s) => s.playing);
   const overrides = useStore((s) => s.effectOverrides);
   const fullEffects = useStore((s) => s.fullSceneEffects);
+  const ink = useStore((s) => s.inkStyle !== 'off');
   const deviceTier = useMemo(getDeviceTier, []);
 
   const config = useMemo(
@@ -62,8 +63,9 @@ export function ScenePostprocessing() {
       overrides,
       playing,
       reduced: !fullEffects && isReducedPostTier(deviceTier),
+      ink,
     }),
-    [presetId, intensity, overrides, playing, fullEffects, deviceTier],
+    [presetId, intensity, overrides, playing, fullEffects, deviceTier, ink],
   );
 
   return <LupiPostPipeline config={config} aoResolutionScale={aoResolutionScaleFor(deviceTier)} />;

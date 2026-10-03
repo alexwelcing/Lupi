@@ -61,6 +61,7 @@ import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { cue } from './feedback';
 import { installPlayDevHooks, registerPlayDevHook } from './devHooks';
 import { heatKelvin, playStore } from './playStore';
+import { emitToyEvent, registerToyReplaySink, type ToyEvent } from './toyTape';
 import {
   canPlayScatter,
   markArrivalSeen,
@@ -349,6 +350,7 @@ function releaseTug(): void {
   ATOM_GLOW.uFocusAtom.value = -1;
   requestLupiFrames();
   cue('release');
+  emitToyEvent({ kind: 'tugRelease' });
 }
 
 // ─── Burst ──────────────────────────────────────────────────────────
@@ -656,7 +658,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
   // first-frame mark).
   useEffect(() => keepLupiAwake('display-motion', anyLive), []);
   useEffect(
-    () => registerRecordingGuard(() => {
+    () => registerRecordingGuard(({ illustrative }) => {
+      // Instant Replay's clip is a picture of the toys: they keep playing.
+      if (illustrative) return () => {};
       setDisplayMotionSuspended(true);
       return () => setDisplayMotionSuspended(false);
     }),
@@ -732,18 +736,22 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       if (glass || !(atomIndex >= 0 && atomIndex < current.natoms)) return -1;
       adoptScene(current, c);
       const p = current.positions;
-      return addRipple([p[atomIndex * 3], p[atomIndex * 3 + 1], p[atomIndex * 3 + 2]], POKE_AMPLITUDE * displayMotionScale());
+      const slot = addRipple([p[atomIndex * 3], p[atomIndex * 3 + 1], p[atomIndex * 3 + 2]], POKE_AMPLITUDE * displayMotionScale());
+      if (slot >= 0) emitToyEvent({ kind: 'poke', atom: atomIndex });
+      return slot;
     };
 
-    const scatter = (): boolean => {
+    const scatter = (replaySeed?: number): boolean => {
       const now = live.current;
       const totalFrames = useStore.getState().file?.trajectory.totalFrames ?? 0;
       const input = ruleInput(now.frame, totalFrames, now.transmissionActive, now.playing);
       if (!canPlayScatter(input)) return false;
       adoptScene(now.frame, now.center);
-      // A fresh mist every time.
-      armArrival(ARRIVAL_MODE.scatter, now.camera, arrivalSeed(`${input.galleryId ?? 'lupi'}#${Date.now()}`), input.comfort);
+      // A fresh mist every time (a replay brings the sender's).
+      const seed = replaySeed ?? arrivalSeed(`${input.galleryId ?? 'lupi'}#${Date.now()}`);
+      armArrival(ARRIVAL_MODE.scatter, now.camera, seed, input.comfort);
       releaseArrival(now.camera);
+      emitToyEvent({ kind: 'scatter', seed });
       return true;
     };
 
@@ -786,7 +794,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       if (!clientToPlane(clientX, clientY, c, hit)) return;
       driver.lastStroke = { t, x: clientX, y: clientY };
       adoptScene(live.current.frame, c);
-      addRipple([hit.x, hit.y, hit.z], amplitude);
+      if (addRipple([hit.x, hit.y, hit.z], amplitude) >= 0) {
+        emitToyEvent({ kind: 'ripple', point: [hit.x, hit.y, hit.z], amplitude: STROKE_AMPLITUDE });
+      }
     };
 
     // Tug latched: grab the atom under the finger (or the point in space
@@ -821,6 +831,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       syncWeights();
       requestLupiFrames();
       if (atom >= 0) cue('grab');
+      emitToyEvent({ kind: 'tugGrab', atom, point: [grab[0], grab[1], grab[2]] });
       return true;
     };
 
@@ -833,6 +844,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       tug.target[1] = dy * k;
       tug.target[2] = dz * k;
       requestLupiFrames();
+      emitToyEvent({ kind: 'tugPull', d: [dx, dy, dz] });
     };
 
     const tugStroke = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
@@ -857,7 +869,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         return false;
       }
       adoptScene(current, c);
-      return addBurst(origin, displayMotionScale(), getComfort() === 'gentle') >= 0;
+      if (addBurst(origin, displayMotionScale(), getComfort() === 'gentle') < 0) return false;
+      emitToyEvent({ kind: 'burst', point: [origin[0], origin[1], origin[2]] });
+      return true;
     };
 
     const burstAtClient = (clientX: number, clientY: number): boolean => {
@@ -876,6 +890,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       syncWeights();
       publishHeat(true);
       requestLupiFrames();
+      emitToyEvent({ kind: 'heatOn' });
       return true;
     };
 
@@ -885,6 +900,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       heat.rub.live = false;
       publishHeat(true);
       requestLupiFrames();
+      emitToyEvent({ kind: 'heatOff' });
     };
 
     const heatRub = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
@@ -894,7 +910,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         return;
       }
       if (rub.live) {
-        heat.level = Math.min(1, heat.level + Math.hypot(clientX - rub.x, clientY - rub.y) * HEAT.rubPerPx);
+        const amount = Math.hypot(clientX - rub.x, clientY - rub.y) * HEAT.rubPerPx;
+        heat.level = Math.min(1, heat.level + amount);
+        if (amount > 0) emitToyEvent({ kind: 'heatRub', amount });
       }
       rub.x = clientX;
       rub.y = clientY;
@@ -944,7 +962,59 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       onIntent('play.scatter', () => {
         scatter();
       }),
-      onIntent('play.reset', () => resetDisplayMotion()),
+      onIntent('play.reset', () => {
+        resetDisplayMotion();
+        emitToyEvent({ kind: 'reset' });
+      }),
+      // Instant Replay plays the sender's toy inputs back here, at this
+      // view's own Motion comfort.
+      registerToyReplaySink({
+        play: (event: ToyEvent) => {
+          switch (event.kind) {
+            case 'poke':
+              if (poke(event.atom) >= 0) cue('poke');
+              break;
+            case 'ripple': {
+              const amplitude = event.amplitude * displayMotionScale();
+              if (!(amplitude > 0) || live.current.transmissionActive) break;
+              adoptScene(live.current.frame, live.current.center);
+              addRipple([event.point[0], event.point[1], event.point[2]], amplitude);
+              break;
+            }
+            case 'burst':
+              if (burstAt(event.point)) cue('burst');
+              break;
+            case 'tugGrab': {
+              const atom = event.atom >= 0 && event.atom < live.current.frame.natoms ? event.atom : null;
+              tugGrab(0, 0, atom, atom === null ? event.point : undefined);
+              break;
+            }
+            case 'tugPull':
+              if (tug.held) tugPullBy(event.d[0], event.d[1], event.d[2]);
+              break;
+            case 'tugRelease':
+              releaseTug();
+              break;
+            case 'heatOn':
+              heatStart();
+              break;
+            case 'heatOff':
+              heatStop();
+              break;
+            case 'heatRub':
+              if (heat.held) heat.level = Math.min(1, heat.level + event.amount);
+              break;
+            case 'scatter':
+              scatter(event.seed);
+              break;
+            case 'reset':
+              resetDisplayMotion();
+              break;
+            default:
+              break;
+          }
+        },
+      }),
       // Still stops the arrival, ripples and Scatter already running.
       subscribeComfort((comfort) => {
         if (comfort === 'still') resetDisplayMotion();
@@ -1023,7 +1093,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
           if (atom >= 0 && poke(atom) >= 0) cue('poke');
           else if (atom < 0) {
             adoptScene(live.current.frame, live.current.center);
-            addRipple(point, POKE_AMPLITUDE * displayMotionScale());
+            if (addRipple(point, POKE_AMPLITUDE * displayMotionScale()) >= 0) {
+              emitToyEvent({ kind: 'ripple', point: [point[0], point[1], point[2]], amplitude: POKE_AMPLITUDE });
+            }
           }
           break;
         case 'burst':

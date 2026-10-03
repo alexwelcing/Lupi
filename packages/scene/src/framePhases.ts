@@ -3,11 +3,14 @@
  *
  * Order (proven, lead probe L5):
  *   start → input → physics → update → lupi-canonical → lupi-uniforms
- *         → render → lupi-capture → finish
+ *         → lupi-overlays → render → lupi-capture → finish
  *
  * - `lupi-canonical`: settle canonical scene state (the export barrier).
  * - `lupi-uniforms`: push playback, property and look state into node
  *   material uniforms. Camera-derived values live in the node graph.
+ * - `lupi-overlays`: place CPU-side overlays from this frame's uniforms
+ *   (labels and rings riding display motion), so they never trail the atoms
+ *   by a frame.
  * - `lupi-capture`: read back after the default render.
  *
  * Rules (plan-final D12, §4.6): frame jobs use `useFrame(cb, { phase, id })`
@@ -20,6 +23,7 @@ import { getScheduler } from '@react-three/fiber/webgpu';
 export const LUPI_PHASE = {
   canonical: 'lupi-canonical',
   uniforms: 'lupi-uniforms',
+  overlays: 'lupi-overlays',
   capture: 'lupi-capture',
 } as const;
 
@@ -58,6 +62,18 @@ export const LUPI_JOB = {
   frameDemand: 'lupi/frame-demand',
   /** The phone atom card's view shift (a projection view offset) in `update`. */
   viewInset: 'lupi/view-inset',
+  /** Overlays (labels, rings, the card anchor, trails) riding display motion, in `lupi-overlays`. */
+  displayFollow: 'lupi/display-follow',
+  /** Instant Replay's clip: compose each recorded frame and its labels, in `lupi-capture`. */
+  clipComposite: 'lupi/clip-composite',
+  /** Instant Replay's recorder: the camera pose of each drawn frame, in `lupi-capture`. */
+  replayRecord: 'lupi/replay-record',
+  /** A shared replay playing in this view (camera and toys), in `update`. */
+  replayPlay: 'lupi/replay-play',
+  /** A Remix code's Foil finish: level fades and the reveal sweep, in `lupi-uniforms`. */
+  atomFoil: 'lupi/atom-foil',
+  /** The Illustrate look's fade (Ink-to-Light) uniforms in `lupi-uniforms`. */
+  inkLook: 'lupi/ink-look',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];
@@ -71,6 +87,7 @@ export function installLupiPhases(): void {
   const scheduler = getScheduler();
   if (!scheduler.hasPhase(LUPI_PHASE.canonical)) scheduler.addPhase(LUPI_PHASE.canonical, { after: 'update' });
   if (!scheduler.hasPhase(LUPI_PHASE.uniforms)) scheduler.addPhase(LUPI_PHASE.uniforms, { after: LUPI_PHASE.canonical });
+  if (!scheduler.hasPhase(LUPI_PHASE.overlays)) scheduler.addPhase(LUPI_PHASE.overlays, { after: LUPI_PHASE.uniforms });
   if (!scheduler.hasPhase(LUPI_PHASE.capture)) scheduler.addPhase(LUPI_PHASE.capture, { after: 'render' });
 }
 

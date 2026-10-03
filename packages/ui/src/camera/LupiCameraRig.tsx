@@ -38,7 +38,7 @@ import { RigController, type RigHost } from './rigController';
 import { attachGestureArbiter, createGestureMachine, type GestureMachine, type GestureSink } from './gestureArbiter';
 import { createTouchMarks } from './touchMarks';
 import { GESTURE } from './gestureTokens';
-import { pendingViewShift } from './viewInset';
+import { liveClientPoint } from './viewInset';
 
 export interface LupiCameraRigProps {
   center: Vec3;
@@ -94,7 +94,10 @@ export function LupiCameraRig({ center, minDistance, maxDistance, enabled, onFir
       },
       onInteraction: () => interaction.current?.(),
       wake: () => requestLupiFrames(),
-      pendingViewShift,
+      liveClientPoint: (x: number, y: number) => {
+        const element = canvas();
+        return element ? liveClientPoint(x, y, element.getBoundingClientRect()) : { x, y };
+      },
     };
     // Start from the store's target when the camera already shows the store
     // pose, else from the structure's centre (what OrbitControls used).

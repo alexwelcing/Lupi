@@ -114,9 +114,9 @@ export const RIPPLE_SLOTS = 4;
 /** Burst slots: three, as six plain vec4 uniforms. */
 export const BURST_SLOTS = 3;
 
-/** Salts mixed into the position seed so each toy's noise is independent. */
-const BURST_SALT = 0x9e37;
-const HEAT_SALT = 0x51ed27;
+/** Salts mixed into the position seed so each toy's noise is independent (the CPU twin uses them too). */
+export const BURST_SALT = 0x9e37;
+export const HEAT_SALT = 0x51ed27;
 
 /** The multipliers mixing the three position words into one seed. */
 export const SEED_MIX_Y = 2654435769;

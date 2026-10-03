@@ -837,6 +837,28 @@ export async function handleRequest(
       return json({ error: 'Asset route not found', path: url.pathname }, { status: 404, headers: cors });
     }
 
+    // A link preview of a viewer link (`?sim=<id>`, an Instant Replay's
+    // `&replay=`) unfurls with that molecule's ink card instead of the
+    // generic one. Only link-preview robots get this page; people get the app.
+    // Static assets answer `/` before the Worker runs (the release package
+    // keeps `/` asset-first), so the app shares these links as `/play?…`, a
+    // Worker-first path that sends people on to `/?…`.
+    if (
+      (url.pathname === '/' || url.pathname === '/play')
+      && (request.method === 'GET' || request.method === 'HEAD')
+      && url.searchParams.get('open') !== '1'
+      && isLinkPreviewRobot(request)
+    ) {
+      const unfurl = await renderViewerLinkUnfurl(request, env);
+      if (unfurl) return withCors(unfurl, cors);
+    }
+    if (url.pathname === '/play' && (request.method === 'GET' || request.method === 'HEAD')) {
+      return withCors(new Response(null, {
+        status: 302,
+        headers: { location: `${url.origin}/${url.search}`, 'cache-control': 'no-store' },
+      }), cors);
+    }
+
     if (env.WEB_ASSETS && (request.method === 'GET' || request.method === 'HEAD')) {
       return withCors(await env.WEB_ASSETS.fetch(request), cors);
     }
@@ -2723,6 +2745,62 @@ function moleculePageForSavedView(
 }
 
 type SavedViewShareModel = ReturnType<typeof buildSavedViewShareModel>;
+
+/** Chat and social link-preview fetchers (the saved-view page's own client check, server side). */
+const LINK_PREVIEW_ROBOT = /(bot|crawler|spider|slurp|preview|facebookexternalhit|linkedinbot|twitterbot|discordbot|telegrambot|whatsapp|pinterest|embedly|skypeuripreview)/i;
+
+function isLinkPreviewRobot(request: Request): boolean {
+  return LINK_PREVIEW_ROBOT.test(request.headers.get('user-agent') ?? '');
+}
+
+/**
+ * The unfurl for a viewer link to a gallery molecule with a page: its ink
+ * card, its name, and (with `replay=`) "A shared replay". Null for any other
+ * link, which falls through to the app as before.
+ */
+async function renderViewerLinkUnfurl(request: Request, env: Env): Promise<Response | null> {
+  const url = new URL(request.url);
+  const sim = url.searchParams.get('sim');
+  if (!sim || !/^[a-z0-9_]+$/.test(sim)) return null;
+  const manifest = await readMoleculePagesManifest(request, env);
+  const page = manifest?.pages.find((entry) => entry.id === sim) ?? null;
+  if (!page) return null;
+  const origin = normalizeOrigin(env.LUPI_PUBLIC_ORIGIN || DEFAULT_PUBLIC_ORIGIN);
+  const replay = url.searchParams.has('replay');
+  // A person who lands here anyway opens the app: `open=1` skips the robot check.
+  const appParams = new URLSearchParams(url.search);
+  appParams.set('open', '1');
+  const title = replay ? `A shared replay: ${page.name}` : `${page.name} in 3D`;
+  const description = replay
+    ? `Watch the moment happen in your own 3D view, then it's your turn. ${page.name} (${page.formula}), ${page.atoms} atoms, on Lupi. Illustrative motion.`
+    : `${page.name} (${page.formula}), ${page.atoms} atoms: spin it, flick it, play with it in 3D on Lupi.`;
+  // The ink card only when the deploy rasterised the cards; else the site card.
+  const card = manifest?.cards === true;
+  const model: SavedViewShareModel = {
+    appUrl: `${origin}/?${appParams.toString()}`,
+    description: clip(description, 220),
+    imageAlt: card
+      ? `Ink illustration of ${page.name} (${page.formula}), ${page.atoms} atoms, drawn from its coordinates on Lupi's sage plate.`
+      : `${page.name} in the Lupi molecular viewer.`,
+    imageUrl: card ? `${origin}/og/m/${page.id}.png` : `${origin}${DEFAULT_SOCIAL_IMAGE}`,
+    imageSize: card ? { width: 1200, height: 630 } : null,
+    imageType: card ? 'image/png' : null,
+    twitterCard: 'summary_large_image',
+    molecule: { name: page.name, formula: page.formula, url: `${origin}/m/${page.id}` },
+    pageTitle: `${title} | Lupi`,
+    // Replay links are personal moments: previews yes, search results no.
+    robots: replay ? 'noindex,nofollow,max-image-preview:large' : 'index,follow,max-image-preview:large',
+    shareUrl: replay ? `${origin}/play?${url.searchParams.toString()}` : `${origin}/m/${page.id}`,
+    title,
+  };
+  const headers = new Headers({
+    'content-type': 'text/html; charset=utf-8',
+    'x-robots-tag': model.robots,
+    'cache-control': 'public, max-age=300, s-maxage=3600',
+    vary: 'user-agent',
+  });
+  return new Response(request.method === 'HEAD' ? null : renderSavedViewShareHtml(model, false), { status: 200, headers });
+}
 
 function thumbnailExtension(mimeType: string): string {
   return mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';

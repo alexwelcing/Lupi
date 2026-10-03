@@ -10,7 +10,9 @@ test('mobile Remix, undo, sphere shader, and the full visual workbench are live'
   const read = () => page.evaluate(() => (window as any).__lupiViewerMcp.state());
   const before = await read();
   await page.getByRole('button', { name: 'Style command', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: 'Keep atom colors' })).not.toBeChecked();
+  // Remix keeps CPK atom colours by default; turn that off to exercise the atom-colour Remix.
+  await expect(page.getByRole('checkbox', { name: 'Keep atom colors' })).toBeChecked();
+  await page.getByRole('checkbox', { name: 'Keep atom colors' }).uncheck();
   await page.getByRole('button', { name: 'Remix scene', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Undo remix' })).toBeEnabled();
   const after = await read();

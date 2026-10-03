@@ -505,7 +505,10 @@ test.describe('mobile viewer', () => {
             const bounds = await canvas.boundingBox();
             return Boolean(bounds && bounds.width >= 360 && bounds.height >= 700);
           },
-          { message: `${example.id} fills the embedded phone viewport` },
+          // The largest examples keep a software-GL page busy for 10-15 s
+          // after loading (each frame blocks on readback), and Playwright's
+          // calls wait behind those frames: allow what the canvas check does.
+          { message: `${example.id} fills the embedded phone viewport`, timeout: 30_000 },
         )
         .toBe(true);
       await expect(page.getByTestId('lupine-mcp-harness')).toHaveCount(0);

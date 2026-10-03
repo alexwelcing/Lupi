@@ -3,6 +3,8 @@ import { LOCAL_MOLECULES, scoreLocalMolecule, type LocalMolecule } from '../land
 import { elementsFromFormula, omolFacets, omolRecords, omolStructureUrl, type OmolRecord } from '../molecules/providers/omol';
 import { openPubChemMolecule, pubchemAutocomplete } from '../molecules/pubchemLoad';
 import { openMolecule } from '../viewer/openMolecule';
+import { setBaton } from '../relay/baton';
+import { inkModelFor, inkTileFor, inkTileFromModel, inkTileSrc, inkTileViewDir } from '../landing/inkTiles';
 import propertySheet from './property-sheet.json';
 import { facetsOf } from '../library/libraryFacts';
 
@@ -55,6 +57,26 @@ function atomsLabel(atoms: number): string {
   return atoms ? `${atoms} atoms` : '';
 }
 
+/**
+ * Opening a gallery molecule from its ink drawing: the drawing's pose goes
+ * into the baton, so the molecule arrives at the angle the row showed, in
+ * ink, and the light comes on (ink/InkLookDriver.tsx). No relay inside the
+ * viewer: the switch itself carries it.
+ */
+function handInkDrawing(id: string): void {
+  if (!inkTileSrc(id)) return;
+  const model = inkModelFor(id);
+  const tile = inkTileFor(id) ?? (model ? inkTileFromModel(model) : null);
+  setBaton({
+    galleryId: id,
+    source: 'finder',
+    viewDir: tile ? inkTileViewDir(tile) : null,
+    bodyOmegaY: 0,
+    t: performance.now(),
+    ink: true,
+  });
+}
+
 function galleryCandidate(molecule: LocalMolecule): SwitchCandidate {
   const elements = molecule.formula ? elementsFromFormula(molecule.formula) : [];
   return {
@@ -65,11 +87,13 @@ function galleryCandidate(molecule: LocalMolecule): SwitchCandidate {
     atoms: molecule.atoms,
     source: 'gallery',
     detail: [molecule.formula, atomsLabel(molecule.atoms), molecule.domain].filter(Boolean).join(' · '),
-    image: molecule.image,
+    // Molecules with a page show their ink drawing (an ink tile).
+    image: inkTileSrc(molecule.id) ?? molecule.image,
     category: molecule.domain,
     evidence: galleryEvidence(molecule.id),
     molarMass: molarMass(molecule.formula),
     open: async () => {
+      handInkDrawing(molecule.id);
       const result = await openMolecule({ kind: 'gallery', id: molecule.id, history: 'push' });
       if (!result.ok) throw new Error(result.message);
     },

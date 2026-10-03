@@ -5,6 +5,8 @@ import { useStore } from './store';
 import { resetStore } from './test-utils';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 import { snapshotRemix } from './sceneRemix';
+import { remixStore } from './remix/remixStore';
+import { setComfort } from './motion/comfort';
 describe('focused style controls', () => {
   beforeEach(() => {
     resetStore();
@@ -12,6 +14,10 @@ describe('focused style controls', () => {
     trajectory.frames[0].typeSemantics = { kind: 'atomic-number', provenance: 'source-element-symbol' };
     trajectory.frames[0].distanceSemantics = { kind: 'angstrom', provenance: 'format-convention' };
     useStore.getState().setFile({ name: 'test.xyz', size: 100, trajectory, thermo: null });
+    // Remix keeps atom colours by default (CPK); Still lands each look at
+    // once instead of morphing, so the assertions read the landed look.
+    remixStore.getState().setKeepColors(true);
+    setComfort('still');
   });
   afterEach(cleanup);
   it('changes only the requested viewer setting', () => {
@@ -35,9 +41,9 @@ describe('focused style controls', () => {
     expect(screen.getByRole('button', { name: 'Paper look' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.queryByText(/Equilibrium|New run|Research/)).toBeNull();
   });
-  it('starts with four real look choices and keeps fine controls secondary', () => {
+  it('starts with six real look choices and keeps fine controls secondary', () => {
     render(<StudioControlDeck mode="scene" />);
-    expect(screen.getAllByRole('button', { name: / look$/ })).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: / look$/ })).toHaveLength(6);
     expect(screen.queryByRole('slider')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Studio look' }));
     expect(screen.getByRole('button', { name: 'Studio look' }).getAttribute('aria-pressed')).toBe('true');
@@ -45,8 +51,9 @@ describe('focused style controls', () => {
   it('remixes and undoes a custom scene even after closing the panel', () => {
     const view = render(<StudioControlDeck mode="scene" />);
     const before = snapshotRemix(useStore.getState());
-    expect(screen.getByRole('checkbox', { name: 'Keep atom colors' })).toHaveProperty('checked', false);
+    expect(screen.getByRole('checkbox', { name: 'Keep atom colors' })).toHaveProperty('checked', true);
     expect(screen.getByRole('button', { name: 'Undo remix' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Keep atom colors' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remix scene' }));
     expect(snapshotRemix(useStore.getState())).not.toEqual(before);
     expect(useStore.getState().colorScheme).toBe('colorway');
@@ -59,7 +66,7 @@ describe('focused style controls', () => {
   it('can keep an existing data color encoding while remixing the scene', () => {
     useStore.setState({ colorScheme: 'property', colorMode: 'property', colorProperty: 'energy', colormap: 'inferno' });
     render(<StudioControlDeck mode="scene" />);
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Keep atom colors' }));
+    expect(screen.getByRole('checkbox', { name: 'Keep atom colors' })).toHaveProperty('checked', true);
     fireEvent.click(screen.getByRole('button', { name: 'Remix scene' }));
     expect(useStore.getState()).toMatchObject({ colorScheme: 'property', colorMode: 'property', colorProperty: 'energy', colormap: 'inferno' });
   });

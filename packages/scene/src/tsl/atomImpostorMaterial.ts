@@ -18,6 +18,10 @@
  *   capture;
  * - the hover, selection and grab glow and the heat tint (tsl/atomGlow.ts):
  *   a lime rim and a small swell, exactly absent in every capture;
+ * - the Foil finishes of a Remix code (tsl/atomFoil.ts): Holo, Gold leaf
+ *   and Pearl on the rims and highlights, exactly absent in every capture;
+ * - the Illustrate look (tsl/inkLook.ts): toon fills and an ink outline at
+ *   the disc's silhouette, mixed over the lit surface by `uInkMix`;
  * - hidden types (zero palette radius) and sub-pixel atoms collapse to a
  *   degenerate vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -70,6 +74,7 @@ import {
   select,
   sin,
   smoothstep,
+  sqrt,
   step,
   texture,
   textureLoad,
@@ -82,6 +87,8 @@ import {
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
 import { lupiDisplayOffset } from './displayMotion';
 import { lupiAtomGlow, lupiAtomGlowStrength, lupiAtomSwell } from './atomGlow';
+import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
+import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
 import { CONTACT_OCCLUSION_NEIGHBORS, CONTACT_TEXTURE_WIDTH } from '../atomContactOcclusion';
 import {
   blendMaterialPreset,
@@ -353,6 +360,8 @@ export function createAtomImpostorMaterial({
   // carries the atom away (an arrival, a scatter), and is whole at rest and in
   // every capture (the offset is exactly zero there).
   const vContactFade: N = varying(smoothstep(0.08, 0.8, length(displayOffset)).oneMinus(), 'vContactFade');
+  // The Foil reveal (x revealed, y the passing glint); constant once revealed.
+  const vFoilSweep: N = varying(lupiFoilSweep(viewCenter), 'vFoilSweep');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // The hit is built once and first materialized by the depth prelude, which
@@ -404,7 +413,8 @@ export function createAtomImpostorMaterial({
       vColor.mul(vProp).mul(u.uPropEmission),
       vec3(0.0),
     );
-    const emission = vEmission.rgb.mul(vEmission.a).add(propertyGlow);
+    // Read by both the lit and the Illustrate surface: materialized before either branch (G1).
+    const emission = vEmission.rgb.mul(vEmission.a).add(propertyGlow).toVar();
 
     // Contact occlusion: the K baked neighbours (and the bond stubs leaving
     // this atom) as analytic spheres around the hit point, in view space.
@@ -442,27 +452,55 @@ export function createAtomImpostorMaterial({
       );
     });
     // Scalar density occlusion (large scenes) times contact occlusion.
-    const openness = mix(float(1), vOcclusion, u.uOcclusionStrength).mul(contactOpen);
+    const openness = mix(float(1), vOcclusion, u.uOcclusionStrength).mul(contactOpen).toVar();
 
-    const lit = (lupiSurface(
-      {
-        normal,
-        baseColor: vColor,
-        albedo,
-        metalness: surface.x,
-        roughness,
-        clearcoat: u.uSurfaceClearcoat,
-        polish: u.uSurfacePolish,
-        occlusion: openness,
-        occlusionStrength: float(1),
-        emission,
-        pixelRadius: vPixelRadius,
-        subsurface: surface.z,
-      },
-      lights,
-      env,
-      tier,
-    ) as N).toVar();
+    // The lit Specimen surface, the Illustrate surface (tsl/inkLook.ts), or a
+    // blend of the two while the look fades. Uniform branches: a still look
+    // runs one of them only.
+    const inkMix: N = INK_LOOK.uInkMix as N;
+    const lit = vec3(0).toVar();
+    If(inkMix.lessThan(1.0), () => {
+      lit.assign(lupiSurface(
+        {
+          normal,
+          baseColor: vColor,
+          albedo,
+          metalness: surface.x,
+          roughness,
+          clearcoat: u.uSurfaceClearcoat,
+          polish: u.uSurfacePolish,
+          occlusion: openness,
+          occlusionStrength: float(1),
+          emission,
+          pixelRadius: vPixelRadius,
+          subsurface: surface.z,
+        },
+        lights,
+        env,
+        tier,
+      ) as N);
+    });
+    If(inkMix.greaterThan(0.0), () => {
+      // Pixels from the hit to the disc's silhouette: R·(1 − sin θ) on screen.
+      const inkEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate()));
+      const facing: N = clamp(dot(normal, inkEye), 0.0, 1.0).toVar();
+      const edgePx: N = vPixelRadius.mul(float(1).sub(sqrt(max(float(1).sub(facing.mul(facing)), 0.0))));
+      const ink = lupiInkSurface(
+        {
+          normal,
+          baseColor: albedo,
+          occlusion: openness,
+          pixelRadius: vPixelRadius,
+          edgePx,
+          lineWidth: INK_LOOK_TUNING.atomLine,
+          hit: hit.xyz,
+          isOrtho,
+          emission,
+        },
+        lights,
+      ) as N;
+      lit.assign(mix(lit, ink, clamp(inkMix, 0.0, 1.0)));
+    });
 
     // Etched annotation: the view-space normal is the stamp UV (the text
     // faces the camera); only the targeted atom darkens where alpha is set.
@@ -474,11 +512,23 @@ export function createAtomImpostorMaterial({
     const targeted = u.uHasEtch.greaterThan(0.5).and(abs(vAtomId.sub(u.uEtchAtomId)).lessThan(0.5));
     const etchAlpha = (texture(u.tEtchTexture, clamp(etchUv, 0.0, 1.0)) as N).a;
     const etch = select(targeted.and(inside), etchAlpha, float(0.0));
-    const shaded: N = mix(lit, lit.mul(0.32), etch);
-    // Hover / selection / grab rim and the heat tint (zero in captures).
+    const etched: N = mix(lit, lit.mul(0.32), etch);
     const toEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate()));
-    const glow = lupiAtomGlow(vGlow, dot(normal, toEye));
-    return vec4(shaded.add(glow), 1.0);
+    const facing: N = dot(normal, toEye).toVar();
+    // A Remix code's Foil finish (exactly `etched` without one, and in captures).
+    const shaded: N = lupiFoilFinish({
+      lit: etched,
+      normal,
+      facing,
+      keyLightDir: lights.lightDir,
+      pixelRadius: vPixelRadius,
+      sweep: vFoilSweep,
+      // The Illustrate look is a drawing: a finish steps aside as ink comes in.
+      mute: inkMix,
+    });
+    // Hover / selection / grab rim and the heat tint (zero in captures).
+    const glow = lupiAtomGlow(vGlow, facing);
+    return vec4((shaded as N).add(glow), 1.0);
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

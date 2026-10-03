@@ -1,19 +1,38 @@
-import type { AppState } from './store';
+import type { AppState, InkStyle } from './store';
 import { POSTPROCESS_PRESETS } from './postprocess/presets';
+import { PAPER_PLATE_PRESET_ID, SAGE_PLATE_PRESET_ID } from './backgroundPresets';
 
 export const SCENE_LOOKS = [
   { id: 'studio', label: 'Studio', description: 'Soft light · depth' },
   { id: 'paper', label: 'Paper', description: 'Bright · clear' },
   { id: 'night', label: 'Night', description: 'Dark · sculpted' },
   { id: 'prism', label: 'Prism', description: 'Iridescent · luminous' },
+  { id: 'ink', label: 'Illustrate', description: 'Ink · flat colour' },
+  { id: 'sketch', label: 'Sketch', description: 'Ink · hatched · paper' },
 ] as const;
 export type SceneLookId = typeof SCENE_LOOKS[number]['id'];
+
+/** The Illustrate looks' shading (every other Look is lit). */
+export function inkStyleForLook(id: SceneLookId): InkStyle {
+  return id === 'ink' ? 'flat' : id === 'sketch' ? 'hatch' : 'off';
+}
+
+/** The Look a molecule opens on for an ink style (a new file keeps an Illustrate look). */
+export function lookForInkStyle(style: InkStyle): SceneLookId {
+  return style === 'flat' ? 'ink' : style === 'hatch' ? 'sketch' : 'studio';
+}
 
 /** The post recipe every Look renders through (the Specimen rig). */
 const LOOK_POSTPROCESS = 'paper' as const;
 
 /** Presentation only. Never reset color encodings, visibility, bonds or source data.
  * All looks avoid transmission, animated backdrops, bloom and depth of field.
+ *
+ * Illustrate (flat colour on the sage plate) and Sketch (hatched, on the
+ * paper plate) are the ink drawing's voice in 3D: the same rig and recipe as
+ * Studio and Paper, with the impostors' toon shading and ink outlines on
+ * (`inkStyle`); the post recipe steps aside while ink is on
+ * (postprocess/controls.ts). Every other Look turns ink off.
  *
  * The Specimen rig: every Look is one softbox key (az 40, el 45) with a cool
  * fill and a gentle rim card, changing only gains and colours, at every
@@ -26,7 +45,8 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
   void atomCount;
   const post = POSTPROCESS_PRESETS[LOOK_POSTPROCESS];
   return {
-    backgroundPreset: id === 'paper' ? 'white' : id === 'night' ? 'slate' : id === 'prism' ? 'midnight' : 'sage-plate',
+    backgroundPreset: id === 'paper' ? 'white' : id === 'night' ? 'slate' : id === 'prism' ? 'midnight'
+      : id === 'sketch' ? PAPER_PLATE_PRESET_ID : SAGE_PLATE_PRESET_ID,
     backgroundStyle: 'radial',
     backgroundBackdropShape: 'dome',
     backgroundBackdropPattern: 'image',
@@ -47,7 +67,7 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
     filterShellPreset: 'prism',
     filterShellOpacity: 0.38,
     filterShellRadius: 1.08,
-    ambientLightIntensity: id === 'paper' ? 0.85 : id === 'night' ? 0.4 : 0.6,
+    ambientLightIntensity: id === 'paper' || id === 'sketch' ? 0.85 : id === 'night' ? 0.4 : 0.6,
     dirLightIntensity: id === 'night' ? 1.65 : 1.35,
     // A gentle rim on every Look; Night leans on it.
     rimLightIntensity: id === 'night' ? 0.42 : 0.22,
@@ -69,6 +89,7 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
     bloom: post.bloom.enabled,
     dof: post.dof.enabled,
     autoDepthOfField: post.dof.auto,
+    inkStyle: inkStyleForLook(id),
   } satisfies Partial<AppState>;
 }
 

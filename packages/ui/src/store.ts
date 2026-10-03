@@ -25,7 +25,7 @@ import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
 import type { MolecularMeasurement, MeasurementTool } from './measurements';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
 import { MATERIAL_SCENES, getScene, DEFAULT_SCENE_ID } from '@atlas/scene/materials';
-import { sceneLookPatch } from './sceneLooks';
+import { lookForInkStyle, sceneLookPatch } from './sceneLooks';
 import { sanitizeEffectOverrides, type EffectOverrides } from './postprocess/controls';
 import {
   canInferCovalentBonds,
@@ -91,6 +91,8 @@ export type FilterShellPreset = 'haze' | 'cryo' | 'prism' | 'graphite';
 export type BackgroundBackdropShape = 'dome' | 'sphere' | 'cube';
 export type BackgroundBackdropPattern = 'image' | 'plain' | 'grid';
 export type ViewerControlMode = 'molecule' | 'scene' | 'export';
+/** The Illustrate look's shading: off (lit), flat colour, or hatched (scene tsl/inkLook.ts). */
+export type InkStyle = 'off' | 'flat' | 'hatch';
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -152,6 +154,12 @@ function sanitizePostprocessPreset(value: unknown): AppState['postprocessPreset'
   return value === 'paper' || value === 'studio' || value === 'editorial' || value === 'cinematic' || value === 'diagram'
     ? value
     : 'studio';
+}
+
+export function sanitizeInkStyle(value: unknown): InkStyle {
+  if (value === 'f' || value === 'flat') return 'flat';
+  if (value === 'h' || value === 'hatch') return 'hatch';
+  return 'off';
 }
 
 function sanitizeMaterialPreset(value: unknown): AppState['materialPreset'] {
@@ -285,6 +293,39 @@ export interface ExportRequest {
    *  short human label ("bonds", "geometry", "encode"); done/total are
    *  phase-relative. Exporters may call this from any thread cadence. */
   onProgress?: (phase: string, done: number, total: number) => void;
+  /** Instant Replay's clip: the camera and toys follow the clip's own clock (video only). */
+  replay?: ReplayClipDriver;
+  /**
+   * An illustrative recording: display motion (the toys) keeps playing. Only
+   * Instant Replay's clip sets it; it is labelled "Illustrative" in its frames
+   * and is never an artifact.
+   */
+  illustrative?: boolean;
+  /** Record this 2D canvas (each frame plus burned-in labels) instead of the viewer canvas (video only). */
+  compositor?: VideoCompositor;
+  /** Aborting it stops a recording in flight and discards it (onComplete(false), no warning). */
+  signal?: AbortSignal;
+  /** Recording progress, 0..1, once per drawn frame (video only). */
+  onRecordProgress?: (fraction: number) => void;
+}
+
+/** Drives the camera (and anything else) through an Instant Replay clip. */
+export interface ReplayClipDriver {
+  /** Clip length (s). */
+  duration: number;
+  /** Before the first frame. */
+  begin(): void;
+  /** Place the camera (and the rig's target) at `seconds` into the clip. */
+  drive(seconds: number, camera: import('three').Camera, target: import('three').Vector3 | null): void;
+  /** After the last frame, or when the clip is abandoned. */
+  end(): void;
+}
+
+/** Composes each recorded frame (the viewer canvas, then 2D labels) into its own canvas. */
+export interface VideoCompositor {
+  canvas: HTMLCanvasElement;
+  /** Draw one frame; false when the viewer canvas gave nothing to draw. */
+  draw(source: HTMLCanvasElement, seconds: number): boolean;
 }
 
 export interface ExportFailure {
@@ -489,6 +530,14 @@ export interface AppState {
   effectOverrides: EffectOverrides | null;
   /** Device-local opt-in; never imposed on a recipient of a shared view. */
   fullSceneEffects: boolean;
+  /**
+   * The Illustrate look: toon fills and ink outlines on the impostors
+   * ('flat' colour or 'hatch'ed), or 'off' for the lit Specimen surface.
+   * A Look, not toy motion: shared, saved and exported like any look.
+   */
+  inkStyle: InkStyle;
+  /** Ink line weight multiplier (0.4–2.5, 1 = the house weight). */
+  inkWeight: number;
   /** 0..1 — when colorScheme is 'property', atoms with high property values
    *  emit additional light proportional to value × this strength × the
    *  colormap-mapped color. Reads as "this atom is doing something." */
@@ -717,6 +766,7 @@ export interface AppState {
   setPostprocessPreset: (id: AppState['postprocessPreset']) => void;
   setPostprocessIntensity: (v: number) => void;
   setPropertyEmissionStrength: (v: number) => void;
+  setInkStyle: (style: InkStyle) => void;
   toggleSSAO: () => void;
   toggleBloom: () => void;
   toggleDOF: () => void;
@@ -966,6 +1016,8 @@ const DEFAULTS = {
   postprocessIntensity: 1.0,
   effectOverrides: null as EffectOverrides | null,
   fullSceneEffects: false,
+  inkStyle: 'off' as InkStyle,
+  inkWeight: 1,
   propertyEmissionStrength: 0.6,
   ssao: true,
   ssaoIntensity: 0.65,
@@ -1086,6 +1138,8 @@ export function buildStateDelta(s: AppState): Record<string, unknown> {
   if (s.postprocessPreset !== DEFAULTS.postprocessPreset) delta.pp = s.postprocessPreset;
   if (r(s.postprocessIntensity) !== DEFAULTS.postprocessIntensity) delta.pi = r(s.postprocessIntensity);
   if (s.effectOverrides) delta.pfx = s.effectOverrides;
+  if (s.inkStyle !== 'off')                        delta.ink = s.inkStyle === 'hatch' ? 'h' : 'f';
+  if (r(s.inkWeight) !== DEFAULTS.inkWeight)       delta.iw = r(s.inkWeight);
   if (r(s.propertyEmissionStrength) !== DEFAULTS.propertyEmissionStrength) delta.pe = r(s.propertyEmissionStrength);
   if (!s.ssao)                                     delta.ssao = 0;
   if (!s.bloom)                                    delta.bloom = 0;
@@ -1173,6 +1227,8 @@ export function applyStateDelta(delta: unknown): Partial<AppState> {
     postprocessPreset: sanitizePostprocessPreset(s.pp),
     postprocessIntensity: sanitizeNumberRange(s.pi, DEFAULTS.postprocessIntensity, 0, 2),
     effectOverrides: sanitizeEffectOverrides(s.pfx),
+    inkStyle: sanitizeInkStyle(s.ink),
+    inkWeight: sanitizeNumberRange(s.iw, DEFAULTS.inkWeight, 0.4, 2.5),
     propertyEmissionStrength: sanitizeNumberRange(s.pe, DEFAULTS.propertyEmissionStrength, 0, 1),
     ssao: sanitizeBinaryFlag(s.ssao, true),
     bloom: sanitizeBinaryFlag(s.bloom, true),
@@ -1352,7 +1408,9 @@ export const useStore = create<AppState>()(
         // path overrides via setLoadedAtomCount during the load.
         loadedAtomCount: atomCount,
         // Saved URL state is applied after this and remains authoritative.
-        ...(atomCount > 0 && atomCount < 25_000 ? sceneLookPatch('studio', atomCount) : {}),
+        // An Illustrate look carries over to the next molecule (the Play
+        // tray's Ink is a way of seeing, not a per-file setting).
+        ...(atomCount > 0 && atomCount < 25_000 ? sceneLookPatch(lookForInkStyle(get().inkStyle), atomCount) : {}),
       });
       // Fit the camera to the newly-loaded bounds immediately. URL-state
       // restore (decodeFromURL) may override this in a subsequent tick, but
@@ -1472,6 +1530,7 @@ export const useStore = create<AppState>()(
     setPostprocessPreset: (postprocessPreset) => set({ postprocessPreset, effectOverrides: null }),
     setPostprocessIntensity: (postprocessIntensity) =>
       set({ postprocessIntensity: Math.max(0, Math.min(2, postprocessIntensity)) }),
+    setInkStyle: (inkStyle) => set({ inkStyle: sanitizeInkStyle(inkStyle) }),
     setPropertyEmissionStrength: (propertyEmissionStrength) =>
       set({ propertyEmissionStrength: Math.max(0, Math.min(1, propertyEmissionStrength)) }),
     // Legacy individual toggles — no longer drive the EffectComposer (the

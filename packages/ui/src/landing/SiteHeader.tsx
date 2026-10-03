@@ -15,6 +15,7 @@ export function SiteHeader({ current }: { current: SiteSection }) {
       </a>
       <nav aria-label="Primary">
         <a href={`${home}#molecules`}>Molecules</a>
+        <a href="/daily/">Daily</a>
         <a href="/library" aria-current={current === 'library' ? 'page' : undefined}>
           Library
         </a>

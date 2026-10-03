@@ -10,6 +10,12 @@
  * annotated get trails. Bounds memory at 1M-atom scenes (typically ≤ 20
  * tracked atoms × 60 history slots = 1200 vec3 = trivial). Diffusion and
  * dynamics studies become legible — atoms gain "memory" the eye can read.
+ *
+ * The history is source truth (rest positions). While display motion carries
+ * a tracked atom (a poke, Tug, Burst, Heat, the arrival), the trail's newest
+ * samples bend toward it so the trail stays attached to its atom
+ * (play/displayFollow); at rest, and in every capture, it is the plain
+ * history again.
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
@@ -17,6 +23,18 @@ import { useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { hasStableAtomIdentity, resolveTypeColor } from '@atlas/core';
+import { atomRestPoint, useDisplayFollower } from './play/displayFollow';
+
+/** The trail's last samples bend toward the displaced atom over this many samples. */
+const FOLLOW_SAMPLES = 8;
+
+/** How much of the atom's display offset sample `i` of `count` takes (1 at the head, eased out toward the tail). */
+function followWeight(i: number, count: number): number {
+  const fromHead = count - 1 - i;
+  if (fromHead >= FOLLOW_SAMPLES) return 0;
+  const t = 1 - fromHead / FOLLOW_SAMPLES;
+  return t * t * (3 - 2 * t);
+}
 
 interface AtomTrailsProps {
   frame: Frame;
@@ -162,6 +180,31 @@ function TrailLine({
   const colBuf = useMemo(() => new Float32Array(maxLength * 3), [maxLength]);
   const positionAttr = useMemo(() => new THREE.BufferAttribute(posBuf, 3), [posBuf]);
   const colorAttr = useMemo(() => new THREE.BufferAttribute(colBuf, 3), [colBuf]);
+  const restPoint = useMemo(() => new Float64Array(3), []);
+
+  // The history (and a displaced head) can leave the first bounding sphere.
+  useEffect(() => {
+    if (lineRef.current) lineRef.current.frustumCulled = false;
+  }, []);
+
+  // Display motion: rewrite the newest samples as history + weight × offset
+  // (after this frame's history write below), or back to plain history.
+  useDisplayFollower({
+    mode: 'exact',
+    points: () => (atomRestPoint(frame, atomIndex, restPoint) ? restPoint : null),
+    apply: (offsets) => {
+      const pts = historyRef.current.get(atomIndex)?.positions;
+      if (!pts || pts.length < 2) return;
+      const from = Math.max(0, pts.length - FOLLOW_SAMPLES);
+      for (let i = from; i < pts.length; i++) {
+        const w = offsets ? followWeight(i, pts.length) : 0;
+        posBuf[i * 3 + 0] = pts[i].x + (offsets ? offsets[0] * w : 0);
+        posBuf[i * 3 + 1] = pts[i].y + (offsets ? offsets[1] * w : 0);
+        posBuf[i * 3 + 2] = pts[i].z + (offsets ? offsets[2] * w : 0);
+      }
+      positionAttr.needsUpdate = true;
+    },
+  });
 
   useFrame(() => {
     const h = historyRef.current.get(atomIndex);

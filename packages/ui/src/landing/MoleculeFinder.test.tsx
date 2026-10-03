@@ -39,7 +39,10 @@ describe('MoleculeFinder', () => {
     fireEvent.change(input, { target: { value: 'caf' } });
     expect(screen.getByRole('option', { name: /Caffeine/ })).toBeTruthy();
     await waitFor(() => expect(screen.getByRole('option', { name: /caffeic acid/ })).toBeTruthy());
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/rest/autocomplete/compound/caf/json');
+    // The ink tiles also fetch the matches' drawings; PubChem is one of the calls.
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toContainEqual(
+      expect.stringContaining('/rest/autocomplete/compound/caf/json'),
+    );
     const options = screen.getAllByRole('option');
     expect(options[0].textContent).toContain('Caffeine');
     expect(options[options.length - 1].textContent).toContain('Look up on PubChem');

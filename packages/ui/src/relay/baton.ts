@@ -20,6 +20,12 @@ export interface RelayBaton {
   bodyOmegaY: number;
   /** performance.now() at hand-off. */
   t: number;
+  /**
+   * The visitor tapped an ink drawing (an ink tile or finder row; the hero
+   * and molecule pages always are): the viewer opens in ink at the drawing's
+   * pose and the light comes on (ink/InkLookDriver.tsx, Ink-to-Light).
+   */
+  ink?: boolean;
 }
 
 const STORAGE_KEY = 'lupi.relay.baton';

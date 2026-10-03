@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { emitIntent } from '@atlas/scene';
 import { useStore } from '../store';
+import { openReplaySheet } from '../replay/actions';
+import { rollRemix, undoRemix } from '../remix/actions';
+import { toggleIllustrate } from '../ink/illustrate';
 
 export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPaletteOpen: (open: boolean) => void) {
   useEffect(() => {
@@ -49,6 +52,21 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
       }
       if (e.key.toLowerCase() === 'p' && currentFile && noModifiers && !e.shiftKey) {
         emitIntent({ type: 'play.toggleTray', source: 'key' });
+      }
+      // R: Instant Replay of the last moment (or this view, as a still link).
+      if (e.key.toLowerCase() === 'r' && currentFile && noModifiers && !e.shiftKey && !state.activePanel) {
+        e.preventDefault();
+        openReplaySheet();
+      }
+      // M: Remix (a new look and its code); Shift+M steps back.
+      if (e.key.toLowerCase() === 'm' && currentFile && noModifiers && !e.repeat) {
+        e.preventDefault();
+        if (e.shiftKey) undoRemix();
+        else rollRemix('key');
+      }
+      // I: the Illustrate look on and off (ink ⇄ light).
+      if (e.key.toLowerCase() === 'i' && currentFile && noModifiers && !e.shiftKey) {
+        toggleIllustrate({ flash: true });
       }
       if (e.key === 'Escape') {
         state.setActivePanel(null);

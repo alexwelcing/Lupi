@@ -7,8 +7,19 @@ import { useEffect, useState } from 'react';
  */
 export const MOBILE_MEDIA_QUERY = '(max-width: 640px), (max-height: 500px) and (max-width: 900px)';
 
+/** The query's answer right now; false where there is no matchMedia (jsdom, some webviews). */
+export function matchesMediaQuery(query: string): boolean {
+  try {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
+  } catch {
+    return false;
+  }
+}
+
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
+  // Answer on the first render, so a phone never paints one desktop frame
+  // (a sheet that mounts with a panel would otherwise jump into place).
+  const [matches, setMatches] = useState(() => matchesMediaQuery(query));
   useEffect(() => {
     // jsdom and some embedded webviews have no matchMedia; treat as "no match".
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;

@@ -14,8 +14,23 @@
  *   __lupiPlay.poke/flick/catch/scatter/stepDetent(...) once their owner registers them
  *   __lupiPlay.burst(atomIndex), .tug(atomIndex, [dx, dy, dz], holdMs), .heat(level)
  *                         the Play verbs' toys, driven without a pointer
- *   __lupiPlay.viewInset() → { current, target, occluder }: the phone atom card's
- *                         view shift (CSS px, down), once the viewer registers it
+ *   __lupiPlay.viewInset() → { current, target, occluders }: the phone framing
+ *                         ({ x, y, scale }: CSS px and zoom-out) that makes room
+ *                         for the declared phone sheets and cards, and their ids,
+ *                         once the viewer registers it
+ *   __lupiPlay.follow() → { moving, followers, displaced, points, maxOffset }:
+ *                         the overlays riding display motion (labels, rings, the
+ *                         card anchor, measurements, trails); all displaced
+ *                         counts are 0 and maxOffset is 0 at rest
+ *   __lupiPlay.replay()  → Instant Replay: the offered (or last) moment as a tape
+ *                         ({ moment, keys, events, bytes, link }); replay('watch')
+ *                         starts a waiting shared replay; replay('moment') offers
+ *                         the last 4 s as a moment
+ *   __lupiPlay.remix()   → Remix: { code, foil, finish, status, morphing };
+ *                         remix('roll') rolls, remix('undo') steps back,
+ *                         remix('r1-K7QDM') applies a code
+ *   __lupiPlay.ink()    → { mix, hatch, weight, target, holding, fading, arrival }:
+ *                         the Illustrate look's live weights and Ink-to-Light state
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -42,7 +57,11 @@ export type PlayDevHookName =
   | 'burst'
   | 'tug'
   | 'heat'
-  | 'viewInset';
+  | 'viewInset'
+  | 'follow'
+  | 'replay'
+  | 'remix'
+  | 'ink';
 
 export interface PlayRigState {
   position: Vec3;
@@ -90,6 +109,11 @@ export interface LupiPlayDevApi {
   tug?: DevHook;
   heat?: DevHook;
   viewInset?: DevHook;
+  follow?: DevHook;
+  replay?: DevHook;
+  remix?: DevHook;
+  /** The Illustrate look: `{ mix, hatch, weight, target, holding, fading, arrival }` (ink/InkLookDriver.tsx). */
+  ink?: DevHook;
 }
 
 declare global {
@@ -99,8 +123,35 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset'];
+type ExposedHookName =
+  | 'poke'
+  | 'flick'
+  | 'catch'
+  | 'scatter'
+  | 'stepDetent'
+  | 'burst'
+  | 'tug'
+  | 'heat'
+  | 'viewInset'
+  | 'follow'
+  | 'replay'
+  | 'remix'
+  | 'ink';
+const EXPOSED: ReadonlyArray<ExposedHookName> = [
+  'poke',
+  'flick',
+  'catch',
+  'scatter',
+  'stepDetent',
+  'burst',
+  'tug',
+  'heat',
+  'viewInset',
+  'follow',
+  'replay',
+  'remix',
+  'ink',
+];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 

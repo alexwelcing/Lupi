@@ -44,8 +44,13 @@ import {
 } from '../measurements';
 import { CameraFocus } from '../CameraFocus';
 import { PlayLayer } from '../play/PlayLayer';
+import { DisplayFollowDriver } from '../play/displayFollow';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
+import { InkLookDriver } from '../ink/InkLookDriver';
 import { CameraToys } from '../camera/CameraToys';
+import { ReplayDirector } from '../replay/ReplayDirector';
+import { FoilDriver } from '../remix/FoilDriver';
+import { RemixBackdropFade } from '../remix/RemixBackdropFade';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
 import { ViewInsetDriver } from '../camera/ViewInsetDriver';
 import { markCanvasSelection } from '../camera/selectionSource';
@@ -578,6 +583,7 @@ export function ViewerScene({
         backdropPattern={backdropPattern}
         backdropRadius={backdropRadius}
       />
+      <RemixBackdropFade />
       <SceneLighting />
 
       {currentFrame && (
@@ -760,6 +766,7 @@ export function ViewerScene({
             labels={knowledgeLabels}
             visibleKinds={knowledgeLabelKinds}
             visible={showKnowledgeLabels}
+            frame={currentFrame}
           />
           <SelectionMarkers
             frame={currentFrame}
@@ -793,12 +800,17 @@ export function ViewerScene({
             transmissionActive={transmissionActive}
             playing={playing}
           />
+          {/* Labels, rings, the card anchor, measurements and trails ride display motion. */}
+          <DisplayFollowDriver enabled={!transmissionActive} />
           <AtomGlowDriver
             hoveredAtom={visibleHoveredAtom}
             selectedAtoms={visibleSelectedAtoms}
             enabled={!transmissionActive}
           />
+          <FoilDriver />
+          <InkLookDriver />
           <CameraToys frame={currentFrame} />
+          <ReplayDirector frame={currentFrame} center={center} />
           <AtomTrails
             frame={currentFrame}
             frameKey={interpolatedFrameKey}
@@ -866,8 +878,8 @@ export function ViewerScene({
         />
       )}
 
-      {/* The phone atom card's room: a display-only view shift. */}
-      <ViewInsetDriver />
+      {/* Room for phone sheets and the atom card: a display-only framing. */}
+      <ViewInsetDriver bounds={file?.trajectory.globalBounds ?? null} />
 
       {ORBIT_FALLBACK ? (
         <OrbitControls
