@@ -58,6 +58,8 @@ export const LUPI_JOB = {
   frameDemand: 'lupi/frame-demand',
   /** The phone atom card's view shift (a projection view offset) in `update`. */
   viewInset: 'lupi/view-inset',
+  /** The Illustrate look's fade (Ink-to-Light) uniforms in `lupi-uniforms`. */
+  inkLook: 'lupi/ink-look',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];
