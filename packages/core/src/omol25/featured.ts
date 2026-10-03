@@ -1,10 +1,10 @@
 import { OMOL25_NEUTRAL_ELEMENTS, omol25Collection } from './collections';
-import { OMOL25_CITATION } from './truth';
+import { OMOL25_CITATION, OMOL25_VIEWER_BOND_RECIPE } from './truth';
 import { omolFeaturedPath, omolPickInkPath, omolPickKey, omolStructurePath } from './urls';
 
 export const OMOL25_FEATURED_SCHEMA = 'lupi.omol25-featured.v1' as const;
 export const OMOL25_FEATURED_DATASET = 'colabfit/OMol25_neutral_validation' as const;
-export const OMOL25_FEATURED_BOND_RECIPE = 'lupi-bonds.molecular.v1' as const;
+export const OMOL25_FEATURED_BOND_RECIPE = OMOL25_VIEWER_BOND_RECIPE;
 
 export type OmolShelfId = 'drug-like' | 'amino-acid-ligand' | 'conformers' | 'off-equilibrium' | 'salt-complexes' | 'small';
 export const OMOL25_SHELVES: readonly OmolShelfId[] = [

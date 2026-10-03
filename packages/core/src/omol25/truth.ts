@@ -10,6 +10,8 @@ export const OMOL25_LICENSE_URL = 'https://creativecommons.org/licenses/by/4.0/'
 /** ColabFit's collection of the public conversions Lupi reads. */
 export const OMOL25_ATTRIBUTION_URL = 'https://huggingface.co/collections/colabfit/omol25-open-molecules-2025-colabfit';
 export const OMOL25_METHOD = 'ωB97M-V/def2-TZVPD';
+/** The bond recipe the viewer applies to OMol25 records (OMol25 itself supplies none). */
+export const OMOL25_VIEWER_BOND_RECIPE = 'lupi-bonds.molecular.v1' as const;
 
 export const OMOL25_COORDINATE_TRUTH = 'Source DFT coordinates (ωB97M-V/def2-TZVPD, OMol25).';
 export const OMOL25_MASTHEAD_BOND_SENTENCE = 'OMol25 supplies no bond topology; Lupi infers bonds with a published rule and labels them.';
