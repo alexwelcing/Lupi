@@ -88,10 +88,15 @@ function turnText(tape: Tape): string {
 function yourTurn(tape: Tape, latch: boolean): void {
   const verb = tape.gesture ? TURN_VERB[tape.gesture] : undefined;
   const play = playStore.getState();
-  if (latch && verb && getComfort() !== 'still' && !tape.still) play.setVerb(verb);
-  // The verb's own hint flashes as it latches; the coach line goes after it.
-  play.flashText(turnText(tape), 'turn', TURN_FLASH_MS);
   play.markTeachSeen();
+  if (latch && verb && getComfort() !== 'still' && !tape.still && play.verb !== verb) {
+    play.setVerb(verb);
+    // The verb's own hint flashes as it latches (a React effect); the coach
+    // line follows it, after the pill's one-second minimum.
+    setTimeout(() => playStore.getState().flashText(turnText(tape), 'turn', TURN_FLASH_MS), 120);
+    return;
+  }
+  play.flashText(turnText(tape), 'turn', TURN_FLASH_MS);
 }
 
 /** The farthest atom from `center` (world). */

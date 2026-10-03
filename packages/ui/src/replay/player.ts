@@ -24,8 +24,10 @@ import type { Tape, TapeEvent } from './tape';
 const FLASH_MS = { detent: 1200, flip: 1800, catch: 700, info: 1400 } as const;
 /** The molecule's bounding sphere fills at most this much of the narrow side. */
 const FIT_MARGIN = 1.08;
-/** A replay never zooms out more than this to fit a narrower screen. */
+/** A replay never zooms out more than this to fit a narrower screen… */
 const MAX_REFRAME = 2.4;
+/** …nor in more than this on a wider one. */
+const MIN_REFRAME = 0.45;
 
 export interface ReplayFraming {
   /** Molecule centre and bounding radius (world). */
@@ -37,9 +39,13 @@ export interface ReplayFraming {
 }
 
 /**
- * The one distance scale for a tape on another screen: keep the sender's
- * framing, zooming out (never in) only as far as the molecule needs to fit
- * the narrower width, and no further than the sender's own width showed.
+ * The one distance scale for a tape on another screen. The sender framed the
+ * molecule against the narrower of their width and height; the replay keeps
+ * that framing against this screen's narrower side: a phone moment on a
+ * desktop moves in (the molecule fills the height as it filled the phone's
+ * width), a desktop moment on a phone or in the 9:16 clip moves out, but only
+ * as far as the molecule needs to fit. A different FOV keeps the same
+ * apparent size.
  */
 export function reframeScale(tape: Tape, framing: ReplayFraming): number {
   const deg = Math.PI / 180;
@@ -49,11 +55,12 @@ export function reframeScale(tape: Tape, framing: ReplayFraming): number {
   const fovScale = tanHere > 1e-6 ? tanSender / tanHere : 1;
   const aspect = Math.max(0.2, framing.aspect);
   const senderAspect = Math.max(0.2, tape.aspect);
-  if (aspect >= senderAspect - 1e-3 || !(framing.radius > 0)) return fovScale;
-  // Horizontal half-angle here: the bounding sphere must fit it.
-  const halfWidth = Math.atan(tanHere * aspect);
-  const needDistance = (framing.radius * FIT_MARGIN) / Math.sin(halfWidth);
-  let need = 1;
+  const ratio = Math.min(1, senderAspect) / Math.min(1, aspect);
+  if (Math.abs(ratio - 1) < 1e-3 || !(framing.radius > 0)) return fovScale;
+  // The bounding sphere must fit the narrower half-angle here.
+  const halfNarrow = Math.atan(tanHere * Math.min(1, aspect));
+  const needDistance = (framing.radius * FIT_MARGIN) / Math.sin(halfNarrow);
+  let need = -Infinity;
   for (const key of tape.keys) {
     const toCenter = Math.hypot(
       key.target[0] - framing.center[0],
@@ -65,8 +72,11 @@ export function reframeScale(tape: Tape, framing: ReplayFraming): number {
     const d = key.d * fovScale;
     if (d > 1e-6) need = Math.max(need, needDistance / d);
   }
-  const cap = Math.min(MAX_REFRAME, Math.max(1, senderAspect / aspect));
-  return fovScale * Math.min(need, cap);
+  if (!Number.isFinite(need)) need = ratio;
+  const k = ratio > 1
+    ? Math.min(Math.max(need, 1), Math.min(ratio, MAX_REFRAME))
+    : Math.min(1, Math.max(ratio, need, MIN_REFRAME));
+  return fovScale * k;
 }
 
 export interface ReplayPlayerOptions {

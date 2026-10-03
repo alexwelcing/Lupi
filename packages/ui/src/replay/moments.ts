@@ -44,6 +44,8 @@ export const MOMENT = {
   stirRipples: 6,
   /** Tug pulls (pointer moves) that make a tug a moment. */
   tugPulls: 4,
+  /** Atom taps (each rings a ripple) in one go that make a moment; fewer is just looking. */
+  pokes: 5,
 } as const;
 
 /** Tug pulls closer than this merge on the tape (s); heat rubs closer than this add up. */
@@ -131,7 +133,7 @@ function toyEpisodeCounts(toy: ToyEpisode): boolean {
     (toy.tugGrabs > 0 && toy.tugPulls >= MOMENT.tugPulls) ||
     toy.heatHeld >= MOMENT.heatHeldS ||
     toy.ripples >= MOMENT.stirRipples ||
-    toy.pokes >= 3
+    toy.pokes >= MOMENT.pokes
   );
 }
 
