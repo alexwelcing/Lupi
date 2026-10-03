@@ -73,6 +73,13 @@
   display: inline-block;
   white-space: nowrap;
 }
+.dl-title--long {
+  font-size: clamp(1.75rem, 4.2vw, 2.6rem) !important;
+}
+.dl-title--long .dl-word {
+  display: inline;
+  white-space: normal;
+}
 .dl-letter {
   display: inline-block;
 }

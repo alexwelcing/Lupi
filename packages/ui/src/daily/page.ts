@@ -24,8 +24,10 @@
  *
  * Motion follows the viewer's comfort setting (localStorage 'lupi.motion',
  * else prefers-reduced-motion): Gentle shortens the bloom, Still cuts it.
- * No sound. No React, no three: a few kilobytes of script.
+ * No sound. Haptics only if the visitor turned them on in the viewer's
+ * Settings (lib/haptics.ts). No React, no three: a few kilobytes of script.
  */
+import { tick } from '../lib/haptics';
 import { inkSvgMarkup, type InkModel, type InkPose } from '../moleculePage/ink';
 import { createInkStage, type InkComfort, type InkStage } from '../moleculePage/inkStage';
 import { silhouetteSvg } from './art';
@@ -445,6 +447,8 @@ export function mountDailyPage(): void {
     title.replaceChildren();
     title.setAttribute('aria-label', secret.name);
     title.classList.toggle('dl-title--rise', animate && comfort !== 'still');
+    // Buckminsterfullerene does not fit a phone at display size.
+    title.classList.toggle('dl-title--long', secret.name.split(' ').some((word) => word.length > 13));
     // Letters rise one by one; a word never breaks across lines.
     let index = 0;
     secret.name.split(' ').forEach((word, w) => {
@@ -554,7 +558,16 @@ export function mountDailyPage(): void {
       result.appendChild(next);
     }
     result.hidden = false;
-    if (focus) head.focus({ preventScroll: false });
+    if (focus) {
+      // Focus moves for keyboards and screen readers; the eye stays on the bloom, then follows.
+      head.focus({ preventScroll: true });
+      window.setTimeout(() => {
+        const box = result.getBoundingClientRect();
+        if (box.top > window.innerHeight - 80 || box.bottom < 0) {
+          result.scrollIntoView({ behavior: comfort === 'still' ? 'auto' : 'smooth', block: 'nearest' });
+        }
+      }, comfort === 'still' ? 0 : 1500);
+    }
   }
 
   function shareResult(glyphs: string, out: HTMLElement): void {
@@ -613,6 +626,8 @@ export function mountDailyPage(): void {
   }
 
   function bloom(): void {
+    // Two soft ticks, only for visitors who turned haptics on in Settings.
+    if (tick(12)) window.setTimeout(() => tick(10), 140);
     if (!stageHost) return;
     stageHost.dataset.bloom = '';
     setTimeout(() => {
@@ -653,6 +668,7 @@ export function mountDailyPage(): void {
       return;
     }
     save();
+    tick(6);
     renderAll({ fresh: true });
     const n = clueNumber();
     const clue = secret.clues[n - 1];
@@ -890,7 +906,9 @@ export function mountDailyPage(): void {
         showBanner(`It’s already <strong>${formatLongDate(key)}</strong> somewhere, so this puzzle is open early. It counts for that day.`);
       }
       renderAll();
-      if (sub && !over() && !textMode) sub.textContent = 'Six clues. One molecule. The same for everyone today.';
+      if (sub && !over() && !textMode) {
+        sub.textContent = relation === 'past' ? 'Six clues. One molecule.' : 'Six clues. One molecule. The same for everyone today.';
+      }
       void loadYesterday();
     })
     .catch(() => {
