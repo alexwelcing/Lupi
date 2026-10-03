@@ -14,12 +14,14 @@
  *   the canvas.
  * - It only writes the projection: the pose, the store, saved views and the
  *   axes gizmo never see it, and capture copies of the camera clear it.
+ * - Quiet Idle: an overlay change requests frames, and the driver keeps the
+ *   demand loop awake ('viewInset') while it holds or moves.
  */
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import type { Camera, OrthographicCamera, PerspectiveCamera } from 'three';
 import { MOTION, createSpring1, isSettled, springTo } from '@atlas/core/motion';
-import { LUPI_JOB, registerRecordingGuard } from '@atlas/scene';
+import { LUPI_JOB, keepLupiAwake, registerRecordingGuard, requestLupiFrames } from '@atlas/scene';
 import { glidesAnimate } from '../motion/comfort';
 import { registerPlayDevHook } from '../play/devHooks';
 import { GESTURE } from './gestureTokens';
@@ -80,9 +82,22 @@ export function ViewInsetDriver() {
       if (next !== present) st.holdUntil = performance.now() + HOLD_MS;
       present = next;
       st.stale = true;
-      invalidate();
+      requestLupiFrames();
     });
-  }, [invalidate]);
+  }, []);
+
+  // Keep the demand loop drawing while the shift holds for a second tap or
+  // moves; at rest it costs nothing.
+  useEffect(
+    () =>
+      keepLupiAwake('viewInset', () => {
+        const st = state.current;
+        if (st.stale) return true;
+        const goal = st.recording ? 0 : st.target;
+        return st.spring.value !== goal || st.spring.velocity !== 0;
+      }),
+    [],
+  );
 
   useEffect(() => {
     state.current.stale = true;
