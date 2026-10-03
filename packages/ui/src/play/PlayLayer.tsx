@@ -1,7 +1,10 @@
 /**
  * PlayLayer — the display-motion driver inside the Canvas: the arrival (a
  * first open condenses out of a seeded mist, or the hero's flat drawing
- * inflates), the poke ripple, stirring with Poke, and Scatter.
+ * inflates), the poke ripple, stirring with Poke, Scatter, and the latched
+ * verbs Tug (drag an atom; its neighbourhood follows on springs and twangs
+ * home), Burst (a tap pops the atoms outward and they spring back) and Heat
+ * (hold to jiggle; the jiggle grows with hold time and cools on release).
  *
  * It only writes the shared uniforms of `@atlas/scene`'s displayMotion (one
  * write moves every atom and bond material) and `playStore.displaced`. It
@@ -31,14 +34,19 @@ import type { Frame } from '@atlas/core/types';
 import { MOTION, type MotionToken } from '@atlas/core/motion';
 import {
   ARRIVAL_MODE,
+  ATOM_GLOW,
+  BURST_SLOTS,
   DISPLAY_MOTION,
   DISPLAY_MOTION_TUNING,
   LUPI_JOB,
   LUPI_PHASE,
   RIPPLE_SLOTS,
+  burstPeak,
+  burstSlotUniforms,
   isDisplayMotionSuspended,
   keepLupiAwake,
   onIntent,
+  pickAtomAtClient,
   registerRecordingGuard,
   requestLupiFrames,
   resetLupiDisplayMotion,
@@ -95,6 +103,71 @@ const MODE_NAMES = ['none', 'condense', 'flat', 'scatter'] as const;
  */
 const MAX_STEP_S = 0.1;
 
+/** A length that scales with the molecule radius R, clamped (Å). */
+interface RadiusScaled {
+  scale: number;
+  min: number;
+  max: number;
+}
+
+function byRadius(rule: RadiusScaled, radius: number): number {
+  return Math.min(rule.max, Math.max(rule.min, rule.scale * radius));
+}
+
+interface SpringFeel {
+  omega: number;
+  zeta: number;
+}
+
+/**
+ * Tug: the grabbed neighbourhood rides a stiff core spring and a softer halo
+ * spring; held, they follow the finger with a little lag; released, they
+ * swing home past rest (under-damped) and settle. Gentle releases damped.
+ */
+const TUG = {
+  /** Gaussian falloff radius around the grab point. */
+  falloff: { scale: 0.42, min: 1.6, max: 6 } as RadiusScaled,
+  /** The rubber-band limit: displacement saturates as L·tanh(d / L). */
+  limit: { scale: 0.9, min: 2.5, max: 10 } as RadiusScaled,
+  held: { core: { omega: 30, zeta: 0.8 }, halo: { omega: 16, zeta: 0.7 } },
+  release: { core: { omega: 24, zeta: 0.2 }, halo: { omega: 15, zeta: 0.24 } },
+  releaseGentle: { core: { omega: 20, zeta: 0.8 }, halo: { omega: 13, zeta: 0.85 } },
+  /** The neighbourhood widens as it stretches: falloff × (1 + widen · stretch / limit). */
+  widen: 0.35,
+  /** At rest below these (Å, Å/s): the tug ends with its weight exactly 0. */
+  restX: 2e-3,
+  restV: 2e-2,
+  /** Spring integration substep (s). */
+  substepS: 1 / 240,
+} as const;
+
+/** Burst: amplitude and falloff follow the molecule; a quick pop and a soft spring home. */
+const BURST = {
+  amplitude: { scale: 0.45, min: 1.2, max: 5 } as RadiusScaled,
+  falloff: { scale: 0.55, min: 2.5, max: 12 } as RadiusScaled,
+  omega: 9,
+  zeta: 0.42,
+  zetaGentle: 0.75,
+  /** The summed push is bounded at this multiple of one burst's amplitude. */
+  boundScale: 1.6,
+} as const;
+
+/**
+ * Heat: the level rises toward 1 while held (time constant rampS; rubbing
+ * adds rubPerPx per pixel) and cools on release (coolS). The jiggle grows
+ * as √level (thermal amplitude goes as √T); the pill reads the level as an
+ * illustrative temperature.
+ */
+const HEAT = {
+  amplitude: 0.42,
+  rampS: 2.2,
+  coolS: 0.55,
+  rubPerPx: 0.0011,
+  restLevel: 0.003,
+  /** The pill's readout updates at most this often (ms). */
+  readoutMs: 90,
+} as const;
+
 const M = DISPLAY_MOTION;
 
 // ─── The driver (module state: the uniforms are module singletons) ──────
@@ -121,6 +194,48 @@ const driver = {
   lastStroke: { t: -Infinity, x: 0, y: 0 },
 };
 
+type V3 = [number, number, number];
+
+interface Spring3 {
+  x: V3;
+  v: V3;
+}
+
+const tug = {
+  /** Displaced: held, or springing home. */
+  active: false,
+  held: false,
+  /** The grabbed atom (it glows while held), or −1 for a point in space. */
+  atom: -1,
+  grab: [0, 0, 0] as V3,
+  falloff: 1.6,
+  limit: 3,
+  /** Comfort scale captured at the grab (Gentle halves). */
+  scale: 1,
+  gentle: false,
+  /** Where the finger's ray met the grab plane at the start. */
+  startHit: new THREE.Vector3(),
+  /** The finger's (limited, scaled) displacement: the held springs' target. */
+  target: [0, 0, 0] as V3,
+  core: { x: [0, 0, 0], v: [0, 0, 0] } as Spring3,
+  halo: { x: [0, 0, 0], v: [0, 0, 0] } as Spring3,
+};
+
+const bursts = {
+  /** Motion-clock end of each burst slot; < 0 is empty. */
+  ends: new Array<number>(BURST_SLOTS).fill(-1),
+  next: 0,
+};
+
+const heat = {
+  active: false,
+  held: false,
+  level: 0,
+  /** performance.now() of the last readout published to the pill. */
+  readoutAt: -Infinity,
+  rub: { x: 0, y: 0, live: false },
+};
+
 function motionNow(): number {
   return driver.clock;
 }
@@ -129,20 +244,184 @@ function rippleLive(): boolean {
   return driver.slotEnds.some((end) => end >= 0);
 }
 
+function burstLive(): boolean {
+  return bursts.ends.some((end) => end >= 0);
+}
+
+/** Anything displaced (or armed): the clock runs and the loop stays awake. */
+function anyLive(): boolean {
+  return driver.arrival !== null || rippleLive() || tug.active || burstLive() || heat.active;
+}
+
 function syncDisplaced(): void {
   const store = playStore.getState();
   const mode = driver.arrival?.mode ?? null;
   store.setDisplaced('arrival', mode === ARRIVAL_MODE.condense || mode === ARRIVAL_MODE.flat);
   store.setDisplaced('scatter', mode === ARRIVAL_MODE.scatter);
   store.setDisplaced('ripple', rippleLive());
+  store.setDisplaced('tug', tug.active);
+  store.setDisplaced('burst', burstLive());
+  store.setDisplaced('heat', heat.active);
 }
 
 /** The master weight: 1 while anything is live, exactly 0 otherwise or while suspended. */
 function syncWeights(): void {
-  const ripple = rippleLive();
-  M.uRippleWeight.value = ripple ? 1 : 0;
-  M.uMotionWeight.value = (driver.arrival !== null || ripple) && !isDisplayMotionSuspended() ? 1 : 0;
+  M.uRippleWeight.value = rippleLive() ? 1 : 0;
+  M.uTugWeight.value = tug.active ? 1 : 0;
+  M.uBurstWeight.value = burstLive() ? 1 : 0;
+  M.uHeatWeight.value = heat.active ? 1 : 0;
+  M.uMotionWeight.value = anyLive() && !isDisplayMotionSuspended() ? 1 : 0;
   syncDisplaced();
+}
+
+// ─── Tug ────────────────────────────────────────────────────────────
+
+function zero3(out: V3): void {
+  out[0] = 0;
+  out[1] = 0;
+  out[2] = 0;
+}
+
+function stepSpring(s: Spring3, target: V3, feel: SpringFeel, dt: number): void {
+  const k = feel.omega * feel.omega;
+  const c = 2 * feel.zeta * feel.omega;
+  for (let i = 0; i < 3; i += 1) {
+    const a = k * (target[i] - s.x[i]) - c * s.v[i];
+    s.v[i] += a * dt;
+    s.x[i] += s.v[i] * dt;
+  }
+}
+
+function springAtRest(s: Spring3): boolean {
+  return Math.hypot(s.x[0], s.x[1], s.x[2]) < TUG.restX && Math.hypot(s.v[0], s.v[1], s.v[2]) < TUG.restV;
+}
+
+/** End the tug at rest: weight exactly 0, the grab glow off. */
+function clearTug(): void {
+  tug.active = false;
+  tug.held = false;
+  tug.atom = -1;
+  zero3(tug.target);
+  zero3(tug.core.x);
+  zero3(tug.core.v);
+  zero3(tug.halo.x);
+  zero3(tug.halo.v);
+  M.uTugWeight.value = 0;
+  M.uTugCore.value.set(0, 0, 0);
+  M.uTugHalo.value.set(0, 0, 0);
+  ATOM_GLOW.uFocusAtom.value = -1;
+}
+
+function writeTugUniforms(): void {
+  const c = tug.core.x;
+  const stretch = Math.hypot(c[0], c[1], c[2]);
+  const falloff = tug.falloff * (1 + TUG.widen * Math.min(1, stretch / Math.max(tug.limit, 1e-3)));
+  M.uTugGrab.value.set(tug.grab[0], tug.grab[1], tug.grab[2], falloff);
+  M.uTugCore.value.set(c[0], c[1], c[2]);
+  M.uTugHalo.value.set(tug.halo.x[0], tug.halo.x[1], tug.halo.x[2]);
+}
+
+/** Advance the tug's springs by dt (s); ends it once released and at rest. */
+function advanceTug(dt: number): void {
+  if (!tug.active) return;
+  const feel = tug.held ? TUG.held : tug.gentle ? TUG.releaseGentle : TUG.release;
+  const target: V3 = tug.held ? tug.target : [0, 0, 0];
+  let left = dt;
+  while (left > 1e-6) {
+    const h = Math.min(left, TUG.substepS);
+    stepSpring(tug.core, target, feel.core, h);
+    stepSpring(tug.halo, target, feel.halo, h);
+    left -= h;
+  }
+  if (!tug.held && springAtRest(tug.core) && springAtRest(tug.halo)) {
+    clearTug();
+    return;
+  }
+  writeTugUniforms();
+}
+
+/** Let go: the springs swing home (the grab glow goes out). */
+function releaseTug(): void {
+  if (!tug.held) return;
+  tug.held = false;
+  ATOM_GLOW.uFocusAtom.value = -1;
+  requestLupiFrames();
+  cue('release');
+}
+
+// ─── Burst ──────────────────────────────────────────────────────────
+
+/** Pop the atoms outward from `origin`; returns the slot, or -1. */
+function addBurst(origin: Vec3, scale: number, gentle: boolean): number {
+  if (!(scale > 0)) return -1;
+  const R = driver.radius;
+  const amplitude = byRadius(BURST.amplitude, R) * scale;
+  const falloff = byRadius(BURST.falloff, R);
+  const zeta = gentle ? BURST.zetaGentle : BURST.zeta;
+  const slot = bursts.next;
+  bursts.next = (slot + 1) % BURST_SLOTS;
+  const t0 = motionNow();
+  const { a, b } = burstSlotUniforms(slot);
+  a.value.set(origin[0], origin[1], origin[2], t0);
+  b.value.set(amplitude / burstPeak(BURST.omega, zeta), falloff, BURST.omega, zeta);
+  M.uMaxBurst.value = byRadius(BURST.amplitude, R) * BURST.boundScale;
+  const c = driver.center;
+  const rMax = Math.hypot(origin[0] - c[0], origin[1] - c[1], origin[2] - c[2]) + driver.radius;
+  bursts.ends[slot] = t0 + rMax / DISPLAY_MOTION_TUNING.burstSpeed + 7 / (zeta * BURST.omega);
+  syncWeights();
+  requestLupiFrames();
+  return slot;
+}
+
+// ─── Heat ───────────────────────────────────────────────────────────
+
+function wallNow(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+/** Tell the pill the heat level (throttled unless `force`). */
+function publishHeat(force: boolean): void {
+  const t = wallNow();
+  if (!force && t - heat.readoutAt < HEAT.readoutMs) return;
+  heat.readoutAt = t;
+  playStore.getState().setHeat(heat.active ? heat.level : 0, heat.held);
+}
+
+/** Cool to rest: weight exactly 0, the tint off, the readout gone. */
+function clearHeat(): void {
+  heat.active = false;
+  heat.held = false;
+  heat.level = 0;
+  heat.rub.live = false;
+  M.uHeatWeight.value = 0;
+  M.uHeatAmplitude.value = 0;
+  ATOM_GLOW.uHeatGlow.value = 0;
+  publishHeat(true);
+}
+
+function writeHeatUniforms(scale: number): void {
+  M.uHeatAmplitude.value = HEAT.amplitude * scale * Math.sqrt(heat.level);
+  ATOM_GLOW.uHeatGlow.value = heat.level * scale;
+}
+
+/** Warm while held, cool while released; ends exactly at rest. */
+function advanceHeat(dt: number): void {
+  if (!heat.active) return;
+  const scale = displayMotionScale();
+  if (!(scale > 0)) {
+    clearHeat();
+    return;
+  }
+  if (heat.held) heat.level += (1 - heat.level) * (1 - Math.exp(-dt / HEAT.rampS));
+  else {
+    heat.level *= Math.exp(-dt / HEAT.coolS);
+    if (heat.level < HEAT.restLevel) {
+      clearHeat();
+      return;
+    }
+  }
+  writeHeatUniforms(scale);
+  publishHeat(false);
 }
 
 function clearArrival(): void {
@@ -151,20 +430,23 @@ function clearArrival(): void {
   M.uArrivalMode.value = ARRIVAL_MODE.none;
 }
 
-/** Land the arrival (or a scatter) instantly; ripples keep going. */
+/** Land the arrival (or a scatter) instantly; ripples and the verbs keep going. */
 export function cancelArrival(): void {
   if (driver.arrival === null && !(M.uArrivalWeight.value > 0)) return;
   clearArrival();
-  if (!(M.uRippleWeight.value > 0) || isDisplayMotionSuspended()) M.uMotionWeight.value = 0;
-  syncDisplaced();
+  syncWeights();
   requestLupiFrames();
 }
 
-/** Zero everything: arrival, scatter and every ripple slot. */
+/** Zero everything: arrival, scatter, every ripple and burst, the tug and the heat. */
 export function resetDisplayMotion(): void {
   driver.arrival = null;
   driver.slotEnds.fill(-1);
   driver.nextSlot = 0;
+  bursts.ends.fill(-1);
+  bursts.next = 0;
+  clearTug();
+  clearHeat();
   resetLupiDisplayMotion();
   syncDisplaced();
   requestLupiFrames();
@@ -349,9 +631,10 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
 
   useEffect(() => installPlayDevHooks(), []);
   useEffect(() => installArrivalCancel(), []);
-  // Quiet Idle: draw every frame while an arrival, ripple or scatter is live
-  // (an armed arrival included: it waits on the first-frame mark).
-  useEffect(() => keepLupiAwake('display-motion', () => driver.arrival !== null || rippleLive()), []);
+  // Quiet Idle: draw every frame while an arrival, ripple, scatter, tug,
+  // burst or heat is live (an armed arrival included: it waits on the
+  // first-frame mark).
+  useEffect(() => keepLupiAwake('display-motion', anyLive), []);
   useEffect(
     () => registerRecordingGuard(() => {
       setDisplayMotionSuspended(true);
@@ -444,32 +727,194 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       return true;
     };
 
-    const stroke = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
+    /**
+     * Where the ray under a client point meets the plane through `through`
+     * facing the camera (world space), into `out`; false off the canvas or
+     * parallel to the plane.
+     */
+    const clientToPlane = (clientX: number, clientY: number, through: Vec3, out: THREE.Vector3): boolean => {
+      const { camera: cam, renderer: gl } = live.current;
+      const rect = (gl.domElement as HTMLElement).getBoundingClientRect();
+      if (!(rect.width > 0 && rect.height > 0)) return false;
+      ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1));
+      ray.setFromCamera(ndc, cam);
+      cam.getWorldDirection(normal);
+      plane.setFromNormalAndCoplanarPoint(normal, hit.set(through[0], through[1], through[2]));
+      return ray.ray.intersectPlane(plane, out) !== null;
+    };
+
+    /** The atom under a client point (as a tap would pick it), if it is a real atom of this frame. */
+    const atomAt = (clientX: number, clientY: number): number => {
+      const index = pickAtomAtClient(clientX, clientY);
+      return index !== null && index >= 0 && index < live.current.frame.natoms ? index : -1;
+    };
+
+    const atomPosition = (index: number): Vec3 => {
+      const p = live.current.frame.positions;
+      return [p[index * 3], p[index * 3 + 1], p[index * 3 + 2]];
+    };
+
+    // Poke latched: stirring leaves a trail of small ripples.
+    const stir = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
       if (phase === 'end') return;
       const amplitude = STROKE_AMPLITUDE * displayMotionScale();
       if (!(amplitude > 0) || live.current.transmissionActive) return;
       const t = performance.now();
       const last = driver.lastStroke;
       if (phase === 'move' && (t - last.t < STROKE_MIN_MS || Math.hypot(clientX - last.x, clientY - last.y) < STROKE_MIN_PX)) return;
-      const { camera: cam, renderer: gl, center: c } = live.current;
-      const rect = (gl.domElement as HTMLElement).getBoundingClientRect();
-      if (!(rect.width > 0 && rect.height > 0)) return;
-      ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1));
-      ray.setFromCamera(ndc, cam);
-      cam.getWorldDirection(normal);
-      plane.setFromNormalAndCoplanarPoint(normal, hit.set(c[0], c[1], c[2]));
-      if (!ray.ray.intersectPlane(plane, hit)) return;
+      const c = live.current.center;
+      if (!clientToPlane(clientX, clientY, c, hit)) return;
       driver.lastStroke = { t, x: clientX, y: clientY };
       adoptScene(live.current.frame, c);
       addRipple([hit.x, hit.y, hit.z], amplitude);
     };
 
+    // Tug latched: grab the atom under the finger (or the point in space
+    // there) and pull; the neighbourhood follows, and lets go with a twang.
+    const tugGrab = (clientX: number, clientY: number, atomIndex: number | null): boolean => {
+      const { frame: current, center: c, transmissionActive: glass } = live.current;
+      const scale = displayMotionScale();
+      if (!(scale > 0) || glass) return false;
+      adoptScene(current, c);
+      const atom = atomIndex ?? atomAt(clientX, clientY);
+      let grab: Vec3;
+      if (atom >= 0) grab = atomPosition(atom);
+      else {
+        if (!clientToPlane(clientX, clientY, c, hit)) return false;
+        grab = [hit.x, hit.y, hit.z];
+      }
+      if (!clientToPlane(clientX, clientY, grab, tug.startHit)) tug.startHit.set(grab[0], grab[1], grab[2]);
+      // A new grab replaces whatever was still swinging home.
+      clearTug();
+      tug.active = true;
+      tug.held = true;
+      tug.atom = atom;
+      tug.grab = [grab[0], grab[1], grab[2]];
+      tug.falloff = byRadius(TUG.falloff, driver.radius);
+      tug.limit = byRadius(TUG.limit, driver.radius);
+      tug.scale = scale;
+      tug.gentle = getComfort() === 'gentle';
+      ATOM_GLOW.uFocusAtom.value = atom;
+      writeTugUniforms();
+      syncWeights();
+      requestLupiFrames();
+      if (atom >= 0) cue('grab');
+      return true;
+    };
+
+    /** Set the held tug's target from a world displacement (rubber-band limited). */
+    const tugPullBy = (dx: number, dy: number, dz: number) => {
+      const len = Math.hypot(dx, dy, dz);
+      const limited = len > 1e-6 ? (tug.limit * Math.tanh(len / tug.limit)) / len : 0;
+      const k = limited * tug.scale;
+      tug.target[0] = dx * k;
+      tug.target[1] = dy * k;
+      tug.target[2] = dz * k;
+      requestLupiFrames();
+    };
+
+    const tugStroke = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
+      if (phase === 'start') {
+        tugGrab(clientX, clientY, null);
+        return;
+      }
+      if (!tug.held) return;
+      if (phase === 'end') {
+        releaseTug();
+        return;
+      }
+      if (!clientToPlane(clientX, clientY, tug.grab, hit)) return;
+      tugPullBy(hit.x - tug.startHit.x, hit.y - tug.startHit.y, hit.z - tug.startHit.z);
+    };
+
+    // Burst latched: a tap pops the atoms outward from the tap point.
+    const burstAt = (origin: Vec3): boolean => {
+      const { frame: current, center: c, transmissionActive: glass } = live.current;
+      if (glass) return false;
+      adoptScene(current, c);
+      return addBurst(origin, displayMotionScale(), getComfort() === 'gentle') >= 0;
+    };
+
+    const burstAtClient = (clientX: number, clientY: number): boolean => {
+      const atom = atomAt(clientX, clientY);
+      if (atom >= 0) return burstAt(atomPosition(atom));
+      if (!clientToPlane(clientX, clientY, live.current.center, hit)) return false;
+      return burstAt([hit.x, hit.y, hit.z]);
+    };
+
+    // Heat latched: hold to warm (rubbing warms faster), let go to cool.
+    const heatStart = (): boolean => {
+      if (!(displayMotionScale() > 0) || live.current.transmissionActive) return false;
+      heat.held = true;
+      heat.active = true;
+      syncWeights();
+      publishHeat(true);
+      requestLupiFrames();
+      return true;
+    };
+
+    const heatStop = () => {
+      if (!heat.held) return;
+      heat.held = false;
+      heat.rub.live = false;
+      publishHeat(true);
+      requestLupiFrames();
+    };
+
+    const heatRub = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
+      const rub = heat.rub;
+      if (phase === 'end' || !heat.held) {
+        rub.live = false;
+        return;
+      }
+      if (rub.live) {
+        heat.level = Math.min(1, heat.level + Math.hypot(clientX - rub.x, clientY - rub.y) * HEAT.rubPerPx);
+      }
+      rub.x = clientX;
+      rub.y = clientY;
+      rub.live = true;
+    };
+
+    const verbNow = () => playStore.getState().verb;
+
     const offs = [
       onIntent('atom.tap', ({ atomIndex }) => {
         if (useStore.getState().measurementTool != null) return;
+        // With Burst latched the tap itself pops (canvas.tap below).
+        if (verbNow() === 'burst') return;
         if (poke(atomIndex) >= 0) cue('poke');
       }),
-      onIntent('verb.stroke', ({ clientX, clientY, phase }) => stroke(clientX, clientY, phase)),
+      onIntent('canvas.tap', ({ clientX, clientY }) => {
+        if (verbNow() !== 'burst' || useStore.getState().measurementTool != null) return;
+        if (burstAtClient(clientX, clientY)) cue('burst');
+      }),
+      onIntent('verb.stroke', ({ clientX, clientY, phase }) => {
+        switch (verbNow()) {
+          case 'poke':
+            stir(clientX, clientY, phase);
+            break;
+          case 'tug':
+            tugStroke(clientX, clientY, phase);
+            break;
+          case 'heat':
+            heatRub(clientX, clientY, phase);
+            break;
+          default:
+            // A stroke that began under another verb still lets go.
+            if (phase === 'end') releaseTug();
+            break;
+        }
+      }),
+      onIntent('verb.press', ({ phase }) => {
+        if (phase === 'up') heatStop();
+        else if (verbNow() === 'heat') heatStart();
+      }),
+      // Leaving a verb lets go of whatever it held.
+      playStore.subscribe((state, previous) => {
+        if (state.verb === previous.verb) return;
+        heatStop();
+        releaseTug();
+      }),
       onIntent('play.scatter', () => {
         scatter();
       }),
@@ -483,8 +928,36 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         weight: M.uMotionWeight.value,
         arrival: driver.arrival ? `${driver.arrival.armed ? 'armed ' : ''}${MODE_NAMES[driver.arrival.mode]}` : null,
         ripples: driver.slotEnds.filter((end) => end >= 0).length,
+        bursts: bursts.ends.filter((end) => end >= 0).length,
+        tug: tug.active ? { held: tug.held, atom: tug.atom, stretch: Math.hypot(...tug.core.x) } : null,
+        heat: heat.active ? { held: heat.held, level: heat.level } : null,
         suspended: isDisplayMotionSuspended(),
       })),
+      // __lupiPlay.burst(atomIndex): pop from that atom.
+      registerPlayDevHook('burst', (atomIndex: number = 0) => {
+        const index = Math.trunc(Number(atomIndex));
+        if (!(index >= 0 && index < live.current.frame.natoms)) return null;
+        return burstAt(atomPosition(index)) ? { atomIndex: index } : null;
+      }),
+      // __lupiPlay.tug(atomIndex, [dx, dy, dz], holdMs): grab, pull by the
+      // world displacement (Å), let go after holdMs.
+      registerPlayDevHook('tug', (atomIndex: number = 0, pull: unknown = [2, 0, 0], holdMs: number = 600) => {
+        const index = Math.trunc(Number(atomIndex));
+        if (!(index >= 0 && index < live.current.frame.natoms)) return null;
+        if (!tugGrab(0, 0, index)) return null;
+        const d = Array.isArray(pull) ? pull.map(Number) : [2, 0, 0];
+        tugPullBy(d[0] || 0, d[1] || 0, d[2] || 0);
+        setTimeout(releaseTug, Math.max(0, Number(holdMs) || 0));
+        return { atomIndex: index };
+      }),
+      // __lupiPlay.heat(level): warm to `level` (0..1) at once, then cool.
+      registerPlayDevHook('heat', (level: number = 0.8) => {
+        if (!heatStart()) return null;
+        heat.level = Math.min(1, Math.max(0, Number(level) || 0));
+        heat.held = false;
+        publishHeat(true);
+        return { level: heat.level };
+      }),
       registerPlayDevHook('poke', (atomIndex: number = 0) => {
         const index = Math.trunc(Number(atomIndex));
         const slot = poke(index);
@@ -502,7 +975,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       const wall = performance.now();
       const step = driver.lastWall < 0 ? 0 : Math.min(MAX_STEP_S, Math.max(0, (wall - driver.lastWall) / 1000));
       driver.lastWall = wall;
-      if (driver.arrival !== null || rippleLive()) driver.clock += step;
+      if (anyLive()) driver.clock += step;
       const now = driver.clock;
       const arrival = driver.arrival;
       if (arrival) {
@@ -516,7 +989,16 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
           rippleSlotUniforms(i).a.value.w = -1;
         }
       }
-      if (driver.arrival === null && !rippleLive()) {
+      for (let i = 0; i < BURST_SLOTS; i += 1) {
+        const end = bursts.ends[i];
+        if (end >= 0 && now >= end) {
+          bursts.ends[i] = -1;
+          burstSlotUniforms(i).a.value.w = -1;
+        }
+      }
+      advanceTug(step);
+      advanceHeat(step);
+      if (!anyLive()) {
         // Idle: rebase the clock so it stays small (float precision), and
         // forget the wall time: the loop may sleep now, and the next effect
         // must start at t = 0, not a capped 0.1 s into its motion.

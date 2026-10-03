@@ -12,6 +12,8 @@
  *                         smoke plugin drive Scatter, Spin or a stroke before
  *                         the pill that emits it exists)
  *   __lupiPlay.poke/flick/catch/scatter/stepDetent(...) once their owner registers them
+ *   __lupiPlay.burst(atomIndex), .tug(atomIndex, [dx, dy, dz], holdMs), .heat(level)
+ *                         the Play verbs' toys, driven without a pointer
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -34,7 +36,10 @@ export type PlayDevHookName =
   | 'scatter'
   | 'stepDetent'
   | 'reset'
-  | 'frames';
+  | 'frames'
+  | 'burst'
+  | 'tug'
+  | 'heat';
 
 export interface PlayRigState {
   position: Vec3;
@@ -78,6 +83,9 @@ export interface LupiPlayDevApi {
   catch?: DevHook;
   scatter?: DevHook;
   stepDetent?: DevHook;
+  burst?: DevHook;
+  tug?: DevHook;
+  heat?: DevHook;
 }
 
 declare global {
@@ -87,8 +95,8 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent'];
+type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat';
+const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat'];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 
