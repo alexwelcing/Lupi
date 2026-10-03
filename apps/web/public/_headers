@@ -12,3 +12,12 @@
 
 /learn/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/og/m/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/ar/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/m/*
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400

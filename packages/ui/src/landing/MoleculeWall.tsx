@@ -2,6 +2,7 @@ import { useContext, useState } from 'react';
 import { LOCAL_MOLECULES, type LocalMolecule } from './moleculeIndex';
 import { openLocalMolecule, previewRectIn } from './MoleculeFinder';
 import { LandingIntentContext } from './landingIntent';
+import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
 
 const FIRST_PAGE = 48;
 
@@ -13,9 +14,11 @@ function atomsLabel(atoms: number): string {
 
 /**
  * Dense wall of every molecule that opens with one click. Tiles are plain
- * links (`/?sim=<id>`) so they work before hydration and in crawlers, but a
- * click loads in place so the viewer takes over without a full navigation,
- * the tile's preview growing into the sage relay stage on the way.
+ * links so they work before hydration and in crawlers: to the molecule's own
+ * page (`/m/<id>`) when it has one, else the viewer (`/?sim=<id>`). A click
+ * loads in place so the viewer takes over without a full navigation, the
+ * tile's preview growing into the sage relay stage on the way; a new tab or a
+ * copied link gets the page.
  */
 export function MoleculeWall() {
   const [expanded, setExpanded] = useState(false);
@@ -48,7 +51,7 @@ export function MoleculeWall() {
         {shown.map((molecule) => (
           <li key={molecule.id}>
             <a
-              href={`/?sim=${encodeURIComponent(molecule.id)}`}
+              href={hasMoleculePage(molecule.id) ? moleculePagePath(molecule.id) : `/?sim=${encodeURIComponent(molecule.id)}`}
               aria-label={`Open ${molecule.title}`}
               aria-busy={opening === molecule.id}
               onClick={(event) => open(event, molecule)}

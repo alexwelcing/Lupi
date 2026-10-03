@@ -47,6 +47,7 @@ import { PlayLayer } from '../play/PlayLayer';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
 import { CameraToys } from '../camera/CameraToys';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
+import { ViewInsetDriver } from '../camera/ViewInsetDriver';
 import { markCanvasSelection } from '../camera/selectionSource';
 import { AtomTrails } from '../AtomTrails';
 import { MoleculeFilterShell } from '../MoleculeFilterShell';
@@ -864,6 +865,9 @@ export function ViewerScene({
           labelColor="white"
         />
       )}
+
+      {/* The phone atom card's room: a display-only view shift. */}
+      <ViewInsetDriver />
 
       {ORBIT_FALLBACK ? (
         <OrbitControls

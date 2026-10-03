@@ -14,6 +14,7 @@ import { useStore, type SavedViewVisibility } from './store';
 import { track, ANALYTICS_EVENTS } from './analytics';
 import { captureViewerThumbnail } from './viewer/captureViewerThumbnail';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
+import { moleculePageIdFor, moleculePageUrl } from './moleculePage/pages';
 import {
   LupiButton,
   LupiField,
@@ -82,6 +83,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const frame = useStore(state => state.frame);
   const showBonds = useStore(state => state.showBonds);
   const activeSavedView = useStore(state => state.activeSavedView);
+  const activeCardId = useStore(state => state.activeCardId);
   const openLibrary = useStore(state => state.setSavedViewsLibraryOpen);
   const { loading: authLoading, signIn, user, idToken, refreshToken } = useFirebaseAuth();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -112,6 +114,11 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   const urlPreview = makeSavedViewUrl(cleanSlug);
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   const queryClient = useQueryClient();
+  // A gallery molecule has its own page (/m/<id>): a link anyone can share
+  // without an account, which unfurls as the molecule's ink card. A saved
+  // view (this pose, this look) takes over once there is one.
+  const moleculePageId = moleculePageIdFor(activeCardId, file?.sourceUrl);
+  const moleculeLink = moleculePageId ? moleculePageUrl(moleculePageId) : null;
 
   useEffect(() => {
     if (slugTouched) return;
@@ -272,6 +279,29 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
         url: savedUrl,
       });
       setStatus('Share sheet opened.');
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : '';
+      if (name !== 'AbortError') setError(err instanceof Error ? err.message : 'Share failed.');
+    }
+  };
+
+  const handleMoleculeCopy = async () => {
+    if (!moleculeLink) return;
+    try {
+      await navigator.clipboard.writeText(moleculeLink);
+      track(ANALYTICS_EVENTS.VIEW_SHARED, { method: 'molecule_page_copy' });
+      setStatus('Molecule link copied.');
+      setError(null);
+    } catch {
+      setError('Could not copy the link. Select and copy it above.');
+    }
+  };
+
+  const handleMoleculeShare = async () => {
+    if (!moleculeLink || !canNativeShare) return;
+    track(ANALYTICS_EVENTS.VIEW_SHARED, { method: 'molecule_page_share' });
+    try {
+      await navigator.share({ title: `${file?.name ?? 'Molecule'} · Lupi`, url: moleculeLink });
     } catch (err) {
       const name = err instanceof DOMException ? err.name : '';
       if (name !== 'AbortError') setError(err instanceof Error ? err.message : 'Share failed.');
@@ -628,9 +658,61 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     </>
   );
 
+  // Before a view is saved, the molecule's own page is the link to send.
+  const moleculeShare = moleculeLink && !savedUrl ? (
+    <div
+      data-testid="lupi-share-molecule-page"
+      style={{
+        display: 'grid',
+        gap: 8,
+        padding: 10,
+        border: `1px solid ${lupiUserColors.line}`,
+        borderRadius: 6,
+        background: 'rgba(213,239,156,0.06)',
+      }}
+    >
+      <span style={labelStyle}>Share this molecule</span>
+      <a
+        href={moleculeLink}
+        target="_blank"
+        rel="noopener"
+        style={{
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: '#d5ef9c',
+          fontFamily: 'var(--font-mono), ui-monospace, monospace',
+          fontSize: 11,
+        }}
+      >
+        {moleculeLink.replace(/^https?:\/\//, '')}
+      </a>
+      <span style={{ color: lupiUserColors.muted, fontSize: 11, lineHeight: 1.4 }}>
+        Its page: an ink card in chats, the facts, and one tap into 3D. No account needed.
+      </span>
+      <div style={{ display: 'grid', gridTemplateColumns: canNativeShare ? '1fr 1fr' : '1fr', gap: 8 }}>
+        <LupiButton size={controlSize} tone={user ? 'quiet' : 'primary'} onClick={() => void handleMoleculeCopy()}>
+          Copy link
+        </LupiButton>
+        {canNativeShare && (
+          <LupiButton size={controlSize} onClick={() => void handleMoleculeShare()}>
+            Share
+          </LupiButton>
+        )}
+      </div>
+      {!user && (status || error) && (
+        <span role="status" style={{ color: error ? '#ff8fa3' : lupiUserColors.muted, fontSize: 11 }}>
+          {error ?? status}
+        </span>
+      )}
+    </div>
+  ) : null;
+
   const body = (
     <div style={panelBodyStyle}>
       {summary}
+      {moleculeShare}
       {user ? signedIn : signedOut}
     </div>
   );

@@ -74,6 +74,7 @@ import {
 } from 'three/tsl';
 import { CAPTURE_TEXEL_SCALE_KEY, LUPI_JOB, LUPI_PHASE, beginCaptureRender, runPrepareCapture } from '@atlas/scene';
 import type { SavedViewThumbnail } from '../savedViews';
+import { clearLiveViewOffset } from './renderCaptureState';
 import type { LupiBackend } from '../viewer/createLupiRenderer';
 import { LUPI_CONTENT_OUTPUT, contentCoverage } from '../postprocess/backgroundMask';
 import { captureLookIsEmpty, captureLookTouchesBackground, type CaptureLook } from './captureLook';
@@ -826,6 +827,8 @@ export function readbackToCanvas(readback: RasterReadback): HTMLCanvasElement {
  */
 export function coverCropCamera(camera: THREE.Camera, sourceAspect: number, targetAspect: number): THREE.Camera {
   const copy = camera.clone();
+  // A thumbnail shows the view, not the room the live view makes for a phone card.
+  clearLiveViewOffset(copy);
   if (copy instanceof THREE.PerspectiveCamera && camera instanceof THREE.PerspectiveCamera) {
     copy.aspect = targetAspect;
     if (Number.isFinite(sourceAspect) && sourceAspect > 0 && sourceAspect < targetAspect) {

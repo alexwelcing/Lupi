@@ -6,6 +6,10 @@
  * likeness on the label. Picking a result opens the molecule as it always
  * has; the molecule itself never gets the effect.
  *
+ * On a phone the conclusion is a caption strip under the stage instead of a
+ * card over it: the stage is too small to share, and the formed shape is the
+ * point. The strip holds its place while the shape is sketched.
+ *
  * The strip stays collapsed until there is something to form. It skips
  * text that is a formula or a single element, since those are not things,
  * and it disappears for good in a session where the edge reports the
@@ -122,7 +126,18 @@ export function SwitchStage({ query, compact = false }: SwitchStageProps) {
     : null;
   return (
     <div className="switcher-stage" data-on={on} data-compact={compact} aria-hidden={!on}>
-      {on && <GistStage photoUrl={null} active={busy} gist={gist} settled={!busy && gist !== null} status={null} label={label} />}
+      {on && (
+        <GistStage
+          photoUrl={null}
+          active={busy}
+          gist={gist}
+          settled={!busy && gist !== null}
+          status={null}
+          label={label}
+          labelPlacement={compact ? 'caption' : 'overlay'}
+          captionPending={subject ? `Sketching ${subject}…` : null}
+        />
+      )}
     </div>
   );
 }

@@ -275,6 +275,18 @@ export function beginImageCaptureTransaction(
 }
 
 /**
+ * Drop a view offset copied from the live camera (the phone card's view
+ * shift). Captures that tile set their own offsets on top of a clean copy.
+ */
+export function clearLiveViewOffset(camera: THREE.Camera): void {
+  const offset = camera as Partial<THREE.PerspectiveCamera | THREE.OrthographicCamera>;
+  if (offset.view && typeof offset.clearViewOffset === 'function') {
+    offset.clearViewOffset();
+    offset.view = null;
+  }
+}
+
+/**
  * Copy the live camera (world transform, projection) into `target` for a
  * capture of `aspect`, then apply the finalized artifact camera. A
  * perspective camera keeps its vertical field of view, as the v9 export did.
@@ -289,6 +301,9 @@ function syncCaptureCamera(
   // Captures are always level: whatever a live toy did to `up`, the artifact
   // camera looks at its target with world +Y up.
   target.up.set(0, 1, 0);
+  // The live view may be shifted out from under a phone card (a projection
+  // view offset, ViewInsetDriver); an artifact never is.
+  clearLiveViewOffset(target);
   live.updateMatrixWorld();
   live.matrixWorld.decompose(target.position, target.quaternion, target.scale);
   if (target instanceof THREE.PerspectiveCamera) {

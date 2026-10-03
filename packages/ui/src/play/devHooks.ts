@@ -14,6 +14,8 @@
  *   __lupiPlay.poke/flick/catch/scatter/stepDetent(...) once their owner registers them
  *   __lupiPlay.burst(atomIndex), .tug(atomIndex, [dx, dy, dz], holdMs), .heat(level)
  *                         the Play verbs' toys, driven without a pointer
+ *   __lupiPlay.viewInset() → { current, target, occluder }: the phone atom card's
+ *                         view shift (CSS px, down), once the viewer registers it
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -39,7 +41,8 @@ export type PlayDevHookName =
   | 'frames'
   | 'burst'
   | 'tug'
-  | 'heat';
+  | 'heat'
+  | 'viewInset';
 
 export interface PlayRigState {
   position: Vec3;
@@ -86,6 +89,7 @@ export interface LupiPlayDevApi {
   burst?: DevHook;
   tug?: DevHook;
   heat?: DevHook;
+  viewInset?: DevHook;
 }
 
 declare global {
@@ -95,8 +99,8 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat'];
+type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset';
+const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset'];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 

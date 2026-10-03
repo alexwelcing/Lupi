@@ -56,6 +56,8 @@ export const LUPI_JOB = {
   firstFrame: 'lupi/first-frame',
   /** Quiet Idle: counts the drawn frame and asks for the next one, in `finish` (frameDemand.ts). */
   frameDemand: 'lupi/frame-demand',
+  /** The phone atom card's view shift (a projection view offset) in `update`. */
+  viewInset: 'lupi/view-inset',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];

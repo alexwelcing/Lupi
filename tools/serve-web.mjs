@@ -14,6 +14,7 @@ const port = Number.parseInt(process.env.PORT || '8080', 10);
 const contentTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.gif', 'image/gif'],
+  ['.glb', 'model/gltf-binary'],
   ['.html', 'text/html; charset=utf-8'],
   ['.ico', 'image/x-icon'],
   ['.jpg', 'image/jpeg'],
@@ -24,6 +25,7 @@ const contentTypes = new Map([
   ['.mp4', 'video/mp4'],
   ['.png', 'image/png'],
   ['.svg', 'image/svg+xml; charset=utf-8'],
+  ['.usdz', 'model/vnd.usdz+zip'],
   ['.wasm', 'application/wasm'],
   ['.webm', 'video/webm'],
   ['.webp', 'image/webp'],
@@ -72,6 +74,13 @@ async function resolveFile(requestUrl) {
     const directoryIndexPath = path.join(candidate, 'index.html');
     const directoryIndexStat = await existingFile(directoryIndexPath);
     if (directoryIndexStat) return { filePath: directoryIndexPath, fileStat: directoryIndexStat };
+  }
+
+  // `/m/caffeine` → `m/caffeine.html`, as Workers static assets serve it.
+  if (!candidateStat && !path.extname(candidate)) {
+    const htmlPath = `${candidate}.html`;
+    const htmlStat = await existingFile(htmlPath);
+    if (htmlStat) return { filePath: htmlPath, fileStat: htmlStat };
   }
 
   const indexPath = path.join(distRoot, 'index.html');

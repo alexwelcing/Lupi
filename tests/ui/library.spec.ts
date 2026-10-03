@@ -45,7 +45,7 @@ test('research collection carries provenance and the full gallery keeps its filt
   await expect(page.getByRole('status')).toHaveText(/^104 of 104 gallery entries/);
   await page.getByRole('button', { name: /^Biomolecules/ }).click();
   await expect(page.getByRole('status')).toHaveText(/^59 of 104/);
-  await expect(page.getByRole('link', { name: 'Open Caffeine' })).toHaveAttribute('href', '/?sim=caffeine');
+  await expect(page.getByRole('link', { name: 'Open Caffeine' })).toHaveAttribute('href', '/m/caffeine');
 });
 
 test('legacy tabs and OMol25 education URLs redirect into the library; research execution stays retired', async ({ page }) => {
