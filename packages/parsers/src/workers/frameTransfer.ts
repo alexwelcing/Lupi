@@ -1,8 +1,11 @@
 import { normalizeAtomTypeSemantics, normalizeDistanceSemantics } from '@atlas/core';
 import type {
   AtomTypeSemantics,
+  ChemistrySource,
   DistanceSemantics,
+  FrameChemistry,
   FrameIdentity,
+  FrameSourceRecord,
 } from '@atlas/core/types';
 
 type WorkerFrameLike = {
@@ -12,7 +15,65 @@ type WorkerFrameLike = {
   identity?: Partial<FrameIdentity> | null;
   typeSemantics?: AtomTypeSemantics | null;
   distanceSemantics?: DistanceSemantics | null;
+  chemistry?: unknown;
+  sourceRecord?: unknown;
+  periodic?: unknown;
 };
+
+const CHEMISTRY_SOURCES: ReadonlySet<unknown> = new Set<ChemistrySource>(['record', 'split-definition', 'file-declared', 'unavailable']);
+const integerOrNull = (value: unknown) => (typeof value === 'number' && Number.isInteger(value) ? value : null);
+const finiteOrNull = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+const stringOrNull = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null);
+
+/** Declared chemistry from a structured-cloned frame, or undefined when it has none or it is malformed. */
+export function extractFrameChemistry(frame: WorkerFrameLike): FrameChemistry | undefined {
+  const value = frame.chemistry as Partial<Record<keyof FrameChemistry, unknown>> | null | undefined;
+  if (!value || typeof value !== 'object' || !CHEMISTRY_SOURCES.has(value.source)) return undefined;
+  return {
+    totalCharge: integerOrNull(value.totalCharge),
+    spinMultiplicity: integerOrNull(value.spinMultiplicity),
+    source: value.source as ChemistrySource,
+    domain: stringOrNull(value.domain),
+  };
+}
+
+/** The OMol25 record a structured-cloned frame names, or undefined. */
+export function extractFrameSourceRecord(frame: WorkerFrameLike): FrameSourceRecord | undefined {
+  const value = frame.sourceRecord as Partial<Record<keyof FrameSourceRecord, unknown>> | null | undefined;
+  if (!value || typeof value !== 'object' || value.dataset !== 'omol25') return undefined;
+  return {
+    dataset: 'omol25',
+    collection: stringOrNull(value.collection),
+    row: integerOrNull(value.row),
+    method: stringOrNull(value.method),
+    energyEv: finiteOrNull(value.energyEv),
+    maxForceEvPerA: finiteOrNull(value.maxForceEvPerA),
+    homoLumoGapEv: finiteOrNull(value.homoLumoGapEv),
+    license: stringOrNull(value.license),
+    source: stringOrNull(value.source),
+  };
+}
+
+/** `Frame.periodic` survives only as a real boolean; anything else stays undefined ("not eligible"). */
+export function extractFramePeriodic(frame: WorkerFrameLike): boolean | undefined {
+  return typeof frame.periodic === 'boolean' ? frame.periodic : undefined;
+}
+
+/** The optional provenance fields, spread into a frame only when present. */
+export function frameProvenanceFields(frame: WorkerFrameLike): {
+  chemistry?: FrameChemistry;
+  sourceRecord?: FrameSourceRecord;
+  periodic?: boolean;
+} {
+  const chemistry = extractFrameChemistry(frame);
+  const sourceRecord = extractFrameSourceRecord(frame);
+  const periodic = extractFramePeriodic(frame);
+  return {
+    ...(chemistry ? { chemistry } : {}),
+    ...(sourceRecord ? { sourceRecord } : {}),
+    ...(periodic !== undefined ? { periodic } : {}),
+  };
+}
 
 export type WorkerFrameProperty = { name: string; data: Float32Array };
 

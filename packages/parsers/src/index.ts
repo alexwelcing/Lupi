@@ -17,6 +17,7 @@ import {
   extractFrameDistanceSemantics,
   extractFrameIdentity,
   extractFrameTypeSemantics,
+  frameProvenanceFields,
 } from './workers/frameTransfer';
 
 let worker: Worker | null = null;
@@ -79,6 +80,7 @@ export function hydrateWorkerFrame(f: any): Frame {
     identity: extractFrameIdentity(f),
     typeSemantics: extractFrameTypeSemantics(f),
     distanceSemantics: extractFrameDistanceSemantics(f),
+    ...frameProvenanceFields(f),
   };
 }
 
