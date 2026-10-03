@@ -18,6 +18,10 @@
  *   branch only (spike G1).
  * - The billboard works in the mesh's local space (the camera position is
  *   brought into it), so a transformed parent places the arrows correctly.
+ * - Each arrow's foot rides display motion (arrival, ripple, the Play verbs)
+ *   with its atom: the instance position holds the atom's own float32
+ *   coordinates, so `lupiDisplayOffset` hashes the same seed and returns the
+ *   atom's offset. Exactly zero at rest and in every capture.
  */
 import * as THREE from 'three/webgpu';
 import type { TextureNode, UniformNode } from 'three/webgpu';
@@ -50,6 +54,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
+import { lupiDisplayOffset } from './displayMotion';
 
 // Graph-building code works on untyped nodes (spike G13).
 type N = any;
@@ -113,7 +118,10 @@ export function createVectorGlyphMaterial(colormap: THREE.DataTexture): VectorGl
   const u = uniforms as unknown as Record<keyof VectorGlyphUniforms, N>;
 
   // ── Vertex stage ────────────────────────────────────────────────────
-  const P: N = mix(attribute(GLYPH_ATTR.position, 'vec3'), attribute(GLYPH_ATTR.target, 'vec3'), u.uProgress);
+  const rawP: N = attribute(GLYPH_ATTR.position, 'vec3');
+  const restP: N = mix(rawP, attribute(GLYPH_ATTR.target, 'vec3'), u.uProgress);
+  // The foot follows its atom's display offset (bit-identical seed source).
+  const P: N = restP.add(lupiDisplayOffset(restP, rawP) as N).toVar('glyphFoot');
   const V: N = mix(attribute(GLYPH_ATTR.vector, 'vec3'), attribute(GLYPH_ATTR.targetVector, 'vec3'), u.uProgress);
   const mag: N = length(V);
 
