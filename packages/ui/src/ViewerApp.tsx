@@ -96,6 +96,10 @@ import { PlayPill } from './play/PlayPill';
 import { ReplaySheet } from './replay/ReplaySheet';
 import { intakeReplayParam } from './replay/intake';
 import { openReplaySheet } from './replay/actions';
+import { RemixDriver } from './remix/RemixDriver';
+import { RemixSheet } from './remix/RemixSheet';
+import { intakeRemixParam } from './remix/links';
+import { openRemixSheet, rollRemix, undoRemix } from './remix/actions';
 import { PLAY_VERB_LABEL, playStore, type PlayVerb } from './play/playStore';
 import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
@@ -325,8 +329,10 @@ export function ViewerApp() {
 
   // URL state restore + auto-load
   useEffect(() => {
-    // A shared replay (`?replay=`) is taken first and leaves the address bar.
+    // A shared replay (`?replay=`) is taken first and leaves the address bar;
+    // so does a shared look (`?remix=`), which lands once the molecule opens.
     intakeReplayParam();
+    intakeRemixParam();
     const params = new URLSearchParams(window.location.search);
     const intent = recognizeLupiUrlPayload(window.location.href);
     const state = intent?.state ?? params.get('s');
@@ -776,6 +782,8 @@ export function ViewerApp() {
           <PlayPill uiStowed={uiStowed} setUiStowed={setUiStowed} />
         )}
         {file && !isEmbeddedMobileViewer && <ReplaySheet />}
+        {file && !isEmbeddedMobileViewer && <RemixSheet />}
+        {file && <RemixDriver />}
 
         {!file && !isEmbeddedMobileViewer && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>
@@ -965,6 +973,33 @@ export function ViewerApp() {
               onSelect: () => {
                 openReplaySheet();
               },
+            },
+            {
+              id: 'remix-roll',
+              label: 'Remix: roll a new look (a code you can share)',
+              group: 'Scene',
+              shortcut: 'M',
+              disabled: !file,
+              onSelect: () => {
+                rollRemix('palette');
+              },
+            },
+            {
+              id: 'remix-undo',
+              label: 'Remix: back to the previous look',
+              group: 'Scene',
+              shortcut: '⇧M',
+              disabled: !file,
+              onSelect: () => {
+                undoRemix();
+              },
+            },
+            {
+              id: 'remix-codes',
+              label: 'Remix codes: copy, share or type a look code',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => openRemixSheet(),
             },
             {
               id: 'play-reset',

@@ -6,13 +6,16 @@
  *   is a static pose: the moment's last pose and nothing that moves.
  * - `replayLink(token)`: the live link. It keeps only what opens the same
  *   molecule (`sim`, `load`, `molecule`, a saved view's route) and adds
- *   `replay=`. A molecule with no address (a dropped file, a generated
+ *   `replay=`, and `remix=` while the look on screen is exactly a Remix
+ *   code (so the friend watches it in the sender's look). A molecule with no address (a dropped file, a generated
  *   lattice) has no live link; the clip still works.
  * - The view context the canvas registers (FOV, aspect, frame, the
  *   molecule's centre and radius), so DOM code can build tapes and framings.
  */
 import type { Vec3 } from '../camera/rigApi';
 import { getComfort } from '../motion/comfort';
+import { shareableRemixCode } from '../remix/actions';
+import { REMIX_PARAM } from '../remix/links';
 import { decimate } from './keyframes';
 import { recordedWindow, recorderNow } from './recorder';
 import type { ReplayMoment } from './replayStore';
@@ -121,6 +124,8 @@ export function replayLink(token: string, href: string = typeof window !== 'unde
   }
   const hash = url.hash.startsWith('#/view/') ? url.hash.split('?')[0] : '';
   if (!params.toString() && !hash) return null;
+  const look = shareableRemixCode();
+  if (look) params.set(REMIX_PARAM, look.text);
   params.set('replay', token);
   return `${url.origin}/?${params.toString()}${hash}`;
 }
