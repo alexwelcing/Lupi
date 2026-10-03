@@ -140,52 +140,102 @@ function displayRadiusRangeForFrame(frame: Frame): { min: number; max: number } 
 /** Bond radius the viewer draws (Bonds `radius`), also the contact bond-stub radius. */
 const BOND_RADIUS = 0.12;
 
-interface BudgetedContactShadowsProps {
+/**
+ * Where the Specimen floor shadow sits: under a molecule, on an invisible
+ * table just below its lowest atom; under a crystal shown with its cell, on
+ * the cell floor. Placement uses the trajectory's global bounds, so the
+ * table never jumps between frames.
+ */
+export interface SpecimenShadowPlacement {
+  center: [number, number, number];
+  planeSize: number;
+  /** Height above the plane at which atoms stop casting. */
+  far: number;
+}
+
+export function specimenShadowPlacement(
+  bounds: { min: ArrayLike<number>; max: ArrayLike<number> },
+  maxAtomRadius: number,
+  cellFloor: { x: number; y: number; z: number; dx: number; dz: number } | null,
+): SpecimenShadowPlacement {
+  if (cellFloor) {
+    return {
+      center: [cellFloor.x, cellFloor.y - 0.05, cellFloor.z],
+      planeSize: Math.max(cellFloor.dx, cellFloor.dz) * 1.6,
+      far: Math.max(20, cellFloor.dx * 0.6),
+    };
+  }
+  const pad = Math.max(0, maxAtomRadius);
+  const dx = bounds.max[0] - bounds.min[0];
+  const dy = bounds.max[1] - bounds.min[1];
+  const dz = bounds.max[2] - bounds.min[2];
+  const extent = Math.max(dx, dy, dz) + 2 * pad;
+  const gap = Math.max(0.02, extent * 0.015);
+  return {
+    center: [
+      (bounds.min[0] + bounds.max[0]) / 2,
+      bounds.min[1] - pad - gap,
+      (bounds.min[2] + bounds.max[2]) / 2,
+    ],
+    planeSize: Math.max(4, extent * 2.6),
+    far: Math.max(1, dy + 2 * pad) * 1.15,
+  };
+}
+
+interface SpecimenShadowProps {
   atomCount: number;
   frame: Frame;
   hiddenAtomTypes: ReadonlySet<number>;
-  centerX: number;
-  centerY: number;
-  centerZ: number;
-  far: number;
+  placement: SpecimenShadowPlacement;
   opacity: number;
-  planeSize: number;
   playing: boolean;
+  keyLightAzimuth: number;
+  keyLightElevation: number;
 }
 
 /**
- * The floor contact shadow is a CPU splat of the visible atoms (one blurred
- * canvas per recompute; see LupiContactShadow). Keep the authored 1024px
- * mask for small molecules, halve it for medium scenes, and omit it once the
- * scene is dense enough that the splat would stall the main thread. During
- * playback `frames={0}` keeps the last mask instead of re-splatting per frame.
+ * The Specimen floor shadow: a CPU splat of the visible atoms (one blurred
+ * canvas per recompute; see LupiContactShadow) whose penumbra widens with
+ * height and leans away from the key light. The 1024 px mask for small
+ * molecules, half for medium scenes, none once the scene is dense enough
+ * that the splat would stall the main thread. During playback `frames={0}`
+ * keeps the last mask instead of re-splatting per frame.
  */
-const BudgetedContactShadows = memo(function BudgetedContactShadows({
+const SpecimenShadow = memo(function SpecimenShadow({
   atomCount,
   frame,
   hiddenAtomTypes,
-  centerX,
-  centerY,
-  centerZ,
-  far,
+  placement,
   opacity,
-  planeSize,
   playing,
-}: BudgetedContactShadowsProps) {
+  keyLightAzimuth,
+  keyLightElevation,
+}: SpecimenShadowProps) {
+  // Lean away from the key: its horizontal direction, a third of the way to
+  // a true cast shadow (cot of the elevation), so the shadow stays a contact
+  // shadow under the molecule rather than a long cast one.
+  const skew = useMemo<[number, number]>(() => {
+    const az = (keyLightAzimuth * Math.PI) / 180;
+    const el = Math.max(15, Math.min(89, keyLightElevation)) * Math.PI / 180;
+    const lean = Math.min(1.5, 1 / Math.tan(el)) * 0.33;
+    return [-Math.sin(az) * lean, -Math.cos(az) * lean];
+  }, [keyLightAzimuth, keyLightElevation]);
   if (atomCount > CONTACT_SHADOW_MAX_ATOM_LIMIT) return null;
 
   return (
     <LupiContactShadow
-      position={[centerX, centerY - 0.05, centerZ]}
-      scale={planeSize}
-      blur={2.4}
-      far={far}
+      position={placement.center}
+      scale={placement.planeSize}
+      blur={2.2}
+      far={placement.far}
       opacity={opacity}
       resolution={atomCount <= CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT ? 1024 : 512}
       frames={playing ? 0 : 1}
       color="#04060c"
       frame={frame}
       hiddenAtomTypes={hiddenAtomTypes}
+      spread={0.3}
+      skew={skew}
     />
   );
 });
@@ -490,6 +540,27 @@ export function ViewerScene({
   const junctionRadius = contactEligible && currentFrame
     ? displayRadiusRangeForFrame(currentFrame).min * atomScale
     : 0;
+  // The Specimen floor shadow: under every molecule (the filter shell has its
+  // own), off for the flat Diagram figure.
+  const filterShellOn = filterShellShape !== 'off' && filterShellOpacity > 0;
+  const shadowFrameBounds = file?.trajectory.globalBounds;
+  const shadowCell = showCell ? currentFrame?.boxBounds : undefined;
+  const shadowRadius = currentFrame ? displayRadiusRangeForFrame(currentFrame).max * atomScale : 0;
+  const specimenShadow = useMemo(() => {
+    if (!currentFrame || !shadowFrameBounds || filterShellOn || postprocessPreset === 'diagram') return null;
+    const cellFloor = shadowCell
+      ? {
+        x: (shadowCell[0] + shadowCell[1]) / 2,
+        y: shadowCell[2],
+        z: (shadowCell[4] + shadowCell[5]) / 2,
+        dx: shadowCell[1] - shadowCell[0],
+        dz: shadowCell[5] - shadowCell[4],
+      }
+      : null;
+    return specimenShadowPlacement(shadowFrameBounds, shadowRadius, cellFloor);
+    // currentFrame only gates presence; placement follows the global bounds.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(currentFrame), shadowFrameBounds, filterShellOn, postprocessPreset, shadowCell, shadowRadius]);
   const atomQualityTier: AtomQualityTier = deviceQualityTier === 0 ? 0 : deviceQualityTier === 1 ? 1 : 2;
   const atomCullPixelRadius = !isLargeScene
     ? 0
@@ -698,29 +769,18 @@ export function ViewerScene({
           />}
           {showCell && <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />}
 
-          {showCell && !(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
-            const b = currentFrame.boxBounds;
-            const cx = (b[0] + b[1]) / 2;
-            const cy = b[2];
-            const cz = (b[4] + b[5]) / 2;
-            const dx = b[1] - b[0];
-            const dz = b[5] - b[4];
-            const planeSize = Math.max(dx, dz) * 1.6;
-            return (
-              <BudgetedContactShadows
-                atomCount={currentFrame.natoms}
-                frame={interpolatedFrame ?? currentFrame}
-                hiddenAtomTypes={hiddenTypeSet}
-                centerX={cx}
-                centerY={cy}
-                centerZ={cz}
-                far={Math.max(20, dx * 0.6)}
-                opacity={postprocessPreset === 'cinematic' ? 0.55 : 0.32}
-                planeSize={planeSize}
-                playing={playing}
-              />
-            );
-          })()}
+          {specimenShadow && (
+            <SpecimenShadow
+              atomCount={currentFrame.natoms}
+              frame={interpolatedFrame ?? currentFrame}
+              hiddenAtomTypes={hiddenTypeSet}
+              placement={specimenShadow}
+              opacity={postprocessPreset === 'cinematic' || postprocessPreset === 'editorial' ? 0.62 : 0.5}
+              playing={playing}
+              keyLightAzimuth={keyLightAzimuth}
+              keyLightElevation={keyLightElevation}
+            />
+          )}
 
           <AnnotationsLayer
             frame={currentFrame}
