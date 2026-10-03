@@ -16,7 +16,7 @@ import { Billboard } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
-import { keepLupiAwake } from '@atlas/scene';
+import { keepLupiAwake, requestLupiFrames } from '@atlas/scene';
 import { displayMotionScale } from './motion/comfort';
 import { usePlayStore } from './play/playStore';
 
@@ -72,6 +72,10 @@ export function SelectionMarkers({
   const toysDisplacing = usePlayStore((state) => state.displacedSources.some(
     (source) => source === 'tug' || source === 'burst' || source === 'heat',
   ));
+  // Quiet Idle: the toys may end on the loop's last frame; draw the rings back.
+  useEffect(() => {
+    requestLupiFrames();
+  }, [toysDisplacing]);
 
   // Determine active focus atom (selected takes priority over hovered)
   const focusAtom = selectedAtoms.length === 1 ? selectedAtoms[0] : hoveredAtom;
