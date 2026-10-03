@@ -5,8 +5,12 @@
  *   One finger   Orbit · Poke · Tug
  *                Burst · Heat
  *   Try          Scatter · Spin · Reset
+ *   Look         Remix ⟳ · r1-K7QDM (the code: copy, share, type one)
+ *                Foil 1 in 24 · each finish 1 in 72
  *   Motion       Standard · Gentle · Still
  *                Replay ↗ · Settings…
+ *
+ * Remix keeps the tray open, so the next roll is one more tap away.
  *
  * A `role="menu"` anchored above the pill. Arrow keys, Home and End move
  * between items, Enter and Space activate, Escape (or Tab, or a tap outside)
@@ -20,6 +24,9 @@ import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
 import { cue } from './feedback';
 import { openReplaySheet } from '../replay/actions';
+import { openRemixSheet, rollRemix } from '../remix/actions';
+import { FOIL_LABEL, FOIL_ODDS_TEXT } from '../remix/code';
+import { useRemixStore } from '../remix/remixStore';
 import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
 
 export interface PlayTrayProps {
@@ -52,11 +59,14 @@ interface TrayItemProps {
   /** Tooltip while enabled. */
   title?: string;
   verb?: PlayVerb;
+  /** A Foil code's finish (the code item wears it). */
+  foil?: string;
+  ariaLabel?: string;
   onSelect(): void;
   children: ReactNode;
 }
 
-function TrayItem({ role, checked, disabled, hint, title, verb, onSelect, children }: TrayItemProps) {
+function TrayItem({ role, checked, disabled, hint, title, verb, foil, ariaLabel, onSelect, children }: TrayItemProps) {
   return (
     <button
       type="button"
@@ -64,6 +74,8 @@ function TrayItem({ role, checked, disabled, hint, title, verb, onSelect, childr
       tabIndex={-1}
       className="lupi-play-tray__item"
       data-verb={verb}
+      data-foil={foil}
+      aria-label={ariaLabel}
       aria-checked={role === 'menuitemradio' ? Boolean(checked) : undefined}
       aria-disabled={disabled || undefined}
       title={disabled && hint ? hint : title}
@@ -87,6 +99,7 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
   const verb = usePlayStore((state) => state.verb);
   const comfort = useComfort();
   const still = comfort === 'still';
+  const applied = useRemixStore((state) => state.applied);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -120,6 +133,14 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
     emitIntent({ type: intent });
     if (intent === 'play.reset') cue('reset');
     onClose({ restoreFocus: true });
+  };
+  // Remix: roll in place (the tray stays open for the next roll).
+  const roll = () => {
+    rollRemix('tray');
+  };
+  const openCodes = () => {
+    onClose();
+    openRemixSheet();
   };
   // Instant Replay: the last moment (or this view) as a link and a clip.
   const openReplay = () => {
@@ -213,6 +234,30 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
         <TrayItem role="menuitem" onSelect={() => run('play.reset')}>
           Reset
         </TrayItem>
+      </div>
+      <div role="group" aria-labelledby={`${id}-look`} className="lupi-play-tray__row lupi-play-tray__row--look">
+        <span id={`${id}-look`} className="lupi-play-tray__label">Look</span>
+        <TrayItem
+          role="menuitem"
+          title={`Roll a new look (M). ${FOIL_ODDS_TEXT}.`}
+          ariaLabel={`Remix: roll a new look. ${FOIL_ODDS_TEXT}.`}
+          onSelect={roll}
+        >
+          Remix ⟳
+        </TrayItem>
+        <TrayItem
+          role="menuitem"
+          foil={applied?.foil ?? undefined}
+          title="The code for this look: copy it, share it, or type one in"
+          ariaLabel={applied
+            ? `Remix code ${applied.code.text}${applied.foil ? `, ${FOIL_LABEL[applied.foil]} finish` : ''}: copy, share or type a code`
+            : 'Remix codes: type a code, finishes and shake to roll'}
+          onSelect={openCodes}
+        >
+          <span className="lupi-play-tray__code">{applied ? applied.code.text : 'Codes…'}</span>
+          {applied?.foil ? <small className="lupi-play-tray__hint lupi-play-tray__foil">{FOIL_LABEL[applied.foil]}</small> : null}
+        </TrayItem>
+        <span className="lupi-play-tray__note" aria-hidden="true">{FOIL_ODDS_TEXT}</span>
       </div>
       <div role="group" aria-labelledby={`${id}-motion`} className="lupi-play-tray__row">
         <span id={`${id}-motion`} className="lupi-play-tray__label">Motion</span>

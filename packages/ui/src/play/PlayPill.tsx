@@ -28,6 +28,13 @@
  * on a file change and under Motion: Still. While latched the viewport gets
  * a thin lime inset (warm while Heat is held).
  *
+ * Remix lives in the same pill too:
+ * - a roll flashes its code in the status ("Remix · r1-K7QDM"; one in 24
+ *   reads "✦ Holo foil · r1-K7QDM" with its chime);
+ * - "⟳ Again" for 8 s after a roll rolls the next one;
+ * - while a Foil finish is on screen, a small foil chip ("✦ Holo") stays as
+ *   the "cosmetic finish" badge and opens the Remix sheet.
+ *
  * Instant Replay lives in the same pill, as one more segment before stow:
  * - "Replay ↗" for 7 s after a moment (a good flick, a detent chain, a flip,
  *   a toy moment); it opens the share sheet (so does R);
@@ -46,6 +53,9 @@ import { cue } from './feedback';
 import { PLAY_VERB_LABEL, heatKelvin, playStore, playVerbHint, usePlayStore } from './playStore';
 import { PlayTray } from './PlayTray';
 import { isIncomingActive, replayStore, useReplayStore } from '../replay/replayStore';
+import { openRemixSheet, rollRemix } from '../remix/actions';
+import { FOIL_LABEL } from '../remix/code';
+import { shownFinish, useRemixStore } from '../remix/remixStore';
 import './playPill.css';
 
 export interface PlayPillProps {
@@ -65,6 +75,8 @@ const VERB_IDLE_MS = 30_000;
 const VERB_HINT_MS = 2600;
 /** After a shared replay ends, the pill offers "Again" this long (ms). */
 const REPLAY_AGAIN_MS = 9000;
+/** After a Remix roll, the pill offers "Again" this long (ms). */
+const REMIX_AGAIN_MS = 8000;
 const LONG_FORM_KEY = 'lupi.play.illustrativeSeen';
 const SHORT_LABEL = 'Illustrative';
 const LONG_LABEL = 'Illustrative motion, your atoms haven’t moved';
@@ -365,6 +377,66 @@ function ReplaySegment() {
   );
 }
 
+/**
+ * The Remix segment: "⟳ Again" for a while after a roll, then (with a Foil
+ * finish on screen) the finish's chip, which is also its "cosmetic" badge.
+ */
+function RemixSegment() {
+  const rolledAt = useRemixStore((state) => state.rolledAt);
+  const applied = useRemixStore((state) => state.applied);
+  const chosenFinish = useRemixStore((state) => state.chosenFinish);
+  const sheetOpen = useRemixStore((state) => state.sheetOpen);
+  const finish = shownFinish({ applied, chosenFinish });
+  const [againOpen, setAgainOpen] = useState(false);
+  useEffect(() => {
+    if (rolledAt === null) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    const left = REMIX_AGAIN_MS - (now() - rolledAt);
+    if (left <= 0) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    setAgainOpen(true);
+    const timer = setTimeout(() => setAgainOpen(false), left);
+    return () => clearTimeout(timer);
+  }, [rolledAt]);
+  if (sheetOpen) return null;
+  if (againOpen) {
+    return (
+      <button
+        key={`again-${rolledAt}`}
+        type="button"
+        className="lupi-play-pill__remix"
+        data-remix="again"
+        data-foil={finish ?? undefined}
+        aria-label="Roll another look (M)"
+        title="Roll another look (M)"
+        onClick={() => rollRemix('pill')}
+      >
+        <span className="lupi-play-pill__remix-icon" aria-hidden="true">⟳</span>
+        <span className="lupi-play-pill__remix-label">Again</span>
+      </button>
+    );
+  }
+  if (!finish) return null;
+  return (
+    <button
+      type="button"
+      className="lupi-play-pill__remix"
+      data-remix="foil"
+      data-foil={finish}
+      aria-label={`${FOIL_LABEL[finish]} finish, cosmetic: atom colours and positions unchanged. Open Remix`}
+      title={`${FOIL_LABEL[finish]} · cosmetic finish (atom colours and positions unchanged)`}
+      onClick={openRemixSheet}
+    >
+      <span className="lupi-play-pill__remix-icon" aria-hidden="true">✦</span>
+      <span className="lupi-play-pill__remix-label">{FOIL_LABEL[finish]}</span>
+    </button>
+  );
+}
+
 function StowIcon({ stowed }: { stowed: boolean }) {
   return (
     <svg className="lupi-play-pill__stow-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
@@ -609,6 +681,7 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
         )}
       </div>
 
+      {!uiStowed && <RemixSegment />}
       {!uiStowed && <ReplaySegment />}
 
       <button
