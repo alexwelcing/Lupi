@@ -101,6 +101,8 @@ import { RemixSheet } from './remix/RemixSheet';
 import { intakeRemixParam } from './remix/links';
 import { openRemixSheet, rollRemix, undoRemix } from './remix/actions';
 import { PLAY_VERB_LABEL, playStore, type PlayVerb } from './play/playStore';
+import { setIllustrate } from './ink/illustrate';
+import { sceneLookPatch } from './sceneLooks';
 import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
 import { FirstFrameOverlay } from './relay/FirstFrameOverlay';
@@ -908,6 +910,14 @@ export function ViewerApp() {
               },
             },
             {
+              id: 'daily',
+              label: 'Play Lupi Daily: name today’s mystery molecule',
+              group: 'Discover',
+              onSelect: () => {
+                window.location.href = '/daily/';
+              },
+            },
+            {
               id: 'controls-molecule',
               label: 'Open Style',
               group: 'Panels',
@@ -1008,6 +1018,28 @@ export function ViewerApp() {
               group: 'Scene',
               disabled: !file,
               onSelect: () => emitIntent({ type: 'play.reset' }),
+            },
+            {
+              id: 'look-ink',
+              label: 'Ink: draw it like the Lupi drawings (Illustrate look)',
+              group: 'Scene',
+              shortcut: 'I',
+              disabled: !file,
+              onSelect: () => setIllustrate(true, { flash: true }),
+            },
+            {
+              id: 'look-sketch',
+              label: 'Ink: hatched sketch on paper (Sketch look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('sketch', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
+              id: 'look-lit',
+              label: 'Lit: turn the light back on (leave the ink look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => setIllustrate(false, { flash: true }),
             },
             ...(['orbit', 'poke', 'tug', 'burst', 'heat'] as PlayVerb[]).map((verb) => ({
               id: `play-verb-${verb}`,

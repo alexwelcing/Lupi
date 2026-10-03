@@ -23,7 +23,7 @@ import type { Frame } from '@atlas/core/types';
 import { firebaseDb } from './auth/firebase';
 import { loadInlineMolecule, loadMoleculeSource } from './loadMoleculeSource';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
-import { useStore, sanitizeEnvironmentPreset, type AppState, type LoadedFile, type SavedViewVisibility } from './store';
+import { useStore, sanitizeEnvironmentPreset, sanitizeInkStyle, type AppState, type LoadedFile, type SavedViewVisibility } from './store';
 import {
   measurementForInlineSnapshot,
   sanitizeMolecularMeasurement,
@@ -144,7 +144,7 @@ export interface CanonicalMolecularView {
     | 'dofFocus'
     | 'toneMapping'
     | 'antialiasing'
-  >;
+  > & Partial<Pick<AppState, 'inkStyle' | 'inkWeight'>>;
   playback: Pick<AppState, 'playbackSpeed' | 'loopMode'>;
   camera: Pick<AppState, 'cameraPosition' | 'cameraTarget' | 'cameraFov' | 'cameraPreset'>;
   publication: Pick<AppState, 'showScaleBar' | 'colorblindMode' | 'viewportMode'>;
@@ -461,6 +461,8 @@ function captureCanonicalView(): CanonicalMolecularView {
       'dofFocus',
       'toneMapping',
       'antialiasing',
+      'inkStyle',
+      'inkWeight',
     ]),
     playback: pick(s, ['playbackSpeed', 'loopMode']),
     camera: pick(s, ['cameraPosition', 'cameraTarget', 'cameraFov', 'cameraPreset']),
@@ -490,12 +492,20 @@ function applyCanonicalView(view: CanonicalMolecularView) {
   if (material.environmentPreset !== undefined) {
     material.environmentPreset = sanitizeEnvironmentPreset(material.environmentPreset);
   }
+  // Views saved before the Illustrate look open lit; a saved ink look opens inked.
+  const effects = {
+    ...(view.effects ?? {}),
+    inkStyle: sanitizeInkStyle(view.effects?.inkStyle),
+    inkWeight: typeof view.effects?.inkWeight === 'number' && Number.isFinite(view.effects.inkWeight)
+      ? Math.max(0.4, Math.min(2.5, view.effects.inkWeight))
+      : 1,
+  };
   useStore.setState({
     ...(view.color ?? {}),
     ...(view.display ?? {}),
     ...material,
     ...(view.lighting ?? {}),
-    ...(view.effects ?? {}),
+    ...effects,
     ...(view.playback ?? {}),
     ...(view.camera ?? {}),
     ...(view.publication ?? {}),

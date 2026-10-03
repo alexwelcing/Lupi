@@ -11,7 +11,8 @@
  * `?arrival=0` disables it; `?arrival=1` forces it past the session and
  * comfort rules (smoke checks and demos). The mode is `flat` (the drawing
  * inflating into depth) when the home hero handed this very molecule over,
- * otherwise `condense`. A molecule page's drawing (/m/<id>) counts as the hero's.
+ * otherwise `condense`. A molecule page's drawing (/m/<id>) and an ink tile
+ * count as the hero's.
  */
 import type { Comfort } from '../motion/comfort';
 
@@ -40,7 +41,7 @@ export interface ArrivalRuleInput {
   /** The gallery id, or another stable id of the molecule (its name). */
   galleryId: string | null;
   /** The relay baton (`peekBaton()`), if any. */
-  baton?: { galleryId: string; source: string } | null;
+  baton?: { galleryId: string; source: string; ink?: boolean } | null;
 }
 
 function hashRoute(hash: string): string {
@@ -91,8 +92,9 @@ export function shouldPlayArrival(input: ArrivalRuleInput): ArrivalMode | null {
   }
 
   const baton = input.baton;
-  // The drawing the visitor just turned (the home hero, or a molecule page's) inflates into depth.
-  const fromDrawing = baton?.source === 'hero' || baton?.source === 'page';
+  // The drawing the visitor just turned or tapped (the home hero, a molecule
+  // page's, an ink tile) inflates into depth.
+  const fromDrawing = baton?.source === 'hero' || baton?.source === 'page' || baton?.ink === true;
   if (baton && fromDrawing && input.galleryId != null && baton.galleryId === input.galleryId) return 'flat';
   return 'condense';
 }

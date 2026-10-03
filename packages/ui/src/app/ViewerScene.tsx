@@ -46,6 +46,7 @@ import { CameraFocus } from '../CameraFocus';
 import { PlayLayer } from '../play/PlayLayer';
 import { DisplayFollowDriver } from '../play/displayFollow';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
+import { InkLookDriver } from '../ink/InkLookDriver';
 import { CameraToys } from '../camera/CameraToys';
 import { ReplayDirector } from '../replay/ReplayDirector';
 import { FoilDriver } from '../remix/FoilDriver';
@@ -807,6 +808,7 @@ export function ViewerScene({
             enabled={!transmissionActive}
           />
           <FoilDriver />
+          <InkLookDriver />
           <CameraToys frame={currentFrame} />
           <ReplayDirector frame={currentFrame} center={center} />
           <AtomTrails

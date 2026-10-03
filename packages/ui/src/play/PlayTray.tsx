@@ -5,7 +5,8 @@
  *   One finger   Orbit · Poke · Tug
  *                Burst · Heat
  *   Try          Scatter · Spin · Reset
- *   Look         Remix ⟳ · r1-K7QDM (the code: copy, share, type one)
+ *   Look         Lit · Ink · Remix ⟳
+ *                r1-K7QDM (the code: copy, share, type one)
  *                Foil 1 in 24 · each finish 1 in 72
  *   Motion       Standard · Gentle · Still
  *                Replay ↗ · Settings…
@@ -15,7 +16,10 @@
  * A `role="menu"` anchored above the pill. Arrow keys, Home and End move
  * between items, Enter and Space activate, Escape (or Tab, or a tap outside)
  * closes. Every item is at least 44 px tall. Toys only emit intents; Motion
- * writes `comfort.ts`, never the viewer store, URLs or saved views.
+ * writes `comfort.ts`, never the viewer store, URLs or saved views. Lit · Ink
+ * is the Illustrate look (ink/illustrate.ts): a Look like any other, so it is
+ * shared, saved and exported, and Still never turns it off. Remix rolls a
+ * look code (remix/actions.ts).
  */
 import { useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { emitIntent, isCanvasInputSourceActive } from '@atlas/scene';
@@ -29,6 +33,7 @@ import { openReplaySheet } from '../replay/actions';
 import { openRemixSheet, rollRemix, undoRemix } from '../remix/actions';
 import { FOIL_LABEL, FOIL_ODDS_TEXT } from '../remix/code';
 import { useRemixStore } from '../remix/remixStore';
+import { setIllustrate } from '../ink/illustrate';
 import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
 
 export interface PlayTrayProps {
@@ -115,6 +120,7 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
     [occluderRef],
   );
   const verb = usePlayStore((state) => state.verb);
+  const inked = useStore((state) => state.inkStyle !== 'off');
   const comfort = useComfort();
   const still = comfort === 'still';
   const applied = useRemixStore((state) => state.applied);
@@ -263,6 +269,28 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
       </div>
       <div role="group" aria-labelledby={`${id}-look`} className="lupi-play-tray__row lupi-play-tray__row--look">
         <span id={`${id}-look`} className="lupi-play-tray__label">Look</span>
+        <TrayItem
+          role="menuitemradio"
+          checked={!inked}
+          title="The lit molecule: soft light, depth and colour"
+          onSelect={() => {
+            setIllustrate(false, { flash: true });
+            onClose({ restoreFocus: true });
+          }}
+        >
+          Lit
+        </TrayItem>
+        <TrayItem
+          role="menuitemradio"
+          checked={inked}
+          title="Draw it in ink, like the Lupi drawings (exports keep it)"
+          onSelect={() => {
+            setIllustrate(true, { flash: true });
+            onClose({ restoreFocus: true });
+          }}
+        >
+          Ink
+        </TrayItem>
         <TrayItem
           role="menuitem"
           title={`Roll a new look (M). ${FOIL_ODDS_TEXT}.`}

@@ -72,6 +72,8 @@ export const LUPI_JOB = {
   replayPlay: 'lupi/replay-play',
   /** A Remix code's Foil finish: level fades and the reveal sweep, in `lupi-uniforms`. */
   atomFoil: 'lupi/atom-foil',
+  /** The Illustrate look's fade (Ink-to-Light) uniforms in `lupi-uniforms`. */
+  inkLook: 'lupi/ink-look',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];

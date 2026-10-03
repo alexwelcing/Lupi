@@ -56,6 +56,12 @@ const BACKDROP_KEYS = new Set<string>([
 ]);
 /** Labels that carry no picture: written at the start. */
 const LABEL_KEYS = new Set<string>(['materialScene']);
+/**
+ * Keys with their own fade, written at the start so it runs alongside the
+ * morph: the Illustrate look's shading and line weight (InkLookDriver fades
+ * ink in and out over about half a second).
+ */
+const SELF_FADING_KEYS = new Set<string>(['inkStyle', 'inkWeight']);
 
 /** The material strength a preset change dips to at the midpoint. */
 const MATERIAL_DIP = 0.06;
@@ -253,7 +259,7 @@ export function morphLook(patch: LookPatch, options: { duration?: number; onDone
   for (const key of keys) {
     const from = current[key];
     const to = target[key];
-    if (LABEL_KEYS.has(key)) add({ key, kind: 'discrete', from, to, at: 0 });
+    if (LABEL_KEYS.has(key) || SELF_FADING_KEYS.has(key)) add({ key, kind: 'discrete', from, to, at: 0 });
     else if (BACKDROP_KEYS.has(key)) add({ key, kind: 'discrete', from, to, at: backdropAt });
     else if (key === 'materialIntensity' && presetChanges) add({ key, kind: 'materialDip', from, to });
     else if (key === 'postprocessIntensity' && postChanges) add({ key, kind: 'postDip', from, to });

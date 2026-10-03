@@ -123,6 +123,7 @@ export { displayOffsetTwin, readTwinState, restTwinState } from './tsl/displayMo
 export type { DisplayMotionTwinState, TwinTermScales, TwinVec3 } from './tsl/displayMotionTwin';
 export * from './tsl/atomGlow';
 export * from './tsl/atomFoil';
+export * from './tsl/inkLook';
 
 // Shared constants
 export {

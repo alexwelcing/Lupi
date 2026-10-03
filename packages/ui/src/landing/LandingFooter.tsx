@@ -10,6 +10,7 @@ export function LandingFooter() {
       <nav aria-label="Footer">
         <a href="#gallery">Explore examples</a>
         <a href="/m/">Molecules A–Z</a>
+        <a href="/daily/">Lupi Daily</a>
         <a href="/study/organic-functional-groups">Learning guide</a>
         <a href="https://github.com/alexwelcing/Lupi">Source code ↗</a>
       </nav>

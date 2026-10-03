@@ -3,6 +3,7 @@ import { emitIntent } from '@atlas/scene';
 import { useStore } from '../store';
 import { openReplaySheet } from '../replay/actions';
 import { rollRemix, undoRemix } from '../remix/actions';
+import { toggleIllustrate } from '../ink/illustrate';
 
 export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPaletteOpen: (open: boolean) => void) {
   useEffect(() => {
@@ -62,6 +63,10 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
         e.preventDefault();
         if (e.shiftKey) undoRemix();
         else rollRemix('key');
+      }
+      // I: the Illustrate look on and off (ink ⇄ light).
+      if (e.key.toLowerCase() === 'i' && currentFile && noModifiers && !e.shiftKey) {
+        toggleIllustrate({ flash: true });
       }
       if (e.key === 'Escape') {
         state.setActivePanel(null);

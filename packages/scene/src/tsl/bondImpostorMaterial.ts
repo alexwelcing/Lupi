@@ -14,6 +14,8 @@
  *   one thickens a little), exactly as at rest while the motion is off;
  * - the two-tone split at the geometric midpoint;
  * - the distance fade (`uBondFadeStart`/`uBondFadeEnd`) times `uOpacity`;
+ * - the Illustrate look (tsl/inkLook.ts): toon fills, ink along both edges,
+ *   and thin bonds drawn as one ink stroke, mixed in by `uInkMix`;
  * - degenerate, sub-pixel and fully faded bonds collapse to a degenerate
  *   vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -65,6 +67,7 @@ import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './
 import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
 import { ATOM_GLOW } from './atomGlow';
 import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
+import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
@@ -282,26 +285,60 @@ export function createBondImpostorMaterial({
         .add(sphereOcclusion(p, normal, vB, u.uJunctionRadius));
       junction.assign(float(1).sub(min(occ.mul(u.uJunctionStrength), 0.82)));
     });
-    const lit = (lupiSurface(
-      {
-        normal,
-        baseColor,
-        metalness: u.uMetalness,
-        roughness: u.uRoughness.add(u.uSurfaceRoughness),
-        clearcoat: u.uSurfaceClearcoat,
-        polish: u.uSurfacePolish,
-        occlusion: junction,
-        occlusionStrength: float(1),
-        // Tension glow (lime): zero unless display motion stretches the bond.
-        emission: vec3(ATOM_GLOW.uGlowColor as N).mul(smoothstep(0.03, 0.4, vStrain).mul(0.75)),
-        pixelRadius: vPixelRadius,
-        subsurface: float(0),
-      },
-      lights,
-      env,
-      tier,
-    ) as N).toVar();
-    // Foil: gilded edges and the same finish as the atoms (none in captures).
+    // Tension glow (lime): zero unless display motion stretches the bond.
+    const strainGlow = vec3(ATOM_GLOW.uGlowColor as N).mul(smoothstep(0.03, 0.4, vStrain).mul(0.75)).toVar();
+    // The lit surface, the Illustrate surface (tsl/inkLook.ts), or a blend
+    // while the look fades; uniform branches, as on the atoms.
+    const inkMix: N = INK_LOOK.uInkMix as N;
+    const lit = vec3(0).toVar();
+    If(inkMix.lessThan(1.0), () => {
+      lit.assign(lupiSurface(
+        {
+          normal,
+          baseColor,
+          metalness: u.uMetalness,
+          roughness: u.uRoughness.add(u.uSurfaceRoughness),
+          clearcoat: u.uSurfaceClearcoat,
+          polish: u.uSurfacePolish,
+          occlusion: junction,
+          occlusionStrength: float(1),
+          emission: strainGlow,
+          pixelRadius: vPixelRadius,
+          subsurface: float(0),
+        },
+        lights,
+        env,
+        tier,
+      ) as N);
+    });
+    If(inkMix.greaterThan(0.0), () => {
+      // The silhouette runs along both sides: measure across the stick, in
+      // the plane square to its axis. Caps (and a stick seen end-on) have none.
+      const inkEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate())).toVar();
+      const across: N = inkEye.sub(ax.mul(dot(inkEye, ax))).toVar();
+      const acrossLength: N = length(across).toVar();
+      const facing: N = clamp(abs(dot(normal, across.div(max(acrossLength, 1e-4)))), 0.0, 1.0).toVar();
+      const sideEdge: N = vPixelRadius.mul(float(1).sub(sqrt(max(float(1).sub(facing.mul(facing)), 0.0))));
+      const edgePx: N = select(hit.w.greaterThan(0.5).or(acrossLength.lessThan(0.05)), float(1e4), sideEdge);
+      const ink = lupiInkSurface(
+        {
+          normal,
+          baseColor,
+          occlusion: junction,
+          pixelRadius: vPixelRadius,
+          edgePx,
+          lineWidth: INK_LOOK_TUNING.bondLine,
+          hit: hit.xyz,
+          isOrtho,
+          emission: strainGlow,
+          thinSolid: true,
+        },
+        lights,
+      ) as N;
+      lit.assign(mix(lit, ink, clamp(inkMix, 0.0, 1.0)));
+    });
+    // Foil: gilded edges and the same finish as the atoms (none in captures,
+    // and none under the Illustrate look, which is a drawing).
     const toEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate()));
     const finished: N = lupiFoilFinish({
       lit,
@@ -311,6 +348,7 @@ export function createBondImpostorMaterial({
       pixelRadius: vPixelRadius,
       sweep: vFoilSweep,
       bond: true,
+      mute: inkMix,
     });
     return vec4(finished, u.uOpacity.mul(fadeAt(hit.z)));
   }) as N)();

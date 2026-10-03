@@ -29,6 +29,8 @@
  *   __lupiPlay.remix()   → Remix: { code, foil, finish, status, morphing };
  *                         remix('roll') rolls, remix('undo') steps back,
  *                         remix('r1-K7QDM') applies a code
+ *   __lupiPlay.ink()    → { mix, hatch, weight, target, holding, fading, arrival }:
+ *                         the Illustrate look's live weights and Ink-to-Light state
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -58,7 +60,8 @@ export type PlayDevHookName =
   | 'viewInset'
   | 'follow'
   | 'replay'
-  | 'remix';
+  | 'remix'
+  | 'ink';
 
 export interface PlayRigState {
   position: Vec3;
@@ -109,6 +112,8 @@ export interface LupiPlayDevApi {
   follow?: DevHook;
   replay?: DevHook;
   remix?: DevHook;
+  /** The Illustrate look: `{ mix, hatch, weight, target, holding, fading, arrival }` (ink/InkLookDriver.tsx). */
+  ink?: DevHook;
 }
 
 declare global {
@@ -130,7 +135,8 @@ type ExposedHookName =
   | 'viewInset'
   | 'follow'
   | 'replay'
-  | 'remix';
+  | 'remix'
+  | 'ink';
 const EXPOSED: ReadonlyArray<ExposedHookName> = [
   'poke',
   'flick',
@@ -144,6 +150,7 @@ const EXPOSED: ReadonlyArray<ExposedHookName> = [
   'follow',
   'replay',
   'remix',
+  'ink',
 ];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs && tsx ../../scripts/generate-molecule-pages.mts",
+    "build": "tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs && tsx ../../scripts/generate-molecule-pages.mts && tsx ../../scripts/generate-daily-pages.mts",
     "lint": "eslint .",
     "test": "vitest run vite.config.test.ts",
     "preview": "vite preview"

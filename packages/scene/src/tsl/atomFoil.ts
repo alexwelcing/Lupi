@@ -171,6 +171,11 @@ export interface LupiFoilInput {
   sweep: Node;
   /** Bonds take a slightly stronger gold edge (gilded bond edges). */
   bond?: boolean;
+  /**
+   * 0..1: how far the finish steps aside (the Illustrate look's `uInkMix`: a
+   * drawing carries no foil). At 1 the result is exactly `lit`.
+   */
+  mute?: Node;
 }
 
 /**
@@ -182,7 +187,8 @@ export function lupiFoilFinish(input: LupiFoilInput): Node {
   return (Fn(() => {
     const lit: N = (input.lit as N).toVar();
     const out: N = lit.toVar();
-    const gate: N = foilGate().toVar();
+    const muted: N = input.mute ? foilGate().mul(float(1).sub(clamp(input.mute as N, 0, 1))) : foilGate();
+    const gate: N = muted.toVar();
     If(gate.greaterThan(0.0), () => {
       const n: N = input.normal as N;
       const facing: N = clamp(input.facing as N, 0, 1);
