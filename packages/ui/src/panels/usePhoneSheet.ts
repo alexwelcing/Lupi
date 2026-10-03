@@ -214,7 +214,13 @@ export function usePhoneSheet({
   const mode: PhoneSheetMode = portrait ? 'sheet' : sideways ? 'side' : null;
   const comfort = useComfort();
   const cut = !glidesAnimate(comfort);
-  const [detent, setDetentState] = useState<SheetDetent>(() => remembered.get(memoryKey) ?? defaultDetent);
+  // The detent belongs to the panel shown: another panel in the same sheet
+  // opens at its own remembered detent, from its very first frame.
+  const [picked, setPicked] = useState<{ key: string; detent: SheetDetent }>(() => ({
+    key: memoryKey,
+    detent: remembered.get(memoryKey) ?? defaultDetent,
+  }));
+  const detent = picked.key === memoryKey ? picked.detent : (remembered.get(memoryKey) ?? defaultDetent);
   const [heights, setHeights] = useState<SheetHeights | null>(null);
   const [dragging, setDragging] = useState(false);
   const nodeRef = useRef<HTMLElement | null>(null);
@@ -228,19 +234,15 @@ export function usePhoneSheet({
   const live = useRef({ memoryKey, onDismiss, cut, heights, mode, detent });
   live.current = { memoryKey, onDismiss, cut, heights, mode, detent };
 
-  // Another panel in the same sheet: it opens at its own remembered detent.
-  useEffect(() => {
-    setDetentState(remembered.get(memoryKey) ?? defaultDetent);
-  }, [memoryKey, defaultDetent]);
-
   // A sheet swiped closed and opened again starts whole.
   useEffect(() => {
     dismissing.current = false;
   }, [memoryKey, open]);
 
   const setDetent = useCallback((next: SheetDetent) => {
-    remembered.set(live.current.memoryKey, next);
-    setDetentState(next);
+    const key = live.current.memoryKey;
+    remembered.set(key, next);
+    setPicked({ key, detent: next });
   }, []);
 
   const sheetRef = useCallback(

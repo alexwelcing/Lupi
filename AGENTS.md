@@ -131,6 +131,16 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   names what keeps the loop awake; `?frames=1` shows the same as a small
   meter at the top of the viewer (for a phone). `?frameloop=always` renders
   continuously again. Exports and video force their own frames.
+- **Phone sheets make room for the molecule.** On a phone every panel
+  (Learn, Style, Data, Camera, Export, Switch, Settings), the atom card, the
+  Play tray and the Save/Account sheets declare the screen area they cover
+  (`packages/ui/src/camera/viewInset.ts`), and the live view eases the
+  molecule into the free area left (shifted, and shrunk to fit, never grown).
+  It is a display-only projection view offset: the store camera, saved views,
+  share URLs, exports, MCP artifacts, picking and the axes gizmo never see it.
+  Held upright, panels are bottom sheets with Peek, Half and Full detents;
+  held sideways, a column on the right. The canvas never resizes for them.
+  `__lupiPlay.viewInset()` returns `{ current, target, occluders }`.
 - **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
   half-strength display motion) or Still (nothing moves on its own; glides
   cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and
