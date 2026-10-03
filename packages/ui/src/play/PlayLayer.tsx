@@ -130,7 +130,7 @@ const TUG = {
   /** The rubber-band limit: displacement saturates as L·tanh(d / L). */
   limit: { scale: 0.9, min: 2.5, max: 10 } as RadiusScaled,
   held: { core: { omega: 30, zeta: 0.8 }, halo: { omega: 16, zeta: 0.7 } },
-  release: { core: { omega: 24, zeta: 0.2 }, halo: { omega: 15, zeta: 0.24 } },
+  release: { core: { omega: 24, zeta: 0.25 }, halo: { omega: 15, zeta: 0.28 } },
   releaseGentle: { core: { omega: 20, zeta: 0.8 }, halo: { omega: 13, zeta: 0.85 } },
   /** The neighbourhood widens as it stretches: falloff × (1 + widen · stretch / limit). */
   widen: 0.35,
@@ -143,8 +143,8 @@ const TUG = {
 
 /** Burst: amplitude and falloff follow the molecule; a quick pop and a soft spring home. */
 const BURST = {
-  amplitude: { scale: 0.45, min: 1.2, max: 5 } as RadiusScaled,
-  falloff: { scale: 0.55, min: 2.5, max: 12 } as RadiusScaled,
+  amplitude: { scale: 0.6, min: 1.5, max: 6 } as RadiusScaled,
+  falloff: { scale: 0.8, min: 3, max: 14 } as RadiusScaled,
   omega: 9,
   zeta: 0.42,
   zetaGentle: 0.75,

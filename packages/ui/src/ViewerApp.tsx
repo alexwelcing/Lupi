@@ -93,6 +93,8 @@ import { DevProbe } from './DevProbe';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { emitIntent } from '@atlas/scene';
 import { PlayPill } from './play/PlayPill';
+import { PLAY_VERB_LABEL, playStore, type PlayVerb } from './play/playStore';
+import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
 import { FirstFrameOverlay } from './relay/FirstFrameOverlay';
 import { withCameraGlide } from './camera/rigApi';
@@ -955,6 +957,15 @@ export function ViewerApp() {
               disabled: !file,
               onSelect: () => emitIntent({ type: 'play.reset' }),
             },
+            ...(['orbit', 'poke', 'tug', 'burst', 'heat'] as PlayVerb[]).map((verb) => ({
+              id: `play-verb-${verb}`,
+              label: verb === 'orbit'
+                ? 'One finger: Orbit'
+                : `One finger: ${PLAY_VERB_LABEL[verb]} (illustrative)`,
+              group: 'Scene',
+              disabled: !file || (verb !== 'orbit' && getComfort() === 'still'),
+              onSelect: () => playStore.getState().setVerb(verb),
+            })),
             {
               id: 'camera-top',
               label: 'Camera top view',
