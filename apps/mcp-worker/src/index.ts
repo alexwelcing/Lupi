@@ -2431,7 +2431,7 @@ async function renderSavedViewShare(request: Request, env: Env) {
   const slug = savedViewSlugFromPath(url.pathname);
   const publicOrigin = env.LUPI_PUBLIC_ORIGIN || DEFAULT_PUBLIC_ORIGIN;
   let status = 404;
-  let model = buildMissingViewShareModel(slug || 'saved-view', publicOrigin);
+  let model: SavedViewShareModel = buildMissingViewShareModel(slug || 'saved-view', publicOrigin);
   let redirectToApp = false;
 
   if (slug) {
@@ -2441,7 +2441,9 @@ async function renderSavedViewShare(request: Request, env: Env) {
       // carry noindex. Anything else stays a 404.
       if (doc?.visibility === 'public' || doc?.visibility === 'unlisted') {
         status = 200;
-        model = buildSavedViewShareModel(slug, doc, publicOrigin);
+        const manifest = await readMoleculePagesManifest(request, env);
+        const page = manifest ? moleculePageForSavedView(asRecord(doc.molecule), manifest) : null;
+        model = buildSavedViewShareModel(slug, doc, publicOrigin, page);
         redirectToApp = true;
       }
     } catch (error) {
@@ -2505,21 +2507,116 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return isRecord(value) ? value : null;
 }
 
-function buildSavedViewShareModel(slug: string, doc: Record<string, unknown>, publicOrigin: string) {
+/** One gallery molecule with a zero-canvas page and share card (/m/manifest.json, written by the web build). */
+interface MoleculePageEntry {
+  id: string;
+  name: string;
+  formula: string;
+  atoms: number;
+  /** Public path of its coordinate file, e.g. /gallery/curated/popular/caffeine.xyz. */
+  file: string;
+}
+
+interface MoleculePagesManifest {
+  cards: boolean;
+  pages: MoleculePageEntry[];
+}
+
+const MOLECULE_MANIFEST_TTL_MS = 10 * 60 * 1000;
+let moleculeManifestCache: { at: number; manifest: MoleculePagesManifest | null } | null = null;
+
+/** The molecule pages the deployed static assets carry, read once per isolate (10 min). */
+async function readMoleculePagesManifest(request: Request, env: Env): Promise<MoleculePagesManifest | null> {
+  if (!env.WEB_ASSETS) return null;
+  if (moleculeManifestCache && Date.now() - moleculeManifestCache.at < MOLECULE_MANIFEST_TTL_MS) {
+    return moleculeManifestCache.manifest;
+  }
+  let manifest: MoleculePagesManifest | null = null;
+  try {
+    const response = await env.WEB_ASSETS.fetch(new Request(new URL('/m/manifest.json', request.url).toString()));
+    if (response.ok && (response.headers.get('content-type') ?? '').includes('json')) {
+      const raw = await response.json() as Record<string, unknown>;
+      const pages = Array.isArray(raw.pages)
+        ? raw.pages.filter((entry): entry is MoleculePageEntry =>
+          isRecord(entry)
+          && typeof entry.id === 'string' && /^[a-z0-9_]+$/.test(entry.id)
+          && typeof entry.name === 'string'
+          && typeof entry.formula === 'string'
+          && typeof entry.file === 'string'
+          && typeof entry.atoms === 'number')
+        : [];
+      manifest = { cards: raw.cards === true, pages };
+    }
+  } catch (error) {
+    console.warn('lupi_molecule_manifest_failed', error instanceof Error ? error.message : String(error));
+  }
+  moleculeManifestCache = { at: Date.now(), manifest };
+  return manifest;
+}
+
+function normalizedMoleculeKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\.(xyz|extxyz|pdb|sdf|mol)$/i, '').replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * The gallery molecule a saved view shows, when it has a page: by its source
+ * URL's path (a gallery file, on any origin), else by name (an inline XYZ
+ * saved from a gallery molecule keeps its file or display name).
+ */
+function moleculePageForSavedView(
+  molecule: Record<string, unknown> | null,
+  manifest: MoleculePagesManifest,
+): MoleculePageEntry | null {
+  if (!molecule || manifest.pages.length === 0) return null;
+  const url = readString(molecule.url);
+  if (url) {
+    try {
+      const pathname = decodeURIComponent(new URL(url, DEFAULT_PUBLIC_ORIGIN).pathname);
+      const byFile = manifest.pages.find((entry) => entry.file === pathname);
+      if (byFile) return byFile;
+    } catch {
+      /* not a URL: fall through to the name */
+    }
+  }
+  const name = readString(molecule.name);
+  if (!name) return null;
+  const key = normalizedMoleculeKey(name.replace(/^MCP:\s*/i, ''));
+  if (!key) return null;
+  return manifest.pages.find((entry) =>
+    normalizedMoleculeKey(entry.id) === key
+    || normalizedMoleculeKey(entry.name) === key
+    || normalizedMoleculeKey(entry.file.split('/').pop() ?? '') === key) ?? null;
+}
+
+type SavedViewShareModel = ReturnType<typeof buildSavedViewShareModel>;
+
+function buildSavedViewShareModel(
+  slug: string,
+  doc: Record<string, unknown>,
+  publicOrigin: string,
+  page: MoleculePageEntry | null = null,
+) {
   const clean = cleanSlug(readString(doc.slug) || slug) || slug;
   const origin = normalizeOrigin(publicOrigin);
   const title = clip(cleanText(readString(doc.title) || titleFromSlug(clean)), 92);
   const molecule = asRecord(doc.molecule);
   const atomCount = typeof molecule?.atomCount === 'number' ? molecule.atomCount : null;
-  const prefix = readString(molecule?.name) ? `${clip(cleanText(String(molecule?.name)), 72)}: ` : '';
+  const prefix = page
+    ? `${page.name} (${page.formula}): `
+    : readString(molecule?.name) ? `${clip(cleanText(String(molecule?.name)), 72)}: ` : '';
   const stats = atomCount && atomCount > 0 ? `${new Intl.NumberFormat('en-US').format(Math.round(atomCount))} atoms in ` : '';
   const description = clip(`${prefix}${stats}a browser-shareable Lupi molecular view with a live 3D scene.`, 220);
   const unlisted = readString(doc.visibility) === 'unlisted';
   return {
     appUrl: `${origin}/#/view/${encodeURIComponent(clean)}`,
     description,
-    imageAlt: `${title} in the Lupi molecular viewer.`,
-    imageUrl: `${origin}${DEFAULT_SOCIAL_IMAGE}`,
+    // A view of a gallery molecule unfurls as that molecule's ink card.
+    imageAlt: page
+      ? `Ink illustration of ${page.name} (${page.formula}), ${page.atoms} atoms, drawn from its coordinates on Lupi's sage plate.`
+      : `${title} in the Lupi molecular viewer.`,
+    imageUrl: page ? `${origin}/og/m/${page.id}.png` : `${origin}${DEFAULT_SOCIAL_IMAGE}`,
+    imageSize: page ? { width: 1200, height: 630 } : null,
+    molecule: page ? { name: page.name, formula: page.formula, url: `${origin}/m/${page.id}` } : null,
     pageTitle: `${title} | Lupi`,
     robots: unlisted ? 'noindex,nofollow,max-image-preview:large' : 'index,follow,max-image-preview:large',
     shareUrl: `${origin}/view/${encodeURIComponent(clean)}`,
@@ -2527,7 +2624,7 @@ function buildSavedViewShareModel(slug: string, doc: Record<string, unknown>, pu
   };
 }
 
-function buildMissingViewShareModel(slug: string, publicOrigin: string) {
+function buildMissingViewShareModel(slug: string, publicOrigin: string): SavedViewShareModel {
   const clean = cleanSlug(slug) || 'saved-view';
   const origin = normalizeOrigin(publicOrigin);
   return {
@@ -2535,6 +2632,8 @@ function buildMissingViewShareModel(slug: string, publicOrigin: string) {
     description: 'Open shareable molecular and materials scenes in the browser with Lupi.',
     imageAlt: 'Lupi molecular viewer title card from Lupine Science.',
     imageUrl: `${origin}${DEFAULT_SOCIAL_IMAGE}`,
+    imageSize: null,
+    molecule: null,
     pageTitle: 'Lupi saved view not found',
     robots: 'noindex,nofollow,max-image-preview:large',
     shareUrl: `${origin}/view/${encodeURIComponent(clean)}`,
@@ -2542,7 +2641,7 @@ function buildMissingViewShareModel(slug: string, publicOrigin: string) {
   };
 }
 
-function renderSavedViewShareHtml(model: ReturnType<typeof buildSavedViewShareModel>, redirectToApp: boolean) {
+function renderSavedViewShareHtml(model: SavedViewShareModel, redirectToApp: boolean) {
   const jsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'CreativeWork',
@@ -2550,6 +2649,9 @@ function renderSavedViewShareHtml(model: ReturnType<typeof buildSavedViewShareMo
     description: model.description,
     url: model.shareUrl,
     image: model.imageUrl,
+    ...(model.molecule
+      ? { about: { '@type': 'MolecularEntity', name: model.molecule.name, molecularFormula: model.molecule.formula, url: model.molecule.url } }
+      : {}),
     isPartOf: { '@type': 'WebApplication', name: 'Lupi', url: normalizeOrigin(new URL(model.shareUrl).origin) },
   }, null, 2).replace(/</g, '\\u003c');
   const redirectScript = redirectToApp ? `<script>(()=>{const ua=navigator.userAgent||'';const bot=/(bot|crawler|spider|slurp|preview|facebookexternalhit|linkedinbot|twitterbot|discordbot|telegrambot|whatsapp|pinterest)/i.test(ua);if(!bot)window.location.replace(${JSON.stringify(model.appUrl)});})();</script>` : '';
@@ -2566,22 +2668,30 @@ function renderSavedViewShareHtml(model: ReturnType<typeof buildSavedViewShareMo
   <meta property="og:title" content="${escapeHtml(model.title)}">
   <meta property="og:description" content="${escapeHtml(model.description)}">
   <meta property="og:url" content="${escapeHtml(model.shareUrl)}">
-  <meta property="og:image" content="${escapeHtml(model.imageUrl)}">
+  <meta property="og:image" content="${escapeHtml(model.imageUrl)}">${model.imageSize ? `
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="${model.imageSize.width}">
+  <meta property="og:image:height" content="${model.imageSize.height}">` : ''}
   <meta property="og:image:alt" content="${escapeHtml(model.imageAlt)}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapeHtml(model.title)}">
   <meta name="twitter:description" content="${escapeHtml(model.description)}">
   <meta name="twitter:image" content="${escapeHtml(model.imageUrl)}">
+  <meta name="twitter:image:alt" content="${escapeHtml(model.imageAlt)}">
   <link rel="canonical" href="${escapeHtml(model.shareUrl)}">
   <script type="application/ld+json">${jsonLd}</script>
   ${redirectScript}
 </head>
-<body style="margin:0;background:#06080d;color:#f4efe5;font-family:Inter,ui-sans-serif,system-ui,sans-serif">
+<body style="margin:0;background:#101817;color:#e7ede9;font-family:system-ui,-apple-system,'Segoe UI',sans-serif">
   <main style="min-height:100vh;display:grid;place-items:center;padding:16px;box-sizing:border-box">
-    <section style="width:min(620px,100%);border:1px solid rgba(244,239,229,.22);border-radius:8px;padding:20px;background:linear-gradient(145deg,rgba(6,8,8,.96),rgba(18,22,22,.94))">
-      <h1>${escapeHtml(model.title)}</h1>
-      <p>${escapeHtml(model.description)}</p>
-      <a style="color:#120c05;background:#f2aa45;padding:12px 16px;border-radius:8px;font-weight:800;text-decoration:none" href="${escapeHtml(model.appUrl)}">Open in Lupi</a>
+    <section style="width:min(620px,100%);border:1px solid #2a3632;border-radius:14px;padding:20px;background:#16201e">
+      ${model.molecule ? `<img src="${escapeHtml(model.imageUrl)}" alt="${escapeHtml(model.imageAlt)}" width="1200" height="630" style="display:block;width:100%;height:auto;border-radius:8px;margin-bottom:12px">` : ''}
+      <h1 style="font:400 2rem/1.15 Georgia,serif;margin:0 0 8px">${escapeHtml(model.title)}</h1>
+      <p style="color:#c9d4ce">${escapeHtml(model.description)}</p>
+      <p style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0 0">
+        <a style="color:#101817;background:#d5ef9c;padding:12px 18px;border-radius:999px;font-weight:700;text-decoration:none" href="${escapeHtml(model.appUrl)}">Open in Lupi</a>
+        ${model.molecule ? `<a style="color:#d5ef9c" href="${escapeHtml(model.molecule.url)}">About ${escapeHtml(model.molecule.name)}</a>` : ''}
+      </p>
     </section>
   </main>
 </body>
