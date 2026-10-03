@@ -44,6 +44,7 @@ import {
 } from '../measurements';
 import { CameraFocus } from '../CameraFocus';
 import { PlayLayer } from '../play/PlayLayer';
+import { DisplayFollowDriver } from '../play/displayFollow';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
 import { CameraToys } from '../camera/CameraToys';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
@@ -760,6 +761,7 @@ export function ViewerScene({
             labels={knowledgeLabels}
             visibleKinds={knowledgeLabelKinds}
             visible={showKnowledgeLabels}
+            frame={currentFrame}
           />
           <SelectionMarkers
             frame={currentFrame}
@@ -793,6 +795,8 @@ export function ViewerScene({
             transmissionActive={transmissionActive}
             playing={playing}
           />
+          {/* Labels, rings, the card anchor, measurements and trails ride display motion. */}
+          <DisplayFollowDriver />
           <AtomGlowDriver
             hoveredAtom={visibleHoveredAtom}
             selectedAtoms={visibleSelectedAtoms}
