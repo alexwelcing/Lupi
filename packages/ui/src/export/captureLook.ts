@@ -16,6 +16,10 @@
  * per-pixel stages only (AO, tone mapping on un-premultiplied colour) and
  * drops bloom, depth of field and vignette (the spec records them as null).
  *
+ * Under the Illustrate look the recipe steps aside (the drawing shades
+ * itself in the impostors), so the capture takes the raw path; the spec
+ * records the ink in `view.ink` (mcp/renderArtifactAdapter.ts).
+ *
  * This module is pure: the GPU pass is captureLookPass.ts.
  */
 import type { RenderJsonObjectV1 } from '@atlas/core';
@@ -60,6 +64,8 @@ export interface CaptureLookState {
   postprocessPreset: PostprocessPresetId;
   postprocessIntensity: number;
   effectOverrides: EffectOverrides | null;
+  /** The Illustrate look sets the recipe aside (postprocess/controls.ts inkRecipe). Absent = off. */
+  inkStyle?: 'off' | 'flat' | 'hatch';
   cameraPosition: readonly [number, number, number] | readonly number[];
   cameraTarget: readonly [number, number, number] | readonly number[];
 }
@@ -81,6 +87,7 @@ export function resolveCaptureLook(state: CaptureLookState, options: { transpare
     overrides: state.effectOverrides,
     playing: false,
     reduced: false,
+    ink: state.inkStyle !== undefined && state.inkStyle !== 'off',
   });
   const opaque = !options.transparent;
   let dof: CaptureLook['dof'] = null;

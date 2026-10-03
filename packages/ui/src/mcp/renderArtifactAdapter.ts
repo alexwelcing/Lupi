@@ -25,6 +25,7 @@ import {
   type RenderSpecIdV1,
   type Sha256DigestV1,
 } from '@atlas/core';
+import { INK_LOOK_COLORS } from '@atlas/scene';
 import { getBgMedia, BG_PRESETS } from '../backgroundPresets';
 import { getDefaultQualityTier } from '../deviceCapabilities';
 import { environmentAssetIdentity } from '../sceneEnvironment';
@@ -56,6 +57,9 @@ import { LUPI_VIEWER_MCP_VERSION } from './protocol';
 import { activeTransmissionQualityV1 } from './transmissionRuntime';
 
 export const BROWSER_RENDERER_MODULE_ID_V1 = '@atlas/ui/mcp/renderArtifactAdapter';
+
+/** `view.ink.pipeline`: the impostors' toon fills, analytic silhouette ink and hatching (scene tsl/inkLook.ts). */
+export const INK_LOOK_PIPELINE_ID = 'impostor-ink.v1';
 
 const FULL_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
 
@@ -257,6 +261,19 @@ export async function createBrowserRenderArtifactPlanV1(
     // (export/captureLook.ts). Transparent output records no bloom, depth of
     // field or vignette, because the capture does not apply them.
     view.postprocess = captureLookToSpec(resolveCaptureLook(state, { transparent: alpha === 'transparent' }));
+    // The Illustrate look shades the impostors themselves (scene
+    // tsl/inkLook.ts); recorded only while it is on, so every lit spec keeps
+    // its identity. The capture renders the configured look, never a fade.
+    if (state.inkStyle !== 'off') {
+      view.ink = {
+        pipeline: INK_LOOK_PIPELINE_ID,
+        shading: state.inkStyle,
+        weight: Number(state.inkWeight.toPrecision(6)),
+        ink: INK_LOOK_COLORS.ink,
+        paper: INK_LOOK_COLORS.paper,
+        shade: INK_LOOK_COLORS.shade,
+      };
+    }
   }
 
   layers.atoms = true;

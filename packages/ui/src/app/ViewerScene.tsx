@@ -45,6 +45,7 @@ import {
 import { CameraFocus } from '../CameraFocus';
 import { PlayLayer } from '../play/PlayLayer';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
+import { InkLookDriver } from '../ink/InkLookDriver';
 import { CameraToys } from '../camera/CameraToys';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
 import { ViewInsetDriver } from '../camera/ViewInsetDriver';
@@ -798,6 +799,7 @@ export function ViewerScene({
             selectedAtoms={visibleSelectedAtoms}
             enabled={!transmissionActive}
           />
+          <InkLookDriver />
           <CameraToys frame={currentFrame} />
           <AtomTrails
             frame={currentFrame}

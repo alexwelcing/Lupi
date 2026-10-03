@@ -58,12 +58,39 @@ export interface ActivePostprocessInput {
   playing: boolean;
   /** Phone/low-power budget (reduceForMobile), unless the user asked for full effects. */
   reduced: boolean;
+  /**
+   * The Illustrate look is on (the store's `inkStyle` is not 'off'): the
+   * drawing carries its own shading, so the recipe steps aside (inkRecipe).
+   */
+  ink?: boolean;
+}
+
+/**
+ * The recipe under the Illustrate look: no ambient occlusion (the impostors'
+ * baked occlusion shades the drawing, and screen-space AO would shimmer as
+ * it spins), no glow, defocus or vignette, and no tone mapping, so the flat
+ * colours and the ink reach the screen exactly. The live view keeps FXAA,
+ * which smooths the ink; an export takes the raw path (captureLook.ts).
+ * The preset, intensity and overrides stay as they were: turning ink off
+ * gives the same recipe back.
+ */
+export function inkRecipe(config: PostprocessPresetConfig): PostprocessPresetConfig {
+  return {
+    ...config,
+    ssao: { ...config.ssao, enabled: false },
+    bloom: { ...config.bloom, enabled: false },
+    dof: { ...config.dof, enabled: false },
+    vignette: { ...config.vignette, enabled: false },
+    toneMapping: 'none',
+  };
 }
 
 /** The recipe the viewer renders: preset + overrides, scaled by intensity,
- *  cheapened for playback, then bounded by the device budget. */
+ *  cheapened for playback, then bounded by the device budget (and set aside
+ *  under the Illustrate look). */
 export function resolveActivePostprocess(input: ActivePostprocessInput): PostprocessPresetConfig {
   const scaled = scalePreset(resolveEffects(input.presetId, input.overrides), input.intensity);
   const playback = input.playing ? reduceForPlayback(scaled) : scaled;
-  return input.reduced ? reduceForMobile(playback) : playback;
+  const budget = input.reduced ? reduceForMobile(playback) : playback;
+  return input.ink ? inkRecipe(budget) : budget;
 }

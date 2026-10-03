@@ -16,6 +16,8 @@
  *                         the Play verbs' toys, driven without a pointer
  *   __lupiPlay.viewInset() → { current, target, occluder }: the phone atom card's
  *                         view shift (CSS px, down), once the viewer registers it
+ *   __lupiPlay.ink()    → { mix, hatch, weight, target, holding, fading, arrival }:
+ *                         the Illustrate look's live weights and Ink-to-Light state
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -42,7 +44,8 @@ export type PlayDevHookName =
   | 'burst'
   | 'tug'
   | 'heat'
-  | 'viewInset';
+  | 'viewInset'
+  | 'ink';
 
 export interface PlayRigState {
   position: Vec3;
@@ -90,6 +93,8 @@ export interface LupiPlayDevApi {
   tug?: DevHook;
   heat?: DevHook;
   viewInset?: DevHook;
+  /** The Illustrate look: `{ mix, hatch, weight, target, holding, fading, arrival }` (ink/InkLookDriver.tsx). */
+  ink?: DevHook;
 }
 
 declare global {
@@ -99,8 +104,8 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset'];
+type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset' | 'ink';
+const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset', 'ink'];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 
