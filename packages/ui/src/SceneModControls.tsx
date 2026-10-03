@@ -141,7 +141,7 @@ function InkMods() {
       </div>
       <p className="scene-controls__hint">While ink is on, the effect recipe rests: the drawing shades itself, and turning ink off brings the recipe back.</p>
     </>}
-    {transmission && <p className="scene-controls__hint">Refractive glass draws real spheres, not ink. Choose another finish to see the drawing.</p>}
+    {transmission && <p className="scene-controls__hint">Refractive glass draws real spheres, which take no ink: choosing a drawing sets the finish to plastic.</p>}
   </>;
 }
 

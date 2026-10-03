@@ -44,6 +44,9 @@ export function setIllustrate(on: boolean, options: { flash?: boolean } = {}): v
   const current = state.inkStyle;
   if (on === (current !== 'off')) return;
   if (on) {
+    // Refractive glass draws real spheres, which take no ink: the drawing
+    // needs the impostors, so the finish goes back to the Looks' plastic.
+    if (state.materialPreset === 'transmission') useStore.setState({ materialPreset: 'plastic' });
     state.setInkStyle(readLast());
   } else {
     if (current !== 'off') writeLast(current);
@@ -65,6 +68,9 @@ export function toggleIllustrate(options: { flash?: boolean } = {}): void {
 
 /** Choose a shading directly (the Ink controls); remembers it for Ink. */
 export function chooseInkStyle(style: InkStyle): void {
-  if (style !== 'off') writeLast(style);
+  if (style !== 'off') {
+    writeLast(style);
+    if (useStore.getState().materialPreset === 'transmission') useStore.setState({ materialPreset: 'plastic' });
+  }
   useStore.getState().setInkStyle(style);
 }
