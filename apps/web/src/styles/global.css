@@ -1304,8 +1304,12 @@ button:focus:not(:focus-visible) {
   [data-sheet-dragging='true'] .lupi-sheet-handle::before { width: 52px; background: var(--lupi-accent, #d5ef9c); }
   [data-sheet-dragging='true'] .lupi-sheet-handle { cursor: grabbing; }
   .lupi-sheet-handle:focus-visible { outline: 2px solid var(--lupi-accent, #d5ef9c); outline-offset: -3px; }
-  /* At Peek a panel shows its header and a first row: say there is more. */
-  .lupine-app-root [data-detent='peek'] .lupine-command-panel__body { scrollbar-gutter: auto; }
+  /* At Peek a panel shows its header and a first row: its foot fades to say there is more. */
+  .lupine-app-root [data-detent='peek'] .lupine-command-panel__body,
+  .lupine-app-root [data-detent='peek'] .lupi-study-panel__body {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  }
   @keyframes lupi-sheet-rise {
     from { opacity: 0; transform: translateY(32px); }
     to { opacity: 1; transform: translateY(0); }

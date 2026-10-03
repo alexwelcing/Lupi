@@ -135,6 +135,7 @@ export function StudyLensPanel({
         </button>
       </header>
       <div
+        className={phone ? 'lupi-study-panel__body' : undefined}
         style={
           phone
             ? { flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', padding: '0 18px 18px' }
