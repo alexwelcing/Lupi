@@ -2765,13 +2765,17 @@ async function renderViewerLinkUnfurl(request: Request, env: Env): Promise<Respo
   const description = replay
     ? `Watch the moment happen in your own 3D view, then it's your turn. ${page.name} (${page.formula}), ${page.atoms} atoms, on Lupi. Illustrative motion.`
     : `${page.name} (${page.formula}), ${page.atoms} atoms: spin it, flick it, play with it in 3D on Lupi.`;
+  // The ink card only when the deploy rasterised the cards; else the site card.
+  const card = manifest?.cards === true;
   const model: SavedViewShareModel = {
     appUrl: `${origin}/?${appParams.toString()}`,
     description: clip(description, 220),
-    imageAlt: `Ink illustration of ${page.name} (${page.formula}), ${page.atoms} atoms, drawn from its coordinates on Lupi's sage plate.`,
-    imageUrl: `${origin}/og/m/${page.id}.png`,
-    imageSize: { width: 1200, height: 630 },
-    imageType: 'image/png',
+    imageAlt: card
+      ? `Ink illustration of ${page.name} (${page.formula}), ${page.atoms} atoms, drawn from its coordinates on Lupi's sage plate.`
+      : `${page.name} in the Lupi molecular viewer.`,
+    imageUrl: card ? `${origin}/og/m/${page.id}.png` : `${origin}${DEFAULT_SOCIAL_IMAGE}`,
+    imageSize: card ? { width: 1200, height: 630 } : null,
+    imageType: card ? 'image/png' : null,
     twitterCard: 'summary_large_image',
     molecule: { name: page.name, formula: page.formula, url: `${origin}/m/${page.id}` },
     pageTitle: `${title} | Lupi`,
