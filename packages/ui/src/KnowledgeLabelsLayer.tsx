@@ -12,9 +12,13 @@
  * - Max label ceiling: only the closest `maxCount` labels render.
  * - Frame-time telemetry: label count and FPS are reported to the store
  *   and optionally surfaced in a HUD.
+ *
+ * A label tied to an atom (`atomIndex`) rides that atom's display motion
+ * (the arrival, a poke, Tug, Burst, Heat; play/displayFollow, steady) and is
+ * back at rest when it ends. Region labels (sphere centroids) stay put.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { Html, Billboard } from '@react-three/drei/webgpu';
 import { LupiText } from './labels/LupiText';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
@@ -22,6 +26,8 @@ import * as THREE from 'three';
 import { useStore, type KnowledgeLabel } from './store';
 import { selectVisibleLabels } from './knowledgeLabels/selectVisibleLabels';
 import { emitHerdrTask } from './herdr/herdrEvents';
+import { FollowAtom } from './play/displayFollow';
+import type { Frame } from '@atlas/core/types';
 
 export type KnowledgeLabelStyle = 'card' | 'glyph';
 
@@ -31,6 +37,20 @@ interface KnowledgeLabelsLayerProps {
   style?: KnowledgeLabelStyle;
   /** Global toggle; labels are also filtered per-kind by visibleKinds. */
   visible?: boolean;
+  /** The frame the labels' atoms live in, so atom labels can ride display motion. */
+  frame?: Frame;
+}
+
+/** Wrap an atom's label so it rides the atom's display offset; anything else as is. */
+function followLabel(frame: Frame | undefined, label: KnowledgeLabel, key: string, node: ReactNode): ReactNode {
+  if (!frame || label.atomIndex == null || !(label.atomIndex >= 0 && label.atomIndex < frame.natoms)) {
+    return <group key={key}>{node}</group>;
+  }
+  return (
+    <FollowAtom key={key} frame={frame} atom={label.atomIndex} steady>
+      {node}
+    </FollowAtom>
+  );
 }
 
 export function KnowledgeLabelsLayer({
@@ -38,6 +58,7 @@ export function KnowledgeLabelsLayer({
   visibleKinds,
   style = 'card',
   visible = true,
+  frame,
 }: KnowledgeLabelsLayerProps) {
   const hoveredAtom = useStore((s) => s.hoveredAtom);
   const threshold = useStore((s) => s.knowledgeLabelThreshold);
@@ -161,11 +182,10 @@ export function KnowledgeLabelsLayer({
         const isMatch = labelMatches(label, searchQuery, searchFilter);
         const isPinned = pinnedIds.has(label.id);
         if (style === 'glyph') {
-          return <GlyphLabel key={label.id} pos={pos} text={label.text} kind={label.kind} />;
+          return followLabel(frame, label, label.id, <GlyphLabel pos={pos} text={label.text} kind={label.kind} />);
         }
-        return (
+        return followLabel(frame, label, label.id, (
           <CardLabel
-            key={label.id}
             pos={pos}
             text={label.text}
             detail={label.detail}
@@ -180,11 +200,10 @@ export function KnowledgeLabelsLayer({
             isPinned={isPinned}
             hasTask={label.nodeId ? herdrTaskNodeIds.has(label.nodeId) : false}
           />
-        );
+        ));
       })}
-      {hoverLabelToRender && (
+      {hoverLabelToRender && followLabel(frame, hoverLabelToRender, `${hoverLabelToRender.id}-hover`, (
         <CardLabel
-          key={`${hoverLabelToRender.id}-hover`}
           pos={hoverLabelToRender.position}
           text={hoverLabelToRender.text}
           detail={hoverLabelToRender.detail}
@@ -199,7 +218,7 @@ export function KnowledgeLabelsLayer({
           isPinned={pinnedIds.has(hoverLabelToRender.id)}
           hasTask={hoverLabelToRender.nodeId ? herdrTaskNodeIds.has(hoverLabelToRender.nodeId) : false}
         />
-      )}
+      ))}
     </group>
   );
 }

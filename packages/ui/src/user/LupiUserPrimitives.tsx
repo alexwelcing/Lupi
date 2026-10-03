@@ -1,5 +1,7 @@
-import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { MOBILE_MEDIA_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useViewOccluder } from '../camera/useViewOccluder';
 
 export const lupiUserColors = {
   ink: '#050505',
@@ -186,10 +188,21 @@ export function LupiSheet({
 }) {
   const dialog = variant === 'dialog';
   const localRef = useRef<HTMLDivElement | null>(null);
-  const setRef = (node: HTMLDivElement | null) => {
-    localRef.current = node;
-    sheetRef?.(node);
-  };
+  // Over the viewer on a phone, a bottom sheet declares what it covers and the
+  // molecule moves into the room above it (camera/viewInset.ts).
+  const phone = useMediaQuery(MOBILE_MEDIA_QUERY);
+  const occluderId = `sheet:${useId()}`;
+  const { ref: occluderRef } = useViewOccluder(occluderId, phone && !dialog);
+  const sheetRefLatest = useRef(sheetRef);
+  sheetRefLatest.current = sheetRef;
+  const setRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      localRef.current = node;
+      occluderRef(node);
+      sheetRefLatest.current?.(node);
+    },
+    [occluderRef],
+  );
 
   useEffect(() => {
     // Focus the sheet itself (not the first field) so the phone keyboard does

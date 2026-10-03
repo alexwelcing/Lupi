@@ -6,8 +6,9 @@
  * newly selected ring pulses a few times and comes to rest (Quiet Idle: a
  * still view draws nothing); Gentle halves the pulse and Still skips it.
  *
- * The rings sit at rest positions, so while Tug, Burst or Heat carry atoms
- * away they step aside: the impostor's own selection glow moves with the atom.
+ * Each ring rides its atom's display offset (play/displayFollow): through
+ * the arrival, a poke ripple, Tug, Burst and Heat it stays on the atom, and
+ * it is back exactly at rest when the motion ends. Captures see it at rest.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -16,9 +17,9 @@ import { Billboard } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
-import { keepLupiAwake, requestLupiFrames } from '@atlas/scene';
+import { keepLupiAwake } from '@atlas/scene';
 import { displayMotionScale } from './motion/comfort';
-import { usePlayStore } from './play/playStore';
+import { FollowAtom } from './play/displayFollow';
 
 /** The selection pulse: 3.6 rad/s, ±3.5 %, fading to rest over this many seconds. */
 const PULSE_SECONDS = 2.4;
@@ -72,45 +73,37 @@ export function SelectionMarkers({
     ];
   };
 
-  const toysDisplacing = usePlayStore((state) => state.displacedSources.some(
-    (source) => source === 'tug' || source === 'burst' || source === 'heat',
-  ));
-  // Quiet Idle: the toys may end on the loop's last frame; draw the rings back.
-  useEffect(() => {
-    requestLupiFrames();
-  }, [toysDisplacing]);
-
   // Determine active focus atom (selected takes priority over hovered)
   const focusAtom = selectedAtoms.length === 1 ? selectedAtoms[0] : hoveredAtom;
   const showDimming = dimNonNeighbors && focusAtom != null && highlightedNeighbors.size > 0;
 
   return (
-    <group visible={!toysDisplacing}>
+    <group>
       {selectedAtoms.map((idx) => {
         const pos = positionOf(idx);
         if (!pos) return null;
         return (
-          <SelectedMarker
-            key={`selected-${idx}`}
-            position={pos}
-            radius={radiusFor(idx) * 1.26}
-          />
+          <FollowAtom key={`selected-${idx}`} frame={frame} atom={idx}>
+            <SelectedMarker position={pos} radius={radiusFor(idx) * 1.26} />
+          </FollowAtom>
         );
       })}
       {showHoverRing && hoveredAtom != null && !selectedAtoms.includes(hoveredAtom) && (() => {
         const pos = positionOf(hoveredAtom);
         if (!pos) return null;
-        return <HoverMarker position={pos} radius={radiusFor(hoveredAtom) * 1.20} />;
+        return (
+          <FollowAtom key={`hover-${hoveredAtom}`} frame={frame} atom={hoveredAtom}>
+            <HoverMarker position={pos} radius={radiusFor(hoveredAtom) * 1.20} />
+          </FollowAtom>
+        );
       })()}
       {showDimming && Array.from(highlightedNeighbors).map((idx) => {
         const pos = positionOf(idx);
         if (!pos) return null;
         return (
-          <NeighborMarker
-            key={`neighbor-${idx}`}
-            position={pos}
-            radius={radiusFor(idx) * 1.15}
-          />
+          <FollowAtom key={`neighbor-${idx}`} frame={frame} atom={idx}>
+            <NeighborMarker position={pos} radius={radiusFor(idx) * 1.15} />
+          </FollowAtom>
         );
       })}
     </group>

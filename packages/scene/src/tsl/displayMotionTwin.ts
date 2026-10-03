@@ -3,22 +3,30 @@
  *
  * The same formulas, term for term, in double precision, with three r186's
  * PCG `hash` mirrored exactly through `Math.imul` and `>>> 0` and the seed
- * built from the same float32 bits. Used by the unit tests and by the
- * `play` testbed case, which puts probes where the twin says an atom is
- * mid-flight: a GPU that hashed or bit-cast differently (the WebGL2 risk)
- * would miss them. Never used to move anything on screen.
+ * built from the same float32 bits. Every term is mirrored: the arrival, the
+ * ripple and the Play verbs Tug, Burst and Heat.
  *
- * Scope: the arrival and the ripple. The Play verbs' terms (tug, burst,
- * heat) are not mirrored yet; with their weights at 0 (the twin's rest
- * state) the GPU offset equals the twin's.
+ * Used by:
+ * - the unit tests and the `play` testbed case, which puts probes where the
+ *   twin says an atom is mid-flight: a GPU that hashed or bit-cast
+ *   differently (the WebGL2 risk) would miss them;
+ * - the live view's overlays (labels, selection rings, the atom card's
+ *   anchor, measurements, trails: `@atlas/ui` play/displayFollow), which ride
+ *   with their atoms while display motion runs. Only the handful of atoms
+ *   that carry an overlay are evaluated, once per drawn frame, and only while
+ *   the master weight is above 0; at rest the twin is an exact zero.
  */
 import {
   ARRIVAL_MODE,
+  BURST_SALT,
+  BURST_SLOTS,
   DISPLAY_MOTION,
   DISPLAY_MOTION_TUNING,
+  HEAT_SALT,
   RIPPLE_SLOTS,
   SEED_MIX_Y,
   SEED_MIX_Z,
+  burstSlotUniforms,
   rippleSlotUniforms,
 } from './displayMotion';
 
@@ -28,6 +36,13 @@ export interface DisplayMotionTwinRipple {
   /** origin x, y, z, t0 (< 0 empty) */
   a: [number, number, number, number];
   /** amplitude Å, speed Å/s, ω rad/s, ζ */
+  b: [number, number, number, number];
+}
+
+export interface DisplayMotionTwinBurst {
+  /** origin x, y, z, t0 (< 0 empty) */
+  a: [number, number, number, number];
+  /** amplitude / peak (Å), falloff length Å, ω rad/s, ζ */
   b: [number, number, number, number];
 }
 
@@ -50,6 +65,29 @@ export interface DisplayMotionTwinState {
   rippleWeight: number;
   maxRipple: number;
   ripples: DisplayMotionTwinRipple[];
+  tugWeight: number;
+  /** The grab point (rest, Å) and the Gaussian falloff radius (Å). */
+  tugGrab: [number, number, number, number];
+  tugCore: TwinVec3;
+  tugHalo: TwinVec3;
+  burstWeight: number;
+  maxBurst: number;
+  bursts: DisplayMotionTwinBurst[];
+  heatWeight: number;
+  heatAmplitude: number;
+}
+
+/**
+ * Per-term multipliers on top of the uniforms' own weights (all 1 when left
+ * out). Overlays that carry text pass `{ heat: … }` below 1, so a label keeps
+ * to its atom's mean position instead of shivering illegibly with Heat.
+ */
+export interface TwinTermScales {
+  arrival?: number;
+  ripple?: number;
+  tug?: number;
+  burst?: number;
+  heat?: number;
 }
 
 /** A rest state (every weight 0, every slot empty). */
@@ -72,6 +110,15 @@ export function restTwinState(): DisplayMotionTwinState {
     rippleWeight: 0,
     maxRipple: DISPLAY_MOTION_TUNING.rippleAmplitude,
     ripples: Array.from({ length: RIPPLE_SLOTS }, () => ({ a: [0, 0, 0, -1], b: [0, 0, 0, 0] })),
+    tugWeight: 0,
+    tugGrab: [0, 0, 0, 1],
+    tugCore: [0, 0, 0],
+    tugHalo: [0, 0, 0],
+    burstWeight: 0,
+    maxBurst: 6,
+    bursts: Array.from({ length: BURST_SLOTS }, () => ({ a: [0, 0, 0, -1], b: [0, 0, 0, 0] })),
+    heatWeight: 0,
+    heatAmplitude: 0,
   };
 }
 
@@ -100,6 +147,18 @@ export function readTwinState(): DisplayMotionTwinState {
       const { a, b } = rippleSlotUniforms(i);
       return { a: [a.value.x, a.value.y, a.value.z, a.value.w], b: [b.value.x, b.value.y, b.value.z, b.value.w] };
     }),
+    tugWeight: M.uTugWeight.value,
+    tugGrab: [M.uTugGrab.value.x, M.uTugGrab.value.y, M.uTugGrab.value.z, M.uTugGrab.value.w],
+    tugCore: v(M.uTugCore.value),
+    tugHalo: v(M.uTugHalo.value),
+    burstWeight: M.uBurstWeight.value,
+    maxBurst: M.uMaxBurst.value,
+    bursts: Array.from({ length: BURST_SLOTS }, (_, i) => {
+      const { a, b } = burstSlotUniforms(i);
+      return { a: [a.value.x, a.value.y, a.value.z, a.value.w], b: [b.value.x, b.value.y, b.value.z, b.value.w] };
+    }),
+    heatWeight: M.uHeatWeight.value,
+    heatAmplitude: M.uHeatAmplitude.value,
   };
 }
 
@@ -222,12 +281,98 @@ export function twinRipple(state: DisplayMotionTwinState, rest: TwinVec3): TwinV
   return scale(out, clampScale);
 }
 
-/** The display offset `lupiDisplayOffset` computes for one rest point. */
-export function displayOffsetTwin(state: DisplayMotionTwinState, rest: TwinVec3, raw: TwinVec3 = rest): TwinVec3 {
+/** The tug term (before its weight): a Gaussian neighbourhood between the halo and the core spring. */
+export function twinTug(state: DisplayMotionTwinState, rest: TwinVec3): TwinVec3 {
+  const G = state.tugGrab;
+  const rf = Math.max(G[3], 1e-3);
+  const d = sub(rest, [G[0], G[1], G[2]]);
+  const w = Math.exp(-dot(d, d) / (rf * rf));
+  const w2 = w * w;
+  const t = w2 * w2;
+  const halo = state.tugHalo;
+  const core = state.tugCore;
+  return [
+    (halo[0] + (core[0] - halo[0]) * t) * w,
+    (halo[1] + (core[1] - halo[1]) * t) * w,
+    (halo[2] + (core[2] - halo[2]) * t) * w,
+  ];
+}
+
+/** The summed, jittered, bounded burst term (before its weight). */
+export function twinBurst(state: DisplayMotionTwinState, rest: TwinVec3, raw: TwinVec3 = rest): TwinVec3 {
+  const T = DISPLAY_MOTION_TUNING;
+  const jitter = 1 - T.burstJitter / 2 + pcgHash(positionSeed(raw, BURST_SALT)) * T.burstJitter;
+  const out: TwinVec3 = [0, 0, 0];
+  for (const { a, b } of state.bursts) {
+    const d = sub(rest, [a[0], a[1], a[2]]);
+    const r = len(d);
+    const tau = Math.max(state.now - a[3] - r / T.burstSpeed, 0);
+    const zeta = Math.min(Math.max(b[3], 0), 0.9999);
+    const wd = b[2] * Math.sqrt(1 - zeta * zeta);
+    const env = b[0]
+      * Math.exp(-zeta * b[2] * tau)
+      * Math.sin(wd * tau)
+      * Math.exp(-r / Math.max(b[1], 1e-3))
+      * smoothstep(0, T.burstCoreA, r)
+      * (a[3] >= 0 ? 1 : 0);
+    if (r < 1e-4) continue;
+    const k = env / Math.max(r, 1e-4);
+    out[0] += d[0] * k;
+    out[1] += d[1] * k;
+    out[2] += d[2] * k;
+  }
+  const scaled = scale(out, jitter);
+  const clampScale = Math.min(1, state.maxBurst / Math.max(len(scaled), 1e-6));
+  return scale(scaled, clampScale);
+}
+
+const fract = (x: number) => x - Math.floor(x);
+
+/** The heat term (before its weight): two seeded bands of sines per axis. */
+export function twinHeat(state: DisplayMotionTwinState, raw: TwinVec3): TwinVec3 {
+  const T = DISPLAY_MOTION_TUNING;
+  const seed = positionSeed(raw, HEAT_SALT);
+  const t = state.now;
+  const [a0, a1] = T.heatBandA;
+  const [b0, b1] = T.heatBandB;
+  const axis = (k: number): number => {
+    const hf = pcgHash((seed + k) >>> 0);
+    const hp = pcgHash((seed + k + 3) >>> 0);
+    const fa = a0 + (a1 - a0) * hf;
+    const fb = b0 + (b1 - b0) * fract(hf * 13.7);
+    const pa = hp * Math.PI * 2;
+    const pb = fract(hp * 7.3) * Math.PI * 2;
+    return Math.sin(t * fa + pa) + Math.sin(t * fb + pb) * T.heatBandBWeight;
+  };
+  const k = state.heatAmplitude / (1 + T.heatBandBWeight);
+  return [axis(0) * k, axis(1) * k, axis(2) * k];
+}
+
+const ZERO: Readonly<TwinVec3> = [0, 0, 0];
+
+/**
+ * The display offset `lupiDisplayOffset` computes for one rest point (`raw`,
+ * the seed source, defaults to `rest`). `terms` scales single terms for
+ * overlays (see TwinTermScales); left out, it is the GPU's offset.
+ */
+export function displayOffsetTwin(
+  state: DisplayMotionTwinState,
+  rest: TwinVec3,
+  raw: TwinVec3 = rest,
+  terms?: TwinTermScales,
+): TwinVec3 {
   if (!(state.motionWeight > 0)) return [0, 0, 0];
-  const arrival = state.arrivalWeight > 0 ? twinArrival(state, rest, raw) : [0, 0, 0] as TwinVec3;
-  const ripple = state.rippleWeight > 0 ? twinRipple(state, rest) : [0, 0, 0] as TwinVec3;
+  const aw = state.arrivalWeight * (terms?.arrival ?? 1);
+  const rw = state.rippleWeight * (terms?.ripple ?? 1);
+  const tw = state.tugWeight * (terms?.tug ?? 1);
+  const bw = state.burstWeight * (terms?.burst ?? 1);
+  const hw = state.heatWeight * (terms?.heat ?? 1);
+  const arrival = aw > 0 ? twinArrival(state, rest, raw) : ZERO;
+  const ripple = rw > 0 ? twinRipple(state, rest) : ZERO;
+  const tug = tw > 0 ? twinTug(state, rest) : ZERO;
+  const burst = bw > 0 ? twinBurst(state, rest, raw) : ZERO;
+  const heat = hw > 0 ? twinHeat(state, raw) : ZERO;
   return [0, 1, 2].map(
-    (i) => (arrival[i] * state.arrivalWeight + ripple[i] * state.rippleWeight) * state.motionWeight,
+    (i) => (arrival[i] * aw + ripple[i] * rw + tug[i] * tw + burst[i] * bw + heat[i] * hw) * state.motionWeight,
   ) as TwinVec3;
 }

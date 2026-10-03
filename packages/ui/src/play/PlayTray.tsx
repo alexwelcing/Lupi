@@ -13,11 +13,13 @@
  * closes. Every item is at least 44 px tall. Toys only emit intents; Motion
  * writes `comfort.ts`, never the viewer store, URLs or saved views.
  */
-import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { emitIntent, isCanvasInputSourceActive } from '@atlas/scene';
 import { useStore } from '../store';
 import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
+import { MOBILE_MEDIA_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useViewOccluder } from '../camera/useViewOccluder';
 import { cue } from './feedback';
 import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
 
@@ -81,8 +83,24 @@ function menuItems(menu: HTMLElement | null): HTMLElement[] {
   return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'));
 }
 
+/**
+ * On a phone the tray covers the bottom of the molecule: it declares what it
+ * covers, and the view makes room once the tray has stayed open this long
+ * (ms), so a pick that closes it at once moves nothing.
+ */
+const TRAY_LINGER_MS = 420;
+
 export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const phone = useMediaQuery(MOBILE_MEDIA_QUERY);
+  const { ref: occluderRef } = useViewOccluder('play-tray', phone, { lingerMs: TRAY_LINGER_MS });
+  const attachMenu = useCallback(
+    (node: HTMLDivElement | null) => {
+      menuRef.current = node;
+      occluderRef(node);
+    },
+    [occluderRef],
+  );
   const verb = usePlayStore((state) => state.verb);
   const comfort = useComfort();
   const still = comfort === 'still';
@@ -168,7 +186,7 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
   return (
     <div
       id={id}
-      ref={menuRef}
+      ref={attachMenu}
       role="menu"
       aria-label="Play: toys and view"
       className="lupi-play-tray"

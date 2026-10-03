@@ -119,6 +119,8 @@ export {
 } from './tsl/impostorKit';
 export type { LupiEnvBinding, LupiLightUniforms, LupiSurfaceInput } from './tsl/impostorKit';
 export * from './tsl/displayMotion';
+export { displayOffsetTwin, readTwinState, restTwinState } from './tsl/displayMotionTwin';
+export type { DisplayMotionTwinState, TwinTermScales, TwinVec3 } from './tsl/displayMotionTwin';
 export * from './tsl/atomGlow';
 
 // Shared constants

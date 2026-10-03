@@ -44,6 +44,7 @@ import {
 } from '../measurements';
 import { CameraFocus } from '../CameraFocus';
 import { PlayLayer } from '../play/PlayLayer';
+import { DisplayFollowDriver } from '../play/displayFollow';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
 import { CameraToys } from '../camera/CameraToys';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
@@ -760,6 +761,7 @@ export function ViewerScene({
             labels={knowledgeLabels}
             visibleKinds={knowledgeLabelKinds}
             visible={showKnowledgeLabels}
+            frame={currentFrame}
           />
           <SelectionMarkers
             frame={currentFrame}
@@ -793,6 +795,8 @@ export function ViewerScene({
             transmissionActive={transmissionActive}
             playing={playing}
           />
+          {/* Labels, rings, the card anchor, measurements and trails ride display motion. */}
+          <DisplayFollowDriver enabled={!transmissionActive} />
           <AtomGlowDriver
             hoveredAtom={visibleHoveredAtom}
             selectedAtoms={visibleSelectedAtoms}
@@ -866,8 +870,8 @@ export function ViewerScene({
         />
       )}
 
-      {/* The phone atom card's room: a display-only view shift. */}
-      <ViewInsetDriver />
+      {/* Room for phone sheets and the atom card: a display-only framing. */}
+      <ViewInsetDriver bounds={file?.trajectory.globalBounds ?? null} />
 
       {ORBIT_FALLBACK ? (
         <OrbitControls

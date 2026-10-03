@@ -120,6 +120,19 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   halved by Gentle, off in Still, and never in an export. On desktop the
   atom under the cursor glows lime and selected atoms glow stronger
   (`tsl/atomGlow.ts`); captures and videos never carry the glow.
+- **Overlays ride display motion.** Selection, hover and neighbour rings,
+  annotations, atom-bound knowledge labels, measurements (line, letters,
+  value label), the desktop atom card's anchor and trail heads follow their
+  atoms through the arrival, pokes, Scatter, Tug, Burst and Heat, using the
+  CPU twin of the GPU offset (`tsl/displayMotionTwin.ts`, every term) for
+  just the atoms that carry an overlay (`packages/ui/src/play/displayFollow.tsx`,
+  one job in the `lupi-overlays` phase). Text and cards take a fifth of
+  Heat's jiggle so they stay readable; vector glyphs follow on the GPU. They
+  snap back exactly at rest, and every capture renders them at rest (a
+  capture guard), so exports, MCP artifacts, thumbnails and video keep rest
+  truth; a measurement's value is always the rest value.
+  `__lupiPlay.follow()` reports `{ moving, followers, displaced, points,
+  maxOffset }`.
 - **Quiet Idle.** The viewer canvas renders on demand: a still view draws
   no frames. Anything that changes the picture asks for frames (store writes,
   gestures, the rig, display motion, playback, flythrough, async bonds and
@@ -131,6 +144,16 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   names what keeps the loop awake; `?frames=1` shows the same as a small
   meter at the top of the viewer (for a phone). `?frameloop=always` renders
   continuously again. Exports and video force their own frames.
+- **Phone sheets make room for the molecule.** On a phone every panel
+  (Learn, Style, Data, Camera, Export, Switch, Settings), the atom card, the
+  Play tray and the Save/Account sheets declare the screen area they cover
+  (`packages/ui/src/camera/viewInset.ts`), and the live view eases the
+  molecule into the free area left (shifted, and shrunk to fit, never grown).
+  It is a display-only projection view offset: the store camera, saved views,
+  share URLs, exports, MCP artifacts, picking and the axes gizmo never see it.
+  Held upright, panels are bottom sheets with Peek, Half and Full detents;
+  held sideways, a column on the right. The canvas never resizes for them.
+  `__lupiPlay.viewInset()` returns `{ current, target, occluders }`.
 - **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
   half-strength display motion) or Still (nothing moves on its own; glides
   cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and
