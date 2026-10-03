@@ -28,6 +28,8 @@ import { getCameraRig } from './camera/rigApi';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools, readMcpRendererStatus } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
 import { createLupiMcpDriver, type LupiMcpRendererStatus, type LupiMcpStatus } from './mcp/driver';
+import { listViewerBonds, readBondStatus } from './mcp/bondStatus';
+import type { BondProfile } from '@atlas/core/bonds';
 import {
   LUPI_VIEWER_MCP_VERSION,
   MAX_PERSISTED_EXPORT_CHARS,
@@ -78,6 +80,8 @@ interface ViewerPatch extends Record<string, unknown> {
   cameraPreset?: CameraPreset;
   bondTolerance?: number;
   bondColorMode?: BondColorMode;
+  bondProfile?: BondProfile;
+  showBondContacts?: boolean;
   inkStyle?: InkStyle;
   inkWeight?: number;
 }
@@ -1227,13 +1231,17 @@ async function runLupiViewerMcpRequest(request: LupiMcpRequest): Promise<LupiMcp
       const bus = createMcpCommandBus({ readState: readViewerState });
       const result = await bus.dispatch(registryTool.handler, request as never);
       transcript.push(`executed ${request.tool} via AI-control registry`);
-      return okResponse(request, transcript, result);
+      // lupi.status reports the same bond fields as status().
+      return okResponse(request, transcript, request.tool === 'lupi.status' ? { ...result, ...readBondFields() } : result);
     }
 
     if (request.tool === 'lupi.viewer_state') {
       // The rig writes the store camera at rest: mid-coast it still holds the pose before the flick.
       getCameraRig()?.settleNow();
-      return okResponse(request, transcript, { viewer: readViewerState() });
+      const includeBonds = readBoolean(request.arguments.includeBonds) === true;
+      return okResponse(request, transcript, {
+        viewer: includeBonds ? { ...readViewerState(), ...listViewerBonds(useStore.getState()) } : readViewerState(),
+      });
     }
 
     if (request.tool === 'lupi.load_molecule_url') {
@@ -1948,6 +1956,29 @@ function readRendererStatus(): LupiMcpRendererStatus {
   return readMcpRendererStatus();
 }
 
+/**
+ * Bond fields shared by status(), lupi.status and lupi.viewer_state. The
+ * molecular recipe's count is read from the drawn graph itself (covalent plus
+ * coordination), so it is current right after a set_viewer.
+ */
+function readBondFields() {
+  const state = useStore.getState();
+  const frame = state.file?.trajectory.frames[state.frame];
+  const bonds = readBondStatus(state);
+  const bondTopology = effectiveBondTopology(frame);
+  return {
+    bondCount: bonds.bondCount,
+    bondSource: state.bondSource,
+    bondTopology,
+    showBondsEffective: state.showBonds && bondTopology !== 'unavailable' && bonds.bondCount > 0,
+    bondRecipe: bonds.bondRecipe,
+    bondToleranceAdjusted: bonds.bondToleranceAdjusted,
+    bondKinds: bonds.bondKinds,
+    bondEvidence: bonds.bondEvidence,
+    chemistry: bonds.chemistry,
+  };
+}
+
 function readViewerState() {
   const state = useStore.getState();
   const frame = state.file?.trajectory.frames[state.frame];
@@ -1958,11 +1989,9 @@ function readViewerState() {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     showBonds: state.showBonds,
-    showBondsEffective:
-      state.showBonds && effectiveBondTopology(frame) !== 'unavailable' && state.lastBondCount > 0,
-    bondCount: state.lastBondCount,
-    bondSource: state.bondSource,
-    bondTopology: effectiveBondTopology(frame),
+    ...readBondFields(),
+    bondProfile: state.bondProfile,
+    showBondContacts: state.showBondContacts,
     typeSemantics: frame ? normalizeAtomTypeSemantics(frame.typeSemantics) : null,
     distanceSemantics: frame ? normalizeDistanceSemantics(frame.distanceSemantics) : null,
     atomScale: state.atomScale,
@@ -1993,11 +2022,7 @@ function readMcpStatus(): LupiMcpStatus {
     atomCount: frame?.natoms ?? 0,
     frame: state.frame,
     playing: state.playing,
-    bondCount: state.lastBondCount,
-    bondSource: state.bondSource,
-    bondTopology: effectiveBondTopology(frame),
-    showBondsEffective:
-      state.showBonds && effectiveBondTopology(frame) !== 'unavailable' && state.lastBondCount > 0,
+    ...readBondFields(),
   };
 }
 
@@ -2053,12 +2078,21 @@ function applyViewerPatch(patch: ViewerPatch, transcript: string[]) {
     state.setBondColorMode(patch.bondColorMode);
     applied.bondColorMode = patch.bondColorMode;
   }
+  if (patch.bondProfile !== undefined) {
+    state.setBondProfile(patch.bondProfile);
+    applied.bondProfile = patch.bondProfile;
+  }
+  if (patch.showBondContacts !== undefined) {
+    state.setShowBondContacts(patch.showBondContacts);
+    applied.showBondContacts = patch.showBondContacts;
+  }
 
   if (patch.showBonds !== undefined) {
     next.showBonds = patch.showBonds;
     if (!patch.showBonds) {
       next.bondSource = 'none';
       next.lastBondCount = 0;
+      next.lastBondDetail = null;
     }
   }
   if (patch.atomScale !== undefined) next.atomScale = clamp(patch.atomScale, 0.2, 3);
@@ -2088,6 +2122,12 @@ function readBondColorMode(value: unknown): BondColorMode | undefined {
 }
 
 /** The Illustrate look from an MCP argument: 'off' | 'flat' | 'hatch' (also true/false, 'ink', 'sketch'). */
+function readBondProfile(value: unknown): BondProfile | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value === 'auto' || value === 'distance' || value === 'molecular') return value;
+  throw new Error(`bondProfile must be one of auto, distance, molecular (received ${JSON.stringify(value)}).`);
+}
+
 function readInkStyle(value: unknown): InkStyle | undefined {
   if (value === true) return 'flat';
   if (value === false) return 'off';
@@ -2115,6 +2155,8 @@ function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   const bondColorMode = readBondColorMode(args.bondColorMode);
   const inkStyle = readInkStyle(args.inkStyle ?? args.ink);
   const inkWeight = readNumber(args.inkWeight);
+  const bondProfile = readBondProfile(args.bondProfile);
+  const showBondContacts = readBoolean(args.showBondContacts);
 
   if (showBonds !== undefined) patch.showBonds = showBonds;
   if (inkStyle !== undefined) patch.inkStyle = inkStyle;
@@ -2122,6 +2164,8 @@ function readViewerPatch(args: Record<string, unknown>): ViewerPatch {
   if (atomScale !== undefined) patch.atomScale = atomScale;
   if (bondTolerance !== undefined) patch.bondTolerance = bondTolerance;
   if (bondColorMode !== undefined) patch.bondColorMode = bondColorMode;
+  if (bondProfile !== undefined) patch.bondProfile = bondProfile;
+  if (showBondContacts !== undefined) patch.showBondContacts = showBondContacts;
   if (showCell !== undefined) patch.showCell = showCell;
   if (showAxes !== undefined) patch.showAxes = showAxes;
   if (backgroundPreset !== undefined) patch.backgroundPreset = backgroundPreset;

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-10-03T05:42:21.106Z",
+  "generatedAt": "2026-10-03T18:20:30.639Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
@@ -334,6 +334,19 @@
           "bondColorMode": {
             "type": "string"
           },
+          "bondProfile": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "distance",
+              "molecular"
+            ],
+            "description": "Bond rule. auto uses lupi-bonds.molecular.v1 for non-periodic XYZ frames (≤ 2,000 atoms) that declare chemistry and are a single frame or an OMol25 record, else lupi-bonds.distance.v1; source bonds always win."
+          },
+          "showBondContacts": {
+            "type": "boolean",
+            "description": "Draw the molecular recipe's dotted s-block ionic contacts (default true). They are never counted as bonds."
+          },
           "inkStyle": {
             "type": "string",
             "enum": [
@@ -457,7 +470,12 @@
       "description": "Return the current viewer state summary.",
       "parameters": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "includeBonds": {
+            "type": "boolean",
+            "description": "Add bonds: [i, j, kind, lengthÅ, excessÅ] for the drawn graph (at most 5,000; bondsTruncated), with bondsFilter { hiddenTypes, contacts }. Inferred graphs are listed for frames of at most 2,000 atoms."
+          }
+        }
       }
     },
     {

@@ -41,10 +41,21 @@ export interface LupiMcpStatus extends LupiMcpRendererStatus {
   atomCount: number;
   frame: number;
   playing: boolean;
+  /** Covalent plus coordination bonds drawn (ionic contacts are not bonds). */
   bondCount: number;
   bondSource: 'cpu' | 'gpu' | 'none';
   bondTopology: 'source' | 'inferred' | 'unavailable';
   showBondsEffective: boolean;
+  /** The rule the current frame gets (store bondProfile): 'source', a recipe id, or null. */
+  bondRecipe: 'lupi-bonds.molecular.v1' | 'lupi-bonds.distance.v1' | 'source' | null;
+  /** bondTolerance differs from the default 0.45 Å. */
+  bondToleranceAdjusted: boolean;
+  /** Drawn bonds by kind (zeros while bonds are hidden). */
+  bondKinds: { covalent: number; coordination: number; ionicContact: number };
+  /** The recipe's evidence for the frame; null for source bonds or frames above 2,000 atoms. */
+  bondEvidence: { long: number; removed: number; nearMiss: number; clashes: number } | null;
+  /** Declared charge and spin (Frame.chemistry), or null. */
+  chemistry: { totalCharge: number | null; spinMultiplicity: number | null; source: string; domain: string | null } | null;
 }
 
 export interface LupiMcpDriver<State = unknown> {
