@@ -90,6 +90,13 @@ present through `apps/lupine-app -> firebase-admin@12.7.0`, which calls only
 through Expo CLI code-signing build tooling. Neither path verifies a signature
 supplied by a visitor. Remove the entry as soon as a fixed release exists.
 
+`CVE-2026-93687` (`GHSA-vfj7-8cjw-p6xm`) affects `braces@3.0.3`, and GitHub lists
+no patched release. It is present through `micromatch` in build tooling (Metro
+and the Expo CLI file map, among others). The brace patterns it expands come
+from repository and tool configuration, never from visitors, uploads or
+molecule files, so neither the web app nor the Worker is exposed. Remove the
+entry as soon as a fixed release exists.
+
 pnpm 9 expands every advisory path across the combined Expo/R3F peer graph and
 exceeds Node's default 4 GiB heap before applying CVE exceptions. CI and the
 Cloudflare release package therefore give only this audit step an 8 GiB heap.
@@ -104,6 +111,7 @@ This is capacity for the audited graph, not an exception to the audit result.
 | npm `1123482`, `1123483` | `websocket-driver` | `0.7.4` -> `0.7.5` | moderate, critical | Cloud Functions: `firebase-admin -> @firebase/database -> faye-websocket -> websocket-driver` | Realtime Database is not imported by first-party Functions, but the package is in the Firebase Admin production closure; reachability is uncertain. | Normal npm transitive update selected `0.7.5` within `faye-websocket`'s `>=0.5.1` range. No override or major upgrade was used; no known advisory remains. |
 | npm `1123492` / `GHSA-f38q-mgvj-vph7` | `protobufjs` | `7.6.2` -> `7.6.5` | moderate | Cloud Functions: `firebase-admin -> @google-cloud/firestore -> google-gax/@grpc/proto-loader -> protobufjs`, plus `firebase-functions -> protobufjs` | Reachable: Functions import `firebase-admin/firestore` in `src/index.ts`, `src/rateLimit.ts`, and `src/socialView.ts`. | Normal npm transitive update selected `7.6.5` within all current parent ranges. No override or major upgrade was used; no known advisory remains. |
 | `GHSA-m9gg-hp2v-232j`, `GHSA-f596-whhp-79r4` | `@grpc/grpc-js` | `1.14.4` -> `1.14.5` | high | Cloud Functions: `firebase-admin -> @google-cloud/firestore -> google-gax -> @grpc/grpc-js` | Reachable: Functions use the Firestore client, which runs over gRPC. | Normal npm transitive update (`npm update @grpc/grpc-js`) selected `1.14.5` within `google-gax`'s `^1.10.9`. No override or major upgrade; no known advisory remains. |
+| `GHSA-xjh9-v7x6-24jw`, `GHSA-x8mw-p69m-v3mx` | `@fastify/busboy` | `3.2.0` -> `3.2.2` | high | Cloud Functions: `firebase-admin -> @fastify/busboy` | Multipart parsing inside Firebase Admin's production closure; not called directly by first-party Functions. | Normal npm transitive update (`npm update @fastify/busboy`) within `firebase-admin`'s range. No override or major upgrade; no known advisory remains. |
 
 `firebase-admin@13.10.0` and `firebase-functions@6.6.0` are the newest releases
 within their existing supported majors in this snapshot. The baseline does not

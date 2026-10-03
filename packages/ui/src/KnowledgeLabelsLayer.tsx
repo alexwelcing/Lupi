@@ -97,13 +97,16 @@ export function KnowledgeLabelsLayer({
     lastHoverRef.current = hoveredAtom;
   }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, hoveredAtom, camera]);
 
-  // Recompute as the camera moves so distance culling stays accurate.
+  // Recompute as the camera moves so distance culling stays accurate. A
+  // camera at rest recomputes nothing (Quiet Idle: no state churn, so a
+  // still view draws nothing); small moves catch up every third frame.
   useFrame(() => {
     frameRef.current += 1;
     camera.getWorldPosition(camPosRef.current);
-    const moved = camPosRef.current.distanceToSquared(lastCamRef.current) > 0.04;
+    const drift = camPosRef.current.distanceToSquared(lastCamRef.current);
+    const moved = drift > 0.04;
     const hoverChanged = hoveredAtom !== lastHoverRef.current;
-    if (frameRef.current % 3 !== 0 && !moved && !hoverChanged) return;
+    if (!moved && !hoverChanged && (frameRef.current % 3 !== 0 || drift <= 1e-10)) return;
 
     lastCamRef.current.copy(camPosRef.current);
     lastHoverRef.current = hoveredAtom;

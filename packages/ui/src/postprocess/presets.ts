@@ -45,7 +45,8 @@ export interface PostprocessPresetConfig {
     auto: boolean;
   };
   vignette: { enabled: boolean; offset: number; darkness: number };
-  toneMapping: 'aces' | 'reinhard' | 'none';
+  /** 'neutral' is Khronos PBR Neutral: it keeps CPK hues (the Specimen default). */
+  toneMapping: 'neutral' | 'aces' | 'reinhard' | 'none';
   /** MSAA samples for the scene pass when not playing. 0 disables. A graph
    *  that reads depth (AO, DOF) renders without MSAA (postPipeline.ts). */
   multisampling: 0 | 2 | 4 | 8;
@@ -64,11 +65,14 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
     label: 'Paper',
     tagline: 'Soft, true-to-print shading with neutral exposure — reads like a journal figure.',
     performanceTier: 'fast',
-    ssao: { enabled: true, intensity: 1.0, radius: 1.0 },
+    // The baked contact occlusion carries the crevices; GTAO adds the
+    // cross-occlusion (bonds, shells) on top, a little lighter than v9.
+    ssao: { enabled: true, intensity: 0.85, radius: 1.0 },
     bloom: { enabled: false, intensity: 0, threshold: 0.9, smoothing: 0.3 },
     dof: { enabled: false, bokehScale: 1, focalLength: 0.02, focusDistance: 3, focusRange: 4, auto: false },
     vignette: { enabled: false, offset: 0.5, darkness: 0.3 },
-    toneMapping: 'aces',
+    // Khronos PBR Neutral keeps CPK hue and saturation (ACES shifts them).
+    toneMapping: 'neutral',
     multisampling: 4,
     env: { drei: 'softbox' }, // neutral procedural studio
   },
@@ -77,11 +81,11 @@ export const POSTPROCESS_PRESETS: Record<PostprocessPresetId, PostprocessPresetC
     label: 'Studio',
     tagline: 'Balanced studio light with a subtle glow and soft shadows. The everyday default.',
     performanceTier: 'fast',
-    ssao: { enabled: true, intensity: 1.4, radius: 1.2 },
+    ssao: { enabled: true, intensity: 1.2, radius: 1.2 },
     bloom: { enabled: true, intensity: 0.18, threshold: 0.85, smoothing: 0.3 },
     dof: { enabled: false, bokehScale: 1, focalLength: 0.02, focusDistance: 3, focusRange: 5, auto: false },
     vignette: { enabled: true, offset: 0.4, darkness: 0.4 },
-    toneMapping: 'aces',
+    toneMapping: 'neutral',
     multisampling: 4,
     env: { drei: 'studio' }, // balanced studio HDRI
   },

@@ -2,8 +2,12 @@
  * <SelectionMarkers /> - subtle selected and hover feedback for atoms.
  *
  * Camera-facing rings (drei `Billboard`) with plain basic materials, which
- * WebGPURenderer draws through their node equivalents on both backends. The
- * selected ring pulses unless the user prefers reduced motion.
+ * WebGPURenderer draws through their node equivalents on both backends. A
+ * newly selected ring pulses a few times and comes to rest (Quiet Idle: a
+ * still view draws nothing); Gentle halves the pulse and Still skips it.
+ *
+ * The rings sit at rest positions, so while Tug, Burst or Heat carry atoms
+ * away they step aside: the impostor's own selection glow moves with the atom.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -12,9 +16,14 @@ import { Billboard } from '@react-three/drei/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
-import { useMediaQuery } from './hooks/useMediaQuery';
+import { keepLupiAwake, requestLupiFrames } from '@atlas/scene';
+import { displayMotionScale } from './motion/comfort';
+import { usePlayStore } from './play/playStore';
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+/** The selection pulse: 3.6 rad/s, ±3.5 %, fading to rest over this many seconds. */
+const PULSE_SECONDS = 2.4;
+const PULSE_OMEGA = 3.6;
+const PULSE_AMPLITUDE = 0.035;
 
 /** A ring geometry that is disposed when it is replaced or unmounted. */
 function useRingGeometry(inner: number, outer: number, segments: number): THREE.RingGeometry {
@@ -34,6 +43,8 @@ interface SelectionMarkersProps {
   highlightedNeighbors?: Set<number>;
   /** Whether to dim non-neighbor atoms when a node is selected/hovered. */
   dimNonNeighbors?: boolean;
+  /** Draw the hover ring (off where the impostor's own glow marks the hovered atom). */
+  showHoverRing?: boolean;
 }
 
 export function SelectionMarkers({
@@ -43,6 +54,7 @@ export function SelectionMarkers({
   typeRadii,
   highlightedNeighbors = new Set(),
   dimNonNeighbors = false,
+  showHoverRing = true,
 }: SelectionMarkersProps) {
   const radiusFor = (atomIndex: number): number => {
     if (atomIndex < 0 || atomIndex >= frame.natoms) return 0.5;
@@ -60,12 +72,20 @@ export function SelectionMarkers({
     ];
   };
 
+  const toysDisplacing = usePlayStore((state) => state.displacedSources.some(
+    (source) => source === 'tug' || source === 'burst' || source === 'heat',
+  ));
+  // Quiet Idle: the toys may end on the loop's last frame; draw the rings back.
+  useEffect(() => {
+    requestLupiFrames();
+  }, [toysDisplacing]);
+
   // Determine active focus atom (selected takes priority over hovered)
   const focusAtom = selectedAtoms.length === 1 ? selectedAtoms[0] : hoveredAtom;
   const showDimming = dimNonNeighbors && focusAtom != null && highlightedNeighbors.size > 0;
 
   return (
-    <group>
+    <group visible={!toysDisplacing}>
       {selectedAtoms.map((idx) => {
         const pos = positionOf(idx);
         if (!pos) return null;
@@ -77,7 +97,7 @@ export function SelectionMarkers({
           />
         );
       })}
-      {hoveredAtom != null && !selectedAtoms.includes(hoveredAtom) && (() => {
+      {showHoverRing && hoveredAtom != null && !selectedAtoms.includes(hoveredAtom) && (() => {
         const pos = positionOf(hoveredAtom);
         if (!pos) return null;
         return <HoverMarker position={pos} radius={radiusFor(hoveredAtom) * 1.20} />;
@@ -106,19 +126,28 @@ function SelectedMarker({
 }) {
   const ringRef = useRef<THREE.Mesh>(null);
   const ringGeo = useRingGeometry(radius * 0.94, radius * 1.06, 72);
-  const reducedMotion = useMediaQuery(REDUCED_MOTION_QUERY);
+  // The marker mounts with its selection: the pulse runs from here.
+  const pulse = useRef({ start: -1, amplitude: 0 });
 
-  useFrame(({ elapsed }) => {
+  useEffect(() => {
+    pulse.current = { start: performance.now(), amplitude: PULSE_AMPLITUDE * displayMotionScale() };
+    if (!(pulse.current.amplitude > 0)) return undefined;
+    return keepLupiAwake('selection-pulse', () => performance.now() - pulse.current.start < PULSE_SECONDS * 1000);
+  }, []);
+
+  useFrame(() => {
     if (!ringRef.current) return;
-    const pulse = reducedMotion ? 1 : 1 + Math.sin(elapsed * 3.6) * 0.035;
-    ringRef.current.scale.setScalar(pulse);
+    const { start, amplitude } = pulse.current;
+    const t = start < 0 ? PULSE_SECONDS : (performance.now() - start) / 1000;
+    const fade = t < PULSE_SECONDS ? (1 - t / PULSE_SECONDS) ** 2 : 0;
+    ringRef.current.scale.setScalar(1 + Math.sin(t * PULSE_OMEGA) * amplitude * fade);
   });
 
   return (
     <Billboard position={position}>
       <mesh ref={ringRef} geometry={ringGeo}>
         <meshBasicMaterial
-          color="#7dd3fc"
+          color="#d5ef9c"
           side={THREE.DoubleSide}
           transparent
           opacity={0.9}

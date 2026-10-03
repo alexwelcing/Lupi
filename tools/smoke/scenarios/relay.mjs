@@ -265,7 +265,7 @@ async function heroPath(ctx, h) {
 async function tilePath(ctx, h) {
   const { page, check, save, outcome, options } = ctx;
   await page.goto(h.baseFor(page).href, { waitUntil: 'load', timeout: options.timeout });
-  const tile = page.locator('.wall-grid a[href="/?sim=caffeine"]');
+  const tile = page.locator('.wall-grid a[href="/m/caffeine"]');
   await tile.scrollIntoViewIfNeeded({ timeout: options.timeout });
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
   await installRelayLog(page);

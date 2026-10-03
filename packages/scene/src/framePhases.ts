@@ -48,10 +48,16 @@ export const LUPI_JOB = {
   harness: 'lupi/harness',
   /** The Lupi camera rig (drag, coast, glide, detents) in fiber's `update` phase. */
   cameraRig: 'lupi/camera-rig',
-  /** Display-only motion (arrival, ripple, scatter) uniforms in `lupi-uniforms`. */
+  /** Display-only motion (arrival, ripple, scatter, tug, burst, heat) uniforms in `lupi-uniforms`. */
   displayMotion: 'lupi/display-motion',
+  /** The atom impostor's hover and selection glow fades in `lupi-uniforms`. */
+  atomGlow: 'lupi/atom-glow',
   /** The first rendered frame of a file, in `lupi-capture`. */
   firstFrame: 'lupi/first-frame',
+  /** Quiet Idle: counts the drawn frame and asks for the next one, in `finish` (frameDemand.ts). */
+  frameDemand: 'lupi/frame-demand',
+  /** The phone atom card's view shift (a projection view offset) in `update`. */
+  viewInset: 'lupi/view-inset',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];

@@ -1,6 +1,7 @@
 // Scene components
 export {
   AtomsOptimized,
+  DEFAULT_CONTACT_OCCLUSION_STRENGTH,
   LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
   LUPI_ARTIFACT_ATOMS_LAYER,
   LUPI_ARTIFACT_LAYER_KEY,
@@ -11,7 +12,17 @@ export {
 export type { AtomQualityTier } from './AtomsOptimized';
 export { computeAtomOcclusion, suggestOcclusionRadius } from './atomOcclusion';
 export type { AtomOcclusionInput, AtomOcclusionResult } from './atomOcclusion';
-export { useAtomOcclusion, useAtomClusters } from './useAtomOcclusion';
+export {
+  CONTACT_OCCLUSION_MAX_ATOMS,
+  CONTACT_OCCLUSION_NEIGHBORS,
+  CONTACT_OCCLUSION_SYNC_ATOMS,
+  computeContactOcclusion,
+  sphereContactOcclusion,
+  suggestContactRange,
+} from './atomContactOcclusion';
+export type { ContactOcclusionBake, ContactOcclusionInput } from './atomContactOcclusion';
+export { useAtomOcclusion, useAtomClusters, useContactOcclusion } from './useAtomOcclusion';
+export type { ContactOcclusionState } from './useAtomOcclusion';
 export {
   AtomsTransmission,
   MAX_TRANSMISSION_ATOMS,
@@ -37,7 +48,7 @@ export { resolveBondTopologyMode, validateSourceBondTopology } from './bondTopol
 export type { BondTopologyMode, SourceBondTopologyValidation } from './bondTopology';
 export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
-export { AtomPicker } from './AtomPicker';
+export { AtomPicker, pickAtomAtClient } from './AtomPicker';
 export { SpatialHash3D } from './SpatialHash';
 export { VectorGlyphs, LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER } from './VectorGlyphs';
 export type { VectorGlyphStats } from './VectorGlyphs';
@@ -51,6 +62,16 @@ export type { BillionAtomStats } from './BillionAtomBlock';
 // Frame phases (R3F v10 scheduler) and job ids
 export { LUPI_PHASE, LUPI_JOB, installLupiPhases } from './framePhases';
 export type { LupiPhase, LupiJobId } from './framePhases';
+export {
+  FRAME_DEMAND,
+  driveLupiFrameDemand,
+  keepLupiAwake,
+  lupiFrameStats,
+  requestLupiFrames,
+  stopLupiFrameDemand,
+  useLupiCommitFrames,
+} from './frameDemand';
+export type { LupiFrameStats, LupiKeepAwakeOptions } from './frameDemand';
 
 // The intent bus and the capture guards (wave-1 contracts)
 export {
@@ -98,6 +119,7 @@ export {
 } from './tsl/impostorKit';
 export type { LupiEnvBinding, LupiLightUniforms, LupiSurfaceInput } from './tsl/impostorKit';
 export * from './tsl/displayMotion';
+export * from './tsl/atomGlow';
 
 // Shared constants
 export {

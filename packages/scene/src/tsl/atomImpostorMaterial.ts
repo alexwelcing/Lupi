@@ -8,11 +8,16 @@
  * IMPOSTOR_VERTEX / IMPOSTOR_FRAGMENT (AtomsOptimized.tsx before the port):
  * - type, uniform and property colour modes; property emission;
  * - per-element material palette blended toward a look preset;
- * - surface roughness/polish/clearcoat offsets; per-atom occlusion;
+ * - surface roughness/polish/clearcoat offsets; per-atom occlusion (the
+ *   scalar density bake) and per-pixel contact occlusion (the neighbour bake,
+ *   atomContactOcclusion.ts, plus bond stubs where bonds leave an atom);
  * - the etched-annotation stamp and (tier 2) the noise/scratched textures;
  * - the `uProgress` GPU lerp between two instance position buffers;
  * - the display-motion offset (tsl/displayMotion.ts) on the centre: arrival,
- *   ripple and scatter, exactly zero at rest and in every capture;
+ *   ripple, scatter, tug, burst and heat, exactly zero at rest and in every
+ *   capture;
+ * - the hover, selection and grab glow and the heat tint (tsl/atomGlow.ts):
+ *   a lime rim and a small swell, exactly absent in every capture;
  * - hidden types (zero palette radius) and sub-pixel atoms collapse to a
  *   degenerate vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -41,6 +46,7 @@ import * as THREE from 'three/webgpu';
 import type { TextureNode, UniformNode } from 'three/webgpu';
 import {
   Fn,
+  If,
   abs,
   attribute,
   cameraProjectionMatrix,
@@ -52,7 +58,9 @@ import {
   instanceIndex,
   int,
   ivec2,
+  length,
   max,
+  min,
   mix,
   modelViewMatrix,
   normalize,
@@ -61,6 +69,7 @@ import {
   screenSize,
   select,
   sin,
+  smoothstep,
   step,
   texture,
   textureLoad,
@@ -72,12 +81,15 @@ import {
 } from 'three/tsl';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
 import { lupiDisplayOffset } from './displayMotion';
+import { lupiAtomGlow, lupiAtomGlowStrength, lupiAtomSwell } from './atomGlow';
+import { CONTACT_OCCLUSION_NEIGHBORS, CONTACT_TEXTURE_WIDTH } from '../atomContactOcclusion';
 import {
   blendMaterialPreset,
   impostorDepthPrelude,
   lupiSurface,
   orthographicFlag,
   raySphere,
+  sphereOcclusion,
   viewRay,
   type LupiEnvBinding,
   type LupiLightUniforms,
@@ -142,6 +154,11 @@ export interface AtomImpostorTextures {
   materialPalette: THREE.DataTexture;
   /** The etched-annotation stamp (alpha is the mask), or null. */
   etch: THREE.Texture | null;
+  /**
+   * The contact-occlusion neighbour texture (RGBA8 linear data,
+   * CONTACT_TEXTURE_WIDTH wide, K texels per atom), or null.
+   */
+  contact?: THREE.DataTexture | null;
 }
 
 export interface AtomImpostorUniforms extends LupiUniformBag {
@@ -164,12 +181,23 @@ export interface AtomImpostorUniforms extends LupiUniformBag {
   /** Atoms projecting under this many device pixels are culled. */
   uCullPixelRadius: UniformNode<'float', number>;
   uOcclusionStrength: UniformNode<'float', number>;
+  /** 1 while the contact texture holds this layer's bake. */
+  uHasContact: UniformNode<'float', number>;
+  /** The bake's search radius (offsets are snorm8 of it). */
+  uContactRange: UniformNode<'float', number>;
+  /** Gain on the summed contact occlusion. */
+  uContactStrength: UniformNode<'float', number>;
+  /** Radius of the bond stub where a bond leaves an atom (0 = bonds hidden). */
+  uBondStubRadius: UniformNode<'float', number>;
+  /** Neighbours closer than this (world units) carry a bond stub. */
+  uBondStubReach: UniformNode<'float', number>;
   // Base texture nodes: set `.value` to swap a texture for every tier.
   uPalette: TextureNode;
   uColormap: TextureNode;
   uRadiusPalette: TextureNode;
   uMaterialPalette: TextureNode;
   tEtchTexture: TextureNode;
+  tContactTexture: TextureNode;
 }
 
 let emptyEtch: THREE.DataTexture | null = null;
@@ -182,6 +210,20 @@ export function emptyEtchTexture(): THREE.DataTexture {
   }
   return emptyEtch;
 }
+
+let emptyContact: THREE.DataTexture | null = null;
+
+/** A 1×1 "no neighbour" texel, bound while a layer has no contact bake. */
+export function emptyContactTexture(): THREE.DataTexture {
+  if (!emptyContact) {
+    emptyContact = new THREE.DataTexture(new Uint8Array([128, 128, 128, 0]), 1, 1);
+    emptyContact.needsUpdate = true;
+  }
+  return emptyContact;
+}
+
+/** Contact occlusion never darkens a pixel by more than this (keeps CPK legible). */
+export const CONTACT_OCCLUSION_MAX_DARKENING = 0.82;
 
 /**
  * The uniform bag shared by every tier's material of one atom layer. Values
@@ -203,11 +245,17 @@ export function createAtomImpostorUniforms(textures: AtomImpostorTextures): Atom
     uHasEtch: uniform(0),
     uCullPixelRadius: uniform(0),
     uOcclusionStrength: uniform(0),
+    uHasContact: uniform(0),
+    uContactRange: uniform(1),
+    uContactStrength: uniform(0),
+    uBondStubRadius: uniform(0),
+    uBondStubReach: uniform(0),
     uPalette: texture(textures.palette) as unknown as TextureNode,
     uColormap: texture(textures.colormap) as unknown as TextureNode,
     uRadiusPalette: texture(textures.radiusPalette) as unknown as TextureNode,
     uMaterialPalette: texture(textures.materialPalette) as unknown as TextureNode,
     tEtchTexture: texture(textures.etch ?? emptyEtchTexture()) as unknown as TextureNode,
+    tContactTexture: texture(textures.contact ?? emptyContactTexture()) as unknown as TextureNode,
   };
 }
 
@@ -250,7 +298,10 @@ export function createAtomImpostorMaterial({
   const occlusion: N = data.y;
   const prop: N = round(data.z.mul(255.0)).mul(256.0).add(round(data.w.mul(255.0))).div(65535.0);
 
-  const radius: N = (textureLoad(u.uRadiusPalette, ivec2(slot, int(0))) as N).x;
+  // The hovered or grabbed atom swells a little (exactly ×1 in captures).
+  const atomId: N = float(instanceIndex);
+  const paletteRadius: N = (textureLoad(u.uRadiusPalette, ivec2(slot, int(0))) as N).x;
+  const radius: N = paletteRadius.mul(lupiAtomSwell(atomId));
   const typeColor: N = (textureLoad(u.uPalette, ivec2(slot, int(0))) as N).rgb;
   const mapColor: N = (texture(u.uColormap, vec2(prop, 0.5)) as N).level(0).rgb;
   // mix, not select: a select lowers to if/else, and `prop` (read again for
@@ -267,7 +318,8 @@ export function createAtomImpostorMaterial({
     : rawPosition;
   // Display-only motion (arrival, ripple, scatter): exactly zero at rest and
   // in every capture; everything below follows the displaced centre.
-  const center: N = restCenter.add(lupiDisplayOffset(restCenter, rawPosition));
+  const displayOffset: N = (lupiDisplayOffset(restCenter, rawPosition) as N).toVar('atomDisplayOffset');
+  const center: N = restCenter.add(displayOffset);
   const viewCenter: N = modelViewMatrix.mul(vec4(center, 1.0)).xyz;
   const viewDepth: N = max(viewCenter.z.negate(), 1e-4);
   // Device pixels per world unit at unit depth: |P[1][1]| × target height / 2.
@@ -293,9 +345,14 @@ export function createAtomImpostorMaterial({
   const vPixelRadius: N = varying(pixelRadius, 'vPixelRadius');
   const vOcclusion: N = varying(occlusion, 'vOcclusion');
   const vProp: N = varying(prop, 'vProp');
-  const vAtomId: N = varying(float(instanceIndex), 'vAtomId');
+  const vAtomId: N = varying(atomId, 'vAtomId');
+  const vGlow: N = varying(lupiAtomGlowStrength(atomId), 'vGlow');
   const vMaterial: N = varying(materialParams, 'vMaterial');
   const vEmission: N = varying(emissionParams, 'vEmission');
+  // Contact occlusion is baked at rest: it eases open while display motion
+  // carries the atom away (an arrival, a scatter), and is whole at rest and in
+  // every capture (the offset is exactly zero there).
+  const vContactFade: N = varying(smoothstep(0.08, 0.8, length(displayOffset)).oneMinus(), 'vContactFade');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // The hit is built once and first materialized by the depth prelude, which
@@ -349,6 +406,44 @@ export function createAtomImpostorMaterial({
     );
     const emission = vEmission.rgb.mul(vEmission.a).add(propertyGlow);
 
+    // Contact occlusion: the K baked neighbours (and the bond stubs leaving
+    // this atom) as analytic spheres around the hit point, in view space.
+    const contactOpen = float(1).toVar();
+    If(u.uHasContact.greaterThan(0.5), () => {
+      const p: N = hit.xyz.toVar();
+      const occ: N = float(0).toVar();
+      const base: N = int(vAtomId.add(0.5)).mul(int(CONTACT_OCCLUSION_NEIGHBORS)).toVar();
+      const toModelUnits = u.uContactRange.div(127.0);
+      for (let k = 0; k < CONTACT_OCCLUSION_NEIGHBORS; k += 1) {
+        const index: N = base.add(int(k)).toVar();
+        const coord: N = ivec2(index.mod(int(CONTACT_TEXTURE_WIDTH)), index.div(int(CONTACT_TEXTURE_WIDTH)));
+        const texel = (textureLoad(u.tContactTexture, coord) as N).toVar();
+        const offsetBytes: N = (round(texel.xyz.mul(255.0)) as N).sub(128.0).toVar();
+        const valid: N = (step(float(0.5), dot(offsetBytes, offsetBytes) as N) as N).toVar();
+        const offsetModel = offsetBytes.mul(toModelUnits).toVar();
+        const offsetView = (modelViewMatrix as N).mul(vec4(offsetModel, 0.0)).xyz.toVar();
+        const neighborSlot = int(round(texel.w.mul(255.0)));
+        const neighborRadius = (textureLoad(u.uRadiusPalette, ivec2(neighborSlot, int(0))) as N).x.toVar();
+        const neighborCenter = vViewCenter.add(offsetView);
+        occ.addAssign((sphereOcclusion(p, normal, neighborCenter, neighborRadius) as N).mul(valid));
+        // A bond leaving toward a near neighbour: a small sphere sitting on
+        // this atom's surface darkens the ring where the stick meets the ball.
+        const distance = length(offsetModel);
+        const bonded = valid
+          .mul(step(distance, u.uBondStubReach))
+          .mul(step(1e-4, neighborRadius))
+          .mul(step(1e-4, u.uBondStubRadius));
+        const stubDir = offsetView.div(max(length(offsetView), 1e-6));
+        const stubCenter = vViewCenter.add(stubDir.mul(vRadius.add(u.uBondStubRadius.mul(0.6))));
+        occ.addAssign((sphereOcclusion(p, normal, stubCenter, u.uBondStubRadius.mul(1.4)) as N).mul(bonded));
+      }
+      contactOpen.assign(
+        float(1).sub(min(occ.mul(u.uContactStrength), CONTACT_OCCLUSION_MAX_DARKENING).mul(vContactFade)),
+      );
+    });
+    // Scalar density occlusion (large scenes) times contact occlusion.
+    const openness = mix(float(1), vOcclusion, u.uOcclusionStrength).mul(contactOpen);
+
     const lit = (lupiSurface(
       {
         normal,
@@ -358,8 +453,8 @@ export function createAtomImpostorMaterial({
         roughness,
         clearcoat: u.uSurfaceClearcoat,
         polish: u.uSurfacePolish,
-        occlusion: vOcclusion,
-        occlusionStrength: u.uOcclusionStrength,
+        occlusion: openness,
+        occlusionStrength: float(1),
         emission,
         pixelRadius: vPixelRadius,
         subsurface: surface.z,
@@ -380,7 +475,10 @@ export function createAtomImpostorMaterial({
     const etchAlpha = (texture(u.tEtchTexture, clamp(etchUv, 0.0, 1.0)) as N).a;
     const etch = select(targeted.and(inside), etchAlpha, float(0.0));
     const shaded: N = mix(lit, lit.mul(0.32), etch);
-    return vec4(shaded, 1.0);
+    // Hover / selection / grab rim and the heat tint (zero in captures).
+    const toEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate()));
+    const glow = lupiAtomGlow(vGlow, dot(normal, toEye));
+    return vec4(shaded.add(glow), 1.0);
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

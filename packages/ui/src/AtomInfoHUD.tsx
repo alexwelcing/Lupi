@@ -5,12 +5,15 @@
  * no room above), rendered at a constant screen size so it stays legible at any
  * zoom. It never covers the atom it describes: the ripple on a tapped atom
  * stays visible, and a double-click on it reaches the canvas and glides there.
- * Phone: the same content docks as a sheet under the header (full width, larger
- * type, 44px close target) instead of floating over the molecule, where a
- * world-anchored card scales unpredictably and drifts off-screen.
+ * Phone: the card docks as a sheet under the header (full width, larger type)
+ * instead of floating over the molecule, where a world-anchored card scales
+ * unpredictably and drifts off-screen. The sheet opens compact (identity and
+ * one line of key facts; "Details" opens the full card, remembered for the
+ * session), and it reports its bottom edge so the live view moves the
+ * molecule into the band it leaves free (camera/viewInset.ts).
  */
 
-import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Html } from '@react-three/drei/webgpu';
 import { Vector3, type Camera, type Object3D } from 'three';
 import type { Frame } from '@atlas/core/types';
@@ -25,12 +28,16 @@ import {
 import { useStore, type KnowledgeLabel } from './store';
 import { humanizeCategory } from './periodic-table/ElementDetailCard';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
+import { setTopOccluder } from './camera/viewInset';
 
 const MAX_PROPERTY_ROWS = 4;
 const MAX_KNOWLEDGE_ROWS = 4;
 
 /** Header (64px + safe area on phones) plus breathing room. */
 const MOBILE_DOCK_TOP = 'calc(76px + env(safe-area-inset-top))';
+
+/** The phone sheet's Details choice, kept for the session (not persisted). */
+let phoneSheetExpanded = false;
 
 /** Desktop card: fixed width, a gap from the atom's edge, and room kept for the header. */
 const CARD_WIDTH_PX = 248;
@@ -111,6 +118,43 @@ export function AtomInfoHUD({
   const setHighlightedNeighbors = useStore(s => s.setHighlightedNeighbors);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const radiusRef = useRef(0);
+  const [expanded, setExpanded] = useState(phoneSheetExpanded);
+  const toggleExpanded = useCallback(() => {
+    setExpanded((previous) => {
+      phoneSheetExpanded = !previous;
+      return !previous;
+    });
+  }, []);
+  // The phone sheet reports its bottom edge while it is on screen, so the
+  // live view can make room (camera/viewInset.ts). The card renders in drei
+  // Html's own root, so a callback ref (not an effect) sees it mount.
+  const isMobileRef = useRef(isMobile);
+  isMobileRef.current = isMobile;
+  const occluderObserver = useRef<ResizeObserver | null>(null);
+  const attachCard = useCallback((node: HTMLDivElement | null) => {
+    cardRef.current = node;
+    occluderObserver.current?.disconnect();
+    occluderObserver.current = null;
+    if (!node || !isMobileRef.current) {
+      setTopOccluder(null);
+      return;
+    }
+    const report = () => setTopOccluder(node.getBoundingClientRect().bottom);
+    report();
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(report);
+      observer.observe(node);
+      occluderObserver.current = observer;
+    }
+  }, []);
+  useEffect(
+    () => () => {
+      occluderObserver.current?.disconnect();
+      occluderObserver.current = null;
+      setTopOccluder(null);
+    },
+    [],
+  );
   const placeCard = useCallback(
     (object: Object3D, camera: Camera, size: { width: number; height: number }) =>
       anchoredCardPosition(object, camera, size, radiusRef.current, cardRef.current),
@@ -152,13 +196,17 @@ export function AtomInfoHUD({
   const scale = isMobile ? 1.15 : 1;
   const label = { fontSize: 9.5 * scale };
   const value = { fontSize: 12.5 * scale };
+  // Phone: compact until the visitor opens Details.
+  const compact = isMobile && !expanded;
+  const activeValue = activeProperty ? properties.find((row) => row.name === activeProperty) : undefined;
 
   const card = (
     <div
-      ref={cardRef}
+      ref={attachCard}
       data-testid="atom-info-card"
       data-atom-index={atomIndex}
       data-layout={isMobile ? 'sheet' : 'anchored'}
+      data-expanded={isMobile ? String(expanded) : undefined}
       style={{
         width: isMobile ? 'calc(100vw - 20px)' : 248,
         maxWidth: isMobile ? 420 : undefined,
@@ -170,7 +218,7 @@ export function AtomInfoHUD({
         boxShadow: '0 16px 40px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(255,255,255,0.05) inset',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
-        padding: isMobile ? '12px 14px 14px' : '10px 12px 12px',
+        padding: compact ? '10px 12px 11px' : isMobile ? '12px 14px 14px' : '10px 12px 12px',
         fontFamily: FONT_SANS,
         lineHeight: 1.3,
         userSelect: 'none',
@@ -245,6 +293,41 @@ export function AtomInfoHUD({
           </div>
         </div>
 
+        {isMobile && (
+          <button
+            type="button"
+            data-card-toggle=""
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Show fewer atom details' : 'Show all atom details'}
+            onClick={toggleExpanded}
+            style={{
+              alignSelf: 'flex-start',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              height: 32,
+              flex: '0 0 auto',
+              margin: '-2px 0 0',
+              padding: '0 9px',
+              border: '1px solid rgba(174, 214, 255, 0.18)',
+              borderRadius: 8,
+              color: 'rgba(217, 234, 255, 0.86)',
+              background: 'rgba(255, 255, 255, 0.05)',
+              cursor: 'pointer',
+              fontFamily: FONT_SANS,
+              fontSize: 12,
+              fontWeight: 650,
+              lineHeight: 1,
+              touchAction: 'manipulation',
+            }}
+          >
+            {expanded ? 'Less' : 'Details'}
+            <span aria-hidden="true" style={{ fontSize: 10, transform: expanded ? 'rotate(180deg)' : undefined }}>
+              ▾
+            </span>
+          </button>
+        )}
+
         {onDismissCard && (
           <button
             type="button"
@@ -274,100 +357,118 @@ export function AtomInfoHUD({
         )}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: isMobile ? 10 : 8 }}>
-        <Chip scale={scale}>atom {atomIndex}</Chip>
-        <Chip scale={scale}>id {id}</Chip>
-        <Chip scale={scale}>type {type}</Chip>
-        {atomicNumber !== undefined && <Chip scale={scale}>Z {atomicNumber}</Chip>}
-      </div>
-
-      {/* Element facts */}
-      {element && (
-        <Section first>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
-            <Stat label="Mass" value={`${element.mass} u`} labelStyle={label} valueStyle={value} />
-            <Stat label="Cov. radius" title="Single-bond covalent radius" value={`${element.radius} Å`} labelStyle={label} valueStyle={value} />
+      {compact ? (
+        <FactsLine
+          items={[
+            ...(activeValue ? [{ label: activeValue.name, value: formatPropertyValue(activeValue.value), accent: true }] : []),
+            ...(element
+              ? [
+                  { label: '', value: `${element.mass} u`, title: 'Atomic mass' },
+                  ...(element.electronegativity !== null ? [{ label: 'χ', value: String(element.electronegativity), title: 'Pauling electronegativity' }] : []),
+                  { label: 'r', value: `${element.radius} Å`, title: 'Single-bond covalent radius' },
+                ]
+              : [{ label: 'type', value: String(type) }]),
+            { label: 'atom', value: String(atomIndex) },
+          ]}
+        />
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: isMobile ? 10 : 8 }}>
+            <Chip scale={scale}>atom {atomIndex}</Chip>
+            <Chip scale={scale}>id {id}</Chip>
+            <Chip scale={scale}>type {type}</Chip>
+            {atomicNumber !== undefined && <Chip scale={scale}>Z {atomicNumber}</Chip>}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, marginTop: 5 }}>
-            <Stat label="Group" value={element.group !== null ? String(element.group) : '—'} labelStyle={label} valueStyle={value} />
-            <Stat label="Period" value={element.period !== null ? String(element.period) : '—'} labelStyle={label} valueStyle={value} />
-            <Stat
-              label={isMobile ? 'χ Pauling' : 'χ'}
-              rawLabel
-              title="Pauling electronegativity (χ)"
-              value={element.electronegativity !== null ? String(element.electronegativity) : '—'}
-              labelStyle={label}
-              valueStyle={value}
-            />
-          </div>
-        </Section>
-      )}
 
-      {/* Position */}
-      <Section title={`Position · ${coordinateUnit}`} titleStyle={label} first={!element}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5 }}>
-          <Stat label="x" value={formatCoordinate(x)} labelStyle={label} valueStyle={value} />
-          <Stat label="y" value={formatCoordinate(y)} labelStyle={label} valueStyle={value} />
-          <Stat label="z" value={formatCoordinate(z)} labelStyle={label} valueStyle={value} />
-        </div>
-      </Section>
-
-      {/* Per-atom properties */}
-      {properties.length > 0 && (
-        <Section title="Properties" titleStyle={label}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
-            {properties.map(({ name, value: propertyValue }) => (
-              <Stat
-                key={name}
-                label={name}
-                rawLabel
-                title={name}
-                value={formatPropertyValue(propertyValue)}
-                labelStyle={label}
-                valueStyle={value}
-                accent={name === activeProperty}
-              />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Knowledge graph */}
-      {(knowledge.length > 0 || nodeLabel?.neighbors) && (
-        <Section title="Knowledge graph" titleStyle={label}>
-          <div style={{ display: 'grid', gap: 4 }}>
-            {knowledge.map((row) => (
-              <KeyValueRow key={row.label} label={row.label} value={row.value} labelStyle={label} valueStyle={value} />
-            ))}
-            {nodeLabel?.neighbors && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
-                <span style={{ ...label, color: COLOR_MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-                  Highlight neighbors
-                </span>
-                <button
-                  type="button"
-                  aria-pressed={showNeighbors}
-                  onClick={() => setShowNeighbors(!showNeighbors)}
-                  style={{
-                    fontFamily: FONT_SANS,
-                    fontSize: 10.5 * scale,
-                    fontWeight: 700,
-                    minHeight: isMobile ? 32 : 24,
-                    padding: '0 10px',
-                    borderRadius: 7,
-                    border: `1px solid ${showNeighbors ? 'rgba(160, 255, 200, 0.5)' : 'rgba(122, 211, 255, 0.25)'}`,
-                    background: showNeighbors ? 'rgba(160, 255, 200, 0.12)' : 'rgba(255, 255, 255, 0.04)',
-                    color: showNeighbors ? '#a0ffc8' : 'rgba(205, 225, 244, 0.9)',
-                    cursor: 'pointer',
-                    touchAction: 'manipulation',
-                  }}
-                >
-                  {showNeighbors ? 'On' : 'Off'}
-                </button>
+          {/* Element facts */}
+          {element && (
+            <Section first>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
+                <Stat label="Mass" value={`${element.mass} u`} labelStyle={label} valueStyle={value} />
+                <Stat label="Cov. radius" title="Single-bond covalent radius" value={`${element.radius} Å`} labelStyle={label} valueStyle={value} />
               </div>
-            )}
-          </div>
-        </Section>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, marginTop: 5 }}>
+                <Stat label="Group" value={element.group !== null ? String(element.group) : '—'} labelStyle={label} valueStyle={value} />
+                <Stat label="Period" value={element.period !== null ? String(element.period) : '—'} labelStyle={label} valueStyle={value} />
+                <Stat
+                  label={isMobile ? 'χ Pauling' : 'χ'}
+                  rawLabel
+                  title="Pauling electronegativity (χ)"
+                  value={element.electronegativity !== null ? String(element.electronegativity) : '—'}
+                  labelStyle={label}
+                  valueStyle={value}
+                />
+              </div>
+            </Section>
+          )}
+
+          {/* Position */}
+          <Section title={`Position · ${coordinateUnit}`} titleStyle={label} first={!element}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5 }}>
+              <Stat label="x" value={formatCoordinate(x)} labelStyle={label} valueStyle={value} />
+              <Stat label="y" value={formatCoordinate(y)} labelStyle={label} valueStyle={value} />
+              <Stat label="z" value={formatCoordinate(z)} labelStyle={label} valueStyle={value} />
+            </div>
+          </Section>
+
+          {/* Per-atom properties */}
+          {properties.length > 0 && (
+            <Section title="Properties" titleStyle={label}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
+                {properties.map(({ name, value: propertyValue }) => (
+                  <Stat
+                    key={name}
+                    label={name}
+                    rawLabel
+                    title={name}
+                    value={formatPropertyValue(propertyValue)}
+                    labelStyle={label}
+                    valueStyle={value}
+                    accent={name === activeProperty}
+                  />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Knowledge graph */}
+          {(knowledge.length > 0 || nodeLabel?.neighbors) && (
+            <Section title="Knowledge graph" titleStyle={label}>
+              <div style={{ display: 'grid', gap: 4 }}>
+                {knowledge.map((row) => (
+                  <KeyValueRow key={row.label} label={row.label} value={row.value} labelStyle={label} valueStyle={value} />
+                ))}
+                {nodeLabel?.neighbors && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
+                    <span style={{ ...label, color: COLOR_MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+                      Highlight neighbors
+                    </span>
+                    <button
+                      type="button"
+                      aria-pressed={showNeighbors}
+                      onClick={() => setShowNeighbors(!showNeighbors)}
+                      style={{
+                        fontFamily: FONT_SANS,
+                        fontSize: 10.5 * scale,
+                        fontWeight: 700,
+                        minHeight: isMobile ? 32 : 24,
+                        padding: '0 10px',
+                        borderRadius: 7,
+                        border: `1px solid ${showNeighbors ? 'rgba(160, 255, 200, 0.5)' : 'rgba(122, 211, 255, 0.25)'}`,
+                        background: showNeighbors ? 'rgba(160, 255, 200, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                        color: showNeighbors ? '#a0ffc8' : 'rgba(205, 225, 244, 0.9)',
+                        cursor: 'pointer',
+                        touchAction: 'manipulation',
+                      }}
+                    >
+                      {showNeighbors ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </Section>
+          )}
+        </>
       )}
     </div>
   );
@@ -395,6 +496,38 @@ export function AtomInfoHUD({
     >
       {card}
     </Html>
+  );
+}
+
+/** The compact phone sheet's one line of key facts: value-first, muted labels. */
+function FactsLine({ items }: { items: Array<{ label: string; value: string; title?: string; accent?: boolean }> }) {
+  return (
+    <div
+      data-testid="atom-info-facts"
+      style={{
+        marginTop: 8,
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: 10,
+        overflow: 'hidden',
+        whiteSpace: 'nowrap',
+        fontFamily: FONT_MONO,
+        fontSize: 12.5,
+        fontVariantNumeric: 'tabular-nums',
+        color: COLOR_TEXT,
+      }}
+    >
+      {items.map((item) => (
+        <span key={`${item.label}:${item.value}`} title={item.title} style={{ flex: '0 0 auto', color: item.accent ? '#eef9ff' : undefined }}>
+          {item.label && (
+            <span style={{ marginRight: 4, color: item.accent ? COLOR_ACCENT : COLOR_MUTED, fontFamily: FONT_SANS, fontSize: 11, fontWeight: 600 }}>
+              {item.label}
+            </span>
+          )}
+          {item.value}
+        </span>
+      ))}
+    </div>
   );
 }
 

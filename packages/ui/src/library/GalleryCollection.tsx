@@ -6,17 +6,20 @@ import { LOCAL_MOLECULES } from '../landing/moleculeIndex';
 import { openLocalMolecule } from '../landing/MoleculeFinder';
 import type { FunctionalGroupId } from '../organicFunctionalGroups';
 import { useLibraryQuery } from './useLibraryQuery';
+import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
 
 const PREVIEW_BY_ID = new Map(LOCAL_MOLECULES.filter((m) => m.image).map((m) => [m.id, m.image!]));
 
 function hrefFor(example: GalleryExample): string {
-  return example.route ?? `/?sim=${encodeURIComponent(example.id)}`;
+  if (example.route) return example.route;
+  return hasMoleculePage(example.id) ? moleculePagePath(example.id) : `/?sim=${encodeURIComponent(example.id)}`;
 }
 
 /**
  * The full curated catalog with the domain, source-type, and functional-group
- * filters the pre-reset gallery had. Cards are plain `/?sim=` links that open
- * in place, exactly like the homepage wall.
+ * filters the pre-reset gallery had. Cards are plain links (the molecule's
+ * `/m/<id>` page when it has one, else `/?sim=`) that open in place, exactly
+ * like the homepage wall.
  */
 export function GalleryCollection() {
   const [query, update] = useLibraryQuery();

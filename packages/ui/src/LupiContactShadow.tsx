@@ -14,14 +14,26 @@
  * It recomputes in the `update` phase only when its inputs change (frame,
  * hidden types, radii, placement); `frames={0}` keeps the last result, so
  * playback never re-splats per frame.
+ *
+ * The Specimen look (wave 2): the penumbra widens and pales with height
+ * (`spread`), the shadow leans away from the key light (`skew`), each disc
+ * is a pre-rendered opaque sprite drawn with `lighten` (an exact max blend,
+ * an order of magnitude cheaper than a gradient per atom), and the plane
+ * fades out as the camera drops toward the floor and while an arrival or a
+ * scatter carries the atoms (display motion; whole at rest and in every
+ * capture, where the motion weight is zero).
  */
 import { useEffect, useMemo, useRef, type JSX } from 'react';
-import { useFrame } from '@react-three/fiber/webgpu';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three/webgpu';
+import { cameraPosition, float, length, mix, select, smoothstep, texture, uniform, vec3 } from 'three/tsl';
 import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
-import { LUPI_JOB } from '@atlas/scene';
+import { DISPLAY_MOTION, DISPLAY_MOTION_TUNING, LUPI_JOB } from '@atlas/scene';
 import { useStore } from './store';
+
+// Graph-building code works on untyped nodes (spike G13).
+type N = any;
 
 export interface LupiContactShadowProps {
   position?: [number, number, number];
@@ -38,6 +50,12 @@ export interface LupiContactShadowProps {
   color?: THREE.ColorRepresentation;
   frame: Frame;
   hiddenAtomTypes: ReadonlySet<number>;
+  /** Penumbra growth per unit height above the plane (0 = straight discs). */
+  spread?: number;
+  /** World (x, z) offset of the shadow per unit height (leaning away from the key light). */
+  skew?: readonly [number, number];
+  /** Fade the plane out as the camera drops toward (or below) it. Default true. */
+  fadeWithCamera?: boolean;
 }
 
 /** The splat parameters that decide the shadow image. */
@@ -51,6 +69,45 @@ export interface ContactShadowSplat {
   resolution: number;
   /** World radius of each atom type (0 = not drawn). */
   radiusForType: (rawType: number) => number;
+  /** Penumbra growth per unit height (default 0). */
+  spread?: number;
+  /** World (x, z) offset per unit height (default none). */
+  skew?: readonly [number, number];
+}
+
+/** Shades of the pre-rendered disc sprites (the darkness quantization). */
+const SPRITE_LEVELS = 48;
+const SPRITE_SIZE = 64;
+let sprites: HTMLCanvasElement[] | null = null;
+
+/**
+ * One opaque square sprite per darkness level: a radial gradient (level at
+ * the centre, 0.8·level at 70 %, black at the rim and in the corners). Being
+ * opaque, `lighten` composites it as an exact per-channel max.
+ */
+function shadowSprites(): HTMLCanvasElement[] | null {
+  if (sprites) return sprites;
+  if (typeof document === 'undefined') return null;
+  const built: HTMLCanvasElement[] = [];
+  for (let level = 0; level <= SPRITE_LEVELS; level += 1) {
+    const canvas = document.createElement('canvas');
+    canvas.width = SPRITE_SIZE;
+    canvas.height = SPRITE_SIZE;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const value = Math.round((255 * level) / SPRITE_LEVELS);
+    const rim = Math.round(value * 0.8);
+    const half = SPRITE_SIZE / 2;
+    const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+    gradient.addColorStop(0, `rgb(${value},${value},${value})`);
+    gradient.addColorStop(0.7, `rgb(${rim},${rim},${rim})`);
+    gradient.addColorStop(1, 'rgb(0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+    built.push(canvas);
+  }
+  sprites = built;
+  return sprites;
 }
 
 /**
@@ -86,6 +143,10 @@ export function splatContactShadow(
   const reach = Math.max(far, 1e-6);
   const positions = frame.positions;
   const radiusCache = new Map<number, number>();
+  const spread = Math.max(0, splat.spread ?? 0);
+  const skewX = splat.skew?.[0] ?? 0;
+  const skewZ = splat.skew?.[1] ?? 0;
+  const discs = shadowSprites();
   let drawn = 0;
   for (let i = 0; i < frame.natoms; i += 1) {
     const type = frame.types[i];
@@ -102,20 +163,30 @@ export function splatContactShadow(
     if (y + radius < planeY) continue;
     const height = Math.max(0, y - radius - planeY);
     if (height >= reach) continue;
-    const cx = (x - center[0]) * pxPerWorld + size / 2;
-    const cy = (z - center[2]) * pxPerWorld + size / 2;
-    const r = Math.max(0.75, radius * pxPerWorld);
+    // Higher atoms cast wider, paler discs, leaning away from the key.
+    const cx = (x + skewX * height - center[0]) * pxPerWorld + size / 2;
+    const cy = (z + skewZ * height - center[2]) * pxPerWorld + size / 2;
+    const worldRadius = radius + spread * height;
+    const r = Math.max(0.75, worldRadius * pxPerWorld);
     if (cx + r < 0 || cy + r < 0 || cx - r > size || cy - r > size) continue;
-    const level = Math.round(255 * (1 - height / reach));
-    const rim = Math.round(level * 0.8);
-    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    gradient.addColorStop(0, `rgb(${level},${level},${level})`);
-    gradient.addColorStop(0.7, `rgb(${rim},${rim},${rim})`);
-    gradient.addColorStop(1, 'rgb(0,0,0)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
+    const falloff = 1 - height / reach;
+    const darkness = falloff * Math.sqrt(radius / worldRadius);
+    if (discs) {
+      const level = Math.round(Math.max(0, Math.min(1, darkness)) * SPRITE_LEVELS);
+      if (level === 0) continue;
+      ctx.drawImage(discs[level], cx - r, cy - r, 2 * r, 2 * r);
+    } else {
+      const level = Math.round(255 * darkness);
+      const rim = Math.round(level * 0.8);
+      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      gradient.addColorStop(0, `rgb(${level},${level},${level})`);
+      gradient.addColorStop(0.7, `rgb(${rim},${rim},${rim})`);
+      gradient.addColorStop(1, 'rgb(0,0,0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
     drawn += 1;
   }
   ctx.restore();
@@ -172,32 +243,33 @@ export function LupiContactShadow({
   color = '#000000',
   frame,
   hiddenAtomTypes,
+  spread = 0,
+  skew,
+  fadeWithCamera = true,
 }: LupiContactShadowProps): JSX.Element | null {
   const atomScale = useStore((s) => s.atomScale);
   const atomTypeScales = useStore((s) => s.atomTypeScales);
   const size = Math.max(16, Math.min(2048, Math.round(resolution)));
   const surface = useMemo(() => createSurface(size), [size]);
-  const material = useMemo(() => new THREE.MeshBasicNodeMaterial({
-    transparent: true,
-    depthWrite: false,
-    fog: false,
-    toneMapped: false,
-  }), []);
+  const shading = useMemo(() => createShadowMaterial(), []);
+  const material = shading.material;
 
   useEffect(() => () => surface?.texture.dispose(), [surface]);
   useEffect(() => () => material.dispose(), [material]);
 
   useEffect(() => {
-    material.color.set(color);
-    material.opacity = opacity;
-    const alphaMap = surface?.texture ?? null;
-    if (material.alphaMap !== alphaMap) {
-      material.alphaMap = alphaMap;
-      material.needsUpdate = true;
-    }
-  }, [color, material, opacity, surface]);
+    shading.color.value.set(color);
+    shading.opacity.value = opacity;
+    shading.cameraFade.value = fadeWithCamera ? 1 : 0;
+    if (surface) shading.mask.value = surface.texture;
+  }, [color, fadeWithCamera, opacity, shading, surface]);
 
   const [px, py, pz] = position;
+  useEffect(() => {
+    shading.plane.value.set(px, py, pz);
+  }, [px, py, pz, shading]);
+  const skewX = skew?.[0] ?? 0;
+  const skewZ = skew?.[1] ?? 0;
   const inputs = useMemo(() => ({
     frame,
     hiddenAtomTypes,
@@ -209,13 +281,20 @@ export function LupiContactShadow({
       resolution: size,
       radiusForType: (rawType: number) =>
         resolveTypeDisplayRadius(frame, rawType) * atomScale * (atomTypeScales[rawType] ?? 1),
+      spread,
+      skew: [skewX, skewZ] as const,
     } satisfies ContactShadowSplat,
-  }), [atomScale, atomTypeScales, blur, far, frame, hiddenAtomTypes, px, py, pz, scale, size]);
+  }), [atomScale, atomTypeScales, blur, far, frame, hiddenAtomTypes, px, py, pz, scale, size, spread, skewX, skewZ]);
 
   const computed = useRef<{ inputs: typeof inputs | null; surface: ShadowSurface | null }>({
     inputs: null,
     surface: null,
   });
+  // New inputs re-splat in the next frame: ask for one (on-demand loops too).
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    invalidate();
+  }, [inputs, invalidate]);
 
   useFrame(
     () => {
@@ -246,4 +325,71 @@ export function LupiContactShadow({
       <planeGeometry args={[scale, scale]} />
     </mesh>
   );
+}
+
+interface ShadowShading {
+  material: THREE.MeshBasicNodeMaterial;
+  mask: { value: THREE.Texture };
+  color: { value: THREE.Color };
+  opacity: { value: number };
+  /** 1 fades the plane with camera elevation. */
+  cameraFade: { value: number };
+  /** The plane centre (world). */
+  plane: { value: THREE.Vector3 };
+}
+
+let emptyMask: THREE.DataTexture | null = null;
+function emptyShadowMask(): THREE.DataTexture {
+  if (!emptyMask) {
+    emptyMask = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+    emptyMask.needsUpdate = true;
+  }
+  return emptyMask;
+}
+
+/**
+ * The shadow plane's node material: the mask's red channel times opacity,
+ * times two fades.
+ * - Camera: the floor is an invisible table, seen from above. It fades out
+ *   as the camera's elevation over the plane drops below ~13° and is gone at
+ *   ~2°, so an orbit underneath never sees a dark sheet across the molecule.
+ *   `cameraPosition` follows whichever camera renders (captures included).
+ * - Display motion: while an arrival condenses (or a scatter puffs out and
+ *   back) the shadow fades with it, from the display-motion uniforms
+ *   themselves, so it is whole at rest and in every capture.
+ */
+function createShadowMaterial(): ShadowShading {
+  const mask: N = texture(emptyShadowMask());
+  const color: N = uniform(new THREE.Color('#000000'));
+  const opacity: N = uniform(1);
+  const cameraFade: N = uniform(1);
+  const plane: N = uniform(new THREE.Vector3());
+
+  const toCamera: N = (cameraPosition as N).sub(plane);
+  const elevation: N = toCamera.y.div(length(toCamera).max(1e-4));
+  const elevationFade: N = mix(float(1), smoothstep(0.035, 0.22, elevation), cameraFade);
+
+  const M = DISPLAY_MOTION as unknown as Record<string, N>;
+  const rise = DISPLAY_MOTION_TUNING.scatterRiseS;
+  const elapsed: N = M.uMotionNow.sub(M.uArrivalT0);
+  const duration: N = M.uArrivalDuration.max(1e-3);
+  const condensing: N = smoothstep(0, duration, elapsed);
+  const scattering: N = select(
+    elapsed.lessThan(rise),
+    smoothstep(0, rise, elapsed).oneMinus(),
+    smoothstep(rise, duration.add(rise), elapsed),
+  );
+  const arriving: N = select(M.uArrivalMode.greaterThan(2.5), scattering, condensing);
+  const motionFade: N = mix(float(1), arriving, M.uMotionWeight.mul(M.uArrivalWeight).clamp(0, 1));
+
+  const material = new THREE.MeshBasicNodeMaterial({
+    transparent: true,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  });
+  material.name = 'lupi-contact-shadow';
+  material.colorNode = vec3(color);
+  material.opacityNode = (mask as N).r.mul(opacity).mul(elevationFade).mul(motionFade);
+  return { material, mask, color, opacity, cameraFade, plane };
 }

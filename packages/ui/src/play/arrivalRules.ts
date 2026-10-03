@@ -11,7 +11,7 @@
  * `?arrival=0` disables it; `?arrival=1` forces it past the session and
  * comfort rules (smoke checks and demos). The mode is `flat` (the drawing
  * inflating into depth) when the home hero handed this very molecule over,
- * otherwise `condense`.
+ * otherwise `condense`. A molecule page's drawing (/m/<id>) counts as the hero's.
  */
 import type { Comfort } from '../motion/comfort';
 
@@ -91,7 +91,9 @@ export function shouldPlayArrival(input: ArrivalRuleInput): ArrivalMode | null {
   }
 
   const baton = input.baton;
-  if (baton && baton.source === 'hero' && input.galleryId != null && baton.galleryId === input.galleryId) return 'flat';
+  // The drawing the visitor just turned (the home hero, or a molecule page's) inflates into depth.
+  const fromDrawing = baton?.source === 'hero' || baton?.source === 'page';
+  if (baton && fromDrawing && input.galleryId != null && baton.galleryId === input.galleryId) return 'flat';
   return 'condense';
 }
 

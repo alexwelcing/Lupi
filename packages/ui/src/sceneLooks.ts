@@ -1,4 +1,5 @@
 import type { AppState } from './store';
+import { POSTPROCESS_PRESETS } from './postprocess/presets';
 
 export const SCENE_LOOKS = [
   { id: 'studio', label: 'Studio', description: 'Soft light · depth' },
@@ -8,11 +9,22 @@ export const SCENE_LOOKS = [
 ] as const;
 export type SceneLookId = typeof SCENE_LOOKS[number]['id'];
 
+/** The post recipe every Look renders through (the Specimen rig). */
+const LOOK_POSTPROCESS = 'paper' as const;
+
 /** Presentation only. Never reset color encodings, visibility, bonds or source data.
  * All looks avoid transmission, animated backdrops, bloom and depth of field.
- * Large scenes retain the cheaper diagram shader path and skip environment maps. */
+ *
+ * The Specimen rig: every Look is one softbox key (az 40, el 45) with a cool
+ * fill and a gentle rim card, changing only gains and colours, at every
+ * scale. There is no identity switch at 25k atoms any more: the baked contact
+ * and density occlusion carry depth where screen-space AO cannot, devices
+ * without image-based light draw the same softboxes analytically, and the
+ * renderer's own quality tiers drop the per-pixel cost for huge scenes.
+ * `atomCount` stays in the signature for callers and URL compatibility. */
 export function sceneLookPatch(id: SceneLookId, atomCount: number) {
-  const large = atomCount >= 25_000;
+  void atomCount;
+  const post = POSTPROCESS_PRESETS[LOOK_POSTPROCESS];
   return {
     backgroundPreset: id === 'paper' ? 'white' : id === 'night' ? 'slate' : id === 'prism' ? 'midnight' : 'sage-plate',
     backgroundStyle: 'radial',
@@ -27,8 +39,8 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
     materialScene: 'specimen',
     materialPreset: id === 'prism' ? 'metallic' : 'plastic',
     materialIntensity: id === 'prism' ? 0.6 : 0.35,
-    environmentPreset: large ? 'none' : 'softbox',
-    postprocessPreset: large ? 'diagram' : 'paper',
+    environmentPreset: 'softbox',
+    postprocessPreset: LOOK_POSTPROCESS,
     postprocessIntensity: 0.9,
     effectOverrides: null,
     filterShellShape: id === 'prism' ? 'sphere' : 'off',
@@ -37,7 +49,8 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
     filterShellRadius: 1.08,
     ambientLightIntensity: id === 'paper' ? 0.85 : id === 'night' ? 0.4 : 0.6,
     dirLightIntensity: id === 'night' ? 1.65 : 1.35,
-    rimLightIntensity: id === 'night' ? 0.4 : 0.25,
+    // A gentle rim on every Look; Night leans on it.
+    rimLightIntensity: id === 'night' ? 0.42 : 0.22,
     surfaceRoughness: 0.06,
     surfacePolish: 0.16,
     surfaceClearcoat: 0.12,
@@ -50,11 +63,12 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
     rimLightElevation: 30,
     fillLightColor: id === 'prism' ? '#bda9ff' : '#dfe8ef',
     rimLightColor: id === 'prism' ? '#76efff' : '#ffffff',
-    toneMapping: large ? 'none' : 'aces',
-    ssao: !large,
-    bloom: false,
-    dof: false,
-    autoDepthOfField: false,
+    // Legacy mirrors of the recipe (PresetLegacyBridge keeps them in sync).
+    toneMapping: post.toneMapping,
+    ssao: post.ssao.enabled,
+    bloom: post.bloom.enabled,
+    dof: post.dof.enabled,
+    autoDepthOfField: post.dof.auto,
   } satisfies Partial<AppState>;
 }
 

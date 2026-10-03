@@ -2,13 +2,16 @@
  * PlayPill — the one floating pill: [● Play] [status] [stow].
  *
  * - **Play** opens the Play tray (so do `P`, a right click on empty canvas
- *   and the palette's "Open Play", all through `play.toggleTray`). With Poke
- *   latched it reads "Poke ×"; the × goes back to Orbit.
+ *   and the palette's "Open Play", all through `play.toggleTray`). With a
+ *   verb latched it reads "Poke ×", "Tug ×", "Burst ×" or "Heat ×"; the ×
+ *   goes back to Orbit. Latching a verb flashes one line on what it does.
  * - **Status** (`role="status"`), in precedence order:
  *   1. "Illustrative · Reset" while display-only motion has atoms away from
- *      their rest positions (ripple and scatter hold 1.5 s after they end;
- *      the arrival shows only while it runs). The first toy of a session
- *      spells it out: "Illustrative motion, your atoms haven't moved".
+ *      their rest positions (ripple, scatter, tug, burst and heat hold 1.5 s
+ *      after they end; the arrival shows only while it runs). The first toy
+ *      of a session spells it out: "Illustrative motion, your atoms haven't
+ *      moved". While atoms are warm a small thermometer reads the Heat level
+ *      as an illustrative temperature (300 K at rest).
  *   2. a flash (detent label, "Caught", "Flip!") until it expires;
  *   3. the teaching line on a first visit, from the file's first frame
  *      until the first gesture, an atom tap or 10 s later. It waits for
@@ -21,8 +24,9 @@
  *   `aria-label` "Stow viewer controls" / "Restore viewer controls",
  *   `aria-pressed`, and "Clear view" / "Restore" (icon only on a phone).
  *
- * Poke auto-unlatches after 30 s without a stroke, on a file change and
- * under Motion: Still. While latched the viewport gets a thin lime inset.
+ * A latched verb auto-unlatches after 30 s without a stroke, press or tap,
+ * on a file change and under Motion: Still. While latched the viewport gets
+ * a thin lime inset (warm while Heat is held).
  */
 import { useCallback, useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { emitIntent, isCanvasInputSourceActive, onIntent } from '@atlas/scene';
@@ -32,7 +36,7 @@ import { MOBILE_MEDIA_QUERY } from '../hooks/useMediaQuery';
 import { useComfort } from '../motion/comfort';
 import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { cue } from './feedback';
-import { playStore, usePlayStore } from './playStore';
+import { PLAY_VERB_LABEL, heatKelvin, playStore, playVerbHint, usePlayStore } from './playStore';
 import { PlayTray } from './PlayTray';
 import './playPill.css';
 
@@ -47,8 +51,10 @@ const STATUS_MIN_MS = 1000;
 const TOY_HOLD_MS = 1500;
 /** The teaching line starts at the first frame and shows at most this long (ms). */
 const TEACH_MS = 10_000;
-/** Poke unlatches after this long without a stroke (ms). */
-const POKE_IDLE_MS = 30_000;
+/** A latched verb unlatches after this long without a stroke, press or tap (ms). */
+const VERB_IDLE_MS = 30_000;
+/** The line that says what a just-latched verb does stays this long (ms). */
+const VERB_HINT_MS = 2600;
 const LONG_FORM_KEY = 'lupi.play.illustrativeSeen';
 const SHORT_LABEL = 'Illustrative';
 const LONG_LABEL = 'Illustrative motion, your atoms haven’t moved';
@@ -222,6 +228,32 @@ function useTeachDeadline(): number | null {
   return deadline;
 }
 
+/** The Heat readout: a tiny thermometer and an illustrative temperature. */
+function HeatReadout() {
+  const level = usePlayStore((state) => state.heat);
+  const heating = usePlayStore((state) => state.heating);
+  if (!(level > 0)) return null;
+  const kelvin = heatKelvin(level);
+  // The bulb fills from the bottom; the column runs y 3 → 11.
+  const fill = Math.max(0.08, Math.min(1, level));
+  const top = 11 - 8 * fill;
+  return (
+    <span
+      className="lupi-play-pill__heat"
+      data-heating={heating || undefined}
+      title="Illustrative heat: the jiggle grows the longer you hold. Not a simulation."
+      aria-hidden="true"
+    >
+      <svg className="lupi-play-pill__heat-icon" viewBox="0 0 12 20" width="9" height="15">
+        <rect x="3.6" y="1.5" width="4.8" height="12.5" rx="2.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <rect x="5" y={top} width="2" height={13 - top} rx="1" fill="var(--lupi-heat-fill, #ff9a4a)" />
+        <circle cx="6" cy="15.6" r="3.2" fill="var(--lupi-heat-fill, #ff9a4a)" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+      <span className="lupi-play-pill__heat-k">{kelvin.toLocaleString('en-US')} K</span>
+    </span>
+  );
+}
+
 function StowIcon({ stowed }: { stowed: boolean }) {
   return (
     <svg className="lupi-play-pill__stow-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
@@ -320,24 +352,40 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
     return () => clearTimeout(timer);
   }, [teachDeadline]);
 
-  // Poke unlatches after 30 s without a stroke, under Still, on a new file,
-  // and when the viewer closes.
+  // A latched verb unlatches after 30 s without a stroke, press or tap,
+  // under Still, on a new file, and when the viewer closes.
   useEffect(() => {
-    if (verb !== 'poke') return undefined;
+    if (verb === 'orbit') return undefined;
     const unlatch = () => playStore.getState().setVerb('orbit');
-    let timer = setTimeout(unlatch, POKE_IDLE_MS);
-    const off = onIntent('verb.stroke', () => {
+    let timer = setTimeout(unlatch, VERB_IDLE_MS);
+    const keep = () => {
       clearTimeout(timer);
-      timer = setTimeout(unlatch, POKE_IDLE_MS);
-    });
+      timer = setTimeout(unlatch, VERB_IDLE_MS);
+    };
+    const offs = [
+      onIntent('verb.stroke', keep),
+      onIntent('verb.press', keep),
+      onIntent('verb.tap', keep),
+      onIntent('canvas.tap', keep),
+    ];
     return () => {
       clearTimeout(timer);
-      off();
+      for (const off of offs) off();
     };
   }, [verb]);
   useEffect(() => {
-    if (comfort === 'still' && verb === 'poke') playStore.getState().setVerb('orbit');
+    if (comfort === 'still' && verb !== 'orbit') playStore.getState().setVerb('orbit');
   }, [comfort, verb]);
+
+  // Latching a verb says, once, what one finger does now.
+  const touchRef = useRef(false);
+  touchRef.current = isMobile || coarse;
+  useEffect(() => {
+    if (verb === 'orbit') return;
+    const play = playStore.getState();
+    play.markTeachSeen();
+    play.flashText(playVerbHint(verb, touchRef.current), 'info', VERB_HINT_MS);
+  }, [verb]);
   useEffect(
     () => useStore.subscribe(
       (state) => state.file,
@@ -354,14 +402,26 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
     [],
   );
 
-  // The thin lime inset edge on the viewport while Poke is latched.
+  // The thin lime inset edge on the viewport while a verb is latched
+  // (`data-poke` stays for Poke; `data-play-verb` names any verb).
+  const heating = usePlayStore((state) => state.heating);
   useEffect(() => {
-    if (verb !== 'poke') return undefined;
+    if (verb === 'orbit') return undefined;
     const viewport = document.querySelector<HTMLElement>('.lupine-main-viewport');
     if (!viewport) return undefined;
-    viewport.setAttribute('data-poke', '');
-    return () => viewport.removeAttribute('data-poke');
+    viewport.setAttribute('data-play-verb', verb);
+    if (verb === 'poke') viewport.setAttribute('data-poke', '');
+    return () => {
+      viewport.removeAttribute('data-play-verb');
+      viewport.removeAttribute('data-poke');
+    };
   }, [verb, file]);
+  useEffect(() => {
+    if (!heating) return undefined;
+    const viewport = document.querySelector<HTMLElement>('.lupine-main-viewport');
+    viewport?.setAttribute('data-heating', '');
+    return () => viewport?.removeAttribute('data-heating');
+  }, [heating, file]);
 
   const resetMotion = () => {
     emitIntent({ type: 'play.reset' });
@@ -369,6 +429,8 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
   };
 
   const poke = verb === 'poke';
+  const latched = verb !== 'orbit';
+  const verbLabel = PLAY_VERB_LABEL[verb];
   return (
     <div
       className="lupi-play-pill"
@@ -380,7 +442,7 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
       aria-label="Toys and view"
     >
       {!uiStowed && (
-        <div className="lupi-play-pill__play" data-poke={poke || undefined}>
+        <div className="lupi-play-pill__play" data-poke={poke || undefined} data-latched={latched || undefined}>
           <button
             ref={playRef}
             type="button"
@@ -393,13 +455,13 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
             onClick={() => (playStore.getState().trayOpen ? closeTray() : openTray())}
           >
             <span className="lupi-play-pill__dot" aria-hidden="true" />
-            <span className="lupi-play-pill__play-label">{poke ? 'Poke' : 'Play'}</span>
+            <span className="lupi-play-pill__play-label">{latched ? verbLabel : 'Play'}</span>
           </button>
-          {poke && (
+          {latched && (
             <button
               type="button"
               className="lupi-play-pill__unlatch"
-              aria-label="Stop Poke (one finger orbits again)"
+              aria-label={`Stop ${verbLabel} (one finger orbits again)`}
               title="Back to Orbit"
               onClick={() => playStore.getState().setVerb('orbit')}
             >
@@ -420,6 +482,7 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
         </span>
         {status.kind === 'displaced' && (
           <>
+            <HeatReadout />
             <span className="lupi-play-pill__sep" aria-hidden="true">
               ·
             </span>

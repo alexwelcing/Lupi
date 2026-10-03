@@ -47,7 +47,7 @@ export function sanitizeEffectOverrides(input: unknown): EffectOverrides | null 
   for (const [key, max] of [['shadowStrength', 4], ['glowStrength', 4], ['focusDistance', 10000], ['vignetteStrength', 1]] as const) {
     if (typeof value[key] === 'number' && Number.isFinite(value[key])) result[key] = Math.max(0, Math.min(max, value[key]));
   }
-  if (value.toneMapping === 'aces' || value.toneMapping === 'reinhard' || value.toneMapping === 'none') result.toneMapping = value.toneMapping;
+  if (value.toneMapping === 'aces' || value.toneMapping === 'reinhard' || value.toneMapping === 'neutral' || value.toneMapping === 'none') result.toneMapping = value.toneMapping;
   return result;
 }
 

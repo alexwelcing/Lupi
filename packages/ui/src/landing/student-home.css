@@ -591,7 +591,8 @@
   display: grid;
   gap: 2px;
 }
-.finder-results button {
+.finder-results button,
+.finder-results .finder-row {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -604,11 +605,18 @@
   text-align: left;
   cursor: pointer;
 }
+.finder-results .finder-row {
+  box-sizing: border-box;
+  text-decoration: none;
+}
 .finder-results li.is-active button,
-.finder-results button:hover {
+.finder-results button:hover,
+.finder-results li.is-active .finder-row,
+.finder-results .finder-row:hover {
   background: #ffffff12;
 }
-.finder-results button:disabled {
+.finder-results button:disabled,
+.finder-results .finder-row[aria-disabled='true'] {
   cursor: progress;
   opacity: 0.7;
 }

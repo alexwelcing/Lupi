@@ -14,3 +14,6 @@ unless otherwise noted.
 
 Third-party dependencies and imported scientific data retain their upstream
 licenses.
+
+The environment HDRIs in `apps/web/public/hdri/` are from Poly Haven and are
+CC0 1.0 (public domain); see `apps/web/public/hdri/NOTICE.md`.

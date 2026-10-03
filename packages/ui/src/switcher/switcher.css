@@ -259,10 +259,19 @@
 .switcher-stage[data-compact='true'] .scan-stage,
 .switcher-stage[data-compact='true'] .gist-stage,
 .switcher-stage[data-compact='true'] .scan-photo--empty {
-  height: 150px;
+  height: 164px;
 }
+/* Phone: the stage is the whole width and nothing sits on it; the
+   conclusion is a caption strip underneath, one card with the stage. */
 .switcher-stage[data-compact='true'][data-on='true'] {
-  max-height: 180px;
+  max-height: 236px;
+}
+.switcher-stage[data-compact='true'] .gist-stage {
+  border: 0;
+  border-radius: 0;
+}
+.switcher-stage[data-compact='true'] .gist-caption {
+  border-top: 1px solid var(--sw-line);
 }
 
 /* Organize bar: filters, the facet picker, and the sort. */

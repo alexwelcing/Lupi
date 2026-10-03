@@ -9,7 +9,9 @@
  * BOND_IMPOSTOR_FRAGMENT (bondImpostor.ts before the port):
  * - the `uProgress` GPU lerp between two endpoint buffers per end;
  * - the display-motion offset (tsl/displayMotion.ts) on both ends, the same
- *   closed form and seed as the atoms, so bonds follow them;
+ *   closed form and seed as the atoms, so bonds follow them; a bond the toys
+ *   stretch thins like taffy and glows lime with the strain (a compressed
+ *   one thickens a little), exactly as at rest while the motion is off;
  * - the two-tone split at the geometric midpoint;
  * - the distance fade (`uBondFadeStart`/`uBondFadeEnd`) times `uOpacity`;
  * - degenerate, sub-pixel and fully faded bonds collapse to a degenerate
@@ -34,14 +36,17 @@ import * as THREE from 'three/webgpu';
 import type { UniformNode } from 'three/webgpu';
 import {
   Fn,
+  If,
   abs,
   attribute,
   cameraProjectionMatrix,
+  clamp,
   cross,
   dot,
   float,
   length,
   max,
+  min,
   mix,
   modelViewMatrix,
   normalize,
@@ -50,19 +55,22 @@ import {
   screenSize,
   select,
   smoothstep,
+  sqrt,
   uniform,
   varying,
   vec3,
   vec4,
 } from 'three/tsl';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
-import { lupiDisplayOffset } from './displayMotion';
+import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
+import { ATOM_GLOW } from './atomGlow';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
   lupiSurface,
   orthographicFlag,
   rayCappedCylinder,
+  sphereOcclusion,
   viewRay,
   type LupiEnvBinding,
   type LupiLightUniforms,
@@ -120,6 +128,12 @@ export interface BondImpostorUniforms extends LupiUniformBag {
   uBondFadeEnd: UniformNode<'float', number>;
   /** Bonds projecting under this many device pixels are culled. */
   uCullPixelRadius: UniformNode<'float', number>;
+  /**
+   * Radius of the atom spheres at the bond ends, for junction occlusion (the
+   * stick darkens where it enters the ball). 0 disables it.
+   */
+  uJunctionRadius: UniformNode<'float', number>;
+  uJunctionStrength: UniformNode<'float', number>;
 }
 
 /** The uniform bag shared by every tier's material of one bond layer (v9 defaults). */
@@ -135,6 +149,8 @@ export function createBondImpostorUniforms(): BondImpostorUniforms {
     uBondFadeStart: uniform(BOND_FADE_START),
     uBondFadeEnd: uniform(BOND_FADE_END),
     uCullPixelRadius: uniform(0),
+    uJunctionRadius: uniform(0),
+    uJunctionStrength: uniform(0),
   };
 }
 
@@ -180,7 +196,14 @@ export function createBondImpostorMaterial({
   const viewB: N = modelViewMatrix.mul(vec4(b, 1.0)).xyz;
   const axis: N = viewB.sub(viewA);
   const len: N = length(axis);
-  const radius: N = attribute(BOND_ATTR.radius, 'float');
+  // Strain under display motion (stretched > 0): the bond thins as 1/√(1+ε)
+  // (taffy keeps its volume) and glows with tension. With the motion off
+  // (at rest, every capture) it is exactly 0 and the radius exactly as set.
+  const motionLive: N = (DISPLAY_MOTION.uMotionWeight as N).greaterThan(0);
+  const restLen: N = length(restB.sub(restA));
+  const strain: N = select(motionLive, length(b.sub(a)).div(max(restLen, 1e-4)).sub(1), float(0));
+  const thin: N = select(motionLive, clamp(float(1).div(sqrt(max(strain.add(1), 0.05))), 0.45, 1.3), float(1));
+  const radius: N = attribute(BOND_ATTR.radius, 'float').mul(thin);
   const mid: N = viewA.add(viewB).mul(0.5);
   const viewDepth: N = max(mid.z.negate(), 1e-4);
   // Device pixels per world unit at unit depth: |P[1][1]| × target height / 2.
@@ -215,6 +238,7 @@ export function createBondImpostorMaterial({
   const vColorA: N = varying(sRGBTransferEOTF(attribute(BOND_ATTR.colorStart, 'vec4').rgb), 'vBondColorA');
   const vColorB: N = varying(sRGBTransferEOTF(attribute(BOND_ATTR.colorEnd, 'vec4').rgb), 'vBondColorB');
   const vPixelRadius: N = varying(pixelRadius, 'vBondPixelRadius');
+  const vStrain: N = varying(strain, 'vBondStrain');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // Distance fade (LOD): far bonds thin out before the vertex cull drops them.
@@ -248,6 +272,14 @@ export function createBondImpostorMaterial({
     const normal = (cappedCylinderNormal(hit, vA, vB) as N).toVar();
     // Two-tone split at the geometric midpoint.
     const baseColor = select(axial.lessThan(segLen.mul(0.5)), vColorA, vColorB).toVar();
+    // Junction occlusion: the end atoms as spheres around the hit point.
+    const junction = float(1).toVar();
+    If(u.uJunctionRadius.greaterThan(0.0).and(u.uJunctionStrength.greaterThan(0.0)), () => {
+      const p = hit.xyz.toVar();
+      const occ = (sphereOcclusion(p, normal, vA, u.uJunctionRadius) as N)
+        .add(sphereOcclusion(p, normal, vB, u.uJunctionRadius));
+      junction.assign(float(1).sub(min(occ.mul(u.uJunctionStrength), 0.82)));
+    });
     const lit = (lupiSurface(
       {
         normal,
@@ -256,9 +288,10 @@ export function createBondImpostorMaterial({
         roughness: u.uRoughness.add(u.uSurfaceRoughness),
         clearcoat: u.uSurfaceClearcoat,
         polish: u.uSurfacePolish,
-        occlusion: float(1),
-        occlusionStrength: float(0),
-        emission: vec3(0),
+        occlusion: junction,
+        occlusionStrength: float(1),
+        // Tension glow (lime): zero unless display motion stretches the bond.
+        emission: vec3(ATOM_GLOW.uGlowColor as N).mul(smoothstep(0.03, 0.4, vStrain).mul(0.75)),
         pixelRadius: vPixelRadius,
         subsurface: float(0),
       },

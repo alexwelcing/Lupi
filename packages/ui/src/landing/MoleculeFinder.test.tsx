@@ -79,7 +79,7 @@ describe('MoleculeWall', () => {
   afterEach(cleanup);
   it('renders a plain link per molecule and expands to the whole set', () => {
     render(<MoleculeWall />);
-    expect(screen.getByRole('link', { name: 'Open Caffeine' }).getAttribute('href')).toBe('/?sim=caffeine');
+    expect(screen.getByRole('link', { name: 'Open Caffeine' }).getAttribute('href')).toBe('/m/caffeine');
     expect(screen.getAllByRole('link').length).toBeLessThan(LOCAL_MOLECULES.length);
     fireEvent.click(screen.getByRole('button', { name: /Show all/ }));
     expect(screen.getAllByRole('link')).toHaveLength(LOCAL_MOLECULES.length);

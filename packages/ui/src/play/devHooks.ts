@@ -2,19 +2,27 @@
  * devHooks.ts — `window.__lupiPlay`, the Play layer's handle for local smoke
  * plugins and agents (installed in production too, like __lupiViewerMcp).
  *
- *   __lupiPlay.state()  → { verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame }
+ *   __lupiPlay.state()  → { verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame,
+ *                           frames, frameDemand }
+ *     `frames` counts the frames the viewer has drawn: read it twice a few
+ *     seconds apart on a still view and it should not move (Quiet Idle).
+ *     `frameDemand` says what is keeping the loop awake (`awakeBy`).
  *   __lupiPlay.reset()  → emits play.reset (a registered 'reset' hook replaces this default)
  *   __lupiPlay.emit(intent) → emits any intent, exactly as the UI would (lets a
  *                         smoke plugin drive Scatter, Spin or a stroke before
  *                         the pill that emits it exists)
  *   __lupiPlay.poke/flick/catch/scatter/stepDetent(...) once their owner registers them
+ *   __lupiPlay.burst(atomIndex), .tug(atomIndex, [dx, dy, dz], holdMs), .heat(level)
+ *                         the Play verbs' toys, driven without a pointer
+ *   __lupiPlay.viewInset() → { current, target, occluder }: the phone atom card's
+ *                         view shift (CSS px, down), once the viewer registers it
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
  *
  * Contract file: additive edits only.
  */
-import { emitIntent, type LupiIntent } from '@atlas/scene';
+import { emitIntent, lupiFrameStats, type LupiFrameStats, type LupiIntent } from '@atlas/scene';
 import { useStore } from '../store';
 import { getComfort, type Comfort } from '../motion/comfort';
 import { getCameraRig, type Vec3 } from '../camera/rigApi';
@@ -29,7 +37,12 @@ export type PlayDevHookName =
   | 'catch'
   | 'scatter'
   | 'stepDetent'
-  | 'reset';
+  | 'reset'
+  | 'frames'
+  | 'burst'
+  | 'tug'
+  | 'heat'
+  | 'viewInset';
 
 export interface PlayRigState {
   position: Vec3;
@@ -43,6 +56,11 @@ export interface PlayMotionState {
   weight: number;
 }
 
+export interface PlayFrameDemandState extends LupiFrameStats {
+  /** The viewer canvas's frameloop ('demand' unless `?frameloop=always`); null without a canvas. */
+  frameloop: string | null;
+}
+
 export interface LupiPlayState {
   verb: PlayVerb;
   trayOpen: boolean;
@@ -52,6 +70,9 @@ export interface LupiPlayState {
   rig: PlayRigState | null;
   motion: PlayMotionState | null;
   firstFrame: boolean;
+  /** Frames the viewer has drawn since the page loaded. */
+  frames: number;
+  frameDemand: PlayFrameDemandState;
 }
 
 type DevHook = (...args: any[]) => any;
@@ -65,6 +86,10 @@ export interface LupiPlayDevApi {
   catch?: DevHook;
   scatter?: DevHook;
   stepDetent?: DevHook;
+  burst?: DevHook;
+  tug?: DevHook;
+  heat?: DevHook;
+  viewInset?: DevHook;
 }
 
 declare global {
@@ -74,8 +99,8 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent'];
+type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset';
+const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset'];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 
@@ -116,6 +141,8 @@ export function readPlayState(): LupiPlayState {
     rig: readRig(),
     motion: callHook<PlayMotionState>('motion'),
     firstFrame: trajectory ? hasFirstFrame(trajectory) : false,
+    frames: lupiFrameStats().rendered,
+    frameDemand: callHook<PlayFrameDemandState>('frames') ?? { ...lupiFrameStats(), frameloop: null },
   };
 }
 

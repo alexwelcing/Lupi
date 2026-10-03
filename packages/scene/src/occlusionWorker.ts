@@ -10,6 +10,9 @@
  *   in : { kind: 'occlusion', requestId, positions (transferred), natoms, radius }
  *   out: { kind: 'occlusion', requestId, occlusion: Uint8Array (transferred), referenceDensity }
  *
+ *   in : { kind: 'contact', requestId, positions (transferred), natoms, range }
+ *   out: { kind: 'contact', requestId, contact: ContactOcclusionBake (typed arrays transferred) }
+ *
  *   in : { kind: 'clusters', requestId, positions, types (transferred), natoms,
  *          boxBounds, typeSemantics, distanceSemantics, mobile, hiddenAtomTypes }
  *   out: { kind: 'clusters', requestId, clusters: Clusters (typed arrays transferred) }
@@ -17,6 +20,7 @@
 
 import type { Frame } from '@atlas/core/types';
 import { computeAtomOcclusion } from './atomOcclusion';
+import { computeContactOcclusion } from './atomContactOcclusion';
 import { buildClusters } from './ClusterBuilder';
 
 interface OcclusionRequest {
@@ -40,12 +44,28 @@ interface ClusterRequest {
   hiddenAtomTypes: number[];
 }
 
-type SceneAnalysisRequest = OcclusionRequest | ClusterRequest;
+interface ContactRequest {
+  kind: 'contact';
+  requestId: number;
+  positions: Float32Array;
+  natoms: number;
+  range: number;
+}
+
+type SceneAnalysisRequest = OcclusionRequest | ClusterRequest | ContactRequest;
 
 const post = (self as unknown as { postMessage(message: unknown, transfer: ArrayBuffer[]): void }).postMessage.bind(self);
 
 self.onmessage = (event: MessageEvent<SceneAnalysisRequest>) => {
   const request = event.data;
+  if (request.kind === 'contact') {
+    const contact = computeContactOcclusion({ positions: request.positions, natoms: request.natoms, range: request.range });
+    post(
+      { kind: 'contact', requestId: request.requestId, contact },
+      [contact.neighbors.buffer as ArrayBuffer, contact.offsets.buffer as ArrayBuffer],
+    );
+    return;
+  }
   if (request.kind === 'clusters') {
     const frame = {
       timestep: 0,

@@ -11,6 +11,35 @@ import { float, instancedBufferAttribute } from 'three/tsl';
 import type { ProceduralBackgroundVariant } from './backgroundPresets';
 import { SKY_VARIANT_INDEX as VARIANT_INDEX, createSkyMaterial, skyUniforms } from './tsl/skyMaterial';
 import { LUPI_BACKGROUND_MATERIAL_KEY, markBackgroundMaterial } from './postprocess/backgroundMask';
+import { keepLupiAwake } from '@atlas/scene';
+import { useComfort } from './motion/comfort';
+
+/**
+ * Quiet Idle: a drifting background is ambient motion. While it drifts the
+ * demand frameloop keeps drawing, at the ambient cadence (24 fps) when
+ * nothing else moves. Motion "Still" holds it, like every motion nobody asked for.
+ */
+function useBackgroundDrift(name: string, visible: boolean, paused: boolean, speed: number): boolean {
+  const still = useComfort() === 'still';
+  const drifting = visible && !paused && !still && speed !== 0;
+  useEffect(
+    () => (drifting ? keepLupiAwake(name, () => true, { ambient: true }) : undefined),
+    [drifting, name],
+  );
+  return drifting;
+}
+
+/**
+ * Seconds the drift advanced since the last drawn frame, by the wall clock
+ * (at most 0.1 s): ambient frames come at 24 fps and fiber clamps the delta
+ * after its loop sleeps, so the frame delta would slow the drift down.
+ */
+function driftStep(clock: { last: number }, drifting: boolean): number {
+  const now = performance.now();
+  const step = drifting && clock.last >= 0 ? Math.min(0.1, Math.max(0, (now - clock.last) / 1000)) : 0;
+  clock.last = drifting ? now : -1;
+  return step;
+}
 
 /** The field's line materials are background too (postprocess/backgroundMask.ts). */
 const BACKGROUND_MATERIAL_USER_DATA = { [LUPI_BACKGROUND_MATERIAL_KEY]: true };
@@ -207,8 +236,11 @@ export function ProceduralBackground({ variant, top, bottom, visible = true, pau
     bag.uBottom.value.set(bottom);
   }, [bottom, material, top]);
 
-  useFrame((state, delta) => {
-    if (!paused && visible) time.current += Math.min(delta, .1) * speed;
+  const drifting = useBackgroundDrift('background-sky', visible, paused, speed);
+  const clock = useRef({ last: -1 });
+
+  useFrame((state) => {
+    time.current += driftStep(clock.current, drifting) * speed;
     skyUniforms(material).uTime.value = time.current;
     meshRef.current?.position.copy(state.camera.position);
   });
@@ -264,8 +296,11 @@ export function ProceduralMathField({ variant, center, radius, visible = true, p
 
   useEffect(() => () => pointMaterial.dispose(), [pointMaterial]);
 
-  useFrame((_state, delta) => {
-    if (!paused && visible) time.current += Math.min(delta, .1) * speed;
+  const drifting = useBackgroundDrift('background-field', visible, paused, speed);
+  const clock = useRef({ last: -1 });
+
+  useFrame(() => {
+    time.current += driftStep(clock.current, drifting) * speed;
     const t = time.current;
     const index = VARIANT_INDEX[variant] ?? 0;
     if (groupRef.current) {

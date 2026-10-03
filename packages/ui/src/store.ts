@@ -226,7 +226,7 @@ function sanitizeBackgroundStyle(value: unknown): AppState['backgroundStyle'] {
 }
 
 function sanitizeToneMapping(value: unknown): AppState['toneMapping'] {
-  return value === 'none' || value === 'aces' || value === 'reinhard' ? value : 'aces';
+  return value === 'none' || value === 'aces' || value === 'reinhard' || value === 'neutral' ? value : 'aces';
 }
 
 function sanitizeAtomTexture(value: unknown): AppState['atomTexture'] {
@@ -500,7 +500,7 @@ export interface AppState {
   dof: boolean;
   autoDepthOfField: boolean;
   dofFocus: number;
-  toneMapping: 'none' | 'aces' | 'reinhard';
+  toneMapping: 'none' | 'aces' | 'reinhard' | 'neutral';
   antialiasing: 'none' | 'fxaa' | 'msaa4x' | 'smaa';
 
   // ─── Playback ───
@@ -724,7 +724,7 @@ export interface AppState {
   setSSAOIntensity: (v: number) => void;
   setBloomIntensity: (v: number) => void;
   setDOFFocus: (v: number) => void;
-  setToneMapping: (mode: 'none' | 'aces' | 'reinhard') => void;
+  setToneMapping: (mode: 'none' | 'aces' | 'reinhard' | 'neutral') => void;
   toggleCell: () => void;
   toggleAxes: () => void;
   toggleBonds: () => void;

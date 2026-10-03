@@ -58,6 +58,12 @@ import {
   syncLupiEnvBinding,
 } from './tsl/impostorKit';
 import {
+  CONTACT_TEXTURE_WIDTH,
+  contactTextureRows,
+  writeContactTexture,
+  type ContactOcclusionBake,
+} from './atomContactOcclusion';
+import {
   ATOM_ATTR,
   ATOM_DATA_OCCLUSION,
   ATOM_DATA_PROP_HI,
@@ -67,11 +73,13 @@ import {
   ATOM_IMPOSTOR_QUAD_SCALE,
   createAtomImpostorMaterial,
   createAtomImpostorUniforms,
+  emptyContactTexture,
   emptyEtchTexture,
   quantizeAtomProp,
   type AtomImpostorTextures,
   type AtomImpostorUniforms,
 } from './tsl/atomImpostorMaterial';
+import { useLupiCommitFrames } from './frameDemand';
 
 // ─── Types ───────────────────────────────────────────────────────────
 export type AtomQualityTier = 0 | 1 | 2;
@@ -151,6 +159,23 @@ interface AtomsOptimizedProps {
   occlusion?: Uint8Array | null;
   /** How strongly per-atom occlusion darkens ambient/environment light. */
   occlusionStrength?: number;
+  /**
+   * The contact-occlusion neighbour bake (atomContactOcclusion.ts) for this
+   * frame's atoms, or null. Shaded per pixel as analytic sphere occlusion.
+   */
+  contactOcclusion?: ContactOcclusionBake | null;
+  /** Gain on the summed contact occlusion (0 disables it). */
+  contactOcclusionStrength?: number;
+  /** Bond radius when bonds are drawn (0 when hidden): stubs darken where sticks meet balls. */
+  bondStubRadius?: number;
+  /** Neighbours nearer than this carry a bond stub (the bond cutoff). */
+  bondStubReach?: number;
+  /**
+   * True while an occlusion bake for this frame is still computing. The layer
+   * withholds its artifact receipt meanwhile, so a deterministic export never
+   * captures a half-baked look (the export timeout is the fail-closed bound).
+   */
+  occlusionPending?: boolean;
 }
 
 interface ScalarMaterialUniforms {
@@ -511,6 +536,9 @@ function capacityHeadroom(atomCount: number): number {
   return atomCount > 2_000_000 ? 1.05 : 1.2;
 }
 
+/** Default gain on contact occlusion (the Contact look; tuned for CPK on sage). */
+export const DEFAULT_CONTACT_OCCLUSION_STRENGTH = 1.4;
+
 export const LUPI_ARTIFACT_LAYER_KEY = 'lupiArtifactLayer';
 export const LUPI_ARTIFACT_ATOMS_LAYER = 'atoms';
 export const LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY = 'lupiAppliedArtifactSpecId';
@@ -540,6 +568,7 @@ export function createAtomImpostorResources(): AtomImpostorResources {
     radiusPalette: buildRadiusPaletteTexture(() => 0),
     materialPalette: buildMaterialPaletteTexture(),
     etch: null,
+    contact: null,
   };
   return {
     textures,
@@ -583,6 +612,10 @@ export function atomMaterialForTier(
  */
 export function disposeAtomImpostorResources(resources: AtomImpostorResources): void {
   for (const material of resources.materials.values()) material.dispose();
+  resources.textures.contact?.dispose();
+  resources.textures.contact = null;
+  resources.uniforms.tContactTexture.value = emptyContactTexture();
+  resources.uniforms.uHasContact.value = 0;
   disposeOwnedMaterialTextures(
     resources.uniforms as unknown as Record<string, { value?: { dispose?: () => void } | null }>,
   );
@@ -631,12 +664,20 @@ export function AtomsOptimized({
   cullPixelRadius = 0,
   occlusion = null,
   occlusionStrength = 0.55,
+  contactOcclusion = null,
+  contactOcclusionStrength = DEFAULT_CONTACT_OCCLUSION_STRENGTH,
+  bondStubRadius = 0,
+  bondStubReach = 0,
+  occlusionPending = false,
 }: AtomsOptimizedProps) {
+  // Imperative uniform/attribute writes on commit (and async results) get drawn.
+  useLupiCommitFrames();
   void highlightedAtoms;
   const meshRef = useRef<THREE.Mesh>(null!);
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
   const atomCountRef = useRef(0);
   const scene = useThree((state) => state.scene);
+  const invalidate = useThree((state) => state.invalidate);
   const uniformsJobId = `${LUPI_JOB.atomsUniforms}:${useId()}`;
 
   // Large-scene callers intentionally remove the picking callback. Release
@@ -817,6 +858,11 @@ export function AtomsOptimized({
     u.uOcclusionStrength.value = occlusion
       ? Math.max(0, Math.min(1, occlusionStrength))
       : 0;
+    u.uContactStrength.value = Number.isFinite(contactOcclusionStrength)
+      ? Math.max(0, Math.min(4, contactOcclusionStrength))
+      : 0;
+    u.uBondStubRadius.value = Number.isFinite(bondStubRadius) ? Math.max(0, bondStubRadius) : 0;
+    u.uBondStubReach.value = Number.isFinite(bondStubReach) ? Math.max(0, bondStubReach) : 0;
 
     lights.fillLightColor.value.set(fillLightColor);
     lights.rimLightColor.value.set(rimLightColor);
@@ -853,7 +899,7 @@ export function AtomsOptimized({
       (slot) => typeRenderTable.entries[slot]?.atomicNumber,
     );
     writeColormapTexture(resources.textures.colormap, mapFn);
-  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, resources, typeRenderTable, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, cullPixelRadius, occlusion, occlusionStrength]);
+  }, [colorMode, colormap, mapFn, uniformColor, elementColorOverrides, atomColorSource, resources, typeRenderTable, atomTexture, materialPreset, propertyEmissionStrength, etchTexture, etchAtomId, materialIntensity, rimLightIntensity, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, cullPixelRadius, occlusion, occlusionStrength, contactOcclusionStrength, bondStubRadius, bondStubReach]);
 
   // ─── Radius palette: scale / visibility / per-type scale ──────────
   // A 1 KB texture upload replaces an O(n) instance rewrite whenever the user
@@ -1107,15 +1153,65 @@ export function AtomsOptimized({
     return uploadFrame();
   }, [uploadFrame]);
 
+  // ─── Contact occlusion: the neighbour texture ─────────────────────
+  // Rewritten only when the bake, the atoms' type slots or the count change;
+  // radius, scale and hidden types reach the shader through the radius
+  // palette, so they never touch it. Runs after the frame upload (same
+  // commit), so an export never sees a new frame with an old bake.
+  const contactTypes = frame.types;
+  useLayoutEffect(() => {
+    const u = resources.uniforms;
+    const count = Math.min(renderAtomCount, capacity, frame.natoms);
+    if (!contactOcclusion || contactOcclusion.natoms !== frame.natoms || count < 2) {
+      u.uHasContact.value = 0;
+      return;
+    }
+    const rows = contactTextureRows(count);
+    let contactTexture = resources.textures.contact ?? null;
+    if (!contactTexture || contactTexture.image.height !== rows) {
+      contactTexture?.dispose();
+      contactTexture = new THREE.DataTexture(
+        new Uint8Array(CONTACT_TEXTURE_WIDTH * rows * 4),
+        CONTACT_TEXTURE_WIDTH,
+        rows,
+        THREE.RGBAFormat,
+        THREE.UnsignedByteType,
+      );
+      // Offsets and slots are data: no colour decode, no filtering.
+      contactTexture.colorSpace = THREE.NoColorSpace;
+      contactTexture.minFilter = THREE.NearestFilter;
+      contactTexture.magFilter = THREE.NearestFilter;
+      contactTexture.generateMipmaps = false;
+      resources.textures.contact = contactTexture;
+    }
+    const lookup = buildTypeSlotLookup(typeRenderTable);
+    const slotOf = lookup.dense
+      ? (j: number) => {
+        const idx = contactTypes[j] - lookup.base;
+        const slot = idx >= 0 && idx < lookup.dense!.length ? lookup.dense![idx] : -1;
+        return slot < 0 ? 0 : slot;
+      }
+      : (j: number) => lookup.sparse.get(contactTypes[j]) ?? 0;
+    writeContactTexture(contactTexture.image.data as Uint8Array, contactOcclusion, count, slotOf);
+    contactTexture.needsUpdate = true;
+    u.tContactTexture.value = contactTexture;
+    u.uContactRange.value = contactOcclusion.range;
+    u.uHasContact.value = 1;
+    // A worker bake lands between frames: draw it (on-demand frame loops too).
+    invalidate();
+  }, [capacity, contactOcclusion, contactTypes, frame.natoms, invalidate, renderAtomCount, resources, typeRenderTable]);
+
   // ExportManager consumes this only after the palette/material layout effect
   // and instance upload above have both committed. Store truth alone is not a
   // rendering receipt: the tagged Three mesh is the applied-scene receipt.
   // Every tier's material carries it, so a tier switch keeps the receipt.
+  // A bake still computing withholds the receipt (see `occlusionPending`).
   useLayoutEffect(() => {
+    const receipt = occlusionPending ? null : artifactSpecId ?? null;
     for (const tierMaterial of resources.materials.values()) {
-      tierMaterial.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY] = artifactSpecId ?? null;
+      tierMaterial.userData[LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY] = receipt;
     }
-  }, [artifactSpecId, geometry, material, resources, uploadFrame]);
+  }, [artifactSpecId, geometry, material, occlusionPending, resources, uploadFrame, contactOcclusion]);
 
   // Geometry is capacity-keyed and can be replaced while the component stays
   // mounted. Dispose only the retired geometry on a capacity change.

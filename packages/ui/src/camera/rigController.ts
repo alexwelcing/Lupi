@@ -79,6 +79,17 @@ export interface RigHost {
   onCatch?(): void;
   /** A user gesture started moving the camera (analytics). */
   onInteraction?(): void;
+  /**
+   * The rig started or changed motion outside a frame (Quiet Idle): the host
+   * asks the demand frameloop for frames. While the rig is busy, the host's
+   * frame job keeps the loop going.
+   */
+  wake?(): void;
+  /**
+   * The display-only view shift still to come off (CSS px, down; viewInset.ts):
+   * a zoom anchors on the point that will be under the pointer once it settles.
+   */
+  pendingViewShift?(): number;
 }
 
 const DEG = Math.PI / 180;
@@ -316,6 +327,7 @@ export class RigController implements LupiCameraRigApi {
   }
 
   setEnabled(value: boolean): void {
+    this.host.wake?.();
     if (this.enabled === value) return;
     this.enabled = value;
     if (!value) {
@@ -332,6 +344,7 @@ export class RigController implements LupiCameraRigApi {
   }
 
   setCoastModel(model: CoastModel | null): void {
+    this.host.wake?.();
     const next = model ?? this.defaultCoast;
     if (next === this.coast) return;
     if (this.mode === 'coast' && !this.tail && this.coast === this.defaultCoast && next !== this.defaultCoast) {
@@ -427,6 +440,7 @@ export class RigController implements LupiCameraRigApi {
 
   /** A pointer went down on the canvas: hold whatever is drifting slowly. */
   beginGesture(): void {
+    this.host.wake?.();
     this.holding += 1;
     if (this.holding !== 1 || !this.canManipulate()) return;
     if (this.mode === 'coast') {
@@ -480,6 +494,7 @@ export class RigController implements LupiCameraRigApi {
 
   /** The drag ended; `velocity` (px/s) is the orbit release speed, or null for no coast. */
   endDrag(velocity: { vx: number; vy: number } | null): void {
+    this.host.wake?.();
     const wasDrag = this.mode === 'drag';
     this.dragActive = false;
     this.pinchRawLog = null;
@@ -504,6 +519,7 @@ export class RigController implements LupiCameraRigApi {
 
   /** Wheel zoom by `factor` (distance multiplier) toward the client point, eased. */
   wheelZoom(factor: number, clientX: number, clientY: number): void {
+    this.host.wake?.();
     if (!this.canManipulate() || !(factor > 0) || !Number.isFinite(factor)) return;
     if (!this.zoomActive()) {
       this.controls.dispatchEvent({ type: 'start' });
@@ -515,6 +531,7 @@ export class RigController implements LupiCameraRigApi {
   // ─── LupiCameraRigApi ─────────────────────────────────────────────
 
   fling(omegaWorld: Vec3): void {
+    this.host.wake?.();
     if (!this.canManipulate() || !this.host.coastEnabled()) return;
     const speed = Math.hypot(omegaWorld[0], omegaWorld[1], omegaWorld[2]);
     if (!(speed > 1e-6) || !Number.isFinite(speed)) return;
@@ -535,6 +552,7 @@ export class RigController implements LupiCameraRigApi {
 
   /** End a coast without a catch (no flash, no cue): the visitor chose a calmer Motion level. */
   stopCoast(): void {
+    this.host.wake?.();
     if (this.mode !== 'coast') return;
     this.coast.stop();
     this.tail = false;
@@ -545,6 +563,7 @@ export class RigController implements LupiCameraRigApi {
   }
 
   catch(): void {
+    this.host.wake?.();
     const wasMoving = this.isMoving();
     if (this.mode === 'coast') {
       this.coast.stop();
@@ -571,6 +590,7 @@ export class RigController implements LupiCameraRigApi {
     pose: { position: Vec3; target: Vec3 },
     opts: { token?: MotionToken; userMoved?: boolean; onDone?(): void } = {},
   ): void {
+    this.host.wake?.();
     const toPosition = new Vector3().fromArray(pose.position);
     const toTarget = new Vector3().fromArray(pose.target);
     if (!Number.isFinite(toPosition.lengthSq()) || !Number.isFinite(toTarget.lengthSq())) return;
@@ -599,6 +619,7 @@ export class RigController implements LupiCameraRigApi {
   }
 
   zoomToward(clientX: number, clientY: number, factor: number): void {
+    this.host.wake?.();
     if (!this.canManipulate() || !(factor > 0) || !Number.isFinite(factor)) return;
     const token = scaleToken(MOTION.glide, glideDuration(Math.abs(Math.log(factor))));
     this.queueZoom(factor, clientX, clientY, token, false);
@@ -606,6 +627,7 @@ export class RigController implements LupiCameraRigApi {
 
   /** Stop, re-level, and write the camera and store synchronously (before any capture). */
   settleNow(): void {
+    this.host.wake?.();
     if (this.suspended) return;
     this.adoptExternal();
     const active = this.mode !== 'idle' || this.zoomActive() || this.boing || this.dirty || this.outsideLimits();
@@ -651,6 +673,7 @@ export class RigController implements LupiCameraRigApi {
 
   /** Snap to the store pose (as CameraManager would) and adopt it. */
   resumeFromStore(): void {
+    this.host.wake?.();
     this.suspended = false;
     const store = this.host.readStore();
     this.camera.position.fromArray(store.position);
@@ -1326,15 +1349,18 @@ export class RigController implements LupiCameraRigApi {
   /**
    * The world point under a client pointer on the plane through the target
    * facing the camera (the target itself without a pointer). Zooming about it
-   * keeps that point under the pointer.
+   * keeps that point under the pointer. While a display-only view shift is
+   * settling (a phone card came or went), it is the point that will be under
+   * the pointer once the shift has settled.
    */
   private anchorPoint(client: { x: number; y: number } | null, out: Vector3): Vector3 {
     out.copy(this.target);
     const rect = client ? this.host.viewport() : null;
     if (!client || !rect || !(rect.width > 0) || !(rect.height > 0)) return out;
     const cam = this.camera;
+    const pending = this.host.pendingViewShift?.() ?? 0;
     const ndcX = ((client.x - rect.left) / rect.width) * 2 - 1;
-    const ndcY = -(((client.y - rect.top) / rect.height) * 2 - 1);
+    const ndcY = -(((client.y + (Number.isFinite(pending) ? pending : 0) - rect.top) / rect.height) * 2 - 1);
     if (!Number.isFinite(ndcX) || !Number.isFinite(ndcY)) return out;
     const ray = this.vTmp.set(ndcX, ndcY, 0.5).unproject(cam).sub(cam.position).normalize();
     const forward = this.vTmp2.set(0, 0, -1).applyQuaternion(cam.quaternion);

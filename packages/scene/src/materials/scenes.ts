@@ -39,7 +39,7 @@ export interface MaterialScene {
   /** Post-processing preset. */
   postprocessPreset: 'paper' | 'studio' | 'editorial' | 'cinematic' | 'diagram';
   /** Tone mapping. */
-  toneMapping: 'none' | 'aces' | 'reinhard';
+  toneMapping: 'none' | 'aces' | 'reinhard' | 'neutral';
   /** Background preset name. */
   backgroundPreset: string;
   /** Atom surface texture overlay. */

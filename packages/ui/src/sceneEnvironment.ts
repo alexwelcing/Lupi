@@ -17,8 +17,19 @@ export type SceneEnvironmentPreset =
 export type DreiEnvironmentPreset = Exclude<SceneEnvironmentPreset, 'none' | 'softbox'>;
 
 export const DREI_ENVIRONMENT_ASSET_REVISION = '456060a26bbeb8fdf79326f224b6d99b8bcce736';
-/** Where the pinned drei-assets HDRs live (the same URLs drei's presets use). */
-export const DREI_ENVIRONMENT_ASSET_ROOT = `https://raw.githack.com/pmndrs/drei-assets/${DREI_ENVIRONMENT_ASSET_REVISION}/hdri/`;
+/**
+ * Where Lupi serves the pinned HDRs: the same bytes as drei-assets at
+ * DREI_ENVIRONMENT_ASSET_REVISION (Poly Haven, CC0), self-hosted from
+ * `apps/web/public/hdri/` (see the NOTICE there). Same origin, so a blocked
+ * or slow third-party CDN no longer decides how the molecule is lit.
+ */
+export const DREI_ENVIRONMENT_ASSET_ROOT = '/hdri/';
+/**
+ * The upstream copy (the URLs drei's presets use). Tried only when the
+ * self-hosted file cannot be loaded, e.g. a page served from another origin
+ * without `/hdri/`; the asset identity is the same either way.
+ */
+export const DREI_ENVIRONMENT_MIRROR_ROOT = `https://raw.githack.com/pmndrs/drei-assets/${DREI_ENVIRONMENT_ASSET_REVISION}/hdri/`;
 export const DREI_ENVIRONMENT_FILES: Record<DreiEnvironmentPreset, string> = {
   city: 'potsdamer_platz_1k.hdr',
   dawn: 'kiara_1_dawn_1k.hdr',
@@ -33,10 +44,12 @@ export const DREI_ENVIRONMENT_FILES: Record<DreiEnvironmentPreset, string> = {
  * The procedural scientific-studio softbox rig (replaces the retired Drei
  * 'apartment' room HDRI). There is no fetched asset: the identity pins the
  * generator design version instead of a file revision, and the "file" names
- * the procedural recipe. sha1('lupi-scientific-softbox-studio-v1').
+ * the procedural recipe. v2: the key, fill and rim panels follow the
+ * lighting angles (which the spec's `view.lighting` records), so the
+ * catchlight moves with the key light. sha1('lupi-scientific-softbox-studio-v2').
  */
-export const SOFTBOX_ENVIRONMENT_REVISION = 'fecf2129e6137375f8a071c0b949f02aea986fd9';
-export const SOFTBOX_ENVIRONMENT_FILE = 'procedural-scientific-softbox-v1';
+export const SOFTBOX_ENVIRONMENT_REVISION = '57a9aac3c05738675c83dd5e5b321cad756e987a';
+export const SOFTBOX_ENVIRONMENT_FILE = 'procedural-scientific-softbox-v2';
 
 /** Presets that resolve to a concrete PMREM texture (everything but 'none'). */
 export type TexturedEnvironmentPreset = Exclude<SceneEnvironmentPreset, 'none'>;
@@ -58,6 +71,11 @@ export const LUPI_ENVIRONMENT_IDENTITY_KEY = 'lupiEnvironmentIdentity';
 
 export function environmentAssetUrl(preset: DreiEnvironmentPreset): string {
   return `${DREI_ENVIRONMENT_ASSET_ROOT}${DREI_ENVIRONMENT_FILES[preset]}`;
+}
+
+/** Where to load a preset's HDR from, in order: self-hosted first, then the upstream mirror. */
+export function environmentAssetUrls(preset: DreiEnvironmentPreset): readonly string[] {
+  return [environmentAssetUrl(preset), `${DREI_ENVIRONMENT_MIRROR_ROOT}${DREI_ENVIRONMENT_FILES[preset]}`];
 }
 
 export function environmentAssetIdentity(

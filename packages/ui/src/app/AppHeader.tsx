@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { useStore } from '../store';
 import { SavedViewButton } from '../SavedViewButton';
 import { LupiAgentDock } from '../LupiAgentDock';
+import { moleculePageIdFor, moleculePagePath } from '../moleculePage/pages';
 
 export const AppHeader = memo(function AppHeader({
   isMobile,
@@ -12,6 +13,8 @@ export const AppHeader = memo(function AppHeader({
 }) {
   const fileName = useStore(state => state.file?.name ?? '');
   const atomCount = useStore(state => state.file?.trajectory.frames.find(Boolean)?.natoms ?? 0);
+  // A gallery molecule's own page: facts, its ink card, and a desk model on a phone.
+  const pageId = useStore(state => moleculePageIdFor(state.activeCardId, state.file?.sourceUrl));
   return (
     <header
       className="lupine-status-bar"
@@ -57,6 +60,19 @@ export const AppHeader = memo(function AppHeader({
         {atomCount > 0 && (
           <div style={{ fontSize: 11, color: '#afc0b4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {atomCount.toLocaleString()} atoms
+            {pageId && (
+              <>
+                {' · '}
+                <a
+                  href={moleculePagePath(pageId)}
+                  data-testid="lupi-molecule-page-link"
+                  style={{ color: '#d5ef9c', textDecoration: 'none' }}
+                  title="Facts, share card and desk model"
+                >
+                  About
+                </a>
+              </>
+            )}
           </div>
         )}
       </div>

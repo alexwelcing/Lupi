@@ -34,6 +34,7 @@ import * as THREE from 'three/webgpu';
 import type { Clusters } from './ClusterBuilder';
 import { LUPI_JOB, LUPI_PHASE } from './framePhases';
 import { CLUSTER_ATTR, createClusterSplatMaterial } from './tsl/clusterSplatMaterial';
+import { useLupiCommitFrames } from './frameDemand';
 
 export interface AtomClustersProps {
   clusters: Clusters | null;
@@ -54,6 +55,8 @@ export function AtomClusters({
   fadeNear = 80,
   fadeFar = 250,
 }: AtomClustersProps) {
+  // Imperative uniform/attribute writes on commit (and async results) get drawn.
+  useLupiCommitFrames();
   const meshRef = useRef<THREE.Mesh>(null!);
   const count = clusters?.count ?? 0;
 
