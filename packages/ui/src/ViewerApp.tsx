@@ -893,6 +893,14 @@ export function ViewerApp() {
               },
             },
             {
+              id: 'daily',
+              label: 'Play Lupi Daily: name today’s mystery molecule',
+              group: 'Discover',
+              onSelect: () => {
+                window.location.href = '/daily/';
+              },
+            },
+            {
               id: 'controls-molecule',
               label: 'Open Style',
               group: 'Panels',
