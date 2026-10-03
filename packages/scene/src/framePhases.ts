@@ -52,6 +52,8 @@ export const LUPI_JOB = {
   displayMotion: 'lupi/display-motion',
   /** The first rendered frame of a file, in `lupi-capture`. */
   firstFrame: 'lupi/first-frame',
+  /** Quiet Idle: counts the drawn frame and asks for the next one, in `finish` (frameDemand.ts). */
+  frameDemand: 'lupi/frame-demand',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];

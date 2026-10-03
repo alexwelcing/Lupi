@@ -51,6 +51,16 @@ export type { BillionAtomStats } from './BillionAtomBlock';
 // Frame phases (R3F v10 scheduler) and job ids
 export { LUPI_PHASE, LUPI_JOB, installLupiPhases } from './framePhases';
 export type { LupiPhase, LupiJobId } from './framePhases';
+export {
+  FRAME_DEMAND,
+  driveLupiFrameDemand,
+  keepLupiAwake,
+  lupiFrameStats,
+  requestLupiFrames,
+  stopLupiFrameDemand,
+  useLupiCommitFrames,
+} from './frameDemand';
+export type { LupiFrameStats, LupiKeepAwakeOptions } from './frameDemand';
 
 // The intent bus and the capture guards (wave-1 contracts)
 export {

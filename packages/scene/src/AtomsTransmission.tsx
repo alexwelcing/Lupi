@@ -36,6 +36,7 @@ import {
   LUPI_ARTIFACT_LAYER_KEY,
 } from './AtomsOptimized';
 import { buildTypeRenderTable, typeRenderTablesEqual, type TypeRenderTable } from './typeRenderTable';
+import { useLupiCommitFrames } from './frameDemand';
 
 /**
  * Hard ceiling for the transmission path. Above this the extra scene render
@@ -312,6 +313,8 @@ export function AtomsTransmission({
   onSpatialHash,
   artifactSpecId,
 }: AtomsTransmissionProps) {
+  // Imperative instance-matrix writes on commit get drawn.
+  useLupiCommitFrames();
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const materialRef = useRef<ComponentRef<typeof MeshTransmissionMaterial> | null>(null);
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
