@@ -64,6 +64,8 @@ export const LUPI_JOB = {
   replayRecord: 'lupi/replay-record',
   /** A shared replay playing in this view (camera and toys), in `update`. */
   replayPlay: 'lupi/replay-play',
+  /** A Remix code's Foil finish: level fades and the reveal sweep, in `lupi-uniforms`. */
+  atomFoil: 'lupi/atom-foil',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];

@@ -120,6 +120,7 @@ export {
 export type { LupiEnvBinding, LupiLightUniforms, LupiSurfaceInput } from './tsl/impostorKit';
 export * from './tsl/displayMotion';
 export * from './tsl/atomGlow';
+export * from './tsl/atomFoil';
 
 // Shared constants
 export {
