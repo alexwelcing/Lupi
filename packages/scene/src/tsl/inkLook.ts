@@ -41,6 +41,7 @@ import { Color, Vector2, Vector3 } from 'three/webgpu';
 import type { Node, UniformNode } from 'three/webgpu';
 import {
   Fn,
+  If,
   abs,
   cameraProjectionMatrix,
   cameraViewMatrix,
@@ -343,27 +344,31 @@ export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node
 
     // Hatching: strokes in full-picture device pixels about the view axis.
     // |P[1][1]| × target height / 2 is the same in every tile of a capture.
-    const pixelScale: N = abs((cameraProjectionMatrix as N).element(1).y).mul(screenSize.y).mul(0.5);
+    // A uniform branch: flat colour never pays for the strokes.
     const hit: N = (s.hit as N).toVar();
-    const projected: N = select(s.isOrtho as N, hit.xy, hit.xy.div(max(hit.z.negate(), 1e-4)));
-    const screen: N = projected.mul(pixelScale).toVar();
-    const spacing = max(unit.mul(T.hatchSpacing), 2.0).toVar();
-    const dark = float(1).sub(value).toVar();
-    // A right hand's hatching: single strokes run "/" (view y is up), the
-    // cross strokes "\\" over them in the deepest shade.
-    const single = strokes(
-      screen.x.sub(screen.y).mul(0.70710678),
-      smoothstep(T.hatchSingle[0], T.hatchSingle[1], dark),
-      spacing,
-    );
-    const cross = strokes(
-      screen.x.add(screen.y).mul(0.70710678),
-      smoothstep(T.hatchCross[0], T.hatchCross[1], dark),
-      spacing,
-    );
-    // No strokes on atoms too small to hold two of them.
-    const hatchFade = smoothstep(spacing.mul(0.9), spacing.mul(2.2), px);
-    const strokeInk = max(single, cross).mul(hatch).mul(hatchFade).mul(T.hatchInk);
+    const strokeInk = float(0).toVar();
+    If(hatch.greaterThan(0.0), () => {
+      const pixelScale: N = abs((cameraProjectionMatrix as N).element(1).y).mul(screenSize.y).mul(0.5);
+      const projected: N = select(s.isOrtho as N, hit.xy, hit.xy.div(max(hit.z.negate(), 1e-4)));
+      const screen: N = projected.mul(pixelScale).toVar();
+      const spacing = max(unit.mul(T.hatchSpacing), 2.0).toVar();
+      const dark = float(1).sub(value).toVar();
+      // A right hand's hatching: single strokes run "/" (view y is up), the
+      // cross strokes "\\" over them in the deepest shade.
+      const single = strokes(
+        screen.x.sub(screen.y).mul(0.70710678),
+        smoothstep(T.hatchSingle[0], T.hatchSingle[1], dark),
+        spacing,
+      );
+      const cross = strokes(
+        screen.x.add(screen.y).mul(0.70710678),
+        smoothstep(T.hatchCross[0], T.hatchCross[1], dark),
+        spacing,
+      );
+      // No strokes on atoms too small to hold two of them.
+      const hatchFade = smoothstep(spacing.mul(0.9), spacing.mul(2.2), px);
+      strokeInk.assign(max(single, cross).mul(hatch).mul(hatchFade).mul(T.hatchInk));
+    });
 
     const ink = clamp(max(outline, strokeInk), 0.0, 1.0);
     const drawn = mix(fill, vec3(I.uInkColor), ink);
