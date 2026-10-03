@@ -422,13 +422,13 @@ Determinism guarantees that the build scripts and the browser draw the same pair
 - **Changing a parameter.** If a target misses, or the owner changes a Lupi choice, the parameter is changed and the harness re-run before deploy. v1 freezes at its first deploy.
 - **Not prerequisites:** an RDKit `DetermineConnectivity` cross-check (optional), and external ChEMBL/CCD/GEOM graph matching.
 
-**Owner hand-check after deploy.** Open `https://lupi.live/?load=/v1/datasets/omol25/{collection}/structures/{row}.xyz`.
+**Owner hand-check after deploy.** Open `https://lupi.live/?load=/v1/datasets/omol25/{collection}/structures/{row}.xyz`. The neutral-validation rows below are also run by the harness; `handCheck` in `validation-v1.json` lists what v1 draws for each.
 
 | Collection | Row | What it is | Expect |
 |---|---|---|---|
 | neutral-validation | 273 | K⁺ azo-dye sulfonate | dotted K···O, no K···S, no K stick |
-| neutral-validation | 1239 | Ca²⁺ dicarboxylate | at most 8 dotted Ca···O |
-| neutral-validation | 196 | Li⁺ sulfonate | dotted Li···O |
+| neutral-validation | 1239 | Ca²⁺ sitting on a carbanion C (2.25 Å); nearest O 3.49 Å | no Ca line at all; Learn shows the s-block–carbon clause |
+| neutral-validation | 196 | Li⁺ on a sulfonamide N (1.76 Å); nearest O 2.74 Å | dotted Li···N, no Li···S |
 | neutral-validation | 357 | Mg²⁺ salt | dotted Mg···O |
 | neutral-validation | 0 | choline + dianion | two fragments, no stick between them |
 | neutral-validation | 1008 | ani2x distorted snapshot | a long-bond line in Learn |
