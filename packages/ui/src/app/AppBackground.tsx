@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
-import { getBackgroundFromColormap } from '@atlas/scene';
+import { getBackgroundFromColormap, requestLupiFrames } from '@atlas/scene';
 import type { ColormapName } from '@atlas/core/types';
 import { BG_PRESETS, getBgMedia, type BgMedia, type BgPreset } from '../backgroundPresets';
 import { useEquirectMediaTexture } from '../hooks/useEquirectMediaTexture';
@@ -99,12 +99,16 @@ export function AppBackground({
   });
 
   useEffect(() => {
+    // scene.background and fog are set outside React's props: draw the change
+    // (Quiet Idle), here and in every cleanup below.
+    requestLupiFrames();
     if (procedural) {
       scene.background = null;
       scene.fog = new THREE.FogExp2(bottom, 0.0007);
       return () => {
         scene.background = null;
         scene.fog = null;
+        requestLupiFrames();
       };
     }
 
@@ -120,6 +124,7 @@ export function AppBackground({
       return () => {
         scene.background = null;
         scene.fog = null;
+        requestLupiFrames();
       };
     }
 
@@ -129,6 +134,7 @@ export function AppBackground({
     return () => {
       if (scene.background === texture) scene.background = null;
       scene.fog = null;
+      requestLupiFrames();
     };
   }, [bottom, media.kind, procedural, scene, texture, usesBackdropMesh]);
 
@@ -208,6 +214,7 @@ function BackdropVolume({
 
   useEffect(() => {
     updateDomeMaterial(material, domeValues);
+    requestLupiFrames();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adjustments.brightness, adjustments.contrast, adjustments.opacity, adjustments.saturation, bottom, material, pattern, texture, top]);
 

@@ -19,8 +19,9 @@
  * - Any pointerdown, key or wheel lands the arrival instantly, synchronously
  *   in the capture phase, before any pick (`installArrivalCancel`).
  *
- * It also installs `window.__lupiPlay` (the only place it is installed) and
- * registers the `motion`, `poke` and `scatter` dev hooks. `reset` keeps the
+ * It also installs `window.__lupiPlay` (ref-counted; the canvas's
+ * FrameDemandDriver installs it too) and registers the `motion`, `poke` and
+ * `scatter` dev hooks. `reset` keeps the
  * default (it emits `play.reset`, which this layer and every other toy hear).
  */
 import { useEffect, useLayoutEffect, useRef } from 'react';
@@ -36,8 +37,10 @@ import {
   LUPI_PHASE,
   RIPPLE_SLOTS,
   isDisplayMotionSuspended,
+  keepLupiAwake,
   onIntent,
   registerRecordingGuard,
+  requestLupiFrames,
   resetLupiDisplayMotion,
   rippleSlotUniforms,
   setDisplayMotionSuspended,
@@ -154,6 +157,7 @@ export function cancelArrival(): void {
   clearArrival();
   if (!(M.uRippleWeight.value > 0) || isDisplayMotionSuspended()) M.uMotionWeight.value = 0;
   syncDisplaced();
+  requestLupiFrames();
 }
 
 /** Zero everything: arrival, scatter and every ripple slot. */
@@ -163,6 +167,7 @@ export function resetDisplayMotion(): void {
   driver.nextSlot = 0;
   resetLupiDisplayMotion();
   syncDisplaced();
+  requestLupiFrames();
 }
 
 /**
@@ -237,6 +242,7 @@ function armArrival(mode: LiveMode, camera: THREE.Camera, seed: number, comfort:
   viewDirFrom(camera, driver.center, M.uArrivalViewDir.value);
   M.uArrivalSeed.value = seed;
   syncWeights();
+  requestLupiFrames();
 }
 
 /** Start the armed arrival's clock (idempotent). */
@@ -249,6 +255,7 @@ function releaseArrival(camera: THREE.Camera | null): void {
   arrival.end = now + rise + M.uArrivalDuration.value;
   M.uArrivalT0.value = now;
   if (camera) viewDirFrom(camera, driver.center, M.uArrivalViewDir.value);
+  requestLupiFrames();
 }
 
 /** Start a ripple in the next round-robin slot; returns the slot, or -1. */
@@ -265,6 +272,7 @@ function addRipple(origin: Vec3, amplitude: number): number {
   const rMax = Math.hypot(origin[0] - c[0], origin[1] - c[1], origin[2] - c[2]) + driver.radius;
   driver.slotEnds[slot] = t0 + rMax / T.rippleSpeed + 6 / (T.rippleZeta * T.rippleOmega);
   syncWeights();
+  requestLupiFrames();
   return slot;
 }
 
@@ -341,6 +349,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
 
   useEffect(() => installPlayDevHooks(), []);
   useEffect(() => installArrivalCancel(), []);
+  // Quiet Idle: draw every frame while an arrival, ripple or scatter is live
+  // (an armed arrival included: it waits on the first-frame mark).
+  useEffect(() => keepLupiAwake('display-motion', () => driver.arrival !== null || rippleLive()), []);
   useEffect(
     () => registerRecordingGuard(() => {
       setDisplayMotionSuspended(true);
@@ -506,8 +517,11 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         }
       }
       if (driver.arrival === null && !rippleLive()) {
-        // Idle: rebase the clock so it stays small (float precision).
+        // Idle: rebase the clock so it stays small (float precision), and
+        // forget the wall time: the loop may sleep now, and the next effect
+        // must start at t = 0, not a capped 0.1 s into its motion.
         driver.clock = 0;
+        driver.lastWall = -1;
         M.uMotionNow.value = 0;
       } else {
         M.uMotionNow.value = now;

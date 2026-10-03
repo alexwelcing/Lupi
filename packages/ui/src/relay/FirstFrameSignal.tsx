@@ -15,6 +15,8 @@
  *   too; the visitor can keep turning the drawing meanwhile. Without the
  *   relay a long wait would only hold a plate over atoms already drawn.
  * - Fallback: 4 s after the file is set, whatever was drawn.
+ * - Quiet Idle: the demand frameloop keeps drawing until the mark (the
+ *   `first-frame` keeper).
  *
  * The hand-off, when the visitor tapped the home page's drawing:
  * - As the file arrives (a layout effect, before the first render), the
@@ -34,6 +36,8 @@ import {
   LUPI_ARTIFACT_LAYER_KEY,
   LUPI_JOB,
   LUPI_PHASE,
+  keepLupiAwake,
+  requestLupiFrames,
 } from '@atlas/scene';
 import { useStore } from '../store';
 import { getCameraRig } from '../camera/rigApi';
@@ -135,6 +139,8 @@ export function FirstFrameSignal(): null {
     if (relay && baton?.viewDir) applyViewDir(baton.viewDir, three.camera, three.controls as unknown as OrbitLike | null);
     markFirstFrame(key);
     if (relay) endRelay();
+    // The hand-off pose and whatever waited on the mark get drawn.
+    requestLupiFrames();
     if (!baton) return;
     takeBaton();
     const omega = relay ? baton.bodyOmegaY : 0;
@@ -161,6 +167,16 @@ export function FirstFrameSignal(): null {
     const timer = setTimeout(() => handOff(trajectory), FIRST_FRAME_FALLBACK_MS);
     return () => clearTimeout(timer);
   }, [trajectory, handOff]);
+
+  // Quiet Idle: the mark counts drawn frames (and waits for the bonds), so
+  // keep drawing until the open file has its first frame.
+  useEffect(
+    () => keepLupiAwake('first-frame', () => {
+      const key = useStore.getState().file?.trajectory;
+      return Boolean(key) && !hasFirstFrame(key as object);
+    }),
+    [],
+  );
 
   useEffect(
     () => () => {
