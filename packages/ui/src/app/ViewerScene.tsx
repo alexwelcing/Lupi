@@ -147,6 +147,9 @@ function displayRadiusRangeForFrame(frame: Frame): { min: number; max: number } 
 /** Bond radius the viewer draws (Bonds `radius`), also the contact bond-stub radius. */
 const BOND_RADIUS = 0.12;
 
+/** Contact occlusion on phones (quality tier 0) up to this many atoms. */
+const CONTACT_OCCLUSION_MOBILE_MAX_ATOMS = 60_000;
+
 interface SpecimenShadowProps {
   atomCount: number;
   frame: Frame;
@@ -476,9 +479,12 @@ export function ViewerScene({
   // shaded per pixel as analytic sphere occlusion. Phones get crevices back
   // without screen-space AO; desktops get them stable under GTAO. Baked from
   // the paused frame (kept while playing), synchronously for small molecules.
+  // Phones stop earlier: each pixel walks eight neighbours, and a large
+  // structure at phone DPR is mostly small atoms the density bake reads.
+  const contactMaxAtoms = deviceQualityTier === 0 ? CONTACT_OCCLUSION_MOBILE_MAX_ATOMS : CONTACT_OCCLUSION_MAX_ATOMS;
   const contactEligible = Boolean(
     currentFrame
-    && currentFrame.natoms <= CONTACT_OCCLUSION_MAX_ATOMS
+    && currentFrame.natoms <= contactMaxAtoms
     && fullyLoaded,
   );
   const contactRange = useMemo(() => {

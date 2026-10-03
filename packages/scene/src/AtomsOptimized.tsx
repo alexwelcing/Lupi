@@ -674,6 +674,7 @@ export function AtomsOptimized({
   const spatialHashRef = useRef(new SpatialHash3D(3.0));
   const atomCountRef = useRef(0);
   const scene = useThree((state) => state.scene);
+  const invalidate = useThree((state) => state.invalidate);
   const uniformsJobId = `${LUPI_JOB.atomsUniforms}:${useId()}`;
 
   // Large-scene callers intentionally remove the picking callback. Release
@@ -1193,7 +1194,9 @@ export function AtomsOptimized({
     u.tContactTexture.value = contactTexture;
     u.uContactRange.value = contactOcclusion.range;
     u.uHasContact.value = 1;
-  }, [capacity, contactOcclusion, contactTypes, frame.natoms, renderAtomCount, resources, typeRenderTable]);
+    // A worker bake lands between frames: draw it (on-demand frame loops too).
+    invalidate();
+  }, [capacity, contactOcclusion, contactTypes, frame.natoms, invalidate, renderAtomCount, resources, typeRenderTable]);
 
   // ExportManager consumes this only after the palette/material layout effect
   // and instance upload above have both committed. Store truth alone is not a

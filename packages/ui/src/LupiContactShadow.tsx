@@ -24,7 +24,7 @@
  * capture, where the motion weight is zero).
  */
 import { useEffect, useMemo, useRef, type JSX } from 'react';
-import { useFrame } from '@react-three/fiber/webgpu';
+import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three/webgpu';
 import { cameraPosition, float, length, mix, select, smoothstep, texture, uniform, vec3 } from 'three/tsl';
 import type { Frame } from '@atlas/core/types';
@@ -290,6 +290,11 @@ export function LupiContactShadow({
     inputs: null,
     surface: null,
   });
+  // New inputs re-splat in the next frame: ask for one (on-demand loops too).
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    invalidate();
+  }, [inputs, invalidate]);
 
   useFrame(
     () => {
