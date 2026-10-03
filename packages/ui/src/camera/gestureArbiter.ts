@@ -13,14 +13,21 @@
  * - A press while the rig is visibly moving catches it. The rig stops, and
  *   that press never becomes a tap.
  * - Mouse:
- *   - left-drag orbits (strokes with the Poke verb); Shift+left pans;
+ *   - left-drag orbits (strokes with a stroke verb: Poke, Tug, Heat);
+ *     Shift+left pans;
  *   - middle-drag dollies;
- *   - right-drag pans (orbits with Poke);
+ *   - right-drag pans (orbits with a stroke verb);
  *   - a right click that barely moves toggles the Play tray.
  * - Touch and pen:
- *   - one finger orbits (strokes with Poke);
- *   - two fingers pinch-zoom about their midpoint and pan (orbit with Poke);
+ *   - one finger orbits (strokes with a stroke verb);
+ *   - two fingers pinch-zoom about their midpoint and pan (orbit with a
+ *     stroke verb);
  *   - three or more are ignored.
+ * - With any verb latched (not Orbit) the first finger or left press also
+ *   announces `verb.press` down and up (Heat holds on it). Under Heat a press
+ *   held past HOLD_NO_TAP_MS is a hold, not a tap. Burst keeps one-finger
+ *   orbit and owns taps: they arrive as `verb.tap` (never `canvas.tap`, so
+ *   they never select, and two quick ones are two pops, not a double-tap).
  * - Overlays in the canvas wrapper (drei <Html> labels and cards): a wheel
  *   zooms unless the overlay scrolls; a press off their controls drags once
  *   it passes the slop, and below it stays the overlay's click.
@@ -105,11 +112,20 @@ interface Tracked {
   lastY: number;
   caught: boolean;
   noTap: boolean;
+  /** event.timeStamp of the press (ms). */
+  t0: number;
   samples: PointerSample[];
 }
 
 const SAMPLE_KEEP_MS = 200;
 const SAMPLE_KEEP_MAX = 64;
+/** Under Heat, a still press held this long (ms) warms the molecule instead of tapping. */
+export const HOLD_NO_TAP_MS = 350;
+
+/** One finger (and the left button) strokes instead of orbiting with these verbs. */
+export function verbStrokes(verb: PlayVerb): boolean {
+  return verb === 'poke' || verb === 'tug' || verb === 'heat';
+}
 
 export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: GestureSink): GestureMachine {
   const pointers = new Map<number, Tracked>();
@@ -117,20 +133,37 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
   let lastTap: { x: number; y: number; t: number; type: PointerKind } | null = null;
   let two = { a: -1, b: -1, mx: 0, my: 0, dist: 0 };
 
+  /** The pointer whose press was announced as `verb.press` down, or null. */
+  let press: Tracked | null = null;
+
   const slop = (type: PointerKind) => tokens.slopPx[type] ?? 8;
 
   function stroke(p: Tracked, phase: 'start' | 'move' | 'end', x = p.x, y = p.y): void {
     sink.emit({ type: 'verb.stroke', clientX: x, clientY: y, phase, pointerType: p.type });
   }
 
+  function beginPress(p: Tracked): void {
+    if (sink.verb() === 'orbit') return;
+    if (p.type === 'mouse' && (p.button !== 0 || p.shiftKey)) return;
+    press = p;
+    sink.emit({ type: 'verb.press', clientX: p.x, clientY: p.y, phase: 'down', pointerType: p.type });
+  }
+
+  function endPress(): void {
+    const p = press;
+    if (!p) return;
+    press = null;
+    sink.emit({ type: 'verb.press', clientX: p.x, clientY: p.y, phase: 'up', pointerType: p.type });
+  }
+
   function dragKind(p: Tracked): GestureDrag {
-    const poke = sink.verb() === 'poke';
+    const strokes = verbStrokes(sink.verb());
     if (p.type === 'mouse') {
       if (p.button === 1) return 'dolly';
-      if (p.button === 2) return poke ? 'orbit' : 'pan';
+      if (p.button === 2) return strokes ? 'orbit' : 'pan';
       if (p.shiftKey) return 'pan';
     }
-    return poke ? 'stroke' : 'orbit';
+    return strokes ? 'stroke' : 'orbit';
   }
 
   function apply(kind: GestureDrag, dx: number, dy: number): void {
@@ -141,6 +174,7 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
 
   /** Leave whatever one pointer was doing (a second finger took over). */
   function endSingle(): void {
+    endPress();
     if (mode === 'orbit' || mode === 'pan' || mode === 'dolly') sink.endDrag(null);
     else if (mode === 'stroke') {
       const p = pointers.values().next().value;
@@ -170,7 +204,7 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
     const dx = mx - two.mx;
     const dy = my - two.my;
     if (dx !== 0 || dy !== 0) {
-      if (sink.verb() === 'poke') sink.orbitBy(dx, dy);
+      if (verbStrokes(sink.verb())) sink.orbitBy(dx, dy);
       else sink.panBy(dx, dy);
     }
     two = { ...two, mx, my, dist };
@@ -197,6 +231,13 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
       return 'none';
     }
     if (p.type === 'mouse' && p.button !== 0) return 'none';
+    // Burst owns taps: every one pops (rapid taps are rapid pops, never a
+    // double-tap), and none selects.
+    if (sink.verb() === 'burst') {
+      lastTap = null;
+      sink.emit({ type: 'verb.tap', clientX: p.sx, clientY: p.sy, pointerType: p.type });
+      return 'tap';
+    }
     const previous = lastTap;
     if (
       previous &&
@@ -216,9 +257,12 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
   function release(p: Tracked, e: GesturePointer | null): GestureRelease {
     pointers.delete(p.id);
     let result: GestureRelease = 'swallow';
+    if (press === p) endPress();
     if (pointers.size === 0) {
       if (mode === 'pending') {
-        result = p.caught ? 'swallow' : p.noTap || !e ? 'swallow' : tap(p, e.t, e.shiftKey);
+        // Under Heat a long still press was a hold (it warmed), not a tap.
+        const held = e !== null && sink.verb() === 'heat' && e.t - p.t0 >= HOLD_NO_TAP_MS;
+        result = p.caught || held ? 'swallow' : p.noTap || !e ? 'swallow' : tap(p, e.t, e.shiftKey);
       } else if (mode === 'orbit') {
         sink.endDrag(e ? releaseVelocity(p.samples, e.t, { windowMs: tokens.flickWindowMs, pauseMs: tokens.flickPauseMs }) : null);
       } else if (mode === 'pan' || mode === 'dolly' || mode === 'two') {
@@ -257,6 +301,7 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
         lastY: e.y,
         caught: false,
         noTap: pointers.size > 0,
+        t0: e.t,
         samples: [{ x: e.x, y: e.y, t: e.t }],
       };
       if (pointers.size === 0) {
@@ -269,6 +314,7 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
         sink.beginGesture();
         pointers.set(e.id, p);
         mode = 'pending';
+        beginPress(p);
         return { tracked: true, caught: p.caught };
       }
       // Another finger: whatever one finger was doing ends, and nothing taps.
@@ -381,6 +427,12 @@ export interface GestureArbiterOptions {
   /** Wheel, trackpad pinch (ctrl+wheel) and Safari gesture zoom: a distance factor toward the client point. */
   onZoom(factor: number, clientX: number, clientY: number): void;
   marks?: TouchMarks | null;
+  /**
+   * Quiet Idle: called first thing on every pointerdown and wheel over the
+   * element, before any routing, so the demand frameloop draws the first
+   * touch in the next animation frame.
+   */
+  wake?: () => void;
 }
 
 export interface GestureArbiter {
@@ -424,7 +476,7 @@ export function wheelZoomFactor(deltaY: number, deltaMode: number, ctrlKey: bool
   return Math.exp(clamped * 0.0015);
 }
 
-export function attachGestureArbiter({ element, canvas, machine, onZoom, marks = null }: GestureArbiterOptions): GestureArbiter {
+export function attachGestureArbiter({ element, canvas, machine, onZoom, marks = null, wake }: GestureArbiterOptions): GestureArbiter {
   const mac = isMacLike();
   const saved = ELEMENT_STYLES.map((name) => [name, element.style.getPropertyValue(name)] as const);
   element.style.setProperty('touch-action', 'none');
@@ -525,6 +577,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   };
 
   const onPointerDown = (e: PointerEvent) => {
+    wake?.();
     if (e.pointerType === 'mouse' && e.button > 2) return;
     if (isCanvasTarget(e.target)) {
       take(normalize(e));
@@ -605,6 +658,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   const viewportHeight = () => element.getBoundingClientRect().height || window.innerHeight || 800;
 
   const onWheel = (e: WheelEvent) => {
+    wake?.();
     if (!isCanvasTarget(e.target) && !(e.target instanceof Element && element.contains(e.target) && !scrollsWithin(e.target))) {
       // Never page-zoom the viewer (a trackpad pinch over a card is ctrl+wheel).
       if (e.ctrlKey) e.preventDefault();

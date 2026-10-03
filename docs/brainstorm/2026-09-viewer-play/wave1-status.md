@@ -23,7 +23,7 @@ Wave 1 is the first change a visitor can feel. The R3F v10 port ([port-status.md
   - A double-tap glides to the atom. A double-tap on empty space zooms toward that point.
 - **One Play pill** (bottom-left on desktop, one row above the deck on a phone). It carries the status and the old Clear view stow. It replaces both the Clear view bucket and the gesture hint. On a first visit it teaches "Drag to spin · Tap an atom", from the first frame until the first gesture, the first atom tap, or 10 s.
 - **The Play tray.** The pill, `P`, a right click on the canvas, or the palette's "Open Play" opens it. It holds:
-  - One finger: Orbit / Poke. With Poke latched, one finger stirs ripples.
+  - One finger: Orbit / Poke / Tug / Burst / Heat (wave 2 added the last three). With Poke latched, one finger stirs ripples; Tug drags an atom's neighbourhood and twangs it home; Burst pops the atoms from a tap; Heat jiggles them while held, with an illustrative temperature on the pill. Enter plays the latched verb on the selected atom.
   - Scatter.
   - Spin. Caffeine flips end over end: "Flip! · tennis-racket effect".
   - Reset.
@@ -56,7 +56,11 @@ Wave 1 is the first change a visitor can feel. The R3F v10 port ([port-status.md
 | Arrival | 0.6 s (Gentle 0.3 s at half travel), cloud 1.6 × the radius, 0.2 s bottom-up stagger; at most 20,000 atoms, single frame, once per molecule per session | `ui/src/play/PlayLayer.tsx`, `arrivalRules.ts`, `scene/src/tsl/displayMotion.ts` |
 | Ripple | 0.3 Å (the hard bound; Gentle 0.15, Still 0) at 20 Å/s, ω 36 rad/s, ζ 0.28, 8 Å falloff; Poke strokes 0.2 Å | `displayMotion.ts`, `PlayLayer.tsx` |
 | Scatter | 0.18 s rise, then the condense | `displayMotion.ts` |
-| Pill | each text shows at least 1 s; ripple and scatter labels hold 1.5 s; the teaching line lasts 10 s; Poke unlatches after 30 s idle | `ui/src/play/PlayPill.tsx` |
+| Tug (wave 2) | Gaussian falloff 0.42 R (1.6–6 Å), widening 35 % as it stretches; rubber-band limit 0.9 R (2.5–10 Å) as L·tanh(d/L); held springs ω 30/16, ζ 0.8/0.7; release ω 24/15, ζ 0.25/0.28 (Gentle ζ 0.8) | `ui/src/play/PlayLayer.tsx` |
+| Burst (wave 2) | amplitude 0.6 R (1.5–6 Å), falloff 0.8 R (3–14 Å), shock front 70 Å/s, ω 9 rad/s, ζ 0.42 (Gentle 0.75), ±18 % seeded jitter, three slots | `PlayLayer.tsx`, `displayMotion.ts` |
+| Heat (wave 2) | 0.42 Å × √level; level rises with τ 2.2 s while held (+0.0011 per rubbed px), cools with τ 0.55 s; bands 24–40 and 41–67 rad/s; readout 300 K + 1500 K × level | `PlayLayer.tsx`, `displayMotion.ts`, `playStore.ts` |
+| Glow (wave 2) | hover 0.6 (fade in 0.06 s, out 0.14 s) with a 6 % swell; selection 1.0 (0.12 s); Tug's grab 1.15 with an 8 % swell; rim power 2.2; bonds glow from 3 % stretch | `scene/src/tsl/atomGlow.ts`, `ui/src/play/AtomGlowDriver.tsx` |
+| Pill | each text shows at least 1 s; toy labels hold 1.5 s; the teaching line lasts 10 s; a latched verb unlatches after 30 s idle | `ui/src/play/PlayPill.tsx` |
 | Hero | detents are faces within 12° of the turntable (8 faces, largest gap 70°); it opens at 16.8° across, 17.9° up | `ui/src/landing/hero/buckyStage.ts` |
 | Relay | the hand-off waits up to 1.5 s for the bonds under the relay; the ring appears after 1.2 s; a baton spin above 0.5 rad/s carries into 3D | `ui/src/relay/FirstFrameSignal.tsx`, `stage.ts` |
 | Sound and haptics | both off by default; ticks of 6 ms (detent, catch), 12 ms (flip) and 8 ms (reset), at most 10 a second; clicks under 35 ms apart merge | `ui/src/play/feedback.ts`, `ui/src/lib/haptics.ts` |
@@ -77,11 +81,11 @@ Wave 1 is the first change a visitor can feel. The R3F v10 port ([port-status.md
 ## Wave-2 queue
 
 - Real-device pass: iPhone Safari, Android Chrome, a mid-range laptop GPU. Retune the coast, capture and ripple values from the table above.
-- Quiet Idle (demand frames), now that motion has analytic ends and `rig.isMoving()`.
+- ~~Quiet Idle (demand frames)~~: built in wave 2 (the viewer renders on demand; see AGENTS.md, "Quiet Idle").
 - Upright detent roll and FOV narrowing (this needs an up/roll field in the store, saved views, URLs and artifact specs).
 - The rest of Object Facts: hull, rest faces, dice, a libmsym bake, and worker facts for large files.
 - The rest of the gesture constitution: long-press loupe and tray, twist-to-roll, two-finger trackpad orbit, a left-handed mirror, cooperative gestures for embeds.
-- More verbs (Knife, Lasso, Tug, Wake, Burst, Heat), a hover glow, and GPU ID picking.
+- ~~Tug, Burst, Heat and a hover glow~~: built in wave 2 (not yet seen on a device). Still open: Knife, Lasso, Wake, two-finger taffy, a strain meter, and GPU ID picking.
 - Overlays that follow display motion (labels, selection rings, glyphs).
 - Side placement of the desktop atom card.
 - A live, spinnable relay for tiles and finder rows, and View Transitions.

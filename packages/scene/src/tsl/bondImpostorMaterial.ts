@@ -9,7 +9,9 @@
  * BOND_IMPOSTOR_FRAGMENT (bondImpostor.ts before the port):
  * - the `uProgress` GPU lerp between two endpoint buffers per end;
  * - the display-motion offset (tsl/displayMotion.ts) on both ends, the same
- *   closed form and seed as the atoms, so bonds follow them;
+ *   closed form and seed as the atoms, so bonds follow them; a bond the toys
+ *   stretch thins like taffy and glows lime with the strain (a compressed
+ *   one thickens a little), exactly as at rest while the motion is off;
  * - the two-tone split at the geometric midpoint;
  * - the distance fade (`uBondFadeStart`/`uBondFadeEnd`) times `uOpacity`;
  * - degenerate, sub-pixel and fully faded bonds collapse to a degenerate
@@ -37,6 +39,7 @@ import {
   abs,
   attribute,
   cameraProjectionMatrix,
+  clamp,
   cross,
   dot,
   float,
@@ -50,13 +53,15 @@ import {
   screenSize,
   select,
   smoothstep,
+  sqrt,
   uniform,
   varying,
   vec3,
   vec4,
 } from 'three/tsl';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
-import { lupiDisplayOffset } from './displayMotion';
+import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
+import { ATOM_GLOW } from './atomGlow';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
@@ -180,7 +185,14 @@ export function createBondImpostorMaterial({
   const viewB: N = modelViewMatrix.mul(vec4(b, 1.0)).xyz;
   const axis: N = viewB.sub(viewA);
   const len: N = length(axis);
-  const radius: N = attribute(BOND_ATTR.radius, 'float');
+  // Strain under display motion (stretched > 0): the bond thins as 1/√(1+ε)
+  // (taffy keeps its volume) and glows with tension. With the motion off
+  // (at rest, every capture) it is exactly 0 and the radius exactly as set.
+  const motionLive: N = (DISPLAY_MOTION.uMotionWeight as N).greaterThan(0);
+  const restLen: N = length(restB.sub(restA));
+  const strain: N = select(motionLive, length(b.sub(a)).div(max(restLen, 1e-4)).sub(1), float(0));
+  const thin: N = select(motionLive, clamp(float(1).div(sqrt(max(strain.add(1), 0.05))), 0.45, 1.3), float(1));
+  const radius: N = attribute(BOND_ATTR.radius, 'float').mul(thin);
   const mid: N = viewA.add(viewB).mul(0.5);
   const viewDepth: N = max(mid.z.negate(), 1e-4);
   // Device pixels per world unit at unit depth: |P[1][1]| × target height / 2.
@@ -215,6 +227,7 @@ export function createBondImpostorMaterial({
   const vColorA: N = varying(sRGBTransferEOTF(attribute(BOND_ATTR.colorStart, 'vec4').rgb), 'vBondColorA');
   const vColorB: N = varying(sRGBTransferEOTF(attribute(BOND_ATTR.colorEnd, 'vec4').rgb), 'vBondColorB');
   const vPixelRadius: N = varying(pixelRadius, 'vBondPixelRadius');
+  const vStrain: N = varying(strain, 'vBondStrain');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // Distance fade (LOD): far bonds thin out before the vertex cull drops them.
@@ -258,7 +271,8 @@ export function createBondImpostorMaterial({
         polish: u.uSurfacePolish,
         occlusion: float(1),
         occlusionStrength: float(0),
-        emission: vec3(0),
+        // Tension glow (lime): zero unless display motion stretches the bond.
+        emission: vec3(ATOM_GLOW.uGlowColor as N).mul(smoothstep(0.03, 0.4, vStrain).mul(0.75)),
         pixelRadius: vPixelRadius,
         subsurface: float(0),
       },

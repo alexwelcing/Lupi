@@ -11,17 +11,22 @@
  * - registers the rig API, the canvas input source, a capture guard (settle
  *   before any capture), a recording guard (settle, stand aside, resume from
  *   the store) and the `rig` / `flick` / `catch` dev hooks;
- * - steps the rig in fiber's `update` phase.
+ * - steps the rig in fiber's `update` phase;
+ * - Quiet Idle: wakes the demand frameloop whenever the rig starts moving
+ *   (a glide, fling, zoom or catch from anywhere) and keeps it drawing while
+ *   the rig is busy (`camera-rig` keeper).
  */
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import {
   LUPI_JOB,
   emitIntent,
+  keepLupiAwake,
   onIntent,
   registerCanvasInputSource,
   registerCaptureGuard,
   registerRecordingGuard,
+  requestLupiFrames,
 } from '@atlas/scene';
 import { useStore, type AppState } from '../store';
 import { coastEnabled, getComfort, glidesAnimate, subscribeComfort } from '../motion/comfort';
@@ -87,6 +92,7 @@ export function LupiCameraRig({ center, minDistance, maxDistance, enabled, onFir
         cue('catch');
       },
       onInteraction: () => interaction.current?.(),
+      wake: () => requestLupiFrames(),
     };
     // Start from the store's target when the camera already shows the store
     // pose, else from the structure's centre (what OrbitControls used).
@@ -115,6 +121,7 @@ export function LupiCameraRig({ center, minDistance, maxDistance, enabled, onFir
   useEffect(() => {
     const cleanups = [
       registerCameraRig(rig),
+      keepLupiAwake('camera-rig', () => rig.isBusy()),
       registerCanvasInputSource(),
       registerCaptureGuard({ prepare: () => rig.settleNow() }),
       registerRecordingGuard(() => {
@@ -199,6 +206,7 @@ export function LupiCameraRig({ center, minDistance, maxDistance, enabled, onFir
         rig.wheelZoom(factor, x, y);
         invalidate();
       },
+      wake: () => requestLupiFrames(),
     });
     const previousCursor = element.style.cursor;
     element.style.cursor = 'grab';
@@ -216,7 +224,6 @@ export function LupiCameraRig({ center, minDistance, maxDistance, enabled, onFir
   useFrame(
     (_, delta) => {
       rig.frame(delta);
-      if (rig.isBusy()) invalidate();
       const element = cursorTarget.current;
       if (!element) return;
       const drag = machineRef.current?.drag();

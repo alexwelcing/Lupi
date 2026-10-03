@@ -13,10 +13,11 @@ import { useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import { PMREMGenerator } from 'three/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
+import { requestLupiFrames } from '@atlas/scene';
 import { useStore } from './store';
 import {
   clearSceneEnvironmentLoadFailure,
-  environmentAssetUrl,
+  environmentAssetUrls,
   installSceneEnvironmentPmrem,
   markSceneEnvironmentLoadFailed,
   resolveSceneEnvironment,
@@ -29,21 +30,34 @@ const RIG_RADIUS = 11.18;
 const DEG = Math.PI / 180;
 
 /**
- * The pinned HDRs, one download per URL for the page's lifetime. A failed
- * download leaves the cache, so choosing the preset again retries it.
+ * The pinned HDRs, one download per preset for the page's lifetime. Each
+ * preset tries the self-hosted file, then the upstream mirror (the same
+ * bytes). A failed download leaves the cache, so choosing the preset again
+ * retries it.
  */
-const environmentSources = new Map<string, Promise<THREE.DataTexture>>();
+const environmentSources = new Map<DreiEnvironmentPreset, Promise<THREE.DataTexture>>();
 
-function loadEnvironmentSource(url: string): Promise<THREE.DataTexture> {
-  let pending = environmentSources.get(url);
-  if (!pending) {
-    pending = new HDRLoader().loadAsync(url).then((texture) => {
+async function loadFirstEnvironmentSource(urls: readonly string[]): Promise<THREE.DataTexture> {
+  let lastError: unknown = new Error('No environment URL');
+  for (const url of urls) {
+    try {
+      const texture = await new HDRLoader().loadAsync(url);
       texture.mapping = THREE.EquirectangularReflectionMapping;
       texture.colorSpace = THREE.LinearSRGBColorSpace;
       return texture;
-    });
-    pending.catch(() => environmentSources.delete(url));
-    environmentSources.set(url, pending);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function loadEnvironmentSource(preset: DreiEnvironmentPreset): Promise<THREE.DataTexture> {
+  let pending = environmentSources.get(preset);
+  if (!pending) {
+    pending = loadFirstEnvironmentSource(environmentAssetUrls(preset));
+    pending.catch(() => environmentSources.delete(preset));
+    environmentSources.set(preset, pending);
   }
   return pending;
 }
@@ -57,8 +71,9 @@ function loadEnvironmentSource(url: string): Promise<THREE.DataTexture> {
  *
  * The download runs beside the scene rather than through Suspense: until it
  * arrives the molecule renders with the analytic environment, and a failed
- * download (offline, a blocked CDN) leaves it that way instead of taking the
- * canvas into its error boundary.
+ * download (offline, a missing file on both the self-hosted path and the
+ * mirror) leaves it that way instead of taking the canvas into its error
+ * boundary.
  */
 function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
   const { renderer, scene } = useThree();
@@ -66,7 +81,7 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadEnvironmentSource(environmentAssetUrl(preset)).then(
+    loadEnvironmentSource(preset).then(
       (texture) => {
         if (cancelled) return;
         clearSceneEnvironmentLoadFailure(preset);
@@ -75,6 +90,7 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
       (error: unknown) => {
         if (cancelled) return;
         markSceneEnvironmentLoadFailed(preset);
+        requestLupiFrames();
         console.warn(
           `[SceneLighting] Environment '${preset}' could not be loaded; rendering without image-based light.`,
           error instanceof Error ? error.message : String(error),
@@ -88,12 +104,18 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
 
   useLayoutEffect(() => {
     if (!source || source.preset !== preset) return undefined;
-    return installSceneEnvironmentPmrem(
+    const uninstall = installSceneEnvironmentPmrem(
       scene,
       source.texture,
       preset,
       () => new PMREMGenerator(renderer),
     );
+    // The PMREM lands outside React's props: draw it (and again on removal).
+    requestLupiFrames();
+    return () => {
+      uninstall();
+      requestLupiFrames();
+    };
   }, [renderer, preset, scene, source]);
 
   return null;
@@ -107,10 +129,14 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
  */
 function LupiSoftboxEnvironment() {
   const { renderer, scene } = useThree();
-  useLayoutEffect(() => installScientificStudioEnvironment(
-    scene,
-    () => new PMREMGenerator(renderer),
-  ), [renderer, scene]);
+  useLayoutEffect(() => {
+    const uninstall = installScientificStudioEnvironment(scene, () => new PMREMGenerator(renderer));
+    requestLupiFrames();
+    return () => {
+      uninstall();
+      requestLupiFrames();
+    };
+  }, [renderer, scene]);
 
   return null;
 }

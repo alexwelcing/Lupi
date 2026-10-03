@@ -20,7 +20,7 @@
 
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber/webgpu';
-import { LUPI_JOB, LUPI_PHASE, beginRecording, runPrepareCapture } from '@atlas/scene';
+import { LUPI_JOB, LUPI_PHASE, beginRecording, requestLupiFrames, runPrepareCapture } from '@atlas/scene';
 import { useStore, type ExportRequest } from './store';
 import {
   canInferCovalentBonds,
@@ -567,9 +567,9 @@ export function ExportManager() {
       useStore.getState().setFrame(originalStoreState.current.frame);
       originalStoreState.current = null;
     }
-    // Restore the exact mode in effect before export. Canvas defaults to
-    // "always" unless configured otherwise, and export must not silently
-    // change application scheduling for the rest of the session.
+    // Restore the exact mode in effect before export (the viewer runs on
+    // demand), and export must not silently change application scheduling
+    // for the rest of the session.
     if (originalFrameloop.current) {
       setFrameloop(originalFrameloop.current);
       originalFrameloop.current = null;
@@ -578,6 +578,8 @@ export function ExportManager() {
     const stopRecordingGuards = recordingRestoreRef.current;
     recordingRestoreRef.current = null;
     stopRecordingGuards?.();
+    // Entering demand grants no frame: draw the restored view.
+    requestLupiFrames();
   }, [camera, file, setSize, setDpr, setFrameloop, clearExportRequest]);
 
   // Stable ref so the VideoCaptureLoop always calls the freshest restore closure.

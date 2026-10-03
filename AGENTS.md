@@ -88,10 +88,34 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   glide or coast. Only UI gestures, presets and Recenter animate.
 - **`window.__lupiPlay`** is the Play layer's handle for smoke plugins and
   agents (installed in production, like `__lupiViewerMcp`): `state()` returns
-  `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame }`,
+  `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame,
+  frames, frameDemand }`,
   `emit(intent)` emits a Lupi intent as the UI would, `reset()` puts display
-  motion at rest, and `poke`, `flick`, `catch`, `scatter` and `stepDetent`
-  appear once the viewer has registered them. It never writes molecule data.
+  motion at rest, and `poke`, `flick`, `catch`, `scatter`, `stepDetent`,
+  `burst(atomIndex)`, `tug(atomIndex, [dx, dy, dz], holdMs)` and
+  `heat(level)` appear once the viewer has registered them. It never writes
+  molecule data.
+- **One-finger verbs** (Play tray, palette): Orbit, Poke, Tug, Burst, Heat.
+  Tug drags an atom's neighbourhood on springs and twangs it home; Burst pops
+  the atoms out from a tap and springs them back; Heat jiggles the atoms
+  while held (the pill reads an illustrative temperature) and cools on
+  release. With a verb latched, Enter plays it on the selected atom. They
+  are display-only offsets in `packages/scene/src/tsl/displayMotion.ts`
+  (bonds follow and thin as they stretch), labelled "Illustrative · Reset",
+  halved by Gentle, off in Still, and never in an export. On desktop the
+  atom under the cursor glows lime and selected atoms glow stronger
+  (`tsl/atomGlow.ts`); captures and videos never carry the glow.
+- **Quiet Idle.** The viewer canvas renders on demand: a still view draws
+  no frames. Anything that changes the picture asks for frames (store writes,
+  gestures, the rig, display motion, playback, flythrough, async bonds and
+  environment loads, MCP commands), and animators keep the loop awake until
+  they settle (`packages/scene/src/frameDemand.ts`). A drifting procedural
+  background or a halo annotation draws at 24 fps; a selection ring pulses
+  for 2.4 s and rests. `__lupiPlay.state().frames` counts drawn frames (read
+  it twice on a still view: it should not move) and `.frameDemand.awakeBy`
+  names what keeps the loop awake; `?frames=1` shows the same as a small
+  meter at the top of the viewer (for a phone). `?frameloop=always` renders
+  continuously again. Exports and video force their own frames.
 - **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
   half-strength display motion) or Still (nothing moves on its own; glides
   cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and
@@ -327,9 +351,10 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   encoder. The canvas stores them premultiplied in 8 bits, so very low alpha
   loses colour precision. This is deterministic and recorded as
   `rasterAlphaStorage`.
-- Display motion (the arrival, the poke ripple, Scatter) is illustrative and
-  never reaches an artifact: its master weight is zeroed inside every capture
-  render and suspended for the whole of a video recording, and the camera rig
+- Display motion (the arrival, the poke ripple, Scatter, Tug, Burst, Heat)
+  and the hover and selection glow are illustrative and never reach an
+  artifact: their master weights are zeroed inside every capture render and
+  suspended for the whole of a video recording, and the camera rig
   settles and re-levels (y-up) before any capture reads the camera. An export
   mid-ripple has the same `artifactDigest` as one taken at rest.
 - Deterministic raster bonds fail closed until the asynchronous bond result is

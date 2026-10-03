@@ -179,6 +179,26 @@ function pickAtomIndex(
   return hit;
 }
 
+// ─── The mounted picker, for toys (Tug, Burst) ──────────────────────
+
+type ClientPick = (clientX: number, clientY: number) => number | null;
+let activeClientPick: ClientPick | null = null;
+
+/**
+ * The atom under a client-space point (CSS px), picked exactly as a tap
+ * would pick it (rest positions, hidden types skipped), or null. Null too
+ * while no picker is mounted (playback, very large scenes).
+ */
+export function pickAtomAtClient(clientX: number, clientY: number): number | null {
+  if (!activeClientPick) return null;
+  try {
+    return activeClientPick(clientX, clientY);
+  } catch (error) {
+    console.error('[lupi] atom pick threw', error);
+    return null;
+  }
+}
+
 /**
  * True when a pointer event belongs to the viewer canvas: its target is the
  * canvas, or one of the canvas's own wrapper elements (R3F connects events,
@@ -301,6 +321,16 @@ export function AtomPicker({
     measureAtomsRef.current = [];
     selectedRef.current = new Set();
   }, [frame, selectionMode]);
+
+  // Toys pick through the same march (`pickAtomAtClient`).
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const pick = picker.pick;
+    activeClientPick = pick;
+    return () => {
+      if (activeClientPick === pick) activeClientPick = null;
+    };
+  }, [enabled, picker]);
 
   // Which input path is live: the intent bus while a canvas input source is mounted.
   const [intentInput, setIntentInput] = useState(isCanvasInputSourceActive);

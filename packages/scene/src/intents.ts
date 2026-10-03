@@ -37,6 +37,20 @@ export type LupiIntent =
       phase: 'start' | 'move' | 'end';
       pointerType: PointerKind;
     }
+  /**
+   * A latched Play verb's press (not Orbit): `down` when the first finger or
+   * the left button lands, `up` when it lifts, is cancelled, or a second
+   * finger turns it into a camera gesture. Heat holds on it.
+   */
+  | {
+      type: 'verb.press';
+      clientX: number;
+      clientY: number;
+      phase: 'down' | 'up';
+      pointerType: PointerKind;
+    }
+  /** A tap that belongs to the latched verb (Burst), not to picking: it never selects. */
+  | { type: 'verb.tap'; clientX: number; clientY: number; pointerType: PointerKind }
   | { type: 'play.toggleTray'; source: 'pill' | 'key' | 'contextmenu' | 'palette' }
   | { type: 'play.scatter' }
   | { type: 'play.spin' }

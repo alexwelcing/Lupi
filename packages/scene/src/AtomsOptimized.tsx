@@ -72,6 +72,7 @@ import {
   type AtomImpostorTextures,
   type AtomImpostorUniforms,
 } from './tsl/atomImpostorMaterial';
+import { useLupiCommitFrames } from './frameDemand';
 
 // ─── Types ───────────────────────────────────────────────────────────
 export type AtomQualityTier = 0 | 1 | 2;
@@ -632,6 +633,8 @@ export function AtomsOptimized({
   occlusion = null,
   occlusionStrength = 0.55,
 }: AtomsOptimizedProps) {
+  // Imperative uniform/attribute writes on commit (and async results) get drawn.
+  useLupiCommitFrames();
   void highlightedAtoms;
   const meshRef = useRef<THREE.Mesh>(null!);
   const spatialHashRef = useRef(new SpatialHash3D(3.0));

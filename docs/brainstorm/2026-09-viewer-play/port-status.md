@@ -31,5 +31,5 @@ The viewer now runs on React Three Fiber v10 alpha (`10.0.0-canary.14007b4`), `@
 - **fiber canary teardown warning.** If the viewer unmounts while `renderer.init()` is still pending, fiber logs "[R3F] Error while unmounting root", from a null `state.xr`. It's rare, harmless for users, and needs an upstream fix.
 - **drei patch.** `patches/@react-three__drei@11.0.0-alpha.7.patch` stops MeshTransmissionMaterial compiling its distortion noise when distortion is 0; without it, SwiftShader's WebGL2 path freezes. Drop it once drei fixes this upstream.
 - **Export axes overlay.** The overlay in raster exports stays bottom-left (contract literal `canvas-overlay-v1`), while the on-screen gizmo is now bottom-right.
-- **Environment HDRs** are still fetched from raw.githack.com; they should be self-hosted.
+- **Environment HDRs** are self-hosted since wave 2: `apps/web/public/hdri/` (byte-identical to drei-assets at the pinned revision, so no `specId` moved; CC0, see the NOTICE there). raw.githack.com is only a mirror tried when the self-hosted file fails.
 - **Performance** was not a goal of this port. Impostors lose early-Z on both backends, which is accepted, and there is no device data.

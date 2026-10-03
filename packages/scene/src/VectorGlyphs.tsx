@@ -42,6 +42,7 @@ import {
   createGlyphColormapTexture,
   createVectorGlyphMaterial,
 } from './tsl/vectorGlyphMaterial';
+import { useLupiCommitFrames } from './frameDemand';
 
 export interface VectorGlyphStats {
   /** p95 magnitude used as the color/scale reference. */
@@ -103,6 +104,8 @@ export function VectorGlyphs({
   onStats,
   artifactSpecId,
 }: VectorGlyphsProps) {
+  // Imperative uniform/attribute writes on commit (and async results) get drawn.
+  useLupiCommitFrames();
   const meshRef = useRef<THREE.Mesh>(null);
   const canInterpolateToNextFrame = useMemo(
     () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),

@@ -56,6 +56,7 @@ import {
   writeBondColor,
   type BondImpostorUniforms,
 } from './tsl/bondImpostorMaterial';
+import { useLupiCommitFrames } from './frameDemand';
 
 /**
  * Content-equality check for bond-pair Int32Arrays. Used by the bond-
@@ -318,6 +319,8 @@ export function Bonds({
   onBondsUpdate,
   onGpuStatusChange,
 }: BondsProps) {
+  // Imperative uniform/attribute writes on commit (and async results) get drawn.
+  useLupiCommitFrames();
   const meshRef = useRef<THREE.Mesh>(null);
   const canInterpolateToNextFrame = useMemo(
     () => Boolean(nextFrame && framesShareAtomOrder(frame, nextFrame)),

@@ -37,7 +37,7 @@ export { resolveBondTopologyMode, validateSourceBondTopology } from './bondTopol
 export type { BondTopologyMode, SourceBondTopologyValidation } from './bondTopology';
 export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
-export { AtomPicker } from './AtomPicker';
+export { AtomPicker, pickAtomAtClient } from './AtomPicker';
 export { SpatialHash3D } from './SpatialHash';
 export { VectorGlyphs, LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER } from './VectorGlyphs';
 export type { VectorGlyphStats } from './VectorGlyphs';
@@ -51,6 +51,16 @@ export type { BillionAtomStats } from './BillionAtomBlock';
 // Frame phases (R3F v10 scheduler) and job ids
 export { LUPI_PHASE, LUPI_JOB, installLupiPhases } from './framePhases';
 export type { LupiPhase, LupiJobId } from './framePhases';
+export {
+  FRAME_DEMAND,
+  driveLupiFrameDemand,
+  keepLupiAwake,
+  lupiFrameStats,
+  requestLupiFrames,
+  stopLupiFrameDemand,
+  useLupiCommitFrames,
+} from './frameDemand';
+export type { LupiFrameStats, LupiKeepAwakeOptions } from './frameDemand';
 
 // The intent bus and the capture guards (wave-1 contracts)
 export {
@@ -98,6 +108,7 @@ export {
 } from './tsl/impostorKit';
 export type { LupiEnvBinding, LupiLightUniforms, LupiSurfaceInput } from './tsl/impostorKit';
 export * from './tsl/displayMotion';
+export * from './tsl/atomGlow';
 
 // Shared constants
 export {
