@@ -843,7 +843,8 @@
 /* Ink tiles: the molecule's own ink drawing on the sage plate (the /m page's,
    at its opening pose). A tap lights it while the relay takes it into 3D. */
 .wall-grid img.ink-tile,
-.finder-results img.ink-tile {
+.finder-results img.ink-tile,
+.library-card-head img.ink-tile {
   box-sizing: border-box;
   padding: 1px;
   object-fit: contain;
@@ -851,6 +852,7 @@
   transition: filter 160ms ease-out, box-shadow 160ms ease-out, transform 160ms ease-out;
 }
 .wall-grid a:hover img.ink-tile,
+.library-card > a:hover img.ink-tile,
 .finder-results .finder-row:hover img.ink-tile,
 .finder-results li.is-active img.ink-tile {
   box-shadow: 0 0 0 1px #d5ef9c59;
