@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { omol25Collection } from '@atlas/core/omol25';
 import { useStore } from '../store';
 import { openPubChemMolecule, pubchemAutocomplete, PUBCHEM_COMPOUND_COUNT_LABEL } from '../molecules/pubchemLoad';
 import { LOCAL_MOLECULES, searchLocalMolecules, type LocalMolecule } from './moleculeIndex';
@@ -7,6 +8,16 @@ import { beginRelay, endRelay, peekBaton, setBaton, type RelayBaton } from '../r
 import { hasFirstFrame } from '../relay/firstFrame';
 import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
 import { inkTileFor, inkTileSrc, inkTileViewDir, prefetchInkModel, preloadInkTiles } from './inkTiles';
+import {
+  isFormulaShapedForOmol,
+  matchOmolPicks,
+  omolFormulaHandoffHref,
+  omolPickDetail,
+  omolPickHref,
+  omolPickTitle,
+  openOmolPick,
+  type OmolPick,
+} from './omolShelf';
 // The relay stage registers itself here, in the landing chunk (no three).
 import '../relay/stage';
 
@@ -15,6 +26,9 @@ import '../relay/stage';
  * keystroke, one click into the molecule.
  *
  *  - Local gallery molecules match instantly (no network).
+ *  - Featured OMol25 picks (bundled, no network) follow, matched by formula
+ *    or element; a formula-shaped query also gets an explicit link into
+ *    OMol25's validation index. OMol25 itself is never queried from here.
  *  - PubChem's compound dictionary fills in names for anything else after a
  *    short debounce, so a couple of letters reach 100M+ compounds.
  *  - Enter opens the top result; a name with no local match goes straight to
@@ -26,11 +40,14 @@ import '../relay/stage';
 
 export type FinderResult =
   | { kind: 'local'; key: string; title: string; detail: string; molecule: LocalMolecule }
+  | { kind: 'omol'; key: string; title: string; detail: string; pick: OmolPick }
   | { kind: 'pubchem'; key: string; title: string; detail: string; name: string };
 
 const PUBCHEM_DEBOUNCE_MS = 150;
 const LOCAL_LIMIT = 6;
 const PUBCHEM_LIMIT = 8;
+const OMOL_ROWS_LABEL = `${(omol25Collection('neutral-train').sourceRows / 1_000_000).toFixed(1)}M`;
+const OMOL_INDEX_ROWS = omol25Collection('neutral-validation').sourceRows.toLocaleString('en-US');
 
 let relaySerial = 0;
 
@@ -105,8 +122,16 @@ function formatAtoms(atoms: number): string {
   return `${atoms.toLocaleString()} atoms`;
 }
 
-/** Merge instant local matches with PubChem names, local first, no duplicates. */
-export function mergeFinderResults(query: string, local: LocalMolecule[], remote: string[]): FinderResult[] {
+/**
+ * Merge instant local matches, the featured OMol25 picks a query names and
+ * PubChem names: gallery first, then OMol25, then PubChem, no duplicates.
+ */
+export function mergeFinderResults(
+  query: string,
+  local: LocalMolecule[],
+  remote: string[],
+  picks: readonly OmolPick[] = matchOmolPicks(query),
+): FinderResult[] {
   const results: FinderResult[] = local.map((molecule) => ({
     kind: 'local',
     key: `local:${molecule.id}`,
@@ -114,6 +139,9 @@ export function mergeFinderResults(query: string, local: LocalMolecule[], remote
     detail: [molecule.formula, molecule.atoms ? formatAtoms(molecule.atoms) : null].filter(Boolean).join(' · '),
     molecule,
   }));
+  for (const pick of picks) {
+    results.push({ kind: 'omol', key: `omol:${pick.id}`, title: omolPickTitle(pick), detail: `OMol25 · ${omolPickDetail(pick)}`, pick });
+  }
   const seen = new Set(local.map((m) => m.title.toLowerCase()));
   for (const name of remote) {
     const lower = name.toLowerCase();
@@ -129,7 +157,7 @@ export function mergeFinderResults(query: string, local: LocalMolecule[], remote
 }
 
 function finderRowContent(result: FinderResult) {
-  const ink = result.kind === 'local' ? inkTileSrc(result.molecule.id) : null;
+  const ink = result.kind === 'local' ? inkTileSrc(result.molecule.id) : result.kind === 'omol' ? result.pick.ink : null;
   return (
     <>
       {ink ? (
@@ -204,6 +232,7 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
         if (result.kind === 'local') {
           await openLocalMolecule(result.molecule.id, { source: 'finder', fromRect, ink: inkTileSrc(result.molecule.id) !== null });
         }
+        else if (result.kind === 'omol') await openOmolPick(result.pick, 'finder');
         else await openPubChemMolecule({ name: result.name });
       } catch {
         // The store carries the readable error; keep the finder usable.
@@ -268,8 +297,8 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
         )}
       </div>
       <p className="finder-scope">
-        {LOCAL_MOLECULES.length} ready to open · {PUBCHEM_COMPOUND_COUNT_LABEL} more on PubChem · press Enter to open ·{' '}
-        <a href="/library">browse the library</a>
+        {LOCAL_MOLECULES.length} ready to open · <a href="/library/omol25">{OMOL_ROWS_LABEL} in OMol25</a> ·{' '}
+        {PUBCHEM_COMPOUND_COUNT_LABEL} more on PubChem · press Enter to open · <a href="/library">browse the library</a>
       </p>
       {showList && (
         <ul className="finder-results" id={`${listId}-list`} role="listbox" aria-label="Molecule matches">
@@ -281,12 +310,13 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
               aria-selected={index === active}
               className={index === active ? 'is-active' : undefined}
             >
-              {result.kind === 'local' && hasMoleculePage(result.molecule.id) ? (
-                // A gallery molecule with a page: a real link (new tab, copy link
-                // and crawlers reach /m/<id>); a plain click opens it in place.
+              {(result.kind === 'local' && hasMoleculePage(result.molecule.id)) || result.kind === 'omol' ? (
+                // A gallery molecule with a page, or an OMol25 pick: a real link
+                // (new tab, copy link and crawlers reach /m/<id> or the viewer);
+                // a plain click opens it in place.
                 <a
                   className="finder-row"
-                  href={moleculePagePath(result.molecule.id)}
+                  href={result.kind === 'omol' ? omolPickHref(result.pick) : moleculePagePath(result.molecule.id)}
                   aria-disabled={busy || undefined}
                   onMouseEnter={() => setActive(index)}
                   onClick={(event) => {
@@ -316,6 +346,13 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
       {showList && (
         <p className="finder-more">
           <a href={`/library?q=${encodeURIComponent(query.trim())}`}>Search the full library for “{query.trim()}” ↗</a>
+        </p>
+      )}
+      {showList && isFormulaShapedForOmol(query) && (
+        <p className="finder-more">
+          <a href={omolFormulaHandoffHref(query)}>
+            Find {query.trim()} in OMol25’s {OMOL_INDEX_ROWS}-structure index ↗
+          </a>
         </p>
       )}
       {error && !loading && (

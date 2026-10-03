@@ -1,0 +1,151 @@
+/* ---- OMol25 shelf: six featured picks after the hero ---- */
+.omol-shelf {
+  padding-block: 8px 48px;
+}
+.omol-shelf__eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-bottom: 10px !important;
+  color: var(--home-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.omol-shelf__credits {
+  display: inline-flex;
+  gap: 12px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.omol-shelf__credits a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.omol-shelf h2 {
+  font-size: 1.75rem;
+}
+.omol-shelf__deck {
+  margin-top: 6px !important;
+  color: var(--home-muted);
+  font-size: 0.9375rem;
+}
+.omol-shelf__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.omol-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 100%;
+  padding: 8px 14px 8px 8px;
+  background: var(--home-panel);
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+}
+.omol-tile:hover {
+  border-color: #d5ef9c80;
+}
+.omol-shelf__credits a:hover {
+  color: var(--home-accent);
+}
+.omol-tile[aria-busy='true'] {
+  opacity: 0.75;
+}
+.omol-tile img.ink-tile,
+.omol-tile__mark {
+  flex: none;
+  width: 88px;
+  height: 88px;
+  border-radius: 8px;
+}
+.omol-tile img.ink-tile {
+  padding: 1px;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 42%, #1a2722, #101817 72%);
+  transition: filter 160ms ease-out, box-shadow 160ms ease-out, transform 160ms ease-out;
+}
+.omol-tile:hover img.ink-tile {
+  box-shadow: 0 0 0 1px #d5ef9c59;
+}
+.omol-tile__mark {
+  display: grid;
+  place-items: center;
+  background: #0c1312;
+  color: var(--home-muted);
+  font: 400 1.75rem/1 Georgia, 'Times New Roman', serif;
+}
+.omol-tile__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.omol-tile__text strong {
+  color: var(--home-text);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.omol-tile__text small {
+  color: var(--home-muted);
+  font-size: 0.75rem;
+}
+.omol-tile__chip {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border: 1px solid #ffffff2e;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+}
+.omol-shelf__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px !important;
+}
+.omol-shelf__actions .student-secondary {
+  gap: 8px;
+}
+.omol-shelf__actions small {
+  color: var(--home-muted);
+  font-weight: 400;
+}
+.omol-shelf__status,
+.omol-shelf__caption {
+  max-width: 72ch;
+  margin-top: 14px !important;
+  color: var(--home-muted);
+  font-size: 0.75rem;
+}
+@media (max-width: 800px) {
+  .omol-shelf__tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .omol-tile {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+  }
+  .omol-tile img.ink-tile,
+  .omol-tile__mark {
+    width: 64px;
+    height: 64px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .omol-tile img.ink-tile {
+    transition: none;
+  }
+}
