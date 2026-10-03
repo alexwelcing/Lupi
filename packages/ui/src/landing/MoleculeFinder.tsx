@@ -5,6 +5,7 @@ import { LOCAL_MOLECULES, searchLocalMolecules, type LocalMolecule } from './mol
 import { LandingIntentContext } from './landingIntent';
 import { beginRelay, endRelay, peekBaton, setBaton, type RelayBaton } from '../relay/baton';
 import { hasFirstFrame } from '../relay/firstFrame';
+import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
 // The relay stage registers itself here, in the landing chunk (no three).
 import '../relay/stage';
 
@@ -106,6 +107,25 @@ export function mergeFinderResults(query: string, local: LocalMolecule[], remote
     results.push({ kind: 'pubchem', key: `pubchem:${q}`, title: query.trim(), detail: 'Look up on PubChem', name: query.trim() });
   }
   return results;
+}
+
+function finderRowContent(result: FinderResult) {
+  return (
+    <>
+      {result.kind === 'local' && result.molecule.image ? (
+        <img src={result.molecule.image} alt="" width="40" height="40" loading="lazy" decoding="async" />
+      ) : (
+        <span className="finder-glyph" aria-hidden="true">
+          {result.kind === 'local' ? '◉' : '⌕'}
+        </span>
+      )}
+      <span className="finder-text">
+        <strong>{result.title}</strong>
+        <small>{result.detail}</small>
+      </span>
+      <span aria-hidden="true">↗</span>
+    </>
+  );
 }
 
 export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => void } = {}) {
@@ -226,25 +246,32 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
               aria-selected={index === active}
               className={index === active ? 'is-active' : undefined}
             >
-              <button
-                type="button"
-                onMouseEnter={() => setActive(index)}
-                onClick={(event) => void open(result, previewRectIn(event.currentTarget))}
-                disabled={busy}
-              >
-                {result.kind === 'local' && result.molecule.image ? (
-                  <img src={result.molecule.image} alt="" width="40" height="40" loading="lazy" decoding="async" />
-                ) : (
-                  <span className="finder-glyph" aria-hidden="true">
-                    {result.kind === 'local' ? '◉' : '⌕'}
-                  </span>
-                )}
-                <span className="finder-text">
-                  <strong>{result.title}</strong>
-                  <small>{result.detail}</small>
-                </span>
-                <span aria-hidden="true">↗</span>
-              </button>
+              {result.kind === 'local' && hasMoleculePage(result.molecule.id) ? (
+                // A gallery molecule with a page: a real link (new tab, copy link
+                // and crawlers reach /m/<id>); a plain click opens it in place.
+                <a
+                  className="finder-row"
+                  href={moleculePagePath(result.molecule.id)}
+                  aria-disabled={busy || undefined}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                    event.preventDefault();
+                    if (!busy) void open(result, previewRectIn(event.currentTarget));
+                  }}
+                >
+                  {finderRowContent(result)}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onMouseEnter={() => setActive(index)}
+                  onClick={(event) => void open(result, previewRectIn(event.currentTarget))}
+                  disabled={busy}
+                >
+                  {finderRowContent(result)}
+                </button>
+              )}
             </li>
           ))}
         </ul>
