@@ -26,7 +26,14 @@ Core endpoints:
 - `GET /m/:id`, `GET /m/` — zero-canvas molecule pages and their index, static
   HTML written by the web build (`scripts/generate-molecule-pages.mts`) with
   per-molecule Open Graph cards (`/og/m/<id>.png`), ink drawings
-  (`/og/m/<id>-ink.svg`) and desk models (`/ar/<id>.usdz`, `/ar/<id>.glb`)
+  (`/og/m/<id>-ink.svg`) and desk models (`/ar/<id>.usdz`, `/ar/<id>.glb`);
+  `/m/manifest.json` also gives each drawing's opening `pose`, `inkRadius`
+  and the viewer's `fit` radius (the landing's ink tiles hand over with them)
+- `GET /daily/`, `GET /daily/:date`, `GET /daily/text` — Lupi Daily, the
+  zero-canvas mystery-molecule game (static HTML written by the web build,
+  `scripts/generate-daily-pages.mts`), with sealed puzzle files
+  (`/daily/p/<token>.json`), the guess pool and per-day silhouette cards
+  (`/og/daily/<date>.jpg`) that never name the answer (see `docs/daily.md`)
 - `POST /collectAnalytics` — first-party analytics edge collector
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
@@ -107,9 +114,28 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   frames, frameDemand }`,
   `emit(intent)` emits a Lupi intent as the UI would, `reset()` puts display
   motion at rest, and `poke`, `flick`, `catch`, `scatter`, `stepDetent`,
-  `burst(atomIndex)`, `tug(atomIndex, [dx, dy, dz], holdMs)` and
-  `heat(level)` appear once the viewer has registered them. It never writes
-  molecule data.
+  `burst(atomIndex)`, `tug(atomIndex, [dx, dy, dz], holdMs)`,
+  `heat(level)`, `replay()` and `remix()` appear once the viewer has
+  registered them; `ink()` reports the Illustrate look's live weights and
+  Ink-to-Light state. It never writes molecule data.
+- **The Illustrate look (Ink and Light).** Looks → Illustrate (flat colour on
+  the sage plate) or Sketch (hatched, on the paper plate), the Play tray's
+  Look row (Lit · Ink · Remix ⟳), the palette or the `I` key draw the molecule like the
+  Lupi ink drawings: toon fills from the key light, crevices shaded by the
+  baked contact occlusion, an ink outline at every atom and bond silhouette
+  and, for Sketch, pen hatching (`packages/scene/src/tsl/inkLook.ts`, mixed
+  into both impostors by one weight). It is a Look, not toy motion: the
+  store's `inkStyle` (`off`, `flat`, `hatch`) and `inkWeight` ride share URLs
+  (`ink`, `iw` in the `s=` state), saved views and `lupi.set_viewer`, and
+  replay and Remix links add a top-level `ink=f|h`; a Foil finish steps
+  aside under ink (a drawing carries no foil); while ink is on the post
+  recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
+  stays); exports draw it and their spec records `view.ink`. Changes fade
+  (480 ms); every capture renders the configured look, never a fade.
+  Ink-to-Light: a molecule opened from an ink drawing (the hero, a molecule
+  page, an ink tile on the wall or in the finder) first draws in ink at the
+  drawing's pose, then the light comes on; any touch completes it and Still
+  skips it. See `docs/ink-and-light.md`.
 - **One-finger verbs** (Play tray, palette): Orbit, Poke, Tug, Burst, Heat.
   Tug drags an atom's neighbourhood on springs and twangs it home; Burst pops
   the atoms out from a tap and springs them back; Heat jiggles the atoms
@@ -120,6 +146,19 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   halved by Gentle, off in Still, and never in an export. On desktop the
   atom under the cursor glows lime and selected atoms glow stronger
   (`tsl/atomGlow.ts`); captures and videos never carry the glow.
+- **Overlays ride display motion.** Selection, hover and neighbour rings,
+  annotations, atom-bound knowledge labels, measurements (line, letters,
+  value label), the desktop atom card's anchor and trail heads follow their
+  atoms through the arrival, pokes, Scatter, Tug, Burst and Heat, using the
+  CPU twin of the GPU offset (`tsl/displayMotionTwin.ts`, every term) for
+  just the atoms that carry an overlay (`packages/ui/src/play/displayFollow.tsx`,
+  one job in the `lupi-overlays` phase). Text and cards take a fifth of
+  Heat's jiggle so they stay readable; vector glyphs follow on the GPU. They
+  snap back exactly at rest, and every capture renders them at rest (a
+  capture guard), so exports, MCP artifacts, thumbnails and video keep rest
+  truth; a measurement's value is always the rest value.
+  `__lupiPlay.follow()` reports `{ moving, followers, displaced, points,
+  maxOffset }`.
 - **Quiet Idle.** The viewer canvas renders on demand: a still view draws
   no frames. Anything that changes the picture asks for frames (store writes,
   gestures, the rig, display motion, playback, flythrough, async bonds and
@@ -131,6 +170,61 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   names what keeps the loop awake; `?frames=1` shows the same as a small
   meter at the top of the viewer (for a phone). `?frameloop=always` renders
   continuously again. Exports and video force their own frames.
+- **Phone sheets make room for the molecule.** On a phone every panel
+  (Learn, Style, Data, Camera, Export, Switch, Settings), the atom card, the
+  Play tray and the Save/Account sheets declare the screen area they cover
+  (`packages/ui/src/camera/viewInset.ts`), and the live view eases the
+  molecule into the free area left (shifted, and shrunk to fit, never grown).
+  It is a display-only projection view offset: the store camera, saved views,
+  share URLs, exports, MCP artifacts, picking and the axes gizmo never see it.
+  Held upright, panels are bottom sheets with Peek, Half and Full detents;
+  held sideways, a column on the right. The canvas never resizes for them.
+  `__lupiPlay.viewInset()` returns `{ current, target, occluders }`.
+- **Instant Replay** (`packages/ui/src/replay`). The viewer keeps the last
+  20 s in memory: the camera pose of every drawn frame that moved, the toy
+  inputs and the pill's flashes. After a good flick, a chain of three named
+  faces, Spin's flip or a toy moment, the pill offers "Replay ↗" for 7 s (R,
+  the Play tray or the palette any time; with no moment it shares this view). The sheet
+  has the live link at once and records a 9:16 clip through the video
+  export, with "Illustrative" burned into each frame. The link adds
+  `replay=<base64url tape>` (versioned binary: camera keys at a 0.5 s pose
+  snapshot plus where the motion bends, toy inputs, flashes; about 0.5–1.5
+  KB, nothing stored) to `sim`, `load`, `molecule` or a saved view's route.
+  Opening it plays the moment in the visitor's own view (Standard on its
+  own, Gentle on "▶ Watch"; any touch takes over) and ends on "Your turn".
+  Still sends and opens a still pose. The viewer drops `replay=` from the
+  address bar as it reads it. `__lupiPlay.replay()` returns the offered or
+  last moment as `{ moment, keys, events, bytes, link }`; `replay('watch')`
+  starts a waiting shared replay. Replays and clips are never artifacts:
+  MCP cannot request them.
+- **Remix codes and Foil** (`packages/ui/src/remix`). Every Remix is a short
+  versioned code, `r1-K7QDM`: five Crockford base32 characters (keep-colours
+  and worlds flags, a 23-bit seed) that the frozen r1 catalog in
+  `remix/code.ts` resolves to the whole look with an integer-exact
+  mulberry32 stream, so a code gives the same look on any device, molecule
+  and atom count (changing the catalog means r2; r1 resolves forever). r1
+  has no transmission and no adjusted gradients, so a remixed view stays
+  exportable. Roll from the Play tray's Look row (it stays open), the pill's
+  "⟳ Again", M (Shift+M steps back), the scene deck, the palette, or a
+  shake (phones; off until turned on in the Remix sheet, iOS asks
+  permission in that tap). The Remix sheet (the tray's code chip) copies,
+  shares (`?remix=` on the molecule's address) and takes typed or pasted
+  codes; a pasted `r1-` code or `remix=` link also applies anywhere outside
+  text fields, and replay links carry the sender's code. Keep atom colours
+  is on by default (CPK). Looks morph in about 600 ms (`remix/lookMorph.ts`:
+  store keys tweened per frame, colours in linear light, discrete choices at
+  the midpoint under a dip, gradient backdrops cross-faded on a dome); Still
+  cuts. About one code in 24 is Foil, a pure function of the code text
+  (`fmix32(fnv1a(code)) mod 24`): Holo, Gold leaf or Pearl, a cosmetic rim,
+  highlight and sheen term in the atom and bond impostors
+  (`scene/src/tsl/atomFoil.ts`), revealed by a 900 ms sweep from the
+  key-light side, at published odds (Foil 1 in 24, each finish 1 in 72)
+  printed in the tray and the sheet. A finish rolled once stays selectable
+  on that device ("Show all finishes" unlocks all; "Off" hides one). Finishes
+  are never in an export, thumbnail, MCP artifact or ordinary video (the
+  capture guard zeroes them); Instant Replay's illustrative clip keeps them.
+  `__lupiPlay.remix()` returns `{ code, foil, finish, status, morphing }`;
+  `remix('roll')`, `remix('undo')` and `remix('r1-K7QDM')` drive it.
 - **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
   half-strength display motion) or Still (nothing moves on its own; glides
   cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and
@@ -303,6 +397,7 @@ Common recognized keywords:
 - `hide bonds`, `show bonds`, `show cell`, `show axes`
 - `studio`, `paper`, `editorial`, `cinematic`, `diagram` — postprocess presets
 - `iso`, `top`, `side`, `front`, `free` — camera presets
+- `ink` / `illustrate`, `hatched` / `sketch`, `lit` — the Illustrate look (flat, hatched, off)
 
 ## Render artifact V2 truth
 
@@ -375,6 +470,13 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   look is empty. `postprocessPipeline` in the fingerprint's determinism facts
   names the pass (`viewer-look-output-resolution.v1;…`). FXAA is the live
   view's only anti-aliasing and never runs on an export; supersampling is.
+- The Illustrate look shades the impostors themselves, so its capture takes
+  the raw path (`view.postprocess` is `raw-scene`), and the spec carries
+  `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch',
+  weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
+  `plate`), present only while the look is on, so every
+  lit spec keeps its identity. Ink line weight follows the capture's texel
+  scale and the picture's short side, so an export keeps the screen's weight.
 - The Specimen floor shadow (`contactShadows` layer) is part of the view: it
   sits under every molecule up to 50,000 atoms (off for Diagram and under the
   filter shell), and the spec's `view.contactShadows` states its blur,
@@ -399,7 +501,14 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   artifact: their master weights are zeroed inside every capture render and
   suspended for the whole of a video recording, and the camera rig
   settles and re-levels (y-up) before any capture reads the camera. An export
-  mid-ripple has the same `artifactDigest` as one taken at rest.
+  mid-ripple has the same `artifactDigest` as one taken at rest. The one
+  recording that keeps display motion is Instant Replay's clip
+  (`beginRecording({ illustrative: true })`): it is labelled "Illustrative"
+  in every frame and has no artifact identity. A Remix code's Foil finish
+  (Holo, Gold leaf, Pearl) follows the same rule: zero in every capture
+  render and ordinary recording, kept only in that illustrative clip. A
+  Remix look itself (lights, materials, backdrop) is ordinary viewer state
+  and exports as configured.
 - Deterministic raster bonds fail closed until the asynchronous bond result is
   snapshot-addressable; hide bonds before raster export. Model export may use
   its synchronous CPU bond path, but fails if inferred bonds hit the cap.

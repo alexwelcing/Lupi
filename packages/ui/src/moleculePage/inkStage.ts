@@ -27,6 +27,10 @@ export type InkComfort = 'standard' | 'gentle' | 'still';
 
 export interface InkStage {
   setPose(pose: InkPose): void;
+  /** Turn dragging, keys and taps on or off (the drawing stays where it is). */
+  setInteractive(on: boolean): void;
+  /** Paint the current pose again (after the painter changed what it shows). */
+  redraw(): void;
   getPose(): InkPose;
   /** The molecule's apparent spin about world +Y (rad/s). */
   getBodyOmegaY(): number;
@@ -37,12 +41,27 @@ export interface InkStage {
   destroy(): void;
 }
 
+/**
+ * What the stage paints with. The stage owns the pose, the motion and the
+ * pointer; a painter owns the nodes. The default is the lit ink drawing
+ * (createLitInkPainter); the Daily paints silhouettes and outlines with the
+ * same motion.
+ */
+export interface InkPainter {
+  /** The node mounted in the host; pointer events pass through it to the host. */
+  readonly root: SVGElement | HTMLElement;
+  /** Paint `layout`, already laid out for the stage's pose. */
+  draw(layout: InkLayout): void;
+}
+
 export interface InkStageOptions {
   model: InkModel;
   pose?: InkPose;
   interactive: boolean;
   /** Prefix for gradient ids (unique per document). */
   idPrefix: string;
+  /** Paints the drawing; the lit ink drawing when omitted. */
+  painter?: InkPainter;
   comfort?: () => InkComfort;
   onTap?(): void;
   /** The drawing came to rest on a detent. */
@@ -133,48 +152,11 @@ export function createInkStage(host: HTMLElement, opts: InkStageOptions): InkSta
   }
 
   // ── DOM ───────────────────────────────────────────────────────────
-  const root = svg('svg', {
-    viewBox: `0 0 ${INK_VIEW} ${INK_VIEW}`,
-    width: '100%',
-    height: '100%',
-    'aria-hidden': 'true',
-    focusable: 'false',
-    class: 'ink-stage',
-  });
+  const painter = opts.painter ?? createLitInkPainter(model, opts.idPrefix);
+  const root = painter.root;
   root.style.display = 'block';
   root.style.pointerEvents = 'none';
   root.style.overflow = 'visible';
-  const defs = svg('defs', {});
-  const gradients: SVGRadialGradientElement[] = [];
-  for (const kind of model.kinds) {
-    const gradient = svg('radialGradient', { id: `${opts.idPrefix}-${kind.s}`, cx: '0.5', cy: '0.5', r: '0.5', fx: '0.4', fy: '0.35' });
-    for (const [offset, color] of inkGradientStops(kind.c)) gradient.appendChild(svg('stop', { offset, 'stop-color': color }));
-    gradients.push(gradient);
-    defs.appendChild(gradient);
-  }
-  root.appendChild(defs);
-  const group = svg('g', {
-    stroke: INK_BOND,
-    'stroke-linecap': 'round',
-    'stroke-width': layout.bondWidth.toFixed(2),
-  });
-  root.appendChild(group);
-
-  const items: SVGElement[] = [];
-  const circles: SVGCircleElement[] = [];
-  const lines: SVGLineElement[] = [];
-  for (let i = 0; i < layout.atomCount; i += 1) {
-    const kind = model.kinds[model.k[i]];
-    const circle = svg('circle', { fill: `url(#${opts.idPrefix}-${kind.s})`, stroke: INK_PLATE, 'stroke-width': '0.6' });
-    circles.push(circle);
-    items.push(circle);
-  }
-  for (let b = 0; b < layout.bondCount; b += 1) {
-    const line = svg('line', {});
-    lines.push(line);
-    items.push(line);
-  }
-  const shown = new Int32Array(layout.itemCount).fill(-1);
 
   // ── Pose and motion ───────────────────────────────────────────────
   const initial = opts.pose ?? model.opening;
@@ -200,42 +182,7 @@ export function createInkStage(host: HTMLElement, opts: InkStageOptions): InkSta
 
   function draw(): void {
     layout.update({ azimuth: az, elevation: el });
-    for (let i = 0; i < layout.atomCount; i += 1) {
-      const circle = circles[i];
-      circle.setAttribute('cx', layout.cx[i].toFixed(2));
-      circle.setAttribute('cy', layout.cy[i].toFixed(2));
-      circle.setAttribute('r', layout.r[i].toFixed(2));
-      circle.setAttribute('opacity', layout.opacity[i].toFixed(3));
-    }
-    for (let b = 0; b < layout.bondCount; b += 1) {
-      const line = lines[b];
-      line.setAttribute('x1', layout.x1[b].toFixed(2));
-      line.setAttribute('y1', layout.y1[b].toFixed(2));
-      line.setAttribute('x2', layout.x2[b].toFixed(2));
-      line.setAttribute('y2', layout.y2[b].toFixed(2));
-      line.setAttribute('stroke-opacity', layout.bondOpacity[b].toFixed(3));
-    }
-    const fx = layout.lightX.toFixed(3);
-    const fy = layout.lightY.toFixed(3);
-    for (const gradient of gradients) {
-      gradient.setAttribute('fx', fx);
-      gradient.setAttribute('fy', fy);
-    }
-    // Painter's order, back to front; the DOM is touched only when it changed.
-    const order = layout.order;
-    let changed = false;
-    for (let k = 0; k < layout.itemCount; k += 1) {
-      if (shown[k] !== order[k]) {
-        changed = true;
-        break;
-      }
-    }
-    if (changed) {
-      for (let k = 0; k < layout.itemCount; k += 1) {
-        shown[k] = order[k];
-        group.appendChild(items[order[k]]);
-      }
-    }
+    painter.draw(layout);
     opts.onPoseChange?.();
   }
 
@@ -532,15 +479,38 @@ export function createInkStage(host: HTMLElement, opts: InkStageOptions): InkSta
     host.dataset.inkDetent = opening.detent.label;
   }
   draw();
-  if (opts.interactive) {
-    host.style.touchAction = 'pan-y';
-    host.addEventListener('pointerdown', onPointerDown);
-    host.addEventListener('pointermove', onPointerMove);
-    host.addEventListener('pointerup', onPointerUp);
-    host.addEventListener('pointercancel', onPointerCancel);
-    host.addEventListener('lostpointercapture', onLostCapture);
-    host.addEventListener('keydown', onKeyDown);
+  let listening = false;
+  function setInteractive(on: boolean): void {
+    if (on === listening || destroyed) return;
+    listening = on;
+    if (on) {
+      host.style.touchAction = 'pan-y';
+      host.addEventListener('pointerdown', onPointerDown);
+      host.addEventListener('pointermove', onPointerMove);
+      host.addEventListener('pointerup', onPointerUp);
+      host.addEventListener('pointercancel', onPointerCancel);
+      host.addEventListener('lostpointercapture', onLostCapture);
+      host.addEventListener('keydown', onKeyDown);
+      return;
+    }
+    if (pointerId !== null) {
+      try {
+        if (host.hasPointerCapture?.(pointerId)) host.releasePointerCapture(pointerId);
+      } catch {
+        /* already released */
+      }
+    }
+    pointerId = null;
+    pressing = null;
+    caught = false;
+    host.removeEventListener('pointerdown', onPointerDown);
+    host.removeEventListener('pointermove', onPointerMove);
+    host.removeEventListener('pointerup', onPointerUp);
+    host.removeEventListener('pointercancel', onPointerCancel);
+    host.removeEventListener('lostpointercapture', onLostCapture);
+    host.removeEventListener('keydown', onKeyDown);
   }
+  setInteractive(opts.interactive);
 
   return {
     setPose(next) {
@@ -568,18 +538,114 @@ export function createInkStage(host: HTMLElement, opts: InkStageOptions): InkSta
       return [c * Math.sin(az), Math.sin(el), c * Math.cos(az)];
     },
     hop,
+    setInteractive,
+    redraw() {
+      if (!destroyed) draw();
+    },
     destroy() {
+      setInteractive(false);
       destroyed = true;
       stop();
-      host.removeEventListener('pointerdown', onPointerDown);
-      host.removeEventListener('pointermove', onPointerMove);
-      host.removeEventListener('pointerup', onPointerUp);
-      host.removeEventListener('pointercancel', onPointerCancel);
-      host.removeEventListener('lostpointercapture', onLostCapture);
-      host.removeEventListener('keydown', onKeyDown);
       root.remove();
       delete host.dataset.inkState;
       delete host.dataset.inkDetent;
     },
   };
+}
+
+/**
+ * The lit ink drawing: CPK circles shaded by one radial gradient per element,
+ * ink bond lines, painted back to front (the /m pages and the home hero's
+ * look). Nodes are made once; a draw only moves them, and reorders the DOM
+ * only when the painter's order changed.
+ */
+export function createLitInkPainter(model: InkModel, idPrefix: string, opts: { rim?: string } = {}): InkPainter {
+  const atomCount = model.k.length;
+  const bondCount = model.b.length / 2;
+  const itemCount = atomCount + bondCount;
+  const rim = opts.rim ?? INK_PLATE;
+  const root = svg('svg', {
+    viewBox: `0 0 ${INK_VIEW} ${INK_VIEW}`,
+    width: '100%',
+    height: '100%',
+    'aria-hidden': 'true',
+    focusable: 'false',
+    class: 'ink-stage',
+  });
+  const defs = svg('defs', {});
+  const gradients: SVGRadialGradientElement[] = [];
+  for (const kind of model.kinds) {
+    const gradient = svg('radialGradient', { id: `${idPrefix}-${kind.s}`, cx: '0.5', cy: '0.5', r: '0.5', fx: '0.4', fy: '0.35' });
+    for (const [offset, color] of inkGradientStops(kind.c)) gradient.appendChild(svg('stop', { offset, 'stop-color': color }));
+    gradients.push(gradient);
+    defs.appendChild(gradient);
+  }
+  root.appendChild(defs);
+  const group = svg('g', { stroke: INK_BOND, 'stroke-linecap': 'round' });
+  root.appendChild(group);
+
+  const items: SVGElement[] = [];
+  const circles: SVGCircleElement[] = [];
+  const lines: SVGLineElement[] = [];
+  for (let i = 0; i < atomCount; i += 1) {
+    const kind = model.kinds[model.k[i]];
+    const circle = svg('circle', { fill: `url(#${idPrefix}-${kind.s})`, stroke: rim, 'stroke-width': '0.6' });
+    circles.push(circle);
+    items.push(circle);
+  }
+  for (let b = 0; b < bondCount; b += 1) {
+    const line = svg('line', {});
+    lines.push(line);
+    items.push(line);
+  }
+  const shown = new Int32Array(itemCount).fill(-1);
+  let widthSet = false;
+
+  return {
+    root,
+    draw(layout) {
+      if (!widthSet) {
+        group.setAttribute('stroke-width', layout.bondWidth.toFixed(2));
+        widthSet = true;
+      }
+      for (let i = 0; i < atomCount; i += 1) {
+        const circle = circles[i];
+        circle.setAttribute('cx', layout.cx[i].toFixed(2));
+        circle.setAttribute('cy', layout.cy[i].toFixed(2));
+        circle.setAttribute('r', layout.r[i].toFixed(2));
+        circle.setAttribute('opacity', layout.opacity[i].toFixed(3));
+      }
+      for (let b = 0; b < bondCount; b += 1) {
+        const line = lines[b];
+        line.setAttribute('x1', layout.x1[b].toFixed(2));
+        line.setAttribute('y1', layout.y1[b].toFixed(2));
+        line.setAttribute('x2', layout.x2[b].toFixed(2));
+        line.setAttribute('y2', layout.y2[b].toFixed(2));
+        line.setAttribute('stroke-opacity', layout.bondOpacity[b].toFixed(3));
+      }
+      const fx = layout.lightX.toFixed(3);
+      const fy = layout.lightY.toFixed(3);
+      for (const gradient of gradients) {
+        gradient.setAttribute('fx', fx);
+        gradient.setAttribute('fy', fy);
+      }
+      reorder(group, items, shown, layout.order);
+    },
+  };
+}
+
+/** Painter's order, back to front; the DOM is touched only when it changed. */
+export function reorder(group: SVGElement, items: SVGElement[], shown: Int32Array, order: number[]): void {
+  let changed = false;
+  for (let k = 0; k < order.length; k += 1) {
+    if (shown[k] !== order[k]) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return;
+  for (let k = 0; k < order.length; k += 1) {
+    shown[k] = order[k];
+    group.appendChild(items[order[k]]);
+  }
 }

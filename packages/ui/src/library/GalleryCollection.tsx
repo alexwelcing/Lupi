@@ -3,7 +3,8 @@ import { ALL_DOMAINS, SOURCE_FILTERS, type Domain, type GalleryExample, type Sou
 import { useGalleryFilters } from '../gallery/useGalleryFilters';
 import { galleryNomenclatureTags, nomenclatureForGalleryId } from '../galleryNomenclature';
 import { LOCAL_MOLECULES } from '../landing/moleculeIndex';
-import { openLocalMolecule } from '../landing/MoleculeFinder';
+import { lightInkTile, openLocalMolecule, previewRectIn } from '../landing/MoleculeFinder';
+import { inkTileSrc, prefetchInkModel, preloadInkTiles } from '../landing/inkTiles';
 import type { FunctionalGroupId } from '../organicFunctionalGroups';
 import { useLibraryQuery } from './useLibraryQuery';
 import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
@@ -19,7 +20,8 @@ function hrefFor(example: GalleryExample): string {
  * The full curated catalog with the domain, source-type, and functional-group
  * filters the pre-reset gallery had. Cards are plain links (the molecule's
  * `/m/<id>` page when it has one, else `/?sim=`) that open in place, exactly
- * like the homepage wall.
+ * like the homepage wall, and molecules with a page are ink tiles: their own
+ * drawing, lit on tap and carried into 3D (landing/inkTiles.ts).
  */
 export function GalleryCollection() {
   const [query, update] = useLibraryQuery();
@@ -30,13 +32,16 @@ export function GalleryCollection() {
   useEffect(() => {
     setSearch(query.q);
   }, [query.q, setSearch]);
+  useEffect(() => preloadInkTiles(), []);
 
   const open = (event: React.MouseEvent<HTMLAnchorElement>, example: GalleryExample) => {
     if (example.route || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
     event.preventDefault();
     if (opening) return;
     setOpening(example.id);
-    openLocalMolecule(example.id)
+    const ink = inkTileSrc(example.id) !== null;
+    if (ink) lightInkTile(event.currentTarget);
+    openLocalMolecule(example.id, { source: 'tile', fromRect: previewRectIn(event.currentTarget), ink })
       .catch(() => undefined)
       .finally(() => setOpening(null));
   };
@@ -119,6 +124,7 @@ export function GalleryCollection() {
         <div className="library-grid">
           {examples.map((example) => {
             const image = PREVIEW_BY_ID.get(example.id);
+            const ink = inkTileSrc(example.id);
             const formula = nomenclatureForGalleryId(example.id)?.molecularFormula;
             const tags = galleryNomenclatureTags(example.id).slice(0, 3);
             return (
@@ -128,9 +134,14 @@ export function GalleryCollection() {
                   aria-label={`Open ${example.title}`}
                   aria-busy={opening === example.id}
                   onClick={(event) => open(event, example)}
+                  onPointerEnter={ink ? () => prefetchInkModel(example.id) : undefined}
+                  onTouchStart={ink ? () => prefetchInkModel(example.id) : undefined}
+                  onFocus={ink ? () => prefetchInkModel(example.id) : undefined}
                 >
                   <span className="library-card-head">
-                    {image ? (
+                    {ink ? (
+                      <img className="ink-tile" src={ink} alt="" width="44" height="44" loading="lazy" decoding="async" />
+                    ) : image ? (
                       <img src={image} alt="" width="44" height="44" loading="lazy" decoding="async" />
                     ) : (
                       <span

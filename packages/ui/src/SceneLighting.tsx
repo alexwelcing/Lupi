@@ -8,7 +8,7 @@
  * `scene.environment`: a CubeUV texture that node materials read directly and
  * that the impostor kit samples through `pmremTexture` (plan-final D13).
  */
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import { PMREMGenerator } from 'three/webgpu';
@@ -28,6 +28,7 @@ import {
   scientificStudioRigFor,
   type StudioRigAngles,
 } from './studioEnvironment';
+import { isLookMorphing, subscribeLookMorph } from './remix/lookMorph';
 
 // Lighting rig radius (meters) — matches the legacy inline placement in App.
 const RIG_RADIUS = 11.18;
@@ -131,8 +132,9 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
  * and PMREM-baked once per install (and again when a light moves); after that
  * it costs the same as any static environment texture.
  */
-function LupiSoftboxEnvironment({ angles }: { angles: StudioRigAngles }) {
+function LupiSoftboxEnvironment({ angles: liveAngles }: { angles: StudioRigAngles }) {
   const { renderer, scene } = useThree();
+  const angles = useMorphPacedAngles(liveAngles);
   const {
     keyAzimuth, keyElevation, fillAzimuth, fillElevation, rimAzimuth, rimElevation,
   } = angles;
@@ -154,6 +156,50 @@ function LupiSoftboxEnvironment({ angles }: { angles: StudioRigAngles }) {
   }, [renderer, scene, keyAzimuth, keyElevation, fillAzimuth, fillElevation, rimAzimuth, rimElevation]);
 
   return null;
+}
+
+/** During a Remix morph the softbox re-bakes at most this often (ms). */
+const MORPH_BAKE_INTERVAL_MS = 200;
+
+/**
+ * The rig angles the softbox bakes. A Remix morph swings the lights every
+ * frame for ~600 ms; re-baking the PMREM each frame would cost a bake per
+ * frame, so while a morph runs the bake follows at most every 200 ms (the
+ * direct lights still move every frame) and lands exactly when it ends.
+ */
+function useMorphPacedAngles(live: StudioRigAngles): StudioRigAngles {
+  const [paced, setPaced] = useState(live);
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  const lastBake = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const key = `${live.keyAzimuth},${live.keyElevation},${live.fillAzimuth},${live.fillElevation},${live.rimAzimuth},${live.rimElevation}`;
+  useEffect(() => {
+    const land = () => {
+      timer.current = null;
+      lastBake.current = performance.now();
+      setPaced(liveRef.current);
+    };
+    if (!isLookMorphing()) {
+      if (timer.current !== null) clearTimeout(timer.current);
+      land();
+      return;
+    }
+    if (timer.current !== null) return;
+    const wait = Math.max(0, MORPH_BAKE_INTERVAL_MS - (performance.now() - lastBake.current));
+    timer.current = setTimeout(land, wait);
+  }, [key]);
+  useEffect(() => subscribeLookMorph((event) => {
+    if (event.phase !== 'end') return;
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+    lastBake.current = performance.now();
+    setPaced(liveRef.current);
+  }), []);
+  useEffect(() => () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+  }, []);
+  return paced;
 }
 
 function polarToCartesian(azimuthDeg: number, elevationDeg: number) {

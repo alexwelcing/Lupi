@@ -93,7 +93,16 @@ import { DevProbe } from './DevProbe';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { emitIntent } from '@atlas/scene';
 import { PlayPill } from './play/PlayPill';
+import { ReplaySheet } from './replay/ReplaySheet';
+import { intakeReplayParam } from './replay/intake';
+import { openReplaySheet } from './replay/actions';
+import { RemixDriver } from './remix/RemixDriver';
+import { RemixSheet } from './remix/RemixSheet';
+import { intakeRemixParam } from './remix/links';
+import { openRemixSheet, rollRemix, undoRemix } from './remix/actions';
 import { PLAY_VERB_LABEL, playStore, type PlayVerb } from './play/playStore';
+import { intakeInkParam, setIllustrate } from './ink/illustrate';
+import { sceneLookPatch } from './sceneLooks';
 import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
 import { FirstFrameOverlay } from './relay/FirstFrameOverlay';
@@ -322,6 +331,12 @@ export function ViewerApp() {
 
   // URL state restore + auto-load
   useEffect(() => {
+    // A shared replay (`?replay=`) is taken first and leaves the address bar;
+    // so does a shared look (`?remix=`), which lands once the molecule opens,
+    // and the Illustrate look (`?ink=`), which lands now so it opens inked.
+    intakeReplayParam();
+    intakeRemixParam();
+    intakeInkParam();
     const params = new URLSearchParams(window.location.search);
     const intent = recognizeLupiUrlPayload(window.location.href);
     const state = intent?.state ?? params.get('s');
@@ -737,6 +752,7 @@ export function ViewerApp() {
               <div>
                 <StudyLensPanel
                   compact={isMobile}
+                  stowed={uiStowed}
                   onClose={() => useStore.getState().setStudyLensOpen(false)}
                 />
               </div>
@@ -765,11 +781,14 @@ export function ViewerApp() {
         )}
 
         {file && !isEmbeddedMobileViewer && <ViewerCommandDeck compact={isMobile} />}
-        {file && !isEmbeddedMobileViewer && <PanelHost />}
+        {file && !isEmbeddedMobileViewer && <PanelHost stowed={uiStowed} />}
 
         {file && !isEmbeddedMobileViewer && (
           <PlayPill uiStowed={uiStowed} setUiStowed={setUiStowed} />
         )}
+        {file && !isEmbeddedMobileViewer && <ReplaySheet />}
+        {file && !isEmbeddedMobileViewer && <RemixSheet />}
+        {file && <RemixDriver />}
 
         {!file && !isEmbeddedMobileViewer && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>
@@ -893,6 +912,14 @@ export function ViewerApp() {
               },
             },
             {
+              id: 'daily',
+              label: 'Play Lupi Daily: name today’s mystery molecule',
+              group: 'Discover',
+              onSelect: () => {
+                window.location.href = '/daily/';
+              },
+            },
+            {
               id: 'controls-molecule',
               label: 'Open Style',
               group: 'Panels',
@@ -951,11 +978,70 @@ export function ViewerApp() {
               onSelect: () => emitIntent({ type: 'play.toggleTray', source: 'palette' }),
             },
             {
+              id: 'play-replay',
+              label: 'Replay the last moment (link and clip)',
+              group: 'Scene',
+              shortcut: 'R',
+              disabled: !file,
+              onSelect: () => {
+                openReplaySheet();
+              },
+            },
+            {
+              id: 'remix-roll',
+              label: 'Remix: roll a new look (a code you can share)',
+              group: 'Scene',
+              shortcut: 'M',
+              disabled: !file,
+              onSelect: () => {
+                rollRemix('palette');
+              },
+            },
+            {
+              id: 'remix-undo',
+              label: 'Remix: back to the previous look',
+              group: 'Scene',
+              shortcut: '⇧M',
+              disabled: !file,
+              onSelect: () => {
+                undoRemix();
+              },
+            },
+            {
+              id: 'remix-codes',
+              label: 'Remix codes: copy, share or type a look code',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => openRemixSheet(),
+            },
+            {
               id: 'play-reset',
               label: 'Reset illustrative motion',
               group: 'Scene',
               disabled: !file,
               onSelect: () => emitIntent({ type: 'play.reset' }),
+            },
+            {
+              id: 'look-ink',
+              label: 'Ink: draw it like the Lupi drawings (Illustrate look)',
+              group: 'Scene',
+              shortcut: 'I',
+              disabled: !file,
+              onSelect: () => setIllustrate(true, { flash: true }),
+            },
+            {
+              id: 'look-sketch',
+              label: 'Ink: hatched sketch on paper (Sketch look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('sketch', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
+              id: 'look-lit',
+              label: 'Lit: turn the light back on (leave the ink look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => setIllustrate(false, { flash: true }),
             },
             ...(['orbit', 'poke', 'tug', 'burst', 'heat'] as PlayVerb[]).map((verb) => ({
               id: `play-verb-${verb}`,

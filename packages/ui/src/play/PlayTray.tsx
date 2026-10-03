@@ -5,20 +5,35 @@
  *   One finger   Orbit · Poke · Tug
  *                Burst · Heat
  *   Try          Scatter · Spin · Reset
+ *   Look         Lit · Ink · Remix ⟳
+ *                r1-K7QDM (the code: copy, share, type one)
+ *                Foil 1 in 24 · each finish 1 in 72
  *   Motion       Standard · Gentle · Still
- *                Settings…
+ *                Replay ↗ · Settings…
+ *
+ * Remix keeps the tray open, so the next roll is one more tap away.
  *
  * A `role="menu"` anchored above the pill. Arrow keys, Home and End move
  * between items, Enter and Space activate, Escape (or Tab, or a tap outside)
  * closes. Every item is at least 44 px tall. Toys only emit intents; Motion
- * writes `comfort.ts`, never the viewer store, URLs or saved views.
+ * writes `comfort.ts`, never the viewer store, URLs or saved views. Lit · Ink
+ * is the Illustrate look (ink/illustrate.ts): a Look like any other, so it is
+ * shared, saved and exported, and Still never turns it off. Remix rolls a
+ * look code (remix/actions.ts).
  */
-import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { emitIntent, isCanvasInputSourceActive } from '@atlas/scene';
 import { useStore } from '../store';
 import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
+import { MOBILE_MEDIA_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useViewOccluder } from '../camera/useViewOccluder';
 import { cue } from './feedback';
+import { openReplaySheet } from '../replay/actions';
+import { openRemixSheet, rollRemix, undoRemix } from '../remix/actions';
+import { FOIL_LABEL, FOIL_ODDS_TEXT } from '../remix/code';
+import { useRemixStore } from '../remix/remixStore';
+import { setIllustrate } from '../ink/illustrate';
 import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
 
 export interface PlayTrayProps {
@@ -51,11 +66,14 @@ interface TrayItemProps {
   /** Tooltip while enabled. */
   title?: string;
   verb?: PlayVerb;
+  /** A Foil code's finish (the code item wears it). */
+  foil?: string;
+  ariaLabel?: string;
   onSelect(): void;
   children: ReactNode;
 }
 
-function TrayItem({ role, checked, disabled, hint, title, verb, onSelect, children }: TrayItemProps) {
+function TrayItem({ role, checked, disabled, hint, title, verb, foil, ariaLabel, onSelect, children }: TrayItemProps) {
   return (
     <button
       type="button"
@@ -63,6 +81,8 @@ function TrayItem({ role, checked, disabled, hint, title, verb, onSelect, childr
       tabIndex={-1}
       className="lupi-play-tray__item"
       data-verb={verb}
+      data-foil={foil}
+      aria-label={ariaLabel}
       aria-checked={role === 'menuitemradio' ? Boolean(checked) : undefined}
       aria-disabled={disabled || undefined}
       title={disabled && hint ? hint : title}
@@ -81,11 +101,29 @@ function menuItems(menu: HTMLElement | null): HTMLElement[] {
   return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'));
 }
 
+/**
+ * On a phone the tray covers the bottom of the molecule: it declares what it
+ * covers, and the view makes room once the tray has stayed open this long
+ * (ms), so a pick that closes it at once moves nothing.
+ */
+const TRAY_LINGER_MS = 420;
+
 export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const phone = useMediaQuery(MOBILE_MEDIA_QUERY);
+  const { ref: occluderRef } = useViewOccluder('play-tray', phone, { lingerMs: TRAY_LINGER_MS });
+  const attachMenu = useCallback(
+    (node: HTMLDivElement | null) => {
+      menuRef.current = node;
+      occluderRef(node);
+    },
+    [occluderRef],
+  );
   const verb = usePlayStore((state) => state.verb);
+  const inked = useStore((state) => state.inkStyle !== 'off');
   const comfort = useComfort();
   const still = comfort === 'still';
+  const applied = useRemixStore((state) => state.applied);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -119,6 +157,19 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
     emitIntent({ type: intent });
     if (intent === 'play.reset') cue('reset');
     onClose({ restoreFocus: true });
+  };
+  // Remix: roll in place (the tray stays open for the next roll).
+  const roll = () => {
+    rollRemix('tray');
+  };
+  const openCodes = () => {
+    onClose();
+    openRemixSheet();
+  };
+  // Instant Replay: the last moment (or this view) as a link and a clip.
+  const openReplay = () => {
+    onClose();
+    openReplaySheet();
   };
   const openSettings = () => {
     // The store subscription in PlayPill closes the tray as the panel opens.
@@ -159,6 +210,14 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
         event.preventDefault();
         onClose({ restoreFocus: true });
         break;
+      case 'm':
+      case 'M':
+        // M rolls a Remix (Shift+M steps back), as it does outside the tray.
+        if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) break;
+        event.preventDefault();
+        if (event.shiftKey) undoRemix();
+        else rollRemix('tray');
+        break;
       default:
         break;
     }
@@ -168,7 +227,7 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
   return (
     <div
       id={id}
-      ref={menuRef}
+      ref={attachMenu}
       role="menu"
       aria-label="Play: toys and view"
       className="lupi-play-tray"
@@ -208,6 +267,52 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
           Reset
         </TrayItem>
       </div>
+      <div role="group" aria-labelledby={`${id}-look`} className="lupi-play-tray__row lupi-play-tray__row--look">
+        <span id={`${id}-look`} className="lupi-play-tray__label">Look</span>
+        <TrayItem
+          role="menuitemradio"
+          checked={!inked}
+          title="The lit molecule: soft light, depth and colour"
+          onSelect={() => {
+            setIllustrate(false, { flash: true });
+            onClose({ restoreFocus: true });
+          }}
+        >
+          Lit
+        </TrayItem>
+        <TrayItem
+          role="menuitemradio"
+          checked={inked}
+          title="Draw it in ink, like the Lupi drawings (exports keep it)"
+          onSelect={() => {
+            setIllustrate(true, { flash: true });
+            onClose({ restoreFocus: true });
+          }}
+        >
+          Ink
+        </TrayItem>
+        <TrayItem
+          role="menuitem"
+          title={`Roll a new look (M). ${FOIL_ODDS_TEXT}.`}
+          ariaLabel={`Remix: roll a new look. ${FOIL_ODDS_TEXT}.`}
+          onSelect={roll}
+        >
+          Remix ⟳
+        </TrayItem>
+        <TrayItem
+          role="menuitem"
+          foil={applied?.foil ?? undefined}
+          title="The code for this look: copy it, share it, or type one in"
+          ariaLabel={applied
+            ? `Remix code ${applied.code.text}${applied.foil ? `, ${FOIL_LABEL[applied.foil]} finish` : ''}: copy, share or type a code`
+            : 'Remix codes: type a code, finishes and shake to roll'}
+          onSelect={openCodes}
+        >
+          <span className="lupi-play-tray__code">{applied ? applied.code.text : 'Codes…'}</span>
+          {applied?.foil ? <small className="lupi-play-tray__hint lupi-play-tray__foil">{FOIL_LABEL[applied.foil]}</small> : null}
+        </TrayItem>
+        <span className="lupi-play-tray__note" aria-hidden="true">{FOIL_ODDS_TEXT}</span>
+      </div>
       <div role="group" aria-labelledby={`${id}-motion`} className="lupi-play-tray__row">
         <span id={`${id}-motion`} className="lupi-play-tray__label">Motion</span>
         {MOTION_OPTIONS.map((option) => (
@@ -222,6 +327,13 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
         ))}
       </div>
       <div role="none" className="lupi-play-tray__row lupi-play-tray__row--end">
+        <TrayItem
+          role="menuitem"
+          title={still ? 'Share this view as a link (R)' : 'Replay the last moment: a live link and a 9:16 clip (R)'}
+          onSelect={openReplay}
+        >
+          {still ? 'Share ↗' : 'Replay ↗'}
+        </TrayItem>
         <TrayItem role="menuitem" onSelect={openSettings}>
           Settings…
         </TrayItem>

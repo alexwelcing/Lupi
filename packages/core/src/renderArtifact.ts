@@ -843,7 +843,9 @@ function validateRenderViewShapeV1(
       topLevel.push(entry.canonicalStateField.slice('view.'.length));
     }
   }
-  requireExactKeys(view, topLevel, topLevel, '$.spec.view');
+  // `ink` (the Illustrate look) is optional: a raster spec records it only while it is on.
+  requireExactKeys(view, raster ? [...topLevel, 'ink'] : topLevel, topLevel, '$.spec.view');
+  if (raster && 'ink' in view) validateRenderInkV1(view);
 
   if (raster) {
     const camera = exactViewObject(view, 'camera', ['position', 'target', 'fov', 'near', 'far']);
@@ -1077,6 +1079,29 @@ function validateRenderViewShapeV1(
  */
 export const RENDER_POSTPROCESS_PIPELINES_V1 = ['raw-scene', 'viewer-look'] as const;
 export const RENDER_TONE_MAPPINGS_V1 = ['none', 'neutral', 'aces', 'reinhard'] as const;
+/** `view.ink.pipeline`: the impostors' toon fills, silhouette ink and hatching (browser renderer). */
+export const RENDER_INK_PIPELINES_V1 = ['impostor-ink.v1'] as const;
+export const RENDER_INK_SHADINGS_V1 = ['flat', 'hatch'] as const;
+
+/**
+ * The Illustrate look, when a raster spec carries it: the shading, the line
+ * weight, the three ink colours, and the plate its far side fades toward. Its own post recipe is the raw scene
+ * (the drawing shades itself), so it requires a raw-scene postprocess.
+ */
+function validateRenderInkV1(view: RenderJsonObjectV1): void {
+  const path = '$.spec.view.ink';
+  const ink = exactViewObject(view, 'ink', ['pipeline', 'shading', 'weight', 'ink', 'paper', 'shade', 'plate', 'depthCue']);
+  requireOneOf(ink.pipeline, RENDER_INK_PIPELINES_V1, `${path}.pipeline`);
+  requireOneOf(ink.shading, RENDER_INK_SHADINGS_V1, `${path}.shading`);
+  requireNumberInRange(ink.weight, 0.4, 2.5, `${path}.weight`);
+  requireHexColor(ink.ink, `${path}.ink`);
+  requireHexColor(ink.paper, `${path}.paper`);
+  requireHexColor(ink.shade, `${path}.shade`);
+  requireHexColor(ink.plate, `${path}.plate`);
+  requireNumberInRange(ink.depthCue, 0, 1, `${path}.depthCue`);
+  const postprocess = requireRecord(view.postprocess, '$.spec.view.postprocess');
+  requireLiteral(postprocess.pipeline, 'raw-scene', '$.spec.view.postprocess.pipeline');
+}
 
 function validateRenderPostprocessV1(view: RenderJsonObjectV1, transparent: boolean): void {
   const path = '$.spec.view.postprocess';

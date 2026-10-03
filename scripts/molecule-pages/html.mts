@@ -81,6 +81,7 @@ function topBar(): string {
   <a class="mp-brand" href="/">Lupi</a>
   <nav aria-label="Site">
     <a href="/m/">All molecules</a>
+    <a href="/daily/">Daily</a>
     <a href="/library">Library</a>
   </nav>
 </header>`;
@@ -91,6 +92,7 @@ function footer(): string {
   <span>Lupi · explore molecules in 3D, free and without an account</span>
   <a href="/">Home</a>
   <a href="/m/">All molecules</a>
+  <a href="/daily/">Lupi Daily</a>
   <a href="/llms.txt">For agents</a>
 </footer>`;
 }
@@ -387,6 +389,7 @@ export function renderIndexPage(template: string, records: MoleculeRecord[], ctx
 <main id="main" class="mp-main mp-index">
   <h1>Molecules in 3D</h1>
   <p>Every molecule here is drawn from its own coordinate file. Spin the drawing, read the facts, then open the live 3D view, or place it on your desk from a phone.</p>
+  <a class="mp-daily" href="/daily/"><span class="mp-daily__disc" aria-hidden="true">?</span><span><strong>Lupi Daily</strong><span>One mystery molecule a day, as an ink silhouette. Can you name it in six clues?</span></span></a>
   <input id="mp-filter" type="search" placeholder="Filter by name or formula" aria-label="Filter molecules" autocomplete="off" spellcheck="false" hidden />
   <p id="mp-filter-status" class="mp-status" role="status" aria-live="polite"></p>
   ${sections}

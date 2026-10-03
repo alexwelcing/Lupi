@@ -17,16 +17,20 @@
  *              uploads the texture and tells the shader which atom owns it.
  *
  * The atom's current world position is read from frame.positions every
- * frame so labels move with playback — no stale-position lag.
+ * frame so labels move with playback — no stale-position lag. While display
+ * motion carries the atom (the arrival, a poke, Tug, Burst, Heat) the label
+ * rides along (play/displayFollow, steady: Heat's jiggle is damped so the
+ * text stays readable) and is back at rest the moment the motion ends.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type JSX } from 'react';
 import { useFrame } from '@react-three/fiber/webgpu';
 import { keepLupiAwake } from '@atlas/scene';
 import { useComfort } from './motion/comfort';
 import * as THREE from 'three';
 import { Html, Billboard } from '@react-three/drei/webgpu';
 import { LupiText } from './labels/LupiText';
+import { FollowAtom } from './play/displayFollow';
 import type { Frame } from '@atlas/core/types';
 
 export interface AnnotationItem {
@@ -64,19 +68,30 @@ export function AnnotationsLayer({
         const y = frame.positions[ann.atomIndex * 3 + 1];
         const z = frame.positions[ann.atomIndex * 3 + 2];
 
+        let label: JSX.Element;
         switch (style) {
           case 'tag':
-            return <TagAnnotation key={ann.id} pos={[x, y, z]} text={ann.text} onDismiss={() => onDismiss?.(ann.id)} />;
+            label = <TagAnnotation pos={[x, y, z]} text={ann.text} onDismiss={() => onDismiss?.(ann.id)} />;
+            break;
           case 'glyph':
-            return <GlyphAnnotation key={ann.id} pos={[x, y, z]} text={ann.text} />;
+            label = <GlyphAnnotation pos={[x, y, z]} text={ann.text} />;
+            break;
           case 'halo':
-            return <HaloAnnotation key={ann.id} pos={[x, y, z]} text={ann.text} />;
+            label = <HaloAnnotation pos={[x, y, z]} text={ann.text} />;
+            break;
           case 'etched':
-            // Etched style is owned by the impostor shader; this layer renders
-            // a small invisible anchor + ASCII label as a fallback so users
-            // without shader support still see something.
-            return <EtchedAnnotation key={ann.id} pos={[x, y, z]} text={ann.text} />;
+          default:
+            // Etched style is owned by the impostor shader (it moves with the
+            // atom on the GPU); this layer renders a small ASCII label as a
+            // fallback so users without shader support still see something.
+            label = <EtchedAnnotation pos={[x, y, z]} text={ann.text} />;
+            break;
         }
+        return (
+          <FollowAtom key={ann.id} frame={frame} atom={ann.atomIndex} steady>
+            {label}
+          </FollowAtom>
+        );
       })}
     </group>
   );

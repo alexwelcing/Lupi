@@ -9,13 +9,17 @@
  * instead of floating over the molecule, where a world-anchored card scales
  * unpredictably and drifts off-screen. The sheet opens compact (identity and
  * one line of key facts; "Details" opens the full card, remembered for the
- * session), and it reports its bottom edge so the live view moves the
- * molecule into the band it leaves free (camera/viewInset.ts).
+ * session), and it declares the area it covers so the live view moves the
+ * molecule into the room it leaves free (camera/viewInset.ts).
+ *
+ * The desktop card's anchor rides its atom's display motion (a poke, Tug,
+ * Burst, Heat, the arrival; play/displayFollow, steady), so the card keeps to
+ * the atom it describes and never ends up over it.
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Html } from '@react-three/drei/webgpu';
-import { Vector3, type Camera, type Object3D } from 'three';
+import { Matrix3, Vector3, type Camera, type Object3D } from 'three';
 import type { Frame } from '@atlas/core/types';
 import {
   ELEMENT_DATA,
@@ -28,7 +32,11 @@ import {
 import { useStore, type KnowledgeLabel } from './store';
 import { humanizeCategory } from './periodic-table/ElementDetailCard';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
-import { setTopOccluder } from './camera/viewInset';
+import { setViewOccluder } from './camera/viewInset';
+import { atomRestPoint, useDisplayFollower } from './play/displayFollow';
+
+/** The phone sheet's id among the overlays the live view makes room for. */
+const OCCLUDER_ID = 'atom-card';
 
 const MAX_PROPERTY_ROWS = 4;
 const MAX_KNOWLEDGE_ROWS = 4;
@@ -49,12 +57,15 @@ const CARD_HEIGHT_GUESS_PX = 320;
 
 const scratchCardAnchor = new Vector3();
 const scratchCardView = new Vector3();
+const scratchCardOffset = new Vector3();
+const scratchCardBasis = new Matrix3();
 
 /**
  * Top-left (px) of the desktop card for an atom of world `radius` at the Html
- * group's position: above or below the atom's screen disc (the side away from
- * the canvas centre when both fit), never over it; clamped into the canvas
- * horizontally.
+ * group's position (plus the atom's display offset, in the molecule's space,
+ * while display motion carries it): above or below the atom's screen disc
+ * (the side away from the canvas centre when both fit), never over it;
+ * clamped into the canvas horizontally.
  */
 function anchoredCardPosition(
   object: Object3D,
@@ -62,8 +73,13 @@ function anchoredCardPosition(
   size: { width: number; height: number },
   radius: number,
   card: HTMLElement | null,
+  offset: readonly [number, number, number],
 ): [number, number] {
   const anchor = scratchCardAnchor.setFromMatrixPosition(object.matrixWorld);
+  if (offset[0] !== 0 || offset[1] !== 0 || offset[2] !== 0) {
+    scratchCardOffset.set(offset[0], offset[1], offset[2]).applyMatrix3(scratchCardBasis.setFromMatrix4(object.matrixWorld));
+    anchor.add(scratchCardOffset);
+  }
   const view = scratchCardView.copy(anchor).applyMatrix4(camera.matrixWorldInverse);
   anchor.project(camera);
   const halfW = size.width / 2;
@@ -125,7 +141,7 @@ export function AtomInfoHUD({
       return !previous;
     });
   }, []);
-  // The phone sheet reports its bottom edge while it is on screen, so the
+  // The phone sheet declares what it covers while it is on screen, so the
   // live view can make room (camera/viewInset.ts). The card renders in drei
   // Html's own root, so a callback ref (not an effect) sees it mount.
   const isMobileRef = useRef(isMobile);
@@ -136,10 +152,17 @@ export function AtomInfoHUD({
     occluderObserver.current?.disconnect();
     occluderObserver.current = null;
     if (!node || !isMobileRef.current) {
-      setTopOccluder(null);
+      setViewOccluder(OCCLUDER_ID, null);
       return;
     }
-    const report = () => setTopOccluder(node.getBoundingClientRect().bottom);
+    // A canvas tap opens and closes it: the view waits out a double tap.
+    const report = () => {
+      const rect = node.getBoundingClientRect();
+      setViewOccluder(OCCLUDER_ID, {
+        rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+        tapBorn: true,
+      });
+    };
     report();
     if (typeof ResizeObserver === 'function') {
       const observer = new ResizeObserver(report);
@@ -151,13 +174,27 @@ export function AtomInfoHUD({
     () => () => {
       occluderObserver.current?.disconnect();
       occluderObserver.current = null;
-      setTopOccluder(null);
+      setViewOccluder(OCCLUDER_ID, null);
     },
     [],
   );
+  // The desktop card's anchor rides the atom's display motion (steady:
+  // Heat's jiggle damped); drei Html reads it on its next placement.
+  const followOffset = useRef<[number, number, number]>([0, 0, 0]);
+  const followPoint = useRef(new Float64Array(3));
+  useDisplayFollower({
+    mode: 'steady',
+    points: () => (!isMobileRef.current && atomRestPoint(frame, atomIndex ?? -1, followPoint.current) ? followPoint.current : null),
+    apply: (offsets) => {
+      const o = followOffset.current;
+      o[0] = offsets ? offsets[0] : 0;
+      o[1] = offsets ? offsets[1] : 0;
+      o[2] = offsets ? offsets[2] : 0;
+    },
+  });
   const placeCard = useCallback(
     (object: Object3D, camera: Camera, size: { width: number; height: number }) =>
-      anchoredCardPosition(object, camera, size, radiusRef.current, cardRef.current),
+      anchoredCardPosition(object, camera, size, radiusRef.current, cardRef.current, followOffset.current),
     [],
   );
   const validAtomIndex = atomIndex != null && atomIndex >= 0 && atomIndex < frame.natoms;
@@ -332,7 +369,19 @@ export function AtomInfoHUD({
           <button
             type="button"
             aria-label="Dismiss atom details"
-            onClick={() => onDismissCard(atomIndex)}
+            onClick={() => {
+              // Closed by its own button, not a canvas tap: there is no second
+              // tap to wait for, so the molecule eases back at once.
+              const node = cardRef.current;
+              if (node && isMobile) {
+                const rect = node.getBoundingClientRect();
+                setViewOccluder(OCCLUDER_ID, {
+                  rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+                  tapBorn: false,
+                });
+              }
+              onDismissCard(atomIndex);
+            }}
             style={{
               alignSelf: 'flex-start',
               display: 'grid',

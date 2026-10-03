@@ -27,6 +27,20 @@
  * A latched verb auto-unlatches after 30 s without a stroke, press or tap,
  * on a file change and under Motion: Still. While latched the viewport gets
  * a thin lime inset (warm while Heat is held).
+ *
+ * Remix lives in the same pill too:
+ * - a roll flashes its code in the status ("Remix · r1-K7QDM"; one in 24
+ *   reads "✦ Holo foil · r1-K7QDM" with its chime);
+ * - "⟳ Again" for 8 s after a roll rolls the next one;
+ * - while a Foil finish is on screen, a small foil chip ("✦ Holo") stays as
+ *   the "cosmetic finish" badge and opens the Remix sheet.
+ *
+ * Instant Replay lives in the same pill, as one more segment before stow:
+ * - "Replay ↗" for 7 s after a moment (a good flick, a detent chain, a flip,
+ *   a toy moment); it opens the share sheet (so does R);
+ * - on a shared replay link, the status reads "Shared replay" and the segment
+ *   is "▶ Watch" (Gentle, or before Standard's autoplay) or "Skip" while it
+ *   plays; the end flashes "Your turn · …" (flash kind `turn`).
  */
 import { useCallback, useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { emitIntent, isCanvasInputSourceActive, onIntent } from '@atlas/scene';
@@ -38,6 +52,10 @@ import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { cue } from './feedback';
 import { PLAY_VERB_LABEL, heatKelvin, playStore, playVerbHint, usePlayStore } from './playStore';
 import { PlayTray } from './PlayTray';
+import { isIncomingActive, replayStore, useReplayStore } from '../replay/replayStore';
+import { openRemixSheet, rollRemix } from '../remix/actions';
+import { FOIL_LABEL } from '../remix/code';
+import { shownFinish, useRemixStore } from '../remix/remixStore';
 import './playPill.css';
 
 export interface PlayPillProps {
@@ -55,11 +73,15 @@ const TEACH_MS = 10_000;
 const VERB_IDLE_MS = 30_000;
 /** The line that says what a just-latched verb does stays this long (ms). */
 const VERB_HINT_MS = 2600;
+/** After a shared replay ends, the pill offers "Again" this long (ms). */
+const REPLAY_AGAIN_MS = 9000;
+/** After a Remix roll, the pill offers "Again" this long (ms). */
+const REMIX_AGAIN_MS = 8000;
 const LONG_FORM_KEY = 'lupi.play.illustrativeSeen';
 const SHORT_LABEL = 'Illustrative';
 const LONG_LABEL = 'Illustrative motion, your atoms haven’t moved';
 
-type StatusKind = 'displaced' | 'flash' | 'teach' | 'empty';
+type StatusKind = 'displaced' | 'flash' | 'replay' | 'teach' | 'empty';
 
 interface PillStatus {
   kind: StatusKind;
@@ -136,10 +158,17 @@ function usePillStatus(teachText: string, stowed: boolean, teachDeadline: number
       markLongFormSeen();
     }
 
+    const replay = replayStore.getState();
+    const shared = isIncomingActive(replay);
+    const sharedPlaying = replay.incoming?.phase === 'playing';
     let desired: PillStatus;
-    if (displaced) desired = { kind: 'displaced', text: h.long ? LONG_LABEL : SHORT_LABEL };
-    else if (!isStowed && play.flash && play.flash.until > t) {
+    if (displaced) {
+      const label = h.long ? LONG_LABEL : SHORT_LABEL;
+      desired = { kind: 'displaced', text: sharedPlaying ? `Shared replay · ${SHORT_LABEL}` : label };
+    } else if (!isStowed && play.flash && play.flash.until > t) {
       desired = { kind: 'flash', text: play.flash.text, flashKind: play.flash.kind };
+    } else if (shared) {
+      desired = { kind: 'replay', text: 'Shared replay' };
     } else if (!isStowed && !play.teachSeen && deadline !== null && t < deadline) {
       desired = { kind: 'teach', text };
     } else desired = EMPTY_STATUS;
@@ -166,6 +195,9 @@ function usePillStatus(teachText: string, stowed: boolean, teachDeadline: number
 
   useEffect(() => {
     const off = playStore.subscribe(() => evaluateRef.current());
+    const offReplay = replayStore.subscribe((state, previous) => {
+      if (state.incoming !== previous.incoming) evaluateRef.current();
+    });
     // Reset puts the atoms home: the label goes with them, no hold.
     const offReset = onIntent('play.reset', () => {
       const h = hold.current;
@@ -176,6 +208,7 @@ function usePillStatus(teachText: string, stowed: boolean, teachDeadline: number
     });
     return () => {
       off();
+      offReplay();
       offReset();
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = null;
@@ -254,6 +287,156 @@ function HeatReadout() {
   );
 }
 
+/**
+ * The replay segment: "Replay ↗" after a moment, "▶ Watch" / "Skip" on a
+ * shared replay. Null when there is nothing to offer.
+ */
+function ReplaySegment() {
+  const comfort = useComfort();
+  const offer = useReplayStore((state) => state.offer);
+  const phase = useReplayStore((state) => state.incoming?.phase ?? null);
+  const endedAt = useReplayStore((state) => state.incoming?.endedAt ?? null);
+  const stillTape = useReplayStore((state) => state.incoming?.tape.still ?? false);
+  const sheetOpen = useReplayStore((state) => state.sheet !== null);
+  // "Again" for a while after a shared replay ends (until the visitor's own moment).
+  const [againOpen, setAgainOpen] = useState(false);
+  useEffect(() => {
+    if (phase !== 'done' || endedAt === null || stillTape) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    const left = REPLAY_AGAIN_MS - (now() - endedAt);
+    if (left <= 0) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    setAgainOpen(true);
+    const timer = setTimeout(() => setAgainOpen(false), left);
+    return () => clearTimeout(timer);
+  }, [phase, endedAt, stillTape]);
+  if (phase === 'waiting') {
+    return (
+      <button
+        type="button"
+        className="lupi-play-pill__replay"
+        data-replay="watch"
+        aria-label="Watch the shared replay"
+        title="Watch the moment that was shared with you"
+        onClick={() => replayStore.getState().setIncomingPhase('playing')}
+      >
+        <span className="lupi-play-pill__replay-icon" aria-hidden="true">▶</span>
+        <span>Watch</span>
+      </button>
+    );
+  }
+  if (phase === 'playing') {
+    return (
+      <button
+        type="button"
+        className="lupi-play-pill__replay"
+        data-replay="skip"
+        aria-label="Skip the shared replay: your turn"
+        title="Skip to your turn (any touch does too)"
+        onClick={() => replayStore.getState().setIncomingPhase('done')}
+      >
+        Skip
+      </button>
+    );
+  }
+  if (!offer && againOpen && comfort !== 'still') {
+    return (
+      <button
+        type="button"
+        className="lupi-play-pill__replay"
+        data-replay="again"
+        aria-label="Watch the shared replay again"
+        title="Watch the shared moment again"
+        onClick={() => replayStore.getState().setIncomingPhase('playing')}
+      >
+        <span className="lupi-play-pill__replay-icon" aria-hidden="true">↺</span>
+        <span>Again</span>
+      </button>
+    );
+  }
+  if (!offer || sheetOpen) return null;
+  // Still sends a still pose link and makes no clip: the offer says Share.
+  const still = comfort === 'still';
+  return (
+    <button
+      key={offer.id}
+      type="button"
+      className="lupi-play-pill__replay"
+      data-replay="offer"
+      aria-label={still ? 'Share this view as a link (R)' : `Replay ${offer.noun}: share a live link and a clip (R)`}
+      title={still ? 'Share this view: a link that opens at this pose (R)' : 'Share that moment: a live link and a 9:16 clip (R)'}
+      onClick={() => replayStore.getState().openSheet(offer)}
+    >
+      <span>{still ? 'Share' : 'Replay'}</span>
+      <span className="lupi-play-pill__replay-icon" aria-hidden="true">↗</span>
+    </button>
+  );
+}
+
+/**
+ * The Remix segment: "⟳ Again" for a while after a roll, then (with a Foil
+ * finish on screen) the finish's chip, which is also its "cosmetic" badge.
+ */
+function RemixSegment() {
+  const rolledAt = useRemixStore((state) => state.rolledAt);
+  const applied = useRemixStore((state) => state.applied);
+  const chosenFinish = useRemixStore((state) => state.chosenFinish);
+  const sheetOpen = useRemixStore((state) => state.sheetOpen);
+  const finish = shownFinish({ applied, chosenFinish });
+  const [againOpen, setAgainOpen] = useState(false);
+  useEffect(() => {
+    if (rolledAt === null) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    const left = REMIX_AGAIN_MS - (now() - rolledAt);
+    if (left <= 0) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    setAgainOpen(true);
+    const timer = setTimeout(() => setAgainOpen(false), left);
+    return () => clearTimeout(timer);
+  }, [rolledAt]);
+  if (sheetOpen) return null;
+  if (againOpen) {
+    return (
+      <button
+        key={`again-${rolledAt}`}
+        type="button"
+        className="lupi-play-pill__remix"
+        data-remix="again"
+        data-foil={finish ?? undefined}
+        aria-label="Roll another look (M)"
+        title="Roll another look (M)"
+        onClick={() => rollRemix('pill')}
+      >
+        <span className="lupi-play-pill__remix-icon" aria-hidden="true">⟳</span>
+        <span className="lupi-play-pill__remix-label">Again</span>
+      </button>
+    );
+  }
+  if (!finish) return null;
+  return (
+    <button
+      type="button"
+      className="lupi-play-pill__remix"
+      data-remix="foil"
+      data-foil={finish}
+      aria-label={`${FOIL_LABEL[finish]} finish, cosmetic: atom colours and positions unchanged. Open Remix`}
+      title={`${FOIL_LABEL[finish]} · cosmetic finish (atom colours and positions unchanged)`}
+      onClick={openRemixSheet}
+    >
+      <span className="lupi-play-pill__remix-icon" aria-hidden="true">✦</span>
+      <span className="lupi-play-pill__remix-label">{FOIL_LABEL[finish]}</span>
+    </button>
+  );
+}
+
 function StowIcon({ stowed }: { stowed: boolean }) {
   return (
     <svg className="lupi-play-pill__stow-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
@@ -277,6 +460,8 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
   const trayOpen = usePlayStore((state) => state.trayOpen);
   const comfort = useComfort();
   const file = useStore((state) => state.file);
+  // The Illustrate look: the pill's dot is drawn in ink (no new chrome).
+  const inked = useStore((state) => state.inkStyle !== 'off');
   const natoms = file?.trajectory.frames[0]?.natoms ?? 0;
   const trayId = useId();
   const playRef = useRef<HTMLButtonElement | null>(null);
@@ -438,6 +623,7 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
       data-stowed={uiStowed}
       data-verb={verb}
       data-tray-open={trayOpen}
+      data-ink={inked || undefined}
       role="group"
       aria-label="Toys and view"
     >
@@ -497,6 +683,9 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
           </>
         )}
       </div>
+
+      {!uiStowed && <RemixSegment />}
+      {!uiStowed && <ReplaySegment />}
 
       <button
         type="button"
