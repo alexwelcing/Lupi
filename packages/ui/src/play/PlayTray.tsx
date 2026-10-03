@@ -31,10 +31,10 @@ export interface PlayTrayProps {
 /** What each verb does, for the item's tooltip and accessible description. */
 const VERB_TITLE: Readonly<Record<PlayVerb, string>> = {
   orbit: 'One finger turns the molecule',
-  poke: 'Drag to stir; tap an atom to ring it',
-  tug: 'Drag an atom; its neighbours follow and spring back',
-  burst: 'Tap to pop the atoms outward; they spring back',
-  heat: 'Hold to warm it up; let go to cool',
+  poke: 'Drag to stir; tap an atom to ring it (Enter rings the selected atom)',
+  tug: 'Drag an atom; its neighbours follow and spring back (Enter plucks the selected atom)',
+  burst: 'Tap to pop the atoms outward; they spring back (Enter pops at the selected atom)',
+  heat: 'Hold to warm it up; let go to cool (or hold Enter)',
 };
 
 const MOTION_OPTIONS: ReadonlyArray<{ value: Comfort; label: string }> = [

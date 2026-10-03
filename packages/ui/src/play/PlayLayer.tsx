@@ -771,14 +771,15 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
 
     // Tug latched: grab the atom under the finger (or the point in space
     // there) and pull; the neighbourhood follows, and lets go with a twang.
-    const tugGrab = (clientX: number, clientY: number, atomIndex: number | null): boolean => {
+    const tugGrab = (clientX: number, clientY: number, atomIndex: number | null, point?: Vec3): boolean => {
       const { frame: current, center: c, transmissionActive: glass } = live.current;
       const scale = displayMotionScale();
       if (!(scale > 0) || glass) return false;
       adoptScene(current, c);
-      const atom = atomIndex ?? atomAt(clientX, clientY);
+      const atom = atomIndex ?? (point ? -1 : atomAt(clientX, clientY));
       let grab: Vec3;
       if (atom >= 0) grab = atomPosition(atom);
+      else if (point) grab = [point[0], point[1], point[2]];
       else {
         if (!clientToPlane(clientX, clientY, c, hit)) return false;
         grab = [hit.x, hit.y, hit.z];
@@ -965,8 +966,84 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       }),
       registerPlayDevHook('scatter', () => scatter()),
     ];
+
+    // Keyboard: with a verb latched, Enter plays it on the selected atom (or
+    // the middle of the molecule): Poke rings, Burst pops, Tug plucks the
+    // atom toward you and lets go, and Heat warms while Enter is held.
+    const typingTarget = (target: EventTarget | null): boolean => {
+      const el = target as Element | null;
+      if (!el || typeof el.closest !== 'function') return false;
+      return Boolean(el.closest(
+        'input, textarea, select, button, a[href], summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="menuitem"], [role="menuitemradio"], [role="slider"], [role="textbox"], [role="combobox"]',
+      ));
+    };
+    const keyTarget = (): { atom: number; point: Vec3 } => {
+      const selected = useStore.getState().selectedAtoms;
+      const atom = selected.length > 0 ? selected[0] : -1;
+      if (atom >= 0 && atom < live.current.frame.natoms) return { atom, point: atomPosition(atom) };
+      const c = live.current.center;
+      return { atom: -1, point: [c[0], c[1], c[2]] };
+    };
+    let keyHeat = false;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (typingTarget(event.target)) return;
+      const verb = verbNow();
+      if (verb === 'orbit' || useStore.getState().activePanel) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      const { atom, point } = keyTarget();
+      switch (verb) {
+        case 'poke':
+          if (atom >= 0 && poke(atom) >= 0) cue('poke');
+          else if (atom < 0) {
+            adoptScene(live.current.frame, live.current.center);
+            addRipple(point, POKE_AMPLITUDE * displayMotionScale());
+          }
+          break;
+        case 'burst':
+          if (burstAt(point)) cue('burst');
+          break;
+        case 'tug': {
+          if (!tugGrab(0, 0, atom >= 0 ? atom : null, point)) break;
+          // Pluck up and to the right on screen (a little toward you), then let go.
+          const cam = live.current.camera;
+          cam.getWorldDirection(normal);
+          const up = new THREE.Vector3().copy(cam.up).normalize();
+          const right = new THREE.Vector3().crossVectors(normal, up).normalize();
+          const pull = right.multiplyScalar(0.7).addScaledVector(up, 0.55).addScaledVector(normal, -0.3);
+          pull.setLength(tug.limit * 0.8);
+          tugPullBy(pull.x, pull.y, pull.z);
+          setTimeout(releaseTug, 420);
+          break;
+        }
+        case 'heat':
+          keyHeat = heatStart();
+          break;
+        default:
+          break;
+      }
+      playStore.getState().markTeachSeen();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || !keyHeat) return;
+      keyHeat = false;
+      heatStop();
+    };
+    const onBlur = () => {
+      if (!keyHeat) return;
+      keyHeat = false;
+      heatStop();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+
     return () => {
       for (const off of offs) off();
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
     };
   }, []);
 
