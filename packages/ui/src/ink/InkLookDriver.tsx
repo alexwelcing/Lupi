@@ -42,9 +42,9 @@ import { registerPlayDevHook } from '../play/devHooks';
 /** A look change: lit ⇄ ink (ms). */
 export const INK_TOGGLE_MS = 480;
 /** Ink-to-Light: the light coming on after the hand-off (ms). */
-export const INK_LIGHT_ON_MS = 620;
+export const INK_LIGHT_ON_MS = 520;
 /** Wait after the first frame before the light comes on: the relay's 120 ms crossfade, and a beat. */
-export const INK_LIGHT_ON_DELAY_MS = 220;
+export const INK_LIGHT_ON_DELAY_MS = 200;
 /** Never hold the hand-off drawing longer than this if the first frame never comes. */
 const HOLD_MAX_MS = 6_000;
 

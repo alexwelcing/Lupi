@@ -74,9 +74,9 @@ export const INK_LOOK_COLORS = {
 /** Tuning points (owner feedback). Widths and spacing are in ink units. */
 export const INK_LOOK_TUNING = {
   /** Outline width at an atom's silhouette. */
-  atomLine: 1.35,
+  atomLine: 1.5,
   /** Outline width along a bond's two edges. */
-  bondLine: 1.05,
+  bondLine: 1.15,
   /** Distance between hatch strokes. */
   hatchSpacing: 4.4,
   /** The widest a stroke grows, as a share of the spacing. */
