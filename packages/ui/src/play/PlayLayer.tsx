@@ -60,7 +60,7 @@ import { isRelayActive, peekBaton } from '../relay/baton';
 import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { cue } from './feedback';
 import { installPlayDevHooks, registerPlayDevHook } from './devHooks';
-import { playStore } from './playStore';
+import { heatKelvin, playStore } from './playStore';
 import {
   canPlayScatter,
   markArrivalSeen,
@@ -234,6 +234,8 @@ const heat = {
   /** performance.now() of the last readout published to the pill. */
   readoutAt: -Infinity,
   rub: { x: 0, y: 0, live: false },
+  /** The last 300 K step that ticked (0: none yet). */
+  tickStep: 0,
 };
 
 function motionNow(): number {
@@ -393,6 +395,7 @@ function clearHeat(): void {
   heat.held = false;
   heat.level = 0;
   heat.rub.live = false;
+  heat.tickStep = 0;
   M.uHeatWeight.value = 0;
   M.uHeatAmplitude.value = 0;
   ATOM_GLOW.uHeatGlow.value = 0;
@@ -412,8 +415,15 @@ function advanceHeat(dt: number): void {
     clearHeat();
     return;
   }
-  if (heat.held) heat.level += (1 - heat.level) * (1 - Math.exp(-dt / HEAT.rampS));
-  else {
+  if (heat.held) {
+    heat.level += (1 - heat.level) * (1 - Math.exp(-dt / HEAT.rampS));
+    // A soft tick each time it warms past another 300 K (if haptics or sound are on).
+    const step = Math.floor(heatKelvin(heat.level) / 300);
+    if (step > heat.tickStep) {
+      if (heat.tickStep > 0) cue('warm');
+      heat.tickStep = step;
+    }
+  } else {
     heat.level *= Math.exp(-dt / HEAT.coolS);
     if (heat.level < HEAT.restLevel) {
       clearHeat();
