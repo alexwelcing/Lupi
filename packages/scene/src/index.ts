@@ -91,7 +91,7 @@ export {
   CAPTURE_TEXEL_SCALE_KEY,
   captureTexelScale,
 } from './captureGuards';
-export type { CaptureGuard } from './captureGuards';
+export type { CaptureGuard, RecordingGuard, RecordingOptions } from './captureGuards';
 
 // TSL: the node-material uniform bag and the impostor shading kit
 export {

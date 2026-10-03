@@ -16,6 +16,9 @@
  *   overwrite anything done earlier in the frame).
  * - `beginRecording()` brackets a video recording (the rig suspends, display
  *   motion is suspended); the returned restore runs when recording ends.
+ *   An illustrative recording (`{ illustrative: true }`, Instant Replay's
+ *   clip, labelled "Illustrative" in its frames) keeps display motion live:
+ *   it is a picture of the toys, never an artifact.
  *
  * One throwing guard is logged and never stops the others or the capture.
  * Contract file: additive edits only.
@@ -28,8 +31,19 @@ export interface CaptureGuard {
   begin?(): () => void;
 }
 
+/** What kind of recording is starting. */
+export interface RecordingOptions {
+  /**
+   * An illustrative clip (Instant Replay): display motion keeps playing.
+   * Artifact and ordinary video exports leave this unset.
+   */
+  illustrative?: boolean;
+}
+
+export type RecordingGuard = (options: RecordingOptions) => () => void;
+
 const guards: CaptureGuard[] = [];
-const recordingGuards: Array<() => () => void> = [];
+const recordingGuards: RecordingGuard[] = [];
 
 function report(what: string, error: unknown): void {
   console.error(`[lupi] capture guard ${what} threw`, error);
@@ -89,17 +103,18 @@ export function beginCaptureRender(): () => void {
 }
 
 /** Register a recording guard: `start` runs when a recording begins and returns its stop. */
-export function registerRecordingGuard(start: () => () => void): () => void {
+export function registerRecordingGuard(start: RecordingGuard): () => void {
   recordingGuards.push(start);
   return () => removeFrom(recordingGuards, start);
 }
 
 /** Start every recording guard; the returned stop runs them back LIFO, once. */
-export function beginRecording(): () => void {
+export function beginRecording(options: RecordingOptions = {}): () => void {
   const stops: Array<() => void> = [];
+  const frozen: RecordingOptions = { ...options };
   for (const start of recordingGuards.slice()) {
     try {
-      const stop = start();
+      const stop = start(frozen);
       if (typeof stop === 'function') stops.push(stop);
     } catch (error) {
       report('recording start', error);

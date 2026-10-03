@@ -58,6 +58,12 @@ export const LUPI_JOB = {
   frameDemand: 'lupi/frame-demand',
   /** The phone atom card's view shift (a projection view offset) in `update`. */
   viewInset: 'lupi/view-inset',
+  /** Instant Replay's clip: compose each recorded frame and its labels, in `lupi-capture`. */
+  clipComposite: 'lupi/clip-composite',
+  /** Instant Replay's recorder: the camera pose of each drawn frame, in `lupi-capture`. */
+  replayRecord: 'lupi/replay-record',
+  /** A shared replay playing in this view (camera and toys), in `update`. */
+  replayPlay: 'lupi/replay-play',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];
