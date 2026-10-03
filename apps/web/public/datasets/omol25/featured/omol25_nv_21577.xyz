@@ -1,0 +1,17 @@
+15
+OMol25 neutral-validation row=21577 | collection=neutral-validation | formula=CH4Cl2O6P2 | configuration_id=CO_1301260222171177618173137 | property_id=PO_2622062847262577275676500 | method=ωB97M-V | charge=0 | multiplicity=1 | charge_source=record | data_id=geom_orca6 | energy_eV=-57014.9330314 | max_force_eV_per_A=0.934018202138 | homo_lumo_gap_eV=11.1407223978 | coordinates=source | bonds=not-provided | license=CC-BY-4.0 | source=colabfit/OMol25_neutral_validation
+O 2.823376 0.218982 -0.220329
+P 1.553684 -0.447599 -0.009292
+O 1.119506 -1.440792 -1.215095
+H 1.878126 -1.598475 -1.782397
+O 1.470232 -1.314877 1.294815
+H 0.593239 -1.722172 1.436551
+C 0.019195 0.570399 -0.000252
+P -1.416623 -0.584897 0.039699
+O -1.177985 -1.670556 1.003134
+O -1.707438 -1.020824 -1.444118
+H -1.167344 -1.761202 -1.727762
+O -2.682312 0.309194 0.314246
+H -2.929184 0.319591 1.240363
+Cl 0.000249 1.454684 1.514828
+Cl -0.010516 1.609321 -1.39697

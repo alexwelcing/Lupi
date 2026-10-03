@@ -19,6 +19,30 @@ export interface OmolPick {
 type Row = readonly [row: number, title: string | null, formula: string, atoms: number, shelf: string, home: 0 | 1, domainLabel: string, charge: number, spinMultiplicity: number];
 
 const ROWS: readonly Row[] = [
+  [23477, null, 'C15H18FNO', 36, 'drug-like', 1, 'GEOM', 0, 1],
+  [7851, null, 'C15H19Br2N3O2', 41, 'amino-acid-ligand', 1, 'SPICE', 0, 1],
+  [8140, null, 'C15H17IO2S', 36, 'conformers', 1, 'OrbNet Denali', 0, 1],
+  [1008, null, 'C4H14N4OS3', 26, 'off-equilibrium', 1, 'ANI-2x', 0, 1],
+  [27019, null, 'C21H17FN7NaO5S3', 55, 'salt-complexes', 1, 'OrbNet Denali', 0, 1],
+  [21277, null, 'C4H4F6O', 15, 'small', 1, 'GEOM', 0, 1],
+  [7655, null, 'C18H19BrN4OS', 44, 'drug-like', 1, 'GEOM', 0, 1],
+  [14413, null, 'C7H16N4O3S', 31, 'amino-acid-ligand', 1, 'SPICE', 0, 1],
+  [12950, null, 'C25H23NO4Si', 54, 'conformers', 1, 'OrbNet Denali', 0, 1],
+  [2728, null, 'C15H11BrF3NO', 32, 'off-equilibrium', 1, 'GEOM', 0, 1],
+  [4138, null, 'C12H10I3KN2O4', 32, 'salt-complexes', 1, 'OrbNet Denali', 0, 1],
+  [3082, null, 'C5H6BNO2', 15, 'small', 1, 'OrbNet Denali', 0, 1],
+  [18958, null, 'C18H17N2OP', 39, 'drug-like', 1, 'GEOM', 0, 1],
+  [4243, null, 'C15H9MgO7P', 33, 'salt-complexes', 1, 'OrbNet Denali', 0, 1],
+  [11984, null, 'C12H11Cl2NO', 27, 'drug-like', 0, 'GEOM', 0, 1],
+  [16918, null, 'C21H23Cl3N2O4', 53, 'amino-acid-ligand', 0, 'SPICE', 0, 1],
+  [23177, null, 'C15H17IO2S', 36, 'conformers', 0, 'OrbNet Denali', 0, 1],
+  [20999, null, 'C7H7FO2S2', 19, 'off-equilibrium', 0, 'ANI-2x', 0, 1],
+  [15395, null, 'C11H5LiN6OS', 25, 'salt-complexes', 0, 'OrbNet Denali', 0, 1],
+  [21577, null, 'CH4Cl2O6P2', 15, 'small', 0, 'GEOM', 0, 1],
+  [9497, null, 'C14H20IN3O4', 42, 'amino-acid-ligand', 0, 'SPICE', 0, 1],
+  [10866, null, 'C25H23NO4Si', 54, 'conformers', 0, 'OrbNet Denali', 0, 1],
+  [17445, null, 'C28H25CaFNO5P', 62, 'salt-complexes', 0, 'OrbNet Denali', 0, 1],
+  [8647, null, 'C7H5BrN2OS', 17, 'small', 0, 'GEOM', 0, 1],
 ];
 
 export const OMOL_PICKS: readonly OmolPick[] = ROWS.map(([row, title, formula, atoms, shelf, home, domainLabel, charge, spinMultiplicity]) => ({
