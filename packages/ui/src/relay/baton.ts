@@ -12,7 +12,8 @@ export type Vec3 = [number, number, number];
 
 export interface RelayBaton {
   galleryId: string;
-  source: 'hero' | 'tile' | 'finder' | 'deeplink';
+  /** `page`: a molecule page's (/m/<id>) ink drawing, across a page load (sessionStorage). */
+  source: 'hero' | 'tile' | 'finder' | 'deeplink' | 'page';
   /** Unit direction from the target to the camera, normalize(position − target), at hand-off; or null. */
   viewDir: Vec3 | null;
   /** The molecule's apparent spin about world +Y (rad/s). */
