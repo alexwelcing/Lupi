@@ -21,6 +21,7 @@ import { cue } from '../play/feedback';
 import { FOIL_LABEL, remixFoil, type FoilKind, type RemixCode } from './code';
 import { lookMorphTarget, morphLook } from './lookMorph';
 import { remixStore, type AppliedRemix } from './remixStore';
+import { matchesMediaQuery } from '../hooks/useMediaQuery';
 
 export type RemixSource = 'tray' | 'pill' | 'key' | 'shake' | 'sheet' | 'paste' | 'link' | 'deck' | 'palette';
 
@@ -190,6 +191,11 @@ export function shareableRemixCode(): RemixCode | null {
 /** Open the Remix sheet (codes, finishes, shake); closes the Play tray. */
 export function openRemixSheet(): void {
   playStore.getState().setTrayOpen(false);
+  // A phone shows one sheet at a time: opened from the Style sheet's deck,
+  // the Remix sheet takes its place rather than stacking over it.
+  if (matchesMediaQuery('(max-width: 640px)') && useStore.getState().activePanel) {
+    useStore.getState().setActivePanel(null);
+  }
   remixStore.getState().setSheetOpen(true);
 }
 
