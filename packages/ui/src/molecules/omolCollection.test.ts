@@ -1,6 +1,25 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it, expect, vi } from 'vitest';
+import {
+  OMOL25_COLLECTIONS,
+  omolShelfPick,
+  validateOmolFeaturedFile,
+  validateOmolShelfPicks,
+  type OmolFeaturedFileV1,
+} from '@atlas/core/omol25';
 import { deriveFacets, omolProvider, type OmolRecord } from './providers/omol';
 import { PERIODIC_TABLE } from './periodicTable';
+import {
+  FALLBACK_OMOL_COLLECTIONS,
+  OmolSlowError,
+  RemoteOmolWarmingError,
+  remoteOmolHit,
+  remoteOmolPage,
+  type RemoteOmolRow,
+} from './remoteOmol';
+import { OMOL_PICKS } from '../landing/omolShelf.data';
 
 // A tiny fixture shaped like the real OMol25 neutral-validation records:
 // gap is null across the slice and src is a single constant — the facet
@@ -148,5 +167,118 @@ describe('OMol25 — compact v4 index bound to edge rows', () => {
     const { parseOmolIndex } = await import('./providers/omol');
     expect(parseOmolIndex({ records: FIXTURE })).toHaveLength(FIXTURE.length);
     expect(parseOmolIndex({ records: 'nope' })).toEqual([]);
+  });
+});
+
+function remoteRow(overrides: Partial<RemoteOmolRow> = {}): RemoteOmolRow {
+  return {
+    rowIndex: 273,
+    id: 'CO_85',
+    configurationId: 'CO_85',
+    propertyId: 'PO_10',
+    formula: 'C21H15KN4O4S',
+    reducedFormula: 'C21H15KN4O4S',
+    elements: ['C', 'H', 'K', 'N', 'O', 'S'],
+    atomCount: 46,
+    multiplicity: 1,
+    charge: 0,
+    spinMultiplicity: 1,
+    chargeSource: 'record',
+    domain: 'orbnet_denali',
+    homoLumoGapEv: 6.39,
+    method: 'ωB97M-V',
+    software: 'ORCA',
+    energy: -63330.86,
+    maxForceNorm: 3.08,
+    name: null,
+    loadUrl: '/v1/datasets/omol25/neutral-validation/structures/273.xyz',
+    coordinateProvenance: 'source',
+    bondTopology: 'not-provided',
+    ...overrides,
+  };
+}
+
+describe('OMol25 — remote rows as library hits', () => {
+  it('words charge and spin from the record and never shows the ColabFit multiplicity', () => {
+    const neutral = remoteOmolHit(remoteRow({ multiplicity: 3 }));
+    expect(neutral.subtitle).toBe('46 atoms · ωB97M-V · neutral singlet');
+
+    const cation = remoteOmolHit(remoteRow({ charge: 1, spinMultiplicity: 2, multiplicity: 1 }));
+    expect(cation.subtitle).toBe('46 atoms · ωB97M-V · charge +1 · doublet');
+
+    const olderEdge = remoteOmolHit(remoteRow({
+      multiplicity: 2, charge: undefined, spinMultiplicity: undefined, chargeSource: undefined, domain: undefined,
+    }));
+    expect(olderEdge.subtitle).toBe('46 atoms · ωB97M-V');
+
+    const unavailable = remoteOmolHit(remoteRow({ charge: null, spinMultiplicity: null, chargeSource: 'unavailable', metaTruncated: true }));
+    expect(unavailable.subtitle).toBe('46 atoms · ωB97M-V');
+
+    for (const hit of [neutral, cation, olderEdge, unavailable]) expect(hit.subtitle).not.toMatch(/multiplicity/);
+    expect(neutral.subtitle).not.toContain('charge +1');
+  });
+
+  it('fills provenance and the geometry notice from the shared truth module', () => {
+    const hit = remoteOmolHit(remoteRow());
+    expect(hit.provenance).toEqual({
+      sourceUrl: 'https://huggingface.co/datasets/colabfit/OMol25_neutral_validation',
+      doi: '10.48550/arXiv.2505.08762',
+      citation: 'Levine et al. 2025, The Open Molecules 2025 (OMol25) Dataset, arXiv:2505.08762',
+      license: 'CC-BY-4.0',
+      licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    });
+    expect(hit.notice).toBe('Snapshot away from a minimum: largest force 3.1 eV/Å.');
+    expect(hit.tags).toContain('orbnet_denali');
+
+    const reaction = remoteOmolHit(remoteRow({ domain: 'trans1x', maxForceNorm: 0.2 }));
+    expect(reaction.notice).toBe('Near a minimum: largest force 0.20 eV/Å. Reaction-path snapshot: stretched bonds may be absent.');
+    expect(remoteOmolHit(remoteRow({ maxForceNorm: null })).notice).toBeUndefined();
+  });
+
+  it('takes its fallback collections from @atlas/core/omol25', () => {
+    expect(FALLBACK_OMOL_COLLECTIONS.map((c) => c.id)).toEqual(OMOL25_COLLECTIONS.map((c) => c.id));
+    expect(FALLBACK_OMOL_COLLECTIONS.find((c) => c.id === 'all-train-preview')).toMatchObject({
+      repository: 'colabfit/OMol25_train',
+      estimatedRows: 65_331_709,
+      sourceRows: 101_666_280,
+      rowsUrl: '/v1/datasets/omol25/all-train-preview/rows',
+    });
+  });
+
+  it('maps an edge 504 slow to OmolSlowError and keeps warming as its own error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 504,
+      json: async () => ({ status: 'slow', error: 'did not answer within 9 seconds.', timeoutSeconds: 9 }),
+    }));
+    const slow = remoteOmolPage({ collection: 'neutral-train', formula: 'C6H6' });
+    await expect(slow).rejects.toBeInstanceOf(OmolSlowError);
+    await expect(slow).rejects.toMatchObject({ timeoutSeconds: 9 });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 202,
+      json: async () => ({ status: 'warming', error: 'Index warming.', retryAfterSeconds: 15 }),
+    }));
+    await expect(remoteOmolPage({ collection: 'neutral-train', formula: 'C6H6' })).rejects.toBeInstanceOf(RemoteOmolWarmingError);
+  });
+});
+
+describe('OMol25 — featured picks data', () => {
+  const featuredPath = join(dirname(fileURLToPath(import.meta.url)), '../../../../apps/web/public/datasets/omol25/featured.v1.json');
+
+  it('ships landing data that passes the shape validator', () => {
+    expect(validateOmolShelfPicks(OMOL_PICKS)).toEqual([]);
+  });
+
+  it('keeps featured.v1.json and the landing data in step', () => {
+    if (!existsSync(featuredPath)) {
+      // Before the featured build runs, the landing data is the empty stub.
+      expect(OMOL_PICKS).toEqual([]);
+      return;
+    }
+    const file = JSON.parse(readFileSync(featuredPath, 'utf8')) as OmolFeaturedFileV1;
+    expect(validateOmolFeaturedFile(file)).toEqual([]);
+    expect(OMOL_PICKS).toEqual(file.picks.map(omolShelfPick));
   });
 });
