@@ -378,9 +378,11 @@ html[data-opening] .dl-stage {
   border-color: var(--mp-line);
   color: var(--mp-faint);
 }
-.dl-clue[data-state='locked'] .dl-clue__title,
-.dl-clue[data-state='locked'] .dl-clue__text {
+.dl-clue[data-state='locked'] .dl-clue__title {
   color: var(--mp-faint);
+}
+.dl-clue[data-state='locked'] .dl-clue__text {
+  color: var(--mp-muted);
   font-family: var(--mp-sans);
   font-size: 0.8125rem;
 }
