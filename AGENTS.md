@@ -59,6 +59,12 @@ Core endpoints:
 - `GET /datasets/omol25/featured.v1.json` — the 24 hand-picked
   neutral-validation rows Lupi keeps (schema `lupi.omol25-featured.v1`, CC BY
   4.0, sha256 per file), each at `/datasets/omol25/featured/omol25_nv_<row>.xyz`
+- `GET /og/omol25/omol25_nv_<row>-ink.svg`, `-ink.json` — the picks' ink
+  drawings and models, written by the web build
+  (`scripts/omol25-picks/build.mts`) from the same `lupi-bonds.molecular.v1`
+  graph the viewer draws (coordination dashed, ionic contacts dotted, InkModel
+  `bk`); the home shelf, finder, switcher and Library tiles show them, and
+  `/omol25` opens `/library/omol25`
 - `GET /v1/jobs/:jobId` — legacy-v0 render-job compatibility
 - `GET /assets/:assetId.:ext` — legacy-v0 R2 asset compatibility
 
