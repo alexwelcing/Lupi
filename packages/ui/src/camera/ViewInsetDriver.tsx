@@ -12,7 +12,8 @@
  *   is never fought.
  * - An overlay a canvas tap opens or closes (the atom card) holds the view
  *   for one double-tap window first, so the second tap of a double-tap lands
- *   on what the first one touched.
+ *   on what the first one touched. A quick menu (the Play tray) holds a
+ *   moment before making room, so a pick that closes it at once moves nothing.
  * - It springs on the motion kernel (MOTION.settle; MOTION.snap while the
  *   visitor drags a sheet, so the molecule rides the sheet) and cuts under
  *   Motion: Still; Gentle still glides, as camera glides do.
@@ -196,6 +197,10 @@ export function ViewInsetDriver({ bounds }: { bounds?: SubjectBounds | null }) {
         const st = state.current;
         // A tap opened or closed it: hold for a possible second tap.
         if (change.tapBorn && (change.appeared || change.gone)) st.holdUntil = performance.now() + HOLD_MS;
+        // A quick menu opened: make room only if it stays open.
+        if (change.appeared && change.lingerMs > 0) {
+          st.holdUntil = Math.max(st.holdUntil, performance.now() + change.lingerMs);
+        }
         st.stale = true;
         requestLupiFrames();
       }),

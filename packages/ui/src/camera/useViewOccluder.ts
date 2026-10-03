@@ -40,16 +40,17 @@ export interface ViewOccluderHandle {
 export function useViewOccluder(
   id: string,
   enabled: boolean,
-  options: { tapBorn?: boolean } = {},
+  options: { tapBorn?: boolean; lingerMs?: number } = {},
 ): ViewOccluderHandle {
   const [node, setNode] = useState<HTMLElement | null>(null);
   const tracking = useRef(false);
   const tapBorn = Boolean(options.tapBorn);
-  const live = useRef({ node, enabled, id, tapBorn });
-  live.current = { node, enabled, id, tapBorn };
+  const lingerMs = options.lingerMs ?? 0;
+  const live = useRef({ node, enabled, id, tapBorn, lingerMs });
+  live.current = { node, enabled, id, tapBorn, lingerMs };
 
   const report = useCallback(() => {
-    const { node: element, enabled: on, id: key, tapBorn: born } = live.current;
+    const { node: element, enabled: on, id: key, tapBorn: born, lingerMs: linger } = live.current;
     if (!element || !on || !element.isConnected) {
       setViewOccluder(key, null);
       return;
@@ -58,6 +59,7 @@ export function useViewOccluder(
       rect: restingRect(element),
       tracking: tracking.current,
       tapBorn: born,
+      lingerMs: linger,
     });
   }, []);
 

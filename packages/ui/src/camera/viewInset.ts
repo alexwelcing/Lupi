@@ -37,6 +37,11 @@ export interface ViewOccluder {
   tapBorn?: boolean;
   /** The visitor is dragging it (a sheet handle): the view follows it tightly. */
   tracking?: boolean;
+  /**
+   * A quick menu (the Play tray): the view waits this long (ms) after it
+   * appears before making room, so a pick that closes it at once moves nothing.
+   */
+  lingerMs?: number;
 }
 
 /**
@@ -73,6 +78,7 @@ export interface OccluderChange {
   appeared: boolean;
   gone: boolean;
   tapBorn: boolean;
+  lingerMs: number;
 }
 
 const occluders = new Map<string, Required<ViewOccluder>>();
@@ -117,24 +123,26 @@ export function setViewOccluder(id: string, occluder: ViewOccluder | null): void
   if (!occluder || !validRect(occluder.rect)) {
     if (!previous) return;
     occluders.delete(id);
-    notify({ id, appeared: false, gone: true, tapBorn: previous.tapBorn });
+    notify({ id, appeared: false, gone: true, tapBorn: previous.tapBorn, lingerMs: previous.lingerMs });
     return;
   }
   const next: Required<ViewOccluder> = {
     rect: roundRect(occluder.rect),
     tapBorn: Boolean(occluder.tapBorn),
     tracking: Boolean(occluder.tracking),
+    lingerMs: occluder.lingerMs !== undefined && occluder.lingerMs > 0 ? occluder.lingerMs : 0,
   };
   if (
     previous &&
     sameRect(previous.rect, next.rect) &&
     previous.tracking === next.tracking &&
-    previous.tapBorn === next.tapBorn
+    previous.tapBorn === next.tapBorn &&
+    previous.lingerMs === next.lingerMs
   ) {
     return;
   }
   occluders.set(id, next);
-  notify({ id, appeared: !previous, gone: false, tapBorn: next.tapBorn });
+  notify({ id, appeared: !previous, gone: false, tapBorn: next.tapBorn, lingerMs: next.lingerMs });
 }
 
 export function viewOccluders(): ReadonlyArray<Required<ViewOccluder>> {
