@@ -225,7 +225,7 @@ function EffectMods() {
     {active.vignette.enabled && slider('vignetteStrength', 'Vignette strength', active.vignette.darkness, 1)}
     <label className="scene-mod-select"><span>Tone mapping</span><select aria-label="Tone mapping" value={active.toneMapping}
       onChange={e => update({ toneMapping: e.target.value as EffectOverrides['toneMapping'] })}>
-      <option value="aces">Filmic (ACES)</option><option value="reinhard">Soft (Reinhard)</option><option value="none">None</option>
+      <option value="neutral">True colour (Neutral)</option><option value="aces">Filmic (ACES)</option><option value="reinhard">Soft (Reinhard)</option><option value="none">None</option>
     </select></label>
     <button className="scene-controls__button" type="button" onClick={() => useStore.setState({ effectOverrides: null })}>Reset effect recipe</button>
   </>;

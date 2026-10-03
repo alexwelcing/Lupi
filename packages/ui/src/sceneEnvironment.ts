@@ -44,10 +44,12 @@ export const DREI_ENVIRONMENT_FILES: Record<DreiEnvironmentPreset, string> = {
  * The procedural scientific-studio softbox rig (replaces the retired Drei
  * 'apartment' room HDRI). There is no fetched asset: the identity pins the
  * generator design version instead of a file revision, and the "file" names
- * the procedural recipe. sha1('lupi-scientific-softbox-studio-v1').
+ * the procedural recipe. v2: the key, fill and rim panels follow the
+ * lighting angles (which the spec's `view.lighting` records), so the
+ * catchlight moves with the key light. sha1('lupi-scientific-softbox-studio-v2').
  */
-export const SOFTBOX_ENVIRONMENT_REVISION = 'fecf2129e6137375f8a071c0b949f02aea986fd9';
-export const SOFTBOX_ENVIRONMENT_FILE = 'procedural-scientific-softbox-v1';
+export const SOFTBOX_ENVIRONMENT_REVISION = '57a9aac3c05738675c83dd5e5b321cad756e987a';
+export const SOFTBOX_ENVIRONMENT_FILE = 'procedural-scientific-softbox-v2';
 
 /** Presets that resolve to a concrete PMREM texture (everything but 'none'). */
 export type TexturedEnvironmentPreset = Exclude<SceneEnvironmentPreset, 'none'>;

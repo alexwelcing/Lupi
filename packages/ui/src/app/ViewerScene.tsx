@@ -9,8 +9,12 @@ import {
   MAX_TRANSMISSION_ATOMS,
   transmissionQuality,
   suggestOcclusionRadius,
+  suggestContactRange,
   useAtomClusters,
   useAtomOcclusion,
+  useContactOcclusion,
+  CONTACT_OCCLUSION_MAX_ATOMS,
+  DEFAULT_CONTACT_OCCLUSION_STRENGTH,
   type AtomQualityTier,
 } from '@atlas/scene';
 import { reportActiveTransmissionQuality } from '../mcp/transmissionRuntime';
@@ -24,6 +28,7 @@ import {
   ensureVectorMagnitude,
   getElementSpec,
   resolveAtomicNumber,
+  resolveTypeDisplayRadius,
 } from '@atlas/core';
 import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
 import { GhostAtoms } from '../GhostAtoms';
@@ -47,6 +52,15 @@ import { AtomTrails } from '../AtomTrails';
 import { MoleculeFilterShell } from '../MoleculeFilterShell';
 import { MoleculeShadow } from '../MoleculeShadow';
 import { LupiContactShadow } from '../LupiContactShadow';
+import {
+  SPECIMEN_SHADOW,
+  specimenShadowEnabled,
+  specimenShadowOpacity,
+  specimenShadowPlacement,
+  specimenShadowResolution,
+  specimenShadowSkew,
+  type SpecimenShadowPlacement,
+} from '../specimenShadow';
 import { AxesGizmo } from '../viewer/AxesGizmo';
 import { SceneLighting } from '../SceneLighting';
 import { ScenePostprocessing } from '../postprocess/ScenePostprocessing';
@@ -69,8 +83,6 @@ import { MAX_INTERACTIVE_PICKING_ATOMS } from '../deviceCapabilities';
 const ORBIT_FALLBACK = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('controls') === 'orbit';
 
-const CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT = 5_000;
-const CONTACT_SHADOW_MAX_ATOM_LIMIT = 50_000;
 /** Scenes at or above this atom count get the large-scene treatment: far-LOD
  *  cluster splats, sub-pixel atom culling and baked per-atom occlusion. */
 const LARGE_SCENE_ATOM_THRESHOLD = 50_000;
@@ -111,52 +123,83 @@ function maxCovalentRadiusForFrame(frame: Frame): number | undefined {
   return value;
 }
 
-interface BudgetedContactShadowsProps {
+/** Smallest and largest display radius among a frame's atom types (cached per type buffer). */
+const displayRadiusCache = new WeakMap<Int32Array, { semanticsKey: string; min: number; max: number }>();
+function displayRadiusRangeForFrame(frame: Frame): { min: number; max: number } {
+  const semanticsKey = JSON.stringify([frame.typeSemantics ?? null, frame.distanceSemantics ?? null]);
+  const cached = displayRadiusCache.get(frame.types);
+  if (cached && cached.semanticsKey === semanticsKey) return cached;
+  const seen = new Set<number>();
+  let minR = Infinity;
+  let maxR = 0;
+  for (let i = 0; i < frame.natoms; i++) {
+    const t = frame.types[i];
+    if (seen.has(t)) continue;
+    seen.add(t);
+    const r = resolveTypeDisplayRadius(frame, t);
+    if (r > maxR) maxR = r;
+    if (r > 0 && r < minR) minR = r;
+  }
+  const entry = { semanticsKey, min: Number.isFinite(minR) ? minR : 0, max: maxR };
+  displayRadiusCache.set(frame.types, entry);
+  return entry;
+}
+
+/** Bond radius the viewer draws (Bonds `radius`), also the contact bond-stub radius. */
+const BOND_RADIUS = 0.12;
+
+/** Contact occlusion on phones (quality tier 0) up to this many atoms. */
+const CONTACT_OCCLUSION_MOBILE_MAX_ATOMS = 60_000;
+
+interface SpecimenShadowProps {
   atomCount: number;
   frame: Frame;
   hiddenAtomTypes: ReadonlySet<number>;
-  centerX: number;
-  centerY: number;
-  centerZ: number;
-  far: number;
+  placement: SpecimenShadowPlacement;
   opacity: number;
-  planeSize: number;
   playing: boolean;
+  keyLightAzimuth: number;
+  keyLightElevation: number;
 }
 
 /**
- * The floor contact shadow is a CPU splat of the visible atoms (one blurred
- * canvas per recompute; see LupiContactShadow). Keep the authored 1024px
- * mask for small molecules, halve it for medium scenes, and omit it once the
- * scene is dense enough that the splat would stall the main thread. During
- * playback `frames={0}` keeps the last mask instead of re-splatting per frame.
+ * The Specimen floor shadow: a CPU splat of the visible atoms (one blurred
+ * canvas per recompute; see LupiContactShadow) whose penumbra widens with
+ * height and leans away from the key light. The 1024 px mask for small
+ * molecules, half for medium scenes, none once the scene is dense enough
+ * that the splat would stall the main thread. During playback `frames={0}`
+ * keeps the last mask instead of re-splatting per frame.
  */
-const BudgetedContactShadows = memo(function BudgetedContactShadows({
+const SpecimenShadow = memo(function SpecimenShadow({
   atomCount,
   frame,
   hiddenAtomTypes,
-  centerX,
-  centerY,
-  centerZ,
-  far,
+  placement,
   opacity,
-  planeSize,
   playing,
-}: BudgetedContactShadowsProps) {
-  if (atomCount > CONTACT_SHADOW_MAX_ATOM_LIMIT) return null;
+  keyLightAzimuth,
+  keyLightElevation,
+}: SpecimenShadowProps) {
+  const skew = useMemo(
+    () => specimenShadowSkew(keyLightAzimuth, keyLightElevation),
+    [keyLightAzimuth, keyLightElevation],
+  );
+  if (!specimenShadowEnabled(atomCount)) return null;
 
   return (
     <LupiContactShadow
-      position={[centerX, centerY - 0.05, centerZ]}
-      scale={planeSize}
-      blur={2.4}
-      far={far}
+      position={placement.center}
+      scale={placement.planeSize}
+      blur={SPECIMEN_SHADOW.blur}
+      far={placement.far}
       opacity={opacity}
-      resolution={atomCount <= CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT ? 1024 : 512}
+      resolution={specimenShadowResolution(atomCount)}
       frames={playing ? 0 : 1}
-      color="#04060c"
+      color={SPECIMEN_SHADOW.color}
       frame={frame}
       hiddenAtomTypes={hiddenAtomTypes}
+      spread={SPECIMEN_SHADOW.spread}
+      skew={skew}
     />
   );
 });
@@ -433,6 +476,58 @@ export function ViewerScene({
     enabled: isLargeScene && fullyLoaded && occlusionRadius > 0,
     radius: occlusionRadius,
   });
+  // Contact occlusion (the Contact look): every atom's nearest neighbours,
+  // shaded per pixel as analytic sphere occlusion. Phones get crevices back
+  // without screen-space AO; desktops get them stable under GTAO. Baked from
+  // the paused frame (kept while playing), synchronously for small molecules.
+  // Phones stop earlier: each pixel walks eight neighbours, and a large
+  // structure at phone DPR is mostly small atoms the density bake reads.
+  const contactMaxAtoms = deviceQualityTier === 0 ? CONTACT_OCCLUSION_MOBILE_MAX_ATOMS : CONTACT_OCCLUSION_MAX_ATOMS;
+  const contactEligible = Boolean(
+    currentFrame
+    && currentFrame.natoms <= contactMaxAtoms
+    && fullyLoaded,
+  );
+  const contactRange = useMemo(() => {
+    if (!currentFrame || !contactEligible) return 0;
+    const maxRadius = displayRadiusRangeForFrame(currentFrame).max * Math.max(1, atomScale);
+    return suggestContactRange(
+      maxRadius,
+      currentFrame.distanceSemantics?.kind === 'angstrom',
+      currentFrame.positions,
+      currentFrame.natoms,
+    );
+  }, [currentFrame, contactEligible, atomScale]);
+  const contact = useContactOcclusion(clusterSourceFrame, {
+    enabled: contactEligible && contactRange > 0,
+    range: contactRange,
+  });
+  // Sticks darken where they enter a ball: the smallest ball, so no visible
+  // stick darkens past it.
+  const junctionRadius = contactEligible && currentFrame
+    ? displayRadiusRangeForFrame(currentFrame).min * atomScale
+    : 0;
+  // The Specimen floor shadow: under every molecule (the filter shell has its
+  // own), off for the flat Diagram figure.
+  const filterShellOn = filterShellShape !== 'off' && filterShellOpacity > 0;
+  const shadowFrameBounds = file?.trajectory.globalBounds;
+  const shadowCell = showCell ? currentFrame?.boxBounds : undefined;
+  const shadowRadius = currentFrame ? displayRadiusRangeForFrame(currentFrame).max * atomScale : 0;
+  const specimenShadow = useMemo(() => {
+    if (!currentFrame || !shadowFrameBounds || filterShellOn || postprocessPreset === 'diagram') return null;
+    const cellFloor = shadowCell
+      ? {
+        x: (shadowCell[0] + shadowCell[1]) / 2,
+        y: shadowCell[2],
+        z: (shadowCell[4] + shadowCell[5]) / 2,
+        dx: shadowCell[1] - shadowCell[0],
+        dz: shadowCell[5] - shadowCell[4],
+      }
+      : null;
+    return specimenShadowPlacement(shadowFrameBounds, shadowRadius, cellFloor);
+    // currentFrame only gates presence; placement follows the global bounds.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(currentFrame), shadowFrameBounds, filterShellOn, postprocessPreset, shadowCell, shadowRadius]);
   const atomQualityTier: AtomQualityTier = deviceQualityTier === 0 ? 0 : deviceQualityTier === 1 ? 1 : 2;
   const atomCullPixelRadius = !isLargeScene
     ? 0
@@ -573,6 +668,10 @@ export function ViewerScene({
             cullPixelRadius={atomCullPixelRadius}
             occlusion={atomOcclusion}
             occlusionStrength={ATOM_OCCLUSION_STRENGTH}
+            contactOcclusion={contact.bake}
+            occlusionPending={contact.pending}
+            bondStubRadius={bondRenderPlan.available ? BOND_RADIUS : 0}
+            bondStubReach={bondRenderPlan.cutoff}
           />
           )}
           {activeVectorField && (
@@ -607,8 +706,10 @@ export function ViewerScene({
             colorProperty={colorProperty ?? undefined}
             uniformColor={uniformAtomColor}
             elementColorOverrides={elementColorOverrides}
-            radius={0.12}
+            radius={BOND_RADIUS}
             opacity={0.85}
+            junctionRadius={junctionRadius}
+            junctionStrength={DEFAULT_CONTACT_OCCLUSION_STRENGTH}
             materialPreset={materialPreset}
             materialIntensity={materialIntensity}
             rimLightIntensity={rimLightIntensity}
@@ -635,29 +736,18 @@ export function ViewerScene({
           />}
           {showCell && <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />}
 
-          {showCell && !(filterShellShape !== 'off' && filterShellOpacity > 0) && currentFrame.boxBounds && postprocessPreset !== 'diagram' && (() => {
-            const b = currentFrame.boxBounds;
-            const cx = (b[0] + b[1]) / 2;
-            const cy = b[2];
-            const cz = (b[4] + b[5]) / 2;
-            const dx = b[1] - b[0];
-            const dz = b[5] - b[4];
-            const planeSize = Math.max(dx, dz) * 1.6;
-            return (
-              <BudgetedContactShadows
-                atomCount={currentFrame.natoms}
-                frame={interpolatedFrame ?? currentFrame}
-                hiddenAtomTypes={hiddenTypeSet}
-                centerX={cx}
-                centerY={cy}
-                centerZ={cz}
-                far={Math.max(20, dx * 0.6)}
-                opacity={postprocessPreset === 'cinematic' ? 0.55 : 0.32}
-                planeSize={planeSize}
-                playing={playing}
-              />
-            );
-          })()}
+          {specimenShadow && (
+            <SpecimenShadow
+              atomCount={currentFrame.natoms}
+              frame={interpolatedFrame ?? currentFrame}
+              hiddenAtomTypes={hiddenTypeSet}
+              placement={specimenShadow}
+              opacity={specimenShadowOpacity(postprocessPreset)}
+              playing={playing}
+              keyLightAzimuth={keyLightAzimuth}
+              keyLightElevation={keyLightElevation}
+            />
+          )}
 
           <AnnotationsLayer
             frame={currentFrame}

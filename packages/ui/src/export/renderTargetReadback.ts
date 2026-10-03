@@ -36,8 +36,15 @@
  * - Pixels are premultiplied linear colour, so un-premultiply in linear, then
  *   sRGB-encode and round. One code path for opaque and transparent output.
  *
- * The render targets bypass the post pipeline and the renderer's output
- * transform (DETERMINISM_V2: raw scene, straight alpha, sRGB OETF on the CPU).
+ * The render targets bypass the live post pipeline and the renderer's output
+ * transform (DETERMINISM_V2: straight alpha, sRGB OETF on the CPU). With a
+ * look (`look`, export/captureLook.ts; the viewer's configured AO, bloom,
+ * depth of field, tone mapping and vignette) the tiles instead assemble HDR
+ * colour, the nearest depth per output pixel and, when the look must leave
+ * the background alone, content coverage (the live pipeline's lupiContent
+ * MRT) into output-sized targets, and captureLookPass.ts runs the look once
+ * over the whole assembled image before the readback. An empty look is the
+ * raw path above, byte for byte.
  *
  * Captures run inside the frame loop, in the `lupi-capture` phase after the
  * default render (never in `render`): ExportManager drives image exports, and
@@ -46,10 +53,31 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three/webgpu';
-import { Discard, Fn, If, clamp, int, ivec2, screenCoordinate, texture, textureLoad, uniform, vec3, vec4 } from 'three/tsl';
+import {
+  Discard,
+  Fn,
+  If,
+  clamp,
+  float,
+  int,
+  ivec2,
+  min,
+  mrt,
+  output,
+  screenCoordinate,
+  texture,
+  textureLoad,
+  uniform,
+  vec2,
+  vec3,
+  vec4,
+} from 'three/tsl';
 import { CAPTURE_TEXEL_SCALE_KEY, LUPI_JOB, LUPI_PHASE, beginCaptureRender, runPrepareCapture } from '@atlas/scene';
 import type { SavedViewThumbnail } from '../savedViews';
 import type { LupiBackend } from '../viewer/createLupiRenderer';
+import { LUPI_CONTENT_OUTPUT, contentCoverage } from '../postprocess/backgroundMask';
+import { captureLookIsEmpty, captureLookTouchesBackground, type CaptureLook } from './captureLook';
+import { renderCaptureLook } from './captureLookPass';
 
 export interface RasterReadback {
   width: number;
@@ -72,7 +100,20 @@ export interface RenderSceneToPixelsOptions {
    * draws. Defaults to the renderer's clear colour, made opaque.
    */
   clearColor?: THREE.ColorRepresentation;
+  /**
+   * The viewer's look to apply (captureLook.ts). Null, absent or empty
+   * renders the raw scene.
+   */
+  look?: CaptureLook | null;
 }
+
+/**
+ * The HDR ceiling a look capture clamps each texel to before averaging
+ * (premultiplied: colour ≤ alpha × ceiling). The raw path clamps to 1, as the
+ * screen shows it; a look tone-maps afterwards, so highlights above 1 must
+ * survive the average (a fixed ceiling keeps an infinite one out).
+ */
+export const CAPTURE_LOOK_HDR_CEILING = 64;
 
 /** Largest supersampling factor (3×3 samples per output pixel). */
 export const CAPTURE_SUPERSAMPLE_MAX_FACTOR = 3;
@@ -161,6 +202,9 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   const { renderer, scene, camera, width, height, transparent } = options;
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
     throw new Error(`renderSceneToPixels: invalid size ${width}x${height}.`);
+  }
+  if (options.look && !captureLookIsEmpty(options.look)) {
+    return renderSceneToPixelsWithLook(options, options.look);
   }
   const backend = rendererBackendOf(renderer);
   const plan = captureSupersamplePlan(width, height, canTileCapture(scene, camera));
@@ -257,6 +301,247 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   } finally {
     release();
   }
+}
+
+/**
+ * The look path of renderSceneToPixels: the same supersampled tiles, but
+ * assembled into output-sized HDR colour (plus coverage) and nearest depth,
+ * then styled once by captureLookPass.ts, then read back. Every render and
+ * every restore happens synchronously, before the first await.
+ */
+async function renderSceneToPixelsWithLook(
+  options: RenderSceneToPixelsOptions,
+  look: CaptureLook,
+): Promise<RasterReadback> {
+  const { renderer, scene, camera, width, height, transparent } = options;
+  const backend = rendererBackendOf(renderer);
+  const plan = captureSupersamplePlan(width, height, canTileCapture(scene, camera));
+  const { factor, columns, rows, tileWidth, tileHeight } = plan;
+  const tiled = columns > 1 || rows > 1;
+  const coverage = !transparent && captureLookTouchesBackground(look);
+
+  const tile = new THREE.RenderTarget(tileWidth * factor, tileHeight * factor, {
+    type: THREE.HalfFloatType,
+    samples: 0,
+    depthBuffer: true,
+    count: coverage ? 2 : 1,
+  });
+  tile.depthTexture = captureDepthTexture(tile.width, tile.height);
+  if (coverage) {
+    tile.textures[0].name = 'output';
+    tile.textures[1].name = LUPI_CONTENT_OUTPUT;
+  }
+  (tile as unknown as Record<string, unknown>)[CAPTURE_TEXEL_SCALE_KEY] = factor;
+  const assembled = new THREE.RenderTarget(width, height, {
+    type: THREE.HalfFloatType,
+    samples: 0,
+    depthBuffer: true,
+  });
+  assembled.depthTexture = captureDepthTexture(width, height);
+  const styled = new THREE.RenderTarget(width, height, { type: THREE.HalfFloatType, samples: 0, depthBuffer: false });
+  const release = () => {
+    releaseCaptureTarget(tile);
+    releaseCaptureTarget(assembled);
+    releaseCaptureTarget(styled);
+  };
+
+  const previousTarget = renderer.getRenderTarget();
+  const previousCubeFace = renderer.getActiveCubeFace();
+  const previousMipmapLevel = renderer.getActiveMipmapLevel();
+  const previousMrt = renderer.getMRT();
+  const previousAutoClear = renderer.autoClear;
+  const previousAutoClearColor = renderer.autoClearColor;
+  const previousAutoClearDepth = renderer.autoClearDepth;
+  const previousAutoClearStencil = renderer.autoClearStencil;
+  const previousClearColor = renderer.getClearColor(new THREE.Color());
+  const previousClearAlpha = renderer.getClearAlpha();
+  const restoreCamera = tiled ? saveCameraView(camera as ViewOffsetCamera) : () => {};
+  let restoreGuards = () => {};
+  const sceneMrt = coverage ? captureCoverageMrt() : null;
+
+  try {
+    renderer.autoClearColor = true;
+    renderer.autoClearDepth = true;
+    renderer.autoClearStencil = true;
+    if (transparent) renderer.setClearColor(0x000000, 0);
+    else renderer.setClearColor(options.clearColor ?? previousClearColor, 1);
+    restoreGuards = beginCaptureRender();
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const x = column * tileWidth;
+        const y = row * tileHeight;
+        if (tiled) {
+          (camera as ViewOffsetCamera).setViewOffset(
+            width * factor,
+            height * factor,
+            x * factor,
+            y * factor,
+            tileWidth * factor,
+            tileHeight * factor,
+          );
+        }
+        renderer.setRenderTarget(tile);
+        renderer.setMRT(sceneMrt);
+        renderer.autoClear = true;
+        renderer.render(scene, camera);
+        const reduce = captureLookDownsampler(factor, coverage, tile);
+        reduce.source.value = tile.textures[0];
+        reduce.depth.value = tile.depthTexture!;
+        if (coverage) reduce.content.value = tile.textures[1];
+        reduce.origin.value.set(x, y);
+        reduce.extent.value.set(Math.min(tileWidth, width - x), Math.min(tileHeight, height - y));
+        reduce.tileSize.value.set(tile.width, tile.height);
+        renderer.setMRT(null);
+        renderer.setRenderTarget(assembled);
+        renderer.autoClear = false;
+        reduce.quad.render(renderer);
+      }
+    }
+    // The look sees the whole image through the capture's own projection.
+    restoreCamera();
+    renderCaptureLook({
+      renderer,
+      look,
+      transparent,
+      coverage,
+      camera,
+      color: assembled.texture,
+      depth: assembled.depthTexture!,
+      target: styled,
+      width,
+      height,
+    });
+  } catch (error) {
+    release();
+    throw error;
+  } finally {
+    restoreGuards();
+    restoreCamera();
+    renderer.setClearColor(previousClearColor, previousClearAlpha);
+    renderer.autoClear = previousAutoClear;
+    renderer.autoClearColor = previousAutoClearColor;
+    renderer.autoClearDepth = previousAutoClearDepth;
+    renderer.autoClearStencil = previousAutoClearStencil;
+    renderer.setMRT(previousMrt);
+    renderer.setRenderTarget(previousTarget, previousCubeFace, previousMipmapLevel);
+  }
+
+  try {
+    const data = await renderer.readRenderTargetPixelsAsync(styled, 0, 0, width, height);
+    const rgba = decodeHalfFloatReadback(data, width, height, backend === 'webgl2');
+    return { width, height, rgba, backend };
+  } finally {
+    release();
+  }
+}
+
+/** A 32-bit float depth attachment that later passes can sample. */
+function captureDepthTexture(width: number, height: number): THREE.DepthTexture {
+  const depth = new THREE.DepthTexture(width, height);
+  depth.type = THREE.FloatType;
+  return depth;
+}
+
+let coverageMrt: ReturnType<typeof mrt> | null = null;
+
+/**
+ * The capture scene pass's MRT for a background-preserving look: colour plus
+ * the live pipeline's `lupiContent` coverage (backgroundMask.ts), blended
+ * like the material and cleared to 0.
+ */
+function captureCoverageMrt(): ReturnType<typeof mrt> {
+  if (coverageMrt) return coverageMrt;
+  const node = mrt({ output, [LUPI_CONTENT_OUTPUT]: contentCoverage() });
+  node.setBlendMode(LUPI_CONTENT_OUTPUT, new THREE.BlendMode(THREE.MaterialBlending));
+  node.setClearColor(LUPI_CONTENT_OUTPUT, 0x000000, 0);
+  coverageMrt = node;
+  return node;
+}
+
+interface LookDownsampler {
+  quad: THREE.QuadMesh;
+  source: { value: THREE.Texture };
+  depth: { value: THREE.Texture };
+  content: { value: THREE.Texture };
+  origin: { value: THREE.Vector2 };
+  extent: { value: THREE.Vector2 };
+  /** Tile target size in texels (for depth sampling). */
+  tileSize: { value: THREE.Vector2 };
+}
+
+const lookDownsamplers = new Map<string, LookDownsampler>();
+
+/**
+ * The look capture's reduction for one factor: like captureDownsampler, but
+ * each texel is clamped to the HDR ceiling (the look tone-maps afterwards),
+ * the alpha of an opaque background-preserving capture carries the averaged
+ * content coverage, and the fragment depth is the nearest depth of the block
+ * (so the look's AO and defocus see the front surface at every pixel).
+ */
+function captureLookDownsampler(factor: number, coverage: boolean, initial: THREE.RenderTarget): LookDownsampler {
+  const key = `${factor}|${coverage ? 'coverage' : 'alpha'}`;
+  const cached = lookDownsamplers.get(key);
+  if (cached) return cached;
+  const source: any = texture(initial.textures[0]);
+  const depth: any = texture(initial.depthTexture!);
+  const content: any = texture(coverage ? initial.textures[1] : initial.textures[0]);
+  const origin: any = uniform(new THREE.Vector2());
+  const extent: any = uniform(new THREE.Vector2(1, 1));
+  const tileSize: any = uniform(new THREE.Vector2(1, 1));
+  const local = (): any => (screenCoordinate as any).xy.sub(origin);
+  const material = new THREE.NodeMaterial();
+  material.name = `lupi-capture-look-downsample-${factor}x${coverage ? '-coverage' : ''}`;
+  material.fragmentNode = (Fn(() => {
+    const at: any = local().toVar();
+    If(
+      at.x.lessThan(0).or(at.y.lessThan(0)).or(at.x.greaterThanEqual(extent.x)).or(at.y.greaterThanEqual(extent.y)),
+      () => {
+        Discard();
+      },
+    );
+    const base: any = (ivec2(at) as any).mul(int(factor)).toVar();
+    let sum: any = vec4(0);
+    let covered: any = float(0);
+    for (let dy = 0; dy < factor; dy += 1) {
+      for (let dx = 0; dx < factor; dx += 1) {
+        const coord: any = base.add(ivec2(dx, dy));
+        const texel: any = (textureLoad(source, coord) as any).toVar();
+        const alpha: any = clamp(texel.a, 0, 1);
+        sum = sum.add(vec4(texel.rgb.max(vec3(0)).min(vec3(alpha.mul(CAPTURE_LOOK_HDR_CEILING))), alpha));
+        if (coverage) covered = covered.add(clamp((textureLoad(content, coord) as any).r, 0, 1));
+      }
+    }
+    const mean: any = sum.mul(1 / (factor * factor));
+    return coverage ? vec4(mean.rgb, covered.mul(1 / (factor * factor))) : mean;
+  }) as any)();
+  material.depthNode = (Fn(() => {
+    const base: any = (ivec2(local()) as any).mul(int(factor)).toVar();
+    let nearest: any = float(1);
+    for (let dy = 0; dy < factor; dy += 1) {
+      for (let dx = 0; dx < factor; dx += 1) {
+        const at: any = vec2(base.add(ivec2(dx, dy))).add(0.5).div(tileSize);
+        nearest = min(nearest, (depth.sample(at) as any).r);
+      }
+    }
+    return nearest;
+  }) as any)();
+  material.depthTest = true;
+  material.depthWrite = true;
+  material.depthFunc = THREE.AlwaysDepth;
+  material.blending = THREE.NoBlending;
+  material.fog = false;
+  material.toneMapped = false;
+  const downsampler: LookDownsampler = {
+    quad: new THREE.QuadMesh(material),
+    source,
+    depth,
+    content,
+    origin,
+    extent,
+    tileSize,
+  };
+  lookDownsamplers.set(key, downsampler);
+  return downsampler;
 }
 
 type ViewOffsetCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
@@ -647,8 +932,8 @@ export function ViewerCaptureService(): null {
   return null;
 }
 
-/** A 320×200 JPEG of the current view (≤ 60,000 data-URL chars), via renderSceneToPixels. */
-export async function requestViewerThumbnail(): Promise<SavedViewThumbnail | null> {
+/** A 320×200 JPEG of the current view (≤ 60,000 data-URL chars), via renderSceneToPixels, with `look` when given. */
+export async function requestViewerThumbnail(look: CaptureLook | null = null): Promise<SavedViewThumbnail | null> {
   const pending = runViewerCapture(async ({ renderer, scene, camera, size, plate }) => {
     const captureCamera = coverCropCamera(camera, size.width / size.height, THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT);
     const readback = await renderSceneToPixels({
@@ -659,6 +944,7 @@ export async function requestViewerThumbnail(): Promise<SavedViewThumbnail | nul
       height: THUMBNAIL_HEIGHT,
       transparent: false,
       clearColor: plate,
+      look,
     });
     return encodeThumbnailJpeg(readback);
   });

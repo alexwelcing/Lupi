@@ -421,7 +421,7 @@ export function validateRenderRequestSpecV1(value: unknown): RenderRequestSpecV1
   }
   const view = normalizeJsonObject(input.view, '$.spec.view');
   validateEnabledLayerStateV1(layers, view);
-  validateRenderViewShapeV1(format, layers, view);
+  validateRenderViewShapeV1(format, layers, view, alpha === 'transparent');
   return {
     version: RENDER_ARTIFACT_SPEC_VERSION_V1,
     source,
@@ -833,6 +833,7 @@ function validateRenderViewShapeV1(
   format: RenderFormatV1,
   layers: RenderLayerStateV1,
   view: RenderJsonObjectV1,
+  transparent = false,
 ): void {
   const raster = RENDER_FORMAT_RULES_V1[format].kind === 'raster';
   const topLevel = raster ? ['camera', 'lighting', 'postprocess'] : [];
@@ -896,13 +897,7 @@ function validateRenderViewShapeV1(
       requireLiteral(environment.colorSpace, 'srgb-linear', '$.spec.view.lighting.environment.colorSpace');
     }
 
-    const postprocess = exactViewObject(view, 'postprocess', [
-      'pipeline', 'toneMapping', 'multisampling', 'outputColorSpace',
-    ]);
-    requireLiteral(postprocess.pipeline, 'raw-scene', '$.spec.view.postprocess.pipeline');
-    requireLiteral(postprocess.toneMapping, 'none', '$.spec.view.postprocess.toneMapping');
-    requireLiteral(postprocess.multisampling, 0, '$.spec.view.postprocess.multisampling');
-    requireLiteral(postprocess.outputColorSpace, 'srgb', '$.spec.view.postprocess.outputColorSpace');
+    validateRenderPostprocessV1(view, transparent);
   }
 
   if (layers.background) {
@@ -1069,6 +1064,63 @@ function validateRenderViewShapeV1(
       '$.spec.view.axes.axisColors',
     );
     requireLiteral(axes.labelColor, 'white', '$.spec.view.axes.labelColor');
+  }
+}
+
+/**
+ * `view.postprocess` names how a raster is styled after the scene renders:
+ * - 'raw-scene': nothing (no tone mapping), the original V1 literal;
+ * - 'viewer-look': the viewer's look as the browser capture applies it
+ *   (GTAO, bloom, depth of field, tone mapping, vignette at the output
+ *   resolution), each stage null when off. Transparent output applies no
+ *   bloom, depth of field or vignette, so they must be null there.
+ */
+export const RENDER_POSTPROCESS_PIPELINES_V1 = ['raw-scene', 'viewer-look'] as const;
+export const RENDER_TONE_MAPPINGS_V1 = ['none', 'neutral', 'aces', 'reinhard'] as const;
+
+function validateRenderPostprocessV1(view: RenderJsonObjectV1, transparent: boolean): void {
+  const path = '$.spec.view.postprocess';
+  const raw = requireRecord(view.postprocess, path);
+  const pipeline = requireOneOf(raw.pipeline, RENDER_POSTPROCESS_PIPELINES_V1, `${path}.pipeline`);
+  if (pipeline === 'raw-scene') {
+    const postprocess = exactViewObject(view, 'postprocess', [
+      'pipeline', 'toneMapping', 'multisampling', 'outputColorSpace',
+    ]);
+    requireLiteral(postprocess.toneMapping, 'none', `${path}.toneMapping`);
+    requireLiteral(postprocess.multisampling, 0, `${path}.multisampling`);
+    requireLiteral(postprocess.outputColorSpace, 'srgb', `${path}.outputColorSpace`);
+    return;
+  }
+  const postprocess = exactViewObject(view, 'postprocess', [
+    'pipeline', 'toneMapping', 'multisampling', 'outputColorSpace', 'ao', 'bloom', 'dof', 'vignette',
+  ]);
+  requireOneOf(postprocess.toneMapping, RENDER_TONE_MAPPINGS_V1, `${path}.toneMapping`);
+  requireLiteral(postprocess.multisampling, 0, `${path}.multisampling`);
+  requireLiteral(postprocess.outputColorSpace, 'srgb', `${path}.outputColorSpace`);
+  const stage = (field: string, keys: Record<string, readonly [number, number]>): boolean => {
+    const value = postprocess[field];
+    if (value === null) return false;
+    const record = requireRecord(value, `${path}.${field}`);
+    const names = Object.keys(keys);
+    requireExactKeys(record, names, names, `${path}.${field}`);
+    for (const name of names) {
+      const [minimum, maximum] = keys[name];
+      requireNumberInRange(record[name], minimum, maximum, `${path}.${field}.${name}`);
+    }
+    return true;
+  };
+  stage('ao', { intensity: [0, 8], radius: [0.01, 100] });
+  const bloom = stage('bloom', { intensity: [0, 8], threshold: [0, 8], smoothing: [0.001, 4] });
+  const dof = stage('dof', { focusDistance: [0, 1_000_000], focusRange: [0.001, 1_000_000], bokehScale: [0, 16] });
+  const vignette = stage('vignette', { offset: [-4, 4], darkness: [0, 4] });
+  if (transparent && (bloom || dof || vignette)) {
+    throw new RenderArtifactValidationError(
+      path,
+      'transparent raster output applies no bloom, dof or vignette; they must be null',
+    );
+  }
+  if (postprocess.toneMapping === 'none' && postprocess.ao === null && !bloom && !dof && !vignette) {
+    throw new RenderArtifactValidationError(`${path}.pipeline`, 'an empty viewer-look must be raw-scene');
   }
 }
 

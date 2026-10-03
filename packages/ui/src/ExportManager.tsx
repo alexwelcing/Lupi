@@ -67,6 +67,7 @@ import {
   type BackgroundGradientStyle,
 } from './equirectTexture';
 import { assertSceneEnvironmentReady, sceneEnvironmentLoadFailed } from './sceneEnvironment';
+import { captureLookFromSpec, resolveCaptureLook } from './export/captureLook';
 import {
   inspectArtifactAtomSceneReadiness,
   inspectArtifactVectorGlyphSceneReadiness,
@@ -224,9 +225,11 @@ function ImageCaptureFrame({
  *   resized and the live camera never moves, so the on-screen view is
  *   untouched.
  *
- * The capture renders the raw scene (the post pipeline is bypassed) with the
- * background the viewer shows: the finalized artifact background, or the
- * live scene background over the viewer plate, or none when transparent.
+ * The capture renders the scene supersampled, with the background the viewer
+ * shows (the finalized artifact background, or the live scene background
+ * over the viewer plate, or none when transparent), then applies the
+ * viewer's look (export/captureLook.ts): the one an artifact spec records,
+ * or the configured one for an interactive export.
  */
 function ImageCaptureFrameLifecycle({
   request,
@@ -438,6 +441,11 @@ function ImageCaptureFrameLifecycle({
 
       const transparent = Boolean(request.transparent);
       const captureCamera = transaction.camera;
+      // The viewer's look: an artifact applies exactly the look its spec
+      // records; an interactive export applies the configured one.
+      const look = request.artifactSpec
+        ? captureLookFromSpec(request.artifactSpec.view.postprocess)
+        : resolveCaptureLook(useStore.getState(), { transparent });
       // The render into the target and the scene restore both happen inside
       // this call; only the readback resolves later.
       const readback = transaction.withCaptureScene(() => renderSceneToPixels({
@@ -448,6 +456,7 @@ function ImageCaptureFrameLifecycle({
         height,
         transparent,
         clearColor: resolveViewerPlate(renderer.domElement),
+        look,
       }));
       const contractAxes = request.artifactSpec?.layers.axes;
       const drawAxes = contractAxes ?? useStore.getState().showAxes;

@@ -272,6 +272,13 @@ interface BondsProps {
   onBondsUpdate?: (info: { source: 'cpu' | 'gpu' | 'none'; count: number }) => void;
   /** Telemetry hook — fires when the GPU pipeline's status changes. */
   onGpuStatusChange?: (status: 'idle' | 'ready' | 'unsupported') => void;
+  /**
+   * Radius of the atom balls at the bond ends (the smallest drawn, so no
+   * visible stick darkens past its ball). With `junctionStrength` > 0 the
+   * stick darkens where it enters the ball (the Contact look). 0 disables it.
+   */
+  junctionRadius?: number;
+  junctionStrength?: number;
 }
 
 export function Bonds({
@@ -297,6 +304,8 @@ export function Bonds({
   surfaceRoughness = 0.0,
   surfacePolish = 0.0,
   surfaceClearcoat = 0.0,
+  junctionRadius = 0,
+  junctionStrength = 0,
   fillLightColor = '#5577ff',
   rimLightColor = '#ff7755',
   keyLightAzimuth = 40,
@@ -890,6 +899,8 @@ export function Bonds({
     lights.rimLight.value = rimLightIntensity;
     u.uOpacity.value = Math.max(0, Math.min(1, opacity));
     u.uCullPixelRadius.value = Number.isFinite(cullPixelRadius) ? Math.max(0, cullPixelRadius) : 0;
+    u.uJunctionRadius.value = Number.isFinite(junctionRadius) ? Math.max(0, junctionRadius) : 0;
+    u.uJunctionStrength.value = Number.isFinite(junctionStrength) ? Math.max(0, junctionStrength) : 0;
     const wantsTransparent = opacity < 1;
     for (const tierMaterial of resources.materials.values()) {
       if (tierMaterial.transparent !== wantsTransparent) {
@@ -897,7 +908,7 @@ export function Bonds({
         tierMaterial.needsUpdate = true;
       }
     }
-  }, [resources, material, materialPreset, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, rimLightIntensity, opacity, cullPixelRadius]);
+  }, [resources, material, materialPreset, surfaceRoughness, surfacePolish, surfaceClearcoat, fillLightColor, rimLightColor, rimLightIntensity, opacity, cullPixelRadius, junctionRadius, junctionStrength]);
 
   // Lights: world-space directions; the node graph converts them to view
   // space with whichever camera renders.
