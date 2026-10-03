@@ -206,6 +206,7 @@ export function LupiCameraRig({ center, minDistance, maxDistance, enabled, onFir
         rig.wheelZoom(factor, x, y);
         invalidate();
       },
+      wake: () => requestLupiFrames(),
     });
     const previousCursor = element.style.cursor;
     element.style.cursor = 'grab';

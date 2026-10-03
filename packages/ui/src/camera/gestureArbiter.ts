@@ -381,6 +381,12 @@ export interface GestureArbiterOptions {
   /** Wheel, trackpad pinch (ctrl+wheel) and Safari gesture zoom: a distance factor toward the client point. */
   onZoom(factor: number, clientX: number, clientY: number): void;
   marks?: TouchMarks | null;
+  /**
+   * Quiet Idle: called first thing on every pointerdown and wheel over the
+   * element, before any routing, so the demand frameloop draws the first
+   * touch in the next animation frame.
+   */
+  wake?: () => void;
 }
 
 export interface GestureArbiter {
@@ -424,7 +430,7 @@ export function wheelZoomFactor(deltaY: number, deltaMode: number, ctrlKey: bool
   return Math.exp(clamped * 0.0015);
 }
 
-export function attachGestureArbiter({ element, canvas, machine, onZoom, marks = null }: GestureArbiterOptions): GestureArbiter {
+export function attachGestureArbiter({ element, canvas, machine, onZoom, marks = null, wake }: GestureArbiterOptions): GestureArbiter {
   const mac = isMacLike();
   const saved = ELEMENT_STYLES.map((name) => [name, element.style.getPropertyValue(name)] as const);
   element.style.setProperty('touch-action', 'none');
@@ -525,6 +531,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   };
 
   const onPointerDown = (e: PointerEvent) => {
+    wake?.();
     if (e.pointerType === 'mouse' && e.button > 2) return;
     if (isCanvasTarget(e.target)) {
       take(normalize(e));
@@ -605,6 +612,7 @@ export function attachGestureArbiter({ element, canvas, machine, onZoom, marks =
   const viewportHeight = () => element.getBoundingClientRect().height || window.innerHeight || 800;
 
   const onWheel = (e: WheelEvent) => {
+    wake?.();
     if (!isCanvasTarget(e.target) && !(e.target instanceof Element && element.contains(e.target) && !scrollsWithin(e.target))) {
       // Never page-zoom the viewer (a trackpad pinch over a card is ctrl+wheel).
       if (e.ctrlKey) e.preventDefault();
