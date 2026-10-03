@@ -8,6 +8,8 @@
  *                         smoke plugin drive Scatter, Spin or a stroke before
  *                         the pill that emits it exists)
  *   __lupiPlay.poke/flick/catch/scatter/stepDetent(...) once their owner registers them
+ *   __lupiPlay.viewInset() → { current, target, occluder }: the phone atom card's
+ *                         view shift (CSS px, down), once the viewer registers it
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -29,6 +31,7 @@ export type PlayDevHookName =
   | 'catch'
   | 'scatter'
   | 'stepDetent'
+  | 'viewInset'
   | 'reset';
 
 export interface PlayRigState {
@@ -65,6 +68,7 @@ export interface LupiPlayDevApi {
   catch?: DevHook;
   scatter?: DevHook;
   stepDetent?: DevHook;
+  viewInset?: DevHook;
 }
 
 declare global {
@@ -74,8 +78,8 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent'];
+type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'viewInset';
+const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'viewInset'];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 

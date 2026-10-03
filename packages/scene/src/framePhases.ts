@@ -52,6 +52,8 @@ export const LUPI_JOB = {
   displayMotion: 'lupi/display-motion',
   /** The first rendered frame of a file, in `lupi-capture`. */
   firstFrame: 'lupi/first-frame',
+  /** The phone atom card's view shift (a projection view offset) in `update`. */
+  viewInset: 'lupi/view-inset',
 } as const;
 
 export type LupiJobId = (typeof LUPI_JOB)[keyof typeof LUPI_JOB];
