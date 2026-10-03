@@ -245,6 +245,9 @@ export function useContactOcclusion(
       bake = workerResult?.bake ?? null;
       pending = workerResult?.frame !== frame;
       if (bake && bake.natoms !== natoms) bake = null;
+      // While the new frame bakes, keep the last bake of the same system on
+      // screen (no pop); `pending` still holds exports back.
+      if (!bake && lastRef.current?.natoms === natoms) bake = lastRef.current;
     }
     if (bake) lastRef.current = bake;
     else if (!viaWorker) lastRef.current = null;

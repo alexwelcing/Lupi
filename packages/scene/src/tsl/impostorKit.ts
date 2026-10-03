@@ -429,7 +429,9 @@ export const ANALYTIC_SOFTBOX_RIG = {
  */
 function softboxPanel(dir: N, toPanel: N, up: N, halfWidth: number, halfHeight: number, roughness: N): N {
   const z = dot(dir, toPanel).toVar();
-  const side = normalize(cross(up, toPanel)).toVar();
+  // A panel straight overhead (or below) has no horizon: nudge the cross
+  // product so the tangent frame never collapses to NaN.
+  const side = normalize(cross(up, toPanel).add(vec3(0, 0, 1e-4))).toVar();
   const lift = cross(toPanel, side).toVar();
   const invZ = float(1).div(max(z, 1e-3));
   const x = abs(dot(dir, side).mul(invZ));
