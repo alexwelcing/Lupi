@@ -13,6 +13,8 @@ export interface LibraryQuery {
   source: string | null;
   /** Required element symbols (AND). */
   elements: string[];
+  /** Required functional-group ids (AND), for collections that screen them. */
+  groups: string[];
   /** OMol25 collection id. */
   collection: string | null;
   /** Page offset for paged collections. */
@@ -25,10 +27,18 @@ export const EMPTY_LIBRARY_QUERY: LibraryQuery = {
   q: '',
   source: null,
   elements: [],
+  groups: [],
   collection: null,
   offset: 0,
   view: null,
 };
+
+function listParam(params: URLSearchParams, key: string): string[] {
+  return (params.get(key) ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export function parseLibraryQuery(search: string): LibraryQuery {
   const params = new URLSearchParams(search);
@@ -36,10 +46,8 @@ export function parseLibraryQuery(search: string): LibraryQuery {
   return {
     q: (params.get('q') ?? '').trim(),
     source: params.get('source') || null,
-    elements: (params.get('elements') ?? '')
-      .split(',')
-      .map((symbol) => symbol.trim())
-      .filter(Boolean),
+    elements: listParam(params, 'elements'),
+    groups: listParam(params, 'groups'),
     collection: params.get('collection') || null,
     offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
     view: params.get('view') || null,
@@ -52,6 +60,7 @@ export function serializeLibraryQuery(query: LibraryQuery): string {
   if (query.q) params.set('q', query.q);
   if (query.source) params.set('source', query.source);
   if (query.elements.length) params.set('elements', query.elements.join(','));
+  if (query.groups.length) params.set('groups', query.groups.join(','));
   if (query.collection) params.set('collection', query.collection);
   if (query.offset > 0) params.set('offset', String(query.offset));
   if (query.view) params.set('view', query.view);

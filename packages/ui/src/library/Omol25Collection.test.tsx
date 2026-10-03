@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RemoteBrowser, compactCount } from './Omol25Collection';
+import { OMOL_SLOW_COPY, OmolMasthead, RemoteBrowser, compactCount } from './Omol25Collection';
 
 function jsonResponse(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
@@ -80,5 +80,51 @@ describe('OMol25 remote browser', () => {
     expect(compactCount(34_335_828)).toBe('34.3M');
     expect(compactCount(27_697)).toBe('27.7K');
     expect(compactCount(841_736)).toBe('842K');
+  });
+});
+
+describe('OMol25 masthead', () => {
+  afterEach(cleanup);
+
+  it('keeps the no-bond-topology sentence and says which rows Lupi keeps', () => {
+    render(<OmolMasthead />);
+    const text = screen.getByRole('banner').textContent ?? '';
+    expect(text).toMatch(/OMol25 supplies no bond topology/);
+    expect(text).toContain('Lupi pages rows on demand and keeps 24 hand-picked rows, credited, for its shelves.');
+    expect(text).toContain('Nearly all OMol25 geometries are snapshots away from a minimum.');
+    expect(text).not.toMatch(/copies no rows/);
+  });
+});
+
+describe('OMol25 remote browser failures', () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    window.history.replaceState({}, '', '/library/omol25');
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('names a slow host in plain words', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).endsWith('/v1/datasets/omol25')
+        ? jsonResponse(200, { collections: [] })
+        : jsonResponse(504, { status: 'slow', error: 'upstream timed out after 9 s' }),
+    );
+    render(<RemoteBrowser />);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(OMOL_SLOW_COPY));
+  });
+
+  it('never shows raw abort text', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/v1/datasets/omol25')) return jsonResponse(200, { collections: [] });
+      throw new DOMException('signal is aborted without reason', 'AbortError');
+    });
+    render(<RemoteBrowser />);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('OMol25’s host is slow to answer. Try again in a moment.'));
+    expect(screen.getByRole('alert').textContent).not.toMatch(/abort/i);
   });
 });

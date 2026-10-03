@@ -126,6 +126,18 @@
   color: var(--home-muted);
   font-size: 0.75rem;
 }
+.omol-shelf__status:empty {
+  margin: 0 !important;
+}
+.omol-shelf--library {
+  padding-block: 4px 12px;
+}
+.omol-shelf--library h2 {
+  font-size: 1.25rem;
+}
+.omol-shelf--library .library-section-head a:hover {
+  color: var(--home-accent);
+}
 @media (max-width: 800px) {
   .omol-shelf__tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
