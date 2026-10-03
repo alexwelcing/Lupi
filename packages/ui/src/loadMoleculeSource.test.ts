@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockFrame, createMockTrajectory } from '@atlas/core/test-utils';
 import { getStoreState, resetStore } from './test-utils';
+import { markOpenEntry, takeOpenEntry } from './analytics/openEntry';
 import {
   importDumpFileStreaming,
   loadMoleculeSource,
@@ -73,6 +74,13 @@ describe('loadMoleculeSource strict remote mode', () => {
       { redirect: 'error' },
     );
     expect(getStoreState().file).toBeTruthy();
+  });
+
+  it('drops the entry mark when the load fails, so the next load is not credited to it', async () => {
+    markOpenEntry('home-surprise');
+    fetchMock.mockResolvedValue({ ok: false, status: 502, redirected: false, headers: new Headers() });
+    await expect(loadMoleculeSource('/v1/datasets/omol25/neutral-train/structures/7.xyz')).rejects.toThrow(/502/);
+    expect(takeOpenEntry()).toBeNull();
   });
 
   it('rejects an oversized monolithic remote text file before buffering it', async () => {

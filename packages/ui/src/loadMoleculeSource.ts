@@ -235,6 +235,8 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
     await loadParsedFile(new File([blob], name), loadUrl, options.isCurrent);
   } catch (err) {
     if (err instanceof ViewerLoadSupersededError || !viewerLoadIsCurrent(options.isCurrent)) throw err;
+    // This open's entry mark must not credit the next load.
+    takeOpenEntry();
     const message = err instanceof Error ? err.message : String(err);
     useStore.getState().setError(message);
     throw err;
