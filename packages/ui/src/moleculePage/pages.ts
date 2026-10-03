@@ -46,6 +46,11 @@ export const MOLECULE_PAGE_IDS: readonly string[] = (galleryData as GalleryEntry
 
 const PAGE_ID_SET = new Set(MOLECULE_PAGE_IDS);
 
+/** `/gallery/curated/…/caffeine.xyz` → `caffeine`, for pages only. */
+const PAGE_ID_BY_FILE = new Map(
+  (galleryData as GalleryEntryLike[]).filter(hasMoleculePageEntry).map((entry) => [`/${entry.file}`, entry.id]),
+);
+
 export function hasMoleculePage(id: string | null | undefined): id is string {
   return typeof id === 'string' && PAGE_ID_SET.has(id);
 }
@@ -74,4 +79,20 @@ export function moleculeDeskPaths(id: string): { usdz: string; glb: string } {
 /** The absolute share URL for a molecule page on `origin`. */
 export function moleculePageUrl(id: string, origin = typeof window === 'undefined' ? 'https://lupi.live' : window.location.origin): string {
   return `${origin.replace(/\/+$/, '')}${moleculePagePath(id)}`;
+}
+
+/**
+ * The molecule page for what the viewer shows: the gallery card it was opened
+ * from, else its source file (a saved view or a shared link of a gallery
+ * molecule loads by URL). Null for anything without a page.
+ */
+export function moleculePageIdFor(activeCardId: string | null | undefined, sourceUrl?: string | null): string | null {
+  if (hasMoleculePage(activeCardId)) return activeCardId;
+  if (!sourceUrl) return null;
+  try {
+    const pathname = decodeURIComponent(new URL(sourceUrl, 'https://lupi.live').pathname);
+    return PAGE_ID_BY_FILE.get(pathname) ?? null;
+  } catch {
+    return null;
+  }
 }
