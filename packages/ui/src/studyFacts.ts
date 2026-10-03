@@ -8,6 +8,8 @@ import {
   resolveTypeLabel,
 } from '@atlas/core';
 import type { Frame } from '@atlas/core/types';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
+import type { BondsUpdateDetail } from '@atlas/scene';
 import type { LoadedFile } from './store';
 import { ALL_EXAMPLES, publicAssetUrl, type GalleryExample } from './landing/shared';
 import { functionalGroupsForMolecule, type FunctionalGroupConcept } from './organicFunctionalGroups';
@@ -54,7 +56,7 @@ export interface SelectedAtomStudyFact {
   properties: Array<{ name: string; value: number }>;
 }
 
-export type BondStudySource = 'source' | 'visual-guide' | 'not-shown' | 'missing';
+export type BondStudySource = 'source' | 'inferred' | 'visual-guide' | 'not-shown' | 'missing';
 
 export interface BondStudyFact {
   summary: string;
@@ -113,6 +115,7 @@ export function buildMoleculeStudyFacts({
   frameIndex,
   selectedAtoms = [],
   lastBondCount = 0,
+  lastBondDetail = null,
   showBonds = false,
   measurement = null,
   shareUrl,
@@ -121,6 +124,8 @@ export function buildMoleculeStudyFacts({
   frameIndex: number;
   selectedAtoms?: number[];
   lastBondCount?: number;
+  /** The drawn layer's recipe and kinds (store `lastBondDetail`). */
+  lastBondDetail?: BondsUpdateDetail | null;
   showBonds?: boolean;
   measurement?: MolecularMeasurement | null;
   shareUrl?: string;
@@ -137,8 +142,8 @@ export function buildMoleculeStudyFacts({
     : [];
   const composition = summarizeComposition(frame);
   const propertyStats = summarizeProperties(frame);
-  const bondInfo = summarizeBonds(frame, lastBondCount, showBonds);
-  const sourceLabel = inferSourceLabel(file, galleryExample);
+  const bondInfo = summarizeBonds(frame, lastBondCount, showBonds, lastBondDetail);
+  const sourceLabel = inferSourceLabel(file, galleryExample, frame);
   const bounds = summarizeBounds(frame);
   const resolvedMeasurement = resolveMolecularMeasurement(frame, frameIndex, measurement);
   const inspectedAtoms = resolvedMeasurement?.atoms.length
@@ -728,7 +733,12 @@ function summarizeBounds(frame: Frame) {
   };
 }
 
-function summarizeBonds(frame: Frame, lastBondCount: number, showBonds: boolean): BondStudyFact {
+function summarizeBonds(
+  frame: Frame,
+  lastBondCount: number,
+  showBonds: boolean,
+  detail: BondsUpdateDetail | null,
+): BondStudyFact {
   const fileBondCount = frame.bonds?.length ? Math.floor(frame.bonds.length / 2) : 0;
   if (fileBondCount > 0) {
     return {
@@ -754,6 +764,17 @@ function summarizeBonds(frame: Frame, lastBondCount: number, showBonds: boolean)
       detail: 'The source frame has no explicit bond table, and Lupi cannot apply covalent-radius inference without a complete element mapping and Ångström coordinates.',
       source: 'missing',
       count: null,
+      isScientific: false,
+    };
+  }
+  if (detail?.recipe === MOLECULAR_RECIPE_ID) {
+    const { covalent, coordination, ionicContact } = detail.kinds;
+    const supplier = frame.sourceRecord?.dataset === 'omol25' ? 'OMol25 supplies' : 'The file supplies';
+    return {
+      summary: 'Inferred bonds',
+      detail: `Lupi inferred ${covalent.toLocaleString()} covalent bonds, ${coordination.toLocaleString()} metal–ligand coordination lines and ${ionicContact.toLocaleString()} ionic contacts from the geometry with its molecular rule (${MOLECULAR_RECIPE_ID}). ${supplier} no bonds; these do not show bond orders.`,
+      source: 'inferred',
+      count: covalent + coordination,
       isScientific: false,
     };
   }
@@ -790,8 +811,13 @@ function buildStudyCue(composition: ElementStudyFact[], groups: FunctionalGroupC
   return 'Use the composition, geometry, selected atoms, and per-frame properties to decide what structural question this view answers.';
 }
 
-function inferSourceLabel(file: LoadedFile, galleryExample: GalleryExample | null): string {
+function inferSourceLabel(file: LoadedFile, galleryExample: GalleryExample | null, frame: Frame): string {
   if (galleryExample) return `Gallery - ${galleryExample.domain}`;
+  const record = frame.sourceRecord;
+  if (record?.dataset === 'omol25') {
+    const where = [record.collection, record.row !== null ? `row ${record.row}` : null].filter(Boolean).join(' ');
+    return where ? `Meta OMol25 · ${where}` : 'Meta OMol25';
+  }
   const source = file.sourceUrl ?? '';
   if (source.startsWith('opfs://')) return 'Local trajectory library';
   if (source.startsWith('local://')) return 'Local import';

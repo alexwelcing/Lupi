@@ -4,7 +4,7 @@ import {
   validatePubChemMolecule,
   type PubChemMolecule,
 } from '@atlas/core/pubchem';
-import { frameFromOmol25Molecule, validateOmol25Molecule, type Omol25Molecule } from '@atlas/core/omol25';
+import { frameFromOmol25Molecule, validateOmol25Molecule, type Omol25Molecule } from '@atlas/core/omol25/widget';
 
 export type LupiMolecule = PubChemMolecule | Omol25Molecule;
 

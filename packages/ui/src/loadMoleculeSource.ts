@@ -1,7 +1,9 @@
 import type { Frame, Trajectory } from '@atlas/core/types';
 import { atomicTypeMapForExternalResearchLoadUrl } from '@atlas/core';
+import { isOmol25Url } from '@atlas/core/omol25';
 import { useStore } from './store';
 import { track, ANALYTICS_EVENTS } from './analytics';
+import { takeOpenEntry } from './analytics/openEntry';
 import {
   isTrajectoryLibrarySupported,
   saveTrajectory,
@@ -104,8 +106,10 @@ function applyCatalogTypeMapToTrajectory(
 }
 
 /** Coarse, non-PII source classifier so the funnel can compare entry paths. */
-function sourceKind(sourceUrl: string): string {
+export function sourceKind(sourceUrl: string): string {
   if (sourceUrl === 'inline-firestore') return 'inline';
+  // Edge rows and the featured same-origin copies alike, so OMol25 opens are countable.
+  if (isOmol25Url(sourceUrl)) return 'omol25';
   if (sourceUrl.endsWith('.glimbin')) return 'streaming';
   if (/^https?:/i.test(sourceUrl)) return 'remote';
   return 'other';
@@ -207,6 +211,7 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
       track(ANALYTICS_EVENTS.MOLECULE_LOADED, {
         source: 'streaming',
         frames: meta.totalFrames,
+        entry: takeOpenEntry() ?? undefined,
       });
       return;
     }
@@ -230,6 +235,8 @@ export async function loadMoleculeSource(loadUrl: string, options: LoadMoleculeS
     await loadParsedFile(new File([blob], name), loadUrl, options.isCurrent);
   } catch (err) {
     if (err instanceof ViewerLoadSupersededError || !viewerLoadIsCurrent(options.isCurrent)) throw err;
+    // This open's entry mark must not credit the next load.
+    takeOpenEntry();
     const message = err instanceof Error ? err.message : String(err);
     useStore.getState().setError(message);
     throw err;
@@ -280,6 +287,7 @@ async function loadParsedFile(
   track(ANALYTICS_EVENTS.MOLECULE_LOADED, {
     source: sourceKind(sourceUrl),
     frames: trajectory.totalFrames,
+    entry: takeOpenEntry() ?? undefined,
   });
 }
 

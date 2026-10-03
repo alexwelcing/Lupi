@@ -1,0 +1,30 @@
+{
+  "schema": "lupi.omol25-featured-picks.v1",
+  "note": "Hand-picked neutral-validation rows for the OMol25 shelves. Home picks are listed first, cycling through the shelves, so any six consecutive home picks (the home shelf's daily window) span the shelves. Edit, then run pnpm exec tsx tools/build-omol25-featured.mjs.",
+  "picks": [
+    { "collection": "neutral-validation", "row": 23477, "shelf": "drug-like", "home": true, "why": "GEOM drug-like fluorinated amide; near a minimum (largest force 0.36 eV/Å)." },
+    { "collection": "neutral-validation", "row": 7851, "shelf": "amino-acid-ligand", "home": true, "why": "SPICE amino acid + ligand: tryptophan beside a dibrominated ligand (2BM); two fragments, no stick between them." },
+    { "collection": "neutral-validation", "row": 8140, "shelf": "conformers", "home": true, "why": "OrbNet conformer of ChEMBL389672, an aryl iodide with a thioether and an ester; pairs with row 23177 (2.1 Å RMSD apart)." },
+    { "collection": "neutral-validation", "row": 1008, "shelf": "off-equilibrium", "home": true, "why": "ANI-2x distorted snapshot (largest force 33 eV/Å) with one long bond: the strategy's hand-check row for the Learn long-bond line." },
+    { "collection": "neutral-validation", "row": 27019, "shelf": "salt-complexes", "home": true, "why": "Na+ salt of ChEMBL303782: the sodium sits among F, O and N donors (five dotted contacts)." },
+    { "collection": "neutral-validation", "row": 21277, "shelf": "small", "home": true, "why": "Small hexafluoro ether from GEOM, 15 atoms, near a minimum (0.35 eV/Å)." },
+    { "collection": "neutral-validation", "row": 7655, "shelf": "drug-like", "home": true, "why": "GEOM drug-like bromo thiosemicarbazide-type compound (C=S, four N); near a minimum (0.49 eV/Å)." },
+    { "collection": "neutral-validation", "row": 14413, "shelf": "amino-acid-ligand", "home": true, "why": "SPICE amino acid + ligand: serine with a small sulfur ligand (TOU), 31 atoms." },
+    { "collection": "neutral-validation", "row": 12950, "shelf": "conformers", "home": true, "why": "OrbNet conformer of ChEMBL2435202, the silicon pick; pairs with row 10866 (2.2 Å RMSD apart)." },
+    { "collection": "neutral-validation", "row": 2728, "shelf": "off-equilibrium", "home": true, "why": "GEOM snapshot far from a minimum (largest force 49 eV/Å) that still has a clean bond graph." },
+    { "collection": "neutral-validation", "row": 4138, "shelf": "salt-complexes", "home": true, "why": "K+ salt of a triiodinated benzoate (ChEMBL1200423): dotted K···O contacts, three iodines." },
+    { "collection": "neutral-validation", "row": 3082, "shelf": "small", "home": true, "why": "Pyridine boronic acid conformer (ChEMBL3236605), the boron pick; 15 atoms, near a minimum (0.37 eV/Å)." },
+    { "collection": "neutral-validation", "row": 18958, "shelf": "drug-like", "home": true, "why": "GEOM drug-like organophosphorus amide (P bonded to two C, one N, one O), the phosphorus pick on the drug-like shelf." },
+    { "collection": "neutral-validation", "row": 4243, "shelf": "salt-complexes", "home": true, "why": "Mg2+ with an aryl phosphate (ChEMBL3219850): magnesium among O donors, no C or H close by." },
+    { "collection": "neutral-validation", "row": 11984, "shelf": "drug-like", "home": false, "why": "GEOM dichloro aryl ketone with a secondary amine; near a minimum (0.36 eV/Å)." },
+    { "collection": "neutral-validation", "row": 16918, "shelf": "amino-acid-ligand", "home": false, "why": "SPICE amino acid + ligand: proline with a trichlorinated ligand (FT2)." },
+    { "collection": "neutral-validation", "row": 23177, "shelf": "conformers", "home": false, "why": "Second conformer of ChEMBL389672 (see row 8140)." },
+    { "collection": "neutral-validation", "row": 20999, "shelf": "off-equilibrium", "home": false, "why": "Small ANI-2x snapshot with two long bonds (largest force 19 eV/Å)." },
+    { "collection": "neutral-validation", "row": 15395, "shelf": "salt-complexes", "home": false, "why": "Li+ salt of ChEMBL366587: lithium held by one O and one N donor; near a minimum (0.74 eV/Å)." },
+    { "collection": "neutral-validation", "row": 21577, "shelf": "small", "home": false, "why": "Dichloromethylene bisphosphonic acid from GEOM: P and Cl in 15 atoms." },
+    { "collection": "neutral-validation", "row": 9497, "shelf": "amino-acid-ligand", "home": false, "why": "SPICE amino acid + ligand: glycine with an iodinated ligand (33S)." },
+    { "collection": "neutral-validation", "row": 10866, "shelf": "conformers", "home": false, "why": "Second conformer of ChEMBL2435202 (see row 12950)." },
+    { "collection": "neutral-validation", "row": 17445, "shelf": "salt-complexes", "home": false, "why": "Ca2+ salt of ChEMBL329349, one of the few neutral-validation calcium rows with the ion among O donors." },
+    { "collection": "neutral-validation", "row": 8647, "shelf": "small", "home": false, "why": "Small GEOM bromo heterocycle with S and two N, 17 atoms." }
+  ]
+}

@@ -14,6 +14,12 @@
  *   one thickens a little), exactly as at rest while the motion is off;
  * - the two-tone split at the geometric midpoint;
  * - the distance fade (`uBondFadeStart`/`uBondFadeEnd`) times `uOpacity`;
+ * - the bond's style code in the start colour's alpha byte (strategy §2.7):
+ *   k = round(a·3), 3 solid (every bond before kinds, byte for byte), 2
+ *   dashed coordination, 1 dotted ionic contact; dashes repeat from each end
+ *   toward the middle and a gap discards like a miss, so depth, the ink look
+ *   and picking see the same holes (CPU twin: bondDashSegments in
+ *   ui/src/export/exportSceneBuilder.ts);
  * - the Illustrate look (tsl/inkLook.ts): toon fills, ink along both edges,
  *   and thin bonds drawn as one ink stroke, mixed in by `uInkMix`;
  * - degenerate, sub-pixel and fully faded bonds collapse to a degenerate
@@ -46,6 +52,8 @@ import {
   cross,
   dot,
   float,
+  floor,
+  fract,
   length,
   max,
   min,
@@ -63,6 +71,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
+import { BOND_KIND_DASH } from '@atlas/core/bonds';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
 import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
 import { ATOM_GLOW } from './atomGlow';
@@ -94,7 +103,7 @@ export const BOND_ATTR = {
   colorEnd: 'instanceColorEnd',
 } as const;
 
-/** Bytes per endpoint colour: display-sRGB RGB plus an unused 255. */
+/** Bytes per endpoint colour: display-sRGB RGB plus the style code byte (255 = solid). */
 export const BOND_COLOR_STRIDE = 4;
 
 /** The box half-width in radii: slightly conservative under float rounding. */
@@ -104,17 +113,22 @@ export const BOND_BOX_EXPAND = 1.05;
 export const BOND_FADE_START = 60;
 export const BOND_FADE_END = 200;
 
-/** Write one display-sRGB colour (components 0..1) as a Uint8×4 word. */
+/**
+ * Write one display-sRGB colour (components 0..1) as a Uint8×4 word. The
+ * fourth byte is the style code (`BOND_KIND_STYLE_ALPHA`): 255 solid, 170
+ * dashed, 85 dotted; the shader reads it from the start colour.
+ */
 export function writeBondColor(
   out: Uint8Array,
   i: number,
   rgb: readonly [number, number, number],
+  style = 255,
 ): void {
   const base = i * BOND_COLOR_STRIDE;
   out[base] = Math.round(Math.max(0, Math.min(1, rgb[0])) * 255);
   out[base + 1] = Math.round(Math.max(0, Math.min(1, rgb[1])) * 255);
   out[base + 2] = Math.round(Math.max(0, Math.min(1, rgb[2])) * 255);
-  out[base + 3] = 255;
+  out[base + 3] = style;
 }
 
 export interface BondImpostorUniforms extends LupiUniformBag {
@@ -243,20 +257,39 @@ export function createBondImpostorMaterial({
   const vColorB: N = varying(sRGBTransferEOTF(attribute(BOND_ATTR.colorEnd, 'vec4').rgb), 'vBondColorB');
   const vPixelRadius: N = varying(pixelRadius, 'vBondPixelRadius');
   const vStrain: N = varying(strain, 'vBondStrain');
+  // Constant per instance; rounded again in the fragment against interpolation error.
+  const vStyle: N = varying(floor(attribute(BOND_ATTR.colorStart, 'vec4').a.mul(3).add(0.5)), 'vBondStyle');
   const vFoilSweep: N = varying(lupiFoilSweep(mid), 'vBondFoilSweep');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // Distance fade (LOD): far bonds thin out before the vertex cull drops them.
   const fadeAt = (viewZ: N): N => smoothstep(u.uBondFadeStart, u.uBondFadeEnd, viewZ.negate()).oneMinus();
 
+  // Dashed (k = 2) and dotted (k = 1) bonds: a hit in a gap of the pattern.
+  // Distance runs from the nearer end, so each end begins with a dash and the
+  // pattern is symmetric about the middle. Solid bonds never test it.
+  const coordinationDash = BOND_KIND_DASH[1];
+  const contactDash = BOND_KIND_DASH[2];
+  const styleGap = (p: N): N => {
+    const style: N = floor(vStyle.add(0.5));
+    const segLen: N = length(vB.sub(vA));
+    const axial: N = dot(p.sub(vA), vB.sub(vA).div(max(segLen, 1e-6)));
+    const fromEnd: N = max(min(axial, segLen.sub(axial)), 0.0);
+    const dotted: N = style.lessThan(1.5);
+    const period: N = select(dotted, float(contactDash.periodA), float(coordinationDash.periodA));
+    const duty: N = select(dotted, float(contactDash.duty), float(coordinationDash.duty));
+    return style.lessThan(2.5).and(fract(fromEnd.div(period)).greaterThan(duty));
+  };
+
   // The hit is built once and first materialized by the depth prelude, which
-  // three sets up before the colour (G1/G2). A fully faded hit counts as a
-  // miss, so the prelude discards it too.
+  // three sets up before the colour (G1/G2). A fully faded hit and a hit in a
+  // dash gap count as misses, so the prelude discards them too.
   const hit: N = (Fn(() => {
     const { ro, rd } = viewRay(vViewPos, isOrtho);
     const cylinder = (rayCappedCylinder(ro, rd, vA, vB, vRadius) as N).toVar();
     const fade = fadeAt(cylinder.z).toVar();
-    return vec4(cylinder.xyz, select(fade.lessThanEqual(0.001), float(-1), cylinder.w));
+    const miss: N = fade.lessThanEqual(0.001).or(styleGap(cylinder.xyz));
+    return vec4(cylinder.xyz, select(miss, float(-1), cylinder.w));
   }) as N)().toVar('bondHit');
 
   const material = new THREE.MeshBasicNodeMaterial();

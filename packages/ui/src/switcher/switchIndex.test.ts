@@ -18,7 +18,8 @@ vi.mock('../molecules/providers/omol', async (importOriginal) => {
   };
 });
 
-import { findSwitchCandidates, galleryCandidates, mergeCandidates, omolCandidates, switchElementCounts } from './switchIndex';
+import { findSwitchCandidates, galleryCandidates, mergeCandidates, omolCandidates, omolPickCandidates, switchElementCounts } from './switchIndex';
+import { LOCAL_MOLECULES } from '../landing/moleculeIndex';
 
 describe('switch candidate index', () => {
   it('lists familiar gallery molecules first with no query and filters by element AND', () => {
@@ -50,10 +51,23 @@ describe('switch candidate index', () => {
 
   it('matches OMol25 by formula prefix or elements, smallest first', async () => {
     const byElements = await omolCandidates({ query: '', elements: ['C', 'O'] });
-    expect(byElements.map((c) => c.title)).toEqual(['C2H6O']);
+    expect(byElements.map((c) => c.title)).toEqual(['C2H6O (OMol25)']);
     const byFormula = await omolCandidates({ query: 'C', elements: [] });
-    expect(byFormula.map((c) => c.title)).toEqual(['CH4', 'C2H6O', 'C6H6']);
+    expect(byFormula.map((c) => c.formula)).toEqual(['CH4', 'C2H6O', 'C6H6']);
     expect(await omolCandidates({ query: 'benzene', elements: [] })).toEqual([]);
+  });
+
+  it('offers four of today’s OMol25 picks apart from the gallery, titled and drawn', () => {
+    const picks = omolPickCandidates();
+    expect(picks).toHaveLength(4);
+    expect(new Set(picks.map((c) => c.key)).size).toBe(4);
+    for (const pick of picks) {
+      expect(pick.source).toBe('omol');
+      expect(pick.title).toMatch(/^[A-Z][A-Za-z0-9]* \(OMol25\)$/);
+      expect(pick.image).toMatch(/^\/og\/omol25\/omol25_nv_\d+-ink\.svg$/);
+    }
+    expect(LOCAL_MOLECULES.some((m) => m.title.includes('OMol25'))).toBe(false);
+    expect(galleryCandidates({ query: '', elements: [], limit: 200 }).some((c) => c.source === 'omol')).toBe(false);
   });
 
   it('counts switchable structures per element, gallery first', async () => {

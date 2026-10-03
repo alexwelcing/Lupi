@@ -1,5 +1,5 @@
 /** OMol25 discovery for the ChatGPT plugin, backed by Lupi's existing data API. */
-import { moleculeFromOmol25Xyz, type Omol25Molecule, type Omol25RowIdentity } from '@atlas/core/omol25';
+import { moleculeFromOmol25Xyz, type Omol25Molecule, type Omol25RowIdentity } from '@atlas/core/omol25/widget';
 import { OMOL_DATASETS, routeScienceData } from './scienceData';
 
 type ScienceRoute = (request: Request) => Promise<Response | null>;

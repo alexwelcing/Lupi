@@ -58,7 +58,7 @@ export function LibraryShell({
         <a className="student-skip" href="#main">
           Skip to content
         </a>
-        <SiteHeader current="library" />
+        <SiteHeader current={collection === 'omol25' ? 'omol25' : 'library'} />
         <LibraryPage collection={collection} />
         <LandingFooter />
       </div>

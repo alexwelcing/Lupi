@@ -19,6 +19,7 @@ import {
   extractFrameIdentity,
   extractFrameProperties,
   extractFrameTypeSemantics,
+  frameProvenanceFields,
   lammpsDataSemantics,
 } from './frameTransfer';
 
@@ -216,6 +217,7 @@ self.onmessage = async (e: MessageEvent) => {
           identity: f.identity,
           typeSemantics: f.typeSemantics,
           distanceSemantics: f.distanceSemantics,
+          ...frameProvenanceFields(f),
           stats: parsed.stats[index],
         };
       });

@@ -82,7 +82,9 @@
 .student-header nav {
   margin-left: auto;
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 24px;
   font-size: 0.875rem;
 }
 .student-header nav a {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameFromOmol25Molecule, moleculeFromOmol25Xyz, validateOmol25Molecule } from './omol25';
+import { frameFromOmol25Molecule, moleculeFromOmol25Xyz, validateOmol25Molecule } from './widget';
 
 const row = {
   rowIndex: 7,

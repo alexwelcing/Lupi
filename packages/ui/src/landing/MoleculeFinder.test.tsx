@@ -76,6 +76,56 @@ describe('MoleculeFinder', () => {
     expect(merged.filter((r) => r.title.toLowerCase() === 'caffeine')).toHaveLength(1);
     expect(merged.map((r) => r.kind)).toEqual(['local', 'pubchem', 'pubchem']);
   });
+
+  it('places up to three OMol25 picks after the gallery and before PubChem', () => {
+    const local = searchLocalMolecules('Br', 6);
+    expect(local.length).toBeGreaterThan(0);
+    const merged = mergeFinderResults('Br', local, ['Bromine']);
+    const kinds = merged.map((r) => r.kind);
+    const omol = kinds.flatMap((kind, i) => (kind === 'omol' ? [i] : []));
+    expect(omol.length).toBeGreaterThan(0);
+    expect(omol.length).toBeLessThanOrEqual(3);
+    expect(Math.min(...omol)).toBeGreaterThan(kinds.lastIndexOf('local'));
+    expect(Math.max(...omol)).toBeLessThan(kinds.indexOf('pubchem'));
+    const first = merged[omol[0]];
+    expect(first.title).toMatch(/ \(OMol25\)$/);
+    expect(first.detail).toMatch(/^OMol25 · .+ · \d+ atoms$/);
+  });
+
+  it('never makes a pick that merely contains the formula the top result', () => {
+    expect(searchLocalMolecules('C15H17', 6)).toEqual([]);
+    const merged = mergeFinderResults('C15H17', [], []);
+    expect(merged[0]).toMatchObject({ kind: 'pubchem', detail: 'Look up on PubChem' });
+    expect(merged.slice(1).every((r) => r.kind === 'omol')).toBe(true);
+    expect(merged.length).toBeGreaterThan(1);
+    expect(mergeFinderResults('CH4', [], [])[0]).toMatchObject({ kind: 'pubchem', name: 'CH4' });
+  });
+
+  it('opens an OMol25 pick from its same-origin file and offers the formula handoff', async () => {
+    render(<MoleculeFinder />);
+    const input = screen.getByRole('combobox', { name: 'Type a molecule' });
+    fireEvent.change(input, { target: { value: 'C15H17IO2S' } });
+    const handoff = screen.getByRole('link', { name: /Find C15H17IO2S in OMol25’s 27,697-structure index/ });
+    expect(handoff.getAttribute('href')).toBe('/library/omol25?view=facets&q=C15H17IO2S');
+    const option = screen.getAllByRole('option').find((o) => o.textContent?.includes('C15H17IO2S (OMol25)'))!;
+    const row = within(option).getByRole('link');
+    expect(row.getAttribute('href')).toMatch(/^\/\?load=\/datasets\/omol25\/featured\/omol25_nv_\d+\.xyz$/);
+    fireEvent.click(row);
+    await waitFor(() => expect(openMolecule).toHaveBeenCalledTimes(1));
+    expect(openMolecule.mock.calls[0][0]).toEqual({
+      kind: 'url',
+      url: row.getAttribute('href')!.replace('/?load=', ''),
+      title: 'C15H17IO2S (OMol25)',
+      history: 'push',
+    });
+  });
+
+  it('links the scope line to OMol25 and offers no OMol25 handoff for a word', () => {
+    render(<MoleculeFinder />);
+    expect(screen.getByRole('link', { name: '34.3M in OMol25' }).getAttribute('href')).toBe('/library/omol25');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Type a molecule' }), { target: { value: 'HI' } });
+    expect(screen.queryByRole('link', { name: /in OMol25’s/ })).toBeNull();
+  });
 });
 
 describe('MoleculeWall', () => {

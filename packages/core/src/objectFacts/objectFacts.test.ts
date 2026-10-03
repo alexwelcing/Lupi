@@ -140,6 +140,28 @@ describe('object facts', () => {
     expect(f?.detents.filter((d) => d.kind === 'ring-face').every((d) => d.label === 'Ring face-on')).toBe(true);
   });
 
+  it('bondPairs replace the distance rule for rings; without them the output is unchanged', () => {
+    const input = readXyz('popular/benzene.xyz');
+    const baseline = computeObjectFacts(input)!;
+    expect(computeObjectFacts(input, {})).toEqual(baseline);
+    expect(computeObjectFacts(input, { bondPairs: undefined })).toEqual(baseline);
+
+    const pairs = computeBonds(input.atomicNumbers, input.positions, input.natoms).pairs;
+    const flat = pairs.flat();
+    const supplied = computeObjectFacts(input, { bondPairs: flat })!;
+    expect(supplied.rings).toEqual(baseline.rings);
+    expect(supplied.symmetryAxes).toEqual(baseline.symmetryAxes);
+    expect(supplied.provenance.method).toContain('supplied bond');
+
+    // Open the ring by leaving out one C–C pair: no ring face survives.
+    const ringBond = pairs.findIndex(([i, j]) => input.atomicNumbers[i] === 6 && input.atomicNumbers[j] === 6);
+    const opened = pairs.filter((_, k) => k !== ringBond).flat();
+    expect(computeObjectFacts(input, { bondPairs: opened })!.rings).toEqual([]);
+    // Junk pairs (self, out of range, repeated) are ignored.
+    const noisy = computeObjectFacts(input, { bondPairs: [...flat, 0, 0, -1, 2, 1, 999, ...flat.slice(0, 2)] })!;
+    expect(noisy.rings).toEqual(baseline.rings);
+  });
+
   it('refuses empty and oversized inputs; C60 runs in under 20 ms', () => {
     expect(computeObjectFacts({ atomicNumbers: [], positions: [], natoms: 0 })).toBeNull();
     const big = 2001;

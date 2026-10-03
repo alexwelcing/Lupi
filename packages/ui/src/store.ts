@@ -24,6 +24,8 @@ import type { NistCatalogEntry } from '@atlas/nist';
 import type { FlythroughSequence, FlythroughKeyframe } from './flythrough';
 import type { MolecularMeasurement, MeasurementTool } from './measurements';
 import { COLOR_SCHEMES, pickInitialScheme, type ColorSchemeId, type AtomColorSource } from './coloring';
+import type { BondProfile } from '@atlas/core/bonds';
+import type { BondsUpdateDetail } from '@atlas/scene';
 import { MATERIAL_SCENES, getScene, DEFAULT_SCENE_ID } from '@atlas/scene/materials';
 import { lookForInkStyle, sceneLookPatch } from './sceneLooks';
 import { sanitizeEffectOverrides, type EffectOverrides } from './postprocess/controls';
@@ -154,6 +156,12 @@ function sanitizePostprocessPreset(value: unknown): AppState['postprocessPreset'
   return value === 'paper' || value === 'studio' || value === 'editorial' || value === 'cinematic' || value === 'diagram'
     ? value
     : 'studio';
+}
+
+export function sanitizeBondProfile(value: unknown): BondProfile {
+  if (value === 'd' || value === 'distance') return 'distance';
+  if (value === 'm' || value === 'molecular') return 'molecular';
+  return 'auto';
 }
 
 export function sanitizeInkStyle(value: unknown): InkStyle {
@@ -467,8 +475,16 @@ export interface AppState {
   /** Backend that produced the most recent bond pairs. 'none' until first
    *  detection completes. Drives the dev HUD; not used by render path. */
   bondSource: 'cpu' | 'gpu' | 'none';
-  /** Bond count from the most recent detection — for HUD + telemetry. */
+  /** Bond count from the most recent detection — for HUD + telemetry.
+   *  Covalent plus coordination; ionic contacts are not bonds. */
   lastBondCount: number;
+  /** The drawn layer's recipe, kinds and evidence (null until it reports). */
+  lastBondDetail: BondsUpdateDetail | null;
+  /** Bond rule: 'auto' (molecular where the file declares chemistry),
+   *  'distance' or 'molecular'. URL `brp` = 'd' | 'm', omitted for auto. */
+  bondProfile: BondProfile;
+  /** Draw the molecular recipe's dotted ionic contacts. URL `bco` = 0 when off. */
+  showBondContacts: boolean;
   
   // ─── Bond Registry (Phase 3) ───
   bondRegistry: Record<string, BondDataset>;
@@ -790,7 +806,9 @@ export interface AppState {
   toggleMeamScreening: () => void;
   setUseGpuBonds: (v: boolean) => void;
   setGpuBondsStatus: (status: AppState['gpuBondsStatus']) => void;
-  reportBondsUpdate: (source: AppState['bondSource'], count: number) => void;
+  reportBondsUpdate: (source: AppState['bondSource'], count: number, detail?: BondsUpdateDetail) => void;
+  setBondProfile: (profile: BondProfile) => void;
+  setShowBondContacts: (show: boolean) => void;
   registerBondDataset: (dataset: BondDataset) => void;
   setActiveBondDataset: (id: string | null) => void;
   setAtomScale: (scale: number) => void;
@@ -967,6 +985,9 @@ const DEFAULTS = {
   gpuBondsStatus: 'idle' as const,
   bondSource: 'none' as const,
   lastBondCount: 0,
+  lastBondDetail: null as BondsUpdateDetail | null,
+  bondProfile: 'auto' as BondProfile,
+  showBondContacts: true,
   
   // ─── Bond Registry ───
   bondRegistry: {} as Record<string, BondDataset>,
@@ -1175,6 +1196,8 @@ export function buildStateDelta(s: AppState): Record<string, unknown> {
   if (s.showBonds)                                 delta.bonds = 1;
   if (r(s.bondCutoff) !== 3.2)                     delta.bc = r(s.bondCutoff);
   if (r(s.bondTolerance) !== 0.45)                 delta.bt = r(s.bondTolerance);
+  if (s.bondProfile !== 'auto')                    delta.brp = s.bondProfile === 'distance' ? 'd' : 'm';
+  if (!s.showBondContacts)                         delta.bco = 0;
   if (s.materialScene !== DEFAULTS.materialScene)  delta.ms = s.materialScene;
   if (s.materialPreset !== DEFAULTS.materialPreset) delta.mp = s.materialPreset;
   if (r(s.materialIntensity) !== DEFAULTS.materialIntensity) delta.mi = r(s.materialIntensity);
@@ -1264,6 +1287,8 @@ export function applyStateDelta(delta: unknown): Partial<AppState> {
     showBonds: sanitizeBinaryFlag(s.bonds, false),
     bondCutoff: sanitizeNumberRange(s.bc, 3.2, 0.01, 100),
     bondTolerance: sanitizeNumberRange(s.bt, 0.45, 0, 1.5),
+    bondProfile: sanitizeBondProfile(s.brp),
+    showBondContacts: sanitizeBinaryFlag(s.bco, true),
     materialScene: sanitizeMaterialScene(s.ms),
     materialPreset: sanitizeMaterialPreset(s.mp),
     materialIntensity: sanitizeNumberRange(s.mi, DEFAULTS.materialIntensity, 0, 1),
@@ -1353,7 +1378,10 @@ export const useStore = create<AppState>()(
         loading: false,
         loadProgress: 1,
         showBonds: options?.initialShowBonds ?? (sceneDirective.showBonds && canShowBondsByDefault),
-        showCell: sceneDirective.showCell,
+        // A molecule that declares its chemistry has no cell: no padded box.
+        showCell: sceneDirective.showCell && !(firstFrame?.chemistry && firstFrame.periodic === false),
+        bondProfile: DEFAULTS.bondProfile,
+        showBondContacts: DEFAULTS.showBondContacts,
         showAxes: sceneDirective.showAxes,
         postprocessPreset: sceneDirective.preset,
         postprocessIntensity: sceneDirective.intensity,
@@ -1403,6 +1431,7 @@ export const useStore = create<AppState>()(
         gpuBondsStatus: 'idle',
         bondSource: 'none',
         lastBondCount: 0,
+        lastBondDetail: null,
         // Default-fill loadedAtomCount to atomCount so non-streaming
         // consumers don't need to special-case this field. The streaming
         // path overrides via setLoadedAtomCount during the load.
@@ -1550,7 +1579,7 @@ export const useStore = create<AppState>()(
     toggleAxes: () => set(s => ({ showAxes: !s.showAxes })),
     toggleBonds: () => set((s) =>
       s.showBonds
-        ? { showBonds: false, bondSource: 'none', lastBondCount: 0 }
+        ? { showBonds: false, bondSource: 'none', lastBondCount: 0, lastBondDetail: null }
         : { showBonds: true },
     ),
     setBondCutoff: (bondCutoff) => set({ bondCutoff }),
@@ -1569,7 +1598,9 @@ export const useStore = create<AppState>()(
     toggleMeamScreening: () => set(s => ({ meamScreening: !s.meamScreening })),
     setUseGpuBonds: (useGpuBonds) => set({ useGpuBonds }),
     setGpuBondsStatus: (gpuBondsStatus) => set({ gpuBondsStatus }),
-    reportBondsUpdate: (bondSource, lastBondCount) => set({ bondSource, lastBondCount }),
+    reportBondsUpdate: (bondSource, lastBondCount, detail) => set({ bondSource, lastBondCount, lastBondDetail: detail ?? null }),
+    setBondProfile: (bondProfile) => set({ bondProfile }),
+    setShowBondContacts: (showBondContacts) => set({ showBondContacts }),
     
     // Bond Registry Actions
     registerBondDataset: (dataset: BondDataset) => set((s) => ({
@@ -1713,6 +1744,7 @@ export const useStore = create<AppState>()(
       gpuBondsStatus: 'idle',
       bondSource: 'none',
       lastBondCount: 0,
+      lastBondDetail: null,
     }),
 
     triggerExport: (req) => set(s => ({ exportRequest: { ...req, type: req.type ?? null } as ExportRequest })),

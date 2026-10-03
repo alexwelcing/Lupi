@@ -7,6 +7,7 @@ import { createMockTrajectory } from '@atlas/core/test-utils';
 import { snapshotRemix } from './sceneRemix';
 import { remixStore } from './remix/remixStore';
 import { setComfort } from './motion/comfort';
+import { frameFromAtoms, sodiumHexaaqua } from './bonds/bondFixtures.test-utils';
 describe('focused style controls', () => {
   beforeEach(() => {
     resetStore();
@@ -40,6 +41,23 @@ describe('focused style controls', () => {
     expect(screen.getByText(/Custom look/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Paper look' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.queryByText(/Equilibrium|New run|Research/)).toBeNull();
+  });
+  it('offers the bond rule and the contacts toggle for a molecule that declares chemistry', () => {
+    const frame = frameFromAtoms(sodiumHexaaqua(), 'charge=1 multiplicity=1');
+    const trajectory = createMockTrajectory(1, frame.natoms);
+    trajectory.frames[0] = frame;
+    useStore.getState().setFile({ name: 'salt.xyz', size: 100, trajectory, thermo: null });
+    useStore.setState({ showBonds: true });
+    render(<StudioControlDeck mode="molecule" />);
+    fireEvent.click(screen.getByRole('button', { name: 'All visual mods' }));
+    fireEvent.click(screen.getByText('Structure guides'));
+    expect(screen.getByRole('checkbox', { name: 'Bond guides' })).toBeTruthy();
+    expect(screen.getByText(/inferred from geometry by Lupi/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ionic contacts' }));
+    expect(useStore.getState().showBondContacts).toBe(false);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Bond rule' }), { target: { value: 'distance' } });
+    expect(useStore.getState().bondProfile).toBe('distance');
+    expect(screen.queryByRole('checkbox', { name: 'Ionic contacts' })).toBeNull();
   });
   it('starts with six real look choices and keeps fine controls secondary', () => {
     render(<StudioControlDeck mode="scene" />);

@@ -6,6 +6,9 @@
  * records in `provenance.unresolvedElements`) and computes the facts once.
  * Larger structures than `OBJECT_FACTS_MAX_ATOMS` get none: the rig then
  * keeps its isotropic coast and has no detents (the arrow keys step 15°).
+ * `opts.bondPairs` (the molecular graph's covalent and coordination pairs)
+ * replaces Object Facts' own distance bonds, so rings, symmetry detents and
+ * face labels come from the drawn graph, never from a ring through an ion.
  */
 import { resolveAtomicNumber } from '@atlas/core';
 import { computeObjectFacts, type ObjectFactsV1 } from '@atlas/core/objectFacts';
@@ -15,6 +18,7 @@ export const OBJECT_FACTS_MAX_ATOMS = 2000;
 
 export function objectFactsForFile(
   frame: Pick<Frame, 'natoms' | 'types' | 'positions' | 'typeSemantics'> | null | undefined,
+  opts?: { bondPairs?: ArrayLike<number> },
 ): ObjectFactsV1 | null {
   if (!frame) return null;
   const natoms = frame.natoms;
@@ -31,5 +35,8 @@ export function objectFactsForFile(
     }
     atomicNumbers[i] = z;
   }
-  return computeObjectFacts({ atomicNumbers, positions: frame.positions, natoms }, { maxAtoms: OBJECT_FACTS_MAX_ATOMS });
+  return computeObjectFacts(
+    { atomicNumbers, positions: frame.positions, natoms },
+    { maxAtoms: OBJECT_FACTS_MAX_ATOMS, ...(opts?.bondPairs ? { bondPairs: opts.bondPairs } : {}) },
+  );
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parsePubChemRecord } from '@atlas/core/pubchem';
-import { moleculeFromOmol25Xyz } from '@atlas/core/omol25';
+import { moleculeFromOmol25Xyz } from '@atlas/core/omol25/widget';
 import source3d from '../../mcp-worker/test-fixtures/chatgpt/cid-439378-3d.json';
 import source2d from '../../mcp-worker/test-fixtures/chatgpt/cid-439378-2d.json';
 import sourceProperties from '../../mcp-worker/test-fixtures/chatgpt/cid-439378-properties.json';

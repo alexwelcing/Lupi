@@ -19,6 +19,8 @@ describe('library routes', () => {
     expect(libraryRedirectTarget('/', '?tab=potentials')).toBe('/library/potentials');
     expect(libraryRedirectTarget('/materials/omol25', '')).toBe('/library/omol25');
     expect(libraryRedirectTarget('/materials/omol25-molecule-geometry/', '')).toBe('/library/omol25');
+    expect(libraryRedirectTarget('/omol25', '')).toBe('/library/omol25');
+    expect(libraryRedirectTarget('/omol25/', '?view=facets&q=C6H6')).toBe('/library/omol25?view=facets&q=C6H6');
     expect(libraryRedirectTarget('/', '?tab=equilibrium')).toBeNull();
     expect(libraryRedirectTarget('/materials/million-atom-viewer', '')).toBeNull();
     expect(libraryRedirectTarget('/study/x', '?tab=browse')).toBeNull();

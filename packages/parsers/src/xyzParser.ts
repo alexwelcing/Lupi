@@ -24,10 +24,14 @@
  *     other 3-vectors -> `name[1..3]`),
  *   - a bare integer comment line, or `step=`/`timestep=`/`frame=` keys, set
  *     the frame timestep; otherwise frames are numbered in order,
+ *   - `charge=`, `multiplicity=`/`spin_multiplicity=`, `charge_source=` and
+ *     `data_id=` become `Frame.chemistry`; a comment beginning `OMol25 ` also
+ *     fills `Frame.sourceRecord`; `Frame.periodic` is whether `Lattice=` is
+ *     present. None of these add per-atom properties,
  *   - CRLF line endings, a UTF-8 BOM, and blank lines between frames.
  */
 
-import type { Frame } from '@atlas/core/types';
+import type { ChemistrySource, Frame, FrameChemistry, FrameSourceRecord } from '@atlas/core/types';
 import { ELEMENT_DATA } from '@atlas/core/elements';
 import { xyzFrameMetadata } from './workers/frameTransfer';
 import { NL, isSpace, scanFloat } from './byteScan';
@@ -188,22 +192,89 @@ interface CommentInfo {
   timestep: number | null;
   lattice: number[] | null;
   layout: FrameLayout;
+  /** `Lattice=` is present (even if malformed): the frame claims periodicity. */
+  periodic: boolean;
+  chemistry: FrameChemistry | null;
+  sourceRecord: FrameSourceRecord | null;
+}
+
+const CHEMISTRY_SOURCES: ReadonlySet<string> = new Set<ChemistrySource>(['record', 'split-definition', 'file-declared', 'unavailable']);
+
+function boundedInteger(value: string | undefined, min: number, max: number): number | null {
+  if (value === undefined || value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+}
+
+function finiteNumber(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Declared charge and spin multiplicity. A bare `spin=` is never read: tools
+ * use it for S, 2S or 2S+1. Chemistry is attached only when `charge=`,
+ * `multiplicity=`/`spin_multiplicity=` or `charge_source=` is usable;
+ * `charge=` without `charge_source=` is file-declared.
+ */
+function readChemistry(keys: ReadonlyMap<string, string>): FrameChemistry | null {
+  const totalCharge = boundedInteger(keys.get('charge'), -20, 20);
+  const spinMultiplicity = boundedInteger(keys.get('multiplicity') ?? keys.get('spin_multiplicity'), 1, 20);
+  const declaredSource = keys.get('charge_source');
+  const source = declaredSource !== undefined && CHEMISTRY_SOURCES.has(declaredSource)
+    ? declaredSource as ChemistrySource
+    : null;
+  if (totalCharge === null && spinMultiplicity === null && source === null) return null;
+  return {
+    totalCharge,
+    spinMultiplicity,
+    source: source ?? 'file-declared',
+    domain: keys.get('data_id') || null,
+  };
+}
+
+/** The OMol25 record behind a comment that begins `OMol25 ` (the edge and featured-pick format). */
+function readSourceRecord(comment: string, keys: ReadonlyMap<string, string>): FrameSourceRecord | null {
+  if (!comment.startsWith('OMol25 ')) return null;
+  const leading = comment.slice('OMol25 '.length).split(/\s+/)[0];
+  return {
+    dataset: 'omol25',
+    collection: keys.get('collection') || (leading && !leading.includes('=') ? leading : null),
+    row: boundedInteger(keys.get('row'), 0, Number.MAX_SAFE_INTEGER),
+    method: keys.get('method') || null,
+    energyEv: finiteNumber(keys.get('energy_ev')),
+    maxForceEvPerA: finiteNumber(keys.get('max_force_ev_per_a')),
+    homoLumoGapEv: finiteNumber(keys.get('homo_lumo_gap_ev')),
+    license: keys.get('license') || null,
+    source: keys.get('source') || null,
+  };
 }
 
 /** Read `key=value` / `key="quoted value"` pairs from an extended-XYZ comment. */
 function parseComment(comment: string, frameIndex: number, lineNumber: number): CommentInfo {
   const trimmed = comment.trim();
-  const info: CommentInfo = { timestep: null, lattice: null, layout: DEFAULT_LAYOUT };
+  const info: CommentInfo = {
+    timestep: null,
+    lattice: null,
+    layout: DEFAULT_LAYOUT,
+    periodic: false,
+    chemistry: null,
+    sourceRecord: null,
+  };
   if (/^\d+$/.test(trimmed)) {
     info.timestep = Number(trimmed);
     return info;
   }
+  const keys = new Map<string, string>();
   const pairs = /([A-Za-z_][A-Za-z0-9_\-]*)\s*=\s*("([^"]*)"|'([^']*)'|(\S+))/g;
   let match: RegExpExecArray | null;
   while ((match = pairs.exec(trimmed)) !== null) {
     const key = match[1].toLowerCase();
     const value = match[3] ?? match[4] ?? match[5] ?? '';
+    if (!keys.has(key)) keys.set(key, value);
     if (key === 'lattice') {
+      info.periodic = true;
       const numbers = value.trim().split(/\s+/).map(Number);
       if (numbers.length === 9 && numbers.every(Number.isFinite)) info.lattice = numbers;
     } else if (key === 'properties') {
@@ -221,6 +292,8 @@ function parseComment(comment: string, frameIndex: number, lineNumber: number): 
       if (Number.isInteger(numeric) && numeric >= 0) info.timestep = numeric;
     }
   }
+  info.chemistry = readChemistry(keys);
+  info.sourceRecord = readSourceRecord(trimmed, keys);
   return info;
 }
 
@@ -403,7 +476,10 @@ export function parseXyzBytes(bytes: Uint8Array, options: XyzParseOptions = {}):
       identity: metadata.identity,
       typeSemantics: metadata.typeSemantics,
       distanceSemantics: metadata.distanceSemantics,
+      periodic: info.periodic,
     };
+    if (info.chemistry) frame.chemistry = info.chemistry;
+    if (info.sourceRecord) frame.sourceRecord = info.sourceRecord;
     frames.push(frame);
     stats.push({
       bounds: [minX, maxX, minY, maxY, minZ, maxZ],

@@ -1,6 +1,6 @@
 /** A bounded, source-attributed OMol25 structure for the embedded viewer. */
-import { getAtomicNumberBySymbol } from './elements';
-import type { Frame } from './types';
+import { getAtomicNumberBySymbol } from '../elements';
+import type { Frame } from '../types';
 
 export const OMOL25_MOLECULE_SCHEMA = 'lupi.omol25.v1' as const;
 export const MAX_OMOL25_WIDGET_ATOMS = 1_000;

@@ -9,7 +9,10 @@ Change control: explicit reviewed product decision approved by the decision owne
 Ratified: 2026-07-19
 
 Amended: 2026-09-18 (Library restoration; decision owner approval recorded in
-[the library restoration design](library-restoration-design.md))
+[the library restoration design](library-restoration-design.md)); 2026-10-03
+(OMol25 as a front-door resource; recorded in
+[OMol25 in Lupi](omol25-bonds-and-discovery.md) section 4.1 and the
+[product reset amendment](product-reset-2026-09-04.md))
 
 This document is the product authority for the standalone Lupi repository. If
 an older roadmap, campaign plan, branch, or feature brief conflicts with this
@@ -54,8 +57,10 @@ in the [library restoration design](library-restoration-design.md) found that
 the reset went too far and amended the public surface as follows:
 
 - Public navigation is Explore, Library, How to use, and Open a file.
+  (Superseded by the 2026-10-03 amendment below.)
 - The homepage search matches the curated gallery and PubChem names. The
   curated student collection remains the guided starter set on the homepage.
+  (Extended by the 2026-10-03 amendment below.)
 - The Library route (`/library` and its collections) offers every connected
   structure source explicitly, one source at a time or all together, with the
   source and its provenance named on every result. No source is queried
@@ -63,6 +68,29 @@ the reset went too far and amended the public surface as follows:
   distance-inferred bond) as dataset truth.
 - Research execution, model policy, and scientific claim decisions remain
   outside Lupi.
+
+The 2026-10-03 owner decision recorded in
+[OMol25 in Lupi](omol25-bonds-and-discovery.md) (section 4.1) makes OMol25 a
+front-door resource and amends the public surface again:
+
+- Public navigation is Molecules, OMol25, Daily, Library, Scan, How to use,
+  and Open a file. OMol25 goes to `/library/omol25`. No public navigation
+  label names research or MLIPs.
+- The homepage carries one OMol25 shelf directly after the hero, rendered
+  from bundled same-origin data. It is not part of the curated student
+  collection, which is unchanged. The homepage makes no OMol25, edge or
+  Hugging Face request and draws no canvas.
+- The homepage search matches the curated gallery, the bundled featured
+  OMol25 picks and PubChem names. For a formula-shaped query it adds one
+  labelled, user-initiated "Find … in OMol25" link. No source is queried
+  silently.
+- Lupi keeps same-origin copies of at most 48 featured OMol25 rows, CC BY
+  4.0, attributed, each with a sha256 receipt. Every other row stays
+  stream-only.
+- Every OMol25 surface states that coordinates are source data, the
+  geometry state (largest force), that bonds are Lupi's inference (naming
+  the recipe), and that any name is a derived parent compound, in the
+  wording of `packages/core/src/omol25/truth.ts`.
 
 Inside the viewer the controls are Learn, Style, Data, Camera, Export, and
 Elements, with Path only for an explicitly opened, source-bound reaction
