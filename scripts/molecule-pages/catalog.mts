@@ -307,6 +307,16 @@ export function buildMoleculeCatalog({ repoRoot, publicDir }: CatalogOptions): M
   const records: MoleculeRecord[] = [];
   for (const entry of gallery) {
     if (!hasMoleculePageEntry(entry)) continue;
+    try {
+      records.push(buildRecord(entry));
+    } catch (error) {
+      // One bad file loses its page, never the deploy.
+      console.warn(`[molecule-pages] skipped ${entry.id}: ${(error as Error).message}`);
+    }
+  }
+  return records;
+
+  function buildRecord(entry: GalleryEntry): MoleculeRecord {
     const source = fs.readFileSync(path.join(pub, entry.file), 'utf8');
     const atoms = parseXyz(source, entry.id);
     const sha256 = createHash('sha256').update(source.replace(/\r\n/g, '\n')).digest('hex');
@@ -379,9 +389,8 @@ export function buildMoleculeCatalog({ repoRoot, publicDir }: CatalogOptions): M
       model,
       facets: libraryFacts[`gallery:${entry.id}`]?.facts ?? {},
     };
-    records.push({ ...partial, description: describe(entry, partial) });
+    return { ...partial, description: describe(entry, partial) };
   }
-  return records;
 }
 
 /** Up to `limit` other pages, nearest by library facets, shared elements and shelf. */
