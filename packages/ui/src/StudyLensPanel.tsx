@@ -110,7 +110,7 @@ export function StudyLensPanel({
             style={{
               margin: phone ? '2px 0 10px' : '4px 0 16px',
               fontSize: phone ? 20 : 22,
-              lineHeight: 1.25,
+              lineHeight: phone ? 1.25 : undefined,
               overflowWrap: 'anywhere',
             }}
           >
