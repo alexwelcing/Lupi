@@ -1091,14 +1091,15 @@ button:focus:not(:focus-visible) {
 .scene-remix .lupi-action__content > svg { width: 24px; height: 24px; }
 /* The look's Remix code under the button: tap for the Remix sheet. A Foil
    code wears its finish as its border. */
-.scene-remix-bar .scene-remix-code { grid-column: 1 / -1; justify-content: center; font: 680 .86rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .03em; }
+.scene-remix-code { margin-top: -6px; justify-content: center; font: 680 .86rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .03em; }
 .scene-remix-code[data-foil] { border: 1.5px solid transparent; background: linear-gradient(#14241e, #14241e) padding-box, var(--lupi-foil-edge) border-box; }
 .scene-remix-code[data-foil='holo'] { --lupi-foil-edge: conic-gradient(from 200deg, #ff9de6, #9df3ff, #d5ef9c, #ffe59d, #c7a6ff, #ff9de6); }
 .scene-remix-code[data-foil='gold'] { --lupi-foil-edge: linear-gradient(135deg, #fff2c4, #c99a3c 35%, #f7e1a1 55%, #9c7128 80%, #fff2c4); }
 .scene-remix-code[data-foil='pearl'] { --lupi-foil-edge: conic-gradient(from 120deg, #fff6f8, #e3efff, #f1ffe9, #fff0e2, #f6ecff, #fff6f8); }
 .scene-controls button:disabled { opacity: .4; cursor: default; }
 .scene-controls__announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.scene-mod-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; padding: 4px; background: #0c1c17; border-radius: 12px; position: sticky; top: 68px; z-index: 2; }
+/* One row however many categories there are: a wrapped nav doubles the sticky chrome over the mods. */
+.scene-mod-nav { display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 3px; padding: 4px; background: #0c1c17; border-radius: 12px; position: sticky; top: 68px; z-index: 2; }
 .scene-mod-nav button { min-width: 0; min-height: 44px; padding: 4px 0; font: 500 .75rem/1.4 var(--font-body, system-ui); color: var(--scene-muted); border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; overflow-wrap: anywhere; }
 .scene-mod-nav button[aria-pressed='true'] { background: #2b4236; color: #f0efdc; border-color: #627752; }
 .scene-mod-fields { display: grid; gap: 10px; min-width: 0; }
@@ -1137,6 +1138,14 @@ button:focus:not(:focus-visible) {
   .scene-controls { gap: 8px; padding: 10px; }
   .scene-controls__intro, .scene-controls > .scene-controls__hint { display: none; }
   .scene-look__sample { height: 36px; }
+}
+
+/* A landscape phone's side column is too short for sticky rows above and
+   below the looks (together they cover every look); keep them in flow. */
+@media (max-height: 500px) and (max-width: 900px) and (orientation: landscape) {
+  .scene-controls .scene-remix-bar,
+  .scene-controls .scene-controls__actions { position: static; }
+  .scene-controls .scene-mod-nav { top: 0; }
 }
 
 .lupine-camera-command { min-height: 100%; display: flex; flex-direction: column; }

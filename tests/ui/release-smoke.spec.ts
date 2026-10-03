@@ -123,7 +123,10 @@ test.describe('phone', () => {
     const bounds = await remix.boundingBox();
     expect(bounds!.width).toBeGreaterThanOrEqual(44);
     expect(bounds!.height).toBeGreaterThanOrEqual(44);
-    await expect(page.getByRole('checkbox', { name: 'Keep atom colors' })).not.toBeChecked();
+    // Remix keeps CPK atom colours by default; turn that off to exercise the atom-colour Remix.
+    const keepColors = page.getByRole('checkbox', { name: 'Keep atom colors' });
+    await expect(keepColors).toBeChecked();
+    await keepColors.uncheck();
     await remix.click();
     await expect.poll(async () => (await read()).colorScheme).toBe('colorway');
     const after = await read();

@@ -47,11 +47,12 @@ export function StudioControlDeck({ mode: _mode }: { mode: StudioDeckMode }) {
     <div className="scene-remix-bar">
       <LupiActionButton className="scene-remix" onClick={remix} title={`Roll a new look (M). ${FOIL_ODDS_TEXT}.`}><IconRemix /> Remix scene</LupiActionButton>
       <button type="button" className="scene-controls__button" onClick={undo} disabled={historyDepth === 0} aria-label="Undo remix"><IconUndo /> Undo</button>
-      <button type="button" className="scene-controls__button scene-remix-code" data-foil={applied?.foil ?? undefined}
-        onClick={openRemixSheet} aria-label={applied ? `Remix code ${applied.code.text}${codeStatus === 'edited' ? ', edited' : ''}: copy, share or type a code` : 'Remix codes: type a code'}>
-        {applied ? <>{applied.code.text}{applied.foil ? ` · ${FOIL_LABEL[applied.foil]}` : ''}{codeStatus === 'edited' ? ' · edited' : ''}</> : 'Code…'}
-      </button>
     </div>
+    {/* Outside the sticky bar: a second sticky row would cover the looks and mods on a phone. */}
+    <button type="button" className="scene-controls__button scene-remix-code" data-foil={applied?.foil ?? undefined}
+      onClick={openRemixSheet} aria-label={applied ? `Remix code ${applied.code.text}${codeStatus === 'edited' ? ', edited' : ''}: copy, share or type a code` : 'Remix codes: type a code'}>
+      {applied ? <>{applied.code.text}{applied.foil ? ` · ${FOIL_LABEL[applied.foil]}` : ''}{codeStatus === 'edited' ? ' · edited' : ''}</> : 'Code…'}
+    </button>
     <span className="scene-controls__announcement" role="status">{announcement}</span>
     {!adjusting ? <>
       <div className="scene-controls__looks" role="group" aria-label="Scene looks">
