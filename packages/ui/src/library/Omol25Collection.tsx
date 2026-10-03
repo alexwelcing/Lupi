@@ -397,7 +397,7 @@ export function FacetedValidation() {
   const [openError, setOpenError] = useState<string | null>(null);
   const requestId = useRef(0);
   const groups = useMemo(
-    () => query.groups.filter((id): id is FunctionalGroupId => id in FUNCTIONAL_GROUP_BY_ID),
+    () => query.groups.filter((id): id is FunctionalGroupId => Object.prototype.hasOwnProperty.call(FUNCTIONAL_GROUP_BY_ID, id)),
     [query.groups],
   );
 
