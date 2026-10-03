@@ -32,8 +32,8 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
 - **Ink tiles:**
   - Every molecule with a page (69 small gallery molecules) shows its own ink drawing on its molecule-wall tile, its finder row and its library card, on the sage plate. It is the `/m` page's drawing at its opening pose.
   - A tap lights the drawing with a lime glow. The relay then grows it to the size the 3D view will draw the molecule at.
-  - Inside the viewer, the molecule switcher's rows are ink drawings too. Picking one opens the molecule at the row's angle, in ink, and the light comes on (there is no relay inside the viewer).
   - While the viewer loads, the drawing turns like the hero's: drag it, flick it, and it clicks onto a ring or axis view and names it. Its model (`/og/m/<id>-ink.json`, a couple of kB) is fetched as a finger or pointer reaches the tile, or as a finder match appears. The 3D view opens at the pose you leave, with your spin.
+  - Inside the viewer, the molecule switcher's rows are ink drawings too. Picking one opens the molecule at the row's angle, in ink, and the light comes on (there is no relay inside the viewer).
 - **Ink-to-Light:**
   - The 3D view opens in ink, at the drawing's pose and size, and inflates into depth (the hero's flat arrival).
   - Once the relay has faded, the light comes on (about 0.5 s).
