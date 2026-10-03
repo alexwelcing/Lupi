@@ -134,8 +134,8 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
 - **Instant Replay** (`packages/ui/src/replay`). The viewer keeps the last
   20 s in memory: the camera pose of every drawn frame that moved, the toy
   inputs and the pill's flashes. After a good flick, a chain of three named
-  faces, Spin's flip or a toy moment, the pill offers "Replay ↗" for 7 s (R
-  or the palette any time; with no moment R shares this view). The sheet
+  faces, Spin's flip or a toy moment, the pill offers "Replay ↗" for 7 s (R,
+  the Play tray or the palette any time; with no moment it shares this view). The sheet
   has the live link at once and records a 9:16 clip through the video
   export, with "Illustrative" burned into each frame. The link adds
   `replay=<base64url tape>` (versioned binary: camera keys at a 0.5 s pose

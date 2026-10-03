@@ -12,7 +12,7 @@ Short-list item 9: [Instant Replay](round2/capture-share-loops.md#r2-capture-sha
   - a chain of three named faces in a row, from flicks or arrow keys;
   - Spin's tennis-racket flip, or a flip a flick found on its own;
   - a toy moment: a burst, a tug that was pulled, about a second of heat, a scatter, a good stir, or five atom taps in a row.
-- **The offer sits in the same pill.** It is one more segment before stow, so there is no new chrome on phones. It eases in and does not bounce. **R** (or the palette's "Replay the last moment") opens the same thing at any time. With no moment yet, R shares the current view as a still link.
+- **The offer sits in the same pill.** It is one more segment before stow, so there is no new chrome on phones. It eases in and does not bounce. **R**, the Play tray's **Replay ↗** (last row, beside Settings…) and the palette's "Replay the last moment" open the same thing at any time. With no moment yet, R shares the current view as a still link.
 - **One tap opens the sheet.** It holds two things:
   - **The live link**, ready at once, with Copy and Share. It carries `replay=` with the moment's tape, typically 0.5 to 1.5 KB, and nothing is stored anywhere. The sheet shows the byte count.
   - **A 9:16 clip**, recording right away in the sheet's preview. It is 720×1280 on phones and 1080×1920 on desktop, MP4 where the browser records MP4 (Safari) and WebM elsewhere. It is the normal video export, replaying the moment off screen with the toys allowed. Every frame carries the molecule's name, "Illustrative motion · lupi.live" and the pill's flash as it played (for example "Pentagon face-on · 5-fold axis"). It ends on a sage card reading "Your turn" with the molecule's `/m` page.
@@ -52,7 +52,7 @@ A chat preview of a viewer link to a gallery molecule that has a `/m` page now s
 | Playback (camera, toys, flashes, reframing) | `replay/player.ts` |
 | Canvas side (recording, receiving, Your turn, dev hook) | `replay/ReplayDirector.tsx`, `replay/intake.ts` |
 | Sheet, clip frames | `replay/ReplaySheet.tsx`, `replay/replaySheet.css`, `replay/clipCompositor.ts` |
-| Pill segment (Replay ↗, ▶ Watch, Skip, ↺ Again) | `play/PlayPill.tsx`, `play/playPill.css` |
+| Pill segment (Replay ↗, ▶ Watch, Skip, ↺ Again) and the tray's Replay ↗ | `play/PlayPill.tsx`, `play/PlayTray.tsx`, `play/playPill.css`, `replay/actions.ts` |
 | Toys as replayable inputs | `play/toyTape.ts`, `play/PlayLayer.tsx` |
 | Clip recording in the video export | `ExportManager.tsx` (`replay`, `illustrative`, `compositor`, `signal` on `ExportRequest`) |
 | Illustrative recordings, `camera.fling`, job ids | `scene/src/captureGuards.ts`, `intents.ts`, `framePhases.ts` |
