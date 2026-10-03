@@ -1,6 +1,7 @@
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { OMOL25_ATTRIBUTION_URL, OMOL25_NEUTRAL_TRAIN_ROWS, OMOL25_PAPER_URL, omolChargeSpin } from '@atlas/core/omol25';
 import type { OpenEntry } from '../analytics/openEntry';
+import { useStore } from '../store';
 import { LandingIntentContext } from './landingIntent';
 import { lightInkTile } from './MoleculeFinder';
 import {
@@ -53,7 +54,12 @@ export function useOmolOpener(): OmolOpener {
       setFailure(null);
       open()
         .then((result) => {
-          if (!result.ok && !/superseded/i.test(result.message ?? '')) setFailure(failed);
+          if (result.ok || /superseded/i.test(result.message ?? '')) return;
+          // The loader also left its message in the store, which the finder
+          // shows: this surface's sentence is the one alert.
+          const store = useStore.getState();
+          if (store.error === result.message) store.setError(null);
+          setFailure(failed);
         })
         .catch(() => setFailure(failed))
         .finally(() => setOpening(null));
