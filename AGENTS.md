@@ -120,6 +120,19 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   halved by Gentle, off in Still, and never in an export. On desktop the
   atom under the cursor glows lime and selected atoms glow stronger
   (`tsl/atomGlow.ts`); captures and videos never carry the glow.
+- **Overlays ride display motion.** Selection, hover and neighbour rings,
+  annotations, atom-bound knowledge labels, measurements (line, letters,
+  value label), the desktop atom card's anchor and trail heads follow their
+  atoms through the arrival, pokes, Scatter, Tug, Burst and Heat, using the
+  CPU twin of the GPU offset (`tsl/displayMotionTwin.ts`, every term) for
+  just the atoms that carry an overlay (`packages/ui/src/play/displayFollow.tsx`,
+  one job in the `lupi-overlays` phase). Text and cards take a fifth of
+  Heat's jiggle so they stay readable; vector glyphs follow on the GPU. They
+  snap back exactly at rest, and every capture renders them at rest (a
+  capture guard), so exports, MCP artifacts, thumbnails and video keep rest
+  truth; a measurement's value is always the rest value.
+  `__lupiPlay.follow()` reports `{ moving, followers, displaced, points,
+  maxOffset }`.
 - **Quiet Idle.** The viewer canvas renders on demand: a still view draws
   no frames. Anything that changes the picture asks for frames (store writes,
   gestures, the rig, display motion, playback, flythrough, async bonds and
