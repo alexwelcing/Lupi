@@ -86,6 +86,15 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
 - **MCP camera tools stay instant.** `lupi.set_camera`,
   `lupi.set_camera_preset` and `lupi.fit_camera` land on the call, with no
   glide or coast. Only UI gestures, presets and Recenter animate.
+- **The phone atom card makes room.** On a phone the atom card opens as a
+  compact sheet under the header (identity and one line of facts; Details
+  opens the full card for the session), and the live view eases down (a
+  projection view offset, `packages/ui/src/camera/ViewInsetDriver.tsx`) so
+  the molecule centres in the band between the card and the Play pill.
+  Motion: Still cuts it, and closing the card eases it back. It is display
+  only: the store pose, saved views, share URLs, the axes gizmo, picking (it
+  raycasts what is drawn) and every capture (exports, thumbnails, MCP, video)
+  never see it. `__lupiPlay.viewInset()` reports `{ current, target, occluder }`.
 - **`window.__lupiPlay`** is the Play layer's handle for smoke plugins and
   agents (installed in production, like `__lupiViewerMcp`): `state()` returns
   `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame }`,
