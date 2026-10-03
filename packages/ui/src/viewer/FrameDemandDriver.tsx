@@ -12,9 +12,11 @@
  *   React prop changes on three objects and for its root store;
  * - keeps the loop awake during trajectory playback (its rAF loop lives
  *   outside the canvas) and the flythrough preview;
- * - requests a frame on the first pointerdown, wheel or key (window capture
- *   phase, before any handler), when the tab becomes visible again, and on a
- *   resize or a device-pixel-ratio change, so the first touch renders at once;
+ * - requests frames on any pointerdown (window capture phase, before any
+ *   handler; the gesture arbiter also wakes on canvas wheel), when the tab
+ *   becomes visible again, and on a resize or a device-pixel-ratio change, so
+ *   the first touch renders at once. Keys and panel scrolling wake the loop
+ *   only through what they change (a store write, a rig glide);
  * - asks for frames on mount (entering demand grants none);
  * - installs `window.__lupiPlay` with the `frames` dev hook
  *   (`__lupiPlay.state().frames` and `.frameDemand`).
@@ -79,8 +81,6 @@ export function FrameDemandDriver(): null {
     watchDpr();
     const capture = { capture: true, passive: true } as const;
     window.addEventListener('pointerdown', wake, capture);
-    window.addEventListener('wheel', wake, capture);
-    window.addEventListener('keydown', wake, capture);
     window.addEventListener('resize', wake);
     document.addEventListener('visibilitychange', onVisibility);
 
@@ -99,8 +99,6 @@ export function FrameDemandDriver(): null {
     return () => {
       for (const off of offs) off();
       window.removeEventListener('pointerdown', wake, capture);
-      window.removeEventListener('wheel', wake, capture);
-      window.removeEventListener('keydown', wake, capture);
       window.removeEventListener('resize', wake);
       document.removeEventListener('visibilitychange', onVisibility);
       dprQuery?.removeEventListener('change', onDprChange);
