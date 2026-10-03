@@ -18,6 +18,8 @@ import {
   type AtomQualityTier,
 } from '@atlas/scene';
 import { reportActiveTransmissionQuality } from '../mcp/transmissionRuntime';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
+import { getPerceivedBonds, molecularBondStubReach, resolveFrameRecipe } from '../bonds/perceivedBonds';
 import { AtomClusters } from '@atlas/scene/AtomClusters';
 import { Bonds } from '@atlas/scene/Bonds';
 import { emitIntent, validateSourceBondTopology } from '@atlas/scene';
@@ -325,6 +327,8 @@ export function ViewerScene({
   const playing = useStore(s => s.playing);
   const showBonds = useStore(s => s.showBonds);
   const bondTolerance = useStore(s => s.bondTolerance);
+  const bondProfile = useStore(s => s.bondProfile);
+  const showBondContacts = useStore(s => s.showBondContacts);
   const useGpuBonds = useStore(s => s.useGpuBonds);
   const bondColorMode = useStore(s => s.bondColorMode);
   const atomScale = useStore(s => s.atomScale);
@@ -450,6 +454,27 @@ export function ViewerScene({
       console.warn(`[Bonds] Refusing malformed source topology: ${bondRenderPlan.warning}.`);
     }
   }, [bondRenderPlan.warning]);
+
+  // The frame's bond rule. Molecular frames get their graph synchronously
+  // from the shared cache (the atom card, MCP and exports read the same one).
+  const frameCount = file?.trajectory.totalFrames ?? file?.trajectory.frames.length ?? 0;
+  const bondRecipe = useMemo(
+    () => (renderedFrame ? resolveFrameRecipe(renderedFrame, { profile: bondProfile, frameCount }) : null),
+    [renderedFrame, bondProfile, frameCount],
+  );
+  const perceivedBonds = useMemo(
+    () => (bondRenderPlan.available && renderedFrame && bondRecipe === MOLECULAR_RECIPE_ID
+      ? getPerceivedBonds(renderedFrame, { recipe: MOLECULAR_RECIPE_ID, tolerance: bondTolerance })
+      : null),
+    [bondRenderPlan.available, renderedFrame, bondRecipe, bondTolerance],
+  );
+  // Stubs follow sticks; an s-block ion's dotted contacts reach much farther.
+  const bondStubReach = useMemo(
+    () => (perceivedBonds && renderedFrame
+      ? molecularBondStubReach(renderedFrame, bondTolerance) ?? bondRenderPlan.cutoff
+      : bondRenderPlan.cutoff),
+    [perceivedBonds, renderedFrame, bondTolerance, bondRenderPlan.cutoff],
+  );
 
   const clusterSourceFrame = playing ? undefined : currentFrame;
   const isLargeScene = Boolean(currentFrame && currentFrame.natoms >= LARGE_SCENE_ATOM_THRESHOLD);
@@ -678,7 +703,7 @@ export function ViewerScene({
             contactOcclusion={contact.bake}
             occlusionPending={contact.pending}
             bondStubRadius={bondRenderPlan.available ? BOND_RADIUS : 0}
-            bondStubReach={bondRenderPlan.cutoff}
+            bondStubReach={bondStubReach}
           />
           )}
           {activeVectorField && (
@@ -738,7 +763,10 @@ export function ViewerScene({
             atomColorSource={atomColorSource}
             hiddenAtomTypes={hiddenAtomTypes}
             sourceKey={file?.trajectory ?? null}
-            onBondsUpdate={(info) => useStore.getState().reportBondsUpdate(info.source, info.count)}
+            recipe={bondRecipe}
+            perceivedBonds={perceivedBonds}
+            showBondContacts={showBondContacts}
+            onBondsUpdate={(info) => useStore.getState().reportBondsUpdate(info.source, info.count, info.detail)}
             onGpuStatusChange={(status) => useStore.getState().setGpuBondsStatus(status)}
           />}
           {showCell && <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />}

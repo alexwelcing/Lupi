@@ -10,6 +10,8 @@ import { resolveEffects, type EffectOverrides } from './postprocess/controls';
 import { getDeviceTier } from './deviceCapabilities';
 import { chooseInkStyle } from './ink/illustrate';
 import { PAPER_PLATE_PRESET_ID, SAGE_PLATE_PRESET_ID } from './backgroundPresets';
+import { MOLECULAR_RECIPE_ID, MOLECULAR_RECIPE_MAX_ATOMS, type BondProfile } from '@atlas/core/bonds';
+import { resolveFrameRecipe } from './bonds/perceivedBonds';
 
 export const MOD_SECTIONS = ['Atoms', 'Ink', 'Backdrop', 'Light', 'Sphere', 'Effects'] as const;
 export type ModSection = typeof MOD_SECTIONS[number];
@@ -274,15 +276,35 @@ export function StructureGuideMods() {
   const showBonds = useStore(s => s.showBonds);
   const showAxes = useStore(s => s.showAxes);
   const showCell = useStore(s => s.showCell);
+  const bondProfile = useStore(s => s.bondProfile);
+  const showBondContacts = useStore(s => s.showBondContacts);
   const sourceBonds = !!frame?.bonds.length;
   const inference = !!frame && canInferCovalentBonds(frame);
   const available = sourceBonds || inference;
+  const frameCount = file?.trajectory.totalFrames ?? 1;
+  const recipe = frame ? resolveFrameRecipe(frame, { profile: bondProfile, frameCount }) : null;
+  const molecular = recipe === MOLECULAR_RECIPE_ID;
+  // The molecular rule can only apply to a non-periodic XYZ frame of ≤ 2,000 atoms.
+  const ruleChoice = !sourceBonds && inference && frame?.periodic === false && frame.natoms <= MOLECULAR_RECIPE_MAX_ATOMS;
+  const autoRecipe = frame ? resolveFrameRecipe(frame, { profile: 'auto', frameCount }) : null;
+  const omol25 = frame?.sourceRecord?.dataset === 'omol25';
   return <details className="scene-mod-details"><summary>Structure guides</summary>
     <SceneToggle label="Bond guides" checked={showBonds} disabled={!available && !showBonds} onChange={() => useStore.getState().toggleBonds()} />
-    <p className="scene-controls__hint">{sourceBonds ? 'Source bond pairs are preserved.' : inference
-      ? 'Connections are inferred from distance; they do not specify bond order.'
-      : 'Bond guides need source pairs, or identified elements with known distance units.'}</p>
+    <p className="scene-controls__hint">{sourceBonds ? 'Source bond pairs are preserved.' : molecular
+      ? omol25
+        ? 'Bonds are inferred from geometry by Lupi; OMol25 supplies none. They do not show bond order.'
+        : 'Bonds are inferred from geometry by Lupi; the file supplies none. They do not show bond order.'
+      : inference
+        ? 'Connections are inferred from distance; they do not specify bond order.'
+        : 'Bond guides need source pairs, or identified elements with known distance units.'}</p>
     {showBonds && available && <>
+      {ruleChoice && <label className="scene-mod-select"><span>Bond rule</span><select aria-label="Bond rule" value={bondProfile}
+        onChange={e => useStore.getState().setBondProfile(e.target.value as BondProfile)}>
+        <option value="auto">{`Automatic (${autoRecipe === MOLECULAR_RECIPE_ID ? 'Molecular v1' : 'distance only'})`}</option>
+        <option value="molecular">Molecular (v1)</option>
+        <option value="distance">Distance only</option>
+      </select></label>}
+      {molecular && <SceneToggle label="Ionic contacts" checked={showBondContacts} onChange={value => useStore.getState().setShowBondContacts(value)} />}
       <Select field="bondColorMode" label="Bond color" choices={[[ 'type', 'By atom type' ], [ 'length', 'By length' ]]} />
       {!sourceBonds && inference && <Range field="bondTolerance" label="Bond sensitivity" min={0} max={1.2} step={.02} />}
     </>}

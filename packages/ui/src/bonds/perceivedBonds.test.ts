@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOND_KIND, DISTANCE_RECIPE_ID, MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
 import { createMockFrame } from '@atlas/core/test-utils';
-import { getPerceivedBonds, resolveFrameRecipe } from './perceivedBonds';
+import { getPerceivedBonds, molecularBondStubReach, resolveFrameRecipe } from './perceivedBonds';
 import { frameFromAtoms, sodiumHexaaqua } from './bondFixtures.test-utils';
 
 describe('getPerceivedBonds', () => {
@@ -57,5 +57,14 @@ describe('resolveFrameRecipe', () => {
     expect(resolveFrameRecipe({ ...frame, bonds: new Int32Array([0, 1]) }, { profile: 'molecular', frameCount: 1 })).toBe('source');
     expect(resolveFrameRecipe({ ...frame, periodic: true }, { profile: 'molecular', frameCount: 1 })).toBe(DISTANCE_RECIPE_ID);
     expect(resolveFrameRecipe({ ...frame, periodic: undefined }, { profile: 'auto', frameCount: 1 })).toBe(DISTANCE_RECIPE_ID);
+  });
+});
+
+describe('molecularBondStubReach', () => {
+  it('excludes s-block ions: [Na(H₂O)₆]⁺ reaches 2·r_O + τ, not 2·r_Na + τ', () => {
+    const frame = frameFromAtoms(sodiumHexaaqua(), 'charge=1 multiplicity=1');
+    // O 0.66 Å is the largest stick-holding radius; Na (1.66 Å) only makes contacts.
+    expect(molecularBondStubReach(frame, 0.45)).toBeCloseTo(2 * 0.66 + 0.45, 6);
+    expect(molecularBondStubReach(frame, 0.6)).toBeCloseTo(2 * 0.66 + 0.6, 6);
   });
 });

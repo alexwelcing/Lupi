@@ -21,6 +21,8 @@ const FROST_MAX = 0.66;
 import { COLOR_SCHEMES, SCHEME_ORDER, type ColorSchemeId } from '../coloring';
 import { POSTPROCESS_PRESETS } from '../postprocess/presets';
 import { useStore } from '../store';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
+import { resolveFrameRecipe } from '../bonds/perceivedBonds';
 import {
   AdvancedSection,
   ControlGroup,
@@ -164,6 +166,9 @@ export function MoleculeControls() {
   const setBondTolerance = useStore(s => s.setBondTolerance);
   const bondColorMode = useStore(s => s.bondColorMode);
   const setBondColorMode = useStore(s => s.setBondColorMode);
+  const bondProfile = useStore(s => s.bondProfile);
+  const useGpuBonds = useStore(s => s.useGpuBonds);
+  const setUseGpuBonds = useStore(s => s.setUseGpuBonds);
   const file = useStore(s => s.file);
   const frame = useStore(s => s.frame);
   const [selectedType, setSelectedType] = useState<number | null>(null);
@@ -208,6 +213,9 @@ export function MoleculeControls() {
   const bondsAreSafe = atomCount > 0
     && atomCount < 25_000
     && (hasSourceBonds || canInferBonds);
+  const molecularBonds = residentFrame
+    ? resolveFrameRecipe(residentFrame, { profile: bondProfile, frameCount: file?.trajectory.totalFrames ?? 1 }) === MOLECULAR_RECIPE_ID
+    : false;
   const requiresDiagram = atomCount >= 200_000;
   const validColorProperty = colorProperty && availableProperties.includes(colorProperty)
     ? colorProperty
@@ -664,9 +672,11 @@ export function MoleculeControls() {
         <p style={schemeHintStyle}>
           {hasSourceBonds
             ? 'This frame carries source bond pairs. Adjust presentation without changing their topology.'
-            : canInferBonds
-              ? 'Lupi can infer visual bonds because element identity and Ångström distance are known. Adjust sensitivity only when needed.'
-              : 'Distance-inferred bonds require a complete element mapping and Ångström coordinates.'}
+            : molecularBonds
+              ? 'Lupi infers these bonds from the geometry with its molecular rule (lupi-bonds.molecular.v1): dashed lines are metal coordination, dotted lines ionic contacts. They do not show bond order.'
+              : canInferBonds
+                ? 'Lupi can infer visual bonds because element identity and Ångström distance are known. Adjust sensitivity only when needed.'
+                : 'Distance-inferred bonds require a complete element mapping and Ångström coordinates.'}
         </p>
         <div className="lupi-studio-segments">
           <SegmentButton label="Bonds" active={showBonds} accent="#1edce0" onClick={() => { if (bondsAreSafe) toggleBonds(); }} />
@@ -680,6 +690,14 @@ export function MoleculeControls() {
           <p role="status" style={schemeHintStyle}>No source bonds are present, and this frame does not carry enough chemistry/unit provenance for covalent inference.</p>
         )}
         <CompactSlider label="Bond sensitivity" value={bondTolerance} min={0} max={1.2} step={0.02} onChange={setBondTolerance} format={value => value.toFixed(2)} />
+        {!hasSourceBonds && canInferBonds && (
+          <>
+            <div className="lupi-studio-segments">
+              <SegmentButton label="GPU detection" active={useGpuBonds} accent="#7de9ff" onClick={() => setUseGpuBonds(!useGpuBonds)} />
+            </div>
+            <p style={schemeHintStyle}>GPU detection is for structures without declared chemistry; molecular bonds are computed on the CPU.</p>
+          </>
+        )}
       </ControlGroup>
       </AdvancedSection>
     </div>

@@ -11,7 +11,10 @@
  */
 import { canInferCovalentBonds, resolveAtomicNumber } from '@atlas/core';
 import {
+  ELEMENT_CLASS,
   MOLECULAR_RECIPE_MAX_ATOMS,
+  covalentRadius,
+  elementClass,
   perceiveBonds,
   selectBondRecipe,
   type BondProfile,
@@ -120,4 +123,26 @@ export function getPerceivedBonds(
   }
   byKey.set(key, { types: frame.types, semantics, result });
   return result;
+}
+
+/**
+ * Contact-occlusion bond-stub reach for a molecular frame: twice the largest
+ * covalent radius among the elements that can hold a stick (not s-block ions,
+ * which only make dotted contacts, nor inert atoms), plus τ. Null when an
+ * atom type has no element.
+ */
+export function molecularBondStubReach(frame: PerceiveFrame, tolerance: number): number | null {
+  const atomicNumbers = frameAtomicNumbers(frame);
+  if (!atomicNumbers) return null;
+  const seen = new Set<number>();
+  let maxR = 0;
+  for (let i = 0; i < atomicNumbers.length; i += 1) {
+    const z = atomicNumbers[i];
+    if (seen.has(z)) continue;
+    seen.add(z);
+    const cls = elementClass(z);
+    if (cls === ELEMENT_CLASS.ion || cls === ELEMENT_CLASS.inert) continue;
+    maxR = Math.max(maxR, covalentRadius(z));
+  }
+  return 2 * maxR + tolerance;
 }
