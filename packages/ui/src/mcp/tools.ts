@@ -24,7 +24,7 @@ import { getLupiRendererRuntime } from '../viewer/createLupiRenderer';
 import { executionClassV2 } from '../export/exportProfileV2';
 import { MCP_TOOL_DEFINITIONS } from './toolManifest';
 import {
-  FALLBACK_OMOL_COLLECTIONS,
+  OmolSlowError,
   RemoteOmolWarmingError,
   remoteOmolHit,
   remoteOmolPage,
@@ -35,6 +35,7 @@ import { LUPI_VIEWER_MCP_VERSION } from './protocol';
 import { assertBrowserImageExportIntent } from '../export/renderCaptureState';
 import { validateArtifactBytesV1 } from '../export/artifactByteValidation';
 import { computeRenderArtifactDigestV1 } from '@atlas/core';
+import { OMOL25_COLLECTION_IDS, OMOL25_VIEWER_BOND_RECIPE } from '@atlas/core/omol25';
 import {
   createBrowserRenderArtifactPlanV1,
   createInlineBrowserDeliveryV1,
@@ -774,7 +775,7 @@ async function handleAssessAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
 
 /* ─── Library ─── */
 
-const OMOL_COLLECTIONS = new Set(FALLBACK_OMOL_COLLECTIONS.map((collection) => collection.id));
+const OMOL_COLLECTIONS = new Set<string>(OMOL25_COLLECTION_IDS);
 
 async function handleBrowseCollection(request: LupiMcpRequest): Promise<LupiMcpResponseResult> {
   const args = request.arguments ?? {};
@@ -795,6 +796,9 @@ async function handleBrowseCollection(request: LupiMcpRequest): Promise<LupiMcpR
     if (error instanceof RemoteOmolWarmingError) {
       throw new Error(`${error.message} Retry after ${error.retryAfterSeconds} seconds.`);
     }
+    if (error instanceof OmolSlowError) {
+      throw new Error(`${error.message} Retry in a moment.`);
+    }
     throw error;
   }
 
@@ -804,22 +808,36 @@ async function handleBrowseCollection(request: LupiMcpRequest): Promise<LupiMcpR
     coverage: page.coverage,
     indexedRows: page.indexedRows,
     estimatedRows: page.estimatedRows,
+    sourceRows: page.sourceRows ?? null,
     offset: page.offset,
     limit: page.limit,
     returnedRows: page.returnedRows,
     matchedRows: page.matchedRows,
     partial: page.partial,
-    sourceTruth: { coordinates: 'source', bondTopology: 'not-provided' },
-    molecules: page.rows.map(remoteOmolHit).map((hit) => ({
-      id: hit.id,
-      source: hit.source,
-      title: hit.title,
-      subtitle: hit.subtitle,
-      formula: hit.formula,
-      elements: hit.elements,
-      tags: hit.tags,
-      load: hit.load,
-    })),
+    sourceTruth: {
+      coordinates: 'source',
+      bondTopology: 'not-provided',
+      viewerBonds: { recipe: OMOL25_VIEWER_BOND_RECIPE, provenance: 'inferred' },
+    },
+    molecules: page.rows.map((row) => {
+      const hit = remoteOmolHit(row);
+      return {
+        id: hit.id,
+        source: hit.source,
+        title: hit.title,
+        subtitle: hit.subtitle,
+        formula: hit.formula,
+        elements: hit.elements,
+        tags: hit.tags,
+        // Charge and spin come from the record, never ColabFit's multiplicity column.
+        charge: row.charge ?? null,
+        spinMultiplicity: row.spinMultiplicity ?? null,
+        chargeSource: row.chargeSource ?? 'unavailable',
+        domain: row.domain ?? null,
+        homoLumoGapEv: row.homoLumoGapEv ?? null,
+        load: hit.load,
+      };
+    }),
   };
 }
 

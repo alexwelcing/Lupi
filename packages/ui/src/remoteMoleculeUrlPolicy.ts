@@ -1,4 +1,5 @@
 import { EXTERNAL_RESEARCH_DATASETS, externalResearchLoadPath } from '@atlas/core';
+import { OMOL25_COLLECTION_IDS, OMOL25_FEATURED_PATH_RE } from '@atlas/core/omol25';
 
 export type RemoteMoleculeUrlContext = 'mcp' | 'human-load' | 'saved-view';
 
@@ -24,13 +25,7 @@ const GCS_PREFIXES = [
   '/shed-489901-nist-demos/',
   '/shed-489901-omol25/',
 ] as const;
-const OMOL_COLLECTION_IDS = new Set([
-  'neutral-train',
-  'neutral-validation',
-  'all-train-preview',
-  'train-4m-preview',
-  'validation-preview',
-]);
+const OMOL_COLLECTION_IDS = new Set<string>(OMOL25_COLLECTION_IDS);
 const RESEARCH_DATA_PATHS = new Set(EXTERNAL_RESEARCH_DATASETS.map(externalResearchLoadPath));
 const GENERATED_GALLERY_PATHS = new Set([
   '/generated/lupine-wiki/sphere-grid.lammpstrj',
@@ -145,5 +140,7 @@ function isDevelopmentOrTest(): boolean {
 function isTrustedScienceDataUrl(url: URL): boolean {
   if (url.search || url.hash) return false;
   const omol = url.pathname.match(/^\/v1\/datasets\/omol25\/([a-z0-9-]+)\/structures\/\d+\.xyz$/);
-  return Boolean(omol && OMOL_COLLECTION_IDS.has(omol[1])) || RESEARCH_DATA_PATHS.has(url.pathname);
+  return Boolean(omol && OMOL_COLLECTION_IDS.has(omol[1]))
+    || OMOL25_FEATURED_PATH_RE.test(url.pathname)
+    || RESEARCH_DATA_PATHS.has(url.pathname);
 }

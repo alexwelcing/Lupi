@@ -4,97 +4,96 @@ import {
   getElementSpec,
   type ExternalResearchDataset,
 } from '@atlas/core';
+import {
+  OMOL25_ATTRIBUTION_URL,
+  OMOL25_CITATION,
+  OMOL25_COLLECTIONS,
+  OMOL25_PAPER_URL,
+  OMOL25_VIEWER_BOND_RECIPE,
+  omolStructurePath,
+  type Omol25CollectionId,
+} from '@atlas/core/omol25';
 
 type JsonRecord = Record<string, unknown>;
 
 export type ScienceDataRouteResult = Response | null;
 
+export interface ScienceDataOptions {
+  fetcher?: typeof fetch;
+  /** Structure cache: undefined uses the Workers default cache when there is one; null disables caching. */
+  cache?: Cache | null;
+  /** Upstream budgets in ms; tests shorten them. */
+  rowsTimeoutMs?: number;
+  structureTimeoutMs?: number;
+}
+
 const HF_DATASET_VIEWER_ORIGIN = 'https://datasets-server.huggingface.co';
 const OMOL_LICENSE = 'CC-BY-4.0';
-const OMOL_ATTRIBUTION_URL = 'https://huggingface.co/collections/colabfit/omol25-open-molecules-2025-colabfit';
-const OMOL_PAPER_URL = 'https://arxiv.org/abs/2505.08762';
 const OMOL_MAX_PAGE_SIZE = 36;
 const OMOL_MAX_ATOMS = 1_000;
 const MAX_EXTERNAL_RESEARCH_BYTES = 16 * 1024 * 1024;
+// The browser gives up at 20 s; answer well before it with an explicit state.
+export const OMOL_ROWS_TIMEOUT_MS = 9_000;
+export const OMOL_STRUCTURE_TIMEOUT_MS = 12_000;
+/** Bump when the structure XYZ text changes, so cached copies are not served. */
+export const OMOL_XYZ_CACHE_VERSION = 'omol25-xyz-v2';
+const OMOL_XYZ_CACHE_ORIGIN = 'https://science-cache.lupi.live';
 
 export interface OmolDatasetDefinition {
-  id: string;
+  id: Omol25CollectionId;
   label: string;
   dataset: string;
   config: string;
   split: string;
   indexedRows: number;
+  /** Hugging Face's estimate; understates the larger repositories (see sourceRows). */
   estimatedRows: number;
+  sourceRows: number;
   coverage: 'complete' | 'indexed-preview';
   description: string;
 }
 
-/**
- * Public ColabFit conversions of OMol25. The complete neutral splits are the
- * reliable large-scale browsing lane today. Hugging Face's Dataset Viewer has
- * indexed only a bounded window of the broader train/validation repositories,
- * so those entries stay explicitly marked as previews rather than being
- * presented as complete access to the ~83M-system source corpus.
- */
-export const OMOL_DATASETS: readonly OmolDatasetDefinition[] = [
-  {
-    id: 'neutral-train',
-    label: 'Neutral train',
-    dataset: 'colabfit/OMol25_train_neutral',
-    config: 'default',
-    split: 'train',
-    indexedRows: 34_335_828,
-    estimatedRows: 34_335_828,
-    coverage: 'complete',
-    description: 'Complete public neutral training split, streamed one row at a time.',
-  },
-  {
-    id: 'neutral-validation',
-    label: 'Neutral validation',
-    dataset: 'colabfit/OMol25_neutral_validation',
-    config: 'default',
-    split: 'train',
-    indexedRows: 27_697,
-    estimatedRows: 27_697,
-    coverage: 'complete',
-    description: 'Complete public neutral validation split.',
-  },
-  {
-    id: 'all-train-preview',
-    label: 'All train (indexed window)',
-    dataset: 'colabfit/OMol25_train',
-    config: 'default',
-    split: 'train',
-    indexedRows: 841_736,
-    estimatedRows: 65_331_709,
-    coverage: 'indexed-preview',
-    description: 'Hugging Face indexed window of the broader charged + neutral training repository.',
-  },
-  {
-    id: 'train-4m-preview',
-    label: '4M train (indexed window)',
-    dataset: 'colabfit/OMol25_train_4M',
-    config: 'default',
-    split: 'train',
-    indexedRows: 1_000_000,
-    estimatedRows: 2_657_915,
-    coverage: 'indexed-preview',
-    description: 'Hugging Face indexed window of the OMol25 4M training repository.',
-  },
-  {
-    id: 'validation-preview',
-    label: 'Validation (indexed window)',
-    dataset: 'colabfit/OMol25_validation',
-    config: 'default',
-    split: 'train',
-    indexedRows: 800_000,
-    estimatedRows: 1_842_258,
-    coverage: 'indexed-preview',
-    description: 'Hugging Face indexed window of the broader validation repository.',
-  },
-] as const;
+const OMOL_DESCRIPTIONS: Record<Omol25CollectionId, string> = {
+  'neutral-train': 'Complete public neutral training split, streamed one row at a time.',
+  'neutral-validation': 'Complete public neutral validation split.',
+  'all-train-preview': 'Hugging Face indexed window of the broader charged + neutral training repository.',
+  'train-4m-preview': 'Hugging Face indexed window of the OMol25 4M training repository.',
+  'validation-preview': 'Hugging Face indexed window of the broader validation repository.',
+};
 
-const OMOL_DATASET_BY_ID = new Map(OMOL_DATASETS.map((dataset) => [dataset.id, dataset]));
+/**
+ * Public ColabFit conversions of OMol25 (from @atlas/core/omol25). The complete
+ * neutral splits are the reliable large-scale browsing lane today. Hugging
+ * Face's Dataset Viewer has indexed only a bounded window of the broader
+ * train/validation repositories, so those entries stay explicitly marked as
+ * previews rather than being presented as complete access to the source corpus.
+ */
+export const OMOL_DATASETS: readonly OmolDatasetDefinition[] = OMOL25_COLLECTIONS.map((collection) => ({
+  id: collection.id,
+  label: collection.coverage === 'indexed-preview' ? `${collection.label} (indexed window)` : collection.label,
+  dataset: collection.repo,
+  config: 'default',
+  split: 'train',
+  indexedRows: collection.indexedRows,
+  estimatedRows: collection.hfEstimatedRows,
+  sourceRows: collection.sourceRows,
+  coverage: collection.coverage,
+  description: OMOL_DESCRIPTIONS[collection.id],
+}));
+
+const OMOL_DATASET_BY_ID = new Map<string, OmolDatasetDefinition>(OMOL_DATASETS.map((dataset) => [dataset.id, dataset]));
+
+type OmolChargeSource = 'record' | 'split-definition' | 'unavailable';
+
+/** Charge, spin and domain of a row, with where they came from. */
+interface OmolRecordChemistry {
+  charge: number | null;
+  spinMultiplicity: number | null;
+  chargeSource: OmolChargeSource;
+  domain: string | null;
+  homoLumoGapEv: number | null;
+  metaTruncated: boolean;
+}
 
 interface OmolCompactRow {
   rowIndex: number;
@@ -105,7 +104,15 @@ interface OmolCompactRow {
   reducedFormula: string | null;
   elements: string[];
   atomCount: number;
+  /** ColabFit column, not spin multiplicity (it reads 1 for open-shell records); see spinMultiplicity. */
   multiplicity: number | null;
+  charge: number | null;
+  spinMultiplicity: number | null;
+  chargeSource: OmolChargeSource;
+  domain: string | null;
+  homoLumoGapEv: number | null;
+  /** Present when Hugging Face truncated property_metadata, so charge and spin are unavailable. */
+  metaTruncated?: true;
   method: string | null;
   software: string | null;
   energy: number | null;
@@ -117,7 +124,10 @@ interface OmolCompactRow {
 }
 
 /** Route the public, storage-light scientific data API. */
-export async function routeScienceData(request: Request): Promise<ScienceDataRouteResult> {
+export async function routeScienceData(
+  request: Request,
+  options: ScienceDataOptions = {},
+): Promise<ScienceDataRouteResult> {
   const url = new URL(request.url);
 
   if (url.pathname === '/v1/datasets/omol25') {
@@ -132,7 +142,7 @@ export async function routeScienceData(request: Request): Promise<ScienceDataRou
     if (!isGetOrHead(request)) return methodNotAllowed(['GET', 'HEAD']);
     const dataset = OMOL_DATASET_BY_ID.get(rowsMatch[1]);
     if (!dataset) return jsonResponse({ error: 'Unknown OMol25 collection.' }, { status: 404 });
-    return bodyForMethod(request, await browseOmolRows(url, dataset));
+    return bodyForMethod(request, await browseOmolRows(url, dataset, options));
   }
 
   const structureMatch = url.pathname.match(
@@ -144,7 +154,7 @@ export async function routeScienceData(request: Request): Promise<ScienceDataRou
     if (!dataset) return jsonResponse({ error: 'Unknown OMol25 collection.' }, { status: 404 });
     const rowIndex = parseInteger(structureMatch[2], 'row index', 0, dataset.indexedRows - 1);
     if (rowIndex instanceof Response) return rowIndex;
-    return bodyForMethod(request, await omolXyzResponse(dataset, rowIndex));
+    return bodyForMethod(request, await omolXyzResponse(dataset, rowIndex, options));
   }
 
   if (url.pathname === '/v1/datasets/research') {
@@ -316,11 +326,14 @@ function omolManifest() {
     sourceAccess: 'gated',
     publicConversion: 'ColabFit Exchange',
     license: OMOL_LICENSE,
-    attributionUrl: OMOL_ATTRIBUTION_URL,
-    paperUrl: OMOL_PAPER_URL,
+    attributionUrl: OMOL25_ATTRIBUTION_URL,
+    paperUrl: OMOL25_PAPER_URL,
+    citation: OMOL25_CITATION,
     sourceTruth: {
       coordinates: 'OMol25 source coordinates',
-      bondTopology: 'not provided; any viewer bonds are display inference',
+      bondTopology: 'not provided; viewer bonds are Lupi\'s labelled inference',
+      chargeAndSpin: 'property_metadata where the split has it (record); neutral-train by split definition',
+      viewerBonds: { recipe: OMOL25_VIEWER_BOND_RECIPE, provenance: 'inferred' },
     },
     browserContract: {
       maxRowsPerRequest: OMOL_MAX_PAGE_SIZE,
@@ -334,13 +347,14 @@ function omolManifest() {
       repository: dataset.dataset,
       indexedRows: dataset.indexedRows,
       estimatedRows: dataset.estimatedRows,
+      sourceRows: dataset.sourceRows,
       coverage: dataset.coverage,
       rowsUrl: `/v1/datasets/omol25/${dataset.id}/rows`,
     })),
   };
 }
 
-async function browseOmolRows(url: URL, dataset: OmolDatasetDefinition): Promise<Response> {
+async function browseOmolRows(url: URL, dataset: OmolDatasetDefinition, options: ScienceDataOptions): Promise<Response> {
   const offset = parseInteger(url.searchParams.get('offset') ?? '0', 'offset', 0, dataset.indexedRows - 1);
   if (offset instanceof Response) return offset;
   const requestedLimit = parseInteger(
@@ -371,10 +385,10 @@ async function browseOmolRows(url: URL, dataset: OmolDatasetDefinition): Promise
   if (query) upstream.searchParams.set('query', query);
   if (formula) upstream.searchParams.set('where', `"chemical_formula_hill"='${formula}'`);
 
-  const upstreamResponse = await fetch(upstream, {
-    headers: { accept: 'application/json', 'user-agent': 'Lupi/OMol25-edge' },
-  });
-  const payload = await readJsonObject(upstreamResponse);
+  const timeoutMs = options.rowsTimeoutMs ?? OMOL_ROWS_TIMEOUT_MS;
+  const fetched = await fetchUpstreamJson(upstream, timeoutMs, options);
+  if (typeof fetched === 'string') return upstreamUnavailable(fetched, dataset, timeoutMs);
+  const { response: upstreamResponse, payload } = fetched;
   if (!upstreamResponse.ok) return upstreamFailure(upstreamResponse, payload, dataset);
 
   const sourceRows = Array.isArray(payload.rows) ? payload.rows : [];
@@ -390,6 +404,7 @@ async function browseOmolRows(url: URL, dataset: OmolDatasetDefinition): Promise
     coverage: dataset.coverage,
     indexedRows: dataset.indexedRows,
     estimatedRows: dataset.estimatedRows,
+    sourceRows: dataset.sourceRows,
     offset,
     limit,
     returnedRows: rows.length,
@@ -400,16 +415,32 @@ async function browseOmolRows(url: URL, dataset: OmolDatasetDefinition): Promise
     rows,
     provenance: {
       license: OMOL_LICENSE,
-      attributionUrl: OMOL_ATTRIBUTION_URL,
+      attributionUrl: OMOL25_ATTRIBUTION_URL,
       coordinates: 'source',
       bondTopology: 'not-provided',
+      viewerBonds: { recipe: OMOL25_VIEWER_BOND_RECIPE, provenance: 'inferred' },
     },
   }, {
     headers: scienceHeaders('public, max-age=300, stale-while-revalidate=3600'),
   });
 }
 
-async function omolXyzResponse(dataset: OmolDatasetDefinition, rowIndex: number): Promise<Response> {
+async function omolXyzResponse(
+  dataset: OmolDatasetDefinition,
+  rowIndex: number,
+  options: ScienceDataOptions,
+): Promise<Response> {
+  const cache = options.cache === undefined
+    ? (globalThis as { caches?: { default?: Cache } }).caches?.default ?? null
+    : options.cache;
+  const cacheKey = new Request(
+    `${OMOL_XYZ_CACHE_ORIGIN}/${OMOL_XYZ_CACHE_VERSION}/${dataset.id}/structures/${rowIndex}.xyz`,
+  );
+  if (cache) {
+    const hit = await cache.match(cacheKey).catch(() => null);
+    if (hit) return hit;
+  }
+
   const upstream = new URL('/rows', HF_DATASET_VIEWER_ORIGIN);
   upstream.searchParams.set('dataset', dataset.dataset);
   upstream.searchParams.set('config', dataset.config);
@@ -417,15 +448,23 @@ async function omolXyzResponse(dataset: OmolDatasetDefinition, rowIndex: number)
   upstream.searchParams.set('offset', String(rowIndex));
   upstream.searchParams.set('length', '1');
 
-  const upstreamResponse = await fetch(upstream, {
-    headers: { accept: 'application/json', 'user-agent': 'Lupi/OMol25-edge' },
-  });
-  const payload = await readJsonObject(upstreamResponse);
+  const timeoutMs = options.structureTimeoutMs ?? OMOL_STRUCTURE_TIMEOUT_MS;
+  const fetched = await fetchUpstreamJson(upstream, timeoutMs, options);
+  if (typeof fetched === 'string') return upstreamUnavailable(fetched, dataset, timeoutMs);
+  const { response: upstreamResponse, payload } = fetched;
   if (!upstreamResponse.ok) return upstreamFailure(upstreamResponse, payload, dataset);
 
   const first = Array.isArray(payload.rows) ? payload.rows[0] : undefined;
   if (!isRecord(first) || !isRecord(first.row) || numberOrNull(first.row_idx) !== rowIndex) {
     return jsonResponse({ error: 'OMol25 row was not available from the upstream index.' }, { status: 404 });
+  }
+  const truncated = stringArray(first.truncated_cells);
+  if (truncated.includes('positions') || truncated.includes('atomic_numbers')) {
+    return jsonResponse({
+      error: 'OMol25 row is too large for the Hugging Face Dataset Viewer to return whole: its coordinates were truncated upstream.',
+      dataset: dataset.id,
+      row: rowIndex,
+    }, { status: 502, headers: { 'cache-control': 'no-store' } });
   }
 
   let atomicNumbers: unknown;
@@ -456,32 +495,98 @@ async function omolXyzResponse(dataset: OmolDatasetDefinition, rowIndex: number)
     );
   }
 
-  const formula = stringOrNull(first.row.chemical_formula_hill) ?? `OMol25-${rowIndex}`;
-  const configurationId = compactCommentValue(first.row.configuration_id);
-  const propertyId = compactCommentValue(first.row.property_id);
-  const method = compactCommentValue(first.row.method);
-  const comment = [
-    `OMol25 ${dataset.id} row=${rowIndex}`,
-    `formula=${compactCommentValue(formula) ?? 'unknown'}`,
-    configurationId ? `configuration_id=${configurationId}` : '',
-    propertyId ? `property_id=${propertyId}` : '',
-    method ? `method=${method}` : '',
-    'coordinates=source',
-    'bonds=not-provided',
-    `license=${OMOL_LICENSE}`,
-    `source=${dataset.dataset}`,
-  ].filter(Boolean).join(' | ');
-  const xyz = `${coordinateLines.length}\n${comment}\n${coordinateLines.join('\n')}\n`;
+  const chemistry = omolRecordChemistry(first, first.row, dataset);
+  const xyz = `${coordinateLines.length}\n${omolCommentLine(dataset, rowIndex, first.row, chemistry)}\n${coordinateLines.join('\n')}\n`;
   const headers = scienceHeaders('public, max-age=86400, stale-while-revalidate=604800');
   headers.set('content-type', 'chemical/x-xyz; charset=utf-8');
   headers.set('content-length', String(new TextEncoder().encode(xyz).byteLength));
   headers.set('content-disposition', `inline; filename="omol25-${dataset.id}-${rowIndex}.xyz"`);
   headers.set('x-lupi-coordinate-provenance', 'source');
   headers.set('x-lupi-bond-topology', 'not-provided');
-  return new Response(xyz, { headers });
+  headers.set('x-lupi-charge-provenance', chemistry.chargeSource);
+  headers.set('x-lupi-bond-inference', OMOL25_VIEWER_BOND_RECIPE);
+  const response = new Response(xyz, { headers });
+  if (cache) await cache.put(cacheKey, response.clone()).catch(() => undefined);
+  return response;
 }
 
-function compactOmolRow(entry: unknown, dataset: OmolDatasetDefinition): OmolCompactRow | null {
+/**
+ * The XYZ comment line. Keys and order are a contract with the parser and the
+ * featured-pick builder: values never contain spaces, charge= and
+ * multiplicity= are omitted when unavailable, and there is no Properties=.
+ */
+function omolCommentLine(
+  dataset: Pick<OmolDatasetDefinition, 'id' | 'dataset'>,
+  rowIndex: number,
+  row: JsonRecord,
+  chemistry: OmolRecordChemistry,
+): string {
+  const formula = compactCommentValue(row.chemical_formula_hill) ?? `OMol25-${rowIndex}`;
+  const configurationId = compactCommentValue(row.configuration_id);
+  const propertyId = compactCommentValue(row.property_id);
+  const method = compactCommentValue(row.method);
+  const energy = numberOrNull(row.energy);
+  const maxForce = numberOrNull(row.max_force_norm);
+  const known = chemistry.chargeSource !== 'unavailable';
+  return [
+    `OMol25 ${dataset.id} row=${rowIndex}`,
+    `collection=${dataset.id}`,
+    `formula=${formula}`,
+    configurationId ? `configuration_id=${configurationId}` : '',
+    propertyId ? `property_id=${propertyId}` : '',
+    method ? `method=${method}` : '',
+    known && chemistry.charge !== null ? `charge=${chemistry.charge}` : '',
+    known && chemistry.spinMultiplicity !== null ? `multiplicity=${chemistry.spinMultiplicity}` : '',
+    `charge_source=${chemistry.chargeSource}`,
+    chemistry.domain ? `data_id=${chemistry.domain}` : '',
+    energy !== null ? `energy_eV=${formatCoordinate(energy)}` : '',
+    maxForce !== null ? `max_force_eV_per_A=${formatCoordinate(maxForce)}` : '',
+    chemistry.homoLumoGapEv !== null ? `homo_lumo_gap_eV=${formatCoordinate(chemistry.homoLumoGapEv)}` : '',
+    'coordinates=source',
+    'bonds=not-provided',
+    `license=${OMOL_LICENSE}`,
+    `source=${dataset.dataset}`,
+  ].filter(Boolean).join(' | ');
+}
+
+/**
+ * Charge and spin with their provenance. ColabFit's `multiplicity` column is
+ * not spin (it reads 1 for a Pr triplet), so spin comes only from
+ * property_metadata. neutral-train has no metadata column; the split is
+ * charge-neutral singlets by definition (arXiv:2505.08762 Table 1).
+ */
+function omolRecordChemistry(entry: JsonRecord, row: JsonRecord, dataset: OmolDatasetDefinition): OmolRecordChemistry {
+  if (dataset.id === 'neutral-train') {
+    return { charge: 0, spinMultiplicity: 1, chargeSource: 'split-definition', domain: null, homoLumoGapEv: null, metaTruncated: false };
+  }
+  const unavailable = (metaTruncated: boolean, domain: string | null = null, gap: number | null = null): OmolRecordChemistry => ({
+    charge: null, spinMultiplicity: null, chargeSource: 'unavailable', domain, homoLumoGapEv: gap, metaTruncated,
+  });
+  if (stringArray(entry.truncated_cells).includes('property_metadata')) return unavailable(true);
+  let meta: unknown = row.property_metadata;
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      return unavailable(false);
+    }
+  }
+  if (!isRecord(meta)) return unavailable(false);
+  const domain = typeof meta.data_id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(meta.data_id) ? meta.data_id : null;
+  const gapList = Array.isArray(meta.homo_lumo_gap) ? meta.homo_lumo_gap[0] : meta.homo_lumo_gap;
+  const gap = numberOrNull(gapList);
+  const charge = meta.charge;
+  const spin = meta.spin;
+  if (
+    typeof charge !== 'number' || !Number.isInteger(charge) || Math.abs(charge) > 10
+    || typeof spin !== 'number' || !Number.isInteger(spin) || spin < 1 || spin > 11
+  ) {
+    return unavailable(false, domain, gap);
+  }
+  return { charge, spinMultiplicity: spin, chargeSource: 'record', domain, homoLumoGapEv: gap, metaTruncated: false };
+}
+
+export function compactOmolRow(entry: unknown, dataset: OmolDatasetDefinition): OmolCompactRow | null {
   if (!isRecord(entry) || !isRecord(entry.row)) return null;
   const rowIndex = numberOrNull(entry.row_idx);
   if (rowIndex === null || !Number.isInteger(rowIndex) || rowIndex < 0) return null;
@@ -494,6 +599,7 @@ function compactOmolRow(entry: unknown, dataset: OmolDatasetDefinition): OmolCom
   const names = stringArray(row.names);
   const atomCount = numberOrNull(row.nsites) ?? (Array.isArray(row.positions) ? row.positions.length : 0);
   const elements = stringArray(row.elements);
+  const chemistry = omolRecordChemistry(entry, row, dataset);
   return {
     rowIndex,
     id: configurationId ?? propertyId ?? `${dataset.id}-${rowIndex}`,
@@ -504,12 +610,18 @@ function compactOmolRow(entry: unknown, dataset: OmolDatasetDefinition): OmolCom
     elements,
     atomCount,
     multiplicity: numberOrNull(row.multiplicity),
+    charge: chemistry.charge,
+    spinMultiplicity: chemistry.spinMultiplicity,
+    chargeSource: chemistry.chargeSource,
+    domain: chemistry.domain,
+    homoLumoGapEv: chemistry.homoLumoGapEv,
+    ...(chemistry.metaTruncated ? { metaTruncated: true as const } : {}),
     method: stringOrNull(row.method),
     software: stringOrNull(row.software),
     energy: numberOrNull(row.energy),
     maxForceNorm: numberOrNull(row.max_force_norm),
     name: names[0] ?? null,
-    loadUrl: `/v1/datasets/omol25/${dataset.id}/structures/${rowIndex}.xyz`,
+    loadUrl: omolStructurePath(dataset.id, rowIndex),
     coordinateProvenance: 'source',
     bondTopology: 'not-provided',
   };
@@ -537,13 +649,44 @@ function upstreamFailure(response: Response, payload: JsonRecord, dataset: OmolD
   }, { status: 502, headers: { 'cache-control': 'no-store' } });
 }
 
-async function readJsonObject(response: Response): Promise<JsonRecord> {
+type UpstreamJson = { response: Response; payload: JsonRecord } | 'slow' | 'unreachable';
+
+/** One Dataset Viewer call under a deadline that also covers reading the body. */
+async function fetchUpstreamJson(url: URL, timeoutMs: number, options: ScienceDataOptions): Promise<UpstreamJson> {
+  const fetcher = options.fetcher ?? fetch;
   try {
-    const value: unknown = await response.json();
-    return isRecord(value) ? value : {};
-  } catch {
-    return {};
+    const response = await fetcher(url, {
+      headers: { accept: 'application/json', 'user-agent': 'Lupi/OMol25-edge' },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const text = await response.text();
+    let payload: JsonRecord = {};
+    try {
+      const value: unknown = JSON.parse(text);
+      if (isRecord(value)) payload = value;
+    } catch {
+      // A non-JSON body is reported through the status code below.
+    }
+    return { response, payload };
+  } catch (error) {
+    const name = (error as { name?: unknown } | null)?.name;
+    return name === 'TimeoutError' || name === 'AbortError' ? 'slow' : 'unreachable';
   }
+}
+
+function upstreamUnavailable(kind: 'slow' | 'unreachable', dataset: OmolDatasetDefinition, timeoutMs: number): Response {
+  if (kind === 'slow') {
+    return jsonResponse({
+      error: `The upstream OMol25 dataset service did not answer within ${Math.round(timeoutMs / 1000)} seconds.`,
+      status: 'slow',
+      dataset: dataset.id,
+      timeoutSeconds: timeoutMs / 1000,
+    }, { status: 504, headers: { 'cache-control': 'no-store' } });
+  }
+  return jsonResponse({
+    error: 'The upstream OMol25 dataset service is temporarily unavailable.',
+    dataset: dataset.id,
+  }, { status: 502, headers: { 'cache-control': 'no-store' } });
 }
 
 function parseInteger(value: string, label: string, min: number, max: number): number | Response {
@@ -575,9 +718,10 @@ function cleanFormula(value: string | null): string | null | Response {
   return cleaned;
 }
 
+/** A comment value with no whitespace or `|`, so `key=value` pairs parse as single tokens. */
 function compactCommentValue(value: unknown): string | null {
   const text = stringOrNull(value);
-  return text ? text.replace(/[\r\n|]/g, ' ').slice(0, 180) : null;
+  return text ? text.trim().replace(/[\s|]+/g, '_').slice(0, 180) || null : null;
 }
 
 function formatCoordinate(value: number): string {
