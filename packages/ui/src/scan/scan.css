@@ -478,6 +478,113 @@
   color: var(--home-muted);
   font-size: 0.75rem;
 }
+
+/* The label as a caption strip under the stage (labelPlacement="caption"),
+   so the formed shape is never under text: what it looks like and the
+   model's confidence on one line, Jev's likeness meter and judgments on the
+   next. Single lines that ellipsize, so the strip never changes height. */
+.gist-caption {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 10px 9px;
+  background: #050807;
+  animation: scanMaterialize 420ms ease both;
+}
+.gist-caption p {
+  margin: 0;
+}
+.gist-caption__line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.gist-caption__eyebrow {
+  flex: 0 0 auto;
+  color: var(--sw-accent, var(--home-accent, #d5ef9c));
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.gist-caption__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.15;
+  text-transform: capitalize;
+}
+.gist-caption .scan-inference {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 1px 7px;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--sw-muted, var(--home-muted, #94a3b8));
+}
+.gist-caption__line--meta {
+  align-items: center;
+  font-size: 0.68rem;
+}
+.gist-caption__likeness {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px dashed #ffffff33;
+  border-radius: 6px;
+  color: var(--sw-text, var(--home-text, #f8fafc));
+}
+.gist-caption__likeness > span:last-child {
+  position: relative;
+}
+.gist-caption small {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--sw-muted, var(--home-muted, #94a3b8));
+  font-size: 0.68rem;
+}
+.gist-caption[data-sculpting='true'] .gist-caption__likeness {
+  border-color: #d5ef9c55;
+}
+.gist-caption.is-pending {
+  animation: none;
+}
+.gist-caption.is-pending .gist-caption__eyebrow {
+  color: var(--sw-muted, var(--home-muted, #94a3b8));
+  letter-spacing: 0.08em;
+  line-height: 1.15rem;
+}
+.gist-caption.is-pending .gist-caption__likeness {
+  border-color: #ffffff1f;
+}
+.gist-caption.is-pending .gist-likeness-bar {
+  transform: none;
+  background: linear-gradient(90deg, transparent, #d5ef9c26, transparent);
+  animation: gistCaptionWait 1.6s ease-in-out infinite;
+}
+@keyframes gistCaptionWait {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gist-caption,
+  .gist-caption.is-pending .gist-likeness-bar {
+    animation: none;
+  }
+}
 .scan-demo-links {
   color: var(--home-muted);
   font-size: 0.8125rem;

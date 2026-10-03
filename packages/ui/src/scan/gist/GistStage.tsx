@@ -47,6 +47,15 @@ export interface GistStageProps {
   settled: boolean;
   status: { line: string; elapsedMs: number } | null;
   label: StageLabel | null;
+  /**
+   * Where the label sits: over the stage's bottom-left corner (the scanner,
+   * the desktop switcher), or as a compact caption strip under the stage, so
+   * the formed shape is never under text (the phone switcher, where the stage
+   * is too small to share).
+   */
+  labelPlacement?: 'overlay' | 'caption';
+  /** Caption placement: the line the strip holds while there is no label yet (the shape is still being sketched). */
+  captionPending?: string | null;
   onRenderer?: (renderer: StageRenderer) => void;
 }
 
@@ -76,7 +85,7 @@ function formatMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = null, points = null, spin = 0, active, gist, volume = null, palette = null, settled, status, label, onRenderer }: GistStageProps) {
+export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = null, points = null, spin = 0, active, gist, volume = null, palette = null, settled, status, label, labelPlacement = 'overlay', captionPending = null, onRenderer }: GistStageProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const particles = useRef<GistParticles | null>(null);
   const swirl = useRef<ScanSwirl | null>(null);
@@ -182,7 +191,8 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = nul
   );
 
   const dimmed = active || gist !== null || volume !== null;
-  return (
+  const caption = labelPlacement === 'caption';
+  const stage = (
     <div
       className={`scan-stage gist-stage${active ? ' is-scanning' : ''}${gist || volume ? ' has-gist' : ''}${settled ? ' is-done' : ''}`}
       data-renderer={renderer}
@@ -199,29 +209,93 @@ export function GistStage({ photoUrl, photoWidth, photoHeight, photoPixels = nul
           <span>{formatMs(status.elapsedMs)}</span>
         </div>
       )}
-      {label && (
-        <div className="gist-label" aria-live="polite">
-          <p className="student-eyebrow">
-            Looks like <span className="scan-inference">inferred · {Math.round(label.confidence * 100)}%</span>
-          </p>
-          <strong className="gist-label-text">{label.text}</strong>
-          <div className="gist-likeness" aria-label={label.likeness === null ? 'Jev has not rated the shape yet' : `Jev rates the likeness ${Math.round(label.likeness * 100)}%`}>
-            <span className="gist-likeness-bar" style={{ ['--share' as string]: label.likeness ?? 0 }} aria-hidden="true" />
-            <span>
-              {label.likeness === null
-                ? label.sculpting
-                  ? 'Jev is looking…'
-                  : 'Jev did not rate it'
-                : `reads as ${label.text} · ${Math.round(label.likeness * 100)}% · inferred`}
-            </span>
-          </div>
-          <small>
-            {label.judgments > 0 ? `Jev · ${label.judgments} judgment${label.judgments === 1 ? '' : 's'}` : label.sculpting ? 'Jev · sculpting' : 'Jev · off'}
-            {label.lastMove ? ` · ${moveWords(label.lastMove)}` : ''}
-            {label.sculpting ? ' …' : ''}
-          </small>
-        </div>
-      )}
+      {!caption && label && <GistLabel label={label} />}
+    </div>
+  );
+  if (!caption) return stage;
+  return (
+    <>
+      {stage}
+      {label ? <GistCaption label={label} /> : <GistCaptionPending line={captionPending} />}
+    </>
+  );
+}
+
+function likenessWords(label: StageLabel): string {
+  if (label.likeness !== null) return `reads as ${label.text} · ${Math.round(label.likeness * 100)}%`;
+  return label.sculpting ? 'Jev is looking…' : 'Jev did not rate it';
+}
+
+function judgmentWords(label: StageLabel): string {
+  const head = label.judgments > 0 ? `Jev · ${label.judgments} judgment${label.judgments === 1 ? '' : 's'}` : label.sculpting ? 'Jev · sculpting' : 'Jev · off';
+  return `${head}${label.lastMove ? ` · ${moveWords(label.lastMove)}` : ''}${label.sculpting ? ' …' : ''}`;
+}
+
+/**
+ * The label as a caption strip under the stage: what it looks like and the
+ * model's confidence on one line, Jev's likeness meter and its judgments on
+ * the next. Everything is still marked as inference.
+ */
+function GistCaption({ label }: { label: StageLabel }) {
+  const likenessLabel = label.likeness === null ? 'Jev has not rated the shape yet' : `Jev rates the likeness ${Math.round(label.likeness * 100)}%`;
+  return (
+    <div className="gist-caption" aria-live="polite" data-sculpting={label.sculpting}>
+      <p className="gist-caption__line">
+        <span className="gist-caption__eyebrow">Looks like</span>
+        <strong className="gist-caption__text">{label.text}</strong>
+        <span className="scan-inference">inferred · {Math.round(label.confidence * 100)}%</span>
+      </p>
+      <p className="gist-caption__line gist-caption__line--meta">
+        <span className="gist-caption__likeness" aria-label={likenessLabel}>
+          <span className="gist-likeness-bar" style={{ ['--share' as string]: label.likeness ?? 0 }} aria-hidden="true" />
+          <span>{likenessWords(label)}</span>
+        </span>
+        <small>{judgmentWords(label)}</small>
+      </p>
+    </div>
+  );
+}
+
+/** The caption strip's place, held while the shape is sketched, so the panel does not jump when the label lands. */
+function GistCaptionPending({ line }: { line: string | null }) {
+  return (
+    <div className="gist-caption is-pending" aria-hidden="true">
+      <p className="gist-caption__line">
+        <span className="gist-caption__eyebrow">{line ?? 'Sketching…'}</span>
+      </p>
+      <p className="gist-caption__line gist-caption__line--meta">
+        <span className="gist-caption__likeness">
+          <span className="gist-likeness-bar" aria-hidden="true" />
+          <span>&nbsp;</span>
+        </span>
+      </p>
+    </div>
+  );
+}
+
+/** Everything the intelligence claims about the shape, marked as inference. */
+function GistLabel({ label }: { label: StageLabel }) {
+  return (
+    <div className="gist-label" aria-live="polite">
+      <p className="student-eyebrow">
+        Looks like <span className="scan-inference">inferred · {Math.round(label.confidence * 100)}%</span>
+      </p>
+      <strong className="gist-label-text">{label.text}</strong>
+      <div className="gist-likeness" aria-label={label.likeness === null ? 'Jev has not rated the shape yet' : `Jev rates the likeness ${Math.round(label.likeness * 100)}%`}>
+        <span className="gist-likeness-bar" style={{ ['--share' as string]: label.likeness ?? 0 }} aria-hidden="true" />
+        <span>
+          {label.likeness === null
+            ? label.sculpting
+              ? 'Jev is looking…'
+              : 'Jev did not rate it'
+            : `reads as ${label.text} · ${Math.round(label.likeness * 100)}% · inferred`}
+        </span>
+      </div>
+      <small>
+        {label.judgments > 0 ? `Jev · ${label.judgments} judgment${label.judgments === 1 ? '' : 's'}` : label.sculpting ? 'Jev · sculpting' : 'Jev · off'}
+        {label.lastMove ? ` · ${moveWords(label.lastMove)}` : ''}
+        {label.sculpting ? ' …' : ''}
+      </small>
     </div>
   );
 }
