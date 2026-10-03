@@ -134,17 +134,20 @@ export async function writeMoleculeSite(repoRoot: string, distRoot: string): Pro
   if (!cards && report.cards > 0) report.failures.push('some cards failed to rasterise; pages use the site card');
   const ctx = pageContext(site, { appEntry, warm: viewerChunks(distRoot), cards });
 
+  // Desk models before each page: a page offers AR only when its models exist.
   for (const record of site.records) {
-    fs.writeFileSync(path.join(pagesDir, `${record.id}.html`), moleculePageHtml(site, template, record.id, ctx)!);
-    report.pages += 1;
+    let desk = false;
     try {
-      const desk = await buildDeskModels(record);
-      fs.writeFileSync(path.join(deskDir, `${record.id}.usdz`), desk.usdz);
-      fs.writeFileSync(path.join(deskDir, `${record.id}.glb`), desk.glb);
+      const models = await buildDeskModels(record);
+      fs.writeFileSync(path.join(deskDir, `${record.id}.usdz`), models.usdz);
+      fs.writeFileSync(path.join(deskDir, `${record.id}.glb`), models.glb);
       report.desk += 1;
+      desk = true;
     } catch (error) {
       report.failures.push(`${record.id} desk model: ${(error as Error).message}`);
     }
+    fs.writeFileSync(path.join(pagesDir, `${record.id}.html`), moleculePageHtml(site, template, record.id, { ...ctx, desk })!);
+    report.pages += 1;
   }
   fs.writeFileSync(path.join(pagesDir, 'index.html'), moleculeIndexHtml(site, template, ctx));
   fs.writeFileSync(path.join(pagesDir, 'manifest.json'), `${JSON.stringify(moleculeManifest(site, cards), null, 2)}\n`);

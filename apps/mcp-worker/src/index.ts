@@ -2577,7 +2577,7 @@ async function renderSavedViewShare(request: Request, env: Env) {
         status = 200;
         const manifest = await readMoleculePagesManifest(request, env);
         const page = manifest ? moleculePageForSavedView(asRecord(doc.molecule), manifest) : null;
-        model = buildSavedViewShareModel(slug, doc, publicOrigin, page);
+        model = buildSavedViewShareModel(slug, doc, publicOrigin, page, manifest?.cards === true);
         redirectToApp = true;
       }
     } catch (error) {
@@ -2733,6 +2733,7 @@ function buildSavedViewShareModel(
   doc: Record<string, unknown>,
   publicOrigin: string,
   page: MoleculePageEntry | null = null,
+  cards = false,
 ) {
   const clean = cleanSlug(readString(doc.slug) || slug) || slug;
   const origin = normalizeOrigin(publicOrigin);
@@ -2745,23 +2746,26 @@ function buildSavedViewShareModel(
   const stats = atomCount && atomCount > 0 ? `${new Intl.NumberFormat('en-US').format(Math.round(atomCount))} atoms in ` : '';
   const description = clip(`${prefix}${stats}a browser-shareable Lupi molecular view with a live 3D scene.`, 220);
   const unlisted = readString(doc.visibility) === 'unlisted';
-  const thumbnail = page ? null : savedViewThumbnail(doc);
+  // A view of a gallery molecule unfurls as that molecule's ink card, when the
+  // deploy rasterised the cards (manifest `cards`); otherwise as its own
+  // thumbnail or the site card.
+  const card = page && cards ? page : null;
+  const thumbnail = card ? null : savedViewThumbnail(doc);
   return {
     appUrl: `${origin}/#/view/${encodeURIComponent(clean)}`,
     description,
-    // A view of a gallery molecule unfurls as that molecule's ink card.
-    imageAlt: page
-      ? `Ink illustration of ${page.name} (${page.formula}), ${page.atoms} atoms, drawn from its coordinates on Lupi's sage plate.`
+    imageAlt: card
+      ? `Ink illustration of ${card.name} (${card.formula}), ${card.atoms} atoms, drawn from its coordinates on Lupi's sage plate.`
       : thumbnail ? `${title}: the view as it was saved in the Lupi molecular viewer.` : `${title} in the Lupi molecular viewer.`,
-    imageUrl: page
-      ? `${origin}/og/m/${page.id}.png`
+    imageUrl: card
+      ? `${origin}/og/m/${card.id}.png`
       : thumbnail ? `${origin}/view/${encodeURIComponent(clean)}/card.${thumbnailExtension(thumbnail.mimeType)}` : `${origin}${DEFAULT_SOCIAL_IMAGE}`,
-    imageSize: page
+    imageSize: card
       ? { width: 1200, height: 630 }
       : thumbnail?.width && thumbnail.height ? { width: thumbnail.width, height: thumbnail.height } : null,
-    imageType: page ? 'image/png' : thumbnail ? thumbnail.mimeType : null,
+    imageType: card ? 'image/png' : thumbnail ? thumbnail.mimeType : null,
     // A small captured thumbnail reads better as a summary card than stretched large.
-    twitterCard: page || !thumbnail ? 'summary_large_image' : 'summary',
+    twitterCard: card || !thumbnail ? 'summary_large_image' : 'summary',
     molecule: page ? { name: page.name, formula: page.formula, url: `${origin}/m/${page.id}` } : null,
     pageTitle: `${title} | Lupi`,
     robots: unlisted ? 'noindex,nofollow,max-image-preview:large' : 'index,follow,max-image-preview:large',

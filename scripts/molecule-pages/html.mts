@@ -29,6 +29,8 @@ export interface PageContext {
   warm?: string[];
   /** False when the card PNGs could not be rasterised: og:image falls back to the site card. */
   cards: boolean;
+  /** False when this page's desk models failed to build: no AR button and no model links. */
+  desk?: boolean;
   defaultImage: string;
 }
 
@@ -267,7 +269,7 @@ function bodyMarkup(record: MoleculeRecord, related: MoleculeRecord[], ctx: Page
       : '',
     `<li>Coordinates: <a href="${escapeHtml(record.file)}">${escapeHtml(record.file.split('/').pop() ?? record.file)}</a> <small>SHA-256 ${record.sha256.slice(0, 12)}…</small></li>`,
     record.sheet ? '<li>Room-temperature values: typical handbook figures (CRC Handbook, PubChem), not measured by Lupi.</li>' : '',
-    `<li>3D model: <a href="${desk.usdz}">USDZ</a> · <a href="${desk.glb}" download>GLB</a></li>`,
+    ctx.desk === false ? '' : `<li>3D model: <a href="${desk.usdz}">USDZ</a> · <a href="${desk.glb}" download>GLB</a></li>`,
   ]
     .filter(Boolean)
     .join('');
@@ -287,7 +289,7 @@ function bodyMarkup(record: MoleculeRecord, related: MoleculeRecord[], ctx: Page
     <p class="mp-lede">${escapeHtml(record.description)}</p>
     <div class="mp-verbs">
       <a id="open-3d" class="mp-verb mp-verb--primary" href="${escapeHtml(data.open)}">Open in 3D</a>
-      <button id="desk" class="mp-verb" type="button" hidden>${deskIcon()}Place on your desk</button>
+      ${ctx.desk === false ? '' : `<button id="desk" class="mp-verb" type="button" hidden>${deskIcon()}Place on your desk</button>`}
       <button id="share" class="mp-verb" type="button">${shareIcon()}Share</button>
     </div>
     <p id="share-status" class="mp-status" role="status" aria-live="polite"></p>

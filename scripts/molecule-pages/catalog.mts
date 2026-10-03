@@ -307,11 +307,12 @@ export function buildMoleculeCatalog({ repoRoot, publicDir }: CatalogOptions): M
   const records: MoleculeRecord[] = [];
   for (const entry of gallery) {
     if (!hasMoleculePageEntry(entry)) continue;
+    // The app links every eligible id (pages.ts MOLECULE_PAGE_IDS): a file
+    // that cannot become a page fails the build rather than ship dead links.
     try {
       records.push(buildRecord(entry));
     } catch (error) {
-      // One bad file loses its page, never the deploy.
-      console.warn(`[molecule-pages] skipped ${entry.id}: ${(error as Error).message}`);
+      throw new Error(`[molecule-pages] ${entry.id}: ${(error as Error).message}`);
     }
   }
   return records;
