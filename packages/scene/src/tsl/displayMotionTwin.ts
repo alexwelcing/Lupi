@@ -7,6 +7,10 @@
  * `play` testbed case, which puts probes where the twin says an atom is
  * mid-flight: a GPU that hashed or bit-cast differently (the WebGL2 risk)
  * would miss them. Never used to move anything on screen.
+ *
+ * Scope: the arrival and the ripple. The Play verbs' terms (tug, burst,
+ * heat) are not mirrored yet; with their weights at 0 (the twin's rest
+ * state) the GPU offset equals the twin's.
  */
 import {
   ARRIVAL_MODE,
