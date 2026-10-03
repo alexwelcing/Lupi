@@ -16,6 +16,10 @@
  *                         the Play verbs' toys, driven without a pointer
  *   __lupiPlay.viewInset() → { current, target, occluder }: the phone atom card's
  *                         view shift (CSS px, down), once the viewer registers it
+ *   __lupiPlay.replay()  → Instant Replay: the offered (or last) moment as a tape
+ *                         ({ moment, keys, events, bytes, link }); replay('watch')
+ *                         starts a waiting shared replay; replay('moment') offers
+ *                         the last 4 s as a moment
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -42,7 +46,8 @@ export type PlayDevHookName =
   | 'burst'
   | 'tug'
   | 'heat'
-  | 'viewInset';
+  | 'viewInset'
+  | 'replay';
 
 export interface PlayRigState {
   position: Vec3;
@@ -90,6 +95,7 @@ export interface LupiPlayDevApi {
   tug?: DevHook;
   heat?: DevHook;
   viewInset?: DevHook;
+  replay?: DevHook;
 }
 
 declare global {
@@ -99,8 +105,8 @@ declare global {
 }
 
 const hooks = new Map<PlayDevHookName, DevHook>();
-type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset';
-const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset'];
+type ExposedHookName = 'poke' | 'flick' | 'catch' | 'scatter' | 'stepDetent' | 'burst' | 'tug' | 'heat' | 'viewInset' | 'replay';
+const EXPOSED: ReadonlyArray<ExposedHookName> = ['poke', 'flick', 'catch', 'scatter', 'stepDetent', 'burst', 'tug', 'heat', 'viewInset', 'replay'];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
 

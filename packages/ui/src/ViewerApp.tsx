@@ -93,6 +93,9 @@ import { DevProbe } from './DevProbe';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { emitIntent } from '@atlas/scene';
 import { PlayPill } from './play/PlayPill';
+import { ReplaySheet } from './replay/ReplaySheet';
+import { intakeReplayParam } from './replay/intake';
+import { openReplaySheet } from './replay/actions';
 import { PLAY_VERB_LABEL, playStore, type PlayVerb } from './play/playStore';
 import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
@@ -322,6 +325,8 @@ export function ViewerApp() {
 
   // URL state restore + auto-load
   useEffect(() => {
+    // A shared replay (`?replay=`) is taken first and leaves the address bar.
+    intakeReplayParam();
     const params = new URLSearchParams(window.location.search);
     const intent = recognizeLupiUrlPayload(window.location.href);
     const state = intent?.state ?? params.get('s');
@@ -770,6 +775,7 @@ export function ViewerApp() {
         {file && !isEmbeddedMobileViewer && (
           <PlayPill uiStowed={uiStowed} setUiStowed={setUiStowed} />
         )}
+        {file && !isEmbeddedMobileViewer && <ReplaySheet />}
 
         {!file && !isEmbeddedMobileViewer && (
           <div style={{ position: 'relative', width: '100%', zIndex: 10 }}>
@@ -949,6 +955,16 @@ export function ViewerApp() {
               shortcut: 'P',
               disabled: !file,
               onSelect: () => emitIntent({ type: 'play.toggleTray', source: 'palette' }),
+            },
+            {
+              id: 'play-replay',
+              label: 'Replay the last moment (link and clip)',
+              group: 'Scene',
+              shortcut: 'R',
+              disabled: !file,
+              onSelect: () => {
+                openReplaySheet();
+              },
             },
             {
               id: 'play-reset',

@@ -27,6 +27,13 @@
  * A latched verb auto-unlatches after 30 s without a stroke, press or tap,
  * on a file change and under Motion: Still. While latched the viewport gets
  * a thin lime inset (warm while Heat is held).
+ *
+ * Instant Replay lives in the same pill, as one more segment before stow:
+ * - "Replay ↗" for 7 s after a moment (a good flick, a detent chain, a flip,
+ *   a toy moment); it opens the share sheet (so does R);
+ * - on a shared replay link, the status reads "Shared replay" and the segment
+ *   is "▶ Watch" (Gentle, or before Standard's autoplay) or "Skip" while it
+ *   plays; the end flashes "Your turn · …" (flash kind `turn`).
  */
 import { useCallback, useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { emitIntent, isCanvasInputSourceActive, onIntent } from '@atlas/scene';
@@ -38,6 +45,7 @@ import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { cue } from './feedback';
 import { PLAY_VERB_LABEL, heatKelvin, playStore, playVerbHint, usePlayStore } from './playStore';
 import { PlayTray } from './PlayTray';
+import { isIncomingActive, replayStore, useReplayStore } from '../replay/replayStore';
 import './playPill.css';
 
 export interface PlayPillProps {
@@ -59,7 +67,7 @@ const LONG_FORM_KEY = 'lupi.play.illustrativeSeen';
 const SHORT_LABEL = 'Illustrative';
 const LONG_LABEL = 'Illustrative motion, your atoms haven’t moved';
 
-type StatusKind = 'displaced' | 'flash' | 'teach' | 'empty';
+type StatusKind = 'displaced' | 'flash' | 'replay' | 'teach' | 'empty';
 
 interface PillStatus {
   kind: StatusKind;
@@ -136,10 +144,17 @@ function usePillStatus(teachText: string, stowed: boolean, teachDeadline: number
       markLongFormSeen();
     }
 
+    const replay = replayStore.getState();
+    const shared = isIncomingActive(replay);
+    const sharedPlaying = replay.incoming?.phase === 'playing';
     let desired: PillStatus;
-    if (displaced) desired = { kind: 'displaced', text: h.long ? LONG_LABEL : SHORT_LABEL };
-    else if (!isStowed && play.flash && play.flash.until > t) {
+    if (displaced) {
+      const label = h.long ? LONG_LABEL : SHORT_LABEL;
+      desired = { kind: 'displaced', text: sharedPlaying ? `Shared replay · ${SHORT_LABEL}` : label };
+    } else if (!isStowed && play.flash && play.flash.until > t) {
       desired = { kind: 'flash', text: play.flash.text, flashKind: play.flash.kind };
+    } else if (shared) {
+      desired = { kind: 'replay', text: 'Shared replay' };
     } else if (!isStowed && !play.teachSeen && deadline !== null && t < deadline) {
       desired = { kind: 'teach', text };
     } else desired = EMPTY_STATUS;
@@ -166,6 +181,9 @@ function usePillStatus(teachText: string, stowed: boolean, teachDeadline: number
 
   useEffect(() => {
     const off = playStore.subscribe(() => evaluateRef.current());
+    const offReplay = replayStore.subscribe((state, previous) => {
+      if (state.incoming !== previous.incoming) evaluateRef.current();
+    });
     // Reset puts the atoms home: the label goes with them, no hold.
     const offReset = onIntent('play.reset', () => {
       const h = hold.current;
@@ -176,6 +194,7 @@ function usePillStatus(teachText: string, stowed: boolean, teachDeadline: number
     });
     return () => {
       off();
+      offReplay();
       offReset();
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = null;
@@ -251,6 +270,63 @@ function HeatReadout() {
       </svg>
       <span className="lupi-play-pill__heat-k">{kelvin.toLocaleString('en-US')} K</span>
     </span>
+  );
+}
+
+/**
+ * The replay segment: "Replay ↗" after a moment, "▶ Watch" / "Skip" on a
+ * shared replay. Null when there is nothing to offer.
+ */
+function ReplaySegment() {
+  const comfort = useComfort();
+  const offer = useReplayStore((state) => state.offer);
+  const phase = useReplayStore((state) => state.incoming?.phase ?? null);
+  const sheetOpen = useReplayStore((state) => state.sheet !== null);
+  if (phase === 'waiting') {
+    return (
+      <button
+        type="button"
+        className="lupi-play-pill__replay"
+        data-replay="watch"
+        aria-label="Watch the shared replay"
+        title="Watch the moment that was shared with you"
+        onClick={() => replayStore.getState().setIncomingPhase('playing')}
+      >
+        <span className="lupi-play-pill__replay-icon" aria-hidden="true">▶</span>
+        <span>Watch</span>
+      </button>
+    );
+  }
+  if (phase === 'playing') {
+    return (
+      <button
+        type="button"
+        className="lupi-play-pill__replay"
+        data-replay="skip"
+        aria-label="Skip the shared replay: your turn"
+        title="Skip to your turn (any touch does too)"
+        onClick={() => replayStore.getState().setIncomingPhase('done')}
+      >
+        Skip
+      </button>
+    );
+  }
+  if (!offer || sheetOpen) return null;
+  // Still sends a still pose link and makes no clip: the offer says Share.
+  const still = comfort === 'still';
+  return (
+    <button
+      key={offer.id}
+      type="button"
+      className="lupi-play-pill__replay"
+      data-replay="offer"
+      aria-label={still ? 'Share this view as a link (R)' : `Replay ${offer.noun}: share a live link and a clip (R)`}
+      title={still ? 'Share this view: a link that opens at this pose (R)' : 'Share that moment: a live link and a 9:16 clip (R)'}
+      onClick={() => replayStore.getState().openSheet(offer)}
+    >
+      <span>{still ? 'Share' : 'Replay'}</span>
+      <span className="lupi-play-pill__replay-icon" aria-hidden="true">↗</span>
+    </button>
   );
 }
 
@@ -497,6 +573,8 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
           </>
         )}
       </div>
+
+      {!uiStowed && <ReplaySegment />}
 
       <button
         type="button"

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { emitIntent } from '@atlas/scene';
 import { useStore } from '../store';
+import { openReplaySheet } from '../replay/actions';
 
 export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPaletteOpen: (open: boolean) => void) {
   useEffect(() => {
@@ -49,6 +50,11 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
       }
       if (e.key.toLowerCase() === 'p' && currentFile && noModifiers && !e.shiftKey) {
         emitIntent({ type: 'play.toggleTray', source: 'key' });
+      }
+      // R: Instant Replay of the last moment (or this view, as a still link).
+      if (e.key.toLowerCase() === 'r' && currentFile && noModifiers && !e.shiftKey && !state.activePanel) {
+        e.preventDefault();
+        openReplaySheet();
       }
       if (e.key === 'Escape') {
         state.setActivePanel(null);

@@ -46,6 +46,7 @@ import { CameraFocus } from '../CameraFocus';
 import { PlayLayer } from '../play/PlayLayer';
 import { AtomGlowDriver } from '../play/AtomGlowDriver';
 import { CameraToys } from '../camera/CameraToys';
+import { ReplayDirector } from '../replay/ReplayDirector';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
 import { ViewInsetDriver } from '../camera/ViewInsetDriver';
 import { markCanvasSelection } from '../camera/selectionSource';
@@ -799,6 +800,7 @@ export function ViewerScene({
             enabled={!transmissionActive}
           />
           <CameraToys frame={currentFrame} />
+          <ReplayDirector frame={currentFrame} center={center} />
           <AtomTrails
             frame={currentFrame}
             frameKey={interpolatedFrameKey}
