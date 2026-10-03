@@ -168,6 +168,18 @@ html.mp-js .mp-caption__hint:not([data-hidden]) {
   opacity: 0;
   transform: translateY(3px);
 }
+.mp-caption__flash {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mp-face {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
 .mp-caption__flash[data-on] {
   opacity: 1;
   transform: none;
@@ -429,6 +441,25 @@ html[data-opening] .mp-verb--primary {
 .mp-index h1 {
   margin: 8px 0 6px;
   font: 400 clamp(2rem, 5vw, 3rem) / 1.1 var(--mp-serif);
+}
+.mp-index input[type='search'] {
+  width: min(100%, 420px);
+  min-height: 44px;
+  margin: 0 0 4px;
+  padding: 0 14px;
+  border: 1px solid var(--mp-line);
+  border-radius: 999px;
+  background: var(--mp-plate-2);
+  color: var(--mp-ink);
+  font: 400 1rem/1 var(--mp-sans);
+}
+.mp-index input[type='search']:focus-visible {
+  outline: 2px solid var(--mp-lime);
+  outline-offset: 2px;
+}
+.mp-index input[hidden],
+.mp-index [hidden] {
+  display: none;
 }
 .mp-index > p {
   margin: 0 0 24px;

@@ -213,6 +213,28 @@ function shareIcon(): string {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
 }
 
+/**
+ * One observation to make with the drawing: the student collection's prompt,
+ * else one read off the drawing's own detents (what the turn will click onto).
+ */
+function tryThis(record: MoleculeRecord): string | null {
+  if (record.prompt) return record.prompt;
+  const labels = record.model.detents.map((d) => d.label);
+  const ring = labels.find((label) => /face-on/.test(label) && !/^Face-on/.test(label));
+  if (ring) {
+    const polygon = ring.split(' ')[0];
+    const named = polygon === 'Ring' ? 'a ring' : `a ${polygon.toLowerCase()}`;
+    return `Turn the drawing until it clicks with ${named} facing you. Then open it in 3D and find the same ring.`;
+  }
+  if (labels.some((label) => label.startsWith('Face-on'))) {
+    return 'Turn it edge-on, then face-on: every atom lies in one plane. Does the 3D view agree?';
+  }
+  if (labels.length >= 2) {
+    return `Flick the drawing: it settles on the ${labels.length} views that line up with its principal axes. Which one shows the most atoms?`;
+  }
+  return null;
+}
+
 export function moleculePageData(record: MoleculeRecord, ctx: PageContext): MoleculePageData {
   const desk = moleculeDeskPaths(record.id);
   return {
@@ -271,8 +293,8 @@ function bodyMarkup(record: MoleculeRecord, related: MoleculeRecord[], ctx: Page
     <p id="share-status" class="mp-status" role="status" aria-live="polite"></p>
   </section>
   ${
-    record.prompt
-      ? `<section class="mp-section" aria-labelledby="mp-try"><h2 id="mp-try">Try this</h2><p class="mp-try">${escapeHtml(record.prompt)}</p></section>`
+    tryThis(record)
+      ? `<section class="mp-section" aria-labelledby="mp-try"><h2 id="mp-try">Try this</h2><p class="mp-try">${escapeHtml(tryThis(record)!)}</p></section>`
       : ''
   }
   <section class="mp-section" aria-labelledby="mp-facts">
@@ -363,6 +385,8 @@ export function renderIndexPage(template: string, records: MoleculeRecord[], ctx
 <main id="main" class="mp-main mp-index">
   <h1>Molecules in 3D</h1>
   <p>Every molecule here is drawn from its own coordinate file. Spin the drawing, read the facts, then open the live 3D view, or place it on your desk from a phone.</p>
+  <input id="mp-filter" type="search" placeholder="Filter by name or formula" aria-label="Filter molecules" autocomplete="off" spellcheck="false" hidden />
+  <p id="mp-filter-status" class="mp-status" role="status" aria-live="polite"></p>
   ${sections}
 </main>
 ${footer()}`;

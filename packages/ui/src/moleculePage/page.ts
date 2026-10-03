@@ -116,7 +116,63 @@ function openQuickLook(data: MoleculePageData): void {
   setTimeout(() => anchor.remove(), 1000);
 }
 
+const POLYGON_SIDES: Record<string, number> = {
+  Triangle: 3,
+  Square: 4,
+  Pentagon: 5,
+  Hexagon: 6,
+  Heptagon: 7,
+  Octagon: 8,
+};
+
+/** A small outline of the ring face a detent names ("Hexagon face-on …"), as the home hero shows. */
+function faceMark(label: string): SVGSVGElement | null {
+  const sides = POLYGON_SIDES[label.split(' ')[0]];
+  if (!sides) return null;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 14 14');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'mp-face');
+  const polygon = document.createElementNS(ns, 'polygon');
+  const points: string[] = [];
+  for (let i = 0; i < sides; i += 1) {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / sides;
+    points.push(`${(7 + 5.6 * Math.cos(a)).toFixed(2)},${(7 + 5.6 * Math.sin(a)).toFixed(2)}`);
+  }
+  polygon.setAttribute('points', points.join(' '));
+  svg.appendChild(polygon);
+  return svg;
+}
+
+/** The index (/m/): a filter over the tiles, by name or formula. */
+function mountIndexFilter(): void {
+  const input = document.getElementById('mp-filter') as HTMLInputElement | null;
+  const status = document.getElementById('mp-filter-status');
+  if (!input) return;
+  const tiles = Array.from(document.querySelectorAll<HTMLLIElement>('.mp-index li'));
+  const sections = Array.from(document.querySelectorAll<HTMLElement>('.mp-index section'));
+  const text = tiles.map((tile) => (tile.textContent ?? '').toLowerCase());
+  input.hidden = false;
+  input.addEventListener('input', () => {
+    const query = input.value.trim().toLowerCase();
+    let shown = 0;
+    tiles.forEach((tile, i) => {
+      const match = !query || text[i].includes(query);
+      tile.hidden = !match;
+      if (match) shown += 1;
+    });
+    for (const section of sections) {
+      section.hidden = !section.querySelector('li:not([hidden])');
+    }
+    if (status) status.textContent = query ? `${shown} of ${tiles.length}` : '';
+  });
+}
+
 export function mountMoleculePage(): void {
+  mountIndexFilter();
   const data = readData();
   const host = document.getElementById('ink-stage');
   if (!data || !host) return;
@@ -151,7 +207,10 @@ export function mountMoleculePage(): void {
 
   const showFlash = (label: string) => {
     if (!flash || !hint) return;
-    flash.textContent = label;
+    flash.replaceChildren();
+    const mark = faceMark(label);
+    if (mark) flash.appendChild(mark);
+    flash.appendChild(document.createTextNode(label));
     flash.dataset.on = '';
     hint.dataset.hidden = '';
     if (live) live.textContent = label;
