@@ -637,6 +637,7 @@ export async function handleRequest(
     }
 
     if (url.pathname.startsWith('/view/')) {
+      if (SAVED_VIEW_CARD_PATH.test(url.pathname)) return withCors(await serveSavedViewCard(request, env), cors);
       return withCors(await renderSavedViewShare(request, env), cors);
     }
 
@@ -2422,6 +2423,62 @@ function sanitizeAnalyticsEvent(raw: unknown): Record<string, unknown> | null {
   });
 }
 
+/** `/view/<slug>/card.jpg`: the picture the viewer captured when the view was saved. */
+const SAVED_VIEW_CARD_PATH = /^\/view\/[^/?#]+\/card\.(jpe?g|png|webp)$/i;
+const MAX_SAVED_VIEW_CARD_BYTES = 512 * 1024;
+
+interface SavedViewThumbnailBytes {
+  bytes: Uint8Array;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+}
+
+/** The saved view's stored thumbnail (a small data URL in the Firestore doc), decoded; null when absent or unusable. */
+function savedViewThumbnail(doc: Record<string, unknown>): SavedViewThumbnailBytes | null {
+  const thumbnail = asRecord(doc.thumbnail);
+  const dataUrl = readString(thumbnail?.dataUrl);
+  const match = dataUrl?.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match || match[2].length > Math.ceil((MAX_SAVED_VIEW_CARD_BYTES * 4) / 3)) return null;
+  try {
+    const bytes = base64ToUint8Array(match[2]);
+    if (bytes.byteLength === 0) return null;
+    const dimension = (value: unknown) => {
+      const number = readNumber(value);
+      return number && number > 0 && number <= 8192 ? Math.round(number) : null;
+    };
+    return { bytes, mimeType: match[1], width: dimension(thumbnail?.width), height: dimension(thumbnail?.height) };
+  } catch {
+    return null;
+  }
+}
+
+async function serveSavedViewCard(request: Request, env: Env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } });
+  }
+  const slug = savedViewSlugFromPath(new URL(request.url).pathname);
+  const notFound = () => new Response('Not found', { status: 404, headers: { 'cache-control': 'no-cache' } });
+  if (!slug) return notFound();
+  try {
+    const doc = await readSavedViewDoc(slug, env);
+    if (!doc || (doc.visibility !== 'public' && doc.visibility !== 'unlisted')) return notFound();
+    const thumbnail = savedViewThumbnail(doc);
+    if (!thumbnail) return notFound();
+    const headers = new Headers({
+      'content-type': thumbnail.mimeType,
+      'content-length': String(thumbnail.bytes.byteLength),
+      'cache-control': 'public, max-age=300, s-maxage=3600',
+      'x-robots-tag': 'noindex',
+    });
+    if (request.method === 'HEAD') return new Response(null, { status: 200, headers });
+    return new Response(thumbnail.bytes as unknown as BodyInit, { status: 200, headers });
+  } catch (error) {
+    console.error('lupi_view_card_failed', JSON.stringify({ slug, error: error instanceof Error ? error.message : String(error) }));
+    return new Response('Card unavailable', { status: 502, headers: { 'cache-control': 'no-cache' } });
+  }
+}
+
 async function renderSavedViewShare(request: Request, env: Env) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } });
@@ -2590,6 +2647,10 @@ function moleculePageForSavedView(
 
 type SavedViewShareModel = ReturnType<typeof buildSavedViewShareModel>;
 
+function thumbnailExtension(mimeType: string): string {
+  return mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+}
+
 function buildSavedViewShareModel(
   slug: string,
   doc: Record<string, unknown>,
@@ -2607,15 +2668,23 @@ function buildSavedViewShareModel(
   const stats = atomCount && atomCount > 0 ? `${new Intl.NumberFormat('en-US').format(Math.round(atomCount))} atoms in ` : '';
   const description = clip(`${prefix}${stats}a browser-shareable Lupi molecular view with a live 3D scene.`, 220);
   const unlisted = readString(doc.visibility) === 'unlisted';
+  const thumbnail = page ? null : savedViewThumbnail(doc);
   return {
     appUrl: `${origin}/#/view/${encodeURIComponent(clean)}`,
     description,
     // A view of a gallery molecule unfurls as that molecule's ink card.
     imageAlt: page
       ? `Ink illustration of ${page.name} (${page.formula}), ${page.atoms} atoms, drawn from its coordinates on Lupi's sage plate.`
-      : `${title} in the Lupi molecular viewer.`,
-    imageUrl: page ? `${origin}/og/m/${page.id}.png` : `${origin}${DEFAULT_SOCIAL_IMAGE}`,
-    imageSize: page ? { width: 1200, height: 630 } : null,
+      : thumbnail ? `${title}: the view as it was saved in the Lupi molecular viewer.` : `${title} in the Lupi molecular viewer.`,
+    imageUrl: page
+      ? `${origin}/og/m/${page.id}.png`
+      : thumbnail ? `${origin}/view/${encodeURIComponent(clean)}/card.${thumbnailExtension(thumbnail.mimeType)}` : `${origin}${DEFAULT_SOCIAL_IMAGE}`,
+    imageSize: page
+      ? { width: 1200, height: 630 }
+      : thumbnail?.width && thumbnail.height ? { width: thumbnail.width, height: thumbnail.height } : null,
+    imageType: page ? 'image/png' : thumbnail ? thumbnail.mimeType : null,
+    // A small captured thumbnail reads better as a summary card than stretched large.
+    twitterCard: page || !thumbnail ? 'summary_large_image' : 'summary',
     molecule: page ? { name: page.name, formula: page.formula, url: `${origin}/m/${page.id}` } : null,
     pageTitle: `${title} | Lupi`,
     robots: unlisted ? 'noindex,nofollow,max-image-preview:large' : 'index,follow,max-image-preview:large',
@@ -2633,6 +2702,8 @@ function buildMissingViewShareModel(slug: string, publicOrigin: string): SavedVi
     imageAlt: 'Lupi molecular viewer title card from Lupine Science.',
     imageUrl: `${origin}${DEFAULT_SOCIAL_IMAGE}`,
     imageSize: null,
+    imageType: null,
+    twitterCard: 'summary_large_image',
     molecule: null,
     pageTitle: 'Lupi saved view not found',
     robots: 'noindex,nofollow,max-image-preview:large',
@@ -2668,12 +2739,12 @@ function renderSavedViewShareHtml(model: SavedViewShareModel, redirectToApp: boo
   <meta property="og:title" content="${escapeHtml(model.title)}">
   <meta property="og:description" content="${escapeHtml(model.description)}">
   <meta property="og:url" content="${escapeHtml(model.shareUrl)}">
-  <meta property="og:image" content="${escapeHtml(model.imageUrl)}">${model.imageSize ? `
-  <meta property="og:image:type" content="image/png">
+  <meta property="og:image" content="${escapeHtml(model.imageUrl)}">${model.imageType ? `
+  <meta property="og:image:type" content="${escapeHtml(model.imageType)}">` : ''}${model.imageSize ? `
   <meta property="og:image:width" content="${model.imageSize.width}">
   <meta property="og:image:height" content="${model.imageSize.height}">` : ''}
   <meta property="og:image:alt" content="${escapeHtml(model.imageAlt)}">
-  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:card" content="${escapeHtml(model.twitterCard)}">
   <meta name="twitter:title" content="${escapeHtml(model.title)}">
   <meta name="twitter:description" content="${escapeHtml(model.description)}">
   <meta name="twitter:image" content="${escapeHtml(model.imageUrl)}">
