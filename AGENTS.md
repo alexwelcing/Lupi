@@ -27,6 +27,11 @@ Core endpoints:
   HTML written by the web build (`scripts/generate-molecule-pages.mts`) with
   per-molecule Open Graph cards (`/og/m/<id>.png`), ink drawings
   (`/og/m/<id>-ink.svg`) and desk models (`/ar/<id>.usdz`, `/ar/<id>.glb`)
+- `GET /daily/`, `GET /daily/:date`, `GET /daily/text` — Lupi Daily, the
+  zero-canvas mystery-molecule game (static HTML written by the web build,
+  `scripts/generate-daily-pages.mts`), with sealed puzzle files
+  (`/daily/p/<token>.json`), the guess pool and per-day silhouette cards
+  (`/og/daily/<date>.jpg`) that never name the answer (see `docs/daily.md`)
 - `POST /collectAnalytics` — first-party analytics edge collector
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
