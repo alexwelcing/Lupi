@@ -1,5 +1,5 @@
 import { OMOL25_NEUTRAL_ELEMENTS, omol25Collection } from './collections';
-import { OMOL25_CITATION, OMOL25_VIEWER_BOND_RECIPE } from './truth';
+import { OMOL25_CITATION, OMOL25_VIEWER_BOND_RECIPE, omolGeometryState } from './truth';
 import { omolFeaturedPath, omolPickInkPath, omolPickKey, omolStructurePath } from './urls';
 
 export const OMOL25_FEATURED_SCHEMA = 'lupi.omol25-featured.v1' as const;
@@ -77,8 +77,21 @@ export interface OmolShelfPick {
   domainLabel: string;
   charge: number;
   spinMultiplicity: number;
+  /** Largest atom force (eV/Å), shortened to the digits `omolGeometryState` reads. */
+  maxForceEvPerA: number | null;
   file: string;
   ink: string;
+}
+
+/** A largest force at the fewest decimals (two or more) that `omolGeometryState` reads the same. */
+export function omolShelfForce(force: number | null): number | null {
+  if (force === null || !Number.isFinite(force)) return null;
+  const state = omolGeometryState(force);
+  for (let digits = 2; digits <= 12; digits += 1) {
+    const short = Number(force.toFixed(digits));
+    if (omolGeometryState(short) === state) return short;
+  }
+  return force;
 }
 
 export function omolShelfPick(pick: OmolFeaturedPickV1): OmolShelfPick {
@@ -93,6 +106,7 @@ export function omolShelfPick(pick: OmolFeaturedPickV1): OmolShelfPick {
     domainLabel: pick.domainLabel,
     charge: pick.charge,
     spinMultiplicity: pick.spinMultiplicity,
+    maxForceEvPerA: omolShelfForce(pick.maxForceEvPerA),
     file: pick.xyz,
     ink: pick.ink,
   };
@@ -229,6 +243,10 @@ export function validateOmolShelfPicks(value: unknown): string[] {
     if (!isText(pick.domainLabel)) fail('domainLabel must be non-empty text');
     if (!Number.isInteger(pick.charge)) fail('charge must be an integer');
     if (!Number.isInteger(pick.spinMultiplicity) || (pick.spinMultiplicity as number) < 1) fail('spinMultiplicity must be a positive integer');
+    const force = pick.maxForceEvPerA;
+    if (force !== null && !(typeof force === 'number' && Number.isFinite(force) && force >= 0)) {
+      fail('maxForceEvPerA must be null or a non-negative number');
+    }
     if (pick.file !== omolFeaturedPath(row)) fail(`file must be ${omolFeaturedPath(row)}`);
     if (pick.ink !== omolPickInkPath(row)) fail(`ink must be ${omolPickInkPath(row)}`);
   });

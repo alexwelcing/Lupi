@@ -280,17 +280,18 @@ export interface OmolPick {
   domainLabel: string;
   charge: number;
   spinMultiplicity: number;
+  maxForceEvPerA: number | null;
   file: string;
   ink: string;
 }
 
-type Row = readonly [row: number, title: string | null, formula: string, atoms: number, shelf: string, home: 0 | 1, domainLabel: string, charge: number, spinMultiplicity: number];
+type Row = readonly [row: number, title: string | null, formula: string, atoms: number, shelf: string, home: 0 | 1, domainLabel: string, charge: number, spinMultiplicity: number, maxForceEvPerA: number | null];
 
 const ROWS: readonly Row[] = [`;
 
 const SHELF_DATA_TAIL = `];
 
-export const OMOL_PICKS: readonly OmolPick[] = ROWS.map(([row, title, formula, atoms, shelf, home, domainLabel, charge, spinMultiplicity]) => ({
+export const OMOL_PICKS: readonly OmolPick[] = ROWS.map(([row, title, formula, atoms, shelf, home, domainLabel, charge, spinMultiplicity, maxForceEvPerA]) => ({
   id: \`omol25_nv_\${row}\`,
   title: title ?? formula,
   formula,
@@ -301,13 +302,14 @@ export const OMOL_PICKS: readonly OmolPick[] = ROWS.map(([row, title, formula, a
   domainLabel,
   charge,
   spinMultiplicity,
+  maxForceEvPerA,
   file: \`/datasets/omol25/featured/omol25_nv_\${row}.xyz\`,
   ink: \`/og/omol25/omol25_nv_\${row}-ink.svg\`,
 }));
 `;
 
 /** The same expansion the generated module runs, so the build can prove it equals omolShelfPick. */
-function expandShelfRow([row, title, formula, atoms, shelf, home, domainLabel, charge, spinMultiplicity]) {
+function expandShelfRow([row, title, formula, atoms, shelf, home, domainLabel, charge, spinMultiplicity, maxForceEvPerA]) {
   return {
     id: `omol25_nv_${row}`,
     title: title ?? formula,
@@ -319,6 +321,7 @@ function expandShelfRow([row, title, formula, atoms, shelf, home, domainLabel, c
     domainLabel,
     charge,
     spinMultiplicity,
+    maxForceEvPerA,
     file: `/datasets/omol25/featured/omol25_nv_${row}.xyz`,
     ink: `/og/omol25/omol25_nv_${row}-ink.svg`,
   };
@@ -327,7 +330,7 @@ function expandShelfRow([row, title, formula, atoms, shelf, home, domainLabel, c
 function shelfDataSource(picks) {
   const rows = picks.map((p) => {
     const shelf = omol.omolShelfPick(p);
-    const row = [p.row, shelf.title === shelf.formula ? null : shelf.title, shelf.formula, shelf.atoms, shelf.shelf, shelf.home ? 1 : 0, shelf.domainLabel, shelf.charge, shelf.spinMultiplicity];
+    const row = [p.row, shelf.title === shelf.formula ? null : shelf.title, shelf.formula, shelf.atoms, shelf.shelf, shelf.home ? 1 : 0, shelf.domainLabel, shelf.charge, shelf.spinMultiplicity, shelf.maxForceEvPerA];
     if (JSON.stringify(expandShelfRow(row)) !== JSON.stringify(shelf)) {
       throw new Error(`${p.id}: the compact landing row does not expand to its shelf pick.`);
     }

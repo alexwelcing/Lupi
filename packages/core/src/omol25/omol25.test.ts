@@ -19,6 +19,7 @@ import {
   omolFeaturedCoverage,
   omolGeometryState,
   omolPickKey,
+  omolShelfForce,
   omolShelfPick,
   omolSpinWord,
   omolStructurePath,
@@ -193,12 +194,25 @@ describe('featured picks contract', () => {
       domainLabel: 'OrbNet Denali',
       charge: 0,
       spinMultiplicity: 1,
+      maxForceEvPerA: 3.08,
       file: '/datasets/omol25/featured/omol25_nv_273.xyz',
       ink: '/og/omol25/omol25_nv_273-ink.svg',
     });
     expect(validateOmolShelfPicks([shelf])).toEqual([]);
     expect(validateOmolShelfPicks([])).toEqual([]);
     expect(validateOmolShelfPicks([{ ...shelf, file: '/elsewhere.xyz' }])).toHaveLength(1);
+    expect(validateOmolShelfPicks([{ ...shelf, maxForceEvPerA: -1 }])).toHaveLength(1);
+    expect(validateOmolShelfPicks([{ ...shelf, maxForceEvPerA: null }])).toEqual([]);
+  });
+
+  it('shortens a pick force only as far as its geometry state reads the same', () => {
+    for (const force of [3.0829408336136006, 0.358911779552, 48.9453305232, 0.4999, 0.49999999, 0.5, 1.1499, 0]) {
+      const short = omolShelfForce(force)!;
+      expect(omolGeometryState(short), String(force)).toBe(omolGeometryState(force));
+    }
+    expect(omolShelfForce(0.358911779552)).toBe(0.36);
+    expect(omolShelfForce(0.4999)).toBe(0.4999);
+    expect(omolShelfForce(null)).toBeNull();
   });
 
   it('reports element and shelf coverage', () => {

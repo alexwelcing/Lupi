@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   OMOL25_ATTRIBUTION_URL,
-  OMOL25_FEATURED_FILE_PATH,
   OMOL25_MASTHEAD_BOND_SENTENCE,
   OMOL25_PAPER_URL,
   OMOL25_SHELF_LABELS,
   OMOL25_SHELVES,
   omol25Collection,
-  omolGeometryState,
   type OmolShelfId,
 } from '@atlas/core/omol25';
 import { FUNCTIONAL_GROUP_BY_ID, type FunctionalGroupId } from '../organicFunctionalGroups';
@@ -119,39 +117,9 @@ export function OmolMasthead() {
   );
 }
 
-interface FeaturedFacts {
-  maxForceEvPerA: number | null;
-}
-
-/** Per-pick facts from featured.v1.json that the bundled shelf data leaves out. */
-function useFeaturedFacts(): Map<string, FeaturedFacts> {
-  const [facts, setFacts] = useState<Map<string, FeaturedFacts>>(() => new Map());
-  useEffect(() => {
-    let alive = true;
-    fetch(OMOL25_FEATURED_FILE_PATH)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((file: { picks?: unknown } | null) => {
-        if (!alive || !Array.isArray(file?.picks)) return;
-        const next = new Map<string, FeaturedFacts>();
-        for (const raw of file.picks as Array<{ id?: unknown; maxForceEvPerA?: unknown }>) {
-          if (typeof raw?.id !== 'string') continue;
-          const force = raw.maxForceEvPerA;
-          next.set(raw.id, { maxForceEvPerA: typeof force === 'number' && Number.isFinite(force) ? force : null });
-        }
-        setFacts(next);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return facts;
-}
-
 /** The featured picks, one shelf at a time: ink tiles that open the same-origin copy. */
 export function FeaturedShelves() {
   const [shelf, setShelf] = useState<OmolShelfId>(OMOL25_SHELVES[0]);
-  const facts = useFeaturedFacts();
   const opener = useOmolOpener();
   const counts = useMemo(() => new Map(OMOL25_SHELVES.map((id) => [id, OMOL_PICKS.filter((pick) => pick.shelf === id).length])), []);
   const picks = useMemo(() => OMOL_PICKS.filter((pick) => pick.shelf === shelf), [shelf]);
@@ -173,7 +141,6 @@ export function FeaturedShelves() {
         entry="library"
         opener={opener}
         label={OMOL25_SHELF_LABELS[shelf]}
-        note={(pick) => omolGeometryState(facts.get(pick.id)?.maxForceEvPerA ?? null)}
       />
       <OmolOpenerStatus opener={opener} />
     </section>

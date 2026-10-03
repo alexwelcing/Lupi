@@ -1,11 +1,5 @@
-import { useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import {
-  OMOL25_ATTRIBUTION_URL,
-  OMOL25_PAPER_URL,
-  omol25Collection,
-  omolBondTruth,
-  omolChargeSpin,
-} from '@atlas/core/omol25';
+import { useCallback, useContext, useMemo, useState } from 'react';
+import { OMOL25_ATTRIBUTION_URL, OMOL25_PAPER_URL, omol25Collection, omolChargeSpin } from '@atlas/core/omol25';
 import type { OpenEntry } from '../analytics/openEntry';
 import { LandingIntentContext } from './landingIntent';
 import { lightInkTile } from './MoleculeFinder';
@@ -13,10 +7,12 @@ import {
   OMOL_PICK_FAILURE,
   OMOL_SURPRISE_FAILURE,
   omolPickDetail,
+  omolPickGeometry,
   omolPickHref,
   omolPickMark,
   omolPickTitle,
   openOmolPick,
+  omolShelfTruth,
   openOmolSurprise,
   todaysOmolPicks,
   type OmolPick,
@@ -85,23 +81,21 @@ export function OmolOpenerStatus({ opener }: { opener: OmolOpener }) {
 
 /**
  * Featured picks as ink tiles: plain links to the viewer with the
- * same-origin file, opened in place on a plain click. Save-Data, or a
- * drawing that fails to load, shows the pick's heaviest element instead.
+ * same-origin file, opened in place on a plain click, each with its geometry
+ * state. Save-Data, or a drawing that fails to load, shows the pick's
+ * heaviest element instead.
  */
 export function OmolPickTiles({
   picks,
   entry,
   opener,
   prefetchViewer,
-  note,
   label,
 }: {
   picks: readonly OmolPick[];
   entry: OpenEntry;
   opener: OmolOpener;
   prefetchViewer?: () => void;
-  /** An extra line under a tile (the Library's geometry state). */
-  note?: (pick: OmolPick) => ReactNode;
   label?: string;
 }) {
   const [textOnly] = useState(saveData);
@@ -110,7 +104,7 @@ export function OmolPickTiles({
     <ul className="omol-shelf__tiles" aria-label={label}>
       {picks.map((pick) => {
         const chip = chargeChip(pick);
-        const extra = note?.(pick);
+        const geometry = omolPickGeometry(pick);
         return (
           <li key={pick.id}>
             <a
@@ -143,7 +137,7 @@ export function OmolPickTiles({
               <span className="omol-tile__text">
                 <strong>{omolPickTitle(pick)}</strong>
                 <small>{omolPickDetail(pick)}</small>
-                {extra && <small>{extra}</small>}
+                {geometry && <small>{geometry}</small>}
                 {chip && <span className="omol-tile__chip">{chip}</span>}
               </span>
             </a>
@@ -201,7 +195,7 @@ export function OmolShelf() {
         </a>
       </p>
       <OmolOpenerStatus opener={opener} />
-      <p className="omol-shelf__caption">{omolBondTruth()}</p>
+      <p className="omol-shelf__caption">{omolShelfTruth()}</p>
     </section>
   );
 }

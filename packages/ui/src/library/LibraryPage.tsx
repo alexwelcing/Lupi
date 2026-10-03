@@ -1,9 +1,8 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { EXTERNAL_RESEARCH_DATASETS } from '@atlas/core';
-import { omolBondTruth } from '@atlas/core/omol25';
 import { EXAMPLES } from '../gallery/catalog';
 import { OmolOpenerStatus, OmolPickTiles, useOmolOpener } from '../landing/OmolShelf';
-import { todaysOmolPicks } from '../landing/omolPicks';
+import { omolShelfTruth, todaysOmolPicks } from '../landing/omolPicks';
 import { OMOL_PICKS } from '../landing/omolShelf.data';
 import { libraryPath, type LibraryCollectionId } from '../viewer/viewerRoutes';
 import { LibraryBrowser } from './LibraryBrowser';
@@ -103,7 +102,7 @@ function OmolPicksRow() {
       </div>
       <OmolPickTiles picks={picks} entry="library" opener={opener} />
       <OmolOpenerStatus opener={opener} />
-      <p className="omol-shelf__caption">{omolBondTruth()}</p>
+      <p className="omol-shelf__caption">{omolShelfTruth()}</p>
     </section>
   );
 }

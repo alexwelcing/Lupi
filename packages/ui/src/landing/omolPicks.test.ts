@@ -7,6 +7,7 @@ const { openMolecule } = vi.hoisted(() => ({
 }));
 vi.mock('../viewer/openMolecule', () => ({ openMolecule }));
 
+import { OMOL25_COORDINATE_TRUTH } from '@atlas/core/omol25';
 import { OPEN_ENTRY_STORAGE_KEY } from '../analytics/openEntry';
 import { OmolShelf } from './OmolShelf';
 import { OMOL_PICKS, type OmolPick } from './omolShelf.data';
@@ -17,8 +18,10 @@ import {
   matchOmolPicks,
   omolFormulaHandoffHref,
   omolIndexFormula,
+  omolPickGeometry,
   omolPickMark,
   omolShelfForDay,
+  omolShelfTruth,
 } from './omolPicks';
 
 const HOME = OMOL_PICKS.filter((pick) => pick.home);
@@ -132,7 +135,7 @@ describe('OmolShelf', () => {
     else delete (navigator as { connection?: unknown }).connection;
   });
 
-  it('renders six linked ink tiles, the actions and the bond truth, with no canvas', () => {
+  it('renders six linked ink tiles, the actions and the truth, with no canvas', () => {
     const { container } = render(createElement(OmolShelf));
     expect(screen.getByRole('heading', { name: 'From Open Molecules 2025' })).toBeTruthy();
     const tiles = container.querySelectorAll('a.omol-tile');
@@ -140,6 +143,7 @@ describe('OmolShelf', () => {
     for (const tile of tiles) {
       expect(tile.getAttribute('href')).toMatch(/^\/\?load=\/datasets\/omol25\/featured\/omol25_nv_\d+\.xyz$/);
       expect(tile.textContent).toMatch(/\(OMol25\)/);
+      expect(tile.textContent).toMatch(/(Snapshot away from|Near) a minimum: largest force \d+\.\d+ eV\/Å/);
       expect(tile.querySelector('img.ink-tile')?.getAttribute('src')).toMatch(/^\/og\/omol25\/omol25_nv_\d+-ink\.svg$/);
     }
     expect(container.querySelector('canvas')).toBeNull();
@@ -147,7 +151,18 @@ describe('OmolShelf', () => {
     expect(screen.getByRole('link', { name: /Browse OMol25/ }).getAttribute('href')).toBe('/library/omol25');
     expect(screen.getByRole('link', { name: /Surprise me.*one of 34,335,828/ }).getAttribute('href')).toBe('/library/random');
     expect(screen.getByRole('link', { name: /Filter by element/ }).getAttribute('href')).toBe('/library/omol25?view=facets');
-    expect(screen.getByText(/OMol25 supplies no bonds/)).toBeTruthy();
+    const caption = screen.getByText(/OMol25 supplies no bonds/).textContent ?? '';
+    expect(caption.startsWith(OMOL25_COORDINATE_TRUTH)).toBe(true);
+    expect(caption).toContain('lupi-bonds.molecular.v1');
+  });
+
+  it('reads each pick’s geometry state from the bundled force, as featured.v1.json gives it', () => {
+    const snapshot = OMOL_PICKS.find((pick) => pick.id === 'omol25_nv_2728')!;
+    expect(omolPickGeometry(snapshot)).toBe('Snapshot away from a minimum: largest force 48.9 eV/Å');
+    const near = OMOL_PICKS.find((pick) => pick.id === 'omol25_nv_23477')!;
+    expect(omolPickGeometry(near)).toBe('Near a minimum: largest force 0.36 eV/Å');
+    expect(omolPickGeometry({ ...near, maxForceEvPerA: null })).toBeNull();
+    expect(omolShelfTruth()).toMatch(/^Source DFT coordinates .+ OMol25 supplies no bonds\./);
   });
 
   it('shows text marks under Save-Data and when a drawing fails to load', () => {

@@ -8,7 +8,7 @@
  * date helpers and the one-shot entry mark: no three, no analytics session,
  * no network. The viewer loader is imported only when a pick is opened.
  */
-import { OMOL25_NEUTRAL_ELEMENTS, omolTitle } from '@atlas/core/omol25';
+import { OMOL25_COORDINATE_TRUTH, OMOL25_NEUTRAL_ELEMENTS, omolBondTruth, omolGeometryState, omolTitle } from '@atlas/core/omol25';
 import { markOpenEntry, type OpenEntry } from '../analytics/openEntry';
 import { dayNumber, localDateKey } from '../daily/schedule';
 import type { ViewerOpenResult } from '../viewer/openTypes';
@@ -145,6 +145,16 @@ export function omolPickTitle(pick: OmolPick): string {
 
 export function omolPickDetail(pick: OmolPick): string {
   return `${pick.domainLabel} · ${pick.atoms} atoms`;
+}
+
+/** A pick's geometry state from its bundled largest force: the Library's and Learn's words. */
+export function omolPickGeometry(pick: OmolPick): string | null {
+  return omolGeometryState(pick.maxForceEvPerA);
+}
+
+/** An OMol25 shelf's caption: source coordinates, then Lupi's bond inference. */
+export function omolShelfTruth(): string {
+  return `${OMOL25_COORDINATE_TRUTH} ${omolBondTruth()}`;
 }
 
 // The neutral-lane elements by atomic number, lightest first.
