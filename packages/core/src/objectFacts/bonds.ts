@@ -103,6 +103,35 @@ export interface BondGraph {
   adjacency: number[][];
 }
 
+/**
+ * A bond graph from caller-supplied flat pairs. Out-of-range, self and
+ * repeated pairs are dropped; the result is canonical (i < j, sorted).
+ */
+export function bondGraphFromPairs(pairs: ArrayLike<number>, natoms: number): BondGraph {
+  const seen = new Set<number>();
+  const out: Array<[number, number]> = [];
+  for (let k = 0; k + 1 < pairs.length; k += 2) {
+    const a = pairs[k];
+    const b = pairs[k + 1];
+    if (!Number.isInteger(a) || !Number.isInteger(b) || a === b) continue;
+    if (a < 0 || b < 0 || a >= natoms || b >= natoms) continue;
+    const i = Math.min(a, b);
+    const j = Math.max(a, b);
+    const key = i * natoms + j;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push([i, j]);
+  }
+  out.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const adjacency: number[][] = Array.from({ length: natoms }, () => []);
+  for (const [i, j] of out) {
+    adjacency[i].push(j);
+    adjacency[j].push(i);
+  }
+  for (const list of adjacency) list.sort((p, q) => p - q);
+  return { pairs: out, adjacency };
+}
+
 /** Covalent bonds from a uniform grid: d ≤ (r_cov,i + r_cov,j) · 1.15. */
 export function computeBonds(atomicNumbers: ArrayLike<number>, positions: ArrayLike<number>, natoms: number): BondGraph {
   const radii = new Float64Array(natoms);

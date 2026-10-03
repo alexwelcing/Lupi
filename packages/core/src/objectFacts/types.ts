@@ -19,6 +19,12 @@ export interface ObjectFactsInput {
 export interface ObjectFactsOptions {
   maxAtoms?: number;
   tolerance?: number;
+  /**
+   * Flat bonded pairs [i0, j0, i1, j1, …]. When present they replace the
+   * built-in distance rule for rings and symmetry, so the facts follow the
+   * graph the viewer draws.
+   */
+  bondPairs?: ArrayLike<number>;
 }
 
 /**
