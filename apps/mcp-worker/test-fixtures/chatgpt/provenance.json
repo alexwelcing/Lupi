@@ -1,0 +1,51 @@
+{
+  "provider": "PubChem (NCBI/NLM/NIH)",
+  "purpose": "Captured source responses replayed at an injected fetch boundary in deterministic protocol and service tests. These tests are mocked network tests; they do not prove a fresh PubChem request or rendering in ChatGPT.",
+  "modifications": "Raw response files are copied byte-for-byte. Tests clone records before intentionally modifying them for source-change scenarios. The captured property request includes IUPACName; the production request asks only for Title and MolecularFormula. The captured 2D URL omits /record; the equivalent /record route is tested with this response.",
+  "responses": [
+    {
+      "file": "cid-439378-3d.json",
+      "source": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/439378/record/JSON?record_type=3d",
+      "retrievedAt": "2026-09-29T19:50:22.972572+00:00",
+      "httpStatus": 200,
+      "bytes": 13113,
+      "sha256": "6e813b077b9a866c96ba3e1152aad31de96f1fd997dd8e54bc1ef3d00ba26133"
+    },
+    {
+      "file": "cid-439378-2d.json",
+      "source": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/439378/JSON?record_type=2d",
+      "retrievedAt": "2026-09-29T19:52:28.232868+00:00",
+      "httpStatus": 200,
+      "bytes": 13315,
+      "sha256": "874e70b57e8c01ffcad271d664aec831da82f0395835c83037460d7f43a9ddf8"
+    },
+    {
+      "file": "cid-439378-properties.json",
+      "source": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/439378/property/Title,MolecularFormula,IUPACName/JSON",
+      "retrievedAt": "2026-09-29T19:50:29.030698+00:00",
+      "httpStatus": 200,
+      "bytes": 237,
+      "sha256": "8b4d7b11f19671349c45c698e756770a5ff762f181c9410fc793fc5dae6b1f28"
+    },
+    {
+      "file": "cid-280-3d.json",
+      "source": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/280/record/JSON?record_type=3d",
+      "retrievedAt": "2026-09-29T20:00:38.951683+00:00",
+      "httpStatus": 200,
+      "bytes": 6964,
+      "sha256": "62fdda5005f53274c9549dd0f4f347d8c06a36c5b5ccf9bfdef1940a354ac4b8"
+    },
+    {
+      "file": "cid-280-properties.json",
+      "source": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/280/property/Title,MolecularFormula/JSON",
+      "retrievedAt": "2026-09-29T20:00:44.773799+00:00",
+      "httpStatus": 200,
+      "bytes": 160,
+      "sha256": "c2820da1843b91f72123ac2281b1bcdaa98787dd2ca5865a45a349db2046d3b1"
+    }
+  ],
+  "compoundSources": [
+    "https://pubchem.ncbi.nlm.nih.gov/compound/439378",
+    "https://pubchem.ncbi.nlm.nih.gov/compound/280"
+  ]
+}

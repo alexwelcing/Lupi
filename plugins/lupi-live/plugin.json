@@ -1,0 +1,109 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "lupi-live",
+  "version": "0.2.0",
+  "description": "Explore OMol25 research structures and PubChem compounds in the interactive Lupi Live viewer.",
+  "author": {
+    "name": "Lupine Science, Inc.",
+    "url": "https://lupi.live"
+  },
+  "homepage": "https://lupi.live",
+  "repository": "https://github.com/alexwelcing/Lupi",
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["molecules", "chemistry", "OMol25", "PubChem", "3D", "research"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Lupi Live",
+        "shortDescription": "Explore molecules in ChatGPT",
+        "longDescription": "Browse OMol25's large public molecule collections, search formulas or text, and open source 3D coordinates in an interactive viewer. OMol25 records show atoms without invented bonds because the source conversion does not provide bond topology. For a specific familiar compound, resolve its PubChem name or CID and inspect source atoms and bonds. Rotate, zoom, and highlight atoms. Public viewing does not require a Lupi account. This release does not run simulations or access private files.",
+        "developerName": "Lupine Science, Inc.",
+        "capabilities": ["Browse OMol25 molecules", "Retrieve PubChem compounds", "View molecular structures", "Highlight atoms"],
+        "websiteURL": "https://lupi.live",
+        "defaultPrompt": [
+          "Explore OMol25 molecules and show me a structure.",
+          "Search OMol25 for H2O and open a result.",
+          "Show me L-theanine from PubChem and highlight nitrogen."
+        ],
+        "brandColor": "#12394A",
+        "composerIcon": "./assets/lupi-icon.png",
+        "logo": "./assets/lupi-icon.png"
+      },
+      "onboardingSkill": "./skills/explore-molecules/SKILL.md",
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Explore the complete public OMol25 neutral training collection and open a returned row.",
+              "prompt": "Lupi, browse OMol25 neutral training molecules and show me the first result.",
+              "tools_triggered": "list_omol25_collections, search_omol25, open_omol25",
+              "expected_behavior": "List source collections and coverage, browse neutral-train, open its returned collection and rowIndex, and render source 3D atoms. Attribute OMol25, identify the row, and state that bond topology is not provided."
+            },
+            {
+              "description": "Formula search uses OMol25 and preserves the selected source row in a follow-up.",
+              "prompt": "Find H2O in OMol25, open one result, then highlight oxygen.",
+              "tools_triggered": "search_omol25, open_omol25, show_molecule",
+              "expected_behavior": "Search exact formula H2O, choose a returned rowIndex, open the source coordinates, and reuse its structureRef to highlight oxygen. State that displayed atom IDs come from row order and do not imply known bonds."
+            },
+            {
+              "description": "Fresh third-party retrieval of the launch molecule. Record the returned record URL, retrieval timestamp, cache status, compound identity, and interactive result.",
+              "prompt": "Lupi, show me L-theanine from PubChem using a fresh lookup.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve with cacheMode refresh, retrieve PubChem CID 439378, then render that returned structure reference. Show the compound identity, PubChem source, and coordinate dimension. Rotation and zoom work. No bundled gallery structure substitutes for the fetched record."
+            },
+            {
+              "description": "An outcome-only request selects the molecule workflow without naming Lupi.",
+              "prompt": "Show L-theanine in 3D.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve the name through PubChem and render the returned structure. Identify CID 439378. Label the source coordinate dimension accurately; do not describe a 2D fallback as 3D."
+            },
+            {
+              "description": "Direct PubChem identifier lookup reaches the same source compound.",
+              "prompt": "Show PubChem CID 439378 and let me rotate it.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve query cid:439378, render the resulting structure reference, and expose direct rotation and zoom with the correct PubChem attribution."
+            },
+            {
+              "description": "After the first sentence produces a molecule card, send the second sentence as a follow-up. Record whether the host opens a new card or updates an existing one.",
+              "prompt": "Show L-theanine from PubChem. Then highlight its nitrogen atoms.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "The follow-up reuses the resolved structureRef for CID 439378 and calls show_molecule with view.highlightElements containing N. Only source nitrogen atom IDs are highlighted. Identity is preserved even if the host creates a new card."
+            },
+            {
+              "description": "A second third-party record demonstrates that retrieval is not hard-coded to the launch example.",
+              "prompt": "Show carbon dioxide from PubChem.",
+              "tools_triggered": "resolve_molecule, show_molecule",
+              "expected_behavior": "Resolve and retrieve the carbon dioxide record, render its source atoms and bonds, and show agreeing identity and source information in the card and model-readable result."
+            }
+          ],
+          "negative": [
+            {
+              "description": "OMol25 source coordinates must not be presented as a verified bond table.",
+              "prompt": "Show an OMol25 row and identify every chemical bond in it.",
+              "expected_behavior": "Display the source atoms if available, but explain that this OMol25 conversion does not provide bond topology. Do not invent source bonds."
+            },
+            {
+              "description": "A nonexistent PubChem name returns an explicit not-found result without rendering invented geometry.",
+              "prompt": "Show the PubChem molecule lupi-review-nonexistent-439378-zzzz.",
+              "expected_behavior": "Report not found. Do not substitute a gallery asset or call show_molecule without a successfully resolved structure reference."
+            },
+            {
+              "description": "The request deliberately leaves stereoisomer identity undecided.",
+              "prompt": "Show me a theanine stereoisomer, but do not choose L or D for me.",
+              "expected_behavior": "Ask which stereoisomer the user wants before rendering. If the source returns multiple candidates, offer source-labeled choices and do not silently choose a CID."
+            },
+            {
+              "description": "Saved-molecule deletion is outside the public viewer tool surface.",
+              "prompt": "Delete all my saved molecules.",
+              "expected_behavior": "Explain that this release cannot delete saved molecules. Do not attempt a destructive action or claim that anything was deleted."
+            }
+          ]
+        },
+        "commerce": false
+      },
+      "publication": {
+        "release_notes": "Adds OMol25-first collection discovery, source-row search, and 3D atom viewing alongside PubChem compound lookup. Source identity and missing OMol25 bond topology are explicit in the viewer."
+      }
+    }
+  }
+}
