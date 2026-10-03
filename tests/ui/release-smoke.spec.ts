@@ -111,11 +111,14 @@ test.describe('phone', () => {
     const style = page.getByRole('button', { name: 'Style command', exact: true });
     await style.click();
     const sheet = page.getByRole('region', { name: 'Style command panel' });
-    await expect.poll(async () => {
-      const model = await page.locator('.lupine-main-viewport canvas').boundingBox();
-      const panel = await sheet.boundingBox();
-      return !!model && !!panel && model.height >= 200 && model.y + model.height <= panel.y;
-    }).toBe(true);
+    await expect(sheet).toBeVisible();
+    // The sheet floats over a full-bleed canvas; the molecule moves up into
+    // the room above it (a display-only view inset).
+    await expect.poll(() => page.evaluate(() => {
+      const play = (window as unknown as { __lupiPlay?: { viewInset?: () => { target: { y: number }; occluders: string[] } } }).__lupiPlay;
+      const inset = play?.viewInset?.();
+      return Boolean(inset?.occluders.includes('panel')) && (inset?.target.y ?? 0) < -40;
+    })).toBe(true);
     const remix = page.getByRole('button', { name: 'Remix scene', exact: true });
     const bounds = await remix.boundingBox();
     expect(bounds!.width).toBeGreaterThanOrEqual(44);

@@ -9,12 +9,13 @@ test('phone scene controls leave the model visible and update real looks', async
   await style.click();
   const sheet = page.getByRole('region', { name: 'Style command panel' });
   await expect(page.getByRole('button', { name: 'Studio look', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  const canvas = page.locator('.lupine-main-viewport canvas');
-  await expect.poll(async () => {
-    const model = await canvas.boundingBox();
-    const panel = await sheet.boundingBox();
-    return !!model && !!panel && model.y + model.height <= panel.y && model.height >= 200;
-  }).toBe(true);
+  // The sheet floats over a full-bleed canvas; the molecule moves up into the
+  // room above it (a display-only view inset).
+  await expect.poll(() => page.evaluate(() => {
+    const play = (window as unknown as { __lupiPlay?: { viewInset?: () => { target: { y: number }; occluders: string[] } } }).__lupiPlay;
+    const inset = play?.viewInset?.();
+    return Boolean(inset?.occluders.includes('panel')) && (inset?.target.y ?? 0) < -40;
+  })).toBe(true);
   await expect(page.getByTestId('viewer-gesture-hint')).toBeHidden();
   for (const name of ['Studio look', 'Paper look', 'Night look']) {
     const button = page.getByRole('button', { name, exact: true });
@@ -62,11 +63,12 @@ test('scene sheet reflows at 320px and alongside the model in landscape', async 
   await page.getByRole('checkbox', { name: 'Cell / bounding box' }).check();
   await page.getByRole('button', { name: 'Back to looks', exact: true }).click();
   await page.setViewportSize({ width: 844, height: 390 });
-  await expect.poll(async () => {
-    const model = await page.locator('.lupine-main-viewport canvas').boundingBox();
-    const panel = await sheet.boundingBox();
-    return !!model && !!panel && model.x + model.width <= panel.x && model.height >= 200;
-  }).toBe(true);
+  // Sideways the sheet is a column on the right; the molecule moves left.
+  await expect.poll(() => page.evaluate(() => {
+    const play = (window as unknown as { __lupiPlay?: { viewInset?: () => { target: { x: number }; occluders: string[] } } }).__lupiPlay;
+    const inset = play?.viewInset?.();
+    return Boolean(inset?.occluders.includes('panel')) && (inset?.target.x ?? 0) < -40;
+  })).toBe(true);
   await page.getByRole('button', { name: 'Paper look', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Paper look', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.screenshot({ path: testInfo.outputPath('landscape-paper.png') });
