@@ -11,7 +11,7 @@ import {
   normalizeDistanceSemantics,
   resolveAtomicNumber,
 } from '@atlas/core';
-import { validateSourceBondTopology } from '@atlas/scene';
+import { requestLupiFrames, validateSourceBondTopology } from '@atlas/scene';
 import type { NistCatalogEntry, NistSummary } from '@atlas/nist';
 import { filterCatalog, loadNistCatalog, summarize } from '@atlas/nist';
 import { useStore, type LoadedFile } from './store';
@@ -1208,6 +1208,16 @@ async function executeLupiViewerMcpBatch(requests: LupiMcpRequest[]): Promise<Lu
 }
 
 async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<LupiMcpResponse> {
+  // Quiet Idle: an MCP command draws its result, whatever it changed.
+  requestLupiFrames();
+  try {
+    return await runLupiViewerMcpRequest(request);
+  } finally {
+    requestLupiFrames();
+  }
+}
+
+async function runLupiViewerMcpRequest(request: LupiMcpRequest): Promise<LupiMcpResponse> {
   const transcript = [`received ${request.tool}`];
   try {
     const registryTool = LUPI_MCP_TOOL_MAP.get(request.tool);

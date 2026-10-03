@@ -2,7 +2,11 @@
  * devHooks.ts — `window.__lupiPlay`, the Play layer's handle for local smoke
  * plugins and agents (installed in production too, like __lupiViewerMcp).
  *
- *   __lupiPlay.state()  → { verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame }
+ *   __lupiPlay.state()  → { verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame,
+ *                           frames, frameDemand }
+ *     `frames` counts the frames the viewer has drawn: read it twice a few
+ *     seconds apart on a still view and it should not move (Quiet Idle).
+ *     `frameDemand` says what is keeping the loop awake (`awakeBy`).
  *   __lupiPlay.reset()  → emits play.reset (a registered 'reset' hook replaces this default)
  *   __lupiPlay.emit(intent) → emits any intent, exactly as the UI would (lets a
  *                         smoke plugin drive Scatter, Spin or a stroke before
@@ -14,7 +18,7 @@
  *
  * Contract file: additive edits only.
  */
-import { emitIntent, type LupiIntent } from '@atlas/scene';
+import { emitIntent, lupiFrameStats, type LupiFrameStats, type LupiIntent } from '@atlas/scene';
 import { useStore } from '../store';
 import { getComfort, type Comfort } from '../motion/comfort';
 import { getCameraRig, type Vec3 } from '../camera/rigApi';
@@ -29,7 +33,8 @@ export type PlayDevHookName =
   | 'catch'
   | 'scatter'
   | 'stepDetent'
-  | 'reset';
+  | 'reset'
+  | 'frames';
 
 export interface PlayRigState {
   position: Vec3;
@@ -43,6 +48,11 @@ export interface PlayMotionState {
   weight: number;
 }
 
+export interface PlayFrameDemandState extends LupiFrameStats {
+  /** The viewer canvas's frameloop ('demand' unless `?frameloop=always`); null without a canvas. */
+  frameloop: string | null;
+}
+
 export interface LupiPlayState {
   verb: PlayVerb;
   trayOpen: boolean;
@@ -52,6 +62,9 @@ export interface LupiPlayState {
   rig: PlayRigState | null;
   motion: PlayMotionState | null;
   firstFrame: boolean;
+  /** Frames the viewer has drawn since the page loaded. */
+  frames: number;
+  frameDemand: PlayFrameDemandState;
 }
 
 type DevHook = (...args: any[]) => any;
@@ -116,6 +129,8 @@ export function readPlayState(): LupiPlayState {
     rig: readRig(),
     motion: callHook<PlayMotionState>('motion'),
     firstFrame: trajectory ? hasFirstFrame(trajectory) : false,
+    frames: lupiFrameStats().rendered,
+    frameDemand: callHook<PlayFrameDemandState>('frames') ?? { ...lupiFrameStats(), frameloop: null },
   };
 }
 
