@@ -1238,7 +1238,8 @@ button:focus:not(:focus-visible) {
   .lupine-app-root .lupi-study-panel {
     top: auto;
     right: 8px;
-    bottom: var(--lupi-sheet-bottom);
+    /* Above the deck, or above the on-screen keyboard when it is up. */
+    bottom: max(var(--lupi-sheet-bottom), calc(var(--lupi-sheet-lift, 0px) + 8px));
     left: 8px;
     width: auto;
     max-width: none;
@@ -1249,6 +1250,7 @@ button:focus:not(:focus-visible) {
     transition:
       height 300ms cubic-bezier(0.2, 0.85, 0.2, 1),
       max-height 300ms cubic-bezier(0.2, 0.85, 0.2, 1),
+      bottom 240ms cubic-bezier(0.2, 0.85, 0.2, 1),
       opacity 220ms ease,
       transform 420ms cubic-bezier(0.2, 0.85, 0.2, 1);
   }

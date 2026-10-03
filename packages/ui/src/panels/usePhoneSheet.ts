@@ -98,6 +98,27 @@ function measureHeights(node: HTMLElement): SheetHeights | null {
   return sheetHeights(box.height, bottomInset, Math.max(8, headerBottom + 8));
 }
 
+/** Less than this (CSS px) of the sheet's container under the visual viewport is the URL bar, not a keyboard. */
+const KEYBOARD_MIN_PX = 80;
+
+/**
+ * Lift the sheet above an on-screen keyboard: phones shrink only the visual
+ * viewport for it, so a bottom sheet would sit behind the keys. Writes
+ * `--lupi-sheet-lift` (CSS px of the sheet's container the keyboard covers),
+ * which global.css adds to the sheet's bottom.
+ */
+function liftAboveKeyboard(node: HTMLElement, viewport: VisualViewport | null | undefined): void {
+  const container = node.offsetParent as HTMLElement | null;
+  if (!viewport || !container) {
+    node.style.removeProperty('--lupi-sheet-lift');
+    return;
+  }
+  const keyboardTop = viewport.offsetTop + viewport.height;
+  const covered = container.getBoundingClientRect().bottom - keyboardTop;
+  if (covered > KEYBOARD_MIN_PX) node.style.setProperty('--lupi-sheet-lift', `${Math.round(covered)}px`);
+  else node.style.removeProperty('--lupi-sheet-lift');
+}
+
 function sameHeights(a: SheetHeights | null, b: SheetHeights | null): boolean {
   return a === b || (!!a && !!b && a.peek === b.peek && a.half === b.half && a.full === b.full);
 }
@@ -230,24 +251,30 @@ export function usePhoneSheet({
     [occluderRef],
   );
 
-  // Detent heights follow the screen (rotation, the URL bar, the keyboard).
+  // Detent heights follow the screen (rotation, the URL bar), and the sheet
+  // rides above the on-screen keyboard (the Switch search, a Save name).
   useLayoutEffect(() => {
     if (mode !== 'sheet' || !open) {
       fresh.current = true;
+      nodeRef.current?.style.removeProperty('--lupi-sheet-lift');
       setHeights(null);
       return undefined;
     }
+    const viewport = window.visualViewport;
     const update = () => {
       const node = nodeRef.current;
+      if (node) liftAboveKeyboard(node, viewport);
       const next = node ? measureHeights(node) : null;
       setHeights((previous) => (sameHeights(previous, next) ? previous : next));
     };
     update();
     window.addEventListener('resize', update);
-    window.visualViewport?.addEventListener('resize', update);
+    viewport?.addEventListener('resize', update);
+    viewport?.addEventListener('scroll', update);
     return () => {
       window.removeEventListener('resize', update);
-      window.visualViewport?.removeEventListener('resize', update);
+      viewport?.removeEventListener('resize', update);
+      viewport?.removeEventListener('scroll', update);
     };
   }, [mode, open]);
 

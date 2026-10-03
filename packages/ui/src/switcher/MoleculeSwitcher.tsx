@@ -216,7 +216,9 @@ export function MoleculeSwitcher() {
         aria-autocomplete="list"
         autoComplete="off"
         spellCheck={false}
-        autoFocus
+        // A phone opens the sheet without the keyboard, so the molecule and
+        // the picker show first; a tap on the field brings the keys up.
+        autoFocus={!isMobile}
         value={query}
         placeholder={isMobile ? 'caffeine, C6H6, “floats in water”…' : 'caffeine, C6H6, “floats in water”, “heaviest metal”… Enter switches'}
         style={{ textOverflow: 'ellipsis' }}
