@@ -480,7 +480,8 @@ html[data-opening] .mp-verb--primary {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  .mp-verb--primary {
+  .mp-verb--primary,
+  .mp-verb[hidden] + .mp-verb {
     grid-column: 1 / -1;
   }
   .mp-more ul {
