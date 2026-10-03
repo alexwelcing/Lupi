@@ -796,7 +796,7 @@ export function ViewerScene({
             playing={playing}
           />
           {/* Labels, rings, the card anchor, measurements and trails ride display motion. */}
-          <DisplayFollowDriver />
+          <DisplayFollowDriver enabled={!transmissionActive} />
           <AtomGlowDriver
             hoveredAtom={visibleHoveredAtom}
             selectedAtoms={visibleSelectedAtoms}

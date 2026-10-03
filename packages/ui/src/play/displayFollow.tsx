@@ -141,10 +141,11 @@ function place(entry: Entry, state: ReturnType<typeof readTwinState>): number {
 
 /**
  * One step of the follow driver: place every follower from this frame's
- * uniforms while display motion runs; snap them back once it stops.
+ * uniforms while display motion runs; snap them back once it stops (or when
+ * `enabled` is false: the glass renderer draws atoms without the offset).
  */
-export function stepDisplayFollow(): void {
-  if (!isLupiDisplayMotionActive()) {
+export function stepDisplayFollow(enabled = true): void {
+  if (!enabled || !isLupiDisplayMotionActive()) {
     if (moving) settleAll();
     moving = false;
     return;
@@ -203,12 +204,19 @@ registerCaptureGuard({
   },
 });
 
+export interface DisplayFollowDriverProps {
+  /** False keeps every overlay at rest (the refractive-glass renderer has no display offset). */
+  enabled?: boolean;
+}
+
 /**
  * The follow job, inside the viewer Canvas (one per canvas, next to the
  * PlayLayer). Runs after this frame's display-motion uniforms.
  */
-export function DisplayFollowDriver(): null {
-  useFrame(() => stepDisplayFollow(), { phase: LUPI_PHASE.overlays, id: LUPI_JOB.displayFollow });
+export function DisplayFollowDriver({ enabled = true }: DisplayFollowDriverProps): null {
+  const live = useRef(enabled);
+  live.current = enabled;
+  useFrame(() => stepDisplayFollow(live.current), { phase: LUPI_PHASE.overlays, id: LUPI_JOB.displayFollow });
   useEffect(() => {
     const offHook = registerPlayDevHook('follow', () => {
       let displaced = 0;
