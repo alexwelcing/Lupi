@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["@webgpu/types", "vite/client", "node"]
+  },
+  "include": ["src/**/*", "vite.config.ts", "../../packages/*/src/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}

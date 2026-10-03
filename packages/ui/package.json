@@ -10,6 +10,8 @@
     "./App": "./src/App.tsx",
     "./store": "./src/store.ts",
     "./FileDropZone": "./src/FileDropZone.tsx",
+    "./viewer/LupiCanvas": "./src/viewer/LupiCanvas.tsx",
+    "./renderCapability": "./src/renderCapability.ts",
     "./panels/StylePanel": "./src/panels/StylePanel.tsx",
     "./panels/EffectsPanel": "./src/panels/EffectsPanel.tsx",
     "./panels/ExportPanel": "./src/panels/ExportPanel.tsx"

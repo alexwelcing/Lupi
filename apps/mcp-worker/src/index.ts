@@ -20,6 +20,7 @@ import {
   type RenderRequestSpecV1,
 } from '@atlas/core';
 import { routeScienceData } from './scienceData';
+import { CHATGPT_MCP_PATH, handleChatGptMcp } from './chatgpt';
 import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } from './jev';
 import { SCAN_ROUTE, handleScanIdentify, scanConfigured, scanVisionModel } from './scan';
 import { GIST_ROUTE, SCULPT_ROUTE, handleScanGist, handleScanSculpt } from './gist';
@@ -693,6 +694,10 @@ export async function handleRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   const cors = corsHeaders(request, env);
+
+  // The public ChatGPT plugin owns its transport and CORS policy independently
+  // from the authenticated legacy viewer control plane.
+  if (url.pathname === CHATGPT_MCP_PATH) return handleChatGptMcp(request, env);
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: cors });

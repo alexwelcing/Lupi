@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs && tsx ../../scripts/generate-molecule-pages.mts && tsx ../../scripts/generate-daily-pages.mts",
+    "build": "pnpm --filter @atlas/chatgpt-widget build && tsx ../../tools/generate-mcp-manifest.ts && tsc && vite build && node ../../scripts/generate-seo-routes.mjs && tsx ../../scripts/generate-molecule-pages.mts && tsx ../../scripts/generate-daily-pages.mts && node ../../tools/copy-chatgpt-widget.mjs",
     "lint": "eslint .",
     "test": "vitest run vite.config.test.ts",
     "preview": "vite preview"
@@ -29,6 +29,7 @@
     "@tanstack/react-query": "^5.62.0"
   },
   "devDependencies": {
+    "@atlas/chatgpt-widget": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
