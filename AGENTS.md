@@ -403,7 +403,8 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
 - The Illustrate look shades the impostors themselves, so its capture takes
   the raw path (`view.postprocess` is `raw-scene`), and the spec carries
   `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch',
-  weight, ink, paper, shade }`, present only while the look is on, so every
+  weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
+  `plate`), present only while the look is on, so every
   lit spec keeps its identity. Ink line weight follows the capture's texel
   scale and the picture's short side, so an export keeps the screen's weight.
 - The Specimen floor shadow (`contactShadows` layer) is part of the view: it

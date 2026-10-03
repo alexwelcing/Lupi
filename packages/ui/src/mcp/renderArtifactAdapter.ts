@@ -25,7 +25,8 @@ import {
   type RenderSpecIdV1,
   type Sha256DigestV1,
 } from '@atlas/core';
-import { INK_LOOK_COLORS } from '@atlas/scene';
+import { INK_LOOK_COLORS, INK_LOOK_TUNING } from '@atlas/scene';
+import { inkPlateColor } from '../ink/illustrate';
 import { getBgMedia, BG_PRESETS } from '../backgroundPresets';
 import { getDefaultQualityTier } from '../deviceCapabilities';
 import { environmentAssetIdentity } from '../sceneEnvironment';
@@ -272,6 +273,9 @@ export async function createBrowserRenderArtifactPlanV1(
         ink: INK_LOOK_COLORS.ink,
         paper: INK_LOOK_COLORS.paper,
         shade: INK_LOOK_COLORS.shade,
+        // The far side fades toward the plate (transparent output too).
+        plate: inkPlateColor(state.backgroundPreset),
+        depthCue: INK_LOOK_TUNING.depthCue,
       };
     }
   }

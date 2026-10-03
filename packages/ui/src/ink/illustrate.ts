@@ -11,6 +11,7 @@
  */
 import { useStore, type InkStyle } from '../store';
 import { playStore } from '../play/playStore';
+import { BG_PRESETS, SAGE_PLATE_COLOR } from '../backgroundPresets';
 
 const LAST_KEY = 'lupi.ink.last';
 
@@ -73,4 +74,18 @@ export function chooseInkStyle(style: InkStyle): void {
     if (useStore.getState().materialPreset === 'transmission') useStore.setState({ materialPreset: 'plastic' });
   }
   useStore.getState().setInkStyle(style);
+}
+
+/** The plate colour a background preset reads as (the even mix of its two stops): the ink depth cue fades toward it. */
+export function inkPlateColor(backgroundPreset: string): string {
+  const preset = BG_PRESETS[backgroundPreset];
+  if (!preset) return SAGE_PLATE_COLOR;
+  const parse = (hex: string) => {
+    const value = /^#[0-9a-f]{6}$/i.test(hex) ? parseInt(hex.slice(1), 16) : 0x101817;
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  };
+  const a = parse(preset.top);
+  const b = parse(preset.bottom);
+  const mixed = a.map((channel, i) => Math.round((channel + b[i]) / 2));
+  return `#${((mixed[0] << 16) | (mixed[1] << 8) | mixed[2]).toString(16).padStart(6, '0')}`;
 }

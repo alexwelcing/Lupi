@@ -16,6 +16,8 @@
  * - Motion: Still cuts every fade and skips Ink-to-Light (the molecule opens
  *   lit). Gentle keeps the crossfades: they are a change of light, not
  *   motion.
+ * - Depth cue: the plate colour and the molecule's bounding sphere, so the
+ *   drawing's far side fades toward the plate as the ink drawings do.
  * - Quiet Idle: it keeps the loop awake only while it fades or waits to.
  *
  * It never writes the store: the hand-off drawing is display-only, and the
@@ -38,6 +40,7 @@ import { getComfort, glidesAnimate } from '../motion/comfort';
 import { peekBaton, type RelayBaton } from '../relay/baton';
 import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { registerPlayDevHook } from '../play/devHooks';
+import { inkPlateColor } from './illustrate';
 
 /** A look change: lit ⇄ ink (ms). */
 export const INK_TOGGLE_MS = 480;
@@ -109,6 +112,8 @@ export function InkLookDriver(): null {
   const inkStyle = useStore((s) => s.inkStyle);
   const inkWeight = useStore((s) => s.inkWeight);
   const trajectory = useStore((s) => s.file?.trajectory ?? null);
+  const backgroundPreset = useStore((s) => s.backgroundPreset);
+  const atomScale = useStore((s) => s.atomScale);
   const domElement = useThree((s) => (s.renderer as unknown as { domElement?: HTMLElement } | null)?.domElement ?? null);
   const fadeRef = useRef<FadeState>({
     fromMix: 0,
@@ -151,6 +156,32 @@ export function InkLookDriver(): null {
     INK_LOOK.uInkWeight.value = weight;
     requestLupiFrames();
   }, [inkWeight]);
+
+  // Depth cue: the plate the far side fades toward, and the molecule's
+  // bounding sphere (bounds half-diagonal plus a ball-and-stick radius).
+  useLayoutEffect(() => {
+    INK_LOOK.uPlateColor.value.set(inkPlateColor(backgroundPreset));
+    requestLupiFrames();
+  }, [backgroundPreset]);
+  useLayoutEffect(() => {
+    const bounds = trajectory?.globalBounds;
+    if (!bounds) {
+      INK_LOOK.uInkRadius.value = 0;
+      return;
+    }
+    INK_LOOK.uInkCenter.value.set(
+      (bounds.min[0] + bounds.max[0]) / 2,
+      (bounds.min[1] + bounds.max[1]) / 2,
+      (bounds.min[2] + bounds.max[2]) / 2,
+    );
+    const half = Math.hypot(
+      (bounds.max[0] - bounds.min[0]) / 2,
+      (bounds.max[1] - bounds.min[1]) / 2,
+      (bounds.max[2] - bounds.min[2]) / 2,
+    );
+    INK_LOOK.uInkRadius.value = half + 0.5 * (Number.isFinite(atomScale) && atomScale > 0 ? atomScale : 1);
+    requestLupiFrames();
+  }, [trajectory, atomScale]);
 
   // Ink-to-Light: a molecule handed over from an ink drawing opens in ink.
   useLayoutEffect(() => {

@@ -20,6 +20,7 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
   - **Depth without screen-space AO**: crevices fall into the shade band through the baked contact occlusion, so the drawing holds still while it spins.
   - **Ink**: an outline at every atom's silhouette and along both edges of every bond. Atoms too small to carry a line lose it, and bonds thinner than about two lines become a single ink stroke, as in the drawings.
   - **Sketch** adds strokes in the shade, crossed in the deepest shade.
+  - **Depth**: the far side of the molecule fades toward the plate (up to 40 %), as the drawings fade their back atoms.
 - **Transitions**: switching between ink and light fades over about half a second.
 - **Effects**: while ink is on, the effect recipe rests (no AO, glow, focus, vignette or tone mapping), so the flat colours and the ink reach the screen exactly. Turning ink off brings the recipe back unchanged.
 - **A new molecule** keeps the Illustrate look.
@@ -68,6 +69,7 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'off', inkWeight }`; com
 | Fills | lifted toward paper 8 % (flat) or 40 % (hatched); shade 46 % (flat) or 14 % (hatched) toward `#1a2321` | `INK_LOOK_TUNING` |
 | Hatching | spacing 4.4 units, strokes up to 52 % of it; single strokes from darkness 0.40, crossed from 0.62 | `INK_LOOK_TUNING` |
 | Ink colour | `#0c1211` | `INK_LOOK_COLORS` |
+| Depth cue | the back of the bounding sphere fades 40 % toward the plate, from 15 % of the depth on | `INK_LOOK_TUNING` |
 | Fades | lit ⇄ ink 480 ms; Ink-to-Light waits 200 ms after the first frame, then 520 ms | `InkLookDriver.tsx` |
 
 ## Half-done and next

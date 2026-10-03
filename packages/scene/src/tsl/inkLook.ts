@@ -16,7 +16,11 @@
  * - hatching (`uInkHatch`): pen strokes in the shade, crossed in the deepest
  *   shade, at a fixed spacing in picture pixels. Stroke coordinates come from
  *   the view-space hit and the full picture's projection, so a tiled,
- *   supersampled export draws them seamlessly across its tiles.
+ *   supersampled export draws them seamlessly across its tiles;
+ * - depth cue: the far side of the molecule fades toward the plate, as the
+ *   drawings fade their back atoms (ink.ts opacity 0.42..1). The molecule's
+ *   bounding sphere is a world-space uniform and its depth is taken through
+ *   the rendering camera, so a capture's camera cues exactly as it draws.
  *
  * Line weight is in "ink units": CSS pixels on a 900 px picture, scaled with
  * the picture's short side (within limits) and the device or capture texel
@@ -33,7 +37,7 @@
  * every impostor material. At `uInkMix = 0` the impostors skip this code
  * (a uniform branch), and at 1 they skip the lit surface.
  */
-import { Color, Vector2 } from 'three/webgpu';
+import { Color, Vector2, Vector3 } from 'three/webgpu';
 import type { Node, UniformNode } from 'three/webgpu';
 import {
   Fn,
@@ -109,6 +113,9 @@ export const INK_LOOK_TUNING = {
   hatchCross: [0.62, 0.93] as const,
   /** Ink opacity of the strokes (outlines are full ink). */
   hatchInk: 0.85,
+  /** How far the far side of the molecule fades toward the plate, and where across its depth the fade starts. */
+  depthCue: 0.4,
+  depthCueFrom: 0.15,
 } as const;
 
 type FloatUniform = UniformNode<'float', number>;
@@ -125,6 +132,11 @@ export interface InkLookUniforms {
   uInkColor: UniformNode<'color', Color>;
   uPaperColor: UniformNode<'color', Color>;
   uShadeColor: UniformNode<'color', Color>;
+  /** The plate the drawing sits on (the far side fades toward it). */
+  uPlateColor: UniformNode<'color', Color>;
+  /** The molecule's bounding sphere in world space (the depth cue's range); radius 0 turns the cue off. */
+  uInkCenter: UniformNode<'vec3', Vector3>;
+  uInkRadius: FloatUniform;
 }
 
 const f = (value: number) => uniform(value) as unknown as FloatUniform;
@@ -190,6 +202,9 @@ export const INK_LOOK: InkLookUniforms = {
   uInkColor: uniform(new Color(INK_LOOK_COLORS.ink)) as unknown as UniformNode<'color', Color>,
   uPaperColor: uniform(new Color(INK_LOOK_COLORS.paper)) as unknown as UniformNode<'color', Color>,
   uShadeColor: uniform(new Color(INK_LOOK_COLORS.shade)) as unknown as UniformNode<'color', Color>,
+  uPlateColor: uniform(new Color('#101817')) as unknown as UniformNode<'color', Color>,
+  uInkCenter: uniform(new Vector3()) as unknown as UniformNode<'vec3', Vector3>,
+  uInkRadius: f(0),
 };
 
 const I = INK_LOOK as unknown as Record<keyof InkLookUniforms, N>;
@@ -349,6 +364,14 @@ export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node
     const strokeInk = max(single, cross).mul(hatch).mul(hatchFade).mul(T.hatchInk);
 
     const ink = clamp(max(outline, strokeInk), 0.0, 1.0);
-    return mix(fill, vec3(I.uInkColor), ink);
+    const drawn = mix(fill, vec3(I.uInkColor), ink);
+
+    // Depth cue: 0 at the front of the bounding sphere, 1 at its back, seen
+    // through the camera rendering now (view space looks down −z).
+    const radius = I.uInkRadius.toVar();
+    const centreDepth = (cameraViewMatrix as N).mul(vec4(I.uInkCenter, 1.0)).z.negate();
+    const across = hit.z.negate().sub(centreDepth.sub(radius)).div(max(radius.mul(2.0), 1e-3));
+    const cue = smoothstep(T.depthCueFrom, 1.0, clamp(across, 0.0, 1.0)).mul(T.depthCue).mul(step(1e-3, radius));
+    return mix(drawn, vec3(I.uPlateColor), cue);
   }) as N)();
 }

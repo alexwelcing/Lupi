@@ -1085,18 +1085,20 @@ export const RENDER_INK_SHADINGS_V1 = ['flat', 'hatch'] as const;
 
 /**
  * The Illustrate look, when a raster spec carries it: the shading, the line
- * weight and the three ink colours. Its own post recipe is the raw scene
+ * weight, the three ink colours, and the plate its far side fades toward. Its own post recipe is the raw scene
  * (the drawing shades itself), so it requires a raw-scene postprocess.
  */
 function validateRenderInkV1(view: RenderJsonObjectV1): void {
   const path = '$.spec.view.ink';
-  const ink = exactViewObject(view, 'ink', ['pipeline', 'shading', 'weight', 'ink', 'paper', 'shade']);
+  const ink = exactViewObject(view, 'ink', ['pipeline', 'shading', 'weight', 'ink', 'paper', 'shade', 'plate', 'depthCue']);
   requireOneOf(ink.pipeline, RENDER_INK_PIPELINES_V1, `${path}.pipeline`);
   requireOneOf(ink.shading, RENDER_INK_SHADINGS_V1, `${path}.shading`);
   requireNumberInRange(ink.weight, 0.4, 2.5, `${path}.weight`);
   requireHexColor(ink.ink, `${path}.ink`);
   requireHexColor(ink.paper, `${path}.paper`);
   requireHexColor(ink.shade, `${path}.shade`);
+  requireHexColor(ink.plate, `${path}.plate`);
+  requireNumberInRange(ink.depthCue, 0, 1, `${path}.depthCue`);
   const postprocess = requireRecord(view.postprocess, '$.spec.view.postprocess');
   requireLiteral(postprocess.pipeline, 'raw-scene', '$.spec.view.postprocess.pipeline');
 }
