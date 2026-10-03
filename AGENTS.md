@@ -108,8 +108,8 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   `emit(intent)` emits a Lupi intent as the UI would, `reset()` puts display
   motion at rest, and `poke`, `flick`, `catch`, `scatter`, `stepDetent`,
   `burst(atomIndex)`, `tug(atomIndex, [dx, dy, dz], holdMs)`,
-  `heat(level)` and `replay()` appear once the viewer has registered them.
-  It never writes molecule data.
+  `heat(level)`, `replay()` and `remix()` appear once the viewer has
+  registered them. It never writes molecule data.
 - **One-finger verbs** (Play tray, palette): Orbit, Poke, Tug, Burst, Heat.
   Tug drags an atom's neighbourhood on springs and twangs it home; Burst pops
   the atoms out from a tap and springs them back; Heat jiggles the atoms
@@ -148,6 +148,34 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   last moment as `{ moment, keys, events, bytes, link }`; `replay('watch')`
   starts a waiting shared replay. Replays and clips are never artifacts:
   MCP cannot request them.
+- **Remix codes and Foil** (`packages/ui/src/remix`). Every Remix is a short
+  versioned code, `r1-K7QDM`: five Crockford base32 characters (keep-colours
+  and worlds flags, a 23-bit seed) that the frozen r1 catalog in
+  `remix/code.ts` resolves to the whole look with an integer-exact
+  mulberry32 stream, so a code gives the same look on any device, molecule
+  and atom count (changing the catalog means r2; r1 resolves forever). r1
+  has no transmission and no adjusted gradients, so a remixed view stays
+  exportable. Roll from the Play tray's Look row (it stays open), the pill's
+  "⟳ Again", M (Shift+M steps back), the scene deck, the palette, or a
+  shake (phones; off until turned on in the Remix sheet, iOS asks
+  permission in that tap). The Remix sheet (the tray's code chip) copies,
+  shares (`?remix=` on the molecule's address) and takes typed or pasted
+  codes; a pasted `r1-` code or `remix=` link also applies anywhere outside
+  text fields, and replay links carry the sender's code. Keep atom colours
+  is on by default (CPK). Looks morph in about 600 ms (`remix/lookMorph.ts`:
+  store keys tweened per frame, colours in linear light, discrete choices at
+  the midpoint under a dip, gradient backdrops cross-faded on a dome); Still
+  cuts. About one code in 24 is Foil, a pure function of the code text
+  (`fmix32(fnv1a(code)) mod 24`): Holo, Gold leaf or Pearl, a cosmetic rim,
+  highlight and sheen term in the atom and bond impostors
+  (`scene/src/tsl/atomFoil.ts`), revealed by a 900 ms sweep from the
+  key-light side, at published odds (Foil 1 in 24, each finish 1 in 72)
+  printed in the tray and the sheet. A finish rolled once stays selectable
+  on that device ("Show all finishes" unlocks all; "Off" hides one). Finishes
+  are never in an export, thumbnail, MCP artifact or ordinary video (the
+  capture guard zeroes them); Instant Replay's illustrative clip keeps them.
+  `__lupiPlay.remix()` returns `{ code, foil, finish, status, morphing }`;
+  `remix('roll')`, `remix('undo')` and `remix('r1-K7QDM')` drive it.
 - **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
   half-strength display motion) or Still (nothing moves on its own; glides
   cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and
@@ -419,7 +447,11 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   mid-ripple has the same `artifactDigest` as one taken at rest. The one
   recording that keeps display motion is Instant Replay's clip
   (`beginRecording({ illustrative: true })`): it is labelled "Illustrative"
-  in every frame and has no artifact identity.
+  in every frame and has no artifact identity. A Remix code's Foil finish
+  (Holo, Gold leaf, Pearl) follows the same rule: zero in every capture
+  render and ordinary recording, kept only in that illustrative clip. A
+  Remix look itself (lights, materials, backdrop) is ordinary viewer state
+  and exports as configured.
 - Deterministic raster bonds fail closed until the asynchronous bond result is
   snapshot-addressable; hide bonds before raster export. Model export may use
   its synchronous CPU bond path, but fails if inferred bonds hit the cap.
