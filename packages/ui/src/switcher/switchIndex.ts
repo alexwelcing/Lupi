@@ -1,5 +1,8 @@
 import { molarMass, parsePropertyEvidence, type PropertyEvidence } from '@atlas/core';
+import { omolTitle } from '@atlas/core/omol25';
+import { markOpenEntry } from '../analytics/openEntry';
 import { LOCAL_MOLECULES, scoreLocalMolecule, type LocalMolecule } from '../landing/moleculeIndex';
+import { omolPickTitle, todaysOmolPicks, type OmolPick } from '../landing/omolShelf';
 import { elementsFromFormula, omolFacets, omolRecords, omolStructureUrl, type OmolRecord } from '../molecules/providers/omol';
 import { openPubChemMolecule, pubchemAutocomplete } from '../molecules/pubchemLoad';
 import { openMolecule } from '../viewer/openMolecule';
@@ -50,6 +53,8 @@ export interface SwitchQuery {
 const GALLERY_LIMIT = 12;
 const OMOL_LIMIT = 16;
 const PUBCHEM_LIMIT = 6;
+/** Featured OMol25 picks in the idle view: the first four of today's home shelf. */
+export const OMOL_IDLE_PICKS = 4;
 
 function atomsLabel(atoms: number): string {
   if (atoms >= 1_000_000) return `${(atoms / 1_000_000).toFixed(1).replace(/\.0$/, '')}M atoms`;
@@ -101,9 +106,10 @@ function galleryCandidate(molecule: LocalMolecule): SwitchCandidate {
 }
 
 function omolCandidate(record: OmolRecord): SwitchCandidate {
+  const title = omolTitle(record.formula);
   return {
     key: `omol:${record.id}`,
-    title: record.formula,
+    title,
     formula: record.formula,
     elements: record.elements,
     atoms: record.natoms,
@@ -111,10 +117,40 @@ function omolCandidate(record: OmolRecord): SwitchCandidate {
     detail: `${atomsLabel(record.natoms)} · OMol25 DFT structure`,
     molarMass: molarMass(record.formula),
     open: async () => {
-      const result = await openMolecule({ kind: 'url', url: omolStructureUrl(record.id), title: `${record.formula} (OMol25)`, history: 'push' });
+      markOpenEntry('switcher');
+      const result = await openMolecule({ kind: 'url', url: omolStructureUrl(record.id), title, history: 'push' });
       if (!result.ok) throw new Error(result.message);
     },
   };
+}
+
+function omolPickCandidate(pick: OmolPick): SwitchCandidate {
+  const title = omolPickTitle(pick);
+  return {
+    key: `omol-pick:${pick.id}`,
+    title,
+    formula: pick.formula,
+    elements: elementsFromFormula(pick.formula),
+    atoms: pick.atoms,
+    source: 'omol',
+    detail: `${pick.domainLabel} · ${atomsLabel(pick.atoms)} · featured pick`,
+    image: pick.ink,
+    molarMass: molarMass(pick.formula),
+    open: async () => {
+      markOpenEntry('switcher');
+      const result = await openMolecule({ kind: 'url', url: pick.file, title, history: 'push' });
+      if (!result.ok) throw new Error(result.message);
+    },
+  };
+}
+
+/**
+ * The idle view's "From OMol25" group: four of today's featured picks with
+ * their ink drawings. Kept apart from LOCAL_MOLECULES, which also feeds the
+ * home wall and finder.
+ */
+export function omolPickCandidates(n = OMOL_IDLE_PICKS, now?: Date): SwitchCandidate[] {
+  return todaysOmolPicks(n, now).map(omolPickCandidate);
 }
 
 function pubchemCandidate(name: string): SwitchCandidate {
