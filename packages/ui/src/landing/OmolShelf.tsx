@@ -20,7 +20,7 @@ import {
   openOmolSurprise,
   todaysOmolPicks,
   type OmolPick,
-} from './omolShelf';
+} from './omolPicks';
 import './omol-shelf.css';
 
 const NEUTRAL_TRAIN_ROWS = omol25Collection('neutral-train').sourceRows;

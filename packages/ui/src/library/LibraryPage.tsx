@@ -3,7 +3,7 @@ import { EXTERNAL_RESEARCH_DATASETS } from '@atlas/core';
 import { omolBondTruth } from '@atlas/core/omol25';
 import { EXAMPLES } from '../gallery/catalog';
 import { OmolOpenerStatus, OmolPickTiles, useOmolOpener } from '../landing/OmolShelf';
-import { todaysOmolPicks } from '../landing/omolShelf';
+import { todaysOmolPicks } from '../landing/omolPicks';
 import { OMOL_PICKS } from '../landing/omolShelf.data';
 import { libraryPath, type LibraryCollectionId } from '../viewer/viewerRoutes';
 import { LibraryBrowser } from './LibraryBrowser';

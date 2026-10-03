@@ -1,5 +1,5 @@
 /**
- * omolShelf.ts — the landing-safe logic behind the home page's OMol25 shelf
+ * omolPicks.ts — the landing-safe logic behind the home page's OMol25 shelf
  * and the finder's OMol25 rows: which featured picks show today, which picks
  * a typed query matches, when a query is formula-shaped enough to hand off to
  * the Library, and opening a pick.

@@ -17,7 +17,7 @@ import {
   omolPickTitle,
   openOmolPick,
   type OmolPick,
-} from './omolShelf';
+} from './omolPicks';
 // The relay stage registers itself here, in the landing chunk (no three).
 import '../relay/stage';
 

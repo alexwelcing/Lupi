@@ -8,7 +8,7 @@ const { openMolecule } = vi.hoisted(() => ({
 }));
 vi.mock('../viewer/openMolecule', () => ({ openMolecule }));
 
-import { OMOL_SURPRISE_FAILURE } from '../landing/omolShelf';
+import { OMOL_SURPRISE_FAILURE } from '../landing/omolPicks';
 import { useStore } from '../store';
 import { OMOL25_RANDOM_FAILURE, OMOL25_RANDOM_ROWS, openRandomOmol25Molecule, randomOmol25Url, uniformRandomInt } from './randomOmol';
 

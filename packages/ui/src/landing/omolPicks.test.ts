@@ -17,7 +17,7 @@ import {
   omolFormulaHandoffHref,
   omolPickMark,
   omolShelfForDay,
-} from './omolShelf';
+} from './omolPicks';
 
 const HOME = OMOL_PICKS.filter((pick) => pick.home);
 

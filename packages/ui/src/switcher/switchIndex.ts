@@ -2,7 +2,7 @@ import { molarMass, parsePropertyEvidence, type PropertyEvidence } from '@atlas/
 import { omolTitle } from '@atlas/core/omol25';
 import { markOpenEntry } from '../analytics/openEntry';
 import { LOCAL_MOLECULES, scoreLocalMolecule, type LocalMolecule } from '../landing/moleculeIndex';
-import { omolPickTitle, todaysOmolPicks, type OmolPick } from '../landing/omolShelf';
+import { omolPickTitle, todaysOmolPicks, type OmolPick } from '../landing/omolPicks';
 import { elementsFromFormula, omolFacets, omolRecords, omolStructureUrl, type OmolRecord } from '../molecules/providers/omol';
 import { openPubChemMolecule, pubchemAutocomplete } from '../molecules/pubchemLoad';
 import { openMolecule } from '../viewer/openMolecule';
