@@ -39,6 +39,8 @@ export interface ClipCompositorOptions {
   linkLabel: string;
   /** Total clip length (s), end card included. */
   duration: number;
+  /** A Remix code's Foil finish on screen ("Holo"), labelled as cosmetic. */
+  finish?: string | null;
 }
 
 export interface ClipCompositor extends VideoCompositor {
@@ -121,6 +123,12 @@ export function createClipCompositor(options: ClipCompositorOptions): ClipCompos
     }
 
     ctx.textBaseline = 'alphabetic';
+    if (options.finish) {
+      // A Foil finish says what it is on every frame: cosmetic.
+      ctx.font = `680 ${12 * u}px ${FONT}`;
+      ctx.fillStyle = LIME;
+      ctx.fillText(`✦ ${options.finish} foil · cosmetic finish`, left, height - 96 * u);
+    }
     ctx.font = `720 ${24 * u}px ${FONT}`;
     ctx.fillStyle = INK;
     ctx.fillText(clampText(ctx, options.title, width - 2 * left), left, height - 66 * u);

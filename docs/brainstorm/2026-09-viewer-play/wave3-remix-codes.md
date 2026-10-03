@@ -40,7 +40,7 @@ Short-list item 12: [C062 Remix Codes that Morph](round1-catalog.md#c062) with [
   - A finish you roll once stays selectable on that device: Finish → Holo, Gold leaf or Pearl.
   - "Show all finishes" unlocks all three without rolling.
   - "Off" hides a code's finish.
-- **Never in an artifact.** Exports, thumbnails, MCP images and ordinary videos never carry a finish. Instant Replay's illustrative clip keeps it, as it keeps the toys.
+- **Never in an artifact.** Exports, thumbnails, MCP images and ordinary videos never carry a finish. Instant Replay's illustrative clip keeps it, as it keeps the toys, and every frame of that clip says "✦ Holo foil · cosmetic finish".
 
 ### The Remix sheet
 
@@ -87,6 +87,7 @@ The deck's four Looks (Studio, Paper, Night, Prism) morph the same way. Choosing
 | The sheet | `remix/RemixSheet.tsx`, `remix/remixSheet.css` |
 | Shake detection and permission | `remix/shake.ts` |
 | Tray Look row, pill Again and Foil chip | `play/PlayTray.tsx`, `play/PlayPill.tsx`, `play/playPill.css` |
+| The Foil label on Replay clip frames | `replay/clipCompositor.ts`, `replay/ReplaySheet.tsx` |
 | The phone sheet's view lift (a bottom occluder) | `camera/viewInset.ts`, `camera/ViewInsetDriver.tsx` |
 | M / Shift+M, palette rows, deck | `app/useGlobalShortcuts.ts`, `ViewerApp.tsx`, `StudioControlDeck.tsx` |
 
@@ -151,7 +152,7 @@ Any change to the catalog is r2, and r1 keeps resolving. If a catalog id ever le
 - **Not built:**
   - the filter-shell "case" for a finish;
   - feats;
-  - Foil on share cards;
+  - Foil on share cards and link previews (only the Replay clip's frames are labelled);
   - the reduced-motion "one still" reveal (Still simply shows the finish at once).
 - **A link carries the code, not edits.** A code tweaked after rolling ("edited") is not put in replay links, and Share look shares the code as rolled.
 - **Shake to roll is untested on iOS and Android.** The thresholds are guesses.

@@ -27,6 +27,8 @@ import { ReplayPlayer } from './player';
 import { pauseRecorder } from './recorder';
 import { replayStore, useReplayStore, type ReplayMoment } from './replayStore';
 import { buildTape, moleculePageLabel, replayLink, replayViewContext, tapeHasToys, type BuiltTape } from './session';
+import { FOIL_LABEL } from '../remix/code';
+import { remixStore, shownFinish } from '../remix/remixStore';
 import './replaySheet.css';
 
 type ClipState =
@@ -161,6 +163,7 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
     const width = phone ? 720 : 1080;
     const height = phone ? 1280 : 1920;
     const duration = built.tape.duration + ENDCARD_S;
+    const finish = shownFinish(remixStore.getState());
     const compositor = createClipCompositor({
       width,
       height,
@@ -168,6 +171,7 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
       toys,
       linkLabel: moleculePageLabel(context),
       duration,
+      finish: finish ? FOIL_LABEL[finish] : null,
     });
     compositorRef.current = compositor;
 
