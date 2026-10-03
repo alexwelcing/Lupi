@@ -1,3 +1,4 @@
+import { omolTitle } from '@atlas/core/omol25';
 import { useStore } from '../store';
 import { openMolecule } from '../viewer/openMolecule';
 import { openPubChemMolecule } from './pubchemLoad';
@@ -14,10 +15,14 @@ export async function loadMoleculeHit(hit: MoleculeHit): Promise<void> {
     case 'url':
       {
         useStore.getState().setRendererWarning(null);
-        const result = await openMolecule({ kind: 'url', url: spec.url, title: hit.title, history: 'push' });
+        const omol = hit.source === 'omol';
+        const title = omol ? omolTitle(hit.title) : hit.title;
+        const result = await openMolecule({ kind: 'url', url: spec.url, title, history: 'push' });
         if (!result.ok) throw new Error(result.message);
         if (spec.atomTypeMap) applySourceTypeMap(spec.atomTypeMap);
-        if (hit.notice) useStore.getState().setRendererWarning(hit.notice);
+        // An OMol25 notice is the geometry state, which the viewer's source
+        // card states in Learn; a warning toast would read as a fault.
+        if (hit.notice && !omol) useStore.getState().setRendererWarning(hit.notice);
       }
       if (hit.source === 'social') {
         const store = useStore.getState();

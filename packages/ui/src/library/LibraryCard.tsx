@@ -1,3 +1,4 @@
+import { omolCardTruth } from '@atlas/core/omol25';
 import type { MoleculeHit, MoleculeSourceId } from '../molecules/types';
 
 export const SOURCE_LABEL: Record<MoleculeSourceId, string> = {
@@ -19,7 +20,7 @@ export const SOURCE_LABEL: Record<MoleculeSourceId, string> = {
 export function describeHitTruth(hit: MoleculeHit): string {
   switch (hit.source) {
     case 'omol':
-      return 'Source DFT coordinates. OMol25 supplies no bonds; any bond lines are a viewer guide.';
+      return omolCardTruth();
     case 'research':
       return hit.load.kind === 'url' && hit.load.atomTypeMap
         ? 'Source file streamed from Zenodo with a catalog element map.'
