@@ -1,5 +1,5 @@
 import { useCallback, useContext, useMemo, useState } from 'react';
-import { OMOL25_ATTRIBUTION_URL, OMOL25_PAPER_URL, omol25Collection, omolChargeSpin } from '@atlas/core/omol25';
+import { OMOL25_ATTRIBUTION_URL, OMOL25_NEUTRAL_TRAIN_ROWS, OMOL25_PAPER_URL, omolChargeSpin } from '@atlas/core/omol25';
 import type { OpenEntry } from '../analytics/openEntry';
 import { LandingIntentContext } from './landingIntent';
 import { lightInkTile } from './MoleculeFinder';
@@ -19,8 +19,7 @@ import {
 } from './omolPicks';
 import './omol-shelf.css';
 
-const NEUTRAL_TRAIN_ROWS = omol25Collection('neutral-train').sourceRows;
-const MILLIONS = (NEUTRAL_TRAIN_ROWS / 1_000_000).toFixed(1);
+const MILLIONS = (OMOL25_NEUTRAL_TRAIN_ROWS / 1_000_000).toFixed(1);
 
 function saveData(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -188,7 +187,7 @@ export function OmolShelf() {
             opener.run('surprise', OMOL_SURPRISE_FAILURE, () => openOmolSurprise('home-surprise', intent.prefetchViewer));
           }}
         >
-          Surprise me <small>one of {NEUTRAL_TRAIN_ROWS.toLocaleString('en-US')}</small>
+          Surprise me <small>one of {OMOL25_NEUTRAL_TRAIN_ROWS.toLocaleString('en-US')}</small>
         </a>
         <a className="student-secondary" href="/library/omol25?view=facets">
           Filter by element <span aria-hidden="true">→</span>

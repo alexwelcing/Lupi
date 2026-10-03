@@ -20,6 +20,10 @@ export interface Omol25Collection {
   license: 'CC-BY-4.0';
 }
 
+/** Rows of the two complete neutral splits, for surfaces that need only the count (the landing). */
+export const OMOL25_NEUTRAL_TRAIN_ROWS = 34_335_828;
+export const OMOL25_NEUTRAL_VALIDATION_ROWS = 27_697;
+
 /**
  * The public ColabFit conversions of OMol25 that Lupi pages through its edge.
  * Only the two neutral splits are complete; the Dataset Viewer has indexed a
@@ -30,9 +34,9 @@ export const OMOL25_COLLECTIONS: readonly Omol25Collection[] = [
     id: 'neutral-train',
     label: 'Neutral train',
     repo: 'colabfit/OMol25_train_neutral',
-    indexedRows: 34_335_828,
-    hfEstimatedRows: 34_335_828,
-    sourceRows: 34_335_828,
+    indexedRows: OMOL25_NEUTRAL_TRAIN_ROWS,
+    hfEstimatedRows: OMOL25_NEUTRAL_TRAIN_ROWS,
+    sourceRows: OMOL25_NEUTRAL_TRAIN_ROWS,
     coverage: 'complete',
     license: 'CC-BY-4.0',
   },
@@ -40,9 +44,9 @@ export const OMOL25_COLLECTIONS: readonly Omol25Collection[] = [
     id: 'neutral-validation',
     label: 'Neutral validation',
     repo: 'colabfit/OMol25_neutral_validation',
-    indexedRows: 27_697,
-    hfEstimatedRows: 27_697,
-    sourceRows: 27_697,
+    indexedRows: OMOL25_NEUTRAL_VALIDATION_ROWS,
+    hfEstimatedRows: OMOL25_NEUTRAL_VALIDATION_ROWS,
+    sourceRows: OMOL25_NEUTRAL_VALIDATION_ROWS,
     coverage: 'complete',
     license: 'CC-BY-4.0',
   },
@@ -78,9 +82,10 @@ export const OMOL25_COLLECTIONS: readonly Omol25Collection[] = [
   },
 ];
 
-export const OMOL25_COLLECTION_IDS: readonly Omol25CollectionId[] = OMOL25_COLLECTIONS.map((c) => c.id);
+// Pure, so a bundle that needs only the counts or the elements drops the table.
+export const OMOL25_COLLECTION_IDS: readonly Omol25CollectionId[] = /* @__PURE__ */ OMOL25_COLLECTIONS.map((c) => c.id);
 
-const BY_ID = new Map<string, Omol25Collection>(OMOL25_COLLECTIONS.map((c) => [c.id, c]));
+const BY_ID = /* @__PURE__ */ new Map<string, Omol25Collection>(/* @__PURE__ */ OMOL25_COLLECTIONS.map((c) => [c.id, c]));
 
 export function isOmol25CollectionId(value: unknown): value is Omol25CollectionId {
   return typeof value === 'string' && BY_ID.has(value);

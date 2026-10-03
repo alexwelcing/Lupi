@@ -1,4 +1,4 @@
-import { OMOL25_NEUTRAL_ELEMENTS, omol25Collection } from './collections';
+import { OMOL25_NEUTRAL_ELEMENTS, OMOL25_NEUTRAL_VALIDATION_ROWS } from './collections';
 import { OMOL25_CITATION, OMOL25_VIEWER_BOND_RECIPE, omolGeometryState } from './truth';
 import { omolFeaturedPath, omolPickInkPath, omolPickKey, omolStructurePath } from './urls';
 
@@ -127,9 +127,9 @@ export function parseOmolFormula(formula: string): Array<[string, number]> | nul
   return out;
 }
 
-const NEUTRAL = new Set(OMOL25_NEUTRAL_ELEMENTS);
-const SHELVES = new Set<string>(OMOL25_SHELVES);
-const NV_ROWS = omol25Collection('neutral-validation').indexedRows;
+const NEUTRAL = /* @__PURE__ */ new Set(OMOL25_NEUTRAL_ELEMENTS);
+const SHELVES = /* @__PURE__ */ new Set<string>(OMOL25_SHELVES);
+const NV_ROWS = OMOL25_NEUTRAL_VALIDATION_ROWS;
 
 /** Shape errors for one featured pick; empty when it is valid. */
 export function validateOmolFeaturedPick(value: unknown, label = 'pick'): string[] {

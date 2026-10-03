@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { omol25Collection } from '@atlas/core/omol25';
+import { OMOL25_NEUTRAL_TRAIN_ROWS, OMOL25_NEUTRAL_VALIDATION_ROWS } from '@atlas/core/omol25';
 import { useStore } from '../store';
 import { openPubChemMolecule, pubchemAutocomplete, PUBCHEM_COMPOUND_COUNT_LABEL } from '../molecules/pubchemLoad';
 import { LOCAL_MOLECULES, searchLocalMolecules, type LocalMolecule } from './moleculeIndex';
@@ -49,8 +49,8 @@ export type FinderResult =
 const PUBCHEM_DEBOUNCE_MS = 150;
 const LOCAL_LIMIT = 6;
 const PUBCHEM_LIMIT = 8;
-const OMOL_ROWS_LABEL = `${(omol25Collection('neutral-train').sourceRows / 1_000_000).toFixed(1)}M`;
-const OMOL_INDEX_ROWS = omol25Collection('neutral-validation').sourceRows.toLocaleString('en-US');
+const OMOL_ROWS_LABEL = `${(OMOL25_NEUTRAL_TRAIN_ROWS / 1_000_000).toFixed(1)}M`;
+const OMOL_INDEX_ROWS = OMOL25_NEUTRAL_VALIDATION_ROWS.toLocaleString('en-US');
 
 let relaySerial = 0;
 
