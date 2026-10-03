@@ -3,7 +3,8 @@ import { MOLECULAR_RECIPE_ID, type PerceivedBonds } from '@atlas/core/bonds';
 import type { FrameChemistry, FrameSourceRecord } from '@atlas/core/types';
 import { bondMethodCopy } from './BondMethodSection';
 import { bondLegendCopy } from './BondLegendHUD';
-import { omol25SourceRows, randomNeutralTrainRow } from '../omol25/Omol25SourceCard';
+import { omol25SourceRows } from '../omol25/Omol25SourceCard';
+import { OMOL25_RANDOM_ROWS, uniformRandomInt } from '../molecules/randomOmol';
 import { getPerceivedBonds } from './perceivedBonds';
 import { frameFromAtoms, sodiumHexaaqua } from './bondFixtures.test-utils';
 
@@ -80,7 +81,9 @@ describe('OMol25 source card', () => {
   });
 
   it('picks random rows inside the neutral training split', () => {
-    expect(randomNeutralTrainRow(() => 0)).toBe(0);
-    expect(randomNeutralTrainRow(() => 0.999999999999)).toBe(34_335_827);
+    // The card's Random OMol25 opens through molecules/randomOmol.
+    const limit = 2 ** 32 - (2 ** 32 % OMOL25_RANDOM_ROWS);
+    expect(uniformRandomInt(OMOL25_RANDOM_ROWS, () => 0)).toBe(0);
+    expect(uniformRandomInt(OMOL25_RANDOM_ROWS, () => limit - 1)).toBe(34_335_827);
   });
 });

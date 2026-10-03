@@ -6,7 +6,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import {
   OMOL25_CITATION,
-  OMOL25_COLLECTIONS,
   OMOL25_COORDINATE_TRUTH,
   isOmol25CollectionId,
   omol25Collection,
@@ -14,24 +13,8 @@ import {
   omolChargeSourcePhrase,
   omolChargeSpin,
   omolGeometryState,
-  omolStructurePath,
 } from '@atlas/core/omol25';
 import type { Frame } from '@atlas/core/types';
-import { openMolecule } from '../viewer/openMolecule';
-
-const NEUTRAL_TRAIN_ROWS = OMOL25_COLLECTIONS.find((c) => c.id === 'neutral-train')!.sourceRows;
-
-/** A uniform row of the 34.3M-row neutral training split (no index download). */
-export function randomNeutralTrainRow(random: () => number = cryptoUnit): number {
-  return Math.min(NEUTRAL_TRAIN_ROWS - 1, Math.floor(random() * NEUTRAL_TRAIN_ROWS));
-}
-
-function cryptoUnit(): number {
-  const words = new Uint32Array(2);
-  globalThis.crypto.getRandomValues(words);
-  // 53 random bits: no modulo bias over 34,335,828 rows.
-  return ((words[0] >>> 5) * 67_108_864 + (words[1] >>> 6)) / 9_007_199_254_740_992;
-}
 
 export interface Omol25SourceRows {
   record: string;
@@ -88,8 +71,9 @@ export function Omol25SourceCard({
       setCopied('failed');
     }
   };
+  // The one random-row path (uniform draw, titled, the host-failure sentence), as in the palette and Library.
   const openRandom = () => {
-    void openMolecule({ kind: 'url', url: omolStructurePath('neutral-train', randomNeutralTrainRow()) });
+    void import('../molecules/randomOmol').then(({ openRandomOmol25Molecule }) => openRandomOmol25Molecule());
   };
 
   const entries: Array<[string, string | null]> = [
