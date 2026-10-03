@@ -52,8 +52,11 @@ export function heatKelvin(level: number): number {
 
 export interface PlayFlash {
   text: string;
-  /** `turn`: a shared replay handed the view over ("Your turn · flick it"). */
-  kind: 'detent' | 'catch' | 'flip' | 'info' | 'turn';
+  /**
+   * `turn`: a shared replay handed the view over ("Your turn · flick it").
+   * `remix`: a Remix code landed; `foil`: one in 24, with a Foil finish.
+   */
+  kind: 'detent' | 'catch' | 'flip' | 'info' | 'turn' | 'remix' | 'foil';
   /** performance.now() (ms) when the flash expires. */
   until: number;
 }
