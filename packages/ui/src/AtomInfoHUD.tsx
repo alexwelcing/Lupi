@@ -11,11 +11,15 @@
  * one line of key facts; "Details" opens the full card, remembered for the
  * session), and it declares the area it covers so the live view moves the
  * molecule into the room it leaves free (camera/viewInset.ts).
+ *
+ * The desktop card's anchor rides its atom's display motion (a poke, Tug,
+ * Burst, Heat, the arrival; play/displayFollow, steady), so the card keeps to
+ * the atom it describes and never ends up over it.
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Html } from '@react-three/drei/webgpu';
-import { Vector3, type Camera, type Object3D } from 'three';
+import { Matrix3, Vector3, type Camera, type Object3D } from 'three';
 import type { Frame } from '@atlas/core/types';
 import {
   ELEMENT_DATA,
@@ -29,6 +33,7 @@ import { useStore, type KnowledgeLabel } from './store';
 import { humanizeCategory } from './periodic-table/ElementDetailCard';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import { setViewOccluder } from './camera/viewInset';
+import { atomRestPoint, useDisplayFollower } from './play/displayFollow';
 
 /** The phone sheet's id among the overlays the live view makes room for. */
 const OCCLUDER_ID = 'atom-card';
@@ -52,12 +57,15 @@ const CARD_HEIGHT_GUESS_PX = 320;
 
 const scratchCardAnchor = new Vector3();
 const scratchCardView = new Vector3();
+const scratchCardOffset = new Vector3();
+const scratchCardBasis = new Matrix3();
 
 /**
  * Top-left (px) of the desktop card for an atom of world `radius` at the Html
- * group's position: above or below the atom's screen disc (the side away from
- * the canvas centre when both fit), never over it; clamped into the canvas
- * horizontally.
+ * group's position (plus the atom's display offset, in the molecule's space,
+ * while display motion carries it): above or below the atom's screen disc
+ * (the side away from the canvas centre when both fit), never over it;
+ * clamped into the canvas horizontally.
  */
 function anchoredCardPosition(
   object: Object3D,
@@ -65,8 +73,13 @@ function anchoredCardPosition(
   size: { width: number; height: number },
   radius: number,
   card: HTMLElement | null,
+  offset: readonly [number, number, number],
 ): [number, number] {
   const anchor = scratchCardAnchor.setFromMatrixPosition(object.matrixWorld);
+  if (offset[0] !== 0 || offset[1] !== 0 || offset[2] !== 0) {
+    scratchCardOffset.set(offset[0], offset[1], offset[2]).applyMatrix3(scratchCardBasis.setFromMatrix4(object.matrixWorld));
+    anchor.add(scratchCardOffset);
+  }
   const view = scratchCardView.copy(anchor).applyMatrix4(camera.matrixWorldInverse);
   anchor.project(camera);
   const halfW = size.width / 2;
@@ -165,9 +178,23 @@ export function AtomInfoHUD({
     },
     [],
   );
+  // The desktop card's anchor rides the atom's display motion (steady:
+  // Heat's jiggle damped); drei Html reads it on its next placement.
+  const followOffset = useRef<[number, number, number]>([0, 0, 0]);
+  const followPoint = useRef(new Float64Array(3));
+  useDisplayFollower({
+    mode: 'steady',
+    points: () => (!isMobileRef.current && atomRestPoint(frame, atomIndex ?? -1, followPoint.current) ? followPoint.current : null),
+    apply: (offsets) => {
+      const o = followOffset.current;
+      o[0] = offsets ? offsets[0] : 0;
+      o[1] = offsets ? offsets[1] : 0;
+      o[2] = offsets ? offsets[2] : 0;
+    },
+  });
   const placeCard = useCallback(
     (object: Object3D, camera: Camera, size: { width: number; height: number }) =>
-      anchoredCardPosition(object, camera, size, radiusRef.current, cardRef.current),
+      anchoredCardPosition(object, camera, size, radiusRef.current, cardRef.current, followOffset.current),
     [],
   );
   const validAtomIndex = atomIndex != null && atomIndex >= 0 && atomIndex < frame.natoms;
