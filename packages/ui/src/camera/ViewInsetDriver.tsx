@@ -27,7 +27,9 @@ import { registerPlayDevHook } from '../play/devHooks';
 import { GESTURE } from './gestureTokens';
 import {
   FREE_BAND_GAP_PX,
+  bandShift,
   bottomChromeTop,
+  bottomOccluder,
   insetShift,
   reportViewShift,
   subscribeTopOccluder,
@@ -74,10 +76,10 @@ export function ViewInsetDriver() {
 
   // The overlay appeared, changed size or went: recompute the target.
   useEffect(() => {
-    let present = topOccluder() !== null;
+    let present = topOccluder() !== null || bottomOccluder() !== null;
     return subscribeTopOccluder(() => {
       const st = state.current;
-      const next = topOccluder() !== null;
+      const next = topOccluder() !== null || bottomOccluder() !== null;
       // Appearing or going follows a tap: hold for a possible second tap.
       if (next !== present) st.holdUntil = performance.now() + HOLD_MS;
       present = next;
@@ -143,14 +145,24 @@ export function ViewInsetDriver() {
       if (st.stale) {
         st.stale = false;
         const bottom = topOccluder();
+        const sheetTop = bottomOccluder();
         const canvas = renderer?.domElement as HTMLCanvasElement | undefined;
-        if (bottom === null || !canvas) st.target = 0;
-        else {
+        if ((bottom === null && sheetTop === null) || !canvas) st.target = 0;
+        else if (sheetTop !== null) {
+          // A sheet over the bottom (the phone Remix sheet): lift into the band above it.
+          const rect = canvas.getBoundingClientRect();
+          st.target = bandShift({
+            canvasTop: rect.top,
+            canvasHeight: rect.height,
+            freeTop: (bottom ?? rect.top) + FREE_BAND_GAP_PX,
+            freeBottom: Math.min(sheetTop, bottomChromeTop(rect)) - FREE_BAND_GAP_PX,
+          });
+        } else {
           const rect = canvas.getBoundingClientRect();
           st.target = insetShift({
             canvasTop: rect.top,
             canvasHeight: rect.height,
-            freeTop: bottom + FREE_BAND_GAP_PX,
+            freeTop: (bottom ?? rect.top) + FREE_BAND_GAP_PX,
             freeBottom: bottomChromeTop(rect) - FREE_BAND_GAP_PX,
           });
         }

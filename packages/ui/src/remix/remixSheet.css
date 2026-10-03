@@ -1,0 +1,212 @@
+/* remixSheet.css — the Remix sheet. Sage plate #101817, lime #d5ef9c, the
+   Play pill's ink. It never veils the molecule: a card at the right on
+   desktop, a short bottom sheet on a phone (the view lifts above it). Foil
+   codes wear their finish as a border: a conic rainbow (Holo), gold leaf, or
+   nacre (Pearl). The border sweeps once when it appears, and holds still
+   under reduced motion. */
+
+@property --lupi-foil-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.lupi-remix-sheet {
+  --lupi-sheet-ink: #e4f2c6;
+  --lupi-sheet-muted: #a7b9a1;
+  --lupi-sheet-lime: var(--lupi-accent, #d5ef9c);
+  position: fixed;
+  right: 16px;
+  bottom: 84px;
+  z-index: 380;
+  display: grid;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100dvh - 120px);
+  padding: 18px 18px 16px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: var(--lupi-sheet-ink);
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  background: linear-gradient(180deg, rgba(27, 44, 37, 0.97), rgba(16, 27, 23, 0.98)), #14241e;
+  border: 1px solid #40564a;
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: lupi-remix-in 220ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+@keyframes lupi-remix-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+
+.lupi-remix-sheet__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 40px;
+  height: 40px;
+  color: var(--lupi-sheet-muted);
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lupi-remix-sheet__close:hover { color: var(--lupi-sheet-ink); background: rgba(255, 255, 255, 0.05); }
+.lupi-remix-sheet :where(button, input):focus-visible { outline: 2px solid var(--lupi-sheet-lime); outline-offset: 2px; }
+
+.lupi-remix-sheet__title { margin: 2px 40px 0 0; font-size: 18px; font-weight: 720; letter-spacing: -0.01em; }
+.lupi-remix-sheet__note,
+.lupi-remix-sheet__odds,
+.lupi-remix-sheet__honest { margin: 0; color: var(--lupi-sheet-muted); font-size: 12.5px; line-height: 1.45; }
+.lupi-remix-sheet__honest { color: #8fa48a; font-size: 11.5px; }
+.lupi-remix-sheet__label { margin: 0; color: var(--lupi-sheet-muted); font-size: 11.5px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; }
+.lupi-remix-sheet__error { margin: 0; color: #ffc2a8; font-size: 12.5px; }
+
+/* The code, a collectible chip; Foil codes wear their finish. */
+.lupi-remix-sheet__code-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lupi-remix-sheet__code {
+  --lupi-foil-border: #40564a;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  color: var(--lupi-sheet-ink);
+  background:
+    linear-gradient(#13221d, #13221d) padding-box,
+    var(--lupi-foil-border) border-box;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  font: 700 19px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.lupi-remix-sheet__code[data-empty] { color: #6f8269; }
+.lupi-remix-sheet__code[data-foil='holo'] {
+  --lupi-foil-border: conic-gradient(from var(--lupi-foil-angle), #ff9de6, #9df3ff, #d5ef9c, #ffe59d, #c7a6ff, #ff9de6);
+  animation: lupi-foil-sweep 1.4s ease-out 1;
+}
+.lupi-remix-sheet__code[data-foil='gold'] {
+  --lupi-foil-border: linear-gradient(calc(135deg + var(--lupi-foil-angle)), #fff2c4, #c99a3c 35%, #f7e1a1 55%, #9c7128 80%, #fff2c4);
+  animation: lupi-foil-sweep 1.4s ease-out 1;
+}
+.lupi-remix-sheet__code[data-foil='pearl'] {
+  --lupi-foil-border: conic-gradient(from var(--lupi-foil-angle), #fff6f8, #e3efff, #f1ffe9, #fff0e2, #f6ecff, #fff6f8);
+  animation: lupi-foil-sweep 1.4s ease-out 1;
+}
+@keyframes lupi-foil-sweep {
+  from { --lupi-foil-angle: -180deg; }
+  to { --lupi-foil-angle: 0deg; }
+}
+.lupi-remix-sheet__code-foil,
+.lupi-remix-sheet__code-edited {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font: 700 10.5px/1.1 var(--font-sans, system-ui, sans-serif);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.lupi-remix-sheet__code-foil { color: #101817; background: var(--lupi-sheet-lime); }
+.lupi-remix-sheet__code-edited { color: var(--lupi-sheet-muted); background: rgba(255, 255, 255, 0.06); }
+.lupi-remix-sheet__code-actions { display: flex; gap: 8px; margin-left: auto; }
+
+.lupi-remix-sheet__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lupi-remix-sheet__button {
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--lupi-sheet-ink);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #40564a;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 680;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.lupi-remix-sheet__button:hover:not(:disabled) { background: rgba(213, 239, 156, 0.1); }
+.lupi-remix-sheet__button:disabled { opacity: 0.5; cursor: default; }
+.lupi-remix-sheet__button--primary { color: #101817; background: var(--lupi-sheet-lime); border-color: var(--lupi-sheet-lime); }
+.lupi-remix-sheet__button--primary:hover:not(:disabled) { background: #e2f6b8; }
+
+.lupi-remix-sheet__type { display: grid; gap: 6px; }
+.lupi-remix-sheet__type-row { display: flex; gap: 8px; min-width: 0; }
+.lupi-remix-sheet__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  color: var(--lupi-sheet-ink);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid #40564a;
+  border-radius: 12px;
+  font: 600 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.lupi-remix-sheet__field::placeholder { color: #5f7259; text-transform: none; }
+.lupi-remix-sheet__field[aria-invalid='true'] { border-color: #c98a6e; }
+
+.lupi-remix-sheet__section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid rgba(64, 86, 74, 0.6); }
+.lupi-remix-sheet__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lupi-remix-sheet__chip {
+  min-height: 40px;
+  padding: 0 12px;
+  color: var(--lupi-sheet-ink);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #40564a;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lupi-remix-sheet__chip[aria-checked='true'] { color: #101817; background: var(--lupi-sheet-lime); border-color: var(--lupi-sheet-lime); }
+.lupi-remix-sheet__chip[aria-disabled='true'] { opacity: 0.45; cursor: default; }
+.lupi-remix-sheet__chip[data-foil='holo']:not([aria-disabled='true']):not([aria-checked='true']) { border-color: #b9a8ff; }
+.lupi-remix-sheet__chip[data-foil='gold']:not([aria-disabled='true']):not([aria-checked='true']) { border-color: #c99a3c; }
+.lupi-remix-sheet__chip[data-foil='pearl']:not([aria-disabled='true']):not([aria-checked='true']) { border-color: #e9e3ef; }
+.lupi-remix-sheet__found { margin-left: 5px; font-size: 11px; }
+
+.lupi-remix-sheet__prefs { gap: 4px; }
+.lupi-remix-sheet__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.lupi-remix-sheet__toggle input { width: 18px; height: 18px; accent-color: var(--lupi-sheet-lime); }
+.lupi-remix-sheet__toggle small { color: var(--lupi-sheet-muted); font-size: 11.5px; }
+
+/* Phone: a short bottom sheet over the pill; the view lifts above it. */
+@media (max-width: 640px) {
+  .lupi-remix-sheet {
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: min(58dvh, 520px);
+    padding: 16px 16px calc(14px + env(safe-area-inset-bottom));
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+  }
+  .lupi-remix-sheet__code-actions { margin-left: 0; flex: 1 1 100%; }
+  .lupi-remix-sheet__code-actions .lupi-remix-sheet__button { flex: 1 1 auto; }
+  .lupi-remix-sheet__actions .lupi-remix-sheet__button { flex: 1 1 auto; }
+}
+
+/* Motion: Still holds the foil border still (and the sheet appears in place). */
+.lupi-remix-sheet[data-still],
+.lupi-remix-sheet[data-still] .lupi-remix-sheet__code { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lupi-remix-sheet,
+  .lupi-remix-sheet__code { animation: none !important; }
+}

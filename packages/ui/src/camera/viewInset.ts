@@ -40,6 +40,24 @@ export function topOccluder(): number | null {
   return occluderBottom;
 }
 
+let bottomOccluderTop: number | null = null;
+
+/**
+ * The client y (CSS px) of the top edge of a sheet docked over the bottom of
+ * the canvas (the phone Remix sheet), or null. The view lifts into the band
+ * above it. The same listeners hear it as the top occluder's.
+ */
+export function setBottomOccluder(top: number | null): void {
+  const next = top !== null && Number.isFinite(top) ? Math.round(top) : null;
+  if (next === bottomOccluderTop) return;
+  bottomOccluderTop = next;
+  for (const listener of Array.from(listeners)) listener();
+}
+
+export function bottomOccluder(): number | null {
+  return bottomOccluderTop;
+}
+
 export function subscribeTopOccluder(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
@@ -85,6 +103,20 @@ export function insetShift({ canvasTop, canvasHeight, freeTop, freeBottom }: Fre
   const shift = (freeTop + freeBottom) / 2 - (canvasTop + canvasHeight / 2);
   if (!Number.isFinite(shift)) return 0;
   return Math.min(canvasHeight * MAX_SHIFT_FRACTION, Math.max(0, shift));
+}
+
+/**
+ * The shift (CSS px, down positive, up negative) that moves the canvas
+ * centre to the centre of the free band, clamped to ±MAX_SHIFT_FRACTION ×
+ * height: `insetShift` for bands that may sit above the centre too (a sheet
+ * docked over the bottom of the canvas).
+ */
+export function bandShift({ canvasTop, canvasHeight, freeTop, freeBottom }: FreeBand): number {
+  if (!(canvasHeight > 0) || !(freeBottom > freeTop)) return 0;
+  const shift = (freeTop + freeBottom) / 2 - (canvasTop + canvasHeight / 2);
+  if (!Number.isFinite(shift)) return 0;
+  const limit = canvasHeight * MAX_SHIFT_FRACTION;
+  return Math.min(limit, Math.max(-limit, shift));
 }
 
 /**
