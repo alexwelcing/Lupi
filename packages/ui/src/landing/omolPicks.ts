@@ -62,40 +62,76 @@ export function isFormulaShapedForOmol(query: string): boolean {
   return /\d/.test(q) || (/[a-z]/.test(q) && /[A-Z]/.test(q));
 }
 
-function elementCount(formula: string, symbol: string): number {
-  let total = 0;
-  for (const [, s, digits] of formula.matchAll(/([A-Z][a-z]?)(\d*)/g)) {
-    if (s === symbol) total += digits ? Number(digits) : 1;
-  }
-  return total;
+/** Element counts of a formula as written: a missing subscript is 1, a repeated element adds up (CH3COOH). */
+function formulaCounts(text: string): Map<string, number> | null {
+  const tokens = formulaTokens(text);
+  if (!tokens) return null;
+  const counts = new Map<string, number>();
+  for (const [symbol, n] of tokens) counts.set(symbol, (counts.get(symbol) ?? 0) + (n ?? 1));
+  return counts;
+}
+
+/** A formula in the OMol25 index's order: C, then H (with or without carbon), then alphabetical. */
+export function omolIndexFormula(text: string): string | null {
+  const counts = formulaCounts(text.trim());
+  if (!counts) return null;
+  const rank = (symbol: string) => (symbol === 'C' ? 0 : symbol === 'H' ? 1 : 2);
+  return [...counts.keys()]
+    .sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .map((symbol) => `${symbol}${counts.get(symbol) === 1 ? '' : counts.get(symbol)}`)
+    .join('');
+}
+
+export interface OmolPickMatches {
+  /** Picks the query names: its exact formula (in any element order), a lone element symbol, or "omol25". */
+  named: OmolPick[];
+  /** Picks that contain the written formula alongside other elements: never Enter's default. */
+  containing: OmolPick[];
 }
 
 /**
- * Featured picks a finder query names: an exact formula first, then picks
- * that contain every element written (with the count, when one is given).
- * "omol25" (or its start) lists today's picks. Never more than `limit`.
+ * Featured picks a finder query matches. A formula reads as written (no
+ * subscript means one), so "CH4" names methane's formula and never a
+ * fluorinated ether; a lone symbol ("Br") lists picks with that element.
+ * "omol25" (or its start) lists today's picks. At most `limit` in all.
  */
-export function matchOmolPicks(query: string, picks: readonly OmolPick[] = OMOL_PICKS, limit = OMOL_FINDER_LIMIT): OmolPick[] {
+export function findOmolPicks(query: string, picks: readonly OmolPick[] = OMOL_PICKS, limit = OMOL_FINDER_LIMIT): OmolPickMatches {
+  const none: OmolPickMatches = { named: [], containing: [] };
   const q = query.trim();
-  if (q.length < 2 || limit <= 0) return [];
-  if (q.length >= 3 && 'omol25'.startsWith(q.toLowerCase())) return todaysOmolPicks(limit);
-  const tokens = formulaTokens(q);
-  if (!tokens) return [];
-  const exact: OmolPick[] = [];
-  const partial: OmolPick[] = [];
+  if (q.length < 2 || limit <= 0) return none;
+  if (q.length >= 3 && 'omol25'.startsWith(q.toLowerCase())) return { named: todaysOmolPicks(limit), containing: [] };
+  const want = formulaCounts(q);
+  if (!want) return none;
+  const element = /^[A-Z][a-z]?$/.test(q) ? q : null;
+  const named: OmolPick[] = [];
+  const containing: OmolPick[] = [];
   for (const pick of picks) {
-    if (pick.formula === q) exact.push(pick);
-    else if (tokens.every(([symbol, n]) => {
-      const have = elementCount(pick.formula, symbol);
-      return n === null ? have > 0 : have === n;
-    })) partial.push(pick);
+    const have = formulaCounts(pick.formula);
+    if (!have) continue;
+    if (element) {
+      if (have.has(element)) named.push(pick);
+    } else if ([...want].every(([symbol, n]) => have.get(symbol) === n)) {
+      (have.size === want.size ? named : containing).push(pick);
+    }
   }
-  return [...exact, ...partial].slice(0, limit);
+  const kept = named.slice(0, limit);
+  return { named: kept, containing: containing.slice(0, limit - kept.length) };
 }
 
-/** The Library facet view for a formula: the explicit "Find … in OMol25" link. */
+/** `findOmolPicks` as one list, the named picks first. */
+export function matchOmolPicks(query: string, picks: readonly OmolPick[] = OMOL_PICKS, limit = OMOL_FINDER_LIMIT): OmolPick[] {
+  const { named, containing } = findOmolPicks(query, picks, limit);
+  return [...named, ...containing];
+}
+
+/**
+ * The Library facet view for a formula: the explicit "Find … in OMol25" link.
+ * The index matches its own formula form, so "LiOH" goes as HLiO and
+ * "C2H5OH" as C2H6O.
+ */
 export function omolFormulaHandoffHref(query: string): string {
-  return `/library/omol25?view=facets&q=${encodeURIComponent(query.trim())}`;
+  const q = query.trim();
+  return `/library/omol25?view=facets&q=${encodeURIComponent(omolIndexFormula(q) ?? q)}`;
 }
 
 /** Plain-link address of a pick: the viewer with the same-origin file. */

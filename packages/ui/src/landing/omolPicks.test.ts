@@ -12,9 +12,11 @@ import { OmolShelf } from './OmolShelf';
 import { OMOL_PICKS, type OmolPick } from './omolShelf.data';
 import {
   OMOL_FINDER_LIMIT,
+  findOmolPicks,
   isFormulaShapedForOmol,
   matchOmolPicks,
   omolFormulaHandoffHref,
+  omolIndexFormula,
   omolPickMark,
   omolShelfForDay,
 } from './omolPicks';
@@ -79,6 +81,34 @@ describe('matchOmolPicks', () => {
   it('lists picks for the dataset name', () => {
     expect(matchOmolPicks('omol25').length).toBe(OMOL_FINDER_LIMIT);
   });
+  it('reads a missing subscript as one, so a small formula never names an unrelated pick', () => {
+    for (const q of ['CO2', 'CH4', 'NaOH', 'LiOH', 'HCl', 'HNO3', 'CH4O']) {
+      expect(findOmolPicks(q).named, q).toEqual([]);
+    }
+    expect(findOmolPicks('CH4').containing.every((pick) => /^CH4(?![0-9])/.test(pick.formula))).toBe(true);
+  });
+  it('names a pick by its formula in any element order', () => {
+    expect(findOmolPicks('C4H4OF6').named.map((pick) => pick.formula)).toEqual(['C4H4F6O']);
+    expect(findOmolPicks('C4H4F6O').containing).toEqual([]);
+  });
+  it('keeps picks that merely contain the formula apart from the named ones', () => {
+    const { named, containing } = findOmolPicks('C15H17');
+    expect(named).toEqual([]);
+    expect(containing.length).toBeGreaterThan(0);
+    expect(containing.every((pick) => /^C15H17(?![0-9])/.test(pick.formula))).toBe(true);
+  });
+});
+
+describe('omolIndexFormula', () => {
+  it('writes a formula as the OMol25 index does: C, then H, then alphabetical', () => {
+    expect(omolIndexFormula('LiOH')).toBe('HLiO');
+    expect(omolIndexFormula('C2H5OH')).toBe('C2H6O');
+    expect(omolIndexFormula('CH3COOH')).toBe('C2H4O2');
+    expect(omolIndexFormula('NaCl')).toBe('ClNa');
+    expect(omolIndexFormula('BH3')).toBe('H3B');
+    expect(omolIndexFormula(' C15H17IO2S ')).toBe('C15H17IO2S');
+    expect(omolIndexFormula('caffeine')).toBeNull();
+  });
 });
 
 describe('pick helpers', () => {
@@ -86,6 +116,7 @@ describe('pick helpers', () => {
     expect(omolPickMark({ ...OMOL_PICKS[0], elements: ['C', 'H', 'F', 'N', 'O'] })).toBe('F');
     expect(omolPickMark({ ...OMOL_PICKS[0], elements: ['C', 'H', 'I', 'O', 'S'] })).toBe('I');
     expect(omolFormulaHandoffHref(' C6H6 ')).toBe('/library/omol25?view=facets&q=C6H6');
+    expect(omolFormulaHandoffHref('C2H5OH')).toBe('/library/omol25?view=facets&q=C2H6O');
   });
 });
 

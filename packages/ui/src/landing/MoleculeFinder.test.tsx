@@ -92,6 +92,15 @@ describe('MoleculeFinder', () => {
     expect(first.detail).toMatch(/^OMol25 · .+ · \d+ atoms$/);
   });
 
+  it('never makes a pick that merely contains the formula the top result', () => {
+    expect(searchLocalMolecules('C15H17', 6)).toEqual([]);
+    const merged = mergeFinderResults('C15H17', [], []);
+    expect(merged[0]).toMatchObject({ kind: 'pubchem', detail: 'Look up on PubChem' });
+    expect(merged.slice(1).every((r) => r.kind === 'omol')).toBe(true);
+    expect(merged.length).toBeGreaterThan(1);
+    expect(mergeFinderResults('CH4', [], [])[0]).toMatchObject({ kind: 'pubchem', name: 'CH4' });
+  });
+
   it('opens an OMol25 pick from its same-origin file and offers the formula handoff', async () => {
     render(<MoleculeFinder />);
     const input = screen.getByRole('combobox', { name: 'Type a molecule' });

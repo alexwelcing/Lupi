@@ -9,14 +9,15 @@ import { hasFirstFrame } from '../relay/firstFrame';
 import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
 import { inkTileFor, inkTileSrc, inkTileViewDir, prefetchInkModel, preloadInkTiles } from './inkTiles';
 import {
+  findOmolPicks,
   isFormulaShapedForOmol,
-  matchOmolPicks,
   omolFormulaHandoffHref,
   omolPickDetail,
   omolPickHref,
   omolPickTitle,
   openOmolPick,
   type OmolPick,
+  type OmolPickMatches,
 } from './omolPicks';
 // The relay stage registers itself here, in the landing chunk (no three).
 import '../relay/stage';
@@ -27,8 +28,10 @@ import '../relay/stage';
  *
  *  - Local gallery molecules match instantly (no network).
  *  - Featured OMol25 picks (bundled, no network) follow, matched by formula
- *    or element; a formula-shaped query also gets an explicit link into
- *    OMol25's validation index. OMol25 itself is never queried from here.
+ *    or element; picks that merely contain the formula come last, so Enter
+ *    never opens an unrelated structure. A formula-shaped query also gets an
+ *    explicit link into OMol25's validation index. OMol25 itself is never
+ *    queried from here.
  *  - PubChem's compound dictionary fills in names for anything else after a
  *    short debounce, so a couple of letters reach 100M+ compounds.
  *  - Enter opens the top result; a name with no local match goes straight to
@@ -125,13 +128,21 @@ function formatAtoms(atoms: number): string {
 /**
  * Merge instant local matches, the featured OMol25 picks a query names and
  * PubChem names: gallery first, then OMol25, then PubChem, no duplicates.
+ * Picks that only contain the formula follow PubChem's rows.
  */
 export function mergeFinderResults(
   query: string,
   local: LocalMolecule[],
   remote: string[],
-  picks: readonly OmolPick[] = matchOmolPicks(query),
+  picks: OmolPickMatches = findOmolPicks(query),
 ): FinderResult[] {
+  const omolRow = (pick: OmolPick): FinderResult => ({
+    kind: 'omol',
+    key: `omol:${pick.id}`,
+    title: omolPickTitle(pick),
+    detail: `OMol25 · ${omolPickDetail(pick)}`,
+    pick,
+  });
   const results: FinderResult[] = local.map((molecule) => ({
     kind: 'local',
     key: `local:${molecule.id}`,
@@ -139,9 +150,7 @@ export function mergeFinderResults(
     detail: [molecule.formula, molecule.atoms ? formatAtoms(molecule.atoms) : null].filter(Boolean).join(' · '),
     molecule,
   }));
-  for (const pick of picks) {
-    results.push({ kind: 'omol', key: `omol:${pick.id}`, title: omolPickTitle(pick), detail: `OMol25 · ${omolPickDetail(pick)}`, pick });
-  }
+  for (const pick of picks.named) results.push(omolRow(pick));
   const seen = new Set(local.map((m) => m.title.toLowerCase()));
   for (const name of remote) {
     const lower = name.toLowerCase();
@@ -153,6 +162,7 @@ export function mergeFinderResults(
   if (q.length >= 2 && !seen.has(q)) {
     results.push({ kind: 'pubchem', key: `pubchem:${q}`, title: query.trim(), detail: 'Look up on PubChem', name: query.trim() });
   }
+  for (const pick of picks.containing) results.push(omolRow(pick));
   return results;
 }
 
