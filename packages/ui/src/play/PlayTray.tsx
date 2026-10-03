@@ -5,13 +5,16 @@
  *   One finger   Orbit · Poke · Tug
  *                Burst · Heat
  *   Try          Scatter · Spin · Reset
+ *   Look         Lit · Ink
  *   Motion       Standard · Gentle · Still
  *                Settings…
  *
  * A `role="menu"` anchored above the pill. Arrow keys, Home and End move
  * between items, Enter and Space activate, Escape (or Tab, or a tap outside)
  * closes. Every item is at least 44 px tall. Toys only emit intents; Motion
- * writes `comfort.ts`, never the viewer store, URLs or saved views.
+ * writes `comfort.ts`, never the viewer store, URLs or saved views. Look is
+ * the Illustrate look (ink/illustrate.ts): a Look like any other, so it is
+ * shared, saved and exported, and Still never turns it off.
  */
 import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { emitIntent, isCanvasInputSourceActive } from '@atlas/scene';
@@ -19,6 +22,7 @@ import { useStore } from '../store';
 import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
 import { cue } from './feedback';
+import { setIllustrate } from '../ink/illustrate';
 import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
 
 export interface PlayTrayProps {
@@ -84,6 +88,7 @@ function menuItems(menu: HTMLElement | null): HTMLElement[] {
 export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const verb = usePlayStore((state) => state.verb);
+  const inked = useStore((state) => state.inkStyle !== 'off');
   const comfort = useComfort();
   const still = comfort === 'still';
   const closeRef = useRef(onClose);
@@ -206,6 +211,31 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
         </TrayItem>
         <TrayItem role="menuitem" onSelect={() => run('play.reset')}>
           Reset
+        </TrayItem>
+      </div>
+      <div role="group" aria-labelledby={`${id}-look`} className="lupi-play-tray__row">
+        <span id={`${id}-look`} className="lupi-play-tray__label">Look</span>
+        <TrayItem
+          role="menuitemradio"
+          checked={!inked}
+          title="The lit molecule: soft light, depth and colour"
+          onSelect={() => {
+            setIllustrate(false, { flash: true });
+            onClose({ restoreFocus: true });
+          }}
+        >
+          Lit
+        </TrayItem>
+        <TrayItem
+          role="menuitemradio"
+          checked={inked}
+          title="Draw it in ink, like the Lupi drawings (exports keep it)"
+          onSelect={() => {
+            setIllustrate(true, { flash: true });
+            onClose({ restoreFocus: true });
+          }}
+        >
+          Ink
         </TrayItem>
       </div>
       <div role="group" aria-labelledby={`${id}-motion`} className="lupi-play-tray__row">

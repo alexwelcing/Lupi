@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { emitIntent } from '@atlas/scene';
 import { useStore } from '../store';
+import { toggleIllustrate } from '../ink/illustrate';
 
 export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPaletteOpen: (open: boolean) => void) {
   useEffect(() => {
@@ -49,6 +50,10 @@ export function useGlobalShortcuts(commandPaletteOpen: boolean, setCommandPalett
       }
       if (e.key.toLowerCase() === 'p' && currentFile && noModifiers && !e.shiftKey) {
         emitIntent({ type: 'play.toggleTray', source: 'key' });
+      }
+      // I: the Illustrate look on and off (ink ⇄ light).
+      if (e.key.toLowerCase() === 'i' && currentFile && noModifiers && !e.shiftKey) {
+        toggleIllustrate({ flash: true });
       }
       if (e.key === 'Escape') {
         state.setActivePanel(null);

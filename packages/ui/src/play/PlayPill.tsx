@@ -277,6 +277,8 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
   const trayOpen = usePlayStore((state) => state.trayOpen);
   const comfort = useComfort();
   const file = useStore((state) => state.file);
+  // The Illustrate look: the pill's dot is drawn in ink (no new chrome).
+  const inked = useStore((state) => state.inkStyle !== 'off');
   const natoms = file?.trajectory.frames[0]?.natoms ?? 0;
   const trayId = useId();
   const playRef = useRef<HTMLButtonElement | null>(null);
@@ -438,6 +440,7 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
       data-stowed={uiStowed}
       data-verb={verb}
       data-tray-open={trayOpen}
+      data-ink={inked || undefined}
       role="group"
       aria-label="Toys and view"
     >

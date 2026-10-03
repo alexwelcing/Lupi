@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-09-24T11:55:01.794Z",
+  "generatedAt": "2026-10-03T05:42:21.106Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
@@ -333,6 +333,21 @@
           },
           "bondColorMode": {
             "type": "string"
+          },
+          "inkStyle": {
+            "type": "string",
+            "enum": [
+              "off",
+              "flat",
+              "hatch"
+            ],
+            "description": "The Illustrate look: toon fills and ink outlines (flat colour or hatched); off is the lit surface. Exports keep it."
+          },
+          "inkWeight": {
+            "type": "number",
+            "minimum": 0.4,
+            "maximum": 2.5,
+            "description": "Ink line weight multiplier (1 = the house weight)."
           }
         }
       }
