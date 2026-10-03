@@ -262,7 +262,7 @@ function moleculePagesDevPlugin() {
         if (req.method !== 'GET' && req.method !== 'HEAD') return next();
         const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
         const page = pathname.match(/^\/m\/([a-z0-9_]+)\/?$/);
-        const card = pathname.match(/^\/og\/m\/([a-z0-9_]+)(-ink\.svg|\.png)$/);
+        const card = pathname.match(/^\/og\/m\/([a-z0-9_]+)(-ink\.svg|-ink\.json|\.png)$/);
         const desk = pathname.match(/^\/ar\/([a-z0-9_]+)\.(usdz|glb)$/);
         const index = pathname === '/m' || pathname === '/m/';
         const manifest = pathname === '/m/manifest.json';
@@ -280,6 +280,7 @@ function moleculePagesDevPlugin() {
           const record = loaded.byId.get((card ?? desk)![1]);
           if (!record) return next();
           if (card?.[2] === '-ink.svg') return send(res, 'image/svg+xml; charset=utf-8', mod.moleculeInkSvg(record));
+          if (card?.[2] === '-ink.json') return send(res, 'application/json; charset=utf-8', mod.moleculeInkJson(record));
           if (card) {
             const png = await mod.moleculeCardPng(loaded, record);
             return png ? send(res, 'image/png', png) : next();

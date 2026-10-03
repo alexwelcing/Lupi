@@ -11,6 +11,8 @@
  *                          the drawing's pose and fit (the ink tiles' hand-off)
  *   /og/m/<id>.png         the 1200×630 share card
  *   /og/m/<id>-ink.svg     the drawing alone (index tiles, Quick Look's image)
+ *   /og/m/<id>-ink.json    the drawing's model (ink.ts InkModel): the landing's
+ *                          ink tiles turn it in the relay while 3D loads
  *   /ar/<id>.usdz, .glb    "Place on your desk"
  */
 import fs from 'node:fs';
@@ -76,6 +78,11 @@ export function moleculeInkSvg(record: MoleculeRecord): string {
     title: `${record.name}, ink drawing`,
     attrs: { width: '400', height: '400' },
   })}\n`;
+}
+
+/** The drawing's model as JSON (the relay turns it while the viewer loads). */
+export function moleculeInkJson(record: MoleculeRecord): string {
+  return JSON.stringify(record.model);
 }
 
 export async function moleculeCardPng(site: MoleculeSite, record: MoleculeRecord): Promise<Buffer | null> {
@@ -153,6 +160,7 @@ export async function writeMoleculeSite(repoRoot: string, distRoot: string): Pro
   // Cards first: a page only names its own card when the card exists.
   for (const record of site.records) {
     fs.writeFileSync(path.join(cardsDir, `${record.id}-ink.svg`), moleculeInkSvg(record));
+    fs.writeFileSync(path.join(cardsDir, `${record.id}-ink.json`), moleculeInkJson(record));
     const png = await moleculeCardPng(site, record);
     if (png) {
       fs.writeFileSync(path.join(cardsDir, `${record.id}.png`), png);

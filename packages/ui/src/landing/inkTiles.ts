@@ -11,11 +11,17 @@
  * Fetched once, at idle; a tap before it arrives still opens in ink, from
  * the viewer's own angle.
  *
- * Imports only the gallery page list and the ink drawing's pure math: safe
- * for the landing chunk (no three).
+ * The drawing's model (`/og/m/<id>-ink.json`, a couple of kB) is fetched as
+ * a finger or pointer reaches a tile, so the relay can hand the visitor a
+ * drawing they can keep turning while the 3D view loads (the hero's relay,
+ * for every molecule with a page); the pose they leave is where 3D opens.
+ *
+ * Imports only the gallery page list, the ink drawing's pure math and the
+ * element table: safe for the landing chunk (no three).
  */
+import { getElementSpecBySymbol } from '@atlas/core';
 import { hasMoleculePage, moleculeInkPath } from '../moleculePage/pages';
-import { inkViewDir, type InkPose } from '../moleculePage/ink';
+import { inkViewDir, type InkModel, type InkPose } from '../moleculePage/ink';
 
 export interface InkTile {
   /** The drawing's opening pose (radians). */
@@ -90,4 +96,73 @@ export function inkTileSrc(id: string): string | null {
 /** The baton's view direction (normalize(camera − target)) for a tile's pose. */
 export function inkTileViewDir(tile: InkTile): [number, number, number] {
   return inkViewDir(tile.pose);
+}
+
+// ─── The drawing's model ─────────────────────────────────────────────
+
+const models = new Map<string, InkModel>();
+const modelPending = new Map<string, Promise<InkModel | null>>();
+
+/** `/og/m/<id>-ink.json`: the drawing's model. */
+export function inkModelPath(id: string): string {
+  return `/og/m/${encodeURIComponent(id)}-ink.json`;
+}
+
+function isInkModel(raw: unknown): raw is InkModel {
+  const m = raw as Partial<InkModel> | null;
+  return Boolean(
+    m
+      && Array.isArray(m.p) && Array.isArray(m.k) && Array.isArray(m.b) && Array.isArray(m.kinds)
+      && Array.isArray(m.detents) && m.p.length === m.k.length * 3
+      && finite(m.radius) && m.opening && finite(m.opening.azimuth) && finite(m.opening.elevation),
+  );
+}
+
+/** Fetch a molecule's drawing model once (null when it has no page or the fetch fails). */
+export function loadInkModel(id: string): Promise<InkModel | null> {
+  const known = models.get(id);
+  if (known) return Promise.resolve(known);
+  const inFlight = modelPending.get(id);
+  if (inFlight) return inFlight;
+  if (!hasMoleculePage(id) || typeof fetch === 'undefined') return Promise.resolve(null);
+  const request = fetch(inkModelPath(id), { credentials: 'same-origin' })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((raw) => {
+      if (!isInkModel(raw)) return null;
+      models.set(id, raw);
+      return raw;
+    })
+    .catch(() => null)
+    .finally(() => modelPending.delete(id));
+  modelPending.set(id, request);
+  return request;
+}
+
+/** Start fetching a tile's model (a finger or pointer reached it). */
+export function prefetchInkModel(id: string): void {
+  void loadInkModel(id);
+}
+
+/** The drawing model when it has arrived. */
+export function inkModelFor(id: string): InkModel | null {
+  return models.get(id) ?? null;
+}
+
+/**
+ * The hand-off data from the model itself (when the manifest has not
+ * arrived): its opening pose, drawn radius, and the viewer's fit radius
+ * (bounds half-diagonal plus the largest ball-and-stick radius present).
+ */
+export function inkTileFromModel(model: InkModel): InkTile {
+  let hx = 0;
+  let hy = 0;
+  let hz = 0;
+  for (let i = 0; i < model.p.length; i += 3) {
+    hx = Math.max(hx, Math.abs(model.p[i]));
+    hy = Math.max(hy, Math.abs(model.p[i + 1]));
+    hz = Math.max(hz, Math.abs(model.p[i + 2]));
+  }
+  let atom = 0;
+  for (const kind of model.kinds) atom = Math.max(atom, getElementSpecBySymbol(kind.s)?.displayRadius ?? kind.r);
+  return { pose: { ...model.opening }, inkRadius: model.radius, fit: Math.hypot(hx, hy, hz) + atom };
 }

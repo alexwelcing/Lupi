@@ -3,7 +3,7 @@ import { LOCAL_MOLECULES, type LocalMolecule } from './moleculeIndex';
 import { lightInkTile, openLocalMolecule, previewRectIn } from './MoleculeFinder';
 import { LandingIntentContext } from './landingIntent';
 import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
-import { inkTileSrc, preloadInkTiles } from './inkTiles';
+import { inkTileSrc, prefetchInkModel, preloadInkTiles } from './inkTiles';
 
 const FIRST_PAGE = 48;
 
@@ -65,6 +65,10 @@ export function MoleculeWall() {
               aria-label={`Open ${molecule.title}`}
               aria-busy={opening === molecule.id}
               onClick={(event) => open(event, molecule)}
+              // The drawing's model arrives as the finger or pointer does, so the relay can turn it.
+              onPointerEnter={() => prefetchInkModel(molecule.id)}
+              onTouchStart={() => prefetchInkModel(molecule.id)}
+              onFocus={() => prefetchInkModel(molecule.id)}
               title={molecule.subtitle}
             >
               {inkTileSrc(molecule.id) ? (

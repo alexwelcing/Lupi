@@ -6,7 +6,7 @@ import { LandingIntentContext } from './landingIntent';
 import { beginRelay, endRelay, peekBaton, setBaton, type RelayBaton } from '../relay/baton';
 import { hasFirstFrame } from '../relay/firstFrame';
 import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
-import { inkTileFor, inkTileSrc, inkTileViewDir, preloadInkTiles } from './inkTiles';
+import { inkTileFor, inkTileSrc, inkTileViewDir, prefetchInkModel, preloadInkTiles } from './inkTiles';
 // The relay stage registers itself here, in the landing chunk (no three).
 import '../relay/stage';
 
@@ -162,8 +162,13 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
   const intent = useContext(LandingIntentContext);
 
   const local = useMemo(() => searchLocalMolecules(query, LOCAL_LIMIT), [query]);
-  // The ink tiles' poses arrive at idle, before a pick.
+  // The ink tiles' poses arrive at idle, before a pick; the drawings of the
+  // matches on show arrive as they appear (a couple of kB each), so the relay
+  // can turn the one picked.
   useEffect(() => preloadInkTiles(), []);
+  useEffect(() => {
+    for (const molecule of local) if (inkTileSrc(molecule.id)) prefetchInkModel(molecule.id);
+  }, [local]);
   const results = useMemo(() => mergeFinderResults(query, local, remote), [query, local, remote]);
 
   useEffect(() => {
