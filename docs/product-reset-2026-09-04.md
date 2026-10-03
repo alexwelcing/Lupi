@@ -111,3 +111,37 @@ now lists Library in the public navigation.
 | Research/Comparison URLs | Lightweight retirement explanation, no renderer, external handoff | Research execution stays retired. `?tab=browse`, `?tab=omol25`, `?tab=research`, `?tab=potentials`, and `/materials/omol25*` redirect into `/library` |
 | Library | Removed with the homepage tab shell | `/library`, `/library/gallery`, `/library/omol25`, `/library/research`, `/library/potentials`, `/library/random`, rebuilt on the surviving federated providers and edge routes |
 
+
+## Amendment 2026-10-03: OMol25 becomes a front-door resource
+
+Owner decision: OMol25 is one of Lupi's top resources, so it moves out of the
+Library alone and onto the public surfaces. The plan of record is
+[OMol25 in Lupi](omol25-bonds-and-discovery.md) (section 4.1); the
+[ownership contract](product-ownership-contract.md) mirrors it. The student
+curation, the 12-card starter collection and the retirement of research
+execution stand.
+
+1. **Public navigation** is Molecules · OMol25 · Daily · Library · Scan ·
+   How to use · Open a file. OMol25 goes to `/library/omol25`. No label
+   matches `/research|MLIP/i`.
+2. **The home page** carries one OMol25 shelf directly after the hero,
+   rendered from bundled same-origin data. It is not part of the 12-card
+   student collection, which is unchanged. `/` makes zero OMol25, edge or
+   Hugging Face requests and has zero canvases.
+3. **The homepage finder** matches the gallery, the bundled featured OMol25
+   picks and PubChem names. For a formula-shaped query it adds one labelled,
+   user-initiated "Find … in OMol25" link. No source is queried silently.
+4. **Lupi keeps same-origin copies of a small featured set:** at most 48
+   rows, CC BY 4.0, attributed, each with a sha256 receipt. All other rows
+   stay stream-only.
+5. **Every OMol25 surface states** that coordinates are source data, the
+   geometry state (largest force), that bonds are Lupi's inference (naming
+   the recipe), and that any name is a derived parent compound. The wording
+   comes from `packages/core/src/omol25/truth.ts`.
+
+| Surface | 2026-09-18 amendment | 2026-10-03 amendment |
+|---|---|---|
+| Home | Finder, molecule wall, Library link in the header, full-library handoff under the finder | Adds the OMol25 shelf after the hero (six featured picks a day, bundled, zero canvases) and the finder's OMol25 pick matches and formula handoff |
+| Navigation | Molecules · Daily · Library · Scan · How to use · Open a file | Molecules · OMol25 · Daily · Library · Scan · How to use · Open a file; `/omol25` redirects to `/library/omol25` |
+| Library | Every connected source, one at a time or together | Leads with OMol25: All sources · OMol25 · Lupi gallery · Zenodo research · NIST potentials · Surprise me, with an "OMol25 picks" row on `/library` |
+| Collection | Positive list of 12 source-bound examples | Unchanged; OMol25 picks never join it |
