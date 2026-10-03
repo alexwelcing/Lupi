@@ -679,7 +679,7 @@ export function Bonds({
         debounceRef.current = null;
       }
     };
-  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, typeSemanticsKey, sourceKey]);
+  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, inferenceAllowed, typeSemanticsKey, sourceKey]);
 
   // ─── GPU dispatch ──────────────────────────────────────────────────
   // Runs only when gpuActive is true. Mirrors the worker effect's contract:
