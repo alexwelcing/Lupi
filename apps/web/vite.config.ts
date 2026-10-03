@@ -298,6 +298,73 @@ function moleculePagesDevPlugin() {
   };
 }
 
+/**
+ * Lupi Daily in development.
+ *
+ * The build writes /daily/, /daily/<date>, /daily/text, the puzzle files and
+ * the share cards into dist after `vite build`
+ * (scripts/generate-daily-pages.mts). The dev server renders the same
+ * artifacts on request from the same modules, with the page script hot from
+ * src/daily.ts. Date pages and cards answer for any date from No. 1 on.
+ */
+function dailyDevPlugin() {
+  const repoRoot = path.resolve(__dirname, '../..');
+  const buildModule = path.resolve(repoRoot, 'scripts/daily/build.mts');
+  return {
+    name: 'lupi-daily-dev',
+    apply: 'serve' as const,
+    configureServer(server: any) {
+      let site: any = null;
+      const load = async () => {
+        const mod = await server.ssrLoadModule(buildModule);
+        site ??= mod.loadDailySite(repoRoot);
+        return { mod, site };
+      };
+      const send = (res: any, type: string, body: string | Uint8Array) => {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', type);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(body);
+      };
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+        const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+        const home = pathname === '/daily' || pathname === '/daily/';
+        const text = pathname === '/daily/text';
+        const date = pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})\/?$/);
+        const puzzle = pathname.match(/^\/daily\/p\/([a-f0-9]+)\.json$/);
+        const pool = pathname === '/daily/pool.json';
+        const schedule = pathname === '/daily/schedule.json';
+        const card = pathname.match(/^\/og\/daily(?:\/(\d{4}-\d{2}-\d{2}))?\.jpg$/);
+        if (!home && !text && !date && !puzzle && !pool && !schedule && !card) return next();
+        try {
+          const { mod, site: loaded } = await load();
+          if (pool) return send(res, 'application/json; charset=utf-8', mod.dailyPoolJson(loaded));
+          if (schedule) return send(res, 'application/json; charset=utf-8', mod.dailyScheduleJson(loaded));
+          if (puzzle) {
+            const json = mod.dailyPuzzleJson(loaded, puzzle[1]);
+            return json ? send(res, 'application/json; charset=utf-8', json) : next();
+          }
+          if (card) {
+            const jpeg = await mod.dailyCardJpeg(loaded, card[1] ?? null);
+            return jpeg ? send(res, 'image/jpeg', jpeg) : next();
+          }
+          const raw = fs.readFileSync(path.resolve(__dirname, 'daily.html'), 'utf8');
+          const template = await server.transformIndexHtml('/daily.html', raw);
+          const today = mod.buildToday();
+          const span = mod.dailyWindow(today);
+          const ctx = mod.dailyContext(loaded, { lastPage: span.lastPage, cards: new Set(span.cards), genericCard: true });
+          const html = mod.dailyPageHtml(loaded, template, home ? 'home' : text ? 'text' : date![1], ctx);
+          return html ? send(res, 'text/html; charset=utf-8', html) : next();
+        } catch (error: any) {
+          server.config.logger.warn(`[daily] ${pathname}: ${error?.message ?? error}`);
+          return next();
+        }
+      });
+    },
+  };
+}
+
 function parseMultipart(buffer: Buffer, boundary: string): any[] {
   const parts: any[] = [];
   const boundaryBuffer = Buffer.from(`--${boundary}`);
@@ -347,6 +414,7 @@ export default defineConfig(({ command }) => ({
     wgslVitePlugin({ minify: true }),
     galleryAssetUploadPlugin(),
     moleculePagesDevPlugin(),
+    dailyDevPlugin(),
     pruneExternalHostedAssets(),
   ],
   // The WASM parsers live ONLY inside web workers (parse/transcode workers),
@@ -387,12 +455,14 @@ export default defineConfig(({ command }) => ({
     // something to silence. (Was 3000, which hid the 2.6MB App chunk entirely.)
     chunkSizeWarningLimit: 800,
     rollupOptions: {
-      // Two pages: the app (index.html) and the template of the zero-canvas
-      // molecule pages (molecule.html), which scripts/generate-molecule-pages.mts
-      // fills once per gallery molecule and then removes.
+      // Three pages: the app (index.html) and the templates of the zero-canvas
+      // molecule pages (molecule.html) and of Lupi Daily (daily.html), which
+      // scripts/generate-molecule-pages.mts and generate-daily-pages.mts fill
+      // once per page and then remove.
       input: {
         index: path.resolve(__dirname, 'index.html'),
         molecule: path.resolve(__dirname, 'molecule.html'),
+        daily: path.resolve(__dirname, 'daily.html'),
       },
       output: {
         manualChunks(id) {
