@@ -101,7 +101,7 @@ import { RemixSheet } from './remix/RemixSheet';
 import { intakeRemixParam } from './remix/links';
 import { openRemixSheet, rollRemix, undoRemix } from './remix/actions';
 import { PLAY_VERB_LABEL, playStore, type PlayVerb } from './play/playStore';
-import { setIllustrate } from './ink/illustrate';
+import { intakeInkParam, setIllustrate } from './ink/illustrate';
 import { sceneLookPatch } from './sceneLooks';
 import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
@@ -332,9 +332,11 @@ export function ViewerApp() {
   // URL state restore + auto-load
   useEffect(() => {
     // A shared replay (`?replay=`) is taken first and leaves the address bar;
-    // so does a shared look (`?remix=`), which lands once the molecule opens.
+    // so does a shared look (`?remix=`), which lands once the molecule opens,
+    // and the Illustrate look (`?ink=`), which lands now so it opens inked.
     intakeReplayParam();
     intakeRemixParam();
+    intakeInkParam();
     const params = new URLSearchParams(window.location.search);
     const intent = recognizeLupiUrlPayload(window.location.href);
     const state = intent?.state ?? params.get('s');

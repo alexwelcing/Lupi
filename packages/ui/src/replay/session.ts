@@ -16,6 +16,7 @@ import type { Vec3 } from '../camera/rigApi';
 import { getComfort } from '../motion/comfort';
 import { shareableRemixCode } from '../remix/actions';
 import { REMIX_PARAM } from '../remix/links';
+import { INK_PARAM, inkParamValue } from '../ink/illustrate';
 import { decimate } from './keyframes';
 import { recordedWindow, recorderNow } from './recorder';
 import type { ReplayMoment } from './replayStore';
@@ -126,6 +127,9 @@ export function replayLink(token: string, href: string = typeof window !== 'unde
   if (!params.toString() && !hash) return null;
   const look = shareableRemixCode();
   if (look) params.set(REMIX_PARAM, look.text);
+  // The Illustrate look travels too: the moment replays as the drawing it was.
+  const ink = inkParamValue();
+  if (ink) params.set(INK_PARAM, ink);
   params.set('replay', token);
   return `${url.origin}/?${params.toString()}${hash}`;
 }

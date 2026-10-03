@@ -11,6 +11,7 @@
  *   visitor has moved on to.
  */
 import { parseRemixCode, type RemixCode, type RemixCodeParse } from './code';
+import { INK_PARAM, inkParamValue } from '../ink/illustrate';
 
 export const REMIX_PARAM = 'remix';
 
@@ -33,6 +34,9 @@ export function remixLink(code: RemixCode, href: string = typeof window !== 'und
   const hash = url.hash.startsWith('#/view/') ? url.hash.split('?')[0] : '';
   if (!params.toString() && !hash) return null;
   params.set(REMIX_PARAM, code.text);
+  // A code over the Illustrate look shares as the drawing (the code alone is lit).
+  const ink = inkParamValue();
+  if (ink) params.set(INK_PARAM, ink);
   return `${url.origin}/?${params.toString()}${hash}`;
 }
 

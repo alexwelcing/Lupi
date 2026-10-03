@@ -9,7 +9,7 @@
  * Ink brings back the drawing you had. The Looks grid (Illustrate, Sketch)
  * sets plate and shading together instead (sceneLooks.ts).
  */
-import { useStore, type InkStyle } from '../store';
+import { sanitizeInkStyle, useStore, type InkStyle } from '../store';
 import { playStore } from '../play/playStore';
 import { BG_PRESETS, SAGE_PLATE_COLOR } from '../backgroundPresets';
 
@@ -88,4 +88,45 @@ export function inkPlateColor(backgroundPreset: string): string {
   const b = parse(preset.bottom);
   const mixed = a.map((channel, i) => Math.round((channel + b[i]) / 2));
   return `#${((mixed[0] << 16) | (mixed[1] << 8) | mixed[2]).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * The Illustrate look in a short link: `ink=f` (flat colour) or `ink=h`
+ * (hatched). Instant Replay and Remix links carry it beside `replay=` and
+ * `remix=`, which travel without the full `s=` state, so whoever opens them
+ * sees the drawing the sender was looking at.
+ */
+export const INK_PARAM = 'ink';
+
+/** The `ink=` value for a shading, or null when the look is lit. */
+export function inkParamValue(style: InkStyle = useStore.getState().inkStyle): string | null {
+  return style === 'flat' ? 'f' : style === 'hatch' ? 'h' : null;
+}
+
+/**
+ * Take `?ink=` from the address bar as the viewer boots (idempotent). The
+ * shading lands before the molecule opens, so it opens inked; the parameter
+ * leaves the address bar, like `remix=`, so a reload keeps whatever look
+ * the visitor moves on to. A `?s=` state decoded afterwards still wins.
+ */
+export function intakeInkParam(): boolean {
+  if (typeof window === 'undefined') return false;
+  let url: URL;
+  try {
+    url = new URL(window.location.href);
+  } catch {
+    return false;
+  }
+  const value = url.searchParams.get(INK_PARAM);
+  if (value === null) return false;
+  url.searchParams.delete(INK_PARAM);
+  try {
+    window.history.replaceState(window.history.state, '', url);
+  } catch {
+    /* sandboxed: the parameter stays, harmlessly */
+  }
+  const style = sanitizeInkStyle(value);
+  if (style === 'off') return false;
+  chooseInkStyle(style);
+  return true;
 }
