@@ -4,7 +4,8 @@
  *
  * Per file (the key is `file.trajectory`):
  * - at its first frame, remember the opening view (Home) and, when the
- *   browser is idle (≤ 500 ms), compute Object Facts (≤ 2,000 atoms);
+ *   browser is idle (≤ 500 ms), compute Object Facts (≤ 2,000 atoms), again
+ *   whenever Bond rule or Bond sensitivity changes the molecular graph;
  * - register a TrueSpinCoast (the flick coasts on the molecule's inertia)
  *   and, for a single structure, SymmetryDetents (a coast clicks into a face)
  *   on the rig; unregister on file change or unmount. Without facts the rig
@@ -75,10 +76,12 @@ interface Toys {
   opening: { position: Vec3; target: Vec3 } | null;
   /** A key step's destination while its glide runs. */
   step: { dir: Vec3; at: number } | null;
+  /** The bond graph the facts came from (`graphSignature`). */
+  graph: string | null;
 }
 
 function emptyToys(): Toys {
-  return { coast: null, detents: null, ready: false, rig: null, opening: null, step: null };
+  return { coast: null, detents: null, ready: false, rig: null, opening: null, step: null, graph: null };
 }
 
 function now(): number {
@@ -145,6 +148,30 @@ function factsBondPairs(frame: Frame, frameCount: number): Int32Array | undefine
   return perceived ? molecularBondPairs(perceived) : undefined;
 }
 
+/** Identifies a bond graph, so a rule or sensitivity change that leaves it alone keeps the facts. */
+function graphSignature(pairs: Int32Array | undefined): string {
+  if (!pairs) return 'distance';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < pairs.length; i += 1) h = Math.imul(h ^ pairs[i], 0x01000193);
+  return `${pairs.length}:${(h >>> 0).toString(36)}`;
+}
+
+/** Object Facts on `bondPairs` → the coast and (single structures) detents, replacing earlier ones. */
+function buildModels(toys: Toys, frame: Frame, frameCount: number, bondPairs: Int32Array | undefined): void {
+  let facts = null;
+  try {
+    facts = objectFactsForFile(frame, { bondPairs });
+  } catch (error) {
+    console.error('[lupi] object facts failed', error);
+  }
+  toys.coast?.stop();
+  toys.coast = facts && facts.rotor !== 'atom' ? new TrueSpinCoast(facts, { onFlip }) : null;
+  toys.detents = facts && frameCount <= 1 && facts.detents.length > 0
+    ? new SymmetryDetents(facts, { captureDisabled })
+    : null;
+  toys.graph = graphSignature(bondPairs);
+}
+
 function captureDisabled(): boolean {
   return useStore.getState().measurementTool != null;
 }
@@ -202,6 +229,7 @@ function stepDetent(toys: Toys, camera: Camera, dx: number, dy: number): { label
 export function CameraToys({ frame }: CameraToysProps): null {
   const camera = useThree((s) => s.camera);
   const trajectory = useStore((s) => s.file?.trajectory ?? null);
+  const bondGraphKey = useStore((s) => `${s.bondProfile}|${s.bondTolerance}`);
   const frameRef = useRef(frame);
   frameRef.current = frame;
   const cameraRef = useRef(camera);
@@ -223,17 +251,8 @@ export function CameraToys({ frame }: CameraToysProps): null {
       toys.opening = { position: [...state.cameraPosition] as Vec3, target: [...state.cameraTarget] as Vec3 };
       cancelIdle = scheduleIdle(() => {
         if (disposed) return;
-        let facts = null;
-        try {
-          facts = objectFactsForFile(frameRef.current, { bondPairs: factsBondPairs(frameRef.current, trajectory.totalFrames ?? 1) });
-        } catch (error) {
-          console.error('[lupi] object facts failed', error);
-        }
-        if (facts && facts.rotor !== 'atom') toys.coast = new TrueSpinCoast(facts, { onFlip });
-        const single = (trajectory.totalFrames ?? 1) <= 1;
-        if (facts && single && facts.detents.length > 0) {
-          toys.detents = new SymmetryDetents(facts, { captureDisabled });
-        }
+        const frameCount = trajectory.totalFrames ?? 1;
+        buildModels(toys, frameRef.current, frameCount, factsBondPairs(frameRef.current, frameCount));
         register(toys);
         unhookStep = registerPlayDevHook('stepDetent', (dx?: number, dy?: number) =>
           stepDetent(toysRef.current, cameraRef.current, Math.sign(dx ?? 1), Math.sign(dy ?? 0)),
@@ -259,6 +278,27 @@ export function CameraToys({ frame }: CameraToysProps): null {
       if (toysRef.current === toys) toysRef.current = emptyToys();
     };
   }, [trajectory]);
+
+  // The bond rule or sensitivity changed: rings and detents follow the graph
+  // the view now draws (Home and the dev hook stay). A change that leaves the
+  // graph alone, as on every distance-rule frame, keeps the facts.
+  useEffect(() => {
+    const toys = toysRef.current;
+    if (!trajectory || !toys.ready) return undefined;
+    let cancelled = false;
+    const cancelIdle = scheduleIdle(() => {
+      if (cancelled || toysRef.current !== toys) return;
+      const frameCount = trajectory.totalFrames ?? 1;
+      const pairs = factsBondPairs(frameRef.current, frameCount);
+      if (graphSignature(pairs) === toys.graph) return;
+      buildModels(toys, frameRef.current, frameCount, pairs);
+      register(toys);
+    }, CAMERA_TOYS.idleTimeoutMs);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
+  }, [trajectory, bondGraphKey]);
 
   // Intents, for as long as the toys are mounted.
   useEffect(() => {
