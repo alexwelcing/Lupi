@@ -14,11 +14,20 @@ https://lupi.live/study/organic-functional-groups
 Every curated small molecule has a zero-canvas page with its ink drawing, PubChem-backed identity, handbook values and a link into 3D: https://lupi.live/m/<id> (index: https://lupi.live/m/, list: https://lupi.live/m/manifest.json).
 Share card: https://lupi.live/og/m/<id>.png (1200x630). Desk models: https://lupi.live/ar/<id>.usdz and .glb.
 
+## OMol25 (Open Molecules 2025)
+Meta FAIR Chemistry's DFT dataset (ωB97M-V/def2-TZVPD; Levine et al. 2025, arXiv:2505.08762; CC BY 4.0), paged one row at a time from the public ColabFit conversions on Hugging Face. Lupi stores no shards.
+Browse: https://lupi.live/library/omol25 (the 34,335,828-row neutral training split; element filters over the 27,697-row neutral validation split).
+Random structure: https://lupi.live/library/random
+Featured picks (24 neutral-validation rows kept as same-origin copies, each with a sha256 receipt): https://lupi.live/datasets/omol25/featured.v1.json
+One row as XYZ: https://lupi.live/v1/datasets/omol25/<collection>/structures/<row>.xyz. The comment line carries charge, spin multiplicity and where they came from.
+Coordinates, charge and spin are source data. OMol25 supplies no bonds: the lines Lupi draws are its own inference (lupi-bonds.molecular.v1), solid for covalent bonds, dashed for metal coordination, dotted for ionic contacts.
+Agents page the same rows with lupi.browse_collection and lupi.search_molecules.
+
 ## Agent interface
 Edge manifest: https://lupi.live/mcp-manifest.json
 Browser manifest: https://lupi.live/browser-mcp-manifest.json
 These are different contracts. Edge V1 validates requests but does not render artifacts. Browser execution requires a mounted viewer.
 
 ## Boundaries
-Distance-inferred visual bond guides are not source bond topology. Unknown properties remain unknown.
+Inferred bonds (distance guides, or lupi-bonds.molecular.v1 on files that declare charge and spin) are not source bond topology. Unknown properties remain unknown.
 Research execution and scientific claim publication belong to the separate Lupine Science project. They are not the student app.

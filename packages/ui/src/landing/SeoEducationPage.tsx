@@ -40,9 +40,12 @@ export function SeoEducationPage({ kind }: { kind: SeoEducationKind }) {
       <main className="student-home">
         <section className="student-width" style={{ paddingBlock: 64 }}>
           <h1>This workspace has retired from Lupi.</h1>
-          <p>Large dataset browsing and research execution are separate from the learning app.</p>
+          <p>Research execution is separate from the learning app. Large datasets, OMol25 among them, are browsed in the Library.</p>
           <a className="student-primary" href="/">
             Explore the collection
+          </a>{' '}
+          <a className="student-secondary" href="/library/omol25">
+            Browse OMol25
           </a>
         </section>
       </main>

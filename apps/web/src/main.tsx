@@ -236,12 +236,17 @@ if (libraryRedirect) {
         <p>Lupi</p>
         <h1>This research workspace has retired from Lupi.</h1>
         <p>
-          Lupi now focuses on exploring and learning from molecular structures. Research execution and large
-          dataset browsing are separate from the learning app.
+          Lupi now focuses on exploring and learning from molecular structures. Research execution is separate
+          from the learning app; large datasets, OMol25 among them, are browsed in the Library.
         </p>
         <p>
           <a style={{ color: '#d5ef9c' }} href="/">
             Explore the learning collection
+          </a>
+        </p>
+        <p>
+          <a style={{ color: '#d5ef9c' }} href="/library/omol25">
+            Browse OMol25 in the Library
           </a>
         </p>
         <p>
