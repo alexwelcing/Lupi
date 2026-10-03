@@ -12,7 +12,10 @@
  * - the etched-annotation stamp and (tier 2) the noise/scratched textures;
  * - the `uProgress` GPU lerp between two instance position buffers;
  * - the display-motion offset (tsl/displayMotion.ts) on the centre: arrival,
- *   ripple and scatter, exactly zero at rest and in every capture;
+ *   ripple, scatter, tug, burst and heat, exactly zero at rest and in every
+ *   capture;
+ * - the hover, selection and grab glow and the heat tint (tsl/atomGlow.ts):
+ *   a lime rim and a small swell, exactly absent in every capture;
  * - hidden types (zero palette radius) and sub-pixel atoms collapse to a
  *   degenerate vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -72,6 +75,7 @@ import {
 } from 'three/tsl';
 import { LUPI_SHADER_TAG_KEY, attachLupiUniforms, type LupiUniformBag } from './lupiUniforms';
 import { lupiDisplayOffset } from './displayMotion';
+import { lupiAtomGlow, lupiAtomGlowStrength, lupiAtomSwell } from './atomGlow';
 import {
   blendMaterialPreset,
   impostorDepthPrelude,
@@ -250,7 +254,10 @@ export function createAtomImpostorMaterial({
   const occlusion: N = data.y;
   const prop: N = round(data.z.mul(255.0)).mul(256.0).add(round(data.w.mul(255.0))).div(65535.0);
 
-  const radius: N = (textureLoad(u.uRadiusPalette, ivec2(slot, int(0))) as N).x;
+  // The hovered or grabbed atom swells a little (exactly ×1 in captures).
+  const atomId: N = float(instanceIndex);
+  const paletteRadius: N = (textureLoad(u.uRadiusPalette, ivec2(slot, int(0))) as N).x;
+  const radius: N = paletteRadius.mul(lupiAtomSwell(atomId));
   const typeColor: N = (textureLoad(u.uPalette, ivec2(slot, int(0))) as N).rgb;
   const mapColor: N = (texture(u.uColormap, vec2(prop, 0.5)) as N).level(0).rgb;
   // mix, not select: a select lowers to if/else, and `prop` (read again for
@@ -293,7 +300,8 @@ export function createAtomImpostorMaterial({
   const vPixelRadius: N = varying(pixelRadius, 'vPixelRadius');
   const vOcclusion: N = varying(occlusion, 'vOcclusion');
   const vProp: N = varying(prop, 'vProp');
-  const vAtomId: N = varying(float(instanceIndex), 'vAtomId');
+  const vAtomId: N = varying(atomId, 'vAtomId');
+  const vGlow: N = varying(lupiAtomGlowStrength(atomId), 'vGlow');
   const vMaterial: N = varying(materialParams, 'vMaterial');
   const vEmission: N = varying(emissionParams, 'vEmission');
 
@@ -380,7 +388,10 @@ export function createAtomImpostorMaterial({
     const etchAlpha = (texture(u.tEtchTexture, clamp(etchUv, 0.0, 1.0)) as N).a;
     const etch = select(targeted.and(inside), etchAlpha, float(0.0));
     const shaded: N = mix(lit, lit.mul(0.32), etch);
-    return vec4(shaded, 1.0);
+    // Hover / selection / grab rim and the heat tint (zero in captures).
+    const toEye: N = select(isOrtho, vec3(0.0, 0.0, 1.0), normalize(hit.xyz.negate()));
+    const glow = lupiAtomGlow(vGlow, dot(normal, toEye));
+    return vec4(shaded.add(glow), 1.0);
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

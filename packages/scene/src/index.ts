@@ -37,7 +37,7 @@ export { resolveBondTopologyMode, validateSourceBondTopology } from './bondTopol
 export type { BondTopologyMode, SourceBondTopologyValidation } from './bondTopology';
 export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
-export { AtomPicker } from './AtomPicker';
+export { AtomPicker, pickAtomAtClient } from './AtomPicker';
 export { SpatialHash3D } from './SpatialHash';
 export { VectorGlyphs, LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER } from './VectorGlyphs';
 export type { VectorGlyphStats } from './VectorGlyphs';
@@ -108,6 +108,7 @@ export {
 } from './tsl/impostorKit';
 export type { LupiEnvBinding, LupiLightUniforms, LupiSurfaceInput } from './tsl/impostorKit';
 export * from './tsl/displayMotion';
+export * from './tsl/atomGlow';
 
 // Shared constants
 export {
