@@ -393,7 +393,9 @@ included; do not replace it with `--no-optional` to make the graph smaller.
 Two later exceptions are documented in `docs/dependency-security-baseline.md`:
 `CVE-2026-85393` (`node-forge`, no patched release; reached here only through
 Expo CLI code-signing tooling) and `CVE-2026-101916` (`@grpc/grpc-js@1.9.16`
-under Firestore's Node.js build). Neither is reachable from the native app.
+under Firestore's Node.js build), and `CVE-2026-93687` (`braces`, no patched
+release; reached through Metro's file map in build tooling). None is reachable
+from the native app.
 
 ## Running on an iPhone with Expo Go
 

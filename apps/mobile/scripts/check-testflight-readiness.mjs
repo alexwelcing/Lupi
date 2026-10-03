@@ -132,6 +132,7 @@ check(
       "CVE-2025-71330",
       "CVE-2026-85393",
       "CVE-2026-101916",
+      "CVE-2026-93687",
     ]),
   "The unpatched image parser, node-forge and Firestore gRPC exceptions stay exact and reviewable",
 );
