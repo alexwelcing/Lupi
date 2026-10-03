@@ -559,6 +559,10 @@
   animation: none;
 }
 .gist-caption.is-pending .gist-caption__eyebrow {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--sw-muted, var(--home-muted, #94a3b8));
   letter-spacing: 0.08em;
   line-height: 1.15rem;
