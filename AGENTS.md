@@ -277,7 +277,7 @@ The browser candidate advertises PNG/JPEG/WebP/GLB, subject to exact format
 and active-state checks. JPEG is opaque only; GLB rejects raster dimensions and
 transparency.
 
-Raster capture never reads the canvas. It renders the raw Three.js scene with
+Raster capture never reads the canvas. It renders the Three.js scene with
 a copy of the artifact camera into its own HalfFloat render targets,
 supersampled (no MSAA, pixel ratio 1, no renderer tone mapping), and reads the
 result back asynchronously. On the CPU it de-strides WebGPU rows, flips WebGL2
@@ -295,9 +295,12 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   4096 px side. After each tile a GPU pass box-averages every factor x factor
   block of premultiplied linear texels into the tile's rectangle of an
   output-sized target, in a fixed order with f32 sums. Each texel is first
-  clamped as the screen would show it, so a highlight cannot bleed. Only the
-  output-sized target is read back. Thumbnails use the same path. Peak
-  capture memory is one tile target plus the output target and its readback.
+  clamped as the screen would show it, so a highlight cannot bleed (with a
+  look, to alpha × 64, because the look tone-maps afterwards). Only the
+  output-sized target is read back. Thumbnails use the same path, look
+  included. Peak capture memory is one tile target plus the output target
+  and its readback (with a look, also an output-sized depth texture, the
+  styled target and the look's own stage targets, released after the pass).
   A 4096 x 4096 export needs about 1.3x what it needed without
   supersampling; every export up to 2048 px needs less than that
   un-supersampled 4096 x 4096 capture did.
@@ -310,11 +313,36 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   target with the factor, and the cell scales its opacity by it, so an
   exported cell keeps the weight of a 1 px line (in the live view the cell
   scales by the canvas DPR over 1.25 instead).
-
-- The interactive post pipeline (AO, bloom, depth of field, output tone
-  mapping, vignette) is bypassed. Exports show the raw scene with the viewer's
-  configured background. `postprocessPipeline: 'raw-scene-bypassed'` in the
-  fingerprint and `view.postprocess` in the spec both record this.
+- Exports carry the viewer's look (owner decision: exports use the view as
+  configured). The capture applies the configured post recipe (preset ×
+  intensity × overrides, never the phone budget, so the spec does not depend
+  on the device) itself, not through the live `useRenderPipeline`:
+  - with a look, each tile texel is clamped to alpha × 64 instead of alpha,
+    and the tiles assemble output-sized HDR colour, the nearest depth of each
+    factor×factor block and, when tone mapping or the vignette would restyle
+    the background, the averaged `lupiContent` coverage (the live MRT);
+  - the look then runs once over the whole assembled image at the output
+    resolution (`export/captureLookPass.ts`): GTAO (16 samples, denoised with
+    a seeded noise texture) → bloom → depth of field → tone mapping →
+    vignette, with the background given back where the look touched it. One
+    pass over the whole image is the tile-seam rule: no stage sees a tile
+    edge, and bloom, AO and defocus keep their extent relative to the image;
+  - transparent output applies AO and tone mapping (on un-premultiplied
+    colour) only, never bloom, depth of field or a vignette;
+  - an empty look (the Diagram preset) is the raw path, byte for byte.
+  `view.postprocess` records it: `pipeline: 'viewer-look'` with `toneMapping`
+  (`neutral`, `aces`, `reinhard` or `none`) and `ao`, `bloom`, `dof`,
+  `vignette` (each null when off), or the old `raw-scene` literal when the
+  look is empty. `postprocessPipeline` in the fingerprint's determinism facts
+  names the pass (`viewer-look-output-resolution.v1;…`). FXAA is the live
+  view's only anti-aliasing and never runs on an export; supersampling is.
+- The Specimen floor shadow (`contactShadows` layer) is part of the view: it
+  sits under every molecule up to 50,000 atoms (off for Diagram and under the
+  filter shell), and the spec's `view.contactShadows` states its blur,
+  opacity, resolution and colour (`specimenShadow.ts`). Contact occlusion is
+  baked from the frame's positions; while a worker bake is still computing
+  (12,001–250,000 atoms) the atom layer withholds its artifact receipt, so an
+  export waits for it.
 - An opaque artifact applies the spec's finalized gradient directly as the
   scene background, rather than trusting asynchronous UI background state. The
   gradient covers every pixel. Image, video, procedural, and backdrop-mesh

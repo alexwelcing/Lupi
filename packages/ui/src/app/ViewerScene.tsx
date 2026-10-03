@@ -51,6 +51,15 @@ import { AtomTrails } from '../AtomTrails';
 import { MoleculeFilterShell } from '../MoleculeFilterShell';
 import { MoleculeShadow } from '../MoleculeShadow';
 import { LupiContactShadow } from '../LupiContactShadow';
+import {
+  SPECIMEN_SHADOW,
+  specimenShadowEnabled,
+  specimenShadowOpacity,
+  specimenShadowPlacement,
+  specimenShadowResolution,
+  specimenShadowSkew,
+  type SpecimenShadowPlacement,
+} from '../specimenShadow';
 import { AxesGizmo } from '../viewer/AxesGizmo';
 import { SceneLighting } from '../SceneLighting';
 import { ScenePostprocessing } from '../postprocess/ScenePostprocessing';
@@ -73,8 +82,6 @@ import { MAX_INTERACTIVE_PICKING_ATOMS } from '../deviceCapabilities';
 const ORBIT_FALLBACK = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('controls') === 'orbit';
 
-const CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT = 5_000;
-const CONTACT_SHADOW_MAX_ATOM_LIMIT = 50_000;
 /** Scenes at or above this atom count get the large-scene treatment: far-LOD
  *  cluster splats, sub-pixel atom culling and baked per-atom occlusion. */
 const LARGE_SCENE_ATOM_THRESHOLD = 50_000;
@@ -140,48 +147,6 @@ function displayRadiusRangeForFrame(frame: Frame): { min: number; max: number } 
 /** Bond radius the viewer draws (Bonds `radius`), also the contact bond-stub radius. */
 const BOND_RADIUS = 0.12;
 
-/**
- * Where the Specimen floor shadow sits: under a molecule, on an invisible
- * table just below its lowest atom; under a crystal shown with its cell, on
- * the cell floor. Placement uses the trajectory's global bounds, so the
- * table never jumps between frames.
- */
-export interface SpecimenShadowPlacement {
-  center: [number, number, number];
-  planeSize: number;
-  /** Height above the plane at which atoms stop casting. */
-  far: number;
-}
-
-export function specimenShadowPlacement(
-  bounds: { min: ArrayLike<number>; max: ArrayLike<number> },
-  maxAtomRadius: number,
-  cellFloor: { x: number; y: number; z: number; dx: number; dz: number } | null,
-): SpecimenShadowPlacement {
-  if (cellFloor) {
-    return {
-      center: [cellFloor.x, cellFloor.y - 0.05, cellFloor.z],
-      planeSize: Math.max(cellFloor.dx, cellFloor.dz) * 1.6,
-      far: Math.max(20, cellFloor.dx * 0.6),
-    };
-  }
-  const pad = Math.max(0, maxAtomRadius);
-  const dx = bounds.max[0] - bounds.min[0];
-  const dy = bounds.max[1] - bounds.min[1];
-  const dz = bounds.max[2] - bounds.min[2];
-  const extent = Math.max(dx, dy, dz) + 2 * pad;
-  const gap = Math.max(0.02, extent * 0.015);
-  return {
-    center: [
-      (bounds.min[0] + bounds.max[0]) / 2,
-      bounds.min[1] - pad - gap,
-      (bounds.min[2] + bounds.max[2]) / 2,
-    ],
-    planeSize: Math.max(4, extent * 2.6),
-    far: Math.max(1, dy + 2 * pad) * 1.15,
-  };
-}
-
 interface SpecimenShadowProps {
   atomCount: number;
   frame: Frame;
@@ -211,30 +176,25 @@ const SpecimenShadow = memo(function SpecimenShadow({
   keyLightAzimuth,
   keyLightElevation,
 }: SpecimenShadowProps) {
-  // Lean away from the key: its horizontal direction, a third of the way to
-  // a true cast shadow (cot of the elevation), so the shadow stays a contact
-  // shadow under the molecule rather than a long cast one.
-  const skew = useMemo<[number, number]>(() => {
-    const az = (keyLightAzimuth * Math.PI) / 180;
-    const el = Math.max(15, Math.min(89, keyLightElevation)) * Math.PI / 180;
-    const lean = Math.min(1.5, 1 / Math.tan(el)) * 0.33;
-    return [-Math.sin(az) * lean, -Math.cos(az) * lean];
-  }, [keyLightAzimuth, keyLightElevation]);
-  if (atomCount > CONTACT_SHADOW_MAX_ATOM_LIMIT) return null;
+  const skew = useMemo(
+    () => specimenShadowSkew(keyLightAzimuth, keyLightElevation),
+    [keyLightAzimuth, keyLightElevation],
+  );
+  if (!specimenShadowEnabled(atomCount)) return null;
 
   return (
     <LupiContactShadow
       position={placement.center}
       scale={placement.planeSize}
-      blur={2.2}
+      blur={SPECIMEN_SHADOW.blur}
       far={placement.far}
       opacity={opacity}
-      resolution={atomCount <= CONTACT_SHADOW_HIGH_QUALITY_ATOM_LIMIT ? 1024 : 512}
+      resolution={specimenShadowResolution(atomCount)}
       frames={playing ? 0 : 1}
-      color="#04060c"
+      color={SPECIMEN_SHADOW.color}
       frame={frame}
       hiddenAtomTypes={hiddenAtomTypes}
-      spread={0.3}
+      spread={SPECIMEN_SHADOW.spread}
       skew={skew}
     />
   );
@@ -775,7 +735,7 @@ export function ViewerScene({
               frame={interpolatedFrame ?? currentFrame}
               hiddenAtomTypes={hiddenTypeSet}
               placement={specimenShadow}
-              opacity={postprocessPreset === 'cinematic' || postprocessPreset === 'editorial' ? 0.62 : 0.5}
+              opacity={specimenShadowOpacity(postprocessPreset)}
               playing={playing}
               keyLightAzimuth={keyLightAzimuth}
               keyLightElevation={keyLightElevation}

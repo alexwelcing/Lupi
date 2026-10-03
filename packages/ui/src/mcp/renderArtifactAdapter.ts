@@ -29,6 +29,12 @@ import { getBgMedia, BG_PRESETS } from '../backgroundPresets';
 import { getDefaultQualityTier } from '../deviceCapabilities';
 import { environmentAssetIdentity } from '../sceneEnvironment';
 import { captureLookToSpec, resolveCaptureLook } from '../export/captureLook';
+import {
+  SPECIMEN_SHADOW,
+  specimenShadowEnabled,
+  specimenShadowOpacity,
+  specimenShadowResolution,
+} from '../specimenShadow';
 import type { AppState } from '../store';
 import {
   DECODED_RENDER_FRAME_MEDIA_TYPE_V3,
@@ -340,13 +346,15 @@ export async function createBrowserRenderArtifactPlanV1(
       keyAzimuth: state.keyLightAzimuth,
       keyElevation: state.keyLightElevation,
     };
-  } else if (raster && state.postprocessPreset !== 'diagram') {
+  } else if (raster && state.postprocessPreset !== 'diagram' && specimenShadowEnabled(frame.natoms)) {
+    // The Specimen floor shadow, exactly as the viewer draws it
+    // (specimenShadow.ts); its lean follows `view.lighting`.
     layers.contactShadows = true;
     view.contactShadows = {
-      blur: 2.4,
-      opacity: state.postprocessPreset === 'cinematic' ? 0.55 : 0.32,
-      resolution: 1024,
-      color: '#04060c',
+      blur: SPECIMEN_SHADOW.blur,
+      opacity: specimenShadowOpacity(state.postprocessPreset),
+      resolution: specimenShadowResolution(frame.natoms),
+      color: SPECIMEN_SHADOW.color,
     };
   }
 

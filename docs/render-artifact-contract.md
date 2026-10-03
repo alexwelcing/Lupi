@@ -71,7 +71,7 @@ The browser and edge manifests are intentionally different contracts.
 | V1 execution            | Executes locally in the browser                                                                                                                                                         | **Validation only**; always returns `awaiting_renderer` and withholds renderer/artifact/job/cache identities               |
 | Raster formats          | PNG and WebP with opaque or transparent alpha; JPEG opaque only; exact dimensions 64-4096                                                                                               | Opaque PNG only in the advertised submission capability; no V1 pixel executor exists                                       |
 | Model formats           | Deterministic GLB with `alpha: 'not-applicable'`; raster dimensions and `transparent` are rejected. USDZ is disabled in the immutable-key lane because three's USDZExporter (r186) embeds process-global ids. | Unsupported                                                                                                                |
-| Applied raster pipeline | Raw Three.js scene rendered supersampled into HalfFloat render targets (no MSAA, pixel ratio 1; factor 3 up to 1365 px, else 2, in view-offset tiles of at most 4096 texels; untiled with transmission), GPU box average of premultiplied linear texels, CPU linear un-premultiply + sRGB encode, no renderer tone mapping or interactive postprocess, plus the versioned canvas axes overlay when enabled | Declared in the accepted V1 spec, but not executed                                                                         |
+| Applied raster pipeline | Three.js scene rendered supersampled into HalfFloat render targets (no MSAA, pixel ratio 1; factor 3 up to 1365 px, else 2, in view-offset tiles of at most 4096 texels; untiled with transmission), GPU box average of premultiplied linear texels, then the viewer's look (`view.postprocess`: GTAO, bloom, depth of field, tone mapping, vignette) once over the assembled image at the output resolution, CPU linear un-premultiply + sRGB encode, no renderer tone mapping, plus the versioned canvas axes overlay when enabled | Declared in the accepted V1 spec, but not executed                                                                         |
 | Backgrounds             | Opaque raster requires a canonical, unadjusted gradient that capture applies directly; image, video, procedural, backdrop-mesh and adjusted backgrounds fail closed. Transparent raster disables background. | Background layer is unsupported in the initial V1 profile                                                                  |
 | Bonds                   | Model export may use the synchronous CPU export path. Deterministic raster bonds fail closed because the live asynchronous bond result is not snapshot-addressable.                     | Unsupported                                                                                                                |
 | Delivery                | Inline base64/data URL or user download; no durable ownership is implied                                                                                                                | V1 remains validation-only. A separately named authenticated legacy-v0 lane may use synchronous HTTP plus private R2 job/provenance/artifact routes |
@@ -161,7 +161,8 @@ Every applied default is materialized before canonicalization. `view` contains
 exact keys for the selected format and enabled layers; unknown or ignored
 fields fail. Raster `view` always includes canonical camera position, target,
 FOV, near plane, far plane, lighting, and the
-fixed raw-scene postprocess projection. Maps use sorted keys and non-finite
+postprocess projection (the raw scene, or the viewer's look as applied; see
+"Tone" below). Maps use sorted keys and non-finite
 numbers, ambient locale, wall-clock time, and randomness are forbidden. Model
 formats omit raster camera/lighting/postprocess and dimensions and use
 `alpha: 'not-applicable'`.
@@ -244,7 +245,7 @@ Three Fiber v10). The profile lives in
   limits do not change bytes and are not in the fingerprint.
 - **No renderer yet.** An export before the viewer has created its renderer
   fails, because the backend is part of the identity.
-- **Capture.** A raster capture never reads the canvas. The raw scene is
+- **Capture.** A raster capture never reads the canvas. The scene is
   rendered with a copy of the artifact camera, supersampled, into HalfFloat
   linear render targets with samples 0:
   - the factor is 3 up to 1365 px on the longest side and 2 above;
@@ -253,8 +254,14 @@ Three Fiber v10). The profile lives in
     camera, into one reused tile target;
   - after each tile, a GPU pass box-averages every factor×factor block of
     premultiplied linear texels, each clamped as the screen shows it (alpha
-    to 0..1, colour to 0..alpha), in a fixed order with f32 sums, into the
-    tile's rectangle of an output-sized HalfFloat target;
+    to 0..1, colour to 0..alpha; to 0..64·alpha when a look follows), in a
+    fixed order with f32 sums, into the tile's rectangle of an output-sized
+    HalfFloat target. With a look the same pass also writes the nearest
+    depth of the block into an output-sized depth texture and, for an opaque
+    look that tone-maps or vignettes, the averaged `lupiContent` coverage
+    (the live pipeline's background MRT, rendered with the tile) into alpha;
+  - with a look, `view.postprocess` is then applied once over the whole
+    assembled image at the output resolution (see "Tone");
   - a scene with a screen-space transmission material is not tiled: one
     target, factor min(3, floor(4096 / longest side)), so 1 above 2048 px.
 
@@ -267,12 +274,13 @@ Three Fiber v10). The profile lives in
   Flat regions match the on-screen canvas; transparent output is straight
   alpha, and impostor silhouettes are anti-aliased by the supersampling. The
   canvas keeps its size, and the live camera never moves.
-- **WYSIWYG, with one exception.** The owner's rule is that exports use the
-  view the user configured. The raster uses the viewer's configured gradient
-  background, or none when transparent. The interactive post pipeline (AO,
-  bloom, depth of field, output tone mapping, vignette) is **not** yet part of
-  the export: `postprocessPipeline: 'raw-scene-bypassed'` records that, and so
-  does `view.postprocess`.
+- **WYSIWYG.** The owner's rule is that exports use the view the user
+  configured. The raster uses the viewer's configured gradient background, or
+  none when transparent, and the viewer's configured look (AO, bloom, depth
+  of field, tone mapping, vignette), recorded in `view.postprocess` and named
+  by `postprocessPipeline: 'viewer-look-output-resolution.v1;…'` in the
+  fingerprint. The live view's FXAA is not applied: supersampling
+  anti-aliases exports.
 - **Opaque clear colour.** Opaque artifacts draw the spec gradient as the
   scene background, which covers every pixel, so the clear colour never
   reaches artifact bytes. Interactive (non-artifact) UI exports capture
@@ -345,13 +353,34 @@ and browser encoder variability need their own canonical specification.
 
 ### Tone
 
-- Browser export fixes `pipeline: 'raw-scene'`, `toneMapping: 'none'`, and
-  `multisampling: 0`. Capture bypasses the interactive post pipeline
-  (`useRenderPipeline`) and renders the raw Three.js scene into its own render
-  target exactly once.
-- Interactive postprocess presets are therefore not silently represented as
-  exported pixels. A future postprocessed artifact profile needs its own
-  canonical fields, renderer fingerprint, structural tests, and visual proof.
+- `view.postprocess.pipeline` is `raw-scene` or `viewer-look`; both fix
+  `multisampling: 0` and `outputColorSpace: 'srgb'`.
+- `raw-scene` fixes `toneMapping: 'none'` and nothing else: the raw scene.
+  The browser emits it whenever the configured look is empty (the Diagram
+  preset), and that capture is byte for byte the raw path.
+- `viewer-look` carries the configured recipe exactly as the capture applies
+  it: `toneMapping` (`neutral` — Khronos PBR Neutral, the Specimen default
+  that keeps CPK hue — `aces`, `reinhard` or `none`), and `ao` (`intensity`,
+  `radius`), `bloom` (`intensity`, `threshold`, `smoothing`), `dof`
+  (`focusDistance`, `focusRange`, `bokehScale`, autofocus resolved to the
+  camera-to-target distance) and `vignette` (`offset`, `darkness`), each
+  null when off. It is the configured recipe (preset × intensity ×
+  overrides), never the phone budget or the playback cheapening, so the spec
+  does not depend on the device. A `viewer-look` with nothing in it is
+  invalid (it must be `raw-scene`).
+- The browser applies it once over the whole assembled image, at the output
+  resolution, with the live pipeline's own nodes: GTAO (16 samples,
+  depth-reconstructed normals, denoised; the denoiser's noise texture is
+  rebuilt from a fixed seed, because three seeds it from `Math.random`) →
+  bloom (mip radius 0.4) → depth of field → tone mapping → vignette. Where the
+  look touched the background (tone mapping, vignette) the configured
+  background is given back in proportion to its coverage, as on screen.
+  Running after assembly rather than per tile is the tile-seam rule: no stage
+  ever sees a tile edge, so a 2160 px export has no seams, and bloom, AO and
+  defocus keep the same extent relative to the image at every export size.
+- Transparent output has no plate to glow over or darken: the capture applies
+  AO and tone mapping (on un-premultiplied colour) only, and the spec must
+  record `bloom`, `dof` and `vignette` as null.
 
 ## Visible-layer fail-closed rule
 

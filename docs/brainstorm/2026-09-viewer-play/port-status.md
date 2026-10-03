@@ -26,7 +26,7 @@ The viewer now runs on React Three Fiber v10 alpha (`10.0.0-canary.14007b4`), `@
 ## Known follow-ups
 
 - **Wave 1 (the Buckyball Minute)** shipped on top of this port: the Lupi camera rig, the ink C60 hero, the no-splash relay, display motion and the one Play pill. Its status, tuning points, known limits and wave-2 queue are in [wave1-status.md](wave1-status.md).
-- **Exports don't include the post look yet.** The molecule in an export is the raw scene, not tone-mapped or AO'd as it is on screen. This is queued as a separate task.
+- **Exports include the post look** (wave 2, Contact + Specimen Rig). Captures apply the configured AO, bloom, depth of field, tone mapping and vignette once over the assembled supersampled image; see AGENTS.md, "Render artifact V2 truth". V2 parity candidates must be derived again.
 - **three r187** (due 2026-10-21) fixes a GL program leak on the WebGL2 fallback in long sessions. Bump to it and recheck environment lighting, because PMREMs become cube render targets.
 - **fiber canary teardown warning.** If the viewer unmounts while `renderer.init()` is still pending, fiber logs "[R3F] Error while unmounting root", from a null `state.xr`. It's rare, harmless for users, and needs an upstream fix.
 - **drei patch.** `patches/@react-three__drei@11.0.0-alpha.7.patch` stops MeshTransmissionMaterial compiling its distortion noise when distortion is 0; without it, SwiftShader's WebGL2 path freezes. Drop it once drei fixes this upstream.
