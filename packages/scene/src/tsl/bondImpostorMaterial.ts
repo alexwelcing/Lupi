@@ -34,6 +34,7 @@ import * as THREE from 'three/webgpu';
 import type { UniformNode } from 'three/webgpu';
 import {
   Fn,
+  If,
   abs,
   attribute,
   cameraProjectionMatrix,
@@ -42,6 +43,7 @@ import {
   float,
   length,
   max,
+  min,
   mix,
   modelViewMatrix,
   normalize,
@@ -63,6 +65,7 @@ import {
   lupiSurface,
   orthographicFlag,
   rayCappedCylinder,
+  sphereOcclusion,
   viewRay,
   type LupiEnvBinding,
   type LupiLightUniforms,
@@ -120,6 +123,12 @@ export interface BondImpostorUniforms extends LupiUniformBag {
   uBondFadeEnd: UniformNode<'float', number>;
   /** Bonds projecting under this many device pixels are culled. */
   uCullPixelRadius: UniformNode<'float', number>;
+  /**
+   * Radius of the atom spheres at the bond ends, for junction occlusion (the
+   * stick darkens where it enters the ball). 0 disables it.
+   */
+  uJunctionRadius: UniformNode<'float', number>;
+  uJunctionStrength: UniformNode<'float', number>;
 }
 
 /** The uniform bag shared by every tier's material of one bond layer (v9 defaults). */
@@ -135,6 +144,8 @@ export function createBondImpostorUniforms(): BondImpostorUniforms {
     uBondFadeStart: uniform(BOND_FADE_START),
     uBondFadeEnd: uniform(BOND_FADE_END),
     uCullPixelRadius: uniform(0),
+    uJunctionRadius: uniform(0),
+    uJunctionStrength: uniform(0),
   };
 }
 
@@ -248,6 +259,14 @@ export function createBondImpostorMaterial({
     const normal = (cappedCylinderNormal(hit, vA, vB) as N).toVar();
     // Two-tone split at the geometric midpoint.
     const baseColor = select(axial.lessThan(segLen.mul(0.5)), vColorA, vColorB).toVar();
+    // Junction occlusion: the end atoms as spheres around the hit point.
+    const junction = float(1).toVar();
+    If(u.uJunctionRadius.greaterThan(0.0).and(u.uJunctionStrength.greaterThan(0.0)), () => {
+      const p = hit.xyz.toVar();
+      const occ = (sphereOcclusion(p, normal, vA, u.uJunctionRadius) as N)
+        .add(sphereOcclusion(p, normal, vB, u.uJunctionRadius));
+      junction.assign(float(1).sub(min(occ.mul(u.uJunctionStrength), 0.82)));
+    });
     const lit = (lupiSurface(
       {
         normal,
@@ -256,8 +275,8 @@ export function createBondImpostorMaterial({
         roughness: u.uRoughness.add(u.uSurfaceRoughness),
         clearcoat: u.uSurfaceClearcoat,
         polish: u.uSurfacePolish,
-        occlusion: float(1),
-        occlusionStrength: float(0),
+        occlusion: junction,
+        occlusionStrength: float(1),
         emission: vec3(0),
         pixelRadius: vPixelRadius,
         subsurface: float(0),

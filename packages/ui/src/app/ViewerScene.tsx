@@ -9,8 +9,12 @@ import {
   MAX_TRANSMISSION_ATOMS,
   transmissionQuality,
   suggestOcclusionRadius,
+  suggestContactRange,
   useAtomClusters,
   useAtomOcclusion,
+  useContactOcclusion,
+  CONTACT_OCCLUSION_MAX_ATOMS,
+  DEFAULT_CONTACT_OCCLUSION_STRENGTH,
   type AtomQualityTier,
 } from '@atlas/scene';
 import { reportActiveTransmissionQuality } from '../mcp/transmissionRuntime';
@@ -24,6 +28,7 @@ import {
   ensureVectorMagnitude,
   getElementSpec,
   resolveAtomicNumber,
+  resolveTypeDisplayRadius,
 } from '@atlas/core';
 import { AnomalyTracker } from '@atlas/scene/AnomalyTracker';
 import { GhostAtoms } from '../GhostAtoms';
@@ -109,6 +114,31 @@ function maxCovalentRadiusForFrame(frame: Frame): number | undefined {
   covalentRadiusCache.set(frame.types, { semanticsKey, value });
   return value;
 }
+
+/** Smallest and largest display radius among a frame's atom types (cached per type buffer). */
+const displayRadiusCache = new WeakMap<Int32Array, { semanticsKey: string; min: number; max: number }>();
+function displayRadiusRangeForFrame(frame: Frame): { min: number; max: number } {
+  const semanticsKey = JSON.stringify([frame.typeSemantics ?? null, frame.distanceSemantics ?? null]);
+  const cached = displayRadiusCache.get(frame.types);
+  if (cached && cached.semanticsKey === semanticsKey) return cached;
+  const seen = new Set<number>();
+  let minR = Infinity;
+  let maxR = 0;
+  for (let i = 0; i < frame.natoms; i++) {
+    const t = frame.types[i];
+    if (seen.has(t)) continue;
+    seen.add(t);
+    const r = resolveTypeDisplayRadius(frame, t);
+    if (r > maxR) maxR = r;
+    if (r > 0 && r < minR) minR = r;
+  }
+  const entry = { semanticsKey, min: Number.isFinite(minR) ? minR : 0, max: maxR };
+  displayRadiusCache.set(frame.types, entry);
+  return entry;
+}
+
+/** Bond radius the viewer draws (Bonds `radius`), also the contact bond-stub radius. */
+const BOND_RADIUS = 0.12;
 
 interface BudgetedContactShadowsProps {
   atomCount: number;
@@ -432,6 +462,34 @@ export function ViewerScene({
     enabled: isLargeScene && fullyLoaded && occlusionRadius > 0,
     radius: occlusionRadius,
   });
+  // Contact occlusion (the Contact look): every atom's nearest neighbours,
+  // shaded per pixel as analytic sphere occlusion. Phones get crevices back
+  // without screen-space AO; desktops get them stable under GTAO. Baked from
+  // the paused frame (kept while playing), synchronously for small molecules.
+  const contactEligible = Boolean(
+    currentFrame
+    && currentFrame.natoms <= CONTACT_OCCLUSION_MAX_ATOMS
+    && fullyLoaded,
+  );
+  const contactRange = useMemo(() => {
+    if (!currentFrame || !contactEligible) return 0;
+    const maxRadius = displayRadiusRangeForFrame(currentFrame).max * Math.max(1, atomScale);
+    return suggestContactRange(
+      maxRadius,
+      currentFrame.distanceSemantics?.kind === 'angstrom',
+      currentFrame.positions,
+      currentFrame.natoms,
+    );
+  }, [currentFrame, contactEligible, atomScale]);
+  const contact = useContactOcclusion(clusterSourceFrame, {
+    enabled: contactEligible && contactRange > 0,
+    range: contactRange,
+  });
+  // Sticks darken where they enter a ball: the smallest ball, so no visible
+  // stick darkens past it.
+  const junctionRadius = contactEligible && currentFrame
+    ? displayRadiusRangeForFrame(currentFrame).min * atomScale
+    : 0;
   const atomQualityTier: AtomQualityTier = deviceQualityTier === 0 ? 0 : deviceQualityTier === 1 ? 1 : 2;
   const atomCullPixelRadius = !isLargeScene
     ? 0
@@ -572,6 +630,10 @@ export function ViewerScene({
             cullPixelRadius={atomCullPixelRadius}
             occlusion={atomOcclusion}
             occlusionStrength={ATOM_OCCLUSION_STRENGTH}
+            contactOcclusion={contact.bake}
+            occlusionPending={contact.pending}
+            bondStubRadius={bondRenderPlan.available ? BOND_RADIUS : 0}
+            bondStubReach={bondRenderPlan.cutoff}
           />
           )}
           {activeVectorField && (
@@ -606,8 +668,10 @@ export function ViewerScene({
             colorProperty={colorProperty ?? undefined}
             uniformColor={uniformAtomColor}
             elementColorOverrides={elementColorOverrides}
-            radius={0.12}
+            radius={BOND_RADIUS}
             opacity={0.85}
+            junctionRadius={junctionRadius}
+            junctionStrength={DEFAULT_CONTACT_OCCLUSION_STRENGTH}
             materialPreset={materialPreset}
             materialIntensity={materialIntensity}
             rimLightIntensity={rimLightIntensity}

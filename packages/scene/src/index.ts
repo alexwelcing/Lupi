@@ -1,6 +1,7 @@
 // Scene components
 export {
   AtomsOptimized,
+  DEFAULT_CONTACT_OCCLUSION_STRENGTH,
   LUPI_APPLIED_ARTIFACT_SPEC_ID_KEY,
   LUPI_ARTIFACT_ATOMS_LAYER,
   LUPI_ARTIFACT_LAYER_KEY,
@@ -11,7 +12,17 @@ export {
 export type { AtomQualityTier } from './AtomsOptimized';
 export { computeAtomOcclusion, suggestOcclusionRadius } from './atomOcclusion';
 export type { AtomOcclusionInput, AtomOcclusionResult } from './atomOcclusion';
-export { useAtomOcclusion, useAtomClusters } from './useAtomOcclusion';
+export {
+  CONTACT_OCCLUSION_MAX_ATOMS,
+  CONTACT_OCCLUSION_NEIGHBORS,
+  CONTACT_OCCLUSION_SYNC_ATOMS,
+  computeContactOcclusion,
+  sphereContactOcclusion,
+  suggestContactRange,
+} from './atomContactOcclusion';
+export type { ContactOcclusionBake, ContactOcclusionInput } from './atomContactOcclusion';
+export { useAtomOcclusion, useAtomClusters, useContactOcclusion } from './useAtomOcclusion';
+export type { ContactOcclusionState } from './useAtomOcclusion';
 export {
   AtomsTransmission,
   MAX_TRANSMISSION_ATOMS,

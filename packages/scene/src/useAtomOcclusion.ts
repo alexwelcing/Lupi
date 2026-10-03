@@ -9,9 +9,15 @@
  */
 
 /// <reference path="./vite-env.d.ts" />
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Frame } from '@atlas/core/types';
 import type { Clusters } from './ClusterBuilder';
+import {
+  CONTACT_OCCLUSION_MAX_ATOMS,
+  CONTACT_OCCLUSION_SYNC_ATOMS,
+  computeContactOcclusion,
+  type ContactOcclusionBake,
+} from './atomContactOcclusion';
 import SceneAnalysisWorkerCtor from './occlusionWorker.ts?worker';
 
 export interface UseAtomOcclusionOptions {
@@ -30,10 +36,11 @@ export interface UseAtomClustersOptions {
 }
 
 interface WorkerResult {
-  kind: 'occlusion' | 'clusters';
+  kind: 'occlusion' | 'clusters' | 'contact';
   requestId: number;
   occlusion?: Uint8Array;
   clusters?: Clusters;
+  contact?: ContactOcclusionBake;
 }
 
 /**
@@ -165,4 +172,84 @@ export function useAtomClusters(
     },
     (result) => (result.kind === 'clusters' && result.clusters ? result.clusters : null),
   );
+}
+
+export interface UseContactOcclusionOptions {
+  enabled: boolean;
+  /** Neighbour search radius (see suggestContactRange). */
+  range: number;
+  debounceMs?: number;
+}
+
+export interface ContactOcclusionState {
+  /** The bake for the source frame, or the last one while a new one computes. */
+  bake: ContactOcclusionBake | null;
+  /**
+   * True while the bake for the current source frame has not arrived yet.
+   * Deterministic exports wait on it (the atom layer withholds its receipt).
+   */
+  pending: boolean;
+}
+
+/**
+ * Contact occlusion (atomContactOcclusion.ts) for `frame`: synchronous up to
+ * CONTACT_OCCLUSION_SYNC_ATOMS (the first frame already has it, and an export
+ * never waits), in the scene-analysis worker up to
+ * CONTACT_OCCLUSION_MAX_ATOMS, off above. Pass an undefined frame while a
+ * trajectory plays: the last bake stays (the look does not pop), and the
+ * paused frame re-bakes.
+ */
+export function useContactOcclusion(
+  frame: Frame | null | undefined,
+  { enabled, range, debounceMs = 60 }: UseContactOcclusionOptions,
+): ContactOcclusionState {
+  const natoms = frame?.natoms ?? 0;
+  const active = enabled && range > 0;
+  const sync = active && Boolean(frame) && natoms >= 2 && natoms <= CONTACT_OCCLUSION_SYNC_ATOMS;
+  const viaWorker = active && Boolean(frame) && natoms > CONTACT_OCCLUSION_SYNC_ATOMS && natoms <= CONTACT_OCCLUSION_MAX_ATOMS;
+
+  const syncBake = useMemo(
+    () => (sync && frame ? computeContactOcclusion({ positions: frame.positions, natoms: frame.natoms, range }) : null),
+    [sync, frame, range],
+  );
+
+  const requestFrames = useRef(new Map<number, Frame>());
+  const workerResult = useSceneAnalysisJob<{ bake: ContactOcclusionBake; frame: Frame | null }>(
+    frame,
+    viaWorker,
+    String(range),
+    debounceMs,
+    (source, requestId) => {
+      requestFrames.current.clear();
+      requestFrames.current.set(requestId, source);
+      const positions = new Float32Array(source.positions.subarray(0, source.natoms * 3));
+      return {
+        message: { kind: 'contact', requestId, positions, natoms: source.natoms, range },
+        transfer: [positions.buffer],
+      };
+    },
+    (result) => (result.kind === 'contact' && result.contact
+      ? { bake: result.contact, frame: requestFrames.current.get(result.requestId) ?? null }
+      : null),
+  );
+
+  // While playing (no source frame) keep the last bake of the same system.
+  const lastRef = useRef<ContactOcclusionBake | null>(null);
+  let bake: ContactOcclusionBake | null = null;
+  let pending = false;
+  if (!enabled || range <= 0) {
+    lastRef.current = null;
+  } else if (frame) {
+    if (sync) bake = syncBake;
+    else if (viaWorker) {
+      bake = workerResult?.bake ?? null;
+      pending = workerResult?.frame !== frame;
+      if (bake && bake.natoms !== natoms) bake = null;
+    }
+    if (bake) lastRef.current = bake;
+    else if (!viaWorker) lastRef.current = null;
+  } else {
+    bake = lastRef.current;
+  }
+  return { bake, pending };
 }

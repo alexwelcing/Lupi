@@ -353,6 +353,25 @@ export function impostorDepthPrelude(hit: Node, isOrtho: Node): Node {
   }) as N)();
 }
 
+/**
+ * Occlusion of a surface point `p` (normal `n`) by a sphere at `c` of radius
+ * `r`, all in one space: Quilez's (r/d)² with a horizon term, so a sphere
+ * partly below the tangent plane still counts and one fully below does not.
+ * CPU twin: sphereContactOcclusion (atomContactOcclusion.ts).
+ */
+export function sphereOcclusion(p: Node, n: Node, c: Node, r: Node): Node {
+  return (Fn(() => {
+    const P = p as N;
+    const Nn = n as N;
+    const R = r as N;
+    const v = (c as N).sub(P).toVar();
+    const d = max(length(v), 1e-4).toVar();
+    const h = dot(Nn, v);
+    const horizon = clamp(h.add(R).div(d.add(R)), 0.0, 1.0);
+    return min(R.div(d).mul(R.div(d)), 1.0).mul(horizon);
+  }) as N)();
+}
+
 // ─── Shading ────────────────────────────────────────────────────────────
 
 /** A world-space direction in view space. */
