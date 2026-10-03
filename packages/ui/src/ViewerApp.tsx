@@ -89,6 +89,7 @@ import { TelemetryHUD } from './TelemetryHUD';
 import { StateInspector } from './StateInspector';
 import { LabelPerfHUD } from './LabelPerfHUD';
 import { PropertyLegendHUD } from './PropertyLegendHUD';
+import { BondLegendHUD } from './bonds/BondLegendHUD';
 import { DevProbe } from './DevProbe';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { emitIntent } from '@atlas/scene';
@@ -776,6 +777,9 @@ export function ViewerApp() {
                 // scale bar): the pill owns the bottom-left corner.
                 bottomOffset={isMobile ? 118 : 100}
               />
+            )}
+            {!isEmbeddedMobileViewer && (
+              <BondLegendHUD frame={currentFrame} bottomOffset={isMobile ? 118 : 100} />
             )}
           </div>
         )}

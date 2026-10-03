@@ -224,6 +224,7 @@ export function FigureExportPanel({
   const selectedAtoms = useStore(s => s.selectedAtoms);
   const measurement = useStore(s => s.measurement);
   const lastBondCount = useStore(s => s.lastBondCount);
+  const lastBondDetail = useStore(s => s.lastBondDetail);
   const showBonds = useStore(s => s.showBonds);
   const [status, setStatus] = useState<ExportStatus>({
     kind: 'idle',
@@ -296,6 +297,7 @@ export function FigureExportPanel({
       frameIndex: frame,
       selectedAtoms,
       lastBondCount,
+      lastBondDetail,
       showBonds,
       measurement,
       shareUrl: typeof window === 'undefined' ? undefined : window.location.href,
@@ -334,7 +336,7 @@ export function FigureExportPanel({
         }
       },
     });
-  }, [currentFrame, file, frame, lastBondCount, measurement, selectedAtoms, showBonds, triggerExport]);
+  }, [currentFrame, file, frame, lastBondCount, lastBondDetail, measurement, selectedAtoms, showBonds, triggerExport]);
 
   const runUsdExport = useCallback(() => {
     if (!file) return;

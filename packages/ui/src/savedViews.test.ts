@@ -119,6 +119,17 @@ describe('saved molecule source policy', () => {
     if (source.kind === 'inline-xyz') expect(source.xyz).toMatch(/^2\nsource\.xyz\n/m);
   });
 
+  it('writes declared chemistry back into an inline XYZ copy, ahead of the name', () => {
+    setLoadedSource('https://untrusted.example/molecule.xyz');
+    const frame = useStore.getState().file!.trajectory.frames[0]!;
+    frame.chemistry = { totalCharge: 1, spinMultiplicity: 2, source: 'record', domain: 'metal complexes' };
+    const source = readMoleculeSource();
+    expect(source.kind).toBe('inline-xyz');
+    if (source.kind === 'inline-xyz') {
+      expect(source.xyz.split('\n')[1]).toBe('charge=1 multiplicity=2 charge_source=record data_id=metal_complexes source.xyz');
+    }
+  });
+
   it('rejects an inline XYZ fallback when raw types lack an element map', () => {
     setLoadedSource('https://untrusted.example/molecule.xyz');
     const frame = useStore.getState().file!.trajectory.frames[0]!;

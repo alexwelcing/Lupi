@@ -39,6 +39,8 @@ import { registerPlayDevHook } from '../play/devHooks';
 import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { getCameraRig, type LupiCameraRigApi, type Vec3 } from './rigApi';
 import { objectFactsForFile } from './objectFactsForFile';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
+import { getPerceivedBonds, molecularBondPairs, resolveFrameRecipe } from '../bonds/perceivedBonds';
 import { TRUE_SPIN, TrueSpinCoast } from './trueSpinCoast';
 import { SymmetryDetents } from './symmetryDetents';
 
@@ -132,6 +134,17 @@ function onFlip(): void {
   cue('flip');
 }
 
+/**
+ * A molecular frame's covalent and coordination pairs (the drawn graph,
+ * before display filters); undefined keeps Object Facts' own distance bonds.
+ */
+function factsBondPairs(frame: Frame, frameCount: number): Int32Array | undefined {
+  const { bondProfile, bondTolerance } = useStore.getState();
+  if (resolveFrameRecipe(frame, { profile: bondProfile, frameCount }) !== MOLECULAR_RECIPE_ID) return undefined;
+  const perceived = getPerceivedBonds(frame, { recipe: MOLECULAR_RECIPE_ID, tolerance: bondTolerance });
+  return perceived ? molecularBondPairs(perceived) : undefined;
+}
+
 function captureDisabled(): boolean {
   return useStore.getState().measurementTool != null;
 }
@@ -212,7 +225,7 @@ export function CameraToys({ frame }: CameraToysProps): null {
         if (disposed) return;
         let facts = null;
         try {
-          facts = objectFactsForFile(frameRef.current);
+          facts = objectFactsForFile(frameRef.current, { bondPairs: factsBondPairs(frameRef.current, trajectory.totalFrames ?? 1) });
         } catch (error) {
           console.error('[lupi] object facts failed', error);
         }

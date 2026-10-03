@@ -6,7 +6,9 @@
  * mounted and uses visibility toggling instead of unmount/remount.
  *
  * Architecture:
- * - Bond detection → Web Worker / WebGPU (non-blocking)
+ * - Bond detection → Web Worker / WebGPU (non-blocking); the molecular
+ *   recipe instead draws the owner's synchronous `getPerceivedBonds` result
+ *   (≤ 2,000 atoms), with dashed coordination and dotted ionic contacts
  * - Rendering → one ray-cast cylinder impostor per bond, a TSL node material
  *   (tsl/bondImpostorMaterial.ts) on the shared impostor kit: endpoints,
  *   radius and two endpoint colors per instance, frame interpolation on the
@@ -37,7 +39,20 @@ import { useBondGpuPipeline } from './useBondGpuPipeline';
 // `?worker` module declaration from vite-env.d.ts so this resolves both
 // in @atlas/scene's own tsc run and in any consumer (e.g. @atlas/ui).
 import BondWorkerCtor from './bondWorker.ts?worker';
-import { resolveBondTopologyMode, shouldUseGpuBondInference } from './bondTopology';
+import {
+  BOND_KIND_RADIUS_SCALE,
+  BOND_KIND_STYLE_ALPHA,
+  MOLECULAR_RECIPE_ID,
+  filterPerceivedBonds,
+  type BondRecipeId,
+  type PerceivedBonds,
+} from '@atlas/core/bonds';
+import {
+  bondsUpdateDetail,
+  resolveBondTopologyMode,
+  shouldUseGpuBondInference,
+  type BondsUpdateDetail,
+} from './bondTopology';
 import { wrapDelta } from './interpolation';
 import { bondMaterialParams, createBondBoxGeometry } from './bondImpostor';
 import { markInstancedAttributeUpdateRange, resolveAtomQualityTier, type AtomQualityTier } from './AtomsOptimized';
@@ -266,10 +281,19 @@ interface BondsProps {
    *  object). Frames of one trajectory share it; a new value is a different
    *  molecule even when its atom count and types match the previous one. */
   sourceKey?: object | null;
+  /** The frame's bond rule (the owner's resolveFrameRecipe). With the
+   *  molecular recipe the layer draws `perceivedBonds` and never posts to the
+   *  worker or the GPU. */
+  recipe?: BondRecipeId | 'source' | null;
+  /** The unfiltered molecular bond graph of `frame` (getPerceivedBonds). */
+  perceivedBonds?: PerceivedBonds | null;
+  /** Draw ionic contacts (store `showBondContacts`). */
+  showBondContacts?: boolean;
   /** Telemetry hook — reports the bonds actually left after visibility
-   *  filtering, not merely the raw inference result. Used by visual readiness
+   *  filtering, not merely the raw inference result. `count` is covalent plus
+   *  coordination (contacts are not bonds). Used by visual readiness, MCP
    *  and the dev HUD; safe to omit. */
-  onBondsUpdate?: (info: { source: 'cpu' | 'gpu' | 'none'; count: number }) => void;
+  onBondsUpdate?: (info: { source: 'cpu' | 'gpu' | 'none'; count: number; detail?: BondsUpdateDetail }) => void;
   /** Telemetry hook — fires when the GPU pipeline's status changes. */
   onGpuStatusChange?: (status: 'idle' | 'ready' | 'unsupported') => void;
   /**
@@ -325,6 +349,9 @@ export function Bonds({
   atomColorSource = 'colormap',
   hiddenAtomTypes = new Set<number>(),
   sourceKey,
+  recipe = null,
+  perceivedBonds = null,
+  showBondContacts = true,
   onBondsUpdate,
   onGpuStatusChange,
 }: BondsProps) {
@@ -358,12 +385,15 @@ export function Bonds({
   const hiddenAtomTypesKey = Array.from(hiddenAtomTypes).sort((a, b) => a - b).join(',');
   const hasSourceTopology = topologyMode === 'source';
   const inferenceAllowed = topologyMode === 'infer';
-  const forceGpu = !hasSourceTopology && inferenceAllowed && (frame?.natoms ?? 0) > FORCE_GPU_ATOM_THRESHOLD;
+  // The molecular graph is computed for exactly this frame on the main thread.
+  const molecular = inferenceAllowed && recipe === MOLECULAR_RECIPE_ID && perceivedBonds !== null;
+  const forceGpu = !hasSourceTopology && inferenceAllowed && !molecular && (frame?.natoms ?? 0) > FORCE_GPU_ATOM_THRESHOLD;
   const wantGpu = inferenceAllowed && shouldUseGpuBondInference(
     frame?.natoms ?? 0,
     frame?.bonds,
     useGpu,
     FORCE_GPU_ATOM_THRESHOLD,
+    molecular ? MOLECULAR_RECIPE_ID : recipe,
   );
 
   // GPU bond pipeline. Initializes lazily; falls back via `unsupported`.
@@ -390,13 +420,23 @@ export function Bonds({
   const [detectedBondPairs, setBondPairs] = useState<Int32Array>(EMPTY_BOND_PAIRS);
   const [detectedBondDistances, setBondDistances] = useState<Float32Array>(EMPTY_BOND_DISTANCES);
   const [detectedBondSource, setDetectedBondSource] = useState<'cpu' | 'gpu' | 'none'>('none');
+  // Molecular: the same filter as the atom card, MCP and exports.
+  const drawnMolecular = useMemo(
+    () => (molecular && perceivedBonds
+      ? filterPerceivedBonds(perceivedBonds, { types: frame.types, hiddenTypes: hiddenAtomTypes, showContacts: showBondContacts })
+      : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [molecular, perceivedBonds, frame.types, hiddenAtomTypesKey, showBondContacts],
+  );
   const { pairs: bondPairs, distances: bondDistances } = useMemo(
-    () => filterHiddenTypeBonds(frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypes),
+    () => drawnMolecular ?? filterHiddenTypeBonds(frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypes),
     // The key binds contents even if the store reuses its hidden-types array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypesKey],
+    [drawnMolecular, frame, detectedBondPairs, detectedBondDistances, hiddenAtomTypesKey],
   );
+  const bondKinds = drawnMolecular?.kinds ?? null;
   const bondCount = bondPairs.length / 2;
+  const bondSource: 'cpu' | 'gpu' | 'none' = drawnMolecular ? 'cpu' : detectedBondSource;
   const onBondsUpdateRef = useRef(onBondsUpdate);
 
   useEffect(() => {
@@ -404,8 +444,19 @@ export function Bonds({
   }, [onBondsUpdate]);
 
   useEffect(() => {
-    onBondsUpdateRef.current?.({ source: detectedBondSource, count: bondCount });
-  }, [bondCount, detectedBondSource]);
+    if (drawnMolecular && perceivedBonds) {
+      const detail = bondsUpdateDetail(MOLECULAR_RECIPE_ID, drawnMolecular.count, perceivedBonds.params.tolerance, {
+        kinds: drawnMolecular.kinds,
+        counts: perceivedBonds.counts,
+      });
+      onBondsUpdateRef.current?.({ source: 'cpu', count: detail.kinds.covalent + detail.kinds.coordination, detail });
+      return;
+    }
+    const detail = bondSource === 'none' || recipe === null
+      ? undefined
+      : bondsUpdateDetail(recipe, bondCount, tolerance);
+    onBondsUpdateRef.current?.({ source: bondSource, count: bondCount, detail });
+  }, [bondCount, bondSource, drawnMolecular, perceivedBonds, recipe, tolerance]);
 
   const clearBondState = useCallback(() => {
     setBondPairs(prev => prev.length === 0 ? prev : EMPTY_BOND_PAIRS);
@@ -489,6 +540,23 @@ export function Bonds({
       cpuAcceptFromRef.current = cpuDispatchGenRef.current + 1;
       pendingMsgRef.current = null;
       return; // GPU effect below owns dispatch in this mode.
+    }
+    if (molecular) {
+      // Drawn from the synchronous molecular graph; nothing to detect. Forget
+      // the last dispatch so a switch back to distance detects afresh.
+      cpuDispatchGenRef.current += 1;
+      cpuAcceptFromRef.current = cpuDispatchGenRef.current + 1;
+      pendingMsgRef.current = null;
+      clearBondState();
+      lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
+      lastDispatchToleranceRef.current = NaN;
+      lastDispatchMaxBondLengthRef.current = NaN;
+      lastDispatchTypesRef.current = null;
+      prevFrameRef.current = frame;
+      prevNatomsRef.current = frame.natoms;
+      prevSourceKeyRef.current = sourceKey;
+      return;
     }
     // Skip CPU dispatch when bonds are hidden — running spatial-hash + neighbor
     // scan on a 1M-atom system produces tens of MB of bond pairs that are
@@ -649,7 +717,7 @@ export function Bonds({
         debounceRef.current = null;
       }
     };
-  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, typeSemanticsKey, sourceKey]);
+  }, [frame, maxBondLength, tolerance, gpuActive, molecular, visible, skipDetection, clearBondState, hasSourceTopology, typeSemanticsKey, sourceKey]);
 
   // ─── GPU dispatch ──────────────────────────────────────────────────
   // Runs only when gpuActive is true. Mirrors the worker effect's contract:
@@ -1008,7 +1076,8 @@ export function Bonds({
         bx = ax + dx; by = ay + dy; bz = az + dz;
       }
       let stale = false;
-      if (radiusByType) {
+      // Coordination and contacts exceed the covalent criterion by design.
+      if (radiusByType && (!bondKinds || bondKinds[i] === 0)) {
         const dx = bx - ax, dy = by - ay, dz = bz - az;
         const limit = (covalentRadiusOf(frame.types[a]) + covalentRadiusOf(frame.types[b]) + tolerance) * STALE_BOND_SLACK;
         if (dx * dx + dy * dy + dz * dz > limit * limit) {
@@ -1041,7 +1110,7 @@ export function Bonds({
       markInstancedAttributeUpdateRange(startTarget, drawCount * 3);
       markInstancedAttributeUpdateRange(endTarget, drawCount * 3);
     }
-  }, [bondPairs, bondCount, capacity, geometry, frame, nextFrame, canInterpolateToNextFrame, periodic, cellBounds, ensureTargetAttributes, topologyMode, tolerance]);
+  }, [bondPairs, bondKinds, bondCount, capacity, geometry, frame, nextFrame, canInterpolateToNextFrame, periodic, cellBounds, ensureTargetAttributes, topologyMode, tolerance]);
 
   // ─── Color + radius upload — runs on bond-set or scheme changes ───────
   // Bond-stability cache: a fresh Int32Array with identical contents (same
@@ -1074,6 +1143,7 @@ export function Bonds({
       JSON.stringify(elementColorOverrides),
       JSON.stringify(frame.typeSemantics ?? null),
       capacity,
+      bondKinds ? MOLECULAR_RECIPE_ID : 'plain',
     ].join('|');
 
     if (
@@ -1148,6 +1218,10 @@ export function Bonds({
     for (let i = 0; i < drawCount; i++) {
       const a = bondPairs[i * 2];
       const b = bondPairs[i * 2 + 1];
+      // Kind: thinner, and a style code in the colour's alpha byte (dashes, dots).
+      const kind = bondKinds ? bondKinds[i] : 0;
+      const kindScale = BOND_KIND_RADIUS_SCALE[kind] ?? 1;
+      const style = BOND_KIND_STYLE_ALPHA[kind] ?? 255;
 
       let normA = 0.5, normB = 0.5;
       if (isPropMode && propData) {
@@ -1159,21 +1233,21 @@ export function Bonds({
         normB = pMax > pMin ? (valB - pMin) / (pMax - pMin) : 0.5;
       }
       // Property mode scales the tube by the mean of both endpoints.
-      radiusArr[i] = isPropMode ? radius * (0.2 + 1.8 * 0.5 * (normA + normB)) : radius;
+      radiusArr[i] = (isPropMode ? radius * (0.2 + 1.8 * 0.5 * (normA + normB)) : radius) * kindScale;
 
       if (bondColorMode === 'length' && bondDistances.length > i) {
         const rgb = mapFn((bondDistances[i] - distMin) / distRange);
-        writeBondColor(colorStartArr, i, rgb);
-        writeBondColor(colorEndArr, i, rgb);
+        writeBondColor(colorStartArr, i, rgb, style);
+        writeBondColor(colorEndArr, i, rgb, style);
       } else if (isPropMode && propData) {
-        writeBondColor(colorStartArr, i, mapFn(normA));
-        writeBondColor(colorEndArr, i, mapFn(normB));
+        writeBondColor(colorStartArr, i, mapFn(normA), style);
+        writeBondColor(colorEndArr, i, mapFn(normB), style);
       } else if (colorMode === 'uniform') {
-        writeBondColor(colorStartArr, i, uniformRgb);
-        writeBondColor(colorEndArr, i, uniformRgb);
+        writeBondColor(colorStartArr, i, uniformRgb, style);
+        writeBondColor(colorEndArr, i, uniformRgb, style);
       } else {
-        writeBondColor(colorStartArr, i, frame.types ? colorForType(frame.types[a]) : DEFAULT_TYPE_COLOR);
-        writeBondColor(colorEndArr, i, frame.types ? colorForType(frame.types[b]) : DEFAULT_TYPE_COLOR);
+        writeBondColor(colorStartArr, i, frame.types ? colorForType(frame.types[a]) : DEFAULT_TYPE_COLOR, style);
+        writeBondColor(colorEndArr, i, frame.types ? colorForType(frame.types[b]) : DEFAULT_TYPE_COLOR, style);
       }
     }
 
@@ -1189,7 +1263,7 @@ export function Bonds({
     // property mode `propData` (a per-frame Float32Array) is a dep, so colors
     // do refresh per frame for property coloring.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondPairs, bondDistances, bondCount, capacity, geometry, frame.types, frame.typeSemantics, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, canInterpolateToNextFrame, interpolationFactor, colorProperty]);
+  }, [bondPairs, bondKinds, bondDistances, bondCount, capacity, geometry, frame.types, frame.typeSemantics, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, canInterpolateToNextFrame, interpolationFactor, colorProperty]);
 
   return (
     <mesh

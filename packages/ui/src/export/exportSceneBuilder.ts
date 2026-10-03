@@ -8,7 +8,10 @@
  * Scaling decisions this module owns:
  *   Bonds     — spatial-hash detection via @atlas/scene's detectBondsCpu,
  *               run in x-sorted slabs so the main thread yields between
- *               chunks instead of freezing for the whole detection.
+ *               chunks instead of freezing for the whole detection. A
+ *               molecular frame instead brings its cached graph (the one the
+ *               view draws), filtered the same way, as three named meshes
+ *               whose dashes and dots are cylinder segments.
  *   LOD       — sphere segment tiers by atom count; USDZ additionally
  *               enforces a total-triangle budget because its bake path
  *               materializes vertices × atoms.
@@ -18,6 +21,14 @@
 
 import * as THREE from 'three';
 import { detectBondsCpu } from '@atlas/scene/bondDetectCpu';
+import {
+  BOND_KIND_DASH,
+  BOND_KIND_NAMES,
+  BOND_KIND_RADIUS_SCALE,
+  filterPerceivedBonds,
+  type BondKindName,
+  type PerceivedBonds,
+} from '@atlas/core/bonds';
 
 /** Matches ExportRequest.onProgress in the store. */
 export type ExportProgress = (phase: string, done: number, total: number) => void;
@@ -313,6 +324,85 @@ export interface ExportBondResult {
   count: number;
   capped: boolean;
   topology: 'none' | 'source' | 'inferred';
+  /** Molecular recipe only: the kind of each pair and the recipe that drew it. */
+  kinds?: Uint8Array;
+  recipe?: PerceivedBonds['recipe'];
+}
+
+/** The three named bond meshes of a molecular export, by kind. */
+export const EXPORT_BOND_MESH_NAMES = ['lupi-bonds-covalent', 'lupi-bonds-coordination', 'lupi-contacts-ionic'] as const;
+
+/**
+ * The drawn pieces of a dashed (kind 1) or dotted (kind 2) bond of length
+ * `length`, as [from, to] distances along it; a solid bond is one piece. The
+ * pattern runs from each end toward the middle, as in the live impostor
+ * (tsl/bondImpostorMaterial.ts): on where fract(x / period) ≤ duty, x the
+ * distance from the nearer end, so each end begins with a dash.
+ */
+export function bondDashSegments(length: number, kind: number): Array<[number, number]> {
+  const dash = BOND_KIND_DASH[kind as 0 | 1 | 2] ?? null;
+  if (!dash || !(length > 0)) return length > 0 ? [[0, length]] : [];
+  const half = length / 2;
+  const period = dash.periodA;
+  const on = period * dash.duty;
+  const left: Array<[number, number]> = [];
+  for (let n = 0; n * period < half; n += 1) {
+    const start = n * period;
+    left.push([start, Math.min(start + on, half)]);
+  }
+  const right = left.map(([a, b]) => [length - b, length - a] as [number, number]).reverse();
+  const last = left[left.length - 1];
+  if (last && last[1] === half) {
+    // The middle piece reaches the centre from both sides: one segment.
+    left.pop();
+    right.shift();
+    return [...left, [last[0], length - last[0]], ...right];
+  }
+  return [...left, ...right];
+}
+
+/**
+ * A molecular frame's export bonds: its unfiltered graph through the same
+ * filter as the live view (hidden atom types, the contacts toggle).
+ */
+export function molecularExportBonds(
+  frame: ExportFrameData,
+  perceived: PerceivedBonds,
+  opts: { hiddenTypes?: ReadonlySet<number>; showContacts: boolean; cap?: number },
+): ExportBondResult {
+  const drawn = filterPerceivedBonds(perceived, {
+    types: frame.types,
+    hiddenTypes: opts.hiddenTypes,
+    showContacts: opts.showContacts,
+  });
+  const cap = opts.cap ?? MAX_EXPORT_BONDS;
+  const count = Math.min(drawn.count, cap);
+  return {
+    pairs: drawn.pairs.subarray(0, count * 2),
+    kinds: drawn.kinds.subarray(0, count),
+    count,
+    capped: drawn.count > cap,
+    topology: 'inferred',
+    recipe: perceived.recipe,
+  };
+}
+
+function bondLength(positions: Float32Array, a: number, b: number): number {
+  const dx = positions[b * 3] - positions[a * 3];
+  const dy = positions[b * 3 + 1] - positions[a * 3 + 1];
+  const dz = positions[b * 3 + 2] - positions[a * 3 + 2];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+/** Cylinder instances a bond layer needs: one per bond, or one per dash and dot. */
+function exportBondInstanceCount(frame: ExportFrameData, bonds: ExportBondResult): number {
+  if (!bonds.kinds) return bonds.count;
+  let total = 0;
+  for (let b = 0; b < bonds.count; b += 1) {
+    const kind = bonds.kinds[b];
+    total += kind === 0 ? 1 : bondDashSegments(bondLength(frame.positions, bonds.pairs[b * 2], bonds.pairs[b * 2 + 1]), kind).length;
+  }
+  return total;
 }
 
 export class ModelExportLayerIncompleteError extends Error {
@@ -683,6 +773,13 @@ export interface ExportSceneOptions {
   surfaceRoughness?: number;
   showBonds?: boolean;
   bondTolerance?: number;
+  /**
+   * The frame's molecular bond graph (getPerceivedBonds), unfiltered. When
+   * set it replaces inference, and bonds export as three named meshes.
+   */
+  perceivedBonds?: PerceivedBonds | null;
+  /** With `perceivedBonds`: export the ionic contacts (the view's toggle). */
+  showBondContacts?: boolean;
   /** Covalent radius (Å) indexed by the inference type buffer. */
   covalentRadii?: Float32Array;
   /** Atomic numbers used only for bond inference; atom rendering keeps raw type ids. */
@@ -778,6 +875,13 @@ export async function buildExportScene(
     if (sourceBonds) {
       bonds = sourceBonds;
       onProgress?.('bonds (source)', bonds.count, bonds.count);
+    } else if (opts.perceivedBonds) {
+      bonds = molecularExportBonds(frame, opts.perceivedBonds, {
+        hiddenTypes: opts.hiddenTypes,
+        showContacts: opts.showBondContacts ?? true,
+        cap: bondCap,
+      });
+      onProgress?.('bonds', frame.natoms, frame.natoms);
     } else if (opts.covalentRadii) {
       if (opts.bondTypes && opts.bondTypes.length < frame.natoms) {
         throw new ModelExportSourceTopologyError(
@@ -804,7 +908,9 @@ export async function buildExportScene(
     }
   }
 
-  const geometryTotal = visibleAtoms + bonds.count;
+  // Dashes and dots are separate cylinders, so the budget counts segments.
+  const bondInstances = exportBondInstanceCount(frame, bonds);
+  const geometryTotal = visibleAtoms + bondInstances;
   let geometryDone = 0;
   let sinceYield = 0;
   const tickGeometry = async (n: number) => {
@@ -823,11 +929,11 @@ export async function buildExportScene(
   const sphereLod = opts.sphereLod ?? selectBudgetedSphereLod(
     visibleAtoms,
     opts.format,
-    bonds.count,
+    bondInstances,
     opts.delivery,
   );
   assertModelExportBudget(
-    estimateModelExportBudget(opts.format, visibleAtoms, bonds.count, sphereLod, opts.delivery),
+    estimateModelExportBudget(opts.format, visibleAtoms, bondInstances, sphereLod, opts.delivery),
   );
   const scene = new THREE.Scene();
   const ownedGeometries = new Set<THREE.BufferGeometry>();
@@ -873,8 +979,67 @@ export async function buildExportScene(
     scene.add(mesh);
   }
 
+  // ── Molecular bonds: one mesh per kind, dashes and dots as segments ──
+  if (bonds.count > 0 && bonds.kinds) {
+    const bondRadius = 0.12 * arScale;
+    const radialSegments = bondRadialSegments(opts.format, bondInstances);
+    const cylGeo = new THREE.CylinderGeometry(bondRadius, bondRadius, 1, radialSegments, 1);
+    ownedGeometries.add(cylGeo);
+    const up = new THREE.Vector3(0, 1, 0);
+    const dir = new THREE.Vector3();
+    const colorA = new THREE.Color();
+    const colorB = new THREE.Color();
+    const segmentsByKind: Array<Array<{ bond: number; from: number; to: number; length: number }>> = [[], [], []];
+    for (let b = 0; b < bonds.count; b++) {
+      const kind = bonds.kinds[b];
+      const length = bondLength(frame.positions, bonds.pairs[b * 2], bonds.pairs[b * 2 + 1]);
+      for (const [from, to] of bondDashSegments(length, kind)) segmentsByKind[kind]?.push({ bond: b, from, to, length });
+    }
+    for (let kind = 0; kind < segmentsByKind.length; kind++) {
+      const segments = segmentsByKind[kind];
+      if (segments.length === 0) continue;
+      const bondMat = createExportMaterial(preset, surfacePolish, surfaceRoughness, isUsdZ);
+      ownedMaterials.add(bondMat);
+      const mesh = new THREE.InstancedMesh(cylGeo, bondMat, segments.length);
+      mesh.name = EXPORT_BOND_MESH_NAMES[kind];
+      const kindName: BondKindName = BOND_KIND_NAMES[kind];
+      // GLTFExporter writes userData as glTF extras.
+      mesh.userData = { lupiBondRecipe: bonds.recipe, lupiBondKind: kindName, lupiProvenance: 'inferred' };
+      const thickness = BOND_KIND_RADIUS_SCALE[kind];
+      for (let k = 0; k < segments.length; k++) {
+        const { bond, from, to, length } = segments[k];
+        const ai = bonds.pairs[bond * 2];
+        const aj = bonds.pairs[bond * 2 + 1];
+        const ax = (frame.positions[ai * 3] - centerX) * arScale;
+        const ay = (frame.positions[ai * 3 + 1] - centerY) * arScale;
+        const az = (frame.positions[ai * 3 + 2] - centerZ) * arScale;
+        const bx = (frame.positions[aj * 3] - centerX) * arScale;
+        const by = (frame.positions[aj * 3 + 1] - centerY) * arScale;
+        const bz = (frame.positions[aj * 3 + 2] - centerZ) * arScale;
+        const mid = (from + to) / (2 * length);
+        scratchPos.set(ax + (bx - ax) * mid, ay + (by - ay) * mid, az + (bz - az) * mid);
+        dir.set(bx - ax, by - ay, bz - az).normalize();
+        scratchQuat.setFromUnitVectors(up, dir);
+        scratchScale.set(thickness, (to - from) * arScale, thickness);
+        scratchMat.compose(scratchPos, scratchQuat, scratchScale);
+        mesh.setMatrixAt(k, scratchMat);
+        const [ar, ag, ab] = opts.resolveAtomColor(ai, frame.types[ai]);
+        const [br, bg, bb] = opts.resolveAtomColor(aj, frame.types[aj]);
+        colorA.setRGB(ar, ag, ab, THREE.SRGBColorSpace);
+        colorB.setRGB(br, bg, bb, THREE.SRGBColorSpace);
+        scratchColor.copy(colorA).lerp(colorB, 0.5);
+        mesh.setColorAt(k, scratchColor);
+        if ((k & 0x3fff) === 0x3fff) await tickGeometry(0x4000);
+      }
+      await tickGeometry(segments.length % 0x4000);
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      scene.add(mesh);
+    }
+  }
+
   // ── Bond cylinders ──
-  if (bonds.count > 0) {
+  if (bonds.count > 0 && !bonds.kinds) {
     const bondRadius = 0.12 * arScale;
     // USDZ bakes cylinder vertices per bond, so trim radial segments when the
     // bond count alone would blow the triangle budget.

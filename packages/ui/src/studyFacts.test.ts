@@ -76,6 +76,58 @@ describe('study facts', () => {
     expect(facts?.bondInfo.detail).toContain('not source bonds');
   });
 
+  it('labels molecular-recipe bonds as inferred, with counts by kind', () => {
+    const file = makeFile('local://salt.xyz', 'salt.xyz');
+    file.trajectory.frames[0].bonds = new Int32Array(0);
+
+    const facts = buildMoleculeStudyFacts({
+      file,
+      frameIndex: 0,
+      lastBondCount: 12,
+      lastBondDetail: {
+        recipe: 'lupi-bonds.molecular.v1',
+        kinds: { covalent: 12, coordination: 2, ionicContact: 6 },
+        evidence: { long: 0, removed: 1, nearMiss: 0, clashes: 0 },
+        tolerance: 0.45,
+      },
+      showBonds: true,
+    });
+
+    expect(facts?.bondSummary).toBe('Inferred bonds');
+    expect(facts?.bondInfo.source).toBe('inferred');
+    expect(facts?.bondInfo.count).toBe(14);
+    expect(facts?.bondInfo.detail).toContain('12 covalent bonds, 2 metal–ligand coordination lines and 6 ionic contacts');
+    expect(facts?.bondInfo.isScientific).toBe(false);
+  });
+
+  it('keeps distance-recipe bonds a visual guide when the layer reports its recipe', () => {
+    const file = makeFile('local://visual-bonds.xyz', 'visual-bonds.xyz');
+    file.trajectory.frames[0].bonds = new Int32Array(0);
+    const facts = buildMoleculeStudyFacts({
+      file,
+      frameIndex: 0,
+      lastBondCount: 4,
+      lastBondDetail: {
+        recipe: 'lupi-bonds.distance.v1',
+        kinds: { covalent: 4, coordination: 0, ionicContact: 0 },
+        evidence: { long: 0, removed: 0, nearMiss: 0, clashes: 0 },
+        tolerance: 0.45,
+      },
+      showBonds: true,
+    });
+    expect(facts?.bondSummary).toBe('Visual guide only');
+  });
+
+  it('names the OMol25 collection and row as the source', () => {
+    const file = makeFile('/v1/datasets/omol25/neutral-validation/structures/812.xyz', '812.xyz');
+    file.trajectory.frames[0].sourceRecord = {
+      dataset: 'omol25', collection: 'neutral-validation', row: 812, method: 'ωB97M-V',
+      energyEv: null, maxForceEvPerA: null, homoLumoGapEv: null, license: 'CC-BY-4.0', source: null,
+    };
+    const facts = buildMoleculeStudyFacts({ file, frameIndex: 0 });
+    expect(facts?.sourceLabel).toBe('Meta OMol25 · neutral-validation row 812');
+  });
+
   it('falls back gracefully for non-gallery structures', () => {
     const file = makeFile('local://unknown.xyz', 'unknown.xyz');
     file.trajectory.frames[0].properties.clear();
