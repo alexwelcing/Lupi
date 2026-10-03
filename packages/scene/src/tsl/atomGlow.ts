@@ -117,10 +117,13 @@ export function lupiAtomSwell(atomId: Node): Node {
  */
 export function lupiAtomGlow(strength: Node, facing: Node): Node {
   const T = ATOM_GLOW_TUNING;
+  const s = strength as N;
+  const heatLevel = G.uHeatGlow.mul(T.heat).mul(G.uGlowWeight);
   const rim = pow(float(1).sub(clamp(facing as N, 0, 1)), T.rimPower);
-  const glow = vec3(G.uGlowColor).mul(rim.mul(T.rimGain).add(T.fill)).mul(strength as N);
-  const heat = vec3(G.uHeatColor).mul(rim.mul(0.8).add(0.22)).mul(G.uHeatGlow.mul(T.heat).mul(G.uGlowWeight));
-  return glow.add(heat) as Node;
+  const glow = vec3(G.uGlowColor).mul(rim.mul(T.rimGain).add(T.fill)).mul(s);
+  const heat = vec3(G.uHeatColor).mul(rim.mul(0.8).add(0.22)).mul(heatLevel);
+  // A select, not a product, at rest: exactly vec3(0) whatever `facing` is.
+  return select(s.greaterThan(0).or(heatLevel.greaterThan(0)), glow.add(heat), vec3(0)) as Node;
 }
 
 /** Zero every glow channel (the master stays as it is). */
