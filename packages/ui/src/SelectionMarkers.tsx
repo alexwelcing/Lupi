@@ -5,6 +5,9 @@
  * WebGPURenderer draws through their node equivalents on both backends. A
  * newly selected ring pulses a few times and comes to rest (Quiet Idle: a
  * still view draws nothing); Gentle halves the pulse and Still skips it.
+ *
+ * The rings sit at rest positions, so while Tug, Burst or Heat carry atoms
+ * away they step aside: the impostor's own selection glow moves with the atom.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -15,6 +18,7 @@ import type { Frame } from '@atlas/core/types';
 import { resolveTypeDisplayRadius } from '@atlas/core';
 import { keepLupiAwake } from '@atlas/scene';
 import { displayMotionScale } from './motion/comfort';
+import { usePlayStore } from './play/playStore';
 
 /** The selection pulse: 3.6 rad/s, ±3.5 %, fading to rest over this many seconds. */
 const PULSE_SECONDS = 2.4;
@@ -65,12 +69,16 @@ export function SelectionMarkers({
     ];
   };
 
+  const toysDisplacing = usePlayStore((state) => state.displacedSources.some(
+    (source) => source === 'tug' || source === 'burst' || source === 'heat',
+  ));
+
   // Determine active focus atom (selected takes priority over hovered)
   const focusAtom = selectedAtoms.length === 1 ? selectedAtoms[0] : hoveredAtom;
   const showDimming = dimNonNeighbors && focusAtom != null && highlightedNeighbors.size > 0;
 
   return (
-    <group>
+    <group visible={!toysDisplacing}>
       {selectedAtoms.map((idx) => {
         const pos = positionOf(idx);
         if (!pos) return null;
