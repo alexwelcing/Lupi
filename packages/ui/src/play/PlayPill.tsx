@@ -362,7 +362,12 @@ export function PlayPill({ uiStowed, setUiStowed }: PlayPillProps) {
       clearTimeout(timer);
       timer = setTimeout(unlatch, VERB_IDLE_MS);
     };
-    const offs = [onIntent('verb.stroke', keep), onIntent('verb.press', keep), onIntent('canvas.tap', keep)];
+    const offs = [
+      onIntent('verb.stroke', keep),
+      onIntent('verb.press', keep),
+      onIntent('verb.tap', keep),
+      onIntent('canvas.tap', keep),
+    ];
     return () => {
       clearTimeout(timer);
       for (const off of offs) off();

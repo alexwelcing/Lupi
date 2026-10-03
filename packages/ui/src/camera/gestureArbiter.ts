@@ -26,7 +26,8 @@
  * - With any verb latched (not Orbit) the first finger or left press also
  *   announces `verb.press` down and up (Heat holds on it). Under Heat a press
  *   held past HOLD_NO_TAP_MS is a hold, not a tap. Burst keeps one-finger
- *   orbit: it acts on taps.
+ *   orbit and owns taps: they arrive as `verb.tap` (never `canvas.tap`, so
+ *   they never select, and two quick ones are two pops, not a double-tap).
  * - Overlays in the canvas wrapper (drei <Html> labels and cards): a wheel
  *   zooms unless the overlay scrolls; a press off their controls drags once
  *   it passes the slop, and below it stays the overlay's click.
@@ -230,6 +231,13 @@ export function createGestureMachine(tokens: GestureTokens = GESTURE, sink: Gest
       return 'none';
     }
     if (p.type === 'mouse' && p.button !== 0) return 'none';
+    // Burst owns taps: every one pops (rapid taps are rapid pops, never a
+    // double-tap), and none selects.
+    if (sink.verb() === 'burst') {
+      lastTap = null;
+      sink.emit({ type: 'verb.tap', clientX: p.sx, clientY: p.sy, pointerType: p.type });
+      return 'tap';
+    }
     const previous = lastTap;
     if (
       previous &&

@@ -49,6 +49,8 @@ export type LupiIntent =
       phase: 'down' | 'up';
       pointerType: PointerKind;
     }
+  /** A tap that belongs to the latched verb (Burst), not to picking: it never selects. */
+  | { type: 'verb.tap'; clientX: number; clientY: number; pointerType: PointerKind }
   | { type: 'play.toggleTray'; source: 'pill' | 'key' | 'contextmenu' | 'palette' }
   | { type: 'play.scatter' }
   | { type: 'play.spin' }

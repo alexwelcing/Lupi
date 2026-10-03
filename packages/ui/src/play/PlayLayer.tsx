@@ -881,12 +881,12 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     const offs = [
       onIntent('atom.tap', ({ atomIndex }) => {
         if (useStore.getState().measurementTool != null) return;
-        // With Burst latched the tap itself pops (canvas.tap below).
+        // With Burst latched taps pop (verb.tap below) and never select.
         if (verbNow() === 'burst') return;
         if (poke(atomIndex) >= 0) cue('poke');
       }),
-      onIntent('canvas.tap', ({ clientX, clientY }) => {
-        if (verbNow() !== 'burst' || useStore.getState().measurementTool != null) return;
+      onIntent('verb.tap', ({ clientX, clientY }) => {
+        if (verbNow() !== 'burst') return;
         if (burstAtClient(clientX, clientY)) cue('burst');
       }),
       onIntent('verb.stroke', ({ clientX, clientY, phase }) => {
