@@ -40,6 +40,7 @@ import {
   cameraViewMatrix,
   cameraWorldMatrix,
   clamp,
+  cross,
   dot,
   float,
   length,
@@ -53,6 +54,7 @@ import {
   select,
   smoothstep,
   sqrt,
+  step,
   texture,
   uniform,
   vec3,
@@ -399,6 +401,79 @@ export const analyticEnvironment = (Fn(([dir, roughness]: [N, N]) => {
   return base.add(vec3(0.55).mul(band));
 }) as N) as (dir: Node, roughness: Node) => Node;
 
+// ─── The analytic softbox rig ───────────────────────────────────────────
+
+/**
+ * The Specimen rig's panels for the analytic environment, mirroring
+ * SCIENTIFIC_STUDIO_RIG (packages/ui/src/studioEnvironment.ts): each panel's
+ * half-size in tangent units (half width / rig distance) and its HDR
+ * radiance. The key, fill and rim follow the light uniforms; the overhead
+ * strip and the floor bounce are fixed in the world, as on the rig.
+ */
+export const ANALYTIC_SOFTBOX_RIG = {
+  key: { halfWidth: 0.45, halfHeight: 0.3, color: [1.0, 0.949, 0.886], intensity: 22 },
+  fill: { halfWidth: 0.5, halfHeight: 0.35, color: [0.867, 0.902, 0.969], intensity: 4.5 },
+  strip: { azimuthDeg: -30, elevationDeg: 80, halfWidth: 0.65, halfHeight: 0.1125, color: [0.957, 0.969, 0.984], intensity: 10 },
+  rim: { halfWidth: 0.25, halfHeight: 0.175, color: [0.933, 0.953, 1.0], intensity: 7 },
+  floor: { azimuthDeg: 20, elevationDeg: -65, halfWidth: 0.6, halfHeight: 0.4, color: [0.969, 0.925, 0.867], intensity: 0.9 },
+  /** Blur growth of a panel with roughness², in tangent units. */
+  blur: 1.25,
+} as const;
+
+/**
+ * One feathered softbox seen along view-space `dir`: the panel faces the
+ * origin from view-space direction `toPanel`. The direction is projected onto
+ * the panel plane (gnomonic), and the rig's falloff texture is reproduced
+ * analytically: a plateau over the middle sixth, smooth to the edge. Roughness
+ * widens the panel and dims it by the same area, so the energy holds.
+ */
+function softboxPanel(dir: N, toPanel: N, up: N, halfWidth: number, halfHeight: number, roughness: N): N {
+  const z = dot(dir, toPanel).toVar();
+  const side = normalize(cross(up, toPanel)).toVar();
+  const lift = cross(toPanel, side).toVar();
+  const invZ = float(1).div(max(z, 1e-3));
+  const x = abs(dot(dir, side).mul(invZ));
+  const y = abs(dot(dir, lift).mul(invZ));
+  const grow = roughness.mul(roughness).mul(ANALYTIC_SOFTBOX_RIG.blur).toVar();
+  const w = grow.add(halfWidth).toVar();
+  const h = grow.add(halfHeight).toVar();
+  const fx = smoothstep(0.16, 1.0, x.div(w)).oneMinus();
+  const fy = smoothstep(0.16, 1.0, y.div(h)).oneMinus();
+  const energy = float(halfWidth * halfHeight).div(w.mul(h));
+  return fx.mul(fy).mul(energy).mul(step(0.0, z));
+}
+
+/**
+ * The analytic Specimen rig's specular radiance along view-space `dir` (HDR,
+ * linear): the key softbox, fill card, overhead strip, rim card and floor
+ * bounce. Added to the analytic environment's reflections, so devices without
+ * image-based light (phones, tier 0; `environment: none`) get the same
+ * catchlights, in the same places, as the PMREM softbox.
+ */
+export function analyticSoftboxSpecular(dir: Node, roughness: Node, lights: LupiLightUniforms): Node {
+  return (Fn(() => {
+    const D = (dir as N).toVar();
+    const r = (roughness as N).toVar();
+    const up = toView(vec3(0, 1, 0)).toVar();
+    const rig = ANALYTIC_SOFTBOX_RIG;
+    const panel = (
+      toPanel: N,
+      spec: { halfWidth: number; halfHeight: number; color: readonly number[]; intensity: number },
+    ): N => vec3(spec.color[0], spec.color[1], spec.color[2])
+      .mul(spec.intensity)
+      .mul(softboxPanel(D, toPanel, up, spec.halfWidth, spec.halfHeight, r));
+    const fixedDir = (azimuthDeg: number, elevationDeg: number): N => {
+      const world = lightDirection(azimuthDeg, elevationDeg);
+      return toView(vec3(world.x, world.y, world.z));
+    };
+    return panel(toView(lights.lightDir), rig.key)
+      .add(panel(toView(lights.fillLightDir), rig.fill))
+      .add(panel(fixedDir(rig.strip.azimuthDeg, rig.strip.elevationDeg), rig.strip))
+      .add(panel(toView(lights.rimLightDir), rig.rim))
+      .add(panel(fixedDir(rig.floor.azimuthDeg, rig.floor.elevationDeg), rig.floor));
+  }) as N)();
+}
+
 // ─── Material presets ───────────────────────────────────────────────────
 
 /**
@@ -567,7 +642,11 @@ export function lupiSurface(
     const envSpec = vec3(0).toVar();
     const envAvg = vec3(0).toVar();
     const analytic = (): void => {
-      envSpec.assign(analyticEnvironment(R, specRoughness));
+      // The hemisphere for the broad light, plus the Specimen rig's
+      // softboxes for the catchlights (the PMREM softbox carries both).
+      envSpec.assign(
+        (analyticEnvironment(R, specRoughness) as N).add(analyticSoftboxSpecular(R, specRoughness, lights)),
+      );
       envAvg.assign((analyticEnvironment(Nrm, float(1.0)) as N).mul(0.8));
     };
     if (tier >= 1) {

@@ -161,7 +161,7 @@ export interface VisualizationState {
     dofFocusDistance: number;
     dofAperture: number;
     antialiasing: 'none' | 'fxaa' | 'msaa4x';
-    toneMapping: 'none' | 'aces' | 'reinhard';
+    toneMapping: 'none' | 'aces' | 'reinhard' | 'neutral';
   };
   /** Display toggles */
   display: {

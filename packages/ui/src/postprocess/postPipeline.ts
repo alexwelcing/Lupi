@@ -28,7 +28,8 @@
  *   (world units; `focalLength` is the distance from the focal plane to full blur)
  * - Vignette offset/darkness  → the postprocessing library's default vignette,
  *   `rgb *= smoothstep(0.8, offset*0.799, |uv-0.5|*(darkness+offset))`
- * - ToneMapping ACES_FILMIC / REINHARD → renderOutput(ACESFilmic / Reinhard)
+ * - ToneMapping ACES_FILMIC / REINHARD → renderOutput(ACESFilmic / Reinhard);
+ *   'neutral' (Khronos PBR Neutral, the Specimen default) → renderOutput(Neutral)
  *
  * The configured background stays out of the look: when the graph tone-maps
  * or vignettes, the scene pass also writes content coverage (backgroundMask.ts)
@@ -73,7 +74,14 @@ export interface PostChain {
 const TONE_MAPPING = {
   aces: THREE.ACESFilmicToneMapping,
   reinhard: THREE.ReinhardToneMapping,
+  // Khronos PBR Neutral: keeps base-colour hue and saturation (CPK reads true).
+  neutral: THREE.NeutralToneMapping,
 } as const;
+
+/** The three tone-mapping constant for a preset's mode (none → NoToneMapping). */
+export function toneMappingConstant(mode: PostprocessPresetConfig['toneMapping']): THREE.ToneMapping {
+  return mode === 'none' ? THREE.NoToneMapping : TONE_MAPPING[mode];
+}
 
 /** GTAO sample count (a shader constant; changing it recompiles). */
 const AO_SAMPLES = 16;

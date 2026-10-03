@@ -19,8 +19,8 @@ describe('learner scene looks', () => {
     expect(currentSceneLook(after)).toBe(id);
     expect(after).toMatchObject({ bloom: false, dof: false, environmentPreset: 'softbox' });
   });
-  it.each(SCENE_LOOKS)('$id keeps large systems on the fast path', ({ id }) => {
-    expect(sceneLookPatch(id, 200_000)).toMatchObject({ environmentPreset: 'none', postprocessPreset: 'diagram', bloom: false, dof: false });
+  it.each(SCENE_LOOKS)('$id keeps one rig at every scale', ({ id }) => {
+    expect(sceneLookPatch(id, 200_000)).toEqual(sceneLookPatch(id, 24));
   });
   it('saved scene state remains authoritative after a fresh file default', () => {
     useStore.setState(sceneLookPatch('night', 24));
