@@ -2,7 +2,8 @@
  * PlayTray — the short menu the Play pill opens (also `P`, a right click on
  * empty canvas, and the palette's "Open Play"):
  *
- *   One finger   Orbit · Poke
+ *   One finger   Orbit · Poke · Tug
+ *                Burst · Heat
  *   Try          Scatter · Spin · Reset
  *   Motion       Standard · Gentle · Still
  *                Settings…
@@ -18,7 +19,7 @@ import { useStore } from '../store';
 import { pressButton } from '../camera/gestureArbiter';
 import { coastEnabled, setComfort, useComfort, type Comfort } from '../motion/comfort';
 import { cue } from './feedback';
-import { playStore, usePlayStore, type PlayVerb } from './playStore';
+import { PLAY_VERBS, PLAY_VERB_LABEL, playStore, usePlayStore, type PlayVerb } from './playStore';
 
 export interface PlayTrayProps {
   id: string;
@@ -26,6 +27,15 @@ export interface PlayTrayProps {
   anchorRef: RefObject<HTMLElement | null>;
   onClose(options?: { restoreFocus?: boolean }): void;
 }
+
+/** What each verb does, for the item's tooltip and accessible description. */
+const VERB_TITLE: Readonly<Record<PlayVerb, string>> = {
+  orbit: 'One finger turns the molecule',
+  poke: 'Drag to stir; tap an atom to ring it',
+  tug: 'Drag an atom; its neighbours follow and spring back',
+  burst: 'Tap to pop the atoms outward; they spring back',
+  heat: 'Hold to warm it up; let go to cool',
+};
 
 const MOTION_OPTIONS: ReadonlyArray<{ value: Comfort; label: string }> = [
   { value: 'standard', label: 'Standard' },
@@ -38,20 +48,24 @@ interface TrayItemProps {
   checked?: boolean;
   disabled?: boolean;
   hint?: string;
+  /** Tooltip while enabled. */
+  title?: string;
+  verb?: PlayVerb;
   onSelect(): void;
   children: ReactNode;
 }
 
-function TrayItem({ role, checked, disabled, hint, onSelect, children }: TrayItemProps) {
+function TrayItem({ role, checked, disabled, hint, title, verb, onSelect, children }: TrayItemProps) {
   return (
     <button
       type="button"
       role={role}
       tabIndex={-1}
       className="lupi-play-tray__item"
+      data-verb={verb}
       aria-checked={role === 'menuitemradio' ? Boolean(checked) : undefined}
       aria-disabled={disabled || undefined}
-      title={disabled && hint ? hint : undefined}
+      title={disabled && hint ? hint : title}
       onClick={() => {
         if (!disabled) onSelect();
       }}
@@ -160,20 +174,22 @@ export function PlayTray({ id, anchorRef, onClose }: PlayTrayProps) {
       className="lupi-play-tray"
       onKeyDown={onKeyDown}
     >
-      <div role="group" aria-labelledby={`${id}-finger`} className="lupi-play-tray__row">
+      <div role="group" aria-labelledby={`${id}-finger`} className="lupi-play-tray__row lupi-play-tray__row--verbs">
         <span id={`${id}-finger`} className="lupi-play-tray__label">One finger</span>
-        <TrayItem role="menuitemradio" checked={verb === 'orbit'} onSelect={() => chooseVerb('orbit')}>
-          Orbit
-        </TrayItem>
-        <TrayItem
-          role="menuitemradio"
-          checked={verb === 'poke'}
-          disabled={still}
-          hint={stillHint}
-          onSelect={() => chooseVerb('poke')}
-        >
-          Poke
-        </TrayItem>
+        {PLAY_VERBS.map((option) => (
+          <TrayItem
+            key={option}
+            role="menuitemradio"
+            verb={option}
+            checked={verb === option}
+            disabled={option !== 'orbit' && still}
+            hint={stillHint}
+            title={VERB_TITLE[option]}
+            onSelect={() => chooseVerb(option)}
+          >
+            {PLAY_VERB_LABEL[option]}
+          </TrayItem>
+        ))}
       </div>
       <div role="group" aria-labelledby={`${id}-try`} className="lupi-play-tray__row">
         <span id={`${id}-try`} className="lupi-play-tray__label">Try</span>
