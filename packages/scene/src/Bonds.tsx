@@ -417,6 +417,10 @@ export function Bonds({
 
   // ─── Web Worker lifecycle ──────────────────────────────────────────
   useEffect(() => {
+    // Source topology can be applied directly, and a view with no trusted
+    // topology needs no inference worker. Embedded MCP views run in hosts
+    // whose content policy may forbid blob workers.
+    if (!inferenceAllowed) return;
     const worker = new BondWorkerCtor();
     workerRef.current = worker;
 
@@ -455,7 +459,7 @@ export function Bonds({
       workerBusyRef.current = false;
       pendingMsgRef.current = null;
     };
-  }, []);
+  }, [inferenceAllowed]);
 
   // ─── Dispatch bond detection to worker (debounced) ─────────────────
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -514,6 +518,32 @@ export function Bonds({
       pendingMsgRef.current = null;
       clearBondState();
       lastDispatchPositionsRef.current = null;
+      lastDispatchBackendRef.current = null;
+      lastDispatchToleranceRef.current = NaN;
+      lastDispatchMaxBondLengthRef.current = NaN;
+      prevFrameRef.current = frame;
+      return;
+    }
+    if (hasSourceTopology && !inferenceAllowed) {
+      cpuDispatchGenRef.current += 1;
+      cpuAcceptFromRef.current = cpuDispatchGenRef.current + 1;
+      pendingMsgRef.current = null;
+      const pairs = new Int32Array(frame.bonds);
+      const distances = new Float32Array(pairs.length / 2);
+      for (let index = 0; index < distances.length; index += 1) {
+        const a = pairs[index * 2] * 3;
+        const b = pairs[index * 2 + 1] * 3;
+        const dx = frame.positions[b] - frame.positions[a];
+        const dy = frame.positions[b + 1] - frame.positions[a + 1];
+        const dz = frame.positions[b + 2] - frame.positions[a + 2];
+        distances[index] = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      }
+      setBondPairs(pairs);
+      setBondDistances(distances);
+      setDetectedBondSource('cpu');
+      lastDispatchPositionsRef.current = null;
+      lastDispatchTypesRef.current = null;
+      lastDispatchTypeSemanticsKeyRef.current = '';
       lastDispatchBackendRef.current = null;
       lastDispatchToleranceRef.current = NaN;
       lastDispatchMaxBondLengthRef.current = NaN;
@@ -649,7 +679,7 @@ export function Bonds({
         debounceRef.current = null;
       }
     };
-  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, typeSemanticsKey, sourceKey]);
+  }, [frame, maxBondLength, tolerance, gpuActive, visible, skipDetection, clearBondState, hasSourceTopology, inferenceAllowed, typeSemanticsKey, sourceKey]);
 
   // ─── GPU dispatch ──────────────────────────────────────────────────
   // Runs only when gpuActive is true. Mirrors the worker effect's contract:
