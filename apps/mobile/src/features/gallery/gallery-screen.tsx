@@ -16,6 +16,7 @@ import {
 
 import { getLupiWebBaseUrl } from "@/src/config/lupi";
 import { moleculeRouteParams } from "@/src/domain/molecules";
+import { Omol25EntryCard } from "@/src/features/omol25/omol25-entry-card";
 import { colors } from "@/src/theme/colors";
 import { layout, radii, spacing, typeScale } from "@/src/theme/tokens";
 
@@ -185,6 +186,8 @@ export function GalleryScreen({
               value={query}
             />
           ) : null}
+
+          <Omol25EntryCard onPress={() => router.push("/omol25")} />
 
           <View
             style={{

@@ -62,6 +62,7 @@ const scenarios = [
   {
     checks: [
       labelCheck("gallery-root", "Lupi molecular gallery"),
+      labelCheck("gallery-omol25", "Explore OMol25 molecules"),
       labelCheck("gallery-search", "Search gallery"),
       textCheck("gallery-count", "24 structures"),
       roleCheck("gallery-featured-heading", "heading", "Featured"),
@@ -73,6 +74,19 @@ const scenarios = [
     path: "/",
     recentMolecules: [],
     title: "Gallery — default",
+  },
+  {
+    checks: [
+      roleCheck("omol25-heading", "heading", "Explore OMol25"),
+      labelCheck("omol25-formula-search", "Search OMol25 rows"),
+      labelCheck("omol25-source-row", "H2O, OMol25 row 7, 3 atoms, bonds not provided"),
+      textCheck("omol25-coverage", "Complete public split · 34,335,828 indexed rows · colabfit/OMol25_train_neutral"),
+    ],
+    description: "OMol25 source discovery with a mocked public row and explicit coverage.",
+    id: "omol25-source",
+    path: "/omol25",
+    recentMolecules: [],
+    title: "OMol25 — source rows",
   },
   {
     checks: [
@@ -157,7 +171,12 @@ let browser;
 const results = [];
 
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    ...(process.env.LUPI_CHROME_EXECUTABLE
+      ? { executablePath: process.env.LUPI_CHROME_EXECUTABLE }
+      : {}),
+  });
 
   for (const profile of selectedProfiles) {
     const context = await browser.newContext({
@@ -182,6 +201,33 @@ try {
         });
       },
     );
+
+    await context.route("https://lupi.live/v1/datasets/omol25**", async (route) => {
+      const url = new URL(route.request().url());
+      const manifest = {
+        id: "omol25",
+        collections: [{
+          id: "neutral-train", label: "Neutral train", description: "Complete public neutral training split.",
+          repository: "colabfit/OMol25_train_neutral", indexedRows: 34_335_828,
+          estimatedRows: 34_335_828, coverage: "complete",
+        }],
+      };
+      const rows = {
+        dataset: "neutral-train", coverage: "complete", indexedRows: 34_335_828,
+        offset: 0, matchedRows: 34_335_828,
+        rows: [{
+          rowIndex: 7, formula: "H2O", atomCount: 3, elements: ["H", "O"], method: "DFT",
+          loadUrl: "/v1/datasets/omol25/neutral-train/structures/7.xyz",
+          coordinateProvenance: "source", bondTopology: "not-provided",
+        }],
+      };
+      await route.fulfill({
+        body: JSON.stringify(url.pathname.endsWith("/rows") ? rows : manifest),
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        status: 200,
+      });
+    });
 
     for (const scenario of scenarios) {
       const result = await captureScenario({
