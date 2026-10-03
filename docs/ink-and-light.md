@@ -29,8 +29,9 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
 ### Ink tiles and Ink-to-Light
 
 - **Ink tiles:**
-  - Every molecule with a page (69 small gallery molecules) shows its own ink drawing on its molecule-wall tile and its finder row, on the sage plate. It is the `/m` page's drawing at its opening pose.
+  - Every molecule with a page (69 small gallery molecules) shows its own ink drawing on its molecule-wall tile, its finder row and its library card, on the sage plate. It is the `/m` page's drawing at its opening pose.
   - A tap lights the drawing with a lime glow. The relay then grows it to the size the 3D view will draw the molecule at.
+  - While the viewer loads, the drawing turns like the hero's: drag it, flick it, and it clicks onto a ring or axis view and names it. Its model (`/og/m/<id>-ink.json`, a couple of kB) is fetched as a finger or pointer reaches the tile, or as a finder match appears. The 3D view opens at the pose you leave, with your spin.
 - **Ink-to-Light:**
   - The 3D view opens in ink, at the drawing's pose and size, and inflates into depth (the hero's flat arrival).
   - Once the relay has faded, the light comes on (about 0.5 s).
@@ -53,8 +54,8 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
 | Looks and the paper plate | `packages/ui/src/sceneLooks.ts`, `backgroundPresets.ts` |
 | The post recipe stepping aside | `packages/ui/src/postprocess/controls.ts` (`inkRecipe`) |
 | The spec (`view.ink`) | `packages/ui/src/mcp/renderArtifactAdapter.ts`, `packages/core/src/renderArtifact.ts` |
-| Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `relay/stage.ts` |
-| Tile poses and fit | `scripts/molecule-pages/build.mts` (`/m/manifest.json`) |
+| Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `library/GalleryCollection.tsx`, `relay/stage.ts` |
+| Tile poses, fit and drawing models | `scripts/molecule-pages/build.mts` (`/m/manifest.json`, `/og/m/<id>-ink.json`) |
 
 Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, weight, target, holding, fading, arrival }`.
 

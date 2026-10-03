@@ -225,11 +225,12 @@ export function InkLookDriver(): null {
     [],
   );
 
-  // Leaving the viewer: the next one opens on its own look.
+  // Leaving the viewer: the next one opens on its own look, cut, not faded.
   useEffect(() => () => {
     INK_LOOK.uInkMix.value = 0;
     INK_LOOK.uInkHatch.value = 0;
     setInkLookTarget({ mix: 0, hatch: 0, weight: 1 });
+    lookSeen.current = false;
   }, []);
 
   useFrame(
