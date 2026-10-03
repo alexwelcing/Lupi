@@ -328,6 +328,7 @@ export function ReplayDirector({ frame, center }: ReplayDirectorProps): null {
       replayStore.subscribe((state, previous) => {
         const phase = state.incoming?.phase;
         const before = previous.incoming?.phase;
+        // ▶ Watch, or "Again" after the end.
         if (phase === 'playing' && before !== 'playing' && !playerRef.current) createPlayer();
         if (phase === 'done' && before === 'playing' && playerRef.current) stopPlayback('skip');
       }),

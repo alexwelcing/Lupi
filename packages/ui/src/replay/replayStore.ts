@@ -40,6 +40,8 @@ export interface IncomingReplay {
   phase: IncomingPhase;
   /** The tape has toy events (the replay is illustrative motion). */
   toys: boolean;
+  /** performance.now() (ms) when it last finished (the pill offers "Again" a while). */
+  endedAt?: number;
 }
 
 export interface ReplayState {
@@ -86,7 +88,8 @@ export const replayStore: StoreApi<ReplayState> = createStore<ReplayState>()((se
   setIncomingPhase(phase) {
     const incoming = get().incoming;
     if (!incoming || incoming.phase === phase) return;
-    set({ incoming: { ...incoming, phase } });
+    const endedAt = phase === 'done' ? (typeof performance !== 'undefined' ? performance.now() : Date.now()) : incoming.endedAt;
+    set({ incoming: { ...incoming, phase, endedAt } });
   },
   openSheet(moment) {
     if (offerTimer !== null) clearTimeout(offerTimer);

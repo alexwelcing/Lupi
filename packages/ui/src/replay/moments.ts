@@ -156,6 +156,8 @@ export function installMomentDetector(): () => void {
   let pendingRest: ReturnType<typeof setTimeout> | null = null;
   /** The last detent a chain offer already covers (no second offer for the same chain). */
   let chainOfferedThrough = -Infinity;
+  /** A toy moment that ended while the camera still coasted: offered at its rest. */
+  let deferredToy: { start: number; gesture: MomentGesture | null } | null = null;
 
   /** Where the gesture that led to now began. */
   const episodeStart = (now: number): { start: number; gesture: MomentGesture } => {
@@ -180,20 +182,24 @@ export function installMomentDetector(): () => void {
       chainTail.unshift(detents[i]);
     }
     const lastDetent = chainTail[chainTail.length - 1];
+    let offered = false;
     if (chainTail.length >= MOMENT.chainCount && now - lastDetent.t < 1.5) {
       if (lastDetent.t > chainOfferedThrough) {
         chainOfferedThrough = lastDetent.t;
         const keys = chainTail.every((entry) => entry.gesture === 'keys');
-        offerMoment('chain', keys ? 'keys' : 'flick', chainTail[0].start, end);
+        offered = offerMoment('chain', keys ? 'keys' : 'flick', chainTail[0].start, end) !== null;
       }
     } else if (flingAt !== null) {
       const turned = turnedBetween(flingAt, now);
       if (flipAt !== null && flipAt >= flingAt - 0.05) {
-        offerMoment('flip', spinAt !== null && Math.abs(flingAt - spinAt) < 0.3 ? 'spin' : 'flick', start, end);
+        offered = offerMoment('flip', spinAt !== null && Math.abs(flingAt - spinAt) < 0.3 ? 'spin' : 'flick', start, end) !== null;
       } else if (turned >= MOMENT.flickTurn || (detentLabel && turned >= MOMENT.detentTurn)) {
-        offerMoment('flick', gesture, start, end);
+        offered = offerMoment('flick', gesture, start, end) !== null;
       }
     }
+    // Toys that settled while the camera still turned: the moment is both.
+    if (deferredToy && !offered) offerMoment('toy', deferredToy.gesture, Math.min(deferredToy.start, start), end);
+    deferredToy = null;
     flingAt = null;
     flipAt = null;
     spinAt = null;
@@ -295,8 +301,11 @@ export function installMomentDetector(): () => void {
     const t = recorderNow();
     if (episode.heatOnAt !== null) episode.heatHeld += t - episode.heatOnAt;
     if (!toyEpisodeCounts(episode)) return;
-    // A flick still coasting will offer itself (with the toys) when it rests.
-    if (getCameraRig()?.isMoving()) return;
+    // The camera still coasting: offer at its rest, with the toys in the window.
+    if (getCameraRig()?.isMoving()) {
+      deferredToy = { start: episode.start - MOMENT.leadS, gesture: episode.gesture };
+      return;
+    }
     offerMoment('toy', episode.gesture, episode.start - MOMENT.leadS, t + 0.4);
   };
 

@@ -63,6 +63,8 @@ const TEACH_MS = 10_000;
 const VERB_IDLE_MS = 30_000;
 /** The line that says what a just-latched verb does stays this long (ms). */
 const VERB_HINT_MS = 2600;
+/** After a shared replay ends, the pill offers "Again" this long (ms). */
+const REPLAY_AGAIN_MS = 9000;
 const LONG_FORM_KEY = 'lupi.play.illustrativeSeen';
 const SHORT_LABEL = 'Illustrative';
 const LONG_LABEL = 'Illustrative motion, your atoms haven’t moved';
@@ -281,7 +283,25 @@ function ReplaySegment() {
   const comfort = useComfort();
   const offer = useReplayStore((state) => state.offer);
   const phase = useReplayStore((state) => state.incoming?.phase ?? null);
+  const endedAt = useReplayStore((state) => state.incoming?.endedAt ?? null);
+  const stillTape = useReplayStore((state) => state.incoming?.tape.still ?? false);
   const sheetOpen = useReplayStore((state) => state.sheet !== null);
+  // "Again" for a while after a shared replay ends (until the visitor's own moment).
+  const [againOpen, setAgainOpen] = useState(false);
+  useEffect(() => {
+    if (phase !== 'done' || endedAt === null || stillTape) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    const left = REPLAY_AGAIN_MS - (now() - endedAt);
+    if (left <= 0) {
+      setAgainOpen(false);
+      return undefined;
+    }
+    setAgainOpen(true);
+    const timer = setTimeout(() => setAgainOpen(false), left);
+    return () => clearTimeout(timer);
+  }, [phase, endedAt, stillTape]);
   if (phase === 'waiting') {
     return (
       <button
@@ -308,6 +328,21 @@ function ReplaySegment() {
         onClick={() => replayStore.getState().setIncomingPhase('done')}
       >
         Skip
+      </button>
+    );
+  }
+  if (!offer && againOpen && comfort !== 'still') {
+    return (
+      <button
+        type="button"
+        className="lupi-play-pill__replay"
+        data-replay="again"
+        aria-label="Watch the shared replay again"
+        title="Watch the shared moment again"
+        onClick={() => replayStore.getState().setIncomingPhase('playing')}
+      >
+        <span className="lupi-play-pill__replay-icon" aria-hidden="true">↺</span>
+        <span>Again</span>
       </button>
     );
   }
