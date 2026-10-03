@@ -737,6 +737,7 @@ export function ViewerApp() {
               <div>
                 <StudyLensPanel
                   compact={isMobile}
+                  stowed={uiStowed}
                   onClose={() => useStore.getState().setStudyLensOpen(false)}
                 />
               </div>
