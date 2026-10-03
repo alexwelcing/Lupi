@@ -285,6 +285,39 @@ export interface ExportRequest {
    *  short human label ("bonds", "geometry", "encode"); done/total are
    *  phase-relative. Exporters may call this from any thread cadence. */
   onProgress?: (phase: string, done: number, total: number) => void;
+  /** Instant Replay's clip: the camera and toys follow the clip's own clock (video only). */
+  replay?: ReplayClipDriver;
+  /**
+   * An illustrative recording: display motion (the toys) keeps playing. Only
+   * Instant Replay's clip sets it; it is labelled "Illustrative" in its frames
+   * and is never an artifact.
+   */
+  illustrative?: boolean;
+  /** Record this 2D canvas (each frame plus burned-in labels) instead of the viewer canvas (video only). */
+  compositor?: VideoCompositor;
+  /** Aborting it stops a recording in flight and discards it (onComplete(false), no warning). */
+  signal?: AbortSignal;
+  /** Recording progress, 0..1, once per drawn frame (video only). */
+  onRecordProgress?: (fraction: number) => void;
+}
+
+/** Drives the camera (and anything else) through an Instant Replay clip. */
+export interface ReplayClipDriver {
+  /** Clip length (s). */
+  duration: number;
+  /** Before the first frame. */
+  begin(): void;
+  /** Place the camera (and the rig's target) at `seconds` into the clip. */
+  drive(seconds: number, camera: import('three').Camera, target: import('three').Vector3 | null): void;
+  /** After the last frame, or when the clip is abandoned. */
+  end(): void;
+}
+
+/** Composes each recorded frame (the viewer canvas, then 2D labels) into its own canvas. */
+export interface VideoCompositor {
+  canvas: HTMLCanvasElement;
+  /** Draw one frame; false when the viewer canvas gave nothing to draw. */
+  draw(source: HTMLCanvasElement, seconds: number): boolean;
 }
 
 export interface ExportFailure {

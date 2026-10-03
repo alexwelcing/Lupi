@@ -11,6 +11,12 @@
  *           Safari/iOS, webm (vp9/vp8) on Chromium/Firefox. The capture loop only
  *           drives the camera/scene by wall-clock time; the canvas is recorded
  *           automatically.
+ *           Instant Replay's clip rides the same path: its driver moves the
+ *           camera and toys by the clip clock, display motion stays live (an
+ *           illustrative recording), and a compositor draws each frame plus
+ *           its "Illustrative" labels into a 2D canvas, which is what gets
+ *           recorded. The recorder starts on the first composed frame (if the
+ *           viewer canvas cannot be drawn there, it records the canvas itself).
  *   GLB:    Reconstructs real sphere/cylinder meshes from atomic data and exports
  *           via GLTFExporter for use in Blender, Unity, or any 3D software.
  *   USDZ:   Same mesh reconstruction → USDZExporter for AR Quick Look.
@@ -94,9 +100,11 @@ function VideoCaptureLoop({
   recorderRef,
   recorderStoppedRef,
   captureStartRef,
+  abortRecording,
 }: any) {
   const { invalidate } = useThree();
   const { camera } = useThree();
+  const controls = useThree((state) => state.controls) as { target?: THREE.Vector3 } | null;
 
   useFrame(() => {
     if (!isRecording.current) return;
@@ -106,8 +114,20 @@ function VideoCaptureLoop({
     // stall after the first frame once the frameloop idles.
     invalidate();
 
-    const req = requestRef.current;
+    const req = requestRef.current as ExportRequest | null;
     if (!req) return;
+
+    if (req.signal?.aborted) {
+      abortRecording();
+      return;
+    }
+
+    // A composed clip starts its recorder on the first composed frame
+    // (ClipCompositeJob): until then it holds the clip's first pose.
+    if (captureStartRef.current === null && req.compositor) {
+      req.replay?.drive(0, camera, controls?.target ?? null);
+      return;
+    }
 
     // On the first tick, anchor the wall-clock start. MediaRecorder started a hair
     // earlier; tying progress to the first rendered frame keeps the motion smooth.
@@ -116,12 +136,15 @@ function VideoCaptureLoop({
     }
 
     const elapsed = performance.now() - captureStartRef.current;
-    const durationMs = (req.durationSeconds || 5) * 1000;
+    const durationMs = (req.replay ? req.replay.duration : req.durationSeconds || 5) * 1000;
     const progress = Math.min(elapsed / durationMs, 1);
+    req.onRecordProgress?.(progress);
 
     // Drive the camera/scene by wall-clock `progress` (0..1).
-    // Flythrough path takes priority over orbit
-    if (req.flythrough && req.flythrough.keyframes.length >= 2) {
+    // An Instant Replay clip follows its tape; flythrough takes priority over orbit.
+    if (req.replay) {
+      req.replay.drive(elapsed / 1000, camera, controls?.target ?? null);
+    } else if (req.flythrough && req.flythrough.keyframes.length >= 2) {
       const flyDuration = getSequenceDuration(req.flythrough);
       const flyTime = progress * flyDuration;
 
@@ -189,6 +212,55 @@ function VideoCaptureLoop({
       }
     }
   }, { phase: 'update', id: LUPI_JOB.videoDrive });
+
+  return null;
+}
+
+/** Blank composed frames tolerated before a clip records the viewer canvas itself. */
+const COMPOSITE_BLANK_FRAMES = 2;
+
+/**
+ * An illustrative clip's compositor, in `lupi-capture` (right after the
+ * default render, while the viewer canvas still holds this frame on both
+ * backends): draw the frame and its labels into the compositor's canvas.
+ * The first composed frame starts the recorder on that canvas; if the viewer
+ * canvas cannot be drawn there, the recorder takes the canvas itself.
+ */
+function ClipCompositeJob({
+  requestRef,
+  isRecording,
+  captureStartRef,
+  startRecorder,
+}: {
+  requestRef: { current: ExportRequest | null };
+  isRecording: { current: boolean };
+  captureStartRef: { current: number | null };
+  startRecorder: (composed: boolean) => void;
+}) {
+  const renderer = useThree((state) => state.renderer);
+  const blankFrames = useRef(0);
+
+  useFrame(() => {
+    if (!isRecording.current) return;
+    const req = requestRef.current;
+    const compositor = req?.compositor;
+    if (!req || !compositor) return;
+    const started = captureStartRef.current !== null;
+    const seconds = started ? (performance.now() - (captureStartRef.current as number)) / 1000 : 0;
+    let drawn = false;
+    try {
+      drawn = compositor.draw(renderer.domElement as HTMLCanvasElement, seconds);
+    } catch (error) {
+      console.warn('[ExportManager] clip compositor failed', error);
+    }
+    if (started) return;
+    if (drawn) {
+      startRecorder(true);
+    } else {
+      blankFrames.current += 1;
+      if (blankFrames.current >= COMPOSITE_BLANK_FRAMES) startRecorder(false);
+    }
+  }, { phase: LUPI_PHASE.capture, id: LUPI_JOB.clipComposite });
 
   return null;
 }
@@ -525,7 +597,7 @@ export function ExportManager() {
   // Recording state
   const isRecording = useRef(false);
   const [isCapturing, setIsCapturing] = useState(false);
-  const onCompleteRef = useRef<((success: boolean, blob?: Blob, filename?: string) => void) | null>(null);
+  const onCompleteRef = useRef<ExportRequest['onComplete'] | null>(null);
 
   // MediaRecorder pipeline state. MediaRecorder records `captureStream()` of the
   // viewer canvas (WebGPU or its WebGL2 fallback) natively, off the main thread — no UI freeze, works on every
@@ -534,7 +606,7 @@ export function ExportManager() {
   const recordedChunksRef = useRef<Blob[]>([]); // recorder chunks accumulated via ondataavailable
   const captureStartRef = useRef<number | null>(null); // wall-clock anchor, set on first VideoCaptureLoop tick
   const recorderStoppedRef = useRef(false); // ensures recorder.stop() is called exactly once
-  const requestRef = useRef<any>(null);
+  const requestRef = useRef<ExportRequest | null>(null);
   const totalFrames = useRef(0);
   const frameCount = useRef(0);
   const originalPixelRatio = useRef<number>(1);
@@ -545,10 +617,21 @@ export function ExportManager() {
   const originalFrameloop = useRef<'always' | 'demand' | 'never' | null>(null);
   // The recording guards' stop (the camera rig resumes, display motion un-suspends).
   const recordingRestoreRef = useRef<(() => void) | null>(null);
+  // A composed clip's recorder starts on its first composed frame.
+  const startComposedRecorderRef = useRef<((composed: boolean) => void) | null>(null);
+  const abortedRef = useRef(false);
 
   // Shared scene/camera/size/store restore after a video export. Reused for both
   // the success and failure paths of the MediaRecorder capture.
   const restoreAfterVideo = useCallback(() => {
+    const replayDriver = requestRef.current?.replay;
+    if (replayDriver) {
+      try {
+        replayDriver.end();
+      } catch (error) {
+        console.error('[ExportManager] replay clip end threw', error);
+      }
+    }
     if (originalCameraPosition.current && file) {
       const { min, max } = file.trajectory.globalBounds;
       const center = new THREE.Vector3((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
@@ -888,18 +971,20 @@ export function ExportManager() {
 
     onCompleteRef.current = req.onComplete || null;
     requestRef.current = req;
+    abortedRef.current = false;
 
     // Toys stand down for the whole recording: the rig settles and suspends,
     // display motion stays at rest. restoreAfterVideo stops them on every exit.
     // First, so the pose below is the settled one, not a glide's mid-flight.
+    // An illustrative clip (Instant Replay) keeps the toys playing.
     recordingRestoreRef.current?.();
-    recordingRestoreRef.current = beginRecording();
+    recordingRestoreRef.current = beginRecording(req.illustrative ? { illustrative: true } : {});
 
     // Capture the camera pose to restore after capture. The flythrough
     // path drives position AND fov every tick, so both video modes need
     // this — previously only orbit captured, leaving the viewport stuck
     // at the flythrough's final pose after export.
-    if (req.orbit || (req.flythrough && req.flythrough.keyframes.length >= 2)) {
+    if (req.orbit || req.replay || (req.flythrough && req.flythrough.keyframes.length >= 2)) {
       originalCameraPosition.current = camera.position.clone();
       originalCameraFov.current =
         camera instanceof THREE.PerspectiveCamera ? camera.fov : null;
@@ -956,8 +1041,14 @@ export function ExportManager() {
     const mimeType = supportsRecorder
       ? candidateMimes.find((m) => MediaRecorder.isTypeSupported(m))
       : undefined;
+    const compositor = req.compositor ?? null;
 
-    if (!supportsRecorder || !mimeType || typeof canvas.captureStream !== 'function') {
+    if (
+      !supportsRecorder
+      || !mimeType
+      || typeof canvas.captureStream !== 'function'
+      || (compositor && typeof compositor.canvas.captureStream !== 'function')
+    ) {
       useStore.getState().setRendererWarning('Video export isn’t supported in this browser.');
       onCompleteRef.current?.(false);
       restoreAfterVideo();
@@ -966,56 +1057,83 @@ export function ExportManager() {
 
     const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
 
-    const stream = canvas.captureStream(fps);
-    const recorder = new MediaRecorder(stream, {
-      mimeType,
-      videoBitsPerSecond: 12_000_000,
-    });
+    const beginRecorder = (stream: MediaStream) => {
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: req.replay ? 8_000_000 : 12_000_000,
+      });
 
-    // Fresh chunk accumulator for this export.
-    recordedChunksRef.current = [];
-    const chunks = recordedChunksRef.current;
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size) chunks.push(e.data);
-    };
+      // Fresh chunk accumulator for this export.
+      recordedChunksRef.current = [];
+      const chunks = recordedChunksRef.current;
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
 
-    recorder.onstop = () => {
-      void (async () => {
-        try {
-          const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
-          const baseName = req.baseName || 'LUPI';
-          const filename = `${baseName}.${ext}`;
+      recorder.onstop = () => {
+        void (async () => {
+          try {
+            if (abortedRef.current) {
+              onCompleteRef.current?.(false, undefined, undefined, { code: 'aborted', message: 'The recording was cancelled.' });
+              return;
+            }
+            const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+            const baseName = req.baseName || 'LUPI';
+            const filename = `${baseName}.${ext}`;
 
-          if (blob.size === 0) {
-            useStore.getState().setRendererWarning('Video export captured no frames.');
+            if (blob.size === 0) {
+              useStore.getState().setRendererWarning('Video export captured no frames.');
+              onCompleteRef.current?.(false);
+            } else if (req.fileStream) {
+              // Stream the final video to the user-picked file handle.
+              await req.fileStream.write(blob);
+              await req.fileStream.close();
+              onCompleteRef.current?.(true);
+            } else if (onCompleteRef.current) {
+              onCompleteRef.current(true, blob, filename);
+            } else {
+              downloadBlob(blob, filename);
+            }
+          } catch (err) {
+            console.error('[ExportManager] Video delivery failed:', err);
+            useStore.getState().setRendererWarning('Video export failed in this browser.');
             onCompleteRef.current?.(false);
-          } else if (req.fileStream) {
-            // Stream the final video to the user-picked file handle.
-            await req.fileStream.write(blob);
-            await req.fileStream.close();
-            onCompleteRef.current?.(true);
-          } else if (onCompleteRef.current) {
-            onCompleteRef.current(true, blob, filename);
-          } else {
-            downloadBlob(blob, filename);
+          } finally {
+            restoreAfterVideoRef.current();
           }
-        } catch (err) {
-          console.error('[ExportManager] Video delivery failed:', err);
-          useStore.getState().setRendererWarning('Video export failed in this browser.');
-          onCompleteRef.current?.(false);
-        } finally {
-          restoreAfterVideoRef.current();
-        }
-      })();
+        })();
+      };
+
+      recorderRef.current = recorder;
+      recorderStoppedRef.current = false;
+      recorder.start();
     };
 
-    recorderRef.current = recorder;
-    captureStartRef.current = null; // anchored on the first VideoCaptureLoop tick
+    captureStartRef.current = null; // anchored on the first VideoCaptureLoop tick (or composed frame)
+    recorderRef.current = null;
     recorderStoppedRef.current = false;
 
-    recorder.start();
+    if (compositor) {
+      // The first composed frame starts the recorder (ClipCompositeJob).
+      startComposedRecorderRef.current = (composed: boolean) => {
+        startComposedRecorderRef.current = null;
+        if (!isRecording.current) return;
+        if (!composed) console.warn('[ExportManager] the viewer canvas could not be composed; recording it without labels');
+        beginRecorder((composed ? compositor.canvas : canvas).captureStream(fps));
+        captureStartRef.current = performance.now();
+      };
+    } else {
+      startComposedRecorderRef.current = null;
+      beginRecorder(canvas.captureStream(fps));
+    }
 
-    totalFrames.current = fps * (req.durationSeconds || 5); // no longer used for completion; harmless
+    try {
+      req.replay?.begin();
+    } catch (error) {
+      console.error('[ExportManager] replay clip begin threw', error);
+    }
+
+    totalFrames.current = fps * (req.replay ? req.replay.duration : req.durationSeconds || 5); // no longer used for completion; harmless
     frameCount.current = 0;
     isRecording.current = true;
     setIsCapturing(true);
@@ -1023,6 +1141,23 @@ export function ExportManager() {
     // so without this the capture loop can stall before its first tick.
     invalidate();
   }, [exportRequest, camera, renderer, size, frameloop, clearExportRequest, setSize, setDpr, setFrameloop, invalidate, restoreAfterVideo]);
+
+  // Stop a recording in flight and discard it (the share sheet closed).
+  const abortRecording = useCallback(() => {
+    if (!isRecording.current) return;
+    abortedRef.current = true;
+    isRecording.current = false;
+    setIsCapturing(false);
+    startComposedRecorderRef.current = null;
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== 'inactive' && !recorderStoppedRef.current) {
+      recorderStoppedRef.current = true;
+      recorder.stop(); // onstop reports the abort and restores
+      return;
+    }
+    onCompleteRef.current?.(false, undefined, undefined, { code: 'aborted', message: 'The recording was cancelled.' });
+    restoreAfterVideoRef.current();
+  }, []);
 
   // ─── Effect: Dispatch export actions ──────────────────────────
   // IMPORTANT: Only depend on exportRequest. We use refs for the handlers
@@ -1071,6 +1206,15 @@ export function ExportManager() {
           recorderRef={recorderRef}
           recorderStoppedRef={recorderStoppedRef}
           captureStartRef={captureStartRef}
+          abortRecording={abortRecording}
+        />
+      )}
+      {isCapturing && exportRequest.compositor && (
+        <ClipCompositeJob
+          requestRef={requestRef}
+          isRecording={isRecording}
+          captureStartRef={captureStartRef}
+          startRecorder={(composed) => startComposedRecorderRef.current?.(composed)}
         />
       )}
     </>
