@@ -342,7 +342,19 @@ export function AtomInfoHUD({
           <button
             type="button"
             aria-label="Dismiss atom details"
-            onClick={() => onDismissCard(atomIndex)}
+            onClick={() => {
+              // Closed by its own button, not a canvas tap: there is no second
+              // tap to wait for, so the molecule eases back at once.
+              const node = cardRef.current;
+              if (node && isMobile) {
+                const rect = node.getBoundingClientRect();
+                setViewOccluder(OCCLUDER_ID, {
+                  rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+                  tapBorn: false,
+                });
+              }
+              onDismissCard(atomIndex);
+            }}
             style={{
               alignSelf: 'flex-start',
               display: 'grid',
