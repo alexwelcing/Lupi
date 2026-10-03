@@ -162,7 +162,7 @@ function hillFormula(counts: Map<string, number>): string {
 }
 
 /** Drawn radius (Å): the viewer's ball-and-stick radius, lighter, with small hydrogens. */
-function drawRadius(symbol: string): number {
+export function drawRadius(symbol: string): number {
   if (symbol === 'H') return 0.2;
   const spec = getElementSpecBySymbol(symbol)!;
   return round(0.9 * Math.min(0.7, Math.max(0.3, spec.radius * 0.5)), 3);
@@ -192,13 +192,24 @@ function spread(points: number[][], pose: InkPose): number {
   return total;
 }
 
-/** The turntable, its detents and the opening pose, from Object Facts' view detents. */
-function turntable(points: number[][], atomicNumbers: number[]): { detents: InkDetent[]; opening: InkPose } {
-  const facts = computeObjectFacts({
-    atomicNumbers,
-    positions: points.flat(),
-    natoms: points.length,
-  });
+/**
+ * The turntable, its detents and the opening pose, from Object Facts' view
+ * detents. `bondPairs` (flat) gives Object Facts the drawing's own graph, so
+ * ring faces follow the bonds drawn (the OMol25 picks' molecular recipe).
+ */
+export function turntable(
+  points: number[][],
+  atomicNumbers: number[],
+  bondPairs?: ArrayLike<number>,
+): { detents: InkDetent[]; opening: InkPose } {
+  const facts = computeObjectFacts(
+    {
+      atomicNumbers,
+      positions: points.flat(),
+      natoms: points.length,
+    },
+    bondPairs ? { bondPairs } : undefined,
+  );
   const candidates: Candidate[] = (facts?.detents ?? []).map((d, priority) => ({
     azimuth: Math.atan2(d.dir[0], d.dir[2]),
     elevation: Math.asin(Math.max(-1, Math.min(1, d.dir[1]))),

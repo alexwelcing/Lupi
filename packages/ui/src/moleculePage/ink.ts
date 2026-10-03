@@ -47,6 +47,11 @@ export interface InkModel {
   kinds: InkKind[];
   /** Bonded atom index pairs, flat. */
   b: number[];
+  /**
+   * Bond kind per pair in `b` (BondKindCode: 0 covalent, 1 metal coordination,
+   * 2 ionic contact). Absent means every pair is a covalent stick.
+   */
+  bk?: number[];
   /** Largest distance from the centre to an atom's drawn surface (Å). */
   radius: number;
   /** Turntable detents, ascending azimuth; may be empty. */
@@ -66,6 +71,9 @@ const BOND_W = 0.14;
 const BOND_DEPTH_BIAS = 0.35;
 export const INK_PLATE = '#101817';
 export const INK_BOND = '#a3aaa6';
+/** Stroke width and dashes per bond kind: the viewer's BOND_KIND_RADIUS_SCALE, dashed coordination, dotted contacts. */
+const KIND_WIDTH = [1, 0.6, 0.45];
+const KIND_DASH = [null, '4 3', '1 3'];
 const HIGHLIGHT = '#f3f5ef';
 const SHADE = '#1a2321';
 
@@ -254,7 +262,11 @@ export function inkItemsMarkup(layout: InkLayout, idPrefix: string, rim = INK_PL
       out += `<circle cx="${fmt(layout.cx[item])}" cy="${fmt(layout.cy[item])}" r="${fmt(layout.r[item])}" opacity="${fmt(layout.opacity[item])}" fill="url(#${idPrefix}-${kind.s})" stroke="${rim}" stroke-width="0.6"/>`;
     } else {
       const b = item - layout.atomCount;
-      out += `<line x1="${fmt(layout.x1[b])}" y1="${fmt(layout.y1[b])}" x2="${fmt(layout.x2[b])}" y2="${fmt(layout.y2[b])}" stroke-opacity="${fmt(layout.bondOpacity[b])}"/>`;
+      const kind = model.bk?.[b] ?? 0;
+      const dash = kind === 1 || kind === 2
+        ? ` stroke-width="${fmt(layout.bondWidth * KIND_WIDTH[kind])}" stroke-dasharray="${KIND_DASH[kind]}"`
+        : '';
+      out += `<line x1="${fmt(layout.x1[b])}" y1="${fmt(layout.y1[b])}" x2="${fmt(layout.x2[b])}" y2="${fmt(layout.y2[b])}" stroke-opacity="${fmt(layout.bondOpacity[b])}"${dash}/>`;
     }
   }
   return `${out}</g>`;
