@@ -52,10 +52,23 @@ export type ExecutionClassV2 = (typeof EXECUTION_CLASS_V2)[LupiBackend];
  * - The browser encoder receives the pixels through a 2D canvas, which stores
  *   them premultiplied in 8 bits: low-alpha colour quantizes there. That is
  *   deterministic and accepted (plan-final R18).
- * - The interactive post pipeline (useRenderPipeline) is bypassed and the
- *   renderer applies no tone mapping: exports show the raw scene with the
- *   viewer's configured background (owner override O5). The spec records the
- *   same fact in `view.postprocess`.
+ * - The interactive post pipeline (useRenderPipeline, with its canvas-sized
+ *   targets and FXAA) is not used, and the renderer applies no tone mapping.
+ *   Instead the capture applies the viewer's look itself (owner decision:
+ *   exports use the view as configured), recorded in the spec's
+ *   `view.postprocess` ('viewer-look', or 'raw-scene' when the look is
+ *   empty, which is the raw path byte for byte). With a look, each texel is
+ *   clamped to alpha × 64 instead of alpha (highlights survive to the tone
+ *   map), the tiles assemble output-sized HDR colour, the nearest depth of
+ *   each block and, when tone mapping or the vignette would restyle the
+ *   background, the averaged lupiContent coverage (in alpha). The look then
+ *   runs once over the whole assembled image at the output resolution:
+ *   GTAO (16 samples, depth-reconstructed normals, denoised with a seeded
+ *   noise texture) → bloom → depth of field → tone mapping → vignette, with
+ *   the background given back where the look touched it. One pass over the
+ *   whole image is the tile-seam rule: no stage ever sees a tile edge.
+ *   Transparent output applies AO and tone mapping only (on un-premultiplied
+ *   colour), never bloom, depth of field or a vignette.
  * - Opaque artifact captures draw the spec's gradient as `scene.background`,
  *   which covers every pixel, so the clear colour never reaches the bytes.
  */
@@ -63,14 +76,14 @@ export const DETERMINISM_V2 = {
   pixelRatio: 1,
   readback: 'render-target-async',
   renderTarget: 'rgba16f-linear-premultiplied-samples0',
-  supersample: 'ssaa-box-premultiplied-clamped.v2;factor=max(w,h)<=1365?3:2;tiles=view-offset<=4096;gpu-f32-sum-rgba16f;untiled-transmission=min(3,floor(4096/max(w,h)))',
+  supersample: 'ssaa-box-premultiplied-clamped.v2;factor=max(w,h)<=1365?3:2;tiles=view-offset<=4096;gpu-f32-sum-rgba16f;untiled-transmission=min(3,floor(4096/max(w,h)));look-clamp=alpha*64;look-depth=block-min-f32;look-coverage=lupiContent-mean',
   pixelEncode: 'cpu-linear-unpremultiply-srgb-oetf-round.v1',
   rowOrder: 'top-left;destride-256;flip-webgl2',
   alpha: 'straight',
   rasterAlphaStorage: 'canvas2d-premultiplied-rgba8',
   outputColorSpace: 'srgb',
   rendererToneMapping: 'none',
-  postprocessPipeline: 'raw-scene-bypassed',
+  postprocessPipeline: 'viewer-look-output-resolution.v1;raw-scene-when-empty;gtao16-denoise-seed-0x4c757069;bloom-radius-0.4;transparent=ao+tonemap-unpremultiplied',
   opaqueBackground: 'spec-gradient-scene-background',
   rasterEncoder: 'browser-canvas-native',
   axesOverlay: 'canvas-overlay-v1',

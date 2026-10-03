@@ -28,6 +28,7 @@ import {
 import { getBgMedia, BG_PRESETS } from '../backgroundPresets';
 import { getDefaultQualityTier } from '../deviceCapabilities';
 import { environmentAssetIdentity } from '../sceneEnvironment';
+import { captureLookToSpec, resolveCaptureLook } from '../export/captureLook';
 import type { AppState } from '../store';
 import {
   DECODED_RENDER_FRAME_MEDIA_TYPE_V3,
@@ -244,16 +245,12 @@ export async function createBrowserRenderArtifactPlanV1(
       rimColor: state.rimLightColor,
       environment: environmentAssetIdentity(state.environmentPreset),
     };
-    // ExportManager renders the raw scene into its own render target. The
-    // interactive post pipeline is bypassed (DETERMINISM_V2), so these are
-    // fixed applied export semantics rather than the current UI postprocess
-    // controls.
-    view.postprocess = {
-      pipeline: 'raw-scene',
-      toneMapping: 'none',
-      multisampling: 0,
-      outputColorSpace: 'srgb',
-    };
+    // The viewer's configured look, as the capture applies it (never the
+    // phone budget, so the spec does not depend on the device): the
+    // 'viewer-look' recipe, or the raw-scene literal when it is empty
+    // (export/captureLook.ts). Transparent output records no bloom, depth of
+    // field or vignette, because the capture does not apply them.
+    view.postprocess = captureLookToSpec(resolveCaptureLook(state, { transparent: alpha === 'transparent' }));
   }
 
   layers.atoms = true;

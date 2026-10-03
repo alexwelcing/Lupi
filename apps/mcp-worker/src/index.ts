@@ -355,16 +355,93 @@ const EDGE_RENDER_VIEW_SCHEMA_V1: JsonValue = {
         },
       },
     },
+    // Mirrors @atlas/core validateRenderPostprocessV1: the raw scene, or the
+    // viewer's look as the browser capture applies it (each stage null when
+    // off). The edge only validates; the core check adds the transparent and
+    // empty-look rules.
     postprocess: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['pipeline', 'toneMapping', 'multisampling', 'outputColorSpace'],
-      properties: {
-        pipeline: { const: 'raw-scene' },
-        toneMapping: { const: 'none' },
-        multisampling: { const: 0 },
-        outputColorSpace: { const: 'srgb' },
-      },
+      oneOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['pipeline', 'toneMapping', 'multisampling', 'outputColorSpace'],
+          properties: {
+            pipeline: { const: 'raw-scene' },
+            toneMapping: { const: 'none' },
+            multisampling: { const: 0 },
+            outputColorSpace: { const: 'srgb' },
+          },
+        },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['pipeline', 'toneMapping', 'multisampling', 'outputColorSpace', 'ao', 'bloom', 'dof', 'vignette'],
+          properties: {
+            pipeline: { const: 'viewer-look' },
+            toneMapping: { enum: ['none', 'neutral', 'aces', 'reinhard'] },
+            multisampling: { const: 0 },
+            outputColorSpace: { const: 'srgb' },
+            ao: {
+              oneOf: [
+                { type: 'null' },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['intensity', 'radius'],
+                  properties: {
+                    intensity: { type: 'number', minimum: 0, maximum: 8 },
+                    radius: { type: 'number', minimum: 0.01, maximum: 100 },
+                  },
+                },
+              ],
+            },
+            bloom: {
+              oneOf: [
+                { type: 'null' },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['intensity', 'threshold', 'smoothing'],
+                  properties: {
+                    intensity: { type: 'number', minimum: 0, maximum: 8 },
+                    threshold: { type: 'number', minimum: 0, maximum: 8 },
+                    smoothing: { type: 'number', minimum: 0.001, maximum: 4 },
+                  },
+                },
+              ],
+            },
+            dof: {
+              oneOf: [
+                { type: 'null' },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['focusDistance', 'focusRange', 'bokehScale'],
+                  properties: {
+                    focusDistance: { type: 'number', minimum: 0, maximum: 1_000_000 },
+                    focusRange: { type: 'number', minimum: 0.001, maximum: 1_000_000 },
+                    bokehScale: { type: 'number', minimum: 0, maximum: 16 },
+                  },
+                },
+              ],
+            },
+            vignette: {
+              oneOf: [
+                { type: 'null' },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['offset', 'darkness'],
+                  properties: {
+                    offset: { type: 'number', minimum: -4, maximum: 4 },
+                    darkness: { type: 'number', minimum: 0, maximum: 4 },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      ],
     },
     atoms: {
       type: 'object',
