@@ -194,6 +194,47 @@ describe('browser render artifact adapter', () => {
     })).rejects.toThrow(/usdz is unsupported by this renderer/i);
   });
 
+  it('validates a GLB with bonds and records the drawn recipe; raster with bonds still throws', async () => {
+    useStore.getState().reset();
+    const file = loadedFile('salt.xyz');
+    const frame = file.trajectory.frames[0]!;
+    frame.bonds = new Int32Array(0);
+    frame.types = new Int32Array([11, 8]);
+    frame.positions = new Float32Array([0, 0, 0, 2.4, 0, 0]);
+    frame.typeSemantics = { kind: 'atomic-number', provenance: 'xyz-element-token' };
+    frame.distanceSemantics = { kind: 'angstrom', provenance: 'format-convention' };
+    frame.chemistry = { totalCharge: 1, spinMultiplicity: 1, source: 'file-declared', domain: null };
+    frame.periodic = false;
+    useStore.getState().setFile(file);
+    useStore.setState({ playing: false, showBonds: true, showBondContacts: false, showKnowledgeLabels: false, annotations: [], ghostFile: null });
+
+    const model = await createBrowserRenderArtifactPlanV1(useStore.getState(), {
+      format: 'glb',
+      delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
+    });
+    expect(model.spec.layers.bonds).toBe(true);
+    expect(model.spec.view.bonds).toMatchObject({
+      topology: 'molecular-inference-v1',
+      recipe: 'lupi-bonds.molecular.v1',
+      contacts: false,
+    });
+    expect(model.spec.view.bonds).not.toHaveProperty('sourceBondCount');
+
+    useStore.setState({ bondProfile: 'distance' });
+    const distance = await createBrowserRenderArtifactPlanV1(useStore.getState(), {
+      format: 'glb',
+      delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
+    });
+    expect(distance.spec.view.bonds).toMatchObject({ topology: 'covalent-inference-v1', recipe: 'lupi-bonds.distance.v1' });
+    expect(distance.spec.view.bonds).not.toHaveProperty('contacts');
+    expect(distance.specId).not.toBe(model.specId);
+
+    await expect(createBrowserRenderArtifactPlanV1(useStore.getState(), {
+      format: 'png', width: 320, height: 240, transparent: false,
+      delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
+    })).rejects.toThrow(/Hide bonds before deterministic raster export/);
+  });
+
   it('addresses deterministic projection planes derived from source bounds', async () => {
     const result = await plan();
     expect(result.spec.view.camera).toMatchObject({

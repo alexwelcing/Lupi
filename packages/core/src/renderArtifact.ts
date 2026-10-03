@@ -1006,11 +1006,22 @@ function validateRenderViewShapeV1(
       'colormap', 'uniformColor', 'elementColorOverrides', 'materialPreset', 'roughness', 'polish',
       'execution',
     ];
-    const bonds = exactViewObject(
-      view,
-      'bonds',
-      raster ? [...shared, 'colorMode', 'materialIntensity', 'clearcoat', 'appliedCount'] : shared,
-    );
+    const required = raster ? [...shared, 'colorMode', 'materialIntensity', 'clearcoat', 'appliedCount'] : shared;
+    // Provenance of the drawn graph: allowed, never required, so specs written
+    // before it (and the edge fixture) stay valid. `sourceBondCount` is gone.
+    const bonds = requireRecord(view.bonds, '$.spec.view.bonds');
+    requireExactKeys(bonds, [...required, 'topology', 'recipe', 'contacts'], required, '$.spec.view.bonds');
+    if ('topology' in bonds) {
+      requireOneOf(
+        bonds.topology,
+        ['source-frame-v1', 'covalent-inference-v1', 'molecular-inference-v1'] as const,
+        '$.spec.view.bonds.topology',
+      );
+    }
+    if ('recipe' in bonds) {
+      requireOneOf(bonds.recipe, ['lupi-bonds.molecular.v1', 'lupi-bonds.distance.v1'] as const, '$.spec.view.bonds.recipe');
+    }
+    if ('contacts' in bonds) requireBoolean(bonds.contacts, '$.spec.view.bonds.contacts');
     requireNumberInRange(bonds.tolerance, 0, 1.5, '$.spec.view.bonds.tolerance');
     requireOneOf(bonds.atomColorSource, ['colormap', 'element'] as const, '$.spec.view.bonds.atomColorSource');
     requireOneOf(bonds.atomColorMode, ['type', 'property', 'uniform'] as const, '$.spec.view.bonds.atomColorMode');
