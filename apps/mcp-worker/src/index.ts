@@ -2306,7 +2306,7 @@ function corsHeaders(request: Request, env: Env) {
     'content-type,content-length,content-range,accept-ranges,etag,last-modified,' +
       'x-lupi-edge-executed,x-lupi-data-source,x-lupi-data-license,x-lupi-content-checksum,' +
       'x-lupi-source-checksum,x-lupi-integrity-verified,x-lupi-coordinate-provenance,' +
-      'x-lupi-bond-topology,x-lupi-research-dataset',
+      'x-lupi-bond-topology,x-lupi-research-dataset,x-lupi-charge-provenance,x-lupi-bond-inference',
   );
   headers.set('x-lupi-edge-executed', '1');
   return headers;

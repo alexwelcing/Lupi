@@ -3,7 +3,8 @@ import {
   EXTERNAL_RESEARCH_DATASETS,
   externalResearchLoadPath,
 } from '@atlas/core';
-import { OMOL_DATASETS, routeScienceData } from './scienceData';
+import { handleRequest } from './index';
+import { OMOL_DATASETS, compactOmolRow, routeScienceData } from './scienceData';
 
 function req(path: string, init: RequestInit = {}): Request {
   return new Request(`https://lupi.live${path}`, init);
@@ -34,6 +35,7 @@ describe('external science-data routes', () => {
         id: string;
         indexedRows: number;
         estimatedRows: number;
+        sourceRows: number;
         coverage: string;
       }>;
     };
@@ -58,8 +60,10 @@ describe('external science-data routes', () => {
     expect(body.collections.find((entry) => entry.id === 'all-train-preview')).toEqual(expect.objectContaining({
       indexedRows: 841_736,
       estimatedRows: 65_331_709,
+      sourceRows: 101_666_280,
       coverage: 'indexed-preview',
     }));
+    expect(body.collections.map((entry) => entry.sourceRows)).toEqual([34_335_828, 27_697, 101_666_280, 3_986_754, 2_762_021]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -118,10 +122,16 @@ describe('external science-data routes', () => {
       formula: 'H2O',
       elements: ['H', 'O'],
       atomCount: 3,
+      charge: 0,
+      spinMultiplicity: 1,
+      chargeSource: 'split-definition',
+      domain: null,
+      homoLumoGapEv: null,
       loadUrl: '/v1/datasets/omol25/neutral-train/structures/12.xyz',
       coordinateProvenance: 'source',
       bondTopology: 'not-provided',
     });
+    expect(body.rows[0]).not.toHaveProperty('metaTruncated');
     expect(body.rows[0]).not.toHaveProperty('positions');
     expect(body.rows[0]).not.toHaveProperty('atomic_numbers');
 
@@ -164,14 +174,197 @@ describe('external science-data routes', () => {
       'H -0.25 0.7 0',
       '',
     ]);
-    expect(xyz).toContain('configuration_id=cfg 7');
+    // Comment values never carry spaces, so each key=value parses as one token.
+    expect(xyz).toContain('configuration_id=cfg_7');
+    expect(xyz).toContain('method=DFT_PBE');
     expect(xyz).toContain('coordinates=source');
     expect(xyz).toContain('bonds=not-provided');
+    expect(xyz).toContain('charge=0 | multiplicity=1 | charge_source=split-definition');
+    expect(response!.headers.get('x-lupi-charge-provenance')).toBe('split-definition');
+    expect(response!.headers.get('x-lupi-bond-inference')).toBe('lupi-bonds.molecular.v1');
 
     const upstreamUrl = new URL(String(fetchMock.mock.calls[0][0]));
     expect(upstreamUrl.pathname).toBe('/rows');
     expect(upstreamUrl.searchParams.get('offset')).toBe('7');
     expect(upstreamUrl.searchParams.get('length')).toBe('1');
+  });
+
+  it('reads charge and spin from property_metadata, never from the ColabFit multiplicity column', () => {
+    const dataset = OMOL_DATASETS.find((entry) => entry.id === 'validation-preview')!;
+    const row = compactOmolRow({
+      row_idx: 0,
+      truncated_cells: [],
+      row: {
+        configuration_id: 'CO_1',
+        chemical_formula_hill: 'C30H40N4Pr',
+        multiplicity: 1,
+        property_metadata: JSON.stringify({ charge: 1, spin: 3, data_id: 'metal_complexes', homo_lumo_gap: [2.5, 2.25] }),
+      },
+    }, dataset);
+    expect(row).toMatchObject({
+      charge: 1,
+      spinMultiplicity: 3,
+      chargeSource: 'record',
+      multiplicity: 1,
+      domain: 'metal_complexes',
+      homoLumoGapEv: 2.5,
+    });
+  });
+
+  it('marks truncated or implausible metadata unavailable without failing the page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonUpstream({
+      rows: [
+        { row_idx: 4, truncated_cells: ['property_metadata'], row: { chemical_formula_hill: 'C2H6O', property_metadata: '{"charge": 0, "sp' } },
+        { row_idx: 5, truncated_cells: [], row: { chemical_formula_hill: 'CH4', property_metadata: '{"charge": 0.5, "spin": 1}' } },
+        { row_idx: 6, truncated_cells: [], row: { chemical_formula_hill: 'H2O', property_metadata: 'not json' } },
+        { row_idx: 7, truncated_cells: [], row: { chemical_formula_hill: 'NH3', property_metadata: '{"charge": 0, "spin": 12}' } },
+      ],
+    })));
+
+    const response = await routeScienceData(req('/v1/datasets/omol25/validation-preview/rows?offset=4&limit=4'));
+    const body = await response!.json() as { rows: Array<Record<string, unknown>> };
+
+    expect(response!.status).toBe(200);
+    expect(body.rows).toHaveLength(4);
+    expect(body.rows[0]).toMatchObject({ charge: null, spinMultiplicity: null, chargeSource: 'unavailable', metaTruncated: true });
+    for (const row of body.rows.slice(1)) {
+      expect(row).toMatchObject({ charge: null, spinMultiplicity: null, chargeSource: 'unavailable' });
+      expect(row).not.toHaveProperty('metaTruncated');
+    }
+  });
+
+  it('writes the record\'s chemistry into the structure comment in contract order', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonUpstream({
+      rows: [{
+        row_idx: 273,
+        truncated_cells: [],
+        row: {
+          atomic_numbers: [8, 1, 1],
+          positions: [[0, 0, 0], [0.75, 0, 0], [-0.25, 0.7, 0]],
+          chemical_formula_hill: 'H2O',
+          configuration_id: 'CO_85',
+          property_id: 'PO_10',
+          method: 'ωB97M-V',
+          multiplicity: 1,
+          energy: -63330.86111298835,
+          max_force_norm: 3.0829408336136006,
+          property_metadata: JSON.stringify({ charge: 0, spin: 1, data_id: 'orbnet_denali', homo_lumo_gap: [6.386757202393212] }),
+        },
+      }],
+    })));
+
+    const response = await routeScienceData(req('/v1/datasets/omol25/neutral-validation/structures/273.xyz'), { cache: null });
+    const comment = (await response!.text()).split('\n')[1];
+
+    expect(response!.status).toBe(200);
+    expect(comment).toBe([
+      'OMol25 neutral-validation row=273',
+      'collection=neutral-validation',
+      'formula=H2O',
+      'configuration_id=CO_85',
+      'property_id=PO_10',
+      'method=ωB97M-V',
+      'charge=0',
+      'multiplicity=1',
+      'charge_source=record',
+      'data_id=orbnet_denali',
+      'energy_eV=-63330.861113',
+      'max_force_eV_per_A=3.08294083361',
+      'homo_lumo_gap_eV=6.38675720239',
+      'coordinates=source',
+      'bonds=not-provided',
+      'license=CC-BY-4.0',
+      'source=colabfit/OMol25_neutral_validation',
+    ].join(' | '));
+    expect(comment).not.toContain('Properties=');
+    expect(comment).not.toMatch(/=\S*\s+[^|\s]/);
+    expect(response!.headers.get('x-lupi-charge-provenance')).toBe('record');
+    expect(response!.headers.get('x-lupi-bond-inference')).toBe('lupi-bonds.molecular.v1');
+    expect(response!.headers.get('x-lupi-bond-topology')).toBe('not-provided');
+  });
+
+  it('omits charge and multiplicity when the record has none', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonUpstream({
+      rows: [{
+        row_idx: 3,
+        truncated_cells: ['property_metadata'],
+        row: { atomic_numbers: [1, 1], positions: [[0, 0, 0], [0.74, 0, 0]], chemical_formula_hill: 'H2' },
+      }],
+    })));
+
+    const response = await routeScienceData(req('/v1/datasets/omol25/validation-preview/structures/3.xyz'), { cache: null });
+    const comment = (await response!.text()).split('\n')[1];
+
+    expect(comment).toContain('charge_source=unavailable');
+    expect(comment).not.toMatch(/\| charge=|\| multiplicity=/);
+    expect(response!.headers.get('x-lupi-charge-provenance')).toBe('unavailable');
+  });
+
+  it('returns 504 slow when the upstream times out', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    }));
+    const rows = await routeScienceData(req('/v1/datasets/omol25/neutral-train/rows?formula=H2O'));
+    expect(rows!.status).toBe(504);
+    expect(rows!.headers.get('cache-control')).toBe('no-store');
+    expect(await rows!.json()).toMatchObject({ status: 'slow', dataset: 'neutral-train', timeoutSeconds: 9 });
+
+    vi.stubGlobal('fetch', vi.fn((_input: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    const structure = await routeScienceData(
+      req('/v1/datasets/omol25/neutral-train/structures/1.xyz'),
+      { cache: null, structureTimeoutMs: 5 },
+    );
+    expect(structure!.status).toBe(504);
+    expect(await structure!.json()).toMatchObject({ status: 'slow' });
+  });
+
+  it('reports a truncated coordinate cell explicitly', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonUpstream({
+      rows: [{ row_idx: 9, truncated_cells: ['positions'], row: { atomic_numbers: [8, 1, 1], positions: [[0, 0, 0]] } }],
+    })));
+    const response = await routeScienceData(req('/v1/datasets/omol25/validation-preview/structures/9.xyz'), { cache: null });
+    expect(response!.status).toBe(502);
+    expect(await response!.json()).toMatchObject({ error: expect.stringContaining('truncated') });
+  });
+
+  it('serves structures without a cache, and from an injected cache on the second call', async () => {
+    const upstream = () => jsonUpstream({
+      rows: [{ row_idx: 2, row: { atomic_numbers: '[8,1,1]', positions: [[0, 0, 0], [0.75, 0, 0], [-0.25, 0.7, 0]], chemical_formula_hill: 'H2O' } }],
+    });
+    const fetchMock = vi.fn(async () => upstream());
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect((globalThis as { caches?: unknown }).caches).toBeUndefined();
+    const uncached = await routeScienceData(req('/v1/datasets/omol25/neutral-train/structures/2.xyz'));
+    expect(uncached!.status).toBe(200);
+    expect(await uncached!.text()).toContain('formula=H2O');
+
+    const store = new Map<string, Response>();
+    const cache = {
+      match: async (key: Request) => store.get(key.url)?.clone() ?? undefined,
+      put: async (key: Request, value: Response) => { store.set(key.url, value); },
+    } as unknown as Cache;
+    fetchMock.mockClear();
+    const first = await routeScienceData(req('/v1/datasets/omol25/neutral-train/structures/2.xyz'), { cache });
+    const second = await routeScienceData(req('/v1/datasets/omol25/neutral-train/structures/2.xyz'), { cache });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect([...store.keys()]).toEqual([expect.stringContaining('omol25-xyz-v2')]);
+    expect(await second!.text()).toBe(await first!.text());
+    expect(second!.headers.get('x-lupi-charge-provenance')).toBe('split-definition');
+  });
+
+  it('exposes the provenance headers to browsers through CORS', async () => {
+    const response = await handleRequest(req('/v1/datasets/omol25'));
+    const exposed = response.headers.get('access-control-expose-headers') ?? '';
+    expect(exposed.split(',')).toEqual(expect.arrayContaining([
+      'x-lupi-coordinate-provenance',
+      'x-lupi-bond-topology',
+      'x-lupi-charge-provenance',
+      'x-lupi-bond-inference',
+    ]));
   });
 
   it('turns Dataset Viewer index warming into a retryable response', async () => {
