@@ -14,8 +14,10 @@
  *   __lupiPlay.poke/flick/catch/scatter/stepDetent(...) once their owner registers them
  *   __lupiPlay.burst(atomIndex), .tug(atomIndex, [dx, dy, dz], holdMs), .heat(level)
  *                         the Play verbs' toys, driven without a pointer
- *   __lupiPlay.viewInset() → { current, target, occluder }: the phone atom card's
- *                         view shift (CSS px, down), once the viewer registers it
+ *   __lupiPlay.viewInset() → { current, target, occluders }: the phone framing
+ *                         ({ x, y, scale }: CSS px and zoom-out) that makes room
+ *                         for the declared phone sheets and cards, and their ids,
+ *                         once the viewer registers it
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.

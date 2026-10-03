@@ -9,8 +9,8 @@
  * instead of floating over the molecule, where a world-anchored card scales
  * unpredictably and drifts off-screen. The sheet opens compact (identity and
  * one line of key facts; "Details" opens the full card, remembered for the
- * session), and it reports its bottom edge so the live view moves the
- * molecule into the band it leaves free (camera/viewInset.ts).
+ * session), and it declares the area it covers so the live view moves the
+ * molecule into the room it leaves free (camera/viewInset.ts).
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -28,7 +28,10 @@ import {
 import { useStore, type KnowledgeLabel } from './store';
 import { humanizeCategory } from './periodic-table/ElementDetailCard';
 import { MOBILE_MEDIA_QUERY, useMediaQuery } from './hooks/useMediaQuery';
-import { setTopOccluder } from './camera/viewInset';
+import { setViewOccluder } from './camera/viewInset';
+
+/** The phone sheet's id among the overlays the live view makes room for. */
+const OCCLUDER_ID = 'atom-card';
 
 const MAX_PROPERTY_ROWS = 4;
 const MAX_KNOWLEDGE_ROWS = 4;
@@ -125,7 +128,7 @@ export function AtomInfoHUD({
       return !previous;
     });
   }, []);
-  // The phone sheet reports its bottom edge while it is on screen, so the
+  // The phone sheet declares what it covers while it is on screen, so the
   // live view can make room (camera/viewInset.ts). The card renders in drei
   // Html's own root, so a callback ref (not an effect) sees it mount.
   const isMobileRef = useRef(isMobile);
@@ -136,10 +139,17 @@ export function AtomInfoHUD({
     occluderObserver.current?.disconnect();
     occluderObserver.current = null;
     if (!node || !isMobileRef.current) {
-      setTopOccluder(null);
+      setViewOccluder(OCCLUDER_ID, null);
       return;
     }
-    const report = () => setTopOccluder(node.getBoundingClientRect().bottom);
+    // A canvas tap opens and closes it: the view waits out a double tap.
+    const report = () => {
+      const rect = node.getBoundingClientRect();
+      setViewOccluder(OCCLUDER_ID, {
+        rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+        tapBorn: true,
+      });
+    };
     report();
     if (typeof ResizeObserver === 'function') {
       const observer = new ResizeObserver(report);
@@ -151,7 +161,7 @@ export function AtomInfoHUD({
     () => () => {
       occluderObserver.current?.disconnect();
       occluderObserver.current = null;
-      setTopOccluder(null);
+      setViewOccluder(OCCLUDER_ID, null);
     },
     [],
   );

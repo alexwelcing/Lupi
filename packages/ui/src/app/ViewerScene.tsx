@@ -866,8 +866,8 @@ export function ViewerScene({
         />
       )}
 
-      {/* The phone atom card's room: a display-only view shift. */}
-      <ViewInsetDriver />
+      {/* Room for phone sheets and the atom card: a display-only framing. */}
+      <ViewInsetDriver bounds={file?.trajectory.globalBounds ?? null} />
 
       {ORBIT_FALLBACK ? (
         <OrbitControls

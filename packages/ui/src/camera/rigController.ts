@@ -86,10 +86,11 @@ export interface RigHost {
    */
   wake?(): void;
   /**
-   * The display-only view shift still to come off (CSS px, down; viewInset.ts):
-   * a zoom anchors on the point that will be under the pointer once it settles.
+   * The display-only phone framing (viewInset.ts) may still be moving: the
+   * client point to raycast through the live projection now to reach what
+   * will be under (x, y) once it settles. A zoom anchors on that point.
    */
-  pendingViewShift?(): number;
+  liveClientPoint?(x: number, y: number): { x: number; y: number };
 }
 
 const DEG = Math.PI / 180;
@@ -1349,18 +1350,18 @@ export class RigController implements LupiCameraRigApi {
   /**
    * The world point under a client pointer on the plane through the target
    * facing the camera (the target itself without a pointer). Zooming about it
-   * keeps that point under the pointer. While a display-only view shift is
-   * settling (a phone card came or went), it is the point that will be under
-   * the pointer once the shift has settled.
+   * keeps that point under the pointer. While the display-only phone framing
+   * is settling (a sheet or card came or went), it is the point that will be
+   * under the pointer once the framing has settled.
    */
   private anchorPoint(client: { x: number; y: number } | null, out: Vector3): Vector3 {
     out.copy(this.target);
     const rect = client ? this.host.viewport() : null;
     if (!client || !rect || !(rect.width > 0) || !(rect.height > 0)) return out;
     const cam = this.camera;
-    const pending = this.host.pendingViewShift?.() ?? 0;
-    const ndcX = ((client.x - rect.left) / rect.width) * 2 - 1;
-    const ndcY = -(((client.y + (Number.isFinite(pending) ? pending : 0) - rect.top) / rect.height) * 2 - 1);
+    const live = this.host.liveClientPoint?.(client.x, client.y) ?? client;
+    const ndcX = ((live.x - rect.left) / rect.width) * 2 - 1;
+    const ndcY = -(((live.y - rect.top) / rect.height) * 2 - 1);
     if (!Number.isFinite(ndcX) || !Number.isFinite(ndcY)) return out;
     const ray = this.vTmp.set(ndcX, ndcY, 0.5).unproject(cam).sub(cam.position).normalize();
     const forward = this.vTmp2.set(0, 0, -1).applyQuaternion(cam.quaternion);
