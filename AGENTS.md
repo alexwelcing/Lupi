@@ -101,8 +101,9 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   background or a halo annotation draws at 24 fps; a selection ring pulses
   for 2.4 s and rests. `__lupiPlay.state().frames` counts drawn frames (read
   it twice on a still view: it should not move) and `.frameDemand.awakeBy`
-  names what keeps the loop awake. `?frameloop=always` renders continuously
-  again. Exports and video force their own frames.
+  names what keeps the loop awake; `?frames=1` shows the same as a small
+  meter at the top of the viewer (for a phone). `?frameloop=always` renders
+  continuously again. Exports and video force their own frames.
 - **Motion comfort** (Settings or the Play tray): Standard, Gentle (no coast,
   half-strength display motion) or Still (nothing moves on its own; glides
   cut). With nothing chosen it follows `prefers-reduced-motion`. Sound and

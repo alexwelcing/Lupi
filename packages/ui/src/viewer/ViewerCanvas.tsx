@@ -5,6 +5,7 @@ import { LupiCanvas } from './LupiCanvas';
 import type { LupiBackend, LupiRendererRuntime } from './createLupiRenderer';
 import { FirstFrameSignal } from '../relay/FirstFrameSignal';
 import { FrameDemandDriver, viewerFrameloop } from './FrameDemandDriver';
+import { FrameMeter, frameMeterRequested } from './FrameMeter';
 
 interface ViewerCanvasProps {
   capability: RenderCapability;
@@ -91,7 +92,8 @@ export function viewerDprRange(
  * drawing only while something changes or moves, so a still view costs no
  * GPU work. `?frameloop=always` restores continuous rendering. The prop is
  * read once and never changes, so ExportManager's `setFrameloop('always')`
- * for a video recording is never overridden mid-recording.
+ * for a video recording is never overridden mid-recording. `?frames=1` shows
+ * a small frame meter (fps, what keeps the loop awake).
  */
 export function ViewerCanvas({
   capability,
@@ -103,6 +105,7 @@ export function ViewerCanvas({
 }: ViewerCanvasProps) {
   const tier = useMemo(getDeviceTier, []);
   const frameloop = useMemo(() => viewerFrameloop(), []);
+  const showFrameMeter = useMemo(() => frameMeterRequested(), []);
   const [backend, setBackend] = useState<LupiBackend | null>(null);
   const dpr = useMemo(() => viewerDprRange(tier, atomCount, backend), [tier, atomCount, backend]);
   const atomCountRef = useRef(atomCount);
@@ -117,22 +120,25 @@ export function ViewerCanvas({
     [tier],
   );
   return (
-    <LupiCanvas
-      id={VIEWER_CANVAS_ID}
-      capability={capability}
-      frameloop={frameloop}
-      camera={{
-        position: [center[0], center[1], center[2] + cameraDistance],
-        fov: 50,
-        near: cameraNear,
-        far: Math.max(10000, cameraDistance * 100),
-      }}
-      dpr={dpr}
-      onRuntime={onRuntime}
-    >
-      <FrameDemandDriver />
-      {children}
-      <FirstFrameSignal />
-    </LupiCanvas>
+    <>
+      {showFrameMeter && <FrameMeter frameloop={frameloop} />}
+      <LupiCanvas
+        id={VIEWER_CANVAS_ID}
+        capability={capability}
+        frameloop={frameloop}
+        camera={{
+          position: [center[0], center[1], center[2] + cameraDistance],
+          fov: 50,
+          near: cameraNear,
+          far: Math.max(10000, cameraDistance * 100),
+        }}
+        dpr={dpr}
+        onRuntime={onRuntime}
+      >
+        <FrameDemandDriver />
+        {children}
+        <FirstFrameSignal />
+      </LupiCanvas>
+    </>
   );
 }
