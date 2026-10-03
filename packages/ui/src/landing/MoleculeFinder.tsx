@@ -6,6 +6,7 @@ import { LandingIntentContext } from './landingIntent';
 import { beginRelay, endRelay, peekBaton, setBaton, type RelayBaton } from '../relay/baton';
 import { hasFirstFrame } from '../relay/firstFrame';
 import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
+import { inkTileFor, inkTileSrc, inkTileViewDir, preloadInkTiles } from './inkTiles';
 // The relay stage registers itself here, in the landing chunk (no three).
 import '../relay/stage';
 
@@ -38,11 +39,12 @@ let relaySerial = 0;
  * sage relay covers the page from this call until the viewer's first frame:
  * it grows `fromRect` (the tapped drawing or tile image) into the stage. The
  * home page's drawing leaves a baton with its pose first; any other opener
- * gets a fresh one.
+ * gets a fresh one. An ink tile (`ink`) hands over its drawing's pose, and
+ * the viewer opens in ink before the light comes on (Ink-to-Light).
  */
 export function openLocalMolecule(
   id: string,
-  opts?: { source?: RelayBaton['source']; fromRect?: DOMRect | null },
+  opts?: { source?: RelayBaton['source']; fromRect?: DOMRect | null; ink?: boolean },
 ): Promise<void> {
   const source = opts?.source ?? 'finder';
   const held = peekBaton();
@@ -50,7 +52,16 @@ export function openLocalMolecule(
   if (held && held.galleryId === id && held.source === source) {
     baton = held;
   } else {
-    baton = { galleryId: id, source, viewDir: null, bodyOmegaY: 0, t: performance.now() };
+    const ink = opts?.ink === true && inkTileSrc(id) !== null;
+    const tile = ink ? inkTileFor(id) : null;
+    baton = {
+      galleryId: id,
+      source,
+      viewDir: tile ? inkTileViewDir(tile) : null,
+      bodyOmegaY: 0,
+      t: performance.now(),
+      ...(ink ? { ink: true } : {}),
+    };
     setBaton(baton); // replaces a stale pose for another opener
   }
   const serial = (relaySerial += 1);
@@ -78,6 +89,14 @@ export function openLocalMolecule(
 export function previewRectIn(element: Element | null | undefined): DOMRect | null {
   const art = element?.querySelector('img, .wall-mark, .finder-glyph');
   return art ? art.getBoundingClientRect() : null;
+}
+
+/** Light the tapped ink drawing (a lime glow while the relay takes it); harmless on other art. */
+export function lightInkTile(element: Element | null | undefined): void {
+  const art = element?.querySelector<HTMLElement>('.ink-tile');
+  if (!art) return;
+  art.dataset.lit = '';
+  window.setTimeout(() => delete art.dataset.lit, 1600);
 }
 
 function formatAtoms(atoms: number): string {
@@ -110,9 +129,12 @@ export function mergeFinderResults(query: string, local: LocalMolecule[], remote
 }
 
 function finderRowContent(result: FinderResult) {
+  const ink = result.kind === 'local' ? inkTileSrc(result.molecule.id) : null;
   return (
     <>
-      {result.kind === 'local' && result.molecule.image ? (
+      {ink ? (
+        <img className="ink-tile" src={ink} alt="" width="40" height="40" loading="lazy" decoding="async" />
+      ) : result.kind === 'local' && result.molecule.image ? (
         <img src={result.molecule.image} alt="" width="40" height="40" loading="lazy" decoding="async" />
       ) : (
         <span className="finder-glyph" aria-hidden="true">
@@ -140,6 +162,8 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
   const intent = useContext(LandingIntentContext);
 
   const local = useMemo(() => searchLocalMolecules(query, LOCAL_LIMIT), [query]);
+  // The ink tiles' poses arrive at idle, before a pick.
+  useEffect(() => preloadInkTiles(), []);
   const results = useMemo(() => mergeFinderResults(query, local, remote), [query, local, remote]);
 
   useEffect(() => {
@@ -172,7 +196,9 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
       // A pick is intent: fetch the viewer while the molecule loads.
       intent.prefetchViewer();
       try {
-        if (result.kind === 'local') await openLocalMolecule(result.molecule.id, { source: 'finder', fromRect });
+        if (result.kind === 'local') {
+          await openLocalMolecule(result.molecule.id, { source: 'finder', fromRect, ink: inkTileSrc(result.molecule.id) !== null });
+        }
         else await openPubChemMolecule({ name: result.name });
       } catch {
         // The store carries the readable error; keep the finder usable.
@@ -194,7 +220,11 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
       event.preventDefault();
       const index = results[active] ? active : 0;
       const pick = results[index];
-      if (pick) void open(pick, previewRectIn(document.getElementById(`${listId}-${index}`)));
+      const row = document.getElementById(`${listId}-${index}`);
+      if (pick) {
+        lightInkTile(row);
+        void open(pick, previewRectIn(row));
+      }
     } else if (event.key === 'Escape') {
       setQuery('');
     }
@@ -257,7 +287,9 @@ export function MoleculeFinder({ onOpen }: { onOpen?: (result: FinderResult) => 
                   onClick={(event) => {
                     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
                     event.preventDefault();
-                    if (!busy) void open(result, previewRectIn(event.currentTarget));
+                    if (busy) return;
+                    lightInkTile(event.currentTarget);
+                    void open(result, previewRectIn(event.currentTarget));
                   }}
                 >
                   {finderRowContent(result)}

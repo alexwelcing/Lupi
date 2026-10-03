@@ -840,6 +840,33 @@
   font: 400 1.25rem/1 Georgia, 'Times New Roman', serif;
   overflow: hidden;
 }
+/* Ink tiles: the molecule's own ink drawing on the sage plate (the /m page's,
+   at its opening pose). A tap lights it while the relay takes it into 3D. */
+.wall-grid img.ink-tile,
+.finder-results img.ink-tile {
+  box-sizing: border-box;
+  padding: 1px;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 42%, #1a2722, #101817 72%);
+  transition: filter 160ms ease-out, box-shadow 160ms ease-out, transform 160ms ease-out;
+}
+.wall-grid a:hover img.ink-tile,
+.finder-results .finder-row:hover img.ink-tile,
+.finder-results li.is-active img.ink-tile {
+  box-shadow: 0 0 0 1px #d5ef9c59;
+}
+img.ink-tile[data-lit] {
+  filter: brightness(1.2) saturate(1.15);
+  box-shadow: 0 0 0 1.5px #d5ef9c, 0 0 16px rgba(213, 239, 156, 0.55);
+  transform: scale(1.06);
+}
+.wall-grid a[aria-busy='true']:has(img.ink-tile) {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  img.ink-tile { transition: none; }
+  img.ink-tile[data-lit] { transform: none; }
+}
 .wall-text {
   display: grid;
   min-width: 0;

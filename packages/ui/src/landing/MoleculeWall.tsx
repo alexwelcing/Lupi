@@ -1,8 +1,9 @@
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { LOCAL_MOLECULES, type LocalMolecule } from './moleculeIndex';
-import { openLocalMolecule, previewRectIn } from './MoleculeFinder';
+import { lightInkTile, openLocalMolecule, previewRectIn } from './MoleculeFinder';
 import { LandingIntentContext } from './landingIntent';
 import { hasMoleculePage, moleculePagePath } from '../moleculePage/pages';
+import { inkTileSrc, preloadInkTiles } from './inkTiles';
 
 const FIRST_PAGE = 48;
 
@@ -19,12 +20,19 @@ function atomsLabel(atoms: number): string {
  * loads in place so the viewer takes over without a full navigation, the
  * tile's preview growing into the sage relay stage on the way; a new tab or a
  * copied link gets the page.
+ *
+ * Ink tiles: a molecule with a page shows its own ink drawing (the /m
+ * page's, at its opening pose) on the sage plate. A tap lights it, the relay
+ * grows the drawing to the size the 3D view will draw it, and the viewer
+ * opens in ink at the same pose before the light comes on (Ink-to-Light).
  */
 export function MoleculeWall() {
   const [expanded, setExpanded] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
   const intent = useContext(LandingIntentContext);
   const shown = expanded ? LOCAL_MOLECULES : LOCAL_MOLECULES.slice(0, FIRST_PAGE);
+  // The ink tiles' poses arrive at idle, before a tap.
+  useEffect(() => preloadInkTiles(), []);
 
   const open = (event: React.MouseEvent<HTMLAnchorElement>, molecule: LocalMolecule) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
@@ -33,8 +41,10 @@ export function MoleculeWall() {
     setOpening(molecule.id);
     // A tap is intent: fetch the viewer while the molecule loads.
     intent.prefetchViewer();
-    // The relay grows the tile's preview into the sage stage.
-    openLocalMolecule(molecule.id, { source: 'tile', fromRect: previewRectIn(event.currentTarget) })
+    const ink = inkTileSrc(molecule.id) !== null;
+    if (ink) lightInkTile(event.currentTarget);
+    // The relay grows the tile's preview (or ink drawing) into the sage stage.
+    openLocalMolecule(molecule.id, { source: 'tile', fromRect: previewRectIn(event.currentTarget), ink })
       .catch(() => undefined)
       .finally(() => setOpening(null));
   };
@@ -57,7 +67,9 @@ export function MoleculeWall() {
               onClick={(event) => open(event, molecule)}
               title={molecule.subtitle}
             >
-              {molecule.image ? (
+              {inkTileSrc(molecule.id) ? (
+                <img className="ink-tile" src={inkTileSrc(molecule.id)!} alt="" width="48" height="48" loading="lazy" decoding="async" />
+              ) : molecule.image ? (
                 <img src={molecule.image} alt="" width="48" height="48" loading="lazy" decoding="async" />
               ) : (
                 <span
