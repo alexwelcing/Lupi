@@ -920,6 +920,28 @@ export function ViewerApp() {
               },
             },
             {
+              id: 'omol25-browse',
+              label: 'Browse OMol25 · 34.3M DFT structures',
+              group: 'Discover',
+              onSelect: () => {
+                window.location.href = '/library/omol25';
+              },
+            },
+            {
+              id: 'omol25-random',
+              label: 'Open a random OMol25 structure',
+              group: 'Discover',
+              onSelect: () => {
+                // One row of the 34.3M neutral split, opened in place; a failure lands in the store's error.
+                void Promise.all([import('./analytics/openEntry'), import('./molecules/randomOmol')]).then(
+                  ([{ markOpenEntry }, { openRandomOmol25Molecule }]) => {
+                    markOpenEntry('palette');
+                    return openRandomOmol25Molecule();
+                  },
+                );
+              },
+            },
+            {
               id: 'controls-molecule',
               label: 'Open Style',
               group: 'Panels',
