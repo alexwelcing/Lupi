@@ -26,7 +26,9 @@ Core endpoints:
 - `GET /m/:id`, `GET /m/` — zero-canvas molecule pages and their index, static
   HTML written by the web build (`scripts/generate-molecule-pages.mts`) with
   per-molecule Open Graph cards (`/og/m/<id>.png`), ink drawings
-  (`/og/m/<id>-ink.svg`) and desk models (`/ar/<id>.usdz`, `/ar/<id>.glb`)
+  (`/og/m/<id>-ink.svg`) and desk models (`/ar/<id>.usdz`, `/ar/<id>.glb`);
+  `/m/manifest.json` also gives each drawing's opening `pose`, `inkRadius`
+  and the viewer's `fit` radius (the landing's ink tiles hand over with them)
 - `GET /daily/`, `GET /daily/:date`, `GET /daily/text` — Lupi Daily, the
   zero-canvas mystery-molecule game (static HTML written by the web build,
   `scripts/generate-daily-pages.mts`), with sealed puzzle files
@@ -113,8 +115,25 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   `emit(intent)` emits a Lupi intent as the UI would, `reset()` puts display
   motion at rest, and `poke`, `flick`, `catch`, `scatter`, `stepDetent`,
   `burst(atomIndex)`, `tug(atomIndex, [dx, dy, dz], holdMs)` and
-  `heat(level)` appear once the viewer has registered them. It never writes
+  `heat(level)` appear once the viewer has registered them; `ink()` reports
+  the Illustrate look's live weights and Ink-to-Light state. It never writes
   molecule data.
+- **The Illustrate look (Ink and Light).** Looks → Illustrate (flat colour on
+  the sage plate) or Sketch (hatched, on the paper plate), the Play tray's
+  Look row (Lit · Ink), the palette or the `I` key draw the molecule like the
+  Lupi ink drawings: toon fills from the key light, crevices shaded by the
+  baked contact occlusion, an ink outline at every atom and bond silhouette
+  and, for Sketch, pen hatching (`packages/scene/src/tsl/inkLook.ts`, mixed
+  into both impostors by one weight). It is a Look, not toy motion: the
+  store's `inkStyle` (`off`, `flat`, `hatch`) and `inkWeight` ride share URLs
+  (`ink`, `iw`), saved views and `lupi.set_viewer`; while ink is on the post
+  recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
+  stays); exports draw it and their spec records `view.ink`. Changes fade
+  (480 ms); every capture renders the configured look, never a fade.
+  Ink-to-Light: a molecule opened from an ink drawing (the hero, a molecule
+  page, an ink tile on the wall or in the finder) first draws in ink at the
+  drawing's pose, then the light comes on; any touch completes it and Still
+  skips it. See `docs/ink-and-light.md`.
 - **One-finger verbs** (Play tray, palette): Orbit, Poke, Tug, Burst, Heat.
   Tug drags an atom's neighbourhood on springs and twangs it home; Burst pops
   the atoms out from a tap and springs them back; Heat jiggles the atoms
@@ -308,6 +327,7 @@ Common recognized keywords:
 - `hide bonds`, `show bonds`, `show cell`, `show axes`
 - `studio`, `paper`, `editorial`, `cinematic`, `diagram` — postprocess presets
 - `iso`, `top`, `side`, `front`, `free` — camera presets
+- `ink` / `illustrate`, `hatched` / `sketch`, `lit` — the Illustrate look (flat, hatched, off)
 
 ## Render artifact V2 truth
 
@@ -380,6 +400,12 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   look is empty. `postprocessPipeline` in the fingerprint's determinism facts
   names the pass (`viewer-look-output-resolution.v1;…`). FXAA is the live
   view's only anti-aliasing and never runs on an export; supersampling is.
+- The Illustrate look shades the impostors themselves, so its capture takes
+  the raw path (`view.postprocess` is `raw-scene`), and the spec carries
+  `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch',
+  weight, ink, paper, shade }`, present only while the look is on, so every
+  lit spec keeps its identity. Ink line weight follows the capture's texel
+  scale and the picture's short side, so an export keeps the screen's weight.
 - The Specimen floor shadow (`contactShadows` layer) is part of the view: it
   sits under every molecule up to 50,000 atoms (off for Diagram and under the
   filter shell), and the spec's `view.contactShadows` states its blur,
