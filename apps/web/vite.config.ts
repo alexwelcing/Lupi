@@ -230,6 +230,74 @@ function pruneExternalHostedAssets() {
   };
 }
 
+/**
+ * Molecule pages in development.
+ *
+ * The build writes the zero-canvas pages (/m/<id>), their cards and desk
+ * models into dist after `vite build` (scripts/generate-molecule-pages.mts).
+ * The dev server renders the same artifacts on request from the same modules,
+ * so /m/caffeine works under `pnpm dev` too, with the page script hot from
+ * src/molecule.ts.
+ */
+function moleculePagesDevPlugin() {
+  const repoRoot = path.resolve(__dirname, '../..');
+  const buildModule = path.resolve(repoRoot, 'scripts/molecule-pages/build.mts');
+  return {
+    name: 'lupi-molecule-pages-dev',
+    apply: 'serve' as const,
+    configureServer(server: any) {
+      let site: any = null;
+      const load = async () => {
+        const mod = await server.ssrLoadModule(buildModule);
+        site ??= mod.loadMoleculeSite(repoRoot);
+        return { mod, site };
+      };
+      const send = (res: any, type: string, body: string | Uint8Array) => {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', type);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(body);
+      };
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+        const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+        const page = pathname.match(/^\/m\/([a-z0-9_]+)\/?$/);
+        const card = pathname.match(/^\/og\/m\/([a-z0-9_]+)(-ink\.svg|\.png)$/);
+        const desk = pathname.match(/^\/ar\/([a-z0-9_]+)\.(usdz|glb)$/);
+        const index = pathname === '/m' || pathname === '/m/';
+        const manifest = pathname === '/m/manifest.json';
+        if (!page && !card && !desk && !index && !manifest) return next();
+        try {
+          const { mod, site: loaded } = await load();
+          if (manifest) return send(res, 'application/json; charset=utf-8', JSON.stringify(mod.moleculeManifest(loaded, true), null, 2));
+          if (page || index) {
+            const raw = fs.readFileSync(path.resolve(__dirname, 'molecule.html'), 'utf8');
+            const template = await server.transformIndexHtml('/molecule.html', raw);
+            const ctx = mod.pageContext(loaded, { cards: true });
+            const html = page ? mod.moleculePageHtml(loaded, template, page[1], ctx) : mod.moleculeIndexHtml(loaded, template, ctx);
+            return html ? send(res, 'text/html; charset=utf-8', html) : next();
+          }
+          const record = loaded.byId.get((card ?? desk)![1]);
+          if (!record) return next();
+          if (card?.[2] === '-ink.svg') return send(res, 'image/svg+xml; charset=utf-8', mod.moleculeInkSvg(record));
+          if (card) {
+            const png = await mod.moleculeCardPng(loaded, record);
+            return png ? send(res, 'image/png', png) : next();
+          }
+          const deskModule = await server.ssrLoadModule(path.resolve(repoRoot, 'scripts/molecule-pages/desk.mts'));
+          const models = await deskModule.buildDeskModels(record);
+          return desk![2] === 'usdz'
+            ? send(res, 'model/vnd.usdz+zip', models.usdz)
+            : send(res, 'model/gltf-binary', models.glb);
+        } catch (error: any) {
+          server.config.logger.warn(`[molecule-pages] ${pathname}: ${error?.message ?? error}`);
+          return next();
+        }
+      });
+    },
+  };
+}
+
 function parseMultipart(buffer: Buffer, boundary: string): any[] {
   const parts: any[] = [];
   const boundaryBuffer = Buffer.from(`--${boundary}`);
@@ -278,6 +346,7 @@ export default defineConfig(({ command }) => ({
     react(),
     wgslVitePlugin({ minify: true }),
     galleryAssetUploadPlugin(),
+    moleculePagesDevPlugin(),
     pruneExternalHostedAssets(),
   ],
   // The WASM parsers live ONLY inside web workers (parse/transcode workers),
@@ -318,6 +387,13 @@ export default defineConfig(({ command }) => ({
     // something to silence. (Was 3000, which hid the 2.6MB App chunk entirely.)
     chunkSizeWarningLimit: 800,
     rollupOptions: {
+      // Two pages: the app (index.html) and the template of the zero-canvas
+      // molecule pages (molecule.html), which scripts/generate-molecule-pages.mts
+      // fills once per gallery molecule and then removes.
+      input: {
+        index: path.resolve(__dirname, 'index.html'),
+        molecule: path.resolve(__dirname, 'molecule.html'),
+      },
       output: {
         manualChunks(id) {
           // Vite's dynamic-import preload helper (__vitePreload) is imported by
