@@ -39,6 +39,7 @@ import {
 } from '../measurements';
 import { CameraFocus } from '../CameraFocus';
 import { PlayLayer } from '../play/PlayLayer';
+import { AtomGlowDriver } from '../play/AtomGlowDriver';
 import { CameraToys } from '../camera/CameraToys';
 import { LupiCameraRig } from '../camera/LupiCameraRig';
 import { markCanvasSelection } from '../camera/selectionSource';
@@ -672,7 +673,9 @@ export function ViewerScene({
           <SelectionMarkers
             frame={currentFrame}
             selectedAtoms={visibleSelectedAtoms}
-            hoveredAtom={visibleHoveredAtom}
+            // The impostor's own glow marks the hovered atom; the glass
+            // renderer has none, so it keeps the hover ring.
+            hoveredAtom={transmissionActive ? visibleHoveredAtom : null}
             highlightedNeighbors={visibleHighlightedNeighbors}
             dimNonNeighbors={dimNonNeighbors}
           />
@@ -697,6 +700,11 @@ export function ViewerScene({
             center={center}
             transmissionActive={transmissionActive}
             playing={playing}
+          />
+          <AtomGlowDriver
+            hoveredAtom={visibleHoveredAtom}
+            selectedAtoms={visibleSelectedAtoms}
+            enabled={!transmissionActive}
           />
           <CameraToys frame={currentFrame} />
           <AtomTrails

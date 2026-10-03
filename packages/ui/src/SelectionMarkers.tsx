@@ -132,7 +132,7 @@ function SelectedMarker({
     <Billboard position={position}>
       <mesh ref={ringRef} geometry={ringGeo}>
         <meshBasicMaterial
-          color="#7dd3fc"
+          color="#d5ef9c"
           side={THREE.DoubleSide}
           transparent
           opacity={0.9}
