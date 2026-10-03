@@ -48,6 +48,17 @@ Core endpoints:
 - `POST /v1/scan/identify` — photo → molecules: a Hugging Face vision model (Inference Providers, `HF_TOKEN`) identifies the subject and its materials, Jev ranks the gallery pool; `{ configured: false }` without `HF_TOKEN` (see `docs/scan-pipeline.md`)
 - `POST /v1/scan/gist`, `POST /v1/scan/sculpt`, `POST /v1/scan/recipe` — photo → a label and outline (or `{ text }` alone → the gist of the thing named, for the molecule search's stage, where the particles form "candy" while the results come in), one Jev sculpting judgment per call for the primitive fallback, and Jev's recipe (does this measured silhouette read as the subject; inflate, extrude, or revolve; how deep) for the photo's own inflated volume
 - `POST /v1/scan/plan`, `POST /v1/scan/segment`, `POST /v1/scan/reconstruct` — the remote models through Hugging Face Spaces, with the token on the edge: Jev's plan (is the device's cut good enough, is a 3D rebuild worth the wait, given what is running), SAM 3's concept mask for the subject, and SAM 3D Objects' reconstruction sampled into `lupi.points.v1` (coloured points, ~700 kB) for the particles; `{ configured: false }` without `HF_TOKEN` (see `docs/scan-pipeline.md`)
+- `GET /v1/datasets/omol25`, `GET /v1/datasets/omol25/:collection/rows`,
+  `GET /v1/datasets/omol25/:collection/structures/:row.xyz` — OMol25 through
+  the edge, paged from Hugging Face on demand: coverage and citation, compact
+  rows (with `charge`, `spinMultiplicity`, `chargeSource`, `domain`,
+  `homoLumoGapEv`), and one source row as XYZ whose comment carries charge,
+  multiplicity and their provenance (headers `x-lupi-bond-topology:
+  not-provided`, `x-lupi-charge-provenance`, `x-lupi-bond-inference:
+  lupi-bonds.molecular.v1`; see `docs/external-science-data.md`)
+- `GET /datasets/omol25/featured.v1.json` — the 24 hand-picked
+  neutral-validation rows Lupi keeps (schema `lupi.omol25-featured.v1`, CC BY
+  4.0, sha256 per file), each at `/datasets/omol25/featured/omol25_nv_<row>.xyz`
 - `GET /v1/jobs/:jobId` — legacy-v0 render-job compatibility
 - `GET /assets/:assetId.:ext` — legacy-v0 R2 asset compatibility
 
@@ -317,16 +328,50 @@ console.log(status);
 //   atomCount: 250000,
 //   frame: 0,
 //   playing: false,
-//   bondCount: 420000,
+//   bondCount: 420000,                  // covalent + coordination drawn
 //   bondSource: 'gpu',
 //   bondTopology: 'inferred',
-//   showBondsEffective: true
+//   showBondsEffective: true,
+//   bondRecipe: 'lupi-bonds.distance.v1', // 'lupi-bonds.molecular.v1', 'source' or null
+//   bondToleranceAdjusted: false,        // bondTolerance ≠ 0.45 Å
+//   bondKinds: { covalent: 420000, coordination: 0, ionicContact: 0 },
+//   bondEvidence: null,                  // { long, removed, nearMiss, clashes } up to 2,000 atoms
+//   chemistry: null                      // { totalCharge, spinMultiplicity, source, domain } when declared
 // }
 ```
 
 Poll until `ready === true` and `toolCount > 0` before sending commands, and
 until `rendererBackend` is non-null before an export. The `lupi.status` tool
-returns the same three renderer fields.
+returns the same three renderer fields and the same bond fields.
+
+### Bonds: which rule, and what is inferred
+
+Lupi draws bonds by one of three rules, and every surface says which:
+
+- **Source** pairs from the file always win (`bondRecipe: 'source'`).
+- **`lupi-bonds.molecular.v1`** (`docs/omol25-bonds-and-discovery.md` §2) for
+  a non-periodic XYZ frame of at most 2,000 atoms that declares chemistry
+  (`charge=`, `multiplicity=` or `charge_source=` in its comment) and is a
+  single frame or an OMol25 record. Covalent bonds are solid sticks,
+  transition-metal coordination is dashed and thinner, and s-block ionic
+  contacts (Li, Na, K, Mg, Ca, …) are dotted and thinnest, never sticks.
+  OMol25 supplies no bonds; these are Lupi's inference, labelled as such in
+  the legend, Learn ("How these bonds were drawn"), the atom card and here.
+- **`lupi-bonds.distance.v1`** (r_i + r_j + τ) for everything else: gallery
+  molecules, materials, trajectories and every non-XYZ format, unchanged.
+
+`lupi.set_viewer { bondProfile: 'auto' | 'distance' | 'molecular' }` picks
+the rule (URL `brp=d|m`; molecular still needs a non-periodic XYZ frame of
+≤ 2,000 atoms) and `{ showBondContacts: false }` hides the dotted contacts
+(URL `bco=0`). `bondCount` and `bondKinds` count what is drawn after hidden
+atom types and the contacts toggle; ionic contacts never count as bonds.
+`lupi.viewer_state { includeBonds: true }` adds `bonds: [[i, j, kind,
+lengthÅ, excessÅ], …]` (kind `covalent`, `coordination` or `ionicContact`;
+excess over the covalent-radius sum; at most 5,000, then `bondsTruncated:
+true`) and `bondsFilter: { hiddenTypes, contacts }`, from the same graph the
+view, the atom card, Object Facts and model exports read
+(`packages/ui/src/bonds/perceivedBonds.ts`). Inferred graphs are listed for
+frames of at most 2,000 atoms; larger frames return `bondsUnavailable`.
 
 ## Tool Manifest
 
@@ -353,11 +398,11 @@ const manifest = await page.evaluate(() =>
 | `lupi.open_gallery_example` | Open a canonical gallery example with caller-pinned identity and atom-count limits.                                             | `{ id: 'c60_buckyball', expectedAtomCount: 60, maxAtomCount: 50000 }` |
 | `lupi.open_saved_view`     | Open a saved Lupi view by slug.                                                                                                  | `{ slug: 'abc123' }`                                      |
 | `lupi.search_molecules`    | Search molecule/catalog providers; filter by library facets and sort by measured properties (see `docs/library-facts.md`).       | `{ query: '', facets: ['metal'], sortBy: 'density' }`     |
-| `lupi.browse_collection`   | Page through a remote OMol25 collection via the dataset edge; returns source-coordinate load specs, no rows stored by Lupi.       | `{ collection: 'neutral-train', offset: 0, limit: 24 }`   |
-| `lupi.set_viewer`          | Apply common viewer display/style settings.                                                                                      | `{ showBonds: true, cameraPreset: 'iso' }`                |
+| `lupi.browse_collection`   | Page through a remote OMol25 collection via the dataset edge; returns source-coordinate load specs, no rows stored by Lupi. Each molecule carries `charge`, `spinMultiplicity`, `chargeSource`, `domain` and `homoLumoGapEv`; `sourceTruth` is `{ coordinates: 'source', bondTopology: 'not-provided', viewerBonds: { recipe: 'lupi-bonds.molecular.v1', provenance: 'inferred' } }`. | `{ collection: 'neutral-train', offset: 0, limit: 24 }`   |
+| `lupi.set_viewer`          | Apply common viewer display/style settings, including the bond rule (`bondProfile`) and the ionic-contacts toggle.               | `{ showBonds: true, bondProfile: 'molecular', showBondContacts: true }` |
 | `lupi.export_xyz`          | Return active frame XYZ text.                                                                                                    | `{}`                                                      |
 | `lupi.export_asset`        | Return the active deterministic profile as inline PNG/JPEG/WebP or GLB; unsupported active layers/combinations fail closed.       | `{ format: 'png', width: 1024, height: 1024 }`            |
-| `lupi.viewer_state`        | Return current viewer state.                                                                                                     | `{}`                                                      |
+| `lupi.viewer_state`        | Return current viewer state; `includeBonds` adds the drawn bond list.                                                            | `{ includeBonds: true }`                                  |
 | `lupi.assess_asset`        | Run a bounded fast assessment of materialized source data and declared context without rendering.                                | `{ source: 'active', mode: 'fast' }`                      |
 | `lupi.knowledge_graph`     | Query active knowledge-graph labels.                                                                                             | `{ query: 'force', limit: 20 }`                           |
 | `lupi.status`              | Report bridge readiness and viewer health.                                                                                       | `{}`                                                      |
@@ -515,6 +560,14 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
 - Deterministic raster bonds fail closed until the asynchronous bond result is
   snapshot-addressable; hide bonds before raster export. Model export may use
   its synchronous CPU bond path, but fails if inferred bonds hit the cap.
+  The spec's `view.bonds` names the graph: `topology` (`source-frame-v1`,
+  `covalent-inference-v1` or `molecular-inference-v1`), `recipe` and, for the
+  molecular recipe, `contacts`; all three are optional to the validator, and
+  `sourceBondCount` is no longer accepted. A molecular GLB exports the view's
+  graph as three meshes, `lupi-bonds-covalent`, `lupi-bonds-coordination` and
+  `lupi-contacts-ionic`, with dashes and dots as cylinder segments of the live
+  period and duty, and glTF extras `{ lupiBondRecipe, lupiBondKind,
+  lupiProvenance: 'inferred' }`; other frames keep one `bonds` mesh.
 - USDZ remains available from the ordinary interactive export UI (AR Quick
   Look) but is not advertised by `lupi.export_asset`. three's USDZExporter
   (r186) embeds process-global object ids, so identical semantics do not yet
