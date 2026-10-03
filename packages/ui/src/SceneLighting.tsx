@@ -22,7 +22,11 @@ import {
   resolveSceneEnvironment,
   type DreiEnvironmentPreset,
 } from './sceneEnvironment';
-import { installScientificStudioEnvironment } from './studioEnvironment';
+import {
+  installScientificStudioEnvironment,
+  scientificStudioRigFor,
+  type StudioRigAngles,
+} from './studioEnvironment';
 
 // Lighting rig radius (meters) — matches the legacy inline placement in App.
 const RIG_RADIUS = 11.18;
@@ -100,17 +104,24 @@ function LupiEnvironment({ preset }: { preset: DreiEnvironmentPreset }) {
 }
 
 /**
- * The procedural scientific-studio softbox rig. Nothing to fetch and nothing
- * to suspend on: the emissive rig scene is built on-device and PMREM-baked
- * exactly once per install; after that it costs the same as any static
- * environment texture.
+ * The procedural scientific-studio softbox rig (the Specimen rig). Nothing to
+ * fetch and nothing to suspend on: the emissive rig scene is built on-device
+ * and PMREM-baked once per install (and again when a light moves); after that
+ * it costs the same as any static environment texture.
  */
-function LupiSoftboxEnvironment() {
+function LupiSoftboxEnvironment({ angles }: { angles: StudioRigAngles }) {
   const { renderer, scene } = useThree();
+  const {
+    keyAzimuth, keyElevation, fillAzimuth, fillElevation, rimAzimuth, rimElevation,
+  } = angles;
+  // Re-baked (a five-panel scene, a few milliseconds) when a light moves, so
+  // the softbox catchlight follows the key the atoms are lit by. The layout
+  // effect lands it in the same commit as the light uniforms.
   useLayoutEffect(() => installScientificStudioEnvironment(
     scene,
     () => new PMREMGenerator(renderer),
-  ), [renderer, scene]);
+    scientificStudioRigFor({ keyAzimuth, keyElevation, fillAzimuth, fillElevation, rimAzimuth, rimElevation }),
+  ), [renderer, scene, keyAzimuth, keyElevation, fillAzimuth, fillElevation, rimAzimuth, rimElevation]);
 
   return null;
 }
@@ -164,7 +175,18 @@ export function SceneLighting() {
           <directionalLight position={[rx, ry, rz]} intensity={key * 0.15} color={rimLightColor} />
         </>
       )}
-      {finalEnv === 'softbox' && <LupiSoftboxEnvironment />}
+      {finalEnv === 'softbox' && (
+        <LupiSoftboxEnvironment
+          angles={{
+            keyAzimuth: keyLightAzimuth,
+            keyElevation: keyLightElevation,
+            fillAzimuth: fillLightAzimuth,
+            fillElevation: fillLightElevation,
+            rimAzimuth: rimLightAzimuth,
+            rimElevation: rimLightElevation,
+          }}
+        />
+      )}
       {finalEnv && finalEnv !== 'softbox' && <LupiEnvironment preset={finalEnv} />}
     </>
   );

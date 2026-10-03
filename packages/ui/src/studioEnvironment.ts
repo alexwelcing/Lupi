@@ -75,6 +75,39 @@ export const SCIENTIFIC_STUDIO_RIG: ScientificStudioRig = {
 
 const DEG = Math.PI / 180;
 
+/** Where the three movable lights sit (degrees), as the store keeps them. */
+export interface StudioRigAngles {
+  keyAzimuth: number;
+  keyElevation: number;
+  fillAzimuth: number;
+  fillElevation: number;
+  rimAzimuth: number;
+  rimElevation: number;
+}
+
+/**
+ * The Specimen rig with its key softbox, fill card and rim card moved to the
+ * viewer's light angles (the overhead strip and floor bounce stay put), so
+ * the softbox catchlight follows the key light the atoms are lit by. At the
+ * default angles (40/45, -120/10, 160/30) it is SCIENTIFIC_STUDIO_RIG exactly.
+ */
+export function scientificStudioRigFor(
+  angles: StudioRigAngles,
+  rig: ScientificStudioRig = SCIENTIFIC_STUDIO_RIG,
+): ScientificStudioRig {
+  const [key, fill, strip, rim, ...rest] = rig.panels;
+  return {
+    ...rig,
+    panels: [
+      { ...key, azimuthDeg: angles.keyAzimuth, elevationDeg: angles.keyElevation },
+      { ...fill, azimuthDeg: angles.fillAzimuth, elevationDeg: angles.fillElevation },
+      strip,
+      { ...rim, azimuthDeg: angles.rimAzimuth, elevationDeg: angles.rimElevation },
+      ...rest,
+    ],
+  };
+}
+
 function rigPosition(azimuthDeg: number, elevationDeg: number, radius: number): THREE.Vector3 {
   const az = azimuthDeg * DEG;
   const el = elevationDeg * DEG;
