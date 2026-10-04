@@ -87,7 +87,7 @@ extension Molecule {
         var total = 0.0
         var weighted = Vec3.zero
         for a in 0..<count {
-            var m = Element.forAtomicNumber(atomicNumbers[a]).mass
+            var m = ChemicalElement.forAtomicNumber(atomicNumbers[a]).mass
             if !(m > 0) {
                 m = Self.unresolvedMass
                 unresolved += 1

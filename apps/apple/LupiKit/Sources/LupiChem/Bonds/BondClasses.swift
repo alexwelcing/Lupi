@@ -57,7 +57,7 @@ public enum ElementClass: UInt8, Sendable, Codable {
 
 public enum BondRadii {
     /// Single-bond covalent radius: the element table's (1.40 Å for unknown types).
-    public static func covalent(_ z: Int) -> Double { Element.forAtomicNumber(z).covalentRadius }
+    public static func covalent(_ z: Int) -> Double { ChemicalElement.forAtomicNumber(z).covalentRadius }
 
     /// Cordero 2008 high-spin radii, so high-spin complexes are not missed.
     public static let highSpin: [Int: Double] = [25: 1.61, 26: 1.52, 27: 1.50]

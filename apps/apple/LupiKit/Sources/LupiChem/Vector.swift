@@ -2,7 +2,8 @@ import Foundation
 
 // Small vector maths on the standard library's SIMD types, so LupiKit needs
 // no `simd` module and builds on Linux. SIMD3<Double> is the working type;
-// coordinates are stored as SIMD3<Float>, as the web stores Float32Array.
+// coordinates are stored as SIMD3<Float>, as the web stores Float32Array, and
+// widen with the standard library's converting init, Vec3(floatVector).
 
 public typealias Vec3 = SIMD3<Double>
 
@@ -20,10 +21,6 @@ extension SIMD3 where Scalar == Double {
     @inlinable public var normalized: Self {
         let len = length
         return len > 0 ? self / len : self
-    }
-
-    @inlinable public init(_ v: SIMD3<Float>) {
-        self.init(Double(v.x), Double(v.y), Double(v.z))
     }
 }
 

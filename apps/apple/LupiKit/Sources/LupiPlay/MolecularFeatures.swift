@@ -87,8 +87,8 @@ public struct MolecularFeatures: Sendable, Equatable, Codable {
     }
 
     static func label(_ bond: GraphBond, _ z: [Int]) -> String {
-        let a = Element.forAtomicNumber(z[bond.i]).symbol
-        let b = Element.forAtomicNumber(z[bond.j]).symbol
+        let a = ChemicalElement.forAtomicNumber(z[bond.i]).symbol
+        let b = ChemicalElement.forAtomicNumber(z[bond.j]).symbol
         switch bond.kind {
         case .ionicContact: return "\(a)···\(b)"
         case .coordination: return "\(a)–\(b)"

@@ -57,9 +57,10 @@ public enum ElementCategory: String, Sendable, Codable, CaseIterable {
     case unknown
 }
 
-/// One element. `Element.table` is generated from the web's element table, so
-/// colours and bond radii match the viewer exactly.
-public struct Element: Sendable, Hashable {
+/// One chemical element. `table` is generated from the web's element table,
+/// so colours and bond radii match the viewer exactly. (Not `Element`, which
+/// would shadow every collection's associated type.)
+public struct ChemicalElement: Sendable, Hashable {
     public let z: Int
     public let symbol: String
     public let name: String
@@ -93,18 +94,18 @@ public struct Element: Sendable, Hashable {
     }
 
     /// Every element, Z 1...118.
-    public static var all: [Element] { table }
+    public static var all: [ChemicalElement] { table }
 
     /// The table entry, or nil outside 1...118.
-    public static func known(_ z: Int) -> Element? {
+    public static func known(_ z: Int) -> ChemicalElement? {
         z >= 1 && z <= table.count ? table[z - 1] : nil
     }
 
     /// The table entry, or the web's stand-in for an unknown type (`getElementSpec`):
     /// a 1.40 Å covalent radius so bond rules still see it, no mass, grey.
-    public static func forAtomicNumber(_ z: Int) -> Element {
+    public static func forAtomicNumber(_ z: Int) -> ChemicalElement {
         if let element = known(z) { return element }
-        return Element(
+        return ChemicalElement(
             z: z, symbol: "X\(z)", name: "Unknown Isotope", mass: 0, covalentRadius: 1.40, vdwRadius: 2.45,
             displayRadius: 0.70, cpk: CPKColor(hex: 0x999999), category: .unknown, electronegativity: nil
         )

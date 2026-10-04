@@ -97,7 +97,8 @@ public struct Placement: Sendable, Equatable, Codable {
         var issues: [String] = []
         if trophyId.isEmpty { issues.append("a placement has no trophyId") }
         if ![position.x, position.y, position.z].allSatisfy(\.isFinite) { issues.append("\(trophyId): position is not finite") }
-        let norm = (rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z + rotation.w * rotation.w).squareRoot()
+        let q = rotation
+        let norm = (q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w).squareRoot()
         if !(abs(norm - 1) < 1e-3) { issues.append("\(trophyId): rotation is not a unit quaternion") }
         if !(displayScale > 0 && displayScale.isFinite) { issues.append("\(trophyId): displayScale must be positive") }
         return issues

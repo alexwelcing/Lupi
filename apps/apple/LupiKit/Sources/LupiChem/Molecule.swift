@@ -59,7 +59,7 @@ public struct Molecule: Sendable, Equatable, Codable {
     /// carbon every element is alphabetical. "C8H10N4O2".
     public var hillFormula: String {
         var bySymbol: [String: Int] = [:]
-        for (z, n) in elementCounts { bySymbol[Element.forAtomicNumber(z).symbol, default: 0] += n }
+        for (z, n) in elementCounts { bySymbol[ChemicalElement.forAtomicNumber(z).symbol, default: 0] += n }
         var order: [String] = []
         if bySymbol["C"] != nil {
             order.append("C")
@@ -74,7 +74,7 @@ public struct Molecule: Sendable, Equatable, Codable {
 
     /// Sum of standard atomic weights, g/mol. Unknown types weigh nothing, as on the web.
     public var molarMass: Double {
-        atomicNumbers.reduce(0) { $0 + Element.forAtomicNumber($1).mass }
+        atomicNumbers.reduce(0) { $0 + ChemicalElement.forAtomicNumber($1).mass }
     }
 
     public var heavyAtomCount: Int { atomicNumbers.lazy.filter { $0 != 1 }.count }
@@ -107,7 +107,7 @@ public struct Molecule: Sendable, Equatable, Codable {
     public func xyzText(comment: String? = nil) -> String {
         var lines = ["\(count)", comment ?? name ?? hillFormula]
         for (z, p) in zip(atomicNumbers, positions) {
-            lines.append("\(Element.forAtomicNumber(z).symbol) \(fixed6(p.x)) \(fixed6(p.y)) \(fixed6(p.z))")
+            lines.append("\(ChemicalElement.forAtomicNumber(z).symbol) \(fixed6(p.x)) \(fixed6(p.y)) \(fixed6(p.z))")
         }
         return lines.joined(separator: "\n") + "\n"
     }

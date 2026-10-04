@@ -183,7 +183,9 @@ public struct InlineStructure: Sendable, Equatable, Codable {
         if atomicNumbers.isEmpty { issues.append("structure has no atoms") }
         if positions.count != 3 * atomicNumbers.count { issues.append("structure needs 3 coordinates per atom") }
         if !positions.allSatisfy(\.isFinite) { issues.append("structure has a non-finite coordinate") }
-        if atomicNumbers.contains(where: { !(1...118).contains($0) }) { issues.append("structure has an atomic number outside 1...118") }
+        if atomicNumbers.contains(where: { !(1...118).contains($0) }) {
+            issues.append("structure has an atomic number outside 1...118")
+        }
         for entry in bonds {
             guard entry.count == 4, entry[0] != entry[1],
                   atomicNumbers.indices.contains(entry[0]), atomicNumbers.indices.contains(entry[1]),

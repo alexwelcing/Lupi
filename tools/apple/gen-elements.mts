@@ -74,7 +74,7 @@ export function renderElementsSwift(): string {
     const e = ELEMENT_DATA[z];
     const vdw = (VDW_RADII_PM[z] ?? VDW_FALLBACK_PM) / 100;
     const en = e.electronegativity === null ? 'nil' : num(e.electronegativity);
-    return `        Element(z: ${z}, symbol: ${str(e.symbol)}, name: ${str(e.name)}, mass: ${num(e.mass)}, `
+    return `        ChemicalElement(z: ${z}, symbol: ${str(e.symbol)}, name: ${str(e.name)}, mass: ${num(e.mass)}, `
       + `covalentRadius: ${num(e.radius)}, vdwRadius: ${num(vdw)}, displayRadius: ${num(e.displayRadius)}, `
       + `cpk: CPKColor(hex: ${colorLiteral(e.color)}), category: .${CATEGORY_CASE[e.category]}, electronegativity: ${en}),`;
   });
@@ -83,9 +83,9 @@ export function renderElementsSwift(): string {
     '// Covalent radii: Cordero 2008 (Pyykkö 2009 where Cordero has none), as the web table.',
     '// Van der Waals radii: PubChem Periodic Table (AtomicRadius, pm); Z >= 100 use 2.45 Å.',
     '',
-    'extension Element {',
+    'extension ChemicalElement {',
     '    /// Z 1...118 in order: `table[z - 1]`.',
-    '    static let table: [Element] = [',
+    '    static let table: [ChemicalElement] = [',
     ...rows,
     '    ]',
     '}',

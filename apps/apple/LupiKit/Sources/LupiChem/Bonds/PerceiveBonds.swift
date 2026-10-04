@@ -85,7 +85,8 @@ public enum BondPerception {
             let cut = sum + tolerance
             if d2 > 0 && d2 <= cut * cut {
                 let d = d2.squareRoot()
-                bonds.append(PerceivedBond(i: a, j: b, kind: .covalent, distance: Float(d), excess: Float(d - (rcov[a] + rcov[b]))))
+                let excess = Float(d - (rcov[a] + rcov[b]))
+                bonds.append(PerceivedBond(i: a, j: b, kind: .covalent, distance: Float(d), excess: excess))
                 if d - sum > BondConstants.longExcess { counts.long += 1 }
             } else if d2 > cut * cut {
                 let window = cut + BondConstants.nearMissWindow

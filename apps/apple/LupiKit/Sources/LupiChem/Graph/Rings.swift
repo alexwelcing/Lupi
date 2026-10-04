@@ -43,7 +43,8 @@ extension BondGraph {
         let components = self.components(kinds: kinds).count
         let cycleCount = active.count - atomCount + components
         let ringIndices = bonds.indices.filter { ringBond[$0] }
-        let smallest = ringIndices.count <= Self.ringSearchLimit ? smallestRings(ringBond: ringBond, ringIndices: ringIndices) : nil
+        let smallest = ringIndices.count <= Self.ringSearchLimit
+            ? smallestRings(ringBond: ringBond, ringIndices: ringIndices) : nil
         return RingAnalysis(
             ringBond: ringBond, cycleCount: cycleCount, smallestRings: smallest,
             systems: ringSystems(ringBond: ringBond, molecule: molecule)
@@ -103,7 +104,8 @@ extension BondGraph {
         let words = (ringIndices.count + 63) / 64
         var ringAtoms = Set<Int>()
         for k in ringIndices { ringAtoms.insert(bonds[k].i); ringAtoms.insert(bonds[k].j) }
-        let ringComponents = components(kinds: [.covalent, .coordination, .ionicContact], excluding: Set(bonds.indices.filter { !ringBond[$0] }))
+        let nonRing = Set(bonds.indices.filter { !ringBond[$0] })
+        let ringComponents = components(kinds: BondGraph.allKinds, excluding: nonRing)
             .filter { $0.count > 1 || ringAtoms.contains($0[0]) }.count
         let target = ringIndices.count - ringAtoms.count + ringComponents
 

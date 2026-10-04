@@ -94,7 +94,7 @@ public enum XYZParser {
             }
             return value
         }
-        guard let z = Element.atomicNumber(forSymbol: trimmed) else {
+        guard let z = ChemicalElement.atomicNumber(forSymbol: trimmed) else {
             throw XYZTokenError("unknown element token '\(trimmed)'")
         }
         return z
@@ -190,7 +190,8 @@ public enum XYZParser {
                 }
                 if tokenCount < layout.requiredTokens {
                     throw XYZParseError(
-                        message: "Expected at least \(layout.requiredTokens) columns at line \(lineNumber), got: '\(text(pos, min(lineEnd, pos + 120)))'",
+                        message: "Expected at least \(layout.requiredTokens) columns at line \(lineNumber), "
+                            + "got: '\(text(pos, min(lineEnd, pos + 120)))'",
                         line: lineNumber, frameIndex: frames.count
                     )
                 }
@@ -390,7 +391,9 @@ public enum XYZParser {
             case "step", "timestep", "frame":
                 if info.timestep == nil {
                     let n = JSText.number(value)
-                    if n.isFinite && n.rounded(.towardZero) == n && n >= 0 && n <= 9_007_199_254_740_991 { info.timestep = Int(n) }
+                    if n.isFinite && n.rounded(.towardZero) == n && n >= 0 && n <= 9_007_199_254_740_991 {
+                        info.timestep = Int(n)
+                    }
                 }
             default:
                 break

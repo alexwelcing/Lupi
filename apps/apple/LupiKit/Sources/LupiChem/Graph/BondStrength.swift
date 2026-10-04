@@ -70,8 +70,8 @@ public enum BondStrength {
     static func singleBond(_ pair: ElementPair) -> Double {
         if let value = single[pair] { return value }
         if let a = single[ElementPair(pair.a, pair.a)], let b = single[ElementPair(pair.b, pair.b)] {
-            let chiA = Element.forAtomicNumber(pair.a).electronegativity ?? 0
-            let chiB = Element.forAtomicNumber(pair.b).electronegativity ?? 0
+            let chiA = ChemicalElement.forAtomicNumber(pair.a).electronegativity ?? 0
+            let chiB = ChemicalElement.forAtomicNumber(pair.b).electronegativity ?? 0
             return (a * b).squareRoot() + electronVolt * (chiA - chiB) * (chiA - chiB)
         }
         return unknownSingle
@@ -113,7 +113,8 @@ extension BondGraph {
             let splits = !ringBond[k]
             if splittingOnly && !splits { continue }
             let excess = Double(bond.length) - (BondRadii.covalent(z[bond.i]) + BondRadii.covalent(z[bond.j]))
-            ranked.append((RankedBond(index: k, bond: bond, kJPerMol: BondStrength.kJPerMol(bond, in: molecule), splits: splits), excess))
+            let strength = BondStrength.kJPerMol(bond, in: molecule)
+            ranked.append((RankedBond(index: k, bond: bond, kJPerMol: strength, splits: splits), excess))
         }
         ranked.sort { p, q in
             if p.0.kJPerMol != q.0.kJPerMol { return p.0.kJPerMol < q.0.kJPerMol }
