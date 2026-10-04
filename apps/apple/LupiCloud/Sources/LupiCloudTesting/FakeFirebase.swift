@@ -52,6 +52,7 @@ public actor FakeFirebase: HTTPTransport {
   private var offline = false
   private var faults: [String: [Result<HTTPResponse, TransportError>]] = [:]
   private var commitHook: (@Sendable () async -> Void)?
+  private var callHooks: [String: @Sendable () async -> Void] = [:]
   private var frozenRequestTime: FirestoreTimestamp?
 
   public init(
@@ -89,6 +90,13 @@ public actor FakeFirebase: HTTPTransport {
   /// another device can sneak a write in.
   public func onceBeforeCommit(_ hook: @escaping @Sendable () async -> Void) {
     commitHook = hook
+  }
+
+  /// Runs `hook` once, when the next call of `kind` (say "auth.signInWithIdp")
+  /// arrives and before it is answered: a window for the app to act while
+  /// that request is in flight.
+  public func onceBefore(_ kind: String, _ hook: @escaping @Sendable () async -> Void) {
+    callHooks[kind] = hook
   }
 
   /// Every commit from now on gets the same REQUEST_TIME, as writes landing
@@ -142,6 +150,7 @@ public actor FakeFirebase: HTTPTransport {
     let uid = bearerUID(request)
     calls.append(Call(kind: kind, uid: kind.hasPrefix("firestore") ? uid : nil))
     if offline { throw TransportError("offline") }
+    if let hook = callHooks.removeValue(forKey: kind) { await hook() }
     if var queue = faults[kind], !queue.isEmpty {
       let fault = queue.removeFirst()
       faults[kind] = queue

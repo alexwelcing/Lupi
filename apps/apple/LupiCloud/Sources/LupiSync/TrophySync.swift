@@ -34,7 +34,12 @@ public actor TrophySync<Payload: SyncPayload> {
   private var loaded = false
   private var loadTask: Task<SyncState<Payload>?, any Error>?
   private var lastPersist: Task<Void, any Error>?
-  private var syncTask: Task<SyncReport, any Error>?
+  /// The newest sync run. Each run waits for the one before it, so runs never
+  /// overlap.
+  private var syncRun: SyncRun?
+  private var runCounter = 0
+  /// True from the start of deleteAccount to its end: sync refuses to start.
+  private var deletionUnderway = false
   /// The last server time seen (readTime, commitTime) and the local time it
   /// arrived, to estimate the server's clock.
   private var serverClock: (server: Date, local: Date)?
@@ -154,19 +159,35 @@ public actor TrophySync<Payload: SyncPayload> {
     try await session.signOut()
   }
 
-  /// Pull then push for the signed-in account. Concurrent callers share one
-  /// run. `full` re-reads the whole collection instead of resuming from the
-  /// cursor: a cheap safety net (say once a day) against a commit that took
-  /// longer than `pullOverlap` to become visible.
+  /// Pull then push for the signed-in account. Concurrent callers for the
+  /// same account share one run. `full` re-reads the whole collection instead
+  /// of resuming from the cursor: a cheap safety net (say once a day) against
+  /// a commit that took longer than `pullOverlap` to become visible.
   @discardableResult
   public func sync(full: Bool = false) async throws -> SyncReport {
-    if let running = syncTask {
-      return try await running.value
+    let uid = await session.currentUID()
+    // Join only a run that covers this request: a run for the previous
+    // account, or one that skips the full re-read, would not.
+    if let running = syncRun, running.uid == uid, running.full || !full {
+      return try await running.task.value
     }
-    let task = Task { try await self.runSync(full: full) }
-    syncTask = task
-    defer { syncTask = nil }
+    runCounter += 1
+    let id = runCounter
+    let previous = syncRun?.task
+    let task = Task { () async throws -> SyncReport in
+      _ = await previous?.result
+      defer { if self.syncRun?.id == id { self.syncRun = nil } }
+      return try await self.runSync(full: full)
+    }
+    syncRun = SyncRun(id: id, uid: uid, full: full, task: task)
     return try await task.value
+  }
+
+  private struct SyncRun {
+    var id: Int
+    var uid: String?
+    var full: Bool
+    var task: Task<SyncReport, any Error>
   }
 
   /// Deletes the account, in the order App Store review and Apple require:
@@ -179,10 +200,17 @@ public actor TrophySync<Payload: SyncPayload> {
   /// An interruption leaves `deletingAccount` set: sync stays off for that
   /// account until a retry (with a new Apple credential) completes.
   public func deleteAccount(reauthentication credential: AppleCredential) async throws {
-    try await loadIfNeeded()
     guard let code = credential.authorizationCode, !code.isEmpty else { throw SyncError.missingAuthorizationCode }
+    guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
+    // Before the first suspension: a sync started from here on (the app syncs
+    // after edits) refuses, so nothing can be pushed or pulled back in while
+    // documents are deleted and the uid forgotten.
+    deletionUnderway = true
+    defer { deletionUnderway = false }
+    try await loadIfNeeded()
     guard let uid = await session.currentUID() else { throw SyncError.notSignedIn }
-    if let running = syncTask { _ = try? await running.value }
+    // Runs are chained, so the newest one finishes after every earlier one.
+    if let running = syncRun { _ = await running.task.result }
     do {
       try await session.reauthenticate(with: credential)
     } catch AuthError.reauthenticationMismatch {
@@ -203,7 +231,7 @@ public actor TrophySync<Payload: SyncPayload> {
   private func runSync(full: Bool) async throws -> SyncReport {
     try await loadIfNeeded()
     guard let uid = await session.currentUID() else { throw SyncError.notSignedIn }
-    if state.deletingAccount == uid { throw SyncError.accountDeletionInProgress }
+    if deletionUnderway || state.deletingAccount == uid { throw SyncError.accountDeletionInProgress }
     var report = SyncReport()
     // Adopt on a change of account, and whenever trophies were made signed
     // out since (a sign-out keeps the same account active).

@@ -390,6 +390,81 @@ struct TrophySyncTests {
     #expect(try await phone.sync.snapshot().deletingAccount == nil)
   }
 
+  @Test("a sync started while deletion re-authenticates refuses to run")
+  func syncDuringDeletion() async throws {
+    let cloud = FakeFirebase()
+    let phone = await Device(cloud)
+    try await phone.sync.signIn(with: appleCredential())
+    let uid = try #require(await cloud.uid(forAppleSub: "apple-owner"))
+    try await phone.sync.save(.make("t1"))
+    try await phone.sync.sync()
+    try await phone.sync.save(.make("t2"))
+
+    // The app's "sync after edits" fires while Apple's sign-in is in flight.
+    let engine = phone.sync
+    let racing = Slot<Result<SyncReport, any Error>>()
+    await cloud.onceBefore("auth.signInWithIdp") {
+      do {
+        await racing.set(.success(try await engine.sync()))
+      } catch {
+        await racing.set(.failure(error))
+      }
+    }
+    await cloud.clearCalls()
+    try await phone.sync.deleteAccount(reauthentication: appleCredential(code: "c"))
+
+    let outcome = try #require(await racing.value)
+    #expect(throws: SyncError.accountDeletionInProgress) { try outcome.get() }
+    #expect(
+      await cloud.callKinds
+        == ["auth.signInWithIdp", "firestore.list", "firestore.commit", "firestore.list", "auth.revokeToken", "auth.delete"]
+    )
+    #expect(await cloud.documents(in: "users/\(uid)/trophies").isEmpty)
+    #expect(try await phone.sync.snapshot().records.isEmpty)
+    await #expect(throws: SyncError.notSignedIn) { try await phone.sync.sync() }
+  }
+
+  @Test("signing in as another account runs its own sync, not the previous account's")
+  func signInDoesNotJoinPreviousSync() async throws {
+    let cloud = FakeFirebase()
+    let pad = await Device(cloud)
+    try await pad.sync.signIn(with: appleCredential(sub: "owner-b"))
+    try await pad.sync.save(.make("b1", name: "Water"))
+    try await pad.sync.sync()
+
+    let phone = await Device(cloud)
+    try await phone.sync.signIn(with: appleCredential(sub: "owner-a"))
+    let uidA = try #require(await cloud.uid(forAppleSub: "owner-a"))
+    try await phone.sync.save(.make("a1"))
+
+    // A's push is held at its commit while the device switches to B.
+    let engine = phone.sync
+    let sessions = phone.sessions
+    let switched = Slot<Task<SyncReport, any Error>>()
+    await cloud.onceBeforeCommit {
+      let signIn = Task {
+        try await engine.signOut(flush: false)
+        return try await engine.signIn(with: appleCredential(sub: "owner-b"))
+      }
+      await switched.set(signIn)
+      while true {
+        let current = await sessions.currentUID()
+        if current != nil && current != uidA { break }
+        try? await Task.sleep(nanoseconds: 2_000_000)
+      }
+      // Let signIn reach sync() while A's run is still in flight.
+      try? await Task.sleep(nanoseconds: 20_000_000)
+    }
+    let reportA = try await phone.sync.sync()
+    #expect(reportA.pushed == 1)
+
+    let reportB = try await #require(await switched.value).value
+    #expect(reportB.pulled == 1)
+    #expect(reportB.pushed == 0)
+    #expect(try await phone.names() == ["b1": "Water"])
+    #expect(try await phone.sync.snapshot().activeOwner == cloud.uid(forAppleSub: "owner-b"))
+  }
+
   @Test("deletion refuses a different Apple ID and a missing authorization code")
   func deletionGuards() async throws {
     let cloud = FakeFirebase()
@@ -597,4 +672,10 @@ struct FlatPayload: SyncPayload, Identifiable {
     id = try container.decode(String.self, forKey: Key("id"))
     count = container.allKeys.count - 1
   }
+}
+
+/// A value handed out of a hook.
+actor Slot<Value: Sendable> {
+  private(set) var value: Value?
+  func set(_ value: Value) { self.value = value }
 }

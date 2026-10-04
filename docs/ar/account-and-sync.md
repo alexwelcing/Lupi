@@ -117,7 +117,7 @@ The Swift emulator suite also drives the rules over REST: wrong schema, an extra
 - `clientUpdatedAt` is the device clock at microsecond precision, kept strictly increasing per record.
 - A delete becomes a tombstone, unless the trophy never left the device; then it simply disappears.
 
-**`sync()`** runs pull then push. Concurrent calls share one run.
+**`sync()`** runs pull then push. Concurrent calls for the same account share one run (a plain call joins a full one, not the other way round). Runs never overlap: each waits for the one before it, so a sign-in as another account starts its own run after the previous account's finishes.
 
 1. **Adopt.** If the signed-in uid is not `activeOwner`, or trophies were made signed out, those trophies take the uid as owner. They join the outbox and are never dropped. This is saved before any network call.
 2. **Pull.**
@@ -167,7 +167,7 @@ App Store Review Guideline 5.1.1(v): "If your app supports account creation, you
 1. **Re-authenticate.** `signInWithIdp` again. Deleting a user needs a recent sign-in ([Firebase](https://firebase.google.com/docs/auth/ios/manage-users); `CREDENTIAL_TOO_OLD_LOGIN_AGAIN` otherwise), and revocation needs a valid ID token.
    - A different Apple ID is refused (`.reauthenticatedAsDifferentAccount`).
    - If that sign-in just created an empty account, it is deleted again.
-2. **Mark `deletingAccount = uid`.** From here on, sync refuses to run for that account, so local copies cannot be pushed back up.
+2. **Mark `deletingAccount = uid`.** From here on, sync refuses to run for that account, so local copies cannot be pushed back up. In memory the gate closes earlier, before step 1: a sync already running is waited out, and one started during the deletion (say the app's sync after an edit) refuses with `accountDeletionInProgress`.
 3. **Delete every trophy document.** It lists `users/{uid}/trophies` (field mask `deleted`) and commits deletes until the list is empty.
 4. **Revoke Apple's tokens.** `POST https://identitytoolkit.googleapis.com/v2/accounts:revokeToken?key=…` with `{"idToken":…,"providerId":"apple.com","token":<authorizationCode>,"tokenType":"CODE"}`. The endpoint and fields come from the firebase-ios-sdk source ([RevokeTokenRequest.swift](https://github.com/firebase/firebase-ios-sdk/blob/main/FirebaseAuth/Sources/Swift/Backend/RPC/RevokeTokenRequest.swift), `useIdentityPlatform: true` selects `/v2/` in [IdentityToolkitRequest.swift](https://github.com/firebase/firebase-ios-sdk/blob/main/FirebaseAuth/Sources/Swift/Backend/IdentityToolkitRequest.swift)) and from the [Identity Platform reference](https://cloud.google.com/identity-platform/docs/reference/rest/v2/accounts/revokeToken).
    - The SDK sends `tokenType` as the enum number in a string, `"3"`. We send the enum name `"CODE"`; proto3 JSON accepts both.
