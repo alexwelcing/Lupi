@@ -24,7 +24,8 @@ public struct RingAnalysis: Sendable, Equatable {
     public var ringBond: [Bool]
     /// Independent cycles over the analysed kinds: bonds − atoms + components.
     public var cycleCount: Int
-    /// Smallest set of smallest rings, or nil when the ring bonds exceed `ringSearchLimit`.
+    /// Smallest set of smallest rings, by size then atoms; nil when a ring
+    /// system has more than `ringSearchLimit` ring bonds.
     public var smallestRings: [Ring]?
     public var systems: [RingSystem]
 
@@ -32,7 +33,8 @@ public struct RingAnalysis: Sendable, Equatable {
 }
 
 extension BondGraph {
-    /// Above this many ring bonds the ring search is skipped (colossi); cycle counts still hold.
+    /// A ring system with more ring bonds than this skips the ring search
+    /// (colossi); cycle counts and ring systems still hold.
     public static let ringSearchLimit = 6000
 
     /// Rings over covalent bonds by default; metal coordination would make
@@ -42,13 +44,32 @@ extension BondGraph {
         let active = bonds.indices.filter { kinds.contains(bonds[$0].kind) }
         let components = self.components(kinds: kinds).count
         let cycleCount = active.count - atomCount + components
-        let ringIndices = bonds.indices.filter { ringBond[$0] }
-        let smallest = ringIndices.count <= Self.ringSearchLimit
-            ? smallestRings(ringBond: ringBond, ringIndices: ringIndices) : nil
+        let groups = ringGroups(ringBond: ringBond)
+        var smallest: [Ring]? = []
+        for group in groups {
+            guard group.bonds.count <= Self.ringSearchLimit else {
+                smallest = nil
+                break
+            }
+            smallest?.append(contentsOf: smallestRings(ringBond: ringBond, group: group))
+        }
+        smallest?.sort { $0.size != $1.size ? $0.size < $1.size : $0.atoms.lexicographicallyPrecedes($1.atoms) }
         return RingAnalysis(
             ringBond: ringBond, cycleCount: cycleCount, smallestRings: smallest,
-            systems: ringSystems(ringBond: ringBond, molecule: molecule)
+            systems: ringSystems(groups, molecule: molecule)
         )
+    }
+
+    /// Atoms and ring bonds of each ring system, ordered by lowest atom.
+    func ringGroups(ringBond: [Bool]) -> [(atoms: [Int], bonds: [Int])] {
+        let nonRing = Set(bonds.indices.filter { !ringBond[$0] })
+        let groups = components(kinds: BondGraph.allKinds, excluding: nonRing).filter { $0.count > 2 }
+        // One pass over the ring bonds, so many small systems stay linear.
+        var label = [Int](repeating: -1, count: atomCount)
+        for (g, members) in groups.enumerated() { for atom in members { label[atom] = g } }
+        var groupBonds = [[Int]](repeating: [], count: groups.count)
+        for k in bonds.indices where ringBond[k] && label[bonds[k].i] >= 0 { groupBonds[label[bonds[k].i]].append(k) }
+        return zip(groups, groupBonds).map { ($0, $1) }
     }
 
     /// Bridges by Tarjan's low-link, iteratively so a million-atom chain cannot overflow the stack.
@@ -98,16 +119,12 @@ extension BondGraph {
     /// a greedy pick, smallest first, of cycles independent over GF(2) until
     /// there are as many as the ring bonds' cycle count. Deterministic: ties
     /// break on the sorted atom list.
-    func smallestRings(ringBond: [Bool], ringIndices: [Int]) -> [Ring] {
+    func smallestRings(ringBond: [Bool], group: (atoms: [Int], bonds: [Int])) -> [Ring] {
+        let ringIndices = group.bonds
         guard !ringIndices.isEmpty else { return [] }
         let column = Dictionary(uniqueKeysWithValues: ringIndices.enumerated().map { ($0.element, $0.offset) })
         let words = (ringIndices.count + 63) / 64
-        var ringAtoms = Set<Int>()
-        for k in ringIndices { ringAtoms.insert(bonds[k].i); ringAtoms.insert(bonds[k].j) }
-        let nonRing = Set(bonds.indices.filter { !ringBond[$0] })
-        let ringComponents = components(kinds: BondGraph.allKinds, excluding: nonRing)
-            .filter { $0.count > 1 || ringAtoms.contains($0[0]) }.count
-        let target = ringIndices.count - ringAtoms.count + ringComponents
+        let target = ringIndices.count - group.atoms.count + 1
 
         var candidates: [(atoms: [Int], key: [Int], edges: [UInt64])] = []
         var seen = Set<[Int]>()
@@ -187,20 +204,15 @@ extension BondGraph {
         return rings
     }
 
-    func ringSystems(ringBond: [Bool], molecule: Molecule) -> [RingSystem] {
-        let nonRing = Set(bonds.indices.filter { !ringBond[$0] })
-        var systems: [RingSystem] = []
-        for members in components(kinds: BondGraph.allKinds, excluding: nonRing) where members.count > 2 {
-            let memberSet = Set(members)
-            let bondCount = bonds.indices.filter { ringBond[$0] && memberSet.contains(bonds[$0].i) }.count
-            let cycles = bondCount - members.count + 1
-            guard cycles >= 1 else { continue }
-            systems.append(RingSystem(
-                atoms: members, bondCount: bondCount, cycleCount: cycles,
-                isCage: cycles >= 3 && isGlobular(members, molecule: molecule)
-            ))
+    func ringSystems(_ groups: [(atoms: [Int], bonds: [Int])], molecule: Molecule) -> [RingSystem] {
+        groups.compactMap { group in
+            let cycles = group.bonds.count - group.atoms.count + 1
+            guard cycles >= 1 else { return nil }
+            return RingSystem(
+                atoms: group.atoms, bondCount: group.bonds.count, cycleCount: cycles,
+                isCage: cycles >= 3 && isGlobular(group.atoms, molecule: molecule)
+            )
         }
-        return systems
     }
 
     private func isGlobular(_ atoms: [Int], molecule: Molecule) -> Bool {

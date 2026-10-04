@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import LupiChem
 
@@ -242,5 +243,32 @@ struct ValenceTests {
         #expect(abs(Valence.restLength(6, 1, kind: .covalent) - 1.07) < 1e-12)
         #expect(abs(Valence.restLength(11, 17, kind: .ionicContact) - 2.83) < 1e-12)
         #expect(abs(Valence.restLength(26, 6, kind: .coordination) - (1.52 + 0.76)) < 1e-12)
+    }
+}
+
+@Suite("graph scale")
+struct GraphScaleTests {
+    /// 2,000 separate benzene rings: ring systems must be found in one pass, not one scan per system.
+    @Test func manySmallRingSystemsStayLinear() {
+        var atomicNumbers: [Int] = []
+        var positions: [Vec3] = []
+        var bonds: [GraphBond] = []
+        for copy in 0..<2000 {
+            let base = atomicNumbers.count
+            let offset = Vec3(Double(copy % 50) * 6, Double(copy / 50) * 6, 0)
+            for k in 0..<6 {
+                let t = Double(k) * .pi / 3
+                atomicNumbers.append(6)
+                positions.append(offset + Vec3(1.39 * cos(t), 1.39 * sin(t), 0))
+                bonds.append(GraphBond(i: base + k, j: base + (k + 1) % 6, order: .delocalized, length: 1.39))
+            }
+        }
+        let molecule = Molecule(atomicNumbers: atomicNumbers, positions: positions)
+        let graph = BondGraph(atomCount: molecule.count, bonds: bonds)
+        let rings = graph.rings(molecule: molecule)
+        #expect(rings.cycleCount == 2000)
+        #expect(rings.systems.count == 2000)
+        #expect(rings.systems.allSatisfy { $0.cycleCount == 1 && !$0.isCage })
+        #expect(rings.smallestRings?.count == 2000)
     }
 }
