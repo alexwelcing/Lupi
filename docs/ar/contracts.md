@@ -155,6 +155,7 @@ A molecule built from atoms:
 Further rules:
 
 - `atoms` equals the atom count of the coordinates. A record may reference any size (a million-atom gallery structure is one record), but `xyz` is embedded only up to 2,000 atoms, the cap of `lupi-bonds.molecular.v1` (`MOLECULAR_RECIPE_MAX_ATOMS`, `packages/core/src/bonds/classes.ts`). That also keeps an account document far below Firestore's 1 MiB limit.
+- A piece of a LupiScale structure, of any count up to a googolplex and beyond, is `source: scale` with the optional `molecule.scale` reference (`lupi.scale-ref.v1`). Both are additive to v1 and are specified in [scale-spec.md §7.4](scale-spec.md) (D14); they land before M1.
 - `formula` is recomputed from the coordinates by LupiKit, never copied from a label.
 - A fragment of a fragment is `kind: broken` with `parent.source: fragment`.
 - An OMol25-derived fragment or built molecule keeps OMol25's CC BY 4.0 attribution: its XYZ comment carries `source=omol25:<collection>:<row>` and `license=CC-BY-4.0`, and the app shows the attribution with it.
@@ -235,6 +236,7 @@ public struct RootTransform: Codable, Sendable, Hashable {
 - A placement whose trophy no longer exists in the collection is dropped on load. A trophy may appear in at most one placement across all shelves; pinning it elsewhere moves it.
 - Deleting a shelf deletes its directory: map, snapshot and record. Deleting the account does not touch shelves; "Erase this device's collection" does.
 - At most 60 placements per shelf (plan §3.4).
+- A placement of a `source: scale` trophy stores `scale = 0` and an optional `spanMetres`, because metres per ångström cannot express a googolplex at 20 cm ([scale-spec.md §7.5](scale-spec.md)).
 
 ---
 
@@ -364,7 +366,7 @@ Inputs: the coordinates and elements, the game graph (LupiKit's port of `lupi-bo
 | `soundFamily` | clack | thwap | tink | boing |
 | `hapticSharpness` | 0.8 | 0.3 | 1.0 | 0.5 |
 
-6. **Mass:** `massKg = clamp(0.2 × (M / 180)^0.4 × massScale, 0.06, 0.6)`, with M the molar mass in Da from the element table.
+6. **Mass:** `massKg = clamp(0.2 × (M / 180)^0.4 × massScale, 0.06, 0.6)`, with M the molar mass in Da from the element table. This is `lupi.feltmass.v1` up to about 1,018 Da; above that, its slow tail applies ([scale-spec.md §10.2](scale-spec.md)), so masses keep their order to a googolplex instead of clamping at 2.8 kDa.
 7. **Breaking:** `breakSpeed = base × sqrt(weakest energy / 346)`, and `breakImpulse = massKg × breakSpeed`. Both are `null` when the weakest energy is 800 kJ/mol or more (N₂, CO), and for a single atom.
 8. **Reasons:** one line naming the rule that matched, in plain words and with the number it used.
 
@@ -465,4 +467,4 @@ The 200,000-character `xyz` limit covers 2,000 atoms at about 40 characters a li
 - **No room data anywhere off the device:** no world map, snapshot or placement in any synced or uploaded contract (D7; [retention-collection.md §3.6](research/retention-collection.md)).
 - **No share format:** D12 rules out multi-user, and D7 rules out a web shelf page.
 - **No physics card:** the brief's `lupi.physics-card.v1` (per-bond Morse parameters, modes) is not needed for D8's toy physics; the personality rules derive everything on device. It can return later as an optional input to `lupi.personality.rules.v2`.
-- **No LupiPack yet:** the binary colossus format from [million-atom-ar.md §5](research/million-atom-ar.md) is specified when M3 starts.
+- **No LupiPack here:** LupiPack v1, the node records and `lupi.scale-ref.v1` are specified in [scale-spec.md](scale-spec.md) (D14), from M0. They replace the colossus format sketched in [million-atom-ar.md §5](research/million-atom-ar.md).
