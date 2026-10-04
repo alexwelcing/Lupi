@@ -54,7 +54,7 @@ The trophy record itself (`lupi.trophy.v1`) is defined by the app lane in LupiKi
 - Auth codes: `TOKEN_EXPIRED`, `INVALID_REFRESH_TOKEN`, `INVALID_ID_TOKEN`, `USER_DISABLED`, `USER_NOT_FOUND`, `CREDENTIAL_TOO_OLD_LOGIN_AGAIN`, `INVALID_IDP_RESPONSE`, `MISSING_OR_INVALID_NONCE`, `OPERATION_NOT_ALLOWED`, `EMAIL_EXISTS` / `FEDERATED_USER_ID_ALREADY_LINKED` (which may arrive in a 200 as `errorMessage`, or as `needConfirmation`), `PROJECT_NUMBER_MISMATCH`, `TOO_MANY_ATTEMPTS_TRY_LATER`.
 - Key problems: `keyInvalid` / `API_KEY_INVALID`, and `API_KEY_IOS_APP_BLOCKED` / `ipRefererBlocked`.
 
-An error that ends the session (expired, invalid refresh token, disabled, user gone) clears the stored session, so the app shows itself signed out instead of failing every call.
+An error that ends the session (expired, invalid refresh token, disabled, user gone) clears the stored session, so the app shows itself signed out instead of failing every call. Unless the refresh already said `USER_NOT_FOUND`, `SessionManager` first asks `accounts:lookup` with the last ID token; `USER_NOT_FOUND` there ("There is no user record corresponding to this identifier. The user may have been deleted.", [Auth REST](https://firebase.google.com/docs/reference/rest/auth)) turns the error into `.userNotFound`.
 
 **Audience.** Apple puts the app's bundle ID in the identity token's `aud`. Firebase's guide says to register the bundle ID when adding the iOS app to the project ([Firebase](https://firebase.google.com/docs/auth/ios/apple)). The Identity Platform config behind the Apple provider has `appleSignInConfig.bundleIds`, "a list of Bundle ID's usable by this project" ([Identity Platform](https://cloud.google.com/identity-platform/docs/reference/rest/v2/projects.defaultSupportedIdpConfigs)). **UNCONFIRMED:** that adding the iOS app in the console fills `bundleIds`. The checklist (§7) verifies it directly.
 
@@ -179,7 +179,12 @@ If any step fails, `deletingAccount` stays set. The app shows "Finish deleting y
 
 **Backstop.** `deleteUserData` is a 1st-gen Auth `onDelete` trigger (`firebase-functions/v1`; firebase-functions 6 has no 2nd-gen user-deleted event, and `onUserDeleted` arrives in later majors, see [Firebase](https://firebase.google.com/docs/functions/auth-events)). It recursively deletes `users/{uid}` and retries on failure. That covers an interrupted client and a deletion from the console. Bulk `deleteUsers()` fires no event ([Firebase](https://firebase.google.com/docs/functions/auth-events)).
 
-**Elsewhere.** If the account is deleted on the iPad, the iPhone learns at its next token refresh (`USER_NOT_FOUND`) and forgets everything tied to the uid.
+**Elsewhere.** If the account is deleted on the iPad, the iPhone learns at its next token refresh and forgets everything tied to the uid, when either call says `USER_NOT_FOUND`:
+
+- the refresh itself, as production documents for a deleted user's refresh token ("It is likely the user was deleted", [Auth REST](https://firebase.google.com/docs/reference/rest/auth));
+- or the `accounts:lookup` that follows any other session-ending refresh error. The Auth emulator answers the refresh with `INVALID_REFRESH_TOKEN` and the lookup with `USER_NOT_FOUND` (firebase-tools 15.32.1, `parseIdToken` in `lib/emulator/auth/operations.js`). Production documents `USER_NOT_FOUND` for lookup; whether it says so for an expired ID token of a deleted user, rather than `INVALID_ID_TOKEN`, is **UNCONFIRMED**.
+
+Any other ending (`TOKEN_EXPIRED` after the owner's refresh tokens were revoked, `USER_DISABLED`, an `INVALID_REFRESH_TOKEN` the lookup cannot confirm) proves nothing about deletion. The device signs out but keeps that account's copies, as a sign-out does: the trophy case stays visible, edits queue, the same Apple ID resumes syncing on sign-in, and another account never sees them. If that account was in fact deleted, its copies stay on the device until the app removes them; an explicit "remove this account's trophies from this device" is a follow-up.
 
 **Residual risk.** An ID token stays valid for up to an hour after the user is deleted, and the rules cannot check revocation. A second device that is online and syncing in that hour could write a trophy back after the backstop ran. Two follow-ups would close this: a scheduled sweep of `users/*` for uids that no longer exist, or `request.auth.token.auth_time` checks. Neither is built.
 
@@ -201,7 +206,7 @@ If any step fails, `deletingAccount` stays set. The app shows "Finish deleting y
 | `runQuery` streamed array; `startAt` cursor may not name more fields than `orderBy` | [runQuery](https://firebase.google.com/docs/firestore/reference/rest/v1/projects.databases.documents/runQuery), [StructuredQuery](https://firebase.google.com/docs/firestore/reference/rest/v1/StructuredQuery) | emulator |
 | `REQUEST_TIME` is the arrival time in ms, before `updateTime` | Firestore emulator v1.22.0 (observed 340 ms) | emulator; production gap **UNCONFIRMED** |
 | Delete write result is `{}` | Firestore emulator | emulator |
-| Deleted user's refresh token | docs: `USER_NOT_FOUND`; Auth emulator: `INVALID_REFRESH_TOKEN` | both handled; both end the session |
+| Deleted user's refresh token | docs: `USER_NOT_FOUND`; Auth emulator: `INVALID_REFRESH_TOKEN` | both end the session; the emulator's case is confirmed by `accounts:lookup` (`USER_NOT_FOUND`, firebase-tools source) |
 
 ---
 

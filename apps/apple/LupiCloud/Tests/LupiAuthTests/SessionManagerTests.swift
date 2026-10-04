@@ -69,12 +69,28 @@ struct SessionManagerTests {
   @Test("a dead refresh token signs the device out")
   func deadRefreshToken() async throws {
     let transport = ScriptedTransport()
-    await transport.enqueue(.googleError(400, message: "TOKEN_EXPIRED"))
+    await transport.enqueue(
+      .googleError(400, message: "TOKEN_EXPIRED"),
+      .json(200, #"{"kind":"identitytoolkit#GetAccountInfoResponse","users":[{"localId":"u1"}]}"#)
+    )
     let store = InMemoryTokenStore(Session(uid: "u1", idToken: "id1", refreshToken: "r1", expiresAt: clock.now))
     let sessions = manager(transport, store: store)
     await #expect(throws: AuthError.tokenExpired) { _ = try await sessions.validSession() }
     #expect(try await store.load() == nil)
     await #expect(throws: AuthError.notSignedIn) { _ = try await sessions.validSession() }
+    #expect(await transport.requests.map(\.url.path) == ["/v1/token", "/v1/accounts:lookup"])
+  }
+
+  @Test("a refused refresh for a user lookup cannot find ends as a deleted account")
+  func deletedUserBehindInvalidRefreshToken() async throws {
+    let transport = ScriptedTransport()
+    // The Auth emulator's answer for a deleted user, then lookup's.
+    await transport.enqueue(.googleError(400, message: "INVALID_REFRESH_TOKEN"), .googleError(400, message: "USER_NOT_FOUND"))
+    let store = InMemoryTokenStore(Session(uid: "u1", idToken: "id1", refreshToken: "r1", expiresAt: clock.now.addingTimeInterval(200)))
+    let sessions = manager(transport, store: store)
+    await #expect(throws: AuthError.userNotFound) { _ = try await sessions.validSession() }
+    #expect(try await store.load() == nil)
+    #expect(await transport.requests.last?.bodyText == #"{"idToken":"id1"}"#)
   }
 
   @Test("a transient refresh failure keeps the session")

@@ -302,7 +302,10 @@ public actor FakeFirebase: HTTPTransport {
 
   private func lookup(_ request: HTTPRequest) -> HTTPResponse {
     if let error = requireKey(request) { return error }
-    guard let user = validUser(idToken: jsonBody(request)["idToken"] as? String) else {
+    let idToken = jsonBody(request)["idToken"] as? String
+    guard let user = validUser(idToken: idToken) else {
+      // A live token of a deleted user, as Firebase and the emulator answer it.
+      if let idToken, let entry = idTokens[idToken], entry.expires > now { return authError("USER_NOT_FOUND") }
       return authError("INVALID_ID_TOKEN")
     }
     return json([

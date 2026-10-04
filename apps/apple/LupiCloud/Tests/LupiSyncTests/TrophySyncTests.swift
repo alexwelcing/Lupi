@@ -501,6 +501,46 @@ struct TrophySyncTests {
     #expect(try await phone.sync.snapshot().records.isEmpty)
   }
 
+  @Test("an account deleted elsewhere is wiped even when the refresh says INVALID_REFRESH_TOKEN")
+  func deletedElsewhereInvalidRefreshToken() async throws {
+    let cloud = FakeFirebase()
+    let phone = await Device(cloud)
+    let pad = await Device(cloud)
+    try await phone.sync.signIn(with: appleCredential())
+    try await pad.sync.signIn(with: appleCredential())
+    try await phone.sync.save(.make("t1"))
+    try await phone.sync.sync()
+    try await pad.sync.deleteAccount(reauthentication: appleCredential(code: "c"))
+
+    // Inside the refresh leeway, the ID token still live: lookup confirms.
+    await cloud.advance(3400)
+    phone.clock.advance(3400)
+    await cloud.failNext("auth.token", with: .googleError(400, message: "INVALID_REFRESH_TOKEN"))
+    await #expect(throws: AuthError.userNotFound) { try await phone.sync.sync() }
+    #expect(try await phone.sync.snapshot().records.isEmpty)
+    #expect(try await phone.sessions.currentSession() == nil)
+  }
+
+  @Test("a session that ends without proof of deletion keeps the account's copies")
+  func endedSessionKeepsCopies() async throws {
+    let cloud = FakeFirebase()
+    let phone = await Device(cloud)
+    let pad = await Device(cloud)
+    try await phone.sync.signIn(with: appleCredential())
+    try await pad.sync.signIn(with: appleCredential())
+    try await phone.sync.save(.make("t1"))
+    try await phone.sync.sync()
+    try await pad.sync.deleteAccount(reauthentication: appleCredential(code: "c"))
+
+    // The ID token has expired too, so lookup cannot tell: signed out, kept.
+    await cloud.advance(3700)
+    phone.clock.advance(3700)
+    await cloud.failNext("auth.token", with: .googleError(400, message: "INVALID_REFRESH_TOKEN"))
+    await #expect(throws: AuthError.invalidRefreshToken) { try await phone.sync.sync() }
+    #expect(try await phone.sessions.currentSession() == nil)
+    #expect(try await phone.names() == ["t1": "Caffeine"])
+  }
+
   @Test("local validation: id, size and width")
   func validation() async throws {
     let cloud = FakeFirebase()

@@ -136,12 +136,31 @@ public actor SessionManager: AccessTokenProvider {
     } catch let error as AuthError where error.endsSession {
       // The refresh token is dead (expired, disabled, deleted user): forget it
       // so the app shows itself signed out rather than failing every call.
+      var ending = error
+      if error != .userNotFound, startedFor == generation, await accountIsGone(current) {
+        ending = .userNotFound
+      }
       if startedFor == generation {
         generation += 1
         session = nil
         try? await store.clear()
       }
-      throw error
+      throw ending
+    }
+  }
+
+  /// Whether accounts:lookup says the user no longer exists. Production
+  /// documents USER_NOT_FOUND for a deleted user's refresh token, but the
+  /// Auth emulator answers INVALID_REFRESH_TOKEN; lookup with the last ID
+  /// token tells a deleted account apart from a revoked or disabled one.
+  private func accountIsGone(_ session: Session) async -> Bool {
+    do {
+      _ = try await client.lookup(idToken: session.idToken)
+      return false
+    } catch AuthError.userNotFound {
+      return true
+    } catch {
+      return false
     }
   }
 
