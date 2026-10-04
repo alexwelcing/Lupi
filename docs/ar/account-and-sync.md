@@ -222,15 +222,18 @@ Project `shed-489901`, team `26Y4SLFJ4M`, bundle ID `live.lupi.app`.
    - Then run, from the repo root:
      ```bash
      npm --prefix functions ci
-     npx firebase-tools deploy --only firestore:rules,functions:deleteUserData --project shed-489901
+     npx firebase-tools@15 deploy --only firestore:rules,functions:deleteUserData --project shed-489901
      ```
    - The functions `predeploy` builds with `tsc`. Deploying only `deleteUserData` leaves the existing functions untouched. A 1st-gen Auth trigger deploys to `us-central1` like the others.
+   - **Runtime.** `functions/package.json` sets `engines.node` to `"22"`, so the deploy uses `nodejs22` (1st gen supports it until its decommission on 2027-10-31). Node.js 20 is decommissioned for Cloud Functions on **2026-10-30**: "After the decommission date, you can no longer create new workloads or update existing workloads using the runtime", and "Workloads that continue to use a decommissioned runtime may be disabled" ([Google Cloud](https://docs.cloud.google.com/functions/docs/runtime-support)). `firebase.json` sets no `runtime`, so `engines` decides ([Firebase](https://firebase.google.com/docs/functions/manage-functions)).
+   - Functions deployed while `engines.node` was `"20"` keep Node.js 20 until they are redeployed. Check the runtime column in the console's Functions list, and redeploy any on Node.js 20 before 2026-10-30 (`--only functions` deploys every function in the codebase).
 9. **Optional, local proof before shipping:**
    ```bash
    npm --prefix functions run test:emulator     # rules + recursive delete
-   npx firebase-tools emulators:exec --only auth,firestore --project demo-lupi \
+   npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-lupi \
      "swift test --package-path apps/apple/LupiCloud --filter Emulator"
    ```
+   `test:emulator` fetches the Firebase CLI through `npx` (`firebase-tools@15`), since the functions package depends only on the JS SDK. The emulators need Java 21.
 10. **App wiring** (app lane):
     - Construct the clients:
       - `AuthConfiguration(apiKey: <iOS key>)` (bundle header defaults to `live.lupi.app`).

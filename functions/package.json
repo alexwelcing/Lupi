@@ -3,14 +3,14 @@
   "description": "Lupi MCP auth — API key Cloud Functions",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
     "lint": "pnpm --dir .. exec eslint functions/src",
     "test": "vitest run",
-    "test:emulator": "firebase emulators:exec --only firestore --project demo-lupi \"vitest run\"",
+    "test:emulator": "npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-lupi \"vitest run\"",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions"
   },
