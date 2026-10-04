@@ -11,6 +11,8 @@
  *                         [Na(H2O)6]+, a 0.35 Å clash, …) and seeded clusters
  *   xyz-parse.json        parser cases: comment keys, layouts, line endings
  *
+ * Bond cases also carry the web's point-mass inertia (objectFacts/inertia.ts):
+ * total mass, centre of mass, principal moments and axes, rotor class, κ.
  * Each bond case runs both recipes (and a few tolerances); each run keeps the
  * pairs, kinds, Float32 distances, counts and removed pairs with reasons.
  *
@@ -28,6 +30,7 @@ import {
   type PerceiveBondsInput,
 } from '../../packages/core/src/bonds/index';
 import { getAtomicNumberBySymbol } from '../../packages/core/src/elements';
+import { computeInertia } from '../../packages/core/src/objectFacts/inertia';
 import { parseXyzText } from '../../packages/parsers/src/xyzParser';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -252,6 +255,8 @@ function runCase(input: CaseInput) {
       });
     }
   }
+  const n = input.atomicNumbers.length;
+  const inertia = n > 0 ? computeInertia(input.atomicNumbers, input.positions, n) : null;
   return {
     name: input.name,
     source: input.source,
@@ -260,6 +265,14 @@ function runCase(input: CaseInput) {
     ...(input.chemistry !== undefined ? { chemistry: input.chemistry } : {}),
     atomicNumbers: input.atomicNumbers,
     positions: f32(input.positions),
+    inertia: inertia && {
+      mass: inertia.masses.reduce((sum, m) => sum + m, 0),
+      com: inertia.com,
+      moments: inertia.moments,
+      axes: inertia.axes,
+      rotor: inertia.rotor,
+      kappa: inertia.kappa,
+    },
     runs,
   };
 }

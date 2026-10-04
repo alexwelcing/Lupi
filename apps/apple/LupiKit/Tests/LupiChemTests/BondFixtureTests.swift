@@ -19,7 +19,17 @@ struct BondFixtureCase: Decodable {
     var chemistry: FrameChemistry?
     var atomicNumbers: [Int]
     var positions: [Double]
+    var inertia: InertiaFixture?
     var runs: [Run]
+
+    struct InertiaFixture: Decodable {
+        var mass: Double
+        var com: [Double]
+        var moments: [Double]
+        var axes: [[Double]]
+        var rotor: String
+        var kappa: Double
+    }
 
     struct Run: Decodable {
         var recipe: String
