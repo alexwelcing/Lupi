@@ -1,0 +1,19 @@
+# Lupi AR: the native Apple game
+
+Docs for `apps/apple`, the native SwiftUI + RealityKit app for iPhone Pro and iPad Pro: a physics sandbox whose building blocks are molecules, played against the real room.
+
+When two documents disagree, the one higher in this list wins.
+
+| Document | What it is |
+|---|---|
+| [decisions.md](decisions.md) | The owner's binding decisions, D1–D13 (2026-10-04). |
+| [plan.md](plan.md) | The plan of record: game pillars, architecture, physics design, the juice spec, persistence, scale, the M0–M4 roadmap, the build lane, risks and the owner's open asks. |
+| [contracts.md](contracts.md) | The data contracts: `lupi.trophy.v1`, `lupi.shelf.v1`, `lupi.personality.v1`, the lupi.live endpoints the app reads, and the proposed Firestore layout for account sync. |
+| [research/00-groundwork-brief.md](research/00-groundwork-brief.md) | The groundwork brief that led to the decisions. Superseded where the decisions disagree. |
+| [research/apple-ar-platform.md](research/apple-ar-platform.md) | Apple platform research: ARKit persistence, RealityKit physics and gestures, tooling, with an API capability table. |
+| [research/chemistry-play-physics.md](research/chemistry-play-physics.md) | Molecule physics research: bond strengths, mass and inertia, honest claims. |
+| [research/million-atom-ar.md](research/million-atom-ar.md) | Rendering a million atoms in AR: culling, LOD, the hybrid Metal renderer, frame budget. |
+| [research/repo-mobile-ar.md](research/repo-mobile-ar.md) | What the repo already has for mobile and AR, and what can be ported. |
+| [research/retention-collection.md](research/retention-collection.md) | What keeps people coming back to a persistent AR collection; privacy of room data. |
+
+Related amendments: the viewer brainstorm's "Immersive XR: defer" decision ([decisions.md](../brainstorm/2026-09-viewer-play/decisions.md#amendment-2026-10-04-native-apple-ar)) and its "no native renderer fork" line ([pocket-native-play.md](../brainstorm/2026-09-viewer-play/round2/pocket-native-play.md)) were amended on 2026-10-04 to point here.
