@@ -447,7 +447,7 @@ for t in 0 … perCopy−1:
 for t in 0 … perCopy−1:  Z[idx[pool[t]]] = toZ
 ```
 
-The salt ladder uses Cl → Br, one per copy: a 0.1 % bromide doping that makes every cell of a googolplex different and every chip unique.
+The salt ladder uses Cl → Br, one per copy: a 0.1 % bromide doping whose place is picked by each copy's own key, so neighbouring cells rarely match (two copies put their bromide on the same one of the seed's 500 chlorines with probability 1/500).
 
 #### 3.4.7 Counts
 
