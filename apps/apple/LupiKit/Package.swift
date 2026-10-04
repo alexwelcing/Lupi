@@ -14,7 +14,11 @@ let package = Package(
     targets: [
         .target(name: "LupiChem"),
         .target(name: "LupiPlay", dependencies: ["LupiChem"]),
-        .target(name: "LupiData", dependencies: ["LupiChem"]),
+        .target(
+            name: "LupiData",
+            dependencies: ["LupiChem"],
+            resources: [.copy("Resources/starters")]
+        ),
         .testTarget(name: "LupiChemTests", dependencies: ["LupiChem"]),
         .testTarget(name: "LupiPlayTests", dependencies: ["LupiPlay", "LupiChem"]),
         .testTarget(name: "LupiDataTests", dependencies: ["LupiData", "LupiChem"]),
