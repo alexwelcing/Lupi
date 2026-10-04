@@ -22,7 +22,7 @@ Deliberately left out:
 - Two-phone 'flick to a friend' (needs rooms; C115 is parked).
 - Always-on gyro parallax (a vestibular risk; the tilt window stays opt-in at 3° and off under reduced motion).
 - Drag-tied haptics on iOS web.
-- App Clips and a native renderer fork.
+- App Clips and a native renderer fork. *Amended 2026-10-04: native rendering is now in scope as a separate app, `apps/apple` (SwiftUI + RealityKit), per the owner's [AR decisions](../../../ar/decisions.md) and the [plan of record](../../../ar/plan.md). App Clips stay out.*
 - WebXR (frozen until R10).
 - Anything on `/` (zero canvases respected).
 - Any FPS numbers. The 33.3 ms figure is a detection signature, not a performance claim.
@@ -680,6 +680,8 @@ d) Uploads. /scan downsizes photos on the device and says 'uses mobile data'.
 - Make App Store screenshots in the Illustrate voice from the Daily.
 - Later, and unverified in this repo: a Daily home-screen widget through a WidgetKit target (needs a development build, not Expo Go).
 6) The WebView stays a parity bridge; there is no native renderer fork.
+
+> **Amendment 2026-10-04.** Superseded for iPhone and iPad. The owner chose a native SwiftUI + RealityKit app at `apps/apple` that takes the `live.lupi.app` bundle id and replaces this Expo shell, which is frozen as a reference ([AR decisions](../../../ar/decisions.md), D1). It has a native renderer of its own and shares data, contracts and bond rules with the web, not the web React tree (as `docs/mobile-expo.md` asks). The plan of record is [docs/ar/plan.md](../../../ar/plan.md).
 
 **Experience:** In the app, detents click during a flick, trajectories ask before streaming on cellular, stop-motion switches on exactly when Low Power Mode does, clips go to Messages in one tap, and shared links open in the app. On the web, a quiet banner appears on shared-view pages only. Keyboard and VoiceOver: native controls already carry accessibility labels, and cues never carry information on their own.
 
