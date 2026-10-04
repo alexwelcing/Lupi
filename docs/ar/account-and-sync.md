@@ -266,5 +266,5 @@ Project `shed-489901`, team `26Y4SLFJ4M`, bundle ID `live.lupi.app`.
 
 ## 8. Checks
 
-- `swift build` and `swift test` in `apps/apple/LupiCloud` (Swift 6.4, Linux): 68 tests in 11 suites, run as two test processes (27 LupiAuth, 41 LupiSync). Without the emulators, 64 run and the 4 emulator tests skip. Under `emulators:exec`, all 68 pass. A clean build including tests takes about 17 s, with zero warnings.
-- `functions`: `npm run build` (tsc) passes; `npm test` gives 29 passed and 7 skipped. `npm run test:emulator` gives 36 passed, including the 6 rules tests and the recursive-delete test against the emulator.
+- `swift build` and `swift test` in `apps/apple/LupiCloud` (Swift 6.4, Linux): 79 tests in 12 suites, run as two test processes (30 LupiAuth, 49 LupiSync). Without the emulators, 75 run and the 4 emulator tests skip. Under `emulators:exec` (§7 step 9), the 4 emulator tests pass. A clean build including tests takes about 16 s, with zero warnings.
+- `functions`: `npm run build` (tsc) and `npm run lint` pass; `npm test` gives 29 passed and 7 skipped. `npm run test:emulator` (firebase-tools 15.32.1 through `npx`) gives 36 passed, including the 6 rules tests and the recursive-delete test against the emulator.
