@@ -7,7 +7,7 @@ import Testing
 /// The real wire, against the Firebase emulators with this repo's
 /// firestore.rules loaded. Runs only when both emulators are up:
 ///
-///   npx firebase-tools emulators:exec --only auth,firestore --project demo-lupi \
+///   npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-lupi \
 ///     "swift test --package-path apps/apple/LupiCloud --filter Emulator"
 enum Emulator {
   static let firestoreHost = ProcessInfo.processInfo.environment["FIRESTORE_EMULATOR_HOST"]
@@ -94,6 +94,13 @@ struct EmulatorIntegrationTests {
       #expect(error == .userNotFound || error == .invalidRefreshToken)
       #expect(error.endsSession)
     }
+    // What SessionManager asks next to tell a deleted account apart.
+    await #expect(throws: AuthError.userNotFound) { _ = try await client.lookup(idToken: refreshed.idToken) }
+    let sessions = SessionManager(
+      client: client,
+      store: InMemoryTokenStore(Session(uid: tokens.uid, idToken: refreshed.idToken, refreshToken: tokens.refreshToken, expiresAt: Date()))
+    )
+    await #expect(throws: AuthError.userNotFound) { _ = try await sessions.validSession() }
   }
 
   @Test("Firestore emulator + firestore.rules: precondition and rule statuses")

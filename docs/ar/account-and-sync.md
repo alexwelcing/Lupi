@@ -182,7 +182,7 @@ If any step fails, `deletingAccount` stays set. The app shows "Finish deleting y
 **Elsewhere.** If the account is deleted on the iPad, the iPhone learns at its next token refresh and forgets everything tied to the uid, when either call says `USER_NOT_FOUND`:
 
 - the refresh itself, as production documents for a deleted user's refresh token ("It is likely the user was deleted", [Auth REST](https://firebase.google.com/docs/reference/rest/auth));
-- or the `accounts:lookup` that follows any other session-ending refresh error. The Auth emulator answers the refresh with `INVALID_REFRESH_TOKEN` and the lookup with `USER_NOT_FOUND` (firebase-tools 15.32.1, `parseIdToken` in `lib/emulator/auth/operations.js`). Production documents `USER_NOT_FOUND` for lookup; whether it says so for an expired ID token of a deleted user, rather than `INVALID_ID_TOKEN`, is **UNCONFIRMED**.
+- or the `accounts:lookup` that follows any other session-ending refresh error. The Auth emulator answers the refresh with `INVALID_REFRESH_TOKEN` and the lookup with `USER_NOT_FOUND` (firebase-tools 15.32.1, `parseIdToken` in `lib/emulator/auth/operations.js`; the emulator suite checks both). Production documents `USER_NOT_FOUND` for lookup; whether it says so for an expired ID token of a deleted user, rather than `INVALID_ID_TOKEN`, is **UNCONFIRMED**.
 
 Any other ending (`TOKEN_EXPIRED` after the owner's refresh tokens were revoked, `USER_DISABLED`, an `INVALID_REFRESH_TOKEN` the lookup cannot confirm) proves nothing about deletion. The device signs out but keeps that account's copies, as a sign-out does: the trophy case stays visible, edits queue, the same Apple ID resumes syncing on sign-in, and another account never sees them. If that account was in fact deleted, its copies stay on the device until the app removes them; an explicit "remove this account's trophies from this device" is a follow-up.
 
@@ -206,7 +206,7 @@ Any other ending (`TOKEN_EXPIRED` after the owner's refresh tokens were revoked,
 | `runQuery` streamed array; `startAt` cursor may not name more fields than `orderBy` | [runQuery](https://firebase.google.com/docs/firestore/reference/rest/v1/projects.databases.documents/runQuery), [StructuredQuery](https://firebase.google.com/docs/firestore/reference/rest/v1/StructuredQuery) | emulator |
 | `REQUEST_TIME` is the arrival time in ms, before `updateTime` | Firestore emulator v1.22.0 (observed 340 ms) | emulator; production gap **UNCONFIRMED** |
 | Delete write result is `{}` | Firestore emulator | emulator |
-| Deleted user's refresh token | docs: `USER_NOT_FOUND`; Auth emulator: `INVALID_REFRESH_TOKEN` | both end the session; the emulator's case is confirmed by `accounts:lookup` (`USER_NOT_FOUND`, firebase-tools source) |
+| Deleted user's refresh token | docs: `USER_NOT_FOUND`; Auth emulator: `INVALID_REFRESH_TOKEN` | both end the session; the emulator's case is confirmed by `accounts:lookup` (`USER_NOT_FOUND`), checked through `SessionManager` against the Auth emulator |
 
 ---
 
