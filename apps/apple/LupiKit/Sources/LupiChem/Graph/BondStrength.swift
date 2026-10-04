@@ -36,10 +36,13 @@ public enum BondStrength {
     ]
 
     // Lupi estimates (no table value), chosen to keep the true orderings:
-    /// A pair the table lacks: the geometric mean of the two homonuclear
-    /// single bonds when both are known (Pauling's rule without the polarity
-    /// term), else this.
+    /// A pair the table lacks: Pauling's rule when both homonuclear single
+    /// bonds are known, D(A–B) = √(D(A–A)·D(B–B)) + 96.485·(χA − χB)², the
+    /// electronegativity term in eV converted to kJ/mol (it reproduces the
+    /// table's own C–Si, 318); else this.
     public static let unknownSingle = 250.0
+    /// 1 eV per particle in kJ/mol.
+    static let electronVolt = 96.485
     /// Multiple bonds the table lacks: the single bond times the C=C/C–C and C≡C/C–C ratios.
     public static let doubleRatio = 614.0 / 346.0
     public static let tripleRatio = 839.0 / 346.0
@@ -67,7 +70,9 @@ public enum BondStrength {
     static func singleBond(_ pair: ElementPair) -> Double {
         if let value = single[pair] { return value }
         if let a = single[ElementPair(pair.a, pair.a)], let b = single[ElementPair(pair.b, pair.b)] {
-            return (a * b).squareRoot()
+            let chiA = Element.forAtomicNumber(pair.a).electronegativity ?? 0
+            let chiB = Element.forAtomicNumber(pair.b).electronegativity ?? 0
+            return (a * b).squareRoot() + electronVolt * (chiA - chiB) * (chiA - chiB)
         }
         return unknownSingle
     }

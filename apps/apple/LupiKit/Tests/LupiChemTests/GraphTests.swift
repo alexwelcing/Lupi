@@ -113,8 +113,12 @@ struct GraphTests {
         #expect(BondStrength.kJPerMol(6, 6, order: .delocalized) == 480)
         #expect(BondStrength.kJPerMol(8, 6) == 358)
         #expect(BondStrength.kJPerMol(11, 17, kind: .ionicContact) == BondStrength.ionicContact)
-        // Not in the table: Pauling's geometric mean of S–S and Si–Si.
-        #expect(abs(BondStrength.kJPerMol(14, 16) - (226.0 * 222.0).squareRoot()) < 1e-12)
+        // Not in the table: Pauling's rule from S–S, Si–Si and the electronegativities.
+        #expect(abs(BondStrength.kJPerMol(14, 16) - ((226.0 * 222.0).squareRoot() + 96.485 * 0.68 * 0.68)) < 1e-9)
+        // It reproduces a table value it was not given: C–Si.
+        #expect(abs(BondStrength.singleBond(ElementPair(1000, 1001)) - BondStrength.unknownSingle) < 1e-12)
+        let carbonSilicon = (346.0 * 222.0).squareRoot() + 96.485 * (2.55 - 1.90) * (2.55 - 1.90)
+        #expect(abs(carbonSilicon - 318) < 1)
         #expect(BondStrength.kJPerMol(30, 34) == BondStrength.unknownSingle)
     }
 
