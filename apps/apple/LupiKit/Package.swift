@@ -8,9 +8,12 @@ let package = Package(
     platforms: [.iOS("26.0"), .macOS("26.0")],
     products: [
         .library(name: "LupiChem", targets: ["LupiChem"]),
+        .library(name: "LupiPlay", targets: ["LupiPlay"]),
     ],
     targets: [
         .target(name: "LupiChem"),
+        .target(name: "LupiPlay", dependencies: ["LupiChem"]),
         .testTarget(name: "LupiChemTests", dependencies: ["LupiChem"]),
+        .testTarget(name: "LupiPlayTests", dependencies: ["LupiPlay", "LupiChem"]),
     ]
 )
