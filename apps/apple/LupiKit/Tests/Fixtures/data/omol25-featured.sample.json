@@ -1,0 +1,42 @@
+{
+  "schema": "lupi.omol25-featured.v1",
+  "license": "CC-BY-4.0",
+  "citation": "Levine et al. 2025, The Open Molecules 2025 (OMol25) Dataset, arXiv:2505.08762",
+  "picks": [
+    {
+      "id": "omol25_nv_23477",
+      "collection": "neutral-validation",
+      "dataset": "colabfit/OMol25_neutral_validation",
+      "row": 23477,
+      "configurationId": "CO_5458426053358557162152355",
+      "propertyId": "PO_3044998752156953626544625",
+      "formula": "C15H18FNO",
+      "atoms": 36,
+      "elements": [
+        "C",
+        "H",
+        "F",
+        "N",
+        "O"
+      ],
+      "shelf": "drug-like",
+      "home": true,
+      "domain": "geom_orca6",
+      "domainLabel": "GEOM",
+      "charge": 0,
+      "spinMultiplicity": 1,
+      "chargeSource": "record",
+      "energyEv": -22102.5586316,
+      "maxForceEvPerA": 0.358911779552,
+      "homoLumoGapEv": 9.49459681162,
+      "title": "C15H18FNO",
+      "name": null,
+      "xyz": "/datasets/omol25/featured/omol25_nv_23477.xyz",
+      "edge": "/v1/datasets/omol25/neutral-validation/structures/23477.xyz",
+      "ink": "/og/omol25/omol25_nv_23477-ink.svg",
+      "sha256": "cb0088a392d39de109bbdef38e18f7a42aa5c1a9ff5a4d14579e0a965f3bd514",
+      "fetchedAt": "2026-10-03T17:40:57.741Z",
+      "bondRecipe": "lupi-bonds.molecular.v1"
+    }
+  ]
+}

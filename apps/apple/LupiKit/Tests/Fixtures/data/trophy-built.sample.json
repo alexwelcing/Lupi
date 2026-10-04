@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-10-04T21:30:00.000Z",
+  "earned": { "at": "2026-10-04T21:30:00.000Z", "how": "built", "note": "Snapped from loose atoms" },
+  "id": "1d2b7a40-0f4e-4a0f-8a0e-6b0c3d1e2f30",
+  "molecule": {
+    "atomCount": 3,
+    "bondRecipe": "lupi-bonds.molecular.v1",
+    "formula": "H2O",
+    "name": "Water",
+    "source": "built",
+    "structure": {
+      "atomicNumbers": [8, 1, 1],
+      "bonds": [[0, 1, 0, 2], [0, 2, 0, 2]],
+      "positions": [0, 0, 0.1173, 0, 0.7572, -0.4692, 0, -0.7572, -0.4692]
+    }
+  },
+  "plaque": "Water · H2O · built 4 Oct",
+  "schema": "lupi.trophy.v1",
+  "updatedAt": "2026-10-04T21:30:00.000Z"
+}

@@ -9,11 +9,14 @@ let package = Package(
     products: [
         .library(name: "LupiChem", targets: ["LupiChem"]),
         .library(name: "LupiPlay", targets: ["LupiPlay"]),
+        .library(name: "LupiData", targets: ["LupiData"]),
     ],
     targets: [
         .target(name: "LupiChem"),
         .target(name: "LupiPlay", dependencies: ["LupiChem"]),
+        .target(name: "LupiData", dependencies: ["LupiChem"]),
         .testTarget(name: "LupiChemTests", dependencies: ["LupiChem"]),
         .testTarget(name: "LupiPlayTests", dependencies: ["LupiPlay", "LupiChem"]),
+        .testTarget(name: "LupiDataTests", dependencies: ["LupiData", "LupiChem"]),
     ]
 )

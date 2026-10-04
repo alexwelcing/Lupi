@@ -1,0 +1,12 @@
+{
+  "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
+  "content-disposition": "inline; filename=\"omol25-neutral-validation-273.xyz\"",
+  "content-length": "472",
+  "content-type": "chemical/x-xyz; charset=utf-8",
+  "x-lupi-bond-inference": "lupi-bonds.molecular.v1",
+  "x-lupi-bond-topology": "not-provided",
+  "x-lupi-charge-provenance": "record",
+  "x-lupi-coordinate-provenance": "source",
+  "x-lupi-data-license": "CC-BY-4.0",
+  "x-lupi-data-source": "huggingface-dataset-viewer"
+}

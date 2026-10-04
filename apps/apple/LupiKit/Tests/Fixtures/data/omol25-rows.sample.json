@@ -1,0 +1,83 @@
+{
+  "dataset": "neutral-validation",
+  "repository": "colabfit/OMol25_neutral_validation",
+  "coverage": "complete",
+  "indexedRows": 27697,
+  "estimatedRows": 27697,
+  "sourceRows": 27697,
+  "offset": 273,
+  "limit": 2,
+  "returnedRows": 2,
+  "matchedRows": 27697,
+  "partial": false,
+  "query": null,
+  "formula": null,
+  "rows": [
+    {
+      "rowIndex": 273,
+      "id": "CO_85",
+      "configurationId": "CO_85",
+      "propertyId": "PO_10",
+      "formula": "H2O",
+      "reducedFormula": "H2O",
+      "elements": [
+        "H",
+        "O"
+      ],
+      "atomCount": 3,
+      "multiplicity": 1,
+      "charge": 0,
+      "spinMultiplicity": 1,
+      "chargeSource": "record",
+      "domain": "orbnet_denali",
+      "homoLumoGapEv": 6.386757202393212,
+      "method": "ωB97M-V",
+      "software": "ORCA",
+      "energy": -63330.86111298835,
+      "maxForceNorm": 3.0829408336136006,
+      "name": "water",
+      "loadUrl": "/v1/datasets/omol25/neutral-validation/structures/273.xyz",
+      "coordinateProvenance": "source",
+      "bondTopology": "not-provided"
+    },
+    {
+      "rowIndex": 274,
+      "id": "CO_86",
+      "configurationId": "CO_86",
+      "propertyId": null,
+      "formula": "C2H6O",
+      "reducedFormula": null,
+      "elements": [
+        "C",
+        "H",
+        "O"
+      ],
+      "atomCount": 9,
+      "multiplicity": null,
+      "charge": null,
+      "spinMultiplicity": null,
+      "chargeSource": "unavailable",
+      "domain": null,
+      "homoLumoGapEv": null,
+      "metaTruncated": true,
+      "method": "ωB97M-V",
+      "software": null,
+      "energy": -4214.5,
+      "maxForceNorm": null,
+      "name": null,
+      "loadUrl": "/v1/datasets/omol25/neutral-validation/structures/274.xyz",
+      "coordinateProvenance": "source",
+      "bondTopology": "not-provided"
+    }
+  ],
+  "provenance": {
+    "license": "CC-BY-4.0",
+    "attributionUrl": "https://huggingface.co/collections/colabfit/omol25-open-molecules-2025-colabfit",
+    "coordinates": "source",
+    "bondTopology": "not-provided",
+    "viewerBonds": {
+      "recipe": "lupi-bonds.molecular.v1",
+      "provenance": "inferred"
+    }
+  }
+}
