@@ -1,9 +1,28 @@
 import Foundation
 
 /// A record the engine can sync. The trophy model (lupi.trophy.v1 in
-/// LupiKit) conforms; the engine never looks inside beyond `id`.
+/// LupiKit) conforms; the engine reads only its document id and whether it
+/// marks itself deleted.
 public protocol SyncPayload: Codable, Sendable {
-  var id: String { get }
+  /// The Firestore document id; must match [A-Za-z0-9_-]{1,128}.
+  var syncID: String { get }
+  /// True for a record that carries its own tombstone (lupi.trophy.v1's
+  /// `deletedAt`). The engine syncs it as a deletion, never as a live record.
+  var isSyncTombstone: Bool { get }
+}
+
+extension SyncPayload {
+  public var isSyncTombstone: Bool { false }
+}
+
+extension SyncPayload where Self: Identifiable, ID == String {
+  public var syncID: String { id }
+}
+
+extension SyncPayload where Self: Identifiable, ID == UUID {
+  /// Uppercase hex with hyphens, as Swift encodes a UUID: the document id
+  /// contracts.md gives a trophy.
+  public var syncID: String { id.uuidString }
 }
 
 public struct TrophySyncConfiguration: Sendable, Equatable {

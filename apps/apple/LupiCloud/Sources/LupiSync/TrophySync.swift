@@ -3,7 +3,8 @@ import LupiAuth
 
 /// The local-first trophy case. Everything works signed out; signing in adopts
 /// what was made signed out and keeps the owner's devices in step through
-/// Firestore. Generic over the record so LupiKit's trophy model plugs in.
+/// Firestore. Generic over the record (`SyncPayload`) so LupiKit's trophy
+/// model plugs in.
 ///
 /// Sync is pull, then push:
 /// - pull reads documents whose server `updatedAt` is past this account's
@@ -86,11 +87,16 @@ public actor TrophySync<Payload: SyncPayload> {
 
   // MARK: - Writing (local first)
 
-  /// Adds or replaces a trophy locally and queues it for the account.
+  /// Adds or replaces a trophy locally and queues it for the account. A
+  /// record that marks its own deletion (`isSyncTombstone`) is `delete(id:)`.
   public func save(_ payload: Payload) async throws {
     try await loadIfNeeded()
-    let id = payload.id
+    let id = payload.syncID
     try Self.validate(id: id)
+    if payload.isSyncTombstone {
+      try await delete(id: id)
+      return
+    }
     _ = try encodePayload(payload)
     let uid = await session.currentUID()
     var record: LocalRecord<Payload>
@@ -539,7 +545,7 @@ public actor TrophySync<Payload: SyncPayload> {
   }
 
   private func encodePayload(_ payload: Payload) throws -> [String: FirestoreValue] {
-    let id = payload.id
+    let id = payload.syncID
     let json: Data
     do {
       json = try JSONEncoder().encode(payload)

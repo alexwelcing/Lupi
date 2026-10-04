@@ -14,7 +14,7 @@ What exists:
 | `LupiSync`: Firestore over REST, Value codec, `TrophySync<Payload>` | `apps/apple/LupiCloud/Sources/LupiSync` |
 | Emulator ports for local runs | `firebase.json` (`emulators`) |
 
-The trophy record itself (`lupi.trophy.v1`) is defined by the app lane in LupiKit and `docs/ar/contracts.md`. The sync layer does not import it: `TrophySync` is generic over any `Codable & Sendable` record with a `String` id, and stores it inside an envelope defined here.
+The trophy record itself (`lupi.trophy.v1`) is defined by the app lane in LupiKit and `docs/ar/contracts.md`. The sync layer does not import it: `TrophySync` is generic over `SyncPayload`, a `Codable & Sendable` record that gives its document id (`syncID`) and says whether it marks itself deleted (`isSyncTombstone`), and stores it inside an envelope defined here. Where this layout and contracts.md §5 differ, this one holds (§3).
 
 ---
 
@@ -78,6 +78,18 @@ Each trophy is one document at `users/{uid}/trophies/{trophyId}`:
 - The rules require exactly these keys (`hasOnly` and `hasAll`).
 - Access is owner-only by path: `request.auth.uid == uid` for get, list, create, update and delete.
 - Nothing else under `users/{uid}` is readable or writable. No index entry is needed: the pull query is one inequality on `updatedAt`, ordered by `updatedAt` then `__name__`, which the automatic single-field index serves (**UNCONFIRMED** in production; the emulator does not enforce indexes; a missing index would answer `FAILED_PRECONDITION` with a link to create it).
+
+**The record inside, and contracts.md §5.** contracts.md §5 (on the app and docs branches) proposed a different layout: the raw `lupi.trophy.v1` record as the document, string dates, last-writer-wins on the record's `updatedAt` with ties to the larger id, and `deletedAt` tombstones. `firestore.rules` admits only the envelope, so both cannot hold. This is the layout of record, and contracts.md §5 should point here when the branches merge.
+
+| | contracts.md §5 proposed | Layout of record |
+|---|---|---|
+| Document | the record | the envelope; the record is `payload` |
+| Document id | the record's `id` | `syncID`. `Identifiable` records get it free: `id.uuidString` for a `UUID` (uppercase with hyphens, as contracts.md §0 writes ids), the id itself for a `String` |
+| Dates in the record | ISO 8601 strings | Firestore timestamps (`FirestoreEncoder` writes a `Date` as `timestampValue`, truncated to microseconds), read back as `Date`. The JSON form stays LupiKit's |
+| Pull order | the record's `updatedAt` | the envelope's `updatedAt`, the server's `REQUEST_TIME`. A device whose clock runs behind cannot hide its write from the others' pulls |
+| Last writer wins | the record's `updatedAt`, ties to the larger id | the envelope's `clientUpdatedAt`, which `save()` stamps (§4). The record's own `updatedAt` travels in `payload` and is never compared. Both sides of a conflict share one id, so an id cannot break a tie; the pending local edit wins it |
+| Tombstone | `deletedAt` set, `molecule.xyz` dropped, record kept | `deleted: true` and `payload: {}`: nothing of the trophy stays on the server. `save()` of a record with `isSyncTombstone` (for a trophy, `deletedAt != nil`) is `delete(id:)`, and a pulled record with `deletedAt` counts as deleted whatever its envelope says |
+| Rules | check record fields (`name`, `molecule.source`, …) | check the envelope. The record's shape is LupiKit's validation, so adding an optional v1 field never needs a rules deploy |
 
 **Size.** Rules cannot measure a map's serialized size: maps only offer `size()` (key count). So the rules cap the top-level keys, and LupiSync holds the 256 KiB bound on the record's JSON encoding at `save()`, refusing it with `.payloadTooLarge` before anything is queued. Firestore's 1 MiB document limit is the server's hard ceiling. A hostile owner with their own token could still store up to 1 MiB per document in their own subtree. That costs them, not other users. Budget alerts and App Check are the levers if it ever matters.
 
@@ -242,7 +254,8 @@ Project `shed-489901`, team `26Y4SLFJ4M`, bundle ID `live.lupi.app`.
       - `JSONFileSyncStateStore` under Application Support.
     - Call `sync()` on launch, on foreground and a few seconds after edits, and `sync(full: true)` once a day.
     - The deletion screen starts a fresh Sign in with Apple and passes its `authorizationCode`.
-    - Make `Trophy` conform to `SyncPayload` (it needs only `id: String`).
+    - Make the trophy conform to `SyncPayload`: `extension TrophyRecord: SyncPayload { public var isSyncTombstone: Bool { deletedAt != nil } }`. `syncID` comes from `Identifiable` (`UUID` or `String` ids); any other id type implements `syncID` itself.
+    - Delete with `delete(id:)`, or `save()` the record with `deletedAt` set; both queue a tombstone. Deleted trophies leave `trophies()` at once.
 
 ---
 

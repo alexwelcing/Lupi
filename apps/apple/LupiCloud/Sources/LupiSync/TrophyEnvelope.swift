@@ -62,14 +62,18 @@ public enum TrophyEnvelope {
     }
     var payload: Payload?
     if !deleted {
+      let decoded: Payload
       do {
-        payload = try FirestoreDecoder().decode(Payload.self, fields: payloadFields)
+        decoded = try FirestoreDecoder().decode(Payload.self, fields: payloadFields)
       } catch {
         return .failure(EnvelopeProblem(id: id, reason: "payload: \(error)"))
       }
-      if payload?.id != id {
+      if decoded.syncID != id {
         return .failure(EnvelopeProblem(id: id, reason: "payload id differs from document id"))
       }
+      // A record that marks its own deletion is a tombstone whatever the
+      // envelope says; this engine never writes one live, another client might.
+      payload = decoded.isSyncTombstone ? nil : decoded
     }
     return .success(
       Decoded(

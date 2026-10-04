@@ -553,7 +553,7 @@ struct TrophySyncTests {
 }
 
 /// A payload whose keys sit at the top level, to exceed the rules' 32-key cap.
-struct FlatPayload: SyncPayload {
+struct FlatPayload: SyncPayload, Identifiable {
   var id: String
   var count: Int
 

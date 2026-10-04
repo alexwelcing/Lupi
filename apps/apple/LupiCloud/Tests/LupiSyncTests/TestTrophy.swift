@@ -3,7 +3,7 @@ import LupiSync
 
 /// Shaped like lupi.trophy.v1 (the real model lives in LupiKit): a molecule
 /// reference, a name, when and how it was earned, and its look.
-struct TestTrophy: SyncPayload, Equatable {
+struct TestTrophy: SyncPayload, Identifiable, Equatable {
   struct Molecule: Codable, Equatable, Sendable {
     var source: String
     var id: String?
