@@ -8,7 +8,8 @@ When two documents disagree, the one higher in this list wins.
 |---|---|
 | [decisions.md](decisions.md) | The owner's binding decisions, D1–D13 (2026-10-04). |
 | [plan.md](plan.md) | The plan of record: game pillars, architecture, physics design, the juice spec, persistence, scale, the M0–M4 roadmap, the build lane, risks and the owner's open asks. |
-| [contracts.md](contracts.md) | The data contracts: `lupi.trophy.v1`, `lupi.shelf.v1`, `lupi.personality.v1`, the lupi.live endpoints the app reads, and the proposed Firestore layout for account sync. |
+| [contracts.md](contracts.md) | The data contracts: `lupi.trophy.v1`, `lupi.shelf.v1`, `lupi.personality.v1`, the lupi.live endpoints the app reads, and a pointer to the Firestore layout. |
+| [account-and-sync.md](account-and-sync.md) | The trophy case on the Lupi account: Firebase Auth and Firestore over REST from pure Swift (`apps/apple/LupiCloud`), the envelope and `firestore.rules`, the sync algorithm, account deletion, and the owner's setup checklist. |
 | [research/00-groundwork-brief.md](research/00-groundwork-brief.md) | The groundwork brief that led to the decisions. Superseded where the decisions disagree. |
 | [research/apple-ar-platform.md](research/apple-ar-platform.md) | Apple platform research: ARKit persistence, RealityKit physics and gestures, tooling, with an API capability table. |
 | [research/chemistry-play-physics.md](research/chemistry-play-physics.md) | Molecule physics research: bond strengths, mass and inertia, honest claims. |

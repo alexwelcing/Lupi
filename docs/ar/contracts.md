@@ -426,37 +426,11 @@ Bounds (`PUBCHEM_DEFAULT_BOUNDS`): at most 5,000 atoms, 10,000 bonds, 2,000,000 
 
 ---
 
-## 5. Account sync: Firestore layout and proposed rules
+## 5. Account sync: Firestore layout
 
-The collection syncs to the Lupi account in the existing Firebase project `shed-489901` (D7). Today `firestore.rules` has `lupiViews`, `apiKeys`, `rateLimits` and `moleculeLibrary` and no per-user collection, so this is a **proposal for the owner to approve** before M1.
+The layout of record is [account-and-sync.md §3](account-and-sync.md#3-the-envelope-and-the-rules), and `firestore.rules` admits only it. Each trophy is one document at `users/{uid}/trophies/{syncID}` holding an envelope: `schema`, `id`, `payload` (this record), `deleted`, `updatedAt` (the server's `REQUEST_TIME`) and `clientUpdatedAt`. Last writer wins on `clientUpdatedAt`; a tombstone is `deleted: true` with an empty payload, and a record with `deletedAt` set is saved as one. The rules check the envelope, not the record, so a new optional v1 field never needs a rules deploy; LupiKit validates the record and LupiSync caps its JSON at 256 KiB.
 
-- **Path:** `users/{uid}/trophies/{trophyId}`. The document is the `lupi.trophy.v1` JSON with the same keys and the same string dates, so a record round-trips byte-for-byte through the account. No other per-user documents in v1.
-- **Sync:** push records whose `updatedAt` is newer than the last push; pull with `where updatedAt > lastPulledAt` (string order works because the dates are fixed-width); merge by last writer wins on `updatedAt`, ties broken by the larger `id`. Deletion writes a tombstone (`deletedAt` set, `molecule.xyz` removed) so other devices delete too.
-- **Account deletion:** list and batch-delete every `users/{uid}/trophies` document, revoke the Sign in with Apple token, then delete the Firebase user (plan §6.2).
-
-Proposed rules, in the style of the current file:
-
-```
-match /users/{uid}/trophies/{trophyId} {
-  function mine() {
-    return request.auth != null && request.auth.uid == uid;
-  }
-  function validTrophy() {
-    let d = request.resource.data;
-    return d.schema == 'lupi.trophy.v1'
-      && d.id == trophyId
-      && d.molecule.source in ['gallery', 'omol25', 'pubchem', 'built', 'fragment']
-      && d.molecule.atoms is int && d.molecule.atoms >= 1
-      && d.molecule.get('xyz', '').size() <= 200000
-      && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
-      && d.updatedAt is string && d.createdAt is string;
-  }
-  allow read, delete: if mine();
-  allow create, update: if mine() && validTrophy();
-}
-```
-
-The 200,000-character `xyz` limit covers 2,000 atoms at about 40 characters a line with room to spare, and keeps documents well under Firestore's 1 MiB maximum.
+This replaces the earlier proposal here (the raw record as the document, string dates, last writer wins on the record's `updatedAt`), which account-and-sync.md §3 compares point by point.
 
 ---
 
