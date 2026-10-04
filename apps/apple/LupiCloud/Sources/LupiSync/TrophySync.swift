@@ -498,7 +498,9 @@ public actor TrophySync<Payload: SyncPayload> {
     for (id, record) in state.records where record.owner == uid {
       state.records[id] = nil
     }
-    state.outbox.removeAll { state.records[$0] == nil }
+    // Read a copy: the closure may not touch `state` while removeAll mutates it.
+    let records = state.records
+    state.outbox.removeAll { records[$0] == nil }
     state.cursors[uid] = nil
     if state.activeOwner == uid { state.activeOwner = nil }
   }

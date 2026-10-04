@@ -349,6 +349,22 @@ struct TrophySyncTests {
     #expect(try await phone.names().isEmpty)
   }
 
+  @Test("deleting an account with unsynced edits forgets them too")
+  func deletionWithPendingEdits() async throws {
+    let cloud = FakeFirebase()
+    let phone = await Device(cloud)
+    try await phone.sync.signIn(with: appleCredential())
+    try await phone.sync.save(.make("t1"))
+    try await phone.sync.sync()
+    try await phone.sync.save(.make("t2"))
+    try await phone.sync.save(.make("t1", name: "Theine"))
+    #expect(try await phone.sync.outbox().count == 2)
+
+    try await phone.sync.deleteAccount(reauthentication: appleCredential(code: "c"))
+    let state = try await phone.sync.snapshot()
+    #expect(state.records.isEmpty && state.outbox.isEmpty)
+  }
+
   @Test("an interrupted deletion keeps sync off until a retry finishes it")
   func interruptedDeletion() async throws {
     let cloud = FakeFirebase()
