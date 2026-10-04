@@ -62,7 +62,7 @@ Kept from the brief: the native SwiftUI + RealityKit app at `apps/apple` taking 
 | **Lupi app** | `apps/apple` (one universal iPhone + iPad target, `live.lupi.app`, iOS 26.0) | SwiftUI shell (Play, Cabinet, Settings); RealityView play space; ARSession, scene mesh and world maps; RealityKit bodies, gestures, collisions; Core Haptics; spatial audio; Firebase account and sync | macOS runner with Xcode (compile on every push) |
 | **LupiEngine** | later, M3 | Metal colossus renderer inside RealityView post-processing: cluster culling, LOD tiers, impostors ported from WGSL and TSL | Mac only |
 
-LupiKit carries everything that can be decided without a device, so the logic that makes the game fun is unit-tested on Linux. Two Linux rules keep it portable: no `import simd` (quaternions and transforms are LupiKit's own value types over `SIMD3<Float>`/`SIMD4<Float>`, which are standard library), and no CryptoKit (SHA-256 is implemented in LupiKit against the NIST test vectors). LupiKit must also compile with the Swift that the macOS runner's Xcode ships (Swift 6.2 on Xcode 26.6), so it avoids features newer than its tools version even though the local Linux toolchain is 6.4.
+LupiKit carries everything that can be decided without a device, so the logic that makes the game fun is unit-tested on Linux. Two Linux rules keep it portable: no `import simd` (quaternions and transforms are LupiKit's own value types over `SIMD3<Float>`/`SIMD4<Float>`, which are standard library), and no CryptoKit (SHA-256 is implemented in LupiKit against the NIST test vectors). LupiKit must also compile with the Swift that the macOS runner's Xcode 26.x ships (6.2 or later; Xcode 26 introduced Swift 6.2, [apple-ar-platform.md §1](research/apple-ar-platform.md)), so it avoids features newer than its tools version even though the local Linux toolchain is 6.4.
 
 ### 3.2 Runtime stack
 
@@ -144,7 +144,7 @@ Fun first (D8). The numbers below are starting values: the owner tunes them on t
 
 - **Felt mass** compresses molar mass M (from `ELEMENT_DATA[z].mass`) so the ordering stays true and the range fits RealityKit's 10× guidance:
   `massKg = clamp(0.2 × (M / 180 Da)^0.4 × massScale, 0.06, 0.6)`.
-  Water weighs 0.08, glucose 0.2, C₆₀ (bouncy, massScale 0.8) 0.28, and hemoglobin hits the 0.6 ceiling (est.). The exponent sits in the brief's γ = 0.3–0.5 band ([chemistry-play-physics.md §4.4](research/chemistry-play-physics.md)). Learn says the feel is compressed and shows the real molar mass.
+  Water weighs 0.08, glucose 0.2, C₆₀ (bouncy, massScale 0.8) 0.28, and hemoglobin hits the 0.6 ceiling (est.). The exponent sits in the brief's γ = 0.3–0.5 band ([chemistry-play-physics.md §4.4](research/chemistry-play-physics.md)). The "Toy physics" info sheet says the feel is compressed, and the plaque shows the real molar mass.
 - **Inertia** keeps the true shape of the molecule's inertia tensor: each principal moment is `massKg × (I_i / M) × s²`, with `I_i` the point-mass principal moments in amu·Å² and the axes from the same diagonalisation (`lupi.object-facts.v1`, `packages/core/src/objectFacts/types.ts`). The smallest moment is floored at 0.02 × the largest, as the web's free-spin coast does for linear rotors (`packages/ui/src/camera/trueSpinCoast.ts`), to keep the solver stable.
 - **Tumble.** With true moments, an asymmetric top thrown spinning about its middle axis should flip (the tennis-racket effect). Whether RealityKit's solver keeps the gyroscopic terms that need is **UNCONFIRMED** ([chemistry-play-physics.md §2](research/chemistry-play-physics.md)); spike A3 checks it. If it does not, LupiKit's port of `trueSpinCoast.ts` drives the orientation while the body is airborne and hands back to RealityKit on first contact.
 - Mass does not change with toy scale while a body is dynamic (0.5×–3× of spawn size), which keeps the 10× band.
@@ -177,9 +177,9 @@ All values are starting points **(est.)**. A personality never claims to be chem
 ### 4.4 Breaking
 
 - **Impact strength.** Each collision pair reports `impulse` (N·s) and `impulseDirection` on `CollisionEvents.Began` and `CollisionEvents.Updated` (iOS 13; [Began](https://developer.apple.com/documentation/realitykit/collisionevents/began), [Updated](https://developer.apple.com/documentation/realitykit/collisionevents/updated)). We take the largest impulse within 50 ms of the first contact (a first-contact impulse can read low) and convert it to a velocity change, `Δv = J / m_eff`, with `m_eff` the body's mass against the world or the reduced mass of two bodies. A pair is quiet for 80 ms after it fires.
-- **Threshold.** A body breaks when `Δv ≥ breakSpeed × sqrt(D_weakest / 346 kJ/mol)`: the personality sets the base, and the weakest bond scales it (a peroxide gives way at about 64 % of a C–C molecule's speed). `breakImpulse` in the contract is that speed times the mass. A fresh fragment cannot break again for 0.25 s, so one hit never turns into dust.
+- **Threshold.** A body breaks when `Δv ≥ base × sqrt(D_weakest / 346 kJ/mol)`: the personality sets the base, and the weakest bond scales it (a peroxide gives way at about 64 % of a C–C molecule's speed). That product is `breakSpeed` in the contract, and `breakImpulse` is `breakSpeed` times the mass. A fresh fragment cannot break again for 0.25 s, so one hit never turns into dust.
 - **Where it breaks: graph cut at the weakest bond class.**
-  1. Find the bridges of the covalent graph (bonds whose removal splits it; ring bonds are never bridges).
+  1. Find the bridges of the bond graph, covalent bonds, coordination bonds and ionic contacts together (bonds whose removal splits it; ring bonds are never bridges).
   2. Take the bridges in the weakest energy class (within 10 % of the minimum). Coordination bonds and ionic contacts count as their own, weaker classes and go first.
   3. Cut the one nearest the contact point, in body coordinates. A hydrogen always leaves with its partner unless the X–H bond itself is the cut.
   4. A molecule with no bridges (a cage or a fused ring system) chips instead: the heavy atom nearest the contact leaves with its hydrogens, cutting all of its bonds.
@@ -199,12 +199,12 @@ All values are starting points **(est.)**. A personality never claims to be chem
 
 - Compound spheres fixed in one body do not roll like marbles: a flat molecule lying on its face rests on many contacts and holds. Linear molecules roll, as a dumbbell would.
 - **Rest damping:** when a body is touching something, slower than 3 cm/s and turning slower than 0.3 rad/s for 0.25 s, its damping rises to 2.0 linear and 4.0 angular. Any impulse above 0.05 N·s or a grab restores its personality's damping.
-- Solver iterations are raised on the play simulation (`PhysicsSimulationComponent.solverIterations`, iOS 18).
+- Solver iterations are raised on the play simulation root (`PhysicsSimulationComponent.solverIterations`, iOS 18), which shares spike A2's question about scene-understanding colliders.
 - **Tower detection:** a stack is the longest chain of bodies each resting on the one below (contact normal within 30° of up) down to the world mesh.
 
 ### 4.7 Honesty
 
-D8 replaces the brief's label ladder with one rule: nothing claims to be a simulation. Learn has one short section, "Toy physics", saying that masses, tumbling and which bond breaks first are loosely inspired by the molecule's real mass, shape and bond strengths, and that the weights are compressed. Plaques show only true facts (name, formula, molar mass, atom count, source, magnification, the reason for the personality). Fragments and built molecules are labelled as what they are. No copy implies that molecules feel gravity or that a break predicts a reaction ([chemistry-play-physics.md §6](research/chemistry-play-physics.md)).
+D8 replaces the brief's label ladder with one rule: nothing claims to be a simulation. One short info sheet, "Toy physics" (from the plaque and from Settings), says that masses, tumbling and which bond breaks first are loosely inspired by the molecule's real mass, shape and bond strengths, and that the weights are compressed. Plaques show only true facts (name, formula, molar mass, atom count, source, magnification, the reason for the personality). Fragments and built molecules are labelled as what they are. No copy implies that molecules feel gravity or that a break predicts a reaction ([chemistry-play-physics.md §6](research/chemistry-play-physics.md)).
 
 ---
 
@@ -254,7 +254,7 @@ D8 replaces the brief's label ladder with one rule: nothing claims to be a simul
 
 ### 5.4 Squash, sparks, hit-stop and slow motion
 
-- **Squash** is applied to the render child only, never the physics body. It compresses along the impulse direction by up to the personality's maximum × `I`, preserves volume, and recovers on the `boing` token (smooth time 0.12 s, damping 0.45). A personality-coloured wobble follows for flexible and bouncy molecules.
+- **Squash** is applied to the render child only, never the physics body. It compresses along the impulse direction by up to the personality's maximum × `I`, preserves volume, and recovers on the `boing` token (smooth time 0.12 s, damping 0.45). Flexible and bouncy molecules wobble for a moment after.
 - **Sparks:** `ParticleEmitterComponent.burst()` (iOS 18; [doc](https://developer.apple.com/documentation/realitykit/particleemittercomponent)), 0.25 s life, 0.4–1.2 m/s, in CPK colours.
 - **Hit-stop** for medium hits (`I ≥ 0.6`): the struck molecule's render child holds its pose for 50 ms while physics runs on, then catches up on the `snap` token. It costs nothing and needs no clock.
 - **Slow motion** for big moments (a break, `Δv > 4 m/s`, a bank shot landing): the play simulation runs at quarter speed for 220 ms and eases back over 180 ms, at most once every 2 s. The documented hook is `PhysicsSimulationComponent.clock`, a `CMClockOrTimebase` that "drives the physics simulation" (iOS 18; [doc](https://developer.apple.com/documentation/realitykit/physicssimulationcomponent)), driven by a timebase at rate 0.25. Whether bodies under a custom simulation root still collide with the scene-understanding mesh is **UNCONFIRMED** (spike A2); if not, the mirrored arena (§3.3) or hit-stop alone carries it.
