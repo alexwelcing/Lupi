@@ -13,7 +13,8 @@ public actor SessionManager: AccessTokenProvider {
 
   private var session: Session?
   private var loaded = false
-  private var refreshTask: Task<Session, any Error>?
+  /// The refresh in flight and the generation it was started for.
+  private var refreshTask: (task: Task<Session, any Error>, generation: Int)?
   /// Bumped by sign-in and sign-out, so a refresh that started for an older
   /// session cannot resurrect it.
   private var generation = 0
@@ -33,8 +34,12 @@ public actor SessionManager: AccessTokenProvider {
   /// The stored session, if any, without touching the network.
   public func currentSession() async throws -> Session? {
     if !loaded {
-      session = try await store.load()
-      loaded = true
+      let stored = try await store.load()
+      // A sign-in or sign-out during the load is newer than what was stored.
+      if !loaded {
+        session = stored
+        loaded = true
+      }
     }
     return session
   }
@@ -102,8 +107,13 @@ public actor SessionManager: AccessTokenProvider {
   }
 
   private func refreshed(_ current: Session) async throws -> Session {
-    if let inFlight = refreshTask {
-      return try await inFlight.value
+    // A refresh started for an earlier session is not joined: its tokens
+    // belong to whoever was signed in then.
+    if let inFlight = refreshTask, inFlight.generation == generation {
+      let startedFor = inFlight.generation
+      let fresh = try await inFlight.task.value
+      guard startedFor == generation else { throw AuthError.notSignedIn }
+      return fresh
     }
     let client = self.client
     let now = self.now
@@ -113,8 +123,10 @@ public actor SessionManager: AccessTokenProvider {
       let tokens = try await client.refresh(refreshToken: refreshToken)
       return Session(tokens, issuedAt: now())
     }
-    refreshTask = task
-    defer { refreshTask = nil }
+    refreshTask = (task, startedFor)
+    defer {
+      if refreshTask?.generation == startedFor { refreshTask = nil }
+    }
     do {
       let fresh = try await task.value
       guard startedFor == generation else { throw AuthError.notSignedIn }

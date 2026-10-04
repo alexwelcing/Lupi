@@ -12,7 +12,7 @@ struct SessionManagerTests {
     .json(200, #"{"expires_in":"3600","token_type":"Bearer","refresh_token":"\#(refresh)","id_token":"\#(id)","user_id":"\#(uid)","project_id":"1"}"#)
   }
 
-  func manager(_ transport: ScriptedTransport, store: InMemoryTokenStore = InMemoryTokenStore()) -> SessionManager {
+  func manager(_ transport: ScriptedTransport, store: any TokenStore = InMemoryTokenStore()) -> SessionManager {
     SessionManager(
       client: AuthClient(configuration: AuthConfiguration(apiKey: "k"), transport: transport),
       store: store,
@@ -104,6 +104,42 @@ struct SessionManagerTests {
     #expect(try await sessions.currentSession() == nil)
   }
 
+  @Test("a refresh started before sign-out is not handed to the next user")
+  func staleRefreshNotJoined() async throws {
+    let transport = ScriptedTransport { request in
+      if request.bodyText?.contains("refresh_token=rA") == true {
+        try await Task.sleep(nanoseconds: 150_000_000)
+        return .json(200, #"{"expires_in":"3600","refresh_token":"rA2","id_token":"idA2","user_id":"uA"}"#)
+      }
+      return .json(200, #"{"expires_in":"3600","refresh_token":"rB2","id_token":"idB2","user_id":"uB"}"#)
+    }
+    let store = InMemoryTokenStore(Session(uid: "uA", idToken: "idA", refreshToken: "rA", expiresAt: clock.now))
+    let sessions = manager(transport, store: store)
+    let pending = Task { try await sessions.validSession() }
+    try await Task.sleep(nanoseconds: 20_000_000)
+    try await sessions.signOut()
+    await transport.enqueue(.json(200, #"{"localId":"uB","idToken":"idB","refreshToken":"rB","expiresIn":"3600"}"#))
+    try await sessions.signInWithApple(AppleCredential(idToken: "t", rawNonce: "n"))
+    // Firestore's 401 retry: a forced refresh for B while A's is in flight.
+    #expect(try await sessions.accessToken(forceRefresh: true) == "idB2")
+    await #expect(throws: AuthError.notSignedIn) { _ = try await pending.value }
+    #expect(try await sessions.currentSession()?.uid == "uB")
+    #expect(try await store.load()?.idToken == "idB2")
+  }
+
+  @Test("a sign-in during the first load is not overwritten by the stored session")
+  func signInDuringLoad() async throws {
+    let transport = ScriptedTransport()
+    await transport.enqueue(.json(200, #"{"localId":"uB","idToken":"idB","refreshToken":"rB","expiresIn":"3600"}"#))
+    let store = SlowTokenStore(Session(uid: "uA", idToken: "idA", refreshToken: "rA", expiresAt: clock.now.addingTimeInterval(3600)))
+    let sessions = manager(transport, store: store)
+    let loading = Task { try await sessions.currentSession() }
+    try await Task.sleep(nanoseconds: 20_000_000)
+    try await sessions.signInWithApple(AppleCredential(idToken: "t", rawNonce: "n"))
+    #expect(try await loading.value?.uid == "uB")
+    #expect(await sessions.currentUID() == "uB")
+  }
+
   @Test("re-authentication must be the same user; a stray new account is removed")
   func reauthenticate() async throws {
     let transport = ScriptedTransport()
@@ -150,4 +186,22 @@ struct SessionManagerTests {
     let data = try JSONEncoder().encode(session)
     #expect(try JSONDecoder().decode(Session.self, from: data) == session)
   }
+}
+
+/// A Keychain stand-in whose first read is slow.
+actor SlowTokenStore: TokenStore {
+  private var session: Session?
+
+  init(_ session: Session?) {
+    self.session = session
+  }
+
+  func load() async throws -> Session? {
+    let stored = session
+    try await Task.sleep(nanoseconds: 100_000_000)
+    return stored
+  }
+
+  func save(_ session: Session) async throws { self.session = session }
+  func clear() async throws { session = nil }
 }
