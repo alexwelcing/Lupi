@@ -105,8 +105,9 @@ The Apple workflow (`.github/workflows/apple.yml`) runs on Linux:
 
 The app's unsigned Debug builds now pass on the owner's Mac with Xcode 26.6
 against the iOS 26.5 device and Simulator SDKs. Home, Collection, Settings and
-the first-run camera explanation were checked in the Simulator. Signing and
-physical-device AR still need completion; see
+the first-run camera explanation were checked in the Simulator. A signed
+development device build also passes. Device installation and physical AR
+still need completion; see
 [the Mac build record](../../docs/ar/mac-build-2026-10-05.md).
 
 To check compilation before a device or signing profile is available:

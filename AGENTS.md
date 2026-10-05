@@ -120,8 +120,9 @@ from a Linux session.
 M0–M2, M3a and M4 (plan §8) are built; M3b (LupiEngine) is not started.
 Unsigned Debug builds against Apple's iOS 26.5 SDK and Simulator SDK pass on
 the owner's Mac with Xcode 26.6 (2026-10-05). Home, Collection, Settings and
-the camera explanation were exercised in the Simulator. Signing and physical
-device AR remain unverified; see `docs/ar/mac-build-2026-10-05.md`.
+the camera explanation were exercised in the Simulator. A signed development
+device build also passes; device installation and physical AR remain
+unverified. See `docs/ar/mac-build-2026-10-05.md`.
 `docs/ar/status.md` is the owner's checklist (build on the Mac, the spikes
 and exits on the device, the decisions waiting) and lists where the first
 compile will most likely fail; `apps/apple/README.md` is the how-to.
