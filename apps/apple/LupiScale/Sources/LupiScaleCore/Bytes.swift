@@ -37,7 +37,7 @@ struct ByteWriter {
     /// BigUInt: u16 byte count, then the minimal little-endian magnitude (§1.2).
     mutating func big(_ v: BigUInt) throws {
         let mag = v.littleEndianBytes
-        guard mag.count <= BigUInt.maxBits / 8 else { throw fail(.range, "BigUInt beyond 65,536 bits") }
+        guard mag.count <= BigUInt.maxBits / 8 else { throw fail(.limit, "BigUInt beyond 65,536 bits") }
         u16(UInt16(mag.count))
         bytes.append(contentsOf: mag)
     }

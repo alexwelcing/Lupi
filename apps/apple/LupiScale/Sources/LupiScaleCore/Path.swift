@@ -226,7 +226,7 @@ public struct Path: Sendable, Hashable {
                 if ranges.count > PathLimits.maxRanges { throw fail(.limit, "more than 4,096 ranges") }
                 for (i, r) in ranges.enumerated() {
                     if r.length == 0 { throw fail(.canonical, "an empty atom range") }
-                    if Int(r.start) + Int(r.length) > PathLimits.atomIndexLimit { throw fail(.range, "atom range past 4,096") }
+                    if Int(r.start) + Int(r.length) > PathLimits.atomIndexLimit { throw fail(.canonical, "atom range past 4,096") }
                     if i > 0 {
                         let p = ranges[i - 1]
                         if Int(r.start) <= Int(p.start) + Int(p.length) { throw fail(.canonical, "ranges must ascend with gaps") }

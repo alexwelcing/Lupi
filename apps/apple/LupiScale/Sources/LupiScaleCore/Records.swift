@@ -207,7 +207,7 @@ public struct NodeRecord: Sendable, Hashable {
 
     static func encodeLeaf(_ leaf: LeafNode, _ w: inout ByteWriter) throws {
         let n = leaf.atomicNumbers.count
-        guard n >= 1, n <= RecordLimits.maxAtoms else { throw fail(.limit, "a leaf holds 1 to 4,096 atoms") }
+        guard n >= 1, n <= RecordLimits.maxAtoms else { throw fail(.range, "a leaf holds 1 to 4,096 atoms") }
         guard leaf.positions.count == n else { throw fail(.range, "one position per atom") }
         w.u32(UInt32(n))
         for z in leaf.atomicNumbers {
@@ -225,7 +225,7 @@ public struct NodeRecord: Sendable, Hashable {
 
     static func decodeLeaf(_ r: inout ByteReader) throws -> LeafNode {
         let n = Int(try r.u32())
-        guard n >= 1, n <= RecordLimits.maxAtoms else { throw fail(.limit, "a leaf holds 1 to 4,096 atoms") }
+        guard n >= 1, n <= RecordLimits.maxAtoms else { throw fail(.range, "a leaf holds 1 to 4,096 atoms") }
         let z = try r.take(n)
         for v in z where v < 1 || v > 118 { throw fail(.range, "atomic number \(v)") }
         try r.pad(toMultipleOf: 4)
@@ -257,13 +257,13 @@ public struct NodeRecord: Sendable, Hashable {
 
     static func checkQuaternion(_ q: SIMD4<Double>) throws {
         let s = ((q.x * q.x + q.y * q.y) + q.z * q.z) + q.w * q.w
-        guard abs(s - 1) <= 0x1p-30 else { throw fail(.range, "rotation is not a unit quaternion") }
+        guard abs(s - 1) <= 0x1p-30 else { throw fail(.validity, "rotation is not a unit quaternion") }
         guard quaternionIsCanonical(q) else { throw fail(.canonical, "rotation sign is not canonical") }
     }
 
     static func encodeGroup(_ children: [GroupChild], _ w: inout ByteWriter) throws {
         guard children.count >= 1, children.count <= RecordLimits.maxChildren else {
-            throw fail(.limit, "a group holds 1 to 256 children")
+            throw fail(.range, "a group holds 1 to 256 children")
         }
         w.u16(UInt16(children.count))
         w.u16(0)
@@ -282,7 +282,7 @@ public struct NodeRecord: Sendable, Hashable {
     static func decodeGroup(_ r: inout ByteReader) throws -> [GroupChild] {
         let c = Int(try r.u16())
         try r.zeros(2)
-        guard c >= 1, c <= RecordLimits.maxChildren else { throw fail(.limit, "a group holds 1 to 256 children") }
+        guard c >= 1, c <= RecordLimits.maxChildren else { throw fail(.range, "a group holds 1 to 256 children") }
         var out: [GroupChild] = []
         out.reserveCapacity(c)
         for _ in 0..<c {
@@ -302,19 +302,19 @@ public struct NodeRecord: Sendable, Hashable {
         let s = c.structure, t = c.termination
         guard c.speciesA >= 1, c.speciesA <= 118 else { throw fail(.range, "speciesA") }
         guard c.speciesB <= 118 else { throw fail(.range, "speciesB") }
-        if (s == .sc || s == .fcc) && c.speciesB != 0 { throw fail(.canonical, "sc and fcc have no second species") }
-        if s == .rocksalt && c.speciesB == 0 { throw fail(.canonical, "rock salt needs speciesB") }
+        if (s == .sc || s == .fcc) && c.speciesB != 0 { throw fail(.validity, "sc and fcc have no second species") }
+        if s == .rocksalt && c.speciesB == 0 { throw fail(.validity, "rock salt needs speciesB") }
         guard c.quarterQ16 >= 1, c.quarterQ16 <= RecordLimits.maxQuarter else { throw fail(.range, "quarter") }
         let n = [c.cells.x, c.cells.y, c.cells.z]
         for v in n where v < 1 || v > RecordLimits.maxCells { throw fail(.range, "cells per axis 1 to 2^60") }
         let mx = n.max()!, mn = n.min()!
         // Compared exactly: when 2^16 · mn passes 64 bits it is above every cell count.
         let (bound, overflow) = RecordLimits.maxAspect.multipliedReportingOverflow(by: mn)
-        if !overflow && mx > bound { throw fail(.limit, "crystal aspect above 2^16") }
+        if !overflow && mx > bound { throw fail(.validity, "crystal aspect above 2^16") }
         if t == .capped {
-            if s != .diamond { throw fail(.canonical, "capped crystals are diamond") }
-            if n[0] != n[1] || n[1] != n[2] { throw fail(.canonical, "capped crystals have n0 = n1 = n2") }
-            if n[0] > RecordLimits.maxCapped { throw fail(.limit, "capped crystals have m ≤ 12") }
+            if s != .diamond { throw fail(.validity, "capped crystals are diamond") }
+            if n[0] != n[1] || n[1] != n[2] { throw fail(.validity, "capped crystals have n0 = n1 = n2") }
+            if n[0] > RecordLimits.maxCapped { throw fail(.range, "capped crystals have m ≤ 12") }
             guard c.capZ >= 1, c.capZ <= 118, c.capOffsetQ16 >= 1, c.capOffsetQ16 <= RecordLimits.maxQuarter else {
                 throw fail(.range, "cap fields")
             }
@@ -365,14 +365,13 @@ public struct NodeRecord: Sendable, Hashable {
             }
         }
         let det = TowerMath.determinant(p)
-        if det == 0 { throw fail(.canonical, "periods are linearly dependent") }
-        if !TowerMath.slendernessHolds(p, det: det) { throw fail(.limit, "period cell slenderness above 2^12") }
+        if det == 0 { throw fail(.validity, "periods are linearly dependent") }
+        if !TowerMath.slendernessHolds(p, det: det) { throw fail(.validity, "period cell slenderness above 2^12") }
     }
 
     static func validateSubstitution(_ s: Substitution) throws {
-        guard s.fromZ >= 1, s.fromZ <= 118, s.toZ >= 1, s.toZ <= 118, s.fromZ != s.toZ else {
-            throw fail(.range, "substitution elements")
-        }
+        guard s.fromZ >= 1, s.fromZ <= 118, s.toZ >= 1, s.toZ <= 118 else { throw fail(.range, "substitution elements") }
+        guard s.fromZ != s.toZ else { throw fail(.validity, "a substitution changes the element") }
         guard s.perCopy >= 1, s.perCopy <= 4096 else { throw fail(.range, "perCopy 1 to 4,096") }
     }
 
@@ -421,7 +420,7 @@ public struct NodeRecord: Sendable, Hashable {
 
     static func encodeEdit(_ e: EditNode, _ w: inout ByteWriter) throws {
         let list = e.removed.map(\.bytes).sorted { compareBytes($0, $1) < 0 }
-        guard list.count >= 1, list.count <= RecordLimits.maxRemovals else { throw fail(.limit, "an edit removes 1 to 256 paths") }
+        guard list.count >= 1, list.count <= RecordLimits.maxRemovals else { throw fail(.range, "an edit removes 1 to 256 paths") }
         for i in 1..<list.count where compareBytes(list[i - 1], list[i]) == 0 { throw fail(.canonical, "duplicate removal") }
         for p in e.removed {
             try Path.validate(p.steps)
@@ -442,7 +441,7 @@ public struct NodeRecord: Sendable, Hashable {
         let base = NodeID(unchecked: try r.take(32))
         let c = Int(try r.u16())
         try r.zeros(2)
-        guard c >= 1, c <= RecordLimits.maxRemovals else { throw fail(.limit, "an edit removes 1 to 256 paths") }
+        guard c >= 1, c <= RecordLimits.maxRemovals else { throw fail(.range, "an edit removes 1 to 256 paths") }
         var raw: [[UInt8]] = []
         var paths: [Path] = []
         for _ in 0..<c {

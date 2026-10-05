@@ -45,15 +45,15 @@ struct RecordValidationTests {
 
     @Test func leaves() throws {
         let w = try Self.water().bytes
-        reject(.limit, edited(w) { writeU32(&$0, 12, 0) })
+        reject(.range, edited(w) { writeU32(&$0, 12, 0) })
         reject(.range, edited(w) { $0[16] = 0 })                         // Z = 0
         reject(.range, edited(w) { $0[16] = 119 })                       // Z = 119
         reject(.canonical, edited(w) { $0[19] = 1 })                     // padding
         reject(.canonical, edited(w) { writeU32(&$0, 20, 0x8000_0000) }) // −0
         reject(.range, edited(w) { writeU32(&$0, 20, 0x7FC0_0000) })     // NaN
         reject(.range, edited(w) { writeU32(&$0, 20, Float(2_000_000).bitPattern) })   // beyond 2^20 Å
-        expectCode(.limit) { _ = try NodeRecord(.leaf(LeafNode(atomicNumbers: [], positions: []))) }
-        expectCode(.limit) {
+        expectCode(.range) { _ = try NodeRecord(.leaf(LeafNode(atomicNumbers: [], positions: []))) }
+        expectCode(.range) {
             _ = try NodeRecord(.leaf(LeafNode(atomicNumbers: [UInt8](repeating: 1, count: 4097), positions: [SIMD3<Float>](repeating: .zero, count: 4097))))
         }
         expectCode(.range) { _ = try NodeRecord(.leaf(LeafNode(atomicNumbers: [1, 1], positions: [.zero]))) }
@@ -62,10 +62,10 @@ struct RecordValidationTests {
     @Test func groups() throws {
         let child = try Self.water().id
         let g = try NodeRecord(.group([GroupChild(id: child)])).bytes
-        reject(.limit, edited(g) { $0[12] = 0 })                         // no children
+        reject(.range, edited(g) { $0[12] = 0 })                         // no children
         reject(.canonical, edited(g) { $0[14] = 1 })                     // reserved
         // qw = 0.5: not a unit quaternion.
-        reject(.range, edited(g) { b in for (i, v) in Double(0.5).bitPattern.littleEndianBytes.enumerated() { b[16 + 32 + 24 + i] = v } })
+        reject(.validity, edited(g) { b in for (i, v) in Double(0.5).bitPattern.littleEndianBytes.enumerated() { b[16 + 32 + 24 + i] = v } })
         // qw = −1: unit but not the canonical sign.
         reject(.canonical, edited(g) { b in for (i, v) in Double(-1).bitPattern.littleEndianBytes.enumerated() { b[16 + 32 + 24 + i] = v } })
         // tx = 2^41 Å.
@@ -75,8 +75,8 @@ struct RecordValidationTests {
         #expect(flipped.bytes == g)
         let quarterTurn = try NodeRecord(.group([GroupChild(id: child, rotation: SIMD4(0, -0.6, 0, -0.8))]))
         if case let .group(c)? = quarterTurn.node { #expect(c[0].rotation == SIMD4(0, 0.6, 0, 0.8)) }
-        expectCode(.limit) { _ = try NodeRecord(.group([])) }
-        expectCode(.limit) { _ = try NodeRecord(.group([GroupChild](repeating: GroupChild(id: child), count: 257))) }
+        expectCode(.range) { _ = try NodeRecord(.group([])) }
+        expectCode(.range) { _ = try NodeRecord(.group([GroupChild](repeating: GroupChild(id: child), count: 257))) }
     }
 
     @Test func crystals() throws {
@@ -86,23 +86,23 @@ struct RecordValidationTests {
             return c
         }
         let seed = Spec.seedRecord().bytes
-        reject(.canonical, edited(seed) { $0[15] = 0 })                   // rock salt without B
-        reject(.canonical, edited(seed) { $0[12] = 3 })                   // fcc with B
+        reject(.validity, edited(seed) { $0[15] = 0 })                   // rock salt without B
+        reject(.validity, edited(seed) { $0[12] = 3 })                   // fcc with B
         reject(.range, edited(seed) { $0[12] = 6 })                       // structure 6
         reject(.range, edited(seed) { $0[13] = 3 })                       // termination 3
         reject(.range, edited(seed) { writeU32(&$0, 16, 0) })             // quarter 0
         reject(.range, edited(seed) { writeU32(&$0, 16, (1 << 20) + 1) }) // quarter beyond 2^20
         reject(.range, edited(seed) { writeU64(&$0, 20, 0) })             // no cells
         reject(.range, edited(seed) { writeU64(&$0, 20, (1 << 60) + 1) })
-        reject(.limit, edited(seed) { writeU64(&$0, 20, 5 << 16 + 1) })   // aspect above 2^16
+        reject(.validity, edited(seed) { writeU64(&$0, 20, 5 << 16 + 1) })   // aspect above 2^16
         reject(.canonical, edited(seed) { $0[44] = 1 })                   // capZ on an open crystal
         reject(.canonical, edited(seed) { $0[45] = 1 })                   // reserved
         // Exactly at the aspect limit is fine.
         _ = try NodeRecord(.crystal(crystal { $0.cells = SIMD3(1 << 16, 1, 1) }))
         let capped = try NodeRecord(.crystal(Spec.diamondoid(1))).bytes
-        reject(.limit, edited(capped) { for a in 0..<3 { writeU64(&$0, 20 + 8 * a, 13) } })
-        reject(.canonical, edited(capped) { writeU64(&$0, 28, 2) })        // n0 ≠ n1
-        reject(.canonical, edited(capped) { $0[12] = 3; $0[15] = 0 })      // capped fcc
+        reject(.range, edited(capped) { for a in 0..<3 { writeU64(&$0, 20 + 8 * a, 13) } })
+        reject(.validity, edited(capped) { writeU64(&$0, 28, 2) })        // n0 ≠ n1
+        reject(.validity, edited(capped) { $0[12] = 3; $0[15] = 0 })      // capped fcc
         reject(.range, edited(capped) { $0[44] = 0 })                      // no capZ
     }
 
@@ -113,13 +113,13 @@ struct RecordValidationTests {
         reject(.canonical, edited(t) { $0[45] = 3 })                      // flags bit 1
         reject(.canonical, edited(t) { $0[46] = 1 })                      // reserved
         reject(.range, edited(t) { writeU64(&$0, 48, (1 << 40) + 1) })    // period component
-        reject(.canonical, edited(t) { writeU64(&$0, 72, 1_848_180); writeU64(&$0, 80, 0) })  // p1 = p0: dependent
+        reject(.validity, edited(t) { writeU64(&$0, 72, 1_848_180); writeU64(&$0, 80, 0) })  // p1 = p0: dependent
         reject(.canonical, edited(t) { $0.replaceSubrange(120..<123, with: [2, 0, 3, 0]) })   // non-minimal levels
-        reject(.range, edited(t) { $0[124] = 17 })                        // fromZ = toZ
+        reject(.validity, edited(t) { $0[124] = 17 })                        // fromZ = toZ
         reject(.range, edited(t) { $0[125] = 0; $0[126] = 0 })            // perCopy 0
         // A cell 2^13 times longer than it is wide breaks slenderness; 2^12 is the limit.
         let long: [SIMD3<Int64>] = [SIMD3(1 << 25, 0, 0), SIMD3(0, 1 << 12, 0), SIMD3(0, 0, 1 << 12)]
-        expectCode(.limit) { _ = try NodeRecord(.tower(TowerNode(seed: Spec.seed.id, factor: 2, periodsQ16: long, levels: 1))) }
+        expectCode(.validity) { _ = try NodeRecord(.tower(TowerNode(seed: Spec.seed.id, factor: 2, periodsQ16: long, levels: 1))) }
         let ok: [SIMD3<Int64>] = [SIMD3(1 << 24, 0, 0), SIMD3(0, 1 << 12, 0), SIMD3(0, 0, 1 << 12)]
         _ = try NodeRecord(.tower(TowerNode(seed: Spec.seed.id, factor: 2, periodsQ16: ok, levels: 1)))
     }
@@ -138,7 +138,7 @@ struct RecordValidationTests {
         swapped.replaceSubrange(68..<88, with: first)
         reject(.canonical, swapped)
         expectCode(.canonical) { _ = try NodeRecord(.edit(EditNode(base: gp.id, removed: [child9, child9]))) }
-        expectCode(.limit) { _ = try NodeRecord(.edit(EditNode(base: gp.id, removed: []))) }
+        expectCode(.range) { _ = try NodeRecord(.edit(EditNode(base: gp.id, removed: []))) }
         expectCode(.validity) { _ = try NodeRecord(.edit(EditNode(base: gp.id, removed: [Path()]))) }
         expectCode(.validity) {
             _ = try NodeRecord(.edit(EditNode(base: gp.id, removed: [try child9.appending([Spec.towerStep(1, [[], [(0, 1)], []])]), child9])))
@@ -296,7 +296,7 @@ struct PathTests {
         reject(.canonical, [1, 0, 3, 2, 0, 1, 0, 1, 0, 3, 1, 1, 0, 0, 0, 0])  // non-minimal BigUInt
         reject(.canonical, [1, 0, 4, 2, 0, 0, 0, 2, 0, 2, 0, 1, 0])          // ranges without a gap
         reject(.canonical, [1, 0, 4, 1, 0, 0, 0, 0, 0])                      // an empty range
-        reject(.range, [1, 0, 4, 1, 0, 0xFF, 0x0F, 2, 0])                    // past 4,096
+        reject(.canonical, [1, 0, 4, 1, 0, 0xFF, 0x0F, 2, 0])                    // past 4,096
         reject(.unsupported, [1, 0, 9])                                      // unknown tag
         reject(.canonical, [0, 0, 0])                                        // trailing bytes
         reject(.truncated, [1, 0, 1, 0])                                     // a short child index
