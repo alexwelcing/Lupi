@@ -37,7 +37,7 @@ fixture that drifted from the spec fails too.
 | `LupiScaleTests` (47 tests) | the §9.8 guarantees (an edited box draws nothing removed, a camera inside terrain anchored at its own node opens the bubble), frames (§8), budgets, τ and draw items (§9.3, §9.7), felt mass, heft, inertia and proxies (§10.1–§10.4, §10.8), breaking, chipping, Grow ×2 against the fixtures, and picking (§10.5–§10.7) |
 
 `CutGuaranteeTests.buildCutCost` times `buildCut` at the fair column's 8,192
-visits and fails a release build above 4 ms, taking the best of 15 frames
+visits and fails a release build above 8 ms (twice a GitHub-hosted runner), taking the best of 15 frames
 because Swift Testing runs other suites alongside it. On the Linux machine
 these were written on it takes about 2.7 ms in release and 55 ms in debug;
 a googolplex inside view (2,925 visits) about 3 ms in release. These are not

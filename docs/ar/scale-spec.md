@@ -1402,7 +1402,7 @@ DrawItem {
 4. Monotone error holds for every view generated.
 5. With ρ unchanged, hysteresis never flips an item twice in consecutive frames.
 6. **Flight.** In a simulated dive through the googolplex, a wrap changes no item of the cut (compared as eye-space boxes), and consecutive frames differ only by what V's zoom changes.
-7. **Cost.** A release-mode benchmark of the Swift `buildCut` at 8,192 visits runs with the Linux tests and fails above 4 ms on CI hardware, taking the best of 15 frames, in up to three windows, because the test runner and the machine are shared. The device budget of 1 ms is measured by spike S2. The TypeScript reference is written for exact agreement, not speed (about 80 ms for the same frame on Node 22); its test asserts the 8,192 visits and gates the time loosely, and a web viewer that adopts it profiles against §9.3 for itself.
+7. **Cost.** A release-mode benchmark of the Swift `buildCut` at 8,192 visits runs with the Linux tests and fails above 8 ms on CI hardware, taking the best of 15 frames, in up to three windows, because the test runner and the machine are shared. A GitHub-hosted runner takes 4.2–4.5 ms, so the gate catches a doubling rather than a busy neighbour. The device budget of 1 ms is measured by spike S2. The TypeScript reference is written for exact agreement, not speed (about 80 ms for the same frame on Node 22); its test asserts the 8,192 visits and gates the time loosely, and a web viewer that adopts it profiles against §9.3 for itself.
 
 ---
 
@@ -2063,7 +2063,7 @@ v1 is not frozen until it reaches `main` (§0), so these entries revise v1 in pl
 | §9.5 | The bubble's wall draws a shell of atoms two cells thick. | Swift |
 | §9.6 | A seed copy's materialization is resident under its exact path, not its copy key, so a frame hashes only new materializations. | Swift |
 | §9.8.2 | Same footprint, same cost: within ±10 % or 10, whichever is larger. | Swift |
-| §9.8.7 | The 4 ms bound is the Swift release benchmark's. | TS |
+| §9.8.7 | The bound is the Swift release benchmark's: 8 ms on CI hardware, twice a GitHub-hosted runner's 4.2–4.5 ms (raised from 4 ms after a main-branch run measured 4.24 ms). | TS |
 | §10.2 | Hemoglobin is 64,458 Da. `FeltMass` and `MassLog` now live in LupiKit's `LupiPlay`, as §11.1 always said; LupiScale's interim copies are gone. | Swift |
 | §10.4 | A hydrogen folded into its partner grows its radius by 1.15, compounded. | Swift |
 | §11.1, §11.2 | Swift adds `ViewState.viewportWidth`, `Budgets.tauMinimum`, `TauController` and the Magnitude members above; TypeScript's `BodyFrame` carries its resolver and `buildCut` an options argument. | TS, Swift |
