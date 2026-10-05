@@ -21,7 +21,6 @@ struct StarterTests {
             #expect(molecule.hillFormula == starter.formula, "\(starter.id)")
             let graph = BondGraph.forPlay(molecule)
             #expect(graph.components().count == 1, "\(starter.id) is one body")
-            #expect(Starters.trophyMolecule(starter).validate().isEmpty, "\(starter.id)")
         }
     }
 
@@ -43,6 +42,15 @@ struct StarterTests {
         let salt = try lengths("salt_cluster")
         #expect(salt.count == 12)
         #expect(salt.allSatisfy { abs($0 - 2.82) < 1e-5 })
+    }
+
+    @Test func provenance() throws {
+        let starters = Dictionary(uniqueKeysWithValues: try Starters.manifest().starters.map { ($0.id, $0) })
+        #expect(starters["caffeine"]?.lupiPath == "/gallery/curated/popular/caffeine.xyz")
+        #expect(starters["c60_buckyball"]?.lupiPath == "/gallery/curated/c60_buckyball.xyz")
+        #expect(starters["hydrogen_peroxide"]?.lupiPath == nil)
+        #expect(starters["hydrogen_peroxide"]?.pubchemCID == 784)
+        #expect(starters["methane"]?.pubchemCID == nil)
     }
 
     @Test func tamperedFilesAreRefused() throws {

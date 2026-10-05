@@ -1,13 +1,14 @@
 import Foundation
 
-/// JSON as Lupi's records write it: sorted keys, dates as RFC 3339 UTC with
+/// JSON as Lupi's records write it: sorted keys, slashes unescaped (so a URL
+/// reads as one), dates as RFC 3339 UTC with
 /// milliseconds ("2026-10-04T21:19:00.123Z", what JavaScript's toISOString
 /// writes). Dates decode with or without fractional seconds and with any
 /// offset. Hand-rolled so every platform reads and writes the same text.
 public enum LupiJSON {
     public static func encoder() -> JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(RFC3339.string(from: date))
