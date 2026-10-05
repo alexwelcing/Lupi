@@ -1,6 +1,6 @@
 # LupiScale v1: the normative specification
 
-*2026-10-04. This is the contract that two independent implementations build to: TypeScript in `packages/core/src/scale` (the reference, which writes the test fixtures) and Swift in `apps/apple/LupiScale` (which reads them). The architecture, the reasons and the play design are in [scale.md](scale.md); the owner's decision is D14 in [decisions.md](decisions.md). Where this spec and scale.md disagree on bytes or algorithms, this spec wins.*
+*2026-10-04, revised 2026-10-05 after an adversarial review. This is the contract that two independent implementations build to: TypeScript in `packages/core/src/scale` (the reference, which writes the test fixtures) and Swift in `apps/apple/LupiScale` (which reads them). The architecture, the reasons and the play design are in [scale.md](scale.md); the owner's decision is D14 in [decisions.md](decisions.md). Where this spec and scale.md disagree on bytes or algorithms, this spec wins.*
 
 ---
 
@@ -16,9 +16,16 @@
 | **[V]** value | Both compute the same quantity to a stated tolerance. These values are never hashed or persisted. | Property and tolerance tests on both sides. |
 | **[P]** play | Behaviour of the app. The constants are starting values in the app's tuning table, changed on the device without a format change. | Linux unit tests of the pure logic; feel on the device. |
 
-**Frozen.** Everything marked [B] is frozen when v1 first merges to `main`. After that, a change of any byte, order, constant or rounding is a new record kind version, a new step tag, a new reference version or a new pack version (§13). Version 1 then keeps resolving forever, bugs included, as the web's Remix `r1` codes do (`packages/ui/src/remix/code.ts`).
+**Frozen when persisted.** A [B] rule is frozen by the first change merged to `main` that can persist bytes depending on it. From then on, a change of any byte, order, constant or rounding is a new record kind version, a new step tag, a new reference version or a new pack version (§13), and the frozen version keeps resolving forever, bugs included, as the web's Remix `r1` codes do (`packages/ui/src/remix/code.ts`). Before a rule is frozen it may change, and the fixtures are regenerated in the same change.
 
-**Test vectors.** §12 lists values computed while drafting this spec with a scratch implementation of exactly these algorithms. The core vectors (CRC-32, SplitMix64, the salt seed and its leaf, the copper billion, diamondoids 1, 2 and 12, the googolplex record, the grain's copy key, substitution and probe, the 10³ copy key, and every row of the formatting table) were then re-derived by a second, separately written Swift program and matched byte for byte. The TypeScript implementation MUST reproduce every value in §12 before it writes `packages/core/src/scale/__fixtures__/scale-v1.json` (`pnpm exec tsx packages/core/scripts/write-scale-fixtures.mts`). The Swift tests read a copy at `apps/apple/LupiScale/Tests/Fixtures/scale-v1.json`, kept in sync by `pnpm exec tsx tools/apple/export-scale-fixtures.mts` (with `--check`), the pattern LupiKit's bond fixtures already use.
+| Rules | Frozen by | Why then |
+|---|---|---|
+| §1; §2.1, §2.2, §2.4–§2.8; §3.1, §3.3–§3.5; §4; §5; §7 | M1, the first build that writes a trophy with a scale reference | trophies are the first persisted data |
+| §2.3 groups, §3.2, §3.6 the partition bake, §6 packs | M3b, the first pack served by lupi.live (`massive_1m`) | no group or pack is persisted before it |
+
+M0 persists nothing (keeps arrive in M1), so M0 implements and tests the subset it plays with and may still revise any rule (plan.md §8).
+
+**Test vectors.** §12 lists values computed with a scratch implementation of exactly these algorithms. The core vectors (CRC-32, SplitMix64, the salt seed and its leaf, the copper billion, diamondoids 1, 2 and 12, the googolplex record, the grain's copy key, substitution and probe, the 10³ copy key, and every row of the formatting table) were re-derived by a second, separately written Swift program and matched byte for byte. So were the vectors added or changed in the 2026-10-05 revision: both packs' contentIds, headers and file hashes, the Grow ×2 periods and records, the tower over a group-wrapped tower, the removal inside a seed copy, and the micro-dalton table. The TypeScript implementation MUST reproduce every value in §12 before it writes `packages/core/src/scale/__fixtures__/scale-v1.json` (`pnpm exec tsx packages/core/scripts/write-scale-fixtures.mts`). The Swift tests read a copy at `apps/apple/LupiScale/Tests/Fixtures/scale-v1.json`, kept in sync by `pnpm exec tsx tools/apple/export-scale-fixtures.mts` (with `--check`), the pattern LupiKit's bond fixtures already use.
 
 ---
 
@@ -61,7 +68,7 @@ Generator geometry is integer. Lengths are integers in units of 2⁻¹⁶ Å ("Q
 
 ### 1.5 SHA-256 and domain strings
 
-- SHA-256 is FIPS 180-4. LupiKit's pure-Swift implementation (`LupiData/SHA256.swift`, tested against the NIST vectors) is acceptable.
+- SHA-256 is FIPS 180-4. LupiKit's pure-Swift implementation, tested against the NIST vectors, is the one Swift uses: it moves from `LupiData/SHA256.swift` to the `LupiCore` target (§11.1).
 - Every hash that is not a NodeID starts with a domain string: the ASCII bytes below followed by one `0x00` byte.
 
 | Domain string | Used for |
@@ -116,24 +123,47 @@ next():
 |---|---|
 | BigUInt | 65,536 bits (8,192 bytes) |
 | Node record | 65,536 bytes |
+| Record depth (§2.8) | 64 |
 | Atoms in a leaf, or in any materialized node | 4,096 |
 | Atomic number | 1 to 118 |
 | Leaf coordinate | \|x\| ≤ 2²⁰ Å |
 | Group children | 1 to 256 |
 | Group translation | \|t\| ≤ 2⁴⁰ Å |
-| Crystal cells per axis | 1 to 2⁶² |
+| Crystal cells per axis | 1 to 2⁶⁰ |
+| Crystal aspect | the largest cell count at most 2¹⁶ times the smallest |
 | Crystal `quarter`, `capOffset` | 1 to 2²⁰ Q16 |
 | Capped crystal size `m` | 1 to 12 |
 | Tower factor | 2 to 16 |
 | Tower levels | 0 to 2⁶⁵⁵³⁶ − 1 |
+| Tower period components | \|p\| ≤ 2⁴⁰ Q16 |
+| Tower period cell slenderness (§2.5) | 2¹² |
 | Tower seed count | below 2²⁵⁶ |
-| Edit removals | 1 to 256 |
-| Path | 65,536 bytes, 1,024 steps |
+| Edit removals | 1 to 256, within the 65,536-byte record |
+| Path in a record or a reference | 65,536 bytes, 1,024 steps |
 | Octants in one `cells` step | 64 |
 | Runs per axis in one `tower` step | 4,096 |
 | Ranges in one `atoms` step | 4,096 |
-| Scale reference | 196,608 bytes, 255 embedded records, 255 dependencies |
+| Scale reference | 163,840 bytes, 255 embedded records, 255 dependencies |
 | Pack | 2²² records, 4,096 roots, 256 dependencies, 16 sections, 2⁴⁰ bytes |
+
+A body's anchor path (§8.3) is runtime state, never persisted, and is not subject to the path limits.
+
+### 1.10 Integer widths
+
+Every [B] computation is exact. At the limits above, these are the widths it needs:
+
+| Quantity | Bound | Width |
+|---|---|---|
+| Crystal quarter-grid coordinates `g` (§3.3) | at most 2⁶² | i64 |
+| Q16 positions of a materialized box or capped crystal | below 2³⁶ | i64, exact in binary64 |
+| Tower child translations `j × p` | below 2⁴⁴ | i64 |
+| Period determinant (§2.5) | below 2¹²³ | 128-bit: Swift `Int128`, TypeScript `bigint` |
+| Slenderness products (§2.5) | below 2²⁸⁰ | BigUInt or `bigint` |
+| Box atom counts (§3.3.2) | below 2¹⁸⁴ | BigUInt or `bigint` |
+| Sub-box translations `4(lo_child − lo_parent) × quarter` (§8.2) | below 2⁸³ | 128-bit, converted to binary64 once |
+| Partition inputs `u` (§3.6) | below 2³² | i64 or Number; TypeScript MUST NOT use the 32-bit operators `>>`, `<<` or `\|` on them |
+
+The rules of §1.9 and §2 keep every value inside these bounds, so no conforming reader ever overflows. A Swift implementation still uses checked arithmetic (never `&+` outside §1.7 and §1.5), and an overflow it meets is a bug, never a wrap.
 
 ---
 
@@ -187,6 +217,7 @@ A **node** is an immutable description of a finite set of atoms (an element and 
 - **Translation.** `|tx|, |ty|, |tz| ≤ 2⁴⁰` Å.
 - **Order** is meaningful (it is the child index of a path), and a NodeID MAY repeat: a 60-subunit capsid is one subunit referenced 60 times.
 - Every child MUST have unit exponent 0 (§2.8).
+- Record depth (§2.8) bounds nesting, so the count of any group is below 2⁸⁰⁰ and is always a plain Magnitude (§5.1).
 - A group stores no interface or bond table. Which children touch, and how strongly, is derived data (scale.md §5.4).
 
 ### 2.4 Crystal (kind 3): a lattice generator
@@ -198,7 +229,7 @@ A **node** is an immutable description of a finite set of atoms (an element and 
 | 14 | 1 | `A`, species of sublattice 0 | 1 to 118 |
 | 15 | 1 | `B`, species of sublattice 1 | 0 to 118; 0 means "same as A" |
 | 16 | 4 | `quarter` | a quarter of the cubic lattice constant, Q16, 1 to 2²⁰ |
-| 20 | 8 | `n0` | cells along x, 1 to 2⁶² |
+| 20 | 8 | `n0` | cells along x, 1 to 2⁶⁰ |
 | 28 | 8 | `n1` | cells along y |
 | 36 | 8 | `n2` | cells along z |
 | 44 | 1 | `capZ` | capping species when `termination = 2`, else 0 |
@@ -209,6 +240,7 @@ The record is always 52 bytes. Field rules:
 
 - `sc` and `fcc`: `B` MUST be 0. `rocksalt`: `B` MUST NOT be 0. `bcc` with `B ≠ 0` is the CsCl structure, and `diamond` with `B ≠ 0` is zincblende.
 - `termination = 2` (capped) requires `structure = 4`, `n0 = n1 = n2 = m` with `1 ≤ m ≤ 12`, and nonzero `capZ` and `capOffset`.
+- **Aspect.** `max(n0, n1, n2) ≤ 2¹⁶ × min(n0, n1, n2)`, compared exactly. A longer needle or a thinner sheet is a tower or a group. The limit keeps every octree box within the anchor rule of §8.4.
 - The algorithm is in §3.3.
 
 ### 2.5 Tower (kind 4): a self-similar generator
@@ -223,7 +255,11 @@ The record is always 52 bytes. Field rules:
 | 120 | 2 + k | `levels`, a BigUInt |
 | 122 + k | 4 | only when flags bit 0 is set: `fromZ` (u8), `toZ` (u8), `perCopy` (u16) |
 
-- The periods MUST be linearly independent: their determinant, computed exactly in integers, is nonzero.
+- Every period component satisfies `|p| ≤ 2⁴⁰` Q16 (2²⁴ Å).
+- The periods MUST be linearly independent: their determinant `det = p0 · (p1 × p2)`, computed exactly in 128-bit integers, is nonzero.
+- **Slenderness.** The period cell may be at most 2¹² times longer than it is wide. For each axis `a`, with `b`, `c` the other two:
+  `max(|p0|², |p1|², |p2|²) × |p_b × p_c|² ≤ 2²⁴ × det²`,
+  evaluated exactly (BigUInt; every term is a sum of squares of integers). `det / |p_b × p_c|` is the cell's width across the faces spanned by `p_b` and `p_c`, so this bounds the longest period over the narrowest width. The bounding radius of every level of a valid tower is then at most `1.5 f × 2¹²` times its narrowest width, which the anchor rule of §8.4 relies on.
 - Substitution: `fromZ` and `toZ` in 1 to 118 and different; `perCopy` 1 to 4,096.
 - The algorithm is in §3.4. The googolplex record is 168 bytes.
 
@@ -237,7 +273,8 @@ The record is always 52 bytes. Field rules:
 | 48 | … | `r` removals, each a u32 byte length followed by a canonical path (§4.2) |
 
 - Removals are sorted strictly ascending by their path bytes: compare byte by byte, and a proper prefix sorts first. Duplicates are forbidden.
-- The base MUST NOT itself be an edit; writers flatten (an edit of an edit becomes one edit with both removal sets).
+- The base MUST NOT itself be an edit. Writers flatten: removing node `n` from an edit `E` writes one edit of `E`'s base whose removals are `E`'s removals, minus every removal that `n` contains (§4.4), plus `n`. Removing a node that lies inside an existing removal is an error (`path`): that piece is already gone.
+- An edit is **full** when one more removal would pass 256 removals or the 65,536-byte record. Writers refuse it (the play text is "this one is full", §10.6).
 - The semantics are in §3.5.
 
 ### 2.7 Kinds a reader does not know
@@ -257,15 +294,19 @@ These are checked when a node is resolved, because they look at other nodes.
 | tower level `k` | `u(k)` from §3.4.1, in the tower's base `f` |
 | edit | that of its base |
 
-Two rules use it:
-
-- A group child MUST have unit exponent 0.
-- A tower seed MUST have unit exponent 0. A tower with `levels ≤ 3` has unit exponent 0 and may itself be a seed or a group child.
+One rule uses it: a group child MUST have unit exponent 0. A tower with `levels ≤ 3` has unit exponent 0, so it may be a group child. (A tower seed, which is never a tower, always has unit exponent 0.)
 
 **Tower seeds.**
 
+- A tower seed MUST NOT be a tower, or an edit whose base is a tower. Its seed view would sit directly below the outer tower's level 0, and the two tower steps would be adjacent, which §4.2 rule 1 merges into one invalid step. A writer that needs a tower of towers wraps the inner tower in a one-child group with the identity placement: the path then reads `tower`, `child 0`, `tower` (§12.4).
 - The seed's atom count MUST be below 2²⁵⁶.
 - With a substitution, the seed MUST be materializable (§4.5) and MUST contain at least `perCopy` atoms of `fromZ`.
+
+**Record depth.** A leaf or a crystal has depth 1; a group has 1 plus its deepest child's depth; a tower, 1 plus its seed's; an edit, 1 plus its base's. Depth MUST NOT exceed 64.
+
+- Readers check it lazily, so that a reader needs only the records it reads: walking a path checks the records it enters, and any evaluation of a whole subtree (a count, a composition, an aggregate, a materialization) checks the depth of that subtree. Both fail with `limit`.
+- Depth is a property of the record, so it is memoized by NodeID like counts.
+- It bounds every recursion at 64 frames and every group count below 2⁸⁰⁰ (§2.3).
 
 **Edits.**
 
@@ -410,14 +451,14 @@ Level `k ≥ 1` has `f` children, `j = 0 … f−1`, each a level `k − 1` node
 
 A descent of `D` levels from level `k` picks one child digit per level, `d ∈ [0, f)`. The digits are grouped by axis and written most significant first: for axis `a`, the digits of the levels `k, k−1, …` whose `axis` is `a`, in descending level order.
 
-- The digits of axis `a` from the top of the tower down to level 0 are exactly the base-`f` representation of the seed copy's index along `a`. That is why a point maps to a short path (§4.8).
+- The digits of axis `a` from the top of the tower down to level 0 are exactly the base-`f` representation of the seed copy's index along `a`. So a neighbour is ±1 on that number, with carries through the runs (§9.4), and a copy's key needs only its runs (§3.4.5).
 - Digit strings are run-length coded as `(digit, length)` runs.
 
 #### 3.4.4 Seed copies
 
 Level 0 below a tower is a **seed copy**.
 
-- **Without a substitution** the copy is the seed node itself, and a path continues into it with the seed's own steps.
+- **Without a substitution** the copy is the seed node itself, and a path continues into it with the seed's own steps. The seed is never a tower (§2.8), so the next step is never a second `tower` step.
 - **With a substitution** the copy is a leaf: the seed's materialization (§4.5) with `perCopy` atoms of `fromZ` turned into `toZ`. Positions are the seed's, unchanged. Where a copy sits is its path, never its coordinates.
 
 #### 3.4.5 The copy key
@@ -483,8 +524,10 @@ while |level| > 1:
 root     = level[0]
 ```
 
-- Positions are never re-centred or re-quantized, so the source's numbers survive.
-- `massive_1m.glimbin` (953,312 Cu atoms) bakes to 233 leaves and 35 groups.
+- Positions are never re-centred or re-quantized, so the source's numbers survive. (Drawing uses a derived local centre per leaf, §8.5; that is display data, never identity.)
+- Every input position satisfies |x| ≤ 2²⁰ Å (§1.9); a bake of anything larger fails with `range`.
+- `u` reaches 2³¹, and the key has 63 bits: TypeScript computes `u >> shift` as `Math.floor(u / 2 ** shift)` and the key in `bigint` (§1.10).
+- `massive_1m.glimbin` (953,312 Cu atoms) bakes to 233 leaves and 35 groups, depth 4.
 
 ---
 
@@ -508,7 +551,7 @@ step   := u8 tag, then
 
 Writers MUST write, and readers MUST accept only, canonical paths:
 
-1. **No two adjacent steps share a tag of 2, 3 or 4.** Adjacent `cells` steps concatenate their octants (at most 64). Adjacent `tower` steps add their `D` and concatenate the run lists per axis. Adjacent `atoms` steps compose: the second selection indexes the first, and the result is re-expressed in the first's base indices.
+1. **No two adjacent steps share a tag of 2, 3 or 4.** Adjacent `cells` steps concatenate their octants (at most 64). Adjacent `tower` steps add their `D` and concatenate the run lists per axis. Adjacent `atoms` steps compose: the second selection indexes the first, and the result is re-expressed in the first's base indices. Two adjacent `tower` steps always descend one tower, because a tower's seed is never a tower (§2.8), so this rule needs no context.
 2. **Runs.** In each axis list, adjacent runs have different digits and every length is at least 1. An axis with no levels in the step has `runCount = 0`.
 3. **Ranges** ascend with a gap of at least one index between them (`start[i+1] > start[i] + length[i]`), and `start + length ≤ 4096`.
 4. The empty path (`stepCount = 0`) names the root itself.
@@ -541,14 +584,24 @@ An edit record resolves to its base's view, carrying the edit's removals (§4.4)
 
 ### 4.4 Removals
 
-A view carries the list of removal paths that start at it. Taking a step updates the list:
+A view carries the list of removal paths that start at it. Taking a step updates each removal `r`, whose first step is `h`. A removal is **used up** when `h` is its only step.
 
-- **`child i`.** A removal starting with `child i` loses that step. If nothing remains, the step enters a removed node and fails. Removals starting with another index are dropped.
-- **`cells o₁…oₙ`.** Compare with the removal's octant list. If the removal's octants are a prefix of (or equal to) the step's, the step enters a removed node and fails. If the step's octants are a proper prefix of the removal's, the removal keeps the remaining octants. Otherwise the removal is dropped.
-- **`tower D`.** Let `D' = min(D, D_removal)`. Compare, per axis, the first `n(a, k, D')` digits of both. If they differ, drop the removal. If they match and `D_removal ≤ D`, the step enters a removed node and fails. Otherwise the removal keeps a tower step of `D_removal − D` levels with the remaining digits.
+- **`child i`.** If `h` is `child i`: when `r` is used up, the step enters a removed node and fails; otherwise `r` continues with its remaining steps. A removal starting with another index is dropped.
+- **`cells o₁…oₙ`.** If `h`'s octants are equal to the step's, or a proper prefix of them, the step enters a removed node and fails. (A `cells` step is always a removal's last: removals have no `atoms` step, and adjacent `cells` steps merge.) If the step's octants are a proper prefix of `h`'s, `r` keeps the remaining octants. Otherwise `r` is dropped.
+- **`tower D`**, taken at level `k`. Let `D' = min(D, D_h)`, and compare per axis the first `n(a, k, D')` digits of the step and of `h`. If they differ, drop `r`. If they match:
+  - `D_h > D`: `r` keeps a tower step of `D_h − D` levels with the remaining digits, followed by its other steps;
+  - `D_h ≤ D` and `r` is used up: the step enters a removed node and fails;
+  - otherwise `D_h = D = k`, because a removal continues past a tower step only from level 0 (§4.2 rule 1): `r` continues inside the seed copy with its remaining steps. This is how an edit removes part of one copy (§5.3).
 - **`atoms`.** Selections index the materialization, which already excludes removed atoms (§4.5), so the selection view carries no removals.
 
-**Containment** for the edit rule "no removal contains another" is the same prefix comparison applied between two removal paths that start at the same node. It needs no start level: the shorter tower step's run lengths give the digit counts to compare.
+**Containment.** Removal `a` contains removal `b` (both starting at the same view) when `a` equals `b` or names one of its ancestors. Compare them step by step:
+
+- `child`: equal indices go on to the next steps; different indices: no.
+- `cells`: if neither octant list is a prefix of the other: no. If `a`'s list is a proper prefix of `b`'s: yes. If `b`'s is a proper prefix of `a`'s: no. If they are equal, go on.
+- `tower`: compare per axis as many leading digits as the shorter of the two steps has on that axis (its run lengths); any difference: no. If `D_a < D_b`: yes. If `D_a > D_b`: no. If they are equal, go on.
+- When `a` runs out of steps first, or both run out together: yes. When `b` runs out first: no.
+
+It needs no start level, because each step's run lengths give its digit counts. Writers use it to flatten edits (§2.6), and readers to check that no removal contains another (§2.8).
 
 **Counts with removals:** `count(view) = baseCount(view) − Σ baseCount(view without removals, walked along r)` over its removals `r`.
 
@@ -578,14 +631,17 @@ rootView(id, removals):
   rec ← store.record(id)                          // a missing record is the error `missing`
   match rec.kind:
     leaf     → leaf view (removals must be empty)
-    group    → group view (check every child has unit exponent 0)
+    group    → group view (a child's unit exponent is checked when a `child` step enters it,
+                or when the group's whole subtree is evaluated)
     crystal  → capped view, or the box [0, n)
-    tower    → check the seed (§2.8); the level L view, or the copy when L = 0
+    tower    → check the seed (§2.8: not a tower, unit exponent 0, count, substitution);
+                the level L view, or the copy when L = 0
     edit     → validate the removals (§2.8), then rootView(base, removals ++ edit.removals)
 ```
 
-- Implementations SHOULD memoize counts by NodeID.
-- They MUST NOT expand anything to answer a count: every count above is closed-form.
+- **What a resolution reads.** The records on the path; for a tower, its seed's subtree (for the seed's count and, with a substitution, its materialization); for an edit, the records its removals walk through. Nothing else, so a reference can embed exactly these (§7.2), and record depth is checked on them (§2.8).
+- **Memoization.** Counts, compositions, depths and aggregates of records MUST be memoized by NodeID. A DAG that repeats children is exponentially larger than its records (a 64-deep chain of 256-way groups names 256⁶³ leaves), and evaluating it MUST cost O(records × children), never the number of paths.
+- Nothing is ever expanded to answer a count: every count above is closed-form.
 
 ### 4.7 Errors
 
@@ -601,13 +657,27 @@ rootView(id, removals):
 
 ### 4.8 From a point to a path [V]
 
-The pinch, the dive and the chip gesture need the path to the node under a point. Inside one node:
+Picking, rebasing, chips and pieces need the path from a node down to the node under a point F. Inside one node:
 
-- **Group:** the child whose bounds contain the point, nearest centre first on ties.
-- **Box:** the octant `o` whose bits are set where the point is at or past `mid` (in quarter units).
-- **Tower level `k`:** express the point in the period basis (solve `x = Σ c_a p_a` in binary64), then take `j = clamp(⌊c_axis(k)⌋, 0, f − 1)`.
+- **Group:** the child whose bounds contain F, nearest centre first on ties.
+- **Box:** the octant `o` whose bits are set where F is at or past `mid` (in quarter units).
+- **Tower level `k`:** express F in the period basis of the node's own frame (solve `x = Σ c_a p_a` in binary64), take `j = clamp(⌊c_axis(k)⌋, 0, f − 1)`, and continue in child `j`.
 
-Repeating this down a tower toward a point whose coordinates are binary64 values gives, per axis, a few dozen explicit digits and then one constant run. So even a dive of 10¹⁰⁰ levels writes a path of a few hundred bytes. The digits are play input; once written, the path is exact.
+**Every descent is bounded by its target, never by the depth of the content.** A descent stops at the first node that is small enough for its purpose:
+
+| Descent | Stops at |
+|---|---|
+| picking (§10.5) | the first node on the hit whose displayed diameter is below one pixel, or below the bottom of the band being picked (4 cm for the hand band, 1 cm for the chip band) |
+| rebasing (§8.4) | one level per descent, at most 2 descents per frame |
+| a chip or a piece (§10.5, §10.6) | the node in the chip band (1–5 cm) or the hand band (4–40 cm) |
+
+Each starts from a node already drawn on screen (an item of the current cut, or the anchor), so it takes at most `3 ⌈log_f(start size / stop size)⌉` levels per tower: a few dozen, for a water or a googolplex alike.
+
+**Precision.** F is known in binary64 relative to the node a descent starts from, so its digits there are meaningful for only `P(f) = ⌊40 / log₂ f⌋` digits per axis (40 for f = 2, 12 for f = 10, 10 for f = 16). Iterating `c ← (c − j) · f` past that point produces noise, not digits: for odd `f` it never settles. So a descent MUST NOT iterate past `P(f)` digits on any axis; it instead re-expresses F, from its world position, in the frame of the node it has reached, and goes on. F's world position is known to about 10⁻¹⁵ m, and every node a bounded descent stops at is at least a pixel across, so F always determines the digits it needs.
+
+The one descent that is not bounded by a target is flight, which crosses up to 2⁶⁵⁵³⁶ levels. It does not use F's digits at all: it descends by whole self-similar periods along constant digits (§8.8), so a dive of 10¹⁰⁰ levels adds about one run per axis to the anchor path.
+
+The digits are play input; once written, a path is exact.
 
 ---
 
@@ -615,50 +685,90 @@ Repeating this down a tower toward a point whose coordinates are binary64 values
 
 ### 5.1 Values
 
-A Magnitude is an exact non-negative integer, held in one of two forms:
+A Magnitude is an exact non-negative integer, its **value**, held in one of two forms, together with a **display base** `f` (2 to 16, and 10 for plain counts). The display base only chooses how §5.4 prints the value, never what it is.
 
 | Form | Holds | Used for |
 |---|---|---|
 | plain | a BigUInt, below 2⁶⁵⁵³⁶ | every count of a finite node: leaves, groups, crystals, small towers, selections |
 | base-`f` runs | `f` in 2…16 and digit runs `(digit, BigUInt length)`, most significant first, adjacent digits different, no leading zero run | tower counts and anything derived from them |
 
-- `towerCount(s, f, k)` is the base-`f` digits of `s` followed by a run of `k` zeros.
-- A Magnitude keeps the base of the tower it came from, and formats in that base (§5.4). Equality and order are by value.
+- `towerCount(s, f, k)` is the base-`f` digits of `s` followed by a run of `k` zeros, with display base `f`.
+- **Canonical form.** A value below 2⁶⁵⁵³⁶ is canonically plain, whichever form produced it. A larger value is canonically runs in its **root base**: 2 for `f` in {2, 4, 8, 16}, 3 for `f` in {3, 9}, and `f` itself for 5, 6, 7, 10, 11, 12, 13, 14 and 15. Bases with one root form a **family**. Converting a base-`r^j` value to base `r` replaces each digit by its `j` base-`r` digits. That costs O(runs) for every value v1 produces, because their long runs hold only the digits 0 and `f − 1`, whose expansions are themselves single runs.
 - **Exact range.** Every count v1 can produce is exact: plain values below 2⁶⁵⁵³⁶ and tower values `s · f^L` with `s < 2²⁵⁶`, `f ≤ 16` and `L < 2⁶⁵⁵³⁶`, plus sums and differences of these. That reaches about 10^(2.4 × 10¹⁹⁷²⁸); a googolplex is 10^(10^100). There is no floating-point step anywhere in a count. §13 says how a later version goes past this bound.
 
 ### 5.2 Arithmetic
 
 | Operation | Rule |
 |---|---|
-| `add`, `sub` | Plain + plain is BigUInt arithmetic. With one tower base `f`, the plain operand is converted to base-`f` digits and the digit runs are added or subtracted from the least significant end. Within an aligned segment of constant digits, at most two positions differ before the carry or borrow settles, so the cost is O(runs). A negative result is an error. Two different tower bases are converted to plain when both fit, else the operation fails; v1 never needs it, because only edits subtract and an edit's terms share one tower. |
+| `add`, `sub` | Both plain: BigUInt arithmetic. One family: in the root base, digit runs added or subtracted from the least significant end; within an aligned segment of constant digits at most two positions differ before the carry or borrow settles, so the cost is O(runs). Different families: plain arithmetic when both operands and the result fit in 65,536 bits, otherwise the error `base`. v1 never reaches that error, because only edits subtract and an edit's terms share one tower. A negative result is the error `range`. The result keeps the left operand's display base. |
 | `mulSmall(k)` | Repeated doubling, for `k` below 2²⁵⁶. |
-| `cmp` | By digit count, then digit by digit from the most significant. |
+| `cmp` | Plain values: numerically. One family: by digit count in the root base, then digit by digit from the most significant. Different families with a value above 2⁶⁵⁵³⁶: the error `base`. No [B] rule compares across families; interfaces that sort mixed values use the key of §5.5. |
+| equality, hash | By canonical form. That is numeric equality for every pair except two values above 2⁶⁵⁵³⁶ in different families, which v1 treats as unequal without deciding. Hashes hash the canonical form, so equal values hash alike and the display base never matters. |
 | `fitsPlain`, `toPlain` | Exact conversion when the value has at most 65,536 bits. |
+
+In Swift, `+`, `-` and `compare` throw (§11.1). In TypeScript they throw `ScaleError('base')`.
 
 ### 5.3 Composition, formula and mass
 
-**Composition** is `count(Z) = perUnit[Z] × multiplier`:
+**Composition** gives exact per-element counts in one form:
 
-- **Finite node:** `perUnit` is its exact element counts and `multiplier` is 1.
-- **Tower level `k`:** `perUnit` is one copy's counts (the seed's, with the substitution applied) and `multiplier` is `f^k` minus the copies removed by edits.
+```
+count(Z) = unit[Z] × copies − removed[Z]
+```
+
+- **A tower level `k`**, with the removals its view carries:
+  - `unit` is one seed copy's counts: the seed's composition with the substitution applied;
+  - `copies` is `f^k`, minus `f^j` for each removal used up at a level-`j` node (`j = 0` for a whole seed copy);
+  - `removed` sums the counts of the removals that continue inside a seed copy (§4.4), each a finite node.
+- **Every other view:** `unit` is its exact counts after its removals, `copies` is 1 and `removed` is empty. A crystal box's counts are closed-form per species, like its atom count (§3.3.2); a group's are the sum over its children.
+- `unit` and `removed` are plain; `copies` is a Magnitude.
 - The googolplex is BrCl₄₉₉Na₅₀₀ × 10^(10^100 − 3).
 
-**Formula.** The Hill formula of `perUnit`:
+**Formula** (`MoleculeRef.formula`, §7.4) is the Hill formula of `unit`:
 
 - with carbon: C first, H second, then alphabetical; without carbon: all alphabetical;
-- counts of 1 omitted.
+- counts of 1 omitted, no separators.
 
-For finite nodes it is the molecular formula (caffeine is C8H10N4O2). For towers it is one copy's formula followed by "× multiplier".
+For a tower piece it is one seed copy's formula (BrCl499Na500 for every salt rung, edited or not); for any other piece, its molecular formula (caffeine is C8H10N4O2).
+
+**Formula text**, for plaques: the formula; then ` × ` and `format(copies)` when `copies ≠ 1`, in parentheses when that text is a sum or a difference (rules 4a and 4b of §5.4); then ` − ` and the Hill formula of `removed` when it is not empty:
+
+| Piece | Formula text |
+|---|---|
+| the googolplex | `BrCl499Na500 × 10^(10^100 − 3)` |
+| the googolplex without child 9 and the grain | `BrCl499Na500 × (9 × 10^(10^100 − 4) − 1)` |
+| §12.4's edit inside a seed copy | `Cl500Na500 × 1,000 − Cl108Na108` |
+| caffeine | `C8H10N4O2` |
 
 **Mass** is exact in micro-daltons:
 
-- `massµDa = Σ_Z perUnit[Z] × µDa(Z) × multiplier`, where `µDa(Z) = ELEMENT_DATA[Z].mass × 10⁶` from `packages/core/src/elements.ts` (at most four decimals today, so exact).
-- The element table is generated for Swift from the same file (`tools/apple/gen-elements.mts`), so both sides hold the same integers.
-- Mass is derived data, never identity.
+```
+massµDa = (Σ_Z unit[Z] × µDa(Z)) × copies − Σ_Z removed[Z] × µDa(Z)
+```
+
+`µDa(Z)` is the frozen table below (`lupi.mass.v1`): each element mass of `packages/core/src/elements.ts` read as its decimal literal and scaled by 10⁶ exactly. Never multiply the binary64 mass by 10⁶ and truncate: in binary64, 65.38 × 10⁶ is 65,379,999.99999999 and 32.06 × 10⁶ is 32,060,000.000000004. `tools/apple/gen-elements.mts` emits this column as integers for Swift and TypeScript alike, and `pnpm apple:check` fails when `elements.ts` changes a mass without a new table version.
+
+```
+µDa(Z), ten elements per row
+  1–10  1008000 4002600 6940000 9012200 10810000 12011000 14007000 15999000 18998000 20180000
+ 11–20  22990000 24305000 26982000 28085000 30974000 32060000 35450000 39950000 39098000 40078000
+ 21–30  44956000 47867000 50942000 51996000 54938000 55845000 58933000 58693000 63546000 65380000
+ 31–40  69723000 72630000 74922000 78971000 79904000 83798000 85468000 87620000 88906000 91224000
+ 41–50  92906000 95950000 98000000 101070000 102910000 106420000 107870000 112410000 114820000 118710000
+ 51–60  121760000 127600000 126900000 131290000 132910000 137330000 138910000 140120000 140910000 144240000
+ 61–70  145000000 150360000 151960000 157250000 158930000 162500000 164930000 167260000 168930000 173050000
+ 71–80  174970000 178490000 180950000 183840000 186210000 190230000 192220000 195080000 196970000 200590000
+ 81–90  204380000 207200000 208980000 209000000 210000000 222000000 223000000 226000000 227000000 232040000
+ 91–100 231040000 238030000 237000000 244000000 243000000 247000000 247000000 251000000 252000000 257000000
+101–110 258000000 259000000 266000000 267000000 268000000 269000000 270000000 269000000 278000000 281000000
+111–118 282000000 285000000 286000000 289000000 290000000 293000000 294000000 294000000
+```
+
+Mass is derived data, never identity.
 
 ### 5.4 Formatting
 
-One function, `format(M)`, prints every count on every surface: the HUD, plaques, trophies and the web. It works on the decimal digit string of `M` without ever forming it in full, using runs. For a tower base `f ≠ 10` it first applies the rules of §5.4.2.
+One function, `format(M)`, prints every count on every surface: the HUD, plaques, trophies and the web. It works on the decimal digit string of `M` without ever forming it in full, using runs. For a display base `f ≠ 10` it first applies the rules of §5.4.2.
 
 #### 5.4.1 Decimal rules
 
@@ -677,20 +787,36 @@ Let `D` be the decimal digits of `M` (plain values are converted with an exact B
 
 #### 5.4.2 Other bases
 
-For a tower base `f ≠ 10` and `M ≥ 10¹⁵`:
+For a display base `f ≠ 10` and `M ≥ 10¹⁵`, working on the base-`f` digits:
 
-1. If the digits are `c` followed by `z` zeros with `c < 10¹⁵`, print `c × f^E(z)`, or `f^E(z)` when `c = 1`. Water grown a hundred times is `3 × 2^100`.
+1. If the digits are `c` followed by `z` zeros with `c < 10¹⁵`, print `c × f^E(z)`, or `f^E(z)` when `c = 1`. `c` is printed in decimal, grouped as in rule 1 of §5.4.1. Water grown a hundred times is `3 × 2^100`.
 2. Else, if `M` fits in 65,536 bits, convert it to plain and use §5.4.1.
-3. Else take `c` as the value of the leading 16 base-`f` digits, `k` as the number of digits after them, move factors of `f` from `c` into `k`, and print `≈ c × f^E(k)`.
+3. Else take `c` as the value of the leading 16 base-`f` digits, `k` as the number of digits after them, move factors of `f` from `c` into `k`, and print `≈ c × f^E(k)`, with `c` in decimal, grouped.
 
 ### 5.5 Approximate quantities [V]
 
-Physical quantities derived from exact counts (kilograms, metres, magnification) and the feel functions of §10 need logarithms of huge Magnitudes:
+Physical quantities derived from exact counts (kilograms, metres, magnification) and the feel functions of §10 need logarithms of Magnitudes. These are values, never hashed or persisted, and they are tested with the tolerances below. Exponents are printed exactly only in a base in which they are exact.
 
-- **`log10(M)`.** For a value of `len` digits in base `f` with leading digits `c` (16 of them), `log10(M) = (len − 16) · log10(f) + log10(c)`, in binary64 while `len < 2⁵³`.
-- **`loglog10(M)`** is `log10(log10(M))`, computed from the bit length of `len` so it stays finite for every v1 value.
-- **Scientific display** of a physical quantity is `≈ m × 10^E`, with the mantissa `m` in binary64 and the exponent `E` an exact integer taken from the Magnitude: the googolplex weighs `≈ 4.859 × 10^(10^100 − 26)` kg.
-- **Tolerance:** relative 10⁻⁹ on mantissas, exact exponents.
+For a Magnitude `M ≥ 1` whose display base is `f`, let `n` be its number of base-`f` digits, `c` the integer value of its leading `min(n, 16)` digits, and `N = max(n − 16, 0)`, an exact integer.
+
+| Quantity | Computed as | Tolerance |
+|---|---|---|
+| `ln M` | `N · ln f + ln c` in binary64; `+∞` when that overflows | absolute 10⁻⁹ while \|ln M\| ≤ 10⁶, else relative 2⁻⁴⁰ |
+| `lnln M` (for `M ≥ 3`) | `ln(ln f) + ln(N + log_f c)`: in binary64 while `N < 2⁵³`; beyond, `ln N` from `N`'s bit length and its top 53 bits (`log_f c` is then below 2⁻⁴⁸ of `N` and is dropped). Finite for every v1 value. | absolute 10⁻¹² |
+| `log10 M` | `ln M / ln 10` | as `ln M` |
+
+Binary64 cannot carry more than about 16 digits of `n · log10 f`, so the decimal exponent of a large value whose base is not 10 is not exact (for `3 × 2^L` it goes wrong from `L = 2⁵³`).
+
+**Scientific display** of a physical quantity `Q = M × q`, with `q` a binary64 constant (1.66053906660 × 10⁻³³ kg per µDa, or metres per unit), prints `≈ m × b^E`:
+
+- The base `b` is 10 when `M` is plain or has display base 10. Otherwise it is `M`'s display base, the only base in which its exponent is exact.
+- With `n` the number of base-`b` digits of `M` and `c` the integer value of its leading `min(n, 17)` digits: `E = max(n − 17, 0) + ⌊log_b(c · q)⌋`, an exact integer, and `m = b^frac(log_b(c · q))`, printed with 4 significant digits (half to even on the binary64 value).
+- `E` is printed by `E(k)` of §5.4.1, with a minus sign U+2212 when negative.
+- The googolplex weighs `≈ 4.859 × 10^(10^100 − 26)` kg. A water tower of `levels` 70,000 (3 × 2^70000 atoms) weighs `≈ 1.157 × 2^69915` kg.
+
+**Sorting** mixed Magnitudes in an interface (a shelf by count) uses the key `(lnln M, ln M)`, then the existing order. It is approximate across families, and no [B] rule uses it.
+
+The magnification `λ` and the scale axis `φ` (§8.7) are computed from the exact unit exponent in the same way.
 
 ---
 
@@ -717,14 +843,23 @@ A pack is an immutable, content-addressed bundle of node records. It is the unit
 | 12 | 4 | sectionCount | 2 to 16 |
 | 16 | 8 | sectionTableOffset | 128 |
 | 24 | 8 | fileLength | the exact file length, a multiple of 16,384 |
-| 32 | 32 | contentId | SHA-256(`lupi.pack.v1` ‖ 0x00 ‖ every NodeID in NIDX order) |
+| 32 | 32 | contentId | §6.2.1 |
 | 64 | 32 | reserved | 0 |
 | 96 | 4 | flags | 0 |
 | 100 | 4 | tableCrc | CRC-32 of the section table bytes |
 | 104 | 20 | reserved | 0 |
 | 124 | 4 | headerCrc | CRC-32 of bytes 0 to 123 |
 
-The contentId depends only on which records the pack holds, not on its layout: it is the pack's identity, its file name and its URL.
+#### 6.2.1 contentId
+
+```
+contentId = SHA-256( "lupi.pack.v1" ‖ 0x00
+                   ‖ u32 nodeCount ‖ every NodeID, in NIDX order
+                   ‖ u32 length of ROOT ‖ the ROOT section's bytes
+                   ‖ u32 length of DEPS ‖ the DEPS section's bytes )
+```
+
+An absent ROOT or DEPS section contributes a length of 0 and no bytes. The contentId depends on the records, the root names and the dependencies, and not on the layout, which the writer fixes (§6.5). It is the pack's identity, its file name and its URL, so two packs that hold the same records under different roots or dependencies are different packs with different URLs. The SHA-256 of the whole file (§12.6) is a further check, never an identity.
 
 ### 6.3 Section table entry (32 bytes)
 
@@ -787,7 +922,7 @@ A conforming writer produces identical bytes from the same records, roots and de
 1. Sort the records by NodeID and drop exact duplicates. Two different records cannot share a NodeID.
 2. Write sections in the order NIDX, NREC, then ROOT if there are roots, then DEPS if there are dependencies. Each has flags 1 and sectionVersion 1.
 3. Place the first section at offset 16,384. Each section occupies `max(1, ⌈length / 16384⌉)` pages. The file ends at the end of the last section's last page.
-4. Fill the header. `contentId` comes from the sorted NodeIDs, and the two CRCs are computed last: `tableCrc` first, then `headerCrc` over bytes 0 to 123.
+4. Fill the header. `contentId` comes from the sorted NodeIDs and the ROOT and DEPS bytes (§6.2.1), and the two CRCs are computed last: `tableCrc` first, then `headerCrc` over bytes 0 to 123.
 
 v1 writers write no other sections.
 
@@ -817,7 +952,7 @@ A reader MUST reject the pack (error `pack`, `crc`, `version`, `unsupported` or 
 5. **Records.**
    - Every record's SHA-256 equals its NIDX NodeID before the record is used. Hashing every record at open time is allowed but not required; hashing on first use is enough.
    - Records of known kinds decode under §2; unknown kinds stay opaque.
-6. **contentId** recomputed from NIDX equals the header's.
+6. **contentId** recomputed from NIDX, ROOT and DEPS (§6.2.1) equals the header's.
 7. **ROOT and DEPS**, when present, follow §6.4.
 
 ### 6.7 How packs reference other packs and generators
@@ -830,9 +965,11 @@ A reader MUST reject the pack (error `pack`, `crc`, `version`, `unsupported` or 
 
 | Where | What |
 |---|---|
-| lupi.live | `GET /scale/p/<contentId hex>.lpk`: static assets written by the web build next to the OG cards and desk models. The response carries `Cache-Control: public, max-age=31536000, immutable`. HTTP range requests work because sections are page-aligned. |
+| lupi.live | `GET /scale/p/<contentId hex>.lpk`, served by the Worker from an append-only R2 bucket. The response carries `Cache-Control: public, max-age=31536000, immutable`. HTTP range requests work because sections are page-aligned. |
 | The app bundle | `lupi-scale-r1.lpk` (the salt ladder, copper, diamondoids; §12.6), plus the gallery leaves, which are also derivable from the bundled XYZ files. |
-| On the device | `Caches/scale/<contentId hex>.lpk`. iOS may purge it, which is safe: a missing pack only shows its root's proxy until it is fetched again. |
+| On the device | `Caches/scale/<contentId hex>.lpk`. iOS may purge it, which is safe: a missing pack only shows the trophy's stored aggregate (§7.4) until it is fetched again. |
+
+**Retention.** A trophy may depend on a pack for as long as the trophy exists, so a pack, once any build has served it, is never removed or replaced. Packs are therefore not ordinary static assets of the web build, which Workers static assets drop at the next deploy. The web build writes them, the deploy uploads each new contentId to the R2 bucket before the build goes live, and nothing ever deletes from that bucket. A pack with the same contentId is byte-identical by construction, so re-uploading it is harmless. (The bucket and its binding are new; contracts.md §4 lists the route.)
 
 ---
 
@@ -856,20 +993,26 @@ A **scale reference** names one piece (a node reached from a root by a path) so 
 | … | … | the path (§4.1), canonical |
 | … | 32 | the probe, when flags bit 0 is set |
 
-- The reference is at most 196,608 bytes, and nothing follows the probe.
+- The reference is at most 163,840 bytes, and nothing follows the probe. Its text form is then at most 218,459 characters, which leaves room for the rest of a trophy under the account sync's 256 KiB bound (§7.4).
 - **Text form:** `lsr1:` followed by the base64url of the bytes.
 - **refKey** = SHA-256(`lupi.scale.ref.v1` ‖ 0x00 ‖ rootID ‖ path bytes). It identifies the piece whatever is embedded: two references to the same piece have the same refKey even if one embeds a record that the other fetches.
 
 ### 7.2 Writing
 
-- **Embedded records.** Writers SHOULD embed every generator record (crystal, tower, edit) and every leaf that is needed and not in a dependency pack. They SHOULD reference large explicit packs (gallery colossi) by dependency instead of embedding them.
+- **Embedded records.** A writer MUST embed every record that resolving the reference reads (§4.6), even one the app bundles, with one exception: when the target has more than 4,096 atoms, the records of an explicit pack (a gallery colossus) MAY be left to that pack, listed in DEPS. So:
+  - generator records (crystal, tower, edit) are always embedded;
+  - a target of at most 4,096 atoms always resolves from the reference alone. When it lives in a pack, its leaf and the group records on its path are embedded, and the pack need not be listed;
+  - only a bigger piece of explicit content depends on a pack, and packs are kept forever (§6.8).
 - **The probe** is present exactly when the target is materializable (§4.5), and it is the target's probe.
+- **When it does not fit.** If the reference would pass 163,840 bytes, or its path the limits of §1.9:
+  - a target of at most 4,096 atoms is kept as its own materialized leaf, as a root with the empty path (always under 54 KB). Its probe and atoms are the same, its refKey is new, and the trophy's origin records where it came from;
+  - anything else is refused with the error `limit`, and the app says "This piece is too intricate to keep". No v1 content reaches this: it takes several nearly full edits on one path, or thousands of alternating smashes along one axis.
 - Typical sizes:
 
 | Piece | Size |
 |---|---|
 | A gallery molecule, its leaf embedded: caffeine | 406 bytes (a 4,096-atom leaf: about 53 KB) |
-| A leaf of `massive_1m`: root and pack by id, three `child` steps, probe | 115 bytes |
+| A leaf of `massive_1m`, embedded with the three groups on its path, three `child` steps, probe | 55,171 bytes (§12.6); by dependency alone it would be 115 bytes |
 | The salt rung 10³: two records, empty path, probe | 260 bytes |
 | A grain of the googolplex: two records, one tower step, probe | 496 bytes (§12.4) |
 
@@ -879,7 +1022,7 @@ A **scale reference** names one piece (a node reached from a root by a path) so 
 2. Build a store from the embedded records plus the records of the listed packs that are available. Each embedded record's NodeID is its SHA-256.
 3. Resolve the path from the root (§4.6).
 4. The probe MUST be present exactly when the target is materializable. If present, it MUST equal the target's probe, otherwise the error is `mismatch`.
-5. **When a dependency pack is missing**, the piece is not lost: the app shows the trophy from its cached aggregate (and plaque text) and fetches the pack. A missing generator record cannot happen when writers embed them.
+5. **When a dependency pack is missing**, the piece is not lost: the app shows the trophy from the aggregate stored in its `ScaleRefField` (§7.4) and its plaque text, and fetches the pack, which lupi.live keeps forever (§6.8). Generator records and targets of at most 4,096 atoms never need a pack (§7.2).
 
 ### 7.4 In `lupi.trophy.v1` (amends contracts.md §1 before M1)
 
@@ -893,6 +1036,11 @@ public struct ScaleRefField: Codable, Sendable, Hashable {
     public var ref: String         // "lsr1:…"
     public var count: String       // format(count), §5.4: a cache for plaques, re-checked on load
     public var spanMetres: Float   // longest displayed extent when kept, 0.005...3
+    public var aggregate: ScaleAggregate?   // for display while a dependency pack is missing
+}
+public struct ScaleAggregate: Codable, Sendable, Hashable {
+    public var extents: [Float]    // 3 values, the shape: extents along the node's axes, the longest = 1
+    public var colour: String      // "#rrggbb", the coverage-weighted CPK mean of its exposed atoms
 }
 // MoleculeRef.scale: ScaleRefField?
 ```
@@ -900,14 +1048,16 @@ public struct ScaleRefField: Codable, Sendable, Hashable {
 | `MoleculeRef` field | For `source: scale` |
 |---|---|
 | `sha256` | the refKey in hex |
-| `formula` | the Hill formula of the per-unit composition (§5.3); a tower piece's formula is one seed copy's |
+| `formula` | the Hill formula of `unit` (§5.3): a tower piece's formula is one seed copy's |
 | `atoms` | the count when it is at most 2⁵³ − 1, else 2⁵³ − 1; `scale.count` is authoritative |
 | `xyz` | MAY be embedded, as for fragments, when the piece is materializable and has at most 2,000 atoms |
 | `scale` | required |
 
 Other sources MAY also carry `scale`: a fragment of a gallery molecule is its leaf plus an `atoms` step.
 
-On load, the app resolves `scale.ref`, recomputes `format(count)` and the formula, and treats a disagreement as a corrupt record. Every reference above fits under the account sync's 256 KiB payload bound (`docs/ar/account-and-sync.md` on the `ar/acct` branch).
+On load, the app resolves `scale.ref`, recomputes `format(count)` and the formula, and treats a disagreement as a corrupt record.
+
+**Size.** The account sync refuses a trophy whose JSON encoding passes 256 KiB (`.payloadTooLarge`, `docs/ar/account-and-sync.md` on the `ar/acct` branch). A reference is at most 218,459 characters as text (§7.1), so the rest of the record has at least 43 KiB. A writer omits `xyz` whenever including it would pass the bound.
 
 ### 7.5 In `lupi.shelf.v1`
 
@@ -926,26 +1076,27 @@ On load, the app resolves `scale.ref`, recomputes `format(count)` and the formul
 | world | ARKit world space, metres, y up. Kept in binary64 on the CPU. |
 | node frame | every view's own coordinates, in units of `f^u` Å (§2.8): Å for leaves, crystals and groups; for a tower level, a unit in which its extents are a few periods |
 | anchor | the one node per body that carries the body's world pose |
+| frame entity | a RealityKit entity whose local space (Float32 metres) holds draw items: a body's own entity, or the camera frame entity that holds terrain and face planes (§8.5) |
 
-No position is ever absolute across levels. A point is named by a node (a root and a path) and local coordinates in that node's frame.
+No position is ever absolute across levels. A point is named by a node (a root and a path) and local coordinates in that node's frame. Every node also has a **local centre** `c(X)`, the centre of its bounding box in its own frame (binary64, derived data, never identity); drawing happens relative to it.
 
 ### 8.2 Placements: child into parent
 
 | From → to | Map, `x_parent = s · R · x_child + t` |
 |---|---|
 | group child → group | `R(q)`, `t` from the record, `s = 1` |
-| sub-box → box | `R = I`, `s = 1`, `t = 4(lo_child − lo_parent) × quarter / 65536` Å: an exact integer before the last division |
+| sub-box → box | `R = I`, `s = 1`, `t = 4(lo_child − lo_parent) × quarter / 65536` Å: a 128-bit integer before the one division in binary64 (§1.10) |
 | level `k−1` child `j` → level `k` | `R = I`, `s = f^(u(k−1) − u(k))`, `t = j · p_axis(k) / 65536` |
 | seed copy and seed, selection and its base, edit and its base | identity: they share one frame |
 
-For a run of `r` equal digits `d` on axis `a`, the composed translation is a geometric series with a closed form, so composing a dive of 10¹⁰⁰ levels costs O(runs), not O(levels).
+For a run of `r` equal digits `d` on axis `a`, the composed translation is a geometric series with a closed form, so composing a descent of 10¹⁰⁰ levels costs O(runs), not O(levels).
 
 ### 8.3 Body frames
 
 ```
 BodyFrame {
   ref                   // the body's piece: root and path (§7)
-  anchorPath            // a path from the body's node to its anchor A (often empty)
+  anchorPath            // from the body's node to its anchor A; runtime state, empty for toys and monuments
   worldFromAnchor       // rigid transform, binary64: rotation and translation in metres
   metresPerAnchorUnit   // σ_A, binary64
 }
@@ -953,19 +1104,30 @@ BodyFrame {
 
 A point `x` in A's frame is at `worldFromAnchor(σ_A · x)` in the world.
 
+**Who owns the pose.** A toy or a monument is never larger than about 3 m, so its anchor is always its own node (§8.4) and its anchor path is empty.
+
+- For a dynamic or kinematic body, RealityKit's entity transform is authoritative. The cut runs in a System ordered after the physics step. It refreshes `worldFromAnchor` from the entity's transform (Float32 to binary64 is exact) before it culls or refines, and it never writes a body entity's transform; only physics and the grab do.
+- The body's draw items are children of its entity, through one render child that carries squash and hit-stop (plan §5.4). RealityKit composes them with the collider in the same frame, so nothing lags.
+- Terrain is static, and at most one exists (§10.1). The app owns its `worldFromAnchor` in binary64, and its anchor may sit any depth below its node.
+
 ### 8.4 Rebasing
 
-Let `radius_m(X) = σ_X · r(X)`, where `r(X)` is X's bounding radius in X's units. The focus point F is, in order of preference:
+Let `σ_X` be metres per X unit, `radius_m(X) = σ_X · r(X)` with `r(X)` X's bounding radius, and `w_m(X) = σ_X · w(X)` with `w(X)` X's **narrowest width**:
 
-1. the pinch centroid's hit on the body;
-2. the screen-centre hit;
-3. the camera position, when the camera is inside the body.
+- for a box, its shortest side;
+- for a tower level, `min_a n_a · ω_a`, where `n_a` is its count of periods along `a` and `ω_a = |det| / |p_b × p_c|` is the period cell's width (§2.5);
+- for a group or a leaf, the shortest side of its bounding box.
+
+The focus point F is, in order of preference: the pinch centroid's hit on the body; the screen-centre hit; the camera position, when the camera is inside the body.
 
 | Rule | Condition | Starting value |
 |---|---|---|
-| descend from A to its child C that contains F | `radius_m(C) ≥ R_desc`, or `radius_m(A) > R_cap` | `R_desc` = 16 m, `R_cap` = 10⁶ m |
-| ascend from A to its parent | `radius_m(A) < R_asc` and A is not the body's node | `R_asc` = 8 m |
-| steps per frame | at most 2 descents or ascents; a flight (§8.8) may append one whole run | |
+| descend from A to its child C that contains F (§4.8) | `w_m(C) ≥ E_desc`, or `radius_m(A) > R_cap` | `E_desc` = 40 m, `R_cap` = 10⁸ m |
+| ascend from A to its parent | `w_m(A) < E_asc` and A is not the body's node | `E_asc` = `z_far` = 20 m |
+| steps per frame | at most 2 descents or ascents; flight moves the anchor by whole periods (§8.8) | |
+
+- **Coverage.** An anchor with `w_m(A) ≥ z_far` has a 3 × 3 × 3 neighbourhood (§9.4) that contains every point within `z_far` of a camera anywhere inside A: on each axis the neighbours reach at least one width past A's faces. This holds for all three level shapes, (f,1,1), (f,f,1) and (f,f,f), which a radius threshold does not guarantee (a radius of 8 m covers only 1 to 9 m across a bar).
+- **Precision guard.** At rest a tower anchor has `w_m(A) < f · E_desc ≤ 640 m`, and the slenderness limits (§2.5) keep its radius below `1.5 f × 2¹² × 640 m`, about 6.3 × 10⁷ m. A crystal box anchor has `w_m(A) < 3 E_desc` and a radius below 1.4 × 10⁷ m (aspect, §2.4). So `R_cap` never fires for towers or crystals; it guards groups, whose placements are free.
 
 A descent through placement `(s, R, t)` updates the frame:
 
@@ -975,50 +1137,68 @@ worldFromC.translation = worldFromA.translation + worldFromA.rotation · (σ_A �
 σ_C = σ_A · s
 ```
 
-An ascent applies the inverse. A rebase is a change of representation, not of state: no drawn vertex moves by more than 10⁻⁴ px across one (tested on Linux; the bound is §8.6's).
+An ascent applies the inverse. A rebase is a change of representation, not of state: no drawn vertex moves by more than the bound of §8.6 across one (tested on Linux).
 
-### 8.5 Eye-relative drawing
+### 8.5 Drawing relative to a nearby origin
 
-For every drawn item X, compose in binary64 and cast once:
+Every vertex position that reaches Float32 is relative to an origin near it: the item's local centre `c(X)`, and an entity or eye origin within metres of the item. All composition before that happens in binary64.
+
+**RealityKit (M0 on).** An item's parent is a frame entity: the body's entity for a toy or a monument, or for terrain and face planes, a camera frame entity, kept within 2 m of the camera and moved (with its items recomputed) when the camera leaves that range. The frame entity's origin is the local centre of the node it carries. For each item, the cut computes in binary64
 
 ```
-modelToEye(X) = Float32( cameraFromWorld · worldFromAnchor · Scale(σ_A) · T(A ← X) )
+body:     entityFromItem(X) = Scale(σ_A) · T(−c(A)) · T(A ← X) · T(c(X))                       // metres
+terrain:  entityFromItem(X) = cameraFrameFromWorld · worldFromAnchor · Scale(σ_A) · T(A ← X) · T(c(X))
 ```
 
-- `T(A ← X)` is the composition of the placements from A down to X; for an item above A, the inverse chain.
-- The GPU computes `p_eye = modelToEye(X) · p_X` in Float32, with `p_X` local to X (|p_X| ≤ r(X)).
-- Items above the anchor are drawn only where they come within the far distance: a tower or crystal ancestor contributes its outer face planes (§9.4), never a far-away origin.
-- RealityKit receives only room-sized transforms (bodies and face planes within metres of the camera).
+with A the anchor and the camera frame entity's pose held in binary64, and casts it to Float32 once. Vertex data, merged meshes and instance positions are built relative to `c(X)`, in binary64, then cast once. RealityKit then composes `worldFromEntity · entityFromItem` itself in Float32.
 
-### 8.6 Precision bound
+A body entity's origin is its anchor's local centre: it shares `worldFromAnchor`'s rotation, and its translation is `worldFromAnchor.translation + rotation · (σ_A · c(A))`. Refreshing `worldFromAnchor` from the entity (§8.3) inverts that. The body's mass properties put the centre of mass where the proxy's is (plan §3.4).
 
-Suppose every drawn item satisfies:
+**LupiEngine (M3b).** Items are composed relative to the eye and cast once:
+
+```
+modelToEye(X) = Float32( cameraFromWorld · worldFromAnchor · Scale(σ_A) · T(A ← X) · T(c(X)) )
+```
+
+The GPU computes `p_eye = modelToEye(X) · p_X` in Float32, with `p_X = x − c(X)`, so `|p_X| ≤ r(X)`. Atoms are drawn per 64-atom cluster, each about its own centre.
+
+**Both.** `T(A ← X)` is the composition of the placements from A down to X; for an item above A, the inverse chain. Items above the anchor are drawn only where they come within `z_far`: a tower or crystal ancestor contributes its outer face planes (§9.4), never a far-away origin.
+
+### 8.6 Precision bounds
+
+**Eye-relative (LupiEngine).** Suppose every drawn item satisfies:
 
 - (i) it lies within `z_far` = 20 m of the camera;
-- (ii) it is no larger than its distance `d` from the camera (the cut refines anything larger);
-- (iii) its anchor has `radius_m(A) ≤ 10⁶` m (rule `R_cap`).
+- (ii) it, or for atoms each 64-atom cluster, is no larger than its distance `d` from the camera. The cut refines larger items, and a cluster larger than its distance is drawn atom by atom;
+- (iii) its anchor has `radius_m(A) ≤ R_cap` = 10⁸ m (§8.4).
 
-Then its eye-space vertex error is at most `2⁻²³ (d + r) + 2⁻⁵⁰ × 10⁶ m ≤ 2.4 × 10⁻⁷ d + 10⁻⁹ m`. One pixel at distance `d` subtends about `d / 1,380` (the research's 1,380 px/rad, UNCONFIRMED per device). So the error is below **4 × 10⁻⁴ px** for every `d ≥ z_near` = 0.05 m, at every magnification and depth.
+Then its eye-space vertex error is at most `2⁻²³ (d + r) + 2⁻⁵⁰ × 10⁸ m ≤ 2.4 × 10⁻⁷ d + 9 × 10⁻⁸ m`. One pixel at distance `d` subtends about `d / 1,380` (the research's 1,380 px/rad, UNCONFIRMED per device). So the error is below **3 × 10⁻³ px** for every `d ≥ z_near` = 0.05 m, and below 5 × 10⁻⁴ px beyond 1 m, at every magnification and depth. This is the relative-to-eye technique of virtual-globe engines ([Cozzi and Ring](https://www.virtualglobebook.com/); [Ohlarik](https://help.agi.com/AGIComponents/html/BlogPrecisionsPrecisions.htm)) applied once per level of a hierarchy, and the Linux tests hold to it.
 
-This is the relative-to-eye technique of virtual-globe engines ([Cozzi and Ring](https://www.virtualglobebook.com/); [Ohlarik](https://help.agi.com/AGIComponents/html/BlogPrecisionsPrecisions.htm)) applied once per level of a hierarchy.
+**RealityKit.** RealityKit composes our Float32 transforms with its own Float32 world and view matrices, so this bound does not describe what it draws. With frame entities within about 20 m of the session origin and items within `z_far` of their entity, every Float32 world position is under 40 m, and the composition errs by a few micrometres: about 0.15 px at `z_near` (5 cm) and under 0.01 px beyond 75 cm. That is sub-pixel at every magnification and depth. The Linux tests check what we cast; RealityKit's own arithmetic is not ours to test.
 
 ### 8.7 Magnification and λ
 
 - The magnification of a body is `σ_A × 10¹⁰ / f^u(A)` (metres per Å × 10¹⁰).
-- Its decimal logarithm is `λ = log10(σ_A) + 10 − u(A) · log10(f)`.
-- It is held as a pair, `u(A)` exactly and `log10 σ_A` in binary64, never as one binary64 once `u(A)` passes 2⁵³.
-- Readouts print `10^λ` with §5.5's scientific form: "shown 10^(−3.333 × 10^99) times life size".
+- Its decimal logarithm is `λ = ℓ − u(A) · log10 f`, with `ℓ = log10(σ_A) + 10` in binary64 and `u(A)` an exact integer.
+- It is held as the pair `(u(A), ℓ)`, never as one binary64 once `u(A) · log10 f` passes 2⁵⁰.
+- **φ from the pair.** While `u(A) · log10 f < 2⁵⁰`, λ is formed in binary64 and φ follows §8.8. Beyond, λ is negative and `ln|λ| = ln u(A) + ln(log10 f)` to within 2⁻⁴⁰ (the ℓ term is negligible), with `ln u(A)` taken from its bit length and its top 53 bits, so `φ = −32 · (1 + ln|λ| − ln 32)` is finite for every v1 tower: about −7,254 for the googolplex bar, and −1.45 × 10⁶ for a tower of `levels` 2⁶⁵⁵³⁵.
+- **Cap.** λ ≤ 11: one ångström drawn 10 m across. Nothing finer than an atom has detail, so a pinch stops there.
+- **Readout.** "shown 10^λ times life size", with λ printed in §5.5's scientific form: "shown 10^(−3.333 × 10^99) times life size". When `f ≠ 10` and `u(A) · log10 f ≥ 2⁵⁰`, it prints in the tower's base instead, "shown f^(−X) times life size" with `X = u(A) − ℓ / log10 f` (§5.5), because the decimal exponent is not exact there.
 
 ### 8.8 Pinch, detents and flight [P]
 
-**Pinch.** Ratio `r` about the focus F scales the body:
+**Pinch.** A ratio `r` about a centre P scales the body:
 
 ```
-worldFromAnchor.translation ← F + r · (translation − F)
+worldFromAnchor.translation ← P + r · (translation − P)
 σ_A ← r · σ_A
 ```
 
-This is continuous and exactly invertible.
+- P is the focus F for a held body or one in the air. For a body resting on a support (in contact during the last 0.1 s, with a contact normal within 45° of up), P is the lowest point of its bounds along gravity, so it grows and shrinks on its footprint and never sinks into what holds it.
+- While pinching, the body is kinematic and its colliders scale with it every frame. A kinematic body that grows pushes the bodies stacked on it.
+- At pinch end, the body takes its size state's mode (§10.1). If its proxy then overlaps anything, it is first lifted along +y until it is clear (at most its own height).
+
+The map is continuous and exactly invertible.
 
 **Scale axis.** The gesture moves along `φ(λ)`:
 
@@ -1027,14 +1207,23 @@ This is continuous and exactly invertible.
 φ(λ) = sign(λ) · 32 · (1 + ln(|λ| / 32))    otherwise     (C¹ at |λ| = 32)
 ```
 
-- Within |λ| ≤ 32 (everything from life size to 10³²×), fingers map one to one.
-- Beyond, a pinch moves φ, and a two-finger hold flies at up to 400 φ/s with 4 φ/s² easing. A googolplex at 30 cm sits near λ = −3.3 × 10⁹⁹, which is φ ≈ −7,300: about 20 s of flight from atoms to the whole bar.
+- Within |λ| ≤ 32 (everything from 10⁻³²× to 10³²× of life size), fingers map one to one.
+- Beyond, a pinch moves φ, and a two-finger hold flies (§10.5).
 
-**Detents** click at every decade while |λ| ≤ 32, at λ = 0 ("life size"), and at |λ| = 10ᵏ beyond.
+**Detents** click at every decade while |λ| ≤ 32, at λ = 0 ("life size"), and at |λ| = 10ᵏ beyond, at most one click per frame.
 
-**Flight.** Each frame appends at most one run per axis to the anchor path, toward F (§4.8).
+**Flight speed.** φ moves at up to 400 φ/s with 4 φ/s² easing while |φ| ≤ 8,192, and at |φ| / 20.48 per second beyond, doubling every 14 s. So every v1 tower is crossed in bounded time: from the googolplex bar at desk size to its atoms in about 18 s, and from the top of a tower of `levels` 2⁶⁵⁵³⁵ in about two minutes.
 
-**Comfort.** Still turns flight into cuts between detents; Gentle halves the flight speed.
+**Wraps: the picture moves at a bounded rate while λ races.** Beyond |λ| = 32 a frame of flight moves λ by thousands of decades, and a tower repeats itself every 3 levels (log10 f decades). Zooming the picture that fast would land on a random phase of the repeat each frame, a strobe of boxes. So the picture and λ are decoupled:
+
+- The displayed magnification changes by at most V = 0.03 decade per frame (0.015 in Gentle).
+- The rest of λ's change is made by **wraps**. A wrap moves the anchor by whole periods (3 levels, a factor of f on every axis) and keeps `worldFromAnchor` and `σ_A` unchanged. A level and its descendant 3 levels down have the same extents in their own units, and the cut draws both as the same boxes, so a wrap leaves the picture exactly as it was while λ jumps by `log10 f` per period.
+- A wrap is allowed only when the last cut drew nothing at or below the tower's seed copies, no removal touches the anchor's neighbourhood, and, on every axis whose root face lies in the neighbourhood, the anchor touches that face. A dive is aimed at a hit on the body's surface, so its anchor touches the face it dives into.
+- A descending wrap of `n` periods appends 3n levels to the anchor path, the digits of each axis being constant: on an axis whose root face the anchor touches, the extreme digit (`f − 1` at the upper face, 0 at the lower); on any other axis, ⌊f/2⌋, the child that holds its parent's centre. So a dive of 10¹⁰⁰ levels adds about one run per axis to the anchor path. An ascending wrap removes 3n levels.
+- Each frame wraps by as many whole periods as keep the remaining distance below one period plus V. Each wrap costs O(runs).
+- When wraps stop (seed copies come into the cut near the atoms), the dive finishes at V per frame: the last few decades take a few seconds, in which the player sees the ions grow to marbles.
+
+**Comfort.** Gentle halves the speeds and V. Still turns flight into cuts: λ jumps between detents with no visual zoom, each jump a wrap plus at most one rebase.
 
 ---
 
@@ -1060,82 +1249,101 @@ A view is **solid** when it is a crystal box, a tower level whose seed is solid,
 
 | View | Stand-in when not refined | `ε` | Refined into |
 |---|---|---|---|
-| solid view | a box impostor: an oriented box, the aggregate colour, optional lattice shading | `r_atom` in Å (`r_atom / f^u(k)` in a level's units): a solid box is exact up to atom bumps, at every level | its atoms when materializable, else its octants or tower children |
+| solid view | a box: its atom envelope (the bounds of its atom centres grown by `r_atom`), oriented, in the aggregate colour, with optional lattice shading | `r_atom` in Å (`r_atom / f^u(k)` in a level's units): the box is exact up to atom bumps, at every level | its exposed atoms when materializable (§9.5), else its octants or tower children |
+| tower level `k ≥ 1` of any other seed | a box: the period cells of its copies, grown to cover the seed's atom envelope, in the aggregate colour | `r(seed) + max_a \|p_a\| / 65536` in Å (divided by `f^u(k)` in the level's units): every atom lies in the box, and every point of the box lies within one period and one seed radius of an atom | its `f` children |
 | leaf, capped crystal, other copies, selection | up to 8 splat spheres fitted to its 64-atom clusters (consecutive in Morton order, derived data) | the radius of its largest 64-atom cluster | its atoms (final) |
-| tower level `k`, other seeds | up to 8 splat spheres | `r(seed) / f^u(k)` | its `f` children |
 | group | up to 8 splat spheres fitted to its children | `max(max ε(child), r(group) / 2)` | its children |
 
-A body whose node is a leaf of at most 2,000 atoms always draws as its merged mesh (the M0 path), whatever ρ says.
+A body whose node is a leaf of at most 2,000 atoms always draws as its merged mesh (the M0 path), whatever ρ says, and as `atomInstances` until that mesh is built (§9.6).
 
-Errors are monotone: `ε(parent) ≥ max ε(child)`, by construction for solid views and by the `max` for groups. A crystal or tower is therefore refined only where its atoms are bigger than τ pixels. Its cut is a ring of boxes around the eye, the geometry clipmap of terrain rendering ([Losasso and Hoppe 2004](https://hhoppe.com/proj/geomclipmap/)), whatever its count.
+Errors are monotone, `ε(parent) ≥ max ε(child)`: by construction for towers (one value for every level, at least the seed's own error) and by the `max` for groups. Because a tower's error is the same at every level, a level is refined only where its atoms (solid) or its periods (any other seed) are bigger than τ pixels. So its cut is a ring of boxes around the eye, the geometry clipmap of terrain rendering ([Losasso and Hoppe 2004](https://hhoppe.com/proj/geomclipmap/)), whatever its count, and it refines gradually as the eye approaches. A box drawn for a sparse seed reads denser at a distance than the seed really is; v1's only non-solid towers come from Grow (§10.7), whose copies sit 2.3 Å apart.
 
 ### 9.3 Budgets
 
-Starting values for the iPhone 15 Pro (A17 Pro), **est.** Spikes S1 and S2 replace them with measurements.
+Starting values for the iPhone 15 Pro (A17 Pro), **est.** Spikes S1, S2, S7 and S10 replace them with measurements.
 
 | Budget | fair | serious | critical | iPad Pro (fair) |
 |---|---|---|---|---|
-| τ (px): start, and the controller's minimum (its maximum is 8) | 1.5, 1.0 | 1.5, 1.5 | 2.0, 2.0 | 1.5, 1.0 |
+| τ (px): start, and the controllers' minimum (their maximum is 8) | 1.5, 1.0 | 1.5, 1.5 | 2.0, 2.0 | 1.5, 1.0 |
 | nodes visited per frame | 8,192 | 6,144 | 4,096 | 12,288 |
 | draw items | 4,096 | 3,072 | 2,048 | 8,192 |
 | atoms drawn by RealityKit instancing (before LupiEngine) | 5,000 | 3,000 | 2,000 | 8,000 |
-| atoms drawn by LupiEngine impostors (M3) | 150,000 | 75,000 | 50,000 | 250,000 |
+| atoms drawn by LupiEngine impostors (M3b) | 150,000 | 75,000 | 50,000 | 250,000 |
 | boxes and splats | 32,000 | 24,000 | 16,000 | 48,000 |
 | leaf materializations per frame (background) | 8 | 4 | 2 | 12 |
+| merged-mesh builds per frame (off the main actor) | 1 | 1 | 1 | 2 |
 | traversal and draw-list CPU | 1.0 ms | 0.8 ms | 0.6 ms | 1.0 ms |
 | resident scale cache | min(192 MB, 10 % of `os_proc_available_memory`) | same | same, plus eviction | min(384 MB, 10 %) |
 
-- **τ controller.** τ follows the measured molecule GPU time toward 8 ms: `τ ← clamp(τ · exp(0.5 (t − 8 ms) / 8 ms), τ_min, 8)`, evaluated each 0.5 s. `τ_min` is the thermal column's value.
-- Frame rate is protected, and detail is what gets spent.
+**τ** is the larger of two controllers, each evaluated every 0.5 s and kept in [τ_min, 8], where τ_min is the thermal column's value:
+
+- **Frame time.** RealityKit exposes no per-pass GPU time, so through M3a the signal is the frame interval, the difference between consecutive `ARFrame` timestamps. A window with any interval over 1.5 display periods (a dropped frame) multiplies τ by 1.25; 2 s without one multiplies it by 0.95. With LupiEngine (M3b), τ also follows that pass's own GPU time (its command buffer's `gpuStartTime` and `gpuEndTime`) toward 8 ms: `τ ← τ · exp(0.5 (t − 8 ms) / 8 ms)`.
+- **Budget.** A cut that was `overBudget` (§9.5) multiplies the next frame's τ by 1.25; 0.5 s with every budget under 80 % multiplies it by 0.9. Refinement therefore stays uniform in screen-space error: a budget never leaves a patchwork of refined and unrefined copies.
+
+Frame rate is protected, and detail is what gets spent. On RealityKit the degradation order is: τ rises; the atom and box budgets drop to the next thermal column; 30 fps; the oldest loose pieces poof; the cache evicts to aggregates. The 30 fps step re-runs the session with a 30 fps `ARConfiguration.VideoFormat`; whether tracking survives that without a reset is UNCONFIRMED (spike A5), and if it does not, the step is skipped. Render scale has no RealityKit equivalent: with LupiEngine (M3b), its pass drops to 0.75× with MetalFX after the budgets.
 
 ### 9.4 Where the traversal starts
 
 For each body:
 
-- **The anchor is the body's own node.** Start from it (the common case: anything smaller than the room).
-- **The anchor is a crystal box or a tower level.** Start from the anchor's **index neighbourhood**: the 3 × 3 × 3 nodes at the anchor's level around it.
-  - In a tower, a level-`k` node's index on axis `a` is the number formed by its digits on that axis above level `k`. Neighbours add ±1 to it, with carries and borrows through the digit runs, at O(runs) each.
-  - In a crystal, the neighbours are the boxes at the anchor's octree depth that hold the cells just beyond its faces, found by descending from the crystal's root (at most 63 octants).
-  - Neighbours outside the root are dropped: compare per-axis digit strings with the root's per-axis counts.
+- **The anchor is the body's own node.** Start from it. Every toy and monument does (§8.3).
+- **The anchor is a crystal box or a tower level** (terrain). Start from the anchor's **index neighbourhood**:
+  - In a tower: the 3 × 3 × 3 nodes at the anchor's level around it. A level-`k` node's index on axis `a` is the number formed by its digits on that axis above level `k`; neighbours add ±1 to it, with carries and borrows through the digit runs, at O(runs) each. The nodes of one level are congruent, so with `w_m(A) ≥ z_far` (§8.4) these 27 cover every point within `z_far` of the camera.
+  - In a crystal: the boxes at the anchor's octree depth that hold the cells up to `⌈z_far / cell width⌉` cells beyond the anchor's faces, found by descending from the crystal's root (at most 60 octants). Boxes at one depth differ by at most one cell per axis, so these are at most 5 per axis.
+  - Neighbours outside the root are dropped: compare per-axis indices with the root's per-axis counts.
   - Add a **face plane** item for each outer face of the root within `z_far` of the camera. The distance to it is an exact integer from the digits, converted only when small.
-  - The anchor is at least `R_asc` = 8 m in radius, so the neighbourhood covers everything within `z_far` of the camera that is not removed.
-- **The anchor is inside a group.** Start from the group's children whose bounds come within `z_far` of the camera, at every group level from the anchor up to the body's node. Explicit groups nest only log₈ of their atom count deep (at most 9 for 10¹² atoms), and the visit budget caps the rest.
+  - **Enclosed nodes.** A solid node whose 26 neighbours at its level all lie inside the root, carry no removal, and miss the excavation bubble (§10.1) is **enclosed**. Nothing of it can be seen, from outside (only the root's surface shows) or from inside (only the bubble's wall and removal walls show), so it is neither drawn nor refined.
+- **The anchor is inside a group.** Start from the group's children whose bounds come within `z_far` of the camera, at every group level from the anchor up to the body's node; record depth (§2.8) bounds the levels at 64.
 - **Removals** inside a starting node split it into its remaining children, at most 256 per edit.
+- Starting nodes enter the heap of §9.5 in decreasing ρ while its budget invariant holds. Any that do not fit are dropped and the cut is `overBudget`. Only groups with many overlapping children can cause this, and it is the one case in which a cut may leave a hole.
 
 ### 9.5 The algorithm
 
 ```
 buildCut(bodies, view, budgets, previousCut) → Cut:
-  heap ← max-heap by ρ (ties: larger projected area first)
-  for each body: push its starting nodes (§9.4)
+  heap ← max-heap by ρ (ties: larger projected area first, then smaller key32)
+  used ← 0        // per budget: the emitted items, plus the stand-in cost of every entry in the heap
+  for each body, for each starting node S (§9.4), in decreasing ρ:
+    if S is outside the frustum or enclosed: skip
+    if used + cost(S) ≤ budgets: push S; used ← used + cost(S)
+    else: overBudget ← true
   visited ← 0
   while heap not empty:
     X ← pop
-    visited += 1
-    if X is outside the frustum, or occluded by last frame's Hi-Z (LupiEngine only): continue
+    if visited = budgets.visits:
+       emit X as its stand-in; continue                     // drain: counts no visit
+    visited ← visited + 1
     wantRefine ← ρ(X) > τ, or (X was refined in previousCut and ρ(X) ≥ τ/2)
-    if not wantRefine, or X is final, or visited ≥ budgets.visits:
+    if not wantRefine, or X is final:
        emit X as its stand-in (§9.2); continue
-    kids ← children of X that are resident
-       (crystal octants, tower children, group children; a materializable node's atoms)
-    if kids are not all resident:
-       request the missing ones (priority ρ); emit X as its stand-in; continue
-    if emitting kids would exceed an item, atom or splat budget:
-       emit X as its stand-in; continue
-    push kids
-  return the emitted items, with counts for the HUD (exact total, drawn, aggregated)
+    kids ← the children of X (§9.2's last column) that are inside the frustum, not enclosed,
+           and not occluded by last frame's Hi-Z (LupiEngine only)
+    if any kid is not resident:
+       request it (priority ρ); emit X as its stand-in; continue
+    if used − cost(X) + Σ cost(kid) > budgets:
+       overBudget ← true; emit X as its stand-in; continue
+    used ← used − cost(X) + Σ cost(kid); push every kid
+  return the emitted items, visited, overBudget, and the HUD's counts (each body's exact count, the atoms drawn)
 ```
 
-- Each pop costs O(1) except a tower child's path extension, which is O(runs) with tiny constants.
+- **`cost(X)`** is what X's stand-in draws: one item; its boxes and splats (one box, or up to 8 splats); and, for a final item of atoms, its atoms (only the exposed ones for a solid node).
+- **Invariant.** `used ≤ budgets` holds after every step, and every heap entry is emitted as at most its stand-in. So no budget is ever exceeded, whatever the content.
+- **Work.** Every pop is either an emit (at most `items` of them) or a visit (at most `visits`), and culled children are never pushed. So a frame makes at most `items + visits` pops, each O(log items) plus O(runs) for a tower child's digits.
+- **Exposed atoms.** When a solid node is refined into its atoms, only the atoms of its outermost cell layer on each exposed face are drawn. A face is exposed when the neighbour across it lies outside the root, is removed, or meets the excavation bubble. A seed copy at a corner of a salt cube draws 488 of its 1,000 ions, one in a face draws 200, and an enclosed one is skipped. The atoms keep their materialization order; the selection is display data.
 - No step depends on the atom count.
 
-### 9.6 Fades, residency and loading
+### 9.6 Swaps, fades, residency and loading
 
-- **Fades.** An item entering or leaving the cut fades over 200 ms with a stable screen-door threshold (a hash of its refKey against the fade value), using `discard` and no blending. Atoms stay opaque and need no sort. Still comfort cuts instead.
-- **Residency.** Decoded leaves and derived aggregates live in an LRU keyed by NodeID (or refKey for virtual nodes), capped by the resident budget.
-  - Nodes that are bodies, or on a shelf, are pinned at their aggregate.
-  - Materialized seed copies and crystal boxes are cheaper to regenerate than to store, so they are never written to disk.
+- **Swaps (RealityKit, M0–M3a).** There are no screen-door fades. `MeshInstancesComponent` carries per-instance transforms and, as far as Apple documents, no per-instance shader data; whether a `CustomMaterial` can read an instance index is UNCONFIRMED (spike S7). A refinement adds the children and removes the parent in the same frame, and the error bound keeps that swap under τ pixels. Where a swap changes texture (a box becoming atoms), the atoms scale in from radius 0 over 120 ms inside the box, which is removed when they reach full size; coarsening reverses it. Still comfort swaps at once.
+- **Fades (LupiEngine, M3b).** An item entering or leaving the cut fades over 200 ms with a stable screen-door threshold (its `key32` against the fade value), using `discard` and no blending. Atoms stay opaque and need no sort.
+- **Residency.** Decoded leaves and aggregates live in an LRU capped by the resident budget. Its keys need no hashing per visit:
+  - records and their aggregates, by NodeID;
+  - a tower level's aggregate, by (tower NodeID, k): every node of one level has the same shape and colour;
+  - a crystal box's aggregate, by (crystal NodeID, extents, which far faces it owns);
+  - a seed copy's materialization, by (tower NodeID, copy key); a crystal box's, by (crystal NodeID, lo, hi).
+  The only hashes in a frame are the copy keys of new materializations (at most the materialization budget) and the refKey of a new anchor. Nodes that are bodies, or on a shelf, are pinned at their aggregate. Materialized seed copies and crystal boxes are cheaper to regenerate than to store, so they are never written to disk.
 - **Missing data draws the parent.** A missing child never leaves a hole.
+- **Merged meshes** are built off the main actor (`MeshDescriptor`, or `LowLevelMesh`), at most one per frame (§9.3). A body waiting for its mesh, such as a fresh piece of a break, draws as `atomInstances` in its own entity meanwhile. The mesh replaces the instances once it is ready and the body is at rest or under 64 px across, because shading parity between the two is UNCONFIRMED. Spike S10 times the build for 1,000 and 2,000 atoms.
 
 ### 9.7 Draw items
 
@@ -1143,76 +1351,92 @@ buildCut(bodies, view, budgets, previousCut) → Cut:
 DrawItem {
   kind          // leafMesh | atomInstances | box | splats | facePlane | atomsGPU | clusterSplats
   node          // root + path, or a resident handle
-  modelToEye    // Float32 3×4 (§8.5)
+  transform     // Float32 3×4: entityFromItem on RealityKit, modelToEye on LupiEngine (§8.5)
   fade          // 0…1
-  key32         // low 32 bits of the refKey, for stable dithering and display jitter
+  key32         // display key, below
   extras        // per kind: element runs for instances, half-extents and colour for a box, splat spheres
 }
 ```
+
+**`key32`** is a display key, never identity: the low 32 bits of `key64`. A starting node's `key64` is the first 8 bytes, read as a little-endian u64, of the refKey of its path, computed once when the anchor changes. A child's is `mix64(key64(parent) + 0x9E3779B97F4A7C15 × (i + 1))`, with `i` its octant, tower digit or group child index, and `mix64` SplitMix64's output function (§1.7, the steps after `z ← s`). Collisions only affect dithering and jitter.
 
 **Backends** (scale.md §4):
 
 | Kind | Drawn by |
 |---|---|
 | `leafMesh` | RealityKit merged mesh (bodies with ≤ 2,000 atoms) |
-| `atomInstances` | RealityKit `MeshInstancesComponent`, one per element colour |
+| `atomInstances` | RealityKit `MeshInstancesComponent`, one per element colour; also a fresh piece's atoms until its merged mesh is ready |
 | `box` | RealityKit instanced unit cube, one component per material |
 | `facePlane` | RealityKit plane |
-| `atomsGPU`, `clusterSplats`, `splats` | LupiEngine (M3); before it, `splats` draw as instanced spheres |
+| `atomsGPU`, `clusterSplats`, `splats` | LupiEngine (M3b); before it, `splats` draw as instanced spheres |
 
 ### 9.8 Guarantees (Linux tests)
 
-1. No budget is exceeded, for any camera, over random roots from 10³ to a googolplex.
+1. **Budgets.** No budget is exceeded, for any camera, over random roots from 10³ to a googolplex, and no frame makes more than `items + visits` pops (§9.5's invariant).
 2. **Same footprint, same cost.** For the same on-screen footprint and camera, the visited and emitted counts of the 10⁹, 10¹⁰⁰ and googolplex salt rungs agree within ±10 %. For inside views at the same atom pixel size, the cut is identical for every rung that is deep enough.
-3. No region is drawn at two levels, and no visible, unremoved region is missing (a coverage test on a sampled ray grid).
+3. **Coverage.** No region is drawn at two levels, and no visible, unremoved region is missing (a coverage test on a sampled ray grid). It runs with the camera inside anchors of all three level shapes, (f,1,1), (f,f,1) and (f,f,f), for f = 2, 10 and 16, and on a water grown by Grow ×2 (a non-solid tower) as the camera approaches, where refinement must also be gradual: the emitted count grows by at most a factor of 2 per halving of the distance.
 4. Monotone error holds for every view generated.
 5. With ρ unchanged, hysteresis never flips an item twice in consecutive frames.
+6. **Flight.** In a simulated dive through the googolplex, a wrap changes no item of the cut (compared as eye-space boxes), and consecutive frames differ only by what V's zoom changes.
+7. **Cost.** A release-mode benchmark of `buildCut` at 8,192 visits runs with the Linux tests and fails above 4 ms on CI hardware. The device budget of 1 ms is measured by spike S2.
 
 ---
 
 ## 10. Physics and play [V, P]
 
-### 10.1 Size states [P]
+### 10.1 Size states and spawning [P]
+
+**Spawn size.** A molecule spawns at the plan's toy scale (plan §4.1). Anything bigger (a crystal, tower or group) spawns at the larger of a 15 cm longest span and a 3 cm shortest span, capped at a 30 cm longest span. So the googolplex bar (10 : 1 : 1) is 30 cm long and 3 cm thick, and a cube is 15 cm.
 
 | State | When | Physics |
 |---|---|---|
-| toy | longest span ≤ 3 × its spawn span (spawn spans 15 cm) | dynamic body |
-| monument | span up to 3 m | kinematic; up to 256 static shapes; other bodies land on it |
-| terrain | span over 3 m (at most one at a time) | static. A collision window of radius 2 m around the camera and each dynamic body holds up to 256 shapes. It is rebuilt (asynchronously) when its centre moves 0.5 m, at most twice a second, plus an analytic plane for each outer face of a box ancestor within the window. When the camera is inside solid material, atoms within 0.35 m of the camera are not drawn (an excavation bubble). |
+| toy | longest span ≤ 3 × its spawn span | dynamic body |
+| monument | longer, up to 3 m | kinematic; up to 256 static shapes; other bodies land on it |
+| terrain | over 3 m (at most one at a time) | static, below |
+
+**Terrain physics.**
+
+- **Face planes are global.** Each outer face of the terrain's root within 20 m of the camera is a static collider, a box 0.5 m thick behind the face. The planes are made once, when the terrain forms, and move with the camera frame entity (§8.5); no window rebuild ever removes them, so nothing falls through. (Holes left by chips get no planes; their atoms are windowed like any others.)
+- **Atom windows.** Atom-level bumps are static spheres in windows: one of radius 1 m around the camera, and one of radius 0.5 m around each dynamic body slower than 1 m/s. A faster body collides with the face planes alone, with CCD on. A window is rebuilt asynchronously when its centre moves a quarter of its radius. All windows together hold at most 256 shapes: 64 for the camera's, and the rest shared among the slow bodies' windows, nearest bodies first.
+- **Inside the solid.** When the camera is inside solid terrain, atoms within 0.35 m of it are not drawn (the excavation bubble). Toys are then parked, frozen and hidden in place outside the simulation, until the camera leaves the solid, and the terrain's colliders are off. No toy is ever spawned or moved inside matter, so none is born interpenetrating.
 
 ### 10.2 Felt mass: `lupi.feltmass.v1` [V]
 
-RealityKit "works best if the size and mass ratios don't exceed one order of magnitude" (plan §3.4). Felt mass therefore stays in [0.06, 0.6] kg and keeps the true order of masses to a googolplex and beyond. With M the exact mass in Da (§5.3):
+RealityKit "works best if the size and mass ratios don't exceed one order of magnitude" (plan §3.4). Felt mass therefore stays in [0.06, 0.6) kg and keeps the true order of masses to a googolplex and beyond. With M the exact mass in Da (§5.3) and `massScale` the personality's (contracts.md §3.3):
 
 ```
-M_k = 180 · 2^2.5 Da (≈ 1,018 Da);   a = 0.8 · ln(M_k) (≈ 5.541)
-b(M) = 0.2 · (M / 180)^0.4                                   for M ≤ M_k    (plan §4.2, unchanged)
-b(M) = 0.6 − 0.2 / (1 + a · (ln ln M − ln ln M_k))           for M > M_k    (C¹ at M_k)
-massKg = clamp(b(M) · massScale, 0.06, 0.6)                    massScale from the personality
+M_k = 180 · 2^2.5 Da (≈ 1,018 Da);   a = 0.8 · ln M_k (≈ 5.541)
+x   = ln M + 2.5 · ln(massScale)
+b   = 0.2 · exp(0.4 · (x − ln 180))                    for x ≤ ln M_k     (= plan §4.2's 0.2 · (M/180)^0.4 · massScale)
+b   = 0.6 − 0.2 / (1 + a · (ln x − ln ln M_k))           for x > ln M_k     (C¹ at the knee)
+massKg = max(0.06, b)
 ```
 
-- `ln ln M` comes from §5.5, so it is finite for every Magnitude.
-- **Below about 1 kDa nothing changes** from the plan: water 0.080, caffeine 0.206, C₆₀ 0.348 before `massScale`.
+- **The personality shifts the body along the curve** instead of scaling the result. Below the knee that is exactly the plan's `b(M) × massScale`; above it, the shift fades out, so no personality can push anything to the ceiling. `ln x` is computed as `lnln M + ln1p(2.5 · ln(massScale) / ln M)`, with `lnln M` from §5.5; the second term is dropped when `ln M` is not finite in binary64.
+- **Order.** For one personality, felt mass is strictly increasing in M from about 9 Da (the 0.06 kg floor) up to and past a googolplex: `b` never reaches 0.6, so nothing clamps at the top. Across personalities, order is true whenever two masses differ by more than `(massScale ratio)^2.5`, at most (1.0 / 0.8)^2.5 ≈ 1.75 with the contract's table. A googolplex of salt, which is brittle, outweighs every molecule of every personality.
+- **Below about 1 kDa nothing changes** from the plan: water 0.080, caffeine 0.206, C₆₀ 0.348 at `massScale` 1; hydrogen peroxide (brittle, 0.85) 0.087 and C₆₀ (bouncy, 0.8) 0.279, as in contracts.md §3.2.
 - **Above it**, mass rises slowly instead of hitting the ceiling at 2.8 kDa:
 
-| Structure | `b` (kg) |
-|---|---|
-| hemoglobin | 0.544 |
-| salt 10³ (29,264 Da) | 0.537 |
-| salt 10⁶ | 0.567 |
-| salt 10⁹ | 0.575 |
-| salt 10³⁰ | 0.586 |
-| salt 10¹⁰⁰ | 0.590 |
-| googolplex | 0.5998 |
+| Structure | `massScale` 1 (kg) | brittle, 0.85 (kg) |
+|---|---|---|
+| hemoglobin | 0.544 | 0.541 |
+| salt 10³ (29,264 Da) | 0.537 | 0.533 |
+| salt 10⁶ | 0.567 | 0.566 |
+| salt 10⁹ | 0.575 | 0.574 |
+| salt 10³⁰ | 0.586 | 0.586 |
+| salt 10¹⁰⁰ | 0.590 | 0.590 |
+| googolplex | 0.5998 | 0.5998 |
 
-LupiKit's `GameUnits` uses a different curve (50 g × (M/18)^0.4, up to 100 kg, growing with display scale). It MUST be replaced by this function, and contracts.md §3.3 rule 6 points here.
+- **What it cannot do.** Above about 10 kDa the differences are a few percent, too small to feel in a throw, which sets the velocity directly. Felt mass keeps the order honest in collisions and in the hand; heft (§10.8) and the plaque carry the scale to the player.
+- **Owner.** The function lives in LupiKit's `LupiPlay` as `FeltMass` (§11.1), taking `ln M`, `lnln M` and `massScale`, so personality derivation calls it without depending on LupiScale. It replaces LupiKit's `GameUnits` curve (50 g × (M/18)^0.4, up to 100 kg, growing with display scale), and contracts.md §3.3 rule 6 points here.
+- Pieces of an expansion share their parent's felt mass instead (§10.6).
 
 ### 10.3 Inertia [V]
 
 - **Leaf:** point-mass principal moments and axes, as LupiKit's `Inertia` (port of `objectFacts/inertia.ts`).
 - **Crystal box:** the closed form for a uniform grid: `Cov = Cov(cell) + Σ_a ((e_a² − 1) / 12) · v_a v_aᵀ`, with `v_a` the cell vector of axis a and `e_a` the cell count.
 - **Tower level `k`:** `Cov = Cov(seed) + Σ_a ((n_a² − 1) / 12) · p_a p_aᵀ`, with `n_a = f^C(a,k)`, normalized by the level's radius. The three `n_a` of one level differ by a factor of 1 or `f`, so the normalized tensor stays well within binary64 for every `k`, including a googolplex.
-- **Group:** the parallel-axis theorem over children.
+- **Group:** the parallel-axis theorem over its children, weighted by mass fractions `m_child / m_group`. Each fraction is formed in binary64 from exact plain masses (§5.3; a group's mass is below 2⁸³⁰ µDa, inside binary64's range), so no weight overflows.
 - The inertia is `I = M (tr(Cov) E − Cov)`, and the body uses the shape tensor `I / (M r²)` times felt mass times display radius², with the smallest principal moment floored at 0.02 of the largest (plan §4.2).
 
 ### 10.4 Collision proxies [V]
@@ -1220,28 +1444,54 @@ LupiKit's `GameUnits` uses a different curve (50 g × (M/18)^0.4, up to 100 kg, 
 | Node | Proxy |
 |---|---|
 | leaf, capped crystal, copy, selection | plan §3.4: one sphere per heavy atom at toy radius, each hydrogen folded into its partner (+15 % radius each), grid-merged to at most 48 spheres |
-| box, or tower level with orthogonal periods | one box (`ShapeResource.generateBox`) of the node's extents plus `r_atom`. Stacks hold on it. |
-| tower level with oblique periods | the convex hull of its 8 corners (`generateConvex`) |
+| box, or tower level with orthogonal periods | one box (`ShapeResource.generateBox`): its atom envelope (§9.2), the same box that is drawn. Stacks hold on it. |
+| tower level with oblique periods | the convex hull of its envelope's 8 corners (`generateConvex`) |
 | group | children's bounding spheres; split the largest into its own proxy until 64 shapes, or every sphere is under 8 % of the group radius |
 | edit | the proxy of the remaining children; holes smaller than 1/8 of the node are ignored |
 
-Proxies are cached by NodeID or refKey together with a quantized `σ`.
+- **Fresh pieces.** For their first 0.25 s, the pieces of a break use proxies inset by `r_atom · σ + 1 mm` on every side (spheres shrunk by the same), so no two pieces start in contact and the solver never has to push them apart.
+- Proxies are cached under the same keys as aggregates (§9.6), together with a quantized `σ`.
 
-### 10.5 Picking and the hand band [P]
+### 10.5 Picking, gestures and bands [P]
 
 **Picking.** A touch ray is tested against the current cut:
 
 1. a BVH over draw items;
 2. then the item's own shapes, so the box of a box item, or up to 64 atoms of a leaf, adjusted by the display-motion twin;
-3. then refinement along the hit, down to the deepest node the ray hits, so the result is a hit chain.
+3. then refinement along the hit, bounded as §4.8 says: it stops at the first node on the hit whose displayed diameter is under one pixel, or under the bottom of the band the gesture picks from. The hit chain is a few dozen nodes at most, for a water or a googolplex.
 
 The hit costs tens of µs (est.).
 
-**Grab** takes the body when its span is at most 40 cm. Otherwise it takes the deepest node on the hit chain whose displayed diameter is 4 to 40 cm (the hand band), detached as a chip (§10.6).
+**Bands.** The hand band is 4 to 40 cm of displayed diameter, and the chip band 1 to 5 cm.
+
+**Gestures.** One arbiter, `GestureArbiter` in LupiKit (pure Swift, tested on Linux with recorded touch streams), turns touches into exactly one of these. Thresholds are starting values.
+
+| Gesture | Starts when | Does |
+|---|---|---|
+| tap | one finger, down and up within 250 ms, moving under 8 pt | selects the body and shows its plaque |
+| grab | one finger down on a toy, then moving 8 pt or held 120 ms | grabs the whole toy, whatever its span (plan §3.5); releasing throws it |
+| chunk | one finger down on a monument or terrain, moving 8 pt within 400 ms | detaches the deepest node on the hit chain in the hand band, as a new toy already grabbed |
+| chip | one finger down on a monument or terrain, held still (under 8 pt) for 400 ms, then moving | detaches the node in the chip band under the finger, grabbed |
+| pinch and twist | two fingers whose separation changes by 12 pt (or 6 %) before a hold is recognized | scales the selected or held body (§8.8) and turns it |
+| fly | two fingers held still (separation and centroid each changing under 12 pt) for 300 ms, while \|λ\| > 32 | flies on in the direction of the last pinch (spreading flies toward smaller things), §8.8 |
+
+- A gesture holds until all its fingers lift. A second finger during a grab starts pinch-and-twist of the held body, which stays held. During a fly, a separation change of 12 pt turns it back into a pinch.
+- Chunks and chips only come from monuments and terrain: a toy is always grabbed whole.
+- The web's gesture arbiter (`packages/ui/src/camera`) is the model for the structure, not for these thresholds.
 
 ### 10.6 Breaking and chipping [P]
 
-**Threshold.** A body breaks when an impact's Δv reaches `base(personality) · sqrt(E / 346 kJ/mol)` (plan §4.4). E is the bond energy for leaves, and the interface class for anything larger (game values: covalent 346, coordination 150, ionic contact 80, lattice-ionic 60, noncovalent 40).
+**Two tiers.**
+
+| Break | Threshold on the impact's Δv |
+|---|---|
+| a **bond break**: a leaf molecule of at most 2,000 atoms with a bridge in its game graph | `base(personality) · sqrt(E_weakest / 346 kJ/mol)` (plan §4.4) |
+| an **expansion**: everything else (a leaf with no breakable bridge, a box, a tower level, a group) | `max(3.0 m/s, base(personality) · sqrt(E / 346 kJ/mol))` |
+
+**The personality of a node that is not a molecule** comes from one **representative leaf**, derived once per NodeID by LupiKit's rules (contracts.md §3.3): for a crystal box, its crystal's 2 × 2 × 2-cell box at the origin (or the whole crystal when it is smaller); for a tower level or seed copy, its seed's materialization; for a group, its child with the most atoms (the lower index on ties), recursively; for an edit, its base's. So every salt rung is brittle, because its seed has ionic contacts.
+
+- E for an expansion is the node's interface class, in game values, read from its representative leaf's game graph: lattice-ionic 60 when it has ionic contacts, else coordination 150 when it has coordination bonds, else covalent 346; noncovalent 40 for a group; an edit takes its base's.
+- The 3 m/s floor lets a crystal survive a drop from 30 cm (an impact Δv of 2.9 m/s with restitution 0.2) and breaks it when thrown at a wall at about 2.5 m/s or more. Without it, brittle salt (lattice-ionic) would break when dropped from 1 to 4 cm.
 
 **Expanding a body** makes up to `B` = min(16, 41 − dynamic bodies) pieces:
 
@@ -1253,30 +1503,36 @@ The hit costs tens of µs (est.).
 | one-cell box | its atoms, as loose atoms for building (D9) |
 | box with octants, tower level, group | its children: octants, the `f` children of a level (the googolplex bar breaks into ten cubes of 10^(10^100 − 1) atoms), or a group's children. When there are more than `B`, the `B − 1` children nearest the contact become pieces and the rest stays as one edit. |
 
-- Each piece is a scale reference (the parent's path plus one step) with the parent's velocity at that point plus 0.4 m/s of separation.
-- A fresh piece cannot break again for 0.25 s.
-- A piece's identity is exact even though the contact point is not: the play input picks the step, and the step is exact (scale.md law 3).
+**Pieces.**
 
-**Chipping** (a pinch-pull at the surface) detaches the node under the finger whose displayed diameter is 1 to 5 cm.
+- Each piece is a scale reference: the parent's path plus one step. Its identity is exact even though the contact point is not, because the play input picks the step and the step is exact (scale.md law 3).
+- **Velocity:** the parent's velocity at the piece's centre, plus 0.4 m/s of separation outward from the parent's centre.
+- **Felt mass:** a bond break's fragments are new molecules with their own felt mass (§10.2). An expansion's pieces share their parent's, `m_piece = max(0.06 kg, m_parent × M_piece / M_parent)`, so a smash never multiplies the weight in play. A piece that is kept and later respawned takes its own felt mass from §10.2.
+- **Size:** a piece whose longest span would be under 6 cm grows about its own centre to 6 cm over 0.2 s (at once in Still), and its magnification readout follows. While it grows it separates at its growth rate on top of the 0.4 m/s. So the bar smashes into ten 3 cm cubes that grow to 6 cm, and smashing on never makes millimetre bodies.
+- **Proxies** are inset at first (§10.4).
+- **Cooldown:** a bond break's fragment cannot break again for 0.25 s (plan §4.4), and an expansion's piece for 1.0 s, so one throw at a wall makes one smash, not a cascade.
+- **Meshes:** nothing is built on the frame of the impact. A piece of at most 2,000 atoms draws as `atomInstances` until its merged mesh is built, one per frame (§9.6).
+
+**Chipping** is the chip and chunk gestures (§10.5) on a monument or terrain.
 
 - The chip is its path.
-- The remainder is the parent minus it: a selection of the complement when the parent is materializable, otherwise an edit.
-- An edit already holding 256 removals refuses: "this one is full".
+- The remainder is the parent minus it: a selection of the complement when the parent is materializable, otherwise an edit, flattened as §2.6 says.
+- A full edit (§2.6) refuses: "this one is full".
 - A trophy's record is never destroyed by play (plan §4.4).
 
 ### 10.7 Building and growing [P]
 
 - **Snap** (plan §4.5) joins atoms into a new leaf. Atom order: the larger body's atoms first, then the other's, each in its own order. Its record is embedded in the trophy's reference, so its identity is whatever the app built; there is nothing to agree on across languages.
-- **Grow ×2** (proposed; the owner to confirm) wraps a body of unit exponent 0 in a tower:
-  - `f = 2`;
-  - periods on the diagonal equal to the body's extent plus 2 × 0.9 Å plus 0.5 Å, rounded up to Q16;
-  - one more level per tap (a new record each time).
+- **Grow ×2** (proposed; the owner to confirm):
+  - **What grows.** A body whose piece is materializable (§4.5) becomes a new tower: its materialization as the seed leaf, `f = 2`, no substitution, `levels` 1. A body whose piece is the root of a factor-2 tower gets the same record with `levels` + 1. Other bodies do not grow in v1.
+  - **Periods** [B], so that the same body grows into the same record on every device. On the diagonal, for each axis `a`, the period is `qmax − qmin + 150,733` Q16, where `qmax` is the maximum over the seed's atoms of `⌈x_a × 65536⌉` and `qmin` the minimum of `⌊x_a × 65536⌋`. Both are exact on Float32 positions (scaling by 2¹⁶ is exact), and 150,733 Q16 is 2.3 Å (2 × 0.9 Å + 0.5 Å) rounded up. If the record would break a limit of §2.5 (a very long, flat seed), Grow is refused.
+  - **Span held.** The body keeps its longest displayed span: each tap divides σ by the growth of its longest extent, and the magnification readout shows it. So a grown body stays a toy, however many taps.
   - Water grown a hundred times is `3 × 2^100` atoms (§12.4), as cheap as one water.
 - **Glue** of arbitrary bodies into a group is reserved and not in v1.
 
 ### 10.8 Heft: sound and haptics [P]
 
-`h = log10(1 + log10(M / 1 Da))`. Values: water 0.35, C₆₀ 0.59, salt 10⁶ 0.93, salt 10⁹ 1.06, salt 10¹⁰⁰ 2.01, googolplex 100.
+`h = log10(1 + log10(M / 1 Da))`, from §5.5's `ln M`, or as `(lnln M − ln ln 10) / ln 10` when `ln M` is not finite. Values: water 0.35, C₆₀ 0.59, salt 10⁶ 0.93, salt 10⁹ 1.06, salt 10¹⁰⁰ 2.01, googolplex 100.
 
 | Channel | Starting value |
 |---|---|
@@ -1294,10 +1550,19 @@ The two implementations expose the same names. `packages/core` gains the export 
 
 ### 11.1 Swift: `apps/apple/LupiScale`
 
-A Swift package (tools 6.0, Swift 6 language mode, Foundation only, iOS 26 and macOS 26) with two library targets:
+A Swift package (tools 6.0, Swift 6 language mode, Foundation only, iOS 26 and macOS 26) with two library targets, over LupiKit through `.package(path: "../LupiKit")`:
 
-- **`LupiScaleCore`** has no dependencies and holds everything marked [B].
-- **`LupiScale`** depends on it and on LupiKit's `LupiChem` (element table, bond perception, graph cuts) through `.package(path: "../LupiKit")`.
+- **`LupiScaleCore`** holds everything marked [B]. Its only dependency is LupiKit's `LupiCore`, for SHA-256.
+- **`LupiScale`** depends on `LupiScaleCore` and on LupiKit's `LupiChem` (element table, bond perception, graph cuts) and `LupiPlay` (personalities, felt mass).
+
+**One owner for each shared piece**, so that nothing is duplicated and no dependency runs both ways:
+
+| Piece | Owner | Users |
+|---|---|---|
+| SHA-256 (FIPS 180-4) | LupiKit's new `LupiCore` target: no dependencies, moved there from `LupiData/SHA256.swift` | `LupiData`, `LupiScaleCore`. No other module declares a `SHA256`, so an app importing both never sees two. |
+| felt mass `lupi.feltmass.v1` (§10.2) | LupiKit's `LupiPlay`, as `FeltMass`, over a `MassLog` (`ln M`, `lnln M`) | `Personality.derive`, and LupiScale for nodes (it turns a Magnitude into a `MassLog`, §5.5) |
+| personalities and their table (contracts.md §3.3) | LupiKit's `LupiPlay` | LupiScale derives a node's personality from one materialized leaf (§10.6) |
+| the gesture arbiter (§10.5) | LupiKit's `LupiPlay` | the app |
 
 Tests run on Linux with `swift test`.
 
@@ -1331,10 +1596,17 @@ public enum Step: Sendable, Hashable {
 }
 public struct Path: Sendable, Hashable { public var steps: [Step]
     public init(canonicalizing steps: [Step]) throws; public init(bytes: [UInt8]) throws; public var bytes: [UInt8] { get } }
-public struct Magnitude: Sendable, Hashable, Comparable {                         // §5
+public struct Magnitude: Sendable, Hashable {                                     // §5: == and hash by canonical form
     public init(_ value: BigUInt); public static func tower(seedCount: BigUInt, factor: UInt8, levels: BigUInt) -> Magnitude
-    public static func + (a: Magnitude, b: Magnitude) -> Magnitude; public static func - (a: Magnitude, b: Magnitude) throws -> Magnitude
-    public var formatted: String { get }; public var log10: Double { get }; public var logLog10: Double { get }
+    public static func + (a: Magnitude, b: Magnitude) throws -> Magnitude          // ScaleError.base across families
+    public static func - (a: Magnitude, b: Magnitude) throws -> Magnitude
+    public func compare(_ other: Magnitude) throws -> Int                          // −1, 0, 1; not Comparable (§5.2)
+    public var displayBase: UInt8 { get }; public var formatted: String { get }
+    public var lnM: Double { get }; public var lnlnM: Double { get }               // §5.5 [V]
+}
+public struct Composition: Sendable, Hashable {                                   // §5.3
+    public var unit: [UInt8: BigUInt]; public var copies: Magnitude; public var removed: [UInt8: BigUInt]
+    public var formula: String { get }; public var formulaText: String { get }; public func massMicroDa() throws -> Magnitude
 }
 public protocol NodeStore: Sendable { func record(_ id: NodeID) throws -> NodeRecord }
 public struct View: Sendable { /* leaf | group | box | capped | level | copy | selection, with pending removals */ }
@@ -1344,7 +1616,7 @@ public struct Resolver: Sendable {
     public func step(_ view: View, _ step: Step) throws -> View
     public func resolve(_ id: NodeID, _ path: Path) throws -> View
     public func count(_ view: View) throws -> Magnitude
-    public func composition(_ view: View) throws -> Composition                    // perUnit + multiplier
+    public func composition(_ view: View) throws -> Composition                    // unit × copies − removed (§5.3)
     public func isMaterializable(_ view: View) -> Bool
     public func materialize(_ view: View) throws -> LeafNode
     public func probe(_ view: View) throws -> NodeID
@@ -1363,29 +1635,34 @@ public struct LupiPack: Sendable {
 }
 extension LupiPack: NodeStore {}
 public enum Partition { public static func bake(atomicNumbers: [UInt8], positions: [SIMD3<Float>]) throws -> (records: [NodeRecord], root: NodeID) }
-public enum SHA256 { public static func hash(_ bytes: [UInt8]) -> [UInt8] }
-public enum CRC32 { public static func checksum(_ bytes: [UInt8]) -> UInt32 }
+public enum CRC32 { public static func checksum(_ bytes: [UInt8]) -> UInt32 }     // SHA-256 is LupiCore's
 public struct SplitMix64 { public init(seed: UInt64); public mutating func next() -> UInt64 }
 
 // LupiScale
 public struct Aggregate: Sendable { /* bounds, geometricError, splats, colour, shape tensor, count, massMicroDa */ }
-public struct BodyFrame: Sendable { public var ref: ScaleRef; public var anchorPath: Path
+public struct BodyFrame: Sendable { public var ref: ScaleRef; public var anchorPath: [Step]   // runtime, unlimited (§8.3)
     public var worldFromAnchor: RigidD; public var metresPerAnchorUnit: Double }
 public struct ViewState: Sendable { public var cameraFromWorld: RigidD; public var fovY: Double; public var viewportHeight: Int
     public var zNear: Double; public var zFar: Double }
-public struct Budgets: Sendable { public var tau: Double; public var visits, items, instancedAtoms, engineAtoms, boxesAndSplats, materializations: Int
+public struct Budgets: Sendable { public var tau: Double; public var visits, items, instancedAtoms, engineAtoms, boxesAndSplats, materializations, meshBuilds: Int
     public var residentBytes: Int; public static func iPhone15Pro(_ thermal: ThermalLevel) -> Budgets }   // fair, serious, critical
-public struct Cut: Sendable { public var items: [DrawItem]; public var totalAtoms: Magnitude; public var drawnAtoms: Int; public var visited: Int }
+public struct Cut: Sendable { public var items: [DrawItem]; public var bodyCounts: [Magnitude]; public var drawnAtoms: Int
+    public var visited: Int; public var overBudget: Bool }                       // the HUD sums bodyCounts when it can (§5.2)
 public func rebase(_ frame: inout BodyFrame, focusWorld: SIMD3<Double>, resolver: Resolver) throws
 public func buildCut(bodies: [BodyFrame], view: ViewState, budgets: Budgets, previous: Cut?, resolver: Resolver) -> Cut
-public func pick(ray: RayD, cut: Cut, handBand: ClosedRange<Double>, resolver: Resolver) -> PickResult?
+public func pick(ray: RayD, cut: Cut, band: ClosedRange<Double>, resolver: Resolver) -> PickResult?   // bounded, §4.8
 public func collisionProxy(for view: View, metresPerUnit: Double, maxShapes: Int, resolver: Resolver) throws -> [CollisionShape]
-public func feltMass(massMicroDa: Magnitude, massScale: Double) -> Double                       // §10.2
+public func massLog(massMicroDa: Magnitude) -> MassLog                                           // §5.5, for LupiPlay's FeltMass (§10.2)
+public func personality(for view: View, resolver: Resolver) throws -> PersonalityDerivation     // §10.6, cached by NodeID
 public func expand(_ body: BodyFrame, contactWorld: SIMD3<Double>, budget: Int, resolver: Resolver) throws -> BreakPlan
 public func grow(_ body: BodyFrame, resolver: Resolver) throws -> NodeRecord                    // §10.7
+
+// LupiKit's LupiPlay (for reference)
+public struct MassLog: Sendable { public var lnM: Double; public var lnlnM: Double }             // lnM may be +infinity
+public enum FeltMass { public static func kg(_ mass: MassLog, massScale: Double) -> Double }      // lupi.feltmass.v1, §10.2
 ```
 
-Types named but not spelled out (`DigitRun`, `AtomRange`, `Substitution`, `Composition`, `RigidD`, `RayD`, `DrawItem`, `PickResult`, `CollisionShape`, `BreakPlan`) follow the sections cited next to their use.
+Types named but not spelled out (`DigitRun`, `AtomRange`, `Substitution`, `RigidD`, `RayD`, `DrawItem`, `PickResult`, `CollisionShape`, `BreakPlan`, `ThermalLevel`) follow the sections cited next to their use.
 
 ### 11.2 TypeScript: `packages/core/src/scale`
 
@@ -1417,6 +1694,9 @@ export class Resolver {
   isMaterializable(view: View): boolean; materialize(view: View): Leaf; probe(view: View): NodeID;
 }
 export function formatMagnitude(m: Magnitude): string;
+export function addMagnitude(a: Magnitude, b: Magnitude): Magnitude;    // throws ScaleError('base') across families (§5.2)
+export function compareMagnitude(a: Magnitude, b: Magnitude): -1 | 0 | 1;  // likewise
+export function magnitudeKey(m: Magnitude): string;                     // the canonical form, for equality and maps
 export function writePack(records: Uint8Array[], opts?: { roots?: { name: string; id: NodeID }[]; deps?: NodeID[] }): Uint8Array;
 export function readPack(bytes: Uint8Array): Pack;                  // §6.6 conformance
 export function encodeRef(ref: ScaleRef): Uint8Array; export function decodeRef(bytes: Uint8Array): ScaleRef;
@@ -1583,10 +1863,25 @@ BLA1ZTtTrhgyPGAZElhGs54iVFtEXIu6NoHil5LaXyJ5O94VN2RGEl9-ArQ
 
 **Composition and mass.**
 
-- Googolplex: per-copy formula BrCl499Na500 × 10^(10^100 − 3); mass 2.9264454 × 10^(10^100 + 7) µDa.
+- Googolplex: formula BrCl499Na500, formula text `BrCl499Na500 × 10^(10^100 − 3)`; mass 2.9264454 × 10^(10^100 + 7) µDa.
+- The googolplex with child 9 and the grain removed: formula text `BrCl499Na500 × (9 × 10^(10^100 − 4) − 1)`.
 - Caffeine leaf: C8H10N4O2, 194,194,000 µDa.
+- `µDa` of S, Zn and Xe (the three masses whose binary64 product with 10⁶ is not an integer): 32,060,000, 65,380,000 and 131,290,000.
 
-**Grow ×2.** Water (the leaf above) as seed, factor 2, periods 190501, 224868, 214388 Q16 on the diagonal, `levels` 100: 123-byte record, NodeID `554f4b7dcfadca431d8d5cd0c27f9a5ed802da3334163275bb487a010784a48b`, count 3 × 2^100.
+**A removal inside a seed copy.** The salt seed in a tower of factor 10 with the salt periods, `levels` 3 and no substitution (record `4c55504e040100006f0000002ef8502fcd22e4b098c57e85c0bd1b6793ff8be13f9b330d0017f1c9561e3f3e0a00000074331c000000000000000000000000000000000000000000000000000000000074331c000000000000000000000000000000000000000000000000000000000074331c0000000000010003`, NodeID `31e0ec4ca049b549f939cd0b170459cdca96f41a466824aec7eb58c53400ee27`), edited to remove octant 0 of seed copy (0, 0, 0):
+
+- Removal path `020003010003010000010001010000010001010000010001020100`: a tower step to level 0, then `cells 0`.
+- Edit record `4c55504e050100004300000031e0ec4ca049b549f939cd0b170459cdca96f41a466824aec7eb58c53400ee27010000001b000000020003010003010000010001010000010001010000010001020100`, NodeID `ee3b568af6b6583687b1efe9e65f7e472541e052eb03ec54935a56becfb6c4d2`.
+- Count 999,784 (one octant is 27 cells of 8 ions). Formula Cl500Na500; formula text `Cl500Na500 × 1,000 − Cl108Na108`; mass 29,213,688,480,000 µDa.
+- Inside the edit: copy (0, 0, 0) resolves, with 784 atoms and probe `e5d83bf7fcf5686f3ec7b398323feab9c4a43de3f89ac91b6909d3a6f4117fa5`; its octant 1 resolves, with 144 atoms; its octant 0, or anything below it, fails with `path`.
+
+**A tower of towers.** A tower whose seed is the 10⁶ rung itself is rejected with `validity` (§2.8). Wrapped in a one-child group, it resolves:
+
+- Group record `4c55504e020100005c00000001000000cd481a1353e063838be8fc0c55f420b977465a8f1db3e959460aaa34ac4b8df8000000000000000000000000000000000000000000000000000000000000f03f000000000000000000000000000000000000000000000000`, NodeID `bdd05a247b85878be2d11bbd16470d62cdc722d182ec124f76aa212e898d0cfa`.
+- Over it, factor 2, periods ten times the salt periods, `levels` 1: record `4c55504e040100006f000000bdd05a247b85878be2d11bbd16470d62cdc722d182ec124f76aa212e898d0cfa0200000088021a010000000000000000000000000000000000000000000000000000000088021a010000000000000000000000000000000000000000000000000000000088021a0100000000010001`, NodeID `6bff9b557dcb5058dcb4126f001f7415a617e43e3bf31e3922c6adeea4d3bfa6`, count 2,000,000.
+- The path `tower` (x digit 1), `child 0`, `tower` (to level 0, all digits 0) is `0300030100010100010100010000000001000003010003010000010001010000010001010000010001`. It reaches a seed copy with probe `7e800b0105dba71bf11d993caf7b8a7c44c922cbe44ebfd766c57626118d7202`, the same in both copies of the outer tower, because they instance one record.
+
+**Grow ×2.** Water (the leaf above) as seed, factor 2, periods 190501, 224869, 214389 Q16 on the diagonal (§10.7's integer rule), `levels` 100: 123-byte record, NodeID `56f05f1af0f47e8b00834c5742f6e6e7b4ad7a1f63b31cadb476ed79a5610aac`, count 3 × 2^100. With `levels` 1 (the first tap), NodeID `9a0d1fadcc862005945fb3a802e644fcb96ab88b7beccd45de8d2bb7889f8ddf`.
 
 ### 12.5 Formatting
 
@@ -1612,7 +1907,7 @@ BLA1ZTtTrhgyPGAZElhGs54iVFtEXIu6NoHil5LaXyJ5O94VN2RGEl9-ArQ
 
 ### 12.6 Packs
 
-**A small pack** holding the water leaf, the salt seed and the googolplex tower, with roots `salt-googolplex` and `water`: 65,536 bytes; contentId `9fe8d2366fbba08239408ac3b0308a917465770e9a3c428f1bf72c0d822ce15d`; header CRC `616fe651`; SHA-256 of the file `fe2e65065e9499fd79d6171cedd3c158ad46ad5b96febb3d22cd955ef2ffe674`.
+**A small pack** holding the water leaf, the salt seed and the googolplex tower, with roots `salt-googolplex` and `water`: 65,536 bytes; contentId `a91476434956a8fc564e9328db078a20864d0053e674734e89da55b4675f6256`; header CRC `ac22309b`; SHA-256 of the file `64235b518944425f713f018008f94171525328d7627e00865cff8a5d9442c2a8`.
 
 | Section | Offset | Length | CRC-32 |
 |---|---|---|---|
@@ -1624,29 +1919,31 @@ Header (128 bytes) and section table:
 
 ```
 4c55504b01000000800000000300000080000000000000000000010000000000
-9fe8d2366fbba08239408ac3b0308a917465770e9a3c428f1bf72c0d822ce15d
+a91476434956a8fc564e9328db078a20864d0053e674734e89da55b4675f6256
 0000000000000000000000000000000000000000000000000000000000000000
-000000009fae118f000000000000000000000000000000000000000051e66f61
+000000009fae118f00000000000000000000000000000000000000009b3022ac
 
 4e49445801000000004000000000000098000000000000006ad6cb1a01000000
 4e52454301000000008000000000000018010000000000005efc1bb001000000
 524f4f540100000000c000000000000064000000000000004c47e7dd01000000
 ```
 
-**The bundled scale pack** `lupi-scale-r1.lpk` (the six salt rungs and their seed, copper open and closed, diamondoids 1 to 12; 20 roots, 21 records): 65,536 bytes; contentId `0cdc9ca710a3f5ac7c4c2e9ed1420513616ee7ad6d96fe6fc6b932c8e9d18f36`; file SHA-256 `97e3a0a6b25a7b91d5139438c714d36633d1bb87f5f5338d31f978020754ca29`.
+**The bundled scale pack** `lupi-scale-r1.lpk` (the six salt rungs and their seed, copper open and closed, diamondoids 1 to 12; 20 roots, 21 records): 65,536 bytes; contentId `4ec7833bd79b74af882a100e2ef121fa928a01c02dcc5dc66e2282a127377e97`; file SHA-256 `d5f1d7ba69da089b970e7f1cdfe1f6e530c17d006c268ceee4bad0cd795a2794`.
 
-**`massive_1m.glimbin` through `lupi.bake.partition@1`:** 953,312 Cu atoms → 233 leaves (the last holds 3,040 atoms) and 35 groups; root `08588107c1be69ef9816bb4226c25e65b2dae3d2da2edf3fb9420fff76664cca`; pack 12,484,608 bytes, contentId `6ced2d48335d9efb281e5685fbce716368d86f477495624a6f2719d4f221a939`, file SHA-256 `5709e48847b04b15a0b11c400c0073834ed9d64217c32d172f6510ee3e1abafb`; the resolver counts 953,312 atoms.
+**`massive_1m.glimbin` through `lupi.bake.partition@1`:** 953,312 Cu atoms → 233 leaves (the last holds 3,040 atoms) and 35 groups, depth 4; root `08588107c1be69ef9816bb4226c25e65b2dae3d2da2edf3fb9420fff76664cca`; pack (root `massive_1m`) 12,484,608 bytes, contentId `c760f77ae2225153e842d6f1dd164fe6470de5741a75f2bd9e0603f92b307f08`, file SHA-256 `b12f3e7a79ac58774e4b79b0066b08f91f79a669816c672d3748b978177e9b85`; the resolver counts 953,312 atoms.
+
+- Keeping its first leaf (path `child 0`, `child 0`, `child 0`) embeds the leaf (53,264 bytes) and the three groups on the path (368, 720 and 720 bytes): a 55,171-byte reference, 73,567 characters as text, that resolves with no pack (§7.2). By dependency alone it would be 115 bytes.
 
 ---
 
 ## 13. Change control [B]
 
-**What v1 freezes.** Everything marked [B]:
+**What v1 freezes.** Everything marked [B], each part at the milestone §0 names (M1 for what trophies carry, M3b for groups and packs):
 
-- the record layouts and kinds 1–5 at `kindVersion` 1;
+- the record layouts and kinds 1–5 at `kindVersion` 1, with the limits of §1.9 and the contextual rules of §2.8;
 - the site tables, orders and roundings of §3;
 - the step tags 1–4 and the canonical rules of §4;
-- the Magnitude formatting of §5.4;
+- Magnitude's canonical form, the composition and formula text of §5.3, the mass table `lupi.mass.v1`, and the formatting of §5.4;
 - the pack layout at version 1.0;
 - `lupi.scale-ref.v1`;
 - the domain strings, CRC-32 and SplitMix64 constants.
@@ -1662,7 +1959,13 @@ Header (128 bytes) and section table:
 | A new reference format | `LSR` with version 2 |
 | A new felt-mass curve or budgets | not format changes: [V] and [P] values live in the app's tuning table |
 
-**Past the v1 ceiling.** v1 counts reach about 10^(2.4 × 10¹⁹⁷²⁸), far past a googolplex, and v1 paths address any node of any v1 tower. Going further needs no rewrite:
+**Past the v1 ceiling.** v1 is honest about where it stops:
+
+- **Counts** are exact up to about 10^(2.4 × 10¹⁹⁷²⁸), far past a googolplex.
+- **Paths** address every node of a v1 tower whose digit strings, within one tower step, have at most 4,096 runs per axis, in a path of at most 65,536 bytes and 1,024 steps. That covers every node play can reach: a smash adds at most one run per axis, a chip at most a few dozen (its bounded descent, §4.8), and a dive about one (§8.8). It does not cover a node whose index digits are arbitrary, such as the seed copy at a random index of a googolplex, whose 10¹⁰⁰ digits have about as many runs; no gesture produces one. A keep past the limits falls back as §7.2 says.
+- **Anchor paths** are runtime state with no limit (§8.3).
+
+Going further needs no rewrite:
 
 - **Record:** a tower `kindVersion` 2 whose `levels` is itself a Magnitude in runs form (a tower of towers).
 - **Path:** a tower step tag whose run lengths are Magnitudes.
