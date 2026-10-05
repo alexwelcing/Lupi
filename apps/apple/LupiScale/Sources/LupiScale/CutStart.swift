@@ -410,6 +410,22 @@ enum Digits {
 
     static func all(_ runs: [DigitRun], _ d: UInt8) -> Bool { runs.allSatisfy { $0.digit == d } }
 
+    /// The digits without their last `n`.
+    static func dropLast(_ runs: [DigitRun], _ n: BigUInt) -> [DigitRun] {
+        var r = runs
+        var left = n
+        while !left.isZero, let last = r.last {
+            if last.length <= left {
+                r.removeLast()
+                left = left.minus(last.length)
+            } else {
+                r[r.count - 1].length = last.length.minus(left)
+                left = BigUInt()
+            }
+        }
+        return r
+    }
+
     /// The value of the digits when it is at most `limit`.
     static func smallValue(_ runs: [DigitRun], _ f: UInt8, limit: Int) -> Int? {
         var v = 0

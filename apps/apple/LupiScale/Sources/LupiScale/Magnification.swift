@@ -168,9 +168,16 @@ public struct Flight: Sendable {
 public enum Wraps {
     /// How many whole periods to wrap so the remaining change in λ stays below one period plus V.
     public static func periods(remaining: Double, factor: UInt8, pictureStep: Double) -> Int {
+        let n = periodCount(remaining: remaining, factor: factor, pictureStep: pictureStep)
+        return n.int ?? Int.max
+    }
+
+    /// The same count exactly: a dive through the googolplex wraps some 10⁹⁸ periods in a frame.
+    public static func periodCount(remaining: Double, factor: UInt8, pictureStep: Double) -> BigUInt {
         let period = log10(Double(factor))
         let excess = abs(remaining) - period - pictureStep
-        return excess > 0 ? Int((excess / period).rounded(.up)) : 0
+        guard excess > 0, excess.isFinite else { return BigUInt() }
+        return BigUInt(roundingUp: excess / period)
     }
 
     /// Appends (descending) or removes (ascending) 3n levels. The digits of a descent are constant per
@@ -199,21 +206,27 @@ public enum Wraps {
             var remaining = levels
             var anchorView = anchor
             while !remaining.isZero {
-                guard case let .tower(d, _)? = frame.anchorPath.last else { throw ScaleError(.path, "not enough levels above the anchor") }
+                guard case let .tower(d, runs)? = frame.anchorPath.last else { throw ScaleError(.path, "not enough levels above the anchor") }
                 if d <= remaining {
                     frame.anchorPath.removeLast()
                     remaining = remaining.minus(d)
-                } else {
-                    // Peel levels off the last step one period at a time.
-                    for _ in 0..<3 {
-                        let (rest, _) = try AnchorPath.popLevel(frame.anchorPath, anchor: anchorView)
-                        frame.anchorPath = rest
-                        anchorView = try resolver.walk(body, rest)
-                    }
-                    remaining = remaining.minus(3)
+                    anchorView = try resolver.walk(body, frame.anchorPath)
                     continue
                 }
-                anchorView = try resolver.walk(body, frame.anchorPath)
+                // Part of the last step: single levels until a whole number of periods is left,
+                // then one digit per axis for each period, so a long climb costs O(runs).
+                if remaining.dividedSmall(3).remainder != 0 {
+                    let (rest, _) = try AnchorPath.popLevel(frame.anchorPath, anchor: anchorView)
+                    frame.anchorPath = rest
+                    anchorView = try resolver.walk(body, rest)
+                    remaining = remaining.minus(1)
+                    continue
+                }
+                let q = remaining.dividedSmall(3).quotient
+                var upper = runs
+                for a in 0..<3 { upper[a] = Digits.dropLast(runs[a], q) }
+                frame.anchorPath[frame.anchorPath.count - 1] = .tower(levels: d.minus(remaining), runs: upper)
+                remaining = BigUInt()
             }
         }
     }
@@ -237,5 +250,23 @@ public enum Wraps {
             if low == 1 || high == 1 { return false }
         }
         return true
+    }
+}
+
+extension BigUInt {
+    /// ⌈v⌉ for a finite v ≥ 0, exactly: binary64 integers above 2⁵³ are a 53-bit significand shifted.
+    public init(roundingUp v: Double) {
+        guard v.isFinite, v > 0 else {
+            self.init()
+            return
+        }
+        let up = v.rounded(.up)
+        if up < 0x1p63 {
+            self.init(UInt64(up))
+            return
+        }
+        let e = Int(up.exponent)
+        let significand = up.significandBitPattern | (1 << 52)
+        self = BigUInt(significand) << (e - 52)
     }
 }
