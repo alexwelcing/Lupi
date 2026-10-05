@@ -115,34 +115,36 @@ enum Proxies {
                 heavy[best].1 *= 1.15
             }
         }
-        var spheres = heavy
-        if spheres.count > limit {
-            var box = Box3.empty
-            for s in spheres { box = box.union(Box3(min: s.0, max: s.0)) }
-            var cell = max(box.longest / 8, 1e-6)
-            while true {
-                var cells: [SIMD3<Int64>: [(Vec3, Double)]] = [:]
-                for s in spheres {
-                    let k = SIMD3<Int64>(Int64(((s.0.x - box.min.x) / cell).rounded(.down)),
-                                         Int64(((s.0.y - box.min.y) / cell).rounded(.down)),
-                                         Int64(((s.0.z - box.min.z) / cell).rounded(.down)))
-                    cells[k, default: []].append(s)
-                }
-                if cells.count <= limit {
-                    spheres = cells.keys.sorted { ($0.z, $0.y, $0.x) < ($1.z, $1.y, $1.x) }.map { k in
-                        let members = cells[k]!
-                        var c = Vec3.zero
-                        for m in members { c += m.0 }
-                        c /= Double(members.count)
-                        let r = members.map { ($0.0 - c).length + $0.1 }.max()!
-                        return (c, r)
-                    }
-                    break
-                }
-                cell *= 1.5
+        return merge(heavy, limit).map { .sphere(centre: ($0.0 - centre) * sigma, radius: $0.1 * sigma) }
+    }
+
+    /// Grid clustering into at most `limit` bounding spheres (plan §3.4), coarsening the grid
+    /// until the occupied cells fit.
+    static func merge(_ spheres: [(Vec3, Double)], _ limit: Int) -> [(Vec3, Double)] {
+        guard spheres.count > limit else { return spheres }
+        var box = Box3.empty
+        for s in spheres { box = box.union(Box3(min: s.0, max: s.0)) }
+        var cell = max(box.longest / 8, 1e-6)
+        while true {
+            var cells: [SIMD3<Int64>: [(Vec3, Double)]] = [:]
+            for s in spheres {
+                let k = SIMD3<Int64>(Int64(((s.0.x - box.min.x) / cell).rounded(.down)),
+                                     Int64(((s.0.y - box.min.y) / cell).rounded(.down)),
+                                     Int64(((s.0.z - box.min.z) / cell).rounded(.down)))
+                cells[k, default: []].append(s)
             }
+            if cells.count <= limit {
+                return cells.keys.sorted { ($0.z, $0.y, $0.x) < ($1.z, $1.y, $1.x) }.map { k in
+                    let members = cells[k]!
+                    var c = Vec3.zero
+                    for m in members { c += m.0 }
+                    c /= Double(members.count)
+                    let r = members.map { ($0.0 - c).length + $0.1 }.max()!
+                    return (c, r)
+                }
+            }
+            cell *= 1.5
         }
-        return spheres.map { .sphere(centre: ($0.0 - centre) * sigma, radius: $0.1 * sigma) }
     }
 
     /// Children's bounding spheres; the largest is split into its own proxy until 64 shapes, or
@@ -182,7 +184,11 @@ enum Proxies {
                 continue
             }
         }
-        return leaves + parts.map { .sphere(centre: ($0.centre - centre) * sigma, radius: $0.radius * sigma) }
+        // A group with more children than shapes merges them (§10.4 bounds a group at 64).
+        var spheres: [(Vec3, Double)] = []
+        for case let .sphere(c, radius) in leaves { spheres.append((c / sigma + centre, radius / sigma)) }
+        spheres += parts.map { ($0.centre, $0.radius) }
+        return merge(spheres, limit).map { .sphere(centre: ($0.0 - centre) * sigma, radius: $0.1 * sigma) }
     }
 
     /// An edit: the proxy of the remaining children, ignoring holes smaller than 1/8 of the node.

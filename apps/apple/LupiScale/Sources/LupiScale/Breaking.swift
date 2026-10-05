@@ -128,7 +128,7 @@ public func expand(_ body: BodyFrame, contactWorld: SIMD3<Double>, budget: Int, 
         var dir = body.worldFromAnchor.applyDirection(centre - agg.centre)
         dir = dir.length > 0 ? dir.normalized : Vec3(0, 1, 0)
         let span = body.metresPerAnchorUnit * p.scale * a.bounds.longest
-        let share = exp(a.massMicroDa.lnM - agg.massMicroDa.lnM)
+        let share = exp(a.massMicroDa.lnRatio(agg.massMicroDa))
         return BreakPlan.Piece(
             root: root ?? body.ref.root, path: path, count: try r.count(w), centreWorld: worldCentre,
             separation: BreakTuning.separation * dir, feltMassKg: expansion ? max(0.06, parentMass * share) : nil,

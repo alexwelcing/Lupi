@@ -106,6 +106,12 @@ struct LevelBase {
         (((r0 - depth) % 3 + 3) % 3, k0Small.map { $0 - depth >= 4 } ?? true)
     }
 
+    /// Whether the level `depth` below k0 is 0, and its axis, without f^−u(k).
+    @inline(__always) func levelKind(_ depth: Int) -> (isZero: Bool, axis: Int) {
+        if let k = k0Small, k - depth == 0 { return (true, 0) }
+        return (false, ((r0 - depth) % 3 + 3) % 3)
+    }
+
     /// The level `depth` below k0: whether it is 0, its axis, and f^−u(k).
     func level(_ depth: Int, factor f: Int) -> (isZero: Bool, axis: Int, inverseUnit: Double, atLeastFour: Bool) {
         if let k = k0Small, k - depth == 0 { return (true, 0, 1, false) }
@@ -235,6 +241,8 @@ final class CutBuilder {
     @exclusivity(unchecked) var levelBases: [LevelBase] = []
     @exclusivity(unchecked) var kidScratch: [Int32] = []
     @exclusivity(unchecked) var keepScratch: [Bool] = []
+    /// A level's envelope and f^−u by (level base, depth): every node of one level shares them.
+    @exclusivity(unchecked) var levelShapes: [Int64: (Box3, Double)] = [:]
     /// The cells of crystal box nodes, kept apart so nodes stay small to copy.
     @exclusivity(unchecked) var cellBoxes: [CellBox] = []
 
@@ -344,9 +352,9 @@ final class CutBuilder {
                 continue
             }
             visited += 1
-            let node = nodes[Int(x)]
-            let wantRefine = node.rho > tau || (previousRefined.contains(node.key64) && node.rho >= tau / 2)
-            if !wantRefine || node.final {
+            let rho = nodes[Int(x)].rho, key64 = nodes[Int(x)].key64
+            let wantRefine = rho > tau || (rho >= tau / 2 && previousRefined.contains(key64))
+            if !wantRefine || nodes[Int(x)].final {
                 emit(x)
                 continue
             }
@@ -361,7 +369,7 @@ final class CutBuilder {
                 emit(x)
                 continue
             }
-            var next = used - node.cost
+            var next = used - nodes[Int(x)].cost
             for kid in kids { next = next + nodes[Int(kid)].cost }
             if !fits(next) {
                 overBudget = true
@@ -369,7 +377,7 @@ final class CutBuilder {
                 continue
             }
             used = next
-            refined.insert(node.key64)
+            refined.insert(key64)
             for kid in kids { heap.push(kid, self) }
         }
         let largest = max(
@@ -402,8 +410,7 @@ final class CutBuilder {
 
     /// Records a node: evaluates its ρ, culls it against the frustum, the enclosed rule and the
     /// excavation bubble. Returns its handle, or nil when it is not drawn.
-    func add(_ n: CNode, parent: Int32, step: Cut.LiteStep, base: Int32 = -1) -> Int32? {
-        var node = n
+    func add(_ node: CNode, parent: Int32, step: Cut.LiteStep, base: Int32 = -1) -> Int32? {
         let b = bodies[Int(node.body)]
         let r = rotation(node.rot)
         let centreA = node.s * (node.rot < 0 ? node.bounds.centre : r * node.bounds.centre) + node.t
@@ -428,21 +435,25 @@ final class CutBuilder {
         let ex = e.x * cosX + e.z * sinX, ey = e.y * cosY + e.z * sinY
         if p.x * cosX + p.z * sinX > ex || -p.x * cosX + p.z * sinX > ex { return nil }
         if p.y * cosY + p.z * sinY > ey || -p.y * cosY + p.z * sinY > ey { return nil }
+        var faces = node.faces
         if node.solid && node.kind != .atoms && b.bubble {
             if insideBubble(node, b) { return nil }
-            node.faces |= bubbleFaces(node, b)
+            faces |= bubbleFaces(node, b)
         }
         if node.solid && !node.hasRemovals && node.kind != .atoms {
             // Enclosed (§9.4), or every exposed face turned away from the camera: nothing of it shows.
-            if node.faces & frontFaces(node, b) == 0 && !(b.bubble && intersectsBubble(node, b)) { return nil }
+            if faces & frontFaces(node, b) == 0 && !(b.bubble && intersectsBubble(node, b)) { return nil }
         }
         let dist = p.length
-        node.rho = node.final ? 0 : node.epsilon * node.s * b.sigma * k / max(dist - radius, view.zNear)
         let projected = radius / max(dist, view.zNear)
-        node.area = projected * projected
+        // Appended as given, then patched in place: a node is copied once.
         nodes.append(node)
+        let i = nodes.count - 1
+        nodes[i].faces = faces
+        nodes[i].rho = node.final ? 0 : node.epsilon * node.s * b.sigma * k / max(dist - radius, view.zNear)
+        nodes[i].area = projected * projected
         arena.append(Cut.ArenaEntry(parent: parent, base: base, step: step))
-        return Int32(nodes.count - 1)
+        return Int32(i)
     }
 
     func intersectsBubble(_ n: CNode, _ b: BodyState) -> Bool {

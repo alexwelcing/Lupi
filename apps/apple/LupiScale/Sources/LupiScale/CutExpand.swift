@@ -31,7 +31,7 @@ extension CutBuilder {
         // The child's frame is 1/f of the parent's when k ≡ 1 (mod 3) and k ≥ 4 (§3.4.2).
         let shrink = a == 0 && atLeastFour ? 1 / Double(f) : 1
         let childDepth = n.depth + 1
-        let child = base.level(Int(childDepth), factor: f)
+        let child = base.levelKind(Int(childDepth))
         let r = rotation(n.rot)
         let pitch = r * tc.periods[a]
         // A reused buffer: the caller is done with the last expansion's handles.
@@ -39,8 +39,21 @@ extension CutBuilder {
         kidScratch = []
         out.removeAll(keepingCapacity: true)
         defer { kidScratch = out }
-        let childBounds = child.isZero ? nil : tc.envelope(axis: child.axis, inverseUnit: child.inverseUnit)
-        let childEpsilon = tc.epsilon * (child.isZero ? 1 : child.inverseUnit)
+        var childBounds: Box3?
+        var childEpsilon = tc.epsilon
+        if !child.isZero {
+            let key = Int64(n.levelBase) << 20 | Int64(childDepth)
+            let shape: (Box3, Double)
+            if let cached = levelShapes[key] {
+                shape = cached
+            } else {
+                let inverseUnit = base.level(Int(childDepth), factor: f).inverseUnit
+                shape = (tc.envelope(axis: child.axis, inverseUnit: inverseUnit), inverseUnit)
+                levelShapes[key] = shape
+            }
+            childBounds = shape.0
+            childEpsilon = tc.epsilon * shape.1
+        }
         let lower = UInt8(1 << (2 * a)), upper = UInt8(1 << (2 * a + 1))
         for j in 0..<f {
             var faces = n.faces & ~(lower | upper)
