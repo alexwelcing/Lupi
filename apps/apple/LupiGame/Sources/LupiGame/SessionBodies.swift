@@ -31,31 +31,48 @@ extension PlaySession {
         do {
             let content = try catalog.content(request.source)
             store.add(content.ref.records)
+            if let identity = content.identity { store.add(identity.records) }
             let view = try resolver.resolve(content.ref.root, content.ref.path)
-            let sigma = try Spawn.metresPerUnit(view, resolver: resolver)
+            let sigma = try content.metresPerUnit ?? Spawn.metresPerUnit(view, resolver: resolver)
             let facts = try BodyFacts.of(content.ref, resolver: resolver)
-            let position: Vec3
+            let pose: RigidD
             switch request.placement {
             case let .world(p):
-                position = p
+                pose = RigidD(translation: p)
             case let .ahead(sideways):
                 var flat = camera.forward
                 flat.y = 0
                 flat = flat.lengthSquared > 1e-6 ? flat.normalized : Vec3(0, 0, -1)
                 let side = Vec3(0, 1, 0).cross(flat).normalized * -1
-                position = camera.position + flat * PlayTuning.spawnDistance + side * sideways - Vec3(0, PlayTuning.spawnDrop, 0)
+                pose = RigidD(translation: camera.position + flat * PlayTuning.spawnDistance + side * sideways - Vec3(0, PlayTuning.spawnDrop, 0))
+            case let .shelf(entityPose):
+                pose = entityPose
             }
+            // The entity sits at the node's local centre (scale-spec §8.5).
             let frame = BodyFrame(
                 ref: content.ref,
-                worldFromAnchor: RigidD(translation: position - sigma * facts.aggregate.centre),
+                worldFromAnchor: RigidD(rotation: pose.rotation, translation: pose.translation - pose.rotation.act(sigma * facts.aggregate.centre)),
                 metresPerAnchorUnit: sigma
             )
+            let onShelf = request.placement.isShelf
             let id = try addBody(
-                frame: frame, identity: content.ref, facts: facts, name: content.name, brokenFrom: nil, feltMass: nil,
-                mode: .kinematic, now: now, floatFor: PlayTuning.spawnFloat
+                frame: frame, identity: content.identity ?? content.ref, facts: facts, name: content.name, brokenFrom: nil, feltMass: nil,
+                mode: .kinematic, now: now, floatFor: onShelf ? 0 : PlayTuning.spawnFloat, provenance: content.provenance,
+                budgeted: !onShelf
             )
-            bodies[id]?.breakableAfter = now + PlayTuning.spawnGrace
-            let body = bodies[id]!
+            guard var body = bodies[id] else { return }
+            body.breakableAfter = now + PlayTuning.spawnGrace
+            if case let .trophy(record) = content.provenance {
+                body.trophyID = record.id
+                if record.origin.kind == .broken { body.brokenFrom = record.origin.parent?.name }
+            }
+            if onShelf {
+                // Back on its shelf: in place until something touches it (plan §6.4).
+                body.pinned = true
+                body.frozen = true
+                body.floatUntil = -.infinity
+            }
+            bodies[id] = body
             out.events.append(.spawned(id))
             fire(.spawn, on: body, at: body.entityPose.translation, direction: .zero, now: now)
         } catch {
@@ -68,9 +85,10 @@ extension PlaySession {
     @discardableResult
     mutating func addBody(
         frame: BodyFrame, identity: ScaleRef, facts: BodyFacts, name: String, brokenFrom: String?, feltMass: Double?,
-        mode: MotionMode, now: Double, floatFor: Double = 0, spawnSpan: Double? = nil
+        mode: MotionMode, now: Double, floatFor: Double = 0, spawnSpan: Double? = nil, provenance: Provenance,
+        budgeted: Bool = true
     ) throws -> BodyID {
-        makeRoom(for: 1)
+        if budgeted { makeRoom(for: 1) }
         let id = newID()
         let felt = feltMass ?? facts.feltMassKg
         let span = frame.metresPerAnchorUnit * facts.aggregate.bounds.longest
@@ -85,6 +103,7 @@ extension PlaySession {
             motion: BodyMotion(pose: .identity), bornAt: now, breakableAfter: now, insetUntil: -.infinity, growth: nil,
             floatUntil: now + floatFor, effects: BodyEffects(popIn: PopIn(comfort: settings.comfort))
         )
+        body.provenance = provenance
         body.spec = try BodyPhysics.spec(body, mode: mode, resting: false, now: now, cameraInside: false, resolver: resolver)
         body.motion = BodyMotion(pose: body.entityPose)
         bodies[id] = body
@@ -97,13 +116,14 @@ extension PlaySession {
     mutating func makeRoom(for n: Int) {
         while toyCount + n > PlayTuning.maxDynamicBodies {
             let held = grab?.body
-            let candidates = bodyOrder.compactMap { bodies[$0] }.filter { $0.isToy && $0.id != held && $0.id != pinch?.body }
+            let candidates = bodyOrder.compactMap { bodies[$0] }.filter { $0.isToy && !$0.pinned && $0.id != held && $0.id != pinch?.body }
             guard let victim = candidates.first(where: { $0.brokenFrom != nil }) ?? candidates.first else { return }
             remove(victim.id, poof: true)
         }
     }
 
-    var toyCount: Int { bodies.values.filter { $0.isToy }.count }
+    /// Loose toys: what the 40-body budget counts. Shelved trophies count against their shelf's 60.
+    var toyCount: Int { bodies.values.filter { $0.isToy && !$0.pinned }.count }
 
     mutating func remove(_ id: BodyID, poof: Bool) {
         guard bodies.removeValue(forKey: id) != nil else { return }
@@ -163,7 +183,7 @@ extension PlaySession {
     mutating func rest(_ b: inout Body, now: Double) -> Bool {
         let slow = b.motion.linearVelocity.length < PlayTuning.restSpeed && b.motion.angularVelocity.length < PlayTuning.restSpin
         if b.atRest {
-            if slow { return false }
+            if slow { return checkShelf(&b, now: now) }
             wake(&b)
             return true
         }
@@ -181,14 +201,59 @@ extension PlaySession {
         return true
     }
 
+    /// Three seconds at rest on a shelf keeps a body there (plan §6.3); checked once per rest.
+    mutating func checkShelf(_ b: inout Body, now: Double) -> Bool {
+        guard !b.shelfChecked, let since = b.restingSince, now - since >= PlayTuning.pinHold else { return false }
+        b.shelfChecked = true
+        if let support = shelfSupport(of: b) { out.events.append(.restedOnShelf(b.id, support: support)) }
+        return true
+    }
+
+    /// Where a resting body's stack meets the room, when that is a shelf: world mesh at least
+    /// 25 cm above the floor, or a trophy already on its shelf (plan §6.3). Nil on the floor,
+    /// while the floor is unknown, or when the chain of supports is broken.
+    func shelfSupport(of body: Body) -> Vec3? {
+        guard let floorY else { return nil }
+        var current = body
+        var seen: Set<BodyID> = []
+        for _ in 0..<PlayTuning.maxStack {
+            guard seen.insert(current.id).inserted else { return nil }
+            if current.id != body.id, current.pinned, current.frozen {
+                let box = current.worldBounds
+                let base = Vec3(box.centre.x, box.min.y, box.centre.z)
+                return base.y - floorY >= PlayTuning.shelfHeight ? base : nil
+            }
+            switch current.support {
+            case let .room(point)?:
+                return point.y - floorY >= PlayTuning.shelfHeight ? point : nil
+            case let .body(next)?:
+                guard let below = bodies[next] else { return nil }
+                current = below
+            case nil:
+                return nil
+            }
+        }
+        return nil
+    }
+
     /// Restores the personality's damping (an impulse above 0.05 N·s, a grab).
     mutating func wake(_ b: inout Body) {
         b.restingSince = nil
+        b.shelfChecked = false
         if b.atRest {
             b.atRest = false
             let p = b.facts.personality.personality
             out.physics.append(.setDamping(b.id, linear: p.linearDamping, angular: p.angularDamping))
         }
+    }
+
+    /// A trophy held in place on its shelf becomes an ordinary dynamic body.
+    mutating func unfreeze(_ b: inout Body) {
+        guard b.frozen else { return }
+        b.frozen = false
+        b.mode = .dynamic
+        b.spec.mode = .dynamic
+        out.physics.append(.setMode(b.id, .dynamic))
     }
 
     // MARK: Out of bounds (plan §3.3)

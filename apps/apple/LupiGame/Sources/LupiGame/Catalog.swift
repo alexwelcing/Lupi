@@ -67,6 +67,8 @@ public enum SpawnSource: Sendable, Hashable {
     /// A bundled starter (LupiData), by id.
     case starter(String)
     case salt(ReceiptRung)
+    /// A kept trophy, from the Cabinet or a shelf (plan §6.4).
+    case trophy(TrophyRecord)
 }
 
 public struct SpawnItem: Sendable, Hashable, Identifiable {
@@ -77,10 +79,24 @@ public struct SpawnItem: Sendable, Hashable, Identifiable {
     public var source: SpawnSource
 }
 
-/// What a spawn becomes: a scale reference with its records, named.
+/// What a spawn becomes: a scale reference with its records, named, and where it came from.
 public struct SpawnContent: Sendable {
+    /// What the cut draws.
     public var ref: ScaleRef
     public var name: String
+    public var provenance: Provenance
+    /// The piece exactly, when the drawing goes through another reference (a restored fragment).
+    public var identity: ScaleRef?
+    /// σ when the size is given (a trophy keeps its own); nil for the spawn size (scale-spec §10.1).
+    public var metresPerUnit: Double?
+
+    public init(ref: ScaleRef, name: String, provenance: Provenance, identity: ScaleRef? = nil, metresPerUnit: Double? = nil) {
+        self.ref = ref
+        self.name = name
+        self.provenance = provenance
+        self.identity = identity
+        self.metresPerUnit = metresPerUnit
+    }
 }
 
 /// The bundled content: starters as leaves (scale-spec §2.2, file order, Float32 as the web
@@ -128,9 +144,30 @@ public struct Catalog: Sendable {
         case let .starter(id):
             guard let entry = starters[id] else { throw ScaleError(.missing, "starter \(id)") }
             let record = try NodeRecord(.leaf(entry.leaf))
-            return SpawnContent(ref: try ScaleRef.keep(root: record.id, path: Path(), store: RecordStore([record])), name: entry.starter.name)
+            return SpawnContent(
+                ref: try ScaleRef.keep(root: record.id, path: Path(), store: RecordStore([record])), name: entry.starter.name,
+                provenance: Self.provenance(entry.starter)
+            )
         case let .salt(rung):
-            return SpawnContent(ref: try SaltLadder.ref(levels: rung.levels), name: rung.title)
+            return SpawnContent(ref: try SaltLadder.ref(levels: rung.levels), name: rung.title, provenance: .scale)
+        case let .trophy(trophy):
+            let piece = try Restore.piece(trophy, catalog: self, store: GameStore())
+            return SpawnContent(
+                ref: piece.display, name: piece.name, provenance: .trophy(trophy), identity: piece.identity,
+                metresPerUnit: piece.metresPerUnit
+            )
         }
+    }
+
+    /// Where a bundled starter came from (contracts.md §1.3): a gallery file is a gallery
+    /// molecule, a PubChem conformer is a PubChem one, and a geometry the bundler wrote has no
+    /// home but its reference.
+    public static func provenance(_ starter: Starter) -> Provenance {
+        if let path = starter.lupiPath, let url = URL(string: Provenance.lupiOrigin + path) {
+            // Bundled byte for byte, so the bundle's hash is the one the molecule page prints.
+            return .gallery(id: starter.id, url: url, sha256: starter.sha256)
+        }
+        if let cid = starter.pubchemCID { return .pubchem(cid: cid, url: Provenance.pubchemRecordURL(cid: cid)) }
+        return .scale
     }
 }

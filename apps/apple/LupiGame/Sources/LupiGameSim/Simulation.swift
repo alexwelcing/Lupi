@@ -11,6 +11,9 @@ public struct Simulation: Sendable {
     public var camera: CameraState
     public var thermal: ThermalLevel = .nominal
     public var dt = 1.0 / 60
+    /// The floor the session is told about, when it is not the stub's lowest plane: a shelf test
+    /// lets that plane stand in for a shelf above the room's floor.
+    public var reportedFloorY: Double?
     public private(set) var time = 0.0
     public private(set) var rate = 1.0
     public private(set) var last = FrameOutput()
@@ -36,7 +39,7 @@ public struct Simulation: Sendable {
         frames += 1
         let input = FrameInput(
             time: time, camera: camera, bodies: world.motions, contacts: contacts, touches: touches, thermal: thermal,
-            floorY: world.floorY
+            floorY: reportedFloorY ?? world.floorY
         )
         lastInput = input
         let out = session.step(input)

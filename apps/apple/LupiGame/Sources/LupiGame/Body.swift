@@ -39,6 +39,13 @@ public struct BodyFacts: Sendable {
     public var feltMassKg: Double { FeltMass.kg(massLog, massScale: personality.personality.massScale) }
 }
 
+/// What a resting body sits on.
+public enum Support: Sendable, Equatable {
+    /// The room's mesh (or a plane), touched at this world point.
+    case room(Vec3)
+    case body(BodyID)
+}
+
 /// Timers and render effects of one body (plan §5.4).
 public struct BodyEffects: Sendable {
     public var popIn: PopIn
@@ -59,6 +66,19 @@ public struct Body: Sendable {
     public var name: String
     /// "Broken from Hydrogen peroxide" and the like; nil for a spawn.
     public var brokenFrom: String?
+    /// Where it came from, for the trophy a keep writes (contracts.md §1.3).
+    public var provenance: Provenance = .scale
+    /// The trophy this body is, once kept or when it came back from the collection.
+    public var trophyID: UUID?
+    /// On a shelf (plan §6.3): outside the 40-toy budget, which counts loose play only (plan §3.4).
+    public var pinned = false
+    /// Held in place, kinematic, until something touches it: how a shelf's trophies come back
+    /// before the room's mesh under them is rebuilt (plan §6.4).
+    public var frozen = false
+    /// What it last rested on: the room at a point, or another body (plan §6.3).
+    public var support: Support?
+    /// The shelf test ran for this rest; it runs again after the body moves.
+    public var shelfChecked = false
     public var feltMassKg: Double
     /// Longest span at spawn, metres: the size states count from it (scale-spec §10.1).
     public var spawnSpan: Double

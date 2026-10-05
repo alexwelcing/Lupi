@@ -83,6 +83,8 @@ public enum SessionEvent: Sendable, Equatable {
     case detent(BodyID, readout: String)
     case selected(BodyID?)
     case refused(String)
+    /// At rest for 3 s on a shelf (plan §6.3), on a stack whose base touches the room here.
+    case restedOnShelf(BodyID, support: Vec3)
 }
 
 /// What the app applies after a frame.
@@ -107,6 +109,10 @@ public enum SpawnPlacement: Sendable, Equatable {
     case ahead(sideways: Double)
     /// At a world point (entity origin).
     case world(Vec3)
+    /// Back on a shelf: the entity's world pose from its placement, held in place (plan §6.4).
+    case shelf(RigidD)
+
+    var isShelf: Bool { if case .shelf = self { return true }; return false }
 }
 
 struct SpawnRequest: Sendable {

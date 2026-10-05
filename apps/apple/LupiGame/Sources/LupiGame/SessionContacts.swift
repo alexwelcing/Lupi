@@ -1,5 +1,6 @@
 import Foundation
 import LupiChem
+import LupiData
 import LupiPlay
 import LupiScale
 import LupiScaleCore
@@ -16,9 +17,15 @@ extension PlaySession {
             let dv = JuiceRouter.deltaV(impulse: c.impulse, massA: ma, massB: mb)
             for id in [c.a, c.b].compactMap({ $0 }) {
                 guard var b = bodies[id] else { continue }
+                let other = id == c.a ? c.b : c.a
                 b.lastContact = c.time
-                if c.position.y < b.entityPose.translation.y, abs(c.direction.normalized.y) > 0.707 { b.lastSupportContact = c.time }
+                if c.position.y < b.entityPose.translation.y, abs(c.direction.normalized.y) > 0.707 {
+                    b.lastSupportContact = c.time
+                    b.support = other.map { .body($0) } ?? .room(c.position)
+                }
                 if abs(c.impulse) > PlayTuning.wakeImpulse && b.atRest && dv > 0.2 { wake(&b) }
+                // A shelved trophy held in place lets go when something hits it (plan §6.4).
+                if b.frozen, other != nil, abs(c.impulse) > PlayTuning.wakeImpulse { unfreeze(&b) }
                 bodies[id] = b
             }
             let (_, playNow) = juice.observe(c, deltaV: dv)
@@ -93,7 +100,7 @@ extension PlaySession {
     /// bridge, an expansion of one level for anything else. Pieces inherit the parent's velocity
     /// at their centre plus 0.4 m/s outward.
     mutating func tryBreak(_ id: BodyID, deltaV: Double, at contact: Vec3, direction: Vec3, now: Double) {
-        guard let body = bodies[id], body.isToy, !body.parked, now >= body.breakableAfter,
+        guard let body = bodies[id], body.isToy, !body.parked, !body.frozen, now >= body.breakableAfter,
               grab?.body != id, pinch?.body != id, body.frame.anchorPath.isEmpty else { return }
         let p = body.facts.personality.personality
         // A molecule whose only bridges are 800 kJ/mol or more never breaks (N₂, CO, plan §4.3).
@@ -159,7 +166,8 @@ extension PlaySession {
         let name = plan.kind == .bondBreak ? facts.formula : "Piece of \(parent.name)"
         let id = try addBody(
             frame: frame, identity: identity, facts: facts, name: name, brokenFrom: parent.brokenFrom ?? parent.name,
-            feltMass: piece.feltMassKg, mode: .dynamic, now: now, spawnSpan: max(BreakTuning.minimumPieceSpan, sigma * facts.aggregate.bounds.longest)
+            feltMass: piece.feltMassKg, mode: .dynamic, now: now, spawnSpan: max(BreakTuning.minimumPieceSpan, sigma * facts.aggregate.bounds.longest),
+            provenance: .piece(parent: parentRef(of: parent))
         )
         guard var b = bodies[id] else { return id }
         b.breakableAfter = now + piece.cooldown
@@ -196,6 +204,26 @@ extension PlaySession {
             path = p
         }
         return (try? ScaleRef.keep(root: root, path: path, store: store)) ?? display
+    }
+
+    /// The parent a piece's trophy names (contracts.md §1.1): the trophy it was, or where it came from.
+    func parentRef(of b: Body) -> ParentRef {
+        switch b.provenance {
+        case let .trophy(t):
+            return ParentRef(name: t.name, formula: t.molecule.formula, source: t.molecule.source, id: t.molecule.id, trophyId: t.id)
+        case let .gallery(page, _, _):
+            return ParentRef(name: b.name, formula: b.facts.formula, source: .gallery, id: page)
+        case let .pubchem(cid, _):
+            return ParentRef(name: b.name, formula: b.facts.formula, source: .pubchem, id: "cid:\(cid)")
+        case let .omol25(row, _, _):
+            return ParentRef(name: b.name, formula: b.facts.formula, source: .omol25, id: row)
+        case .scale:
+            return ParentRef(name: b.name, formula: b.facts.formula, source: .scale)
+        case .piece:
+            // A piece of a piece: a fragment when it is a selection of a molecule's atoms.
+            let leafRoot = (try? store.record(b.identity.root).kindByte) == NodeKind.leaf.rawValue
+            return ParentRef(name: b.name, formula: b.facts.formula, source: leafRoot && b.facts.isMolecule ? .fragment : .scale)
+        }
     }
 
     /// σ scaled by `ratio` about a world point (scale-spec §8.8).

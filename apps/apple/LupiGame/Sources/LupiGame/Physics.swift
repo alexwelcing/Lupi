@@ -175,6 +175,12 @@ public enum PlayTuning {
     public static let dynamicFrictionShare = 0.75
     /// Shapes are rebuilt at most this often during a pinch (est.).
     public static let pinchShapeInterval = 0.1
+    /// A body at rest this long on a shelf is kept there (plan §6.3).
+    public static let pinHold = 3.0
+    /// A shelf is at least this far above the lowest floor (plan §6.3).
+    public static let shelfHeight = 0.25
+    /// Supports followed down a stack before giving up.
+    public static let maxStack = 8
 }
 
 extension Mat3 {

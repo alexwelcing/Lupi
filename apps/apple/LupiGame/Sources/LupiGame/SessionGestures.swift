@@ -90,8 +90,13 @@ extension PlaySession {
         b.floatUntil = -.infinity
         b.mode = .kinematic
         b.spec.mode = .kinematic
+        // Picked off its shelf, a trophy is a loose toy again until it rests on one.
+        let wasPinned = b.pinned
+        b.pinned = false
+        b.frozen = false
         bodies[id] = b
         out.physics.append(.setMode(id, .kinematic))
+        if wasPinned { makeRoom(for: 0) }
         fire(.grab, on: b, at: hit, direction: .zero, now: now)
         if selection != id { selection = id }
     }
@@ -171,7 +176,11 @@ extension PlaySession {
         }
         wake(&b)
         b.floatUntil = -.infinity
+        let wasPinned = b.pinned
+        b.pinned = false
+        b.frozen = false
         bodies[id] = b
+        if wasPinned { makeRoom(for: 0) }
     }
 
     mutating func changePinch(centroid: SIMD2<Double>, ratio: Double, twist: Double, now: Double) {
