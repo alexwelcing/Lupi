@@ -161,6 +161,8 @@ public struct PlaySession: Sendable {
     public internal(set) var selection: BodyID?
     public internal(set) var lastCut: Cut?
     public internal(set) var time: Double?
+    /// Spike A3's toss, while it runs and after it lands.
+    public internal(set) var tumble: TumbleReport?
 
     var nextID: UInt64 = 1
     var queue: [SpawnRequest] = []
@@ -258,6 +260,7 @@ public struct PlaySession: Sendable {
         for g in arbiter.tick(input.time) { handle(g, now: input.time) }
         stepGrab(dt: dt, now: input.time)
         stepGlide(now: input.time)
+        stepTumble(now: input.time)
         stepBodies(dt: dt, now: input.time)
         dequeueSpawn(now: input.time)
         rescue()

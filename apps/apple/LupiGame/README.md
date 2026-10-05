@@ -26,6 +26,7 @@ swift test
 | play session | spawn, float, land and settle (once); a flick at the wall with its juice; a set-down; hydrogen peroxide cracking into two hydroxyls with exact identities; pieces' inherited velocity and 0.4 m/s kick; the 10⁹ crystal smashing into ten pieces that share its felt mass; Sound & haptics off, Still comfort, iPad without haptics; the 40-toy budget; out-of-bounds rescue; every frame of the receipt within its budgets, cool and critical; requests between frames; determinism |
 | scale in play | pinch on the footprint, one to one within 10^±32, mass unchanged; toy, monument and back; the dive into the 10⁹ crystal (terrain, parked toys, the bubble's wall within budgets, exact counts) and back out; the receipt within the critical column |
 | gesture arbiter | recorded touch streams: tap, grab by move and by hold, pinch with and without a held body, twist, fly only beyond 10^±32, chunk and chip |
+| device spikes | spike A3's toss: up and spinning about the intermediate axis, landing, damping restored; no flip on the stand-in, which has no gyroscopic terms; refused for a spherical top |
 | camera rays and rotations, merged meshes, juice router | ray and projection round trips (off-centre too), launch impulses inverting to the release velocity, icosphere and half-bond counts, dotted ionic contacts, the impact window, surfaces, reduced mass, squash and lean |
 
 The stand-in physics is good enough to test the session's logic, not to tune
