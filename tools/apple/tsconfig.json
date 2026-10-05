@@ -1,0 +1,32 @@
+// Typechecks the LupiKit generators and LupiScale's fixture writer:
+// pnpm exec tsc -p tools/apple/tsconfig.json
+// `paths` replaces the root's, so the @atlas aliases are repeated; three's
+// types live in the ui workspace (the molecule-pages builder imports three).
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@atlas/assessment": ["../../packages/assessment/src"],
+      "@atlas/assessment/*": ["../../packages/assessment/src/*"],
+      "@atlas/core": ["../../packages/core/src"],
+      "@atlas/core/*": ["../../packages/core/src/*"],
+      "@atlas/nist": ["../../packages/nist/src"],
+      "@atlas/nist/*": ["../../packages/nist/src/*"],
+      "@atlas/parsers": ["../../packages/parsers/src"],
+      "@atlas/parsers/*": ["../../packages/parsers/src/*"],
+      "@atlas/renderer": ["../../packages/renderer/src"],
+      "@atlas/renderer/*": ["../../packages/renderer/src/*"],
+      "@atlas/scene": ["../../packages/scene/src"],
+      "@atlas/scene/*": ["../../packages/scene/src/*"],
+      "@atlas/ui": ["../../packages/ui/src"],
+      "@atlas/ui/*": ["../../packages/ui/src/*"],
+      "@atlas/export": ["../../packages/export/src"],
+      "@atlas/export/*": ["../../packages/export/src/*"],
+      "three": ["../../packages/ui/node_modules/@types/three"],
+      "three/addons/*": ["../../packages/ui/node_modules/@types/three/examples/jsm/*"]
+    }
+  },
+  "include": ["./*.mts", "../../packages/core/scripts/*.mts"]
+}

@@ -19,7 +19,8 @@
     "./objectFacts": "./src/objectFacts/index.ts",
     "./bonds": "./src/bonds/index.ts",
     "./omol25": "./src/omol25/index.ts",
-    "./omol25/widget": "./src/omol25/widget.ts"
+    "./omol25/widget": "./src/omol25/widget.ts",
+    "./scale": "./src/scale/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

@@ -52,6 +52,7 @@
     "cloudflare:deploy": "pnpm --filter @atlas/mcp-worker run deploy",
     "cloudflare:test": "pnpm --filter @atlas/mcp-worker test",
     "chatgpt:build": "pnpm --filter @atlas/chatgpt-widget build && pnpm --filter @atlas/mcp-worker build",
+    "apple:check": "tsc -p tools/apple/tsconfig.json && tsx tools/apple/gen-elements.mts --check && tsx tools/apple/export-bond-fixtures.mts --check && tsx tools/apple/export-validation-sample.mts --check && tsx tools/apple/export-edge-samples.mts --check && tsx tools/apple/bundle-starters.mts --check && tsx packages/core/scripts/write-scale-fixtures.mts --check && tsx tools/apple/export-scale-fixtures.mts --check",
     "chatgpt:test": "pnpm --filter @atlas/core exec vitest run src/pubchem.test.ts src/omol25/widget.test.ts && pnpm --filter @atlas/chatgpt-widget test && pnpm --filter @atlas/mcp-worker exec vitest run src/chatgpt.test.ts src/index.test.ts",
     "chatgpt:dev": "node --import tsx tools/serve-chatgpt-plugin.mts",
     "chatgpt:verify": "node --import tsx tools/verify-chatgpt-plugin.mts",

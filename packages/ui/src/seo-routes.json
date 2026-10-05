@@ -205,6 +205,20 @@
         "url": "https://lupi.live/scan",
         "description": "Point your camera at an everyday thing. Lupi names what it is made of, molecule by molecule, and opens each one in 3D."
       }
+    },
+    "scale": {
+      "title": "From one ion to a googolplex | Lupi",
+      "description": "Dive from a grain of salt to ten to the googol ions and back, with every count exact. Smash the googolplex bar into ten cubes and dive into any of them.",
+      "canonicalPath": "/scale",
+      "image": "https://lupi.live/og-lupi.png",
+      "imageAlt": "A googolplex of salt in Lupi",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "From one ion to a googolplex | Lupi",
+        "url": "https://lupi.live/scale",
+        "description": "Dive from a grain of salt to ten to the googol ions and back, with every count exact. Smash the googolplex bar into ten cubes and dive into any of them."
+      }
     }
   }
 }

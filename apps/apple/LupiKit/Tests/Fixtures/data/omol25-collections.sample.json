@@ -1,0 +1,83 @@
+{
+  "id": "omol25",
+  "title": "Open Molecules 2025",
+  "description": "Remote, row-level access to public ColabFit OMol25 conversions. No dataset shards are stored by Lupi.",
+  "sourceDataset": "facebook/OMol25",
+  "sourceAccess": "gated",
+  "publicConversion": "ColabFit Exchange",
+  "license": "CC-BY-4.0",
+  "attributionUrl": "https://huggingface.co/collections/colabfit/omol25-open-molecules-2025-colabfit",
+  "paperUrl": "https://arxiv.org/abs/2505.08762",
+  "citation": "Levine et al. 2025, The Open Molecules 2025 (OMol25) Dataset, arXiv:2505.08762",
+  "sourceTruth": {
+    "coordinates": "OMol25 source coordinates",
+    "bondTopology": "not provided; viewer bonds are Lupi's labelled inference",
+    "chargeAndSpin": "property_metadata where the split has it (record); neutral-train by split definition",
+    "viewerBonds": {
+      "recipe": "lupi-bonds.molecular.v1",
+      "provenance": "inferred"
+    }
+  },
+  "browserContract": {
+    "maxRowsPerRequest": 36,
+    "storageModel": "metadata pages and one selected XYZ are fetched on demand",
+    "completePublicLane": "neutral-train"
+  },
+  "collections": [
+    {
+      "id": "neutral-train",
+      "label": "Neutral train",
+      "description": "Complete public neutral training split, streamed one row at a time.",
+      "repository": "colabfit/OMol25_train_neutral",
+      "indexedRows": 34335828,
+      "estimatedRows": 34335828,
+      "sourceRows": 34335828,
+      "coverage": "complete",
+      "rowsUrl": "/v1/datasets/omol25/neutral-train/rows"
+    },
+    {
+      "id": "neutral-validation",
+      "label": "Neutral validation",
+      "description": "Complete public neutral validation split.",
+      "repository": "colabfit/OMol25_neutral_validation",
+      "indexedRows": 27697,
+      "estimatedRows": 27697,
+      "sourceRows": 27697,
+      "coverage": "complete",
+      "rowsUrl": "/v1/datasets/omol25/neutral-validation/rows"
+    },
+    {
+      "id": "all-train-preview",
+      "label": "All train (indexed window)",
+      "description": "Hugging Face indexed window of the broader charged + neutral training repository.",
+      "repository": "colabfit/OMol25_train",
+      "indexedRows": 841736,
+      "estimatedRows": 65331709,
+      "sourceRows": 101666280,
+      "coverage": "indexed-preview",
+      "rowsUrl": "/v1/datasets/omol25/all-train-preview/rows"
+    },
+    {
+      "id": "train-4m-preview",
+      "label": "4M train (indexed window)",
+      "description": "Hugging Face indexed window of the OMol25 4M training repository.",
+      "repository": "colabfit/OMol25_train_4M",
+      "indexedRows": 1000000,
+      "estimatedRows": 2657915,
+      "sourceRows": 3986754,
+      "coverage": "indexed-preview",
+      "rowsUrl": "/v1/datasets/omol25/train-4m-preview/rows"
+    },
+    {
+      "id": "validation-preview",
+      "label": "Validation (indexed window)",
+      "description": "Hugging Face indexed window of the broader validation repository.",
+      "repository": "colabfit/OMol25_validation",
+      "indexedRows": 800000,
+      "estimatedRows": 1842258,
+      "sourceRows": 2762021,
+      "coverage": "indexed-preview",
+      "rowsUrl": "/v1/datasets/omol25/validation-preview/rows"
+    }
+  ]
+}

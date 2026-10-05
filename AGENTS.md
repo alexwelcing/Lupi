@@ -37,6 +37,12 @@ Core endpoints:
   `scripts/generate-daily-pages.mts`), with sealed puzzle files
   (`/daily/p/<token>.json`), the guess pool and per-day silhouette cards
   (`/og/daily/<date>.jpg`) that never name the answer (see `docs/daily.md`)
+- `GET /scale` — the scale page: the salt ladder from one ion to a
+  googolplex, copper's billion and the twelve diamondoids, drawn from
+  LupiScale records by the TypeScript reference (`packages/ui/src/scale`,
+  `docs/ar/scale-spec.md` §11.2) with exact counts; `?e=<entry>` opens an
+  entry and `?ref=lsr1:…` a shared piece. A static SEO shell like `/scan`,
+  no Worker route
 - `POST /collectAnalytics` — first-party analytics edge collector
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
@@ -79,6 +85,19 @@ renderer and retrieval path.
 See `docs/cloudflare-migration.md` for the whole-app cutover and
 `docs/cloudflare-mcp.md` for MCP setup, bindings, example `curl`, and renderer
 backend contract.
+
+## Native Apple app (apps/apple)
+
+`apps/apple` is the native SwiftUI + RealityKit AR app for iPhone Pro and
+iPad Pro (bundle id `live.lupi.app`, iOS 26.0): a physics sandbox whose
+building blocks are molecules, played against the room's LiDAR mesh. It
+replaces the Expo app, and `apps/mobile` is frozen as a reference. It has no
+MCP bridge. Its pure-Swift logic lives in the LupiKit package, which builds and
+tests on Linux (`swift build`, `swift test`); the app itself compiles only on
+a macOS runner with Xcode, so never claim device behaviour from a Linux session.
+The owner's decisions are `docs/ar/decisions.md`, the plan of record is
+`docs/ar/plan.md`, and the data contracts it shares with lupi.live are in
+`docs/ar/contracts.md`; `docs/ar/README.md` indexes the folder.
 
 ## Browser execution and visual QA
 

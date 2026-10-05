@@ -1,0 +1,6 @@
+{
+  "error": "The upstream OMol25 search index is warming. Browse by page or retry the search shortly.",
+  "status": "warming",
+  "dataset": "all-train-preview",
+  "retryAfterSeconds": 15
+}

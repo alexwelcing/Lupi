@@ -10,6 +10,40 @@ service cloud.firestore {
       return signedIn() && data.ownerId == request.auth.uid;
     }
 
+    function isUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Every key of a trophy envelope, all required. Shared with LupiSync's
+    // TrophyEnvelope (apps/apple/LupiCloud); change both together.
+    function trophyEnvelopeKeys() {
+      return ['schema', 'id', 'payload', 'deleted', 'updatedAt', 'clientUpdatedAt'];
+    }
+
+    function validTrophyEnvelope(trophyId) {
+      let d = request.resource.data;
+      return trophyId.matches('^[A-Za-z0-9_-]{1,128}$')
+        && d.keys().hasOnly(trophyEnvelopeKeys())
+        && d.keys().hasAll(trophyEnvelopeKeys())
+        && d.schema == 'lupi.trophy.v1'
+        && d.id == trophyId
+        && d.deleted is bool
+        // Rules cannot measure a map's serialized size. They cap its top-level
+        // keys; LupiSync holds the 256 KiB bound on the encoded record, and
+        // Firestore's 1 MiB document limit is the server's ceiling.
+        && d.payload is map
+        && d.payload.size() <= 32
+        // A tombstone keeps only the id, so a deleted trophy leaves no content.
+        && (!d.deleted || d.payload.size() == 0)
+        // updatedAt is the server's commit clock (a REQUEST_TIME transform); it
+        // orders incremental pulls, so a client can never set it.
+        && d.updatedAt == request.time
+        // clientUpdatedAt decides last-writer-wins between the owner's devices.
+        // A clock far in the future would win every later edit, so cap it.
+        && d.clientUpdatedAt is timestamp
+        && d.clientUpdatedAt < request.time + duration.value(1, 'h');
+    }
+
     match /lupiViews/{slug} {
       // Saved views are intentional public share links. Allow direct document
       // gets so missing-slug existence checks return 404 instead of blocking the
@@ -56,6 +90,18 @@ service cloud.firestore {
       allow read: if true;
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
       allow update, delete: if isOwner(resource.data);
+    }
+
+    // The native app's trophy case (lupi.trophy.v1), written by LupiSync over
+    // REST. Owner-only by path. Each document is a sync envelope around one
+    // trophy; deletions are tombstones (deleted == true) so they reach the
+    // owner's other devices, and hard deletes are for account deletion.
+    // Nothing else under users/{uid} is readable or writable; deleteUserData
+    // (functions/src/accountCleanup.ts) clears the subtree when the account goes.
+    match /users/{uid}/trophies/{trophyId} {
+      allow get, list: if isUser(uid);
+      allow create, update: if isUser(uid) && validTrophyEnvelope(trophyId);
+      allow delete: if isUser(uid);
     }
   }
 }

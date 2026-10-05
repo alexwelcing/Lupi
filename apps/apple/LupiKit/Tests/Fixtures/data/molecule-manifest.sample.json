@@ -1,0 +1,46 @@
+{
+  "schema": "lupi.molecule-pages.v1",
+  "origin": "https://lupi.live",
+  "cards": true,
+  "pages": [
+    {
+      "id": "c60_buckyball",
+      "name": "Buckminsterfullerene",
+      "formula": "C60",
+      "atoms": 60,
+      "file": "/gallery/curated/c60_buckyball.xyz",
+      "pose": [
+        0.29175,
+        0.31077
+      ],
+      "inkRadius": 3.858,
+      "fit": 6.31916
+    },
+    {
+      "id": "caffeine",
+      "name": "Caffeine",
+      "formula": "C8H10N4O2",
+      "atoms": 24,
+      "file": "/gallery/curated/popular/caffeine.xyz",
+      "pose": [
+        0.00019,
+        0.00009
+      ],
+      "inkRadius": 4.361,
+      "fit": 5.3142
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "formula": "H2O",
+      "atoms": 3,
+      "file": "/gallery/curated/popular/water.xyz",
+      "pose": [
+        -2.38012,
+        0.39813
+      ],
+      "inkRadius": 1.005,
+      "fit": 1.13521
+    }
+  ]
+}
