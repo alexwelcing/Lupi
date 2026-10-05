@@ -54,8 +54,7 @@ struct PackVectorTests {
         #expect(shuffled == (try Self.smallPack()))
     }
 
-    /// `lupi-scale-r1.lpk`. The spec names its content but not its root names; these are the
-    /// reference implementation's (docs/ar/errata/swift.md, "bundled pack root names").
+    /// `lupi-scale-r1.lpk`, with the twenty root names §12.6 lists: they are part of its contentId.
     @Test func bundledScalePack() throws {
         let seed = Spec.seedRecord()
         var records = [seed]

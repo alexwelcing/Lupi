@@ -204,7 +204,7 @@ const COPY0: Step = { tag: 'tower', levels: 3n, runs: [[{ digit: 0, length: 1n }
 const PARTIAL: Step[] = [COPY0, { tag: 'cells', octants: [0] }];
 const partialEdit = record('salt-tower-3-without-octant-0-of-copy-0', { kind: 'edit', base: nodeId(plain3), removed: [PARTIAL] });
 
-// errata/ts.md E3: an outer edit removes an ancestor of an inner edit's removal through a seed copy.
+// §4.4: an outer edit removes an ancestor of an inner edit's removal through a seed copy.
 const innerEdit = record('salt-seed-without-cells-0-3', { kind: 'edit', base: saltId, removed: [[{ tag: 'cells', octants: [0, 3] }]] });
 const overInner = record('salt-tower-3-over-the-edited-seed', { kind: 'tower', seed: nodeId(innerEdit), factor: 10, periods: SALT_PERIODS, levels: 3n });
 const nestedEdit = record('nested-removals', { kind: 'edit', base: nodeId(overInner), removed: [PARTIAL] });
@@ -714,8 +714,8 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
     viewCase('removal inside a seed copy: copy (0, 0, 0), octant 0', store, nodeId(partialEdit), PARTIAL),
     viewCase('removal inside a seed copy: copy (0, 0, 0), octant 0 then 7', store, nodeId(partialEdit), [COPY0, { tag: 'cells', octants: [0, 7] }]),
     viewCase('removal inside a seed copy: copy (1, 0, 0)', store, nodeId(partialEdit), [{ tag: 'tower', levels: 3n, runs: [[{ digit: 1, length: 1n }], [{ digit: 0, length: 1n }], [{ digit: 0, length: 1n }]] }]),
-    viewCase('nested removals (errata E3)', store, nodeId(nestedEdit), []),
-    viewCase('nested removals (errata E3): copy (0, 0, 0)', store, nodeId(nestedEdit), [COPY0]),
+    viewCase('nested removals through a seed copy', store, nodeId(nestedEdit), []),
+    viewCase('nested removals through a seed copy: copy (0, 0, 0)', store, nodeId(nestedEdit), [COPY0]),
     viewCase('nested removals at one view', store, nodeId(sameView), []),
     viewCase('nested removals at one view: child 0', store, nodeId(sameView), [{ tag: 'child', index: 0 }]),
     viewCase('seven bromides per copy: copy 3', store, nodeId(sevenBromides), [{ tag: 'tower', levels: 1n, runs: [[{ digit: 3, length: 1n }], [], []] }]),
@@ -886,7 +886,7 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
     schema: 'lupi.scale-fixtures.v1',
     generator: 'packages/core/scripts/write-scale-fixtures.mts',
     spec: 'docs/ar/scale-spec.md',
-    errata: 'docs/ar/errata/ts.md',
+    changelog: 'docs/ar/scale-spec.md §13.1',
     notes: [
       'Hex is lowercase; NodeIDs are SHA-256 in hex; integers beyond 2^53 are decimal strings.',
       'A Magnitude is given as its §5.4 text, its display base and its canonical key: "p:<hex>" for a plain value, else "r<root>:" and its digit runs (digit and length in hex, most significant first).',
@@ -896,7 +896,7 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
       'Approximations and scientific rows: the value is built as in formatting, or is the mass of the root record\'s composition.',
       'A contextual rejection with records resolves in a store of exactly those records; without, in a store of every fixture record.',
       'Pack rejection cases are patches ([offset, hex]) to packs.small, with the CRCs already resealed where the case is not about a CRC.',
-      'The bundled pack lupi-scale-r1 uses the root names salt-<rung>, copper-billion, copper-billion-closed and diamondoid-<m> (scale-spec §12.6 does not name them; errata/ts.md).',
+      'The bundled pack lupi-scale-r1 uses the root names scale-spec §12.6 lists: salt-<rung>, copper-billion, copper-billion-closed and diamondoid-<m>.',
     ],
     primitives: {
       crc32: [

@@ -8,7 +8,6 @@ When two documents disagree, the one higher in this list wins.
 |---|---|
 | [decisions.md](decisions.md) | The owner's binding decisions, D1–D14 (2026-10-04), with the amendment to D2 (builds on the owner's Mac). |
 | [scale-spec.md](scale-spec.md) | The normative scale spec that Swift (`apps/apple/LupiScale`) and TypeScript (`packages/core/src/scale`) build to byte for byte: node records, the frozen generator registry v1, paths, Magnitude, LupiPack v1, `lupi.scale-ref.v1`, frames, the cut, physics proxies and test vectors. On scale it outranks the documents below it. |
-| [errata/swift.md](errata/swift.md) | Problems in scale-spec.md found while building `apps/apple/LupiScale`, and what the Swift code does until the spec is amended. |
 | [scale.md](scale.md) | The scale architecture of record (D14): principles as tests, walkthroughs from 10³ atoms to a googolplex, rendering, physics and persistence at every scale, validation, risks, and the adjudication of the three proposals. |
 | [plan.md](plan.md) | The plan of record: game pillars, architecture, physics design, the juice spec, persistence, scale, the M0–M4 roadmap, the build lane, risks and the owner's open asks. |
 | [contracts.md](contracts.md) | The data contracts: `lupi.trophy.v1`, `lupi.shelf.v1`, `lupi.personality.v1`, the lupi.live endpoints the app reads, and a pointer to the Firestore layout. |

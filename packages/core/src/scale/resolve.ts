@@ -442,7 +442,7 @@ export class Resolver {
    * §4.4: the view's own count less what each removal takes. Only the
    * outermost removals are subtracted, each with the removals nested inside
    * it applied (an edit inside a tower seed, entered by the walk), so the
-   * count always equals the materialization (errata/ts.md E3).
+   * count always equals the materialization (scale-spec §4.4).
    */
   count(v: View): Magnitude {
     this.checkSubtree(v);

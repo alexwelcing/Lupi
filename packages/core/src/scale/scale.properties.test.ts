@@ -310,7 +310,7 @@ describe('removals (§2.6, §4.4)', () => {
     const r = new Resolver(new MemoryStore([salt, inner, tower, outer]));
     const copy = r.resolve(nodeId(outer), [t(3n, [[0], [0], [0]])]);
     const whole = r.root(nodeId(outer));
-    // The literal §4.4 formula gives 1,000 − 216 − 16 = 768 and 984,000 − 216 = 983,784 here (errata/ts.md E3).
+    // The literal §4.4 formula gives 1,000 − 216 − 16 = 768 and 984,000 − 216 = 983,784 here (scale-spec §4.4).
     expect([formatMagnitude(r.count(copy)), r.materialize(copy).z.length, formatMagnitude(r.count(whole)), formulaText(r.composition(whole))])
       .toEqual(['784', 784, '983,800', 'Cl492Na492 × 1,000 − Cl100Na100']);
   });

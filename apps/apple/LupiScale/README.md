@@ -24,14 +24,17 @@ swift test -c release      # byte-exact vectors again, and the timed cut
 On Linux, put a Swift 6 toolchain on `PATH` first. Tests use Swift Testing,
 read the gallery XYZ files from `apps/web/public/gallery` through LupiKit's
 parser (file order, Float32), and never touch the network. The golden fixture
-`Tests/Fixtures/scale-v1.json` is written later by the TypeScript reference
-(`tools/apple/export-scale-fixtures.mts`); until then every §12 value is
-hard-coded from the spec.
+`Tests/Fixtures/scale-v1.json` is written by the TypeScript reference
+(`packages/core/scripts/write-scale-fixtures.mts`) and copied here by
+`pnpm exec tsx tools/apple/export-scale-fixtures.mts`; `pnpm apple:check`
+fails when it is stale. `FixtureConformanceTests` asserts every value in it
+byte for byte, and the §12 values are also hard-coded from the spec, so a
+fixture that drifted from the spec fails too.
 
 | Suite | Covers |
 |---|---|
-| `LupiScaleCoreTests` (77 tests) | every §12 vector the core reaches (primitives, gallery leaves, crystals, diamondoids, the salt ladder, formatting, compositions, both packs, `massive_1m`), every §6.6 rejection, and §2 and §4 validation on corrupted inputs |
-| `LupiScaleTests` (44 tests) | the §9.8 guarantees, frames (§8), budgets and draw items (§9.3, §9.7), felt mass, heft, inertia and proxies (§10.1–§10.4, §10.8), breaking, chipping, Grow ×2 and picking (§10.5–§10.7) |
+| `LupiScaleCoreTests` (103 tests) | every value of the golden fixtures (records both ways, resolutions with counts, compositions, masses, copy keys, substitutions, probes and materialized leaves, formatting, arithmetic and comparison, the scientific display, packs, references, the partition bakes, and every rejection code); every §12 vector the core reaches, hard-coded from the spec; every §6.6 rejection; and §2 and §4 validation on corrupted inputs |
+| `LupiScaleTests` (46 tests) | the §9.8 guarantees (an edited box draws nothing removed), frames (§8), budgets, τ and draw items (§9.3, §9.7), felt mass, heft, inertia and proxies (§10.1–§10.4, §10.8), breaking, chipping, Grow ×2 against the fixtures, and picking (§10.5–§10.7) |
 
 `CutGuaranteeTests.buildCutCost` times `buildCut` at the fair column's 8,192
 visits and fails a release build above 4 ms, taking the best of 15 frames
@@ -55,8 +58,8 @@ device numbers: the 1 ms device budget is spike S2's to measure.
   copy's materialization by its exact path, a start's refKey by root and
   steps. Only new materializations hash.
 
-Where the spec is wrong, ambiguous or silent, the choice made is recorded in
-[docs/ar/errata/swift.md](../../../docs/ar/errata/swift.md).
+Where the spec was wrong, ambiguous or silent, the decisions are folded into
+it; its changelog ([§13.1](../../../docs/ar/scale-spec.md)) lists them.
 
 ## Not here yet
 

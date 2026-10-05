@@ -2,7 +2,7 @@
  "schema": "lupi.scale-fixtures.v1",
  "generator": "packages/core/scripts/write-scale-fixtures.mts",
  "spec": "docs/ar/scale-spec.md",
- "errata": "docs/ar/errata/ts.md",
+ "changelog": "docs/ar/scale-spec.md §13.1",
  "notes": [
   "Hex is lowercase; NodeIDs are SHA-256 in hex; integers beyond 2^53 are decimal strings.",
   "A Magnitude is given as its §5.4 text, its display base and its canonical key: \"p:<hex>\" for a plain value, else \"r<root>:\" and its digit runs (digit and length in hex, most significant first).",
@@ -12,7 +12,7 @@
   "Approximations and scientific rows: the value is built as in formatting, or is the mass of the root record's composition.",
   "A contextual rejection with records resolves in a store of exactly those records; without, in a store of every fixture record.",
   "Pack rejection cases are patches ([offset, hex]) to packs.small, with the CRCs already resealed where the case is not about a CRC.",
-  "The bundled pack lupi-scale-r1 uses the root names salt-<rung>, copper-billion, copper-billion-closed and diamondoid-<m> (scale-spec §12.6 does not name them; errata/ts.md)."
+  "The bundled pack lupi-scale-r1 uses the root names scale-spec §12.6 lists: salt-<rung>, copper-billion, copper-billion-closed and diamondoid-<m>."
  ],
  "primitives": {
   "crc32": [
@@ -5500,7 +5500,7 @@
    }
   },
   {
-   "name": "nested removals (errata E3)",
+   "name": "nested removals through a seed copy",
    "root": "ae3d9e6017238f0d77c616ff5f0a2afccdb4964ce1ff2d58f41110b9b6e15024",
    "path": {
     "hex": "0000",
@@ -5545,7 +5545,7 @@
    }
   },
   {
-   "name": "nested removals (errata E3): copy (0, 0, 0)",
+   "name": "nested removals through a seed copy: copy (0, 0, 0)",
    "root": "ae3d9e6017238f0d77c616ff5f0a2afccdb4964ce1ff2d58f41110b9b6e15024",
    "path": {
     "hex": "010003010003010000010001010000010001010000010001",

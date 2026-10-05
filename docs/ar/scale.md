@@ -134,10 +134,9 @@ lupi.live (Worker, static assets)      /scale/p/<contentId>.lpk  ← web build b
 packages/core/src/scale  (TypeScript)  the reference: records, generators, paths, magnitude, packs, refs;
                                        writes the golden fixtures; later the web viewer's cut
 apps/apple/LupiKit       (Swift, Linux-tested)
-   LupiCore        SHA-256 (one owner for every package)
    LupiChem, LupiPlay, LupiData   elements and bonds; personalities, felt mass, the gesture arbiter; trophies
 apps/apple/LupiScale     (Swift, Linux-tested)
-   LupiScaleCore   [byte-exact]  BigUInt, Magnitude, records, generators, paths, resolver, packs, refs   (over LupiCore)
+   LupiScaleCore   [byte-exact]  BigUInt, Magnitude, records, generators, paths, resolver, packs, refs   (no dependencies; its own SHA-256)
    LupiScale       [values]      aggregates, frames and rebasing, the cut, picking, proxies,
                                  node personalities, breaking and growing   (over LupiChem and LupiPlay)
 apps/apple (the app)
@@ -636,6 +635,6 @@ An adversarial review of the first version found one blocker, twenty-nine majors
 | A pinch sank a resting body into its support. | Pinch about the footprint, kinematic while pinching (spec §8.8). |
 | Pinch, chip and fly were ambiguous. | One arbiter and a gesture table (spec §10.5). |
 | Kept pieces of colossi depended on packs a redeploy deletes. | Pieces of at most 4,096 atoms embed everything; packs live in an append-only R2 bucket; trophies store their shape and colour (spec §6.8, §7.2, §7.4). |
-| SHA-256 was declared twice, felt mass made a dependency cycle, and nodes had no personality. | LupiKit's `LupiCore` owns SHA-256 and `LupiPlay` owns felt mass and personalities; a node takes one materialized leaf's personality (spec §10.6, §11.1). |
+| SHA-256 was declared twice, felt mass made a dependency cycle, and nodes had no personality. | `LupiScaleCore` keeps its SHA-256 package-internal, so it declares no second public one, and `LupiPlay` owns felt mass and personalities; a node takes one materialized leaf's personality (spec §10.6, §11.1). |
 | M0 had to freeze the whole spec before any device used it. | Freezing follows persistence (M1, M3b); M0 builds its subset; the scale receipt does not block the playable slice (spec §0, plan.md §8). |
 | Minors | Grow keeps the body's span; spawn size is defined (the bar is 30 × 3 × 3 cm); the flat felt-mass tail is stated honestly; toys are always grabbed whole; the M0 receipt includes an inside view. |

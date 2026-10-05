@@ -416,7 +416,7 @@ describe('§9.8.3 coverage', () => {
     }
   });
 
-  it('a water grown by Grow ×2 is drawn exactly once as the camera approaches, monotone and within budgets (errata/ts.md E13)', () => {
+  it('a water grown by Grow ×2 is drawn exactly once as the camera approaches, monotone and within budgets (scale-spec §9.2: not gradual)', () => {
     // §9.8.3's "at most twice the items per halving" cannot hold here: a non-solid level's ε is the
     // same at every level (§9.2), so every copy within ε·σ·K/τ of the eye refines at once.
     const water = encodeRecord({ kind: 'leaf', z: Uint8Array.from([8, 1, 1]), positions: Float32Array.from([0, 0, 0, 0.2774, 0.8929, 0.2544, 0.6068, -0.2383, -0.7169]) });
