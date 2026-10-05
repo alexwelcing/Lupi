@@ -8,7 +8,7 @@ app. Swift 6 language mode; platforms iOS 26 and macOS 26.
 | Target | What it holds |
 |---|---|
 | `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, inertia |
-| `LupiPlay` | `GameUnits` (scale and felt mass) and `lupi.personality.v1` derived from the bond graph |
+| `LupiPlay` | `GameUnits` (scale, and felt mass below the knee) and `lupi.personality.v1` derived from the bond graph |
 | `LupiData` | `lupi.trophy.v1`, `lupi.shelf.v1`, the edge client, SHA-256, and the twelve bundled starter molecules |
 
 ## Build and test
@@ -50,8 +50,13 @@ Typecheck the generators with `pnpm exec tsc -p tools/apple/tsconfig.json`.
   Pauling's rule for pairs the table lacks. They order breaks truly; the
   absolute values carry the usual 10–20% error.
 - **Scale:** 10⁸× (1 Å → 1 cm) for molecules, 10⁷× for colossi, times the
-  player's grow/shrink. **Mass:** 50 g × (M / 18.015)^0.4, so H₂ weighs 21 g
-  and hemoglobin 1.3 kg; growing multiplies by the display scale.
+  player's grow/shrink. **Mass:** `lupi.feltmass.v1` (scale-spec §10.2),
+  whose canonical form, tail included, is LupiScale's `FeltMass`. LupiKit
+  keeps only the branch below the 1,018 Da knee
+  (`GameUnits.feltMass(molarMass:massScale:)`, 0.2 kg × (M / 180)^0.4 ×
+  massScale, at least 0.06 kg; nil above the knee), pinned to the spec's
+  numbers. Mass never grows with the display scale. A personality carries
+  its `breakSpeed`; the impulse is felt mass × break speed.
 - **Personality:** `PersonalityTable.v1` is the tunable table; rules run in
   order (ionic, weak bond, stretched bonds, cage, small, rotors, fused rings,
   stiff) and each derivation carries its plaque line.

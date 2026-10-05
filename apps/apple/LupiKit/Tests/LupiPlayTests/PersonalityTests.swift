@@ -99,13 +99,13 @@ struct PersonalityTests {
         #expect(d.features.cutStrength == nil)
     }
 
-    @Test func weakerBondsBreakAtSmallerImpulse() throws {
+    @Test func weakerBondsBreakAtSmallerSpeed() throws {
         let ethanol = try derive("ethanol").personality
         let water = try derive("water").personality
-        // Both small and bouncy; per kilogram, water's O–H (459) outlasts ethanol's C–C (346).
-        let ethanolMass = GameUnits.molecule.mass(molarMass: 46.069) * ethanol.massScale
-        let waterMass = GameUnits.molecule.mass(molarMass: 18.015) * water.massScale
-        #expect(ethanol.breakImpulse / ethanolMass < water.breakImpulse / waterMass)
+        // Both small and bouncy; water's O–H (459) outlasts ethanol's C–C (346).
+        #expect(ethanol.breakSpeed < water.breakSpeed)
+        let ratio = (346.0 / 459).squareRoot()
+        #expect(abs(ethanol.breakSpeed / water.breakSpeed - ratio) < 1e-12)
     }
 
     @Test func derivationIsDeterministicAndEncodesNineKeys() throws {
@@ -114,7 +114,7 @@ struct PersonalityTests {
         #expect(a == b)
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(a.personality)) as? [String: Any]
         #expect(Set(json?.keys ?? [:].keys) == [
-            "kind", "restitution", "friction", "linearDamping", "angularDamping", "breakImpulse", "massScale",
+            "kind", "restitution", "friction", "linearDamping", "angularDamping", "breakSpeed", "massScale",
             "soundFamily", "hapticSharpness",
         ])
         let back = try JSONDecoder().decode(Personality.self, from: JSONEncoder().encode(a.personality))
@@ -127,16 +127,17 @@ struct PersonalityTests {
             let p = try derive(name).personality
             #expect((0...0.95).contains(p.restitution), "\(name)")
             #expect((0...1).contains(p.friction), "\(name)")
-            #expect(p.breakImpulse > 0, "\(name)")
+            #expect(p.breakSpeed > 0, "\(name)")
             #expect((0...1).contains(p.hapticSharpness), "\(name)")
         }
     }
 
-    @Test func scalingFollowsFeltMass() throws {
+    @Test func breakImpulseIsFeltMassTimesBreakSpeed() throws {
         let p = try derive("caffeine").personality
-        #expect(abs(p.scaled(by: 10).breakImpulse - 10 * p.breakImpulse) < 1e-12)
+        let mass = try #require(GameUnits.feltMass(molarMass: 194.19, massScale: p.massScale))
+        #expect(p.breakImpulse(feltMass: mass) == mass * p.breakSpeed)
         let n2 = Personality.derive(Molecule(atomicNumbers: [7, 7], positions: [Vec3.zero, Vec3(1.098, 0, 0)])).personality
-        #expect(n2.scaled(by: 10).breakImpulse == Personality.unbreakable)
+        #expect(n2.breakImpulse(feltMass: 0.1) == nil)
     }
 }
 
@@ -154,28 +155,61 @@ struct GameUnitsTests {
         #expect(GameUnits.forSpan(250) == .colossus)
     }
 
-    @Test func feltMassIsCompressedButOrdered() {
-        let units = GameUnits.molecule
-        let h2 = units.mass(molarMass: 2.016)
-        let water = units.mass(molarMass: 18.015)
-        let caffeine = units.mass(molarMass: 194.19)
-        let hemoglobin = units.mass(molarMass: 64_500)
-        let colossus = units.mass(molarMass: 63.546 * 1_000_000)
-        #expect(abs(water - 0.05) < 1e-12)
-        #expect(h2 > 0.015 && h2 < 0.03)
-        #expect(caffeine > 0.12 && caffeine < 0.14)
-        #expect(hemoglobin > 1 && hemoglobin < 2)
-        #expect(colossus > 15 && colossus < 30)
-        #expect(h2 < water && water < caffeine && caffeine < hemoglobin && hemoglobin < colossus)
-        // Real ratio ~3×10⁴, felt ~60.
-        #expect(hemoglobin / h2 < 100)
-        #expect(units.mass(molarMass: 18.015, displayScale: 10) == 0.5)
+    /// scale-spec §10.2 written out in full, the test's own reference for the
+    /// shared domain (LupiKit ships only the branch below the knee).
+    static func specFeltMass(_ m: Double, _ massScale: Double) -> Double {
+        let knee = 180 * pow(2, 2.5)
+        let a = 0.8 * log(knee)
+        let x = log(m) + 2.5 * log(massScale)
+        let b = x <= log(knee)
+            ? 0.2 * exp(0.4 * (x - log(180.0)))
+            : 0.6 - 0.2 / (1 + a * (log(log(m)) + log1p(2.5 * log(massScale) / log(m)) - log(log(knee))))
+        return max(0.06, b)
+    }
+
+    @Test func feltMassBelowTheKneeIsTheSpecsTable() throws {
+        func kg(_ m: Double, _ scale: Double = 1) throws -> Double {
+            try #require(GameUnits.feltMass(molarMass: m, massScale: scale))
+        }
+        let water = Molecule(atomicNumbers: [8, 1, 1], positions: [Vec3.zero, Vec3(0.96, 0, 0), Vec3(-0.24, 0.93, 0)])
+        // scale-spec §10.2 and contracts.md §3.2, to the digits they print.
+        #expect(abs(try kg(water.molarMass) - 0.080) < 0.0005)
+        #expect(abs(try kg(194.19) - 0.206) < 0.0005)
+        #expect(abs(try kg(720.66) - 0.348) < 0.0005)
+        #expect(abs(try kg(34.0147, 0.85) - 0.087) < 0.0005)
+        #expect(abs(try kg(720.66, 0.8) - 0.279) < 0.0005)
+        // Identical to the spec's curve wherever the branch answers.
+        for m in [2.016, 9.0, 18.015, 46.069, 180.156, 500, 1000, 1018] {
+            for scale in [0.8, 0.85, 0.9, 1.0] where m * pow(scale, 2.5) <= GameUnits.feltMassKneeDa {
+                #expect(abs(try kg(m, scale) - Self.specFeltMass(m, scale)) < 1e-15, "\(m) \(scale)")
+            }
+        }
+        // The floor: hydrogen weighs 0.06, not less.
+        #expect(try kg(2.016) == 0.06)
+        // The knee is 0.4 kg (2^(2.5 × 0.4) = 2), where the spec's tail takes over continuously.
+        #expect(abs(try kg(GameUnits.feltMassKneeDa) - 0.4) < 1e-12)
+        #expect(abs(Self.specFeltMass(GameUnits.feltMassKneeDa * (1 + 1e-9), 1) - 0.4) < 1e-6)
+    }
+
+    @Test func feltMassAboveTheKneeIsLeftToLupiScale() {
+        // Hemoglobin and the salt rungs are the tail's (scale-spec §10.2's table).
+        #expect(GameUnits.feltMass(molarMass: 64_500) == nil)
+        #expect(GameUnits.feltMass(molarMass: 29_264, massScale: 0.85) == nil)
+        #expect(GameUnits.feltMass(molarMass: 1019) == nil)
+        // A brittle molecule stays on the branch further: 1,500 × 0.85^2.5 ≈ 999 Da.
+        #expect(GameUnits.feltMass(molarMass: 1500, massScale: 0.85) != nil)
+        #expect(GameUnits.feltMass(molarMass: 0) == nil)
+        #expect(GameUnits.feltMass(molarMass: .infinity) == nil)
+        // The test's reference reproduces the spec's table above the knee, so the two agree where they meet.
+        #expect(abs(Self.specFeltMass(64_500, 1) - 0.544) < 0.0005)
+        #expect(abs(Self.specFeltMass(29_264, 1) - 0.537) < 0.0005)
+        #expect(abs(Self.specFeltMass(29_264, 0.85) - 0.533) < 0.0005)
     }
 
     @Test func principalMomentsKeepTheShape() throws {
         let caffeine = try PlayFixtures.molecule("caffeine")
         let facts = caffeine.inertia
-        let mass = GameUnits.molecule.mass(molarMass: facts.mass)
+        let mass = try #require(GameUnits.feltMass(molarMass: facts.mass))
         let moments = GameUnits.molecule.principalMoments(facts, mass: mass)
         #expect(abs(moments.x / moments.z - facts.moments.x / facts.moments.z) < 1e-12)
         // I = m r² in kg·m² at 1 Å = 1 cm: caffeine's radius of gyration is ~2.6 Å, so I ~ 0.13 · 0.026².
