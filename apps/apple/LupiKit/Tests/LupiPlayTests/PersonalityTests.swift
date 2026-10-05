@@ -155,8 +155,7 @@ struct GameUnitsTests {
         #expect(GameUnits.forSpan(250) == .colossus)
     }
 
-    /// scale-spec §10.2 written out in full, the test's own reference for the
-    /// shared domain (LupiKit ships only the branch below the knee).
+    /// scale-spec §10.2 written out in full, the test's own reference.
     static func specFeltMass(_ m: Double, _ massScale: Double) -> Double {
         let knee = 180 * pow(2, 2.5)
         let a = 0.8 * log(knee)
@@ -191,19 +190,20 @@ struct GameUnitsTests {
         #expect(abs(Self.specFeltMass(GameUnits.feltMassKneeDa * (1 + 1e-9), 1) - 0.4) < 1e-6)
     }
 
-    @Test func feltMassAboveTheKneeIsLeftToLupiScale() {
+    @Test func feltMassAboveTheKneeIsTheTail() throws {
         // Hemoglobin and the salt rungs are the tail's (scale-spec §10.2's table).
-        #expect(GameUnits.feltMass(molarMass: 64_500) == nil)
-        #expect(GameUnits.feltMass(molarMass: 29_264, massScale: 0.85) == nil)
-        #expect(GameUnits.feltMass(molarMass: 1019) == nil)
-        // A brittle molecule stays on the branch further: 1,500 × 0.85^2.5 ≈ 999 Da.
-        #expect(GameUnits.feltMass(molarMass: 1500, massScale: 0.85) != nil)
+        #expect(abs(try #require(GameUnits.feltMass(molarMass: 64_500)) - 0.544) < 0.0005)
+        #expect(abs(try #require(GameUnits.feltMass(molarMass: 29_264)) - 0.537) < 0.0005)
+        #expect(abs(try #require(GameUnits.feltMass(molarMass: 29_264, massScale: 0.85)) - 0.533) < 0.0005)
+        for (m, scale) in [(1019.0, 1.0), (1500, 1), (64_500, 1), (29_264, 0.85), (1e12, 0.9)] {
+            let kg = try #require(GameUnits.feltMass(molarMass: m, massScale: scale))
+            #expect(kg == FeltMass.kg(MassLog(daltons: m), massScale: scale), "\(m) \(scale)")
+            #expect(abs(kg - Self.specFeltMass(m, scale)) < 1e-12, "\(m) \(scale)")
+        }
+        // A brittle molecule stays on the power law further: 1,500 × 0.85^2.5 ≈ 999 Da.
+        #expect(abs(try #require(GameUnits.feltMass(molarMass: 1500, massScale: 0.85)) - 0.2 * pow(1500 / 180, 0.4) * 0.85) < 1e-12)
         #expect(GameUnits.feltMass(molarMass: 0) == nil)
         #expect(GameUnits.feltMass(molarMass: .infinity) == nil)
-        // The test's reference reproduces the spec's table above the knee, so the two agree where they meet.
-        #expect(abs(Self.specFeltMass(64_500, 1) - 0.544) < 0.0005)
-        #expect(abs(Self.specFeltMass(29_264, 1) - 0.537) < 0.0005)
-        #expect(abs(Self.specFeltMass(29_264, 0.85) - 0.533) < 0.0005)
     }
 
     @Test func principalMomentsKeepTheShape() throws {

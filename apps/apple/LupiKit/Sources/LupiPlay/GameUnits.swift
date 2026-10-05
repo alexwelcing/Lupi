@@ -10,9 +10,8 @@ import LupiChem
 /// further `displayScale` multiplier that changes the printed number.
 ///
 /// Mass is not here: felt mass is `lupi.feltmass.v1` (scale-spec §10.2),
-/// whose canonical form lives in LupiScale. LupiKit keeps only its branch
-/// below the knee, `feltMass(molarMass:massScale:)`, with identical numbers.
-/// Mass does not grow with `displayScale` (plan §4.2).
+/// `FeltMass`; `feltMass(molarMass:massScale:)` is its shorthand for a molar
+/// mass in daltons. Mass does not grow with `displayScale` (plan §4.2).
 public struct GameUnits: Sendable, Equatable, Codable {
     /// Metres per ångström at display scale 1.
     public var metersPerAngstrom: Double
@@ -80,18 +79,14 @@ public struct GameUnits: Sendable, Equatable, Codable {
     /// The floor of `lupi.feltmass.v1`, kg.
     public static let feltMassFloorKg = 0.06
 
-    /// Felt mass in kg by `lupi.feltmass.v1` (scale-spec §10.2) on its branch
-    /// below the knee: `max(0.06, 0.2 × (M / 180 Da)^0.4 × massScale)`, which is
-    /// the spec's `b(M × massScale^2.5)` there. Water 0.080, caffeine 0.206,
-    /// C₆₀ 0.348; peroxide at 0.85 is 0.087, C₆₀ at 0.8 is 0.279.
-    ///
-    /// Nil above the knee (`M × massScale^2.5` over 1,018 Da): the tail is
-    /// LupiScale's `FeltMass`, and a second copy here could only drift from it.
+    /// Felt mass in kg by `lupi.feltmass.v1` (scale-spec §10.2), `FeltMass` for
+    /// a molar mass that binary64 holds; nil when it is not positive and finite.
+    /// Below the knee it is `max(0.06, 0.2 × (M / 180 Da)^0.4 × massScale)`:
+    /// water 0.080, caffeine 0.206, C₆₀ 0.348; peroxide at 0.85 is 0.087, C₆₀
+    /// at 0.8 is 0.279. Above it, the slow tail (hemoglobin 0.544).
     public static func feltMass(molarMass: Double, massScale: Double = 1) -> Double? {
         guard molarMass > 0, molarMass.isFinite, massScale > 0, massScale.isFinite else { return nil }
-        let x = Foundation.log(molarMass) + 2.5 * Foundation.log(massScale)
-        guard x <= Foundation.log(feltMassKneeDa) else { return nil }
-        return max(feltMassFloorKg, 0.2 * Foundation.exp(0.4 * (x - Foundation.log(180.0))))
+        return FeltMass.kg(MassLog(daltons: molarMass), massScale: massScale)
     }
 
     static func power10(_ exponent: Int) -> Double {

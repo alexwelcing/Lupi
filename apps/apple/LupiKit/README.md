@@ -85,12 +85,12 @@ counts, the TypeScript lines of every row (by an FNV-1a key) and p99.
   Pauling's rule for pairs the table lacks. They order breaks truly; the
   absolute values carry the usual 10–20% error.
 - **Scale:** 10⁸× (1 Å → 1 cm) for molecules, 10⁷× for colossi, times the
-  player's grow/shrink. **Mass:** `lupi.feltmass.v1` (scale-spec §10.2),
-  whose canonical form, tail included, is LupiScale's `FeltMass`. LupiKit
-  keeps only the branch below the 1,018 Da knee
-  (`GameUnits.feltMass(molarMass:massScale:)`, 0.2 kg × (M / 180)^0.4 ×
-  massScale, at least 0.06 kg; nil above the knee), pinned to the spec's
-  numbers. Mass never grows with the display scale. A personality carries
+  player's grow/shrink. **Mass:** `lupi.feltmass.v1` (scale-spec §10.2) is
+  `FeltMass` over a `MassLog`: 0.2 kg × (M / 180)^0.4 × massScale, at least
+  0.06 kg, below the 1,018 Da knee and a slow tail under 0.6 kg above it.
+  LupiScale forms the `MassLog` from exact masses;
+  `GameUnits.feltMass(molarMass:massScale:)` is the shorthand for daltons.
+  Mass never grows with the display scale. A personality carries
   its `breakSpeed`; the impulse is felt mass × break speed.
 - **Personality:** `PersonalityTable.v1` is the tunable table; rules run in
   order (ionic, weak bond, stretched bonds, cage, small, rotors, fused rings,
