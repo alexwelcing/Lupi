@@ -46,11 +46,15 @@ public enum Support: Sendable, Equatable {
     case body(BodyID)
 }
 
-/// Timers and render effects of one body (plan §5.4).
+/// Timers and render effects of one body (plan §5.4, §8 M4).
 public struct BodyEffects: Sendable {
     public var popIn: PopIn
     public var squash = Squash()
     public var hitStop = HitStop()
+    /// A bouncy cage's shiver after a hit.
+    public var ring = CageRing()
+    /// A flexible molecule's segments swinging on their hinges; nil for a body that does not flop.
+    public var flop: Flop?
 }
 
 /// A body in play: a LupiScale piece with a world pose (scale-spec §8.3), and its game state.
@@ -68,6 +72,18 @@ public struct Body: Sendable {
     public var brokenFrom: String?
     /// Where it came from, for the trophy a keep writes (contracts.md §1.3).
     public var provenance: Provenance = .scale
+    /// Snaps to other atoms (plan §4.5): tray atoms, the pieces of a break, what is built from
+    /// them, and trophies of those. A molecule spawned whole is not, so two gallery molecules
+    /// thrown at each other always bounce.
+    public var buildable = false
+    /// Held, or let go and not yet at rest: a snap needs the player's hand on one side, so the
+    /// pieces of a break never rejoin by themselves.
+    public var fromHand = false
+    /// No snap before this time.
+    public var snapAfter: Double = -.infinity
+    /// OMol25 rows (`<collection>:<row>`) whose atoms are in this body: the attribution its
+    /// trophy's XYZ carries (contracts.md §1.3).
+    public var omolRows: [String] = []
     /// The trophy this body is, once kept or when it came back from the collection.
     public var trophyID: UUID?
     /// On a shelf (plan §6.3): outside the 40-toy budget, which counts loose play only (plan §3.4).
@@ -129,6 +145,26 @@ public struct Body: Sendable {
 
     public var isToy: Bool { sizeState == .toy }
 
+    /// The lowest point of its collider, world y: what rests on the floor, not the atoms' envelope.
+    public var lowestColliderPoint: Double {
+        let pose = entityPose
+        var lowest = Double.infinity
+        for shape in spec.shapes {
+            switch shape {
+            case let .sphere(c, r):
+                lowest = min(lowest, pose.apply(c).y - r)
+            case let .box(c, h, q):
+                for k in 0..<8 {
+                    let corner = Vec3(k & 1 == 0 ? -h.x : h.x, k & 2 == 0 ? -h.y : h.y, k & 4 == 0 ? -h.z : h.z)
+                    lowest = min(lowest, pose.apply(c + q.act(corner)).y)
+                }
+            case let .convex(points):
+                for p in points { lowest = min(lowest, pose.apply(p).y) }
+            }
+        }
+        return lowest.isFinite ? lowest : worldBounds.min.y
+    }
+
     /// The world bounds of the envelope (an axis-aligned box around the rotated envelope).
     public var worldBounds: Box3 {
         let pose = entityPose
@@ -149,6 +185,9 @@ enum BodyPhysics {
     static func spec(
         _ body: Body, mode: MotionMode, resting: Bool, now: Double, cameraInside: Bool, resolver r: Resolver
     ) throws -> PhysicsSpec {
+        // Terrain collides through its face planes and atom windows (§10.1), never its own proxy:
+        // past a few kilometres its node has no binary64 size.
+        if body.sizeState == .terrain { return terrain(body) }
         let view = try r.resolve(body.frame.ref.root, body.frame.ref.path)
         // The proxy is the body node's, at the node's own scale (a terrain's anchor may sit below it).
         let sigma = body.nodePose(r).sigma
@@ -165,12 +204,22 @@ enum BodyPhysics {
             mode: mode, massKg: body.feltMassKg, principalMoments: inertia.moments, principalRotation: rotation,
             centreOfMass: (inertia.centreOfMass - body.facts.aggregate.centre) * sigma,
             material: SurfaceMaterial(
-                staticFriction: p.friction, dynamicFriction: p.friction * PlayTuning.dynamicFrictionShare,
+                staticFriction: p.friction, dynamicFriction: p.dynamicFriction,
                 restitution: p.restitution
             ),
             linearDamping: resting ? PlayTuning.restLinearDamping : p.linearDamping,
             angularDamping: resting ? PlayTuning.restAngularDamping : p.angularDamping,
             shapes: shapes, continuousCollision: mode == .dynamic
+        )
+    }
+
+    /// A terrain's own body: static, shapeless, with finite placeholders where a mass would be.
+    static func terrain(_ body: Body) -> PhysicsSpec {
+        let p = body.facts.personality.personality
+        return PhysicsSpec(
+            mode: .static, massKg: body.feltMassKg, principalMoments: Vec3(1, 1, 1), principalRotation: .identity, centreOfMass: .zero,
+            material: SurfaceMaterial(staticFriction: p.friction, dynamicFriction: p.dynamicFriction, restitution: p.restitution),
+            linearDamping: 0, angularDamping: 0, shapes: [], continuousCollision: false
         )
     }
 }

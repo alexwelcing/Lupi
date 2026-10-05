@@ -8,7 +8,8 @@ extension PlaySession {
     // MARK: Touches in
 
     mutating func handleTouches(_ touches: [TouchSample], now: Double) {
-        arbiter.flyAllowed = false   // flight needs |λ| > 32: M3a content (scale-spec §8.8)
+        // Flight needs |λ| > 32 (scale-spec §8.8).
+        arbiter.flyAllowed = flyAllowed
         for t in touches {
             let target = t.phase == .began ? touchTarget(at: t.location) : .none
             for g in arbiter.handle(t, target: target) { handle(g, now: t.time) }
@@ -56,17 +57,20 @@ extension PlaySession {
         case let .grabEnded(point, cancelled):
             grab?.touch = point
             endGrab(now: now, cancelled: cancelled)
-        case .chunk, .chip:
-            // Chunks and chips come with monuments and terrain as content (M3a).
-            out.events.append(.refused("Chunks and chips arrive with monuments and terrain"))
+        case let .chunk(id, point):
+            detach(id, at: point, band: Bands.hand, chip: false, now: now)
+        case let .chip(id, point):
+            detach(id, at: point, band: Bands.chip, chip: true, now: now)
         case let .pinchBegan(centroid, held, target):
             beginPinch(centroid: centroid, held: held, target: target, now: now)
         case let .pinchChanged(centroid, ratio, twist):
             changePinch(centroid: centroid, ratio: ratio, twist: twist, now: now)
         case .pinchEnded:
             endPinch(now: now)
-        case .flyBegan, .flyEnded:
-            break
+        case let .flyBegan(direction, centroid):
+            beginFly(direction: direction, centroid: centroid, now: now)
+        case .flyEnded:
+            endFly()
         }
     }
 
@@ -90,6 +94,7 @@ extension PlaySession {
         b.floatUntil = -.infinity
         b.mode = .kinematic
         b.spec.mode = .kinematic
+        b.fromHand = true
         // Picked off its shelf, a trophy is a loose toy again until it rests on one.
         let wasPinned = b.pinned
         b.pinned = false
@@ -105,7 +110,8 @@ extension PlaySession {
     mutating func stepGrab(dt: Double, now: Double) {
         guard var g = grab, var b = bodies[g.body], let camera else { return }
         let ray = camera.ray(through: g.touch)
-        let target = ray.at(g.depth) + Vec3(0, PlayTuning.grabLift, 0)
+        // A magnet zone pulls the hand gently toward the bond it would make (plan §4.5 (a)).
+        let target = ray.at(g.depth) + Vec3(0, PlayTuning.grabLift, 0) + g.pull
         g.follow.step(toward: target, dt: dt)
         g.estimator.add(HandSample(time: now, world: target, screen: g.touch))
         let point = g.follow.position.value
@@ -153,10 +159,12 @@ extension PlaySession {
 
     mutating func beginPinch(centroid: SIMD2<Double>, held: BodyID?, target: TouchTarget, now: Double) {
         let id = held ?? selection ?? target.body ?? pickBody(at: centroid)?.body
-        guard let id, var b = bodies[id] else {
+        guard let id, bodies[id] != nil else {
             out.events.append(.refused("Pinch a molecule to resize it"))
             return
         }
+        if flightState?.body == id { endFlight(now: now) }
+        guard var b = bodies[id] else { return }
         glide = nil
         let resting = b.mode == .dynamic && (b.atRest || now - b.lastSupportContact < PlayTuning.contactMemory)
         let focus: Vec3
@@ -185,6 +193,12 @@ extension PlaySession {
 
     mutating func changePinch(centroid: SIMD2<Double>, ratio: Double, twist: Double, now: Double) {
         guard var p = pinch, var b = bodies[p.body], let camera else { return }
+        // Anchored below its node, a body is beyond the fingers' one-to-one range: the pinch moves φ
+        // and the picture follows as in flight (§8.8).
+        if !b.frame.anchorPath.isEmpty || flightState?.body == p.body {
+            pinchAlongAxis(p.body, ratio: ratio, focus: p.focus)
+            return
+        }
         // The scale axis: fingers map one to one within 10^±32, logarithmically beyond (§8.8).
         let before = (try? resolver.magnification(of: b.frame))?.lambda
         var effective = ratio
@@ -229,33 +243,25 @@ extension PlaySession {
     mutating func endPinch(now: Double) {
         guard let p = pinch else { return }
         pinch = nil
+        if flightState?.body == p.body {
+            // The picture finishes its way to the pinched φ, then settles.
+            endPinchAlongAxis()
+            return
+        }
         settleSize(p.body, now: now, held: grab?.body == p.body)
     }
 
-    // MARK: The receipt's dive (plan §8 M0)
+    // MARK: Glides (the receipt's dive, surfacing, life size)
 
-    /// Glides a crystal about its centre until its ions are about 2 cm across, so the camera
-    /// stands inside it (the deep cut, rebasing and the neighbourhood).
-    public mutating func dive(into id: BodyID, ionDiameter: Double = 0.02) {
-        guard let b = bodies[id], let lambda = (try? resolver.magnification(of: b.frame))?.lambda else { return }
-        let target = log10(ionDiameter / (2 * b.facts.aggregate.rAtom)) + 10
-        startGlide(id, ratio: pow(10, target - lambda), returnAhead: false)
-    }
-
-    /// Glides back to spawn size and puts the body ahead of the camera.
-    public mutating func surface(_ id: BodyID) {
-        guard var b = bodies[id] else { return }
-        returnAnchor(&b)
-        bodies[id] = b
-        startGlide(id, ratio: b.spawnSpan / max(b.span, 1e-12), returnAhead: true)
-    }
-
-    mutating func startGlide(_ id: BodyID, ratio: Double, returnAhead: Bool) {
+    mutating func startGlide(_ id: BodyID, ratio: Double, returnAhead: Bool, about: Vec3? = nil) {
         guard var b = bodies[id], ratio.isFinite, ratio > 0 else { return }
         if grab?.body == id { grab = nil }
         if pinch?.body == id { pinch = nil }
         let duration = settings.comfort.animatesGlides ? (settings.comfort == .gentle ? 3.2 : 1.6) : 0
-        glide = Glide(body: id, targetSigma: b.sigma * ratio, start: time ?? 0, fromSigma: b.sigma, duration: duration, returnAhead: returnAhead)
+        glide = Glide(
+            body: id, targetSigma: b.sigma * ratio, start: time ?? 0, fromSigma: b.sigma, duration: duration, returnAhead: returnAhead,
+            about: about
+        )
         b.mode = .kinematic
         b.floatUntil = -.infinity
         // No collider while it sweeps through the room: a growing kinematic box would shove every toy.
@@ -270,8 +276,9 @@ extension PlaySession {
         guard let g = glide, var b = bodies[g.body], let camera else { return }
         let u = g.duration > 0 ? min(1, (now - g.start) / g.duration) : 1
         let sigma = g.fromSigma * pow(g.targetSigma / g.fromSigma, smoothstep(u))
-        // About the body's own centre: a similarity about the eye would keep the eye outside.
-        pinchFrame(&b, ratio: sigma / b.sigma, about: b.nodePose(resolver).frame.translation)
+        // About the body's own centre (a similarity about the eye would keep the eye outside), or
+        // about the footprint a life-size body stands on.
+        pinchFrame(&b, ratio: sigma / b.sigma, about: g.about ?? b.nodePose(resolver).frame.translation)
         if u >= 1 && g.returnAhead {
             var flat = camera.forward
             flat.y = 0

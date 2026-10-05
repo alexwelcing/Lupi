@@ -1,6 +1,7 @@
 import Foundation
 import LupiChem
 import LupiGame
+import LupiPlay
 import LupiScale
 import RealityKit
 import simd
@@ -117,8 +118,12 @@ final class BodyRig {
     let squash = Entity()
     let unsquash = Entity()
     let instances: InstanceSet
-    var meshEntity: ModelEntity?
+    /// The merged mesh, or the flop's container whose children are its segments (plan §8 M4).
+    var meshEntity: Entity?
     var meshKey: String?
+    var segmentEntities: [ModelEntity] = []
+    /// This frame's segment poses, in the recipe's frame (Å).
+    var segmentPoses: [SegmentPose] = []
     var spec: PhysicsSpec
 
     init(id: BodyID, spec: PhysicsSpec) {
@@ -135,6 +140,11 @@ final class BodyRig {
         let axis = r.squashAxis.simd
         squash.transform = Transform(scale: r.squash.asFloat, rotation: axis, translation: .zero)
         unsquash.transform = Transform(scale: SIMD3<Float>(repeating: 1), rotation: axis.inverse, translation: .zero)
+        segmentPoses = r.segments
+        for (k, e) in segmentEntities.enumerated() where k < r.segments.count {
+            let pose = r.segments[k]
+            e.transform = Transform(scale: SIMD3<Float>(repeating: 1), rotation: pose.rotation.simd, translation: pose.translation.asFloat)
+        }
     }
 }
 
@@ -154,10 +164,13 @@ final class PlayScene {
     /// The last merged-mesh build: geometry off the main actor, resource on it (spike S10).
     private(set) var lastMeshBuild: (atoms: Int, milliseconds: Double)?
     private(set) var drawnInstances = 0
+    /// A terrain's face planes and atom windows (scale-spec §10.1), and spike S8's timing.
+    let statics: StaticColliders
 
     init() {
         root.addChild(cameraFrame)
         cameraInstances = InstanceSet(parent: cameraFrame)
+        statics = StaticColliders(parent: root)
     }
 
     func body(of entity: Entity) -> BodyID? { byEntity[entity.id] }
@@ -173,7 +186,8 @@ final class PlayScene {
             switch command {
             case let .create(id, spec, pose):
                 let rig = BodyRig(id: id, spec: spec)
-                rig.entity.transform = pose.transform
+                // A pose binary64 cannot place (a terrain deep in its anchor) keeps the origin.
+                if pose.allFinite { rig.entity.transform = pose.transform }
                 configure(rig, spec)
                 root.addChild(rig.entity)
                 rigs[id] = rig
@@ -190,7 +204,7 @@ final class PlayScene {
                 }
                 if mode == .dynamic { rig.entity.components.set(PhysicsMotionComponent()) }
             case let .move(id, pose, v, w):
-                guard let rig = rigs[id] else { continue }
+                guard let rig = rigs[id], pose.allFinite else { continue }
                 rig.entity.transform = pose.transform
                 rig.entity.components.set(PhysicsMotionComponent(linearVelocity: v.asFloat, angularVelocity: w.asFloat))
             case let .launch(id, linear, angular):
@@ -213,6 +227,8 @@ final class PlayScene {
                 if wasPoof { poof(rig.entity.position(relativeTo: nil)) }
                 byEntity[rig.entity.id] = nil
                 rig.entity.removeFromParent()
+            case let .staticColliders(key, origin, shapes, material):
+                statics.apply(key, origin: origin, shapes: shapes, material: assets.physicsMaterial(material))
             }
         }
     }
@@ -221,7 +237,9 @@ final class PlayScene {
     /// camera stands in, a body gliding through the room).
     private func configure(_ rig: BodyRig, _ s: PhysicsSpec) {
         rig.spec = s
-        guard !s.shapes.isEmpty else {
+        // No physics for a spec binary64 cannot state either: a non-finite shape or mass would
+        // poison the simulation.
+        guard !s.shapes.isEmpty, s.shapes.allSatisfy(\.allFinite), s.massKg.isFinite, s.principalMoments.allFinite else {
             rig.entity.components.remove(PhysicsBodyComponent.self)
             rig.entity.components.remove(CollisionComponent.self)
             return
@@ -282,7 +300,7 @@ final class PlayScene {
     /// Applies the render children and draws the cut. `recipe` gives a molecule body's merged
     /// mesh; until it is built (at most one a frame, off the main actor) the body draws its atoms
     /// instanced, and the mesh takes over once the body may swap (scale-spec §9.6).
-    func draw(_ out: FrameOutput, recipe: (BodyID) -> MeshRecipe?) {
+    func draw(_ out: FrameOutput, recipe: (BodyID) -> MeshRecipe?, segments: (BodyID) -> [MeshRecipe]? = { _ in nil }) {
         finishOneMesh()
         for (id, rig) in rigs {
             if let r = out.renders[id] { rig.apply(r) }
@@ -304,7 +322,8 @@ final class PlayScene {
             switch item.extras {
             case let .atoms(runs):
                 if item.kind == .leafMesh, let rig, let r = recipe(rig.id) {
-                    if drawMesh(rig, recipe: r, item: item, swapAllowed: out.renders[rig.id]?.meshSwapAllowed ?? true) {
+                    let parts = out.renders[rig.id]?.segments.isEmpty == false ? segments(rig.id) : nil
+                    if drawMesh(rig, recipe: r, segments: parts, item: item, swapAllowed: out.renders[rig.id]?.meshSwapAllowed ?? true) {
                         drewMesh.insert(rig.id)
                         continue
                     }
@@ -338,8 +357,38 @@ final class PlayScene {
         drawnInstances = atoms
     }
 
-    /// The merged mesh of a molecule, when it is built and the body may swap to it.
-    private func drawMesh(_ rig: BodyRig, recipe: MeshRecipe, item: DrawItem, swapAllowed: Bool) -> Bool {
+    /// The merged mesh of a molecule, when it is built and the body may swap to it. A flexible
+    /// molecule draws as its flop's segments once every one is built (plan §8 M4), and as its
+    /// whole mesh until then.
+    private func drawMesh(_ rig: BodyRig, recipe: MeshRecipe, segments: [MeshRecipe]?, item: DrawItem, swapAllowed: Bool) -> Bool {
+        if let segments, !segments.isEmpty {
+            let meshes = segments.compactMap { assets.mesh($0.key) }
+            if meshes.count == segments.count {
+                let key = segments.map(\.key).joined(separator: "|")
+                if rig.meshKey != key {
+                    guard swapAllowed || rig.meshKey == recipe.key else { return false }
+                    rig.meshEntity?.removeFromParent()
+                    let container = Entity()
+                    rig.segmentEntities = zip(segments, meshes).map { part, mesh in
+                        let e = ModelEntity(mesh: mesh, materials: Self.materials(part, assets))
+                        e.components.set(GroundingShadowComponent(castsShadow: true))
+                        container.addChild(e)
+                        return e
+                    }
+                    rig.unsquash.addChild(container)
+                    rig.meshEntity = container
+                    rig.meshKey = key
+                    for (k, e) in rig.segmentEntities.enumerated() where k < rig.segmentPoses.count {
+                        let pose = rig.segmentPoses[k]
+                        e.transform = Transform(scale: SIMD3<Float>(repeating: 1), rotation: pose.rotation.simd, translation: pose.translation.asFloat)
+                    }
+                }
+                rig.meshEntity?.transform = Transform(matrix: item.transform.matrix)
+                rig.meshEntity?.isEnabled = true
+                return true
+            }
+            for part in segments where assets.mesh(part.key) == nil { requestMesh(part) }
+        }
         guard let mesh = assets.mesh(recipe.key) else {
             requestMesh(recipe)
             return false
@@ -349,17 +398,22 @@ final class PlayScene {
             // keeps its instances until it rests or is small on screen.
             guard swapAllowed else { return false }
             rig.meshEntity?.removeFromParent()
-            // Parts come one per element, in increasing atomic number.
-            let elements = Set(recipe.atoms.map(\.atomicNumber)).sorted()
-            let entity = ModelEntity(mesh: mesh, materials: elements.map { assets.material(element: $0) })
+            let entity = ModelEntity(mesh: mesh, materials: Self.materials(recipe, assets))
             entity.components.set(GroundingShadowComponent(castsShadow: true))
             rig.unsquash.addChild(entity)
             rig.meshEntity = entity
             rig.meshKey = recipe.key
+            rig.segmentEntities = []
         }
         rig.meshEntity?.transform = Transform(matrix: item.transform.matrix)
         rig.meshEntity?.isEnabled = true
         return true
+    }
+
+    /// One material per element part, in the parts' order: increasing atomic number, as
+    /// `MeshBuilder` makes them (stubs and bond halves are in their atom's element).
+    static func materials(_ recipe: MeshRecipe, _ assets: RenderAssets) -> [PhysicallyBasedMaterial] {
+        Set(recipe.atoms.map(\.atomicNumber)).sorted().map { assets.material(element: $0) }
     }
 
     private func requestMesh(_ recipe: MeshRecipe) {

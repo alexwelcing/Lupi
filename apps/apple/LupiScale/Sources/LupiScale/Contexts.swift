@@ -151,18 +151,29 @@ final class TowerContext: Sendable {
     func envelope(counts n: Vec3, inverseUnit eps: Double) -> Box3 {
         let seed = seedAggregate.bounds
         var lo = seed.min * eps, hi = seed.max * eps
-        var cellLo = Vec3.zero, cellHi = Vec3.zero
         for a in 0..<3 {
             let reach = (n[a] - eps) * periods[a]
             lo += simdMin(reach, .zero)
             hi += simdMax(reach, .zero)
-            let cell = n[a] * periods[a]
-            cellLo += simdMin(cell, .zero)
-            cellHi += simdMax(cell, .zero)
         }
-        var box = Box3(min: lo, max: hi)
-        if !solid { box = box.union(Box3(min: cellLo, max: cellHi)) }
-        return box
+        let box = Box3(min: lo, max: hi)
+        return solid ? box : box.union(cells(counts: n))
+    }
+
+    /// The period cells of a level, its own units: Σ n_a p_a.
+    func cells(_ shape: LevelShape) -> Box3 {
+        let c = shape.counts(factor)
+        return cells(counts: Vec3(c[0], c[1], c[2]))
+    }
+
+    func cells(counts n: Vec3) -> Box3 {
+        var lo = Vec3.zero, hi = Vec3.zero
+        for a in 0..<3 {
+            let cell = n[a] * periods[a]
+            lo += simdMin(cell, .zero)
+            hi += simdMax(cell, .zero)
+        }
+        return Box3(min: lo, max: hi)
     }
 
     /// The translation of child j of level k, in level k's units: j · p_axis(k).

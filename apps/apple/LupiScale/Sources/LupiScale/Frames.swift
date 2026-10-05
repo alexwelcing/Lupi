@@ -213,7 +213,7 @@ public func rebase(_ frame: inout BodyFrame, focusWorld: SIMD3<Double>, resolver
         let childWidth = sigma * p.scale * (try resolver.aggregate(child)).narrowestWidth
         guard childWidth >= FrameTuning.descendWidth || sigma * agg.radius > FrameTuning.radiusCap else { break }
         descend(&frame, through: p)
-        frame.anchorPath.append(s)
+        AnchorPath.append(&frame.anchorPath, s)
         anchor = child
     }
 }
@@ -280,6 +280,19 @@ enum AnchorPath {
             }
         }
         return runs
+    }
+
+    /// Appends a step, merging it into a trailing step of its kind, so a dive keeps about one run
+    /// per axis however many descents and wraps it makes.
+    static func append(_ path: inout [Step], _ step: Step) {
+        switch (path.last, step) {
+        case let (.tower(d0, r0)?, .tower(d1, r1)):
+            path[path.count - 1] = .tower(levels: d0 + d1, runs: (0..<3).map { mergeRuns(r0[$0], r1[$0]) })
+        case let (.cells(o0)?, .cells(o1)):
+            path[path.count - 1] = .cells(o0 + o1)
+        default:
+            path.append(step)
+        }
     }
 
     static func mergeRuns(_ a: [DigitRun], _ b: [DigitRun]) -> [DigitRun] {

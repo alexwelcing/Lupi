@@ -4,15 +4,23 @@ The native Lupi app ([plan.md](../../docs/ar/plan.md)): molecules in your room
 that you can throw at the walls, stack on the desk and break, drawn and
 simulated on the scale spine ([scale.md](../../docs/ar/scale.md),
 [scale-spec.md](../../docs/ar/scale-spec.md)). This is M0's slice, the
-playable molecules and the scale receipt, and M1's: keeping, the collection,
-shelves that remember where trophies sit, and the Lupi account (plan §8).
+playable molecules and the scale receipt; M1's keeping, the collection,
+shelves that remember where trophies sit, and the Lupi account; M2's
+building from atoms, with fragments and built molecules you keep; M3a's
+scale: the salt ladder to a googolplex, copper, diamond and the diamondoids,
+monuments and terrain, flight along the scale axis, chunks and chips, and the
+spikes S8 and S9; and M4's polish: four sound families tuned per personality
+with a sound lab, flexible molecules that flop, cages that ring, plaques that
+say why, VoiceOver, the thermal policy with spike A5, spike A6 and the
+first-run card (plan §8). [docs/ar/status.md](../../docs/ar/status.md) is
+the owner's checklist of everything to build, run and measure.
 
 | Path | What it is | Built and tested |
 |---|---|---|
 | `Lupi/` | The app: SwiftUI, RealityKit, ARKit, Core Haptics, AVFAudio. It turns frames, touches and collisions into `FrameInput` and applies the `FrameOutput` that comes back | Xcode only |
-| `LupiGame/` | The play session: spawning, grab and throw, pinch through the scale axis, breaks, the juice router, the receipt, the HUD; keeping and restoring trophies, the trophy case over LupiSync, shelves and the recovery ladder; and a headless physics stand-in for tests | Linux and Xcode |
+| `LupiGame/` | The play session: spawning, grab and throw, pinch through the scale axis, breaks, the juice router, the receipt, the HUD; the atom tray, the snap magnet, hydrogen fill and "Built it"; keeping and restoring trophies, the trophy case over LupiSync, shelves and the recovery ladder; the scale content, flight, Life size, Grow ×2, chunks and chips, and terrain colliders; and a headless physics stand-in for tests | Linux and Xcode |
 | `LupiScale/` | The scale spine: records, references, counts, the cut, frames and proxies | Linux and Xcode |
-| `LupiKit/` | Chemistry, bonds, personalities, felt mass, the throw estimator, juice and synthesized sound, the bundled starters, and the `lupi.trophy.v1` and `lupi.shelf.v1` records | Linux and Xcode |
+| `LupiKit/` | Chemistry, bonds, building (snap geometry and its re-perception check, hydrogen fill, naming graphs), personalities, felt mass, the throw estimator, juice and synthesized sound, the bundled starters and known molecules, and the `lupi.trophy.v1` and `lupi.shelf.v1` records | Linux and Xcode |
 | `LupiCloud/` | The account and its sync: Firebase Auth and Firestore over REST | Linux and Xcode |
 | `project.yml` | The XcodeGen spec: the source of truth for the Xcode project, Info.plist and the entitlements | |
 | `Config/` | `Lupi.xcconfig` (committed) and your `Secrets.xcconfig` (ignored by git): the account's configuration | |
@@ -35,9 +43,10 @@ cd apps/apple && xcodegen generate && open Lupi.xcodeproj
    the app requires ARKit (`UIRequiredDeviceCapabilities: arkit`). LiDAR is not
    required: without it the molecules land on the floors and tables ARKit
    detects.
-4. On first launch the app asks for the camera. In Play, move the device slowly
-   until ARKit's coaching overlay goes away. Anything you spawn before that
-   waits for tracking.
+4. On first launch a card says why Lupi wants the camera; **Continue** lets
+   iOS ask. (Refused, the card offers **Open Settings**.) In Play, move the
+   device slowly until ARKit's coaching overlay goes away. Anything you spawn
+   before that waits for tracking.
 
 `Lupi.xcodeproj`, `Lupi/Info.plist` and `Lupi/Lupi.entitlements` are generated
 and ignored by git. Run `xcodegen generate` again after pulling changes or
@@ -78,7 +87,8 @@ account on (D7):
 The Apple workflow (`.github/workflows/apple.yml`) runs on Linux:
 
 - `swift test` for every package here (LupiKit, LupiScale, LupiGame,
-  LupiCloud), and LupiScale again in release;
+  LupiCloud), and LupiScale again in release (run LupiGame's in release
+  yourself with `swift test -c release`: its directive tests time frames);
 - `tools/apple/parse-app.sh`, which runs `swiftc -parse` over every Swift file
   in `Lupi/`. It catches syntax errors only: Linux has no SwiftUI, RealityKit
   or ARKit, so it cannot type-check, link or sign the app;
@@ -104,21 +114,81 @@ compiles and tests them; say so if one does.
 
 ## Playing
 
-- **Tray** (bottom): C₆₀ first, then the starters, the **Scale receipt** menu
-  (salt of 10³, 10⁶ and 10⁹ atoms, one at a time or all three in a row) and
-  **Clear**.
+- **Tray** (bottom): **Atoms**, then C₆₀, the starters, the **Scale receipt**
+  menu (salt of 10³, 10⁶ and 10⁹ atoms, one at a time or all three in a row),
+  the **Scale** menu and **Clear**.
+- **Scale** (M3a): the salt ladder (10³, 10⁶, 10⁹, 10³⁰, a googol and a
+  googolplex atoms; the last two are bars of 30 × 3 × 3 cm, the rest 15 cm
+  cubes), copper's billion (open, and closed with its outer faces complete),
+  one carat of diamond, and the diamondoids from adamantane to C₂₉₂₅H₆₇₆.
+  Every count is exact, and a kept one is a few hundred bytes. Home lists the
+  salt ladder too.
+- **Atoms** opens the atom tray: H, C, N, O, F, P, S, Cl, Br, I and Na as CPK
+  beads, plus any element a break has freed (it is new for this session
+  only). Tap one to drop a 3 cm atom ahead; successive atoms land 10 cm apart.
+- **Building** (plan §4.5). Pick an atom up and carry it to another: inside
+  about 1.6 bond lengths the magnet takes hold, the smaller piece glides in
+  (and to the larger one's size), and within a bond length it clicks into
+  place at the ideal angle. Loose atoms, the pieces of a break and anything
+  built snap; a molecule spawned whole only takes them. Nothing snaps by
+  itself: one of the two must be in your hand, or thrown and still moving,
+  so a throw of a hydrogen at a broken hydroxyl joins them, and the halves
+  of a break never rejoin unless you bring them together. If the bond would
+  not read back as the bond you made (a crowded spot), it bounces off with a
+  dull bump. You keep holding what you built. On the plaque, **Fill H** fills
+  every open valence with hydrogens. When every atom has its usual partners,
+  or Lupi knows the molecule, it celebrates: "You built ethanol". The pieces
+  of a bond break are named honestly: "HO radical", "Hydrogen atom", or a
+  molecule's own name when a whole one falls out.
 - **Tap** a molecule to select it and show its plaque; tap it again, or empty
-  space, to let go of the selection.
+  space, to let go of the selection. The plaque says why the molecule plays
+  as it does ("Brittle: its O–O bond is weak (142 kJ/mol)", "Bouncy: a round
+  cage of 60 carbons", "Flexible: three rotating bonds") and how ("Cracks
+  easily, and tinks like glass").
+- **Personalities** (plan §4.3, contracts.md §3.3). Rigid molecules clack like
+  hard plastic. Flexible ones thwap like rubber and flop: their segments swing
+  on their rotating bonds after a throw, a catch or a landing, and their loose
+  ends flap a beat after the hit. Brittle ones tink like glass, crackle when a
+  hit comes close to breaking them, and break easily (hydrogen peroxide at
+  about 0.8 m/s). Bouncy ones boing; cages (C₆₀, adamantane) ring like a small
+  bell and shiver along the hit. A cage breaks only at 6.5 m/s, so a hard
+  throw of C₆₀ at the wall chips it.
 - **Drag** to hold it; **flick** to throw; let go slowly to set it down.
 - **Pinch** on a molecule to grow or shrink it through the scale axis, with
   detents; **twist** turns it. A resting molecule grows on its footprint. With
   one finger holding a molecule, a second finger pinches it in your hand.
 - The plaque's **Dive in** (on a crystal) grows it about its centre until its
   ions are about 2 cm across, so you stand inside it; **Surface** shrinks it
-  back to toy size, 40 cm in front of you.
-- **Keep** (on the plaque): the molecule, fragment or crystal becomes a
-  trophy in your collection, whatever its size; a billion atoms of salt is
-  kept as the same crystal. A kept body shows **Kept**.
+  back to toy size, 40 cm in front of you. Beyond 10³² times life size (the
+  googolplex on the desk) it reads **Fly in**: the picture zooms toward the
+  surface under the screen's centre while whole periods of the lattice pass
+  unseen, about 20 s from the desk to 2 cm ions, and the plaque counts the
+  magnification as it goes. Gentle flies at half speed; Still cuts in jumps.
+- **Two fingers held still**, with a body beyond 10³² selected (or terrain
+  around you), fly toward it; lift them and the picture finishes its way. A **pinch** on a
+  body anchored deep inside its lattice moves along the scale instead of
+  stretching the picture.
+- **Inside a crystal** (dived in, or walked into a monument), the atoms within
+  35 cm are cleared around you, a banner says so, and every toy waits, frozen,
+  until you step out. Outside, a crystal grown past 3 m is terrain: toys land
+  on its faces and roll over its atoms, not on the floor under it.
+- **Life size** (on the plaque, when it fits the room): the body glides to
+  its true size on the floor ahead, its near face 1.2 m away. The 10³⁰ cube is
+  2.82 m tall and weighs 48.6 t. The plaque prints every body's true mass
+  beside how heavy it feels as a toy.
+- **Chunks and chips** (M3a). Drag one finger across a monument or terrain:
+  a piece 4 to 40 cm across comes away in your hand ("Chunk of …"). Hold
+  still 400 ms first and it is a chip of 1 to 5 cm. The counts add up
+  exactly: a chunk of the googolplex's 1 cm ions leaves 10^(10^100) − 1,000.
+- **Grow ×2** (off by default; Settings, Scale): the plaque's **Grow ×2**
+  doubles a molecule along one side, keeping its size in your hand. A water
+  tapped a hundred times holds 3 × 2¹⁰⁰ atoms and still keeps in a few
+  hundred bytes.
+- **Keep** (on the plaque): the molecule, fragment, built molecule or
+  crystal becomes a trophy in your collection, whatever its size; a billion
+  atoms of salt is kept as the same crystal. Fragments and built molecules
+  keep their atoms (embedded XYZ) and their story: "Broken from Hydrogen
+  peroxide", "Built from atoms: O, H, H". A kept body shows **Kept**.
 - **Shelves.** A molecule that sits still for three seconds on a surface at
   least 25 cm above the floor (a shelf, a desk, a table) is kept there with the
   kept chime, and stays there for next time. The first one in
@@ -133,12 +203,17 @@ compiles and tests them; say so if one does.
   surface and the whole arrangement moves there) and **New room**. The
   coaching overlay's Start Over does the same instead of resetting the session.
 - **Collection** (the stack button at the top of Play, or Home): every trophy,
-  with its count and its story. Tap one to bring it into play; swipe to rename
+  with its count, its story and the reason for its personality. Tap one to bring it into play; swipe to rename
   or delete. **Rooms** lists the rooms on this device; swipe to delete one or
   choose which opens next.
+- **VoiceOver.** The room reads as one line ("3 in play: Caffeine, …").
+  Each molecule is its own element when RealityKit exposes it: its name,
+  then its personality, how it plays, its atoms in words and what it is
+  doing; activate it to open its card, and its actions toss it ahead or keep
+  it. With VoiceOver on, the card has a **Toss** button.
 - **Settings** (gear): Sound & haptics (on by default), Motion comfort
-  (Standard, Gentle, Still; by default it follows Reduce Motion), keeping on
-  shelves, and the Lupi account: Sign in with Apple, Sync now, Sign out,
+  (Standard, Gentle, Still; by default it follows Reduce Motion), Grow ×2,
+  keeping on shelves, and the Lupi account: Sign in with Apple, Sync now, Sign out,
   Delete account (it asks you to sign in with Apple once more, which is what
   lets it revoke Lupi's Apple tokens), and Erase this device's collection.
 
@@ -156,6 +231,13 @@ Touch and hold the **Lupi** badge at the top of the play screen. Its lines:
 | `last impulse, Δv` | The last contact's impulse (N·s) and the Δv the juice used (m/s) |
 | `last throw` | Release speed of the last throw (m/s) |
 | `last mesh` | The last merged mesh: atoms and build time (ms) |
+| `magnet` | While a snap is pulling: host ← guest, the atoms' distance, the magnet zone and the distance it snaps at |
+| `flight` | During a flight: its kind, φ now and its target, the frames that wrapped and the periods wrapped in all (exact), and the anchor path's steps |
+| `S8 terrain` | While there is terrain: face boxes, the camera window's shapes, body windows and their shapes, and window rebuilds in the last second |
+| `S8 app` | How the app built the last window (spheres or static mesh): the time from the command to the colliders being set, the mean and worst of the last 30, builds in flight, stale and failed |
+| `S9 …` | One line per body of the S9 drop: when it landed and rested, how deep it sank, its jitter, and whether it fell through or was lost |
+| `thermal …, camera … fps` | What the thermal policy allows now (particles, slow motion, 30 fps, the toy limit) and the frame rate ARKit's video format runs at |
+| `A6 joints` | Spike A6's jointed copy: parts, the worst gap between paired pins (mm), the widest bend, parts lost, its age |
 
 The spike controls follow, then their results and the contact log.
 
@@ -200,6 +282,51 @@ Record what each shows on the iPhone 15 Pro and the iPad Pro.
 - **S10, merged meshes.** Tap **S10 time 1k and 2k atom meshes**: it reports
   the geometry time off the main actor and the `MeshResource` time on it.
 
+### M3a spikes (plan §8 M3a)
+
+- **S8, terrain window rebuild latency.** Spawn the googolplex, tap it, **Fly
+  in**, and stand on the plain of salt. The `S8 terrain` line shows the face
+  boxes and the camera's window of atom bumps (at most 64 spheres in 1 m,
+  rebuilt when you move 25 cm); drop a molecule and it gets its own window
+  when it slows down. Turn on **S8 rebuild the camera window every frame** and
+  walk: the `S8 app` line's mean and worst are the cost of a rebuild. Then
+  pick **S8 static mesh**: each window becomes one triangle mesh made by the
+  asynchronous `ShapeResource.generateStaticMesh`, and the line measures the
+  time until it is in place, with stale builds that a newer one overtook.
+  Record both modes' mean and worst, the fps, and whether a molecule resting
+  on the atoms ever drops through while its window is rebuilt.
+- **S9, colliders at the size extremes.** Tap **S9 drop boxes and hulls of 3
+  and 90 cm**: a 3 cm box, a 90 cm bar (the googolplex grown 3×), a 3 cm hull
+  of a molecule and a 90 cm one fall side by side 1.5 m ahead. The `S9` lines
+  say when each landed and rested, how far it sank into the floor and how much
+  it jittered at rest. Record them on a LiDAR floor and on a table. The
+  stand-in physics in the tests says nothing about RealityKit here.
+
+### M4 spikes and the sound lab (plan §8 M4)
+
+- **A5, 30 fps without losing tracking.** Turn on **A5 allow 30 fps at
+  critical** and pick **critical** in the Thermal picker (or let the phone
+  get hot): the session runs again with a 30 fps video format, without reset
+  options, and five seconds later an `A5` line says how long tracking was
+  limited. **A5 hold 30 fps / let go** switches by hand. Record the line,
+  whether the shelf's trophies stayed put, and whether the camera picture
+  stuttered. Off, the policy never changes the frame rate.
+- **A6, how flexible molecules flop.** Spawn tryptophan, let it rest, tap it,
+  then **A6 toss the selected molecule beside a jointed copy**: the game's own
+  flop (one rigid body, the bend drawn on it) flies up beside a copy whose
+  segments are RealityKit bodies joined by spherical joints. Watch both land
+  and record the `A6 joints` line (a pin gap over a few millimetres, parts
+  lost or a copy that explodes means the joints are not reliable). **A6
+  flexible molecules flop** off makes new spawns stiff, for comparison.
+- **The sound lab.** **Sound lab** in the HUD: each family's pitch and length,
+  heard soft and hard from 40 cm ahead. **Apply** renders the bank again and
+  keeps it on this phone; **Copy the tuning as JSON** and send it back to make
+  it `SoundTuning.v1`. **Back to v1** forgets the change.
+- **The thermal policy** without heating the phone: the Thermal picker plays
+  as serious or critical. At critical there are no sparks or rings and no
+  slow motion; after 30 s the oldest loose pieces of breaks poof down to 24
+  toys.
+
 Two assumptions to check while you play: a spawned molecule appears about
 40 cm ahead of the camera, centred, and a tap selects the molecule under your
 finger in both orientations. If either is off, the RealityView world origin or
@@ -221,11 +348,61 @@ the device and orientation are what to send back.
 If anything in the account fails, Settings shows the error line; send it back
 with the Firebase console's Authentication log entry if there is one.
 
+## The M2 exit (plan §8 M2)
+
+1. Open **Atoms**; drop an O and two H. Carry the O to one H, then on to the
+   other: two clicks, the lime ring and "You built water".
+2. Drop two C and an O. Carry the first C to the second, then the pair to
+   the O; tap the result, then **Fill H**: "You built ethanol".
+3. Leave both on a real shelf until kept (or tap **Keep**).
+4. Throw hydrogen peroxide at a wall; tap a hydroxyl and **Keep** it.
+5. Force-quit and open the **Collection**: the three come back with the same
+   bonds (water's two O–H, ethanol's C–C–O, the hydroxyl's O–H), and their
+   stories read "Built from atoms: O, H, H", "Built from atoms: C, C, O, H, H,
+   H, H, H, H" and "Broken from Hydrogen peroxide".
+
+Report how the magnet feels: the 1.6× zone, the glide and the pull on a held
+atom are the starting values in `BuildTuning` (LupiGame) and `Snapper`
+(LupiKit).
+
+## The M3a exit (plan §8 M3a)
+
+1. **Scale**, Salt, a googolplex atoms: a bar on the desk reading
+   10^(10^100) atoms. Throw it at a wall: ten cubes of 10^(10^100 − 1) each.
+2. Spawn another, tap it, **Fly in**: about 20 s to ions 2 cm across, the
+   plaque counting the magnification. Walk on the plain; drop caffeine on it.
+   Step down into the salt: the toys wait, the banner shows; step out.
+3. Drag a finger across the plain: a chunk of 1,000 ions comes away in your
+   hand, and the plaque of the rest reads 10^(10^100) − 1,000.
+4. **Surface**: the bar comes back to the desk.
+5. **Scale**, Salt, 10³⁰ atoms, then **Life size**: a 2.82 m cube of 48.6 t on
+   the floor, 1.2 m ahead. Walk around it.
+6. Copper, a billion atoms: pinch it up to about 2 m (a monument), step back,
+   and take a chunk and a chip.
+7. Run S8 and S9 above and send the HUD lines back.
+
+## The M4 exit (plan §8 M4)
+
+Play for 30 minutes and want to keep going (D4). Along the way:
+
+1. Throw caffeine, tryptophan, hydrogen peroxide and C₆₀ at the wall: four
+   sounds you can tell apart with your eyes closed, the flop, the crackle and
+   the ring.
+2. Read each plaque's reason.
+3. Turn on VoiceOver: hear the room, a molecule's description, toss one.
+4. Delete the app, install it again: the camera card comes before iOS asks.
+5. Run A5 and A6 above and send the lines back, with the sound lab's JSON if
+   you changed it.
+
 ## Not in this slice
 
-- Chunks, chips and flight (M3a): the gestures are recognized and refused.
-- Terrain collision is simplified: a grown body you stand outside collides as
-  its proxy box; from inside, nothing collides with it, and toys are parked.
+- Terrain colliders follow scale-spec §10.1's numbers (0.5 m face boxes, 64
+  bumps in the camera's 1 m, 256 in all), unproven on a device until S8 runs.
+- Stepping into a monument (the life-size cube, a crystal pinched to 2 m)
+  shows the room: the excavation bubble opens only inside terrain, over 3 m
+  (scale-spec §10.1), and a monument around the camera draws nothing.
+- Chunks and chips need the monument or terrain in front of you, not around
+  you, and are refused while you stand inside a solid or during a flight.
 - Shading parity between instanced atoms and a merged mesh is unconfirmed, so a
   moving body keeps its instances until it rests (scale-spec §9.6).
 - Room surfaces are guessed from the impact's direction and height, not looked
@@ -233,5 +410,16 @@ with the Firebase console's Authentication log entry if there is one.
   contact's height above the floor, not the mesh's classification.
 - The Collection shows a colour swatch, not the ink drawings from
   `/og/m/<id>-ink.svg` (SwiftUI has no SVG view; M4 polish).
-- Building molecules from atoms is M2's. Fragments can already be kept: break
-  a molecule and keep a piece.
+- A new bond does not grow on the `click` token: the merged molecule clicks
+  with a squash along the new bond, and its merged mesh follows a frame or
+  more later (instanced atoms until then, scale-spec §9.6).
+- Snaps make single bonds only, so a built molecule's double bonds come from
+  the pieces it was built from (a hydroxyl's O–H, a vinyl's C=C).
+- The flop is drawn, not simulated: the collider stays one rigid body, so a
+  flopping arm can pass through the table for a moment. Spike A6 decides
+  whether jointed bodies replace it.
+- Whether RealityView on iOS turns `AccessibilityComponent` into VoiceOver
+  elements is unconfirmed; the room's one-line summary and the card's Toss
+  button work either way.
+- The cache does not evict to aggregates yet (the last step of the thermal
+  policy, scale-spec §9.3).

@@ -27,7 +27,7 @@ struct CollectionView: View {
                             app.chosenTrophy = trophy
                             dismiss()
                         } label: {
-                            TrophyRow(trophy: trophy, room: collection.room(of: trophy.id))
+                            TrophyRow(trophy: trophy, room: collection.room(of: trophy.id), plaque: { await app.plaque(of: $0) })
                         }
                         .buttonStyle(.plain)
                         .swipeActions {
@@ -112,6 +112,9 @@ struct CollectionView: View {
 struct TrophyRow: View {
     let trophy: TrophyRecord
     let room: String?
+    /// Its personality's reason (plan §8 M4), read once it is on screen.
+    let plaque: @MainActor (TrophyRecord) async -> TrophyPlaque?
+    @State private var reason: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -127,6 +130,10 @@ struct TrophyRow: View {
                     .foregroundStyle(Color.lime)
                 Text("\(trophy.molecule.scale?.count ?? String(trophy.molecule.atoms)) atoms")
                     .font(.footnote.monospacedDigit())
+                if let reason {
+                    Text(reason)
+                        .font(.footnote)
+                }
                 Text(room.map { "\(trophy.story()) · on a shelf in \($0)" } ?? trophy.story())
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -135,6 +142,7 @@ struct TrophyRow: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .task(id: trophy.updatedAt) { reason = await plaque(trophy)?.reasons.first }
     }
 
     /// The piece's colour when the record has one, else the lime accent.

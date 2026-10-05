@@ -82,6 +82,13 @@ public struct SimBody: Sendable {
     }
 }
 
+/// A terrain's static collider in the stand-in: shapes about a world origin (scale-spec §10.1).
+public struct SimStatic: Sendable {
+    public var origin: Vec3
+    public var shapes: [CollisionShape]
+    public var material: SurfaceMaterial
+}
+
 /// A deterministic stand-in for RealityKit's physics, good enough to test the session's logic:
 /// gravity, damping, impulses, a floor and walls, and bodies against each other by bounding
 /// spheres. PlayContact reports mimic `CollisionEvents`: `began` on the first frame of a touch,
@@ -94,6 +101,10 @@ public struct StubWorld: Sendable {
     public private(set) var commands = 0
     /// The last launch each body received, for the tests.
     public private(set) var launches: [BodyID: PhysicsCommand] = [:]
+    /// Terrain colliders: face-plane boxes and windows of atom bumps.
+    public private(set) var statics: [ColliderKey: SimStatic] = [:]
+    /// How many times each was replaced, for spike S8's tests.
+    public private(set) var staticBuilds: [ColliderKey: Int] = [:]
     var touching: Set<SimKey> = []
 
     struct SimKey: Hashable, Sendable {
@@ -161,6 +172,9 @@ public struct StubWorld: Sendable {
                 bodies[id]?.parked = parked
             case let .remove(id, _):
                 bodies[id] = nil
+            case let .staticColliders(key, origin, shapes, material):
+                staticBuilds[key, default: 0] += 1
+                statics[key] = shapes.isEmpty ? nil : SimStatic(origin: origin, shapes: shapes, material: material)
             }
         }
     }
@@ -205,33 +219,87 @@ public struct StubWorld: Sendable {
         bodies[id] = b
     }
 
+    /// One flat contact: a plane of the room, a terrain face box, or a window's atom bump.
+    struct Obstacle {
+        var key: UInt64
+        var normal: Vec3
+        /// Penetration of a body point (entity-frame centre, radius) along `normal`, and where it touches.
+        var depth: (Vec3, Double) -> (depth: Double, point: Vec3)?
+    }
+
+    /// The room's planes and the terrain's static shapes, each with a stable contact key.
+    func obstacles() -> [Obstacle] {
+        var out: [Obstacle] = []
+        for (k, plane) in planes.enumerated() {
+            out.append(Obstacle(key: UInt64.max - UInt64(k), normal: plane.normal) { world, r in
+                let d = (world - plane.point).dot(plane.normal) - r
+                return d < 0 ? (d, world - plane.normal * r) : nil
+            })
+        }
+        var k: UInt64 = 1 << 40
+        for key in statics.keys.sorted(by: { "\($0)" < "\($1)" }) {
+            let st = statics[key]!
+            for shape in st.shapes {
+                k += 1
+                switch shape {
+                case let .box(c, h, q):
+                    // The outer face is the box's +z side; the box lies behind it.
+                    let n = q.act(Vec3(0, 0, 1))
+                    let centre = st.origin + c
+                    out.append(Obstacle(key: k, normal: n) { world, r in
+                        let local = q.inverted.act(world - centre)
+                        guard abs(local.x) <= h.x + r, abs(local.y) <= h.y + r, local.z > -h.z else { return nil }
+                        let d = local.z - h.z - r
+                        return d < 0 ? (d, world - n * r) : nil
+                    })
+                case let .sphere(c, radius):
+                    let centre = st.origin + c
+                    // A bump: the plane tangent to the sphere under the body's lowest point.
+                    out.append(Obstacle(key: k, normal: Vec3(0, 1, 0)) { world, r in
+                        let v = world - centre
+                        let d = v.length - radius - r
+                        return d < 0 ? (d, centre + v.normalized * radius) : nil
+                    })
+                case .convex:
+                    continue
+                }
+            }
+        }
+        return out
+    }
+
     mutating func collidePlanes(_ id: BodyID, time: Double, reports: inout [SimKey: PlayContact], now: inout Set<SimKey>) {
         guard var b = bodies[id], b.mode == .dynamic, !b.parked, !b.points.isEmpty else { return }
+        let all = obstacles()
         if b.asleep {
             // A sleeping body still reports its resting contacts, as CollisionEvents.Updated does.
-            for k in planes.indices {
-                let key = SimKey(a: id.raw, b: UInt64.max - UInt64(k))
+            for o in all {
+                let key = SimKey(a: id.raw, b: o.key)
                 if touching.contains(key) { now.insert(key) }
             }
             return
         }
-        for (k, plane) in planes.enumerated() {
+        for o in all {
             // Sequential impulses at every penetrating point, a few passes, so a flat body rests on
             // its face instead of rocking from corner to corner.
             var contacts: [Vec3] = []
             var depth = 0.0
+            var normal = o.normal
             for (p, r) in b.points {
                 let world = b.pose.apply(p)
-                let d = (world - plane.point).dot(plane.normal) - r
-                if d < 0 {
-                    contacts.append(world - plane.normal * r)
-                    depth = min(depth, d)
+                if let hit = o.depth(world, r) {
+                    contacts.append(hit.point)
+                    if hit.depth < depth {
+                        depth = hit.depth
+                        // A bump pushes along the line from its centre.
+                        if o.normal == Vec3(0, 1, 0), (world - hit.point).length > 1e-9 { normal = (world - hit.point).normalized }
+                    }
                 }
             }
             guard !contacts.isEmpty else { continue }
-            let key = SimKey(a: id.raw, b: UInt64.max - UInt64(k))
+            let key = SimKey(a: id.raw, b: o.key)
             now.insert(key)
-            let n = plane.normal
+            let n = normal
             b.pose.translation += n * -depth
             var point = Vec3.zero
             for c in contacts { point += c }

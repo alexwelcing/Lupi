@@ -4,7 +4,7 @@ name: Apple packages
 # amended 2026-10-04), so CI covers only what Linux can prove: every pure-Swift
 # package's tests, that the app's own sources parse, and that the Swift sources
 # generated from the web's TypeScript (elements, bond fixtures, edge samples,
-# starters) are current.
+# starters, the known molecules built ones are named after) are current.
 
 on:
   workflow_dispatch: {}

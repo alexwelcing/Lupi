@@ -182,7 +182,8 @@ extension Molecule {
     }
 }
 
-/// Joining atoms into molecules by the valence rules.
+/// Joining atoms into molecules by the valence rules, at the graph level. Play goes through
+/// `Snapper`, which also places the atoms and checks the result by re-perception.
 public enum Snap {
     /// Links atoms `a` and `b` of one body (a ring closure or a new bond),
     /// or nil when the rules refuse or they are already linked.

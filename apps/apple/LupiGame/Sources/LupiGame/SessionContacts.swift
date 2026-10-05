@@ -56,7 +56,8 @@ extension PlaySession {
 
     /// Plays a juice event on a body and applies its visuals to the body's render child.
     mutating func fire(_ event: JuiceEvent, on body: Body, at position: Vec3, direction: Vec3, now: Double, other: Body? = nil) {
-        guard let output = juice.director.fire(event, body: JuiceBody(body), at: now) else { return }
+        guard let fired = juice.director.fire(event, body: JuiceBody(body), at: now) else { return }
+        let output = thermalJuice(fired)
         applyVisual(output.visual, to: body.id, direction: direction, squash: output.visual.squash, now: now)
         if let o = other { applyVisual(JuiceVisual(), to: o.id, direction: -1 * direction, squash: output.visual.otherSquash, now: now) }
         out.juice.append(JuiceCue(
@@ -73,6 +74,11 @@ extension PlaySession {
         }
         if v.hitStop { b.effects.hitStop.hit(intensity: 1, comfort: settings.comfort, at: b.entityPose.translation) }
         if v.slowMotion { slowMotionStart = now }
+        let rotation = b.entityPose.rotation
+        if v.cageRing > 0, direction.lengthSquared > 0 {
+            b.effects.ring.hit(direction: rotation.inverted.act(direction), amount: v.cageRing)
+        }
+        if v.flop > 0 { b.effects.flop?.kick(direction: direction, amount: v.flop, rotation: rotation) }
         bodies[id] = b
     }
 
@@ -103,11 +109,12 @@ extension PlaySession {
         guard let body = bodies[id], body.isToy, !body.parked, !body.frozen, now >= body.breakableAfter,
               grab?.body != id, pinch?.body != id, body.frame.anchorPath.isEmpty else { return }
         let p = body.facts.personality.personality
-        // A molecule whose only bridges are 800 kJ/mol or more never breaks (N₂, CO, plan §4.3).
-        if body.facts.isMolecule, p.isUnbreakable, body.facts.personality.features.cutStrength != nil { return }
+        // A molecule whose weakest bond is 800 kJ/mol or more never breaks (N₂, CO), nor does a lone
+        // atom (contracts.md §3.3 rule 7).
+        if body.facts.isMolecule, p.isUnbreakable { return }
         // Cheap lower bound before planning: no plan breaks below min(base, 3 m/s) × the weakest scaling.
         guard deltaV >= 0.5 * min(p.breakSpeed, BreakTuning.expansionFloor) else { return }
-        let budget = min(16, PlayTuning.maxDynamicBodies + 1 - toyCount)
+        let budget = min(16, thermalPolicy.stage.toyLimit + 1 - toyCount)
         guard budget >= 2 else { return }
         let plan: BreakPlan
         do {
@@ -131,6 +138,7 @@ extension PlaySession {
             made.append(pid)
         }
         out.events.append(.broke(id, into: made))
+        discoverLooseAtoms(made)
     }
 
     /// One piece as a new body: its exact identity (the parent's path plus one step), drawn
@@ -170,6 +178,11 @@ extension PlaySession {
             provenance: .piece(parent: parentRef(of: parent))
         )
         guard var b = bodies[id] else { return id }
+        if plan.kind == .bondBreak, let info = buildInfo(b) { b.name = fragmentName(info.piece) }
+        // Pieces are for building (D9), once they have flown apart.
+        b.buildable = b.facts.isMolecule
+        b.snapAfter = now + BuildTuning.pieceGrace
+        b.omolRows = parent.omolRows
         b.breakableAfter = now + piece.cooldown
         b.insetUntil = now + PlayTuning.insetTime
         b.floatUntil = -.infinity
@@ -189,6 +202,15 @@ extension PlaySession {
             out.physics[i] = .create(id, b.spec, pose: b.entityPose)
         }
         return id
+    }
+
+    /// A fragment is labelled honestly (plan §4.4): a lone atom by its element, a piece whose atoms
+    /// lack partners as a radical, and a whole molecule by its name when Lupi knows it.
+    func fragmentName(_ piece: BuildPiece) -> String {
+        let formula = piece.molecule.hillFormula
+        if piece.count == 1 { return "\(ChemicalElement.forAtomicNumber(piece.molecule.atomicNumbers[0]).name) atom" }
+        guard BuildCues.isComplete(piece) else { return "\(formula) radical" }
+        return catalog.known.match(MolecularGraph(piece))?.name ?? formula
     }
 
     /// The piece's exact reference: the parent's identity path plus the step that made it,
@@ -219,6 +241,8 @@ extension PlaySession {
             return ParentRef(name: b.name, formula: b.facts.formula, source: .omol25, id: row)
         case .scale:
             return ParentRef(name: b.name, formula: b.facts.formula, source: .scale)
+        case .built:
+            return ParentRef(name: b.name, formula: b.facts.formula, source: .built)
         case .piece:
             // A piece of a piece: a fragment when it is a selection of a molecule's atoms.
             let leafRoot = (try? store.record(b.identity.root).kindByte) == NodeKind.leaf.rawValue
