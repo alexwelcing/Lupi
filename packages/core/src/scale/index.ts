@@ -168,6 +168,7 @@ export {
   phiOfLambda,
   rebase,
   REBASE,
+  stepPlacement,
   toFloat32x34,
   type BodyFrame,
   type ChildStep,

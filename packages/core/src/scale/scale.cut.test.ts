@@ -27,21 +27,26 @@ import {
   Geometries,
   IDENTITY3,
   IDENTITY_RIGID,
+  IDENTITY_SIM,
   invertSim,
   len3,
   magnification,
   phi,
   rebase,
+  composeSim,
   scale3,
+  stepPlacement,
   sub3,
   childToward,
   type BodyFrame,
   type Geometry,
   type Mat3,
+  type Similarity,
   type Vec3,
 } from './frames';
 import {
   bakePartition,
+  canonicalPath,
   encodeRecord,
   levelsAlong,
   MemoryStore,
@@ -330,6 +335,36 @@ describe('§9.8.3 coverage', () => {
     }
   }
 
+  it('an anchor inside a group starts from the group\'s other children too: a 2 × 2 slab of copper is covered once', () => {
+    const cu = encodeRecord({ kind: 'crystal', structure: 3, termination: 0, a: 29, b: 0, quarter: 59228, cells: [40n, 40n, 40n], capZ: 0, capOffset: 0 });
+    const w = (4 * 40 * 59228) / 65536;
+    const slab = encodeRecord({
+      kind: 'group',
+      children: [[0, 0], [w, 0], [0, w], [w, w]].map(([x, y]) => ({ id: nodeId(cu), rotation: [0, 0, 0, 1] as [number, number, number, number], translation: [x, y, 0] as [number, number, number] })),
+    });
+    const resolver = new Resolver(new MemoryStore([cu, slab]));
+    // The anchor: a 10³-cell box of child 0, at its +x face; the camera inside it, looking +x.
+    const anchorPath: Step[] = [{ tag: 'child', index: 0 }, { tag: 'cells', octants: [3, 5] }];
+    const anchor = resolver.resolve(nodeId(slab), anchorPath);
+    const g = new Geometries(resolver).of(anchor);
+    const sigma = 0.1 / ((4 * 59228) / 65536); // a cell is 10 cm
+    const eye: Vec3 = [g.max[0] - 0.3 / sigma, g.centre[1], g.centre[2]];
+    const turn: Mat3 = [0, 0, -1, 0, 1, 0, 1, 0, 0];
+    const frame = frameAt(resolver, nodeId(slab), anchorPath, sigma, eye, turn);
+    const budgets = { ...BUDGETS, items: 1e6, boxesAndSplats: 1e6, instancedAtoms: 1e7, visits: 1e6 };
+    const view = { ...VIEW, bubble: 0.35 };
+    const cut = buildCut([frame], view, budgets, frames([frame], view, budgets, 3), { debug: true });
+    const box = new Geometries(resolver).of(resolver.root(nodeId(slab)));
+    // The slab's box in the anchor's units: the anchor is child 0's box at offset lo × cell.
+    const offset = anchor.type === 'box' ? anchor.box.lo.map((x) => Number(x) * ((4 * 59228) / 65536)) : [0, 0, 0];
+    const inAnchor = { ...box, min: sub3(box.min, offset as Vec3), max: sub3(box.max, offset as Vec3) };
+    const c = coverage(frame, cut, anchor, rand, 3000, inAnchor);
+    expect([c.doubled, c.missing]).toEqual([0, 0]);
+    expect(c.checked).toBeGreaterThan(100);
+    // Child 1 lies ahead of the camera; without the group's other children it would be a hole.
+    expect(cut.items.some((i) => i.path[0]?.tag === 'child' && i.path[0].index === 1)).toBe(true);
+  });
+
   it('a water grown by Grow ×2 is drawn exactly once as the camera approaches, monotone and within budgets (errata/ts.md E13)', () => {
     // §9.8.3's "at most twice the items per halving" cannot hold here: a non-solid level's ε is the
     // same at every level (§9.2), so every copy within ε·σ·K/τ of the eye refines at once.
@@ -520,6 +555,47 @@ describe('§8 frames', () => {
     const after = world(up, (x) => x);
     expect(len3(sub3(after, before))).toBeLessThan(1e-9 * len3(before) + 1e-9);
     expect(bodyView(up).type).toBe('level');
+  });
+
+  it('a whole step is placed as the composition of its one-level steps', () => {
+    const rand = prng(88);
+    const { rec, resolver } = saltRung(9n);
+    const close = (a: Similarity, b: Similarity) => {
+      expect(a.s).toBeCloseTo(b.s, 12);
+      for (let i = 0; i < 3; i += 1) expect(a.t[i]).toBeCloseTo(b.t[i], 9);
+    };
+    for (let trial = 0; trial < 20; trial += 1) {
+      const top = resolver.root(nodeId(rec));
+      const D = BigInt(1 + Math.floor(rand() * 9));
+      // Step by step, choosing random digits, then the same descent as one step.
+      let v: View = top;
+      let composed: Similarity = IDENTITY_SIM;
+      const digits: number[][] = [[], [], []];
+      for (let i = 0n; i < D; i += 1n) {
+        const kids = childSteps(v);
+        const c = kids[Math.floor(rand() * kids.length)];
+        if (c.step.tag !== 'tower') throw new Error('tower step expected');
+        const axis = c.step.runs.findIndex((r) => r.length > 0);
+        digits[axis].push(c.index);
+        composed = composeSim(composed, c.placement);
+        v = resolver.step(v, c.step);
+      }
+      const runs = digits.map((d) => d.map((digit) => ({ digit, length: 1n }))) as AxisRuns;
+      const whole = stepPlacement(resolver, top, canonicalPath([{ tag: 'tower', levels: D, runs }])[0]);
+      close(whole.placement, composed);
+    }
+    const cu = encodeRecord({ kind: 'crystal', structure: 3, termination: 0, a: 29, b: 0, quarter: 59228, cells: [40n, 30n, 20n], capZ: 0, capOffset: 0 });
+    const cr = new Resolver(new MemoryStore([cu]));
+    let v: View = cr.root(nodeId(cu));
+    let composed: Similarity = IDENTITY_SIM;
+    const octants: number[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const c = childSteps(v)[i % 3];
+      composed = composeSim(composed, c.placement);
+      octants.push(c.index);
+      v = cr.step(v, c.step);
+    }
+    close(stepPlacement(cr, cr.root(nodeId(cu)), { tag: 'cells', octants }).placement, composed);
   });
 
   it('a descent through §4.8 picks the child that holds the point', () => {

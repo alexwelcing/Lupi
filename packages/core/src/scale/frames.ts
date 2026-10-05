@@ -364,6 +364,42 @@ export function childSteps(v: View): ChildStep[] {
   }
 }
 
+const powF = (f: number, e: bigint): number => (e < -1100n ? 0 : e > 1100n ? Infinity : f ** Number(e));
+
+/**
+ * A whole step's placement in its parent's units, for a step of any length:
+ * a tower step's digit runs sum as geometric series, so 10¹⁰⁰ levels cost
+ * their runs. Binary64: digits far below the parent's unit vanish.
+ */
+export function stepPlacement(resolver: Resolver, parent: View, step: Step): { view: View; placement: Similarity } {
+  const view = resolver.step(parent, step);
+  if (step.tag === 'child' && parent.type === 'group') {
+    const c = parent.group.children[step.index];
+    return { view, placement: { s: 1, r: quaternionMatrix(c.rotation), t: [...c.translation] as Vec3 } };
+  }
+  if (step.tag === 'cells' && parent.type === 'box' && view.type === 'box') {
+    const q = parent.crystal.quarter / 65536;
+    return { view, placement: { s: 1, r: IDENTITY3, t: [0, 1, 2].map((a) => Number(4n * (view.box.lo[a] - parent.box.lo[a])) * q) as Vec3 } };
+  }
+  if (step.tag === 'tower' && parent.type === 'level') {
+    const f = parent.tower.factor;
+    const uK = unitExponent(parent.k);
+    const p = periodVectors(parent.tower.periods);
+    let t: Vec3 = [0, 0, 0];
+    for (let a = 0; a < 3; a += 1) {
+      // A digit at a level of unit exponent u moves its copy u − u(K) parent units' worth of periods.
+      let u = levelsAlong(a, parent.k) - 1n;
+      for (const run of step.runs[a]) {
+        const hi = u - uK;
+        if (run.digit !== 0) t = add3(t, scale3(p[a], (run.digit * (powF(f, hi + 1n) - powF(f, hi - run.length + 1n))) / (f - 1)));
+        u -= run.length;
+      }
+    }
+    return { view, placement: { s: powF(f, unitExponent(parent.k - step.levels) - uK), r: IDENTITY3, t } };
+  }
+  return fail('path', 'no placement for this step');
+}
+
 // ─── From a point to a step (§4.8) ────────────────────────────────────
 
 /** The child of `v` that holds the point x (in v's frame), or null. */

@@ -16,11 +16,13 @@ import {
   Geometries,
   IDENTITY3,
   IDENTITY_SIM,
+  invertSim,
   len3,
   levelSpan,
   mulVec,
   periodVectors,
   scale3,
+  stepPlacement,
   sub3,
   toFloat32x34,
   viewUnitExponent,
@@ -767,9 +769,12 @@ export function buildCut(bodies: BodyFrame[], view: ViewState, budgets: Budgets,
   }
 
   function startNodes(ctx: BodyContext): CutNode[] {
+    const keys = startKeysOf(ctx);
+    return [...anchorStarts(ctx, keys.keysOf, keys.key64Of), ...groupStarts(ctx, keys.key64Of)];
+  }
+
+  function startKeysOf(ctx: BodyContext) {
     const frame = ctx.frame;
-    const anchor = ctx.anchor;
-    const bodyKey = `${ctx.index}:`;
     let byPath = cache.startKeys.get(frame.path);
     if (!byPath) {
       byPath = new WeakMap();
@@ -792,6 +797,13 @@ export function buildCut(bodies: BodyFrame[], view: ViewState, budgets: Budgets,
       return k;
     };
     const key64Of = (path: Step[]) => keysOf(path).key64;
+    return { keysOf, key64Of };
+  }
+
+  function anchorStarts(ctx: BodyContext, keysOf: (path: Step[]) => { pathKey: string; key64: bigint }, key64Of: (path: Step[]) => bigint): CutNode[] {
+    const frame = ctx.frame;
+    const anchor = ctx.anchor;
+    const bodyKey = `${ctx.index}:`;
     const out: CutNode[] = [];
     const last = frame.anchorPath[frame.anchorPath.length - 1];
     const placeOf = (v: View, base: bigint[]) => (v.type === 'level' || v.type === 'copy' ? { trail: v.trail, base, f: v.tower.factor } : null);
@@ -845,6 +857,49 @@ export function buildCut(bodies: BodyFrame[], view: ViewState, budgets: Budgets,
     }
     out.push(make(ctx, anchor, IDENTITY_SIM, `${bodyKey}${keysOf(frame.anchorPath).pathKey}`, key64Of(frame.anchorPath), null, null,
       frame.anchorPath, placeOf(anchor, [0n, 0n, 0n]), ALL_FACES, anchor.removals.length > 0));
+    return out;
+  }
+
+  /**
+   * §9.4: an anchor inside a group also starts from the group's other
+   * children whose bounds come within z_far, at every group level up to the
+   * body's node. They are placed by composing the steps' placements, so a
+   * sibling is as exact as binary64 holds the anchor's offset in that group.
+   */
+  function groupStarts(ctx: BodyContext, key64Of: (path: Step[]) => bigint): CutNode[] {
+    const path = ctx.frame.anchorPath;
+    if (!path.some((step) => step.tag === 'child')) return [];
+    const views: View[] = [bodyView(ctx.frame)];
+    const placements: Similarity[] = [];
+    for (const step of path) {
+      const next = stepPlacement(ctx.resolver, views[views.length - 1], step);
+      views.push(next.view);
+      placements.push(next.placement);
+    }
+    const out: CutNode[] = [];
+    let anchorFromHere: Similarity = IDENTITY_SIM;
+    for (let i = path.length - 1; i >= 0; i -= 1) {
+      // anchorFrom(views[i]) = anchorFrom(views[i + 1]) ∘ placement⁻¹.
+      anchorFromHere = composeSim(anchorFromHere, invertSim(placements[i]));
+      const step = path[i];
+      const group = views[i];
+      if (step.tag !== 'child' || group.type !== 'group') continue;
+      for (const c of childSteps(group)) {
+        if (c.step.tag !== 'child' || c.step.index === step.index) continue;
+        let v: View;
+        try {
+          v = ctx.resolver.step(group, c.step);
+        } catch (e) {
+          if (e instanceof ScaleError && e.code === 'path') continue; // removed
+          throw e;
+        }
+        const siblingPath = [...path.slice(0, i), c.step];
+        const node = make(ctx, v, composeSim(anchorFromHere, c.placement), `${ctx.index}:${pathKeyOf(siblingPath)}`, key64Of(siblingPath),
+          null, null, siblingPath, null, ALL_FACES, v.removals.length > 0);
+        const sp = sphere(node);
+        if (len3(sp.c) - sp.r <= view.zFar) out.push(node);
+      }
+    }
     return out;
   }
 
