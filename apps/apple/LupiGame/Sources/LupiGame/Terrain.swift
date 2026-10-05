@@ -25,7 +25,8 @@ public struct TerrainRegion: Sendable {
     public var faces: [TerrainFace]
     var worldFromAnchor: RigidD
     var sigma: Double
-    /// The anchor's envelope, anchor units: every point of it is inside the root.
+    /// The region the anchor's matter fills, anchor units (`Resolver.occupied`): every point of it
+    /// is inside the root.
     var anchor: Box3
     /// Its 3 × 3 × 3 neighbourhood, anchor units; nil when the anchor is the body's node.
     var neighbourhood: Box3?
@@ -195,7 +196,8 @@ extension PlaySession {
     func terrainRegion(_ b: Body) -> TerrainRegion? {
         guard let body = try? resolver.resolve(b.frame.ref.root, b.frame.ref.path),
               let anchor = try? resolver.walk(body, b.frame.anchorPath),
-              let agg = try? resolver.aggregate(anchor) else { return nil }
+              let agg = try? resolver.aggregate(anchor),
+              let occupied = try? resolver.occupied(anchor) else { return nil }
         let w = b.frame.worldFromAnchor
         let sigma = b.frame.metresPerAnchorUnit
         let box = agg.bounds
@@ -211,7 +213,7 @@ extension PlaySession {
                     faces.append(TerrainFace(point: w.apply(sigma * p), normal: w.applyDirection(n)))
                 }
             }
-            return TerrainRegion(faces: faces, worldFromAnchor: w, sigma: sigma, anchor: box, neighbourhood: nil)
+            return TerrainRegion(faces: faces, worldFromAnchor: w, sigma: sigma, anchor: occupied, neighbourhood: nil)
         }
         var faces: [TerrainFace] = []
         if let cut = lastCut, let index = lastOrder.firstIndex(of: b.id) {
@@ -222,8 +224,11 @@ extension PlaySession {
                 faces.append(TerrainFace(point: point, normal: Vec3(Double(normal.x), Double(normal.y), Double(normal.z))))
             }
         }
-        let size = box.size
-        return TerrainRegion(faces: faces, worldFromAnchor: w, sigma: sigma, anchor: box, neighbourhood: Box3(min: box.min - size, max: box.max + size))
+        let size = occupied.size
+        return TerrainRegion(
+            faces: faces, worldFromAnchor: w, sigma: sigma, anchor: occupied,
+            neighbourhood: Box3(min: occupied.min - size, max: occupied.max + size)
+        )
     }
 
     /// Whether a world point is inside a terrain's matter.
