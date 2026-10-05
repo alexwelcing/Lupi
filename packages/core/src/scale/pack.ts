@@ -207,7 +207,14 @@ export class Pack implements NodeStore {
     const start = this.nrecOffset + e.offset;
     const bytes = this.bytes.subarray(start, start + e.length);
     if (compareBytes(nodeId(bytes), e.id) !== 0) fail('mismatch', 'a record does not hash to its NodeID');
-    const d = decodeRecord(bytes);
+    let d: DecodedRecord;
+    try {
+      d = decodeRecord(bytes);
+    } catch (err) {
+      // §6.6: a record that fails §2 makes the pack non-conforming, found at open or on first use.
+      if (err instanceof ScaleError) fail('pack', `record ${toHex(e.id).slice(0, 16)}…: ${err.message}`);
+      throw err;
+    }
     this.decoded.set(i, d);
     return d;
   }
