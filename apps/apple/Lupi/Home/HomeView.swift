@@ -1,0 +1,155 @@
+import LupiGame
+import SwiftUI
+
+/// Home (plan §8 M0): C₆₀ first, the bundled starters, and the scale receipt.
+struct HomeView: View {
+    @Environment(AppModel.self) private var app
+    @State private var showingSettings = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    header
+                    if let catalog = app.catalog {
+                        if let first = catalog.tray.first { hero(first) }
+                        starters(Array(catalog.tray.dropFirst()))
+                        receipt(catalog.receipt)
+                    } else if let error = app.catalogError {
+                        Text(error)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
+            }
+            .background(Color.sage.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
+                }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
+                    .environment(app)
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Lupi")
+                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.lime)
+            Text("Molecules in your room. Throw them at the wall, stack them on the desk, break them.")
+                .font(.body)
+                .foregroundStyle(.white.opacity(0.75))
+        }
+        .padding(.top, 12)
+    }
+
+    private func hero(_ item: SpawnItem) -> some View {
+        Button {
+            app.play(item.source)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(item.subtitle.subscriptedFormula)
+                    .font(.system(size: 56, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color.sage)
+                Text(item.title)
+                    .font(.headline)
+                    .foregroundStyle(Color.sage.opacity(0.8))
+                HStack {
+                    Image(systemName: "arkit")
+                    Text("Play")
+                }
+                .font(.headline)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(Color.sage))
+                .foregroundStyle(Color.lime)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(24)
+            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.lime))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Play with \(item.title)")
+    }
+
+    private func starters(_ items: [SpawnItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Starters")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                ForEach(items) { item in
+                    Button {
+                        app.play(item.source)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.subtitle.subscriptedFormula)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(Color.lime)
+                            Text(item.title)
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.8))
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                        .padding(16)
+                        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.sageRaised))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func receipt(_ rungs: [SpawnItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("The scale receipt")
+            Text("Salt at a thousand, a million and a billion atoms, each counted exactly, side by side on your desk. Pinch the biggest until its ions are as big as marbles and look around inside.")
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.75))
+            Button {
+                app.playReceipt()
+            } label: {
+                Label("Put all three on the desk", systemImage: "cube.transparent")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Capsule().strokeBorder(Color.lime, lineWidth: 2))
+                    .foregroundStyle(Color.lime)
+            }
+            .buttonStyle(.plain)
+            ForEach(rungs) { rung in
+                Button {
+                    app.play(rung.source)
+                } label: {
+                    HStack {
+                        Text(rung.title)
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Text(rung.subtitle)
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(.white)
+    }
+}
