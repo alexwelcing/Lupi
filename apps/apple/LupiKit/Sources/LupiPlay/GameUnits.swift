@@ -9,39 +9,16 @@ import LupiChem
 /// (1 Å → 1 mm, a million atoms about 25 cm). The player's grow/shrink is a
 /// further `displayScale` multiplier that changes the printed number.
 ///
-/// Mass: felt, not real, but ordered truly. m = m₀ · (M / M₀)^γ with M₀ water
-/// (18.015 g/mol), m₀ = 50 g and γ = 0.4, so real ratios are compressed
-/// without reordering: H₂ 21 g, water 50 g, caffeine 130 g, C₆₀ 219 g,
-/// hemoglobin (64.5 kDa) 1.3 kg, a million copper atoms 21 kg. H₂ is not
-/// weightless and a protein is not immovable. Growing a molecule makes it
-/// heavier as s^β with β = 1 (physics would say 3, which would make a grown
-/// molecule impossible to throw). The real molar mass belongs on the card.
+/// Mass is not here: felt mass is `lupi.feltmass.v1` (scale-spec §10.2),
+/// whose canonical form lives in LupiScale. LupiKit keeps only its branch
+/// below the knee, `feltMass(molarMass:massScale:)`, with identical numbers.
+/// Mass does not grow with `displayScale` (plan §4.2).
 public struct GameUnits: Sendable, Equatable, Codable {
     /// Metres per ångström at display scale 1.
     public var metersPerAngstrom: Double
-    /// Felt mass of the reference molecule at display scale 1, kg.
-    public var referenceMass: Double
-    /// Molar mass of the reference molecule, g/mol (water).
-    public var referenceMolarMass: Double
-    /// γ in m ∝ M^γ.
-    public var massExponent: Double
-    /// β in m ∝ displayScale^β.
-    public var sizeMassExponent: Double
-    /// Felt mass is clamped to this range, kg.
-    public var minimumMass: Double
-    public var maximumMass: Double
 
-    public init(
-        metersPerAngstrom: Double, referenceMass: Double = 0.05, referenceMolarMass: Double = 18.015,
-        massExponent: Double = 0.4, sizeMassExponent: Double = 1, minimumMass: Double = 0.005, maximumMass: Double = 100
-    ) {
+    public init(metersPerAngstrom: Double) {
         self.metersPerAngstrom = metersPerAngstrom
-        self.referenceMass = referenceMass
-        self.referenceMolarMass = referenceMolarMass
-        self.massExponent = massExponent
-        self.sizeMassExponent = sizeMassExponent
-        self.minimumMass = minimumMass
-        self.maximumMass = maximumMass
     }
 
     /// 10⁸×: 1 Å → 1 cm.
@@ -88,14 +65,6 @@ public struct GameUnits: Sendable, Equatable, Codable {
         return "\(text) × \(power)"
     }
 
-    /// Felt mass, kg.
-    public func mass(molarMass: Double, displayScale: Double = 1) -> Double {
-        guard molarMass > 0 else { return minimumMass }
-        let felt = referenceMass * (molarMass / referenceMolarMass).power(massExponent)
-            * displayScale.power(sizeMassExponent)
-        return min(maximumMass, max(minimumMass, felt))
-    }
-
     /// Principal moments in kg·m² for a body of felt mass `mass`: the real
     /// mass distribution (amu·Å²) rescaled to the felt mass and the shown size,
     /// so a molecule tumbles with its true shape.
@@ -103,6 +72,26 @@ public struct GameUnits: Sendable, Equatable, Codable {
         guard facts.mass > 0 else { return .zero }
         let length = metersPerAngstrom * displayScale
         return facts.moments * (mass / facts.mass * length * length)
+    }
+
+    /// The knee of `lupi.feltmass.v1`, 180 · 2^2.5 Da (≈ 1,018 Da), where the
+    /// power law hands over to the slow tail.
+    public static let feltMassKneeDa = 180 * Foundation.pow(2, 2.5)
+    /// The floor of `lupi.feltmass.v1`, kg.
+    public static let feltMassFloorKg = 0.06
+
+    /// Felt mass in kg by `lupi.feltmass.v1` (scale-spec §10.2) on its branch
+    /// below the knee: `max(0.06, 0.2 × (M / 180 Da)^0.4 × massScale)`, which is
+    /// the spec's `b(M × massScale^2.5)` there. Water 0.080, caffeine 0.206,
+    /// C₆₀ 0.348; peroxide at 0.85 is 0.087, C₆₀ at 0.8 is 0.279.
+    ///
+    /// Nil above the knee (`M × massScale^2.5` over 1,018 Da): the tail is
+    /// LupiScale's `FeltMass`, and a second copy here could only drift from it.
+    public static func feltMass(molarMass: Double, massScale: Double = 1) -> Double? {
+        guard molarMass > 0, molarMass.isFinite, massScale > 0, massScale.isFinite else { return nil }
+        let x = Foundation.log(molarMass) + 2.5 * Foundation.log(massScale)
+        guard x <= Foundation.log(feltMassKneeDa) else { return nil }
+        return max(feltMassFloorKg, 0.2 * Foundation.exp(0.4 * (x - Foundation.log(180.0))))
     }
 
     static func power10(_ exponent: Int) -> Double {

@@ -5,8 +5,9 @@ import LupiChem
 /// inspired by chemistry (decision D8): the inputs are real graph facts, the
 /// feel is a design table, and nothing here claims to be a simulation.
 ///
-/// JSON keys are exactly these nine fields. Every value is for display scale
-/// 1; `scaled(by:units:)` adjusts what depends on the felt mass.
+/// JSON keys are exactly these nine fields. None depends on the felt mass or
+/// the display scale: the body's mass is `lupi.feltmass.v1` (scale-spec
+/// §10.2), and `breakImpulse(feltMass:)` turns the break speed into an impulse.
 public struct Personality: Sendable, Equatable, Codable {
     public static let schema = "lupi.personality.v1"
 
@@ -36,27 +37,24 @@ public struct Personality: Sendable, Equatable, Codable {
     public var friction: Double
     public var linearDamping: Double
     public var angularDamping: Double
-    /// The impulse, N·s in game units, of a hit that snaps the weakest bond
-    /// (`unbreakable` when nothing can). Felt mass × break speed.
-    public var breakImpulse: Double
-    /// Multiplier on `GameUnits.mass`: how heavy this kind feels in the hand.
+    /// The velocity change, m/s, of a hit that snaps the weakest bond
+    /// (`unbreakable` when nothing can): plan §4.4's `base × sqrt(E / 346)`.
+    public var breakSpeed: Double
+    /// Shifts the body along `lupi.feltmass.v1` (scale-spec §10.2): how heavy this kind feels in the hand.
     public var massScale: Double
     public var soundFamily: SoundFamily
     /// 0 (soft thud) ... 1 (sharp tick): Core Haptics' sharpness parameter.
     public var hapticSharpness: Double
 
-    /// The break impulse of a molecule nothing can snap: finite for JSON, unreachable in play.
+    /// The break speed of a molecule nothing can snap: finite for JSON, unreachable in play.
     public static let unbreakable = 1.0e6
 
-    public var isUnbreakable: Bool { breakImpulse >= Self.unbreakable }
+    public var isUnbreakable: Bool { breakSpeed >= Self.unbreakable }
 
-    /// The same personality at another display scale: the break impulse
-    /// follows the felt mass (m ∝ s^β), everything else is scale-free.
-    public func scaled(by displayScale: Double, units: GameUnits = .molecule) -> Personality {
-        guard !isUnbreakable else { return self }
-        var copy = self
-        copy.breakImpulse = breakImpulse * displayScale.power(units.sizeMassExponent)
-        return copy
+    /// N·s for a body of this felt mass (kg): `massKg × breakSpeed`, as the
+    /// contract's `breakImpulse`. Nil when nothing can snap.
+    public func breakImpulse(feltMass: Double) -> Double? {
+        isUnbreakable ? nil : feltMass * breakSpeed
     }
 }
 
@@ -151,15 +149,13 @@ public struct PersonalityDerivation: Sendable, Equatable {
 extension Personality {
     /// The personality of `molecule` with its play graph.
     public static func derive(
-        _ molecule: Molecule, graph: BondGraph? = nil, units: GameUnits = .molecule, table: PersonalityTable = .v1
+        _ molecule: Molecule, graph: BondGraph? = nil, table: PersonalityTable = .v1
     ) -> PersonalityDerivation {
         let graph = graph ?? BondGraph.forPlay(molecule)
-        return derive(features: MolecularFeatures(molecule: molecule, graph: graph), units: units, table: table)
+        return derive(features: MolecularFeatures(molecule: molecule, graph: graph), table: table)
     }
 
-    public static func derive(
-        features f: MolecularFeatures, units: GameUnits = .molecule, table: PersonalityTable = .v1
-    ) -> PersonalityDerivation {
+    public static func derive(features f: MolecularFeatures, table: PersonalityTable = .v1) -> PersonalityDerivation {
         let (kind, rule, reason) = classify(f, table)
         let preset = table.preset(kind)
         var restitution = preset.restitution
@@ -175,11 +171,9 @@ extension Personality {
             break
         }
 
-        let mass = units.mass(molarMass: f.molarMass) * preset.massScale
-        var breakImpulse = unbreakable
+        var breakSpeed = unbreakable
         if let cut = f.cutStrength, cut < table.unbreakableCut {
-            let speed = preset.breakSpeed * (cut / table.referenceBond).squareRoot()
-            breakImpulse = min(unbreakable, mass * speed)
+            breakSpeed = min(unbreakable, preset.breakSpeed * (cut / table.referenceBond).squareRoot())
         }
         let personality = Personality(
             kind: kind,
@@ -187,7 +181,7 @@ extension Personality {
             friction: min(1, max(0, preset.friction)),
             linearDamping: max(0, preset.linearDamping),
             angularDamping: max(0, angularDamping),
-            breakImpulse: breakImpulse,
+            breakSpeed: breakSpeed,
             massScale: preset.massScale,
             soundFamily: preset.soundFamily,
             hapticSharpness: min(1, max(0, preset.hapticSharpness))
