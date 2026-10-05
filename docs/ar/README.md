@@ -20,6 +20,17 @@ When two documents disagree, the one higher in this list wins.
 | [research/repo-mobile-ar.md](research/repo-mobile-ar.md) | What the repo already has for mobile and AR, and what can be ported. |
 | [research/retention-collection.md](research/retention-collection.md) | What keeps people coming back to a persistent AR collection; privacy of room data. |
 
-On the web, `/scale` on lupi.live (`packages/ui/src/scale`) draws the same records with the TypeScript reference: the salt ladder from one ion to a googolplex with exact counts, flight and wraps along the scale axis (scale-spec §8.8), the cut of §9 with the viewer's impostors, smashing the bar into its ten cubes, and `lsr1:` share links (§7).
+Where the code is:
+
+| Path | What it is |
+|---|---|
+| [apps/apple/README.md](../../apps/apple/README.md) | The app: building and running it on the Mac, playing, the debug HUD, every spike, and the M1, M2, M3a and M4 exits. |
+| [apps/apple/LupiKit](../../apps/apple/LupiKit/README.md) | Chemistry and feel: bonds, building from atoms (`LupiChem/Build`), personalities, felt mass, throws, juice, sound, the flop; `LupiData`'s starters, known molecules, trophies and shelves. |
+| [apps/apple/LupiScale](../../apps/apple/LupiScale/README.md) | The Swift implementation of [scale-spec.md](scale-spec.md). |
+| [apps/apple/LupiGame](../../apps/apple/LupiGame/README.md) | The play session, M0 to M4, tested headless against a stand-in physics world. |
+| `apps/apple/LupiCloud` | The account and its sync ([account-and-sync.md](account-and-sync.md)). |
+| `tools/apple/` | The generators that write Swift from the web's TypeScript (elements, bond fixtures, edge samples, starters, the known-molecule index, scale fixtures), checked by `pnpm apple:check`, and `parse-app.sh`. |
+| `packages/core/src/scale` | The TypeScript reference of [scale-spec.md](scale-spec.md), which writes the fixtures Swift asserts. |
+| `packages/ui/src/scale` | `/scale` on lupi.live: the same records drawn with the TypeScript reference, the salt ladder from one ion to a googolplex with exact counts, flight and wraps along the scale axis (scale-spec §8.8), the cut of §9 with the viewer's impostors, smashing the bar into its ten cubes, and `lsr1:` share links (§7). |
 
 Related amendments: the viewer brainstorm's "Immersive XR: defer" decision ([decisions.md](../brainstorm/2026-09-viewer-play/decisions.md#amendment-2026-10-04-native-apple-ar)) and its "no native renderer fork" line ([pocket-native-play.md](../brainstorm/2026-09-viewer-play/round2/pocket-native-play.md)) were amended on 2026-10-04 to point here.

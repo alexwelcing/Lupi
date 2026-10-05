@@ -92,9 +92,45 @@ backend contract.
 iPad Pro (bundle id `live.lupi.app`, iOS 26.0): a physics sandbox whose
 building blocks are molecules, played against the room's LiDAR mesh. It
 replaces the Expo app, and `apps/mobile` is frozen as a reference. It has no
-MCP bridge. Its pure-Swift logic lives in the LupiKit package, which builds and
-tests on Linux (`swift build`, `swift test`); the app itself compiles only on
-a macOS runner with Xcode, so never claim device behaviour from a Linux session.
+MCP bridge. Its pure-Swift logic lives in four packages that build and test on
+Linux (`swift build`, `swift test`); the app itself (`apps/apple/Lupi`)
+compiles only on a macOS runner with Xcode, so never claim device behaviour
+from a Linux session.
+
+- **`LupiKit`**: elements, XYZ, both bond recipes, inertia, felt mass, the
+  throw estimator, juice and synthesized sound (four families tuned per
+  personality, `SoundTuning`), the drawn flop, personalities to
+  `lupi.personality.rules.v1` with plaque reasons; building from atoms
+  (`LupiChem/Build`: snap geometry, `Snapper`, `HydrogenFill`,
+  `MolecularGraph`); `LupiData`: the bundled starters, `KnownMolecules` (what
+  a built molecule is named after), `lupi.trophy.v1` and `lupi.shelf.v1`.
+- **`LupiScale`**: the scale spine of `docs/ar/scale-spec.md` (records,
+  paths, Magnitude, packs, `lupi.scale-ref.v1`, frames, the cut, proxies,
+  breaks), byte for byte with the TypeScript reference in
+  `packages/core/src/scale`.
+- **`LupiGame`**: the play session, tested headless against `LupiGameSim`:
+  spawn, grab, throw, pinch and breaks (M0); keeping, the Collection and
+  shelves (M1); the atom tray, the snap magnet, Fill H and "Built it" (M2);
+  the scale content from the bundled pack (the salt ladder to a googolplex,
+  copper, diamond, the diamondoids), flight, Life size, Grow ×2, chunks,
+  chips and terrain colliders (M3a); the flop, the cage ring, VoiceOver
+  descriptions, the thermal policy and the first-run card (M4).
+- **`LupiCloud`**: the Lupi account, Firebase Auth and Firestore over REST.
+
+M0–M2, M3a and M4 (plan §8) are built; M3b (LupiEngine) is not started.
+Nothing has been compiled against Apple's SDK or run on a device:
+`docs/ar/status.md` is the owner's checklist (build on the Mac, the spikes
+and exits on the device, the decisions waiting) and lists where the first
+compile will most likely fail; `apps/apple/README.md` is the how-to.
+
+The Linux gates: `swift test` in every package, and `swift test -c release`
+in LupiScale (its 4 ms `buildCut` gate counts only in release) and LupiGame
+(its directive tests time frames); `tools/apple/parse-app.sh` (syntax only);
+and `pnpm apple:check`, which fails when the Swift generated from the web's
+TypeScript (`tools/apple/*.mts`: elements, bond fixtures, edge samples,
+starters, the known-molecule index, scale fixtures) is stale. The web
+counterpart of the scale play is `/scale` (`packages/ui/src/scale`).
+
 The owner's decisions are `docs/ar/decisions.md`, the plan of record is
 `docs/ar/plan.md`, and the data contracts it shares with lupi.live are in
 `docs/ar/contracts.md`; `docs/ar/README.md` indexes the folder.
