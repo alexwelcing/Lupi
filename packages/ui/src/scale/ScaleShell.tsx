@@ -65,6 +65,9 @@ export function ScaleShell() {
   const [comfort, setComfort] = useState<Comfort>(() => (reducedMotion() ? 'still' : 'standard'));
   const [hud, setHud] = useState<Hud | null>(null);
   const [sliderHeld, setSliderHeld] = useState<number | null>(null);
+  // The ladder's rungs said aloud as a flight passes them.
+  const [rung, setRung] = useState<{ label: string; caption: string; at: number } | null>(null);
+  const lastPhi = useRef<number | null>(null);
   const [toast, setToast] = useState<string | null>(error);
   const viewportRef = useRef<Viewport>({ heightPx: 800, aspect: 1.6 });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -74,9 +77,16 @@ export function ScaleShell() {
 
   useEffect(() => {
     document.title = `${world.entry?.title ?? world.title} | Lupi scale`;
+    lastPhi.current = null;
     // The readout never waits for a frame: counts are exact without a renderer.
     setHud(hudOf(world, viewportRef.current));
   }, [world]);
+
+  useEffect(() => {
+    if (!rung) return;
+    const t = window.setTimeout(() => setRung(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [rung]);
 
   useEffect(() => {
     if (!toast) return;
@@ -91,7 +101,20 @@ export function ScaleShell() {
       // Throttled while moving; the frame the world comes to rest always lands.
       if (!info.idle && now - lastHud.current < 180) return;
       lastHud.current = now;
-      setHud(hudOf(world, info.viewport));
+      const next = hudOf(world, info.viewport);
+      const prev = lastPhi.current;
+      lastPhi.current = next.phi;
+      if (prev !== null && Math.abs(next.phi - prev) > 1e-6) {
+        const lo = Math.min(prev, next.phi);
+        const hi = Math.max(prev, next.phi);
+        const crossed = world.landmarks.filter((l) => {
+          const p = phiOfLambda(l.lambda);
+          return p > lo && p <= hi;
+        });
+        const last = next.phi > prev ? crossed[crossed.length - 1] : crossed[0];
+        if (last) setRung({ label: last.label, caption: last.caption, at: now });
+      }
+      setHud(next);
     },
     [world],
   );
@@ -409,6 +432,12 @@ export function ScaleShell() {
         </div>
         <p className="scale-blurb">{world.entry?.blurb ?? ''}</p>
       </section>
+      {rung && (
+        <div className="scale-rung" key={rung.at} aria-hidden="true">
+          <span className="scale-rung-label">{rung.label}</span>
+          <span className="scale-rung-caption">{rung.caption}</span>
+        </div>
+      )}
       {toast && (
         <div className="scale-toast" role="status">
           {toast}

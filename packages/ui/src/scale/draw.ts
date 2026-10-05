@@ -87,9 +87,18 @@ interface BodyInfo {
 
 export class DrawCache {
   private readonly bodies = new Map<string, BodyInfo>();
-  /** Materialized leaves by body root and item path (§9.6 keeps them cheaper to regenerate than to store). */
-  private readonly leaves = new Map<string, LeafNode>();
+  /**
+   * Materialized leaves by body root and item path, least recently used
+   * first (§9.6: cheaper to regenerate than to store). Capped by bytes: a
+   * salt copy shares its seed's positions and costs its elements, a copper
+   * box its own 4,000 positions.
+   */
+  private readonly leaves = new Map<string, { leaf: LeafNode; bytes: number }>();
+  private bytes = 0;
   private readonly geometries = new WeakMap<Resolver, Geometries>();
+  private readonly seedPositions = new WeakSet<Float32Array>();
+
+  constructor(readonly capacityBytes = 32 << 20) {}
 
   geometriesOf(r: Resolver): Geometries {
     let g = this.geometries.get(r);
@@ -114,19 +123,29 @@ export class DrawCache {
   leaf(frame: BodyFrame, item: DrawItem): LeafNode {
     const full = canonicalPath([...frame.path, ...item.path]);
     const id = `${toHex(frame.root)}:${pathHex(full)}`;
-    let leaf = this.leaves.get(id);
-    if (leaf) {
+    const hit = this.leaves.get(id);
+    if (hit) {
       this.leaves.delete(id);
-      this.leaves.set(id, leaf);
-      return leaf;
+      this.leaves.set(id, hit);
+      return hit.leaf;
     }
-    leaf = frame.resolver.materialize(frame.resolver.resolve(frame.root, full));
-    this.leaves.set(id, leaf);
-    if (this.leaves.size > 3000) {
-      const oldest = this.leaves.keys().next().value;
-      if (oldest !== undefined) this.leaves.delete(oldest);
+    const leaf = frame.resolver.materialize(frame.resolver.resolve(frame.root, full));
+    // Positions shared with an earlier leaf (every copy of one seed) are counted once.
+    const shared = this.seedPositions.has(leaf.positions);
+    this.seedPositions.add(leaf.positions);
+    const bytes = leaf.z.length + (shared ? 0 : leaf.positions.byteLength);
+    this.leaves.set(id, { leaf, bytes });
+    this.bytes += bytes;
+    for (const [key, entry] of this.leaves) {
+      if (this.bytes <= this.capacityBytes || this.leaves.size <= 1) break;
+      this.leaves.delete(key);
+      this.bytes -= entry.bytes;
     }
     return leaf;
+  }
+
+  get residentBytes(): number {
+    return this.bytes;
   }
 }
 

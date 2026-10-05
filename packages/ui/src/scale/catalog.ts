@@ -19,6 +19,8 @@ export type EntryGroup = 'salt' | 'diamondoid' | 'copper';
 /** A labelled point on the scale slider: where a cube of that size fills the view. */
 export interface ScaleLandmark {
   label: string;
+  /** Said when a flight passes it. */
+  caption: string;
   /** λ (decimal log of magnification) at which it fills about half the view. */
   lambda: number;
 }
@@ -102,14 +104,20 @@ const SALT_RUNGS: Array<{ id: string; chip: string; title: string; levels: bigin
 function saltLandmarks(levels: bigint): ScaleLandmark[] {
   const out: ScaleLandmark[] = [];
   if (levels === GOOGOLPLEX_LEVELS) {
-    out.push({ label: '10^(10^100)', lambda: saltCubeLambda((Number(10n ** 100n) - 1) / 3) });
-    for (const k of [60, 30, 10]) out.push({ label: `10^(10^${k})`, lambda: saltCubeLambda(10 ** k / 3) });
+    out.push({ label: '10^(10^100)', caption: 'the whole googolplex', lambda: saltCubeLambda((Number(10n ** 100n) - 1) / 3) });
+    for (const k of [60, 30, 10]) out.push({ label: `10^(10^${k})`, caption: `a cube of ten to the 10^${k} ions`, lambda: saltCubeLambda(10 ** k / 3) });
   }
-  const rungs: Array<[bigint, string]> = [[97n, '10^100'], [27n, '10^30'], [6n, '10^9'], [3n, '10^6'], [0n, '10^3']];
-  for (const [l, label] of rungs) {
-    if (l <= levels) out.push({ label, lambda: saltCubeLambda(Math.ceil(Number(l) / 3)) });
+  const rungs: Array<[bigint, string, string]> = [
+    [97n, '10^100', 'a googol of ions'],
+    [27n, '10^30', 'a million tonnes of salt'],
+    [6n, '10^9', 'a billion ions'],
+    [3n, '10^6', 'a million ions'],
+    [0n, '10^3', 'a grain of 1,000 ions'],
+  ];
+  for (const [l, label, caption] of rungs) {
+    if (l <= levels) out.push({ label, caption, lambda: saltCubeLambda(Math.ceil(Number(l) / 3)) });
   }
-  out.push({ label: '1 ion', lambda: ION_LAMBDA });
+  out.push({ label: '1 ion', caption: 'one ion', lambda: ION_LAMBDA });
   return out;
 }
 
@@ -134,9 +142,9 @@ export function scaleCatalog(): ScaleEntry[] {
     blurb: 'Fcc copper, 630 cells on an edge: 1,000,188,000 atoms, the block the viewer draws at ?billion-atoms, now from one 52-byte record.',
     root: nodeId(copper), records: [copper],
     landmarks: [
-      { label: '10^9', lambda: Math.log10(0.4 / (630 * 3.615)) + 10 },
-      { label: '10^6', lambda: Math.log10(0.4 / (63 * 3.615)) + 10 },
-      { label: '1 atom', lambda: ION_LAMBDA },
+      { label: '10^9', caption: 'a billion copper atoms', lambda: Math.log10(0.4 / (630 * 3.615)) + 10 },
+      { label: '10^6', caption: 'a million copper atoms', lambda: Math.log10(0.4 / (63 * 3.615)) + 10 },
+      { label: '1 atom', caption: 'one copper atom', lambda: ION_LAMBDA },
     ],
   };
   const diamondoids = Array.from({ length: 12 }, (_, i) => diamondoidEntry(i + 1));
@@ -155,7 +163,7 @@ function diamondoidEntry(m: number): ScaleEntry {
     id: `diamondoid-${m}`, group: 'diamondoid', chip: `C${c}`, title: `${name}, C${c}H${h}`,
     blurb: 'A hydrogen-capped diamond nanocrystal cut on {111} faces: every carbon has at least two carbon neighbours.',
     root: nodeId(record), records: [record],
-    landmarks: [{ label: '1 atom', lambda: ION_LAMBDA }],
+    landmarks: [{ label: '1 atom', caption: 'one carbon atom', lambda: ION_LAMBDA }],
   };
 }
 

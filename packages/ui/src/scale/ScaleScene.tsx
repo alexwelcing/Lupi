@@ -113,7 +113,7 @@ export function ScaleScene({ world, budgets, quality, onFrame }: ScaleSceneProps
   const size = useThree((s) => s.size);
   const viewportDpr = useThree((s) => s.viewport.dpr);
   const invalidate = useThree((s) => s.invalidate);
-  const cache = useMemo(() => new DrawCache(), []);
+  const cache = useMemo(() => new DrawCache(Math.min(32 << 20, budgets.residentBytes / 2)), [budgets]);
   const boxes = useMemo(() => allocBoxes(BOX_CAPACITY), []);
   const splats = useMemo(() => allocSplats(SPLAT_CAPACITY), []);
   const boxGeometry = useMemo(() => createBoxGeometry(BOX_CAPACITY), []);

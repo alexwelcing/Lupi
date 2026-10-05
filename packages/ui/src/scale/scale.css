@@ -202,6 +202,48 @@
   font-size: 0.8rem;
 }
 
+.scale-rung {
+  position: absolute;
+  z-index: 2;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  pointer-events: none;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+  animation: scale-rung 1.6s ease-out both;
+}
+.scale-rung-label {
+  font: 400 clamp(2rem, 9vw, 4.4rem) / 1 Georgia, 'Times New Roman', serif;
+  color: var(--scale-accent);
+}
+.scale-rung-caption {
+  font-size: 0.95rem;
+  color: var(--scale-text);
+}
+@keyframes scale-rung {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  15%,
+  70% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scale-rung {
+    animation: none;
+  }
+}
+
 .scale-toast {
   position: absolute;
   z-index: 3;
