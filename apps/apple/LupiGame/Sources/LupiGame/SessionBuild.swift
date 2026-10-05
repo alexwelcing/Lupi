@@ -211,6 +211,12 @@ extension PlaySession {
             grab?.pull = (target - pb) * BuildTuning.heldPull
             if scaling { grab?.localPoint *= ratio }
         } else {
+            // Let go mid-glide: the magnet carries it on.
+            if guest.mode != .kinematic {
+                guest.mode = .kinematic
+                guest.spec.mode = .kinematic
+                out.physics.append(.setMode(guest.id, .kinematic))
+            }
             m.atom.step(toward: target, token: .glide, dt: dt)
             let moved = guest.frame.world(gi.piece.molecule.position(m.guestAtom))
             guest.frame.worldFromAnchor.translation += m.atom.value - moved

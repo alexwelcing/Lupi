@@ -191,8 +191,9 @@ public struct Catalog: Sendable {
         if let parent = trophy.origin.parent, parent.source == .omol25, let id = parent.id { return [id] }
         guard let xyz = trophy.molecule.xyz else { return [] }
         let comment = xyz.split(separator: "\n", maxSplits: 2, omittingEmptySubsequences: false).dropFirst().first ?? ""
-        guard let range = comment.range(of: "source=") else { return [] }
-        let value = comment[range.upperBound...].prefix { !$0.isWhitespace && $0 != "|" }
+        // `key=value | key=value`: the `source` key itself, not `charge_source`.
+        let pairs = comment.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let value = pairs.first(where: { $0.hasPrefix("source=") })?.dropFirst("source=".count) else { return [] }
         return value.split(separator: ",").compactMap { part in
             part.hasPrefix("omol25:") ? String(part.dropFirst("omol25:".count)) : nil
         }

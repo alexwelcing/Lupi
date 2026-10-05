@@ -96,8 +96,10 @@ struct BuildTests {
         let box = b.worldBounds
         #expect(abs(box.min.y - 1.0) < 0.02)
         #expect(b.spec.shapes.count == 1)
-        // Atoms spawn side by side, not in one spot.
+        // Atoms spawn side by side, not in one spot; a lone hydrogen is a bead too.
         let h = Fixture.spawnAtom(&sim, 1)
+        #expect(sim.session.body(h)!.spec.shapes.count == 1)
+        #expect(abs(sim.session.body(h)!.worldBounds.min.y - 1.0) < 0.02)
         let gap = (sim.session.body(h)!.entityPose.translation - sim.session.body(c)!.entityPose.translation).length
         #expect(gap > 0.04)
         // Loose atoms at rest never snap by themselves, however close.
@@ -341,6 +343,22 @@ struct BuildTests {
         sim.build(holding: o, onto: [h])
         let (oh, _) = try #require(sim.snaps.first)
         #expect(sim.session.body(oh)?.facts.formula == "HO")
+    }
+
+    @Test func omolAttributionIsReadBackFromTrophies() throws {
+        let at = Date(timeIntervalSince1970: 1_791_200_000)
+        let xyz = "1\nLupi built | formula=K | charge_source=unavailable | source=omol25:neutral-validation:4138,omol25:neutral-validation:3082 | license=CC-BY-4.0 | coordinates=lupi-play\nK 0 0 0\n"
+        let built = TrophyRecord(
+            name: "K", molecule: MoleculeRef(source: .built, sha256: SHA256.hex(xyz), formula: "K", atoms: 1, xyz: xyz),
+            origin: TrophyOrigin(kind: .built, at: at, parts: ["K"]), look: TrophyLook(scale: 0.025), createdAt: at
+        )
+        #expect(Catalog.omolRows(built) == ["neutral-validation:4138", "neutral-validation:3082"])
+        let fragment = TrophyRecord(
+            name: "HO", molecule: MoleculeRef(source: .fragment, sha256: SHA256.hex(xyz), formula: "K", atoms: 1, xyz: xyz),
+            origin: TrophyOrigin(kind: .broken, at: at, parent: ParentRef(name: "C4H4F6O", formula: "C4H4F6O", source: .omol25, id: "neutral-validation:21277")),
+            look: TrophyLook(scale: 0.025), createdAt: at
+        )
+        #expect(Catalog.omolRows(fragment) == ["neutral-validation:21277"])
     }
 
     @Test func buildingIsDeterministic() throws {

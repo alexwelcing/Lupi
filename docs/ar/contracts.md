@@ -158,7 +158,7 @@ Further rules:
 - A piece of a LupiScale structure, of any count up to a googolplex and beyond, is `source: scale` with the optional `molecule.scale` reference (`lupi.scale-ref.v1`). Both are additive to v1 and are specified in [scale-spec.md §7.4](scale-spec.md) (D14); they land before M1.
 - `formula` is recomputed from the coordinates by LupiKit, never copied from a label.
 - A fragment of a fragment is `kind: broken` with `parent.source: fragment`.
-- An OMol25-derived fragment or built molecule keeps OMol25's CC BY 4.0 attribution: its XYZ comment carries `source=omol25:<collection>:<row>` and `license=CC-BY-4.0`, and the app shows the attribution with it.
+- An OMol25-derived fragment or built molecule keeps OMol25's CC BY 4.0 attribution: its XYZ comment carries `source=omol25:<collection>:<row>` and `license=CC-BY-4.0`, and the app shows the attribution with it. A molecule built from pieces of several rows lists them all, comma-separated with no spaces (`source=omol25:neutral-validation:1008,omol25:neutral-validation:3082`).
 - The origin story shown in the Cabinet is derived from `origin`, not stored: "Spawned 4 Oct 2026", "Broken from Hydrogen peroxide", "Built from atoms: O, H, H".
 
 ### 1.4 Embedded XYZ
