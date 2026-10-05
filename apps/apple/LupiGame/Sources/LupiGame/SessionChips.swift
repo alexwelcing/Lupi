@@ -45,11 +45,21 @@ extension PlaySession {
         }
         store.add(result.newRecords)
 
-        // The rest stays where it was: an edit shares its base's frame, a selection its base's.
+        // Everything that can fail is built before the body changes, so a refusal leaves it whole.
+        let identity: ScaleRef, facts: BodyFacts, frame: BodyFrame, span: Double
         var parent = b
-        parent.frame.ref = result.remainder
-        parent.identity = result.remainder
         do {
+            identity = try ScaleRef.keep(root: result.chip.root, path: result.chip.path, store: store)
+            let view = try resolver.resolve(identity.root, identity.path)
+            let display = try Restore.displayRef(identity, view: view, count: try resolver.count(view), resolver: resolver, store: store)
+            facts = try BodyFacts.of(display, resolver: resolver)
+            frame = BodyFrame(
+                ref: display, worldFromAnchor: RigidD(rotation: hit.nodeRotation, translation: hit.nodeOrigin), metresPerAnchorUnit: hit.metresPerUnit
+            )
+            span = hit.metresPerUnit * facts.aggregate.bounds.longest
+            // The rest stays where it was: an edit shares its base's frame, a selection its base's.
+            parent.frame.ref = result.remainder
+            parent.identity = result.remainder
             parent.facts = try BodyFacts.of(result.remainder, resolver: resolver)
         } catch {
             out.events.append(.refused("That piece will not come away: \(error)"))
@@ -65,14 +75,6 @@ extension PlaySession {
 
         // The piece, in the hand.
         do {
-            let identity = try ScaleRef.keep(root: result.chip.root, path: result.chip.path, store: store)
-            let view = try resolver.resolve(identity.root, identity.path)
-            let display = try Restore.displayRef(identity, view: view, count: try resolver.count(view), resolver: resolver, store: store)
-            let facts = try BodyFacts.of(display, resolver: resolver)
-            let frame = BodyFrame(
-                ref: display, worldFromAnchor: RigidD(rotation: hit.nodeRotation, translation: hit.nodeOrigin), metresPerAnchorUnit: hit.metresPerUnit
-            )
-            let span = hit.metresPerUnit * facts.aggregate.bounds.longest
             let piece = try addBody(
                 frame: frame, identity: identity, facts: facts, name: "\(isChip ? "Chip" : "Chunk") of \(b.name)", brokenFrom: b.name,
                 feltMass: nil, mode: .kinematic, now: now, spawnSpan: span, provenance: .piece(parent: parentRef(of: b))
@@ -89,6 +91,10 @@ extension PlaySession {
             if arbiter.adoptGrab(piece, at: point, time: now) { beginGrab(piece, at: point, now: now) }
             selection = piece
         } catch {
+            // The piece could not be made: the body takes back what it gave.
+            bodies[id] = b
+            out.physics.append(.update(id, b.spec))
+            terrainColliders.invalidate()
             out.events.append(.refused("That piece will not come away: \(error)"))
         }
     }

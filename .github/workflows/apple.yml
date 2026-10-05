@@ -91,6 +91,11 @@ jobs:
       - name: Test LupiScale in release
         run: swift test -c release --package-path apps/apple/LupiScale
 
+      # LupiGame again in release: its directive tests time frames across the
+      # salt ladder, and the optimized build is the one a device runs.
+      - name: Test LupiGame in release
+        run: swift test -c release --package-path apps/apple/LupiGame
+
   generated-sources:
     name: Generated Swift sources are current
     runs-on: ubuntu-latest
