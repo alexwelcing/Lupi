@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import LupiData
 import LupiGame
@@ -66,6 +67,10 @@ final class AppModel {
     var showingCollection = false
     /// The trophy chosen in the collection, spawned once its sheet has closed.
     var chosenTrophy: TrophyRecord?
+    /// The first-run card (plan §8 M4): why Lupi wants the camera, before iOS asks.
+    var onboarding: OnboardingCard?
+    /// What opens once the card is through.
+    @ObservationIgnored private var afterOnboarding: (@MainActor () -> Void)?
 
     enum Keys {
         static let sound = "lupi.soundAndHaptics"
@@ -101,8 +106,10 @@ final class AppModel {
 
     /// Opens Play; the spawn waits until tracking has found the room.
     func play(_ source: SpawnSource?) {
-        guard let controller = openPlay() else { return }
-        if let source { controller.spawn(source) }
+        gate { [weak self] in
+            guard let controller = self?.openPlay() else { return }
+            if let source { controller.spawn(source) }
+        }
     }
 
     /// After the collection closes: the trophy chosen in it comes into play (plan §6.4, step 5).
@@ -114,7 +121,58 @@ final class AppModel {
 
     /// Opens Play with the scale receipt: salt of 10³, 10⁶ and 10⁹ atoms in a row.
     func playReceipt() {
-        openPlay()?.spawnReceipt()
+        gate { [weak self] in self?.openPlay()?.spawnReceipt() }
+    }
+
+    // MARK: The first-run card (plan §8 M4)
+
+    /// Opens Play at once when the camera is allowed; otherwise shows the card first.
+    private func gate(_ then: @escaping @MainActor () -> Void) {
+        guard let card = Onboarding.card(camera: Self.cameraAccess) else {
+            then()
+            return
+        }
+        afterOnboarding = then
+        onboarding = card
+    }
+
+    /// The card's button: Continue lets iOS ask for the camera, then opens Play or says no.
+    func continueOnboarding() async {
+        switch onboarding {
+        case .camera?:
+            if await AVCaptureDevice.requestAccess(for: .video) {
+                onboarding = nil
+                let next = afterOnboarding
+                afterOnboarding = nil
+                next?()
+            } else {
+                onboarding = .cameraDenied
+            }
+        case .cameraDenied?:
+            openSettings()
+        case .cameraRestricted?, nil:
+            break
+        }
+    }
+
+    func dismissOnboarding() {
+        onboarding = nil
+        afterOnboarding = nil
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
+
+    static var cameraAccess: CameraAccess {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .notDetermined: .notDetermined
+        case .authorized: .authorized
+        case .denied: .denied
+        case .restricted: .restricted
+        @unknown default: .denied
+        }
     }
 
     @discardableResult

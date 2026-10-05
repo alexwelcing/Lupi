@@ -25,6 +25,11 @@ struct PlayView: View {
                 onLayout: { [controller] in controller.layout($0, $1, $2) }
             )
             .ignoresSafeArea()
+            // VoiceOver hears the room as one line; each body is its own element through
+            // RealityKit's AccessibilityComponent (plan §8 M4).
+            .accessibilityElement()
+            .accessibilityLabel(controller.accessibilitySummary)
+            .accessibilityHint("Pick a molecule from the tray at the bottom to drop it ahead of you.")
             // Above the touch layer and interactive, so its Start Over reaches our handler
             // instead of resetting the session; once it hides itself, touches pass through.
             CoachingOverlay(session: controller.ar.session, onStartOver: { [controller] in controller.coachingRequestedReset() })
@@ -145,6 +150,7 @@ struct RoundButton: View {
 struct PlaqueCard: View {
     let plaque: PlaqueText
     let controller: PlayController
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -166,8 +172,16 @@ struct PlaqueCard: View {
                 .foregroundStyle(Color.lime)
             Text("\(plaque.atoms) atoms")
                 .font(.subheadline.monospacedDigit())
-            Text(plaque.personality)
-                .font(.footnote)
+            // Why it plays as it does, and how (plan §4.3, §8 M4).
+            ForEach(plaque.reasons, id: \.self) { reason in
+                Text(reason)
+                    .font(.footnote)
+            }
+            if !plaque.feel.isEmpty {
+                Text(plaque.feel)
+                    .font(.footnote.italic())
+                    .foregroundStyle(.secondary)
+            }
             if !plaque.magnification.isEmpty {
                 Text(plaque.magnification)
                     .font(.footnote)
@@ -195,6 +209,12 @@ struct PlaqueCard: View {
                     // Any body can be kept, whatever its count (plan §6.3).
                     Button("Keep") { controller.keepSelected() }
                         .buttonStyle(.borderedProminent)
+                }
+                if voiceOver && !plaque.grown {
+                    // A flick for VoiceOver: thrown gently ahead.
+                    Button("Toss") { controller.tossSelected() }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Toss it ahead")
                 }
                 if plaque.canFill {
                     // One tap fills every open valence with hydrogens (plan §4.5).

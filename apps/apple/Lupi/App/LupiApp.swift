@@ -1,3 +1,4 @@
+import LupiGame
 import SwiftUI
 
 @main
@@ -35,6 +36,14 @@ struct RootView: View {
             .sheet(isPresented: $model.showingCollection, onDismiss: { app.playChosenTrophy() }) {
                 CollectionView()
                     .environment(app)
+            }
+            // The first-run card, before iOS asks for the camera (plan §8 M4).
+            .sheet(isPresented: Binding(get: { app.onboarding != nil }, set: { if !$0 { app.dismissOnboarding() } })) {
+                if let card = app.onboarding {
+                    OnboardingView(card: card)
+                        .environment(app)
+                        .presentationDetents([.medium, .large])
+                }
             }
             .tint(Color.lime)
             .preferredColorScheme(.dark)

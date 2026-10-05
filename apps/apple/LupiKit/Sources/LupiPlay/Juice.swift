@@ -126,6 +126,13 @@ public struct SoundCue: Sendable, Equatable {
     public var gain: Double
     /// Playback speed; pitch follows it.
     public var rate: Double
+
+    public init(voice: SoundVoice, delay: Double = 0, gain: Double, rate: Double = 1) {
+        self.voice = voice
+        self.delay = delay
+        self.gain = gain
+        self.rate = rate
+    }
 }
 
 public enum RingCue: Sendable, Equatable {

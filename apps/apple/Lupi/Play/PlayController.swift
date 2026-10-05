@@ -19,6 +19,9 @@ struct PlaqueText: Equatable {
     var atoms: String
     var personality: String
     var magnification: String
+    /// Every reason for its personality, and how it plays (plan §8 M4).
+    var reasons: [String]
+    var feel: String
     var mass: String
     var brokenFrom: String?
     /// "O, H, H": what a built molecule was snapped from.
@@ -47,6 +50,8 @@ struct PlaqueText: Equatable {
         atoms = p.atoms
         personality = p.personality
         magnification = p.magnification
+        reasons = p.reasons
+        feel = p.feel
         mass = p.feltMassKg < 1 ? String(format: "feels like %.0f g", p.feltMassKg * 1000) : String(format: "feels like %.1f kg", p.feltMassKg)
         brokenFrom = p.brokenFrom
         builtFrom = p.builtFrom
@@ -100,6 +105,27 @@ struct SpikeToggles: Equatable {
     var s8EveryFrame = false
     /// S8: how a window's colliders are built.
     var s8Build = S8Build.primitives
+    /// Flexible molecules flop (plan §8 M4); spike A6 compares it with physics joints.
+    var flop = true
+    /// A5: the thermal policy may switch the camera to 30 fps at critical.
+    var a5ThirtyFPS = false
+    /// Plays as if the device were this hot, to try the thermal policy.
+    var thermal = ThermalChoice.device
+}
+
+/// The debug HUD's thermal override (plan §7.4).
+enum ThermalChoice: String, CaseIterable, Identifiable {
+    case device, serious, critical
+
+    var id: String { rawValue }
+
+    var level: ThermalLevel? {
+        switch self {
+        case .device: nil
+        case .serious: .serious
+        case .critical: .critical
+        }
+    }
 }
 
 /// The play screen's engine room: owns the ARSession host, the RealityKit scene, haptics,
@@ -114,6 +140,8 @@ final class PlayController {
     @ObservationIgnored let sounds = Sounds()
     @ObservationIgnored let sparks = Sparks()
     @ObservationIgnored let stress = InstanceStress()
+    /// Spike A6's jointed copy.
+    @ObservationIgnored let joints = JointFlopRig()
     /// Everything added to the RealityView.
     @ObservationIgnored let content = Entity()
     @ObservationIgnored private(set) var session: PlaySession
@@ -163,6 +191,16 @@ final class PlayController {
     @ObservationIgnored private var rate = 1.0
     @ObservationIgnored private var slowTestUntil: TimeInterval = 0
     @ObservationIgnored private var captionTask: Task<Void, Never>?
+    /// What each body's AccessibilityComponent says now, to set it only when it changes.
+    @ObservationIgnored private var spoken: [BodyID: BodyAccessibility] = [:]
+    /// Spike A5: a switch of video format in progress, and how tracking fared after it.
+    @ObservationIgnored private var a5: (fps: Int, at: TimeInterval, limited: Double, worst: String?)?
+    @ObservationIgnored private var lastFrameTime: TimeInterval?
+    /// The frame rate last asked of ARKit (its default format runs at 60), and A5's manual hold.
+    @ObservationIgnored private var requestedFPS = 60
+    @ObservationIgnored private var heldFPS: Int?
+    /// One line for VoiceOver over the whole play view.
+    private(set) var accessibilitySummary = "No molecules yet."
 
     private struct ContactPair: Hashable {
         var a: BodyID?
@@ -177,6 +215,8 @@ final class PlayController {
         // The plane fallback arena shares the bodies' simulation, custom (A2) or not.
         scene.root.addChild(ar.planeArena)
         content.addChild(stress.anchor)
+        // The jointed copy shares the bodies' simulation and arena.
+        scene.root.addChild(joints.anchor)
         content.addChild(sounds.anchor)
         content.addChild(sparks.anchor)
     }
@@ -199,6 +239,14 @@ final class PlayController {
             },
             view.subscribe(to: CollisionEvents.Updated.self, on: nil, componentType: nil) { [weak self] e in
                 self?.collision(e.entityA, e.entityB, impulse: e.impulse, direction: e.impulseDirection, position: e.position, began: false)
+            },
+            // VoiceOver on a body (plan §8 M4): activating it selects it; its actions toss and keep.
+            view.subscribe(to: AccessibilityEvents.Activate.self, on: nil, componentType: nil) { [weak self] e in
+                self?.accessibilityAction(.select, on: e.entity)
+            },
+            view.subscribe(to: AccessibilityEvents.CustomAction.self, on: nil, componentType: nil) { [weak self] e in
+                guard let action = BodyAction(rawValue: e.key.key) else { return }
+                self?.accessibilityAction(action, on: e.entity)
             },
         ]
     }
@@ -326,15 +374,18 @@ final class PlayController {
         touchBuffer.removeAll(keepingCapacity: true)
         let out = session.step(input)
         scene.apply(out.physics) { self.sparks.poof(at: $0) }
-        scene.draw(out) { self.session.meshRecipe(for: $0) }
+        scene.draw(out, recipe: { self.session.meshRecipe(for: $0) }, segments: { self.session.segmentRecipes(for: $0) })
         for cue in out.juice { play(cue) }
         applyRate(out.simulationRate, now: now)
+        applyFrameRate(out.frameRate, tracking: arFrame.camera.trackingState, now: now)
+        joints.update(now: now, floorY: ar.floorY)
         for event in out.events { handle(event) }
         if session.atomTray.count != atomTray.count { atomTray = session.atomTray.map(TrayAtom.init) }
         if session.cameraInsideTerrain != insideSolid { insideSolid = session.cameraInsideTerrain }
         if now - lastPublish >= 0.25 {
             lastPublish = now
             refreshPlaque()
+            refreshAccessibility()
             if showsHUD {
                 publish(out.hud, arFrame)
                 let a1 = shelf.probe.lines(6)
@@ -362,6 +413,46 @@ final class PlayController {
             let line = state.line
             if limited != line { limited = line }
         }
+    }
+
+    /// The thermal policy's frame rate (plan §7.4): a switch happens at most once until
+    /// tracking has had five seconds with it, and each switch is spike A5's measurement.
+    private func applyFrameRate(_ fps: Int, tracking: ARCamera.TrackingState, now: TimeInterval) {
+        if var probe = a5 {
+            let dt = lastFrameTime.map { now - $0 } ?? 0
+            if case .normal = tracking {} else {
+                probe.limited += dt
+                probe.worst = probe.worst ?? tracking.line
+            }
+            a5 = probe
+            if now - probe.at >= 5 {
+                let worst = probe.worst.map { " (\($0))" } ?? ""
+                note("A5: \(probe.fps) fps for 5 s, tracking limited \(String(format: "%.1f", probe.limited)) s\(worst)")
+                a5 = nil
+            }
+        }
+        lastFrameTime = now
+        let want = heldFPS ?? fps
+        guard a5 == nil, want != requestedFPS else { return }
+        switchFrameRate(want, now: now)
+    }
+
+    private func switchFrameRate(_ fps: Int, now: TimeInterval) {
+        // Asked once either way, so a device without the format is not asked every frame.
+        requestedFPS = fps
+        guard let line = ar.setFrameRate(fps) else {
+            note("A5: this device has no \(fps) fps format")
+            return
+        }
+        note(line)
+        a5 = (fps, now, 0, nil)
+    }
+
+    /// A5: hold 30 fps now, or let the thermal policy choose again, and watch tracking through
+    /// the switch without heating the device.
+    func a5Switch() {
+        heldFPS = heldFPS == nil ? 30 : nil
+        note(heldFPS == nil ? "A5: the thermal policy chooses the frame rate" : "A5: holding 30 fps")
     }
 
     static var thermal: ThermalLevel {
@@ -448,6 +539,54 @@ final class PlayController {
         guard target != rate else { return }
         rate = target
         try? timebase.setRate(target)
+    }
+
+    // MARK: VoiceOver (plan §8 M4)
+
+    /// Each body's AccessibilityComponent, set when what it says changes.
+    private func refreshAccessibility() {
+        let summary = session.accessibilitySummary
+        if summary != accessibilitySummary { accessibilitySummary = summary }
+        let ids = Set(session.bodyOrder)
+        for id in spoken.keys where !ids.contains(id) { spoken[id] = nil }
+        for id in ids {
+            guard let words = session.accessibility(id), spoken[id] != words, let entity = scene.entity(of: id) else { continue }
+            spoken[id] = words
+            var component = AccessibilityComponent()
+            component.isAccessibilityElement = true
+            component.label = LocalizedStringResource(stringLiteral: words.label)
+            component.value = LocalizedStringResource(stringLiteral: words.value)
+            component.systemActions = [.activate]
+            component.customActions = words.actions.filter { $0 != .select }.map { LocalizedStringResource(stringLiteral: $0.rawValue) }
+            entity.components.set(component)
+        }
+    }
+
+    private func accessibilityAction(_ action: BodyAction, on entity: Entity) {
+        // The event may name a child of the body's entity.
+        var e: Entity? = entity
+        var id: BodyID?
+        while let current = e, id == nil {
+            id = scene.body(of: current)
+            e = current.parent
+        }
+        guard let id else { return }
+        switch action {
+        case .select:
+            session.select(id)
+            refreshPlaque()
+        case .toss:
+            if !session.toss(id) { show("It cannot be thrown right now") }
+        case .keep:
+            session.select(id)
+            keepSelected()
+        }
+    }
+
+    /// VoiceOver's toss of the selected body, from its card.
+    func tossSelected() {
+        guard let id = session.selection else { return }
+        if !session.toss(id) { show("It cannot be thrown right now") }
     }
 
     // MARK: Events, captions, plaque, HUD
@@ -630,6 +769,7 @@ final class PlayController {
             "atoms \(h.totalAtoms)",
             "drawn \(h.drawnAtoms), instanced \(scene.drawnInstances), τ \(String(format: "%.2f", h.tau)) px",
             "thermal \(h.thermal), tracking \(frame.camera.trackingState.line), map \(frame.worldMappingStatus.line), \(ar.hasLiDAR ? "LiDAR" : "no LiDAR")",
+            "\(h.thermalLine), camera \(ar.framesPerSecond) fps",
         ]
         if let i = h.lastImpulse { lines.append(String(format: "last impulse %.4f N·s, Δv %.2f m/s", i, h.lastDeltaV ?? 0)) }
         if let s = h.lastThrowSpeed { lines.append(String(format: "last throw %.2f m/s", s)) }
@@ -646,6 +786,7 @@ final class PlayController {
             lines.append(scene.statics.timing.line(scene.statics.build))
         }
         if let s9 = session.s9 { lines.append(contentsOf: s9.lines) }
+        if let a6 = joints.line { lines.append(a6) }
         if hudLines != lines { hudLines = lines }
     }
 
@@ -672,6 +813,18 @@ final class PlayController {
         if spikes.s8Build != old.s8Build {
             scene.statics.build = spikes.s8Build
             note("S8: windows built as \(spikes.s8Build.title)")
+        }
+        if spikes.flop != old.flop {
+            session.debug.flop = spikes.flop
+            note(spikes.flop ? "A6: flexible molecules flop (new spawns)" : "A6: flexible molecules stiff (new spawns)")
+        }
+        if spikes.a5ThirtyFPS != old.a5ThirtyFPS {
+            session.debug.a5ThirtyFPS = spikes.a5ThirtyFPS
+            note(spikes.a5ThirtyFPS ? "A5: 30 fps allowed at critical" : "A5: 30 fps off")
+        }
+        if spikes.thermal != old.thermal {
+            session.debug.thermalOverride = spikes.thermal.level
+            note("Thermal: \(spikes.thermal.rawValue)")
         }
         if !spikes.logContacts && old.logContacts {
             contactLog = []
@@ -754,6 +907,44 @@ final class PlayController {
         }
         session.s9DropExtremes()
         note("S9: dropped four bodies 1.5 m ahead")
+    }
+
+    /// A6: the selected flexible molecule tossed up and ahead with its drawn flop, and beside it
+    /// a copy whose segments are RealityKit bodies joined by spherical joints.
+    func jointFlopTest() {
+        guard let id = session.selection, let b = session.body(id), let camera = lastCamera else {
+            note("A6: tap a flexible molecule (tryptophan) to select it first")
+            return
+        }
+        guard let flop = b.effects.flop, let recipes = session.segmentRecipes(for: id) else {
+            note("A6: \(b.name) does not flop; try tryptophan")
+            return
+        }
+        var side = camera.right
+        side.y = 0
+        // Beside the body, 20 cm to the right; the copy starts unrotated, in the recipe's axes.
+        let origin = (b.entityPose.translation + side.normalized * 0.2).asFloat
+        let velocity = (camera.forward * 0.8 + Vec3(0, 2.5, 0)).asFloat
+        note(joints.toss(
+            segments: flop.segments, recipes: recipes, metresPerAngstrom: Float(b.sigma), origin: origin, velocity: velocity,
+            assets: scene.assets, material: scene.assets.physicsMaterial(b.spec.material), now: ProcessInfo.processInfo.systemUptime
+        ))
+        _ = session.toss(id)
+    }
+
+    // MARK: The sound lab (plan §8 M4)
+
+    var soundTuning: SoundTuning { sounds.tuning }
+    var soundTuningJSON: String { sounds.tuningJSON }
+
+    func retune(_ tuning: SoundTuning) {
+        Task { await sounds.retune(tuning) }
+    }
+
+    /// Plays one voice 40 cm ahead, at full gain.
+    func playTest(_ voice: SoundVoice) {
+        let at = lastCamera.map { ($0.position + $0.forward * 0.4).asFloat } ?? .zero
+        sounds.play(SoundCue(voice: voice, gain: 1), at: at)
     }
 
     /// S10: merged meshes of 1,000 and 2,000 atoms.

@@ -4,6 +4,7 @@ import SwiftUI
 /// cut's counts, thermal state and the last impulse, with the day-one device spikes.
 struct DebugPanel: View {
     @Bindable var controller: PlayController
+    @State private var showingSoundLab = false
 
     var body: some View {
         ScrollView {
@@ -35,6 +36,19 @@ struct DebugPanel: View {
                 .pickerStyle(.segmented)
                 Button("S9 drop boxes and hulls of 3 and 90 cm") { controller.s9Drop() }
                 Button("S10 time 1k and 2k atom meshes") { controller.timeMeshBuilds() }
+                Divider().overlay(Color.white.opacity(0.3))
+                // M4 (plan §8 M4): the thermal policy, spike A5, the flop and spike A6, the sound lab.
+                Picker("Thermal", selection: $controller.spikes.thermal) {
+                    Text("Thermal as is").tag(ThermalChoice.device)
+                    Text("serious").tag(ThermalChoice.serious)
+                    Text("critical").tag(ThermalChoice.critical)
+                }
+                .pickerStyle(.segmented)
+                Toggle("A5 allow 30 fps at critical", isOn: $controller.spikes.a5ThirtyFPS)
+                Button("A5 hold 30 fps / let go") { controller.a5Switch() }
+                Toggle("A6 flexible molecules flop (drawn)", isOn: $controller.spikes.flop)
+                Button("A6 toss the selected molecule beside a jointed copy") { controller.jointFlopTest() }
+                Button("Sound lab") { showingSoundLab = true }
                 lines(controller.a1Lines)
                 lines(controller.spikeLines)
                 lines(controller.contactLog)
@@ -47,6 +61,9 @@ struct DebugPanel: View {
         .foregroundStyle(.white)
         .tint(Color.lime)
         .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .sheet(isPresented: $showingSoundLab) {
+            SoundLabView(controller: controller)
+        }
     }
 
     private func lines(_ list: [String]) -> some View {
