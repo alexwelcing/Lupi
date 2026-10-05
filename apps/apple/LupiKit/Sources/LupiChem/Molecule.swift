@@ -104,23 +104,8 @@ public struct Molecule: Sendable, Equatable, Codable {
     }
 
     /// XYZ text with 6 decimals; the comment line is the name (or the formula).
+    /// `XYZWriter` writes the extended form with the keys the parsers read.
     public func xyzText(comment: String? = nil) -> String {
-        var lines = ["\(count)", comment ?? name ?? hillFormula]
-        for (z, p) in zip(atomicNumbers, positions) {
-            lines.append("\(ChemicalElement.forAtomicNumber(z).symbol) \(fixed6(p.x)) \(fixed6(p.y)) \(fixed6(p.z))")
-        }
-        return lines.joined(separator: "\n") + "\n"
+        XYZWriter.text(atomicNumbers: atomicNumbers, positions: positions, commentLine: comment ?? name ?? hillFormula, decimals: 6)
     }
-}
-
-/// `%.6f` without Foundation's String(format:), which differs across platforms for some inputs.
-func fixed6(_ value: Float) -> String {
-    let scaled = (Double(value) * 1_000_000).rounded()
-    if scaled == 0 { return "0.000000" }
-    let negative = scaled < 0
-    let magnitude = Int64(abs(scaled))
-    let whole = magnitude / 1_000_000
-    let frac = String(magnitude % 1_000_000)
-    let padded = String(repeating: "0", count: 6 - frac.count) + frac
-    return "\(negative ? "-" : "")\(whole).\(padded)"
 }

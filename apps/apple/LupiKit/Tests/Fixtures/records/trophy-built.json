@@ -1,0 +1,16 @@
+{
+  "schema": "lupi.trophy.v1",
+  "id": "2A7D4C10-9E3F-4B21-8D5A-6C0E1F7B2A98",
+  "name": "Water",
+  "molecule": {
+    "source": "built",
+    "sha256": "3dc10093aa363e9a3fde4ccf7ca73be3e81dbcc60b5cbb64284f0e9d46d92360",
+    "formula": "H2O",
+    "atoms": 3,
+    "xyz": "3\nLupi built | formula=H2O | charge_source=unavailable | coordinates=lupi-play\nO 0.00000 0.06558 0.00000\nH 0.75695 -0.52037 0.00000\nH -0.75695 -0.52037 0.00000\n"
+  },
+  "origin": { "kind": "built", "at": "2026-10-04T18:11:40.006Z", "parts": ["O", "H", "H"] },
+  "look": { "scale": 0.025 },
+  "createdAt": "2026-10-04T18:11:52.318Z",
+  "updatedAt": "2026-10-04T18:11:52.318Z"
+}

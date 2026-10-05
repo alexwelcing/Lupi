@@ -1,251 +1,358 @@
 import Foundation
 import LupiChem
 
-/// `lupi.trophy.v1`: one molecule in the player's collection (decision D6:
-/// spawn anything; a molecule left on a shelf is a trophy). Collection
-/// records sync to the Lupi account (D7); where a trophy sits in the room is
-/// a `lupi.shelf.v1` placement and stays on the device.
-public struct Trophy: Sendable, Equatable, Codable, Identifiable {
+/// `lupi.trophy.v1` (contracts.md §1, amended by scale-spec §7.4): one molecule
+/// or piece in the player's collection. It lives on the device and, signed in,
+/// on the Lupi account (D7). It never holds a room map, a placement or a camera
+/// image; where a trophy sits is a `lupi.shelf.v1` placement on the device.
+public struct TrophyRecord: Codable, Sendable, Hashable, Identifiable {
     public static let schemaID = "lupi.trophy.v1"
+    /// `name` is 1...80 characters.
+    public static let maxNameLength = 80
 
     public var schema: String
-    /// Stable across devices: a lowercase UUID.
-    public var id: String
-    public var molecule: TrophyMolecule
-    public var earned: Earned
-    /// The Remix look it wears, if any (codes resolve forever, AGENTS.md).
-    public var remix: RemixLook?
-    /// The museum line: "Caffeine · C8H10N4O2 · shown 10⁸×".
-    public var plaque: String
+    public var id: UUID
+    public var name: String
+    public var molecule: MoleculeRef
+    public var origin: TrophyOrigin
+    public var look: TrophyLook
     public var createdAt: Date
+    /// The record's own last edit; the sync engine compares its envelope's
+    /// `clientUpdatedAt`, never this (account-and-sync.md §3).
     public var updatedAt: Date
-    /// Set when the player deletes it, so the deletion syncs; nil while kept.
+    /// A tombstone: set on delete, `molecule.xyz` dropped.
     public var deletedAt: Date?
 
     public init(
-        id: String = UUID().uuidString.lowercased(), molecule: TrophyMolecule, earned: Earned,
-        remix: RemixLook? = nil, plaque: String, createdAt: Date = Date(), updatedAt: Date? = nil, deletedAt: Date? = nil
+        id: UUID = UUID(), name: String, molecule: MoleculeRef, origin: TrophyOrigin, look: TrophyLook,
+        createdAt: Date, updatedAt: Date? = nil, deletedAt: Date? = nil
     ) {
         schema = Self.schemaID
         self.id = id
+        self.name = name
         self.molecule = molecule
-        self.earned = earned
-        self.remix = remix
-        self.plaque = plaque
+        self.origin = origin
+        self.look = look
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.deletedAt = deletedAt
+    }
+
+    /// A name the contract accepts: control characters and runs of whitespace become
+    /// one space, at most 80 characters; `fallback` when nothing is left.
+    public static func cleanName(_ raw: String, fallback: String) -> String {
+        var out = ""
+        var space = false
+        for ch in raw {
+            if ch.isWhitespace || ch.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
+                space = !out.isEmpty
+                continue
+            }
+            if space { out.append(" ") }
+            space = false
+            out.append(ch)
+        }
+        let cut = String(out.prefix(maxNameLength))
+        return cut.isEmpty ? String(fallback.prefix(maxNameLength)) : cut
+    }
+
+    /// This record deleted: the tombstone keeps the record for sync and drops the embedded XYZ.
+    public func tombstone(at date: Date) -> TrophyRecord {
+        var copy = self
+        copy.deletedAt = date
+        copy.updatedAt = max(updatedAt, date)
+        copy.molecule.xyz = nil
+        return copy
     }
 
     /// What is wrong with this record, empty when it is valid.
     public func validate() -> [String] {
         var issues: [String] = []
         if schema != Self.schemaID { issues.append("schema is \(schema), expected \(Self.schemaID)") }
-        if id.isEmpty { issues.append("id is empty") }
-        if plaque.isEmpty { issues.append("plaque is empty") }
+        if name.isEmpty || name.count > Self.maxNameLength { issues.append("name has \(name.count) characters, expected 1...80") }
+        if name.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
+            issues.append("name has a control character")
+        }
         if updatedAt < createdAt { issues.append("updatedAt is before createdAt") }
-        issues += molecule.validate()
-        if let remix, !RemixLook.isValidCode(remix.code) { issues.append("remix code \(remix.code) is not r1-XXXXX") }
+        issues += molecule.validate(tombstone: deletedAt != nil)
+        issues += origin.validate()
+        issues += look.validate(source: molecule.source)
+        let expectedKind: TrophyOrigin.Kind? = switch molecule.source {
+        case .gallery, .omol25, .pubchem: .spawned
+        case .built: .built
+        case .fragment: .broken
+        case .scale: nil
+        }
+        if let expectedKind, origin.kind != expectedKind {
+            issues.append("a \(molecule.source.rawValue) trophy has origin \(expectedKind.rawValue), not \(origin.kind.rawValue)")
+        }
         return issues
     }
 }
 
-/// Which molecule a trophy is: a reference to a file (URL plus sha256) or,
-/// for molecules that exist nowhere else (built, broken off), the structure.
-public struct TrophyMolecule: Sendable, Equatable, Codable {
-    public enum Source: String, Sendable, Codable, CaseIterable {
-        /// A gallery molecule (/m/manifest.json).
-        case gallery
-        /// An OMol25 record: a featured pick or an edge structure row.
-        case omol25
-        /// One of the app's bundled starters.
-        case starter
-        /// Snapped together by the player.
-        case built
-        /// Broken off another molecule.
-        case fragment
-    }
+public enum MoleculeSource: String, Codable, Sendable, Hashable, CaseIterable {
+    case gallery, omol25, pubchem, built, fragment
+    /// A piece of a LupiScale structure of any count (scale-spec §7.4).
+    case scale
+}
 
-    public var source: Source
-    /// The id within its source: gallery page id, OMol25 pick id or "collection/row", starter id.
-    public var ref: String?
-    public var name: String
-    /// Hill formula.
+/// Which molecule a trophy is (contracts.md §1.3).
+public struct MoleculeRef: Codable, Sendable, Hashable {
+    /// `xyz` is embedded only up to the molecular recipe's cap.
+    public static let maxEmbeddedAtoms = 2000
+    /// `atoms` saturates here for larger counts; `scale.count` is authoritative.
+    public static let maxExactAtoms = 9_007_199_254_740_991
+
+    public var source: MoleculeSource
+    /// Gallery page id, `<collection>:<row>` or `cid:<n>`.
+    public var id: String?
+    /// Where the coordinates came from (https).
+    public var url: URL?
+    /// SHA-256 as 64 lowercase hex: of the file, of the embedded `xyz`, or the refKey for `scale`.
+    public var sha256: String
+    /// Hill formula of the atoms as played; for `scale`, of one unit (scale-spec §5.3).
     public var formula: String
-    public var atomCount: Int
-    /// Where the coordinates live: a path on the Lupi origin ("/gallery/…") or an https URL.
-    public var url: String?
-    /// SHA-256 of the bytes at `url`, lowercase hex.
-    public var sha256: String?
-    /// The coordinates and bonds themselves, when there is no file.
-    public var structure: InlineStructure?
-    /// The bond rule its bonds were drawn with (`lupi-bonds.molecular.v1`).
-    public var bondRecipe: String?
+    public var atoms: Int
+    /// Embedded XYZ (§1.4), at most 2,000 atoms.
+    public var xyz: String?
+    /// The piece as a `lupi.scale-ref.v1` (scale-spec §7.4): required for `scale`, optional otherwise.
+    public var scale: ScaleRefField?
 
     public init(
-        source: Source, ref: String? = nil, name: String, formula: String, atomCount: Int, url: String? = nil,
-        sha256: String? = nil, structure: InlineStructure? = nil, bondRecipe: String? = nil
+        source: MoleculeSource, id: String? = nil, url: URL? = nil, sha256: String, formula: String, atoms: Int,
+        xyz: String? = nil, scale: ScaleRefField? = nil
     ) {
         self.source = source
-        self.ref = ref
-        self.name = name
-        self.formula = formula
-        self.atomCount = atomCount
+        self.id = id
         self.url = url
         self.sha256 = sha256
-        self.structure = structure
-        self.bondRecipe = bondRecipe
+        self.formula = formula
+        self.atoms = atoms
+        self.xyz = xyz
+        self.scale = scale
     }
 
-    /// A built or broken-off molecule, carried whole.
-    public init(source: Source, name: String? = nil, molecule: Molecule, graph: BondGraph, bondRecipe: BondRecipe? = .molecular) {
-        self.init(
-            source: source, name: name ?? molecule.name ?? molecule.hillFormula, formula: molecule.hillFormula,
-            atomCount: molecule.count, structure: InlineStructure(molecule: molecule, graph: graph),
-            bondRecipe: bondRecipe?.rawValue
-        )
-    }
+    /// The OMol25 collections a trophy may name (`packages/core/src/omol25/collections.ts`).
+    public static let omolCollections: Set<String> = [
+        "neutral-train", "neutral-validation", "all-train-preview", "train-4m-preview", "validation-preview",
+    ]
 
-    public func validate() -> [String] {
+    func validate(tombstone: Bool) -> [String] {
         var issues: [String] = []
-        if name.isEmpty { issues.append("molecule name is empty") }
-        if atomCount < 1 { issues.append("atomCount must be at least 1") }
-        let hasFile = url != nil
-        if hasFile {
-            if let url, url.isEmpty { issues.append("url is empty") }
-            guard let sha256 else {
-                issues.append("a url needs its sha256")
-                return issues
+        if !Hex.isSHA256(sha256) { issues.append("sha256 is not 64 lowercase hex digits") }
+        if !Self.isFormula(formula) { issues.append("formula \(formula) is not a formula") }
+        if atoms < 1 { issues.append("atoms must be at least 1") }
+        if let url, url.scheme != "https" { issues.append("url must be https") }
+        switch source {
+        case .gallery:
+            let pageID = id.map { !$0.isEmpty && $0.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") } } ?? false
+            if !pageID { issues.append("a gallery trophy needs its page id") }
+            if url == nil { issues.append("a gallery trophy needs its url") }
+            if xyz != nil { issues.append("a gallery trophy embeds no xyz") }
+        case .omol25:
+            let parts = id?.split(separator: ":", omittingEmptySubsequences: false) ?? []
+            if parts.count != 2 || !Self.omolCollections.contains(String(parts[0])) || parts[1].isEmpty || !parts[1].allSatisfy(\.isNumber) {
+                issues.append("an omol25 trophy's id is <collection>:<row>")
             }
-            if sha256.count != 64 || !sha256.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) {
-                issues.append("sha256 is not 64 lowercase hex digits")
+            if url == nil { issues.append("an omol25 trophy needs its url") }
+            if xyz != nil { issues.append("an omol25 trophy embeds no xyz") }
+        case .pubchem:
+            if !(id.map { $0.hasPrefix("cid:") && $0.count > 4 && $0.dropFirst(4).allSatisfy(\.isNumber) } ?? false) {
+                issues.append("a pubchem trophy's id is cid:<n>")
+            }
+            if url == nil { issues.append("a pubchem trophy needs the record url it used") }
+            if xyz == nil && !tombstone { issues.append("a pubchem trophy embeds its coordinates") }
+        case .built, .fragment:
+            if id != nil || url != nil { issues.append("a \(source.rawValue) trophy has no id or url") }
+            if xyz == nil && !tombstone { issues.append("a \(source.rawValue) trophy embeds its coordinates") }
+        case .scale:
+            if scale == nil { issues.append("a scale trophy needs its scale reference") }
+        }
+        if let scale { issues += scale.validate() }
+        if let xyz {
+            // Every source that embeds XYZ hashes it, except a scale piece, whose sha256 is its refKey.
+            if source != .scale && SHA256.hex(xyz) != sha256 { issues.append("sha256 is not the hash of the embedded xyz") }
+            do {
+                let molecule = try Molecule(xyz: xyz)
+                if molecule.count != atoms { issues.append("xyz has \(molecule.count) atoms, atoms says \(atoms)") }
+                if molecule.count > Self.maxEmbeddedAtoms { issues.append("xyz is embedded only up to 2,000 atoms") }
+                if source != .scale && molecule.hillFormula != formula {
+                    issues.append("formula \(formula) is not the xyz's \(molecule.hillFormula)")
+                }
+            } catch {
+                issues.append("xyz does not parse: \(error)")
             }
         }
-        if let structure {
-            issues += structure.validate()
-            if structure.atomicNumbers.count != atomCount { issues.append("atomCount does not match the structure") }
+        return issues
+    }
+
+    /// Element symbols with optional counts: "C8H10N4O2", "BrCl499Na500".
+    static func isFormula(_ formula: String) -> Bool {
+        let c = Array(formula.unicodeScalars)
+        guard let first = c.first, first.properties.isUppercase else { return false }
+        return c.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0)) }
+    }
+}
+
+/// `MoleculeRef.scale` (scale-spec §7.4).
+public struct ScaleRefField: Codable, Sendable, Hashable {
+    public static let schemaID = "lupi.scale-ref.v1"
+    /// The text form of a 163,840-byte reference (scale-spec §7.1).
+    public static let maxRefCharacters = 218_459
+    public static let spanRange: ClosedRange<Float> = 0.005...3
+
+    public var schema: String
+    /// `lsr1:` and the base64url of the reference.
+    public var ref: String
+    /// The count as scale-spec §5.4 prints it: a cache for plaques, re-checked on load.
+    public var count: String
+    /// Longest displayed extent when kept, metres.
+    public var spanMetres: Float
+    public var aggregate: ScaleAggregate?
+
+    public init(ref: String, count: String, spanMetres: Float, aggregate: ScaleAggregate? = nil) {
+        schema = Self.schemaID
+        self.ref = ref
+        self.count = count
+        self.spanMetres = spanMetres
+        self.aggregate = aggregate
+    }
+
+    func validate() -> [String] {
+        var issues: [String] = []
+        if schema != Self.schemaID { issues.append("scale.schema is \(schema)") }
+        if !ref.hasPrefix("lsr1:") || ref.count > Self.maxRefCharacters { issues.append("scale.ref is not lsr1: text") }
+        if count.isEmpty { issues.append("scale.count is empty") }
+        if !Self.spanRange.contains(spanMetres) { issues.append("scale.spanMetres \(spanMetres) is outside 0.005...3") }
+        if let aggregate { issues += aggregate.validate() }
+        return issues
+    }
+}
+
+/// Shape and colour to show while a dependency pack is missing (scale-spec §7.4).
+public struct ScaleAggregate: Codable, Sendable, Hashable {
+    /// Three extents along the node's axes, the longest 1.
+    public var extents: [Float]
+    /// `#rrggbb`.
+    public var colour: String
+
+    public init(extents: [Float], colour: String) {
+        self.extents = extents
+        self.colour = colour
+    }
+
+    func validate() -> [String] {
+        var issues: [String] = []
+        if extents.count != 3 || !extents.allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= 1 }) || abs((extents.max() ?? 0) - 1) > 1e-6 {
+            issues.append("scale.aggregate.extents are three values with the longest 1")
         }
-        if !hasFile && structure == nil { issues.append("a trophy needs a url and sha256, or a structure") }
-        if (source == .built || source == .fragment) && structure == nil {
-            issues.append("\(source.rawValue) molecules carry their structure")
+        let hex = colour.dropFirst()
+        if !colour.hasPrefix("#") || hex.count != 6 || !hex.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) {
+            issues.append("scale.aggregate.colour is not #rrggbb")
         }
         return issues
     }
 }
 
-/// Coordinates and bonds, compact enough for a synced document.
-public struct InlineStructure: Sendable, Equatable, Codable {
-    public var atomicNumbers: [Int]
-    /// Å, flat x y z per atom.
-    public var positions: [Float]
-    /// Per bond `[i, j, kind, order×2]`: kind 0 covalent, 1 coordination,
-    /// 2 ionic contact; order×2 is 2 single, 3 delocalized, 4 double, 6 triple.
-    public var bonds: [[Int]]
+public struct TrophyOrigin: Codable, Sendable, Hashable {
+    public enum Kind: String, Codable, Sendable, Hashable, CaseIterable { case spawned, broken, built }
+    public static let maxParts = 64
 
-    public init(atomicNumbers: [Int], positions: [Float], bonds: [[Int]]) {
-        self.atomicNumbers = atomicNumbers
-        self.positions = positions
-        self.bonds = bonds
-    }
-
-    public init(molecule: Molecule, graph: BondGraph) {
-        atomicNumbers = molecule.atomicNumbers
-        positions = molecule.positions.flatMap { [$0.x, $0.y, $0.z] }
-        bonds = graph.bonds.map { [$0.i, $0.j, Int($0.kind.rawValue), Int(($0.order.value * 2).rounded())] }
-    }
-
-    /// The molecule; a malformed record (see `validate`) is cut to its complete atoms.
-    public func molecule(name: String? = nil) -> Molecule {
-        let n = min(atomicNumbers.count, positions.count / 3)
-        let points = (0..<n).map { SIMD3<Float>(positions[3 * $0], positions[3 * $0 + 1], positions[3 * $0 + 2]) }
-        return Molecule(atomicNumbers: Array(atomicNumbers.prefix(n)), positions: points, name: name)
-    }
-
-    public func graph() -> BondGraph {
-        let points = molecule()
-        let links = bonds.compactMap { entry -> GraphBond? in
-            guard entry.count == 4, let kind = BondKind(rawValue: UInt8(clamping: entry[2])) else { return nil }
-            let order: BondOrder = switch entry[3] {
-            case 3: .delocalized
-            case 4: .double
-            case 6: .triple
-            default: .single
-            }
-            guard entry[0] >= 0, entry[1] >= 0, entry[0] < points.count, entry[1] < points.count else { return nil }
-            let length = Float((points.position(entry[0]) - points.position(entry[1])).length)
-            return GraphBond(i: entry[0], j: entry[1], kind: kind, order: order, length: length)
-        }
-        return BondGraph(atomCount: points.count, bonds: links)
-    }
-
-    public func validate() -> [String] {
-        var issues: [String] = []
-        if atomicNumbers.isEmpty { issues.append("structure has no atoms") }
-        if positions.count != 3 * atomicNumbers.count { issues.append("structure needs 3 coordinates per atom") }
-        if !positions.allSatisfy(\.isFinite) { issues.append("structure has a non-finite coordinate") }
-        if atomicNumbers.contains(where: { !(1...118).contains($0) }) {
-            issues.append("structure has an atomic number outside 1...118")
-        }
-        for entry in bonds {
-            guard entry.count == 4, entry[0] != entry[1],
-                  atomicNumbers.indices.contains(entry[0]), atomicNumbers.indices.contains(entry[1]),
-                  (0...2).contains(entry[2]), [2, 3, 4, 6].contains(entry[3]) else {
-                issues.append("bond \(entry) is not [i, j, kind, order×2] within the structure")
-                continue
-            }
-        }
-        return issues
-    }
-}
-
-/// How the player came by it.
-public struct Earned: Sendable, Equatable, Codable {
-    public enum How: String, Sendable, Codable, CaseIterable {
-        /// Spawned from the library (any molecule, no gating: D6).
-        case spawned
-        /// Snapped together from loose atoms.
-        case built
-        /// A fragment kept after a break.
-        case broken
-        /// Lupi Daily's molecule of the day.
-        case daily
-        /// Found with Scan.
-        case scan
-        /// An OMol25 specimen.
-        case specimen
-    }
-
-    public var how: How
+    public var kind: Kind
+    /// When it was spawned, broken off or completed.
     public var at: Date
-    /// "Found in: coffee mug", "Broke off caffeine".
-    public var note: String?
+    /// Required for `.broken`.
+    public var parent: ParentRef?
+    /// `.built`: the pieces joined, in snap order (formulas).
+    public var parts: [String]?
 
-    public init(how: How, at: Date = Date(), note: String? = nil) {
-        self.how = how
+    public init(kind: Kind, at: Date, parent: ParentRef? = nil, parts: [String]? = nil) {
+        self.kind = kind
         self.at = at
-        self.note = note
+        self.parent = parent
+        self.parts = parts
+    }
+
+    func validate() -> [String] {
+        var issues: [String] = []
+        if kind == .broken && parent == nil { issues.append("a broken trophy names its parent") }
+        if let parts, parts.count > Self.maxParts { issues.append("at most 64 parts") }
+        if let parent, parent.name.isEmpty || parent.formula.isEmpty { issues.append("a parent needs its name and formula") }
+        return issues
     }
 }
 
-/// A Remix code and the Foil finish it rolled.
-public struct RemixLook: Sendable, Equatable, Codable {
-    public enum Finish: String, Sendable, Codable, CaseIterable {
-        case holo
-        case goldLeaf = "gold-leaf"
-        case pearl
+public struct ParentRef: Codable, Sendable, Hashable {
+    public var name: String
+    public var formula: String
+    public var source: MoleculeSource
+    /// The parent's `MoleculeRef.id`, when it had one.
+    public var id: String?
+    /// When the parent was itself a trophy.
+    public var trophyId: UUID?
+
+    public init(name: String, formula: String, source: MoleculeSource, id: String? = nil, trophyId: UUID? = nil) {
+        self.name = name
+        self.formula = formula
+        self.source = source
+        self.id = id
+        self.trophyId = trophyId
     }
+}
 
-    /// `r1-K7QDM`: five Crockford base32 characters.
-    public var code: String
-    public var finish: Finish?
+public struct TrophyLook: Codable, Sendable, Hashable {
+    public static let scaleRange: ClosedRange<Float> = 0.0005...0.5
+    public static let finishes: Set<String> = ["holo", "gold-leaf", "pearl"]
 
-    public init(code: String, finish: Finish? = nil) {
-        self.code = code
+    /// Toy scale when kept, metres per ångström. A `scale` piece writes 0: metres per
+    /// ångström cannot express a googolplex at 20 cm, so its size is `scale.spanMetres`,
+    /// the rule scale-spec §7.5 gives shelf placements.
+    public var scale: Float
+    /// Reserved; v1 writes none.
+    public var finish: String?
+
+    public init(scale: Float, finish: String? = nil) {
+        self.scale = scale
         self.finish = finish
     }
 
-    public static func isValidCode(_ code: String) -> Bool {
-        let crockford = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
-        return code.count == 8 && code.hasPrefix("r1-") && code.dropFirst(3).allSatisfy { crockford.contains($0) }
+    func validate(source: MoleculeSource) -> [String] {
+        var issues: [String] = []
+        if !(Self.scaleRange.contains(scale) || (source == .scale && scale == 0)) {
+            issues.append("look.scale \(scale) is outside 0.0005...0.5")
+        }
+        if let finish, !Self.finishes.contains(finish) { issues.append("look.finish \(finish) is not a finish") }
+        return issues
+    }
+}
+
+extension TrophyRecord {
+    /// The origin story the Cabinet shows (contracts.md §1.3), derived and never stored:
+    /// "Spawned 4 Oct 2026", "Broken from Hydrogen peroxide", "Built from atoms: O, H, H".
+    public func story(timeZone: TimeZone = .current) -> String {
+        switch origin.kind {
+        case .spawned:
+            return "Spawned \(Self.day(origin.at, timeZone: timeZone))"
+        case .broken:
+            return "Broken from \(origin.parent?.name ?? "a molecule")"
+        case .built:
+            let parts = origin.parts ?? []
+            return parts.isEmpty ? "Built from atoms" : "Built from atoms: \(parts.joined(separator: ", "))"
+        }
+    }
+
+    /// "4 Oct 2026", in English whatever the locale, like the rest of the app.
+    static func day(_ date: Date, timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        return "\(c.day ?? 1) \(months[((c.month ?? 1) - 1) % 12]) \(c.year ?? 1970)"
+    }
+}
+
+enum Hex {
+    static func isSHA256(_ text: String) -> Bool {
+        text.utf8.count == 64 && text.utf8.allSatisfy { ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102) }
     }
 }

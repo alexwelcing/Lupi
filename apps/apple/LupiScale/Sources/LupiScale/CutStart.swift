@@ -67,6 +67,9 @@ extension CutBuilder {
             return
         }
         let n = try makeNode(anchor, body: bi, s: 1, rot: -1, t: .zero, key: key, faces: Self.allFaces)
+        // A terrain short of E_desc keeps its own node as anchor (§8.4); a camera inside it is
+        // inside the solid, so its bubble opens as for a neighbourhood (addStarts).
+        if n.solid && bodies[Int(bi)].terrain && n.bounds.contains(bodies[Int(bi)].cameraA) { bodies[Int(bi)].bubble = true }
         if let h = add(n, parent: -1, step: .start, base: base) { starts.append(h) }
     }
 

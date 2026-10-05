@@ -18,6 +18,23 @@ public struct Starter: Sendable, Equatable, Codable, Identifiable {
     public var sha256: String
 }
 
+extension Starter {
+    /// Where lupi.live serves a starter copied from the gallery: "/gallery/curated/popular/caffeine.xyz".
+    /// Nil for the geometries the bundler writes.
+    public var lupiPath: String? {
+        let prefix = "apps/web/public/"
+        guard source.hasPrefix(prefix) else { return nil }
+        return "/" + source.dropFirst(prefix.count)
+    }
+
+    /// The PubChem compound a written geometry is the 3D conformer of ("PubChem CID 784 3D
+    /// conformer, …"), when its geometry says so.
+    public var pubchemCID: Int? {
+        guard let geometry, let range = geometry.range(of: "PubChem CID ") else { return nil }
+        return Int(geometry[range.upperBound...].prefix { $0.isNumber })
+    }
+}
+
 public struct StarterManifest: Sendable, Equatable, Codable {
     public static let schemaID = "lupi.starters.v1"
 
@@ -58,13 +75,5 @@ public enum Starters {
 
     public static func molecule(_ starter: Starter) throws -> Molecule {
         try Molecule(xyz: try xyz(starter), name: starter.name)
-    }
-
-    /// The trophy reference for a starter.
-    public static func trophyMolecule(_ starter: Starter) -> TrophyMolecule {
-        TrophyMolecule(
-            source: .starter, ref: starter.id, name: starter.name, formula: starter.formula, atomCount: starter.atoms,
-            url: "starters/\(starter.file)", sha256: starter.sha256, bondRecipe: BondRecipe.molecular.rawValue
-        )
     }
 }

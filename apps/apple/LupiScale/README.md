@@ -34,7 +34,7 @@ fixture that drifted from the spec fails too.
 | Suite | Covers |
 |---|---|
 | `LupiScaleCoreTests` (104 tests) | every value of the golden fixtures (records both ways and what a writer canonicalizes, resolutions with counts, compositions, masses, copy keys, substitutions, probes and materialized leaves, formatting, arithmetic and comparison, the scientific display, packs, references, the partition bakes, and every rejection code); every §12 vector the core reaches, hard-coded from the spec; every §6.6 rejection; and §2 and §4 validation on corrupted inputs |
-| `LupiScaleTests` (46 tests) | the §9.8 guarantees (an edited box draws nothing removed), frames (§8), budgets, τ and draw items (§9.3, §9.7), felt mass, heft, inertia and proxies (§10.1–§10.4, §10.8), breaking, chipping, Grow ×2 against the fixtures, and picking (§10.5–§10.7) |
+| `LupiScaleTests` (47 tests) | the §9.8 guarantees (an edited box draws nothing removed, a camera inside terrain anchored at its own node opens the bubble), frames (§8), budgets, τ and draw items (§9.3, §9.7), felt mass, heft, inertia and proxies (§10.1–§10.4, §10.8), breaking, chipping, Grow ×2 against the fixtures, and picking (§10.5–§10.7) |
 
 `CutGuaranteeTests.buildCutCost` times `buildCut` at the fair column's 8,192
 visits and fails a release build above 4 ms, taking the best of 15 frames

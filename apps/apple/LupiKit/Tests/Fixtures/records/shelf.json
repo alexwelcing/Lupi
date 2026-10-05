@@ -1,0 +1,19 @@
+{
+  "schema": "lupi.shelf.v1",
+  "id": "9D3E0B7A-1C42-4F6E-8A5B-3E7F0C2D1A64",
+  "name": "Living room",
+  "worldMapFile": "world.arworldmap",
+  "rootAnchorId": "41C8E2F0-7B3D-4A9E-B615-D2E0F3A7C958",
+  "snapshotFile": "snapshot.jpg",
+  "placements": [
+    {
+      "trophyId": "6F1C2D9E-3B7A-4E58-9C21-0A5D7B8E4F13",
+      "transform": { "translation": [0.18, 0.042, -0.05], "rotation": [0, 0.3827, 0, 0.9239], "scale": 0.0156 },
+      "pinnedAt": "2026-10-04T18:02:41.877Z"
+    }
+  ],
+  "createdAt": "2026-10-04T18:02:41.877Z",
+  "updatedAt": "2026-10-04T18:02:47.020Z",
+  "mapSavedAt": "2026-10-04T18:02:47.020Z",
+  "mapStatusAtSave": "mapped"
+}
