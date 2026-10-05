@@ -8,6 +8,7 @@ import LupiPlay
 import LupiScale
 import Observation
 import RealityKit
+import SwiftUI
 import UIKit
 
 /// The selected body's plaque as text, so SwiftUI files need not import LupiScale (its `View`

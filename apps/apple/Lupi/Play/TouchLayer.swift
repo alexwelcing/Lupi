@@ -26,7 +26,7 @@ final class TouchCaptureView: UIView {
     var onTouches: (@MainActor ([TouchSample]) -> Void)?
     var onLayout: (@MainActor (CGSize, CGFloat, UIInterfaceOrientation) -> Void)?
     private var ids: [ObjectIdentifier: Int] = [:]
-    private var next = 1
+    private var nextTouchID = 1
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -64,8 +64,8 @@ final class TouchCaptureView: UIView {
             if let known = ids[key] {
                 id = known
             } else {
-                id = next
-                next += 1
+                id = nextTouchID
+                nextTouchID += 1
                 ids[key] = id
             }
             let p = touch.location(in: self)
