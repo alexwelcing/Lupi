@@ -255,6 +255,24 @@ import Testing
         #expect(BuildCues.isComplete(rejoined.piece))
     }
 
+    /// A snap re-perceives the merged atoms once (more only when it is refused): what it costs on
+    /// a 512-atom diamond, printed for the record (the app snaps on the main actor).
+    @Test func snappingOntoABigBodyCostsOnePerception() throws {
+        let diamond = BuildPiece(molecule: try FixtureMolecules.named("diamond_crystal"))
+        let open = try #require(diamond.openAtoms.first)
+        let outward = (diamond.molecule.position(open) - diamond.molecule.centroid).normalized
+        let clock = ContinuousClock()
+        let start = clock.now
+        let result = try Snapper.snap(
+            host: diamond, hostAtom: open, guest: Self.atom(1), guestAtom: 0,
+            guestToHost: RigidPlacement(translation: diamond.molecule.position(open) + outward * 1.5)
+        ).get()
+        let elapsed = clock.now - start
+        #expect(result.molecule.count == diamond.count + 1)
+        let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
+        print("snap onto \(diamond.count) atoms: \(String(format: "%.2f", ms)) ms")
+    }
+
     // MARK: Naming graphs
 
     @Test func graphsMatchUnderAnyNumbering() throws {

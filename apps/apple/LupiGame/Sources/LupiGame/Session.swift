@@ -266,6 +266,7 @@ public struct PlaySession: Sendable {
         glide = nil
         magnet = nil
         refusals = [:]
+        delights = []
         arbiter.reset()
     }
 
