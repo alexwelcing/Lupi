@@ -221,9 +221,52 @@ struct CutGuaranteeTests {
         }
     }
 
+    /// An edited crystal box draws none of what was removed: no atom and no stand-in of the cut lies
+    /// inside a removed sub-box, at the corner or inside, and nothing is drawn twice (§9.4, §9.8.3).
+    @Test func editedBoxDrawsNothingRemoved() throws {
+        let copper = try NodeRecord(.crystal(CrystalNode(structure: .fcc, termination: .open, speciesA: 29, quarterQ16: 59_228, cells: SIMD3(16, 16, 16))))
+        let removals = [try Path(canonicalizing: [.cells([7])]), try Path(canonicalizing: [.cells([0, 7])])]
+        let edit = try NodeRecord(.edit(EditNode(base: copper.id, removed: removals)))
+        let r = Resolver(store: RecordStore([copper, edit]))
+        let ref = ScaleRef(root: edit.id, records: [copper, edit], path: Path())
+        let cell = 4 * 59_228.0 / 65536
+        // Octant 7 is cells [8, 16)³; octant 7 of octant 0 is cells [4, 8)³, a cavity at the centre.
+        let removed = [Box3(min: Vec3(8, 8, 8) * cell, max: Vec3(16, 16, 16) * cell), Box3(min: Vec3(4, 4, 4) * cell, max: Vec3(8, 8, 8) * cell)]
+        // Near, atoms show; far, ρ of the edited root is under τ, and only the removals split it.
+        for distance in [0.35, 0.6, 6.0] {
+            let body = try Content.toy(ref, span: 0.3, centre: Vec3(0.02, 0.01, -distance), resolver: r)
+            let budgets = steadyBudgets()
+            let cut = settledCut([body], deskView, budgets, r)
+            CutChecks.withinBudgets(cut, budgets)
+            CutChecks.noRegionTwice(cut)
+            let hollows = removed.map { body.world($0.centre) }
+            var atoms = 0, inside = 0, covering = 0
+            for item in cut.items where item.kind != .facePlane {
+                let (m, t) = CutChecks.world(item, cut)
+                if case let .atoms(runs) = item.extras {
+                    for run in runs {
+                        for p in run.positions {
+                            atoms += 1
+                            let x = body.anchorPoint(m * Vec3(Double(p.x), Double(p.y), Double(p.z)) + t)
+                            if removed.contains(where: { $0.expanded(by: -0.25 * cell).contains(x) }) { inside += 1 }
+                        }
+                    }
+                } else {
+                    // A stand-in that reaches the middle of a removed region draws it.
+                    let h = Vec3(Double(item.halfExtents.x), Double(item.halfExtents.y), Double(item.halfExtents.z))
+                    let region = CutChecks.Region(inverse: inverse3(m), translation: t, half: h)
+                    if hollows.contains(where: { region.contains($0, tolerance: 0) }) { covering += 1 }
+                }
+            }
+            #expect(cut.items.count > 1, "at \(distance) m")
+            #expect(inside == 0, "\(inside) of \(atoms) drawn atoms lie in removed cells at \(distance) m")
+            #expect(covering == 0, "\(covering) stand-ins cover a removed region at \(distance) m")
+        }
+    }
+
     /// A water grown 30 times (a non-solid tower) as the camera approaches: within budgets, nothing
-    /// drawn twice, and every point of a seed copy's envelope along a ray is inside a drawn item.
-    /// §9.8's "at most a factor of 2 per halving" does not hold with §9.2's errors (errata).
+    /// drawn twice, every point of a seed copy's envelope along a ray inside a drawn item, and the
+    /// count never falling. It does not grow gradually (§9.2): it jumps as the eye crosses R.
     @Test func grownWaterAsTheCameraApproaches() throws {
         let tower = try NodeRecord(.tower(TowerNode(seed: Content.water.id, factor: 2, periodsQ16: GrowRule.periods(Content.waterLeaf), levels: 30)))
         let r = Resolver(store: RecordStore([tower, Content.water]))
@@ -261,6 +304,7 @@ struct CutGuaranteeTests {
             }
             #expect(missing == 0, "\(missing) of \(tested) points in copies at \(distance) m")
         }
+        #expect(counts == counts.sorted(), "\(counts)")
         print("grown water approaching, items per halving of the distance: \(counts)")
     }
 
