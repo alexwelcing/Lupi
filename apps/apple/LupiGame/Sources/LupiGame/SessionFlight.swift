@@ -221,6 +221,14 @@ extension PlaySession {
         return b.span * pow(10, -lambda)
     }
 
+    /// What the plaque offers for Life size: the span it would stand at, when it would fit the room
+    /// and is not there already.
+    func lifeSizeOffer(_ id: BodyID) -> String? {
+        guard let b = bodies[id], b.isToy || b.sizeState == .monument, glide?.body != id, flightState?.body != id,
+              let span = lifeSizeSpan(id), FlightTuning.lifeSizeSpans.contains(span), abs(span - b.span) > 1e-6 * span else { return nil }
+        return Self.lengthText(span)
+    }
+
     /// Life size (scale.md §5.8): the body glides to λ = 0 standing on the floor ahead, its near face
     /// 1.2 m away. The 10³⁰ rung becomes a 2.82 m cube of 48.6 tonnes.
     public mutating func lifeSize(_ id: BodyID) {

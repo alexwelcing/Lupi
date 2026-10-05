@@ -57,6 +57,7 @@ struct FlightTests {
         sim.step()
         #expect(sim.events.contains(.flight(id, active: true)))
         #expect(sim.session.flight?.kind == .dive)
+        #expect(sim.session.plaque(id)?.flying == true)
         let (seconds, steps) = Self.fly(&sim, limit: 40)
         let b = try #require(sim.session.body(id))
         let target = log10(0.02 / (2 * rAtom)) + 10

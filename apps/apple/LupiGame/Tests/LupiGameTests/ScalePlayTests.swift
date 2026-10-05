@@ -17,12 +17,18 @@ struct ScalePlayTests {
         let id = FlightTests.spawn(&sim, .salt(.e30))
         let span = try #require(sim.session.lifeSizeSpan(id))
         #expect(abs(span - 2.82) < 0.01)
+        // The plaque offers it, with its true mass and its size there.
+        let offer = try #require(sim.session.plaque(id))
+        #expect(offer.lifeSize == "2.82 m")
+        #expect(offer.trueMass == "48.6 t")
+        #expect(!offer.beyondOneToOne && !offer.flying)
         sim.session.lifeSize(id)
         sim.run(2.5)
         let b = try #require(sim.session.body(id))
         #expect(abs(b.span - span) < 1e-9 * span)
         #expect(abs(FlightTests.lambda(sim, id)) < 1e-9)
         #expect(sim.session.plaque(id)?.magnification == "life size")
+        #expect(sim.session.plaque(id)?.lifeSize == nil)
         #expect(b.sizeState == .monument)
         #expect(b.mode == .kinematic)
         // On the floor, its near face 1.2 m from the camera.
@@ -37,6 +43,8 @@ struct ScalePlayTests {
         // Things that would not fit the room are refused, with their size.
         let plex = FlightTests.spawn(&sim, .salt(.googolplex))
         #expect(sim.session.lifeSizeSpan(plex) == nil)
+        #expect(sim.session.plaque(plex)?.lifeSize == nil)
+        #expect(sim.session.plaque(plex)?.beyondOneToOne == true)
         sim.session.lifeSize(plex)
         sim.step()
         #expect(sim.events.contains(.refused("Life size needs a body you can see whole")))
@@ -55,11 +63,13 @@ struct ScalePlayTests {
         off.step()
         #expect(off.events.contains(.refused("Grow ×2 is off: turn it on in Settings")))
         #expect(!off.session.canGrow(w0))
+        #expect(off.session.plaque(w0)?.canGrow == false)
 
         var sim = Fixture.sim(GameSettings(growTwo: true))
         let id = Fixture.spawn(&sim, "water")
         let span = try #require(sim.session.body(id)).span
         #expect(sim.session.canGrow(id))
+        #expect(sim.session.plaque(id)?.canGrow == true)
         sim.session.grow(id)
         sim.step()
         var b = try #require(sim.session.body(id))

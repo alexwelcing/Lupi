@@ -20,6 +20,17 @@ public struct Plaque: Sendable, Equatable {
     /// One tap of Fill would add hydrogens (plan §4.5).
     public var canFill: Bool
     public var sizeState: SizeState
+    /// The true mass, exact to its printed digits (plan §4.7): "48.6 t", "0.200 g".
+    public var trueMass: String
+    /// Its span at life size when Life size can stand it in the room ("2.82 m", scale.md §5.8);
+    /// nil when it is already there, too big or too small, or not a whole body.
+    public var lifeSize: String?
+    /// Grow ×2 is on and this body can double (scale-spec §10.7).
+    public var canGrow: Bool
+    /// Beyond 10^±32 of life size: a dive or a two-finger hold flies (scale-spec §8.8).
+    public var beyondOneToOne: Bool
+    /// A flight along the scale axis is moving it now.
+    public var flying: Bool
 }
 
 /// The debug HUD (plan §8 M0): what the frame cost and drew, with exact counts.
@@ -187,7 +198,8 @@ extension PlaySession {
         return Plaque(
             name: b.name, formula: formula, atoms: b.facts.count.formatted, personality: b.facts.personality.plaque,
             magnification: readout, feltMassKg: b.feltMassKg, brokenFrom: b.brokenFrom, builtFrom: builtFrom,
-            canFill: canFill(id), sizeState: b.sizeState
+            canFill: canFill(id), sizeState: b.sizeState, trueMass: trueMass(id) ?? "", lifeSize: lifeSizeOffer(id),
+            canGrow: canGrow(id), beyondOneToOne: beyondOneToOne(id), flying: flightState?.body == id
         )
     }
 
