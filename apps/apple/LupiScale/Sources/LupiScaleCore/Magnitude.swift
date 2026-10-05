@@ -178,9 +178,31 @@ public struct Magnitude: Sendable, Hashable, CustomStringConvertible {
         return log(lnf) + N.naturalLog
     }
 
+    /// `ln(self / other)` in binary64 [V]: the digit counts are subtracted exactly before any
+    /// rounding, so the ratio of two values far beyond binary64 (two pieces of a googolplex) is
+    /// as good as that of small ones. Values in different base families fall back to `lnM`.
+    public func lnRatio(_ other: Magnitude) -> Double {
+        let f: UInt8
+        switch (value, other.value) {
+        case let (.runs(r, _), .runs(q, _)):
+            guard r == q else { return lnM - other.lnM }
+            f = effectiveBase
+        case (.runs, .plain): f = effectiveBase
+        case (.plain, .runs): f = other.effectiveBase
+        case (.plain, .plain): f = 10
+        }
+        let a = leadingDigits(in: f), b = other.leadingDigits(in: f)
+        if a.n.isZero || b.n.isZero { return lnM - other.lnM }
+        // value ≈ c · f^(n − min(n, 16))
+        let na = a.n > 16 ? a.n.minus(16) : BigUInt(), nb = b.n > 16 ? b.n.minus(16) : BigUInt()
+        let shift = na >= nb ? na.minus(nb).double : -nb.minus(na).double
+        return shift * log(Double(f)) + log(Double(a.c)) - log(Double(b.c))
+    }
+
     /// (digit count, leading min(n, 16) digits as an integer, base), in the effective base.
-    private func leadingDigits() -> (n: BigUInt, c: UInt64, base: UInt8) {
-        let f = effectiveBase
+    private func leadingDigits() -> (n: BigUInt, c: UInt64, base: UInt8) { leadingDigits(in: effectiveBase) }
+
+    private func leadingDigits(in f: UInt8) -> (n: BigUInt, c: UInt64, base: UInt8) {
         let runs = digitRuns(in: f)
         let n = DigitRuns.count(runs)
         var c: UInt64 = 0
