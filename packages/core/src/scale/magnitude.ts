@@ -216,9 +216,9 @@ export const addMagnitude = (a: Magnitude, b: Magnitude): Magnitude => combine(a
 /** §5.2. A negative result is ScaleError('range'). */
 export const subMagnitude = (a: Magnitude, b: Magnitude): Magnitude => combine(a, b, true);
 
-/** §5.2: repeated doubling, for k below 2²⁵⁶. */
+/** §5.2: repeated doubling, for any plain k (a unit mass in µDa reaches 2²⁸⁵). */
 export function mulSmallMagnitude(m: Magnitude, k: bigint): Magnitude {
-  if (k < 0n || bitLength(k) > 256) fail('range', 'mulSmall factor');
+  if (k < 0n || bitLength(k) > PLAIN_LIMIT_BITS) fail('range', 'mulSmall factor');
   if (m.plain !== null) return fromBig(m.plain * k, m.displayBase);
   let result = Magnitude.make(m.displayBase, 0n, 0, null);
   let addend = m;
