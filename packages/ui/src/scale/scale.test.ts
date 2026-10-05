@@ -296,6 +296,36 @@ describe('world: smash, isolate, pinch, pan (§10.6 on the page)', () => {
     void hit;
   });
 
+  it('a smashed cube, tumbled and set apart, dives to its own ions', () => {
+    const world = ScaleWorld.fromEntry(entryById('googolplex')!, VIEWPORT.aspect);
+    world.cutNow(VIEWPORT, BUDGETS, 0);
+    world.smash();
+    run(world, 300, 1 / 30, (w) => w.bodies.every((b) => b.motion === null));
+    // Tap the cube nearest the middle of the view.
+    const centre = world.centre();
+    const dir = normalizeVec(centre);
+    const hit = world.pick(dir) ?? world.pick(normalizeVec(world.bodies[4].frame.worldFromAnchor.t))!;
+    world.isolate(hit.body);
+    world.flyTo(world.range.phiMax, hit.point);
+    run(world, 1500);
+    run(world, 30, 1 / 30, () => false);
+    expect(world.bodies.length).toBe(1);
+    expect(world.lambda()).toBeCloseTo(ION_LAMBDA, 2);
+    expect(world.cut!.drawnAtoms).toBeGreaterThan(100);
+    expect(world.readout(VIEWPORT).count).toBe('10^(10^100 − 1) atoms');
+  }, 60000);
+
+  it('Still turns the dive into cuts: a handful of frames, no picture zoom between them', () => {
+    const world = ScaleWorld.fromEntry(entryById('googolplex')!, VIEWPORT.aspect);
+    world.comfort = 'still';
+    world.cutNow(VIEWPORT, BUDGETS, 0);
+    world.flyTo(world.range.phiMax, world.pick([0, 0, -1])!.point);
+    const frames = run(world, 400);
+    expect(world.flight).toBe(null);
+    expect(frames).toBeLessThan(120);
+    expect(world.lambda()).toBeCloseTo(ION_LAMBDA, 2);
+  }, 30000);
+
   it('a pinch zooms about its point, never past one ion and never below a twelfth of the view', () => {
     const world = ScaleWorld.fromEntry(entryById('salt-1e6')!, VIEWPORT.aspect);
     world.cutNow(VIEWPORT, BUDGETS, 0);

@@ -64,6 +64,7 @@ export function ScaleShell() {
   const [{ world, error }, setState] = useState(initialWorld);
   const [comfort, setComfort] = useState<Comfort>(() => (reducedMotion() ? 'still' : 'standard'));
   const [hud, setHud] = useState<Hud | null>(null);
+  const [sliderHeld, setSliderHeld] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(error);
   const viewportRef = useRef<Viewport>({ heightPx: 800, aspect: 1.6 });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -256,12 +257,33 @@ export function ScaleShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [world, centreFocus, dive, rise]);
 
+  // The canvas keeps its element across readout updates.
+  const canvas = useMemo(
+    () => (
+      <LupiCanvas
+        id="lupi-scale-canvas"
+        capability={capability}
+        frameloop="demand"
+        camera={{ position: [0, 0, 0], rotation: [0, 0, 0], fov: (CAMERA.fovY * 180) / Math.PI, near: 0.004, far: 80 }}
+        dpr={[1, 2]}
+        background="#101817"
+      >
+        <ScaleScene world={world} budgets={budgets} quality={phone ? 1 : 2} onFrame={onFrame} />
+      </LupiCanvas>
+    ),
+    [capability, phone, world, budgets, onFrame],
+  );
+
   // ─── The slider ──────────────────────────────────────────────────
   const range = world.range;
-  const sliderValue = hud ? Math.round(sliderOfPhi(hud.phi, range) * 1000) : 0;
+  // While a finger holds the thumb it shows where the flight is going; then it shows where the view is.
+  const sliderValue = sliderHeld ?? (hud ? Math.round(sliderOfPhi(hud.phi, range) * 1000) : 0);
   const onSlider = (e: React.ChangeEvent<HTMLInputElement>) => {
-    act(() => world.flyTo(phiOfSlider(Number(e.target.value) / 1000, range), centreFocus()));
+    const value = Number(e.target.value);
+    setSliderHeld(value);
+    act(() => world.flyTo(phiOfSlider(value / 1000, range), centreFocus()));
   };
+  const releaseSlider = () => setSliderHeld(null);
   const ticks = world.landmarks
     .map((l) => ({ ...l, pos: sliderOfPhi(phiOfLambda(l.lambda), range) }))
     .filter((t) => t.pos >= 0 && t.pos <= 1);
@@ -308,16 +330,7 @@ export function ScaleShell() {
         onWheel={onWheel}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <LupiCanvas
-          id="lupi-scale-canvas"
-          capability={capability}
-          frameloop="demand"
-          camera={{ position: [0, 0, 0], rotation: [0, 0, 0], fov: (CAMERA.fovY * 180) / Math.PI, near: 0.004, far: 80 }}
-          dpr={phone ? [1, 2] : [1, 2]}
-          background="#101817"
-        >
-          <ScaleScene world={world} budgets={budgets} quality={phone ? 1 : 2} onFrame={onFrame} />
-        </LupiCanvas>
+        {canvas}
       </div>
 
       <section className="scale-hud" aria-live="polite">
@@ -343,6 +356,10 @@ export function ScaleShell() {
             step={1}
             value={sliderValue}
             onChange={onSlider}
+            onPointerUp={releaseSlider}
+            onPointerCancel={releaseSlider}
+            onKeyUp={releaseSlider}
+            onBlur={releaseSlider}
             aria-label="Scale"
             aria-valuetext={hud?.readout.magnification ?? undefined}
           />
