@@ -232,6 +232,15 @@ extension PlaySession {
         magnet = m
     }
 
+    /// The HUD's line for the snap in progress.
+    func magnetLine() -> String? {
+        guard let m = magnet, let host = bodies[m.host], let guest = bodies[m.guest],
+              let hi = buildInfo(host), let gi = buildInfo(guest) else { return nil }
+        let d = (guest.frame.world(gi.piece.molecule.position(m.guestAtom)) - host.frame.world(hi.piece.molecule.position(m.hostAtom))).length
+        func cm(_ metres: Double) -> String { String(format: "%.1f cm", metres * 100) }
+        return "magnet \(host.id) ← \(guest.id) \(cm(d)), zone \(cm(Snapper.magnetFactor * m.cutoff * host.sigma)), snaps at \(cm(m.cutoff * host.sigma))"
+    }
+
     mutating func engage(_ m: Magnet) {
         magnet = m
         guard grab?.body != m.guest, var g = bodies[m.guest] else { return }

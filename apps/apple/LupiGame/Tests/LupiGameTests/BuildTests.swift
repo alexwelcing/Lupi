@@ -315,12 +315,14 @@ struct BuildTests {
         #expect(host.sigma > BuildTuning.atomScale * 1.2)
         let h = Fixture.spawnAtom(&sim, 1)
         var sigmas: [Double] = []
+        var magnetLines: [String] = []
         // Carry the hydroxyl to the bead; the bead glides to it and grows to its scale.
         guard var at = sim.screenPoint(of: hydroxyl) else { return }
         let finger = sim.touch()
         sim.step(touches: [TouchSample(id: finger, phase: .began, location: at, time: sim.time + sim.dt)])
         for _ in 0..<240 where sim.snaps.isEmpty {
             if let s = sim.session.body(h)?.sigma { sigmas.append(s) }
+            if let line = sim.last.hud.magnet { magnetLines.append(line) }
             guard let goal = sim.screenPoint(of: h) else { break }
             let d = goal - at
             let len = (d.x * d.x + d.y * d.y).squareRoot()
@@ -331,6 +333,8 @@ struct BuildTests {
         let (water, _) = try #require(sim.snaps.first)
         #expect(sim.session.body(water)?.facts.formula == "H2O")
         #expect(sigmas.first == BuildTuning.atomScale)
+        // The HUD shows the pull while it lasts.
+        #expect(magnetLines.first?.hasPrefix("magnet \(hydroxyl) ← \(h) ") == true)
         #expect(try #require(sigmas.last) > BuildTuning.atomScale)
         // The merged body keeps the host's frame and scale.
         #expect(abs(sim.session.body(water)!.sigma - host.sigma) < 1e-12)

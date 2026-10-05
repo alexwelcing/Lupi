@@ -43,6 +43,8 @@ public struct HUDStats: Sendable, Equatable {
     public var lastImpulse: Double?
     public var lastDeltaV: Double?
     public var lastThrowSpeed: Double?
+    /// The snap in progress: "#3 ← #5 4.2 cm, zone 5.7 cm, snaps at 3.5 cm" (plan §4.5), for tuning.
+    public var magnet: String?
     public var plaque: Plaque?
 
     public init() {}
@@ -154,6 +156,7 @@ extension PlaySession {
         h.lastImpulse = lastImpact?.impulse
         h.lastDeltaV = lastImpact?.deltaV
         h.lastThrowSpeed = lastThrow.map { $0.linear.length }
+        h.magnet = magnetLine()
         if let id = selection { h.plaque = plaque(id) }
         return h
     }

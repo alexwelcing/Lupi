@@ -579,6 +579,7 @@ final class PlayController {
         ]
         if let i = h.lastImpulse { lines.append(String(format: "last impulse %.4f N·s, Δv %.2f m/s", i, h.lastDeltaV ?? 0)) }
         if let s = h.lastThrowSpeed { lines.append(String(format: "last throw %.2f m/s", s)) }
+        if let m = h.magnet { lines.append(m) }
         if let m = scene.lastMeshBuild { lines.append(String(format: "last mesh %d atoms, %.1f ms", m.atoms, m.milliseconds)) }
         if let t = session.tumble { lines.append(t.line) }
         if timebase != nil { lines.append("A2 custom simulation, rate \(String(format: "%.2f", rate))") }

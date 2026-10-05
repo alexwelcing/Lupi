@@ -174,6 +174,7 @@ Touch and hold the **Lupi** badge at the top of the play screen. Its lines:
 | `last impulse, Δv` | The last contact's impulse (N·s) and the Δv the juice used (m/s) |
 | `last throw` | Release speed of the last throw (m/s) |
 | `last mesh` | The last merged mesh: atoms and build time (ms) |
+| `magnet` | While a snap is pulling: host ← guest, the atoms' distance, the magnet zone and the distance it snaps at |
 
 The spike controls follow, then their results and the contact log.
 
