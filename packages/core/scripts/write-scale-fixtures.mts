@@ -72,6 +72,7 @@ import {
   type View,
 } from '../src/scale/index';
 import { KG_PER_MICRO_DALTON, scientific } from '../src/scale/magnitude';
+import { packContentId } from '../src/scale/pack';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const OUT = path.join(ROOT, 'packages/core/src/scale/__fixtures__/scale-v1.json');
@@ -235,6 +236,20 @@ const grow100 = record('water-grown-100', { kind: 'tower', seed: nodeId(waterRec
 const grow1 = record('water-grown-1', { kind: 'tower', seed: nodeId(waterRec), factor: 2, periods: growPeriodsQ16, levels: 1n });
 const grow70000 = record('water-grown-70000', { kind: 'tower', seed: nodeId(waterRec), factor: 2, periods: growPeriodsQ16, levels: 70000n });
 
+// §4.4 counts: an outer edit removes, at the same view, an ancestor of an inner edit's removal.
+const childEdit = record('one-child-group-over-the-edited-seed', { kind: 'group', children: [{ id: nodeId(innerEdit), rotation: [0, 0, 0, 1], translation: [0, 0, 0] }] });
+const sameView = record('nested-removals-at-one-view', { kind: 'edit', base: nodeId(childEdit), removed: [[{ tag: 'child', index: 0 }, { tag: 'cells', octants: [0] }]] });
+
+// §3.4.6 with several dopants per copy: the swaps and their order.
+const sevenBromides = record('salt-tower-1-seven-bromides', { kind: 'tower', seed: saltId, factor: 10, periods: SALT_PERIODS, levels: 1n, substitution: { fromZ: 17, toZ: 35, perCopy: 7 } });
+
+// §2.8 record depth: chain[k] is a one-child group over chain[k − 1], depth k + 1; chain[0] is water.
+const chain: Uint8Array[] = [waterRec];
+for (let k = 1; k <= 64; k += 1) {
+  chain.push(record(`depth-${k + 1}`, { kind: 'group', children: [{ id: nodeId(chain[k - 1]), rotation: [0, 0, 0, 1], translation: [0, 0, 0] }] }));
+}
+const children = (n: number): Step[] => Array.from({ length: n }, () => ({ tag: 'child', index: 0 }));
+
 // ─── Resolutions ──────────────────────────────────────────────────────
 
 interface ViewCase {
@@ -275,14 +290,12 @@ function describeView(r: Resolver, v: View): Record<string, unknown> {
 function viewCase(name: string, store: NodeStore, root: Uint8Array, steps: Step[]): ViewCase {
   const r = new Resolver(store);
   const base: ViewCase = { name, root: toHex(root), path: pathJson(steps) };
-  let v: View;
   try {
-    v = r.resolve(root, steps);
+    return { ...base, view: describeView(r, r.resolve(root, steps)) };
   } catch (e) {
     if (e instanceof ScaleError) return { ...base, error: e.code };
     throw e;
   }
-  return { ...base, view: describeView(r, v) };
 }
 
 // ─── The §12 anchors the writer refuses to write without ──────────────
@@ -369,16 +382,18 @@ function proceduralPartition(seed: bigint, n: number) {
   };
 }
 
+/** Patches from a to b; b may be longer, and a reads as zero past its end. */
 function diffPatches(a: Uint8Array, b: Uint8Array): Array<[number, string]> {
   const out: Array<[number, string]> = [];
+  const at = (k: number) => (k < a.length ? a[k] : 0);
   let i = 0;
   while (i < b.length) {
-    if (a[i] === b[i]) {
+    if (at(i) === b[i]) {
       i += 1;
       continue;
     }
     let j = i;
-    while (j < b.length && (a[j] !== b[j] || (j + 1 < b.length && a[j + 1] !== b[j + 1]))) j += 1;
+    while (j < b.length && (at(j) !== b[j] || (j + 1 < b.length && at(j + 1) !== b[j + 1]))) j += 1;
     out.push([i, toHex(b.subarray(i, j))]);
     i = j;
   }
@@ -440,6 +455,20 @@ function rejections(smallPack: Uint8Array) {
   rec('tower: dependent periods', patch(towerRec, 72, [0x74, 0x33, 0x1c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
   rec('tower: substitution to itself', patch(towerRec, 124, [17]));
   rec('edit: removals out of order', swapRemovals());
+  rec('unknown kind with record flags is opaque', patch(waterRec, 4, [9, 1, 3, 0]));
+  rec('leaf: 4,097 atoms', patch(waterRec, 12, [1, 16, 0, 0]));
+  rec('group: no children', patch(groupRec, 12, [0, 0]));
+  rec('group: 257 children', patch(groupRec, 12, [1, 1]));
+  rec('crystal: capped fcc', patch(diamondoids[0], 12, [3]));
+  rec('crystal: capped, not a cube', patch(diamondoids[1], 28, [3]));
+  rec('crystal: cap fields on an open crystal', patch(saltRec, 44, [1]));
+  rec('crystal: cells 0', patch(saltRec, 20, [0]));
+  rec('tower: slender periods', patch(patch(patch(towerRec, 48, [0, 0, 0, 0, 0, 1, 0, 0]), 80, [1, 0, 0, 0, 0, 0, 0, 0]), 112, [1, 0, 0, 0, 0, 0, 0, 0]));
+  rec('tower: period past 2^40', patch(towerRec, 48, [0, 0, 0, 0, 0, 2, 0, 0]));
+  rec('tower: substitution to element 119', patch(towerRec, 124, [119]));
+  rec('tower: perCopy 0', patch(towerRec, 125, [0, 0]));
+  rec('edit: no removals', patch(edit9, 44, [0, 0]));
+  rec('edit: a removal of zero bytes', patch(edit9, 48, [0, 0, 0, 0]));
 
   // Raw bytes, written without the canonical checks the readers apply.
   const raw = (build: (w: Writer) => void) => {
@@ -478,11 +507,30 @@ function rejections(smallPack: Uint8Array) {
   ].map(([name, hex]) => ({ name, hex, error: errorCode(() => encodePath(decodePathHex(hex))) }));
 
   const pack = smallPack;
-  const packCase = (name: string, mutate: (b: Uint8Array, v: DataView) => void, sections: number[] = [], keepCrcs = false) => {
-    const b = pack.slice();
+  const packCase = (name: string, mutate: (b: Uint8Array, v: DataView) => void, sections: number[] = [], keepCrcs = false, pages = 0) => {
+    const b = new Uint8Array(pack.length + pages * 16384);
+    b.set(pack);
     mutate(b, new DataView(b.buffer));
     if (!keepCrcs) reseal(b, sections);
-    return { name, patches: diffPatches(pack, b), error: errorCode(() => readPack(b, { verifyAll: true })) };
+    return { name, fileLength: b.length, patches: diffPatches(pack, b), error: errorCode(() => readPack(b, { verifyAll: true })) };
+  };
+  /** The salt seed (the first record) with reserved byte 45 set, rehashed, still sorting first. */
+  const badSeed = (b: Uint8Array, v: DataView) => {
+    const nrec = 2 * 16384;
+    const water = b.slice(16384 + 8 + 48, 16384 + 8 + 48 + 32);
+    for (let x = 1; x < 256; x += 1) {
+      const rec = b.slice(nrec, nrec + saltRec.length);
+      rec[45] = x;
+      const id = nodeId(rec);
+      if (toHex(id) >= toHex(water)) continue;
+      b.set(rec, nrec);
+      b.set(id, 16384 + 8);
+      const ids = [0, 1, 2].map((i) => b.slice(16384 + 8 + 48 * i, 16384 + 8 + 48 * i + 32));
+      const root = b.subarray(3 * 16384, 3 * 16384 + Number(v.getBigUint64(128 + 64 + 16, true)));
+      b.set(packContentId(ids, root, null), 32);
+      return;
+    }
+    throw new Error('no reserved byte keeps the salt seed first');
   };
   const packCases = [
     packCase('versionMinor 1 is accepted', (_b, v) => v.setUint16(6, 1, true)),
@@ -511,6 +559,15 @@ function rejections(smallPack: Uint8Array) {
     packCase('a record that does not hash to its NodeID', (b) => { b[2 * 16384 + 20] ^= 1; }, [1]),
     packCase('contentId', (b) => { b[40] ^= 1; }),
     packCase('root name with a capital', (b) => { b[3 * 16384 + 8 + 34] = 0x57; }, [2]),
+    packCase('a record that hashes to its NodeID but fails §2', badSeed, [0, 1]),
+    packCase('a zero page between sections is accepted', (b, v) => {
+      const root = b.slice(3 * 16384, 4 * 16384);
+      b.fill(0, 3 * 16384, 4 * 16384);
+      b.set(root, 4 * 16384);
+      v.setBigUint64(128 + 64 + 8, BigInt(4 * 16384), true);
+      v.setBigUint64(24, BigInt(b.length), true);
+    }, [], false, 1),
+    packCase('a zero page after the last section is accepted', (_b, v) => v.setBigUint64(24, BigInt(5 * 16384), true), [], false, 1),
   ];
 
   const ref = writeRef({ root: nodeId(waterRec), path: [], store: new MemoryStore([waterRec]) });
@@ -528,14 +585,17 @@ function rejections(smallPack: Uint8Array) {
     { name: 'probe on a target that is not materializable', hex: toHex(encodeRef({ root: nodeId(plain3), records: [saltRec, plain3], deps: [], path: [], probe })) },
   ].map((c) => ({ ...c, error: errorCode(() => resolveRef(fromHex(c.hex))) }));
 
+  // A case with its own store lists that store's records; the others use the fixture's records.
+  const ownStore = (name: string, recs: Uint8Array[], root: Uint8Array, steps: Step[]) =>
+    ({ ...viewCase(name, new MemoryStore(recs), root, steps), records: recs.map(toHex) });
+  const editOfEdit = encodeRecord({ kind: 'edit', base: nodeId(edit9), removed: [[slab(1)]] });
+  const containing = encodeRecord({ kind: 'edit', base: gpId, removed: [[slab(5)], [GRAIN]] });
+  const tooMuchChlorine = encodeRecord({ kind: 'tower', seed: saltId, factor: 10, periods: SALT_PERIODS, levels: 1n, substitution: { fromZ: 17, toZ: 35, perCopy: 501 } });
   const contextual = [
-    viewCase('a tower whose seed is a tower', new MemoryStore([saltRec, rungs[1], towerOfTowerBad]), nodeId(towerOfTowerBad), []),
-    viewCase('an edit whose base is an edit', new MemoryStore([saltRec, gpRec, edit9, encodeRecord({ kind: 'edit', base: nodeId(edit9), removed: [[slab(1)]] })]),
-      nodeId(encodeRecord({ kind: 'edit', base: nodeId(edit9), removed: [[slab(1)]] })), []),
-    viewCase('a removal that contains another', new MemoryStore([saltRec, gpRec, encodeRecord({ kind: 'edit', base: gpId, removed: [[slab(5)], [GRAIN]] })]),
-      nodeId(encodeRecord({ kind: 'edit', base: gpId, removed: [[slab(5)], [GRAIN]] })), []),
-    viewCase('a substitution needing more chlorine than the seed holds', new MemoryStore([saltRec, encodeRecord({ kind: 'tower', seed: saltId, factor: 10, periods: SALT_PERIODS, levels: 1n, substitution: { fromZ: 17, toZ: 35, perCopy: 501 } })]),
-      nodeId(encodeRecord({ kind: 'tower', seed: saltId, factor: 10, periods: SALT_PERIODS, levels: 1n, substitution: { fromZ: 17, toZ: 35, perCopy: 501 } })), []),
+    ownStore('a tower whose seed is a tower', [saltRec, rungs[1], towerOfTowerBad], nodeId(towerOfTowerBad), []),
+    ownStore('an edit whose base is an edit', [saltRec, gpRec, edit9, editOfEdit], nodeId(editOfEdit), []),
+    ownStore('a removal that contains another', [saltRec, gpRec, containing], nodeId(containing), []),
+    ownStore('a substitution needing more chlorine than the seed holds', [saltRec, tooMuchChlorine], nodeId(tooMuchChlorine), []),
     viewCase('a tower step deeper than its level', allRecords(), nodeId(rungs[1]), [{ tag: 'tower', levels: 4n, runs: [[{ digit: 0, length: 2n }], [{ digit: 0, length: 1n }], [{ digit: 0, length: 1n }]] }]),
     viewCase('a digit not below the factor', allRecords(), nodeId(rungs[1]), [{ tag: 'tower', levels: 1n, runs: [[], [], [{ digit: 10, length: 1n }]] }]),
     viewCase('run lengths on the wrong axis', allRecords(), nodeId(rungs[1]), [{ tag: 'tower', levels: 1n, runs: [[{ digit: 0, length: 1n }], [], []] }]),
@@ -632,6 +692,15 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
     viewCase('removal inside a seed copy: copy (1, 0, 0)', store, nodeId(partialEdit), [{ tag: 'tower', levels: 3n, runs: [[{ digit: 1, length: 1n }], [{ digit: 0, length: 1n }], [{ digit: 0, length: 1n }]] }]),
     viewCase('nested removals (errata E3)', store, nodeId(nestedEdit), []),
     viewCase('nested removals (errata E3): copy (0, 0, 0)', store, nodeId(nestedEdit), [COPY0]),
+    viewCase('nested removals at one view', store, nodeId(sameView), []),
+    viewCase('nested removals at one view: child 0', store, nodeId(sameView), [{ tag: 'child', index: 0 }]),
+    viewCase('seven bromides per copy: copy 3', store, nodeId(sevenBromides), [{ tag: 'tower', levels: 1n, runs: [[{ digit: 3, length: 1n }], [], []] }]),
+    viewCase('a group 64 records deep', store, nodeId(chain[63]), []),
+    viewCase('a group 64 records deep: 63 children down', store, nodeId(chain[63]), children(63)),
+    viewCase('a group 65 records deep', store, nodeId(chain[64]), []),
+    viewCase('a group 65 records deep: child 0', store, nodeId(chain[64]), children(1)),
+    viewCase('a group 65 records deep: 63 children down', store, nodeId(chain[64]), children(63)),
+    viewCase('a group 65 records deep: 64 children down', store, nodeId(chain[64]), children(64)),
     viewCase('tower of towers', store, nodeId(towerOfTower), []),
     viewCase('tower of towers, copy 0 inside outer copy 0', store, nodeId(towerOfTower), intoTower(0)),
     viewCase('tower of towers, copy 0 inside outer copy 1', store, nodeId(towerOfTower), intoTower(1)),
@@ -684,17 +753,17 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
   ];
   const formattingRows = formatting.map(({ name, value, m }) => ({ name, value, ...magJson(m) }));
 
-  const approximations = [
-    ['googolplex', gp], ['3 × 2^100', towerMagnitude(3n, 2, 100n)], ['3 × 2^70000', towerMagnitude(3n, 2, 70000n)],
-    ['1000 × 10^(2^65535)', towerMagnitude(1000n, 10, 1n << 65535n)], ['953312', magnitude(953312)],
-  ].map(([name, m]) => ({ name, lnM: lnMagnitude(m as Magnitude), lnlnM: lnlnMagnitude(m as Magnitude) }));
+  const approximations = ['googolplex', '3 × 2^100', '3 × 2^70000', '1000 × 10^(2^65535)', '953312'].map((name) => {
+    const row = formatting.find((f) => f.name === name)!;
+    return { name, value: row.value, lnM: lnMagnitude(row.m), lnlnM: lnlnMagnitude(row.m) };
+  });
 
   const gpComposition = new Resolver(store).composition(new Resolver(store).root(gpId));
   const waterTower = new Resolver(store);
   const scientificRows = [
-    { name: 'the googolplex, in kg', mass: magJson(massMicroDa(gpComposition)), kgPerMicroDalton: KG_PER_MICRO_DALTON, text: scientific(massMicroDa(gpComposition), KG_PER_MICRO_DALTON) },
+    { name: 'the googolplex, in kg', root: toHex(gpId), mass: magJson(massMicroDa(gpComposition)), kgPerMicroDalton: KG_PER_MICRO_DALTON, text: scientific(massMicroDa(gpComposition), KG_PER_MICRO_DALTON) },
     {
-      name: 'water grown 70,000 times, in kg', mass: magJson(massMicroDa(waterTower.composition(waterTower.root(nodeId(grow70000))))),
+      name: 'water grown 70,000 times, in kg', root: toHex(nodeId(grow70000)), mass: magJson(massMicroDa(waterTower.composition(waterTower.root(nodeId(grow70000))))),
       kgPerMicroDalton: KG_PER_MICRO_DALTON, text: scientific(massMicroDa(waterTower.composition(waterTower.root(nodeId(grow70000)))), KG_PER_MICRO_DALTON),
     },
   ];
@@ -751,6 +820,8 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
       'Leaf positions are the little-endian Float32 bytes (positionsF32Hex).',
       'A view case either resolves (view) or fails with the §4.7 code (error).',
       'Approximations are [V] (scale-spec §5.5): compare with its tolerances; null is +infinity.',
+      'Approximations and scientific rows: the value is built as in formatting, or is the mass of the root record\'s composition.',
+      'A contextual rejection with records resolves in a store of exactly those records; without, in a store of every fixture record.',
       'Pack rejection cases are patches ([offset, hex]) to packs.small, with the CRCs already resealed where the case is not about a CRC.',
       'The bundled pack lupi-scale-r1 uses the root names salt-<rung>, copper-billion, copper-billion-closed and diamondoid-<m> (scale-spec §12.6 does not name them; errata/ts.md).',
     ],
