@@ -37,6 +37,55 @@ public enum JuiceTuning {
     public static let surfaceGain = 0.6
     /// The haptic tail under an impact starts at this share of I (est.).
     public static let tailIntensity = 0.35
+    /// Personality layers (plan §8 M4, est.): a cage rings on hits from this I, a flexible
+    /// molecule's loose ends flap after this one, 55 ms apart, each softer than the last.
+    public static let ringFrom = 0.2
+    public static let ringGain = 0.6
+    public static let flapFrom = 0.25
+    public static let flapGap = 0.055
+    public static let flapGain = 0.5
+    public static let flapDecay = 0.7
+    /// A brittle molecule crackles when a hit reaches this share of its break speed.
+    public static let crackleFrom = 0.6
+}
+
+/// How one body's hits sound beyond its family (plan §8 M4): a body's personality tunes its
+/// voice, so two molecules of one kind still sound like themselves.
+public struct Timbre: Sendable, Equatable {
+    /// Multiplies the size and heft pitch: aromatic rigid bodies are stiffer and brighter, flexible ones lower.
+    public var pitch: Double
+    /// A bouncy cage: every real hit rings.
+    public var rings: Bool
+    /// A flexible molecule's loose segments, each flapping a beat after the hit (0 to 3).
+    public var flaps: Int
+    /// A brittle molecule's break speed, m/s: hits close to it crackle.
+    public var nearBreak: Double?
+
+    public init(pitch: Double = 1, rings: Bool = false, flaps: Int = 0, nearBreak: Double? = nil) {
+        self.pitch = pitch
+        self.rings = rings
+        self.flaps = flaps
+        self.nearBreak = nearBreak
+    }
+
+    public static let plain = Timbre()
+
+    /// The timbre of a personality. `segments` is the flop's count for a flexible molecule (0
+    /// when it has none); without it the flaps follow the rotors.
+    public static func of(_ d: PersonalityDerivation, segments: Int = 0) -> Timbre {
+        let p = d.personality
+        switch p.kind {
+        case .rigid:
+            return Timbre(pitch: 1 + 0.12 * d.features.delocalizedFraction)
+        case .flexible:
+            let loose = segments > 1 ? segments - 1 : min(3, max(1, d.features.rotatableBonds / 2))
+            return Timbre(pitch: 0.92, flaps: min(3, loose))
+        case .brittle:
+            return Timbre(pitch: d.rule == .ionic ? 1.08 : 1, nearBreak: p.isUnbreakable ? nil : p.breakSpeed)
+        case .bouncy:
+            return Timbre(rings: d.rings)
+        }
+    }
 }
 
 /// What ARKit's mesh classification says a contact touched (plan §3.3).
@@ -103,6 +152,12 @@ public struct JuiceVisual: Sendable, Equatable {
     public var trail = false
     public var ring: RingCue?
     public var caption = false
+    /// A bouncy cage's ring, 0...1 of its largest: the body shivers along the hit (`CageRing`).
+    public var cageRing = 0.0
+    /// A flexible molecule's flop, 0...1 of its largest kick (`Flop`).
+    public var flop = 0.0
+    /// A brittle molecule was hit close to its break.
+    public var crackled = false
 
     public init() {}
 }
@@ -128,20 +183,24 @@ public struct JuiceBody: Sendable, Equatable {
     public var span: Double
     /// `JuiceBody.heft(...)`, scale-spec §10.8.
     public var heft: Double
+    public var timbre: Timbre
 
-    public init(id: UInt64, family: ImpactFamily, hapticSharpness: Double, maxSquash: Double, span: Double, heft: Double) {
+    public init(
+        id: UInt64, family: ImpactFamily, hapticSharpness: Double, maxSquash: Double, span: Double, heft: Double, timbre: Timbre = .plain
+    ) {
         self.id = id
         self.family = family
         self.hapticSharpness = hapticSharpness
         self.maxSquash = maxSquash
         self.span = span
         self.heft = heft
+        self.timbre = timbre
     }
 
     /// From a personality kind, with plan §4.3's squash for it.
-    public init(id: UInt64, kind: Personality.Kind, hapticSharpness: Double, span: Double, heft: Double) {
+    public init(id: UInt64, kind: Personality.Kind, hapticSharpness: Double, span: Double, heft: Double, timbre: Timbre = .plain) {
         self.init(id: id, family: ImpactFamily(kind: kind), hapticSharpness: hapticSharpness,
-                  maxSquash: Self.maxSquash(kind), span: span, heft: heft)
+                  maxSquash: Self.maxSquash(kind), span: span, heft: heft, timbre: timbre)
     }
 
     /// Plan §4.3's squash on impact.
@@ -171,7 +230,7 @@ public struct JuiceBody: Sendable, Equatable {
     /// (plan §5.2) and with 0.85^(min(h, 4) − 0.6) (scale-spec §10.8).
     public var pitch: Double {
         let span = min(3, max(0.01, span.isFinite ? span : JuiceTuning.referenceSpan))
-        return (JuiceTuning.referenceSpan / span).squareRoot() * Foundation.pow(0.85, min(heft, 4) - 0.6)
+        return (JuiceTuning.referenceSpan / span).squareRoot() * Foundation.pow(0.85, min(heft, 4) - 0.6) * timbre.pitch
     }
 
     /// scale-spec §10.8: the sub-bass layer's gain.
@@ -314,6 +373,7 @@ public struct JuiceDirector: Sendable {
             sounds = family(body, intensity: i, gain: i, pitch: chainPitch)
             if let layer = surface.layer { sounds.append(cue(layer, gain: JuiceTuning.surfaceGain * i)) }
             if body.subBassGain > 0 { sounds.append(cue(.subBass, gain: body.subBassGain * i)) }
+            personality(body, intensity: i, deltaV: deltaV, gain: i, sounds: &sounds, haptics: &haptics, visual: &out.visual)
             hit(&out.visual, body: body, intensity: i, deltaV: deltaV, at: time)
         case let .collision(deltaV, other):
             guard claimPair(PairKey(body.id, other.id), at: time) else { return nil }
@@ -324,6 +384,7 @@ public struct JuiceDirector: Sendable {
             sounds = family(body, intensity: i, gain: 0.5 * i) + family(other, intensity: i, gain: 0.5 * i)
             let heavy = body.heft >= other.heft ? body : other
             if heavy.subBassGain > 0 { sounds.append(cue(.subBass, gain: heavy.subBassGain * i)) }
+            personality(body, intensity: i, deltaV: deltaV, gain: 0.5 * i, sounds: &sounds, haptics: &haptics, visual: &out.visual)
             hit(&out.visual, body: body, intensity: i, deltaV: deltaV, at: time)
             out.visual.otherSquash = Squash.amount(intensity: i, maxSquash: other.maxSquash, comfort: comfort)
         case .settle:
@@ -389,6 +450,44 @@ public struct JuiceDirector: Sendable {
         let band = SizeBand.nearest(pitch: target)
         let rate = min(2, max(0.5, target / band.pitch))
         return [cue(.impact(body.family, band, IntensityLayer(intensity: intensity)), gain: gain, rate: rate, jitter: true)]
+    }
+
+    /// The layers a personality adds to a hit (plan §8 M4): a cage's ring, a flexible molecule's
+    /// flaps a beat after the hit, a brittle molecule's crackle close to its break. Sound and
+    /// haptics are not motion, so comfort scales only the visuals.
+    mutating func personality(
+        _ body: JuiceBody, intensity i: Double, deltaV: Double, gain: Double,
+        sounds: inout [SoundCue], haptics: inout [HapticEvent], visual: inout JuiceVisual
+    ) {
+        let t = body.timbre
+        let scale = settings.comfort.squashScale
+        let rate = sounds.first?.rate ?? 1
+        if t.rings && i >= JuiceTuning.ringFrom {
+            var ring = cue(.ring(SizeBand.nearest(pitch: body.pitch)), gain: JuiceTuning.ringGain * gain, jitter: false)
+            ring.delay = 0.008
+            ring.rate = rate
+            sounds.append(ring)
+            haptics.append(.continuous(time: 0.02, duration: 0.25, intensity: 0.2 * i, endIntensity: 0, sharpness: 0.9))
+            visual.cageRing = i * scale
+        }
+        if t.flaps > 0 && i >= JuiceTuning.flapFrom {
+            for k in 1...min(3, t.flaps) {
+                let at = JuiceTuning.flapGap * Double(k) + 0.01 * random.signed()
+                var flap = cue(.flap, gain: JuiceTuning.flapGain * gain * Foundation.pow(JuiceTuning.flapDecay, Double(k - 1)))
+                flap.delay = at
+                flap.rate *= 1 - 0.06 * Double(k)
+                sounds.append(flap)
+                haptics.append(.transient(time: at, intensity: 0.35 * i, sharpness: 0.25))
+            }
+            visual.flop = i * scale
+        }
+        if let breakSpeed = t.nearBreak, breakSpeed > 0, deltaV >= JuiceTuning.crackleFrom * breakSpeed {
+            var crackle = cue(.crackle, gain: min(1, 0.7 * deltaV / breakSpeed) * min(1, 2 * gain))
+            crackle.delay = 0.01
+            sounds.append(crackle)
+            haptics.append(.transient(time: 0.04, intensity: 0.4, sharpness: 1))
+            visual.crackled = true
+        }
     }
 
     func tail(_ body: JuiceBody, _ intensity: Double) -> HapticEvent {
