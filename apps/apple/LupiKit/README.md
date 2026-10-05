@@ -8,7 +8,7 @@ app. Swift 6 language mode; platforms iOS 26 and macOS 26.
 | Target | What it holds |
 |---|---|
 | `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, inertia |
-| `LupiPlay` | `GameUnits` (scale and felt mass) and `lupi.personality.v1` derived from the bond graph |
+| `LupiPlay` | `GameUnits` (scale), felt mass `lupi.feltmass.v1` (`FeltMass` over a `MassLog`, scale-spec §10.2) and `lupi.personality.v1` derived from the bond graph |
 | `LupiData` | `lupi.trophy.v1`, `lupi.shelf.v1`, the edge client, SHA-256, and the twelve bundled starter molecules |
 
 ## Build and test

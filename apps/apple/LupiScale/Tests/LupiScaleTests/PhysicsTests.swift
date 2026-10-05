@@ -1,5 +1,6 @@
 import Foundation
 import LupiChem
+import LupiPlay
 import LupiScale
 import LupiScaleCore
 import Testing

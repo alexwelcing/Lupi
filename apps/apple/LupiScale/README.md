@@ -69,5 +69,3 @@ Where the spec is wrong, ambiguous or silent, the choice made is recorded in
   gesture arbiter (LupiKit, §10.5) and trophy and shelf records (§7.4, §7.5)
   belong to the app or LupiKit. LupiScale supplies the paths, proxies, plans
   and draw items they consume.
-- **`FeltMass` and `MassLog`** live here until LupiKit's `LupiPlay` gains
-  them (§10.2); then they must be deleted from this package.
