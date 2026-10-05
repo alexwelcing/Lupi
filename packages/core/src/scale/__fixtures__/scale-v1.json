@@ -1448,6 +1448,38 @@
    }
   },
   {
+   "name": "caffeine-grown-1",
+   "id": "5a9910437443a8940531924ebba289e763528199483fccd6c56ff690c0173358",
+   "kind": 4,
+   "bytes": 123,
+   "crc32": "5810ae8a",
+   "hex": "4c55504e040100006f00000054c3bbfb50de8c1f7a11af255980822b2be57d1eff18908046ccabee382fcc840200000056a009000000000000000000000000000000000000000000000000000000000094a90800000000000000000000000000000000000000000000000000000000008019040000000000010001",
+   "node": {
+    "kind": "tower",
+    "seed": "54c3bbfb50de8c1f7a11af255980822b2be57d1eff18908046ccabee382fcc84",
+    "factor": 2,
+    "periods": [
+     [
+      "630870",
+      "0",
+      "0"
+     ],
+     [
+      "0",
+      "567700",
+      "0"
+     ],
+     [
+      "0",
+      "0",
+      "268672"
+     ]
+    ],
+    "levels": "1",
+    "substitution": null
+   }
+  },
+  {
    "name": "one-child-group-over-the-edited-seed",
    "id": "26ea60e894f469565c8948e8a884d1118f4be7621fc0e364cd81344ed4249667",
    "kind": 2,
@@ -7365,6 +7397,343 @@
    "displayBase": 10
   }
  ],
+ "arithmetic": [
+  {
+   "name": "10 + 3 × 2^70000: a plain value joins the base-2 family, and the sum prints in base 2",
+   "value": {
+    "op": "add",
+    "a": {
+     "op": "plain",
+     "value": "10"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "70000"
+    }
+   },
+   "text": "≈ 3 × 2^70000",
+   "key": "r2:1x2,0x1116c,1x1,0x1,1x1,0x1",
+   "displayBase": 10
+  },
+  {
+   "name": "3 × 2^70000 + 10",
+   "value": {
+    "op": "add",
+    "a": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "70000"
+    },
+    "b": {
+     "op": "plain",
+     "value": "10"
+    }
+   },
+   "text": "≈ 3 × 2^70000",
+   "key": "r2:1x2,0x1116c,1x1,0x1,1x1,0x1",
+   "displayBase": 2
+  },
+  {
+   "name": "3 × 2^70000 − 3 × 2^70000",
+   "value": {
+    "op": "sub",
+    "a": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "70000"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "70000"
+    }
+   },
+   "text": "0",
+   "key": "p:0",
+   "displayBase": 2
+  },
+  {
+   "name": "googolplex − googolplex",
+   "value": {
+    "op": "sub",
+    "a": {
+     "op": "tower",
+     "seed": "1000",
+     "factor": 10,
+     "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "1000",
+     "factor": 10,
+     "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+    }
+   },
+   "text": "0",
+   "key": "p:0",
+   "displayBase": 10
+  },
+  {
+   "name": "7 × 3^50000 + 5 × 9^30000: one family, root 3",
+   "value": {
+    "op": "add",
+    "a": {
+     "op": "tower",
+     "seed": "7",
+     "factor": 3,
+     "levels": "50000"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "5",
+     "factor": 9,
+     "levels": "30000"
+    }
+   },
+   "text": "≈ 5 × 3^60000",
+   "key": "r3:1x1,2x1,0x270e,2x1,1x1,0xc350",
+   "displayBase": 3
+  },
+  {
+   "name": "5 × 9^30000 + 7 × 3^50000: the left display base wins",
+   "value": {
+    "op": "add",
+    "a": {
+     "op": "tower",
+     "seed": "5",
+     "factor": 9,
+     "levels": "30000"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "7",
+     "factor": 3,
+     "levels": "50000"
+    }
+   },
+   "text": "≈ 5 × 9^30000",
+   "key": "r3:1x1,2x1,0x270e,2x1,1x1,0xc350",
+   "displayBase": 9
+  },
+  {
+   "name": "24 × 16^40 + 3 × 2^100: plain values of two families",
+   "value": {
+    "op": "add",
+    "a": {
+     "op": "tower",
+     "seed": "24",
+     "factor": 16,
+     "levels": "40"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "100"
+    }
+   },
+   "text": "≈ 3.508 × 10^49",
+   "key": "p:180000000000000030000000000000000000000000",
+   "displayBase": 16
+  },
+  {
+   "name": "googolplex + 3 × 2^70000: two families above 2^65536",
+   "value": {
+    "op": "add",
+    "a": {
+     "op": "tower",
+     "seed": "1000",
+     "factor": 10,
+     "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "70000"
+    }
+   },
+   "error": "base"
+  },
+  {
+   "name": "1000 − googolplex: negative",
+   "value": {
+    "op": "sub",
+    "a": {
+     "op": "plain",
+     "value": "1000"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "1000",
+     "factor": 10,
+     "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+    }
+   },
+   "error": "range"
+  },
+  {
+   "name": "3 × 2^100 − 3 × 2^70000: negative",
+   "value": {
+    "op": "sub",
+    "a": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "100"
+    },
+    "b": {
+     "op": "tower",
+     "seed": "3",
+     "factor": 2,
+     "levels": "70000"
+    }
+   },
+   "error": "range"
+  }
+ ],
+ "comparisons": [
+  {
+   "name": "googol < googolplex",
+   "a": {
+    "op": "plain",
+    "value": "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "b": {
+    "op": "tower",
+    "seed": "1000",
+    "factor": 10,
+    "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+   },
+   "result": -1
+  },
+  {
+   "name": "googolplex = googolplex",
+   "a": {
+    "op": "tower",
+    "seed": "1000",
+    "factor": 10,
+    "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+   },
+   "b": {
+    "op": "add",
+    "a": {
+     "op": "tower",
+     "seed": "1000",
+     "factor": 10,
+     "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999996"
+    },
+    "b": {
+     "op": "sub",
+     "a": {
+      "op": "tower",
+      "seed": "1000",
+      "factor": 10,
+      "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+     },
+     "b": {
+      "op": "tower",
+      "seed": "1000",
+      "factor": 10,
+      "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999996"
+     }
+    }
+   },
+   "result": 0
+  },
+  {
+   "name": "googolplex − 1 < googolplex",
+   "a": {
+    "op": "sub",
+    "a": {
+     "op": "tower",
+     "seed": "1000",
+     "factor": 10,
+     "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+    },
+    "b": {
+     "op": "plain",
+     "value": "1"
+    }
+   },
+   "b": {
+    "op": "tower",
+    "seed": "1000",
+    "factor": 10,
+    "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+   },
+   "result": -1
+  },
+  {
+   "name": "3 × 2^70000 > 3 × 2^100",
+   "a": {
+    "op": "tower",
+    "seed": "3",
+    "factor": 2,
+    "levels": "70000"
+   },
+   "b": {
+    "op": "tower",
+    "seed": "3",
+    "factor": 2,
+    "levels": "100"
+   },
+   "result": 1
+  },
+  {
+   "name": "7 × 3^50000 < 5 × 9^30000",
+   "a": {
+    "op": "tower",
+    "seed": "7",
+    "factor": 3,
+    "levels": "50000"
+   },
+   "b": {
+    "op": "tower",
+    "seed": "5",
+    "factor": 9,
+    "levels": "30000"
+   },
+   "result": -1
+  },
+  {
+   "name": "2^60 = 16^15",
+   "a": {
+    "op": "tower",
+    "seed": "1",
+    "factor": 2,
+    "levels": "60"
+   },
+   "b": {
+    "op": "tower",
+    "seed": "1",
+    "factor": 16,
+    "levels": "15"
+   },
+   "result": 0
+  },
+  {
+   "name": "googolplex against 3 × 2^70000: two families",
+   "a": {
+    "op": "tower",
+    "seed": "1000",
+    "factor": 10,
+    "levels": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999997"
+   },
+   "b": {
+    "op": "tower",
+    "seed": "3",
+    "factor": 2,
+    "levels": "70000"
+   },
+   "error": "base"
+  }
+ ],
  "approximations": [
   {
    "name": "googolplex",
@@ -8008,6 +8377,28 @@
    ],
    "probe": "7e800b0105dba71bf11d993caf7b8a7c44c922cbe44ebfd766c57626118d7202",
    "count": "1,000"
+  }
+ ],
+ "grow": [
+  {
+   "name": "water, the first tap",
+   "seed": "8985f649ff0866084daa120d8b4a02db7124823d408d32487a63bb870b3a553a",
+   "record": "4c55504e040100006f0000008985f649ff0866084daa120d8b4a02db7124823d408d32487a63bb870b3a553a0200000025e8020000000000000000000000000000000000000000000000000000000000656e0300000000000000000000000000000000000000000000000000000000007545030000000000010001",
+   "periods": [
+    "190501",
+    "224869",
+    "214389"
+   ]
+  },
+  {
+   "name": "caffeine, the first tap",
+   "seed": "54c3bbfb50de8c1f7a11af255980822b2be57d1eff18908046ccabee382fcc84",
+   "record": "4c55504e040100006f00000054c3bbfb50de8c1f7a11af255980822b2be57d1eff18908046ccabee382fcc840200000056a009000000000000000000000000000000000000000000000000000000000094a90800000000000000000000000000000000000000000000000000000000008019040000000000010001",
+   "periods": [
+    "630870",
+    "567700",
+    "268672"
+   ]
   }
  ],
  "partition": {
@@ -9344,6 +9735,38 @@
     "name": "probe on a target that is not materializable",
     "hex": "4c5352010102000031e0ec4ca049b549f939cd0b170459cdca96f41a466824aec7eb58c53400ee27340000004c55504e030100002800000005000b11f968010005000000000000000500000000000000050000000000000000000000000000007b0000004c55504e040100006f0000002ef8502fcd22e4b098c57e85c0bd1b6793ff8be13f9b330d0017f1c9561e3f3e0a00000074331c000000000000000000000000000000000000000000000000000000000074331c000000000000000000000000000000000000000000000000000000000074331c000000000001000300008985f649ff0866084daa120d8b4a02db7124823d408d32487a63bb870b3a553a",
     "error": "mismatch"
+   }
+  ],
+  "referenceTexts": [
+   {
+    "name": "water as text",
+    "text": "lsr1:TFNSAQEBAACJhfZJ_whmCE2qEg2LSgLbcSSCPUCNMkh6Y7uHCzpVOjgAAABMVVBOAQEAACwAAAADAAAACAEBAAAAAAAAAAAAAAAAAF8Hjj4YlWQ_uECCPj9XGz_qBHS-woY3vwAAiYX2Sf8IZghNqhINi0oC23Ekgj1AjTJIemO7hws6VTo",
+    "error": null
+   },
+   {
+    "name": "without the lsr1: prefix",
+    "text": "TFNSAQEBAACJhfZJ_whmCE2qEg2LSgLbcSSCPUCNMkh6Y7uHCzpVOjgAAABMVVBOAQEAACwAAAADAAAACAEBAAAAAAAAAAAAAAAAAF8Hjj4YlWQ_uECCPj9XGz_qBHS-woY3vwAAiYX2Sf8IZghNqhINi0oC23Ekgj1AjTJIemO7hws6VTo",
+    "error": "magic"
+   },
+   {
+    "name": "with padding",
+    "text": "lsr1:TFNSAQEBAACJhfZJ_whmCE2qEg2LSgLbcSSCPUCNMkh6Y7uHCzpVOjgAAABMVVBOAQEAACwAAAADAAAACAEBAAAAAAAAAAAAAAAAAF8Hjj4YlWQ_uECCPj9XGz_qBHS-woY3vwAAiYX2Sf8IZghNqhINi0oC23Ekgj1AjTJIemO7hws6VTo=",
+    "error": "canonical"
+   },
+   {
+    "name": "a character outside base64url",
+    "text": "lsr1:TFNSAQEBAACJhfZJ_whmCE2qEg2LSgLbcSSCPUCNMkh6Y7uHCzpVOjgAAABMVVBOAQEAACwAAAADAAAACAEBAAAAAAAAAAAAAAAAAF8Hjj4YlWQ_uECCPj9XGz_qBHS-woY3vwAAiYX2Sf8IZghNqhINi0oC23Ekgj1AjTJIemO7hws6VT+",
+    "error": "canonical"
+   },
+   {
+    "name": "nonzero trailing bits",
+    "text": "lsr1:TFNSAQEBAACJhfZJ_whmCE2qEg2LSgLbcSSCPUCNMkh6Y7uHCzpVOjgAAABMVVBOAQEAACwAAAADAAAACAEBAAAAAAAAAAAAAAAAAF8Hjj4YlWQ_uECCPj9XGz_qBHS-woY3vwAAiYX2Sf8IZghNqhINi0oC23Ekgj1AjTJIemO7hws6VTp",
+    "error": "canonical"
+   },
+   {
+    "name": "a payload length of 4n + 1",
+    "text": "lsr1:TFNSAQEBAACJhfZJ_whmCE2qEg2LSgLbcSSCPUCNMkh6Y7uHCzpVOjgAAABMVVBOAQEAACwAAAADAAAACAEBAAAAAAAAAAAAAAAAAF8Hjj4YlWQ_uECCPj9XGz_qBHS-woY3vwAAiYX2Sf8IZghNqhINi0oC23Ekgj1AjTJIemO7hws6VToAA",
+    "error": "canonical"
    }
   ],
   "resolutions": [

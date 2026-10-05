@@ -183,6 +183,27 @@ struct FixtureMagnitudeTests {
         expectMagnitude(try Fixture.magnitude(row["value"]), row, name)
     }
 
+    /// §5.2: sums and differences across forms and families, with their errors.
+    @Test func arithmetic() throws {
+        for row in Fixture.json["arithmetic"].array {
+            let name = row["name"].string
+            var m: Magnitude?
+            let code = errorCode { m = try Fixture.magnitude(row["value"]) }
+            #expect(code == row["error"].optionalString, "\(name): got \(code ?? "success")")
+            if let m, row["error"].isNull { expectMagnitude(m, row, name) }
+        }
+    }
+
+    @Test func comparisons() throws {
+        for row in Fixture.json["comparisons"].array {
+            let name = row["name"].string
+            var result: Int?
+            let code = errorCode { result = try Fixture.magnitude(row["a"]).compare(Fixture.magnitude(row["b"])) }
+            #expect(code == row["error"].optionalString, "\(name): got \(code ?? "success")")
+            if row["error"].isNull { #expect(result == row["result"].int, "\(name)") }
+        }
+    }
+
     /// §5.5 [V]: ln M to 10⁻⁹ absolute while |ln M| ≤ 10⁶, else 2⁻⁴⁰ relative; ln ln M to 10⁻¹².
     @Test func approximations() throws {
         for row in Fixture.json["approximations"].array {
@@ -378,6 +399,13 @@ struct FixtureRejectionTests {
     @Test func references() {
         for row in j["references"].array {
             let code = errorCode { _ = try ScaleRef(bytes: row["hex"].bytes).resolve(extra: nil) }
+            #expect(code == row["error"].optionalString, "\(row["name"].string): got \(code ?? "success")")
+        }
+    }
+
+    @Test func referenceTexts() {
+        for row in j["referenceTexts"].array {
+            let code = errorCode { _ = try ScaleRef(text: row["text"].string).resolve(extra: nil) }
             #expect(code == row["error"].optionalString, "\(row["name"].string): got \(code ?? "success")")
         }
     }

@@ -25,6 +25,7 @@ import { decompressGlimbinFrame } from '../../parsers/src/decompressGlimbinFrame
 import {
   addMagnitude,
   bakePartition,
+  compareMagnitude,
   canonicalPath,
   crc32,
   decodePath,
@@ -48,6 +49,7 @@ import {
   mix64,
   nodeId,
   readPack,
+  refFromText,
   refKey,
   refText,
   resolveRef,
@@ -235,6 +237,11 @@ const growPeriodsQ16: [Vec3n, Vec3n, Vec3n] = [[GROW[0], 0n, 0n], [0n, GROW[1], 
 const grow100 = record('water-grown-100', { kind: 'tower', seed: nodeId(waterRec), factor: 2, periods: growPeriodsQ16, levels: 100n });
 const grow1 = record('water-grown-1', { kind: 'tower', seed: nodeId(waterRec), factor: 2, periods: growPeriodsQ16, levels: 1n });
 const grow70000 = record('water-grown-70000', { kind: 'tower', seed: nodeId(waterRec), factor: 2, periods: growPeriodsQ16, levels: 70000n });
+const CAFFEINE_GROW = growPeriods(caffeine.leaf);
+const caffeineGrown = record('caffeine-grown-1', {
+  kind: 'tower', seed: nodeId(caffeineRec), factor: 2, levels: 1n,
+  periods: [[CAFFEINE_GROW[0], 0n, 0n], [0n, CAFFEINE_GROW[1], 0n], [0n, 0n, CAFFEINE_GROW[2]]],
+});
 
 // §4.4 counts: an outer edit removes, at the same view, an ancestor of an inner edit's removal.
 const childEdit = record('one-child-group-over-the-edited-seed', { kind: 'group', children: [{ id: nodeId(innerEdit), rotation: [0, 0, 0, 1], translation: [0, 0, 0] }] });
@@ -584,6 +591,15 @@ function rejections(smallPack: Uint8Array) {
     { name: 'probe that does not match', hex: toHex(encodeRef({ root: nodeId(waterRec), records: [waterRec], deps: [], path: [], probe: wrongProbe })) },
     { name: 'probe on a target that is not materializable', hex: toHex(encodeRef({ root: nodeId(plain3), records: [saltRec, plain3], deps: [], path: [], probe })) },
   ].map((c) => ({ ...c, error: errorCode(() => resolveRef(fromHex(c.hex))) }));
+  const text = refText(ref);
+  const refTexts = [
+    { name: 'water as text', text },
+    { name: 'without the lsr1: prefix', text: text.slice(5) },
+    { name: 'with padding', text: `${text}=` },
+    { name: 'a character outside base64url', text: `${text.slice(0, -1)}+` },
+    { name: 'nonzero trailing bits', text: withTrailingBit(text) },
+    { name: 'a payload length of 4n + 1', text: `${text}${'A'.repeat((((1 - (text.length - 5)) % 4) + 4) % 4 || 4)}` },
+  ].map((c) => ({ ...c, error: errorCode(() => resolveRef(refFromText(c.text))) }));
 
   // A case with its own store lists that store's records; the others use the fixture's records.
   const ownStore = (name: string, recs: Uint8Array[], root: Uint8Array, steps: Step[]) =>
@@ -603,7 +619,15 @@ function rejections(smallPack: Uint8Array) {
     viewCase('an atoms range past the materialization', allRecords(), nodeId(waterRec), [{ tag: 'atoms', ranges: [{ start: 2, length: 2 }] }]),
     viewCase('a child step on a crystal', allRecords(), saltId, [{ tag: 'child', index: 0 }]),
   ];
-  return { records: recordCases, paths: pathCases, pack: { base: 'packs.small', cases: packCases }, references: refCases, resolutions: contextual };
+  return { records: recordCases, paths: pathCases, pack: { base: 'packs.small', cases: packCases }, references: refCases, referenceTexts: refTexts, resolutions: contextual };
+}
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+/** The same text with the lowest unused bit of its last character set (its payload is not 4n long). */
+function withTrailingBit(text: string): string {
+  const last = B64.indexOf(text[text.length - 1]);
+  return `${text.slice(0, -1)}${B64[last | 1]}`;
 }
 
 function encodeAspect(): Uint8Array {
@@ -753,6 +777,55 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
   ];
   const formattingRows = formatting.map(({ name, value, m }) => ({ name, value, ...magJson(m) }));
 
+  // §5.2 arithmetic across forms and families, and its errors.
+  const p70 = towerRow(3n, 2, 70000n);
+  const gpRow = towerRow(1000n, 10, GOOGOLPLEX_L);
+  const evalRow = (v: { op: string; value?: string; seed?: string; factor?: number; levels?: string; a?: unknown; b?: unknown }): Magnitude => {
+    switch (v.op) {
+      case 'plain': return magnitude(BigInt(v.value!));
+      case 'tower': return towerMagnitude(BigInt(v.seed!), v.factor!, BigInt(v.levels!));
+      case 'add': return addMagnitude(evalRow(v.a as never), evalRow(v.b as never));
+      default: return subMagnitude(evalRow(v.a as never), evalRow(v.b as never));
+    }
+  };
+  const arithmeticRow = (name: string, value: { op: string; a: unknown; b: unknown }) => {
+    try {
+      return { name, value, ...magJson(evalRow(value)) };
+    } catch (e) {
+      if (e instanceof ScaleError) return { name, value, error: e.code };
+      throw e;
+    }
+  };
+  const arithmetic = [
+    arithmeticRow('10 + 3 × 2^70000: a plain value joins the base-2 family, and the sum prints in base 2', { op: 'add', a: plainRow(10n), b: p70 }),
+    arithmeticRow('3 × 2^70000 + 10', { op: 'add', a: p70, b: plainRow(10n) }),
+    arithmeticRow('3 × 2^70000 − 3 × 2^70000', { op: 'sub', a: p70, b: p70 }),
+    arithmeticRow('googolplex − googolplex', { op: 'sub', a: gpRow, b: gpRow }),
+    arithmeticRow('7 × 3^50000 + 5 × 9^30000: one family, root 3', { op: 'add', a: towerRow(7n, 3, 50000n), b: towerRow(5n, 9, 30000n) }),
+    arithmeticRow('5 × 9^30000 + 7 × 3^50000: the left display base wins', { op: 'add', a: towerRow(5n, 9, 30000n), b: towerRow(7n, 3, 50000n) }),
+    arithmeticRow('24 × 16^40 + 3 × 2^100: plain values of two families', { op: 'add', a: towerRow(24n, 16, 40n), b: towerRow(3n, 2, 100n) }),
+    arithmeticRow('googolplex + 3 × 2^70000: two families above 2^65536', { op: 'add', a: gpRow, b: p70 }),
+    arithmeticRow('1000 − googolplex: negative', { op: 'sub', a: plainRow(1000n), b: gpRow }),
+    arithmeticRow('3 × 2^100 − 3 × 2^70000: negative', { op: 'sub', a: towerRow(3n, 2, 100n), b: p70 }),
+  ];
+  const comparisonRow = (name: string, a: unknown, b: unknown) => {
+    try {
+      return { name, a, b, result: compareMagnitude(evalRow(a as never), evalRow(b as never)) };
+    } catch (e) {
+      if (e instanceof ScaleError) return { name, a, b, error: e.code };
+      throw e;
+    }
+  };
+  const comparisons = [
+    comparisonRow('googol < googolplex', plainRow(10n ** 100n), gpRow),
+    comparisonRow('googolplex = googolplex', gpRow, { op: 'add', a: towerRow(1000n, 10, GOOGOLPLEX_L - 1n), b: { op: 'sub', a: gpRow, b: towerRow(1000n, 10, GOOGOLPLEX_L - 1n) } }),
+    comparisonRow('googolplex − 1 < googolplex', { op: 'sub', a: gpRow, b: plainRow(1n) }, gpRow),
+    comparisonRow('3 × 2^70000 > 3 × 2^100', p70, towerRow(3n, 2, 100n)),
+    comparisonRow('7 × 3^50000 < 5 × 9^30000', towerRow(7n, 3, 50000n), towerRow(5n, 9, 30000n)),
+    comparisonRow('2^60 = 16^15', towerRow(1n, 2, 60n), towerRow(1n, 16, 15n)),
+    comparisonRow('googolplex against 3 × 2^70000: two families', gpRow, p70),
+  ];
+
   const approximations = ['googolplex', '3 × 2^100', '3 × 2^70000', '1000 × 10^(2^65535)', '953312'].map((name) => {
     const row = formatting.find((f) => f.name === name)!;
     return { name, value: row.value, lnM: lnMagnitude(row.m), lnlnM: lnlnMagnitude(row.m) };
@@ -850,10 +923,16 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
     records: recordList,
     resolutions: views,
     formatting: formattingRows,
+    arithmetic,
+    comparisons,
     approximations,
     scientific: scientificRows,
     packs: { small: packJson('small', small), bundled: packJson('lupi-scale-r1', bundled), withDependencies: packJson('caffeine with two dependencies', withDeps) },
     references,
+    grow: [
+      { name: 'water, the first tap', seed: toHex(nodeId(waterRec)), record: toHex(grow1), periods: GROW.map(big) },
+      { name: 'caffeine, the first tap', seed: toHex(nodeId(caffeineRec)), record: toHex(caffeineGrown), periods: CAFFEINE_GROW.map(big) },
+    ],
     partition: {
       single: (() => {
         const part = bakePartition(Uint8Array.from([8, 1, 1]), water.leaf.positions);
