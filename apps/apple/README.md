@@ -4,15 +4,16 @@ The native Lupi app ([plan.md](../../docs/ar/plan.md)): molecules in your room
 that you can throw at the walls, stack on the desk and break, drawn and
 simulated on the scale spine ([scale.md](../../docs/ar/scale.md),
 [scale-spec.md](../../docs/ar/scale-spec.md)). This is M0's slice, the
-playable molecules and the scale receipt, and M1's: keeping, the collection,
-shelves that remember where trophies sit, and the Lupi account (plan §8).
+playable molecules and the scale receipt; M1's keeping, the collection,
+shelves that remember where trophies sit, and the Lupi account; and M2's
+building from atoms, with fragments and built molecules you keep (plan §8).
 
 | Path | What it is | Built and tested |
 |---|---|---|
 | `Lupi/` | The app: SwiftUI, RealityKit, ARKit, Core Haptics, AVFAudio. It turns frames, touches and collisions into `FrameInput` and applies the `FrameOutput` that comes back | Xcode only |
-| `LupiGame/` | The play session: spawning, grab and throw, pinch through the scale axis, breaks, the juice router, the receipt, the HUD; keeping and restoring trophies, the trophy case over LupiSync, shelves and the recovery ladder; and a headless physics stand-in for tests | Linux and Xcode |
+| `LupiGame/` | The play session: spawning, grab and throw, pinch through the scale axis, breaks, the juice router, the receipt, the HUD; the atom tray, the snap magnet, hydrogen fill and "Built it"; keeping and restoring trophies, the trophy case over LupiSync, shelves and the recovery ladder; and a headless physics stand-in for tests | Linux and Xcode |
 | `LupiScale/` | The scale spine: records, references, counts, the cut, frames and proxies | Linux and Xcode |
-| `LupiKit/` | Chemistry, bonds, personalities, felt mass, the throw estimator, juice and synthesized sound, the bundled starters, and the `lupi.trophy.v1` and `lupi.shelf.v1` records | Linux and Xcode |
+| `LupiKit/` | Chemistry, bonds, building (snap geometry and its re-perception check, hydrogen fill, naming graphs), personalities, felt mass, the throw estimator, juice and synthesized sound, the bundled starters and known molecules, and the `lupi.trophy.v1` and `lupi.shelf.v1` records | Linux and Xcode |
 | `LupiCloud/` | The account and its sync: Firebase Auth and Firestore over REST | Linux and Xcode |
 | `project.yml` | The XcodeGen spec: the source of truth for the Xcode project, Info.plist and the entitlements | |
 | `Config/` | `Lupi.xcconfig` (committed) and your `Secrets.xcconfig` (ignored by git): the account's configuration | |
@@ -104,9 +105,24 @@ compiles and tests them; say so if one does.
 
 ## Playing
 
-- **Tray** (bottom): C₆₀ first, then the starters, the **Scale receipt** menu
-  (salt of 10³, 10⁶ and 10⁹ atoms, one at a time or all three in a row) and
-  **Clear**.
+- **Tray** (bottom): **Atoms**, then C₆₀, the starters, the **Scale receipt**
+  menu (salt of 10³, 10⁶ and 10⁹ atoms, one at a time or all three in a row)
+  and **Clear**.
+- **Atoms** opens the atom tray: H, C, N, O, F, P, S, Cl, Br, I and Na as CPK
+  beads, plus any element a break has freed (it is new for this session
+  only). Tap one to drop a 3 cm atom ahead; successive atoms land 10 cm apart.
+- **Building** (plan §4.5). Pick an atom up and carry it to another: inside
+  about 1.6 bond lengths the magnet takes hold, the smaller piece glides in
+  (and to the larger one's size), and within a bond length it clicks into
+  place at the ideal angle. Loose atoms, the pieces of a break and anything
+  built snap; a molecule spawned whole only takes them. Nothing snaps by
+  itself: one of the two must be in your hand, or thrown and still moving,
+  so a throw of a hydrogen at a broken hydroxyl joins them, and the halves
+  of a break never rejoin unless you bring them together. If the bond would
+  not read back as the bond you made (a crowded spot), it bounces off with a
+  dull bump. You keep holding what you built. On the plaque, **Fill H** fills
+  every open valence with hydrogens. When every atom has its usual partners,
+  or Lupi knows the molecule, it celebrates: "You built ethanol".
 - **Tap** a molecule to select it and show its plaque; tap it again, or empty
   space, to let go of the selection.
 - **Drag** to hold it; **flick** to throw; let go slowly to set it down.
@@ -116,9 +132,11 @@ compiles and tests them; say so if one does.
 - The plaque's **Dive in** (on a crystal) grows it about its centre until its
   ions are about 2 cm across, so you stand inside it; **Surface** shrinks it
   back to toy size, 40 cm in front of you.
-- **Keep** (on the plaque): the molecule, fragment or crystal becomes a
-  trophy in your collection, whatever its size; a billion atoms of salt is
-  kept as the same crystal. A kept body shows **Kept**.
+- **Keep** (on the plaque): the molecule, fragment, built molecule or
+  crystal becomes a trophy in your collection, whatever its size; a billion
+  atoms of salt is kept as the same crystal. Fragments and built molecules
+  keep their atoms (embedded XYZ) and their story: "Broken from Hydrogen
+  peroxide", "Built from atoms: O, H, H". A kept body shows **Kept**.
 - **Shelves.** A molecule that sits still for three seconds on a surface at
   least 25 cm above the floor (a shelf, a desk, a table) is kept there with the
   kept chime, and stays there for next time. The first one in
@@ -221,6 +239,23 @@ the device and orientation are what to send back.
 If anything in the account fails, Settings shows the error line; send it back
 with the Firebase console's Authentication log entry if there is one.
 
+## The M2 exit (plan §8 M2)
+
+1. Open **Atoms**; drop an O and two H. Carry the O to one H, then on to the
+   other: two clicks, the lime ring and "You built water".
+2. Drop two C and an O. Carry the first C to the second, then the pair to
+   the O; tap the result, then **Fill H**: "You built ethanol".
+3. Leave both on a real shelf until kept (or tap **Keep**).
+4. Throw hydrogen peroxide at a wall; tap a hydroxyl and **Keep** it.
+5. Force-quit and open the **Collection**: the three come back with the same
+   bonds (water's two O–H, ethanol's C–C–O, the hydroxyl's O–H), and their
+   stories read "Built from atoms: O, H, H", "Built from atoms: C, C, O, H, H,
+   H, H, H, H" and "Broken from Hydrogen peroxide".
+
+Report how the magnet feels: the 1.6× zone, the glide and the pull on a held
+atom are the starting values in `BuildTuning` (LupiGame) and `Snapper`
+(LupiKit).
+
 ## Not in this slice
 
 - Chunks, chips and flight (M3a): the gestures are recognized and refused.
@@ -233,5 +268,8 @@ with the Firebase console's Authentication log entry if there is one.
   contact's height above the floor, not the mesh's classification.
 - The Collection shows a colour swatch, not the ink drawings from
   `/og/m/<id>-ink.svg` (SwiftUI has no SVG view; M4 polish).
-- Building molecules from atoms is M2's. Fragments can already be kept: break
-  a molecule and keep a piece.
+- A new bond does not grow on the `click` token: the merged molecule clicks
+  with a squash along the new bond, and its merged mesh follows a frame or
+  more later (instanced atoms until then, scale-spec §9.6).
+- Snaps make single bonds only, so a built molecule's double bonds come from
+  the pieces it was built from (a hydroxyl's O–H, a vinyl's C=C).

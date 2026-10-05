@@ -7,9 +7,9 @@ app. Swift 6 language mode; platforms iOS 26 and macOS 26.
 
 | Target | What it holds |
 |---|---|
-| `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser and writer, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, inertia |
+| `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser and writer, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, building (`BondGeometry`: free directions from VSEPR domains; `Snapper`: the recipe's cutoffs, the magnet zone, the placement and its re-perception check; `HydrogenFill`; the `BuildCues` table; `MolecularGraph` for naming), inertia |
 | `LupiPlay` | `GameUnits` (scale), felt mass `lupi.feltmass.v1` (`FeltMass` over a `MassLog`, scale-spec §10.2), `lupi.personality.v1` derived from the bond graph, the motion tokens and exact springs (hold-follow, squash, pop-in, hit-stop), `MotionComfort`, the throw estimator, the juice director (haptics, sound cues and visuals per game event, with the rate limits) and the synthesized sound bank (Float32 PCM) |
-| `LupiData` | `lupi.trophy.v1`, `lupi.shelf.v1`, the edge client, SHA-256, and the thirteen bundled starter molecules |
+| `LupiData` | `lupi.trophy.v1`, `lupi.shelf.v1`, the edge client, SHA-256, the thirteen bundled starter molecules, and `KnownMolecules`, what a built molecule is named after |
 
 ## Build and test
 
@@ -33,6 +33,7 @@ Each generator has a `--check` mode that fails when its output is stale.
 | `pnpm exec tsx tools/apple/export-validation-sample.mts` | `Tests/Fixtures/bonds/validation-sample.json`: `validation-v1.json`'s targets, parameters, hand-check rows and totals, and 81 OMol25 neutral-validation rows with the TypeScript output (choosing rows needs the row cache below; `--check` does not) |
 | `pnpm exec tsx tools/apple/export-edge-samples.mts` | `Tests/Fixtures/data/*`: `/m/manifest.json` from the molecule-pages builder and OMol25 responses from the Worker's `routeScienceData` |
 | `pnpm exec tsx tools/apple/bundle-starters.mts` | `Sources/LupiData/Resources/starters/` |
+| `pnpm exec tsx tools/apple/bundle-known.mts` | `Sources/LupiData/Resources/known-molecules.json`: the gallery pages and featured OMol25 picks of at most 256 atoms that are one piece, as elements and the links the TypeScript molecular recipe perceives (86 molecules, 38 KB) |
 
 Typecheck the generators with `pnpm exec tsc -p tools/apple/tsconfig.json`.
 
@@ -103,5 +104,17 @@ counts, the TypeScript lines of every row (by an FNV-1a key) and p99.
   touch ray's point at the grab depth, and the touch); the release is a
   least-squares slope over the last 100 ms, a flick boost, the caps, and
   spin from sideways speed, grab offset and the drag's curl.
+- **Building** (plan §4.5): a snap needs the valence rule (`Valence.canBond`,
+  the recipe's caps) and lands the guest's atom at the radius sum along the
+  free direction of the host atom's ideal geometry nearest where the guest
+  is, the guest turned so its own free direction points back. Domains count
+  lone pairs (water's O is tetrahedral, an imine N trigonal). Up to three
+  host directions and six turns about the bond are tried; the first whose
+  merged atoms the recipe perceives as exactly both graphs plus the new link
+  wins, otherwise the snap is refused. Snaps make single bonds. Fill places
+  hydrogens on the roomiest free directions and drops any the check refuses.
+  "Built it" is every atom at its usual valence (H 1, C 4, N 3, O 2,
+  halogens 1, S 2, P 3) or a known molecule: same formula, same colour
+  refinement signature and an isomorphic graph, orders ignored.
 - **Records:** JSON with sorted keys and RFC 3339 UTC milliseconds
   (`LupiJSON`). A shelf never contains the room map.

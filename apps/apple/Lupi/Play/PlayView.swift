@@ -10,6 +10,8 @@ struct PlayView: View {
     @Environment(AppModel.self) private var app
     @State private var showingSettings = false
     @State private var showingCollection = false
+    /// The atom tray's row, opened from the tray's Atoms chip (plan §4.5).
+    @State private var showingAtoms = false
 
     var body: some View {
         ZStack {
@@ -80,10 +82,14 @@ struct PlayView: View {
                     .background(.ultraThinMaterial, in: Capsule())
                     .transition(.opacity)
             }
+            if showingAtoms {
+                AtomTrayRow(atoms: controller.atomTray, spawn: { controller.spawnAtom($0) })
+            }
             if let catalog = app.catalog {
                 SpawnTray(
-                    items: catalog.tray, receipt: catalog.receipt,
-                    spawn: { controller.spawn($0) }, spawnReceipt: { controller.spawnReceipt() }, clear: { controller.clear() }
+                    items: catalog.tray, receipt: catalog.receipt, showingAtoms: showingAtoms,
+                    spawn: { controller.spawn($0) }, spawnReceipt: { controller.spawnReceipt() },
+                    toggleAtoms: { showingAtoms.toggle() }, clear: { controller.clear() }
                 )
             }
         }
@@ -167,6 +173,11 @@ struct PlaqueCard: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            if let parts = plaque.builtFrom, !parts.isEmpty {
+                Text("Built from atoms: \(parts)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             HStack {
                 if plaque.kept {
                     Label("Kept", systemImage: "checkmark.seal.fill")
@@ -176,6 +187,12 @@ struct PlaqueCard: View {
                     // Any body can be kept, whatever its count (plan §6.3).
                     Button("Keep") { controller.keepSelected() }
                         .buttonStyle(.borderedProminent)
+                }
+                if plaque.canFill {
+                    // One tap fills every open valence with hydrogens (plan §4.5).
+                    Button("Fill H") { controller.fillSelected() }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Fill open bonds with hydrogens")
                 }
                 if plaque.grown {
                     Button("Surface") { controller.surface() }
@@ -194,17 +211,24 @@ struct PlaqueCard: View {
     }
 }
 
-/// The spawn tray: C₆₀ first, the starters, the scale receipt and Clear.
+/// The spawn tray: the atoms, C₆₀ first, the starters, the scale receipt and Clear.
 struct SpawnTray: View {
     let items: [SpawnItem]
     let receipt: [SpawnItem]
+    let showingAtoms: Bool
     let spawn: @MainActor (SpawnSource) -> Void
     let spawnReceipt: @MainActor () -> Void
+    let toggleAtoms: @MainActor () -> Void
     let clear: @MainActor () -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                Button(action: toggleAtoms) {
+                    chip("H C N O", showingAtoms ? "Hide atoms" : "Atoms")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(showingAtoms ? "Hide the atom tray" : "Show the atom tray")
                 ForEach(items) { item in
                     Button {
                         spawn(item.source)
@@ -244,6 +268,34 @@ struct SpawnTray: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+/// The atom tray (plan §4.5): H, C, N, O, F, P, S, Cl, Br, I, Na and every element a break
+/// has freed, as CPK beads. Tap one to drop a 3 cm atom ahead; carry atoms together to build.
+struct AtomTrayRow: View {
+    let atoms: [TrayAtom]
+    let spawn: @MainActor (Int) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(atoms) { atom in
+                    Button {
+                        spawn(atom.z)
+                    } label: {
+                        Text(atom.symbol)
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(atom.isDark ? Color.white : Color.black)
+                            .frame(width: 44, height: 44)
+                            .background(Color(red: atom.red, green: atom.green, blue: atom.blue), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(atom.name)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
     }
 }
 

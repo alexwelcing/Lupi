@@ -21,6 +21,10 @@ struct PlaqueText: Equatable {
     var magnification: String
     var mass: String
     var brokenFrom: String?
+    /// "O, H, H": what a built molecule was snapped from.
+    var builtFrom: String?
+    /// One tap of Fill would add hydrogens (plan §4.5).
+    var canFill: Bool
     /// A crystal can be dived into (the receipt's view from inside).
     var canDive: Bool
     /// Grown past a toy: Surface brings it back.
@@ -37,10 +41,39 @@ struct PlaqueText: Equatable {
         magnification = p.magnification
         mass = p.feltMassKg < 1 ? String(format: "feels like %.0f g", p.feltMassKg * 1000) : String(format: "feels like %.1f kg", p.feltMassKg)
         brokenFrom = p.brokenFrom
+        builtFrom = p.builtFrom
+        canFill = p.canFill
         canDive = !isMolecule
         grown = p.sizeState != .toy
         self.kept = kept
     }
+}
+
+/// One element of the atom tray, ready for SwiftUI (plan §4.5).
+struct TrayAtom: Identifiable, Equatable {
+    var z: Int
+    var symbol: String
+    var name: String
+    /// CPK, sRGB 0...1.
+    var red: Double
+    var green: Double
+    var blue: Double
+
+    var id: Int { z }
+
+    init(_ z: Int) {
+        let e = ChemicalElement.forAtomicNumber(z)
+        self.z = z
+        symbol = e.symbol
+        name = e.name
+        let c = e.cpk.srgb
+        red = c.x
+        green = c.y
+        blue = c.z
+    }
+
+    /// Dark CPK colours (nitrogen, oxygen, bromine, iodine) take a white symbol.
+    var isDark: Bool { 0.299 * red + 0.587 * green + 0.114 * blue < 0.5 }
 }
 
 /// Debug toggles for the day-one device spikes (plan §8 M0).
@@ -88,6 +121,8 @@ final class PlayController {
     var showsHUD = false
     /// Three seconds at rest on a shelf keeps a body (plan §6.3); the player may turn it off.
     var autoKeep = true
+    /// The atom tray's elements, as the session has them (it grows when a break frees a new one).
+    private(set) var atomTray: [TrayAtom] = BuildTuning.trayElements.map(TrayAtom.init)
     var spikes = SpikeToggles() {
         didSet { applySpikes(from: oldValue) }
     }
@@ -100,6 +135,7 @@ final class PlayController {
     @ObservationIgnored private var subscriptions: [EventSubscription] = []
     @ObservationIgnored private var pending: [SpawnSource] = []
     @ObservationIgnored private var pendingReceipt = false
+    @ObservationIgnored private var pendingAtoms: [Int] = []
     @ObservationIgnored private var running = false
     @ObservationIgnored private var lastPublish: TimeInterval = 0
     @ObservationIgnored private var lastCamera: CameraState?
@@ -201,6 +237,22 @@ final class PlayController {
         session.spawnReceipt()
     }
 
+    /// A tray atom: a 3 cm bead ahead of the camera, beside the last (plan §4.5).
+    func spawnAtom(_ z: Int) {
+        guard ready else {
+            pendingAtoms.append(z)
+            show("Look around slowly so Lupi can find the room")
+            return
+        }
+        session.spawnAtom(z)
+    }
+
+    /// One tap fills every open valence of the selected body with hydrogens (plan §4.5).
+    func fillSelected() {
+        guard let id = session.selection else { return }
+        session.fillHydrogens(id)
+    }
+
     func clear() { session.clear() }
     func deselect() { session.select(nil) }
 
@@ -248,6 +300,7 @@ final class PlayController {
         for cue in out.juice { play(cue) }
         applyRate(out.simulationRate, now: now)
         for event in out.events { handle(event) }
+        if session.atomTray.count != atomTray.count { atomTray = session.atomTray.map(TrayAtom.init) }
         if now - lastPublish >= 0.25 {
             lastPublish = now
             refreshPlaque()
@@ -262,6 +315,8 @@ final class PlayController {
     private func flushPending() {
         for s in pending { session.spawn(s) }
         pending.removeAll()
+        for z in pendingAtoms { session.spawnAtom(z) }
+        pendingAtoms.removeAll()
         if pendingReceipt {
             pendingReceipt = false
             session.spawnReceipt()
@@ -338,6 +393,7 @@ final class PlayController {
             }
         }
         let v = cue.output.visual
+        if v.ring == .lime { sparks.ring(at: position) }
         if v.flashRing {
             sparks.flash(at: position, colours: cue.sparkColours)
         } else if v.sparks > 0 {
@@ -373,7 +429,25 @@ final class PlayController {
         case .selected, .removed: refreshPlaque()
         case .spawned: break
         case let .restedOnShelf(id, support): pin(id, support: support)
+        case .snapped, .filled: refreshPlaque()
+        case .snapRefused: break
+        case let .builtIt(id, name, known): builtIt(id, name: name, known: known)
+        case let .trayGained(z): show("\(ChemicalElement.forAtomicNumber(z).name) joins the atom tray")
         }
+    }
+
+    /// "You built ethanol" (plan §4.5): a known molecule by its name, anything else by its formula.
+    private func builtIt(_ id: BodyID, name: String, known: Bool) {
+        refreshPlaque()
+        let formula = session.body(id)?.facts.formula
+        guard known, name != formula else {
+            show("Built it: \(name.subscriptedFormula)")
+            return
+        }
+        // "Water" reads "water"; "ATP" and "GABA" keep their capitals.
+        let chars = Array(name)
+        let lower = chars.count > 1 && chars[1].isLowercase ? chars[0].lowercased() + String(chars.dropFirst()) : name
+        show("You built \(lower)")
     }
 
     // MARK: Keeping and shelves (plan §6.3, §6.4)

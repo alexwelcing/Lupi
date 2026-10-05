@@ -38,6 +38,20 @@ final class Sparks {
         spawn(emitter, at: position)
     }
 
+    /// The lime ring of a keep or a delight (plan §5.3): a flat burst that does not drift.
+    func ring(at position: SIMD3<Float>) {
+        var emitter = ParticleEmitterComponent()
+        emitter.emitterShape = .torus
+        emitter.emitterShapeSize = SIMD3<Float>(repeating: 0.08)
+        emitter.speed = 0
+        emitter.isEmitting = false
+        emitter.burstCount = 48
+        emitter.mainEmitter.lifeSpan = 0.35
+        emitter.mainEmitter.size = 0.004
+        emitter.mainEmitter.color = Self.colour([SIMD3<Float>(0.84, 0.94, 0.61)])
+        spawn(emitter, at: position)
+    }
+
     /// The small vanish of a body rescued or over budget (plan §3.3, §3.4).
     func poof(at position: SIMD3<Float>) {
         burst(at: position, count: 16, colours: [SIMD3<Float>(0.84, 0.94, 0.61)], drift: false)
