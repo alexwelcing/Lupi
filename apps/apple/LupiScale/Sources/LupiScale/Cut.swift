@@ -353,7 +353,9 @@ final class CutBuilder {
             }
             visited += 1
             let rho = nodes[Int(x)].rho, key64 = nodes[Int(x)].key64
-            let wantRefine = rho > tau || (rho >= tau / 2 && previousRefined.contains(key64))
+            // A node that carries removals is split whatever its ρ (§9.5): its stand-in would
+            // draw what was removed.
+            let wantRefine = rho > tau || (rho >= tau / 2 && previousRefined.contains(key64)) || nodes[Int(x)].hasRemovals
             if !wantRefine || nodes[Int(x)].final {
                 emit(x)
                 continue
