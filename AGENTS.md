@@ -37,6 +37,12 @@ Core endpoints:
   `scripts/generate-daily-pages.mts`), with sealed puzzle files
   (`/daily/p/<token>.json`), the guess pool and per-day silhouette cards
   (`/og/daily/<date>.jpg`) that never name the answer (see `docs/daily.md`)
+- `GET /scale` — the scale page: the salt ladder from one ion to a
+  googolplex, copper's billion and the twelve diamondoids, drawn from
+  LupiScale records by the TypeScript reference (`packages/ui/src/scale`,
+  `docs/ar/scale-spec.md` §11.2) with exact counts; `?e=<entry>` opens an
+  entry and `?ref=lsr1:…` a shared piece. A static SEO shell like `/scan`,
+  no Worker route
 - `POST /collectAnalytics` — first-party analytics edge collector
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
