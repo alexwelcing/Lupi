@@ -21,6 +21,8 @@ export interface ScaleFrameInfo {
   viewport: Viewport;
   /** Milliseconds the last cut took. */
   cutMs: number;
+  /** Nothing moves after this frame: the loop sleeps until the next input. */
+  idle: boolean;
 }
 
 const BOX_CAPACITY = 4096;
@@ -201,8 +203,9 @@ export function ScaleScene({ world, budgets, quality, onFrame }: ScaleSceneProps
       radiiRef.current = nextRadii;
       flushSync(() => setRadii(nextRadii));
     }
-    if (moved || world.dirty || world.flight) invalidate();
-    onFrame?.({ viewport, cutMs });
+    const busy = moved || world.dirty || world.flight !== null;
+    if (busy) invalidate();
+    onFrame?.({ viewport, cutMs, idle: !busy });
   });
 
   return (

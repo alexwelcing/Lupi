@@ -129,9 +129,11 @@ export interface Hit {
 
 /** Web budgets (§9.3 is the phone's AR; a page profiles for itself, §9.8.7). */
 export function webBudgets(phone: boolean): Budgets {
+  // The TypeScript cut costs about 0.04 ms an item on a laptop (§9.8.7 gates it loosely), so items
+  // and visits set the frame time; atoms are cheap impostors.
   return phone
-    ? { tau: 1.5, visits: 1500, items: 1200, instancedAtoms: 30000, engineAtoms: 30000, boxesAndSplats: 6000, materializations: 4, meshBuilds: 1, residentBytes: 48 << 20 }
-    : { tau: 1.5, visits: 3000, items: 2400, instancedAtoms: 90000, engineAtoms: 90000, boxesAndSplats: 12000, materializations: 8, meshBuilds: 1, residentBytes: 96 << 20 };
+    ? { tau: 1.5, visits: 1000, items: 800, instancedAtoms: 30000, engineAtoms: 30000, boxesAndSplats: 4000, materializations: 4, meshBuilds: 1, residentBytes: 48 << 20 }
+    : { tau: 1.5, visits: 2400, items: 1600, instancedAtoms: 90000, engineAtoms: 90000, boxesAndSplats: 8000, materializations: 6, meshBuilds: 1, residentBytes: 96 << 20 };
 }
 
 const viewHeightAt = (d: number) => 2 * d * Math.tan(CAMERA.fovY / 2);

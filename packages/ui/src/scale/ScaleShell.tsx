@@ -6,6 +6,7 @@
  * route and chunk: nothing here loads on any other page.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { invalidate } from '@react-three/fiber/webgpu';
 import { LupiCanvas } from '../viewer/LupiCanvas';
 import { detectRenderCapability } from '../renderCapability';
 import { DEFAULT_ENTRY_ID, entryById, scaleCatalog, type ScaleEntry } from './catalog';
@@ -72,6 +73,8 @@ export function ScaleShell() {
 
   useEffect(() => {
     document.title = `${world.entry?.title ?? world.title} | Lupi scale`;
+    // The readout never waits for a frame: counts are exact without a renderer.
+    setHud(hudOf(world, viewportRef.current));
   }, [world]);
 
   useEffect(() => {
@@ -84,7 +87,8 @@ export function ScaleShell() {
     (info: ScaleFrameInfo) => {
       viewportRef.current = info.viewport;
       const now = performance.now();
-      if (now - lastHud.current < 180) return;
+      // Throttled while moving; the frame the world comes to rest always lands.
+      if (!info.idle && now - lastHud.current < 180) return;
       lastHud.current = now;
       setHud(hudOf(world, info.viewport));
     },
@@ -114,6 +118,7 @@ export function ScaleShell() {
   }, [world]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    invalidate();
     (e.target as Element).setPointerCapture?.(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     world.stop();
@@ -131,6 +136,7 @@ export function ScaleShell() {
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const prev = pointers.current.get(e.pointerId);
     if (!prev || !gesture.current) return;
+    invalidate();
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const g = gesture.current;
     if (pointers.current.size >= 2 && g.pinch !== null && g.centroid) {
@@ -159,6 +165,7 @@ export function ScaleShell() {
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     pointers.current.delete(e.pointerId);
+    invalidate();
     const g = gesture.current;
     if (pointers.current.size > 0) return;
     gesture.current = null;
@@ -176,9 +183,11 @@ export function ScaleShell() {
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     const scale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
-    const ratio = Math.exp(-e.deltaY * scale * 0.0015);
+    // About an eighth of a decade per wheel notch; a trackpad pinch sends small deltas.
+    const ratio = Math.exp(-e.deltaY * scale * 0.003);
     world.stop();
     world.zoom(world.focusFor(rayAt(e.clientX, e.clientY)), ratio);
+    invalidate();
   };
 
   // Wheel events must not scroll the page under the canvas.
@@ -192,8 +201,16 @@ export function ScaleShell() {
 
   const centreFocus = useCallback(() => world.focusFor([0, 0, -1]), [world]);
 
-  const dive = useCallback(() => world.flyTo(world.range.phiMax, centreFocus()), [world, centreFocus]);
-  const rise = useCallback(() => world.flyTo(world.range.phiMin, centreFocus()), [world, centreFocus]);
+  const act = useCallback((f: () => void) => {
+    f();
+    invalidate();
+  }, []);
+  const dive = useCallback(() => act(() => world.flyTo(world.range.phiMax, centreFocus())), [world, centreFocus, act]);
+  // Rise reassembles smashed pieces; otherwise it flies back to the whole body.
+  const rise = useCallback(
+    () => act(() => (world.bodies.length > 1 ? world.reset() : world.flyTo(world.range.phiMin, centreFocus()))),
+    [world, centreFocus, act],
+  );
 
   const share = useCallback(async () => {
     const text = world.shareText(viewportRef.current);
@@ -233,6 +250,7 @@ export function ScaleShell() {
         else world.pan([-dx * 0.05, dy * 0.05, 0]);
       } else return;
       e.preventDefault();
+      invalidate();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -242,7 +260,7 @@ export function ScaleShell() {
   const range = world.range;
   const sliderValue = hud ? Math.round(sliderOfPhi(hud.phi, range) * 1000) : 0;
   const onSlider = (e: React.ChangeEvent<HTMLInputElement>) => {
-    world.flyTo(phiOfSlider(Number(e.target.value) / 1000, range), centreFocus());
+    act(() => world.flyTo(phiOfSlider(Number(e.target.value) / 1000, range), centreFocus()));
   };
   const ticks = world.landmarks
     .map((l) => ({ ...l, pos: sliderOfPhi(phiOfLambda(l.lambda), range) }))
@@ -336,7 +354,7 @@ export function ScaleShell() {
                 tabIndex={-1}
                 className="scale-tick"
                 style={{ '--pos': t.pos } as CSSProperties}
-                onClick={() => world.flyTo(phiOfLambda(t.lambda), centreFocus())}
+                onClick={() => act(() => world.flyTo(phiOfLambda(t.lambda), centreFocus()))}
               >
                 {t.label}
               </button>
@@ -352,12 +370,12 @@ export function ScaleShell() {
             Rise
           </button>
           {hud?.canSmash && (
-            <button type="button" className="scale-button" onClick={() => world.smash()}>
+            <button type="button" className="scale-button" onClick={() => act(() => world.smash())}>
               Smash
             </button>
           )}
           {hud && hud.bodies > 1 && <span className="scale-hint">Tap a piece to dive into it</span>}
-          <button type="button" className="scale-button" onClick={() => world.reset()}>
+          <button type="button" className="scale-button" onClick={() => act(() => world.reset())}>
             Reset
           </button>
           <button type="button" className="scale-button" onClick={share}>
