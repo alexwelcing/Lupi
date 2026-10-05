@@ -71,6 +71,8 @@ final class AppModel {
     var onboarding: OnboardingCard?
     /// What opens once the card is through.
     @ObservationIgnored private var afterOnboarding: (@MainActor () -> Void)?
+    /// The Collection's plaques, read once per trophy version (plan §8 M4).
+    @ObservationIgnored private var plaques: [String: TrophyPlaque] = [:]
 
     enum Keys {
         static let sound = "lupi.soundAndHaptics"
@@ -122,6 +124,16 @@ final class AppModel {
     /// Opens Play with the scale receipt: salt of 10³, 10⁶ and 10⁹ atoms in a row.
     func playReceipt() {
         gate { [weak self] in self?.openPlay()?.spawnReceipt() }
+    }
+
+    /// A trophy's personality line for the Collection, worked out off the main actor and kept.
+    func plaque(of trophy: TrophyRecord) async -> TrophyPlaque? {
+        let key = "\(trophy.id)@\(trophy.updatedAt.timeIntervalSince1970)"
+        if let known = plaques[key] { return known }
+        guard let catalog else { return nil }
+        let found = await Task.detached(priority: .utility) { catalog.plaque(of: trophy) }.value
+        if let found { plaques[key] = found }
+        return found
     }
 
     // MARK: The first-run card (plan §8 M4)

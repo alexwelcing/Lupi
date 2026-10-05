@@ -89,6 +89,21 @@ struct PolishTests {
         #expect(bucky.personality == "Bouncy: a round cage of 60 carbons" && bucky.feel == "Bounces, and its cage rings")
     }
 
+    @Test func theCollectionsPlaquesSayWhyToo() throws {
+        var sim = Fixture.sim()
+        let peroxide = Fixture.spawn(&sim, "hydrogen_peroxide")
+        let kept = try sim.session.keep(peroxide, now: Date(timeIntervalSince1970: 1_800_000_000))
+        let plaque = try #require(Fixture.catalog.plaque(of: kept))
+        #expect(plaque.reasons == ["Brittle: its O–O bond is weak (142 kJ/mol)"])
+        #expect(plaque.feel == "Cracks easily, and tinks like glass")
+        // A googolplex of salt is brittle through its seed, read from a few hundred bytes.
+        sim.session.spawn(.scale(.salt(.googolplex)))
+        sim.step()
+        let bar = try #require(sim.session.bodyOrder.last)
+        let plex = try sim.session.keep(bar, now: Date(timeIntervalSince1970: 1_800_000_001))
+        #expect(Fixture.catalog.plaque(of: plex)?.reasons == ["Brittle: held by ionic contacts (80 kJ/mol)"])
+    }
+
     @Test func voiceOverDescribesAndTosses() throws {
         var sim = Fixture.sim()
         let id = Fixture.spawn(&sim, "caffeine")

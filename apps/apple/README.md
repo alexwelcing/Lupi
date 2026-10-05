@@ -203,7 +203,7 @@ compiles and tests them; say so if one does.
   surface and the whole arrangement moves there) and **New room**. The
   coaching overlay's Start Over does the same instead of resetting the session.
 - **Collection** (the stack button at the top of Play, or Home): every trophy,
-  with its count and its story. Tap one to bring it into play; swipe to rename
+  with its count, its story and the reason for its personality. Tap one to bring it into play; swipe to rename
   or delete. **Rooms** lists the rooms on this device; swipe to delete one or
   choose which opens next.
 - **VoiceOver.** The room reads as one line ("3 in play: Caffeine, …").

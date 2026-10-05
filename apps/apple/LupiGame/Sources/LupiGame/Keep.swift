@@ -324,3 +324,25 @@ public enum Restore {
 extension TrophyRecord: @retroactive SyncPayload {
     public var isSyncTombstone: Bool { deletedAt != nil }
 }
+
+/// A trophy's plaque in the Collection (plan §4.7, §8 M4): why it plays as it does and how,
+/// read from its own reference without a play session.
+public struct TrophyPlaque: Sendable, Equatable {
+    /// "Brittle: its O–O bond is weak (142 kJ/mol)", and "Will not snap: …" when nothing can.
+    public var reasons: [String]
+    /// "Cracks easily, and tinks like glass".
+    public var feel: String
+}
+
+extension Catalog {
+    /// The plaque of a kept trophy; nil when its reference cannot be restored on this device.
+    public func plaque(of trophy: TrophyRecord) -> TrophyPlaque? {
+        let store = GameStore()
+        guard let piece = try? Restore.piece(trophy, catalog: self, store: store) else { return nil }
+        store.add(piece.display.records)
+        let resolver = Resolver(store: store)
+        guard let view = try? resolver.resolve(piece.display.root, piece.display.path),
+              let d = try? LupiScale.personality(for: view, resolver: resolver) else { return nil }
+        return TrophyPlaque(reasons: d.reasons, feel: d.feel)
+    }
+}
