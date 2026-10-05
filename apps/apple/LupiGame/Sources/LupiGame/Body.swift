@@ -141,6 +141,26 @@ public struct Body: Sendable {
 
     public var isToy: Bool { sizeState == .toy }
 
+    /// The lowest point of its collider, world y: what rests on the floor, not the atoms' envelope.
+    public var lowestColliderPoint: Double {
+        let pose = entityPose
+        var lowest = Double.infinity
+        for shape in spec.shapes {
+            switch shape {
+            case let .sphere(c, r):
+                lowest = min(lowest, pose.apply(c).y - r)
+            case let .box(c, h, q):
+                for k in 0..<8 {
+                    let corner = Vec3(k & 1 == 0 ? -h.x : h.x, k & 2 == 0 ? -h.y : h.y, k & 4 == 0 ? -h.z : h.z)
+                    lowest = min(lowest, pose.apply(c + q.act(corner)).y)
+                }
+            case let .convex(points):
+                for p in points { lowest = min(lowest, pose.apply(p).y) }
+            }
+        }
+        return lowest.isFinite ? lowest : worldBounds.min.y
+    }
+
     /// The world bounds of the envelope (an axis-aligned box around the rotated envelope).
     public var worldBounds: Box3 {
         let pose = entityPose
@@ -161,6 +181,9 @@ enum BodyPhysics {
     static func spec(
         _ body: Body, mode: MotionMode, resting: Bool, now: Double, cameraInside: Bool, resolver r: Resolver
     ) throws -> PhysicsSpec {
+        // Terrain collides through its face planes and atom windows (§10.1), never its own proxy:
+        // past a few kilometres its node has no binary64 size.
+        if body.sizeState == .terrain { return terrain(body) }
         let view = try r.resolve(body.frame.ref.root, body.frame.ref.path)
         // The proxy is the body node's, at the node's own scale (a terrain's anchor may sit below it).
         let sigma = body.nodePose(r).sigma
@@ -183,6 +206,16 @@ enum BodyPhysics {
             linearDamping: resting ? PlayTuning.restLinearDamping : p.linearDamping,
             angularDamping: resting ? PlayTuning.restAngularDamping : p.angularDamping,
             shapes: shapes, continuousCollision: mode == .dynamic
+        )
+    }
+
+    /// A terrain's own body: static, shapeless, with finite placeholders where a mass would be.
+    static func terrain(_ body: Body) -> PhysicsSpec {
+        let p = body.facts.personality.personality
+        return PhysicsSpec(
+            mode: .static, massKg: body.feltMassKg, principalMoments: Vec3(1, 1, 1), principalRotation: .identity, centreOfMass: .zero,
+            material: SurfaceMaterial(staticFriction: p.friction, dynamicFriction: p.friction * PlayTuning.dynamicFrictionShare, restitution: p.restitution),
+            linearDamping: 0, angularDamping: 0, shapes: [], continuousCollision: false
         )
     }
 }

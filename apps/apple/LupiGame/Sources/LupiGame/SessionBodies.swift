@@ -295,19 +295,21 @@ extension PlaySession {
     /// Applies a new size state: mode, anchor (terrain may rebase), and physics.
     mutating func settleSize(_ id: BodyID, now: Double, held: Bool) {
         guard var b = bodies[id] else { return }
-        let state = sizeState(for: b, span: b.span)
+        // The node's span: a terrain anchored far below its node has no binary64 span, so it stays terrain.
+        let state = sizeState(for: b, span: b.nodeSpan(resolver))
         b.sizeState = state
         let mode: MotionMode = held && state == .toy ? .kinematic : Self.mode(for: state)
         if state != .terrain && !b.frame.anchorPath.isEmpty { returnAnchor(&b) }
         b.mode = mode
-        let inside = state == .terrain && cameraInside(b)
+        let inside = state == .terrain && (camera.map { terrainContains(b, $0.position) } ?? false)
         b.spec = (try? BodyPhysics.spec(b, mode: mode, resting: false, now: now, cameraInside: inside, resolver: resolver)) ?? b.spec
         b.floatUntil = -.infinity
         bodies[id] = b
         out.physics.append(.update(id, b.spec))
         out.physics.append(.setMode(id, mode))
-        if mode != .dynamic { out.physics.append(.move(id, pose: b.nodePose(resolver).frame, linearVelocity: .zero, angularVelocity: .zero)) }
+        if mode != .dynamic { out.physics.append(.move(id, pose: physicsPose(b), linearVelocity: .zero, angularVelocity: .zero)) }
         hudCache.dirty = true
+        terrainColliders.invalidate()
     }
 
     /// Ascends the anchor back to the body's node (a terrain that shrank to a monument).
@@ -324,47 +326,6 @@ extension PlaySession {
         b.frame.anchorPath = []
     }
 
-    /// Whether the camera is inside a body's envelope.
-    func cameraInside(_ b: Body) -> Bool {
-        guard let camera else { return false }
-        let pose = b.nodePose(resolver)
-        let local = pose.frame.inverse.apply(camera.position) / pose.sigma + b.facts.aggregate.centre
-        return b.facts.aggregate.bounds.contains(local)
-    }
-
-    /// Terrain while the camera is inside: toys parked, its collider off (scale-spec §10.1).
-    mutating func updateTerrain() {
-        guard let terrain = bodies.values.first(where: { $0.sizeState == .terrain }) else {
-            if cameraInsideTerrain { unparkAll() }
-            cameraInsideTerrain = false
-            return
-        }
-        var t = terrain
-        if let camera { try? LupiScale.rebase(&t.frame, focusWorld: camera.position, resolver: resolver) }
-        bodies[t.id] = t
-        let inside = cameraInside(t)
-        guard inside != cameraInsideTerrain else { return }
-        cameraInsideTerrain = inside
-        if let spec = try? BodyPhysics.spec(t, mode: .static, resting: false, now: time ?? 0, cameraInside: inside, resolver: resolver) {
-            bodies[t.id]?.spec = spec
-            out.physics.append(.update(t.id, spec))
-        }
-        if inside {
-            for id in bodyOrder where id != t.id && bodies[id]?.isToy == true && grab?.body != id {
-                bodies[id]?.parked = true
-                out.physics.append(.park(id, true))
-            }
-        } else {
-            unparkAll()
-        }
-    }
-
-    mutating func unparkAll() {
-        for id in bodyOrder where bodies[id]?.parked == true {
-            bodies[id]?.parked = false
-            out.physics.append(.park(id, false))
-        }
-    }
 }
 
 extension Body {

@@ -105,7 +105,7 @@ struct GestureTests {
         _ = a.handle(t(2, .began, 200, 300, 0.01), target: .none)
         #expect(a.tick(0.5).isEmpty)
         a.flyAllowed = true
-        #expect(a.tick(0.6) == [.flyBegan(direction: 1)])
+        #expect(a.tick(0.6) == [.flyBegan(direction: 1, centroid: SIMD2(150, 300))])
         // A separation change turns flight back into a pinch.
         let back = a.handle(t(2, .moved, 215, 300, 0.7), target: .none)
         #expect(back == [.flyEnded, .pinchBegan(centroid: SIMD2(157.5, 300), held: nil, target: .none)])

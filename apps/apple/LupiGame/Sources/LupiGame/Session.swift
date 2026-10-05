@@ -17,12 +17,18 @@ public struct GameSettings: Sendable, Equatable {
     /// `CHHapticEngine.capabilitiesForHardware().supportsHaptics`: false on iPad.
     public var supportsHaptics: Bool
     public var device: DeviceClass
+    /// Grow ×2 (scale-spec §10.7), proposed and off until the owner confirms it (plan §11.9).
+    public var growTwo: Bool
 
-    public init(soundAndHaptics: Bool = true, comfort: MotionComfort = .standard, supportsHaptics: Bool = true, device: DeviceClass = .iPhone) {
+    public init(
+        soundAndHaptics: Bool = true, comfort: MotionComfort = .standard, supportsHaptics: Bool = true, device: DeviceClass = .iPhone,
+        growTwo: Bool = false
+    ) {
         self.soundAndHaptics = soundAndHaptics
         self.comfort = comfort
         self.supportsHaptics = supportsHaptics
         self.device = device
+        self.growTwo = growTwo
     }
 
     var juice: JuiceSettings { JuiceSettings(soundAndHaptics: soundAndHaptics, supportsHaptics: supportsHaptics, comfort: comfort) }
@@ -95,6 +101,14 @@ public enum SessionEvent: Sendable, Equatable {
     case builtIt(BodyID, name: String, known: Bool)
     /// A break made a loose atom of an element the atom tray lacked; the tray has it now.
     case trayGained(Int)
+    /// A flight along the scale axis began or ended (scale-spec §8.8).
+    case flight(BodyID, active: Bool)
+    /// Grow ×2 made this body a tower of `count` atoms (scale-spec §10.7).
+    case grew(BodyID, count: String)
+    /// A chunk or chip came away from a monument or terrain, already in the hand (§10.5).
+    case detached(from: BodyID, piece: BodyID)
+    /// It stands at life size, weighing this (scale.md §5.8).
+    case lifeSize(BodyID, mass: String)
 }
 
 /// What the app applies after a frame.
@@ -161,6 +175,8 @@ struct Glide: Sendable {
     var duration: Double
     /// Put the body back ahead of the camera when the glide ends.
     var returnAhead: Bool
+    /// The fixed point of the glide; nil for the body's own centre.
+    var about: Vec3?
 }
 
 /// The play session (plan §3–§5, scale-spec §8–§10): bodies as LupiScale pieces, spawning,
@@ -188,6 +204,14 @@ public struct PlaySession: Sendable {
     var grab: GrabState?
     var pinch: PinchState?
     var glide: Glide?
+    /// A flight along the scale axis, a dive or surfacing beyond 10^±32, or a pinch that moves φ (§8.8).
+    var flightState: FlightState?
+    /// Terrain colliders and their bookkeeping (scale-spec §10.1, spike S8).
+    var terrainColliders = TerrainColliderState()
+    /// Spike S9's bodies at the size extremes.
+    public internal(set) var s9: S9Probe?
+    /// Debug switches for the device spikes.
+    public var debug = SessionDebug()
     var juice: JuiceRouter
     var tau: TauController
     var thermal: ThermalLevel = .nominal
@@ -264,6 +288,8 @@ public struct PlaySession: Sendable {
         grab = nil
         pinch = nil
         glide = nil
+        flightState = nil
+        s9 = nil
         magnet = nil
         refusals = [:]
         delights = []
@@ -291,6 +317,7 @@ public struct PlaySession: Sendable {
         for g in arbiter.tick(input.time) { handle(g, now: input.time) }
         stepGrab(dt: dt, now: input.time)
         stepGlide(now: input.time)
+        stepFlight(dt: dt, now: input.time)
         stepTumble(now: input.time)
         stepBodies(dt: dt, now: input.time)
         stepMagnet(dt: dt, now: input.time)
@@ -298,6 +325,8 @@ public struct PlaySession: Sendable {
         rescue()
         updateTerrain()
         buildCut(dt: dt, now: input.time)
+        stepTerrainColliders(now: input.time)
+        stepS9(now: input.time)
         out.renders = renderStates(dt: dt)
         out.simulationRate = simulationRate(now: input.time)
         out.hud = hud()

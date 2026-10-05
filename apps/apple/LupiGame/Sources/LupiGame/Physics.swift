@@ -133,6 +133,10 @@ public enum PhysicsCommand: Sendable, Equatable {
     case park(BodyID, Bool)
     /// Gone; `poof` plays the small vanish (out of bounds, over budget).
     case remove(BodyID, poof: Bool)
+    /// A terrain's static colliders (scale-spec §10.1): its face planes or one window of atom bumps,
+    /// replaced whole, in metres about `origin` (world); empty shapes remove them. They belong to no
+    /// body: a toy that touches one touches the room.
+    case staticColliders(ColliderKey, origin: Vec3, shapes: [CollisionShape], material: SurfaceMaterial)
 }
 
 /// The tuning table of the session's physics (plan §3.3, §3.4, §4.4, §4.6). Values marked est.
