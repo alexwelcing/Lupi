@@ -1,4 +1,5 @@
 @preconcurrency import ARKit
+import Foundation
 import SwiftUI
 
 /// ARKit's coaching overlay on our session: it shows itself while tracking needs the player
