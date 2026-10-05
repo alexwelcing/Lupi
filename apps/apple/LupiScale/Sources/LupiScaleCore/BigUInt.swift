@@ -277,6 +277,17 @@ public struct BigUInt: Hashable, Comparable, Sendable, CustomStringConvertible, 
 
     public var description: String { decimal }
 
+    /// Lowercase hex without leading zeros; "0" for zero.
+    public var hex: String {
+        guard let top = limbs.last else { return "0" }
+        var out = String(top, radix: 16)
+        for limb in limbs.dropLast().reversed() {
+            let s = String(limb, radix: 16)
+            out += String(repeating: "0", count: 16 - s.count) + s
+        }
+        return out
+    }
+
     /// Digits in base `f` (2…16), most significant first; empty for zero.
     public func digits(base f: UInt64) -> [UInt8] {
         precondition(f >= 2 && f <= 16)
@@ -323,6 +334,18 @@ public struct BigUInt: Hashable, Comparable, Sendable, CustomStringConvertible, 
         if isZero { return -.infinity }
         let (top, shift) = top53
         return log(Double(top)) + Double(shift) * 0.693_147_180_559_945_3
+    }
+
+    /// The value as a Double, rounded to nearest, ties to even; +∞ beyond the range.
+    public var nearestDouble: Double {
+        let w = bitWidth
+        if w <= 64 { return Double(uint64 ?? 0) }
+        // The top 64 bits with a sticky bit for everything below: one correct rounding.
+        let shift = w - 64
+        var top = (self >> shift).uint64 ?? 0
+        if !minus((self >> shift) << shift).isZero { top |= 1 }
+        if shift > 1100 { return .infinity }
+        return scalbn(Double(top), shift)
     }
 
     /// The value as a Double, rounded toward zero in its 53 bits; +∞ beyond the range.

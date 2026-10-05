@@ -1,3 +1,5 @@
+import Foundation
+
 /// `format(M)` (§5.4): one function for every surface. It reads digit runs and
 /// never forms a long digit string.
 extension Magnitude {
@@ -39,6 +41,18 @@ enum MagnitudeFormat {
         if cs == "1" { return "10^" + exponent(k) }
         let mantissa = cs.count == 1 ? cs : String(cs.first!) + "." + cs.dropFirst()
         return mantissa + times + "10^" + exponent(k)
+    }
+
+    /// A binary64 value in [1, 16) to four significant digits, half to even on its exact value.
+    static func fourSignificant(_ m: Double) -> String {
+        var decimals = 3 - Int(log10(m).rounded(.down))
+        var text = String(format: "%.\(max(decimals, 0))f", m)
+        // Rounding up to the next power of ten adds a digit: print one decimal fewer.
+        if let v = Double(text), v >= pow(10, Double(4 - decimals)) {
+            decimals -= 1
+            text = String(format: "%.\(max(decimals, 0))f", m)
+        }
+        return text
     }
 
     static func stripZeros(_ c: UInt64) -> UInt64 {

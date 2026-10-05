@@ -59,6 +59,18 @@ public struct Magnitude: Sendable, Hashable, CustomStringConvertible {
     /// The same value with another display base.
     public func withDisplayBase(_ f: UInt8) -> Magnitude { Magnitude(value: value, displayBase: f) }
 
+    /// The canonical form as text (§5.2), TypeScript's `magnitudeKey`: `p:` and the value in hex
+    /// below 2⁶⁵⁵³⁶, else `r<root>:` and the root-base runs, most significant first, each
+    /// `<digit>x<length>` in hex. Equal values have equal keys whatever their display base.
+    public var key: String {
+        switch value {
+        case let .plain(v):
+            return "p:" + v.hex
+        case let .runs(r, runs):
+            return "r\(r):" + runs.map { String($0.digit, radix: 16) + "x" + $0.length.hex }.joined(separator: ",")
+        }
+    }
+
     public static func == (a: Magnitude, b: Magnitude) -> Bool { a.value == b.value }
     public func hash(into h: inout Hasher) { h.combine(value) }
 
@@ -220,6 +232,46 @@ public struct Magnitude: Sendable, Hashable, CustomStringConvertible {
 
     /// `log10 M`.
     public var log10M: Double { lnM / log(10) }
+
+    /// §5.5's scientific display of a physical quantity `Q = M × q` [V], such as kilograms from
+    /// micro-daltons: `≈ m × b^E`, with `b` = 10 for a plain or decimal value and otherwise the
+    /// display base, the only base in which `E` is exact.
+    public func scientific(times q: Double) -> String {
+        let b: UInt8 = fitsPlain || effectiveBase == 10 ? 10 : effectiveBase
+        let runs = digitRuns(in: b)
+        let n = DigitRuns.count(runs)
+        if n.isZero { return "0" }
+        // c: the leading min(n, 17) digits, rounded to binary64 once.
+        let head = MagnitudeFormat.digits(runs, from: BigUInt(), count: min(n.int ?? 17, 17))
+        let c = head.reduce(BigUInt()) { $0.multipliedSmall(UInt64(b)) + BigUInt(UInt64($1)) }.nearestDouble
+        let logb = log(c * q) / log(Double(b))
+        var whole = logb.rounded(.down)
+        var mantissa = pow(Double(b), logb - whole)
+        if mantissa >= Double(b) {
+            mantissa /= Double(b)
+            whole += 1
+        }
+        var text = MagnitudeFormat.fourSignificant(mantissa)
+        if let shown = Double(text), shown >= Double(b) {
+            text = MagnitudeFormat.fourSignificant(shown / Double(b))
+            whole += 1
+        }
+        // E = max(n − 17, 0) + whole, exact; whole is a small signed integer.
+        let rest = n > 17 ? n.minus(17) : BigUInt()
+        let w = BigUInt(UInt64(abs(whole)))
+        let exponent: String
+        if whole >= 0 {
+            exponent = MagnitudeFormat.exponent(rest + w)
+        } else if rest >= w {
+            exponent = MagnitudeFormat.exponent(rest.minus(w))
+        } else {
+            exponent = "\u{2212}" + MagnitudeFormat.exponent(w.minus(rest))
+        }
+        return MagnitudeFormat.approx + text + MagnitudeFormat.times + "\(b)^" + exponent
+    }
+
+    /// kg per µDa: the CODATA 2018 atomic mass constant × 10⁻⁶ (§5.5).
+    public static let kgPerMicroDalton = 1.660_539_066_6e-33
 }
 
 /// Digit-run arithmetic in one base, least significant segment first (§5.2).
