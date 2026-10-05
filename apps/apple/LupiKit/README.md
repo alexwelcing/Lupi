@@ -30,10 +30,37 @@ Each generator has a `--check` mode that fails when its output is stale.
 |---|---|
 | `pnpm exec tsx tools/apple/gen-elements.mts` | `Sources/LupiChem/Elements.generated.swift` from `packages/core/src/elements.ts` (plus PubChem van der Waals radii) |
 | `pnpm exec tsx tools/apple/export-bond-fixtures.mts` | `Tests/Fixtures/bonds/*.json`: the TypeScript `perceiveBonds`, `parseXyzText` and `computeInertia` on the 24 OMol25 picks, 25 gallery molecules and 48 synthetic cases; and `xyz-write.json`, a reference XYZ writer's text for built molecules and fragments with the web parser's reading of it |
+| `pnpm exec tsx tools/apple/export-validation-sample.mts` | `Tests/Fixtures/bonds/validation-sample.json`: `validation-v1.json`'s targets, parameters, hand-check rows and totals, and 81 OMol25 neutral-validation rows with the TypeScript output (choosing rows needs the row cache below; `--check` does not) |
 | `pnpm exec tsx tools/apple/export-edge-samples.mts` | `Tests/Fixtures/data/*`: `/m/manifest.json` from the molecule-pages builder and OMol25 responses from the Worker's `routeScienceData` |
 | `pnpm exec tsx tools/apple/bundle-starters.mts` | `Sources/LupiData/Resources/starters/` |
 
 Typecheck the generators with `pnpm exec tsc -p tools/apple/tsconfig.json`.
+
+## Recipe validation
+
+`packages/core/src/bonds/validation-v1.json` is the release receipt of
+`lupi-bonds.molecular.v1` over all 27,697 rows of
+colabfit/OMol25_neutral_validation. `swift test` holds the Swift port to it on
+the committed sample: TypeScript's output row for row, the hard targets (no H
+with two partners, nothing over the v1 caps, no line touching an s-block ion,
+the same output again and with a shuffled grid), the seven hand-check rows
+line for line, the validated parameters, and p99 at 350 atoms (held to the
+5 ms target in release builds; debug builds only record it).
+
+The full run checks every row:
+
+```bash
+NODE_USE_ENV_PROXY=1 pnpm exec tsx tools/omol25-bonds/fetch-rows.mts        # ~250 MB down, 51 MB cached
+pnpm exec tsx tools/apple/export-validation-sample.mts --row-keys .verify-artifacts/omol25-bonds/row-keys.tsv
+cd apps/apple/LupiKit
+LUPI_OMOL25_ROWS=../../../.verify-artifacts/omol25-bonds/colabfit__OMol25_neutral_validation \
+LUPI_OMOL25_ROW_KEYS=../../../.verify-artifacts/omol25-bonds/row-keys.tsv \
+swift test -c release --filter everyRow
+```
+
+It asserts the hard targets, every reported total (line kinds, removals by
+reason, ions, contacts by element, long bonds, near misses), the hand-check
+counts, the TypeScript lines of every row (by an FNV-1a key) and p99.
 
 ## Conventions
 
