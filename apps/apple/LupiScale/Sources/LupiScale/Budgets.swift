@@ -73,55 +73,75 @@ public struct Budgets: Sendable, Hashable {
     }
 }
 
-/// The two τ controllers of §9.3, evaluated every 0.5 s and kept in [τ_min, 8].
+/// The two τ controllers of §9.3, each kept in [τ_min, 8]; τ is the larger of the two.
+///
+/// The frame-time controller judges 0.5 s windows: a window with a dropped frame multiplies it by
+/// 1.25, any other window by 0.95 once 2 s have passed without a drop (counted from the first
+/// frame). The budget controller reacts to an over-budget cut at once, for the next frame, and
+/// multiplies by 0.9 for each 0.5 s in which every budget stays under 80 %.
 public struct TauController: Sendable {
-    public private(set) var tau: Double
-    public var minimum: Double
+    public var tau: Double { max(frameTau, budgetTau) }
+    /// τ_min, the thermal column's value; τ only rises to meet a new one.
+    public var minimum: Double {
+        didSet {
+            frameTau = clamp(frameTau)
+            budgetTau = clamp(budgetTau)
+        }
+    }
     public let maximum = 8.0
+    public private(set) var frameTau: Double
+    public private(set) var budgetTau: Double
     private var windowStart: Double?
     private var droppedInWindow = false
-    private var lastDrop: Double = -.infinity
-    private var underBudgetSince: Double?
-    private var lastDecay: Double = -.infinity
+    private var lastDrop: Double?
+    private var calmSince: Double?
 
     public init(budgets: Budgets) {
-        tau = budgets.tau
         minimum = budgets.tauMinimum
+        frameTau = min(8, max(budgets.tauMinimum, budgets.tau))
+        budgetTau = frameTau
     }
 
     /// Feeds one frame: its interval (ARFrame timestamp difference), the display period, whether
-    /// the cut was over budget, and the largest fraction of any budget it used.
+    /// the cut was over budget, and the largest fraction of the item, box and splat, instanced
+    /// atom and visit budgets it used.
     public mutating func frame(at time: Double, interval: Double, displayPeriod: Double, overBudget: Bool, usage: Double) {
-        if overBudget { tau *= 1.25 }
         if interval > 1.5 * displayPeriod {
             droppedInWindow = true
             lastDrop = time
         }
-        if usage < 0.8 && !overBudget {
-            if underBudgetSince == nil { underBudgetSince = time }
-        } else {
-            underBudgetSince = nil
-        }
+        let quietSince = lastDrop ?? time
+        lastDrop = quietSince
         let start = windowStart ?? time
         windowStart = start
         if time - start >= 0.5 {
-            if droppedInWindow { tau *= 1.25 }
-            if time - lastDrop >= 2, time - lastDecay >= 2 {
-                tau *= 0.95
-                lastDecay = time
-            }
-            if let since = underBudgetSince, time - since >= 0.5 {
-                tau *= 0.9
-                underBudgetSince = time
+            if droppedInWindow {
+                frameTau = clamp(frameTau * 1.25)
+            } else if time - quietSince >= 2 {
+                frameTau = clamp(frameTau * 0.95)
             }
             windowStart = time
             droppedInWindow = false
         }
-        tau = min(maximum, max(minimum, tau))
+        if overBudget {
+            budgetTau = clamp(budgetTau * 1.25)
+            calmSince = nil
+        } else if usage >= 0.8 {
+            calmSince = nil
+        } else {
+            let since = calmSince ?? time
+            calmSince = since
+            if time - since >= 0.5 {
+                budgetTau = clamp(budgetTau * 0.9)
+                calmSince = time
+            }
+        }
     }
+
+    private func clamp(_ t: Double) -> Double { min(maximum, max(minimum, t)) }
 
     /// LupiEngine's own pass GPU time toward 8 ms (M3b): τ ← τ · exp(0.5 (t − 8 ms) / 8 ms).
     public mutating func gpuTime(_ milliseconds: Double) {
-        tau = min(maximum, max(minimum, tau * exp(0.5 * (milliseconds - 8) / 8)))
+        frameTau = clamp(frameTau * exp(0.5 * (milliseconds - 8) / 8))
     }
 }
