@@ -117,14 +117,20 @@ export class TrackingStore implements NodeStore {
 
 export type Removal = Step[];
 
+/**
+ * A node reached by a walk. `chain` counts the records entered from the
+ * root, so record depth is checked lazily (§2.8): a walk that enters more
+ * than 64 records, or a subtree evaluation whose chain plus subtree depth
+ * passes 64, fails with `limit`.
+ */
 export type View =
-  | { type: 'leaf'; id: NodeID; leaf: LeafNode; removals: Removal[] }
-  | { type: 'group'; id: NodeID; group: GroupNode; removals: Removal[] }
-  | { type: 'box'; id: NodeID; crystal: CrystalNode; box: Box; removals: Removal[] }
-  | { type: 'capped'; id: NodeID; crystal: CrystalNode; removals: Removal[] }
-  | { type: 'level'; id: NodeID; tower: TowerNode; k: bigint; trail: AxisRuns; removals: Removal[] }
-  | { type: 'copy'; id: NodeID; tower: TowerNode; trail: AxisRuns; key: bigint; removals: Removal[] }
-  | { type: 'selection'; base: View; ranges: AtomRange[]; removals: Removal[] };
+  | { type: 'leaf'; id: NodeID; leaf: LeafNode; removals: Removal[]; chain: number }
+  | { type: 'group'; id: NodeID; group: GroupNode; removals: Removal[]; chain: number }
+  | { type: 'box'; id: NodeID; crystal: CrystalNode; box: Box; removals: Removal[]; chain: number }
+  | { type: 'capped'; id: NodeID; crystal: CrystalNode; removals: Removal[]; chain: number }
+  | { type: 'level'; id: NodeID; tower: TowerNode; k: bigint; trail: AxisRuns; removals: Removal[]; chain: number }
+  | { type: 'copy'; id: NodeID; tower: TowerNode; trail: AxisRuns; key: bigint; removals: Removal[]; chain: number }
+  | { type: 'selection'; base: View; ranges: AtomRange[]; removals: Removal[]; chain: number };
 
 export type ViewType = View['type'];
 
@@ -216,34 +222,42 @@ export class Resolver {
   // ─── Views ──────────────────────────────────────────────────────────
 
   root(id: NodeID): View {
-    return this.rootView(id, []);
+    return this.rootView(id, [], 1);
   }
 
-  private rootView(id: NodeID, removals: Removal[]): View {
+  private rootView(id: NodeID, removals: Removal[], chain: number): View {
+    if (chain > MAX_DEPTH) fail('limit', 'a walk through more than 64 records');
     const d = this.rec(id);
     const node = d.node!;
     switch (node.kind) {
       case 'leaf':
         if (removals.length > 0) fail('path', 'a removal inside a leaf');
-        return { type: 'leaf', id, leaf: node, removals: [] };
+        return { type: 'leaf', id, leaf: node, removals: [], chain };
       case 'group':
-        return { type: 'group', id, group: node, removals };
+        return { type: 'group', id, group: node, removals, chain };
       case 'crystal':
         if (node.termination === 2) {
           if (removals.length > 0) fail('path', 'a removal inside a capped crystal');
-          return { type: 'capped', id, crystal: node, removals: [] };
+          return { type: 'capped', id, crystal: node, removals: [], chain };
         }
-        return { type: 'box', id, crystal: node, box: rootBox(node), removals };
+        return { type: 'box', id, crystal: node, box: rootBox(node), removals, chain };
       case 'tower': {
         this.checkTower(id, node);
-        const level: View = { type: 'level', id, tower: node, k: node.levels, trail: EMPTY_TRAIL(), removals };
+        const level: View = { type: 'level', id, tower: node, k: node.levels, trail: EMPTY_TRAIL(), removals, chain };
         return node.levels === 0n ? this.seedCopy(level) : level;
       }
       case 'edit': {
         this.checkEdit(id, node.base, node.removed);
-        return this.rootView(node.base, [...removals, ...node.removed]);
+        return this.rootView(node.base, [...removals, ...node.removed], chain + 1);
       }
     }
+  }
+
+  /** §2.8: an evaluation of a whole subtree checks its depth, counted from the walk's root. */
+  private checkSubtree(v: View): void {
+    const id = v.type === 'selection' ? null : v.type === 'group' || v.type === 'level' || v.type === 'copy' ? v.id : null;
+    const depth = id ? this.depth(id) : 1;
+    if (v.chain - 1 + depth > MAX_DEPTH) fail('limit', 'record depth above 64');
   }
 
   /** §2.8 tower seeds, checked once per tower. */
@@ -299,9 +313,9 @@ export class Resolver {
     if (t.substitution) {
       if (level.removals.length > 0) fail('path', 'a removal inside a substituted copy');
       const key = copyKey(level.id, fullTowerStep(t.levels, level.trail));
-      return { type: 'copy', id: level.id, tower: t, trail: level.trail, key, removals: [] };
+      return { type: 'copy', id: level.id, tower: t, trail: level.trail, key, removals: [], chain: level.chain };
     }
-    return this.rootView(t.seed, level.removals);
+    return this.rootView(t.seed, level.removals, level.chain + 1);
   }
 
   resolve(id: NodeID, path: readonly Step[]): View {
@@ -328,7 +342,7 @@ export class Resolver {
           removals.push(r.slice(1));
         }
         if (this.unitExponentOf(child.id) !== 0n) fail('validity', 'a group child has unit exponent 0');
-        return this.rootView(child.id, removals);
+        return this.rootView(child.id, removals, v.chain + 1);
       }
       case 'cells': {
         if (v.type !== 'box') fail('path', `a cells step on a ${v.type}`);
@@ -381,8 +395,10 @@ export class Resolver {
         if (!this.isMaterializable(v)) fail('path', `an atoms step on a ${v.type} that is not materializable`);
         const n = Number(toPlain(this.count(v)));
         for (const r of s.ranges) if (r.start + r.length > n) fail('path', 'atom range outside the materialization');
-        if (v.type === 'selection') return { type: 'selection', base: v.base, ranges: composeRanges(v.ranges, s.ranges), removals: [] };
-        return { type: 'selection', base: v, ranges: s.ranges.map((r) => ({ ...r })), removals: [] };
+        if (v.type === 'selection') {
+          return { type: 'selection', base: v.base, ranges: composeRanges(v.ranges, s.ranges), removals: [], chain: v.chain };
+        }
+        return { type: 'selection', base: v, ranges: s.ranges.map((r) => ({ ...r })), removals: [], chain: v.chain };
       }
     }
   }
@@ -416,6 +432,7 @@ export class Resolver {
 
   /** count = baseCount − Σ baseCount of each (outermost) removal (§4.4). */
   count(v: View): Magnitude {
+    this.checkSubtree(v);
     let c = this.baseCount(v);
     if (v.removals.length === 0) return c;
     const bare = stripped(v);
@@ -477,6 +494,7 @@ export class Resolver {
   }
 
   composition(v: View): Composition {
+    this.checkSubtree(v);
     if (v.type === 'level') {
       const t = v.tower;
       const f = t.factor;
@@ -522,6 +540,7 @@ export class Resolver {
   }
 
   materialize(v: View): LeafNode {
+    this.checkSubtree(v);
     switch (v.type) {
       case 'leaf':
         return v.leaf;
