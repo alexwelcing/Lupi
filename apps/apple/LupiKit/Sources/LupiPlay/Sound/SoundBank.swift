@@ -7,24 +7,29 @@ import Foundation
 public enum SoundBank {
     public static let defaultSampleRate = 48_000.0
 
-    /// One voice. The same voice, rate and seed always give the same samples.
-    public static func render(_ voice: SoundVoice, sampleRate: Double = defaultSampleRate, seed: UInt64 = 0) -> PCMBuffer {
+    /// One voice. The same voice, tuning, rate and seed always give the same samples.
+    public static func render(
+        _ voice: SoundVoice, tuning: SoundTuning = .v1, sampleRate: Double = defaultSampleRate, seed: UInt64 = 0
+    ) -> PCMBuffer {
         var random = SoundRandom(seed: seed ^ fnv1a(voice.name))
-        let strikes = recipe(voice, random: &random)
+        let strikes = recipe(voice, tuning: tuning, random: &random)
         return PCMBuffer(sampleRate: sampleRate, samples: SoundSynth.render(strikes, sampleRate: sampleRate, seed: random.next()))
     }
 
     /// The whole bank, `SoundVoice.all`.
-    public static func renderAll(sampleRate: Double = defaultSampleRate, seed: UInt64 = 0) -> [SoundVoice: PCMBuffer] {
+    public static func renderAll(tuning: SoundTuning = .v1, sampleRate: Double = defaultSampleRate, seed: UInt64 = 0) -> [SoundVoice: PCMBuffer] {
         var bank: [SoundVoice: PCMBuffer] = [:]
-        for voice in SoundVoice.all { bank[voice] = render(voice, sampleRate: sampleRate, seed: seed) }
+        for voice in SoundVoice.all { bank[voice] = render(voice, tuning: tuning, sampleRate: sampleRate, seed: seed) }
         return bank
     }
 
     /// The lowest partial a voice is built on at its own pitch, Hz (for tests and tuning).
-    public static func fundamental(of voice: SoundVoice) -> Double {
+    public static func fundamental(of voice: SoundVoice, tuning: SoundTuning = .v1) -> Double {
         switch voice {
-        case let .impact(family, band, _): Family(family).fundamental * band.pitch
+        case let .impact(family, band, _): tuning.family(family).fundamental * band.pitch
+        case let .ring(band): tuning.ring.fundamental * band.pitch
+        case .flap: tuning.flap.fundamental
+        case .crackle: 4_000
         case .thud: 85
         case .tap: 1_800
         case .subBass: 45
@@ -41,69 +46,58 @@ public enum SoundBank {
         }
     }
 
-    /// Plan §5.2's families: partial ratios and the fundamental's decay (T60).
-    struct Family {
-        var fundamental: Double
-        var ratios: [Double]
-        var t60: Double
-        var hardAmplitudes: [Double]
-        var softAmplitudes: [Double]
-        /// Higher partials decay faster: t60 / ratio^damping.
-        var damping: Double
-        var glide = 0.0
-
-        init(_ family: ImpactFamily) {
-            switch family {
-            case .clack:
-                self.init(fundamental: 1_100, ratios: [1, 2.32, 4.25], t60: 0.080,
-                          hardAmplitudes: [1, 0.7, 0.45], softAmplitudes: [1, 0.45, 0.2], damping: 0.5)
-            case .thwap:
-                self.init(fundamental: 220, ratios: [1, 1.6], t60: 0.050,
-                          hardAmplitudes: [1, 0.5], softAmplitudes: [1, 0.3], damping: 0.3)
-            case .tink:
-                self.init(fundamental: 2_100, ratios: [1, 2.76, 5.40], t60: 0.250,
-                          hardAmplitudes: [1, 0.8, 0.55], softAmplitudes: [1, 0.5, 0.25], damping: 0.3)
-            case .boing:
-                self.init(fundamental: 330, ratios: [1, 1.5], t60: 0.180,
-                          hardAmplitudes: [1, 0.35], softAmplitudes: [1, 0.2], damping: 0.2, glide: 0.35)
+    /// One family's strikes at a band's pitch and a layer's brightness.
+    static func strikes(_ spec: SoundTuning.Family, pitch: Double, hard: Bool) -> [Strike] {
+        let f0 = spec.fundamental * pitch
+        let amplitudes = hard ? spec.hard : spec.soft
+        var modes = zip(spec.ratios, amplitudes).map { ratio, amplitude in
+            Mode(frequency: f0 * ratio, amplitude: amplitude, t60: spec.t60 / pow(ratio, spec.damping),
+                 glide: spec.glide, glideTime: spec.glideTime)
+        }
+        if spec.shimmer > 0, let first = modes.first {
+            var twin = first
+            twin.frequency *= 1 + spec.shimmer
+            twin.amplitude *= 0.6
+            modes.append(twin)
+        }
+        let noise = NoiseBurst(
+            amplitude: hard ? spec.noiseHard : spec.noiseSoft, t60: spec.noiseT60,
+            highpass: spec.highpass.map { $0 * pitch }, lowpass: spec.lowpass.map { $0 * pitch }
+        )
+        var out = [Strike(modes: modes, noise: noise)]
+        if spec.chatter > 0 && spec.chatterGain > 0 {
+            // The second touch is a little higher and has no tail of its own.
+            let short = modes.map { m -> Mode in
+                var m = m
+                m.frequency *= 1.03
+                m.t60 *= 0.5
+                return m
             }
+            out.append(Strike(at: spec.chatter, modes: short, noise: noise, gain: spec.chatterGain))
         }
-
-        init(fundamental: Double, ratios: [Double], t60: Double, hardAmplitudes: [Double], softAmplitudes: [Double],
-             damping: Double, glide: Double = 0) {
-            self.fundamental = fundamental
-            self.ratios = ratios
-            self.t60 = t60
-            self.hardAmplitudes = hardAmplitudes
-            self.softAmplitudes = softAmplitudes
-            self.damping = damping
-            self.glide = glide
-        }
+        return out
     }
 
-    static func recipe(_ voice: SoundVoice, random: inout SoundRandom) -> [Strike] {
+    static func recipe(_ voice: SoundVoice, tuning: SoundTuning, random: inout SoundRandom) -> [Strike] {
         switch voice {
         case let .impact(family, band, layer):
-            let spec = Family(family)
-            let f0 = spec.fundamental * band.pitch
-            let amplitudes = layer == .hard ? spec.hardAmplitudes : spec.softAmplitudes
-            let modes = zip(spec.ratios, amplitudes).map { ratio, amplitude in
-                Mode(frequency: f0 * ratio, amplitude: amplitude, t60: spec.t60 / pow(ratio, spec.damping),
-                     glide: spec.glide, glideTime: 0.06)
+            return strikes(tuning.family(family), pitch: band.pitch, hard: layer == .hard)
+        case let .ring(band):
+            // A soft onset: the ring blooms out of the boing rather than striking again.
+            return strikes(tuning.ring, pitch: band.pitch, hard: true).map { s in
+                var s = s
+                s.attack = 0.006
+                return s
             }
-            let hard = layer == .hard
-            let noise: NoiseBurst
-            switch family {
-            case .clack:
-                noise = NoiseBurst(amplitude: hard ? 0.6 : 0.25, t60: hard ? 0.006 : 0.004, highpass: 2_000 * band.pitch)
-            case .thwap:
-                noise = NoiseBurst(amplitude: hard ? 0.9 : 0.6, t60: 0.030, lowpass: 1_200 * band.pitch)
-            case .tink:
-                noise = NoiseBurst(amplitude: hard ? 0.3 : 0.12, t60: 0.003, highpass: 3_000 * band.pitch)
-            case .boing:
-                noise = NoiseBurst(amplitude: hard ? 0.2 : 0.1, t60: 0.005, lowpass: 2_000 * band.pitch)
+        case .flap:
+            return strikes(tuning.flap, pitch: 1, hard: true)
+        case .crackle:
+            // A handful of tiny glass grains in 40 ms: the crack you hear before the break.
+            return (0..<9).map { _ in
+                let f = 3_000 * pow(3, random.unit())
+                return Strike(at: random.uniform(0...0.04), modes: [Mode(frequency: f, amplitude: random.uniform(0.3...1), t60: random.uniform(0.01...0.04))],
+                              noise: NoiseBurst(amplitude: 0.3, t60: 0.002, highpass: 4_000))
             }
-            return [Strike(modes: modes, noise: noise)]
         case .thud:
             return [Strike(modes: [Mode(frequency: 85, amplitude: 1, t60: 0.14), Mode(frequency: 140, amplitude: 0.4, t60: 0.08)],
                            noise: NoiseBurst(amplitude: 0.5, t60: 0.025, lowpass: 400), attack: 0.002)]

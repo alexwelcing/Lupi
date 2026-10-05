@@ -62,6 +62,22 @@ struct GestureTests {
         #expect(a.handle(t(1, .ended, 120, 100, 0.3), target: .none) == [.grabEnded(SIMD2(120, 100), cancelled: false)])
     }
 
+    @Test func aSnapRetargetsTheHeldBody() {
+        var a = GestureArbiter()
+        _ = a.handle(t(1, .began, 100, 100, 0), target: toy)
+        _ = a.handle(t(1, .moved, 120, 100, 0.02), target: .none)
+        // The held body merged into a new one: the finger holds that one now.
+        a.retarget(BodyID(7), to: BodyID(12))
+        #expect(a.grabbed == BodyID(12))
+        // A second finger pinches the new body.
+        #expect(a.handle(t(2, .began, 220, 100, 0.1), target: .none) == [.pinchBegan(centroid: SIMD2(170, 100), held: BodyID(12), target: .toy(BodyID(12)))])
+        a.retarget(BodyID(12), to: BodyID(13))
+        #expect(a.grabbed == BodyID(13))
+        // Another body's id changes nothing.
+        a.retarget(BodyID(99), to: BodyID(1))
+        #expect(a.grabbed == BodyID(13))
+    }
+
     @Test func twoFingersSpreadingTwelvePointsPinchAndTwist() {
         var a = GestureArbiter()
         _ = a.handle(t(1, .began, 100, 300, 0), target: toy)
@@ -89,7 +105,7 @@ struct GestureTests {
         _ = a.handle(t(2, .began, 200, 300, 0.01), target: .none)
         #expect(a.tick(0.5).isEmpty)
         a.flyAllowed = true
-        #expect(a.tick(0.6) == [.flyBegan(direction: 1)])
+        #expect(a.tick(0.6) == [.flyBegan(direction: 1, centroid: SIMD2(150, 300))])
         // A separation change turns flight back into a pinch.
         let back = a.handle(t(2, .moved, 215, 300, 0.7), target: .none)
         #expect(back == [.flyEnded, .pinchBegan(centroid: SIMD2(157.5, 300), held: nil, target: .none)])

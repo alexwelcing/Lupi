@@ -34,7 +34,7 @@ fixture that drifted from the spec fails too.
 | Suite | Covers |
 |---|---|
 | `LupiScaleCoreTests` (104 tests) | every value of the golden fixtures (records both ways and what a writer canonicalizes, resolutions with counts, compositions, masses, copy keys, substitutions, probes and materialized leaves, formatting, arithmetic and comparison, the scientific display, packs, references, the partition bakes, and every rejection code); every §12 vector the core reaches, hard-coded from the spec; every §6.6 rejection; and §2 and §4 validation on corrupted inputs |
-| `LupiScaleTests` (47 tests) | the §9.8 guarantees (an edited box draws nothing removed, a camera inside terrain anchored at its own node opens the bubble), frames (§8), budgets, τ and draw items (§9.3, §9.7), felt mass, heft, inertia and proxies (§10.1–§10.4, §10.8), breaking, chipping, Grow ×2 against the fixtures, and picking (§10.5–§10.7) |
+| `LupiScaleTests` (51 tests) | the §9.8 guarantees (an edited box draws nothing removed, a camera inside terrain anchored at its own node opens the bubble, and so does one between two copies' atoms), frames (§8: wraps counted as `BigUInt` periods, ascents in O(runs) that keep the picture, merged anchor steps, detents only within 10^±32), budgets, τ and draw items (§9.3, §9.7), felt mass, heft, inertia and proxies (§10.1–§10.4, §10.8), breaking, chipping, Grow ×2 against the fixtures, and picking with the hit node's world pose (§10.5–§10.7) |
 
 `CutGuaranteeTests.buildCutCost` times `buildCut` at the fair column's 8,192
 visits and fails a release build above 8 ms (twice a GitHub-hosted runner), taking the best of 15 frames
@@ -57,6 +57,12 @@ device numbers: the 1 ms device budget is spike S2's to measure.
 - **Residency is keyed by values, not text** (`ResidentStore`): a seed
   copy's materialization by its exact path, a start's refKey by root and
   steps. Only new materializations hash.
+- **Inside a solid means inside its cells.** A solid node's atom envelope
+  leaves a gap between neighbouring copies; `Resolver.occupied` adds the
+  lattice cells, and the bubble and the game's terrain read it (§10.1).
+- **Flights wrap by whole periods.** `Wraps.periodCount` is exact for any
+  depth, `Wraps.maxAscent` bounds a climb so no shallow digit changes the
+  picture, and an empty axis wraps toward the focus (§8.8).
 
 Where the spec was wrong, ambiguous or silent, the decisions are folded into
 it; its changelog ([§13.1](../../../docs/ar/scale-spec.md)) lists them.
@@ -67,8 +73,8 @@ it; its changelog ([§13.1](../../../docs/ar/scale-spec.md)) lists them.
   `Budgets.residentBytes` is not enforced yet (§9.6's LRU).
 - **LupiEngine (M3b) paths.** `atomsGPU` and `clusterSplats` items, fades
   (`DrawItem.fade` is always 1), and Hi-Z occlusion.
-- **App-side work.** Merged-mesh builds, the atoms-scale-in swap, terrain
-  collision windows and face-plane colliders (§10.1), Snap (§10.7), the
-  gesture arbiter (LupiKit, §10.5) and trophy and shelf records (§7.4, §7.5)
-  belong to the app or LupiKit. LupiScale supplies the paths, proxies, plans
-  and draw items they consume.
+- **App-side work.** Merged-mesh builds, the atoms-scale-in swap, Snap
+  (§10.7), the gesture arbiter (§10.5), terrain collision windows and
+  face-plane colliders (§10.1, in LupiGame) and trophy and shelf records
+  (§7.4, §7.5) belong to LupiGame, the app or LupiKit. LupiScale supplies the
+  paths, proxies, plans and draw items they consume.

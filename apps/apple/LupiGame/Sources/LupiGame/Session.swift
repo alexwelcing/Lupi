@@ -17,12 +17,18 @@ public struct GameSettings: Sendable, Equatable {
     /// `CHHapticEngine.capabilitiesForHardware().supportsHaptics`: false on iPad.
     public var supportsHaptics: Bool
     public var device: DeviceClass
+    /// Grow ×2 (scale-spec §10.7), proposed and off until the owner confirms it (plan §11.9).
+    public var growTwo: Bool
 
-    public init(soundAndHaptics: Bool = true, comfort: MotionComfort = .standard, supportsHaptics: Bool = true, device: DeviceClass = .iPhone) {
+    public init(
+        soundAndHaptics: Bool = true, comfort: MotionComfort = .standard, supportsHaptics: Bool = true, device: DeviceClass = .iPhone,
+        growTwo: Bool = false
+    ) {
         self.soundAndHaptics = soundAndHaptics
         self.comfort = comfort
         self.supportsHaptics = supportsHaptics
         self.device = device
+        self.growTwo = growTwo
     }
 
     var juice: JuiceSettings { JuiceSettings(soundAndHaptics: soundAndHaptics, supportsHaptics: supportsHaptics, comfort: comfort) }
@@ -72,6 +78,9 @@ public struct RenderState: Sendable, Equatable {
     public var squash: Vec3 = Vec3(1, 1, 1)
     /// A merged mesh may replace instanced atoms now: at rest, or under 64 px (scale-spec §9.6).
     public var meshSwapAllowed: Bool = true
+    /// A flexible molecule's flop (plan §8 M4): each segment's pose in its recipe's frame (Å),
+    /// in the order of `segmentRecipes(for:)`. Empty for a body that does not flop.
+    public var segments: [SegmentPose] = []
 }
 
 /// What happened, for the app's captions and the HUD.
@@ -85,6 +94,24 @@ public enum SessionEvent: Sendable, Equatable {
     case refused(String)
     /// At rest for 3 s on a shelf (plan §6.3), on a stack whose base touches the room here.
     case restedOnShelf(BodyID, support: Vec3)
+    /// Two bodies snapped into this one (plan §4.5).
+    case snapped(BodyID, from: [BodyID])
+    /// The recipe saw another graph than the snap meant; the guest bounced off.
+    case snapRefused(host: BodyID, guest: BodyID)
+    /// Hydrogens filled every open valence of this body (a new body).
+    case filled(BodyID, hydrogens: Int)
+    /// "Built it": every atom at its usual valence, or a molecule Lupi knows (`known`).
+    case builtIt(BodyID, name: String, known: Bool)
+    /// A break made a loose atom of an element the atom tray lacked; the tray has it now.
+    case trayGained(Int)
+    /// A flight along the scale axis began or ended (scale-spec §8.8).
+    case flight(BodyID, active: Bool)
+    /// Grow ×2 made this body a tower of `count` atoms (scale-spec §10.7).
+    case grew(BodyID, count: String)
+    /// A chunk or chip came away from a monument or terrain, already in the hand (§10.5).
+    case detached(from: BodyID, piece: BodyID)
+    /// It stands at life size, weighing this (scale.md §5.8).
+    case lifeSize(BodyID, mass: String)
 }
 
 /// What the app applies after a frame.
@@ -97,6 +124,8 @@ public struct FrameOutput: Sendable {
     public var juice: [JuiceCue] = []
     /// The play simulation's clock rate: 1, or slow motion (plan §5.4).
     public var simulationRate: Double = 1
+    /// The camera's video format the thermal policy asks for: 60, or 30 at critical (spike A5).
+    public var frameRate = 60
     public var hud = HUDStats()
     public var events: [SessionEvent] = []
 
@@ -130,6 +159,8 @@ struct GrabState: Sendable {
     var follow: HoldFollow
     var estimator = ThrowEstimator()
     var touch: SIMD2<Double>
+    /// World offset a magnet adds to the hold target.
+    var pull: Vec3 = .zero
 }
 
 struct PinchState: Sendable {
@@ -149,6 +180,8 @@ struct Glide: Sendable {
     var duration: Double
     /// Put the body back ahead of the camera when the glide ends.
     var returnAhead: Bool
+    /// The fixed point of the glide; nil for the body's own centre.
+    var about: Vec3?
 }
 
 /// The play session (plan §3–§5, scale-spec §8–§10): bodies as LupiScale pieces, spawning,
@@ -176,11 +209,21 @@ public struct PlaySession: Sendable {
     var grab: GrabState?
     var pinch: PinchState?
     var glide: Glide?
+    /// A flight along the scale axis, a dive or surfacing beyond 10^±32, or a pinch that moves φ (§8.8).
+    var flightState: FlightState?
+    /// Terrain colliders and their bookkeeping (scale-spec §10.1, spike S8).
+    var terrainColliders = TerrainColliderState()
+    /// Spike S9's bodies at the size extremes.
+    public internal(set) var s9: S9Probe?
+    /// Debug switches for the device spikes.
+    public var debug = SessionDebug()
     var juice: JuiceRouter
     var tau: TauController
     var thermal: ThermalLevel = .nominal
+    var thermalPolicy = ThermalPolicy()
     var slowMotionStart: Double?
-    var cameraInsideTerrain = false
+    /// The camera is inside a terrain's matter: toys are parked and its colliders are off (§10.1).
+    public internal(set) var cameraInsideTerrain = false
     var floorY: Double?
     var camera: CameraState?
     var hudCache = HUDCache()
@@ -189,6 +232,16 @@ public struct PlaySession: Sendable {
     var lastThrow: ThrowRelease?
     var lastImpact: LastImpact?
     var cutMs = 0.0
+    /// The snap in progress, at most one (plan §4.5).
+    var magnet: Magnet?
+    /// Refused pairs wait until these times.
+    var refusals: [SnapPair: Double] = [:]
+    /// The atom tray: H, C, N, O, F, P, S, Cl, Br, I, Na, and every element a break has made a
+    /// loose atom of (plan §4.5). Play state: gone when the session ends (plan §6.1).
+    public internal(set) var atomTray: [Int] = BuildTuning.trayElements
+    var atomSpawns = 0
+    /// "Built it" chimes waiting for their moment.
+    var delights: [(body: BodyID, at: Double)] = []
     /// Commands, cues and events gathered since the last frame was returned.
     var out = FrameOutput()
 
@@ -242,6 +295,11 @@ public struct PlaySession: Sendable {
         grab = nil
         pinch = nil
         glide = nil
+        flightState = nil
+        s9 = nil
+        magnet = nil
+        refusals = [:]
+        delights = []
         arbiter.reset()
     }
 
@@ -254,10 +312,13 @@ public struct PlaySession: Sendable {
         time = input.time
         camera = input.camera
         floorY = input.floorY ?? floorY
-        if input.thermal != thermal {
-            thermal = input.thermal
+        let level = debug.thermalOverride ?? input.thermal
+        if level != thermal {
+            thermal = level
             tau.minimum = Self.budgets(settings.device, thermal).tauMinimum
         }
+        thermalPolicy.allowsThirtyFPS = debug.a5ThirtyFPS
+        let stage = thermalPolicy.update(level, now: input.time)
         frameStats.frame(time: input.time, dt: dt)
 
         adoptMotions(input.bodies)
@@ -266,14 +327,20 @@ public struct PlaySession: Sendable {
         for g in arbiter.tick(input.time) { handle(g, now: input.time) }
         stepGrab(dt: dt, now: input.time)
         stepGlide(now: input.time)
+        stepFlight(dt: dt, now: input.time)
         stepTumble(now: input.time)
         stepBodies(dt: dt, now: input.time)
+        shedLoosePieces()
+        stepMagnet(dt: dt, now: input.time)
         dequeueSpawn(now: input.time)
         rescue()
         updateTerrain()
         buildCut(dt: dt, now: input.time)
+        stepTerrainColliders(now: input.time)
+        stepS9(now: input.time)
         out.renders = renderStates(dt: dt)
         out.simulationRate = simulationRate(now: input.time)
+        out.frameRate = stage.frameRate
         out.hud = hud()
         let result = out
         out = FrameOutput()

@@ -85,8 +85,15 @@ public enum SoundVoice: Sendable, Hashable, Codable {
     case delight
     /// A scale detent: the house click.
     case detent
+    /// A bouncy cage rings after it lands, like a bell (plan §8 M4), in the size band's pitch.
+    case ring(SizeBand)
+    /// A flexible molecule's loose end landing after the body: a soft rubber flap.
+    case flap
+    /// A brittle molecule hit close to its break: a few glassy grains, a warning.
+    case crackle
 
-    /// Every voice a bank renders: 4 families × 3 bands × 2 layers, then the rest.
+    /// Every voice a bank renders: 4 families × 3 bands × 2 layers, the rest, then the
+    /// personality layers.
     public static let all: [SoundVoice] = {
         var voices: [SoundVoice] = []
         for family in ImpactFamily.allCases {
@@ -94,7 +101,8 @@ public enum SoundVoice: Sendable, Hashable, Codable {
                 for layer in IntensityLayer.allCases { voices.append(.impact(family, band, layer)) }
             }
         }
-        return voices + [.thud, .tap, .subBass, .pop, .tick, .whoosh, .tock, .kept, .shatter, .snap, .bump, .delight, .detent]
+        voices += [.thud, .tap, .subBass, .pop, .tick, .whoosh, .tock, .kept, .shatter, .snap, .bump, .delight, .detent]
+        return voices + SizeBand.allCases.map { .ring($0) } + [.flap, .crackle]
     }()
 
     /// A stable name, for the app's resource names and logs: "impact.clack.medium.hard", "whoosh".
@@ -114,6 +122,9 @@ public enum SoundVoice: Sendable, Hashable, Codable {
         case .bump: "bump"
         case .delight: "delight"
         case .detent: "detent"
+        case let .ring(band): "ring.\(band.rawValue)"
+        case .flap: "flap"
+        case .crackle: "crackle"
         }
     }
 }

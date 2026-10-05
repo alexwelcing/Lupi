@@ -195,6 +195,13 @@ struct PlayTests {
         let handView = try r.walk(r.root(rung.id), hand.steps)
         let chipView = try r.walk(r.root(rung.id), chipBand.steps)
         #expect(chipView.level < handView.level)
+        // The picked node's world frame is the body's frame composed with its placement (§8.2).
+        for picked in [any, hand, chipBand] {
+            let (p, _) = try r.placement(from: r.root(rung.id), steps: picked.steps)
+            #expect(abs(picked.metresPerUnit - body.metresPerAnchorUnit * p.scale) <= 1e-6 * picked.metresPerUnit)
+            #expect((picked.nodeOrigin - body.world(p.translation)).length < 1e-5)
+            #expect(abs(abs(picked.nodeRotation.w) - 1) < 1e-6)
+        }
         // A ray that misses picks nothing.
         #expect(pick(ray: RayD(origin: .zero, direction: Vec3(1, 0, 0)), cut: cut, band: Bands.any, resolver: r) == nil)
     }

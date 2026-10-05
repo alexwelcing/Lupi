@@ -451,6 +451,38 @@ struct CutGuaranteeTests {
         #expect(wraps == 5)
     }
 
+    /// Climbing back up by whole periods keeps the picture while the anchor's place against the
+    /// root's faces holds, and no further: a climb into the rebase's shallow digits would not.
+    @Test func ascentsKeepThePicture() throws {
+        let levels = Content.googolplexLevels
+        let rung = Content.rung(levels)
+        let r = Content.resolver([rung])
+        // A shallow descent with digits (5, 5, 0) toward the lower z face, then a long wrap down.
+        let k = try levels - 9
+        let path = Content.anchorPath(rootLevels: levels, to: k, digits: [5, 5, 0])
+        let probe = Content.terrain(Content.ref(rung), anchorPath: path, sigma: 1, anchorPoint: .zero, at: .zero)
+        let (_, a) = try Content.anchor(probe, r)
+        let sigma = 100 / a.narrowestWidth
+        let view = ViewState.looking(from: .zero, at: Vec3(0.2, 0.1, 1), fovY: 1.0, viewportHeight: 1380, viewportWidth: 640)
+        var frame = Content.terrain(Content.ref(rung), anchorPath: path, sigma: sigma, anchorPoint: Vec3(a.centre.x, a.centre.y, a.bounds.min.z - 3 / sigma), at: .zero)
+        let budgets = steadyBudgets()
+        let start = settledCut([frame], view, budgets, r)
+        let deep = BigUInt.power(10, 50)
+        try Wraps.wrap(&frame, periods: deep, descending: true, resolver: r)
+        let max = Wraps.maxAscent(frame, resolver: r)
+        // Everything the wrap added, and the shallow digits' own whole periods that keep (5, 5, 0)'s place.
+        #expect(max >= deep)
+        #expect(max < deep + BigUInt(4))
+        let before = CutChecks.eyeBoxes(settledCut([frame], view, budgets, r), view)
+        try Wraps.wrap(&frame, periods: max, descending: false, resolver: r)
+        let after = CutChecks.eyeBoxes(settledCut([frame], view, budgets, r), view)
+        #expect(before.count == after.count)
+        #expect(zip(before, after).allSatisfy { b, c in zip(b, c).allSatisfy { abs($0 - $1) <= 1e-5 * (1 + abs($0)) } })
+        #expect(CutChecks.eyeBoxes(start, view).count == after.count)
+        // One period more would move the anchor's index against a face.
+        #expect(Wraps.maxAscent(frame, resolver: r).isZero)
+    }
+
     static func only(_ item: DrawItem, _ cut: Cut) -> Cut {
         var c = cut
         c.items = [item]

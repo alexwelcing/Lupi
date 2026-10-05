@@ -80,9 +80,13 @@ struct FrameTests {
             let before = frame
             try rebase(&frame, focusWorld: focus, resolver: r)
             guard frame.anchorPath != before.anchorPath else { break }
-            descents += frame.anchorPath.count - before.anchorPath.count
+            // Steps merge as they append (one tower step per run), so descents are counted in levels.
+            let (was, _) = try Content.anchor(before, r)
+            let (now, _) = try Content.anchor(frame, r)
+            descents += try (was.level - now.level).int ?? 0
             try Self.expectSamePoints(before, frame, r)
         }
+        #expect(frame.anchorPath.count == 1)
         let (_, rest) = try Content.anchor(frame, r)
         print("rebase: \(descents) descents to an anchor \(String(format: "%.1f", frame.metresPerAnchorUnit * rest.narrowestWidth)) m wide")
         #expect(descents >= 9)
@@ -221,6 +225,13 @@ struct FrameTests {
         #expect(ScaleAxis.cap == 11)
     }
 
+    /// A flight frame deep in the googolplex crosses |λ| = 10^99 and nothing else, at once.
+    @Test func detentsDeepInAFlight() {
+        #expect(ScaleAxis.detent(from: -3.3e99, to: -3.2e99) == nil)
+        #expect(ScaleAxis.detent(from: -1.2e99, to: -9e98) == -1e99)
+        #expect(ScaleAxis.detent(from: -40, to: -1e40) == -100)
+    }
+
     @Test func detentsClickOncePerFrame() {
         #expect(ScaleAxis.detent(from: 0.5, to: 1.5) == 1)
         #expect(ScaleAxis.detent(from: -0.1, to: 0.1) == 0)
@@ -271,5 +282,39 @@ struct FrameTests {
             #expect(left <= log10(Double(f)) + v + 1e-9)
             #expect(left >= 0 || n == 0)
         }
+        // A googolplex dive wraps about 10⁹⁸ periods a frame: counted exactly, never as an Int.
+        let huge = Wraps.periodCount(remaining: 7.3e98, factor: 10, pictureStep: v)
+        #expect(huge.bitWidth > 320)
+        #expect(abs(huge.double / 7.3e98 - 1) < 1e-12)
+        #expect(Wraps.periods(remaining: 7.3e98, factor: 10, pictureStep: v) == Int.max)
+        #expect(BigUInt(roundingUp: 2.5) == BigUInt(3))
+        #expect(BigUInt(roundingUp: 0x1p70) == BigUInt(1) << 70)
+    }
+
+    /// Climbing back part of the way up a long descent removes one digit per axis for each period,
+    /// in O(runs): the picture's frame stays, and walking the new anchor path is exact.
+    @Test func aPartialClimbCostsRuns() throws {
+        let levels = Content.googolplexLevels
+        let rung = Content.rung(levels)
+        let r = Content.resolver([rung])
+        let k = try levels - 30
+        let path = Content.anchorPath(rootLevels: levels, to: k, digits: [0, 0, 0])
+        var frame = Content.terrain(Content.ref(rung), anchorPath: path, sigma: 1, anchorPoint: .zero, at: .zero)
+        let before = frame.worldFromAnchor
+        let deep = BigUInt.power(10, 98)
+        try Wraps.wrap(&frame, periods: deep, descending: true, resolver: r)
+        // Up again by a tenth of it and one level-period more: the last step is only partly consumed.
+        let up = deep.dividedSmall(10).quotient + BigUInt(1)
+        let clock = ContinuousClock()
+        let start = clock.now
+        try Wraps.wrap(&frame, periods: up, descending: false, resolver: r)
+        #expect(clock.now - start < .seconds(1))
+        let anchor = try r.walk(r.root(rung.id), frame.anchorPath)
+        let expected = try k - deep.multipliedSmall(3) + up.multipliedSmall(3)
+        #expect(anchor.level == expected)
+        #expect(frame.worldFromAnchor == before)
+        // And all the way back to where the dive began.
+        try Wraps.wrap(&frame, periods: try deep - up, descending: false, resolver: r)
+        #expect(try r.walk(r.root(rung.id), frame.anchorPath).level == k)
     }
 }

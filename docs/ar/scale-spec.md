@@ -1240,7 +1240,7 @@ The map is continuous and exactly invertible.
 - The displayed magnification changes by at most V = 0.03 decade per frame (0.015 in Gentle).
 - The rest of λ's change is made by **wraps**. A wrap moves the anchor by whole periods (3 levels, a factor of f on every axis) and keeps `worldFromAnchor` and `σ_A` unchanged. A level and its descendant 3 levels down have the same extents in their own units, and the cut draws both as the same boxes, so a wrap leaves the picture exactly as it was while λ jumps by `log10 f` per period.
 - A wrap is allowed only when the last cut drew nothing at or below the tower's seed copies, no removal touches the anchor's neighbourhood, and, on every axis whose root face lies in the neighbourhood, the anchor touches that face. A dive is aimed at a hit on the body's surface, so its anchor touches the face it dives into.
-- A descending wrap of `n` periods appends 3n levels to the anchor path, the digits of each axis being constant: on an axis whose root face the anchor touches, the extreme digit (`f − 1` at the upper face, 0 at the lower); on any other axis, ⌊f/2⌋, the child that holds its parent's centre. So a dive of 10¹⁰⁰ levels adds about one run per axis to the anchor path. An ascending wrap removes 3n levels.
+- A descending wrap of `n` periods appends 3n levels to the anchor path, the digits of each axis being constant: on an axis whose root face the anchor touches, the extreme digit (`f − 1` at the upper face, 0 at the lower); on any other axis, ⌊f/2⌋, the child that holds its parent's centre. An axis with no digits yet spans the root and touches both faces: the wrap takes the face nearer the point the dive is aimed at, or waits until a rebase has given the axis a digit, so the aim stays in the anchor. So a dive of 10¹⁰⁰ levels adds about one run per axis to the anchor path. An ascending wrap removes 3n levels, at most as many as keep the anchor's place against the root's faces on every axis, so the picture does not change.
 - Each frame wraps by as many whole periods as keep the remaining distance below one period plus V. Each wrap costs O(runs).
 - When wraps stop (seed copies come into the cut near the atoms), the dive finishes at V per frame: the last few decades take a few seconds, in which the player sees the ions grow to marbles.
 
@@ -1422,7 +1422,7 @@ DrawItem {
 
 - **Face planes are global.** Each outer face of the terrain's root within 20 m of the camera is a static collider, a box 0.5 m thick behind the face. The planes are made once, when the terrain forms, and move with the camera frame entity (§8.5); no window rebuild ever removes them, so nothing falls through. (Holes left by chips get no planes; their atoms are windowed like any others.)
 - **Atom windows.** Atom-level bumps are static spheres in windows: one of radius 1 m around the camera, and one of radius 0.5 m around each dynamic body slower than 1 m/s. A faster body collides with the face planes alone, with CCD on. A window is rebuilt asynchronously when its centre moves a quarter of its radius. All windows together hold at most 256 shapes: 64 for the camera's, and the rest shared among the slow bodies' windows, nearest bodies first.
-- **Inside the solid.** When the camera is inside solid terrain, atoms within 0.35 m of it are not drawn (the excavation bubble). Toys are then parked, frozen and hidden in place outside the simulation, until the camera leaves the solid, and the terrain's colliders are off. No toy is ever spawned or moved inside matter, so none is born interpenetrating.
+- **Inside the solid.** The camera is inside a solid node when it is within the node's atom envelope or its lattice cells (Σ nₐ pₐ for a level or a copy, the cell box for a box), so a point in the gap between the atoms of two neighbouring copies is inside. When the camera is inside solid terrain, atoms within 0.35 m of it are not drawn (the excavation bubble). Toys are then parked, frozen and hidden in place outside the simulation, until the camera leaves the solid, and the terrain's colliders are off. No toy is ever spawned or moved inside matter, so none is born interpenetrating.
 
 ### 10.2 Felt mass: `lupi.feltmass.v1` [V]
 
@@ -2068,3 +2068,10 @@ v1 is not frozen until it reaches `main` (§0), so these entries revise v1 in pl
 | §10.4 | A hydrogen folded into its partner grows its radius by 1.15, compounded. | Swift |
 | §11.1, §11.2 | Swift adds `ViewState.viewportWidth`, `Budgets.tauMinimum`, `TauController` and the Magnitude members above; TypeScript's `BodyFrame` carries its resolver and `buildCut` an options argument. | TS, Swift |
 | §12.4, §12.6 | New vectors: nested removals, record depth, several dopants per copy, caffeine's first Grow tap. The bundled pack's twenty root names, which its contentId depends on, are listed. | TS, Swift |
+
+**2026-10-05, play.** The native game's scale play (M3a) and the web's `/scale` page were built to §8 and §10 separately; where the text was open, this entry records what both now do. No [B] part and no vector changed.
+
+| § | Decision | Source |
+|---|---|---|
+| §8.8 | A descending wrap on an axis with no digits takes the face nearer the dive's aim (Swift) or waits for a rebase to give the axis one (web). An ascending wrap climbs at most as many periods as keep the anchor's place against the root's faces. Both cost O(runs), and the period count is exact however far λ races. | Swift, web |
+| §10.1 | A camera between the atoms of neighbouring copies is inside the solid: a solid node fills its lattice cells as well as its atom envelope. Without it the 10³⁰ cube, dived about its centre, drew nothing. | Swift |

@@ -48,8 +48,9 @@ public enum PlayGesture: Sendable, Equatable {
     /// `ratio` multiplies the size since the last change; `twist` turns it, radians, clockwise on screen.
     case pinchChanged(centroid: SIMD2<Double>, ratio: Double, twist: Double)
     case pinchEnded
-    /// +1 toward smaller things (the last pinch spread), −1 toward larger.
-    case flyBegan(direction: Double)
+    /// +1 toward smaller things (the last pinch spread), −1 toward larger; `centroid` is where the
+    /// two fingers rest, which aims it.
+    case flyBegan(direction: Double, centroid: SIMD2<Double>)
     case flyEnded
 }
 
@@ -106,6 +107,18 @@ public struct GestureArbiter: Sendable {
         case let .grabbing(_, b): b
         case let .pinching(_, _, _, _, held): held
         default: nil
+        }
+    }
+
+    /// The held body became another (a snap merged it, plan §4.5): the fingers keep holding.
+    public mutating func retarget(_ old: BodyID, to new: BodyID) {
+        switch state {
+        case let .grabbing(f, b) where b == old:
+            state = .grabbing(f, new)
+        case let .pinching(f1, f2, sep, angle, held) where held == old:
+            state = .pinching(f1, f2, lastSep: sep, lastAngle: angle, held: new)
+        default:
+            break
         }
     }
 
@@ -278,7 +291,7 @@ public struct GestureArbiter: Sendable {
             let still = abs((a.now - b.now).length - sep0) < tuning.flySlop && (((a.now + b.now) / 2) - c0).length < tuning.flySlop
             if still && flyAllowed && time - since >= tuning.flyHold {
                 state = .flying(a, b, sep0: sep0)
-                return [.flyBegan(direction: lastPinchDirection)]
+                return [.flyBegan(direction: lastPinchDirection, centroid: (a.now + b.now) / 2)]
             }
             return []
         default:
@@ -289,6 +302,13 @@ public struct GestureArbiter: Sendable {
     /// The session turned a chunk or chip into a new body held by the same finger.
     public mutating func adoptGrab(_ body: BodyID, finger id: Int, at location: SIMD2<Double>, time: Double) {
         state = .grabbing(Finger(id: id, down: location, downTime: time, now: location, moved: true), body)
+    }
+
+    /// The same, for the one finger a chunk or chip left down; false when there is none.
+    public mutating func adoptGrab(_ body: BodyID, at location: SIMD2<Double>, time: Double) -> Bool {
+        guard case let .done(ids) = state, ids.count == 1, let id = ids.first else { return false }
+        adoptGrab(body, finger: id, at: location, time: time)
+        return true
     }
 
     /// Drops every gesture in progress (the scene went away).
