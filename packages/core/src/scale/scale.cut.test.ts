@@ -255,19 +255,23 @@ describe('§9.8.2 same footprint, same cost', () => {
 });
 
 /** Every point must lie in exactly one emitted region, or in a region skipped as enclosed. */
-/** With `body`, the points are drawn from the body's box and only those in the frustum are checked. */
-function coverage(frame: BodyFrame, cut: Cut, root: View, rand: () => number, samples = 400, body?: Geometry) {
+/**
+ * With `body`, the points are drawn from the body's box and only those in the frustum are checked.
+ * Points in a `removed` box must be drawn by nothing.
+ */
+function coverage(frame: BodyFrame, cut: Cut, root: View, rand: () => number, samples = 400, body?: Geometry, removed: Array<{ min: Vec3; max: Vec3 }> = []) {
   const g = new Geometries(frame.resolver);
   const sigma = frame.metresPerAnchorUnit;
   const regions = [
-    ...cut.items.filter((i) => i.kind !== 'facePlane').map((i) => ({ sim: i.anchorFromItem, min: i.extras.min, max: i.extras.max, kind: 'item' as const })),
-    ...(cut.skipped ?? []).filter((s) => s.why === 'enclosed').map((s) => ({ sim: s.anchorFromNode, min: s.min, max: s.max, kind: 'enclosed' as const })),
+    ...cut.items.filter((i) => i.kind !== 'facePlane').map((i) => ({ sim: i.anchorFromItem, min: i.extras.min, max: i.extras.max, atoms: i.extras.atoms !== undefined })),
+    ...(cut.skipped ?? []).filter((s) => s.why === 'enclosed').map((s) => ({ sim: s.anchorFromNode, min: s.min, max: s.max, atoms: false })),
   ];
   const rootGeometry = g.of(root);
   void rootGeometry;
   let checked = 0;
   let doubled = 0;
   let missing = 0;
+  let drawnRemoved = 0;
   const camFromAnchor = (x: Vec3) => applyRigid(frame.worldFromAnchor, scale3(x, sigma));
   const anchorFromCam = (c: Vec3): Vec3 => {
     const w = frame.worldFromAnchor;
@@ -289,16 +293,25 @@ function coverage(frame: BodyFrame, cut: Cut, root: View, rand: () => number, sa
       p = anchorFromCam([x, y, -depth]);
     }
     let hits = 0;
+    let boxHits = 0;
     for (const r of regions) {
       if (!r.min || !r.max) continue;
       const local = applySim(invertSim(r.sim), p);
-      if ([0, 1, 2].every((a) => local[a] >= r.min![a] - 1e-9 && local[a] < r.max![a] + 1e-9)) hits += 1;
+      if ([0, 1, 2].every((a) => local[a] >= r.min![a] - 1e-9 && local[a] < r.max![a] + 1e-9)) {
+        hits += 1;
+        if (!r.atoms) boxHits += 1;
+      }
+    }
+    // An atoms item spans its whole box; its atoms leave the removed ones out (checked by the caller).
+    if (removed.some((b) => [0, 1, 2].every((a) => p[a] > b.min[a] && p[a] < b.max[a]))) {
+      if (boxHits > 0) drawnRemoved += 1;
+      continue;
     }
     checked += 1;
     if (hits > 1) doubled += 1;
     if (hits === 0) missing += 1;
   }
-  return { checked, doubled, missing };
+  return { checked, doubled, missing, drawnRemoved };
 }
 
 describe('§9.8.3 coverage', () => {
@@ -363,6 +376,44 @@ describe('§9.8.3 coverage', () => {
     expect(c.checked).toBeGreaterThan(100);
     // Child 1 lies ahead of the camera; without the group's other children it would be a hole.
     expect(cut.items.some((i) => i.path[0]?.tag === 'child' && i.path[0].index === 1)).toBe(true);
+  });
+
+  it('an edited copper box draws none of what it removed and the rest exactly once', () => {
+    const cu = encodeRecord({ kind: 'crystal', structure: 3, termination: 0, a: 29, b: 0, quarter: 59228, cells: [40n, 40n, 40n], capZ: 0, capOffset: 0 });
+    const removed: Step[][] = [[{ tag: 'cells', octants: [0, 7] }], [{ tag: 'cells', octants: [3, 5, 6] }], [{ tag: 'cells', octants: [7] }]];
+    const edit = encodeRecord({ kind: 'edit', base: nodeId(cu), removed });
+    const resolver = new Resolver(new MemoryStore([cu, edit]));
+    const bare = resolver.root(nodeId(cu));
+    const cell = (4 * 59228) / 65536;
+    const boxes = removed.map((path) => {
+      const v = resolver.walk(bare, path);
+      if (v.type !== 'box') throw new Error('box expected');
+      return { min: v.box.lo.map((x) => Number(x) * cell) as Vec3, max: v.box.hi.map((x) => Number(x) * cell) as Vec3 };
+    });
+    const root = resolver.root(nodeId(edit));
+    const g = new Geometries(resolver).of(root);
+    for (const [span, distance] of [[0.4, 0.6], [0.4, 0.35]]) {
+      const frame = deskFrame(resolver, nodeId(edit), span, distance);
+      // From +z: octant 7's hole faces the camera; the other two removals are cavities inside.
+      const budgets = { ...BUDGETS, items: 1e6, boxesAndSplats: 1e6, instancedAtoms: 1e7, visits: 1e6, materializations: 1e6 };
+      const cut = buildCut([frame], VIEW, budgets, frames([frame], VIEW, budgets, 3), { debug: true });
+      const c = coverage(frame, cut, root, rand, 1500, g, boxes);
+      expect([c.doubled, c.missing, c.drawnRemoved]).toEqual([0, 0, 0]);
+      expect(c.checked).toBeGreaterThan(300);
+      expect(cut.overBudget).toBe(false);
+      // No atom drawn lies in a removed box.
+      let atoms = 0;
+      for (const item of cut.items.filter((i) => i.extras.atoms !== undefined)) {
+        const leaf = resolver.materialize(resolver.resolve(nodeId(edit), item.path));
+        const indices = item.extras.atomIndices ?? Array.from(leaf.z, (_z, i) => i);
+        for (const i of indices) {
+          const x = applySim(item.anchorFromItem, [leaf.positions[3 * i], leaf.positions[3 * i + 1], leaf.positions[3 * i + 2]]);
+          expect(boxes.some((b) => [0, 1, 2].every((a) => x[a] > b.min[a] && x[a] < b.max[a]))).toBe(false);
+          atoms += 1;
+        }
+      }
+      expect(atoms).toBeGreaterThan(0);
+    }
   });
 
   it('a water grown by Grow ×2 is drawn exactly once as the camera approaches, monotone and within budgets (errata/ts.md E13)', () => {
