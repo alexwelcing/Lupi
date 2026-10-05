@@ -88,7 +88,7 @@ public struct BodyMotion: Sendable, Equatable {
 }
 
 /// One collision report (`CollisionEvents.Began` or `.Updated`, plan §4.4).
-public struct Contact: Sendable, Equatable {
+public struct PlayContact: Sendable, Equatable {
     public enum Phase: Sendable, Equatable { case began, updated }
 
     /// Nil is the room: the scene-understanding mesh or a plane.

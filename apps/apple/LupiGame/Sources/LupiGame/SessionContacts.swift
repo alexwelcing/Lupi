@@ -7,7 +7,7 @@ import LupiScaleCore
 extension PlaySession {
     // MARK: Contacts in (plan §4.4, §5)
 
-    mutating func handleContacts(_ contacts: [Contact], now: Double) {
+    mutating func handleContacts(_ contacts: [PlayContact], now: Double) {
         for c in contacts {
             let ma = c.a.flatMap { bodies[$0]?.feltMassKg }
             let mb = c.b.flatMap { bodies[$0]?.feltMassKg }

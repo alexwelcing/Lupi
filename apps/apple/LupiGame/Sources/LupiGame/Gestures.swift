@@ -33,7 +33,7 @@ public enum TouchTarget: Sendable, Equatable {
 }
 
 /// Exactly one of these per touch sequence (scale-spec §10.5).
-public enum Gesture: Sendable, Equatable {
+public enum PlayGesture: Sendable, Equatable {
     case tap(TouchTarget, SIMD2<Double>)
     /// A toy, grabbed whole where the finger came down.
     case grabBegan(BodyID, SIMD2<Double>)
@@ -111,7 +111,7 @@ public struct GestureArbiter: Sendable {
 
     // MARK: Touches
 
-    public mutating func handle(_ t: TouchSample, target: TouchTarget) -> [Gesture] {
+    public mutating func handle(_ t: TouchSample, target: TouchTarget) -> [PlayGesture] {
         var out = tick(t.time)
         switch t.phase {
         case .began: out += began(t, target)
@@ -122,7 +122,7 @@ public struct GestureArbiter: Sendable {
         return out
     }
 
-    mutating func began(_ t: TouchSample, _ target: TouchTarget) -> [Gesture] {
+    mutating func began(_ t: TouchSample, _ target: TouchTarget) -> [PlayGesture] {
         let f = Finger(id: t.id, down: t.location, downTime: t.time, now: t.location)
         switch state {
         case .idle:
@@ -146,7 +146,7 @@ public struct GestureArbiter: Sendable {
         }
     }
 
-    mutating func moved(_ t: TouchSample) -> [Gesture] {
+    mutating func moved(_ t: TouchSample) -> [PlayGesture] {
         switch state {
         case .pending(var f, let target, let armed):
             guard f.id == t.id else { return [] }
@@ -217,7 +217,7 @@ public struct GestureArbiter: Sendable {
         }
     }
 
-    mutating func ended(_ t: TouchSample, cancelled: Bool) -> [Gesture] {
+    mutating func ended(_ t: TouchSample, cancelled: Bool) -> [PlayGesture] {
         switch state {
         case let .pending(f, target, _):
             guard f.id == t.id else { return [] }
@@ -261,7 +261,7 @@ public struct GestureArbiter: Sendable {
 
     /// Recognitions that need only time: a held toy grabs, a held monument arms a chip, two still
     /// fingers fly.
-    public mutating func tick(_ time: Double) -> [Gesture] {
+    public mutating func tick(_ time: Double) -> [PlayGesture] {
         switch state {
         case let .pending(f, target, armed):
             switch target {

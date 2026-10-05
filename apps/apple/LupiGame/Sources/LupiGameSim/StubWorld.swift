@@ -29,7 +29,7 @@ public struct SimBody: Sendable {
     public var asleep = false
     var stillFor = 0.0
 
-    /// Contact points in the entity frame with their radii: spheres, and a box's or hull's corners.
+    /// PlayContact points in the entity frame with their radii: spheres, and a box's or hull's corners.
     var points: [(Vec3, Double)]
     /// A bounding sphere in the entity frame, for body against body.
     var bound: (Vec3, Double)
@@ -84,7 +84,7 @@ public struct SimBody: Sendable {
 
 /// A deterministic stand-in for RealityKit's physics, good enough to test the session's logic:
 /// gravity, damping, impulses, a floor and walls, and bodies against each other by bounding
-/// spheres. Contact reports mimic `CollisionEvents`: `began` on the first frame of a touch,
+/// spheres. PlayContact reports mimic `CollisionEvents`: `began` on the first frame of a touch,
 /// `updated` while it lasts, with the frame's largest impulse.
 public struct StubWorld: Sendable {
     public var gravity = Vec3(0, -9.81, 0)
@@ -168,8 +168,8 @@ public struct StubWorld: Sendable {
     // MARK: Stepping
 
     /// Advances `dt` seconds and reports the frame's contacts, stamped `time`.
-    public mutating func step(_ dt: Double, time: Double) -> [Contact] {
-        var reports: [SimKey: Contact] = [:]
+    public mutating func step(_ dt: Double, time: Double) -> [PlayContact] {
+        var reports: [SimKey: PlayContact] = [:]
         var now: Set<SimKey> = []
         let n = max(1, Int((dt / substep).rounded(.up)))
         let h = dt / Double(n)
@@ -181,7 +181,7 @@ public struct StubWorld: Sendable {
                 for j in ids.indices where j > i { collideBodies(ids[i], ids[j], time: time, reports: &reports, now: &now) }
             }
         }
-        var out: [Contact] = []
+        var out: [PlayContact] = []
         for key in reports.keys.sorted(by: { ($0.a, $0.b) < ($1.a, $1.b) }) {
             var c = reports[key]!
             c.phase = touching.contains(key) ? .updated : .began
@@ -205,7 +205,7 @@ public struct StubWorld: Sendable {
         bodies[id] = b
     }
 
-    mutating func collidePlanes(_ id: BodyID, time: Double, reports: inout [SimKey: Contact], now: inout Set<SimKey>) {
+    mutating func collidePlanes(_ id: BodyID, time: Double, reports: inout [SimKey: PlayContact], now: inout Set<SimKey>) {
         guard var b = bodies[id], b.mode == .dynamic, !b.parked, !b.points.isEmpty else { return }
         if b.asleep {
             // A sleeping body still reports its resting contacts, as CollisionEvents.Updated does.
@@ -277,12 +277,12 @@ public struct StubWorld: Sendable {
             } else {
                 b.stillFor = 0
             }
-            record(&reports, key, Contact(a: id, b: nil, phase: .began, impulse: j, direction: n, position: point, time: time))
+            record(&reports, key, PlayContact(a: id, b: nil, phase: .began, impulse: j, direction: n, position: point, time: time))
         }
         bodies[id] = b
     }
 
-    mutating func collideBodies(_ x: BodyID, _ y: BodyID, time: Double, reports: inout [SimKey: Contact], now: inout Set<SimKey>) {
+    mutating func collideBodies(_ x: BodyID, _ y: BodyID, time: Double, reports: inout [SimKey: PlayContact], now: inout Set<SimKey>) {
         guard var a = bodies[x], var b = bodies[y], !a.parked, !b.parked, a.bound.1 > 0, b.bound.1 > 0 else { return }
         guard a.mode == .dynamic || b.mode == .dynamic else { return }
         let ca = a.pose.apply(a.bound.0), cb = b.pose.apply(b.bound.0)
@@ -310,10 +310,10 @@ public struct StubWorld: Sendable {
         }
         bodies[x] = a
         bodies[y] = b
-        record(&reports, key, Contact(a: x, b: y, phase: .began, impulse: j, direction: n, position: ca + n * (a.bound.1 - overlap / 2), time: time))
+        record(&reports, key, PlayContact(a: x, b: y, phase: .began, impulse: j, direction: n, position: ca + n * (a.bound.1 - overlap / 2), time: time))
     }
 
-    func record(_ reports: inout [SimKey: Contact], _ key: SimKey, _ c: Contact) {
+    func record(_ reports: inout [SimKey: PlayContact], _ key: SimKey, _ c: PlayContact) {
         if let old = reports[key], old.impulse >= c.impulse { return }
         reports[key] = c
     }

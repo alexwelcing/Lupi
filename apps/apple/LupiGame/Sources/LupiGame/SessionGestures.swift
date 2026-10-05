@@ -45,7 +45,7 @@ extension PlaySession {
         return best.map { ($0.0, $0.1) }
     }
 
-    mutating func handle(_ g: Gesture, now: Double) {
+    mutating func handle(_ g: PlayGesture, now: Double) {
         switch g {
         case let .tap(target, _):
             if let id = target.body { select(selection == id ? nil : id) } else { select(nil) }

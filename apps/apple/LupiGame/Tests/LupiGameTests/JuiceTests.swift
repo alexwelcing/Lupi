@@ -23,8 +23,8 @@ struct JuiceRouterTests {
         let id = Fixture.spawn(&sim, "benzene")
         let m = try #require(sim.session.body(id)).feltMassKg
         let t = sim.time
-        let low = Contact(a: id, b: nil, phase: .began, impulse: 0.05 * m, direction: Vec3(0, 0, 1), position: Vec3(0, 1.1, -0.5), time: t + 0.01)
-        let real = Contact(a: id, b: nil, phase: .updated, impulse: 3 * m, direction: Vec3(0, 0, 1), position: Vec3(0, 1.1, -0.5), time: t + 0.03)
+        let low = PlayContact(a: id, b: nil, phase: .began, impulse: 0.05 * m, direction: Vec3(0, 0, 1), position: Vec3(0, 1.1, -0.5), time: t + 0.01)
+        let real = PlayContact(a: id, b: nil, phase: .updated, impulse: 3 * m, direction: Vec3(0, 0, 1), position: Vec3(0, 1.1, -0.5), time: t + 0.03)
         var input = FrameInput(time: t + 0.01, camera: sim.camera, bodies: sim.world.motions, contacts: [low])
         _ = sim.session.step(input)
         input = FrameInput(time: t + 0.03, camera: sim.camera, bodies: sim.world.motions, contacts: [real])

@@ -36,7 +36,7 @@ public struct FrameInput: Sendable {
     /// Each body's pose and velocity as the physics engine has them now.
     public var bodies: [BodyID: BodyMotion]
     /// Collision reports since the last frame.
-    public var contacts: [Contact]
+    public var contacts: [PlayContact]
     /// Touches since the last frame, in order.
     public var touches: [TouchSample]
     public var thermal: ThermalLevel
@@ -44,7 +44,7 @@ public struct FrameInput: Sendable {
     public var floorY: Double?
 
     public init(
-        time: Double, camera: CameraState, bodies: [BodyID: BodyMotion] = [:], contacts: [Contact] = [],
+        time: Double, camera: CameraState, bodies: [BodyID: BodyMotion] = [:], contacts: [PlayContact] = [],
         touches: [TouchSample] = [], thermal: ThermalLevel = .nominal, floorY: Double? = nil
     ) {
         self.time = time

@@ -64,7 +64,7 @@ struct JuiceRouter: Sendable {
     }
 
     /// Opens or feeds a pair's window. Returns true when this report should play at once.
-    mutating func observe(_ c: Contact, deltaV: Double) -> (key: PairKey, playNow: Bool) {
+    mutating func observe(_ c: PlayContact, deltaV: Double) -> (key: PairKey, playNow: Bool) {
         let key = PairKey(c.a, c.b)
         if var w = windows[key] {
             if deltaV > w.deltaV {
