@@ -2,7 +2,7 @@
 
 *2026-10-05. Issues found in [scale-spec.md](../scale-spec.md) while building the TypeScript reference in `packages/core/src/scale`. The spec text was not edited: each entry quotes it, says what is wrong or unclear, gives the evidence, and names the resolution the reference implements (and the golden fixtures carry). A conformance step reconciles this file with the Swift implementer's errata into the spec.*
 
-Every value in §12 reproduced exactly with the resolutions below; none of them changes a §12 vector.
+Every value in §12 reproduced exactly with the resolutions below; none of them changes a §12 vector. E13 to E17 concern §8 and §9, which the reference implements at value level for the web viewer, so none of them touches the fixtures.
 
 | # | Section | Kind | Resolution in the reference |
 |---|---|---|---|
@@ -18,6 +18,11 @@ Every value in §12 reproduced exactly with the resolutions below; none of them 
 | E10 | §5.5 | gap, [V] | a mantissa that rounds up to the base renormalizes |
 | E11 | §5.3 | wording, [B] | none needed: a product prints without parentheses |
 | E12 | §6.4 | wording, [B] | ROOT padding is per entry (equivalent) |
+| E13 | §9.2, §9.8.3 | error, [V] | ε as §9.2 writes it; the Grow ×2 test checks coverage, budgets and monotone counts, not the factor 2 |
+| E14 | §9.3 | ambiguity, [V] | the τ controllers' windows and counters as `TauController` states them |
+| E15 | §11.2 | gap | `buildCut`'s bodies carry their resolver; an options argument for debugging and the cache |
+| E16 | §9.8.7 | note | the 4 ms bound is the Swift benchmark's; the TypeScript reference is timed and gated at 400 ms |
+| E17 | §9.4, §9.5 | ambiguity, [V] | any node with removals splits like a starting node, within the budgets |
 
 ---
 
@@ -121,3 +126,50 @@ Every value in §12 reproduced exactly with the resolutions below; none of them 
 **Quote.** "per root: NodeID, name length (u16), name, zero padding to a multiple of 4".
 
 **Note.** Padding the entry (34 + len) and padding the section offset to a multiple of 4 are the same, because the section header is 8 bytes and a NodeID 32. The reference pads the entry; the small pack's ROOT (100 bytes) confirms it. A one-word clarification would remove the doubt.
+
+## E13. §9.2 and §9.8.3: a non-solid tower does not refine gradually
+
+**Quote.** §9.2: "Because a tower's error is the same at every level, a level is refined only where its atoms (solid) or its periods (any other seed) are bigger than τ pixels. So its cut is a ring of boxes around the eye, the geometry clipmap of terrain rendering …, whatever its count, and it refines gradually as the eye approaches." §9.8.3: "… and on a water grown by Grow ×2 (a non-solid tower) as the camera approaches, where refinement must also be gradual: the emitted count grows by at most a factor of 2 per halving of the distance."
+
+**Problem.** With one ε in Å for every level, `ρ(X) = ε · σ · K / max(dist − r σ, z_near)` depends on a node's size only through its nearest distance. Every node whose bounds come within `R = ε σ K / τ` of the eye refines, and so does each of its descendants that does: the refined region is a ball of radius `R` that goes down to seed copies all at once, not a set of rings (a clipmap needs an error that grows with each level's cell). Seen face-on, the copies just inside the ball are about τ pixels across, so their number goes from none to roughly `(K/τ)²` while the eye moves from `R` to `R/2`. No factor-2 bound per halving can hold. (A solid tower behaves the same at the atom scale; §9.8 does not ask that to be gradual.)
+
+**Evidence.** Water grown 45 levels with §12.4's Grow ×2 periods, scaled to 3 m across, the camera on the normal through the centre of its top face, iPhone 15 Pro fair budgets except 60,000 items and visits and unlimited materializations, two frames each:
+
+| Eye distance | 0.800 m | 0.566 m | 0.400 m | 0.283 m | 0.200 m | 0.141 m |
+|---|---|---|---|---|---|---|
+| Items | 5 | 5 | 5 | 21 | 59,989 | 59,985 |
+| Visits | 9 | 9 | 9 | 49 | 60,000 (budget) | 60,000 (budget) |
+
+From 0.4 m to 0.2 m, one halving, the count grows by a factor above 10⁴; with the fair budgets the cut stops at 4,096 items and is `overBudget`, and §9.3's controller then raises τ, which shrinks the ball.
+
+**Resolution.** §9.2's error as written. The Grow ×2 test (`scale.cut.test.ts`) checks what does hold: each sampled point of the body in view is drawn exactly once at every distance, including over budget; counts are monotone as the eye approaches; no budget is exceeded; and outside the ball the body stays a handful of boxes. It does not check the factor 2. **Proposed spec change:** drop "refines gradually" from §9.2 and the factor-2 clause from §9.8.3, and say instead that the budgets and τ bound the cut. If gradual growth is wanted, give a non-solid level an error that grows with the level, such as the extent of one child: errors stay monotone, and the cut becomes the clipmap §9.2 describes, at the price of boxes that read denser than their copies out to where one child is τ pixels.
+
+## E14. §9.3: when the τ controllers act
+
+**Quote.** "**τ** is the larger of two controllers, each evaluated every 0.5 s and kept in [τ_min, 8] … A window with any interval over 1.5 display periods (a dropped frame) multiplies τ by 1.25; 2 s without one multiplies it by 0.95. … A cut that was `overBudget` (§9.5) multiplies the next frame's τ by 1.25; 0.5 s with every budget under 80 % multiplies it by 0.9."
+
+**Problem.** "Evaluated every 0.5 s" and "the next frame's τ" disagree for the budget controller. It is not said whether ×0.95 applies once per 2 s or at every window once 2 s have passed, where the 2 s count from at start, or which budgets "every budget" covers.
+
+**Resolution** (`TauController`, [V]). The frame-time controller judges 0.5 s windows: a window with a dropped frame multiplies by 1.25, otherwise ×0.95 when the last drop (or the first frame) is at least 2 s old, so at most once per window. The budget controller reacts to an `overBudget` cut at once, for the next frame; a run of frames with items, boxes and splats, instanced atoms and visits all under 80 % multiplies it by 0.9 each 0.5 s it lasts. Both are clamped to [τ_min, 8], and a thermal change moves τ_min. With LupiEngine, `gpuTime` applies the 8 ms rule to the frame-time controller.
+
+## E15. §11.2: `buildCut` has no store
+
+**Quote.** "`export function buildCut(bodies: BodyFrame[], view: ViewState, budgets: Budgets, previous?: Cut): Cut;   // later, for the web`"; the Swift signature in §11.1 takes `resolver: Resolver`.
+
+**Problem.** The cut reads records, and §8.3's `BodyFrame` holds a reference, not a store, so the TypeScript signature cannot resolve anything.
+
+**Resolution.** The reference's `BodyFrame` carries its `resolver`, with `root` and `path` in place of `ref`, so bodies from different packs share one call, and `buildCut` takes an optional fifth argument `{ debug, cache }` (the regions skipped as enclosed or culled, for the coverage tests; a cache kept across frames). Otherwise the signature is §11.2's. **Proposed spec change:** add the resolver to the TypeScript `BodyFrame` or the signature.
+
+## E16. §9.8.7: the cost bound and the TypeScript reference
+
+**Quote.** "A release-mode benchmark of `buildCut` at 8,192 visits runs with the Linux tests and fails above 4 ms on CI hardware."
+
+**Note.** The bound is the Swift implementation's. The TypeScript reference is written for clarity and exact agreement, with `bigint` digits and object nodes: on this Linux container (Node 22) a frame of exactly 8,192 visits over a 4,000³ copper box takes about 76 to 85 ms, near 10 µs a visit. Its test asserts the 8,192 visits and gates the time at 400 ms (`LUPI_CUT_MS` overrides it), and prints the measurement. A web viewer that adopts `buildCut` will need its own profile against §9.3's 1 ms; no claim about devices is made here.
+
+## E17. §9.4 and §9.5: nodes with removals below the starting nodes
+
+**Quote.** §9.4: "**Removals** inside a starting node split it into its remaining children, at most 256 per edit."
+
+**Problem.** Only starting nodes are mentioned. A node met during the traversal can also carry removals (an edit below the anchor, or a removal deeper than the starting node), and its stand-in (§9.2) would draw the removed matter.
+
+**Resolution.** Any node that carries removals and is not final is refined whatever its ρ, like a starting node, subject to the same residency and budget checks; over budget it is emitted as its stand-in and the cut is `overBudget`, as for any other node. A coverage test on an edited copper box (a hole at a corner, two cavities inside) checks that no removed region is drawn, no atom drawn lies in one, and the rest is drawn once.
