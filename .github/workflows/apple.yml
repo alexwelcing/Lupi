@@ -2,8 +2,9 @@ name: Apple packages
 
 # The native app (apps/apple) is built and signed on the owner's Mac (D2 as
 # amended 2026-10-04), so CI covers only what Linux can prove: every pure-Swift
-# package's tests, and that the Swift sources generated from the web's
-# TypeScript (elements, bond fixtures, edge samples, starters) are current.
+# package's tests, that the app's own sources parse, and that the Swift sources
+# generated from the web's TypeScript (elements, bond fixtures, edge samples,
+# starters) are current.
 
 on:
   workflow_dispatch: {}
@@ -52,6 +53,11 @@ jobs:
       image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # The app (apps/apple/Lupi) builds only in Xcode. `swiftc -parse` resolves
+      # no imports, so this catches syntax errors in its sources, not type errors.
+      - name: Parse the app sources
+        run: sh tools/apple/parse-app.sh
 
       # Every package under apps/apple is tested, so a new one is covered
       # without editing this file.
