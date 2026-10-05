@@ -156,6 +156,8 @@ export class Resolver {
   private readonly unitMemo = new Map<string, bigint>();
   private readonly checked = new Set<string>();
   private readonly cappedMemo = new Map<string, LeafNode>();
+  /** A tower's seed materialization, shared by every copy (each copy differs only by its substitution). */
+  private readonly seedMemo = new Map<string, LeafNode>();
 
   constructor(store: NodeStore) {
     this.store = store;
@@ -570,7 +572,12 @@ export class Resolver {
         return leafFromQ16(materializeBox(v.crystal, v.box, removed));
       }
       case 'copy': {
-        const seed = this.materialize(this.root(v.tower.seed));
+        const seedKey = toHex(v.tower.seed);
+        let seed = this.seedMemo.get(seedKey);
+        if (!seed) {
+          seed = this.materialize(this.root(v.tower.seed));
+          this.seedMemo.set(seedKey, seed);
+        }
         return { kind: 'leaf', z: substitute(seed.z, v.tower.substitution!, v.key).z, positions: seed.positions };
       }
       case 'selection': {
