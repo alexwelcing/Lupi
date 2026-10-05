@@ -26,6 +26,14 @@ struct DebugPanel: View {
                     Text("30k").tag(30000)
                 }
                 .pickerStyle(.segmented)
+                Toggle("S8 rebuild the camera window every frame", isOn: $controller.spikes.s8EveryFrame)
+                Picker("S8 window build", selection: $controller.spikes.s8Build) {
+                    ForEach(S8Build.allCases) { build in
+                        Text("S8 \(build.title)").tag(build)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Button("S9 drop boxes and hulls of 3 and 90 cm") { controller.s9Drop() }
                 Button("S10 time 1k and 2k atom meshes") { controller.timeMeshBuilds() }
                 lines(controller.a1Lines)
                 lines(controller.spikeLines)

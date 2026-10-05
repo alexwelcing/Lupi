@@ -154,10 +154,13 @@ final class PlayScene {
     /// The last merged-mesh build: geometry off the main actor, resource on it (spike S10).
     private(set) var lastMeshBuild: (atoms: Int, milliseconds: Double)?
     private(set) var drawnInstances = 0
+    /// A terrain's face planes and atom windows (scale-spec §10.1), and spike S8's timing.
+    let statics: StaticColliders
 
     init() {
         root.addChild(cameraFrame)
         cameraInstances = InstanceSet(parent: cameraFrame)
+        statics = StaticColliders(parent: root)
     }
 
     func body(of entity: Entity) -> BodyID? { byEntity[entity.id] }
@@ -173,7 +176,8 @@ final class PlayScene {
             switch command {
             case let .create(id, spec, pose):
                 let rig = BodyRig(id: id, spec: spec)
-                rig.entity.transform = pose.transform
+                // A pose binary64 cannot place (a terrain deep in its anchor) keeps the origin.
+                if pose.allFinite { rig.entity.transform = pose.transform }
                 configure(rig, spec)
                 root.addChild(rig.entity)
                 rigs[id] = rig
@@ -190,7 +194,7 @@ final class PlayScene {
                 }
                 if mode == .dynamic { rig.entity.components.set(PhysicsMotionComponent()) }
             case let .move(id, pose, v, w):
-                guard let rig = rigs[id] else { continue }
+                guard let rig = rigs[id], pose.allFinite else { continue }
                 rig.entity.transform = pose.transform
                 rig.entity.components.set(PhysicsMotionComponent(linearVelocity: v.asFloat, angularVelocity: w.asFloat))
             case let .launch(id, linear, angular):
@@ -213,6 +217,8 @@ final class PlayScene {
                 if wasPoof { poof(rig.entity.position(relativeTo: nil)) }
                 byEntity[rig.entity.id] = nil
                 rig.entity.removeFromParent()
+            case let .staticColliders(key, origin, shapes, material):
+                statics.apply(key, origin: origin, shapes: shapes, material: assets.physicsMaterial(material))
             }
         }
     }
@@ -221,7 +227,9 @@ final class PlayScene {
     /// camera stands in, a body gliding through the room).
     private func configure(_ rig: BodyRig, _ s: PhysicsSpec) {
         rig.spec = s
-        guard !s.shapes.isEmpty else {
+        // No physics for a spec binary64 cannot state either: a non-finite shape or mass would
+        // poison the simulation.
+        guard !s.shapes.isEmpty, s.shapes.allSatisfy(\.allFinite), s.massKg.isFinite, s.principalMoments.allFinite else {
             rig.entity.components.remove(PhysicsBodyComponent.self)
             rig.entity.components.remove(CollisionComponent.self)
             return

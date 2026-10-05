@@ -27,10 +27,18 @@ struct PlaqueText: Equatable {
     var canFill: Bool
     /// A crystal can be dived into (the receipt's view from inside).
     var canDive: Bool
-    /// Grown past a toy: Surface brings it back.
+    /// Grown past a toy, or flying: Surface brings it back.
     var grown: Bool
     /// Already a trophy in the collection.
     var kept: Bool
+    /// "48.6 t": the true mass (plan §4.7).
+    var trueMass: String
+    /// "2.82 m": Life size stands it in the room at this span (scale.md §5.8).
+    var lifeSize: String?
+    /// Grow ×2 is on in Settings and this body can double (scale-spec §10.7).
+    var canGrow: Bool
+    /// Beyond 10^±32 of life size, where a dive flies (scale-spec §8.8).
+    var beyondOneToOne: Bool
 
     init(id: BodyID, plaque p: Plaque, isMolecule: Bool, kept: Bool) {
         self.id = id
@@ -44,8 +52,12 @@ struct PlaqueText: Equatable {
         builtFrom = p.builtFrom
         canFill = p.canFill
         canDive = !isMolecule
-        grown = p.sizeState != .toy
+        grown = p.sizeState != .toy || p.flying
         self.kept = kept
+        trueMass = p.trueMass
+        lifeSize = p.lifeSize
+        canGrow = p.canGrow
+        beyondOneToOne = p.beyondOneToOne
     }
 }
 
@@ -84,6 +96,10 @@ struct SpikeToggles: Equatable {
     var logContacts = false
     /// S7: instanced spheres ahead of the camera.
     var stressCount = 0
+    /// S8: rebuild the terrain's camera window every frame, to measure the rebuild.
+    var s8EveryFrame = false
+    /// S8: how a window's colliders are built.
+    var s8Build = S8Build.primitives
 }
 
 /// The play screen's engine room: owns the ARSession host, the RealityKit scene, haptics,
@@ -110,6 +126,8 @@ final class PlayController {
     private(set) var ready = false
     /// The tracking state while it is not normal.
     private(set) var limited: String?
+    /// The camera is inside a crystal's matter (scale-spec §10.1): the toys wait outside.
+    private(set) var insideSolid = false
     private(set) var hudLines: [String] = []
     private(set) var spikeLines: [String] = []
     private(set) var contactLog: [String] = []
@@ -266,6 +284,18 @@ final class PlayController {
         session.surface(id)
     }
 
+    /// Life size (scale.md §5.8): the selected body stands on the floor ahead at λ = 0.
+    func lifeSize() {
+        guard let id = plaque?.id else { return }
+        session.lifeSize(id)
+    }
+
+    /// Grow ×2 (scale-spec §10.7), when Settings has it on.
+    func grow() {
+        guard let id = plaque?.id else { return }
+        session.grow(id)
+    }
+
     // MARK: The frame
 
     private func frame() {
@@ -301,6 +331,7 @@ final class PlayController {
         applyRate(out.simulationRate, now: now)
         for event in out.events { handle(event) }
         if session.atomTray.count != atomTray.count { atomTray = session.atomTray.map(TrayAtom.init) }
+        if session.cameraInsideTerrain != insideSolid { insideSolid = session.cameraInsideTerrain }
         if now - lastPublish >= 0.25 {
             lastPublish = now
             refreshPlaque()
@@ -433,6 +464,29 @@ final class PlayController {
         case .snapRefused: break
         case let .builtIt(id, name, known): builtIt(id, name: name, known: known)
         case let .trayGained(z): show("\(ChemicalElement.forAtomicNumber(z).name) joins the atom tray")
+        case let .flight(_, active): flight(active)
+        case let .grew(_, count):
+            show("Grown ×2: \(count) atoms")
+            refreshPlaque()
+        case let .detached(_, piece):
+            if let p = session.body(piece) { show("\(p.name): \(p.facts.count.formatted) atoms") }
+            refreshPlaque()
+        case let .lifeSize(_, mass): show("Life size: it weighs \(mass)")
+        }
+    }
+
+    /// A flight's start says where it goes; its end, how large the picture now is (scale-spec §8.8).
+    private func flight(_ active: Bool) {
+        refreshPlaque()
+        if active {
+            switch session.flight?.kind {
+            case .dive?: show("Diving toward the atoms")
+            case .surface?: show("Surfacing")
+            case .fly?: show("Flying along the scale")
+            case .pinch?, nil: break
+            }
+        } else if let m = plaque?.magnification, !m.isEmpty {
+            show(m)
         }
     }
 
@@ -584,6 +638,14 @@ final class PlayController {
         if let t = session.tumble { lines.append(t.line) }
         if timebase != nil { lines.append("A2 custom simulation, rate \(String(format: "%.2f", rate))") }
         if stress.count > 0 { lines.append("S7 \(stress.count) instanced spheres") }
+        if let f = session.flight { lines.append(f.line) }
+        // S8: the session's windows, then what RealityKit's shapes cost to build here.
+        let terrain = session.terrainStats
+        if terrain.faces > 0 || terrain.rebuilds > 0 || scene.statics.count > 0 {
+            lines.append(terrain.line)
+            lines.append(scene.statics.timing.line(scene.statics.build))
+        }
+        if let s9 = session.s9 { lines.append(contentsOf: s9.lines) }
         if hudLines != lines { hudLines = lines }
     }
 
@@ -602,6 +664,14 @@ final class PlayController {
             } else {
                 note("S7: no camera yet")
             }
+        }
+        if spikes.s8EveryFrame != old.s8EveryFrame {
+            session.debug.s8RebuildEveryFrame = spikes.s8EveryFrame
+            note(spikes.s8EveryFrame ? "S8: camera window rebuilt every frame" : "S8: camera window rebuilt as it moves")
+        }
+        if spikes.s8Build != old.s8Build {
+            scene.statics.build = spikes.s8Build
+            note("S8: windows built as \(spikes.s8Build.title)")
         }
         if !spikes.logContacts && old.logContacts {
             contactLog = []
@@ -673,6 +743,17 @@ final class PlayController {
     func copyA1Log() {
         UIPasteboard.general.string = shelf.probe.jsonLines()
         note("A1: log copied")
+    }
+
+    /// S9: a box and a hull of 3 cm and of 90 cm dropped side by side, 1.5 m ahead; the HUD
+    /// says when each landed and rested, how deep it sank and whether it fell through.
+    func s9Drop() {
+        guard ready else {
+            note("S9: wait until Lupi has found the room")
+            return
+        }
+        session.s9DropExtremes()
+        note("S9: dropped four bodies 1.5 m ahead")
     }
 
     /// S10: merged meshes of 1,000 and 2,000 atoms.

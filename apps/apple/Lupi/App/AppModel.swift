@@ -53,6 +53,11 @@ final class AppModel {
         didSet { UserDefaults.standard.set(autoKeep, forKey: Keys.autoKeep) }
     }
 
+    /// Grow ×2 (scale-spec §10.7): proposed, so off until the player turns it on (plan §11.9).
+    var growTwo: Bool {
+        didSet { UserDefaults.standard.set(growTwo, forKey: Keys.growTwo) }
+    }
+
     var reduceMotion = UIAccessibility.isReduceMotionEnabled
     var showingPlay = false
     /// The play screen's controller, made when Play opens and released when it closes.
@@ -66,6 +71,7 @@ final class AppModel {
         static let sound = "lupi.soundAndHaptics"
         static let comfort = "lupi.motionComfort"
         static let autoKeep = "lupi.autoKeep"
+        static let growTwo = "lupi.growTwo"
     }
 
     init() {
@@ -81,6 +87,7 @@ final class AppModel {
         soundAndHaptics = UserDefaults.standard.object(forKey: Keys.sound) as? Bool ?? true
         comfortChoice = ComfortChoice(rawValue: UserDefaults.standard.string(forKey: Keys.comfort) ?? "") ?? .system
         autoKeep = UserDefaults.standard.object(forKey: Keys.autoKeep) as? Bool ?? true
+        growTwo = UserDefaults.standard.object(forKey: Keys.growTwo) as? Bool ?? false
     }
 
     var comfort: MotionComfort { comfortChoice.comfort(reduceMotion: reduceMotion) }
@@ -88,7 +95,7 @@ final class AppModel {
     var settings: GameSettings {
         GameSettings(
             soundAndHaptics: soundAndHaptics, comfort: comfort, supportsHaptics: Haptics.hardwareSupportsHaptics,
-            device: UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
+            device: UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone, growTwo: growTwo
         )
     }
 

@@ -39,6 +39,13 @@ struct SettingsView: View {
                     Text("Toy physics")
                 }
                 Section {
+                    Toggle("Grow ×2", isOn: $model.growTwo)
+                } header: {
+                    Text("Scale")
+                } footer: {
+                    Text("Adds Grow ×2 to a molecule's card: each tap doubles it along one side, keeping its size in your hand, so a water tapped a hundred times holds 3 × 2¹⁰⁰ atoms. Kept, it is still a few hundred bytes.")
+                }
+                Section {
                     Toggle("Keep what rests on a shelf", isOn: $model.autoKeep)
                 } footer: {
                     Text("A molecule that sits still for three seconds on a shelf, a table or a desk becomes a trophy and stays there for next time. Keep anything by hand from its card.")

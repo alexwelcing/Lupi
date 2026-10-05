@@ -63,6 +63,14 @@ struct PlayView: View {
                     .padding(.vertical, 6)
                     .background(.ultraThinMaterial, in: Capsule())
             }
+            if controller.insideSolid {
+                Text("Inside the crystal. Step back out and the toys come back.")
+                    .font(.caption.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
             if app.showDebugHUD {
                 DebugPanel(controller: controller)
             }
@@ -87,7 +95,7 @@ struct PlayView: View {
             }
             if let catalog = app.catalog {
                 SpawnTray(
-                    items: catalog.tray, receipt: catalog.receipt, showingAtoms: showingAtoms,
+                    items: catalog.tray, receipt: catalog.receipt, scale: catalog.scale, showingAtoms: showingAtoms,
                     spawn: { controller.spawn($0) }, spawnReceipt: { controller.spawnReceipt() },
                     toggleAtoms: { showingAtoms.toggle() }, clear: { controller.clear() }
                 )
@@ -165,7 +173,7 @@ struct PlaqueCard: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            Text(plaque.mass)
+            Text(plaque.trueMass.isEmpty ? plaque.mass : "Weighs \(plaque.trueMass); \(plaque.mass)")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if let from = plaque.brokenFrom {
@@ -198,11 +206,26 @@ struct PlaqueCard: View {
                     Button("Surface") { controller.surface() }
                         .buttonStyle(.bordered)
                 } else if plaque.canDive {
-                    Button("Dive in") { controller.dive() }
+                    // Beyond 10^±32 the dive flies, wrapping whole periods (scale-spec §8.8).
+                    Button(plaque.beyondOneToOne ? "Fly in" : "Dive in") { controller.dive() }
                         .buttonStyle(.bordered)
                 }
             }
             .padding(.top, 4)
+            if plaque.lifeSize != nil || plaque.canGrow {
+                HStack {
+                    if let span = plaque.lifeSize {
+                        Button("Life size, \(span)") { controller.lifeSize() }
+                            .buttonStyle(.bordered)
+                            .accessibilityHint("Stands it on the floor ahead at its true size")
+                    }
+                    if plaque.canGrow {
+                        Button("Grow ×2") { controller.grow() }
+                            .buttonStyle(.bordered)
+                            .accessibilityHint("Doubles its atoms, keeping its size")
+                    }
+                }
+            }
         }
         .padding(14)
         .frame(maxWidth: 360, alignment: .leading)
@@ -211,10 +234,12 @@ struct PlaqueCard: View {
     }
 }
 
-/// The spawn tray: the atoms, C₆₀ first, the starters, the scale receipt and Clear.
+/// The spawn tray: the atoms, C₆₀ first, the starters, the scale receipt, the scale menu and Clear.
 struct SpawnTray: View {
     let items: [SpawnItem]
     let receipt: [SpawnItem]
+    /// The salt ladder to a googolplex, copper, diamond and the diamondoids (plan §7.5).
+    let scale: [SpawnItem]
     let showingAtoms: Bool
     let spawn: @MainActor (SpawnSource) -> Void
     let spawnReceipt: @MainActor () -> Void
@@ -245,6 +270,20 @@ struct SpawnTray: View {
                     Button("All three in a row") { spawnReceipt() }
                 } label: {
                     chip("NaCl", "Scale receipt")
+                }
+                if !scale.isEmpty {
+                    Menu {
+                        ForEach(ScaleShelf.allCases, id: \.self) { shelf in
+                            Section(shelf.rawValue) {
+                                ForEach(scale.filter { $0.scaleShelf == shelf }) { item in
+                                    Button(item.title) { spawn(item.source) }
+                                }
+                            }
+                        }
+                    } label: {
+                        chip("10¹⁰⁰", "Scale")
+                    }
+                    .accessibilityLabel("Scale: salt to a googolplex, crystals and diamondoids")
                 }
                 Button(action: clear) {
                     chip("Clear", "Poof them all")
@@ -343,5 +382,13 @@ struct ShelfCard: View {
         case .placing: "Tap where the shelf should go"
         case .coverage: "Look around the shelf so I can remember it"
         }
+    }
+}
+
+extension SpawnItem {
+    /// The scale menu's group of a scale item; nil for anything else.
+    var scaleShelf: ScaleShelf? {
+        if case let .scale(item) = source { return item.shelf }
+        return nil
     }
 }
