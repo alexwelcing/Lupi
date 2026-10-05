@@ -148,8 +148,8 @@ compiles and tests them; say so if one does.
   surface under the screen's centre while whole periods of the lattice pass
   unseen, about 20 s from the desk to 2 cm ions, and the plaque counts the
   magnification as it goes. Gentle flies at half speed; Still cuts in jumps.
-- **Two fingers held still** on a body beyond 10³² (or on the terrain) fly
-  toward it; lift them and the picture finishes its way. A **pinch** on a
+- **Two fingers held still**, with a body beyond 10³² selected (or terrain
+  around you), fly toward it; lift them and the picture finishes its way. A **pinch** on a
   body anchored deep inside its lattice moves along the scale instead of
   stretching the picture.
 - **Inside a crystal** (dived in, or walked into a monument), the atoms within
