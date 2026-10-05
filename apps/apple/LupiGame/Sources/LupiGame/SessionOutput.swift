@@ -10,7 +10,12 @@ public struct Plaque: Sendable, Equatable {
     public var formula: String
     /// The exact count, printed one way everywhere (scale-spec §5.4).
     public var atoms: String
+    /// The personality's first reason: "Brittle: its O–O bond is weak (142 kJ/mol)".
     public var personality: String
+    /// Every reason (contracts.md §3.3 rule 8), the second when nothing can snap.
+    public var reasons: [String]
+    /// How it plays: "Bounces, and its cage rings".
+    public var feel: String
     /// "shown 1.5 × 10^8 times life size" (scale-spec §8.7).
     public var magnification: String
     public var feltMassKg: Double
@@ -51,6 +56,8 @@ public struct HUDStats: Sendable, Equatable {
     /// `buildCut`'s wall time this frame, ms (not deterministic; tests ignore it).
     public var cutMs = 0.0
     public var thermal: ThermalLevel = .nominal
+    /// What the thermal policy allows now (plan §7.4).
+    public var thermalLine = "thermal nominal"
     public var lastImpulse: Double?
     public var lastDeltaV: Double?
     public var lastThrowSpeed: Double?
@@ -121,10 +128,26 @@ extension PlaySession {
             b.effects.popIn.step(dt: dt)
             r.scale = b.effects.popIn.scale.value
             b.effects.squash.step(dt: dt)
+            b.effects.ring.step(dt: dt)
             let s = b.effects.squash.scale
-            r.squash = Vec3(s.across, s.along, s.across)
-            r.squashAxis = .between(Vec3(0, 1, 0), b.effects.squash.axis)
+            var along = s.along
+            var axis = b.effects.squash.axis
+            if !b.effects.ring.isAtRest {
+                // A cage's ring rides on the squash, along the squash's axis while it lasts.
+                if b.effects.squash.isAtRest { axis = b.effects.ring.axis }
+                along = min(1.5, max(0.5, along - b.effects.ring.value))
+            }
+            r.squash = Vec3(1 / along.squareRoot(), along, 1 / along.squareRoot())
+            r.squashAxis = .between(Vec3(0, 1, 0), axis)
             let pose = b.entityPose
+            if var flop = b.effects.flop, !b.parked {
+                flop.step(
+                    dt: dt, velocity: b.motion.linearVelocity, rotation: pose.rotation, metresPerAngstrom: b.sigma,
+                    scale: settings.comfort.squashScale
+                )
+                r.segments = flop.poses()
+                b.effects.flop = flop
+            }
             let rendered = b.effects.hitStop.step(physics: pose.translation, dt: dt)
             r.translation = pose.rotation.inverted.act(rendered - pose.translation)
             if let g = grab, g.body == id {
@@ -164,6 +187,7 @@ extension PlaySession {
         h.worstFrameMs = frameStats.worst
         h.cutMs = cutMs
         h.thermal = thermal
+        h.thermalLine = thermalPolicy.stage.line
         h.lastImpulse = lastImpact?.impulse
         h.lastDeltaV = lastImpact?.deltaV
         h.lastThrowSpeed = lastThrow.map { $0.linear.length }
@@ -197,6 +221,7 @@ extension PlaySession {
         }
         return Plaque(
             name: b.name, formula: formula, atoms: b.facts.count.formatted, personality: b.facts.personality.plaque,
+            reasons: b.facts.personality.reasons, feel: b.facts.personality.feel,
             magnification: readout, feltMassKg: b.feltMassKg, brokenFrom: b.brokenFrom, builtFrom: builtFrom,
             canFill: canFill(id), sizeState: b.sizeState, trueMass: trueMass(id) ?? "", lifeSize: lifeSizeOffer(id),
             canGrow: canGrow(id), beyondOneToOne: beyondOneToOne(id), flying: flightState?.body == id
@@ -215,4 +240,32 @@ extension PlaySession {
             MeshRecipe.of(leaf, centre: b.facts.aggregate.centre, key: view.id.hex)
         }
     }
+
+    /// The flop's segment recipes of a flexible molecule (plan §8 M4), one merged mesh each, in
+    /// the order of `RenderState.segments`. Nil for a body that does not flop.
+    public func segmentRecipes(for id: BodyID) -> [MeshRecipe]? {
+        guard let flop = bodies[id]?.effects.flop, let whole = meshRecipe(for: id) else { return nil }
+        return resolver.cached("lupi.game.flopMesh:" + whole.key) {
+            (0..<flop.segments.count).map { whole.segment($0, of: flop.segments) }
+        }
+    }
+
+    /// The segments of a flexible molecule body, in its recipe's frame; nil when it does not
+    /// flop (not flexible, too few rotating bonds, not a molecule, or the flop is switched off).
+    func flopSegments(_ b: Body) -> FlopSegments? {
+        guard debug.flop, b.facts.isMolecule, b.facts.personality.personality.kind == .flexible,
+              let view = try? resolver.resolve(b.frame.ref.root, b.frame.ref.path),
+              let leaf = view.leaf else { return nil }
+        let centre = b.facts.aggregate.centre
+        // Boxed: the resolver's cache cannot tell a cached nil from a missing entry.
+        return resolver.cached("lupi.game.flop:" + view.id.hex) { () -> FlopEntry in
+            let m = Molecule(atomicNumbers: leaf.atomicNumbers.map(Int.init), positions: leaf.positions.map { Vec3($0) - centre })
+            return FlopEntry(segments: FlopSegments.of(m, graph: BondGraph.forPlay(m)))
+        }.segments
+    }
+}
+
+/// A cached flop, nil included.
+struct FlopEntry: Sendable {
+    var segments: FlopSegments?
 }

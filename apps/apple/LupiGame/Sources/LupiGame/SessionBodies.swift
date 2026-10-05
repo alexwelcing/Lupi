@@ -107,6 +107,7 @@ extension PlaySession {
             floatUntil: now + floatFor, effects: BodyEffects(popIn: PopIn(comfort: settings.comfort))
         )
         body.provenance = provenance
+        body.effects.flop = flopSegments(body).map { Flop($0) }
         body.spec = try BodyPhysics.spec(body, mode: mode, resting: false, now: now, cameraInside: false, resolver: resolver)
         body.motion = BodyMotion(pose: body.entityPose)
         bodies[id] = body
@@ -117,7 +118,7 @@ extension PlaySession {
 
     /// Poofs bodies until `n` more toys fit the budget.
     mutating func makeRoom(for n: Int) {
-        while toyCount + n > PlayTuning.maxDynamicBodies {
+        while toyCount + n > thermalPolicy.stage.toyLimit {
             let held = grab?.body
             let candidates = bodyOrder.compactMap { bodies[$0] }.filter { $0.isToy && !$0.pinned && $0.id != held && $0.id != pinch?.body }
             guard let victim = candidates.first(where: { $0.brokenFrom != nil }) ?? candidates.first else { return }

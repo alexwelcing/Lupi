@@ -121,7 +121,8 @@ public enum SurfaceGuess {
 extension JuiceBody {
     init(_ body: Body) {
         let p = body.facts.personality.personality
-        self.init(id: body.id.raw, kind: p.kind, hapticSharpness: p.hapticSharpness, span: body.span, heft: body.facts.heft.h)
+        let timbre = Timbre.of(body.facts.personality, segments: body.effects.flop?.segments.count ?? 0)
+        self.init(id: body.id.raw, kind: p.kind, hapticSharpness: p.hapticSharpness, span: body.span, heft: body.facts.heft.h, timbre: timbre)
     }
 }
 

@@ -56,7 +56,8 @@ extension PlaySession {
 
     /// Plays a juice event on a body and applies its visuals to the body's render child.
     mutating func fire(_ event: JuiceEvent, on body: Body, at position: Vec3, direction: Vec3, now: Double, other: Body? = nil) {
-        guard let output = juice.director.fire(event, body: JuiceBody(body), at: now) else { return }
+        guard let fired = juice.director.fire(event, body: JuiceBody(body), at: now) else { return }
+        let output = thermalJuice(fired)
         applyVisual(output.visual, to: body.id, direction: direction, squash: output.visual.squash, now: now)
         if let o = other { applyVisual(JuiceVisual(), to: o.id, direction: -1 * direction, squash: output.visual.otherSquash, now: now) }
         out.juice.append(JuiceCue(
@@ -73,6 +74,11 @@ extension PlaySession {
         }
         if v.hitStop { b.effects.hitStop.hit(intensity: 1, comfort: settings.comfort, at: b.entityPose.translation) }
         if v.slowMotion { slowMotionStart = now }
+        let rotation = b.entityPose.rotation
+        if v.cageRing > 0, direction.lengthSquared > 0 {
+            b.effects.ring.hit(direction: rotation.inverted.act(direction), amount: v.cageRing)
+        }
+        if v.flop > 0 { b.effects.flop?.kick(direction: direction, amount: v.flop, rotation: rotation) }
         bodies[id] = b
     }
 
@@ -108,7 +114,7 @@ extension PlaySession {
         if body.facts.isMolecule, p.isUnbreakable { return }
         // Cheap lower bound before planning: no plan breaks below min(base, 3 m/s) × the weakest scaling.
         guard deltaV >= 0.5 * min(p.breakSpeed, BreakTuning.expansionFloor) else { return }
-        let budget = min(16, PlayTuning.maxDynamicBodies + 1 - toyCount)
+        let budget = min(16, thermalPolicy.stage.toyLimit + 1 - toyCount)
         guard budget >= 2 else { return }
         let plan: BreakPlan
         do {

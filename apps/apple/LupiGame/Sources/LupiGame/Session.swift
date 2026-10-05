@@ -78,6 +78,9 @@ public struct RenderState: Sendable, Equatable {
     public var squash: Vec3 = Vec3(1, 1, 1)
     /// A merged mesh may replace instanced atoms now: at rest, or under 64 px (scale-spec §9.6).
     public var meshSwapAllowed: Bool = true
+    /// A flexible molecule's flop (plan §8 M4): each segment's pose in its recipe's frame (Å),
+    /// in the order of `segmentRecipes(for:)`. Empty for a body that does not flop.
+    public var segments: [SegmentPose] = []
 }
 
 /// What happened, for the app's captions and the HUD.
@@ -121,6 +124,8 @@ public struct FrameOutput: Sendable {
     public var juice: [JuiceCue] = []
     /// The play simulation's clock rate: 1, or slow motion (plan §5.4).
     public var simulationRate: Double = 1
+    /// The camera's video format the thermal policy asks for: 60, or 30 at critical (spike A5).
+    public var frameRate = 60
     public var hud = HUDStats()
     public var events: [SessionEvent] = []
 
@@ -215,6 +220,7 @@ public struct PlaySession: Sendable {
     var juice: JuiceRouter
     var tau: TauController
     var thermal: ThermalLevel = .nominal
+    var thermalPolicy = ThermalPolicy()
     var slowMotionStart: Double?
     /// The camera is inside a terrain's matter: toys are parked and its colliders are off (§10.1).
     public internal(set) var cameraInsideTerrain = false
@@ -306,10 +312,13 @@ public struct PlaySession: Sendable {
         time = input.time
         camera = input.camera
         floorY = input.floorY ?? floorY
-        if input.thermal != thermal {
-            thermal = input.thermal
+        let level = debug.thermalOverride ?? input.thermal
+        if level != thermal {
+            thermal = level
             tau.minimum = Self.budgets(settings.device, thermal).tauMinimum
         }
+        thermalPolicy.allowsThirtyFPS = debug.a5ThirtyFPS
+        let stage = thermalPolicy.update(level, now: input.time)
         frameStats.frame(time: input.time, dt: dt)
 
         adoptMotions(input.bodies)
@@ -321,6 +330,7 @@ public struct PlaySession: Sendable {
         stepFlight(dt: dt, now: input.time)
         stepTumble(now: input.time)
         stepBodies(dt: dt, now: input.time)
+        shedLoosePieces()
         stepMagnet(dt: dt, now: input.time)
         dequeueSpawn(now: input.time)
         rescue()
@@ -330,6 +340,7 @@ public struct PlaySession: Sendable {
         stepS9(now: input.time)
         out.renders = renderStates(dt: dt)
         out.simulationRate = simulationRate(now: input.time)
+        out.frameRate = stage.frameRate
         out.hud = hud()
         let result = out
         out = FrameOutput()

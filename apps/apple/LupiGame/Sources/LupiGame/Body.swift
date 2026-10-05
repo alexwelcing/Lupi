@@ -46,11 +46,15 @@ public enum Support: Sendable, Equatable {
     case body(BodyID)
 }
 
-/// Timers and render effects of one body (plan §5.4).
+/// Timers and render effects of one body (plan §5.4, §8 M4).
 public struct BodyEffects: Sendable {
     public var popIn: PopIn
     public var squash = Squash()
     public var hitStop = HitStop()
+    /// A bouncy cage's shiver after a hit.
+    public var ring = CageRing()
+    /// A flexible molecule's segments swinging on their hinges; nil for a body that does not flop.
+    public var flop: Flop?
 }
 
 /// A body in play: a LupiScale piece with a world pose (scale-spec §8.3), and its game state.

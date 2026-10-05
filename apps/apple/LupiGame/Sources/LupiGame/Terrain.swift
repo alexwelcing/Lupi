@@ -188,6 +188,12 @@ struct TerrainColliderState: Sendable {
 public struct SessionDebug: Sendable, Equatable {
     /// S8: rebuild the camera's atom window every frame, to time the worst case.
     public var s8RebuildEveryFrame = false
+    /// Flexible molecules flop (plan §8 M4); off draws them stiff, for spike A6's comparison.
+    public var flop = true
+    /// Spike A5: the thermal policy may ask for a 30 fps video format at critical.
+    public var a5ThirtyFPS = false
+    /// Plays as if the device were this hot, to try the thermal policy without heating it.
+    public var thermalOverride: ThermalLevel?
 
     public init() {}
 }
