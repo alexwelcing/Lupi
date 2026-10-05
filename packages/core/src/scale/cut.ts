@@ -1322,7 +1322,9 @@ function exposedAtoms(ctx: BodyContext, n: CutNode, leaf: LeafNode, mask: number
   const v = n.view;
   const crystal = v.type === 'box' ? v.crystal : v.type === 'copy' ? seedCrystal(ctx, v) : null;
   if (!crystal) return Array.from({ length: leaf.z.length }, (_, i) => i);
-  const key = `${v.type === 'box' ? `b${toHex(v.id)}:${v.box.lo}:${v.box.hi}:${v.removals.length > 0 ? pathKeyOf(v.removals.flat()) : ''}` : residencyKey(v)}:${mask}`;
+  // Every copy of a tower has its seed's positions (a substitution changes elements, not places),
+  // so a copy's exposed atoms depend only on the seed and the mask.
+  const key = `${v.type === 'box' ? `b${toHex(v.id)}:${v.box.lo}:${v.box.hi}:${v.removals.length > 0 ? pathKeyOf(v.removals.flat()) : ''}` : v.type === 'copy' ? `s${hexOf(v.tower.seed)}` : residencyKey(v)}:${mask}`;
   let memo = exposedMemo.get(ctx.geometries);
   if (!memo) {
     memo = new Map();
