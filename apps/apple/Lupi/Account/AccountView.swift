@@ -88,7 +88,9 @@ struct DeleteAccountSheet: View {
             Form {
                 Section {
                     Text("This deletes your Lupi account and every trophy on it, on all your devices, and stops Lupi using your Apple ID. It cannot be undone.")
-                    Text("Trophies you kept while signed out stay on this device. Rooms and shelves stay too, unless you erase them below.")
+                    // account-and-sync.md §5 step 6: the account's records go; signing in adopted
+                    // what was kept signed out, so that means the whole collection kept on it.
+                    Text("The account's trophies leave this device too. Rooms stay, unless you erase them below.")
                         .foregroundStyle(.secondary)
                 }
                 Section {
