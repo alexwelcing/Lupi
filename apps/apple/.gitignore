@@ -1,0 +1,7 @@
+# Generated on the owner's Mac by `xcodegen generate` from project.yml.
+Lupi.xcodeproj/
+Lupi/Info.plist
+*.xcworkspace/xcuserdata/
+xcuserdata/
+DerivedData/
+build/
