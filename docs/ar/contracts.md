@@ -366,9 +366,11 @@ Inputs: the coordinates and elements, the game graph (LupiKit's port of `lupi-bo
 | `soundFamily` | clack | thwap | tink | boing |
 | `hapticSharpness` | 0.8 | 0.3 | 1.0 | 0.5 |
 
-6. **Mass:** `massKg = clamp(0.2 × (M / 180)^0.4 × massScale, 0.06, 0.6)`, with M the molar mass in Da from the element table. This is `lupi.feltmass.v1` up to about 1,018 Da; above that, its slow tail applies ([scale-spec.md §10.2](scale-spec.md)), so masses keep their order to a googolplex instead of clamping at 2.8 kDa.
+6. **Mass:** `massKg = max(0.06, b(M × massScale^2.5))`, with M the molar mass in Da from the element table (`µDa` integers, [scale-spec.md §5.3](scale-spec.md)) and `b` the curve `lupi.feltmass.v1` ([scale-spec.md §10.2](scale-spec.md)): `0.2 × (M / 180)^0.4` up to about 1,018 Da, so below it this is exactly `0.2 × (M / 180)^0.4 × massScale`; above it, a slow tail that never reaches 0.6. Masses keep their order to a googolplex instead of clamping at 2.8 kDa, and no personality reaches the ceiling. LupiKit's `LupiPlay` owns it as `FeltMass`, replacing `GameUnits`.
 7. **Breaking:** `breakSpeed = base × sqrt(weakest energy / 346)`, and `breakImpulse = massKg × breakSpeed`. Both are `null` when the weakest energy is 800 kJ/mol or more (N₂, CO), and for a single atom.
 8. **Reasons:** one line naming the rule that matched, in plain words and with the number it used.
+
+These values are the contract. LupiKit's `PersonalityTable.v1` (`apps/apple/LupiKit/Sources/LupiPlay/Personality.swift` on `ar/kit`) currently differs, for example brittle `massScale` 1.1 and base break speed 2.5, and must be brought to this table before M0 exits. A node that is not a molecule (a crystal box, a tower level, a group) takes the personality of one materialized leaf ([scale-spec.md §10.6](scale-spec.md)).
 
 ---
 
@@ -420,7 +422,15 @@ The app therefore calls PubChem PUG-REST directly, with the same three requests 
 
 Bounds (`PUBCHEM_DEFAULT_BOUNDS`): at most 5,000 atoms, 10,000 bonds, 2,000,000 response bytes, a 30 s total deadline. The app lowers the atom cap to 2,000, the toy tier (plan §3.6). PubChem bond orders are kept in the record but the game graph is still the molecular recipe, so every source plays the same way. A cached edge route (for example `GET /v1/pubchem?name=`) would be new Worker work, proposed only if PubChem's rate limits ever bite.
 
-### 4.4 Parsing and the game graph
+### 4.4 Scale packs (from M3b)
+
+| Path | Served by | Shape | App use |
+|---|---|---|---|
+| `GET /scale/p/<contentId hex>.lpk` | Worker, from an append-only R2 bucket (new; the deploy uploads each new pack before the build goes live, and nothing ever deletes one) | LupiPack v1 ([scale-spec.md §6](scale-spec.md)); `Cache-Control: public, max-age=31536000, immutable`; HTTP range requests | the records of explicit colossi (`massive_1m`) that a trophy names by dependency |
+
+Packs are not ordinary static assets, because Workers static assets hold only the current build's files, and a trophy may need a pack forever ([scale-spec.md §6.8](scale-spec.md)).
+
+### 4.5 Parsing and the game graph
 
 - XYZ element tokens are symbols (case-insensitive) or atomic numbers 1–118; an unknown token fails the file rather than becoming hydrogen (the web parser's rule, `packages/parsers/src/xyzParser.ts`).
 - The game graph is LupiKit's port of `lupi-bonds.molecular.v1`, forced (the web's `bondProfile: 'molecular'`) for every non-periodic frame of at most 2,000 atoms, whatever its source. Larger structures get no bonds (colossi are space-filling).
