@@ -373,7 +373,9 @@ final class PlayController {
         )
         touchBuffer.removeAll(keepingCapacity: true)
         let out = session.step(input)
-        scene.apply(out.physics) { self.sparks.poof(at: $0) }
+        // At critical the thermal policy turns particles off, poofs included (plan §7.4).
+        let particles = session.thermalStage.particles
+        scene.apply(out.physics) { if particles { self.sparks.poof(at: $0) } }
         scene.draw(out, recipe: { self.session.meshRecipe(for: $0) }, segments: { self.session.segmentRecipes(for: $0) })
         for cue in out.juice { play(cue) }
         applyRate(out.simulationRate, now: now)
