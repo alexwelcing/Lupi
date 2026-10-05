@@ -11,7 +11,7 @@ import Testing
 extension Fixture {
     /// Spawns a tray atom and lets it land; returns its id. `sideways` places it (metres)
     /// instead of the tray's own spread.
-    static func spawnAtom(_ sim: inout Simulation, _ z: Int, sideways: Double? = nil, settle: Double = 1.5) -> BodyID {
+    static func spawnAtom(_ sim: inout Simulation, _ z: Int, sideways: Double? = nil, settle: Double = 3) -> BodyID {
         let before = Set(sim.session.bodyOrder)
         if let sideways { sim.session.spawn(.atom(z), at: .ahead(sideways: sideways)) } else { sim.session.spawnAtom(z) }
         sim.step()
@@ -316,7 +316,14 @@ struct BuildTests {
         let hydroxyl = try #require(pieces.first { sim.session.body($0) != nil && sim.screenPoint(of: $0) != nil })
         let host = try #require(sim.session.body(hydroxyl))
         #expect(host.sigma > BuildTuning.atomScale * 1.2)
-        let h = Fixture.spawnAtom(&sim, 1)
+        // Walk over to the hydroxyl, wherever the break threw it, and drop a bead beside it.
+        let near = host.entityPose.translation
+        sim.camera = CameraState.looking(from: near + Vec3(0, 0.25, 0.45), at: near)
+        let before = Set(sim.session.bodyOrder)
+        sim.session.spawn(.atom(1), at: .world(near + Vec3(0.12, 0.05, 0)))
+        sim.step()
+        let h = try #require(Set(sim.session.bodyOrder).subtracting(before).first)
+        sim.run(3)
         var sigmas: [Double] = []
         var magnetLines: [String] = []
         // Carry the hydroxyl to the bead; the bead glides to it and grows to its scale.

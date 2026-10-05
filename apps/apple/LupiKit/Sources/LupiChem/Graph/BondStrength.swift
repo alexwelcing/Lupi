@@ -48,8 +48,9 @@ public enum BondStrength {
     public static let tripleRatio = 839.0 / 346.0
     /// Coordination lines give way before covalent sticks (chemistry-play-physics §4.3).
     public static let coordination = 150.0
-    /// Ionic contacts give way first: salt crystals cleave.
-    public static let ionicContact = 100.0
+    /// Ionic contacts give way first: salt crystals cleave. The game value of contracts.md §3.3
+    /// rule 2 and of scale-spec §10.6's interface classes.
+    public static let ionicContact = 80.0
 
     public static func kJPerMol(_ za: Int, _ zb: Int, kind: BondKind = .covalent, order: BondOrder = .single) -> Double {
         switch kind {
@@ -64,6 +65,19 @@ public enum BondStrength {
         case .double: return double[pair] ?? s * doubleRatio
         case .triple: return triple[pair] ?? s * tripleRatio
         case .delocalized: return (s + (double[pair] ?? s * doubleRatio)) / 2
+        }
+    }
+
+    /// Whether the energy for this pair and order comes from the cited table (contracts.md §3.3
+    /// rule 2's `energySource: "table"`), rather than a Lupi estimate or game value.
+    public static func isTabled(_ za: Int, _ zb: Int, kind: BondKind, order: BondOrder) -> Bool {
+        guard kind == .covalent else { return false }
+        let pair = ElementPair(za, zb)
+        switch order {
+        case .single: return single[pair] != nil
+        case .double: return double[pair] != nil
+        case .triple: return triple[pair] != nil
+        case .delocalized: return single[pair] != nil && double[pair] != nil
         }
     }
 

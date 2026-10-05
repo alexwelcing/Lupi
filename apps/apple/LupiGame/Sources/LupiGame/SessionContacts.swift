@@ -103,8 +103,9 @@ extension PlaySession {
         guard let body = bodies[id], body.isToy, !body.parked, !body.frozen, now >= body.breakableAfter,
               grab?.body != id, pinch?.body != id, body.frame.anchorPath.isEmpty else { return }
         let p = body.facts.personality.personality
-        // A molecule whose only bridges are 800 kJ/mol or more never breaks (N₂, CO, plan §4.3).
-        if body.facts.isMolecule, p.isUnbreakable, body.facts.personality.features.cutStrength != nil { return }
+        // A molecule whose weakest bond is 800 kJ/mol or more never breaks (N₂, CO), nor does a lone
+        // atom (contracts.md §3.3 rule 7).
+        if body.facts.isMolecule, p.isUnbreakable { return }
         // Cheap lower bound before planning: no plan breaks below min(base, 3 m/s) × the weakest scaling.
         guard deltaV >= 0.5 * min(p.breakSpeed, BreakTuning.expansionFloor) else { return }
         let budget = min(16, PlayTuning.maxDynamicBodies + 1 - toyCount)

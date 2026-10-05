@@ -388,6 +388,6 @@ extension PlaySession {
 
     func terrainMaterial(_ b: Body) -> SurfaceMaterial {
         let p = b.facts.personality.personality
-        return SurfaceMaterial(staticFriction: p.friction, dynamicFriction: p.friction * PlayTuning.dynamicFrictionShare, restitution: p.restitution)
+        return SurfaceMaterial(staticFriction: p.friction, dynamicFriction: p.dynamicFriction, restitution: p.restitution)
     }
 }

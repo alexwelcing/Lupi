@@ -175,8 +175,6 @@ public enum PlayTuning {
     public static let setDownSpeed = 0.25
     /// The grab lifts the body this much (plan §5.3).
     public static let grabLift = 0.01
-    /// Dynamic friction as a share of static: LupiKit's table has one friction (est.).
-    public static let dynamicFrictionShare = 0.75
     /// Shapes are rebuilt at most this often during a pinch (est.).
     public static let pinchShapeInterval = 0.1
     /// A body at rest this long on a shelf is kept there (plan §6.3).

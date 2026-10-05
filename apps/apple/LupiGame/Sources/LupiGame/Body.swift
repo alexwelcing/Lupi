@@ -200,7 +200,7 @@ enum BodyPhysics {
             mode: mode, massKg: body.feltMassKg, principalMoments: inertia.moments, principalRotation: rotation,
             centreOfMass: (inertia.centreOfMass - body.facts.aggregate.centre) * sigma,
             material: SurfaceMaterial(
-                staticFriction: p.friction, dynamicFriction: p.friction * PlayTuning.dynamicFrictionShare,
+                staticFriction: p.friction, dynamicFriction: p.dynamicFriction,
                 restitution: p.restitution
             ),
             linearDamping: resting ? PlayTuning.restLinearDamping : p.linearDamping,
@@ -214,7 +214,7 @@ enum BodyPhysics {
         let p = body.facts.personality.personality
         return PhysicsSpec(
             mode: .static, massKg: body.feltMassKg, principalMoments: Vec3(1, 1, 1), principalRotation: .identity, centreOfMass: .zero,
-            material: SurfaceMaterial(staticFriction: p.friction, dynamicFriction: p.friction * PlayTuning.dynamicFrictionShare, restitution: p.restitution),
+            material: SurfaceMaterial(staticFriction: p.friction, dynamicFriction: p.dynamicFriction, restitution: p.restitution),
             linearDamping: 0, angularDamping: 0, shapes: [], continuousCollision: false
         )
     }
