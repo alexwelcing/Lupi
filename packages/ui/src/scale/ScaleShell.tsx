@@ -362,9 +362,11 @@ export function ScaleShell() {
           <p className="scale-count" data-testid="scale-count">
             {hud?.readout.count ?? ''}
           </p>
+          <p className="scale-mass">weighing {hud?.readout.mass ?? ''}</p>
           <p className="scale-piece">
             In view: <strong>{hud?.readout.pieceCount ?? ''}</strong>
             <span className="scale-formula">{hud?.readout.pieceFormula ?? ''}</span>
+            <span className="scale-size">{hud?.readout.pieceSize ? `${hud.readout.pieceSize} across` : ''}</span>
           </p>
           <p className="scale-mag">{hud?.readout.magnification ?? ''}</p>
           <p className="scale-drawn">{hud?.readout.drawn ?? ''}</p>

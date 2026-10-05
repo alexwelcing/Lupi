@@ -18,6 +18,9 @@ import {
   descend,
   formatMagnitude,
   formulaText,
+  KG_PER_MICRO_DALTON,
+  massMicroDa,
+  scientific,
   Geometries,
   magnification,
   rebase,
@@ -66,6 +69,7 @@ import {
   transpose,
   type Sim,
 } from './vec';
+import { lengthText } from './units';
 import { ascendTail, descendTail, digitsAllowWrap, maxAscent, runsCount, towerTail, wrapPeriods } from './wraps';
 
 export const CAMERA = {
@@ -193,8 +197,12 @@ const newKey = () => `b${(bodyKeys += 1)}`;
 export interface Readout {
   title: string;
   count: string;
+  /** §5.5's scientific mass of everything shown, in kg. */
+  mass: string;
   pieceCount: string;
   pieceFormula: string;
+  /** The piece's longest side. */
+  pieceSize: string;
   magnification: string;
   drawn: string;
 }
@@ -309,6 +317,16 @@ export class ScaleWorld {
     return total!;
   }
 
+  /** The exact mass of every body in µDa (§5.3). */
+  totalMass(): Magnitude {
+    let total: Magnitude | null = null;
+    for (const b of this.bodies) {
+      const m = massMicroDa(this.resolver.composition(bodyView(b.frame)));
+      total = total ? addMagnitude(total, m) : m;
+    }
+    return total!;
+  }
+
   readout(viewport: Viewport): Readout {
     const piece = this.pieceInView(viewport);
     const pieceView = this.resolver.resolve(this.bodies[piece.body].frame.root, piece.path);
@@ -322,11 +340,15 @@ export class ScaleWorld {
     const parts = [];
     if (boxes) parts.push(`${boxes.toLocaleString('en-US')} ${boxes === 1 ? 'box' : 'boxes'}`);
     if (atoms) parts.push(`${atoms.toLocaleString('en-US')} atoms`);
+    const pieceGeometry = this.geometries.of(pieceView);
+    const pieceUnit = pieceView.type === 'level' ? { u: unitExponent(pieceView.k), f: pieceView.tower.factor } : { u: 0n, f: 10 };
     return {
       title: this.title,
       count: `${formatMagnitude(this.totalCount())} atoms`,
+      mass: `${scientific(this.totalMass(), KG_PER_MICRO_DALTON)} kg`,
       pieceCount: `${formatMagnitude(this.resolver.count(pieceView))} atoms`,
       pieceFormula: formulaText(this.resolver.composition(pieceView)),
+      pieceSize: lengthText(maxExtent(pieceGeometry.min, pieceGeometry.max) + 2 * pieceGeometry.rAtom, pieceUnit.u, pieceUnit.f),
       magnification: magnificationText(magnification(this.bodies[piece.body].frame)),
       drawn: parts.length ? `drawing ${parts.join(' and ')}` : 'drawing nothing',
     };

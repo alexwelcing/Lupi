@@ -134,6 +134,11 @@
   margin-left: 0.6em;
   color: var(--scale-muted);
 }
+.scale-size {
+  margin-left: 0.6em;
+  color: var(--scale-muted);
+}
+.scale-mass,
 .scale-mag,
 .scale-drawn {
   color: var(--scale-muted);
@@ -265,7 +270,8 @@
     border-radius: 16px;
   }
   .scale-blurb,
-  .scale-drawn {
+  .scale-drawn,
+  .scale-mass {
     display: none;
   }
   .scale-tick {

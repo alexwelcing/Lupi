@@ -43,6 +43,7 @@ import {
 import { aggregateColour, allocBoxes, allocSplats, collectAtoms, DrawCache, fillInstances, gridOf, writeBoxMatrix } from './draw';
 import { CAMERA, faceTowardCamera, ScaleWorld, touchedFace, webBudgets, worldFromItem, type Viewport } from './world';
 import { readScaleUrl, scaleUrl } from './share';
+import { lengthText, metresText } from './units';
 import { applySim, IDENTITY, mulVec, rayBox, raySphere, type Sim } from './vec';
 
 const VIEWPORT: Viewport = { heightPx: 720, aspect: 1.6 };
@@ -218,6 +219,9 @@ describe('world: the googolplex dive (§8.4, §8.8, §9)', () => {
     expect(r.pieceCount).toBe('10^(10^100) atoms');
     expect(r.pieceFormula).toBe('BrCl499Na500 × 10^(10^100 − 3)');
     expect(r.magnification).toBe('shown 10^(−3.333 × 10^99) times life size');
+    // §12.4 and §5.5: the googolplex weighs ≈ 4.859 × 10^(10^100 − 26) kg.
+    expect(r.mass).toBe('≈ 4.859 × 10^(10^100 − 26) kg');
+    expect(r.pieceSize).toMatch(/^≈ \d\.\d{3} × 10\^\(≈ 3\.333 × 10\^99\) m$/);
     expect(world.phi()).toBeCloseTo(-7254.2, 0);
     expect(world.wrapAllowed(0)).toBe(false);
     const hit = world.pick([0, 0, -1]);
@@ -483,6 +487,23 @@ describe('draw: from a cut to instances and atoms (§8.5, §9.7)', () => {
     expect(world.readout(VIEWPORT).count).toBe('1,000,188,000 atoms');
     expect(magnification(world.bodies[0].frame).u).toBe(0n);
   }, 30000);
+});
+
+describe('units: lengths at any scale', () => {
+  it('reads everyday lengths in the unit that fits and astronomical ones in light-years', () => {
+    expect(metresText(2.82e-9)).toBe('2.82 nm');
+    expect(metresText(2.82e-7)).toBe('282 nm');
+    expect(metresText(28.2)).toBe('28.2 m');
+    expect(metresText(2.82e12)).toBe('2.82 × 10^12 m');
+    expect(metresText(2.82e24)).toBe('2.98 × 10^8 light-years');
+    expect(lengthText(28.2, 0n, 10)).toBe('2.82 nm');
+    expect(lengthText(282, 1n, 10)).toBe('282 nm');
+  });
+
+  it('keeps the exponent exact past binary64', () => {
+    expect(lengthText(282, 10n ** 60n, 10)).toBe('≈ 2.820 × 10^(10^60 − 8) m');
+    expect(lengthText(3, 2n ** 1000n, 2)).toMatch(/^≈ 1\.\d{3} × 2\^\(≈ 1\.072 × 10\^301\) m$/);
+  });
 });
 
 describe('vec: rays', () => {
