@@ -1402,7 +1402,7 @@ DrawItem {
 4. Monotone error holds for every view generated.
 5. With ρ unchanged, hysteresis never flips an item twice in consecutive frames.
 6. **Flight.** In a simulated dive through the googolplex, a wrap changes no item of the cut (compared as eye-space boxes), and consecutive frames differ only by what V's zoom changes.
-7. **Cost.** A release-mode benchmark of the Swift `buildCut` at 8,192 visits runs with the Linux tests and fails above 4 ms on CI hardware, taking the best of several frames because the test runner shares the machine. The device budget of 1 ms is measured by spike S2. The TypeScript reference is written for exact agreement, not speed (about 80 ms for the same frame on Node 22); its test asserts the 8,192 visits and gates the time loosely, and a web viewer that adopts it profiles against §9.3 for itself.
+7. **Cost.** A release-mode benchmark of the Swift `buildCut` at 8,192 visits runs with the Linux tests and fails above 4 ms on CI hardware, taking the best of 15 frames, in up to three windows, because the test runner and the machine are shared. The device budget of 1 ms is measured by spike S2. The TypeScript reference is written for exact agreement, not speed (about 80 ms for the same frame on Node 22); its test asserts the 8,192 visits and gates the time loosely, and a web viewer that adopts it profiles against §9.3 for itself.
 
 ---
 
