@@ -308,8 +308,9 @@ public struct NodeRecord: Sendable, Hashable {
         let n = [c.cells.x, c.cells.y, c.cells.z]
         for v in n where v < 1 || v > RecordLimits.maxCells { throw fail(.range, "cells per axis 1 to 2^60") }
         let mx = n.max()!, mn = n.min()!
-        // mn ≤ 2^60, so 2^16 · mn cannot overflow.
-        if mx > RecordLimits.maxAspect * mn { throw fail(.limit, "crystal aspect above 2^16") }
+        // Compared exactly: when 2^16 · mn passes 64 bits it is above every cell count.
+        let (bound, overflow) = RecordLimits.maxAspect.multipliedReportingOverflow(by: mn)
+        if !overflow && mx > bound { throw fail(.limit, "crystal aspect above 2^16") }
         if t == .capped {
             if s != .diamond { throw fail(.canonical, "capped crystals are diamond") }
             if n[0] != n[1] || n[1] != n[2] { throw fail(.canonical, "capped crystals have n0 = n1 = n2") }
