@@ -216,7 +216,8 @@ public struct PlaySession: Sendable {
     var tau: TauController
     var thermal: ThermalLevel = .nominal
     var slowMotionStart: Double?
-    var cameraInsideTerrain = false
+    /// The camera is inside a terrain's matter: toys are parked and its colliders are off (§10.1).
+    public internal(set) var cameraInsideTerrain = false
     var floorY: Double?
     var camera: CameraState?
     var hudCache = HUDCache()

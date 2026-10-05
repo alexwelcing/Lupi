@@ -20,7 +20,9 @@ public struct TerrainFace: Sendable, Equatable {
 }
 
 /// Where a terrain's matter is near the camera: inside its anchor, or inside the anchor's
-/// neighbourhood and behind every face of the root that the cut found within reach.
+/// neighbourhood and behind every face of the root that the cut found within reach. Only a solid
+/// (a crystal, or a tower of a seed that tiles) has an inside and faces; a sparse tower such as a
+/// grown water has neither, and meets toys through its windows of atom bumps alone.
 public struct TerrainRegion: Sendable {
     public var faces: [TerrainFace]
     var worldFromAnchor: RigidD
@@ -30,8 +32,10 @@ public struct TerrainRegion: Sendable {
     var anchor: Box3
     /// Its 3 × 3 × 3 neighbourhood, anchor units; nil when the anchor is the body's node.
     var neighbourhood: Box3?
+    var solid: Bool
 
     public func contains(_ p: Vec3) -> Bool {
+        guard solid else { return false }
         let x = worldFromAnchor.inverse.apply(p) / sigma
         if anchor.contains(x) { return true }
         guard let n = neighbourhood, !faces.isEmpty, n.contains(x) else { return false }
@@ -201,6 +205,9 @@ extension PlaySession {
         let w = b.frame.worldFromAnchor
         let sigma = b.frame.metresPerAnchorUnit
         let box = agg.bounds
+        guard agg.solid else {
+            return TerrainRegion(faces: [], worldFromAnchor: w, sigma: sigma, anchor: occupied, neighbourhood: nil, solid: false)
+        }
         if b.frame.anchorPath.isEmpty {
             // The body's own node: its six faces are exact.
             var faces: [TerrainFace] = []
@@ -213,7 +220,7 @@ extension PlaySession {
                     faces.append(TerrainFace(point: w.apply(sigma * p), normal: w.applyDirection(n)))
                 }
             }
-            return TerrainRegion(faces: faces, worldFromAnchor: w, sigma: sigma, anchor: occupied, neighbourhood: nil)
+            return TerrainRegion(faces: faces, worldFromAnchor: w, sigma: sigma, anchor: occupied, neighbourhood: nil, solid: true)
         }
         var faces: [TerrainFace] = []
         if let cut = lastCut, let index = lastOrder.firstIndex(of: b.id) {
@@ -227,7 +234,7 @@ extension PlaySession {
         let size = occupied.size
         return TerrainRegion(
             faces: faces, worldFromAnchor: w, sigma: sigma, anchor: occupied,
-            neighbourhood: Box3(min: occupied.min - size, max: occupied.max + size)
+            neighbourhood: Box3(min: occupied.min - size, max: occupied.max + size), solid: true
         )
     }
 

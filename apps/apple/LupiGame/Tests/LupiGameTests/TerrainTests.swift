@@ -112,13 +112,36 @@ struct TerrainTests {
         sim.camera = CameraState.looking(from: below, at: below + Vec3(0, -1, 0.1))
         sim.run(0.5)
         #expect(sim.world.statics.isEmpty)
+        #expect(sim.session.cameraInsideTerrain)
         #expect(sim.session.body(water)?.parked == true)
         #expect(sim.session.body(id)?.sizeState == .terrain)
         #expect(sim.budgetViolations.isEmpty)
         sim.camera = outside
         sim.run(0.5)
+        #expect(!sim.session.cameraInsideTerrain)
         #expect(sim.session.body(water)?.parked == false)
         #expect(sim.world.statics[.faces] != nil)
+    }
+
+    /// A sparse tower has no inside (§10.1 speaks of solid terrain): a water grown ×2 thirty times
+    /// and pinched past 3 m is terrain, but a camera within its envelope parks nothing, and it has
+    /// no face planes, only atom bumps.
+    @Test func aGrownWaterHasNoInside() throws {
+        var sim = Fixture.sim(GameSettings(growTwo: true))
+        let id = Fixture.spawn(&sim, "water")
+        for _ in 0..<30 { sim.session.grow(id) }
+        sim.step()
+        sim.session.select(id)
+        sim.pinch(id, ratio: 60, over: 1.0)
+        sim.run(1)
+        let b = try #require(sim.session.body(id))
+        #expect(b.sizeState == .terrain)
+        let c = b.worldBounds.centre
+        sim.camera = CameraState.looking(from: c, at: c + Vec3(0, 0, -1))
+        sim.run(0.5)
+        #expect(!sim.session.cameraInsideTerrain)
+        #expect(sim.world.statics[.faces] == nil)
+        #expect(sim.budgetViolations.isEmpty)
     }
 
     /// Spike S9: boxes and hulls of 3 cm and 90 cm dropped side by side land, rest and stay above
