@@ -630,6 +630,26 @@ function withTrailingBit(text: string): string {
   return `${text.slice(0, -1)}${B64[last | 1]}`;
 }
 
+/** §2: what a writer canonicalizes. Each node is given as written by a caller; the bytes are the record's. */
+function writerCases() {
+  const negZero = Float32Array.from(water.leaf.positions);
+  negZero[0] = -0;
+  const cases: Array<{ name: string; node: Node }> = [
+    { name: 'group: a quaternion with qw < 0 is negated', node: { kind: 'group', children: [{ id: saltId, rotation: [0, 0, -0.6, -0.8], translation: [1.5, -2, 3] }] } },
+    { name: 'group: qw = 0 and a negative first component is negated', node: { kind: 'group', children: [{ id: saltId, rotation: [0, -1, 0, 0], translation: [0, 0, -0] }] } },
+    { name: 'group: two children, one rotated a quarter turn about z', node: { kind: 'group', children: [
+      { id: saltId, rotation: [0, 0, 0, 1], translation: [0, 0, 0] },
+      { id: nodeId(waterRec), rotation: [0, 0, Math.SQRT1_2, Math.SQRT1_2], translation: [30.5, -0.25, 1e6] },
+    ] } },
+    { name: 'leaf: −0 is written as +0', node: { kind: 'leaf', z: water.leaf.z, positions: negZero } },
+    { name: 'edit: removals are written sorted', node: { kind: 'edit', base: gpId, removed: [[slab(5)], [slab(3)]] } },
+  ];
+  return cases.map(({ name, node }) => {
+    const bytes = encodeRecord(node);
+    return { name, node: nodeJson(node), hex: toHex(bytes), id: toHex(nodeId(bytes)) };
+  });
+}
+
 function encodeAspect(): Uint8Array {
   const b = encodeRecord({ ...cu(1n, 0), cells: [65536n, 1n, 1n] } as Node).slice();
   new DataView(b.buffer).setBigUint64(20, 65537n, true);
@@ -929,6 +949,7 @@ export async function buildScaleFixtures(): Promise<Record<string, unknown>> {
     scientific: scientificRows,
     packs: { small: packJson('small', small), bundled: packJson('lupi-scale-r1', bundled), withDependencies: packJson('caffeine with two dependencies', withDeps) },
     references,
+    writer: writerCases(),
     grow: [
       { name: 'water, the first tap', seed: toHex(nodeId(waterRec)), record: toHex(grow1), periods: GROW.map(big) },
       { name: 'caffeine, the first tap', seed: toHex(nodeId(caffeineRec)), record: toHex(caffeineGrown), periods: CAFFEINE_GROW.map(big) },

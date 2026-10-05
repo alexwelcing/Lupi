@@ -102,6 +102,15 @@ struct FixtureRecordTests {
         #expect(decoded.id.hex == row["id"].string)
     }
 
+    /// What a writer canonicalizes (§2): a quaternion's sign, −0, the order of removals.
+    @Test func writerCanonicalizes() throws {
+        for row in Fixture.json["writer"].array {
+            let rec = try NodeRecord(Fixture.node(row["node"]))
+            #expect(hexString(rec.bytes) == row["hex"].string, "\(row["name"].string)")
+            #expect(rec.id.hex == row["id"].string)
+        }
+    }
+
     @Test func everyRecordIsListedOnce() {
         #expect(Fixture.records.count == Fixture.json["records"].array.count)
     }
