@@ -171,6 +171,7 @@ extension PlaySession {
             provenance: .piece(parent: parentRef(of: parent))
         )
         guard var b = bodies[id] else { return id }
+        if plan.kind == .bondBreak, let info = buildInfo(b) { b.name = fragmentName(info.piece) }
         // Pieces are for building (D9), once they have flown apart.
         b.buildable = b.facts.isMolecule
         b.snapAfter = now + BuildTuning.pieceGrace
@@ -194,6 +195,15 @@ extension PlaySession {
             out.physics[i] = .create(id, b.spec, pose: b.entityPose)
         }
         return id
+    }
+
+    /// A fragment is labelled honestly (plan §4.4): a lone atom by its element, a piece whose atoms
+    /// lack partners as a radical, and a whole molecule by its name when Lupi knows it.
+    func fragmentName(_ piece: BuildPiece) -> String {
+        let formula = piece.molecule.hillFormula
+        if piece.count == 1 { return "\(ChemicalElement.forAtomicNumber(piece.molecule.atomicNumbers[0]).name) atom" }
+        guard BuildCues.isComplete(piece) else { return "\(formula) radical" }
+        return catalog.known.match(MolecularGraph(piece))?.name ?? formula
     }
 
     /// The piece's exact reference: the parent's identity path plus the step that made it,

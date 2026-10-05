@@ -122,7 +122,9 @@ compiles and tests them; say so if one does.
   not read back as the bond you made (a crowded spot), it bounces off with a
   dull bump. You keep holding what you built. On the plaque, **Fill H** fills
   every open valence with hydrogens. When every atom has its usual partners,
-  or Lupi knows the molecule, it celebrates: "You built ethanol".
+  or Lupi knows the molecule, it celebrates: "You built ethanol". The pieces
+  of a bond break are named honestly: "HO radical", "Hydrogen atom", or a
+  molecule's own name when a whole one falls out.
 - **Tap** a molecule to select it and show its plaque; tap it again, or empty
   space, to let go of the selection.
 - **Drag** to hold it; **flick** to throw; let go slowly to set it down.

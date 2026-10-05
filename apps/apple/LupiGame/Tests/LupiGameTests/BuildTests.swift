@@ -220,6 +220,8 @@ struct BuildTests {
         let piece = try #require(alive.first)
         #expect(sim.session.body(piece)!.buildable)
         #expect(sim.session.body(piece)!.facts.formula == "HO")
+        // Labelled honestly (plan §4.4): a hydroxyl's oxygen lacks a partner.
+        #expect(sim.session.body(piece)!.name == "HO radical")
 
         // A fragment kept: embedded XYZ, broken from its parent, the same bonds back.
         let record = try sim.session.keep(piece, now: Self.now)
@@ -281,6 +283,7 @@ struct BuildTests {
         #expect(sim.session.atomTray.last == 19)
         #expect(sim.events.contains(.trayGained(19)))
         let ion = try #require(pieces.first { sim.session.body($0)?.facts.formula == "K" })
+        #expect(sim.session.body(ion)?.name == "Potassium atom")
         let record = try sim.session.keep(ion, now: Self.now)
         #expect(record.validate() == [])
         #expect(record.molecule.source == .fragment)
