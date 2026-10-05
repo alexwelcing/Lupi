@@ -15,6 +15,10 @@ public struct Plaque: Sendable, Equatable {
     public var magnification: String
     public var feltMassKg: Double
     public var brokenFrom: String?
+    /// "O, H, H": what a built body was snapped from, in order (contracts.md §1.3's story).
+    public var builtFrom: String?
+    /// One tap of Fill would add hydrogens (plan §4.5).
+    public var canFill: Bool
     public var sizeState: SizeState
 }
 
@@ -171,9 +175,16 @@ extension PlaySession {
         guard let b = bodies[id] else { return nil }
         let readout = (try? resolver.magnification(of: b.frame))?.readout ?? ""
         let formula = b.facts.count.plain.map { $0 <= BigUInt(RecordLimits.maxAtoms) } ?? false ? b.facts.formula : b.facts.formulaText
+        var builtFrom: String?
+        switch b.provenance {
+        case let .built(story): builtFrom = story.parts.joined(separator: ", ")
+        case let .trophy(t) where t.origin.kind == .built: builtFrom = (t.origin.parts ?? []).joined(separator: ", ")
+        default: break
+        }
         return Plaque(
             name: b.name, formula: formula, atoms: b.facts.count.formatted, personality: b.facts.personality.plaque,
-            magnification: readout, feltMassKg: b.feltMassKg, brokenFrom: b.brokenFrom, sizeState: b.sizeState
+            magnification: readout, feltMassKg: b.feltMassKg, brokenFrom: b.brokenFrom, builtFrom: builtFrom,
+            canFill: canFill(id), sizeState: b.sizeState
         )
     }
 

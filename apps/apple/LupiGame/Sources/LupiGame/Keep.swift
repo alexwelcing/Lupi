@@ -18,6 +18,8 @@ public enum Provenance: Sendable, Hashable {
     case scale
     /// Broken off another body (scale-spec §10.6).
     case piece(parent: ParentRef)
+    /// Snapped together from atoms and pieces (plan §4.5).
+    case built(BuiltStory)
     /// A trophy brought back into play, or a body already kept.
     case trophy(TrophyRecord)
 
@@ -100,7 +102,8 @@ public enum Keep {
             if let molecule, try resolver.store.record(ref.root).kindByte == NodeKind.leaf.rawValue {
                 // A selection of a molecule's atoms is a fragment: a new molecule with its XYZ.
                 source = .fragment
-                let omol = parent.source == .omol25 ? parent.id.map { "omol25:\($0)" } : nil
+                let rows = body.omolRows.isEmpty && parent.source == .omol25 ? parent.id.map { [$0] } ?? [] : body.omolRows
+                let omol = Self.attribution(rows)
                 let xyz = XYZWriter.embedded(
                     molecule, title: "Lupi fragment", parent: parent.formula, source: omol, license: omol == nil ? nil : "CC-BY-4.0"
                 )
@@ -111,6 +114,16 @@ public enum Keep {
                 source = .scale
                 moleculeRef = Self.scaleRef(ref: ref, unit: unit, count: count, molecule: molecule, title: title, field: field)
             }
+        case let .built(story):
+            // A built molecule embeds its XYZ (contracts.md §1.3); its reference is its own leaf.
+            guard let molecule else { throw KeepError.corrupt("a built molecule that is not a molecule") }
+            source = .built
+            let omol = Self.attribution(body.omolRows)
+            let xyz = XYZWriter.embedded(molecule, title: "Lupi built", source: omol, license: omol == nil ? nil : "CC-BY-4.0")
+            moleculeRef = MoleculeRef(
+                source: source, sha256: SHA256.hex(xyz), formula: molecule.hillFormula, atoms: molecule.count, xyz: xyz, scale: field
+            )
+            origin = TrophyOrigin(kind: .built, at: bornAt, parts: story.parts)
         case .scale:
             source = .scale
             moleculeRef = Self.scaleRef(ref: ref, unit: unit, count: count, molecule: molecule, title: title, field: field)
@@ -139,6 +152,12 @@ public enum Keep {
         }
         if record != kept { record.updatedAt = max(kept.updatedAt, now) }
         return record
+    }
+
+    /// The XYZ `source=` that credits OMol25 rows (CC BY 4.0, contracts.md §1.3); several rows
+    /// are joined with commas, since a value holds no spaces.
+    static func attribution(_ rows: [String]) -> String? {
+        rows.isEmpty ? nil : rows.map { "omol25:\($0)" }.joined(separator: ",")
     }
 
     static func scaleRef(ref: ScaleRef, unit: String, count: Magnitude, molecule: Molecule?, title: String, field: ScaleRefField) -> MoleculeRef {

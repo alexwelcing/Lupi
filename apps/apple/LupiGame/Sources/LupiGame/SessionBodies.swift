@@ -62,6 +62,8 @@ extension PlaySession {
             )
             guard var body = bodies[id] else { return }
             body.breakableAfter = now + PlayTuning.spawnGrace
+            body.buildable = content.buildable
+            body.omolRows = content.omolRows
             if case let .trophy(record) = content.provenance {
                 body.trophyID = record.id
                 if record.origin.kind == .broken { body.brokenFrom = record.origin.parent?.name }
@@ -134,6 +136,7 @@ extension PlaySession {
         if grab?.body == id { grab = nil }
         if pinch?.body == id { pinch = nil }
         if glide?.body == id { glide = nil }
+        if let m = magnet, m.host == id || m.guest == id { magnetLost(m, removed: id) }
         if selection == id { selection = nil }
         hudCache.dirty = true
     }
@@ -196,6 +199,7 @@ extension PlaySession {
         if b.restingSince == nil { b.restingSince = now }
         if now - b.restingSince! >= PlayTuning.restHold {
             b.atRest = true
+            b.fromHand = false
             out.physics.append(.setDamping(b.id, linear: PlayTuning.restLinearDamping, angular: PlayTuning.restAngularDamping))
             fire(.settle, on: b, at: b.entityPose.translation, direction: .zero, now: now)
         }

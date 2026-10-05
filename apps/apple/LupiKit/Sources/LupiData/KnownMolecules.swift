@@ -93,14 +93,20 @@ public struct KnownMolecules: Sendable {
         }
     }
 
-    /// The starters (perceived here, by the play graph) and then the bundled index.
-    public static func bundled(starters: [(Starter, Molecule)]) throws -> KnownMolecules {
+    /// The starters alone, perceived here by the play graph.
+    public static func starters(_ starters: [(Starter, Molecule)]) -> KnownMolecules {
         var known = KnownMolecules()
         for (starter, molecule) in starters {
             let graph = MolecularGraph(molecule: molecule, graph: BondGraph.forPlay(molecule))
             guard graph.isConnected else { continue }
             known.append(KnownMolecule(id: starter.id, name: starter.name, source: .starter, graph: graph))
         }
+        return known
+    }
+
+    /// The starters and then the bundled index.
+    public static func bundled(starters: [(Starter, Molecule)]) throws -> KnownMolecules {
+        var known = Self.starters(starters)
         for m in try bundledIndex() { known.append(m) }
         return known
     }

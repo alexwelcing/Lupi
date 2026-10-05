@@ -109,6 +109,18 @@ public struct GestureArbiter: Sendable {
         }
     }
 
+    /// The held body became another (a snap merged it, plan §4.5): the fingers keep holding.
+    public mutating func retarget(_ old: BodyID, to new: BodyID) {
+        switch state {
+        case let .grabbing(f, b) where b == old:
+            state = .grabbing(f, new)
+        case let .pinching(f1, f2, sep, angle, held) where held == old:
+            state = .pinching(f1, f2, lastSep: sep, lastAngle: angle, held: new)
+        default:
+            break
+        }
+    }
+
     // MARK: Touches
 
     public mutating func handle(_ t: TouchSample, target: TouchTarget) -> [PlayGesture] {

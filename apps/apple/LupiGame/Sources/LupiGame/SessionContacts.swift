@@ -131,6 +131,7 @@ extension PlaySession {
             made.append(pid)
         }
         out.events.append(.broke(id, into: made))
+        discoverLooseAtoms(made)
     }
 
     /// One piece as a new body: its exact identity (the parent's path plus one step), drawn
@@ -170,6 +171,10 @@ extension PlaySession {
             provenance: .piece(parent: parentRef(of: parent))
         )
         guard var b = bodies[id] else { return id }
+        // Pieces are for building (D9), once they have flown apart.
+        b.buildable = b.facts.isMolecule
+        b.snapAfter = now + BuildTuning.pieceGrace
+        b.omolRows = parent.omolRows
         b.breakableAfter = now + piece.cooldown
         b.insetUntil = now + PlayTuning.insetTime
         b.floatUntil = -.infinity
@@ -219,6 +224,8 @@ extension PlaySession {
             return ParentRef(name: b.name, formula: b.facts.formula, source: .omol25, id: row)
         case .scale:
             return ParentRef(name: b.name, formula: b.facts.formula, source: .scale)
+        case .built:
+            return ParentRef(name: b.name, formula: b.facts.formula, source: .built)
         case .piece:
             // A piece of a piece: a fragment when it is a selection of a molecule's atoms.
             let leafRoot = (try? store.record(b.identity.root).kindByte) == NodeKind.leaf.rawValue

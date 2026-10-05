@@ -85,6 +85,16 @@ public enum SessionEvent: Sendable, Equatable {
     case refused(String)
     /// At rest for 3 s on a shelf (plan §6.3), on a stack whose base touches the room here.
     case restedOnShelf(BodyID, support: Vec3)
+    /// Two bodies snapped into this one (plan §4.5).
+    case snapped(BodyID, from: [BodyID])
+    /// The recipe saw another graph than the snap meant; the guest bounced off.
+    case snapRefused(host: BodyID, guest: BodyID)
+    /// Hydrogens filled every open valence of this body (a new body).
+    case filled(BodyID, hydrogens: Int)
+    /// "Built it": every atom at its usual valence, or a molecule Lupi knows (`known`).
+    case builtIt(BodyID, name: String, known: Bool)
+    /// A break made a loose atom of an element the atom tray lacked; the tray has it now.
+    case trayGained(Int)
 }
 
 /// What the app applies after a frame.
@@ -130,6 +140,8 @@ struct GrabState: Sendable {
     var follow: HoldFollow
     var estimator = ThrowEstimator()
     var touch: SIMD2<Double>
+    /// World offset a magnet adds to the hold target.
+    var pull: Vec3 = .zero
 }
 
 struct PinchState: Sendable {
@@ -189,6 +201,16 @@ public struct PlaySession: Sendable {
     var lastThrow: ThrowRelease?
     var lastImpact: LastImpact?
     var cutMs = 0.0
+    /// The snap in progress, at most one (plan §4.5).
+    var magnet: Magnet?
+    /// Refused pairs wait until these times.
+    var refusals: [SnapPair: Double] = [:]
+    /// The atom tray: H, C, N, O, F, P, S, Cl, Br, I, Na, and every element a break has made a
+    /// loose atom of (plan §4.5). Play state: gone when the session ends (plan §6.1).
+    public internal(set) var atomTray: [Int] = BuildTuning.trayElements
+    var atomSpawns = 0
+    /// "Built it" chimes waiting for their moment.
+    var delights: [(body: BodyID, at: Double)] = []
     /// Commands, cues and events gathered since the last frame was returned.
     var out = FrameOutput()
 
@@ -242,6 +264,8 @@ public struct PlaySession: Sendable {
         grab = nil
         pinch = nil
         glide = nil
+        magnet = nil
+        refusals = [:]
         arbiter.reset()
     }
 
@@ -268,6 +292,7 @@ public struct PlaySession: Sendable {
         stepGlide(now: input.time)
         stepTumble(now: input.time)
         stepBodies(dt: dt, now: input.time)
+        stepMagnet(dt: dt, now: input.time)
         dequeueSpawn(now: input.time)
         rescue()
         updateTerrain()

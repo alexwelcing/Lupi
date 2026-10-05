@@ -68,6 +68,18 @@ public struct Body: Sendable {
     public var brokenFrom: String?
     /// Where it came from, for the trophy a keep writes (contracts.md §1.3).
     public var provenance: Provenance = .scale
+    /// Snaps to other atoms (plan §4.5): tray atoms, the pieces of a break, what is built from
+    /// them, and trophies of those. A molecule spawned whole is not, so two gallery molecules
+    /// thrown at each other always bounce.
+    public var buildable = false
+    /// Held, or let go and not yet at rest: a snap needs the player's hand on one side, so the
+    /// pieces of a break never rejoin by themselves.
+    public var fromHand = false
+    /// No snap before this time.
+    public var snapAfter: Double = -.infinity
+    /// OMol25 rows (`<collection>:<row>`) whose atoms are in this body: the attribution its
+    /// trophy's XYZ carries (contracts.md §1.3).
+    public var omolRows: [String] = []
     /// The trophy this body is, once kept or when it came back from the collection.
     public var trophyID: UUID?
     /// On a shelf (plan §6.3): outside the 40-toy budget, which counts loose play only (plan §3.4).

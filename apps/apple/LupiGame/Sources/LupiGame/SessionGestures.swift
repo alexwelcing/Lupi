@@ -90,6 +90,7 @@ extension PlaySession {
         b.floatUntil = -.infinity
         b.mode = .kinematic
         b.spec.mode = .kinematic
+        b.fromHand = true
         // Picked off its shelf, a trophy is a loose toy again until it rests on one.
         let wasPinned = b.pinned
         b.pinned = false
@@ -105,7 +106,8 @@ extension PlaySession {
     mutating func stepGrab(dt: Double, now: Double) {
         guard var g = grab, var b = bodies[g.body], let camera else { return }
         let ray = camera.ray(through: g.touch)
-        let target = ray.at(g.depth) + Vec3(0, PlayTuning.grabLift, 0)
+        // A magnet zone pulls the hand gently toward the bond it would make (plan §4.5 (a)).
+        let target = ray.at(g.depth) + Vec3(0, PlayTuning.grabLift, 0) + g.pull
         g.follow.step(toward: target, dt: dt)
         g.estimator.add(HandSample(time: now, world: target, screen: g.touch))
         let point = g.follow.position.value
