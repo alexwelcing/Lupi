@@ -430,13 +430,18 @@ export class Resolver {
     }
   }
 
-  /** count = baseCount − Σ baseCount of each (outermost) removal (§4.4). */
+  /**
+   * §4.4: the view's own count less what each removal takes. Only the
+   * outermost removals are subtracted, each with the removals nested inside
+   * it applied (an edit inside a tower seed, entered by the walk), so the
+   * count always equals the materialization (errata/ts.md E3).
+   */
   count(v: View): Magnitude {
     this.checkSubtree(v);
     let c = this.baseCount(v);
     if (v.removals.length === 0) return c;
     const bare = stripped(v);
-    for (const r of maximalRemovals(v.removals)) c = subMagnitude(c, this.baseCount(this.walk(bare, r)));
+    for (const r of maximalRemovals(v.removals)) c = subMagnitude(c, this.count(this.walk(bare, r)));
     return c;
   }
 
@@ -489,7 +494,7 @@ export class Resolver {
     const out = this.baseElements(v);
     if (v.removals.length === 0 || v.type === 'selection') return out;
     const bare = stripped(v);
-    for (const r of maximalRemovals(v.removals)) addCounts(out, this.baseElements(this.walk(bare, r)), -1n);
+    for (const r of maximalRemovals(v.removals)) addCounts(out, this.plainCounts(this.walk(bare, r)), -1n);
     return out;
   }
 

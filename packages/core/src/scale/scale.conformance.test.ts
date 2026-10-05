@@ -510,6 +510,14 @@ describe('§6.6 packs readers reject', () => {
       mutate((_b, v) => v.setUint32(deps, 0, true), [3]),
     ]).toEqual(['pack', 'pack', 'pack']);
   });
+  it('a zero page after the last section is accepted, as §6.6 lists no rule against it; a nonzero one is not', () => {
+    const longer = new Uint8Array(ok.length + PAGE);
+    longer.set(ok);
+    new DataView(longer.buffer).setBigUint64(24, BigInt(longer.length), true);
+    const dirty = reseal(longer.slice());
+    dirty[ok.length + 5] = 1;
+    expect([code(() => readPack(reseal(longer), { verifyAll: true })), code(() => readPack(dirty))]).toEqual(['accepted', 'pack']);
+  });
   it('writers refuse bad root names and roots missing from the pack', () => {
     expect([
       code(() => writePack([waterRec], { roots: [{ name: 'Water', id: nodeId(waterRec) }] })),

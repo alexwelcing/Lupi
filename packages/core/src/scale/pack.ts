@@ -282,7 +282,8 @@ export function readPack(bytes: Uint8Array, opts: { verifyAll?: boolean } = {}):
     sections.push({ type, flags, offset: o, length: n, crc, version });
     end = pagesEnd;
   }
-  if (end !== bytes.length) fail('pack', 'bytes after the last section');
+  // §6.6 permits zero pages after the last section (§6.1: bytes between sections are zero).
+  if (!isZero(bytes, end, bytes.length)) fail('pack', 'bytes after the last section');
   const known = new Map<string, PackSection>();
   for (const s of sections) {
     const isKnown = ['NIDX', 'NREC', 'ROOT', 'DEPS'].includes(s.type) && s.version === 1;
