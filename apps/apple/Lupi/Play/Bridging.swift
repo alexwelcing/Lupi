@@ -33,6 +33,12 @@ extension RigidD {
     init(_ t: Transform) {
         self.init(rotation: Quat(t.rotation), translation: t.translation.asDouble)
     }
+
+    /// The rigid part of an ARKit anchor transform (anchors carry no scale).
+    init(_ m: simd_float4x4) {
+        let c = { (v: SIMD4<Float>) in Vec3(Double(v.x), Double(v.y), Double(v.z)) }
+        self.init(rotation: Quat(rotation: Mat3(columns: c(m.columns.0), c(m.columns.1), c(m.columns.2))), translation: c(m.columns.3))
+    }
 }
 
 extension Transform3x4 {

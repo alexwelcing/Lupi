@@ -1,6 +1,9 @@
 # Generated on the owner's Mac by `xcodegen generate` from project.yml.
 Lupi.xcodeproj/
 Lupi/Info.plist
+Lupi/Lupi.entitlements
+# The owner's Firebase configuration; never committed (plan §6.2).
+Config/Secrets.xcconfig
 *.xcworkspace/xcuserdata/
 xcuserdata/
 DerivedData/

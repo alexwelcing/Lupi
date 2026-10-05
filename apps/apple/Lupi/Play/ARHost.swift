@@ -116,38 +116,40 @@ final class ARHost {
         }
     }
 
-    // MARK: Spike A1: world map save and relocalize
+    // MARK: Shelves: anchors, re-runs and raycasts (plan §6.3, §6.4)
 
-    static var worldMapURL: URL {
-        URL.documentsDirectory.appending(path: "spike-a1.worldmap")
+    /// Re-runs our session from a world map (or none), dropping what it tracked. The first run
+    /// goes through `SpatialTrackingSession`; whether RealityView keeps drawing after a direct
+    /// re-run like this is part of spike A1.
+    func rerun(worldMap: ARWorldMap?) {
+        session.run(configuration(worldMap: worldMap), options: [.resetTracking, .removeExistingAnchors])
     }
 
-    /// Saves the current world map when mapping allows it; returns a line for the HUD.
-    func saveWorldMap() async -> String {
-        guard let status = session.currentFrame?.worldMappingStatus, status == .extending || status == .mapped else {
-            return "A1: map not ready, look around more"
-        }
-        do {
-            let map = try await session.currentWorldMap()
-            let data = try NSKeyedArchiver.archivedData(withRootObject: map, requiringSecureCoding: true)
-            try data.write(to: Self.worldMapURL, options: [.atomic, .completeFileProtection])
-            return "A1: saved \(data.count / 1024) KB, \(map.anchors.count) anchors"
-        } catch {
-            return "A1: save failed: \(error.localizedDescription)"
-        }
+    /// Adds an anchor at a pose; returns its identifier.
+    func addAnchor(named name: String, at pose: RigidD) -> UUID {
+        let anchor = ARAnchor(name: name, transform: pose.transform.matrix)
+        session.add(anchor: anchor)
+        return anchor.identifier
     }
 
-    /// Reruns the session from the saved map; relocalization shows in the HUD's tracking line.
-    func loadWorldMap() async -> String {
-        do {
-            let data = try Data(contentsOf: Self.worldMapURL)
-            guard let map = try NSKeyedUnarchiver.unarchivedObject(ofClass: ARWorldMap.self, from: data) else { return "A1: no map" }
-            await tracking.stop()
-            await start(worldMap: map)
-            return "A1: relocalizing from \(data.count / 1024) KB"
-        } catch {
-            return "A1: load failed: \(error.localizedDescription)"
-        }
+    func removeAnchor(_ id: UUID) {
+        guard let anchor = session.currentFrame?.anchors.first(where: { $0.identifier == id }) else { return }
+        session.remove(anchor: anchor)
+    }
+
+    /// The pose of an anchor in this frame, when the session has it.
+    func anchorPose(_ id: UUID, in frame: ARFrame) -> RigidD? {
+        frame.anchors.first { $0.identifier == id }.map { RigidD($0.transform) }
+    }
+
+    /// Where a world ray meets a real horizontal surface ARKit knows or estimates.
+    func raycast(_ ray: RayD) -> Vec3? {
+        let query = ARRaycastQuery(
+            origin: ray.origin.asFloat, direction: ray.direction.normalized.asFloat, allowing: .estimatedPlane, alignment: .horizontal
+        )
+        guard let hit = session.raycast(query).first else { return nil }
+        let t = hit.worldTransform.columns.3
+        return Vec3(Double(t.x), Double(t.y), Double(t.z))
     }
 }
 

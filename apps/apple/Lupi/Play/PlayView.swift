@@ -1,6 +1,7 @@
 import LupiGame
 import RealityKit
 import SwiftUI
+import UIKit
 
 /// The play screen (plan §3, §8 M0): the room through RealityView, touches straight to the
 /// session's gesture arbiter, and the chrome over them.
@@ -8,6 +9,7 @@ struct PlayView: View {
     let controller: PlayController
     @Environment(AppModel.self) private var app
     @State private var showingSettings = false
+    @State private var showingCollection = false
 
     var body: some View {
         ZStack {
@@ -16,20 +18,33 @@ struct PlayView: View {
                 await controller.start()
             }
             .ignoresSafeArea()
-            CoachingOverlay(session: controller.ar.session)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
             TouchLayer(
                 onTouches: { [controller] in controller.touches($0) },
                 onLayout: { [controller] in controller.layout($0, $1, $2) }
             )
             .ignoresSafeArea()
+            // Above the touch layer and interactive, so its Start Over reaches our handler
+            // instead of resetting the session; once it hides itself, touches pass through.
+            CoachingOverlay(session: controller.ar.session, onStartOver: { [controller] in controller.coachingRequestedReset() })
+                .ignoresSafeArea()
+            if controller.shelfPrompt == .placing {
+                // "Put the shelf here": the next tap on a surface places the root (plan §6.4).
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture(coordinateSpace: .local) { point in controller.placeShelf(at: point) }
+            }
             chrome
         }
         .onChange(of: app.settings, initial: true) { _, settings in controller.apply(settings) }
         .onChange(of: app.showDebugHUD, initial: true) { _, on in controller.showsHUD = on }
+        .onChange(of: app.autoKeep, initial: true) { _, on in controller.autoKeep = on }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
+                .environment(app)
+        }
+        .sheet(isPresented: $showingCollection, onDismiss: { app.playChosenTrophy() }) {
+            CollectionView()
                 .environment(app)
         }
         .statusBarHidden()
@@ -48,6 +63,9 @@ struct PlayView: View {
             }
             if app.showDebugHUD {
                 DebugPanel(controller: controller)
+            }
+            if let prompt = controller.shelfPrompt {
+                ShelfCard(prompt: prompt, snapshot: controller.shelfSnapshot, controller: controller)
             }
             if let plaque = controller.plaque {
                 PlaqueCard(plaque: plaque, controller: controller)
@@ -76,6 +94,7 @@ struct PlayView: View {
     private var topBar: some View {
         HStack {
             RoundButton(symbol: "xmark", label: "Home") { app.showingPlay = false }
+            RoundButton(symbol: "square.stack.3d.up", label: "Collection") { showingCollection = true }
             Spacer()
             Text("Lupi")
                 .font(.headline.weight(.bold))
@@ -148,15 +167,25 @@ struct PlaqueCard: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            if plaque.grown {
-                Button("Surface") { controller.surface() }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.top, 4)
-            } else if plaque.canDive {
-                Button("Dive in") { controller.dive() }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.top, 4)
+            HStack {
+                if plaque.kept {
+                    Label("Kept", systemImage: "checkmark.seal.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.lime)
+                } else {
+                    // Any body can be kept, whatever its count (plan §6.3).
+                    Button("Keep") { controller.keepSelected() }
+                        .buttonStyle(.borderedProminent)
+                }
+                if plaque.grown {
+                    Button("Surface") { controller.surface() }
+                        .buttonStyle(.bordered)
+                } else if plaque.canDive {
+                    Button("Dive in") { controller.dive() }
+                        .buttonStyle(.bordered)
+                }
             }
+            .padding(.top, 4)
         }
         .padding(14)
         .frame(maxWidth: 360, alignment: .leading)
@@ -215,5 +244,52 @@ struct SpawnTray: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+/// The shelf's card (plan §6.4): the snapshot as a small ghost while the session relocalizes,
+/// then the ways out when it does not match.
+struct ShelfCard: View {
+    let prompt: ShelfPrompt
+    let snapshot: UIImage?
+    let controller: PlayController
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if let snapshot, prompt != .coverage {
+                Image(uiImage: snapshot)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 72, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .opacity(0.7)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                if prompt == .offer || prompt == .lookAtShelf {
+                    HStack {
+                        Button("Put the shelf here") { controller.putShelfHere() }
+                            .buttonStyle(.borderedProminent)
+                            .opacity(prompt == .offer ? 1 : 0.6)
+                        Button("New room") { controller.startNewRoom() }
+                            .buttonStyle(.bordered)
+                    }
+                    .font(.footnote)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: 360, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var title: String {
+        switch prompt {
+        case .lookAtShelf: "Look at your shelf"
+        case .offer: "Can't find your shelf. Put it here, or start a new room."
+        case .placing: "Tap where the shelf should go"
+        case .coverage: "Look around the shelf so I can remember it"
+        }
     }
 }

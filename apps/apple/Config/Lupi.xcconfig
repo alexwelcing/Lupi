@@ -1,0 +1,11 @@
+// Build settings for the Lupi app target (project.yml, configFiles).
+//
+// The account needs a Firebase Web API key restricted to the iOS app live.lupi.app
+// and the Firebase project id (docs/ar/account-and-sync.md §7). They live in
+// Config/Secrets.xcconfig, which git ignores: copy Secrets.example.xcconfig there and
+// fill it in. Without it the values stay empty and the app runs with the account
+// features hidden.
+LUPI_FIREBASE_API_KEY =
+LUPI_FIREBASE_PROJECT_ID =
+
+#include? "Secrets.xcconfig"

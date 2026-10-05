@@ -11,8 +11,9 @@ struct DebugPanel: View {
                 lines(controller.hudLines)
                 Divider().overlay(Color.white.opacity(0.3))
                 HStack {
-                    Button("A1 save map") { controller.saveWorldMap() }
-                    Button("A1 relocalize") { controller.loadWorldMap() }
+                    Button("A1 save shelf map") { controller.saveShelfMap() }
+                    Button("A1 relocalize") { controller.relocalizeShelf() }
+                    Button("A1 copy log") { controller.copyA1Log() }
                 }
                 Toggle("A2 custom simulation + clock", isOn: $controller.spikes.customSimulation)
                 Button("A2 quarter speed for 2 s") { controller.slowMotionTest() }
@@ -26,6 +27,7 @@ struct DebugPanel: View {
                 }
                 .pickerStyle(.segmented)
                 Button("S10 time 1k and 2k atom meshes") { controller.timeMeshBuilds() }
+                lines(controller.a1Lines)
                 lines(controller.spikeLines)
                 lines(controller.contactLog)
             }

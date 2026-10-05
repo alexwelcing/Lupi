@@ -1,7 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Settings (plan §5.1, §5.5): the one Sound & haptics toggle and Motion comfort.
+/// Settings (plan §3.2, §5.1, §5.5): the one Sound & haptics toggle, Motion comfort and the
+/// Lupi account.
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -37,6 +38,12 @@ struct SettingsView: View {
                 } header: {
                     Text("Toy physics")
                 }
+                Section {
+                    Toggle("Keep what rests on a shelf", isOn: $model.autoKeep)
+                } footer: {
+                    Text("A molecule that sits still for three seconds on a shelf, a table or a desk becomes a trophy and stays there for next time. Keep anything by hand from its card.")
+                }
+                AccountSections()
                 Section {
                     LabeledContent("Version", value: Self.version)
                 }

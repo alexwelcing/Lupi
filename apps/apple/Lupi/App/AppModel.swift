@@ -1,4 +1,5 @@
 import Foundation
+import LupiData
 import LupiGame
 import LupiPlay
 import Observation
@@ -36,6 +37,8 @@ enum ComfortChoice: String, CaseIterable, Identifiable {
 final class AppModel {
     let catalog: Catalog?
     let catalogError: String?
+    /// The trophy case, the shelves and the account (plan §6).
+    let collection: CollectionModel
 
     var soundAndHaptics: Bool {
         didSet { UserDefaults.standard.set(soundAndHaptics, forKey: Keys.sound) }
@@ -45,18 +48,28 @@ final class AppModel {
         didSet { UserDefaults.standard.set(comfortChoice.rawValue, forKey: Keys.comfort) }
     }
 
+    /// Keep what rests on a shelf (plan §6.3); on by default.
+    var autoKeep: Bool {
+        didSet { UserDefaults.standard.set(autoKeep, forKey: Keys.autoKeep) }
+    }
+
     var reduceMotion = UIAccessibility.isReduceMotionEnabled
     var showingPlay = false
     /// The play screen's controller, made when Play opens and released when it closes.
     private(set) var playController: PlayController?
     var showDebugHUD = false
+    var showingCollection = false
+    /// The trophy chosen in the collection, spawned once its sheet has closed.
+    var chosenTrophy: TrophyRecord?
 
     enum Keys {
         static let sound = "lupi.soundAndHaptics"
         static let comfort = "lupi.motionComfort"
+        static let autoKeep = "lupi.autoKeep"
     }
 
     init() {
+        collection = CollectionModel()
         do {
             catalog = try Catalog.bundled()
             catalogError = nil
@@ -67,6 +80,7 @@ final class AppModel {
         // Sound & haptics is on by default (D11).
         soundAndHaptics = UserDefaults.standard.object(forKey: Keys.sound) as? Bool ?? true
         comfortChoice = ComfortChoice(rawValue: UserDefaults.standard.string(forKey: Keys.comfort) ?? "") ?? .system
+        autoKeep = UserDefaults.standard.object(forKey: Keys.autoKeep) as? Bool ?? true
     }
 
     var comfort: MotionComfort { comfortChoice.comfort(reduceMotion: reduceMotion) }
@@ -84,6 +98,13 @@ final class AppModel {
         if let source { controller.spawn(source) }
     }
 
+    /// After the collection closes: the trophy chosen in it comes into play (plan §6.4, step 5).
+    func playChosenTrophy() {
+        guard let trophy = chosenTrophy else { return }
+        chosenTrophy = nil
+        play(.trophy(trophy))
+    }
+
     /// Opens Play with the scale receipt: salt of 10³, 10⁶ and 10⁹ atoms in a row.
     func playReceipt() {
         openPlay()?.spawnReceipt()
@@ -92,8 +113,9 @@ final class AppModel {
     @discardableResult
     private func openPlay() -> PlayController? {
         guard let catalog else { return nil }
-        let controller = playController ?? PlayController(catalog: catalog, settings: settings)
+        let controller = playController ?? PlayController(catalog: catalog, settings: settings, collection: collection)
         playController = controller
+        collection.onForget = { [weak controller] id in controller?.forget(trophy: id) }
         showingPlay = true
         return controller
     }

@@ -2,6 +2,7 @@
 import CoreMedia
 import Foundation
 import LupiChem
+import LupiData
 import LupiGame
 import LupiPlay
 import LupiScale
@@ -24,8 +25,10 @@ struct PlaqueText: Equatable {
     var canDive: Bool
     /// Grown past a toy: Surface brings it back.
     var grown: Bool
+    /// Already a trophy in the collection.
+    var kept: Bool
 
-    init(id: BodyID, plaque p: Plaque, isMolecule: Bool) {
+    init(id: BodyID, plaque p: Plaque, isMolecule: Bool, kept: Bool) {
         self.id = id
         name = p.name
         formula = p.formula
@@ -36,6 +39,7 @@ struct PlaqueText: Equatable {
         brokenFrom = p.brokenFrom
         canDive = !isMolecule
         grown = p.sizeState != .toy
+        self.kept = kept
     }
 }
 
@@ -64,6 +68,8 @@ final class PlayController {
     /// Everything added to the RealityView.
     @ObservationIgnored let content = Entity()
     @ObservationIgnored private(set) var session: PlaySession
+    @ObservationIgnored let collection: CollectionModel
+    @ObservationIgnored let shelf: ShelfHost
 
     private(set) var plaque: PlaqueText?
     private(set) var caption: String?
@@ -74,7 +80,14 @@ final class PlayController {
     private(set) var hudLines: [String] = []
     private(set) var spikeLines: [String] = []
     private(set) var contactLog: [String] = []
+    /// Spike A1's probe, as HUD lines.
+    private(set) var a1Lines: [String] = []
+    /// What the screen says about the shelf (plan §6.4), and its snapshot.
+    private(set) var shelfPrompt: ShelfPrompt?
+    var shelfSnapshot: UIImage? { shelf.snapshot }
     var showsHUD = false
+    /// Three seconds at rest on a shelf keeps a body (plan §6.3); the player may turn it off.
+    var autoKeep = true
     var spikes = SpikeToggles() {
         didSet { applySpikes(from: oldValue) }
     }
@@ -102,8 +115,10 @@ final class PlayController {
         var b: BodyID?
     }
 
-    init(catalog: Catalog, settings: GameSettings) {
+    init(catalog: Catalog, settings: GameSettings, collection: CollectionModel) {
         session = PlaySession(catalog: catalog, settings: settings)
+        self.collection = collection
+        shelf = ShelfHost(store: collection.shelves)
         content.addChild(scene.root)
         // The plane fallback arena shares the bodies' simulation, custom (A2) or not.
         scene.root.addChild(ar.planeArena)
@@ -140,8 +155,11 @@ final class PlayController {
         Task { await sounds.load() }
         // Without LiDAR the arena is the detected planes alone (plan §3.3).
         if !ar.hasLiDAR { show("No LiDAR on this device: molecules land on the floors and tables Lupi finds") }
-        await ar.start()
+        // The room opened last relocalizes from its map (plan §6.3, §6.4).
+        let opened = shelf.openLastRoom(now: ProcessInfo.processInfo.systemUptime)
+        await ar.start(worldMap: opened.map)
         if let missing = ar.unavailable { note("Unavailable: \(missing)") }
+        for e in opened.events { handle(e) }
     }
 
     func stop() async {
@@ -200,12 +218,16 @@ final class PlayController {
 
     private func frame() {
         guard running, let arFrame = ar.session.currentFrame else { return }
-        ar.update(arFrame)
-        track(arFrame.camera.trackingState)
-        guard let camera = ar.camera(arFrame, viewport: viewport, orientation: orientation, scale: pixelsPerPoint) else { return }
-        lastCamera = camera
         // UITouch timestamps and this clock share the system uptime base.
         let now = ProcessInfo.processInfo.systemUptime
+        ar.update(arFrame)
+        track(arFrame.camera.trackingState)
+        for e in shelf.frame(arFrame, now: now) { handle(e) }
+        shelf.saveIfDue(ar: ar, frame: arFrame, now: now)
+        let prompt = shelf.prompt ?? (shelf.needsCoverage(now: now) ? .coverage : nil)
+        if prompt != shelfPrompt { shelfPrompt = prompt }
+        guard let camera = ar.camera(arFrame, viewport: viewport, orientation: orientation, scale: pixelsPerPoint) else { return }
+        lastCamera = camera
         if ready { flushPending() }
         let motions = scene.motions()
         lastMotions = motions
@@ -229,7 +251,11 @@ final class PlayController {
         if now - lastPublish >= 0.25 {
             lastPublish = now
             refreshPlaque()
-            if showsHUD { publish(out.hud, arFrame) }
+            if showsHUD {
+                publish(out.hud, arFrame)
+                let a1 = shelf.probe.lines(6)
+                if a1 != a1Lines { a1Lines = a1 }
+            }
         }
     }
 
@@ -346,7 +372,107 @@ final class PlayController {
         case let .broke(_, pieces): show("Broke into \(pieces.count) pieces")
         case .selected, .removed: refreshPlaque()
         case .spawned: break
+        case let .restedOnShelf(id, support): pin(id, support: support)
         }
+    }
+
+    // MARK: Keeping and shelves (plan §6.3, §6.4)
+
+    /// Keep: the selected body becomes a trophy in the collection.
+    func keepSelected() {
+        guard let id = session.selection else { return }
+        do {
+            let record = try session.keep(id, now: Date())
+            save(record)
+            show("Kept: \(record.name)")
+            refreshPlaque()
+        } catch {
+            show("\(error)")
+        }
+    }
+
+    /// Three seconds at rest on a shelf: kept, and placed relative to the room's root.
+    private func pin(_ id: BodyID, support: Vec3) {
+        guard autoKeep, shelf.acceptsPins, let camera = lastCamera else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        do {
+            let root = try shelf.ensureShelf(support: support, camera: camera.position, ar: ar, now: now)
+            let record = try session.keep(id, now: Date())
+            guard let pose = session.keptPose(id) else { return }
+            save(record)
+            if try shelf.place(trophy: record.id, pose: pose, root: root, now: now) {
+                session.pin(id)
+                show("Kept on the shelf: \(record.name)")
+            } else {
+                show("This shelf is full: 60 trophies")
+            }
+        } catch {
+            show("\(error)")
+        }
+    }
+
+    /// Writes a kept record unless the collection already has it as it is.
+    private func save(_ record: TrophyRecord) {
+        guard collection.trophy(record.id) != record else { return }
+        Task { await collection.keep(record) }
+    }
+
+    private func handle(_ e: RecoveryEvent) {
+        let now = ProcessInfo.processInfo.systemUptime
+        switch e {
+        case let .relocalized(after):
+            show("Found your shelf")
+            shelf.note(String(format: "relocalized after %.1f s", after), now: now)
+        case .offerPutHere:
+            break
+        case let .trophiesAppear(root):
+            let byID = Dictionary(collection.trophies.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            for (trophy, pose) in shelf.placements(under: root, trophies: byID) where session.bodies(of: trophy.id).isEmpty {
+                session.spawn(.trophy(trophy), at: .shelf(pose))
+            }
+        case .rootPlaced:
+            show("The shelf is here now")
+        case .saveMap:
+            shelf.saveSoon(now: now)
+        }
+    }
+
+    /// Step 3: the next tap on a surface puts the shelf there.
+    func putShelfHere() {
+        shelf.choosePutHere(now: ProcessInfo.processInfo.systemUptime)
+        shelfPrompt = shelf.prompt
+    }
+
+    /// The tap after "Put the shelf here", in view points.
+    func placeShelf(at point: CGPoint) {
+        guard let camera = lastCamera,
+              let hit = ar.raycast(camera.ray(through: SIMD2(Double(point.x), Double(point.y)))) else {
+            show("Tap a table or a shelf Lupi can see")
+            return
+        }
+        let root = ShelfMath.rootPose(at: hit, camera: camera.position)
+        for e in shelf.place(root: root, ar: ar, now: ProcessInfo.processInfo.systemUptime) { handle(e) }
+        shelfPrompt = shelf.prompt
+    }
+
+    /// Step 4: the old room stays on the device until deleted.
+    func startNewRoom() {
+        shelf.startNewRoom(ar: ar)
+        shelfPrompt = shelf.prompt
+        show("A new room: leave a molecule on a shelf to start it")
+    }
+
+    /// The coaching overlay's Start Over would reset the session and lose the shelf's anchors
+    /// (plan §6.4, step 6): it stops the wait instead.
+    func coachingRequestedReset() {
+        for e in shelf.offerNow(now: ProcessInfo.processInfo.systemUptime) { handle(e) }
+        shelfPrompt = shelf.prompt
+    }
+
+    /// A trophy left the collection: its bodies stay as copies.
+    func forget(trophy: UUID) {
+        session.forget(trophy: trophy)
+        refreshPlaque()
     }
 
     private func show(_ text: String) {
@@ -362,7 +488,9 @@ final class PlayController {
     private func refreshPlaque() {
         var next: PlaqueText?
         if let id = session.selection, let p = session.plaque(id) {
-            next = PlaqueText(id: id, plaque: p, isMolecule: session.body(id)?.facts.isMolecule ?? true)
+            next = PlaqueText(
+                id: id, plaque: p, isMolecule: session.body(id)?.facts.isMolecule ?? true, kept: session.body(id)?.trophyID != nil
+            )
         }
         if next != plaque { plaque = next }
     }
@@ -450,12 +578,26 @@ final class PlayController {
         if session.tumbleTest(id) { note("A3: tossed \(id)") }
     }
 
-    func saveWorldMap() {
-        Task { note(await ar.saveWorldMap()) }
+    /// A1: save the shelf's map now (when mapping allows).
+    func saveShelfMap() {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard shelf.shelf != nil else {
+            note("A1: no shelf yet; leave a molecule on one")
+            return
+        }
+        shelf.saveSoon(now: now)
     }
 
-    func loadWorldMap() {
-        Task { note(await ar.loadWorldMap()) }
+    /// A1: run the session again from the shelf's saved map and watch it relocalize.
+    func relocalizeShelf() {
+        // Everything in play poofs; the shelf's trophies come back when the map matches.
+        if shelf.relocalizeFromSavedMap(ar: ar, now: ProcessInfo.processInfo.systemUptime) { session.clear() }
+    }
+
+    /// A1: the probe's log as JSON lines, for the owner to paste into an issue.
+    func copyA1Log() {
+        UIPasteboard.general.string = shelf.probe.jsonLines()
+        note("A1: log copied")
     }
 
     /// S10: merged meshes of 1,000 and 2,000 atoms.

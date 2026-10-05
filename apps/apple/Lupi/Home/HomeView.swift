@@ -13,6 +13,7 @@ struct HomeView: View {
                     header
                     if let catalog = app.catalog {
                         if let first = catalog.tray.first { hero(first) }
+                        collectionButton
                         starters(Array(catalog.tray.dropFirst()))
                         receipt(catalog.receipt)
                     } else if let error = app.catalogError {
@@ -82,6 +83,26 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Play with \(item.title)")
+    }
+
+    /// The collection (plan §6.4, step 5): every trophy, one tap from play, camera or not.
+    private var collectionButton: some View {
+        Button {
+            app.showingCollection = true
+        } label: {
+            HStack {
+                Image(systemName: "square.stack.3d.up")
+                Text("Your collection")
+                Spacer()
+                Text(app.collection.trophies.isEmpty ? "Nothing kept yet" : "\(app.collection.trophies.count) kept")
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .font(.headline)
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.sageRaised))
+            .foregroundStyle(Color.lime)
+        }
+        .buttonStyle(.plain)
     }
 
     private func starters(_ items: [SpawnItem]) -> some View {

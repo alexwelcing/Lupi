@@ -1,7 +1,7 @@
 # The Lupi app (D1, D2 as amended): generated on the owner's Mac with XcodeGen,
 #   brew install xcodegen; cd apps/apple && xcodegen generate && open Lupi.xcodeproj
-# The generated Lupi.xcodeproj and Lupi/Info.plist are not committed; this file
-# is the source of truth. Re-run `xcodegen generate` after pulling changes here
+# The generated Lupi.xcodeproj, Lupi/Info.plist and Lupi/Lupi.entitlements are
+# not committed; this file is the source of truth. Re-run `xcodegen generate` after pulling changes here
 # or adding files.
 name: Lupi
 
@@ -39,6 +39,12 @@ targets:
       - path: Lupi
         excludes:
           - Info.plist
+          - Lupi.entitlements
+    # The Firebase API key and project id come from Config/Secrets.xcconfig, which the
+    # owner fills in on the Mac and git ignores; Config/Lupi.xcconfig includes it if present.
+    configFiles:
+      Debug: Config/Lupi.xcconfig
+      Release: Config/Lupi.xcconfig
     dependencies:
       - package: LupiKit
         products: [LupiChem, LupiPlay, LupiData]
@@ -46,8 +52,7 @@ targets:
         products: [LupiScaleCore, LupiScale]
       - package: LupiGame
         product: LupiGame
-      # The account and sync layer lands in M1; it is linked now so every build
-      # compiles it for the device.
+      # The account and sync layer: Firebase Auth and Firestore over REST (M1).
       - package: LupiCloud
         products: [LupiAuth, LupiSync]
     info:
@@ -59,6 +64,10 @@ targets:
         LSRequiresIPhoneOS: true
         ITSAppUsesNonExemptEncryption: false
         NSCameraUsageDescription: Lupi uses the camera to put molecules in your room, so you can throw them at your walls and stack them on your desk. What the camera sees stays on this device.
+        # The account's configuration (plan §6.2): empty unless Config/Secrets.xcconfig sets
+        # them, and then the account features stay hidden.
+        LupiFirebaseAPIKey: $(LUPI_FIREBASE_API_KEY)
+        LupiFirebaseProjectID: $(LUPI_FIREBASE_PROJECT_ID)
         # ARKit is required; LiDAR is not: without it the arena falls back to
         # detected planes (plan §3.3).
         UIRequiredDeviceCapabilities: [arkit]
@@ -76,6 +85,11 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+    # Sign in with Apple (D7, account-and-sync.md §7 step 1).
+    entitlements:
+      path: Lupi/Lupi.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
     settings:
       base:
         PRODUCT_NAME: Lupi
