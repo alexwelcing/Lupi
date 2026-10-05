@@ -221,6 +221,13 @@ struct FrameTests {
         #expect(ScaleAxis.cap == 11)
     }
 
+    /// A flight frame deep in the googolplex crosses |λ| = 10^99 and nothing else, at once.
+    @Test func detentsDeepInAFlight() {
+        #expect(ScaleAxis.detent(from: -3.3e99, to: -3.2e99) == nil)
+        #expect(ScaleAxis.detent(from: -1.2e99, to: -9e98) == -1e99)
+        #expect(ScaleAxis.detent(from: -40, to: -1e40) == -100)
+    }
+
     @Test func detentsClickOncePerFrame() {
         #expect(ScaleAxis.detent(from: 0.5, to: 1.5) == 1)
         #expect(ScaleAxis.detent(from: -0.1, to: 0.1) == 0)

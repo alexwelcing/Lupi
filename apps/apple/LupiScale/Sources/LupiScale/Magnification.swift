@@ -109,7 +109,8 @@ public enum ScaleAxis {
         let lo = min(l0, l1), hi = max(l0, l1)
         if lo < 0 && hi >= 0 || lo <= 0 && hi > 0 { return 0 }
         var candidates: [Double] = []
-        let a = lo.rounded(.up), b = hi.rounded(.down)
+        // Decades click only within ±32; clamped so a flight's λ of −3 × 10⁹⁹ never strides by one.
+        let a = max(-32, lo.rounded(.up)), b = min(32, hi.rounded(.down))
         if a <= b {
             for d in stride(from: a, through: b, by: 1) where abs(d) <= 32 && d != l0 { candidates.append(d) }
         }
