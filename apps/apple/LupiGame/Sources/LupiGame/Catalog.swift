@@ -67,6 +67,8 @@ public enum SpawnSource: Sendable, Hashable {
     /// A bundled starter (LupiData), by id.
     case starter(String)
     case salt(ReceiptRung)
+    /// Scale content (M3a): the salt ladder, copper, the diamond and the diamondoids.
+    case scale(ScaleItem)
     /// A kept trophy, from the Cabinet or a shelf (plan §6.4).
     case trophy(TrophyRecord)
     /// A loose atom from the atom tray, by atomic number (plan §4.5).
@@ -116,6 +118,11 @@ public struct Catalog: Sendable {
     /// The tray, C₆₀ first: the house molecule of the web's first minute (plan §8 M0).
     public var tray: [SpawnItem]
     public var receipt: [SpawnItem]
+    /// The scale menu (plan §7.5): the salt ladder to a googolplex, copper's billion, a diamond
+    /// and the diamondoids.
+    public var scale: [SpawnItem]
+    /// `lupi-scale-r1.lpk`, the scale content's records by root name (scale.md §6.4).
+    public let scalePack: LupiPack?
     /// What a built molecule is named after: the starters, then the gallery and OMol25 picks (plan §4.5).
     public var known: KnownMolecules
     var starters: [String: (starter: Starter, leaf: LeafNode)]
@@ -143,6 +150,12 @@ public struct Catalog: Sendable {
             let count = Magnitude.tower(seedCount: BigUInt(1000), factor: 10, levels: rung.levels)
             return SpawnItem(id: "salt-\(rung.rawValue)", title: rung.title, subtitle: "\(count.formatted) atoms", source: .salt(rung))
         }
+        let pack = try? ScaleContent.bundledPack()
+        scalePack = pack
+        scale = ScaleItem.all.compactMap { item in
+            guard let pack, let ref = try? ScaleContent.ref(item, pack: pack), let (_, count) = try? ref.resolve(extra: nil) else { return nil }
+            return SpawnItem(id: item.id, title: item.title, subtitle: "\(count.formatted) atoms", source: .scale(item))
+        }
     }
 
     /// The starters LupiData bundles.
@@ -152,7 +165,7 @@ public struct Catalog: Sendable {
         return Catalog(starters: starters, known: try KnownMolecules.bundled(starters: starters))
     }
 
-    public func item(_ id: String) -> SpawnItem? { (tray + receipt).first { $0.id == id } }
+    public func item(_ id: String) -> SpawnItem? { (tray + receipt + scale).first { $0.id == id } }
 
     public func content(_ source: SpawnSource) throws -> SpawnContent {
         switch source {
@@ -165,6 +178,16 @@ public struct Catalog: Sendable {
             )
         case let .salt(rung):
             return SpawnContent(ref: try SaltLadder.ref(levels: rung.levels), name: rung.title, provenance: .scale)
+        case let .scale(item):
+            guard let pack = scalePack else { throw ScaleError(.missing, "the bundled scale pack") }
+            let identity = try ScaleContent.ref(item, pack: pack)
+            let resolver = Resolver(store: RecordStore(identity.records))
+            let view = try resolver.resolve(identity.root, identity.path)
+            // A diamondoid small enough for a merged mesh draws through a leaf of its own atoms,
+            // as a break's pieces do, and keeps its crystal record as what it is.
+            let store = GameStore(identity.records)
+            let display = try Restore.displayRef(identity, view: view, count: try resolver.count(view), resolver: resolver, store: store)
+            return SpawnContent(ref: display, name: item.title, provenance: .scale, identity: display.root == identity.root ? nil : identity)
         case let .trophy(trophy):
             let piece = try Restore.piece(trophy, catalog: self, store: GameStore())
             let single = piece.count.plain == BigUInt(1)
