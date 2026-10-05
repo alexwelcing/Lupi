@@ -3,7 +3,7 @@ import Testing
 @testable import LupiPlay
 
 /// |DFT| of `x` at `frequency`, by the Goertzel recurrence, over samples [from, to).
-private func goertzel(_ buffer: PCMBuffer, _ frequency: Double, from: Double = 0, to: Double? = nil) -> Double {
+func goertzel(_ buffer: PCMBuffer, _ frequency: Double, from: Double = 0, to: Double? = nil) -> Double {
     let start = Int(from * buffer.sampleRate)
     let end = min(buffer.samples.count, to.map { Int($0 * buffer.sampleRate) } ?? buffer.samples.count)
     guard start < end else { return 0 }
@@ -19,11 +19,11 @@ private func goertzel(_ buffer: PCMBuffer, _ frequency: Double, from: Double = 0
 }
 
 /// The strongest response near `frequency` (within ±1.5 %, the seeded detune and DFT leakage).
-private func near(_ buffer: PCMBuffer, _ frequency: Double, from: Double = 0, to: Double? = nil) -> Double {
+func near(_ buffer: PCMBuffer, _ frequency: Double, from: Double = 0, to: Double? = nil) -> Double {
     stride(from: -0.015, through: 0.015, by: 0.0025).map { goertzel(buffer, frequency * (1 + $0), from: from, to: to) }.max()!
 }
 
-private func rms(_ buffer: PCMBuffer, from: Double, to: Double) -> Double {
+func rms(_ buffer: PCMBuffer, from: Double, to: Double) -> Double {
     let start = Int(from * buffer.sampleRate)
     let end = min(buffer.samples.count, Int(to * buffer.sampleRate))
     guard start < end else { return 0 }
@@ -31,7 +31,7 @@ private func rms(_ buffer: PCMBuffer, from: Double, to: Double) -> Double {
     return (sum / Double(end - start)).squareRoot()
 }
 
-private func zeroCrossingRate(_ buffer: PCMBuffer, from: Double, to: Double) -> Double {
+func zeroCrossingRate(_ buffer: PCMBuffer, from: Double, to: Double) -> Double {
     let start = Int(from * buffer.sampleRate)
     let end = min(buffer.samples.count, Int(to * buffer.sampleRate))
     var crossings = 0
@@ -40,7 +40,7 @@ private func zeroCrossingRate(_ buffer: PCMBuffer, from: Double, to: Double) -> 
 }
 
 /// Share of the energy in the first difference: a brightness proxy.
-private func brightness(_ buffer: PCMBuffer) -> Double {
+func brightness(_ buffer: PCMBuffer) -> Double {
     var diff = 0.0, total = 0.0
     for k in 1..<buffer.samples.count {
         let d = Double(buffer.samples[k] - buffer.samples[k - 1])
@@ -53,7 +53,7 @@ private func brightness(_ buffer: PCMBuffer) -> Double {
 @Suite("sound synthesis")
 struct SoundTests {
     @Test func theBankHasEveryVoiceOnce() {
-        #expect(SoundVoice.all.count == 4 * 3 * 2 + 13)
+        #expect(SoundVoice.all.count == 4 * 3 * 2 + 13 + 3 + 2)
         #expect(Set(SoundVoice.all).count == SoundVoice.all.count)
         #expect(Set(SoundVoice.all.map(\.name)).count == SoundVoice.all.count)
         #expect(SoundVoice.impact(.clack, .medium, .hard).name == "impact.clack.medium.hard")
@@ -171,5 +171,77 @@ struct SoundTests {
         #expect(IntensityLayer(intensity: 0.5) == .hard)
         #expect(ImpactFamily(kind: .brittle) == .tink)
         #expect(ImpactFamily(kind: .flexible) == .thwap)
+    }
+}
+
+@Suite("sound families")
+struct SoundFamilyTests {
+    /// Where a sound's energy sits and how long it lasts.
+    struct Print: CustomStringConvertible {
+        var brightness: Double
+        var duration: Double
+        var description: String { String(format: "brightness %.3f, %.3f s", brightness, duration) }
+    }
+
+    static func print(_ family: ImpactFamily) -> Print {
+        let b = SoundBank.render(.impact(family, .medium, .hard), seed: 11)
+        return Print(brightness: brightness(b), duration: b.duration)
+    }
+
+    @Test func theFourFamiliesAreDistinct() {
+        let p = Dictionary(uniqueKeysWithValues: ImpactFamily.allCases.map { ($0, Self.print($0)) })
+        // Glass is the brightest and rings longest; rubber the dullest and shortest.
+        #expect(p[.tink]!.brightness > p[.clack]!.brightness)
+        #expect(p[.clack]!.brightness > p[.boing]!.brightness)
+        #expect(p[.thwap]!.duration < p[.clack]!.duration && p[.tink]!.duration > p[.boing]!.duration)
+        // The boing drops its pitch as it springs back.
+        let boing = SoundBank.render(.impact(.boing, .medium, .hard), seed: 11)
+        #expect(zeroCrossingRate(boing, from: 0.001, to: 0.03) > 1.15 * zeroCrossingRate(boing, from: 0.12, to: 0.18))
+        // Any two differ by half again in brightness or in length.
+        let all = ImpactFamily.allCases
+        for (i, a) in all.enumerated() {
+            for b in all[(i + 1)...] {
+                let pa = p[a]!, pb = p[b]!
+                let bright = max(pa.brightness, pb.brightness) / min(pa.brightness, pb.brightness)
+                let long = max(pa.duration, pb.duration) / min(pa.duration, pb.duration)
+                #expect(bright > 1.5 || long > 1.5, "\(a) \(pa) vs \(b) \(pb)")
+            }
+        }
+    }
+
+    @Test func theClackChattersAndTheTinkShimmers() {
+        let clack = SoundBank.render(.impact(.clack, .medium, .hard), seed: 1)
+        // A second touch 7 ms in: the envelope rises again after the first click.
+        #expect(rms(clack, from: 0.007, to: 0.009) > 0.6 * rms(clack, from: 0.004, to: 0.006))
+        let tink = SoundBank.render(.impact(.tink, .medium, .hard), seed: 1)
+        let f0 = SoundBank.fundamental(of: .impact(.tink, .medium, .hard))
+        #expect(near(tink, f0 * 1.006) > 0.3 * near(tink, f0))
+    }
+
+    @Test func theCageRingOutlastsTheBoing() {
+        let ring = SoundBank.render(.ring(.medium), seed: 2)
+        let boing = SoundBank.render(.impact(.boing, .medium, .hard), seed: 2)
+        #expect(ring.duration > 2 * boing.duration && ring.duration < 1)
+        let f0 = SoundBank.fundamental(of: .ring(.medium))
+        for ratio in [1, 1.52, 2.09] { #expect(near(ring, f0 * ratio, from: 0.05) > 3 * near(ring, f0 * 1.27, from: 0.05), "\(ratio)") }
+        // It blooms: no click at the start.
+        #expect(rms(ring, from: 0, to: 0.002) < rms(ring, from: 0.01, to: 0.03))
+        let flap = SoundBank.render(.flap, seed: 2)
+        #expect(flap.duration < 0.1 && brightness(flap) < brightness(SoundBank.render(.impact(.clack, .medium, .soft), seed: 2)))
+        let crackle = SoundBank.render(.crackle, seed: 2)
+        #expect(crackle.duration < 0.12 && brightness(crackle) > brightness(boing))
+    }
+
+    @Test func tuningChangesTheBankAndRoundTrips() throws {
+        var t = SoundTuning.v1
+        #expect(SoundBank.render(.impact(.boing, .medium, .hard), tuning: t, seed: 3) == SoundBank.render(.impact(.boing, .medium, .hard), seed: 3))
+        t.set(.boing, t.boing.scaled(pitch: 1.2, decay: 0.5))
+        let tuned = SoundBank.render(.impact(.boing, .medium, .hard), tuning: t, seed: 3)
+        let plain = SoundBank.render(.impact(.boing, .medium, .hard), seed: 3)
+        #expect(tuned.duration < 0.7 * plain.duration)
+        #expect(SoundBank.fundamental(of: .impact(.boing, .medium, .hard), tuning: t) == 396)
+        let json = try JSONEncoder().encode(t)
+        #expect(try JSONDecoder().decode(SoundTuning.self, from: json) == t)
+        #expect(t.family(.boing) == t.boing && t.family(.tink) == SoundTuning.v1.tink)
     }
 }

@@ -109,7 +109,8 @@ public enum ScaleAxis {
         let lo = min(l0, l1), hi = max(l0, l1)
         if lo < 0 && hi >= 0 || lo <= 0 && hi > 0 { return 0 }
         var candidates: [Double] = []
-        let a = lo.rounded(.up), b = hi.rounded(.down)
+        // Decades click only within ±32; clamped so a flight's λ of −3 × 10⁹⁹ never strides by one.
+        let a = max(-32, lo.rounded(.up)), b = min(32, hi.rounded(.down))
         if a <= b {
             for d in stride(from: a, through: b, by: 1) where abs(d) <= 32 && d != l0 { candidates.append(d) }
         }
@@ -168,14 +169,25 @@ public struct Flight: Sendable {
 public enum Wraps {
     /// How many whole periods to wrap so the remaining change in λ stays below one period plus V.
     public static func periods(remaining: Double, factor: UInt8, pictureStep: Double) -> Int {
+        let n = periodCount(remaining: remaining, factor: factor, pictureStep: pictureStep)
+        return n.int ?? Int.max
+    }
+
+    /// The same count exactly: a dive through the googolplex wraps some 10⁹⁸ periods in a frame.
+    public static func periodCount(remaining: Double, factor: UInt8, pictureStep: Double) -> BigUInt {
         let period = log10(Double(factor))
         let excess = abs(remaining) - period - pictureStep
-        return excess > 0 ? Int((excess / period).rounded(.up)) : 0
+        guard excess > 0, excess.isFinite else { return BigUInt() }
+        return BigUInt(roundingUp: excess / period)
     }
 
     /// Appends (descending) or removes (ascending) 3n levels. The digits of a descent are constant per
-    /// axis: the extreme digit on an axis whose root face the anchor touches, else ⌊f/2⌋.
-    public static func wrap(_ frame: inout BodyFrame, periods n: BigUInt, descending: Bool, resolver: Resolver) throws {
+    /// axis: the extreme digit on an axis whose root face the anchor touches, else ⌊f/2⌋. An axis
+    /// with no digits yet spans the root and touches both faces; it takes the face nearer `focus`
+    /// (world), the point a dive is aimed at, so the focus stays in the anchor (0 without one).
+    public static func wrap(
+        _ frame: inout BodyFrame, periods n: BigUInt, descending: Bool, focus: SIMD3<Double>? = nil, resolver: Resolver
+    ) throws {
         guard !n.isZero else { return }
         let body = try resolver.resolve(frame.ref.root, frame.ref.path)
         let anchor = try resolver.walk(body, frame.anchorPath)
@@ -185,37 +197,76 @@ public enum Wraps {
         if descending {
             guard levels <= anchor.level else { throw ScaleError(.path, "not enough levels below the anchor") }
             let digits = AnchorPath.towerDigits(frame.anchorPath)
+            let centre = try resolver.aggregate(anchor).centre
+            let aim = focus.map { frame.anchorPoint($0) }
             var runs: [[DigitRun]] = [[], [], []]
             for a in 0..<3 {
                 let d: UInt8
-                if !digits[a].isEmpty && Digits.all(digits[a], f - 1) { d = f - 1 }
-                else if !digits[a].isEmpty && Digits.all(digits[a], 0) { d = 0 }
-                else if digits[a].isEmpty { d = 0 }
+                if digits[a].isEmpty { d = (aim.map { $0[a] >= centre[a] } ?? false) ? f - 1 : 0 }
+                else if Digits.all(digits[a], f - 1) { d = f - 1 }
+                else if Digits.all(digits[a], 0) { d = 0 }
                 else { d = f / 2 }
                 runs[a] = [DigitRun(digit: d, length: n)]
             }
-            frame.anchorPath.append(.tower(levels: levels, runs: runs))
+            AnchorPath.append(&frame.anchorPath, .tower(levels: levels, runs: runs))
         } else {
             var remaining = levels
             var anchorView = anchor
             while !remaining.isZero {
-                guard case let .tower(d, _)? = frame.anchorPath.last else { throw ScaleError(.path, "not enough levels above the anchor") }
+                guard case let .tower(d, runs)? = frame.anchorPath.last else { throw ScaleError(.path, "not enough levels above the anchor") }
                 if d <= remaining {
                     frame.anchorPath.removeLast()
                     remaining = remaining.minus(d)
-                } else {
-                    // Peel levels off the last step one period at a time.
-                    for _ in 0..<3 {
-                        let (rest, _) = try AnchorPath.popLevel(frame.anchorPath, anchor: anchorView)
-                        frame.anchorPath = rest
-                        anchorView = try resolver.walk(body, rest)
-                    }
-                    remaining = remaining.minus(3)
+                    anchorView = try resolver.walk(body, frame.anchorPath)
                     continue
                 }
-                anchorView = try resolver.walk(body, frame.anchorPath)
+                // Part of the last step: single levels until a whole number of periods is left,
+                // then one digit per axis for each period, so a long climb costs O(runs).
+                if remaining.dividedSmall(3).remainder != 0 {
+                    let (rest, _) = try AnchorPath.popLevel(frame.anchorPath, anchor: anchorView)
+                    frame.anchorPath = rest
+                    anchorView = try resolver.walk(body, rest)
+                    remaining = remaining.minus(1)
+                    continue
+                }
+                let q = remaining.dividedSmall(3).quotient
+                var upper = runs
+                for a in 0..<3 { upper[a] = Digits.dropLast(runs[a], q) }
+                frame.anchorPath[frame.anchorPath.count - 1] = .tower(levels: d.minus(remaining), runs: upper)
+                remaining = BigUInt()
             }
         }
+    }
+
+    /// The most periods an ascending wrap may climb with the picture unchanged. On every axis the
+    /// anchor's index keeps its place against the root's faces (touching, one or more away, up to
+    /// the face planes' reach of four), so its neighbourhood and face planes stay the same; a climb
+    /// into the shallow digits a rebase put there would change them. Both the index and its
+    /// distance from the upper face only shrink as digits drop, so a binary search finds it.
+    public static func maxAscent(_ frame: BodyFrame, resolver: Resolver) -> BigUInt {
+        guard let body = try? resolver.resolve(frame.ref.root, frame.ref.path),
+              let anchor = try? resolver.walk(body, frame.anchorPath), anchor.kind == .level, let f = anchor.tower?.factor else { return BigUInt() }
+        var levels = BigUInt()
+        for step in frame.anchorPath.reversed() {
+            guard case let .tower(d, _) = step else { break }
+            levels += d
+        }
+        let digits = AnchorPath.towerDigits(frame.anchorPath)
+        func place(_ runs: [DigitRun]) -> (Int, Int) {
+            (Digits.smallValue(runs, f, limit: 5) ?? 6, Digits.smallValue(Digits.complement(runs, f), f, limit: 5) ?? 6)
+        }
+        let now = digits.map(place)
+        func keeps(_ n: BigUInt) -> Bool {
+            (0..<3).allSatisfy { place(Digits.dropLast(digits[$0], n)) == now[$0] }
+        }
+        var lo = BigUInt(), hi = levels.dividedSmall(3).quotient
+        if keeps(hi) { return hi }
+        // keeps(lo) holds, keeps(hi) fails.
+        while hi.minus(lo) > BigUInt(1) {
+            let mid = (lo + hi) >> 1
+            if keeps(mid) { lo = mid } else { hi = mid }
+        }
+        return lo
     }
 
     /// A wrap is allowed only when the last cut drew nothing at or below the tower's seed copies, no
@@ -237,5 +288,23 @@ public enum Wraps {
             if low == 1 || high == 1 { return false }
         }
         return true
+    }
+}
+
+extension BigUInt {
+    /// ⌈v⌉ for a finite v ≥ 0, exactly: binary64 integers above 2⁵³ are a 53-bit significand shifted.
+    public init(roundingUp v: Double) {
+        guard v.isFinite, v > 0 else {
+            self.init()
+            return
+        }
+        let up = v.rounded(.up)
+        if up < 0x1p63 {
+            self.init(UInt64(up))
+            return
+        }
+        let e = Int(up.exponent)
+        let significand = up.significandBitPattern | (1 << 52)
+        self = BigUInt(significand) << (e - 52)
     }
 }

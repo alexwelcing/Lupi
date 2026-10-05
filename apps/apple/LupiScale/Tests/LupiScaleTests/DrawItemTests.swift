@@ -132,6 +132,35 @@ struct DrawItemTests {
         #expect(nearest >= CutTuning.bubbleRadius - 1e-4)
         #expect(nearest < CutTuning.bubbleRadius + 0.05)
     }
+
+    /// An eye between the anchor's atoms and its neighbour's is inside the solid too: two copies'
+    /// envelopes leave a gap of a spacing less two atom radii, and the bubble opens there as well.
+    @Test func theBubbleOpensBetweenCopies() throws {
+        let rung = Content.rung(27)
+        let r = Content.resolver([rung])
+        let path = Content.anchorPath(rootLevels: 27, to: 9, digit: 5)
+        let anchor = try r.walk(r.root(rung.id), path)
+        let envelope = try r.aggregate(anchor).bounds
+        let occupied = try r.occupied(anchor)
+        // The +x neighbour's envelope starts one period on, at the cells' upper face plus its own lower reach.
+        let gap = (envelope.max.x, occupied.max.x + envelope.min.x)
+        #expect(gap.1 - gap.0 > 0.3 * (occupied.max.x - envelope.max.x))
+        let eye = Vec3(0.5 * (gap.0 + gap.1), 141, 141)
+        #expect(!envelope.contains(eye) && occupied.contains(eye))
+        let body = Content.terrain(Content.ref(rung), anchorPath: path, sigma: 1.111, anchorPoint: eye, at: .zero)
+        let cut = settledCut([body], deskView, steadyBudgets(), r)
+        #expect(cut.drawnAtoms > 0)
+        var nearest = Double.infinity
+        for item in cut.items {
+            guard case let .atoms(runs) = item.extras else { continue }
+            let (m, t) = CutChecks.world(item, cut)
+            for run in runs {
+                for p in run.positions { nearest = min(nearest, (m * Vec3(Double(p.x), Double(p.y), Double(p.z)) + t).length) }
+            }
+        }
+        #expect(nearest >= CutTuning.bubbleRadius - 1e-4)
+        #expect(nearest < CutTuning.bubbleRadius + 0.05)
+    }
 }
 
 func simdLengthF(_ v: SIMD3<Float>) -> Float { (v * v).sum().squareRoot() }

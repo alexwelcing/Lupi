@@ -26,6 +26,12 @@ public struct PickResult: Sendable {
     public var displayedDiameter: Double
     /// The element of the atom hit, when the hit item drew atoms.
     public var atomicNumber: UInt8?
+    /// The picked node's frame in the world: a point x of it is at `nodeOrigin + nodeRotation(σ x)`,
+    /// with σ `metresPerUnit`. Composed from the hit item, so it is exact to Float32 at any depth,
+    /// where a placement from the body's node would underflow (a chunk of deep terrain, §10.6).
+    public var nodeRotation: Quat
+    public var nodeOrigin: SIMD3<Double>
+    public var metresPerUnit: Double
 }
 
 /// Tests a touch ray against the cut's items, then refines along the hit only as far as the band
@@ -50,7 +56,9 @@ public func pick(ray: RayD, cut: Cut, band: ClosedRange<Double>, resolver: Resol
         var x = hit.local + agg.centre
         var sigma = Double(simdLength(item.transform.c0))
         var diameter = 2 * agg.radius * sigma
-        var chosen: (path: [Step], diameter: Double)? = band.contains(diameter) ? (path, diameter) : nil
+        // item node ← current node, composed along the hit chain.
+        var composed = Placement.identity
+        var chosen: (path: [Step], diameter: Double, placement: Placement)? = band.contains(diameter) ? (path, diameter, composed) : nil
         var guardSteps = 0
         while guardSteps < 4096 {
             guardSteps += 1
@@ -64,13 +72,19 @@ public func pick(ray: RayD, cut: Cut, band: ClosedRange<Double>, resolver: Resol
             view = child
             sigma = childSigma
             path.append(s)
+            composed = composed.then(p)
             diameter = childDiameter
-            if band.contains(diameter) { chosen = (path, diameter) }
+            if band.contains(diameter) { chosen = (path, diameter, composed) }
         }
         guard let pick = chosen else { return nil }
+        // world(x) = M (P(x) − c(item node)) + t, with M the item's rotation times its σ.
+        let (m, t) = Picking.world(item, cut)
+        let itemSigma = Double(simdLength(item.transform.c0))
+        let rotation = m.scaled(by: 1 / itemSigma) * pick.placement.rotation
         return PickResult(
             body: item.body, item: hit.item, steps: pick.path, pointWorld: ray.at(hit.t), distance: hit.t,
-            displayedDiameter: pick.diameter, atomicNumber: hit.z
+            displayedDiameter: pick.diameter, atomicNumber: hit.z, nodeRotation: Quat(rotation: rotation),
+            nodeOrigin: m * (pick.placement.translation - agg.centre) + t, metresPerUnit: itemSigma * pick.placement.scale
         )
     } catch {
         return nil

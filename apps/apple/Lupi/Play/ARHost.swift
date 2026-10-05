@@ -22,14 +22,38 @@ final class ARHost {
     private var lastPlaneUpdate: TimeInterval = 0
     private(set) var floorY: Double?
     private(set) var unavailable: String?
+    /// The video format the thermal policy chose (spike A5); nil is ARKit's default.
+    private(set) var videoFormat: ARConfiguration.VideoFormat?
 
     func configuration(worldMap: ARWorldMap? = nil) -> ARWorldTrackingConfiguration {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
         config.environmentTexturing = .automatic
         if hasLiDAR { config.sceneReconstruction = .meshWithClassification }
+        if let videoFormat { config.videoFormat = videoFormat }
         config.initialWorldMap = worldMap
         return config
+    }
+
+    /// The frame rate the session runs at now.
+    var framesPerSecond: Int {
+        (session.configuration?.videoFormat ?? videoFormat)?.framesPerSecond ?? 60
+    }
+
+    /// Spike A5 (scale-spec §9.3): runs the session again with a video format at `fps`, the one
+    /// nearest the current resolution. No run options, so tracking resumes from where it was and
+    /// the anchors stay (`ARSession.run(_:options:)`); whether tracking survives is the spike.
+    /// Returns a line for the HUD, or nil when the device has no such format.
+    func setFrameRate(_ fps: Int) -> String? {
+        let current = session.configuration?.videoFormat.imageResolution
+        let candidates = ARWorldTrackingConfiguration.supportedVideoFormats.filter { $0.framesPerSecond == fps }
+        guard let pick = candidates.min(by: { a, b in
+            let w = current?.width ?? 1920
+            return abs(a.imageResolution.width - w) < abs(b.imageResolution.width - w)
+        }) else { return nil }
+        videoFormat = pick
+        session.run(configuration())
+        return "A5: \(fps) fps, \(Int(pick.imageResolution.width))×\(Int(pick.imageResolution.height))"
     }
 
     /// Runs the session through RealityKit, so RealityView renders our ARSession's camera and

@@ -2,8 +2,9 @@ import Foundation
 
 /// FIPS 180-4 SHA-256 in plain Swift. CryptoKit is Apple-only, and the only
 /// use here is hashing the Sign in with Apple nonce, so a small streaming
-/// implementation keeps the package portable.
-public struct SHA256: Sendable {
+/// implementation keeps the package portable. Package-scoped: the app also
+/// imports LupiData, whose public `SHA256` would otherwise be ambiguous.
+package struct SHA256: Sendable {
   private static let k: [UInt32] = [
     0x428a_2f98, 0x7137_4491, 0xb5c0_fbcf, 0xe9b5_dba5, 0x3956_c25b, 0x59f1_11f1, 0x923f_82a4, 0xab1c_5ed5,
     0xd807_aa98, 0x1283_5b01, 0x2431_85be, 0x550c_7dc3, 0x72be_5d74, 0x80de_b1fe, 0x9bdc_06a7, 0xc19b_f174,
@@ -21,11 +22,11 @@ public struct SHA256: Sendable {
   private var buffer: [UInt8] = []
   private var length: UInt64 = 0
 
-  public init() {
+  package init() {
     buffer.reserveCapacity(64)
   }
 
-  public mutating func update<Bytes: Sequence>(_ bytes: Bytes) where Bytes.Element == UInt8 {
+  package mutating func update<Bytes: Sequence>(_ bytes: Bytes) where Bytes.Element == UInt8 {
     for byte in bytes {
       buffer.append(byte)
       length &+= 1
@@ -36,7 +37,7 @@ public struct SHA256: Sendable {
     }
   }
 
-  public mutating func finalize() -> [UInt8] {
+  package mutating func finalize() -> [UInt8] {
     let bitLength = length &* 8
     var tail = buffer
     tail.append(0x80)
@@ -59,7 +60,7 @@ public struct SHA256: Sendable {
     return digest
   }
 
-  public static func hash<Bytes: Sequence>(_ bytes: Bytes) -> [UInt8] where Bytes.Element == UInt8 {
+  package static func hash<Bytes: Sequence>(_ bytes: Bytes) -> [UInt8] where Bytes.Element == UInt8 {
     var hasher = SHA256()
     hasher.update(bytes)
     return hasher.finalize()
@@ -67,7 +68,7 @@ public struct SHA256: Sendable {
 
   /// Lowercase hex of the UTF-8 bytes' digest: the form Apple's `nonce`
   /// request field and Firebase both expect.
-  public static func hexDigest(_ text: String) -> String {
+  package static func hexDigest(_ text: String) -> String {
     hash(Array(text.utf8)).map { String(format: "%02x", $0) }.joined()
   }
 

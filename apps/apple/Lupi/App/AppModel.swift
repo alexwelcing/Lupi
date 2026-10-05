@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import LupiData
 import LupiGame
@@ -53,6 +54,11 @@ final class AppModel {
         didSet { UserDefaults.standard.set(autoKeep, forKey: Keys.autoKeep) }
     }
 
+    /// Grow ×2 (scale-spec §10.7): proposed, so off until the player turns it on (plan §11.9).
+    var growTwo: Bool {
+        didSet { UserDefaults.standard.set(growTwo, forKey: Keys.growTwo) }
+    }
+
     var reduceMotion = UIAccessibility.isReduceMotionEnabled
     var showingPlay = false
     /// The play screen's controller, made when Play opens and released when it closes.
@@ -61,11 +67,18 @@ final class AppModel {
     var showingCollection = false
     /// The trophy chosen in the collection, spawned once its sheet has closed.
     var chosenTrophy: TrophyRecord?
+    /// The first-run card (plan §8 M4): why Lupi wants the camera, before iOS asks.
+    var onboarding: OnboardingCard?
+    /// What opens once the card is through.
+    @ObservationIgnored private var afterOnboarding: (@MainActor () -> Void)?
+    /// The Collection's plaques, read once per trophy version (plan §8 M4).
+    @ObservationIgnored private var plaques: [String: TrophyPlaque] = [:]
 
     enum Keys {
         static let sound = "lupi.soundAndHaptics"
         static let comfort = "lupi.motionComfort"
         static let autoKeep = "lupi.autoKeep"
+        static let growTwo = "lupi.growTwo"
     }
 
     init() {
@@ -81,6 +94,7 @@ final class AppModel {
         soundAndHaptics = UserDefaults.standard.object(forKey: Keys.sound) as? Bool ?? true
         comfortChoice = ComfortChoice(rawValue: UserDefaults.standard.string(forKey: Keys.comfort) ?? "") ?? .system
         autoKeep = UserDefaults.standard.object(forKey: Keys.autoKeep) as? Bool ?? true
+        growTwo = UserDefaults.standard.object(forKey: Keys.growTwo) as? Bool ?? false
     }
 
     var comfort: MotionComfort { comfortChoice.comfort(reduceMotion: reduceMotion) }
@@ -88,14 +102,16 @@ final class AppModel {
     var settings: GameSettings {
         GameSettings(
             soundAndHaptics: soundAndHaptics, comfort: comfort, supportsHaptics: Haptics.hardwareSupportsHaptics,
-            device: UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
+            device: UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone, growTwo: growTwo
         )
     }
 
     /// Opens Play; the spawn waits until tracking has found the room.
     func play(_ source: SpawnSource?) {
-        guard let controller = openPlay() else { return }
-        if let source { controller.spawn(source) }
+        gate { [weak self] in
+            guard let controller = self?.openPlay() else { return }
+            if let source { controller.spawn(source) }
+        }
     }
 
     /// After the collection closes: the trophy chosen in it comes into play (plan §6.4, step 5).
@@ -107,7 +123,68 @@ final class AppModel {
 
     /// Opens Play with the scale receipt: salt of 10³, 10⁶ and 10⁹ atoms in a row.
     func playReceipt() {
-        openPlay()?.spawnReceipt()
+        gate { [weak self] in self?.openPlay()?.spawnReceipt() }
+    }
+
+    /// A trophy's personality line for the Collection, worked out off the main actor and kept.
+    func plaque(of trophy: TrophyRecord) async -> TrophyPlaque? {
+        let key = "\(trophy.id)@\(trophy.updatedAt.timeIntervalSince1970)"
+        if let known = plaques[key] { return known }
+        guard let catalog else { return nil }
+        let found = await Task.detached(priority: .utility) { catalog.plaque(of: trophy) }.value
+        if let found { plaques[key] = found }
+        return found
+    }
+
+    // MARK: The first-run card (plan §8 M4)
+
+    /// Opens Play at once when the camera is allowed; otherwise shows the card first.
+    private func gate(_ then: @escaping @MainActor () -> Void) {
+        guard let card = Onboarding.card(camera: Self.cameraAccess) else {
+            then()
+            return
+        }
+        afterOnboarding = then
+        onboarding = card
+    }
+
+    /// The card's button: Continue lets iOS ask for the camera, then opens Play or says no.
+    func continueOnboarding() async {
+        switch onboarding {
+        case .camera?:
+            if await AVCaptureDevice.requestAccess(for: .video) {
+                onboarding = nil
+                let next = afterOnboarding
+                afterOnboarding = nil
+                next?()
+            } else {
+                onboarding = .cameraDenied
+            }
+        case .cameraDenied?:
+            openSettings()
+        case .cameraRestricted?, nil:
+            break
+        }
+    }
+
+    func dismissOnboarding() {
+        onboarding = nil
+        afterOnboarding = nil
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
+
+    static var cameraAccess: CameraAccess {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .notDetermined: .notDetermined
+        case .authorized: .authorized
+        case .denied: .denied
+        case .restricted: .restricted
+        @unknown default: .denied
+        }
     }
 
     @discardableResult

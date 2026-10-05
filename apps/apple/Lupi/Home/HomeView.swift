@@ -1,7 +1,7 @@
 import LupiGame
 import SwiftUI
 
-/// Home (plan §8 M0): C₆₀ first, the bundled starters, and the scale receipt.
+/// Home (plan §8 M0): C₆₀ first, the bundled starters, the scale receipt and the salt ladder.
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @State private var showingSettings = false
@@ -16,6 +16,7 @@ struct HomeView: View {
                         collectionButton
                         starters(Array(catalog.tray.dropFirst()))
                         receipt(catalog.receipt)
+                        ladder(catalog.scale.filter { $0.scaleShelf == .salt })
                     } else if let error = app.catalogError {
                         Text(error)
                             .font(.callout)
@@ -164,6 +165,38 @@ struct HomeView: View {
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// The salt ladder to a googolplex (plan §7.5): every rung counted exactly and kept in a few
+    /// hundred bytes; crystals and diamondoids wait in Play's Scale menu.
+    @ViewBuilder
+    private func ladder(_ rungs: [SpawnItem]) -> some View {
+        if !rungs.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("To a googolplex")
+                Text("The same salt, ten times more at every step, up to a googolplex atoms: a bar of ten cubes you can hold. Dive into any of them, or stand the 10³⁰ cube in the room at life size. Copper, diamond and the diamondoids are in Play's Scale menu.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.75))
+                ForEach(rungs) { rung in
+                    Button {
+                        app.play(rung.source)
+                    } label: {
+                        HStack {
+                            Text(rung.title)
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Text(rung.subtitle)
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.6))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }

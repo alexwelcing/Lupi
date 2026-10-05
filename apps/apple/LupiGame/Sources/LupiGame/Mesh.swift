@@ -1,5 +1,6 @@
 import Foundation
 import LupiChem
+import LupiPlay
 import LupiScale
 import LupiScaleCore
 
@@ -19,13 +20,52 @@ public struct MeshRecipe: Sendable, Equatable {
         public var kind: BondKind
     }
 
+    /// Half a covalent bond whose other atom is drawn elsewhere: a flop segment's side of its
+    /// hinge (plan §8 M4). The cylinder runs from the atom to the bond's midpoint.
+    public struct Stub: Sendable, Equatable {
+        public var atom: Int
+        /// The other atom's position, Å, in the same frame.
+        public var toward: SIMD3<Float>
+    }
+
     /// Cache key: equal recipes share one mesh.
     public var key: String
     public var atoms: [Atom]
     public var bonds: [Bond]
+    public var stubs: [Stub] = []
+
+    public init(key: String, atoms: [Atom], bonds: [Bond], stubs: [Stub] = []) {
+        self.key = key
+        self.atoms = atoms
+        self.bonds = bonds
+        self.stubs = stubs
+    }
 
     public static func toyRadius(_ z: UInt8) -> Float {
         Float(min(0.90, max(0.32, 0.75 * ChemicalElement.forAtomicNumber(Int(z)).covalentRadius)))
+    }
+
+    /// One flop segment's recipe (plan §8 M4): its atoms, the bonds inside it and its halves
+    /// of the hinges, in this recipe's frame, so the segments drawn together are the whole.
+    public func segment(_ k: Int, of flop: FlopSegments) -> MeshRecipe {
+        let members = flop.segments[k].atoms
+        var local = [Int: Int]()
+        for (n, atom) in members.enumerated() { local[atom] = n }
+        var inside: [Bond] = []
+        var stubs: [Stub] = []
+        for bond in bonds {
+            switch (local[bond.i], local[bond.j]) {
+            case let (i?, j?):
+                inside.append(Bond(i: i, j: j, kind: bond.kind))
+            case let (i?, nil) where bond.kind == .covalent:
+                stubs.append(Stub(atom: i, toward: atoms[bond.j].position))
+            case let (nil, j?) where bond.kind == .covalent:
+                stubs.append(Stub(atom: j, toward: atoms[bond.i].position))
+            default:
+                break
+            }
+        }
+        return MeshRecipe(key: "\(key)#flop\(k)of\(flop.count)", atoms: members.map { atoms[$0] }, bonds: inside, stubs: stubs)
     }
 
     /// The recipe of a leaf (its game graph from `lupi-bonds.molecular.v1`, plan §3.7).
@@ -87,6 +127,12 @@ public enum MeshBuilder {
             }
             p.indices += sphere.indices.map { $0 + base }
             parts[atom.atomicNumber] = p
+        }
+        for stub in recipe.stubs where stub.atom < recipe.atoms.count {
+            let a = recipe.atoms[stub.atom]
+            var p = part(a.atomicNumber)
+            cylinder(&p, from: a.position, to: (a.position + stub.toward) / 2, radius: bondRadius)
+            parts[a.atomicNumber] = p
         }
         for bond in recipe.bonds {
             guard bond.i < recipe.atoms.count, bond.j < recipe.atoms.count else { continue }

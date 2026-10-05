@@ -158,7 +158,7 @@ Further rules:
 - A piece of a LupiScale structure, of any count up to a googolplex and beyond, is `source: scale` with the optional `molecule.scale` reference (`lupi.scale-ref.v1`). Both are additive to v1 and are specified in [scale-spec.md §7.4](scale-spec.md) (D14); they land before M1.
 - `formula` is recomputed from the coordinates by LupiKit, never copied from a label.
 - A fragment of a fragment is `kind: broken` with `parent.source: fragment`.
-- An OMol25-derived fragment or built molecule keeps OMol25's CC BY 4.0 attribution: its XYZ comment carries `source=omol25:<collection>:<row>` and `license=CC-BY-4.0`, and the app shows the attribution with it.
+- An OMol25-derived fragment or built molecule keeps OMol25's CC BY 4.0 attribution: its XYZ comment carries `source=omol25:<collection>:<row>` and `license=CC-BY-4.0`, and the app shows the attribution with it. A molecule built from pieces of several rows lists them all, comma-separated with no spaces (`source=omol25:neutral-validation:1008,omol25:neutral-validation:3082`).
 - The origin story shown in the Cabinet is derived from `origin`, not stored: "Spawned 4 Oct 2026", "Broken from Hydrogen peroxide", "Built from atoms: O, H, H".
 
 ### 1.4 Embedded XYZ
@@ -370,7 +370,7 @@ Inputs: the coordinates and elements, the game graph (LupiKit's port of `lupi-bo
 7. **Breaking:** `breakSpeed = base × sqrt(weakest energy / 346)`, and `breakImpulse = massKg × breakSpeed`. Both are `null` when the weakest energy is 800 kJ/mol or more (N₂, CO), and for a single atom.
 8. **Reasons:** one line naming the rule that matched, in plain words and with the number it used.
 
-These values are the contract. LupiKit's `PersonalityTable.v1` (`apps/apple/LupiKit/Sources/LupiPlay/Personality.swift` on `ar/kit`) currently differs, for example brittle `massScale` 1.1 and base break speed 2.5, and must be brought to this table before M0 exits. A node that is not a molecule (a crystal box, a tower level, a group) takes the personality of one materialized leaf ([scale-spec.md §10.6](scale-spec.md)).
+These values are the contract. LupiKit's `PersonalityTable.v1` (`apps/apple/LupiKit/Sources/LupiPlay/Personality.swift`) matches this table since M4, and `PersonalityRecord` writes §3.2's JSON; the personality takes its bond orders from rule 1, while fragments and snapping keep LupiKit's own length estimate. Rule 1 reads PubChem's O₂ (1.232 Å, ratio 0.933) as a single bond, so O₂ is brittle at its "O–O" 142 kJ/mol; an owner's call whether to move the double-bond threshold. A node that is not a molecule (a crystal box, a tower level, a group) takes the personality of one materialized leaf ([scale-spec.md §10.6](scale-spec.md)).
 
 ---
 
