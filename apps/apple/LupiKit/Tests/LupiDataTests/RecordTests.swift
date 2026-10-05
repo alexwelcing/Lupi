@@ -21,7 +21,7 @@ enum RecordFixtures {
 
 @Suite("lupi.trophy.v1")
 struct TrophyRecordTests {
-    static let examples = ["trophy-gallery.json", "trophy-fragment.json", "trophy-built.json"]
+    static let examples = ["trophy-gallery.json", "trophy-fragment.json", "trophy-built.json", "trophy-scale.json"]
 
     @Test(arguments: examples)
     func contractExamplesDecodeValidateAndRoundTrip(_ name: String) throws {
