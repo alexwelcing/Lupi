@@ -370,7 +370,7 @@ Inputs: the coordinates and elements, the game graph (LupiKit's port of `lupi-bo
 7. **Breaking:** `breakSpeed = base × sqrt(weakest energy / 346)`, and `breakImpulse = massKg × breakSpeed`. Both are `null` when the weakest energy is 800 kJ/mol or more (N₂, CO), and for a single atom.
 8. **Reasons:** one line naming the rule that matched, in plain words and with the number it used.
 
-These values are the contract. LupiKit's `PersonalityTable.v1` (`apps/apple/LupiKit/Sources/LupiPlay/Personality.swift` on `ar/kit`) currently differs, for example brittle `massScale` 1.1 and base break speed 2.5, and must be brought to this table before M0 exits. A node that is not a molecule (a crystal box, a tower level, a group) takes the personality of one materialized leaf ([scale-spec.md §10.6](scale-spec.md)).
+These values are the contract. LupiKit's `PersonalityTable.v1` (`apps/apple/LupiKit/Sources/LupiPlay/Personality.swift`) matches this table since M4, and `PersonalityRecord` writes §3.2's JSON; the personality takes its bond orders from rule 1, while fragments and snapping keep LupiKit's own length estimate. Rule 1 reads PubChem's O₂ (1.232 Å, ratio 0.933) as a single bond, so O₂ is brittle at its "O–O" 142 kJ/mol; an owner's call whether to move the double-bond threshold. A node that is not a molecule (a crystal box, a tower level, a group) takes the personality of one materialized leaf ([scale-spec.md §10.6](scale-spec.md)).
 
 ---
 

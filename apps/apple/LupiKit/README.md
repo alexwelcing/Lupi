@@ -8,7 +8,7 @@ app. Swift 6 language mode; platforms iOS 26 and macOS 26.
 | Target | What it holds |
 |---|---|
 | `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser and writer, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, building (`BondGeometry`: free directions from VSEPR domains; `Snapper`: the recipe's cutoffs, the magnet zone, the placement and its re-perception check; `HydrogenFill`; the `BuildCues` table; `MolecularGraph` for naming), inertia |
-| `LupiPlay` | `GameUnits` (scale), felt mass `lupi.feltmass.v1` (`FeltMass` over a `MassLog`, scale-spec §10.2), `lupi.personality.v1` derived from the bond graph, the motion tokens and exact springs (hold-follow, squash, pop-in, hit-stop), `MotionComfort`, the throw estimator, the juice director (haptics, sound cues and visuals per game event, with the rate limits) and the synthesized sound bank (Float32 PCM) |
+| `LupiPlay` | `GameUnits` (scale), felt mass `lupi.feltmass.v1` (`FeltMass` over a `MassLog`, scale-spec §10.2), `lupi.personality.v1` derived from the bond graph by `lupi.personality.rules.v1` (contracts.md §3.3) with its plaque reasons and `PersonalityRecord`, the motion tokens and exact springs (hold-follow, squash, pop-in, hit-stop), the flop (`FlopSegments`, `Flop`) and the cage ring (`CageRing`), `MotionComfort`, the throw estimator, the juice director (haptics, sound cues and visuals per game event, with the rate limits, and each personality's `Timbre`) and the synthesized sound bank (Float32 PCM) built from a `SoundTuning` |
 | `LupiData` | `lupi.trophy.v1`, `lupi.shelf.v1`, the edge client, SHA-256, the thirteen bundled starter molecules, and `KnownMolecules`, what a built molecule is named after |
 
 ## Build and test
@@ -93,9 +93,30 @@ counts, the TypeScript lines of every row (by an FNV-1a key) and p99.
   `GameUnits.feltMass(molarMass:massScale:)` is the shorthand for daltons.
   Mass never grows with the display scale. A personality carries
   its `breakSpeed`; the impulse is felt mass × break speed.
-- **Personality:** `PersonalityTable.v1` is the tunable table; rules run in
-  order (ionic, weak bond, stretched bonds, cage, small, rotors, fused rings,
-  stiff) and each derivation carries its plaque line.
+- **Personality:** `PersonalityTable.v1` is contracts.md §3.3's table, number
+  for number. The rules run in its order: brittle for ionic contacts,
+  coordination, a weakest bond under 200 kJ/mol or a 3- or 4-membered ring;
+  bouncy for an atom, a spherical top or a cage of rings with 20 heavy atoms;
+  flexible from three rotating bonds; rigid otherwise. The personality's own
+  bond orders come from the contract's length ratio (rule 1) and its energies
+  from the cited table or the game defaults (rule 2); fragments and snapping
+  keep `BondOrderEstimate`. Each derivation carries its reasons ("Brittle: its
+  O–O bond is weak (142 kJ/mol)"), how it plays ("Bounces, and its cage
+  rings") and whether it rings; `PersonalityRecord` is the contract's JSON.
+- **Sound families** (plan §5.2, §8 M4): clack chatters (a second touch 7 ms
+  later), thwap slaps with a small pitch drop, tink shimmers (a detuned twin),
+  boing drops its pitch. Each body's `Timbre` adds its personality's layer: a
+  cage rings (the low modes of a vibrating sphere, 1 : 1.52 : 2.09 : 2.72), a
+  flexible molecule's loose ends flap a beat after the hit, a brittle one
+  crackles when a hit reaches 60 % of its break speed. `SoundTuning.v1` holds
+  every number, so the app's sound lab can change it and copy it back.
+- **Flop and ring** (plan §8 M4): `FlopSegments` cuts a flexible molecule at
+  the rotating bonds that split it most evenly into two to four pieces of at
+  least three heavy atoms; `Flop` swings each about its hinge on a 2.4 Hz
+  spring (damping 0.22, at most 0.6 rad), kicked by hits and by changes in
+  what pushes the body, so resting and free fall leave it straight. `CageRing`
+  shivers a cage along the hit at 9 Hz for about half a second. Both are
+  render only and follow motion comfort.
 - **Juice:** plan §5's tables are `JuiceDirector`'s; every number marked
   (est.) in the plan, and the fundamentals and partial weights of the sound
   bank, are starting values for the tuning pass on the device. Sound and
