@@ -3,7 +3,7 @@
 // are memoized by NodeID, so a DAG that repeats children costs its records,
 // never its paths, and nothing is ever expanded to answer a count.
 
-import { fail, ScaleError, toHex } from './bytes';
+import { fail, idKey, ScaleError, toHex } from './bytes';
 import { addCounts, countsOf, type Composition } from './composition';
 import {
   boxChild,
@@ -66,16 +66,16 @@ export class MemoryStore implements NodeStore {
 
   add(record: Uint8Array | DecodedRecord): NodeID {
     const d = record instanceof Uint8Array ? decodeRecord(record) : record;
-    this.map.set(toHex(d.id), d);
+    this.map.set(idKey(d.id), d);
     return d.id;
   }
 
   has(id: NodeID): boolean {
-    return this.map.has(toHex(id));
+    return this.map.has(idKey(id));
   }
 
   record(id: NodeID): DecodedRecord {
-    const d = this.map.get(toHex(id));
+    const d = this.map.get(idKey(id));
     if (!d) fail('missing', `node ${toHex(id).slice(0, 16)}…`);
     return d;
   }
@@ -110,7 +110,7 @@ export class TrackingStore implements NodeStore {
   constructor(private readonly inner: NodeStore) {}
   record(id: NodeID): DecodedRecord {
     const d = this.inner.record(id);
-    this.read.set(toHex(id), d);
+    this.read.set(idKey(id), d);
     return d;
   }
 }
@@ -171,7 +171,7 @@ export class Resolver {
 
   /** §2.8: leaf and crystal 1; group, tower and edit 1 + their deepest reference. */
   depth(id: NodeID, guard = 0): number {
-    const key = toHex(id);
+    const key = idKey(id);
     const memo = this.depthMemo.get(key);
     if (memo !== undefined) return memo;
     if (guard > MAX_DEPTH) fail('limit', 'record depth above 64');
@@ -188,7 +188,7 @@ export class Resolver {
 
   /** §2.8: the frame unit exponent of a record (towers u(L), edits their base's, else 0). */
   unitExponentOf(id: NodeID): bigint {
-    const key = toHex(id);
+    const key = idKey(id);
     const memo = this.unitMemo.get(key);
     if (memo !== undefined) return memo;
     const node = this.rec(id).node!;
@@ -199,7 +199,7 @@ export class Resolver {
 
   /** The count of a whole record (its own edits applied). */
   recordCount(id: NodeID): Magnitude {
-    const key = toHex(id);
+    const key = idKey(id);
     const memo = this.countMemo.get(key);
     if (memo) return memo;
     this.depth(id);
@@ -210,7 +210,7 @@ export class Resolver {
 
   /** Exact per-element counts of a finite record. */
   recordElements(id: NodeID): Map<number, bigint> {
-    const key = toHex(id);
+    const key = idKey(id);
     const memo = this.elementMemo.get(key);
     if (memo) return memo;
     this.depth(id);
@@ -262,7 +262,7 @@ export class Resolver {
 
   /** §2.8 tower seeds, checked once per tower. */
   private checkTower(id: NodeID, t: TowerNode): void {
-    const key = toHex(id);
+    const key = idKey(id);
     if (this.checked.has(key)) return;
     const seed = this.rec(t.seed).node!;
     const seedBase = seed.kind === 'edit' ? this.rec(seed.base).node! : seed;
@@ -286,7 +286,7 @@ export class Resolver {
 
   /** §2.8 edits: a base that is no edit, and disjoint removals that resolve inside it. */
   private checkEdit(id: NodeID, base: NodeID, removed: Removal[]): void {
-    const key = toHex(id);
+    const key = idKey(id);
     if (this.checked.has(key)) return;
     if (this.rec(base).node!.kind === 'edit') fail('validity', 'the base of an edit is an edit');
     for (const r of removed) {
@@ -312,8 +312,16 @@ export class Resolver {
     const t = level.tower;
     if (t.substitution) {
       if (level.removals.length > 0) fail('path', 'a removal inside a substituted copy');
-      const key = copyKey(level.id, fullTowerStep(t.levels, level.trail));
-      return { type: 'copy', id: level.id, tower: t, trail: level.trail, key, removals: [], chain: level.chain };
+      // The copy key costs a hash of the step, so it is computed when first read.
+      let key: bigint | null = null;
+      const trail = level.trail;
+      return {
+        type: 'copy', id: level.id, tower: t, trail, removals: [], chain: level.chain,
+        get key(): bigint {
+          key ??= copyKey(level.id, fullTowerStep(t.levels, trail));
+          return key;
+        },
+      };
     }
     return this.rootView(t.seed, level.removals, level.chain + 1);
   }
@@ -520,7 +528,7 @@ export class Resolver {
   // ─── Materialization and probes (§4.5) ──────────────────────────────
 
   private cappedLeaf(id: NodeID, c: CrystalNode): LeafNode {
-    const key = toHex(id);
+    const key = idKey(id);
     let leaf = this.cappedMemo.get(key);
     if (!leaf) {
       leaf = leafFromQ16(materializeCapped(c));

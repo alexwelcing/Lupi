@@ -47,16 +47,33 @@ export function bitLength(value: bigint): number {
   return (hexText.length - 1) * 4 + (32 - Math.clz32(parseInt(hexText[0], 16)));
 }
 
+const HEX_VALUE = (() => {
+  const t = new Uint8Array(128);
+  for (let i = 0; i < 16; i += 1) t['0123456789abcdef'.charCodeAt(i)] = i;
+  return t;
+})();
+
 /** Little-endian magnitude bytes, minimal (empty for zero). */
 export function bigUIntBytes(value: bigint): Uint8Array {
   if (value < 0n) fail('range', 'negative BigUInt');
   if (value === 0n) return new Uint8Array(0);
-  let hexText = value.toString(16);
-  if (hexText.length % 2 === 1) hexText = `0${hexText}`;
-  const n = hexText.length / 2;
+  if (value <= 0xffffffffffffn) {
+    let v = Number(value);
+    const out: number[] = [];
+    while (v > 0) {
+      out.push(v % 256);
+      v = Math.floor(v / 256);
+    }
+    return Uint8Array.from(out);
+  }
+  const hexText = value.toString(16);
+  const n = (hexText.length + 1) >> 1;
   const out = new Uint8Array(n);
-  for (let i = 0; i < n; i += 1) {
-    out[n - 1 - i] = parseInt(hexText.slice(2 * i, 2 * i + 2), 16);
+  // Two hex digits per byte from the least significant end; an odd length leaves a lone top digit.
+  for (let i = 0, j = hexText.length; i < n; i += 1, j -= 2) {
+    const lo = HEX_VALUE[hexText.charCodeAt(j - 1)];
+    const hi = j - 2 >= 0 ? HEX_VALUE[hexText.charCodeAt(j - 2)] : 0;
+    out[i] = (hi << 4) | lo;
   }
   return out;
 }
@@ -257,6 +274,18 @@ export class Reader {
 }
 
 const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+
+const ID_KEYS = new WeakMap<Uint8Array, string>();
+
+/** A NodeID's hex, cached on its bytes: stores and caches key on it at every visit. Treat ids as immutable. */
+export function idKey(id: Uint8Array): string {
+  let key = ID_KEYS.get(id);
+  if (key === undefined) {
+    key = toHex(id);
+    ID_KEYS.set(id, key);
+  }
+  return key;
+}
 
 export function toHex(bytes: Uint8Array): string {
   let out = '';

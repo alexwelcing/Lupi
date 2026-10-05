@@ -2,7 +2,7 @@
 // node records in 16 KiB pages. The writer is deterministic (§6.5) and the
 // reader enforces every rule of §6.6.
 
-import { ASCII, compareBytes, concatBytes, fail, Reader, ScaleError, toHex, Writer } from './bytes';
+import { ASCII, compareBytes, concatBytes, fail, idKey, Reader, ScaleError, toHex, Writer } from './bytes';
 import { crc32, DOMAIN_PACK, sha256, Sha256 } from './hash';
 import { decodeRecord, nodeId, type DecodedRecord, type NodeID } from './records';
 import type { NodeStore } from './resolve';
@@ -186,7 +186,7 @@ export class Pack implements NodeStore {
   }
 
   has(id: NodeID): boolean {
-    return this.byHex.has(toHex(id));
+    return this.byHex.has(idKey(id));
   }
 
   /** The record's bytes, its SHA-256 verified before first use (§6.6 rule 5). */
@@ -195,7 +195,7 @@ export class Pack implements NodeStore {
   }
 
   record(id: NodeID): DecodedRecord {
-    const i = this.byHex.get(toHex(id));
+    const i = this.byHex.get(idKey(id));
     if (i === undefined) fail('missing', `node ${toHex(id).slice(0, 16)}…`);
     return this.recordAt(i);
   }

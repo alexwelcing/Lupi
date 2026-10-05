@@ -16,6 +16,7 @@ export const unitExponent = (k: bigint): bigint => (k === 0n ? 0n : (k - 1n) / 3
 /** How many of levels 1…k stack along axis a. */
 export function levelsAlong(a: number, k: bigint): bigint {
   if (k < 0n) fail('range', 'negative level');
+  if (k < 1n << 50n) return BigInt(Math.floor((Number(k) + 2 - a) / 3));
   return (k + 2n - BigInt(a)) / 3n;
 }
 
