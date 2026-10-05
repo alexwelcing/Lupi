@@ -67,6 +67,7 @@ public struct Composition: Sendable, Hashable {
 extension Resolver {
     /// `unit × copies − removed` (§5.3).
     public func composition(_ v: View) throws -> Composition {
+        try checkSubtree(v)
         guard v.kind == .level, let t = v.tower else { return Composition(unit: try finiteCounts(v)) }
         var unit = try finiteCounts(root(t.seed))
         if let s = t.substitution {

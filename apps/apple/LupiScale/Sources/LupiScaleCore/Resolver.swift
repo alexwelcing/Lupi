@@ -362,11 +362,26 @@ public struct Resolver: Sendable {
 
     // MARK: Counts (§4.4, §5)
 
+    /// The view's own count less what each removal takes away: the removal's count with the
+    /// removals nested inside it applied (an edit the walk enters below the view), so the
+    /// count always equals the materialization (§4.4).
     public func count(_ v: View) throws -> Magnitude {
+        try checkSubtree(v)
         var c = try baseCount(v)
         let bare = v.with(removals: [])
-        for r in v.removals { c = try c - baseCount(try walk(bare, r)) }
+        for r in v.removals { c = try c - count(try walk(bare, r)) }
         return c
+    }
+
+    /// §2.8: evaluating a whole subtree checks its depth from the walk's root, so a root deeper
+    /// than 64 fails however it is reached.
+    func checkSubtree(_ v: View) throws {
+        let d: Int
+        switch v.kind {
+        case .group, .level, .copy: d = try depth(v.id)
+        case .leaf, .box, .capped, .selection: d = 1
+        }
+        if v.chain - 1 + d > RecordLimits.maxDepth { throw fail(.limit, "record depth above 64") }
     }
 
     private func baseCount(_ v: View) throws -> Magnitude {
@@ -414,6 +429,7 @@ public struct Resolver: Sendable {
     }
 
     public func materialize(_ v: View) throws -> LeafNode {
+        try checkSubtree(v)
         switch v.kind {
         case .leaf:
             return v.leaf!
