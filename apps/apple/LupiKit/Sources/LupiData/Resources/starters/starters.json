@@ -114,6 +114,16 @@
       "file": "tryptophan.xyz",
       "source": "apps/web/public/gallery/curated/popular/tryptophan.xyz",
       "sha256": "d3b2802d5d164fece9bd39edb9a238e0e956b769c5c68ba7a6e165d8f4a82920"
+    },
+    {
+      "id": "hydrogen_peroxide",
+      "name": "Hydrogen peroxide",
+      "formula": "H2O2",
+      "atoms": 4,
+      "file": "hydrogen_peroxide.xyz",
+      "source": "tools/apple/bundle-starters.mts",
+      "geometry": "PubChem CID 784 3D conformer, r(O-O) 1.449 A",
+      "sha256": "b7ec5add82bc14d7ee00e377b5e4c54b01269cb003250adcfa4f5e0c41b71986"
     }
   ]
 }

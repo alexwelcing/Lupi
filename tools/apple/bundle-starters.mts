@@ -90,6 +90,13 @@ const STARTERS: StarterSpec[] = [
   { id: 'glucose', name: 'Glucose', gallery: 'popular/glucose.xyz' },
   { id: 'salt_cluster', name: 'Salt cluster', atoms: saltCube(), geometry: 'rock-salt Na4Cl4, Na-Cl 2.820 A (a = 5.640 A)' },
   { id: 'tryptophan', name: 'Tryptophan', gallery: 'popular/tryptophan.xyz' },
+  // M0's slice breaks it at its O–O bond (plan §8), and the gallery has no copy.
+  {
+    id: 'hydrogen_peroxide',
+    name: 'Hydrogen peroxide',
+    atoms: [['O', 0.7247, 0, 0], ['O', -0.7247, 0, 0], ['H', 0.8233, -0.7, -0.6676], ['H', -0.8233, -0.6175, 0.7446]],
+    geometry: 'PubChem CID 784 3D conformer, r(O-O) 1.449 A',
+  },
 ];
 
 const fixed = (value: number) => {
