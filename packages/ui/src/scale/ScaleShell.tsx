@@ -127,7 +127,16 @@ export function ScaleShell() {
 
   // ─── Gestures ────────────────────────────────────────────────────
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ startX: number; startY: number; t: number; moved: boolean; pinch: number | null; centroid: [number, number] | null } | null>(null);
+  const gesture = useRef<{
+    startX: number;
+    startY: number;
+    t: number;
+    moved: boolean;
+    pinch: number | null;
+    centroid: [number, number] | null;
+    /** The surface under the gesture: slides stay in its plane. */
+    normal?: [number, number, number];
+  } | null>(null);
 
   const rayAt = useCallback((clientX: number, clientY: number) => {
     const el = stageRef.current!;
@@ -147,8 +156,9 @@ export function ScaleShell() {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     world.stop();
     if (pointers.current.size === 1) {
-      gesture.current = { startX: e.clientX, startY: e.clientY, t: performance.now(), moved: false, pinch: null, centroid: null };
-      world.focus = world.focusFor(rayAt(e.clientX, e.clientY));
+      const hit = world.pick(rayAt(e.clientX, e.clientY));
+      gesture.current = { startX: e.clientX, startY: e.clientY, t: performance.now(), moved: false, pinch: null, centroid: null, normal: hit?.normal };
+      world.focus = hit?.point ?? world.focusFor(rayAt(e.clientX, e.clientY));
     } else if (gesture.current) {
       const [a, b] = [...pointers.current.values()];
       gesture.current.pinch = Math.hypot(a.x - b.x, a.y - b.y);
@@ -170,7 +180,7 @@ export function ScaleShell() {
       const focus = world.focusFor(rayAt(centroid[0], centroid[1]));
       world.zoom(focus, dist / Math.max(1, g.pinch));
       const mpp = metresPerPixel();
-      world.pan([(centroid[0] - g.centroid[0]) * mpp, -(centroid[1] - g.centroid[1]) * mpp, 0]);
+      world.pan([(centroid[0] - g.centroid[0]) * mpp, -(centroid[1] - g.centroid[1]) * mpp, 0], g.normal);
       g.pinch = dist;
       g.centroid = centroid;
       return;
@@ -179,11 +189,11 @@ export function ScaleShell() {
     const dy = e.clientY - prev.y;
     if (Math.hypot(e.clientX - g.startX, e.clientY - g.startY) > 6) g.moved = true;
     if (!g.moved) return;
-    if (world.atDesk() && !e.shiftKey && e.button !== 2) {
+    if (world.canOrbit() && !e.shiftKey && e.button !== 2) {
       world.orbit(world.centre(), dx * 0.008, dy * 0.008);
     } else {
       const mpp = metresPerPixel();
-      world.pan([dx * mpp, -dy * mpp, 0]);
+      world.pan([dx * mpp, -dy * mpp, 0], g.normal);
     }
   };
 
@@ -270,8 +280,8 @@ export function ScaleShell() {
       else if (e.key.startsWith('Arrow') && !(e.target instanceof HTMLInputElement)) {
         const dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
         const dy = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
-        if (world.atDesk()) world.orbit(world.centre(), dx * 0.12, dy * 0.12);
-        else world.pan([-dx * 0.05, dy * 0.05, 0]);
+        if (world.canOrbit()) world.orbit(world.centre(), dx * 0.12, dy * 0.12);
+        else world.pan([-dx * 0.05, dy * 0.05, 0], world.pick([0, 0, -1])?.normal);
       } else return;
       e.preventDefault();
       invalidate();

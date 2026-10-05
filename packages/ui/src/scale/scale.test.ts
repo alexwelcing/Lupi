@@ -44,7 +44,7 @@ import { aggregateColour, allocBoxes, allocSplats, collectAtoms, DrawCache, fill
 import { CAMERA, faceTowardCamera, ScaleWorld, touchedFace, webBudgets, worldFromItem, type Viewport } from './world';
 import { readScaleUrl, scaleUrl } from './share';
 import { lengthText, metresText } from './units';
-import { applySim, IDENTITY, mulVec, rayBox, raySphere, type Sim } from './vec';
+import { applySim, IDENTITY, mulVec, rayBox, rayBoxFace, raySphere, type Sim } from './vec';
 
 const VIEWPORT: Viewport = { heightPx: 720, aspect: 1.6 };
 const BUDGETS = webBudgets(false);
@@ -365,6 +365,18 @@ describe('world: smash, isolate, pinch, pan (§10.6 on the page)', () => {
     // The face is still under the centre of the view.
     expect(world.pick([0, 0, -1])).not.toBe(null);
   });
+
+  it('a slide along a face keeps its distance from the camera', () => {
+    const world = ScaleWorld.fromEntry(entryById('salt-1e6')!, VIEWPORT.aspect);
+    world.cutNow(VIEWPORT, BUDGETS, 0);
+    const hit = world.pick([0, 0, -1])!;
+    expect(hit.normal).toBeDefined();
+    const before = world.pick([0, 0, -1])!.point;
+    // Push straight along the face normal: in the face's plane that is no move at all.
+    world.pan([hit.normal![0] * 0.01, hit.normal![1] * 0.01, hit.normal![2] * 0.01], hit.normal);
+    const after = world.pick([0, 0, -1])!.point;
+    expect(Math.hypot(after[0] - before[0], after[1] - before[1], after[2] - before[2])).toBeLessThan(1e-9);
+  });
 });
 
 describe('share: lsr1 links (§7)', () => {
@@ -513,6 +525,16 @@ describe('vec: rays', () => {
     expect(rayBox([0, 0, 0], [0, 1, 0], box, [-0.5, -0.5, -0.5], [0.5, 0.5, 0.5])).toBe(null);
     expect(raySphere([0, 0, 0], [0, 0, -1], [0, 0, -3], 1)).toBeCloseTo(2, 12);
     expect(raySphere([0, 0, 0], [1, 0, 0], [0, 0, -3], 1)).toBe(null);
+  });
+
+  it('names the face a ray enters by, and none from inside', () => {
+    const box: Sim = { s: 2, r: IDENTITY, t: [0, 0, -4] };
+    const unit: [number, number, number] = [-0.5, -0.5, -0.5];
+    const far: [number, number, number] = [0.5, 0.5, 0.5];
+    expect(rayBoxFace([0, 0, 0], [0, 0, -1], box, unit, far)).toEqual({ t: 3, axis: 2, sign: 1 });
+    expect(rayBoxFace([5, 0, -4], [-1, 0, 0], box, unit, far)).toEqual({ t: 4, axis: 0, sign: 1 });
+    expect(rayBoxFace([0, -5, -4], [0, 1, 0], box, unit, far)).toEqual({ t: 4, axis: 1, sign: -1 });
+    expect(rayBoxFace([0, 0, -4], [0, 0, -1], box, unit, far)?.axis).toBe(-1);
   });
 });
 

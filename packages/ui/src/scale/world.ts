@@ -62,7 +62,7 @@ import {
   mulVec,
   normalize,
   orthonormalize,
-  rayBox,
+  rayBoxFace,
   raySphere,
   scale,
   sub,
@@ -129,6 +129,8 @@ export interface Hit {
   body: number;
   point: Vec3;
   distance: number;
+  /** The surface's outward normal there, world space (absent from inside a box). */
+  normal?: Vec3;
 }
 
 /** Web budgets (§9.3 is the phone's AR; a page profiles for itself, §9.8.7). */
@@ -459,7 +461,13 @@ export class ScaleWorld {
     this.dirty = true;
   }
 
-  pan(delta: Vec3): void {
+  /**
+   * Slides every body by `delta` (world). With a surface normal the slide is
+   * kept in that surface's plane, so sliding over an oblique face never
+   * brings it closer: the camera stays outside the body.
+   */
+  pan(delta: Vec3, normal?: Vec3): void {
+    if (normal) delta = sub(delta, scale(normal, dot(normal, delta)));
     this.sharedPiece = null;
     for (const b of this.bodies) {
       b.frame = { ...b.frame, worldFromAnchor: { ...b.frame.worldFromAnchor, t: add(b.frame.worldFromAnchor.t, delta) } };
@@ -477,6 +485,20 @@ export class ScaleWorld {
       c = add(c, worldOf(b.frame, g.centre));
     }
     return scale(c, 1 / this.bodies.length);
+  }
+
+  /**
+   * Whether a drag may turn the bodies about their centre: only while each
+   * is whole in front of the camera, so a turn can never swing a face
+   * through the eye. Otherwise a drag slides along the surface.
+   */
+  canOrbit(): boolean {
+    return this.bodies.every((b) => {
+      if (b.frame.anchorPath.length > 0) return false;
+      const g = this.geometries.of(anchorView(b.frame));
+      const c = worldOf(b.frame, g.centre);
+      return -c[2] > 1.25 * g.radius * b.frame.metresPerAnchorUnit;
+    });
   }
 
   /** Whether every body still shows its whole node (a drag orbits then; zoomed in, it pans). */
@@ -743,15 +765,28 @@ export class ScaleWorld {
       if (!frame) continue;
       const w = worldFromItem(frame, item);
       let t: number | null = null;
+      let normal: Vec3 | undefined;
       if (item.extras.splats && item.kind === 'splats') {
         for (const s of item.extras.splats) {
-          const hit = raySphere(origin, dir, add(mulVec(w.r, scale(s.centre, w.s)), w.t), s.radius * w.s);
-          if (hit !== null && (t === null || hit < t)) t = hit;
+          const centre = add(mulVec(w.r, scale(s.centre, w.s)), w.t);
+          const hit = raySphere(origin, dir, centre, s.radius * w.s);
+          if (hit !== null && (t === null || hit < t)) {
+            t = hit;
+            normal = normalize(sub(scale(dir, hit), centre));
+          }
         }
       } else if (item.extras.min && item.extras.max) {
-        t = rayBox(origin, dir, w, item.extras.min, item.extras.max);
+        const face = rayBoxFace(origin, dir, w, item.extras.min, item.extras.max);
+        if (face) {
+          t = face.t;
+          if (face.axis >= 0) {
+            const e: Vec3 = [0, 0, 0];
+            e[face.axis] = face.sign;
+            normal = normalize(mulVec(w.r, e));
+          }
+        }
       }
-      if (t !== null && (!best || t < best.distance)) best = { body: item.body, point: scale(dir, t), distance: t };
+      if (t !== null && (!best || t < best.distance)) best = { body: item.body, point: scale(dir, t), distance: t, normal };
     }
     return best;
   }

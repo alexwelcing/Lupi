@@ -60,26 +60,38 @@ export function orthonormalize(m: Mat3): Mat3 {
 
 /** Ray against an oriented box given as worldFromBox (unit box [min, max] in box units); the hit distance or null. */
 export function rayBox(origin: Vec3, dir: Vec3, worldFromBox: Sim, min: Vec3, max: Vec3): number | null {
+  return rayBoxFace(origin, dir, worldFromBox, min, max)?.t ?? null;
+}
+
+/** As rayBox, with the face the ray enters by: its axis and outward sign in box units (axis −1 from inside). */
+export function rayBoxFace(origin: Vec3, dir: Vec3, worldFromBox: Sim, min: Vec3, max: Vec3): { t: number; axis: number; sign: 1 | -1 } | null {
   // Into box units: x = Rᵀ (p − t) / s.
   const rt = transpose(worldFromBox.r);
   const o = scale(mulVec(rt, sub(origin, worldFromBox.t)), 1 / worldFromBox.s);
   const d = scale(mulVec(rt, dir), 1 / worldFromBox.s);
   let t0 = -Infinity;
   let t1 = Infinity;
+  let axis = -1;
+  let sign: 1 | -1 = 1;
   for (let a = 0; a < 3; a += 1) {
     if (Math.abs(d[a]) < 1e-300) {
       if (o[a] < min[a] || o[a] > max[a]) return null;
       continue;
     }
-    let ta = (min[a] - o[a]) / d[a];
-    let tb = (max[a] - o[a]) / d[a];
-    if (ta > tb) [ta, tb] = [tb, ta];
-    t0 = Math.max(t0, ta);
-    t1 = Math.min(t1, tb);
+    const ta = (min[a] - o[a]) / d[a];
+    const tb = (max[a] - o[a]) / d[a];
+    const near = Math.min(ta, tb);
+    if (near > t0) {
+      t0 = near;
+      axis = a;
+      // Entering through the min face moves along +a, so its outward normal is −a.
+      sign = d[a] > 0 ? -1 : 1;
+    }
+    t1 = Math.min(t1, Math.max(ta, tb));
     if (t0 > t1) return null;
   }
   if (t1 < 0) return null;
-  return Math.max(t0, 0);
+  return t0 >= 0 ? { t: t0, axis, sign } : { t: 0, axis: -1, sign: 1 };
 }
 
 /** Ray against a sphere; the near hit distance or null. */
