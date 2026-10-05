@@ -8,7 +8,7 @@ app. Swift 6 language mode; platforms iOS 26 and macOS 26.
 | Target | What it holds |
 |---|---|
 | `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, inertia |
-| `LupiPlay` | `GameUnits` (scale, and felt mass below the knee) and `lupi.personality.v1` derived from the bond graph |
+| `LupiPlay` | `GameUnits` (scale, and felt mass below the knee), `lupi.personality.v1` derived from the bond graph, the motion tokens and exact springs (hold-follow, squash, pop-in, hit-stop), `MotionComfort`, the throw estimator, the juice director (haptics, sound cues and visuals per game event, with the rate limits) and the synthesized sound bank (Float32 PCM) |
 | `LupiData` | `lupi.trophy.v1`, `lupi.shelf.v1`, the edge client, SHA-256, and the twelve bundled starter molecules |
 
 ## Build and test
@@ -60,5 +60,13 @@ Typecheck the generators with `pnpm exec tsc -p tools/apple/tsconfig.json`.
 - **Personality:** `PersonalityTable.v1` is the tunable table; rules run in
   order (ionic, weak bond, stretched bonds, cage, small, rotors, fused rings,
   stiff) and each derivation carries its plaque line.
+- **Juice:** plan §5's tables are `JuiceDirector`'s; every number marked
+  (est.) in the plan, and the fundamentals and partial weights of the sound
+  bank, are starting values for the tuning pass on the device. Sound and
+  haptics never depend on motion comfort; visuals do.
+- **Throw:** plan §3.5. Feed one `HandSample` per frame while held (the
+  touch ray's point at the grab depth, and the touch); the release is a
+  least-squares slope over the last 100 ms, a flick boost, the caps, and
+  spin from sideways speed, grab offset and the drag's curl.
 - **Records:** JSON with sorted keys and RFC 3339 UTC milliseconds
   (`LupiJSON`). A shelf never contains the room map.
