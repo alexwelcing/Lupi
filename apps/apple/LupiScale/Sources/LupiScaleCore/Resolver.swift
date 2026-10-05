@@ -47,6 +47,9 @@ public struct View: Sendable {
         return (b.view, selection)
     }
 
+    /// The same node without the removals that start at it.
+    public var withoutRemovals: View { with(removals: []) }
+
     func with(removals: [[Step]]) -> View {
         View(
             kind: kind, record: record, box: box, level: level, towerRuns: towerRuns, removals: removals,
@@ -103,6 +106,9 @@ public struct Resolver: Sendable {
         self.store = store
         memo = ResolverMemo()
     }
+
+    /// A cached value, if one is resident.
+    public func residentValue(_ key: String) -> (any Sendable)? { memo.extra(key) }
 
     /// A shared cache for derived data, keyed by caller-chosen strings.
     public func cached<T: Sendable>(_ key: String, _ make: () throws -> T) rethrows -> T {
@@ -310,6 +316,8 @@ public struct Resolver: Sendable {
     }
 
     /// The removals that start below `s`; throws `path` when `s` enters a removed node (§4.4).
+    public func removals(below v: View, taking s: Step) throws -> [[Step]] { try descend(v, s) }
+
     func descend(_ v: View, _ s: Step) throws -> [[Step]] {
         var out: [[Step]] = []
         for r in v.removals {
@@ -448,6 +456,20 @@ public struct Resolver: Sendable {
             out.grid.append(all.grid[i])
         }
         return out
+    }
+
+    /// The owner cell (§3.3.2) of each atom of a box view's materialization, in its order,
+    /// or of a copy or seed view whose seed is a crystal box.
+    public func ownerCells(_ v: View) throws -> [SIMD3<UInt64>]? {
+        switch v.kind {
+        case .box:
+            let c = v.crystal!
+            return try boxAtoms(v).grid.map { CrystalMath.ownerCell(c, $0) }
+        case .copy:
+            return try ownerCells(root(v.tower!.seed))
+        default:
+            return nil
+        }
     }
 
     private func cappedAtoms(_ v: View) throws -> LeafNode {

@@ -19,6 +19,12 @@ public struct AtomRange: Sendable, Hashable {
         self.start = start
         self.length = length
     }
+
+    /// Sorted ranges with gaps covering a set of indices below 4,096.
+    public static func covering(_ indices: some Sequence<Int>) throws -> [AtomRange] { try AtomSelection.ranges(Array(indices)) }
+
+    /// The indices of ranges, in order.
+    public static func indices(_ ranges: [AtomRange]) -> [Int] { AtomSelection.indices(ranges) }
 }
 
 /// One step of a path (§4.1).
@@ -268,8 +274,8 @@ public struct Path: Sendable, Hashable {
 
     // MARK: Containment (§4.4)
 
-    /// Does removal `a` contain removal `b` (equal, or an ancestor)? Both start at one view.
-    static func contains(_ a: [Step], _ b: [Step]) -> Bool {
+    /// Does removal `a` contain removal `b` (equal, or an ancestor)? Both start at one view (§4.4).
+    public static func contains(_ a: [Step], _ b: [Step]) -> Bool {
         var i = 0, j = 0
         var bHead: Step? = b.first
         while i < a.count, j < b.count, let y = bHead {

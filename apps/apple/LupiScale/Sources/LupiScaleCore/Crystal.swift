@@ -82,6 +82,8 @@ public enum CrystalMath {
     }
 
     /// Per-species counts of an open or closed box, closed-form.
+    public static func speciesCounts(_ c: CrystalNode, _ box: CellBox) -> [UInt8: BigUInt] { boxComposition(c, box) }
+
     static func boxComposition(_ c: CrystalNode, _ box: CellBox) -> [UInt8: BigUInt] {
         var out: [UInt8: BigUInt] = [:]
         for site in sites(c.structure) {
@@ -118,8 +120,15 @@ public enum CrystalMath {
         return out
     }
 
+    /// The atoms of an open or closed box without removals, in materialization order, with each
+    /// atom's owner cell. The caller keeps boxes at ≤ 4,096 atoms.
+    public static func atoms(_ c: CrystalNode, _ box: CellBox) -> (leaf: LeafNode, cells: [SIMD3<UInt64>]) {
+        let a = materializeBox(c, box)
+        return (a.leaf, a.grid.map { ownerCell(c, $0) })
+    }
+
     /// The owner cell of a grid point: `min(⌊g / 4⌋, n − 1)` per axis (§3.3.2).
-    static func ownerCell(_ c: CrystalNode, _ g: SIMD3<Int64>) -> SIMD3<UInt64> {
+    public static func ownerCell(_ c: CrystalNode, _ g: SIMD3<Int64>) -> SIMD3<UInt64> {
         SIMD3(
             min(UInt64(g.x / 4), c.cells.x - 1),
             min(UInt64(g.y / 4), c.cells.y - 1),

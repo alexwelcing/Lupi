@@ -155,7 +155,7 @@ public struct BigUInt: Hashable, Comparable, Sendable, CustomStringConvertible, 
     }
 
     /// `a − b` for callers that already know `a ≥ b`.
-    func minus(_ b: BigUInt) -> BigUInt {
+    package func minus(_ b: BigUInt) -> BigUInt {
         // A violated precondition is a bug, never a wrap (§1.10).
         guard let d = try? self - b else { preconditionFailure("BigUInt underflow") }
         return d
