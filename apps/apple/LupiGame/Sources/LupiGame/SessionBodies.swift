@@ -74,7 +74,8 @@ extension PlaySession {
             }
             bodies[id] = body
             out.events.append(.spawned(id))
-            fire(.spawn, on: body, at: body.entityPose.translation, direction: .zero, now: now)
+            // A trophy back on its shelf comes with the soft kept chime (plan §6.4).
+            fire(onShelf ? .kept : .spawn, on: body, at: body.entityPose.translation, direction: .zero, now: now)
         } catch {
             out.events.append(.refused("Could not spawn: \(error)"))
         }

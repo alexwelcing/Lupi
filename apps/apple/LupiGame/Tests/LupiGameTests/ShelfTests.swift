@@ -3,6 +3,7 @@ import LupiChem
 import LupiData
 import LupiGame
 import LupiGameSim
+import LupiPlay
 import LupiScale
 import Testing
 
@@ -105,6 +106,7 @@ struct ShelfTests {
         var b = try #require(sim.session.body(back))
         #expect(b.pinned && b.frozen && b.mode == .kinematic)
         #expect(b.trophyID == record.id)
+        #expect(sim.last.juice.contains { $0.output.sounds.contains { $0.voice == .kept } }, "the soft kept chime")
         #expect((b.entityPose.translation - pose.entity.translation).length < 1e-9)
         #expect(sim.session.toys == 0)
         sim.run(1)
@@ -261,6 +263,14 @@ struct RecoveryTests {
         _ = ladder.frame(at: 25, tracking: .relocalizing, rootAnchor: nil)
         ladder.choosePutHere(at: 26)
         #expect(ladder.frame(at: 30, tracking: .normal, rootAnchor: root) == [.relocalized(after: 30), .trophiesAppear(root: root), .saveMap])
+    }
+
+    @Test func startOverStopsTheWaitWithoutAReset() {
+        var ladder = ShelfRecovery()
+        #expect(ladder.offerNow(at: 0).isEmpty, "nothing to stop")
+        ladder.begin(at: 0)
+        #expect(ladder.offerNow(at: 3) == [.offerPutHere])
+        #expect(ladder.offersPutHere)
     }
 
     @Test func normalTrackingWithoutTheRootGivesUpEarly() {

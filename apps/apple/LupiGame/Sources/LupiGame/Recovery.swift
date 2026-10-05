@@ -119,6 +119,15 @@ public struct ShelfRecovery: Sendable, Equatable {
         }
     }
 
+    /// Stop waiting for a match now: the coaching overlay's Start Over, which the app takes
+    /// over so the session keeps its anchors (plan §6.4, step 6).
+    public mutating func offerNow(at t: Double) -> [RecoveryEvent] {
+        guard phase == .relocalizing else { return [] }
+        phase = .offering
+        since = t
+        return [.offerPutHere]
+    }
+
     /// "Put the shelf here" (step 3); available while the trophies wait.
     public mutating func choosePutHere(at t: Double) {
         guard showsGhost else { return }

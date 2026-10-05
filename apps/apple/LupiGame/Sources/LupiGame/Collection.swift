@@ -78,6 +78,12 @@ public struct TrophyCase: Sendable {
         try await sync.trophies().sorted { ($0.createdAt, $0.id.uuidString) > ($1.createdAt, $1.id.uuidString) }
     }
 
+    /// Every live trophy on this device, of any account: what shelf placements may keep. A
+    /// placement of a trophy hidden while another account is signed in is not a missing one.
+    public func knownTrophyIDs() async throws -> Set<UUID> {
+        Set(try await sync.snapshot().records.values.compactMap { $0.payload?.id })
+    }
+
     public func trophy(_ id: UUID) async throws -> TrophyRecord? {
         try await sync.trophy(id: id.uuidString)
     }

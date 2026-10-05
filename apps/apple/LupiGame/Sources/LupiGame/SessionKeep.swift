@@ -40,6 +40,8 @@ extension PlaySession {
         b.name = record.name
         bodies[id] = b
         hudCache.dirty = true
+        // The lime ring and the kept chime (plan §5.3).
+        if let now = time { fire(.kept, on: b, at: b.entityPose.translation, direction: .zero, now: now) }
         return record
     }
 

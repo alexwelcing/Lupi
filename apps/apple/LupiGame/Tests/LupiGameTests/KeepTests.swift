@@ -3,6 +3,7 @@ import LupiChem
 import LupiData
 import LupiGame
 import LupiGameSim
+import LupiPlay
 import LupiScale
 import LupiScaleCore
 import LupiSync
@@ -63,8 +64,10 @@ struct KeepTests {
         #expect(record.id == back.trophyID)
         #expect(back.name == "Caffeine")
         Self.expectSamePiece(kept, back)
-        // The kept body is the trophy now.
+        // The kept body is the trophy now, with the kept chime on the next frame.
         #expect(sim.session.body(id)?.trophyID == record.id)
+        sim.step()
+        #expect(sim.last.juice.contains { $0.output.sounds.contains { $0.voice == .kept } })
     }
 
     @Test func peroxideEmbedsThePubChemConformer() throws {

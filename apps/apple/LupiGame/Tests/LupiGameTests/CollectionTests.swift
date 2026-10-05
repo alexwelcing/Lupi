@@ -156,6 +156,20 @@ struct CollectionTests {
         #expect(await phone.trophies.status() != .signedOut)
     }
 
+    @Test func placementsOfAnotherAccountsTrophiesAreNotMissing() async throws {
+        let cloud = FakeFirebase()
+        let phone = await CaseDevice(cloud)
+        try await phone.trophies.signIn(appleSignIn(sub: "owner"))
+        let kept = try keptTrophies()[0].record
+        try await phone.trophies.keep(kept)
+        try await phone.trophies.signOut()
+        try await phone.trophies.signIn(appleSignIn(sub: "guest"))
+        #expect(try await phone.trophies.trophies().isEmpty)
+        #expect(try await phone.trophies.knownTrophyIDs() == [kept.id])
+        try await phone.trophies.delete(kept.id, at: KeepTests.now)
+        #expect(try await phone.trophies.knownTrophyIDs() == [kept.id], "another account's trophy is not this one's to delete")
+    }
+
     @Test func erasingTheDeviceLeavesTheAccountAlone() async throws {
         let cloud = FakeFirebase()
         let phone = await CaseDevice(cloud)
