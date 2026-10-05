@@ -77,6 +77,20 @@ extension Resolver {
     public func aggregate(_ view: View) throws -> Aggregate {
         try cached("agg:" + ViewKey.of(view)) { try Aggregates.make(view, self) }
     }
+
+    /// The region a view's matter fills, own units (§10.1). A solid node's atom envelope leaves a
+    /// gap of up to a spacing less two atom radii between neighbouring copies, and a point there is
+    /// still inside the solid, so a level, copy or box also covers its lattice cells.
+    public func occupied(_ view: View) throws -> Box3 {
+        let a = try aggregate(view)
+        guard a.solid, view.removals.isEmpty else { return a.bounds }
+        switch view.kind {
+        case .level: return a.bounds.union(try TowerContext.of(view.record, self).cells(LevelShape(view.level)))
+        case .copy: return a.bounds.union(try TowerContext.of(view.record, self).cells(LevelShape(BigUInt())))
+        case .box: return a.bounds.union(CrystalGeometry(view.crystal!).cells(view.box))
+        default: return a.bounds
+        }
+    }
 }
 
 /// Cache keys for views (§9.6): by NodeID, and for virtual nodes by what fixes their shape.

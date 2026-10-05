@@ -69,7 +69,7 @@ extension CutBuilder {
         let n = try makeNode(anchor, body: bi, s: 1, rot: -1, t: .zero, key: key, faces: Self.allFaces)
         // A terrain short of E_desc keeps its own node as anchor (§8.4); a camera inside it is
         // inside the solid, so its bubble opens as for a neighbourhood (addStarts).
-        if n.solid && bodies[Int(bi)].terrain && n.bounds.contains(bodies[Int(bi)].cameraA) { bodies[Int(bi)].bubble = true }
+        if n.solid && bodies[Int(bi)].terrain && occupied(n).contains(bodies[Int(bi)].cameraA) { bodies[Int(bi)].bubble = true }
         if let h = add(n, parent: -1, step: .start, base: base) { starts.append(h) }
     }
 
@@ -314,12 +314,27 @@ extension CutBuilder {
     func addStarts(_ bi: Int32, _ candidates: [(CNode, [Step])]) {
         let b = bodies[Int(bi)]
         let inside = candidates.contains { node, _ in
-            node.solid && node.bounds.transformed(scale: node.s, rotation: rotation(node.rot), translation: node.t).contains(b.cameraA)
+            node.solid && occupied(node).transformed(scale: node.s, rotation: rotation(node.rot), translation: node.t).contains(b.cameraA)
         }
         if inside { bodies[Int(bi)].bubble = true }
         for (node, steps) in candidates {
             bases.append(steps)
             if let h = add(node, parent: -1, step: .start, base: Int32(bases.count - 1)) { starts.append(h) }
+        }
+    }
+
+    /// The region a solid start node fills (`Resolver.occupied`): its envelope and its lattice
+    /// cells, so a camera between the atoms of two copies is inside the solid.
+    func occupied(_ n: CNode) -> Box3 {
+        switch n.kind {
+        case .level where n.depth == 0:
+            return n.bounds.union(towers[Int(n.payload)].cells(LevelShape(levelBases[Int(n.levelBase)].k0)))
+        case .copy:
+            return n.bounds.union(towers[Int(n.payload)].cells(LevelShape(BigUInt())))
+        case .box:
+            return n.bounds.union(crystals[Int(n.payload)].cells(cellBoxes[Int(n.cellBox)]))
+        default:
+            return n.bounds
         }
     }
 
