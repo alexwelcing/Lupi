@@ -182,8 +182,12 @@ public enum Wraps {
     }
 
     /// Appends (descending) or removes (ascending) 3n levels. The digits of a descent are constant per
-    /// axis: the extreme digit on an axis whose root face the anchor touches, else ⌊f/2⌋.
-    public static func wrap(_ frame: inout BodyFrame, periods n: BigUInt, descending: Bool, resolver: Resolver) throws {
+    /// axis: the extreme digit on an axis whose root face the anchor touches, else ⌊f/2⌋. An axis
+    /// with no digits yet spans the root and touches both faces; it takes the face nearer `focus`
+    /// (world), the point a dive is aimed at, so the focus stays in the anchor (0 without one).
+    public static func wrap(
+        _ frame: inout BodyFrame, periods n: BigUInt, descending: Bool, focus: SIMD3<Double>? = nil, resolver: Resolver
+    ) throws {
         guard !n.isZero else { return }
         let body = try resolver.resolve(frame.ref.root, frame.ref.path)
         let anchor = try resolver.walk(body, frame.anchorPath)
@@ -193,16 +197,18 @@ public enum Wraps {
         if descending {
             guard levels <= anchor.level else { throw ScaleError(.path, "not enough levels below the anchor") }
             let digits = AnchorPath.towerDigits(frame.anchorPath)
+            let centre = try resolver.aggregate(anchor).centre
+            let aim = focus.map { frame.anchorPoint($0) }
             var runs: [[DigitRun]] = [[], [], []]
             for a in 0..<3 {
                 let d: UInt8
-                if !digits[a].isEmpty && Digits.all(digits[a], f - 1) { d = f - 1 }
-                else if !digits[a].isEmpty && Digits.all(digits[a], 0) { d = 0 }
-                else if digits[a].isEmpty { d = 0 }
+                if digits[a].isEmpty { d = (aim.map { $0[a] >= centre[a] } ?? false) ? f - 1 : 0 }
+                else if Digits.all(digits[a], f - 1) { d = f - 1 }
+                else if Digits.all(digits[a], 0) { d = 0 }
                 else { d = f / 2 }
                 runs[a] = [DigitRun(digit: d, length: n)]
             }
-            frame.anchorPath.append(.tower(levels: levels, runs: runs))
+            AnchorPath.append(&frame.anchorPath, .tower(levels: levels, runs: runs))
         } else {
             var remaining = levels
             var anchorView = anchor

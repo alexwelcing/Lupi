@@ -80,9 +80,13 @@ struct FrameTests {
             let before = frame
             try rebase(&frame, focusWorld: focus, resolver: r)
             guard frame.anchorPath != before.anchorPath else { break }
-            descents += frame.anchorPath.count - before.anchorPath.count
+            // Steps merge as they append (one tower step per run), so descents are counted in levels.
+            let (was, _) = try Content.anchor(before, r)
+            let (now, _) = try Content.anchor(frame, r)
+            descents += try (was.level - now.level).int ?? 0
             try Self.expectSamePoints(before, frame, r)
         }
+        #expect(frame.anchorPath.count == 1)
         let (_, rest) = try Content.anchor(frame, r)
         print("rebase: \(descents) descents to an anchor \(String(format: "%.1f", frame.metresPerAnchorUnit * rest.narrowestWidth)) m wide")
         #expect(descents >= 9)
