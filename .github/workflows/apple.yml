@@ -72,6 +72,12 @@ jobs:
             exit 1
           fi
 
+      # LupiScale again in release: its byte-exact vectors must hold under
+      # optimization too, and its buildCut benchmark (scale-spec §9.8 item 7)
+      # fails above 4 ms only in a release build.
+      - name: Test LupiScale in release
+        run: swift test -c release --package-path apps/apple/LupiScale
+
   generated-sources:
     name: Generated Swift sources are current
     runs-on: ubuntu-latest
