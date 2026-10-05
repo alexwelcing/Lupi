@@ -295,6 +295,26 @@ struct TrophySyncTests {
     #expect(await cloud.documents(in: "users/\(uid)/trophies").map(\.documentID) == ["t1", "t2"])
   }
 
+  @Test("erasing the device forgets every local trophy and leaves the account's alone")
+  func eraseLocal() async throws {
+    let cloud = FakeFirebase()
+    let phone = await Device(cloud)
+    try await phone.sync.save(.make("signed-out"))
+    try await phone.sync.signIn(with: appleCredential())
+    try await phone.sync.save(.make("pending"))
+    try await phone.sync.eraseLocal()
+    #expect(try await phone.sync.trophies().isEmpty)
+    #expect(try await phone.sync.outbox().isEmpty)
+    let erased = try await phone.sync.snapshot()
+    #expect(erased.records.isEmpty && erased.cursors.isEmpty && erased.activeOwner == nil)
+    #expect(try await phone.sessions.currentSession() != nil)
+    // The account kept what was pushed; the next sync brings it back.
+    let uid = try #require(await cloud.uid(forAppleSub: "apple-owner"))
+    #expect(await cloud.documents(in: "users/\(uid)/trophies").map(\.documentID) == ["signed-out"])
+    try await phone.sync.sync()
+    #expect(try await phone.names() == ["signed-out": "Caffeine"])
+  }
+
   @Test("another account on the same device sees none of the first one's trophies")
   func secondAccount() async throws {
     let cloud = FakeFirebase()

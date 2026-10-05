@@ -159,6 +159,20 @@ public actor TrophySync<Payload: SyncPayload> {
     try await session.signOut()
   }
 
+  /// "Erase this device's collection" (plan §6.2): forgets every trophy on this device, of
+  /// every account, pending edits included, without touching the server or the session. A
+  /// signed-in account's trophies come back with its next sync, which re-reads everything.
+  /// An unfinished account deletion stays marked, so it can still be finished.
+  public func eraseLocal() async throws {
+    guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
+    try await loadIfNeeded()
+    if let running = syncRun { _ = await running.task.result }
+    let deleting = state.deletingAccount
+    state = SyncState()
+    state.deletingAccount = deleting
+    try await persist()
+  }
+
   /// Pull then push for the signed-in account. Concurrent callers for the
   /// same account share one run. `full` re-reads the whole collection instead
   /// of resuming from the cursor: a cheap safety net (say once a day) against

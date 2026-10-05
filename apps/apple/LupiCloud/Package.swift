@@ -10,6 +10,8 @@ let package = Package(
   products: [
     .library(name: "LupiAuth", targets: ["LupiAuth"]),
     .library(name: "LupiSync", targets: ["LupiSync"]),
+    // The in-memory Firebase, for the tests of packages that sync trophies (LupiGame).
+    .library(name: "LupiCloudTesting", targets: ["LupiCloudTesting"]),
   ],
   targets: [
     .target(name: "LupiHTTP"),
