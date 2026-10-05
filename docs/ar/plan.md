@@ -1,12 +1,14 @@
 # Lupi AR: plan of record for the native Apple game
 
-*2026-10-04. Written for the owner. It reworks the [groundwork brief](research/00-groundwork-brief.md) around the owner's [decisions](decisions.md) (D1–D13); where the two disagree, the decisions win. The data shapes it names are specified in [contracts.md](contracts.md). Platform facts cite the research reports or the Apple page they were checked on; numbers marked **(est.)** are arithmetic or starting values to tune on a device, and **UNCONFIRMED** items need a device spike. Nothing here claims behaviour on a device that nobody has measured.*
+*2026-10-04. Written for the owner. It reworks the [groundwork brief](research/00-groundwork-brief.md) around the owner's [decisions](decisions.md) (D1–D14); where the two disagree, the decisions win. The data shapes it names are specified in [contracts.md](contracts.md). Platform facts cite the research reports or the Apple page they were checked on; numbers marked **(est.)** are arithmetic or starting values to tune on a device, and **UNCONFIRMED** items need a device spike. Nothing here claims behaviour on a device that nobody has measured.*
+
+*Amended 2026-10-04 for D14 (scale is the first principle) and the amendment to D2 (builds on the owner's Mac). Scale is the spine from M0: its architecture of record is [scale.md](scale.md), and the bytes and algorithms are [scale-spec.md](scale-spec.md). The amendment touches §0–§4, §6.2 and §7–§11; the rest stands as written. Revised 2026-10-05 after an adversarial review of the scale design ([scale.md Appendix C](scale.md#appendix-c-revision-of-2026-10-05)): §3.1, §3.2, §4.1–§4.4, §7, §8, §10 and §11.*
 
 ---
 
 ## 0. The game in one paragraph
 
-You point your iPhone Pro or iPad Pro at your room, tap a drawing of a molecule, and a glossy, candy-coloured toy of it drops into your hand. You flick it and it flies across the room, smacks your real wall, sparks, clacks, bounces off the real bookshelf and tumbles end over end the way that molecule really tumbles. Throw hydrogen peroxide hard and it cracks at its O–O bond into two real hydroxyl fragments. Throw a buckyball and it boings. Stack caffeines on your desk into a tower. Leave one on a real shelf and it stays there: tomorrow it is still on that shelf, and it is in your collection on your Lupi account. Pick up loose atoms and they snap together by valence into new molecules you can keep. Pinch any of it up to room size, all the way to a million-atom crystal. No score, no levels, no timer (D4): the reward is the feel, and a small celebration when you do something delightful.
+You point your iPhone Pro or iPad Pro at your room, tap a drawing of a molecule, and a glossy, candy-coloured toy of it drops into your hand. You flick it and it flies across the room, smacks your real wall, sparks, clacks, bounces off the real bookshelf and tumbles end over end the way that molecule really tumbles. Throw hydrogen peroxide hard and it cracks at its O–O bond into two real hydroxyl fragments. Throw a buckyball and it boings. Stack caffeines on your desk into a tower. Leave one on a real shelf and it stays there: tomorrow it is still on that shelf, and it is in your collection on your Lupi account. Pick up loose atoms and they snap together by valence into new molecules you can keep. Pinch any of it up to room size, or pick up a crystal of salt with a billion atoms, or a googolplex, and it throws, smashes and stays on your shelf like a water (D14). No score, no levels, no timer (D4): the reward is the feel, and a small celebration when you do something delightful.
 
 ---
 
@@ -23,6 +25,7 @@ Each pillar is a feel target with the mechanism that delivers it. §4 and §5 gi
 | **Personalities you can feel** | Rigid clacks, flexible flops, brittle cracks, bouncy boings | Four personalities derived from the bond graph on device, each with its own restitution, damping, break threshold, sound and haptic sharpness (§4.3) |
 | **Build from atoms** | Bring a loose oxygen to two hydrogens and it clicks into water | Valence snapping with the `lupi-bonds.molecular.v1` caps, then a name if you made something known (§4.5) |
 | **Persistent shelf** | A molecule left on a real shelf is there tomorrow | Collection record on the Lupi account, placement relative to a shelf root in an `ARWorldMap` on device, and a recovery ladder that never loses a trophy (§6) |
+| **No ceiling** | A googolplex of salt is held, thrown, smashed and kept like a water, and its plaque prints the exact count | LupiScale: every piece is a node in one content-addressed hierarchy, drawn through a budgeted cut whose cost follows the screen, never the atom count (§7, [scale.md](scale.md)) |
 
 Hidden delights (D4) get a small celebration (a lime ring, a three-note chime, a triple haptic) and are never counted or scored:
 
@@ -44,11 +47,12 @@ Hidden delights (D4) get a small celebration (a lime ring, a three-note chime, a
 | Earned editions, sets ("7 of 20"), Daily mints | **Spawn anything, no gating**; no sets, scores or levels; hidden delights only | D4, D6 |
 | Broken trophies always re-form | **Breaking makes real fragments you can keep**; a shelved trophy's record is never destroyed by play (§4.4) | D9, plus the attachment finding in [retention-collection.md §2.1](research/retention-collection.md) |
 | Shelf share links, same-room co-play (M5) | **Never multi-user**, no share links, no web shelf page | D7, D12 |
-| Decade magnifications as fixed steps | **Seamless user-controlled scale** from tabletop to room, with the magnification always printed (§7) | D10 |
+| Decade magnifications as fixed steps | **Seamless user-controlled scale** from tabletop to room, with the magnification always printed, for any count from one atom to a googolplex (§7) | D10, D14 |
+| A million-atom colossus as a separate tier, with its own renderer and milestone | **Scale is the spine from M0:** one representation, cut, physics, persistence and UI from 10³ atoms to a googolplex; the colossus and the googolplex are content milestones on it (§7, §8) | D14 |
 | Sound and haptics a recommendation | **On by default in AR**, one toggle | D11 |
-| Recommends iOS 26 floor, Xcode Cloud for TestFlight | iOS 26.0 floor (D3); **GitHub Actions macOS runner** compiles every push and uploads to TestFlight when the secrets exist | D2, D3 |
+| Recommends iOS 26 floor, Xcode Cloud for TestFlight | iOS 26.0 floor (D3); **the app builds on the owner's Mac** with XcodeGen and Xcode, Linux CI tests the pure-Swift packages, and there is no TestFlight lane for now (§9) | D2 as amended, D3 |
 
-Kept from the brief: the native SwiftUI + RealityKit app at `apps/apple` taking `live.lupi.app` with `apps/mobile` frozen (D1); RealityView with an `ARSession` we own; the three persistence layers; the recovery ladder; the hybrid million-atom renderer; the thermal policy; the privacy rules for room maps.
+Kept from the brief: the native SwiftUI + RealityKit app at `apps/apple` taking `live.lupi.app` with `apps/mobile` frozen (D1); RealityView with an `ARSession` we own; the three persistence layers; the recovery ladder; the hybrid million-atom renderer (now LupiEngine, one backend under the scale cut, §7.4); the thermal policy; the privacy rules for room maps.
 
 ---
 
@@ -58,11 +62,12 @@ Kept from the brief: the native SwiftUI + RealityKit app at `apps/apple` taking 
 
 | Unit | Where | Contents | Builds and tests on |
 |---|---|---|---|
-| **LupiKit** | `apps/apple/LupiKit` (Swift package, tools 6.0, Swift 6 language mode, no Apple-only imports) | element table generated from `packages/core/src/elements.ts`; XYZ reader and writer; port of `lupi-bonds.molecular.v1` (`packages/core/src/bonds/`) checked against `validation-v1.json`; inertia and rotor facts (port of `packages/core/src/objectFacts/inertia.ts`); personality derivation; fragmenting by graph cut; valence snapping rules; throw-velocity estimator; motion springs and tokens (`packages/core/src/motion/`); impact-sound synthesis as PCM sample arrays; haptic intensity mapping; the `lupi.trophy.v1`, `lupi.shelf.v1` and `lupi.personality.v1` Codable types; a file-backed collection store; a pure-Swift SHA-256 | Linux (`swift build`, `swift test`) and macOS |
-| **Lupi app** | `apps/apple` (one universal iPhone + iPad target, `live.lupi.app`, iOS 26.0) | SwiftUI shell (Play, Cabinet, Settings); RealityView play space; ARSession, scene mesh and world maps; RealityKit bodies, gestures, collisions; Core Haptics; spatial audio; Firebase account and sync | macOS runner with Xcode (compile on every push) |
-| **LupiEngine** | later, M3 | Metal colossus renderer inside RealityView post-processing: cluster culling, LOD tiers, impostors ported from WGSL and TSL | Mac only |
+| **LupiKit** | `apps/apple/LupiKit` (Swift package, tools 6.0, Swift 6 language mode, no Apple-only imports) | element table generated from `packages/core/src/elements.ts`, with integer micro-dalton masses; XYZ reader and writer; port of `lupi-bonds.molecular.v1` (`packages/core/src/bonds/`) checked against `validation-v1.json`; inertia and rotor facts (port of `packages/core/src/objectFacts/inertia.ts`); personality derivation and felt mass `lupi.feltmass.v1` (`LupiPlay`); the gesture arbiter; fragmenting by graph cut; valence snapping rules; throw-velocity estimator; motion springs and tokens (`packages/core/src/motion/`); impact-sound synthesis as PCM sample arrays; haptic intensity mapping; the `lupi.trophy.v1`, `lupi.shelf.v1` and `lupi.personality.v1` Codable types; a file-backed collection store; a pure-Swift SHA-256 in its own `LupiCore` target, the one every package uses | Linux (`swift build`, `swift test`) and macOS |
+| **LupiScale** | `apps/apple/LupiScale` (Swift package, tools 6.0, Swift 6 language mode, Foundation only) | `LupiScaleCore` (over LupiKit's `LupiCore`): NodeIDs, BigUInt, Magnitude and its formatting, node records and the frozen generator registry v1, paths, LupiPack v1 and `lupi.scale-ref.v1`. `LupiScale` (over LupiKit's `LupiChem` and `LupiPlay`): the resolver, anchors and frames, the budgeted cut, collision proxies, the personality of nodes that are not molecules, breaking by expansion. Byte for byte with the TypeScript reference in `packages/core/src/scale`, held to it by shared golden fixtures ([scale-spec.md](scale-spec.md)) | Linux (`swift build`, `swift test`) and macOS |
+| **Lupi app** | `apps/apple` (one universal iPhone + iPad target, `live.lupi.app`, iOS 26.0) | SwiftUI shell (Play, Cabinet, Settings); RealityView play space; ARSession, scene mesh and world maps; RealityKit bodies, gestures, collisions; the cut's draw items as RealityKit meshes, instances, boxes and planes; Core Haptics; spatial audio; Firebase account and sync | the owner's Mac with Xcode (local builds, §9) |
+| **LupiEngine** | later, M3b | Metal renderer inside RealityView post-processing for dense explicit structures at full detail (`massive_1m`, baked assemblies): cluster culling, LOD tiers, impostors ported from WGSL and TSL. One backend under LupiScale's cut (§7.4) | the owner's Mac |
 
-LupiKit carries everything that can be decided without a device, so the logic that makes the game fun is unit-tested on Linux. Two Linux rules keep it portable: no `import simd` (quaternions and transforms are LupiKit's own value types over `SIMD3<Float>`/`SIMD4<Float>`, which are standard library), and no CryptoKit (SHA-256 is implemented in LupiKit against the NIST test vectors). LupiKit must also compile with the Swift that the macOS runner's Xcode 26.x ships (6.2 or later; Xcode 26 introduced Swift 6.2, [apple-ar-platform.md §1](research/apple-ar-platform.md)), so it avoids features newer than its tools version even though the local Linux toolchain is 6.4.
+LupiKit and LupiScale carry everything that can be decided without a device, so the logic that makes the game fun, and every byte of scale, is unit-tested on Linux. Two Linux rules keep them portable: no `import simd` (quaternions and transforms are LupiKit's own value types over `SIMD3<Float>`/`SIMD4<Float>`, which are standard library), and no CryptoKit (SHA-256 is implemented in LupiKit against the NIST test vectors). They must also compile with the Swift that Xcode 26.x ships on the owner's Mac (6.2 or later; Xcode 26 introduced Swift 6.2, [apple-ar-platform.md §1](research/apple-ar-platform.md)), so they avoid features newer than their tools version even though the local Linux toolchain is 6.4.
 
 ### 3.2 Runtime stack
 
@@ -73,15 +78,20 @@ LupiApp (SwiftUI, @MainActor)
 │   │     ARWorldTrackingConfiguration: sceneReconstruction .meshWithClassification,
 │   │     planeDetection [.horizontal, .vertical], initialWorldMap (when a shelf loads)
 │   ├─ Arena: scene-understanding colliders from the LiDAR mesh (or our mirrored mesh, §3.3)
-│   ├─ Bodies: one Entity per molecule or fragment
-│   │     PhysicsBodyComponent (explicit mass properties) + CollisionComponent (compound spheres)
-│   │     render child: merged mesh, one PhysicallyBasedMaterial per element (glossy CPK)
+│   ├─ Bodies: one Entity per body; a body is a LupiScale piece (a root and a path), a water or a googolplex
+│   │     PhysicsBodyComponent (explicit mass properties) + CollisionComponent (LupiScale proxy:
+│   │     compound spheres, a box or a hull)
+│   │     render: the cut's draw items; a molecule of ≤ 2,000 atoms is one merged mesh,
+│   │     one PhysicallyBasedMaterial per element (glossy CPK)
 │   ├─ Systems: GrabSystem, ImpactSystem (collision events → juice, breaks), RestSystem (settle, pin),
-│   │     SnapSystem (valence building), ScaleSystem (pinch, monuments)
+│   │     SnapSystem (valence building), ScaleSystem (pinch, scale axis, size states),
+│   │     CutSystem (every frame, after the physics step: anchors and rebasing, the budgeted cut,
+│   │     draw items as children of each body's entity; it never moves a body)
 │   └─ Juice: CHHapticEngine, AudioBufferResource per sound family, ParticleEmitterComponent bursts
 ├─ CabinetView: the collection (ink drawings, plaques), works without the camera
 └─ SettingsView: Sound & haptics, Motion comfort, account (sign in, sign out, delete)
 LupiKit (pure Swift): molecule model, bonds, facts, personality, fragments, snapping, contracts, store
+LupiScale (pure Swift): nodes, paths, Magnitude, packs and references, anchors, the cut, proxies, felt mass
 ```
 
 ### 3.3 AR session and the arena
@@ -94,7 +104,7 @@ LupiKit (pure Swift): molecule model, bonds, facts, personality, fragments, snap
 
 ### 3.4 Bodies
 
-- **Collider:** a compound of spheres, one per heavy atom at its toy radius, with each hydrogen folded into its partner's sphere (radius grown by 15 % per H, est.). Above 48 heavy atoms, spheres are merged by a grid clustering into at most 48 bounding spheres; colossi use the cluster hierarchy (§7.3). `ShapeResource.generateSphere(radius:)` plus `offsetBy(translation:)` builds each piece ([ShapeResource](https://developer.apple.com/documentation/realitykit/shaperesource)).
+- **Collider:** a compound of spheres, one per heavy atom at its toy radius, with each hydrogen folded into its partner's sphere (radius grown by 15 % per H, est.). Above 48 heavy atoms, spheres are merged by a grid clustering into at most 48 bounding spheres. Anything bigger than a molecule takes its proxy from LupiScale: a box for a crystal or a tower level, a hull, or a group's spheres ([scale-spec.md §10.4](scale-spec.md), §7.3). `ShapeResource.generateSphere(radius:)` plus `offsetBy(translation:)` builds each piece ([ShapeResource](https://developer.apple.com/documentation/realitykit/shaperesource)).
 - **Mass properties:** set explicitly with `PhysicsMassProperties(mass:inertia:centerOfMass:)`, which takes principal moments and the principal-axis orientation ([doc](https://developer.apple.com/documentation/realitykit/physicsmassproperties)), from LupiKit's inertia facts (§4.2). Overlapping compound spheres would otherwise give a wrong automatic mass.
 - **Body:** `PhysicsBodyComponent(massProperties:material:mode:)` with the personality's material from `PhysicsMaterialResource.generate(staticFriction:dynamicFriction:restitution:)`, `linearDamping`, `angularDamping` and `isContinuousCollisionDetectionEnabled = true` for everything thrown ([PhysicsBodyComponent](https://developer.apple.com/documentation/realitykit/physicsbodycomponent), [PhysicsMaterialResource](https://developer.apple.com/documentation/realitykit/physicsmaterialresource)).
 - **Engine limits we design around:** Apple says RealityKit physics "works best if the size and mass ratios don't exceed one order of magnitude" and if each object's smallest dimension is at least 0.05 units ([Designing scene hierarchies for efficient physics simulation](https://developer.apple.com/documentation/realitykit/designing-scene-hierarchies-for-efficient-physics-simulation)). So felt mass lives in a 10× band (§4.2), dynamic bodies stay within 0.5×–3× of their spawn size, and anything grown beyond that becomes a monument (§7.2). Loose atoms (about 3 cm beads) sit below the 0.05 m guidance; CCD is on for them.
@@ -119,7 +129,7 @@ D5: glossy toy, true CPK colours, chunky bonds, soft shadows on the real table.
 - **Atoms:** spheres at a toy radius of `clamp(0.75 × covalent radius, 0.32 Å, 0.9 Å)` (est.), coloured with `ELEMENT_DATA[z].color` from `packages/core/src/elements.ts` (the web's CPK palette, kept by `docs/brainstorm/2026-09-viewer-play/decisions.md:20`).
 - **Bonds:** half-bond cylinders of radius 0.16 Å (est.), each half in its atom's colour. Coordination bonds are thinner and dashed, ionic contacts dotted, as on the web (`packages/core/src/bonds/types.ts`).
 - **Material:** `PhysicallyBasedMaterial` (iOS 15) with roughness 0.3, clearcoat 1.0 and clearcoat roughness 0.05 for the candy gloss ([doc](https://developer.apple.com/documentation/realitykit/physicallybasedmaterial)); metals get metallic 0.6.
-- **Mesh:** one merged mesh per molecule built with `MeshDescriptor` (iOS 15), one material per element via per-face material indices ([doc](https://developer.apple.com/documentation/realitykit/meshdescriptor)). It needs no instancing API and no per-instance colour, which is unconfirmed on `MeshInstancesComponent` ([forum 814211](https://developer.apple.com/forums/thread/814211)). Up to about 2,000 atoms at 80–320 triangles per sphere (est.); bigger structures go to LupiEngine (§7.3).
+- **Mesh:** one merged mesh per molecule built with `MeshDescriptor` (iOS 15), one material per element via per-face material indices ([doc](https://developer.apple.com/documentation/realitykit/meshdescriptor)). It needs no instancing API and no per-instance colour, which is unconfirmed on `MeshInstancesComponent` ([forum 814211](https://developer.apple.com/forums/thread/814211)). Up to about 2,000 atoms at 80–320 triangles per sphere (est.); bigger structures are drawn through LupiScale's cut (§7.4).
 - **Shadows:** `GroundingShadowComponent` (iOS 18) plus the scene-understanding shadow, so a molecule on your desk sits on it.
 
 ### 3.7 Data in
@@ -138,13 +148,14 @@ Fun first (D8). The numbers below are starting values: the owner tunes them on t
 
 - Physics runs in metres, kilograms and seconds.
 - A molecule spawns at a **toy scale** `s` (metres per ångström) that makes its widest span 15 cm, clamped to 0.005–0.04 m/Å (5×10⁷× to 4×10⁸×). Caffeine and C₆₀ spawn at about 15 cm; water hits the 0.04 m/Å ceiling at about 9 cm; a protein hits the 0.005 m/Å floor at about 30 cm (est.).
+- Anything bigger than a molecule (a LupiScale crystal, tower or group) spawns 15 cm long, or 3 cm thick if that is larger, up to 30 cm long, without the clamp: a cube is 15 cm, the googolplex bar 30 × 3 × 3 cm ([scale-spec.md §10.1](scale-spec.md)). Its magnification is held as LupiScale's exact pair λ, never as one Float metres per Å ([scale-spec.md §8.7](scale-spec.md)): the googolplex bar is "shown 10^(−3.333 × 10^99) times life size".
 - The magnification `s × 10¹⁰` is always readable on the molecule's plaque ("shown 1.5 × 10⁸ times larger"). §7 covers changing it.
 
 ### 4.2 Mass and inertia
 
-- **Felt mass** compresses molar mass M (from `ELEMENT_DATA[z].mass`) so the ordering stays true and the range fits RealityKit's 10× guidance:
-  `massKg = clamp(0.2 × (M / 180 Da)^0.4 × massScale, 0.06, 0.6)`.
-  Water weighs 0.08, glucose 0.2, C₆₀ (bouncy, massScale 0.8) 0.28, and hemoglobin hits the 0.6 ceiling (est.). The exponent sits in the brief's γ = 0.3–0.5 band ([chemistry-play-physics.md §4.4](research/chemistry-play-physics.md)). The "Toy physics" info sheet says the feel is compressed, and the plaque shows the real molar mass.
+- **Felt mass** compresses molar mass M (from the element table's integer micro-daltons) so the ordering stays true and the range fits RealityKit's 10× guidance:
+  `massKg = max(0.06, b(M × massScale^2.5))`, where `b(M) = 0.2 × (M / 180 Da)^0.4` up to about 1,018 Da, so below it this is exactly `0.2 × (M / 180 Da)^0.4 × massScale`. Above that, a slow tail that never reaches 0.6 keeps the order true all the way to a googolplex instead of clamping everything over 2.8 kDa to the ceiling (`lupi.feltmass.v1`, [scale-spec.md §10.2](scale-spec.md), D14). The personality shifts a body along the curve, so no personality reaches the ceiling and a brittle googolplex still outweighs every molecule.
+  Water weighs 0.08, glucose 0.2, C₆₀ (bouncy, massScale 0.8) 0.28; at massScale 1, hemoglobin 0.54, a million-atom salt crystal 0.57 and a googolplex 0.5998 (est.). Above about 10 kDa the differences are a few percent, too small to feel in a throw; heft (sound and haptics) and the plaque carry the scale. The exponent sits in the brief's γ = 0.3–0.5 band ([chemistry-play-physics.md §4.4](research/chemistry-play-physics.md)). The "Toy physics" info sheet says the feel is compressed, and the plaque shows the real molar mass.
 - **Inertia** keeps the true shape of the molecule's inertia tensor: each principal moment is `massKg × (I_i / M) × s²`, with `I_i` the point-mass principal moments in amu·Å² and the axes from the same diagonalisation (`lupi.object-facts.v1`, `packages/core/src/objectFacts/types.ts`). The smallest moment is floored at 0.02 × the largest, as the web's free-spin coast does for linear rotors (`packages/ui/src/camera/trueSpinCoast.ts`), to keep the solver stable.
 - **Tumble.** With true moments, an asymmetric top thrown spinning about its middle axis should flip (the tennis-racket effect). Whether RealityKit's solver keeps the gyroscopic terms that need is **UNCONFIRMED** ([chemistry-play-physics.md §2](research/chemistry-play-physics.md)); spike A3 checks it. If it does not, LupiKit's port of `trueSpinCoast.ts` drives the orientation while the body is airborne and hands back to RealityKit on first contact.
 - Mass does not change with toy scale while a body is dynamic (0.5×–3× of spawn size), which keeps the 10× band.
@@ -170,7 +181,7 @@ Four kinds, derived on device from the game graph by fixed rules (`lupi.personal
 | Sound family | clack (hard plastic) | thwap (rubber) | tink (glass) | boing (rubber ball) |
 | Haptic sharpness | 0.8 | 0.3 | 1.0 | 0.5 |
 
-All values are starting points **(est.)**. A personality never claims to be chemistry: the plaque gives the reason in plain words ("Brittle: O–O bond", "Bouncy: a cage of 60 carbons", "Flexible: 5 rotating bonds").
+All values are starting points **(est.)**, and this table is the contract ([contracts.md §3.3](contracts.md#3-lupipersonalityv1)): LupiKit's `PersonalityTable.v1` on `ar/kit` differs today (brittle `massScale` 1.1, base break speed 2.5, and others) and is brought to it in M0. A personality never claims to be chemistry: the plaque gives the reason in plain words ("Brittle: O–O bond", "Bouncy: a cage of 60 carbons", "Flexible: 5 rotating bonds"). Crystals, towers and groups take the personality of one materialized leaf ([scale-spec.md §10.6](scale-spec.md)): every salt rung is brittle.
 
 **Bond strengths for the game.** Until `lupi-bond-orders.v1` exists (specified in `docs/omol25-bonds-and-discovery.md` §2.6, no code yet), LupiKit estimates a bond's order from its length: the ratio of the bond length to the sum of the two single-bond covalent radii, ≤ 0.84 triple, ≤ 0.92 double, otherwise single (a Lupi game rule: N₂ reads 0.77, ethylene 0.88, ethane 1.01). The energy then comes from the mean bond enthalpies the research cites ([chemistry-play-physics.md §4.1](research/chemistry-play-physics.md): C–H 411, C–C 346, C=C 614, C≡C 839, C=O 745, O–H 459, O–O 142, N≡N 941, H–H 432, F–F 155, I–I 149, N–N 167, C≡O 1072 kJ/mol), and otherwise from game defaults (single 350, double 600, triple 850, coordination 150, ionic contact 80), which are labelled as game values. A molecule whose weakest breakable bond is 800 kJ/mol or more (N₂, CO) never breaks.
 
@@ -185,6 +196,7 @@ All values are starting points **(est.)**. A personality never claims to be chem
   4. A molecule with no bridges (a cage or a fused ring system) chips instead: the heavy atom nearest the contact leaves with its hydrogens, cutting all of its bonds.
 - **Fragments are real molecules.** Each connected component becomes a new body with its own atoms in their original body-frame positions, its own mass, inertia and re-derived personality, the parent's velocity at that point (`v + ω × r`) and a 0.4 m/s separation along the cut bond. A single atom becomes a loose atom for building. A fragment is labelled honestly: formula, and "radical" when its valences are not satisfied.
 - **Keeping fragments.** A fragment left on a shelf, or kept with one tap, becomes a trophy with `source: fragment` and an origin of "broken from <parent>" (D9, [contracts.md §1](contracts.md#1-lupitrophyv1)).
+- **Crystals, towers and groups expand instead** ([scale-spec.md §10.6](scale-spec.md)): only at Δv of 3 m/s or more, so a crystal survives a drop and smashes against a wall; into at most 16 pieces that share the parent's felt mass, start with inset colliders, grow to at least 6 cm and cannot break again for 1 s; drawn as instanced atoms until their meshes are built, one per frame.
 - **A trophy is never destroyed by play.** Breaking a pinned trophy breaks the copy in play. Its collection record stays, its placement is removed, and the next session it is back on its shelf (or "Put back" brings it now). This keeps D9 (real fragments) and the research's warning that destroying creations kills attachment ([retention-collection.md §2.1](research/retention-collection.md)).
 
 ### 4.5 Building from atoms
@@ -294,7 +306,7 @@ The brief's Still made throws "land instantly". In a throwing game that removes 
 - **Sync** (M1): Firestore documents at `users/{uid}/trophies/{trophyId}`, one per record, with last-writer-wins on `updatedAt` and tombstones (`deletedAt`) so deletions propagate. The Firestore rules to add are proposed in [contracts.md §5](contracts.md#5-account-sync-firestore-layout-and-proposed-rules); today `firestore.rules` has no per-user collection.
 - **Account deletion in the app** (5.1.1(v)): Settings → Delete account → re-authenticate with Apple to get a fresh authorization code → `Auth.auth().revokeToken(withAuthorizationCode:)` (token revocation is required for Sign in with Apple accounts) → delete the `users/{uid}` documents → `user.delete()`. The local collection and room maps stay on the device unless the user also chooses "Erase this device's collection".
 - **No account-only features.** Everything works signed out; the account adds the collection on a second device and survival across a new phone.
-- **Config.** `GoogleService-Info.plist` for `live.lupi.app` is injected by CI from a secret (the web keeps its Firebase config in environment variables too, `packages/ui/src/auth/firebase.ts`). A build without it runs with the account features hidden.
+- **Config.** The Firebase client configuration for `live.lupi.app` stays on the owner's Mac and is never committed (the web keeps its Firebase config in environment variables too, `packages/ui/src/auth/firebase.ts`); with local builds (§9) nothing is injected by CI. The account design (`docs/ar/account-and-sync.md` on the `ar/acct` branch) narrows it to an iOS-restricted API key and the project id. A build without it runs with the account features hidden.
 
 ### 6.3 Shelves and world maps
 
@@ -319,81 +331,132 @@ A printed plinth card (`ARImageAnchor`) stays a later option, not v1.
 
 ## 7. Scale
 
-### 7.1 Seamless, user-controlled (D10)
+D14: "Million atom needs to be first principle. Should scale from 1k to googleplex if we needed." Scale is therefore not a feature that arrives in M3. It is the spine the rest of this plan stands on, from M0. [scale.md](scale.md) is the architecture of record and [scale-spec.md](scale-spec.md) the normative bytes and algorithms; this section is the summary the rest of the plan relies on.
 
-- A pinch on a held or selected molecule scales it continuously. The readout shows the magnification as it changes ("1.5 × 10⁸×"), with a detent click at each decade.
-- Physics follows: while the body stays within 0.5×–3× of its spawn size it stays dynamic (colliders rebuilt at pinch end; mass unchanged, §4.2).
+### 7.1 Seamless, user-controlled (D10, D14)
 
-### 7.2 Monuments
+- A pinch on a held or selected molecule scales it continuously about the pinch point, or, for a molecule resting on something, about its footprint, so it never sinks into the table. The readout shows the magnification as it changes ("1.5 × 10⁸×"), with a detent click at each decade and at life size.
+- From 10⁻³²× to 10³²× of life size the fingers map one to one. Beyond, the pinch moves along a logarithmic scale axis, and a two-finger hold flies: from the googolplex bar down to its atoms takes about 18 s ([scale-spec.md §8.8](scale-spec.md)). The picture zooms at a steady rate while the readout races, because the anchor jumps by whole self-similar repeats of the tower, so nothing strobes. Still turns flight into cuts between detents, and Gentle halves its speed. Which two-finger gesture is which is one arbiter's job ([scale-spec.md §10.5](scale-spec.md)).
+- Physics follows: the body is kinematic while pinched and its colliders scale with it; while it stays within 0.5×–3× of its spawn size it is dynamic again afterwards (mass unchanged, §4.2).
 
-Beyond 3× spawn size a molecule becomes a **monument**: kinematic, too big to throw, and solid ground for everything else (stack trophies on a two-metre caffeine). Shrinking it back below 3× returns it to play. A monument's span is capped at 3 m. This keeps the room-scale fantasy inside RealityKit's size-ratio guidance (§3.4).
+### 7.2 Monuments and terrain
 
-### 7.3 The million-atom path
+Beyond 3× spawn size a body becomes a **monument**: kinematic, too big to throw, and solid ground for everything else (stack trophies on a two-metre caffeine). Shrinking it back below 3× returns it to play. Past a 3 m span it becomes **terrain**: static, with a fixed collider for each outer face near you, which no rebuild ever removes, and small windows of atom bumps around the camera and around slow bodies, so you can stand on a plain of salt and throw molecules across it. While the camera is inside the solid, toys are parked until you come out. There is at most one terrain at a time ([scale-spec.md §10.1](scale-spec.md)). This keeps the room-scale fantasy close to RealityKit's size-ratio guidance (§3.4).
 
-Taken from [million-atom-ar.md](research/million-atom-ar.md) and §2.5 of the brief, unchanged in substance:
+### 7.3 The spine: LupiScale
 
-- **Tiers by atom count:** up to about 2,000 atoms, the merged-mesh toy (§3.6); 2,000–5,000, `MeshInstancesComponent` (iOS 26); above that, **LupiEngine**, our Metal renderer drawing inside RealityView's post-processing hook with `sourceColorTexture`, `sourceDepthTexture`, `projection` and `commandBuffer` (iOS 26), so impostors are depth-tested against RealityKit's depth ([million-atom-ar.md §4](research/million-atom-ar.md)).
-- **Content order:** a procedural 1,000,000-atom copper crystal (positions from the instance index, no data); then `massive_1m.glimbin` (953,312 Cu atoms, 10,156,835 bytes, served at `/gallery/trajectories/massive_1m.glimbin`); then one real assembly baked server-side.
-- **Culling and LOD:** exterior bake, 15,625 clusters of 64 atoms, normal cones, two-phase Hi-Z, L0–L3 tiers from impostors to chunk splats; 50–150k atoms drawn per view; 7–10.5 ms GPU at 60 fps on paper (est., spike S2 measures it).
-- **Play at a million atoms:** the colossus spawns at 1 Å = 1 mm (about 25 cm), is one dynamic body with a compound of up to 64 spheres from the cluster hierarchy, and is thrown like anything else. Grown past 3× it becomes a monument with up to 256 static spheres, and other molecules bounce off it. Space-filling, no bonds at that scale. Breaking a colossus into chunks is post-M4.
-- **Thermal policy** from the brief: at `.serious`, LOD bias +1 and the molecule pass at 0.75× with MetalFX upscaling; at `.critical`, 30 fps and slow motion and particles off ([00-groundwork-brief.md §3.3](research/00-groundwork-brief.md)).
+- **Nodes.** Everything in play is a node in one content-addressed graph, named by the SHA-256 of an immutable record:
+  - a **leaf** of up to 4,096 atoms, in file order and Float32 exactly as the web parses it;
+  - a **group** that instances its children (a capsid's subunits);
+  - a **crystal** generated from a 52-byte record (copper's billion, diamond, the diamondoids, the salt seed);
+  - a **tower** that replicates a seed self-similarly (a googolplex of salt is a 168-byte record);
+  - an **edit** that removes pieces.
+- **Pieces.** A body, fragment, chip or kept piece is a root and a canonical path. A piece of a piece is its parent's path plus one exact step, whatever the contact point was.
+- **Counts** are exact Magnitudes, printed one way on the HUD, the plaques and the web: `953,312`, `10^30`, `10^(10^100)`, `9 × 10^(10^100 − 1)`.
+- **The cut.** Each frame, a traversal ordered by screen-space error picks what to draw, under hard caps per thermal state on nodes visited, draw items and atoms. A child that is not ready draws as its parent. Cost follows the pixels and the hand, never the count: the 10⁹, 10¹⁰⁰ and googolplex rungs cost the same for the same footprint, and that is a Linux test.
+- **Frames.** Positions are relative to an anchor node that moves as you zoom. They are composed in binary64 relative to an origin near what is drawn (a body's entity, a camera frame, or with LupiEngine the eye) and cast to Float32 once, so vertex error stays sub-pixel at any depth ([scale-spec.md §8.6](scale-spec.md)). RealityKit's physics owns a moving body's pose, and the cut draws into it.
+- **Physics** uses the node's proxy (§3.4) and felt mass from its exact mass (§4.2). Breaking expands one level: a molecule cuts its weakest bridge as in §4.4, a crystal box splits into octants, a tower level into its children (the googolplex bar into ten cubes) and a group into its children ([scale-spec.md §10.6](scale-spec.md)).
+- **Keeping** writes a `lupi.scale-ref.v1` reference into the trophy ([scale-spec.md §7](scale-spec.md)): 229 bytes for any salt rung from 10⁶ to 10¹⁰⁰, 270 for the googolplex bar. Generator records are embedded, so a kept googolplex never needs the network, and a piece of at most 4,096 atoms embeds everything it needs, even when it came from a pack. Packs that bigger pieces depend on are kept forever.
+- **Determinism.** Generators use integers and Q16 fixed point, with one correctly rounded step to Float32, and their versions are frozen like Remix `r1`. TypeScript writes golden fixtures that the Swift tests read.
+
+### 7.4 Rendering through the cut
+
+| Draw item | Drawn by | Used for |
+|---|---|---|
+| merged mesh | RealityKit (§3.6) | a molecule of at most 2,000 atoms, held or thrown: the M0 look |
+| instanced atoms | RealityKit `MeshInstancesComponent`, one per element colour (cost at 5,000 is UNCONFIRMED, spike S7) | atoms near the eye in crystals and towers |
+| instanced boxes, face planes | RealityKit | solid crystal and tower nodes farther away: a googolplex is one box until you look closer |
+| impostors, splats | LupiEngine (M3b) | dense explicit structures at full detail |
+
+- **RealityKit first.** The whole salt ladder, a googolplex included, draws with RealityKit alone. Atoms outside the merged-mesh path draw space-filling, without bonds. LupiEngine is needed only for dense explicit structures at full detail (`massive_1m`, baked assemblies), so spike S1 no longer blocks the spine.
+- **LupiEngine** keeps the design in [million-atom-ar.md](research/million-atom-ar.md): it draws inside RealityView's post-processing hook with `sourceColorTexture`, `sourceDepthTexture`, `projection` and `commandBuffer` (iOS 26), depth-tested against RealityKit's depth ([million-atom-ar.md §4](research/million-atom-ar.md)), with exterior bake, 64-atom clusters, normal cones, two-phase Hi-Z and L0–L3 tiers; 50–150k atoms drawn per view, 7–10.5 ms GPU at 60 fps on paper (est., spike S2 measures it).
+- **Budgets** (iPhone 15 Pro, est.): per frame at `fair`, 8,192 nodes visited, 4,096 draw items, 5,000 RealityKit-instanced atoms, one merged-mesh build and 1.0 ms of traversal CPU, with less at `serious` and `critical` ([scale-spec.md §9.3](scale-spec.md)). The cut counts its pending work, so no budget is ever exceeded. RealityKit reports no GPU time per pass, so until LupiEngine two controllers steer the error threshold τ: dropped frames, and budgets (a cut that hits one raises τ rather than leave a patchwork). With LupiEngine, its pass's GPU time near 8 ms joins them. Frame rate is protected, and detail is what gets spent.
+- **What is drawn.** Nodes buried on all sides are skipped, and a refined crystal draws only its exposed atoms. On RealityKit's budget, a million-atom crystal on the desk is boxes with atoms only near the eye; LupiEngine draws every exposed ion.
+- **Thermal policy** from the brief, in this order: τ up; atom budgets down; at `.serious`, LupiEngine's pass at 0.75× with MetalFX upscaling (M3b; RealityKit has no such step); at `.critical`, 30 fps (if spike A5 shows the video format can change without losing tracking) with slow motion and particles off ([00-groundwork-brief.md §3.3](research/00-groundwork-brief.md)); then the oldest loose pieces poof, and the cache evicts to aggregates. Exact counts, paths and keeps never degrade.
+
+### 7.5 Content on the spine
+
+| Content | Atoms | Records | Milestone |
+|---|---|---|---|
+| the salt crystal at 10³, 10⁶ and 10⁹ | 1,000 to 1,000,000,000 | a tower of 126 or 127 B over a 52 B seed | M0, the scale receipt |
+| the salt ladder on to 10³⁰ (a 2.82 m cube at life size, 48.6 t), 10¹⁰⁰ and 10^(10^100) | exact | 127 or 168 B + 52 B | M3a |
+| diamond and the diamondoids, adamantane C₁₀H₁₆ to C₂₉₂₅H₆₇₆ | 26 to 3,601 | 52 B each | M3a |
+| copper's billion, the web's `BillionAtomBlock` | 1,000,188,000 | 52 B | M3a |
+| `massive_1m.glimbin` (served at `/gallery/trajectories/massive_1m.glimbin`) | 953,312 | 233 leaves and 35 groups, a 12.5 MB pack | M3b |
+| one real assembly, baked server-side | its own | a pack | M3b |
+
+- **A googolplex is a bar, not a cube.** 10¹⁰⁰ ≡ 1 (mod 3), so 10^(10^100) atoms cannot make a cube. The tower's top level is a 10 : 1 : 1 bar of ten cubes, and a hard throw smashes it into those ten cubes of 10^(10^100 − 1) atoms each.
+- **Play at every scale.** A colossus or a googolplex spawns at §4.1's size, is one dynamic body with its proxy, and is thrown like anything else; grown, it becomes a monument and then terrain (§7.2). Breaking expands one level (§7.3), so breaking a colossus into chunks, post-M4 in the earlier plan, is now ordinary play.
+- **Grow ×2** (proposed, §11): any molecule becomes the seed of a factor-2 tower, one level per tap, and keeps its size in the hand while the molecules inside shrink. A hundred taps on a water make 3 × 2¹⁰⁰ atoms in a 123-byte record.
 
 ---
 
 ## 8. Roadmap
 
-Durations are not promised. Each milestone ends with receipts the owner checks on the device; CI receipts are compile and test results only.
+Durations are not promised. Each milestone ends with receipts the owner checks on the device, from builds on the owner's Mac (§9); CI receipts are Linux test results only. Scale is the spine from M0 (D14): the colossus and the googolplex are content milestones on it (M3).
 
-### M0. Groundwork and the first playable slice
+### M0. Groundwork, the scale spine and the first playable slice on it
 
-- **Docs:** this plan, [contracts.md](contracts.md), the amendments to the viewer brainstorm.
-- **LupiKit:** element table, XYZ reader and writer, the molecular recipe port against `validation-v1.json`, inertia facts, personality derivation, graph-cut fragments, throw estimator, springs, sound synthesis, SHA-256, and the contract types with golden JSON fixtures. `swift build` and `swift test` green on Linux and macOS.
-- **App:** RealityView with an owned ARSession and LiDAR arena; the spawn tray with bundled molecules (C₆₀ first, the house molecule of the web's first minute); grab, throw, bounce off real walls, stack on real surfaces, shatter into fragments; haptics, synthesized sound, squash, sparks and hit-stop; Sound & haptics toggle and Motion comfort.
-- **Build lane:** the macOS workflow compiles on every push; TestFlight upload on main once the secrets exist (§9).
+- **Docs:** this plan, [contracts.md](contracts.md), [scale.md](scale.md) and [scale-spec.md](scale-spec.md), the amendments to the viewer brainstorm.
+- **LupiKit:** element table (with integer micro-dalton masses, `lupi.mass.v1`), XYZ reader and writer, the molecular recipe port against `validation-v1.json`, inertia facts, personality derivation with `PersonalityTable.v1` brought to contracts.md §3.3, graph-cut fragments, throw estimator, the gesture arbiter, springs, sound synthesis, SHA-256 moved into its own `LupiCore` target, and the contract types with golden JSON fixtures; `GameUnits`' felt mass replaced by `FeltMass`, `lupi.feltmass.v1` ([scale-spec.md §10.2](scale-spec.md)). `swift build` and `swift test` green on Linux and macOS.
+- **LupiScale, the spine (D14):** `LupiScaleCore` and `LupiScale` in Swift and the TypeScript reference in `packages/core/src/scale`, which writes the golden fixtures, for the part M0 plays with: leaves, crystals and towers, paths, counts and formatting, the cut, frames and proxies, with their vectors from [scale-spec.md §12](scale-spec.md) reproduced in both languages; `swift test` green on Linux and on the owner's Mac. M0 persists nothing, so nothing freezes yet ([scale-spec.md §0](scale-spec.md)). The directive is a Linux test: for the same footprint and camera, cuts over the 10⁹, 10¹⁰⁰ and googolplex rungs visit within ±10 % of each other and never exceed a budget.
+- **App:** RealityView with an owned ARSession and LiDAR arena; the spawn tray with bundled molecules (C₆₀ first, the house molecule of the web's first minute); grab, throw, bounce off real walls, stack on real surfaces, shatter into fragments; haptics, synthesized sound, squash, sparks and hit-stop; Sound & haptics toggle and Motion comfort. All of it on the spine: every spawned molecule is a leaf, every collider comes from a LupiScale proxy, every break returns selections, and every pinch goes through the anchor and the scale axis.
+- **Scale receipt:** the salt crystal at 10³, 10⁶ and 10⁹ atoms, drawn through the cut with RealityKit instanced atoms and boxes, held and thrown like a water, and seen from inside: the 10⁹ crystal pinched until its ions are about 2 cm across, which exercises the deep cut, rebasing and the neighbourhood. Frame time is flat across all of it, at the same budgets, and the HUD prints the exact total and the drawn count.
+- **Build lane:** builds on the owner's Mac with XcodeGen and Xcode; Linux CI runs `swift test` for the pure-Swift packages (§9).
 - **Day-one device spikes:**
   - **A1** World map save and relocalize under RealityView with an owned ARSession, with `ARView` as the comparison.
   - **A2** Do bodies under a custom `PhysicsSimulationComponent` (slow-motion clock) collide with scene-understanding colliders? If not, mirror the mesh.
   - **A3** Does a RealityKit dynamic body reproduce the tennis-racket flip?
   - **A4** Do impulses on `CollisionEvents.Began` read reliably at first contact?
-- **Exit (on device):** spawn C₆₀ and caffeine, throw them at a wall, watch them bounce and land on a shelf, stack three, break hydrogen peroxide into two pieces, all with sound and (on iPhone) haptics; no frame hitches the owner can see in a 10-minute session.
+  - **S7** What does `MeshInstancesComponent` cost at 5,000 to 30,000 spheres split by element colour, which the scale receipt draws with? Can a `CustomMaterial` read an instance index (for per-instance colour and screen-door fades)?
+  - **S10** How long does a merged mesh of 1,000 and of 2,000 atoms take to build off the main actor (`MeshDescriptor` or `LowLevelMesh`), the budget a break's pieces wait on?
+- **Exit (on device), in two parts.** The playable slice: spawn C₆₀ and caffeine, throw them at a wall, watch them bounce and land on a shelf, stack three, break hydrogen peroxide into two pieces, all with sound and (on iPhone) haptics; no frame hitches the owner can see in a 10-minute session. The scale receipt: salt crystals of 10³, 10⁶ and 10⁹ atoms on the desk and from inside, held and thrown at the same frame time, with exact counts on the HUD. The playable slice does not wait for the receipt; M1's exit does.
 
 ### M1. The persistent trophy shelf and the account
 
 - Pinning, shelves as rooms, world-map save and relocalization, the recovery ladder, the Cabinet (ink drawings from `/og/m/<id>-ink.svg` and `/og/omol25/…-ink.svg`, plaques).
 - Lupi account with Sign in with Apple, local-first store, Firestore sync, in-app account deletion, the Firestore rules.
-- **Exit:** leave three trophies on a real shelf, force-quit, next day they are there (or one tap on "Put the shelf here" restores them); sign in on the iPad and the collection is there; delete the account in the app.
+- Every keep writes a scale reference: `lupi.scale-ref.v1` in the trophy's optional `molecule.scale` ([scale-spec.md §7.4](scale-spec.md)), approved before M1 (§11). LupiScale's records, paths, Magnitude and references are complete in both languages, with every §12 vector they cover, and they freeze with the first build that writes such a trophy ([scale-spec.md §0](scale-spec.md)).
+- **Exit:** the M0 scale receipt holds; leave three trophies on a real shelf, force-quit, next day they are there (or one tap on "Put the shelf here" restores them); a kept salt crystal of a billion atoms comes back as the same crystal; sign in on the iPad and the collection is there; delete the account in the app.
 
 ### M2. Build from atoms; fragments you keep
 
 - Atom tray, valence snapping with the recipe's caps, geometry placement, the re-perception check, hydrogen fill, naming by matching, "Built it".
 - Fragments and built molecules become trophies with embedded XYZ; the "broken from" and "built from atoms" stories.
+- Fragments, chips and built molecules are scale references too, with selections as their exact form.
 - **Exit:** build water and ethanol from loose atoms, keep them on the shelf; break a molecule and keep a fragment; both reload with the same bonds.
 
-### M3. The million-atom colossus and seamless scale
+### M3. Scale content on the spine: the colossus and the googolplex
 
-- Seamless pinch scale with detents and monuments.
-- LupiEngine: spikes S1 (post-process composition) and S2 (1M-atom throughput) first, then the procedural crystal, `massive_1m`, and the colossus as a throwable body and a monument.
-- **Exit:** a million-atom crystal on the desk, thrown, grown to room size and walked around, at a steady frame rate over 10 minutes with thermal state at `fair` or better on the owner's devices.
+Pinch, the cut and scale references are already M0's and M1's. M3 is content, the larger size states and the renderers they need (§7.5).
+
+- **M3a, RealityKit only:** the salt ladder to a googolplex (the bar of ten cubes) with the 2.82 m life-size cube of 10³⁰; diamond and the diamondoids; copper's billion as one record; monuments and terrain, the scale axis with flight and dive, and chips; Grow ×2 if the owner confirms it. Spikes first: S8 (terrain collision-window rebuild latency) and S9 (box and convex colliders at the size extremes); S6 (lattice shading on boxes) is optional.
+- **M3b, LupiEngine:** spikes S1 (post-process composition) and S2 (throughput) first, then `massive_1m` and one baked assembly at full impostor detail. Its pack is the first lupi.live serves, from an append-only R2 bucket (§11); groups, the partition bake and packs freeze with it.
+- **Exit:** a million-atom crystal on the desk, thrown, grown to room size and walked around, at a steady frame rate over 10 minutes with thermal state at `fair` or better on the owner's devices; and a googolplex of salt held, thrown, smashed into ten cubes and kept on a shelf, at the same frame time as the million.
 
 ### M4. Personalities and polish
 
 - Four distinct sound families with a tuning pass on device; flexible molecules that visibly flop (a 2–4 segment articulated body or a wobble deformer, spike first); bouncy cages that ring.
-- Plaques with personality reasons, VoiceOver descriptions (`AccessibilityComponent`), thermal policy, first-run onboarding (one card that explains the camera before the system prompt).
+- Plaques with personality reasons, VoiceOver descriptions (`AccessibilityComponent`), thermal policy (spike A5 first: can a 30 fps video format be set without losing tracking?), first-run onboarding (one card that explains the camera before the system prompt).
 - **Exit:** the owner plays for 30 minutes and wants to keep going (D4).
 
 ---
 
 ## 9. Build and distribution lane
 
-- **Workflow** (one file, for example `.github/workflows/apple.yml`, triggered by changes under `apps/apple/**`):
-  1. **LupiKit on Linux** (`ubuntu-latest`, a Swift 6 toolchain): `swift build` and `swift test` in `apps/apple/LupiKit`.
-  2. **macOS** (`macos-26`: macOS 26.6, Xcode 26.6, iOS 26.0–26.5 SDKs, [apple-ar-platform.md §6](research/apple-ar-platform.md)): `swift test` for LupiKit, then `xcodebuild build` of the app for a generic iOS device with signing disabled, as the compile receipt on every push.
-  3. **TestFlight**, on `main` only and only when the App Store Connect secrets are present (the step checks an environment variable set from the secret, since secrets cannot be tested in a job-level `if`): `xcodebuild archive` with automatic signing and `-allowProvisioningUpdates -authenticationKeyPath -authenticationKeyID -authenticationKeyIssuerID`, then `xcodebuild -exportArchive` with an export options file whose `method` is `app-store-connect` and `destination` is `upload`. The build number is the workflow run number.
-- **Project file.** The Xcode project is generated on the runner from a checked-in spec (recommended: XcodeGen's `project.yml`), so nobody hand-merges a `.pbxproj` and Linux sessions can edit the spec.
-- **iOS 27 APIs.** `macos-26` has no iOS 27 SDK. Code that uses iOS 27 APIs sits behind `#if compiler(>=6.4)` (Xcode 27 ships Swift 6.4) as well as `if #available(iOS 27, *)`, and the job moves to the `xcode-27` runner or a later stable image when M3 needs them ([apple-ar-platform.md §6](research/apple-ar-platform.md)). Uploads must be built with Xcode 26 or later and an iOS 26 SDK, which this lane meets.
-- **Signing.** The team is `26Y4SLFJ4M` (`docs/mobile-testflight-checklist.md:572-574`). Cloud-managed distribution signing from `xcodebuild` needs an API key with the **Admin** role; an App Manager key fails with "Cloud signing permission error" ([Apple forum 698117](https://developer.apple.com/forums/thread/698117)).
-- **What CI proves:** that LupiKit builds and its tests pass, that the app compiles, and that a build reached App Store Connect. It never proves device behaviour; that is the owner's receipt.
-- **Cost:** macOS runner minutes are billed above Linux minutes on private repositories (check the plan); the macOS job runs only when `apps/apple/**` changes.
+D2 as amended on 2026-10-04 ([decisions.md](decisions.md#d2-amended-2026-10-04-builds-on-the-owners-mac)): the app is built, signed and run on the owner's own Mac, and CI keeps only what Linux can prove. This supersedes the earlier lane of a macOS runner compiling every push and uploading to TestFlight.
+
+- **Local builds on the owner's Mac.** The Xcode project is generated from a checked-in XcodeGen spec, `apps/apple/project.yml` (written with the app in M0), so nobody hand-merges a `.pbxproj` and Linux sessions can edit the spec. The generated `Lupi.xcodeproj` is not committed.
+  ```bash
+  brew install xcodegen; cd apps/apple && xcodegen generate && open Lupi.xcodeproj
+  ```
+  Then select team `26Y4SLFJ4M` (Signing & Capabilities, automatic signing; the team is also in `docs/mobile-testflight-checklist.md:572-574`), choose the connected iPhone or iPad, and run on the device. Re-run `xcodegen generate` after pulling changes to `project.yml` or adding files.
+- **Linux CI.** One workflow, `.github/workflows/apple.yml` (written on the `ar/ci` branch), runs on `ubuntu-latest` in a Swift 6.4 container. It runs `swift test` for every pure-Swift package under `apps/apple` (LupiKit and LupiScale; a new package is picked up without editing the workflow) and checks that the Swift files generated from the web's TypeScript are current (`pnpm apple:check`; the scale fixtures join it when LupiScale lands). There is no macOS job.
+- **No TestFlight lane for now.** No App Store Connect key, archive or upload. If a TestFlight lane is wanted later, the earlier design (an `xcodebuild archive` with automatic signing, then `-exportArchive` with `method` `app-store-connect` and `destination` `upload`; cloud signing from `xcodebuild` needs an **Admin**-role API key, [Apple forum 698117](https://developer.apple.com/forums/thread/698117)) is in this file's history.
+- **Toolchains.** The app needs Xcode 26 or later for the iOS 26 SDK, and Xcode 26 ships Swift 6.2 or later. The pure-Swift packages stay within tools 6.0, so the same sources build in Xcode and in CI's Swift 6.4 (§3.1).
+- **iOS 27 APIs.** Code that uses iOS 27 APIs sits behind `#if compiler(>=6.4)` (Xcode 27 ships Swift 6.4) as well as `if #available(iOS 27, *)`, so the app still builds with Xcode 26 until the owner moves to Xcode 27 ([apple-ar-platform.md §6](research/apple-ar-platform.md)).
+- **What each proves.** CI proves that the pure-Swift packages build and pass their tests on Linux, golden fixtures included, and that the generated sources are current. It never proves that the app compiles or how it behaves on a device: those receipts come from the owner's Mac. So app changes are built on the Mac before they merge.
+- **Cost:** Linux minutes only.
 
 ---
 
@@ -408,10 +471,15 @@ Durations are not promised. Each milestone ends with receipts the owner checks o
 | First-contact impulse reads low (A4) | Breaks and juice miss hits | Max over Began and Updated in a 50 ms window; fall back to pre-contact relative velocity |
 | LiDAR mesh holes and lag; fast small bodies tunnel | Molecules vanish into walls | CCD on, 8 m/s cap, out-of-bounds rescue with a poof |
 | RealityKit's 10× size and mass guidance | Jitter, explosions | Mass band, dynamic scale band, monuments, beads at about 3 cm with CCD |
-| Thermal and memory over 30-minute sessions | Throttling, a hot phone | Body budget, thermal policy, one colossus at full detail |
+| Thermal and memory over 30-minute sessions | Throttling, a hot phone | Body budget, the cut's budgets and τ controller, thermal policy, one dense structure at full detail |
 | Sign in with Apple token revocation and account deletion | App Review rejection (5.1.1(v)) | Deletion flow in M1 exactly as §6.2 |
-| Firebase SDK adds build time and size | Slower CI | Account code lands in M1 only; signed-out builds run without the config |
-| Linux toolchain parity (no `simd`, no CryptoKit) | LupiKit fails on one platform | The two rules in §3.1; CI runs LupiKit on both |
+| Firebase SDK adds build time and size | Slower builds on the Mac | Account code lands in M1 only; signed-out builds run without the config |
+| Linux toolchain parity (no `simd`, no CryptoKit) | LupiKit or LupiScale fails on one platform | The two rules in §3.1; Linux CI runs their tests, and the owner's Mac builds them with Xcode |
+| No CI compile of the app (D2 as amended) | A broken app build surfaces only on the Mac | Everything testable lives in the pure-Swift packages, which CI tests; app changes are built on the Mac before they merge |
+| Swift and TypeScript drift in a scale generator | A kept piece regenerates differently | Integer-only generators with one correctly rounded float step, shared golden fixtures, frozen versions, the probe and the count re-checked on every load ([scale.md §9](scale.md)) |
+| The spine delays M0's playable slice | A later first playable | M0 builds only the part it plays with and freezes nothing; the playable slice does not wait for the scale receipt; the spine is integer code written and tested on Linux in parallel with the device spikes; spawn, collider and break can fall back to the direct path without a data change |
+| RealityKit-only drawing of instances and boxes is too slow or too plain (UNCONFIRMED, S7) | The salt ladder drops frames or looks blocky | τ rises first; buried nodes skipped and only exposed atoms drawn; lattice shading (S6); LupiEngine (M3b) for dense detail |
+| A pack a trophy needs is gone from lupi.live | A kept colossus chunk cannot be restored on a new device | Packs in an append-only R2 bucket, never deleted; pieces of at most 4,096 atoms embed everything they need; trophies store their shape and colour for offline display |
 | Bond orders inferred from length | A wrong personality now and then | Plaque gives the reason; `lupi-bond-orders.v1` replaces the estimate when it lands |
 | Novelty fades | The 30-minute promise | The pillars are the content; new molecules and delights in M4 |
 
@@ -419,11 +487,16 @@ Durations are not promised. Each milestone ends with receipts the owner checks o
 
 ## 11. Open asks for the owner
 
-1. **App Store Connect API key** with the **Admin** role: the `.p8` file, its key ID and the issuer ID, stored as GitHub secrets (for example `ASC_KEY_P8` as base64, `ASC_KEY_ID`, `ASC_ISSUER_ID`).
-2. **The App Store Connect app record** for bundle id `live.lupi.app` (name "Lupi"), the agreements accepted, and an internal TestFlight group with you in it. Nothing has been uploaded under that id yet (`apps/mobile/eas.json:99-101`).
-3. **Team `26Y4SLFJ4M`:** confirm it, and confirm that internal TestFlight under the individual membership is fine for `apps/apple`, relaxing the "organization enrollment is mandatory" rule (`docs/mobile-testflight-checklist.md:566-569`) for this app.
-4. **Firebase:** register the iOS app `live.lupi.app` in project `shed-489901` and store its `GoogleService-Info.plist` as a GitHub secret; enable the Apple provider in Firebase Auth with the Services ID, team ID, key ID and private key that Firebase asks for ([Firebase: Apple on iOS](https://firebase.google.com/docs/auth/ios/apple)); approve the Firestore rules in [contracts.md §5](contracts.md#5-account-sync-firestore-layout-and-proposed-rules).
+1. **App Store Connect API key:** not needed for now, because there is no TestFlight lane (D2 as amended, §9).
+2. **The App Store Connect app record** for bundle id `live.lupi.app`: not needed until a TestFlight lane returns. Nothing has been uploaded under that id yet (`apps/mobile/eas.json:99-101`).
+3. **Team `26Y4SLFJ4M`:** select it in Xcode for local builds (§9). Whether internal TestFlight under the individual membership is fine for `apps/apple` (relaxing the "organization enrollment is mandatory" rule, `docs/mobile-testflight-checklist.md:566-569`) waits for a TestFlight lane.
+4. **Firebase:** register the iOS app `live.lupi.app` in project `shed-489901` and keep its client configuration on your Mac (§6.2); enable the Apple provider in Firebase Auth with the Services ID, team ID, key ID and private key that Firebase asks for ([Firebase: Apple on iOS](https://firebase.google.com/docs/auth/ios/apple)); approve the Firestore rules in [contracts.md §5](contracts.md).
 5. **Devices:** the iPhone on record is a 15 Pro on iOS 26.6 (`apps/mobile/README.md:104-108`). Which iPad Pro (M4 or M5)? Both have LiDAR.
 6. **Still comfort:** confirm that throws still fly in Still, capped and without secondary motion (§5.5).
 7. **Breaking a shelved trophy:** confirm that its record is never destroyed and it returns to its shelf next session, while the fragments are new molecules (§4.4).
-8. **Runner budget:** is the repository private, and is the macOS-minutes cost acceptable for a compile on every `apps/apple` push?
+8. **Runner budget:** settled by D2's amendment: Linux minutes only, with no macOS runner (§9).
+9. **Grow ×2:** confirm the proposed verb. Any molecule becomes the seed of a factor-2 tower, one level per tap, keeping its size in your hand while the molecules inside shrink, and 331 taps take a water past a googol ([scale.md §5.6](scale.md)). If you decline it, it is the first thing cut.
+10. **The googolplex showpiece:** a googolplex cannot be a cube (10¹⁰⁰ ≡ 1 mod 3), so the salt tower's top is a bar of ten cubes (30 × 3 × 3 cm in your hand), and a hard throw smashes it into those ten. Confirm the salt ladder (10³, 10⁶, 10⁹, the life-size 10³⁰, 10¹⁰⁰ and 10^(10^100), with one bromide in every thousand atoms at a place that varies from copy to copy) as the showpiece (§7.5).
+11. **Felt mass above 1 kDa:** confirm the slow tail that keeps the order of masses to a googolplex (hemoglobin 0.54 kg instead of the 0.6 ceiling), with the personality shifting a body along the curve rather than scaling it past the ceiling. Be aware that above about 10 kDa the differences are a few percent, which no throw can feel: the order is honest, but heft (the sound and the haptic tail) and the plaque are what make a googolplex feel bigger than a googol. It also replaces LupiKit's `GameUnits` curve (§4.2).
+12. **Trophy amendment:** approve `source: scale` and the optional `molecule.scale` reference (with its optional shape-and-colour `aggregate`) in `lupi.trophy.v1` before M1 ([scale-spec.md §7.4](scale-spec.md)).
+13. **A pack bucket on lupi.live (before M3b):** an R2 bucket and Worker route for `/scale/p/<contentId>.lpk` that the deploy only ever adds to. Trophies that keep big pieces of explicit colossi depend on those packs forever, and Workers static assets drop files at the next deploy ([scale-spec.md §6.8](scale-spec.md), [contracts.md §4.4](contracts.md)).
