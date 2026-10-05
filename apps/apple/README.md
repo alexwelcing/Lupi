@@ -92,6 +92,14 @@ The Apple workflow (`.github/workflows/apple.yml`) runs on Linux:
 - `tools/apple/parse-app.sh`, which runs `swiftc -parse` over every Swift file
   in `Lupi/`. It catches syntax errors only: Linux has no SwiftUI, RealityKit
   or ARKit, so it cannot type-check, link or sign the app;
+- `tools/apple/typecheck-app.sh`, which type-checks `Lupi/` against the
+  packages' real modules and stand-ins for the Apple frameworks
+  (`tools/apple/standin`, each declaration spelled as developer.apple.com
+  documents it). It catches the app calling a package API that changed, its
+  own typos, and isolation errors against documented signatures; it proves
+  nothing about the frameworks, so a stand-in that is wrong about Apple's API
+  passes code Xcode will reject. When the app uses a new Apple API, add it to
+  the stand-in from its documentation page;
 - `pnpm apple:check`: the Swift sources generated from the web's TypeScript
   are current.
 

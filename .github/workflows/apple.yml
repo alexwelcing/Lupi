@@ -2,7 +2,8 @@ name: Apple packages
 
 # The native app (apps/apple) is built and signed on the owner's Mac (D2 as
 # amended 2026-10-04), so CI covers only what Linux can prove: every pure-Swift
-# package's tests, that the app's own sources parse, and that the Swift sources
+# package's tests, that the app's own sources parse and type-check against
+# stand-ins for Apple's frameworks, and that the Swift sources
 # generated from the web's TypeScript (elements, bond fixtures, edge samples,
 # starters, the known molecules built ones are named after) are current.
 
@@ -77,6 +78,12 @@ jobs:
             echo "no Swift packages found under apps/apple" >&2
             exit 1
           fi
+
+      # The app against stand-ins for the Apple frameworks, spelled as Apple
+      # documents them, over the packages' real modules: catches the app calling
+      # a package API that changed, which parsing cannot.
+      - name: Type-check the app against stand-ins
+        run: sh tools/apple/typecheck-app.sh
 
       # LupiScale again in release: its byte-exact vectors must hold under
       # optimization too, and its buildCut benchmark (scale-spec §9.8 item 7)

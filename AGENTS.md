@@ -125,8 +125,11 @@ compile will most likely fail; `apps/apple/README.md` is the how-to.
 
 The Linux gates: `swift test` in every package, and `swift test -c release`
 in LupiScale (its 4 ms `buildCut` gate counts only in release) and LupiGame
-(its directive tests time frames); `tools/apple/parse-app.sh` (syntax only);
-and `pnpm apple:check`, which fails when the Swift generated from the web's
+(its directive tests time frames); `tools/apple/parse-app.sh` (syntax);
+`tools/apple/typecheck-app.sh`, which type-checks the app against the
+packages' real modules and stand-ins for Apple's frameworks spelled as Apple
+documents them (`tools/apple/standin`; add a new Apple API there from its
+documentation page); and `pnpm apple:check`, which fails when the Swift generated from the web's
 TypeScript (`tools/apple/*.mts`: elements, bond fixtures, edge samples,
 starters, the known-molecule index, scale fixtures) is stale. The web
 counterpart of the scale play is `/scale` (`packages/ui/src/scale`).
