@@ -13,6 +13,7 @@ import {
   isMcpViewerRoute,
   isScienceDemoRoute,
   isScanRoute,
+  isScaleRoute,
   libraryCollectionFromRoute,
   libraryRedirectTarget,
   SEO_EDUCATION_ROUTES,
@@ -49,6 +50,7 @@ const retiredResearchRoute =
 const libraryCollection = libraryCollectionFromRoute(normalizedPathRoute(currentPathRoute()));
 const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute())] ?? null;
 const scanRoute = isScanRoute(currentPathRoute());
+const scaleRoute = isScaleRoute(currentPathRoute());
 
 /**
  * URL-only signals that the viewer (App) should load immediately instead of the
@@ -208,6 +210,16 @@ async function mountScan() {
   }
 }
 
+/** /scale: its own chunk (LupiScale, three, the impostors) and canvas; nothing else on the site loads it. */
+async function mountScale() {
+  try {
+    const mod = await import('@atlas/ui/scale/ScaleShell');
+    root.render(withProviders(<mod.ScaleShell />));
+  } catch (err) {
+    renderError('Scale page import', err);
+  }
+}
+
 async function mountEducation(kind: NonNullable<typeof educationKind>) {
   try {
     const mod = await import('@atlas/ui/landing/SeoEducationShell');
@@ -257,6 +269,8 @@ if (libraryRedirect) {
       </main>
     </div>,
   );
+} else if (scaleRoute) {
+  void mountScale();
 } else if (wantsViewerImmediately()) {
   void mountViewer();
 } else if (scanRoute) {

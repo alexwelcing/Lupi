@@ -43,6 +43,13 @@ export function isScanRoute(route: string): boolean {
   return normalizedPathRoute(route.split('?')[0] || '/') === SCAN_PATH;
 }
 
+/** The scale page (`/scale`): one ion to a googolplex, its own chunk and canvas (docs/ar/scale-spec.md §11.2). */
+export const SCALE_PATH = '/scale';
+
+export function isScaleRoute(route: string): boolean {
+  return normalizedPathRoute(route.split('?')[0] || '/') === SCALE_PATH;
+}
+
 export function isTestbedRoute(search = typeof window === 'undefined' ? '' : window.location.search) {
   return new URLSearchParams(search).has('testbed');
 }
