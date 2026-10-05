@@ -232,6 +232,37 @@ public enum Wraps {
         }
     }
 
+    /// The most periods an ascending wrap may climb with the picture unchanged. On every axis the
+    /// anchor's index keeps its place against the root's faces (touching, one or more away, up to
+    /// the face planes' reach of four), so its neighbourhood and face planes stay the same; a climb
+    /// into the shallow digits a rebase put there would change them. Both the index and its
+    /// distance from the upper face only shrink as digits drop, so a binary search finds it.
+    public static func maxAscent(_ frame: BodyFrame, resolver: Resolver) -> BigUInt {
+        guard let body = try? resolver.resolve(frame.ref.root, frame.ref.path),
+              let anchor = try? resolver.walk(body, frame.anchorPath), anchor.kind == .level, let f = anchor.tower?.factor else { return BigUInt() }
+        var levels = BigUInt()
+        for step in frame.anchorPath.reversed() {
+            guard case let .tower(d, _) = step else { break }
+            levels += d
+        }
+        let digits = AnchorPath.towerDigits(frame.anchorPath)
+        func place(_ runs: [DigitRun]) -> (Int, Int) {
+            (Digits.smallValue(runs, f, limit: 5) ?? 6, Digits.smallValue(Digits.complement(runs, f), f, limit: 5) ?? 6)
+        }
+        let now = digits.map(place)
+        func keeps(_ n: BigUInt) -> Bool {
+            (0..<3).allSatisfy { place(Digits.dropLast(digits[$0], n)) == now[$0] }
+        }
+        var lo = BigUInt(), hi = levels.dividedSmall(3).quotient
+        if keeps(hi) { return hi }
+        // keeps(lo) holds, keeps(hi) fails.
+        while hi.minus(lo) > BigUInt(1) {
+            let mid = (lo + hi) >> 1
+            if keeps(mid) { lo = mid } else { hi = mid }
+        }
+        return lo
+    }
+
     /// A wrap is allowed only when the last cut drew nothing at or below the tower's seed copies, no
     /// removal touches the anchor's neighbourhood, and the anchor touches every root face in its
     /// neighbourhood (§8.8).
