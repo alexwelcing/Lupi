@@ -7,7 +7,7 @@ app. Swift 6 language mode; platforms iOS 26 and macOS 26.
 
 | Target | What it holds |
 |---|---|
-| `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, inertia |
+| `LupiChem` | The element table (generated from the web's), the XYZ / extended-XYZ parser and writer, `Molecule`, a port of both bond recipes (`lupi-bonds.molecular.v1`, `lupi-bonds.distance.v1`) and the recipe gate, `BondGraph` (orders estimated from length, components, bridges, rings, rotatable bonds, weakest bonds, fragments), valence and snapping rules, inertia |
 | `LupiPlay` | `GameUnits` (scale, and felt mass below the knee), `lupi.personality.v1` derived from the bond graph, the motion tokens and exact springs (hold-follow, squash, pop-in, hit-stop), `MotionComfort`, the throw estimator, the juice director (haptics, sound cues and visuals per game event, with the rate limits) and the synthesized sound bank (Float32 PCM) |
 | `LupiData` | `lupi.trophy.v1`, `lupi.shelf.v1`, the edge client, SHA-256, and the twelve bundled starter molecules |
 
@@ -29,7 +29,7 @@ Each generator has a `--check` mode that fails when its output is stale.
 | Command | Writes |
 |---|---|
 | `pnpm exec tsx tools/apple/gen-elements.mts` | `Sources/LupiChem/Elements.generated.swift` from `packages/core/src/elements.ts` (plus PubChem van der Waals radii) |
-| `pnpm exec tsx tools/apple/export-bond-fixtures.mts` | `Tests/Fixtures/bonds/*.json`: the TypeScript `perceiveBonds`, `parseXyzText` and `computeInertia` on the 24 OMol25 picks, 25 gallery molecules and 48 synthetic cases |
+| `pnpm exec tsx tools/apple/export-bond-fixtures.mts` | `Tests/Fixtures/bonds/*.json`: the TypeScript `perceiveBonds`, `parseXyzText` and `computeInertia` on the 24 OMol25 picks, 25 gallery molecules and 48 synthetic cases; and `xyz-write.json`, a reference XYZ writer's text for built molecules and fragments with the web parser's reading of it |
 | `pnpm exec tsx tools/apple/export-edge-samples.mts` | `Tests/Fixtures/data/*`: `/m/manifest.json` from the molecule-pages builder and OMol25 responses from the Worker's `routeScienceData` |
 | `pnpm exec tsx tools/apple/bundle-starters.mts` | `Sources/LupiData/Resources/starters/` |
 
@@ -41,6 +41,14 @@ Typecheck the generators with `pnpm exec tsc -p tools/apple/tsconfig.json`.
   (the parser ports the web's float scan), and bond distances are computed
   in double from them. That is what lets the Swift recipes reproduce the
   TypeScript ones pair for pair.
+- **XYZ out:** `XYZWriter` writes `Symbol x y z` from each Float32's exact
+  value (ties away from zero, as `toFixed`; never a signed zero) and a
+  comment of a title and `key=value | …` pairs the parsers read back.
+  `XYZWriter.embedded` is a trophy's XYZ (contracts.md §1.4): centred on the
+  centre of mass, five decimals, `formula=`, `charge_source=unavailable`
+  unless the charge is known, `coordinates=lupi-play`. Below 128 Å a written
+  file reads back and writes again byte for byte, and a fragment or a built
+  molecule reloads with the bonds it had.
 - **Play graph:** `BondGraph.forPlay` uses the molecular recipe wherever the
   viewer could (non-periodic, at most 2,000 atoms). Ionic contacts count for
   connectivity, so a salt cluster is one body until it breaks.

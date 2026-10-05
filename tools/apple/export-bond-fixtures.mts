@@ -10,6 +10,10 @@
  *   bonds-synthetic.json  the bond unit-test geometries (diborane, ferrocene,
  *                         [Na(H2O)6]+, a 0.35 Å clash, …) and seeded clusters
  *   xyz-parse.json        parser cases: comment keys, layouts, line endings
+ *   xyz-write.json        LupiKit's XYZ writer, written here by a reference
+ *                         implementation (built molecules, fragments, keys,
+ *                         rounding ties), with the web parser's reading of
+ *                         each text, so Swift checks its bytes and its parse
  *
  * Bond cases also carry the web's point-mass inertia (objectFacts/inertia.ts):
  * total mass, centre of mass, principal moments and axes, rotor class, κ.
@@ -29,7 +33,7 @@ import {
   type BondRecipeId,
   type PerceiveBondsInput,
 } from '../../packages/core/src/bonds/index';
-import { getAtomicNumberBySymbol } from '../../packages/core/src/elements';
+import { getAtomicNumberBySymbol, getElementSpec } from '../../packages/core/src/elements';
 import { computeInertia } from '../../packages/core/src/objectFacts/inertia';
 import { parseXyzText } from '../../packages/parsers/src/xyzParser';
 
@@ -359,6 +363,212 @@ function parseCases() {
   };
 }
 
+// ─── XYZ writer cases ─────────────────────────────────────────────────
+
+/**
+ * The reference for LupiKit's XYZWriter (contracts.md §1.4): the count, a
+ * comment of an optional title and `key=value` pairs joined by " | ", then
+ * `Symbol x y z` with `toFixed` decimals (exact binary value, ties away from
+ * zero) and no signed zero.
+ */
+interface WriteComment {
+  title: string | null;
+  formula: string | null;
+  chemistry: { totalCharge: number | null; spinMultiplicity: number | null; source: string; domain: string | null } | null;
+  parent: string | null;
+  source: string | null;
+  license: string | null;
+  coordinates: string | null;
+  extra: Array<[string, string]>;
+}
+
+const singleLine = (text: string) => text.replace(/[\r\n]/g, ' ');
+
+function fixedDecimals(x: number, decimals: number): string {
+  const text = x.toFixed(decimals);
+  return /^-0(\.0*)?$/.test(text) ? text.slice(1) : text;
+}
+
+function cleanTitle(title: string): string {
+  const flat = singleLine(title).replace(/=/g, '-').trim();
+  return flat !== '' && /^[0-9]+$/.test(flat) ? `#${flat}` : flat;
+}
+
+function quoteValue(raw: string): string {
+  const value = singleLine(raw);
+  if (!(value === '' || /\s/.test(value) || value.startsWith('"') || value.startsWith("'"))) return value;
+  if (!value.includes('"')) return `"${value}"`;
+  if (!value.includes("'")) return `'${value}'`;
+  return `"${value.replace(/"/g, "'")}"`;
+}
+
+function commentLine(c: WriteComment): string {
+  const pairs: Array<[string, string]> = [];
+  if (c.formula !== null) pairs.push(['formula', c.formula]);
+  if (c.chemistry) {
+    if (c.chemistry.totalCharge !== null) pairs.push(['charge', String(c.chemistry.totalCharge)]);
+    if (c.chemistry.spinMultiplicity !== null) pairs.push(['multiplicity', String(c.chemistry.spinMultiplicity)]);
+    pairs.push(['charge_source', c.chemistry.source]);
+    if (c.chemistry.domain) pairs.push(['data_id', c.chemistry.domain]);
+  }
+  if (c.parent !== null) pairs.push(['parent', c.parent]);
+  if (c.source !== null) pairs.push(['source', c.source]);
+  if (c.license !== null) pairs.push(['license', c.license]);
+  if (c.coordinates !== null) pairs.push(['coordinates', c.coordinates]);
+  for (const [key, value] of c.extra) if (/^[A-Za-z_][A-Za-z0-9_-]*$/.test(key)) pairs.push([key, value]);
+  const parts: string[] = [];
+  if (c.title !== null && cleanTitle(c.title) !== '') parts.push(cleanTitle(c.title));
+  for (const [key, value] of pairs) parts.push(`${key}=${quoteValue(value)}`);
+  return parts.join(' | ');
+}
+
+function writeXyz(atomicNumbers: number[], positions: Float32Array, comment: WriteComment, decimals = 5): string {
+  let out = `${atomicNumbers.length}\n${singleLine(commentLine(comment))}\n`;
+  for (let k = 0; k < atomicNumbers.length; k += 1) {
+    const symbol = getElementSpec(atomicNumbers[k]).symbol;
+    out += `${symbol} ${[0, 1, 2].map((axis) => fixedDecimals(positions[3 * k + axis], decimals)).join(' ')}\n`;
+  }
+  return out;
+}
+
+/** Hill order: C, then H, then the rest alphabetically; with no carbon all alphabetical. */
+function hillFormula(atomicNumbers: number[]): string {
+  const counts = new Map<string, number>();
+  for (const z of atomicNumbers) {
+    const symbol = getElementSpec(z).symbol;
+    counts.set(symbol, (counts.get(symbol) ?? 0) + 1);
+  }
+  const order = counts.has('C') ? ['C', ...(counts.has('H') ? ['H'] : [])] : [];
+  order.push(...[...counts.keys()].filter((symbol) => !order.includes(symbol)).sort());
+  return order.map((symbol) => (counts.get(symbol) === 1 ? symbol : `${symbol}${counts.get(symbol)}`)).join('');
+}
+
+/** Atoms `indices` of a molecule, centred on their centre of mass (the table's masses) and rounded to Float32. */
+function piece(atomicNumbers: number[], positions: ArrayLike<number>, indices: number[]) {
+  let mass = 0;
+  const com = [0, 0, 0];
+  for (const a of indices) {
+    const m = getElementSpec(atomicNumbers[a]).mass;
+    mass += m;
+    for (let axis = 0; axis < 3; axis += 1) com[axis] += m * positions[3 * a + axis];
+  }
+  for (let axis = 0; axis < 3; axis += 1) com[axis] /= mass;
+  return {
+    atomicNumbers: indices.map((a) => atomicNumbers[a]),
+    positions: Float32Array.from(indices.flatMap((a) => [0, 1, 2].map((axis) => positions[3 * a + axis] - com[axis]))),
+  };
+}
+
+/** Connected components over the molecular recipe's lines, each sorted. */
+function components(atomicNumbers: number[], positions: Float32Array): number[][] {
+  const p = perceiveBonds({ atomicNumbers, positions, natoms: atomicNumbers.length, tolerance: 0.45, recipe: MOLECULAR_RECIPE_ID });
+  const parent = atomicNumbers.map((_, k) => k);
+  const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+  for (let k = 0; k < p.count; k += 1) parent[find(p.pairs[2 * k])] = find(p.pairs[2 * k + 1]);
+  const groups = new Map<number, number[]>();
+  atomicNumbers.forEach((_, k) => {
+    const root = find(k);
+    groups.set(root, [...(groups.get(root) ?? []), k]);
+  });
+  return [...groups.values()].sort((a, b) => a[0] - b[0]);
+}
+
+const UNKNOWN_CHARGE = { totalCharge: null, spinMultiplicity: null, source: 'unavailable', domain: null };
+const lupiComment = (title: string, formula: string, extra: Partial<WriteComment> = {}): WriteComment => ({
+  title, formula, chemistry: UNKNOWN_CHARGE, parent: null, source: null, license: null, coordinates: 'lupi-play', extra: [], ...extra,
+});
+
+function writeCases() {
+  const cases: Array<{ name: string; atomicNumbers: number[]; positions: Float32Array; comment: WriteComment; decimals?: number }> = [];
+  const add = (name: string, atomicNumbers: number[], positions: Float32Array, comment: WriteComment, decimals?: number) =>
+    cases.push({ name, atomicNumbers, positions, comment, ...(decimals ? { decimals } : {}) });
+
+  // contracts.md §1.2's built water, as printed there.
+  add('built-water', [8, 1, 1], Float32Array.from([0, 0.06558, 0, 0.75695, -0.52037, 0, -0.75695, -0.52037, 0]), lupiComment('Lupi built', 'H2O'));
+
+  // Hydrogen peroxide (the personality tests' geometry) broken at O–O: a hydroxyl radical.
+  const peroxide = [8, 8, 1, 1];
+  const peroxidePositions = Float32Array.from([0, 0.7375, -0.05, 0, -0.7375, -0.05, 0.8, 0.9, 0.42, -0.8, -0.9, 0.42]);
+  const hydroxyl = piece(peroxide, peroxidePositions, [0, 2]);
+  add('fragment-hydroxyl', hydroxyl.atomicNumbers, hydroxyl.positions,
+    lupiComment('Lupi fragment', hillFormula(hydroxyl.atomicNumbers), { parent: hillFormula(peroxide) }));
+
+  // Caffeine's first N–CH3 broken off: the methyl and the rest, both fragments.
+  const caffeine = fromFile(`${GALLERY}/popular/caffeine.xyz`, 'caffeine');
+  const z = caffeine.atomicNumbers;
+  const bonds = perceiveBonds({ atomicNumbers: z, positions: caffeine.positions, natoms: z.length, tolerance: 0.45, recipe: MOLECULAR_RECIPE_ID });
+  const neighbours = z.map(() => [] as number[]);
+  for (let k = 0; k < bonds.count; k += 1) {
+    neighbours[bonds.pairs[2 * k]].push(bonds.pairs[2 * k + 1]);
+    neighbours[bonds.pairs[2 * k + 1]].push(bonds.pairs[2 * k]);
+  }
+  const methyl = z.findIndex((zc, a) => zc === 6 && neighbours[a].filter((b) => z[b] === 1).length === 3
+    && neighbours[a].some((b) => z[b] === 7));
+  if (methyl < 0) throw new Error('caffeine has no N-methyl');
+  const methylAtoms = [methyl, ...neighbours[methyl].filter((b) => z[b] === 1)].sort((a, b) => a - b);
+  const rest = z.map((_, k) => k).filter((k) => !methylAtoms.includes(k));
+  for (const [name, indices] of [['fragment-caffeine-methyl', methylAtoms], ['fragment-caffeine-demethyl', rest]] as const) {
+    const part = piece(z, caffeine.positions, [...indices]);
+    add(name, part.atomicNumbers, part.positions, lupiComment('Lupi fragment', hillFormula(part.atomicNumbers), { parent: hillFormula(z) }));
+  }
+
+  // An OMol25 pick with more than one molecule: its smallest piece keeps the attribution.
+  const picks = fs.readdirSync(path.join(ROOT, OMOL_FEATURED)).filter((name) => name.endsWith('.xyz'))
+    .sort((a, b) => Number(a.match(/\d+/)![0]) - Number(b.match(/\d+/)![0]));
+  const omol = picks.map((name) => fromFile(`${OMOL_FEATURED}/${name}`, name.replace(/\.xyz$/, '')))
+    .find((pick) => components(pick.atomicNumbers, pick.positions).length > 1);
+  if (!omol) throw new Error('no OMol25 pick with two molecules');
+  const smallest = components(omol.atomicNumbers, omol.positions).sort((a, b) => a.length - b.length || a[0] - b[0])[0];
+  const omolPiece = piece(omol.atomicNumbers, omol.positions, smallest);
+  const row = Number(omol.name.match(/\d+/)![0]);
+  add('fragment-omol25', omolPiece.atomicNumbers, omolPiece.positions, lupiComment('Lupi fragment', hillFormula(omolPiece.atomicNumbers), {
+    parent: hillFormula(omol.atomicNumbers), source: `omol25:neutral-validation:${row}`, license: 'CC-BY-4.0',
+  }));
+
+  // Declared chemistry, a quoted value, rounding ties (1/64 → 0.01563), no signed zero, far and heavy atoms.
+  add('declared-chemistry-and-ties', [11, 78, 92, 118, 6],
+    Float32Array.from([1 / 64, -1 / 64, 3 / 64, -0.000001, -0.000005, 0, 123.456789, -99.999996, 0.5, -127.5, 1e-9, -1e-9, 1, 2, 3]), {
+      title: 'Lupi built', formula: 'CNaPtUOg', parent: null, source: null, license: null, coordinates: 'lupi-play',
+      chemistry: { totalCharge: -1, spinMultiplicity: 2, source: 'file-declared', domain: 'elytes' },
+      extra: [['note', 'two words'], ['bad key', 'dropped'], ['quote', 'say "hi" now'], ['empty', '']],
+    });
+  // A title alone, and a title that would read as a timestep.
+  add('title-only', [1, 1], Float32Array.from([0, 0, 0, 0.74, 0, 0]), {
+    title: 'hydrogen', formula: null, chemistry: null, parent: null, source: null, license: null, coordinates: null, extra: [],
+  });
+  add('numeric-title', [2], Float32Array.from([0, 0, 0]), {
+    title: '42', formula: null, chemistry: null, parent: null, source: null, license: null, coordinates: null, extra: [],
+  });
+  // A whole gallery molecule at six decimals, as Molecule.xyzText writes.
+  const tube = fromFile(`${GALLERY}/carbon_nanotube.xyz`, 'carbon_nanotube');
+  add('nanotube-six-decimals', tube.atomicNumbers, tube.positions, lupiComment('Lupi built', hillFormula(tube.atomicNumbers)), 6);
+
+  return {
+    schema: 'lupi.apple-fixtures.xyz-write.v1',
+    generator: 'tools/apple/export-bond-fixtures.mts',
+    cases: cases.map(({ name, atomicNumbers, positions, comment, decimals }) => {
+      const text = writeXyz(atomicNumbers, positions, comment, decimals);
+      const frame = parseXyzText(text).frames[0];
+      return {
+        name,
+        atomicNumbers,
+        positions: f32(positions),
+        comment,
+        ...(decimals ? { decimals } : {}),
+        text,
+        parsed: {
+          atomicNumbers: Array.from(frame.types),
+          positions: f32(frame.positions),
+          periodic: frame.periodic ?? false,
+          timestep: frame.timestep,
+          chemistry: frame.chemistry ?? null,
+          sourceRecord: frame.sourceRecord ? { ...frame.sourceRecord, dataset: undefined } : null,
+        },
+      };
+    }),
+  };
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────
 
 export function buildFixtures(): Record<string, unknown> {
@@ -413,6 +623,7 @@ export function buildFixtures(): Record<string, unknown> {
     'bonds-gallery.json': fixtureFile('Gallery molecules (apps/web/public/gallery/curated).', gallery),
     'bonds-synthetic.json': fixtureFile('The bond unit-test geometries and seeded mulberry32 clusters.', synthetic),
     'xyz-parse.json': parseCases(),
+    'xyz-write.json': writeCases(),
   };
 }
 
