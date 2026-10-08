@@ -3,7 +3,12 @@
 Lupi has two measurement lanes:
 
 - First-party analytics: enabled in production through `VITE_LUPI_ANALYTICS_URL`.
-  Events go to `collectAnalytics`, then structured Cloud Logging entries with
+  Events go to `collectAnalytics`. On lupi.live that is the edge Worker's
+  collector (`VITE_LUPI_ANALYTICS_URL=/collectAnalytics`), which writes each
+  event as a `component: "lupi_analytics"` line to the Worker's logs
+  (`apps/mcp-worker/src/index.ts`). The Cloud Run fallback build
+  (`.github/workflows/deploy-viewer.yml`) posts to the Firebase Functions
+  collector instead, which writes structured Cloud Logging entries with
   `jsonPayload.component="lupi_analytics"`.
 - Firebase/GA4: available, but intentionally disabled by default. Only enable it
   with `VITE_FIREBASE_ANALYTICS_ENABLED=true` and
@@ -11,24 +16,24 @@ Lupi has two measurement lanes:
 
 ## Live Verification
 
-Run this after deploys:
+There is no scripted live check: `pnpm verify:analytics-live` and its tool
+are not in this repo, and `pnpm verify:cloudflare-live` is read-only and
+writes no analytics. To check by hand after a deploy, open
+`https://lupi.live/?utm_source=codex_verify&utm_campaign=verify` and confirm in
+the browser's network panel that:
 
-```bash
-pnpm verify:analytics-live
-```
-
-It loads `https://lupi.live/` with a synthetic UTM campaign, verifies that:
-
-- the browser sends a first-party `app_landed` event to `collectAnalytics`;
-- no Firebase/GA network requests are made by default;
-- the matching event lands in Cloud Logging.
+- the page sends a first-party `app_landed` event to `collectAnalytics`;
+- no Firebase/GA network requests are made by default.
 
 Synthetic verification traffic uses `utm_source=codex_verify` and is excluded
 from the report tool by default.
 
 ## Funnel Report
 
-Summarize recent events from Cloud Logging:
+Summarize recent events from Cloud Logging. The report reads only Cloud
+Logging, so it sees the Firebase Functions collector's events; it sees the
+edge Worker's only if the Worker's logs are shipped there, and nothing in
+this repo configures that:
 
 ```bash
 pnpm analytics:report -- --hours=24

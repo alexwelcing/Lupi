@@ -236,6 +236,6 @@ promotion ladder again.
 | Local library (OPFS + manifest) | `packages/ui/src/trajectoryLibrary.ts` · UI: `SavedTrajectories.tsx` |
 | Orchestration | `packages/ui/src/loadMoleculeSource.ts` (`importDumpFileStreaming`, `openSavedTrajectory`) |
 | Auth / Firestore precedents | `packages/ui/src/auth/`, `savedViews.ts`, `firestore.rules` |
-| Perf + correctness harnesses | `tools/bench-ingest.mjs`, `verify-real-trajectory.mjs`, `verify-streaming.mjs`, `lupi-doctor.mjs` |
+| Perf + correctness harnesses | `tools/lupi-doctor.mjs` (`pnpm doctor`), `tools/verify-streaming-ux.mjs` (`pnpm verify:streaming-ux`) and the parser tests (`packages/parsers/src/realDumpPipeline.test.ts` runs real LAMMPS dumps through parse, transcode and read-back). `tools/bench-ingest.mjs`, `verify-real-trajectory.mjs` and `verify-streaming.mjs` are not in this repo. |
 | Gallery bake CLI | `tools/bake-glimbin.mjs` (`npm run bake:glimbin`) |
 | Reference data generator | `tools/sims/make_phase_trajectories.py` |

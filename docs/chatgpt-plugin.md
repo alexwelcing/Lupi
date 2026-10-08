@@ -19,7 +19,7 @@ The public ChatGPT route is separate from Lupi's existing `/mcp` control plane. 
 | OMol25 collection API | `apps/mcp-worker/src/scienceData.ts` |
 | OMol25 plugin adapter | `apps/mcp-worker/src/chatgptOmol.ts` |
 | PubChem parser | `packages/core/src/pubchem.ts` |
-| Shared OMol25 frame | `packages/core/src/omol25.ts` |
+| Shared OMol25 record and frame | `packages/core/src/omol25/widget.ts` (collections, URLs and truth strings: `packages/core/src/omol25/`) |
 | MCP route and tools | `apps/mcp-worker/src/chatgpt.ts` |
 | Embedded viewer | `apps/chatgpt-widget/` |
 | Portable package | `plugins/lupi-live/` |
