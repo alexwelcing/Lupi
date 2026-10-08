@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Frame, Trajectory } from '@atlas/core';
+import { computeRenderSpecIdV1, type Frame, type RenderJsonObjectV1, type Trajectory } from '@atlas/core';
 import { useStore, type LoadedFile } from '../store';
 import type { LupiRendererRuntime } from '../viewer/createLupiRenderer';
 import { EXECUTION_CLASS_V2, FIBER_VERSION_V2 } from '../export/exportProfileV2';
@@ -129,6 +129,35 @@ describe('browser render artifact adapter', () => {
       delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
     });
     expect(appearanceChanged.specId).not.toBe(contentChanged.specId);
+  });
+
+  it('records the Illustrate look and its ink contour only while the look is on', async () => {
+    const lit = await plan();
+    expect(lit.spec.view.ink).toBeUndefined();
+    expect(lit.spec.view.postprocess).toMatchObject({ pipeline: 'viewer-look' });
+
+    const drawn = await plan({ inkStyle: 'flat' });
+    expect(drawn.spec.view.postprocess).toMatchObject({ pipeline: 'raw-scene' });
+    expect(drawn.spec.view.ink).toMatchObject({
+      pipeline: 'impostor-ink.v1',
+      shading: 'flat',
+      contour: { pipeline: 'ink-contour.v1', inner: 1.3, outer: 2.6 },
+    });
+    expect(drawn.specId).not.toBe(lit.specId);
+
+    // The drawing before the contour is another spec.
+    const { contour: _contour, ...withoutContour } = drawn.spec.view.ink as Record<string, unknown>;
+    const before = await computeRenderSpecIdV1({
+      ...drawn.spec,
+      view: { ...drawn.spec.view, ink: withoutContour as RenderJsonObjectV1 },
+    });
+    expect(before).not.toBe(drawn.specId);
+
+    const transparent = await createBrowserRenderArtifactPlanV1(useStore.getState(), {
+      format: 'png', width: 320, height: 240, transparent: true,
+      delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
+    });
+    expect(transparent.spec.view.ink).toMatchObject({ contour: { pipeline: 'ink-contour.v1' } });
   });
 
   it('addresses the active raster property range', async () => {

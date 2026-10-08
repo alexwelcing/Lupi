@@ -17,13 +17,16 @@
  * drops bloom, depth of field and vignette (the spec records them as null).
  *
  * Under the Illustrate look the recipe steps aside (the drawing shades
- * itself in the impostors), so the capture takes the raw path; the spec
- * records the ink in `view.ink` (mcp/renderArtifactAdapter.ts).
+ * itself in the impostors), so `view.postprocess` is the raw scene; the spec
+ * records the ink in `view.ink` (mcp/renderArtifactAdapter.ts). The look's
+ * screen-space contour (postprocess/inkContour.ts) still runs once over the
+ * assembled image, like the recipe would (`inkContour`, `view.ink.contour`).
  *
  * This module is pure: the GPU pass is captureLookPass.ts.
  */
 import type { RenderJsonObjectV1 } from '@atlas/core';
 import { resolveActivePostprocess, type EffectOverrides } from '../postprocess/controls';
+import { INK_CONTOUR_PIPELINE_ID, INK_CONTOUR_TUNING, inkContourSwitchedOn } from '../postprocess/inkContour';
 import type { PostprocessPresetConfig, PostprocessPresetId } from '../postprocess/presets';
 
 export type CaptureToneMapping = PostprocessPresetConfig['toneMapping'];
@@ -36,6 +39,18 @@ export interface CaptureLook {
   /** World units: focus distance, distance to full blur, bokeh scale. */
   dof: { focusDistance: number; focusRange: number; bokehScale: number } | null;
   vignette: { offset: number; darkness: number } | null;
+  /**
+   * The Illustrate look's contour (line widths in ink units), on while the
+   * look is; it is recorded in `view.ink.contour`, not in `view.postprocess`.
+   */
+  inkContour: CaptureInkContour | null;
+}
+
+export interface CaptureInkContour {
+  /** Crease and step lines, ink units. */
+  inner: number;
+  /** The outer contour against the plate, ink units. */
+  outer: number;
 }
 
 /** The spec's `view.postprocess.pipeline` when the look is applied. */
@@ -49,10 +64,17 @@ export const EMPTY_CAPTURE_LOOK: CaptureLook = Object.freeze({
   bloom: null,
   dof: null,
   vignette: null,
+  inkContour: null,
 }) as CaptureLook;
 
+/** True when the look has no post recipe to apply (`view.postprocess` is the raw scene); the ink contour is not part of it. */
 export function captureLookIsEmpty(look: CaptureLook | null | undefined): boolean {
   return !look || (look.toneMapping === 'none' && !look.ao && !look.bloom && !look.dof && !look.vignette);
+}
+
+/** True when a capture runs the output-resolution pass: a post recipe, or the ink contour. */
+export function captureLookRunsPass(look: CaptureLook | null | undefined): boolean {
+  return Boolean(look) && (!captureLookIsEmpty(look) || look!.inkContour !== null);
 }
 
 /** True when the look restyles pixels the background owns (so it must be restored there). */
@@ -64,8 +86,8 @@ export interface CaptureLookState {
   postprocessPreset: PostprocessPresetId;
   postprocessIntensity: number;
   effectOverrides: EffectOverrides | null;
-  /** The Illustrate look sets the recipe aside (postprocess/controls.ts inkRecipe). Absent = off. */
-  inkStyle?: 'off' | 'flat' | 'hatch';
+  /** The Illustrate look sets the recipe aside (postprocess/controls.ts inkRecipe) and adds its contour. Absent = off. */
+  inkStyle?: string;
   cameraPosition: readonly [number, number, number] | readonly number[];
   cameraTarget: readonly [number, number, number] | readonly number[];
 }
@@ -81,13 +103,14 @@ function tidy(value: number): number {
  * the live view does (postPipeline.ts `autofocus`).
  */
 export function resolveCaptureLook(state: CaptureLookState, options: { transparent: boolean }): CaptureLook {
+  const ink = state.inkStyle !== undefined && state.inkStyle !== 'off';
   const config = resolveActivePostprocess({
     presetId: state.postprocessPreset,
     intensity: state.postprocessIntensity,
     overrides: state.effectOverrides,
     playing: false,
     reduced: false,
-    ink: state.inkStyle !== undefined && state.inkStyle !== 'off',
+    ink,
   });
   const opaque = !options.transparent;
   let dof: CaptureLook['dof'] = null;
@@ -125,7 +148,16 @@ export function resolveCaptureLook(state: CaptureLookState, options: { transpare
     vignette: opaque && config.vignette.enabled
       ? { offset: tidy(config.vignette.offset), darkness: tidy(config.vignette.darkness) }
       : null,
+    // The contour inks the molecule only, so transparent output keeps it too.
+    inkContour: ink && inkContourSwitchedOn()
+      ? { inner: INK_CONTOUR_TUNING.innerLine, outer: INK_CONTOUR_TUNING.outerLine }
+      : null,
   };
+}
+
+/** The spec's `view.ink.contour` for a look's contour. */
+export function captureInkContourToSpec(contour: CaptureInkContour): RenderJsonObjectV1 {
+  return { pipeline: INK_CONTOUR_PIPELINE_ID, inner: contour.inner, outer: contour.outer };
 }
 
 /** The spec's `view.postprocess` for a look (the V1 raw-scene literal when it is empty). */
@@ -159,11 +191,22 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * The look a validated spec's `view.postprocess` asks for. A raw-scene (or
- * missing) postprocess is the empty look. Values were range-checked by the
- * spec validation; this only reshapes them.
+ * The look a validated spec asks for: its `view.postprocess` and, when it
+ * carries one, its `view.ink.contour`. A raw-scene (or missing) postprocess
+ * is the empty recipe; an ink spec without a contour (one written before
+ * `ink-contour.v1`) draws none. Values were range-checked by the spec
+ * validation; this only reshapes them.
  */
-export function captureLookFromSpec(postprocess: unknown): CaptureLook {
+export function captureLookFromSpec(postprocess: unknown, ink?: unknown): CaptureLook {
+  const contour = record(record(ink)?.contour);
+  const inkContour: CaptureInkContour | null = contour && contour.pipeline === INK_CONTOUR_PIPELINE_ID
+    && finite(contour.inner) !== null && finite(contour.outer) !== null
+    ? { inner: contour.inner as number, outer: contour.outer as number }
+    : null;
+  return { ...captureRecipeFromSpec(postprocess), inkContour };
+}
+
+function captureRecipeFromSpec(postprocess: unknown): CaptureLook {
   const value = record(postprocess);
   if (!value || value.pipeline !== CAPTURE_LOOK_PIPELINE) return EMPTY_CAPTURE_LOOK;
   const toneMapping: CaptureToneMapping = value.toneMapping === 'neutral' || value.toneMapping === 'aces'
@@ -188,6 +231,7 @@ export function captureLookFromSpec(postprocess: unknown): CaptureLook {
     vignette: vignette && finite(vignette.offset) !== null && finite(vignette.darkness) !== null
       ? { offset: vignette.offset as number, darkness: vignette.darkness as number }
       : null,
+    inkContour: null,
   };
 }
 
@@ -201,5 +245,6 @@ export function captureLookStructureKey(look: CaptureLook, transparent: boolean,
     look.toneMapping,
     transparent ? 'transparent' : 'opaque',
     coverage ? 'cov' : '_',
+    look.inkContour ? 'ink' : '_',
   ].join('|');
 }

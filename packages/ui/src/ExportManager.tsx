@@ -518,7 +518,7 @@ function ImageCaptureFrameLifecycle({
       // The viewer's look: an artifact applies exactly the look its spec
       // records; an interactive export applies the configured one.
       const look = request.artifactSpec
-        ? captureLookFromSpec(request.artifactSpec.view.postprocess)
+        ? captureLookFromSpec(request.artifactSpec.view.postprocess, request.artifactSpec.view.ink)
         : resolveCaptureLook(useStore.getState(), { transparent });
       // The render into the target and the scene restore both happen inside
       // this call; only the readback resolves later.
