@@ -1063,6 +1063,20 @@ export function ViewerApp() {
               onSelect: () => useStore.setState(sceneLookPatch('sketch', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
             },
             {
+              id: 'look-engrave',
+              label: 'Ink: banknote line engraving on paper (Engrave look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('engrave', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
+              id: 'look-halftone',
+              label: 'Ink: halftone print dots on paper (Halftone look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('halftone', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
               id: 'look-lit',
               label: 'Lit: turn the light back on (leave the ink look)',
               group: 'Scene',

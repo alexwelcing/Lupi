@@ -131,6 +131,19 @@ describe('browser render artifact adapter', () => {
     expect(appearanceChanged.specId).not.toBe(contentChanged.specId);
   });
 
+  it('records each ink shading in view.ink, and no view.ink while lit', async () => {
+    const lit = await plan();
+    expect(lit.spec.view.ink).toBeUndefined();
+    const ids = new Set([lit.specId]);
+    for (const shading of ['flat', 'hatch', 'engrave', 'halftone'] as const) {
+      const inked = await plan({ inkStyle: shading });
+      expect(inked.spec.view.ink).toMatchObject({ pipeline: 'impostor-ink.v1', shading });
+      expect((inked.spec.view.postprocess as { pipeline?: string }).pipeline).toBe('raw-scene');
+      ids.add(inked.specId);
+    }
+    expect(ids.size).toBe(5);
+  });
+
   it('addresses the active raster property range', async () => {
     const baseline = await plan({ propRange: [0, 1] });
     useStore.setState({ propRange: [-2, 4] });

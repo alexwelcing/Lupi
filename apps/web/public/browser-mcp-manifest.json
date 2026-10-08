@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-10-03T18:20:30.639Z",
+  "generatedAt": "2026-10-08T09:02:05.451Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
@@ -352,9 +352,11 @@
             "enum": [
               "off",
               "flat",
-              "hatch"
+              "hatch",
+              "engrave",
+              "halftone"
             ],
-            "description": "The Illustrate look: toon fills and ink outlines (flat colour or hatched); off is the lit surface. Exports keep it."
+            "description": "The Illustrate look: toon fills and ink outlines (flat colour, hatched, engraved lines or halftone dots); off is the lit surface. Exports keep it."
           },
           "inkWeight": {
             "type": "number",

@@ -5,11 +5,12 @@
  * impostors' shading (`inkStyle`), and the post recipe steps aside while it
  * is on (postprocess/controls.ts `inkRecipe`).
  *
- * The last ink shading used (flat or hatched) is remembered for the tab, so
- * Ink brings back the drawing you had. The Looks grid (Illustrate, Sketch)
- * sets plate and shading together instead (sceneLooks.ts).
+ * The last ink shading used (flat, hatched, engraved or halftone) is
+ * remembered for the tab, so Ink brings back the drawing you had. The Looks
+ * grid (Illustrate, Sketch, Engrave, Halftone) sets plate and shading
+ * together instead (sceneLooks.ts).
  */
-import { sanitizeInkStyle, useStore, type InkStyle } from '../store';
+import { INK_STYLE_LETTERS, sanitizeInkStyle, useStore, type InkStyle } from '../store';
 import { playStore } from '../play/playStore';
 import { BG_PRESETS, SAGE_PLATE_COLOR } from '../backgroundPresets';
 
@@ -17,7 +18,8 @@ const LAST_KEY = 'lupi.ink.last';
 
 function readLast(): Exclude<InkStyle, 'off'> {
   try {
-    return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(LAST_KEY) === 'hatch' ? 'hatch' : 'flat';
+    const last = sanitizeInkStyle(typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(LAST_KEY) : null);
+    return last === 'off' ? 'flat' : last;
   } catch {
     return 'flat';
   }
@@ -31,9 +33,26 @@ function writeLast(style: Exclude<InkStyle, 'off'>): void {
   }
 }
 
+/**
+ * Remember a drawing chosen anywhere (a Look, the Ink controls, a shared
+ * link) as the one Ink and `I` bring back. The viewer's ink driver calls it
+ * on every change of `inkStyle`.
+ */
+export function rememberInkStyle(style: InkStyle): void {
+  if (style !== 'off') writeLast(style);
+}
+
+const INK_STYLE_LABELS: Record<InkStyle, string> = {
+  off: 'Lit',
+  flat: 'Illustrate',
+  hatch: 'Sketch',
+  engrave: 'Engrave',
+  halftone: 'Halftone',
+};
+
 /** A short name for a shading, for the pill and announcements. */
 export function inkStyleLabel(style: InkStyle): string {
-  return style === 'hatch' ? 'Sketch' : style === 'flat' ? 'Illustrate' : 'Lit';
+  return INK_STYLE_LABELS[style] ?? 'Lit';
 }
 
 /**
@@ -91,8 +110,9 @@ export function inkPlateColor(backgroundPreset: string): string {
 }
 
 /**
- * The Illustrate look in a short link: `ink=f` (flat colour) or `ink=h`
- * (hatched). Instant Replay and Remix links carry it beside `replay=` and
+ * The Illustrate look in a short link: `ink=f` (flat colour), `ink=h`
+ * (hatched), `ink=e` (engraved) or `ink=d` (halftone dots), the letters of
+ * the `s=` state. Instant Replay and Remix links carry it beside `replay=` and
  * `remix=`, which travel without the full `s=` state, so whoever opens them
  * sees the drawing the sender was looking at.
  */
@@ -100,7 +120,7 @@ export const INK_PARAM = 'ink';
 
 /** The `ink=` value for a shading, or null when the look is lit. */
 export function inkParamValue(style: InkStyle = useStore.getState().inkStyle): string | null {
-  return style === 'flat' ? 'f' : style === 'hatch' ? 'h' : null;
+  return style === 'off' ? null : INK_STYLE_LETTERS[style] ?? null;
 }
 
 /**
