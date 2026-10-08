@@ -91,7 +91,7 @@ import { lupiDisplayOffset } from './displayMotion';
 import { lupiAtomGlow, lupiAtomGlowStrength, lupiAtomSwell } from './atomGlow';
 import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
-import { lupiAtomFuseHop, lupiFuseMix, lupiFuseSurfacePoint } from './inkFuse';
+import { lupiAtomFuseHop, lupiFuse, lupiFuseEmber, lupiFuseSurfacePoint } from './inkFuse';
 import { CONTACT_OCCLUSION_NEIGHBORS, CONTACT_TEXTURE_WIDTH } from '../atomContactOcclusion';
 import {
   blendMaterialPreset,
@@ -471,8 +471,10 @@ export function createAtomImpostorMaterial({
     // runs one of them only.
     const inkMix: N = INK_LOOK.uInkMix as N;
     // The Light Fuse (tsl/inkFuse.ts): per fragment while a fuse runs, the
-    // front reaching this atom at its hop; exactly `uInkMix` otherwise.
-    const fusedMix: N = (lupiFuseMix(inkMix, lupiAtomFuseHop(vAtomId), lupiFuseSurfacePoint(hit.xyz)) as N).toVar();
+    // front reaching this atom at its hop, and its ember; exactly `uInkMix`
+    // and no ember otherwise.
+    const fuse: N = (lupiFuse(inkMix, lupiAtomFuseHop(vAtomId), lupiFuseSurfacePoint(hit.xyz)) as N).toVar();
+    const fusedMix: N = fuse.x;
     const lit = vec3(0).toVar();
     If(inkMix.lessThan(1.0), () => {
       lit.assign(lupiSurface(
@@ -542,9 +544,11 @@ export function createAtomImpostorMaterial({
       // The Illustrate look is a drawing: a finish steps aside as ink comes in.
       mute: fusedMix,
     });
+    // The fuse's ember along its front (zero in captures, which run no fuse).
+    const embered: N = lupiFuseEmber(shaded, fuse.y);
     // Hover / selection / grab rim and the heat tint (zero in captures).
     const glow = lupiAtomGlow(vGlow, facing);
-    return vec4((shaded as N).add(glow), 1.0);
+    return vec4(embered.add(glow), 1.0);
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

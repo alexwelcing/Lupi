@@ -82,7 +82,7 @@ import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
 import { ATOM_GLOW } from './atomGlow';
 import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
-import { lupiBondFuseHop, lupiFuseMix, lupiFuseSurfacePoint } from './inkFuse';
+import { lupiBondFuseHop, lupiFuse, lupiFuseEmber, lupiFuseSurfacePoint } from './inkFuse';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
@@ -342,13 +342,15 @@ export function createBondImpostorMaterial({
     // The lit surface, the Illustrate surface (tsl/inkLook.ts), or a blend
     // while the look fades; uniform branches, as on the atoms.
     const inkMix: N = INK_LOOK.uInkMix as N;
-    // The Light Fuse (tsl/inkFuse.ts): while a fuse runs, the front runs down
-    // the stick between its atoms' hops; exactly `uInkMix` otherwise.
-    const fusedMix: N = (lupiFuseMix(
+    // The Light Fuse (tsl/inkFuse.ts): while a fuse runs, the front (and its
+    // ember) runs down the stick between its atoms' hops; exactly `uInkMix`
+    // and no ember otherwise.
+    const fuse: N = (lupiFuse(
       inkMix,
       lupiBondFuseHop(vBondId, axial.div(max(segLen, 1e-6))),
       lupiFuseSurfacePoint(hit.xyz),
     ) as N).toVar();
+    const fusedMix: N = fuse.x;
     const lit = vec3(0).toVar();
     If(inkMix.lessThan(1.0), () => {
       lit.assign(lupiSurface(
@@ -410,7 +412,7 @@ export function createBondImpostorMaterial({
       bond: true,
       mute: fusedMix,
     });
-    return vec4(finished, u.uOpacity.mul(fadeAt(hit.z)));
+    return vec4(lupiFuseEmber(finished, fuse.y) as N, u.uOpacity.mul(fadeAt(hit.z)));
   }) as N)();
 
   attachLupiUniforms(material, uniforms);
