@@ -208,14 +208,13 @@ export function canonicalPath(steps: readonly Step[]): Step[] {
     }
     const last = out[out.length - 1];
     if (last && last.tag === step.tag && step.tag !== 'child') {
+      // `last` was made by this call, so it grows in place: a path of d one-level
+      // steps (a cut item's path) merges in O(d), not O(d²).
       if (last.tag === 'cells' && step.tag === 'cells') {
-        out[out.length - 1] = { tag: 'cells', octants: [...last.octants, ...step.octants] };
+        last.octants.push(...step.octants);
       } else if (last.tag === 'tower' && step.tag === 'tower') {
-        out[out.length - 1] = {
-          tag: 'tower',
-          levels: last.levels + step.levels,
-          runs: [0, 1, 2].map((a) => concatRuns(last.runs[a], step.runs[a])) as AxisRuns,
-        };
+        last.levels += step.levels;
+        for (let a = 0; a < 3; a += 1) for (const r of step.runs[a]) pushRun(last.runs[a], r.digit, r.length);
       } else if (last.tag === 'atoms' && step.tag === 'atoms') {
         out[out.length - 1] = { tag: 'atoms', ranges: composeRanges(last.ranges, step.ranges) };
       }

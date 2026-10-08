@@ -381,69 +381,77 @@ describe('lupi-bonds.molecular.v1: properties', () => {
   });
 
   it('fuzz: every pair satisfies its own kind rule, H keeps one partner, no atom is over its cap', () => {
+    // Every rule is checked in plain code and the broken ones collected, then asserted once:
+    // an expect per pair (thousands across the 60 clusters) cost most of this test's time.
+    const broken: string[] = [];
     for (let seed = 100; seed < 160; seed += 1) {
       const input = randomCluster(seed, 40 + (seed % 5) * 20, 6 + (seed % 4));
       const p = perceiveBonds(input);
       const tolerance = p.params.tolerance;
       const z = input.atomicNumbers;
+      const check = (ok: boolean, rule: string) => {
+        if (!ok) broken.push(`seed ${seed}: ${rule}`);
+      };
       const valence = new Map<number, number[]>();
       let previous = -1;
       for (let k = 0; k < p.count; k += 1) {
         const i = p.pairs[2 * k];
         const j = p.pairs[2 * k + 1];
-        expect(i).toBeLessThan(j);
-        expect(i * input.natoms + j).toBeGreaterThan(previous);
+        const pair = `${i}-${j}`;
+        check(i < j, `${pair} is not ordered`);
+        check(i * input.natoms + j > previous, `${pair} is out of order`);
         previous = i * input.natoms + j;
         let d2 = 0;
         for (let a = 0; a < 3; a += 1) d2 += (input.positions[3 * j + a] - input.positions[3 * i + a]) ** 2;
-        expect(d2).toBeGreaterThanOrEqual(CLASH_FLOOR_A ** 2);
+        check(d2 >= CLASH_FLOOR_A ** 2, `${pair} is under the clash floor`);
         const ci = elementClass(z[i]);
         const cj = elementClass(z[j]);
         const covalentLike = (c: number) => c === ELEMENT_CLASS.hydrogen || c === ELEMENT_CLASS.covalent;
         if (p.kinds[k] === BOND_KIND.covalent) {
-          expect(covalentLike(ci) && covalentLike(cj)).toBe(true);
+          check(covalentLike(ci) && covalentLike(cj), `covalent ${pair} joins a non-covalent class`);
           const cut = covalentRadius(z[i]) + covalentRadius(z[j]) + tolerance;
-          expect(d2).toBeLessThanOrEqual(cut * cut);
+          check(d2 <= cut * cut, `covalent ${pair} is beyond its cutoff`);
           valence.set(i, [...(valence.get(i) ?? []), j]);
           valence.set(j, [...(valence.get(j) ?? []), i]);
         } else if (p.kinds[k] === BOND_KIND.coordination) {
           const metal = ci === ELEMENT_CLASS.metal ? i : j;
           const other = metal === i ? j : i;
-          expect(elementClass(z[metal])).toBe(ELEMENT_CLASS.metal);
+          check(elementClass(z[metal]) === ELEMENT_CLASS.metal, `coordination ${pair} has no metal`);
           const co = elementClass(z[other]);
           const cut = co === ELEMENT_CLASS.metal
             ? metalRadius(z[metal]) + metalRadius(z[other]) + 0.25
             : co === ELEMENT_CLASS.hydrogen
               ? metalRadius(z[metal]) + covalentRadius(1) + 0.3
               : metalRadius(z[metal]) + covalentRadius(z[other]) + tolerance;
-          expect([ELEMENT_CLASS.metal, ELEMENT_CLASS.hydrogen, ELEMENT_CLASS.covalent]).toContain(co);
-          expect(d2).toBeLessThanOrEqual(cut * cut);
+          check(([ELEMENT_CLASS.metal, ELEMENT_CLASS.hydrogen, ELEMENT_CLASS.covalent] as number[]).includes(co), `coordination ${pair} has a class-${co} partner`);
+          check(d2 <= cut * cut, `coordination ${pair} is beyond its cutoff`);
         } else {
-          expect(p.kinds[k]).toBe(BOND_KIND.ionicContact);
+          check(p.kinds[k] === BOND_KIND.ionicContact, `${pair} has kind ${p.kinds[k]}`);
           const ion = ci === ELEMENT_CLASS.ion ? i : j;
           const donor = ion === i ? j : i;
-          expect(elementClass(z[ion])).toBe(ELEMENT_CLASS.ion);
-          expect(DONOR_RADII[z[donor]]).toBeDefined();
+          check(elementClass(z[ion]) === ELEMENT_CLASS.ion, `contact ${pair} has no ion`);
+          check(DONOR_RADII[z[donor]] !== undefined, `contact ${pair} has no donor radius`);
           const cut = ION_RADII[z[ion]] + DONOR_RADII[z[donor]] + 0.35;
-          expect(d2).toBeLessThanOrEqual(cut * cut);
-          expect(Math.sqrt(d2)).toBeLessThanOrEqual(MAX_ION_CONTACT_A);
+          check(d2 <= cut * cut, `contact ${pair} is beyond its cutoff`);
+          check(Math.sqrt(d2) <= MAX_ION_CONTACT_A, `contact ${pair} is beyond the longest contact`);
         }
       }
       for (const [atom, list] of valence) {
         if (z[atom] === 1) {
           const bridging = list.length === 2 && list.every((b) => z[b] === 5);
-          expect(list.length === 1 || bridging).toBe(true);
+          check(list.length === 1 || bridging, `H ${atom} has ${list.length} partners`);
           continue;
         }
         const cap = VALENCE_CAPS[z[atom]];
-        if (cap !== undefined) expect(list.length).toBeLessThanOrEqual(cap);
+        if (cap !== undefined) check(list.length <= cap, `atom ${atom} is over its cap`);
         if (z[atom] === 17 || z[atom] === 35 || z[atom] === 53) {
-          expect(list.filter((b) => z[b] !== 8 && z[b] !== 9).length).toBeLessThanOrEqual(1);
+          check(list.filter((b) => z[b] !== 8 && z[b] !== 9).length <= 1, `halogen ${atom} has more than one partner besides O and F`);
         }
       }
-      expect(p.counts.covalent + p.counts.coordination + p.counts.ionicContact).toBe(p.count);
-      expect(p.counts.removed).toBe(p.evidence!.reasons.filter((r) => r !== REMOVAL_REASON.clash).length);
+      check(p.counts.covalent + p.counts.coordination + p.counts.ionicContact === p.count, 'the kind counts do not add up');
+      check(p.counts.removed === p.evidence!.reasons.filter((r) => r !== REMOVAL_REASON.clash).length, 'the removed count does not match the evidence');
     }
+    expect(broken).toEqual([]);
   });
 
   it('covalent output is a subset of the distance recipe at the same tolerance', () => {

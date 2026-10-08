@@ -425,15 +425,9 @@ importers:
       '@react-three/tsl':
         specifier: 10.0.0-canary.14007b4
         version: 10.0.0-canary.14007b4(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(react@19.2.4)(three@0.186.1)(use-sync-external-store@1.6.0(react@19.2.4))
-      '@rive-app/react-canvas':
-        specifier: ^4.28.6
-        version: 4.28.6(react@19.2.4)
       '@tanstack/react-query':
         specifier: ^5.62.0
         version: 5.101.0(react@19.2.4)
-      gifenc:
-        specifier: ^1.0.3
-        version: 1.0.3
       mp4-muxer:
         specifier: ^5.2.2
         version: 5.2.2
@@ -536,17 +530,7 @@ importers:
         version: 5.9.3
 
   packages/renderer:
-    dependencies:
-      '@atlas/core':
-        specifier: workspace:*
-        version: link:../core
-      three:
-        specifier: 0.186.1
-        version: 0.186.1
     devDependencies:
-      '@types/three':
-        specifier: 0.186.0
-        version: 0.186.0
       '@webgpu/types':
         specifier: ^0.1.69
         version: 0.1.69
@@ -571,9 +555,6 @@ importers:
       '@react-three/fiber':
         specifier: 10.0.0-canary.14007b4
         version: 10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1)
-      '@react-three/tsl':
-        specifier: 10.0.0-canary.14007b4
-        version: 10.0.0-canary.14007b4(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(react@19.2.4)(three@0.186.1)(use-sync-external-store@1.6.0(react@19.2.4))
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -626,9 +607,6 @@ importers:
       '@react-three/tsl':
         specifier: 10.0.0-canary.14007b4
         version: 10.0.0-canary.14007b4(@react-three/fiber@10.0.0-canary.14007b4(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.186.1))(@types/react@19.2.14)(react@19.2.4)(three@0.186.1)(use-sync-external-store@1.6.0(react@19.2.4))
-      '@rive-app/react-canvas':
-        specifier: ^4.28.6
-        version: 4.28.6(react@19.2.4)
       '@tanstack/react-query':
         specifier: ^5.62.0
         version: 5.101.0(react@19.2.4)
@@ -2864,14 +2842,6 @@ packages:
   '@remotion/zod-types@4.0.494':
     resolution: {integrity: sha512-lOsYSCDo1UWNTbnvrKdPhdOuclF8mWw5PDK47llZB1vcxwJj22VSKKFlEYoshflDn7whfXdSp4dF2IwwMoSzZw==}
 
-  '@rive-app/canvas@2.37.8':
-    resolution: {integrity: sha512-nffrPG+VkBKHAxZdcqYlP5M+n/mOAoagj774HH397UPTsfC27gwQURg64i6dX7WswMc5qIVX0rzCrZ86Wb2HOA==}
-
-  '@rive-app/react-canvas@4.28.6':
-    resolution: {integrity: sha512-tMEb7uDr+xuPny4HRVnkfGDHgTCkTFn15u7GHj12hC94N59g/dO15TiGr9312GVTO82FulOymOKy6sgxZyi5rw==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0
-
   '@rolldown/pluginutils@1.0.0-beta.27':
     resolution: {integrity: sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==}
 
@@ -4997,9 +4967,6 @@ packages:
   getenv@2.0.0:
     resolution: {integrity: sha512-VilgtJj/ALgGY77fiLam5iD336eSWi96Q15JSAG1zi8NRBysm3LXKdGnHb4m5cuyxvOLQQKWpBZAT6ni4FI2iQ==}
     engines: {node: '>=6'}
-
-  gifenc@1.0.3:
-    resolution: {integrity: sha512-xdr6AdrfGBcfzncONUOlXMBuc5wJDtOueE3c5rdG0oNgtINLD+f2iFZltrBRZYzACRbKr+mSVU/x98zv2u3jmw==}
 
   github-from-package@0.0.0:
     resolution: {integrity: sha512-SyHy3T1v2NUXn29OsWdxmK6RwHD+vkj3v8en8AOBZ1wBQ/hCAQ5bAQTD02kW4W9tUp/3Qh6J8r9EvntiyCmOOw==}
@@ -10226,13 +10193,6 @@ snapshots:
       - react
       - react-dom
 
-  '@rive-app/canvas@2.37.8': {}
-
-  '@rive-app/react-canvas@4.28.6(react@19.2.4)':
-    dependencies:
-      '@rive-app/canvas': 2.37.8
-      react: 19.2.4
-
   '@rolldown/pluginutils@1.0.0-beta.27': {}
 
   '@rollup/plugin-virtual@3.0.2(rollup@4.59.0)':
@@ -12829,8 +12789,6 @@ snapshots:
       resolve-pkg-maps: 1.0.0
 
   getenv@2.0.0: {}
-
-  gifenc@1.0.3: {}
 
   github-from-package@0.0.0: {}
 
