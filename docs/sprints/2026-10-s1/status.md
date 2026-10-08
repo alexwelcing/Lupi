@@ -29,9 +29,9 @@ Everything visual was seen in headless Chromium on SwiftShader, in both backend 
 | Web build | passes; two builds in a row leave the tree clean |
 | Product contract, actionlint runner tests | pass |
 | Looks smoke (ink, fuse, contour, foil), both lanes, desktop | PASS |
-| Morph, fuse and ink smoke, both lanes, desktop | see below |
-| `tests/ui/render-artifact.spec.ts` (WebGL2 lane) | see below |
-| V2 render-parity candidates | see below |
+| Morph, fuse and ink smoke, both lanes, desktop | 254 checks pass; 3 fail, all on the WebGPU lane's mid-morph export, after a 60 s canvas-capture timeout while eight S2 agents held the load average near 47 on 4 CPUs. The WebGL2 lane passes every morph check, including the mid-morph export's `artifactDigest`. To re-run on a quiet machine. |
+| `tests/ui/render-artifact.spec.ts` (WebGL2 lane, CI's lane) | 1 of 2 passes; the other hit the 120 s test timeout inside an export at the same load. To re-run on a quiet machine. |
+| V2 render-parity candidates | Not re-derived yet: S2 changes renderer-validity inputs too, so they are derived once, after S2 merges. |
 
 Each track also ran its own smoke plugin in both lanes before merging (counts are in each track's section of the commit history and in [qa-wave3.md](qa-wave3.md)).
 
