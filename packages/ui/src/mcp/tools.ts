@@ -462,7 +462,29 @@ async function handleResetViewer(): Promise<LupiMcpResponseResult> {
   return { reset: true };
 }
 
+/**
+ * The live view never moves for an export: the capture renders a copy of the
+ * spec's camera (export/renderCaptureState.ts), so a fitted export leaves the
+ * visitor's camera alone. The atom scale is scene state the capture draws, so
+ * a boosted scale holds only while the export runs and is put back after it
+ * (unless something else changed it meanwhile).
+ */
 async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpResponseResult> {
+  let boost = null as { from: number; to: number } | null;
+  try {
+    return await exportAsset(request, (from, to) => {
+      boost = { from, to };
+    });
+  } finally {
+    const live = useStore.getState();
+    if (boost && live.atomScale === boost.to) live.setAtomScale(boost.from);
+  }
+}
+
+async function exportAsset(
+  request: LupiMcpRequest,
+  onAtomScaleBoost: (from: number, to: number) => void,
+): Promise<LupiMcpResponseResult> {
   const state = useStore.getState();
   if (!state.file) throw new Error('No molecule is loaded. Call lupi.generate_molecule or lupi.load_molecule_url first.');
 
@@ -609,8 +631,10 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
   });
   if (image) {
     const liveState = useStore.getState();
-    if (shouldFit) liveState.setCameraState(plannedCameraPosition, plannedCameraTarget);
-    if (liveState.atomScale !== plannedAtomScale) liveState.setAtomScale(plannedAtomScale);
+    if (liveState.atomScale !== plannedAtomScale) {
+      onAtomScaleBoost(liveState.atomScale, plannedAtomScale);
+      liveState.setAtomScale(plannedAtomScale);
+    }
   }
   const exportState = useStore.getState();
   exportRequest = {
@@ -639,7 +663,11 @@ async function handleExportAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
     alpha: image ? (transparent ? 'transparent' : 'opaque') : 'not-applicable',
   });
 
-  const postExportPlan = await createBrowserRenderArtifactPlanV1(useStore.getState(), {
+  // The fitted camera lives only in the spec; everything else is the live view's.
+  const postExportState = image && shouldFit
+    ? { ...useStore.getState(), cameraPosition: plannedCameraPosition, cameraTarget: plannedCameraTarget }
+    : useStore.getState();
+  const postExportPlan = await createBrowserRenderArtifactPlanV1(postExportState, {
     format,
     ...(image ? { width, height, transparent } : {}),
     delivery: createInlineBrowserDeliveryV1(maxInlineBytes, filename),
