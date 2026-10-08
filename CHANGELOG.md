@@ -3,6 +3,28 @@
 Since 2026-09-20 every merge to `main` deploys to lupi.live, so entries from
 then on are dated by the day they merged, with their pull requests.
 
+## Unreleased - Sprint S1, Shaders week (branch `claude/nifty-volta-ophavr`)
+
+- **Engrave and Halftone**, two new Illustrate drawings ported into TSL from
+  Shaders (MIT, open-sourced 2026-10-06), in Looks, the palette, `I`, share
+  links, saved views, MCP and exports. (`docs/ink-and-light.md`)
+- **The ink contour**: the Illustrate look inks where balls meet and sticks
+  enter balls, with a heavier outer silhouette, live and in exports
+  (`view.ink.contour`).
+- **The Light Fuse**: ink turns to light along the molecule's bonds from the
+  touched atom.
+- **The morph arrival**: switching molecules, the atoms on screen flow into
+  the new one. (`docs/morph-arrival.md`)
+- **Foil refinished**: Holo, Gold leaf and Pearl redrawn; codes and odds
+  unchanged.
+- **Fixes**: the pill no longer names a Foil finish under ink; an MCP export
+  no longer moves the live camera; the header no longer flashes over the
+  opening plate; Lupi Daily fits a 390 px phone.
+- **Upkeep**: builds leave the tree clean; about 4,450 lines of dead code and
+  the unused WGSL render pipelines removed; root clutter and an orphan public
+  JSON with local paths deleted; stale root notes archived; docs corrected;
+  CI runs the Worker tests once. (`docs/sprints/2026-10-s1/status.md`)
+
 ## 2026-10-05 - The native Apple app and /scale
 
 - **`apps/apple`**, a native SwiftUI + RealityKit app for iPhone Pro and iPad
