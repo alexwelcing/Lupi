@@ -159,11 +159,13 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
 /**
  * Wait until two captures 250 ms apart match. A software renderer under load
  * can take longer than that to draw one frame, so two matching captures alone
- * may straddle no frame at all: where the viewer reports its frame loop
- * (`__lupiPlay`), the view is settled only when the loop sleeps or at least
- * two frames were drawn between the captures.
+ * may straddle no frame at all, or show an arrival still held under the
+ * opening plate (captures hide the page's chrome): where the viewer reports
+ * its Play state (`__lupiPlay`), the view is settled only with no arrival
+ * armed or running, and when the frame loop sleeps or at least two frames
+ * were drawn between the captures.
  */
-async function waitSettled(page, canvas, minForeground, maxMs = 25_000) {
+async function waitSettled(page, canvas, minForeground, maxMs = 60_000) {
   const started = Date.now();
   let previous = await captureCanvas(page, canvas);
   let previousLoop = await frameLoop(page);
@@ -178,7 +180,7 @@ async function waitSettled(page, canvas, minForeground, maxMs = 25_000) {
     lastDiff = diffImages(previous.image, current.image).changed / area;
     const fg = foreground(current.image).fraction;
     const drawn = loop && previousLoop ? loop.rendered - previousLoop.rendered : null;
-    const quiet = !loop || !loop.awake || (drawn != null && drawn >= 2);
+    const quiet = !loop || (!loop.arriving && (!loop.awake || (drawn != null && drawn >= 2)));
     previous = current;
     previousLoop = loop;
     if (lastDiff < 0.001 && fg >= minForeground && quiet) {
@@ -188,11 +190,13 @@ async function waitSettled(page, canvas, minForeground, maxMs = 25_000) {
   return { ...previous, meta: { settled: false, ms: Date.now() - started, frames, lastDiff } };
 }
 
-/** The viewer's frame loop ({ rendered, awake }), or null without the Play hooks. */
+/** The viewer's frame loop ({ rendered, awake, arriving }), or null without the Play hooks. */
 async function frameLoop(page) {
   return page.evaluate(() => {
-    const demand = window.__lupiPlay?.state?.()?.frameDemand;
-    return demand && Number.isFinite(demand.rendered) ? { rendered: demand.rendered, awake: demand.awake === true } : null;
+    const state = window.__lupiPlay?.state?.();
+    const demand = state?.frameDemand;
+    if (!demand || !Number.isFinite(demand.rendered)) return null;
+    return { rendered: demand.rendered, awake: demand.awake === true, arriving: Boolean(state.motion?.arrival) };
   }).catch(() => null);
 }
 
