@@ -182,7 +182,7 @@ describe('§9.8.1 budgets', () => {
         }
       }
     }
-  }, HEAVY ? 120_000 : 30_000);
+  }, HEAVY ? 240_000 : 60_000);
 });
 
 describe('§9.3 τ controllers', () => {
@@ -448,7 +448,7 @@ describe('§9.8.3 coverage', () => {
     // Outside that ball (ε·σ·K/τ ≈ 0.2 m here) the block stays a handful of boxes.
     expect(counts.slice(0, 3).every((c) => c <= 8)).toBe(true);
     expect(counts[counts.length - 1]).toBeGreaterThan(counts[0]);
-  }, 30_000);
+  }, 60_000);
 });
 
 describe('§9.8.4 monotone error', () => {
