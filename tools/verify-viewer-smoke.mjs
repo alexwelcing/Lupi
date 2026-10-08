@@ -561,6 +561,10 @@ async function runScenarioAttempt(browser, spec, attempt) {
   };
 
   const context = await browser.newContext(contextOptions(spec.profile));
+  // Screenshots and waits without their own timeout take --timeout, not
+  // Playwright's 30 s: a page screenshot waits for a composited frame, which
+  // a loaded software renderer can take longer than that to give.
+  context.setDefaultTimeout(timeout);
   const page = await context.newPage();
   // Actions (boundingBox, tap) wait as long as any other wait: a software
   // renderer compiling a new shader can hold the main thread past 30 s.
@@ -745,7 +749,10 @@ async function scenarioExport(ctx) {
   await waitSettled(page, canvas, 0.01, 15_000);
   const width = 320;
   const height = 240;
-  const response = await withTimeout(page.evaluate(async ({ width: w, height: h }) => {
+  // The tool's 30 s default is sized for a GPU; on SwiftShader under a shared
+  // machine's load a small export took from 10 s to over 90 s.
+  const exportTimeoutMs = 300_000;
+  const response = await withTimeout(page.evaluate(async ({ width: w, height: h, timeoutMs }) => {
     const bridge = window.__lupiViewerMcp;
     const hidden = await bridge.execute({ id: 'smoke-hide-bonds', tool: 'lupi.set_viewer', arguments: { showBonds: false } });
     if (!hidden.ok) return { stage: 'set_viewer', ...hidden };
@@ -754,10 +761,10 @@ async function scenarioExport(ctx) {
     const exported = await bridge.execute({
       id: 'smoke-export-png',
       tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: w, height: h, transparent: true, timeoutMs: 30_000 },
+      arguments: { format: 'png', width: w, height: h, transparent: true, timeoutMs },
     });
     return { stage: 'export_asset', ...exported };
-  }, { width, height }), 90_000, 'lupi.export_asset');
+  }, { width, height, timeoutMs: exportTimeoutMs }), exportTimeoutMs + 60_000, 'lupi.export_asset');
 
   const asset = response?.result?.asset;
   const summary = asset ? { format: asset.format, mimeType: asset.mimeType, byteLength: asset.byteLength, width: asset.width, height: asset.height } : null;

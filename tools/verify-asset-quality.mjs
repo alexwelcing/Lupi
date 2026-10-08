@@ -10,9 +10,11 @@
  * deterministic bridge returns. USDZ is exercised as a required fail-closed
  * capability until its exporter is byte-stable. Rasters are decoded in the
  * browser for dimensions, alpha, and appearance comparisons; model containers
- * are checked structurally. Bytes are compared only within a backend: the two
- * backends are separate execution classes, so the same spec must keep its
- * specId and change its rendererFingerprint and artifactKey across them.
+ * are checked structurally. One Illustrate drawing (Engrave) exports next to
+ * the lit baseline and must get its own specId and pixels. Bytes are compared
+ * only within a backend: the two backends are separate execution classes, so
+ * the same spec must keep its specId and change its rendererFingerprint and
+ * artifactKey across them.
  * Exact returned bytes plus a viewer screenshot are dropped under
  * .verify-artifacts/asset-quality/<run>/<backend>/ for human inspection.
  *
@@ -62,6 +64,8 @@ Options:
                  pnpm --filter @atlas/web build first) or dev (Vite dev server).
   --url=URL      Test an already-running app instead.
   --chromium=P   Chromium binary (default: Chromium 1194 when installed).
+  --export-timeout=MS
+                 timeoutMs for each lupi.export_asset (default 300000).
 `);
   process.exit(0);
 }
@@ -77,6 +81,11 @@ if (!['webgpu', 'webgl2', 'both'].includes(backendArg)) {
 }
 const BACKENDS = backendArg === 'both' ? ['webgpu', 'webgl2'] : [backendArg];
 const serverMode = args.server === 'dev' ? 'dev' : 'dist';
+// The tool's default export budget (30 s for a raster) is sized for a GPU. On
+// SwiftShader in a shared 4-CPU container a 256 px capture took 10 s to over
+// 90 s as the machine's load rose, so every export here asks for this budget
+// unless its request names its own. The checks are about the bytes, not speed.
+const EXPORT_TIMEOUT_MS = Number(args['export-timeout'] ?? 300_000);
 
 let server = null;
 let browser = null;
@@ -532,12 +541,17 @@ async function executeToolAndSettle(page, label, tool, toolArguments) {
   return response;
 }
 
+/** The request with the verifier's export budget, unless it names its own. */
+function withExportTimeout(request) {
+  return { ...request, arguments: { timeoutMs: EXPORT_TIMEOUT_MS, ...request.arguments } };
+}
+
 async function expectAssetRejection(page, label, request, messagePattern) {
   const response = await page.evaluate(async (req) => {
     const driver = window.__lupiViewerMcp;
     if (!driver?.ready) throw new Error('MCP driver is not ready');
     return driver.execute(req);
-  }, request);
+  }, withExportTimeout(request));
   const message = response.error?.message ?? '';
   check(
     label,
@@ -552,7 +566,7 @@ async function runAssetFlow(page, label, request, options = {}) {
     const driver = window.__lupiViewerMcp;
     if (!driver?.ready) throw new Error('MCP driver is not ready');
     return driver.execute(req);
-  }, request);
+  }, withExportTimeout(request));
 
   if (!response.ok) {
     if (request.arguments?.format === 'usdz') {
@@ -808,7 +822,7 @@ function laneReport() {
   return report.lanes[lane];
 }
 
-/** Run every flow in one browser lane; returns the caffeine opaque artifact for cross-lane checks. */
+/** Run every flow in one browser lane; returns the caffeine opaque artifacts (lit, Engrave) for cross-lane checks. */
 async function runLane(backend) {
   lanePrefix = `[${backend}] `;
   ARTIFACTS = join(ARTIFACTS_ROOT, backend);
@@ -820,6 +834,7 @@ async function runLane(backend) {
     args: [...LANE_ARGS[backend]],
   });
   let opaqueElement = null;
+  let opaqueEngrave = null;
   try {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
@@ -894,6 +909,37 @@ async function runLane(backend) {
         opaqueElement,
         opaqueElementRepeat,
       );
+
+      // The Engrave drawing (Illustrate look) takes the raw capture path with
+      // `view.ink` in the spec: same scene and size as the lit baseline, so
+      // only the look separates the two specs and their pixels.
+      await executeToolAndSettle(page, 'Caffeine switches to the Engrave drawing', 'lupi.set_viewer', {
+        inkStyle: 'engrave',
+      });
+      opaqueEngrave = await runAssetFlow(page, 'caffeine-png-opaque-256-engrave', {
+        id: 'caffeine-png-opaque-256-engrave',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 256, height: 256, transparent: false },
+      }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'opaque' });
+      check(
+        'Engrave PNG has its own specId next to the lit baseline',
+        Boolean(opaqueEngrave?.asset?.specId && opaqueElement?.asset?.specId)
+          && opaqueEngrave.asset.specId !== opaqueElement.asset.specId,
+        `lit=${opaqueElement?.asset?.specId} engrave=${opaqueEngrave?.asset?.specId}`,
+      );
+      // Both share the slate plate and the fitted caffeine covers about 5 %
+      // of the frame, so little more than that can change (4.7 % did).
+      await compareRasterAppearance(
+        page,
+        'Engrave and the lit look produce materially different pixels',
+        opaqueElement,
+        opaqueEngrave,
+        { minimumMeanDelta: 2, minimumDifferingRatio: 0.02 },
+      );
+      await executeToolAndSettle(page, 'Caffeine returns to the lit look', 'lupi.set_viewer', {
+        inkStyle: 'off',
+      });
+
       await runAssetFlow(page, 'caffeine-png-1024', {
         id: 'caffeine-png-1024',
         tool: 'lupi.export_asset',
@@ -1029,15 +1075,17 @@ async function runLane(backend) {
     }
 
     // Viewer screenshot (raw DOM) so a human can sanity-check the live frame
-    // the assets are taken from.
+    // the assets are taken from. It waits for a composited frame, which a
+    // loaded software GPU can take longer than Playwright's 30 s default to give.
     const screenshotPath = join(ARTIFACTS, 'viewer-screenshot.png');
-    await page.screenshot({ path: screenshotPath, fullPage: false });
-    check('viewer screenshot captured', existsSync(screenshotPath));
+    const shot = await page.screenshot({ path: screenshotPath, fullPage: false, timeout: 180_000 })
+      .then(() => null, (error) => error?.message ?? String(error));
+    check('viewer screenshot captured', !shot && existsSync(screenshotPath), shot ?? '');
   } finally {
     if (!args['keep-server']) await browser.close().catch(() => {});
     browser = null;
   }
-  return opaqueElement;
+  return { lit: opaqueElement, engrave: opaqueEngrave };
 }
 
 try {
@@ -1048,13 +1096,19 @@ try {
 
   const laneArtifacts = {};
   for (const backend of BACKENDS) {
-    laneArtifacts[backend] = await runLane(backend);
+    // One lane's exception must not hide the other lane's result.
+    try {
+      laneArtifacts[backend] = await runLane(backend);
+    } catch (err) {
+      log(`${lanePrefix}EXCEPTION ${err?.message ?? String(err)}`);
+      check('lane completes without an exception', false, err?.message ?? String(err));
+    }
   }
   lanePrefix = '';
   ARTIFACTS = ARTIFACTS_ROOT;
 
-  const webgpu = laneArtifacts.webgpu?.asset;
-  const webgl2 = laneArtifacts.webgl2?.asset;
+  const webgpu = laneArtifacts.webgpu?.lit?.asset;
+  const webgl2 = laneArtifacts.webgl2?.lit?.asset;
   if (webgpu && webgl2) {
     check(
       'one spec keeps its specId across the two backends',
@@ -1065,6 +1119,15 @@ try {
       'the two backends are separate execution classes (fingerprint and artifactKey differ)',
       webgpu.rendererFingerprint !== webgl2.rendererFingerprint && webgpu.artifactKey !== webgl2.artifactKey,
       `webgpu=${webgpu.artifactKey} webgl2=${webgl2.artifactKey}`,
+    );
+  }
+  const webgpuEngrave = laneArtifacts.webgpu?.engrave?.asset;
+  const webgl2Engrave = laneArtifacts.webgl2?.engrave?.asset;
+  if (webgpuEngrave && webgl2Engrave) {
+    check(
+      'the Engrave spec keeps its specId across the two backends',
+      webgpuEngrave.specId === webgl2Engrave.specId,
+      `webgpu=${webgpuEngrave.specId} webgl2=${webgl2Engrave.specId}`,
     );
   }
 } catch (err) {

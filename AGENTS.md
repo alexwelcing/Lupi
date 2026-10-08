@@ -786,7 +786,8 @@ mutations. It asserts, as applicable:
   VP8/VP8L/VP8X, and GLB magic/chunks)
 - `dataUrl` MIME prefix matches the response `mimeType`
 - the on-disk file matches the round-tripped base64
-- color/material/lighting changes produce material image differences
+- color/material/lighting changes produce material image differences, and an
+  Engrave (Illustrate) PNG gets its own `specId` and pixels next to the lit one
 - each lane reports its backend, and the same spec keeps its `specId` across
   the two lanes while its `rendererFingerprint` and `artifactKey` differ
 

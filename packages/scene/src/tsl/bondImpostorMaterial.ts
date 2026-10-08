@@ -42,7 +42,9 @@
  * the same reason as the atoms (tsl/atomImpostorMaterial.ts): three r186's
  * WebGPU pipeline cache does not see whether two attribute names share one
  * buffer, so a program must never be drawn with both an aliased and a
- * separate target buffer. The static program never reads the targets.
+ * separate target buffer. The static program never reads the targets, and
+ * the interpolating one never reads the atom indices (8 vertex buffers, the
+ * WebGPU limit, with the box's positions).
  */
 import * as THREE from 'three/webgpu';
 import type { UniformNode } from 'three/webgpu';
@@ -219,9 +221,12 @@ export function createBondImpostorMaterial({
   // ── Morph arrival source (tsl/displayMotion.ts) ──────────────────
   // Each end reads its own atom's texel, so a bond spans its two atoms in
   // flight (a collapsed stale bond carries its start atom's index twice).
-  const pair: N = attribute(BOND_ATTR.pair, 'vec2');
-  const morphA = { index: pair.x, on: u.uMorphOn };
-  const morphB = { index: pair.y, on: u.uMorphOn };
+  // The morph never runs on a trajectory, and the interpolating program is
+  // already at WebGPU's 8 vertex buffers (the box, both ends and their
+  // targets, radius, both colours): only the static program reads the pair.
+  const pair: N | null = interpolate ? null : attribute(BOND_ATTR.pair, 'vec2');
+  const morphA = pair ? { index: pair.x, on: u.uMorphOn } : undefined;
+  const morphB = pair ? { index: pair.y, on: u.uMorphOn } : undefined;
   // Display-only motion: each end is a bit-exact copy of its atom's position,
   // so the same closed form and seed move it with the atom (a collapsed stale
   // bond, b = a, stays degenerate). Exactly zero at rest and in captures.

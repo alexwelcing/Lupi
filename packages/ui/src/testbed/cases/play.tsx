@@ -22,6 +22,9 @@
  *
  * The ripple here uses 1 unit of amplitude and a 0.5 bound (not the viewer's
  * 0.3 Å) so a bond that did not follow would miss by more than its radius.
+ * Stretched that far, a bond's tension glow (lime, Bonds) would wash its blue
+ * toward white, so the case draws without the glow: it checks where the
+ * bonds are, not how they glow.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber/webgpu';
@@ -30,6 +33,7 @@ import { MOTION } from '@atlas/core/motion';
 import type { Frame } from '@atlas/core/types';
 import {
   ARRIVAL_MODE,
+  ATOM_GLOW,
   DISPLAY_MOTION,
   DISPLAY_MOTION_TUNING,
   SpatialHash3D,
@@ -310,10 +314,13 @@ export default function PlayCase() {
 
   useEffect(() => {
     releaseRef.current = harnessHold('play');
+    const glow = ATOM_GLOW.uGlowColor.value.clone();
+    ATOM_GLOW.uGlowColor.value.setRGB(0, 0, 0);
     return () => {
       releaseRef.current();
       resetLupiDisplayMotion();
       M.uMaxRipple.value = DISPLAY_MOTION_TUNING.rippleAmplitude;
+      ATOM_GLOW.uGlowColor.value.copy(glow);
     };
   }, []);
 

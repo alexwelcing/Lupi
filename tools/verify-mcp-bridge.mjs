@@ -49,6 +49,14 @@ Environment:
 }
 
 const timeout = Number(args.timeout ?? process.env.VERIFY_TIMEOUT ?? 45000);
+// Budgets for work the software GPU does on the page's behalf. On SwiftShader
+// in a shared 4-CPU container a 256 px export (3x supersampled, plus the look
+// pass) took 10 s to over 90 s as the machine's load rose, and a frame after
+// a scene change can hold the page for seconds; the checks are about shape,
+// not speed.
+const EXPORT_TIMEOUT_MS = 300_000;
+const POST_MESSAGE_TIMEOUT_MS = 60_000;
+const SCREENSHOT_TIMEOUT_MS = 180_000;
 const headless = args.headless ?? !process.stdout.isTTY;
 const externalUrl = process.env.VERIFY_URL || args.url;
 const jsonMode = args.json === true || args.json === 'true';
@@ -221,6 +229,14 @@ try {
     `ok=${loadResult.ok} atoms=${loadResult.result?.molecule?.atomCount ?? 0}`,
   );
 
+  // The lane flags only offer an adapter; the viewer's renderer says which
+  // backend it actually started on (null until the canvas exists).
+  const rendererBackend = await page
+    .waitForFunction(() => window.__lupiViewerMcp.status().rendererBackend, null, { timeout })
+    .then((handle) => handle.jsonValue(), () => null);
+  report.rendererBackend = rendererBackend;
+  check(`viewer renders on the ${backend} backend`, rendererBackend === backend, `rendererBackend=${rendererBackend}`);
+
   // The legacy load above intentionally exercises live asynchronous bonds.
   // A content-addressed raster must not claim those mutable worker results as
   // snapshot truth, so make the visible layer set deterministic before export.
@@ -240,14 +256,14 @@ try {
       : `ok=false error=${deterministicRasterState.error?.message ?? 'unknown'}`,
   );
 
-  const assetResult = await page.evaluate(async () => {
+  const assetResult = await page.evaluate(async (timeoutMs) => {
     const driver = window.__lupiViewerMcp;
     return driver.execute({
       id: 'verify-export-asset',
       tool: 'lupi.export_asset',
-      arguments: { format: 'png', width: 256, height: 256, timeoutMs: 20000 },
+      arguments: { format: 'png', width: 256, height: 256, timeoutMs },
     });
-  });
+  }, EXPORT_TIMEOUT_MS);
   check(
     'export_asset returns inline PNG bytes',
     assetResult.ok === true &&
@@ -300,10 +316,10 @@ try {
   check('command bus emitted success events', hasSuccessEvent, `${eventLog.filter((e) => e.type === 'lupi:mcp:success').length} events`);
 
   // Verify postMessage bridge path.
-  const postMessageResult = await page.evaluate(async () => {
+  const postMessageResult = await page.evaluate(async (timeoutMs) => {
     const requestId = `verify-postmessage-${Date.now()}`;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('postMessage timeout')), 8000);
+      const timer = setTimeout(() => reject(new Error('postMessage timeout')), timeoutMs);
       const handler = (event) => {
         const payload = event.data;
         if (payload?.type !== 'lupi:mcp:response') return;
@@ -318,14 +334,14 @@ try {
         window.location.origin,
       );
     });
-  });
+  }, POST_MESSAGE_TIMEOUT_MS);
   check(
     'postMessage bridge returns a response payload',
     postMessageResult?.type === 'lupi:mcp:response' && postMessageResult?.ok === true,
   );
 
   const screenshotPath = join(ARTIFACTS, `${runId}-mcp-bridge.png`);
-  await page.screenshot({ path: screenshotPath, fullPage: false });
+  await page.screenshot({ path: screenshotPath, fullPage: false, timeout: SCREENSHOT_TIMEOUT_MS });
   report.screenshotPath = screenshotPath;
   log(`[verify-mcp-bridge] screenshot: ${screenshotPath}`);
 } catch (err) {

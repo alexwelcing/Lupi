@@ -445,7 +445,8 @@ export default function LabelsCase() {
           } else if (current === 'selection') {
             const atom = ATOMS[1];
             const radius = resolveTypeDisplayRadius(frame, atom.type) * 1.4;
-            expectLayer('selection ring draws around the atom', c, base, state.camera, atom.position, [radius, radius], [114, 192, 229], minChanged);
+            // The lime ring (#d5ef9c) at opacity 0.9 over the plate.
+            expectLayer('selection ring draws around the atom', c, base, state.camera, atom.position, [radius, radius], [194, 218, 143], minChanged);
           } else if (current === 'orbit') {
             expectPixel('after the orbit the label still shows its fill at the anchor', c, state.camera, PROBE_LABEL, rgbOf(PROBE_FILL), 4);
             const mesh = findLabel(state.scene, BLOCKS);
