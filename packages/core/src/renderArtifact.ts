@@ -1090,9 +1090,9 @@ function validateRenderViewShapeV1(
  */
 export const RENDER_POSTPROCESS_PIPELINES_V1 = ['raw-scene', 'viewer-look'] as const;
 export const RENDER_TONE_MAPPINGS_V1 = ['none', 'neutral', 'aces', 'reinhard'] as const;
-/** `view.ink.pipeline`: the impostors' toon fills, silhouette ink and hatching, engraving or halftone dots (browser renderer). */
+/** `view.ink.pipeline`: the impostors' toon fills, silhouette ink and hatching, engraving, halftone dots or chalk (browser renderer). */
 export const RENDER_INK_PIPELINES_V1 = ['impostor-ink.v1'] as const;
-export const RENDER_INK_SHADINGS_V1 = ['flat', 'hatch', 'engrave', 'halftone'] as const;
+export const RENDER_INK_SHADINGS_V1 = ['flat', 'hatch', 'engrave', 'halftone', 'chalk'] as const;
 
 /**
  * The Illustrate look, when a raster spec carries it: the shading, the line
