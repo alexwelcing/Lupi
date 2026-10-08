@@ -1,52 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertAcceptedActionlintResult, filterActionlintDiagnostics } from './run-actionlint.mjs';
+import { assertAcceptedActionlintResult } from './run-actionlint.mjs';
 
-const queueDiagnostic = '.github/workflows/deploy-cloudflare.yml:33:3: unexpected key "queue" for "concurrency" section. expected one of "cancel-in-progress", "group" [syntax-check]';
+const diagnostic = '.github/workflows/ci.yml:33:3: unexpected key "bogus" for "concurrency" section. expected one of "cancel-in-progress", "group" [syntax-check]';
 
-test('only the documented github.com queue:max actionlint schema lag is suppressed', async () => {
-  const queueSource = `${'\n'.repeat(32)}  queue: max\n`;
-  const accepted = await filterActionlintDiagnostics(queueDiagnostic, { readSource: async () => queueSource });
-  assert.deepEqual(accepted.blocking, []);
-  assert.deepEqual(accepted.suppressed, [queueDiagnostic]);
-
-  const wrongValue = await filterActionlintDiagnostics(queueDiagnostic, {
-    readSource: async () => `${'\n'.repeat(32)}  queue: something-else\n`,
-  });
-  assert.deepEqual(wrongValue.blocking, [queueDiagnostic]);
-
-  const unknownController = queueDiagnostic.replace('deploy-cloudflare.yml', 'other.yml');
-  const unsupportedKey = '.github/workflows/deploy-cloudflare.yml:34:3: unexpected key "bogus" for "concurrency" section. expected one of "cancel-in-progress", "group" [syntax-check]';
-  const rejected = await filterActionlintDiagnostics(`${unknownController}\n${unsupportedKey}`, {
-    readSource: async () => queueSource,
-  });
-  assert.deepEqual(rejected.blocking, [unknownController, unsupportedKey]);
-  assert.deepEqual(rejected.suppressed, []);
+test('a clean actionlint exit with no diagnostics is accepted', () => {
+  assert.doesNotThrow(() => assertAcceptedActionlintResult({ status: 0, output: '' }));
+  assert.doesNotThrow(() => assertAcceptedActionlintResult({ status: 0, output: '\n' }));
 });
 
-test('a nonzero actionlint exit is accepted only for both expected queue:max diagnostics', () => {
-  const reconcile = queueDiagnostic
-    .replace('deploy-cloudflare.yml', 'reconcile-cloudflare-deploy.yml')
-    .replace(':33:', ':62:');
-  assert.doesNotThrow(() => assertAcceptedActionlintResult({
-    status: 1,
-    blocking: [],
-    suppressed: [queueDiagnostic, reconcile],
-  }));
-  assert.throws(() => assertAcceptedActionlintResult({
-    status: 1,
-    blocking: [],
-    suppressed: [queueDiagnostic],
-  }), /exact queue:max compatibility set/);
-  assert.throws(() => assertAcceptedActionlintResult({
-    status: null,
-    signal: 'SIGKILL',
-    blocking: [],
-    suppressed: [queueDiagnostic, reconcile],
-  }), /did not exit normally/);
-  assert.throws(() => assertAcceptedActionlintResult({
-    status: 1,
-    blocking: ['different schema error'],
-    suppressed: [queueDiagnostic, reconcile],
-  }), /different schema error/);
+test('every actionlint diagnostic fails the run', () => {
+  assert.throws(() => assertAcceptedActionlintResult({ status: 1, output: diagnostic }), /unexpected key "bogus"/);
+  assert.throws(() => assertAcceptedActionlintResult({ status: 0, output: diagnostic }), /unexpected key "bogus"/);
+});
+
+test('an abnormal actionlint exit fails the run even without diagnostics', () => {
+  assert.throws(() => assertAcceptedActionlintResult({ status: 1, output: '' }), /did not exit cleanly/);
+  assert.throws(() => assertAcceptedActionlintResult({ status: null, signal: 'SIGKILL' }), /did not exit cleanly/);
 });

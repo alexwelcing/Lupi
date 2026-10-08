@@ -96,6 +96,7 @@ jobs:
 
   build-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -132,7 +133,7 @@ jobs:
       - name: Validate GitHub workflow schemas
         run: pnpm verify:workflows
 
-      - name: Test actionlint compatibility filter
+      - name: Test actionlint runner
         run: node --test tools/run-actionlint.test.mjs
 
       - name: Test product contract verifier
@@ -186,9 +187,6 @@ jobs:
       - name: Test Cloud Functions
         working-directory: functions
         run: npm test
-
-      - name: Test Cloudflare Worker
-        run: pnpm cloudflare:test
 
       - name: Rebuild catalog and fail on drift
         run: |

@@ -83,17 +83,6 @@ test('retired research entry points explain the boundary without mounting a rend
 });
 
 test('student export emits a real PNG and keeps link sharing in Save', async ({ page }, testInfo) => {
-  const neutralHdr = Buffer.concat([
-    Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n', 'ascii'),
-    Buffer.from([128, 128, 128, 129]),
-  ]);
-  await page.route('https://raw.githack.com/**', route =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/octet-stream',
-      body: neutralHdr,
-    }),
-  );
   await page.goto('/?sim=water');
   await expect(page.locator('.lupine-main-viewport canvas')).toBeVisible({
     timeout: 30_000,
