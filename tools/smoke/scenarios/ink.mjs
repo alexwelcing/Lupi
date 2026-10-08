@@ -37,13 +37,24 @@ function setViewer(page, args) {
   }, args);
 }
 
-/** Wait until the ink driver rests at the configured look. */
-function waitInkRest(page, maxMs = 6_000) {
+/** The ink driver's weights for a shading ('off' is lit). */
+function weightsFor(style) {
+  const weight = SHADINGS.find((shading) => shading.style === style)?.weight;
+  return { mix: style === 'off' ? 0 : 1, hatch: 0, engrave: 0, halftone: 0, ...(weight ? { [weight]: 1 } : {}) };
+}
+
+/**
+ * Wait until the ink driver has taken `style` as its target (the store
+ * reaches it a render after set_viewer returns) and rests there.
+ */
+function waitInkRest(page, style, maxMs = 15_000) {
   return page
-    .waitForFunction(() => {
+    .waitForFunction((expected) => {
       const ink = window.__lupiPlay?.ink?.();
-      return ink && !ink.fading && !ink.holding && ink.mix === ink.target.mix ? ink : null;
-    }, null, { timeout: maxMs, polling: 50 })
+      if (!ink || ink.fading || ink.holding) return null;
+      const at = (values) => Object.entries(expected).every(([key, value]) => values[key] === value);
+      return at(ink.target) && at(ink) ? ink : null;
+    }, weightsFor(style), { timeout: maxMs, polling: 50 })
     .then((handle) => handle.jsonValue(), () => page.evaluate(() => window.__lupiPlay?.ink?.() ?? null));
 }
 
@@ -89,21 +100,20 @@ export default {
       // A new molecule keeps the last look (and the device remembers it): start lit, with bonds.
       const reset = await setViewer(page, { inkStyle: 'off', showBonds: true });
       check(`${id}: opens lit with bonds`, reset.ok, JSON.stringify(reset.error));
-      await waitInkRest(page);
+      await waitInkRest(page, 'off');
       const lit = await h.waitSettled(page, canvas, 0.01);
       await save(`${id}-lit`, lit.png);
 
       // 1. Each shading on its Look's plate, against the lit view.
-      for (const { style, weight, plate } of SHADINGS) {
+      for (const { style, plate } of SHADINGS) {
         const applied = await setViewer(page, { inkStyle: style, backgroundPreset: plate });
         check(`${id}: set_viewer inkStyle ${style}`, applied.ok, JSON.stringify(applied.error));
-        const ink = await waitInkRest(page);
-        const weights = ink ? { hatch: ink.hatch, engrave: ink.engrave, halftone: ink.halftone } : null;
-        const expected = { hatch: 0, engrave: 0, halftone: 0, ...(weight ? { [weight]: 1 } : {}) };
+        const ink = await waitInkRest(page, style);
+        const expected = weightsFor(style);
         check(
           `${id}: ${style} rests at its weights`,
-          Boolean(ink) && ink.mix === 1 && Object.entries(expected).every(([key, value]) => weights[key] === value),
-          JSON.stringify({ mix: ink?.mix, ...weights }),
+          Boolean(ink) && Object.entries(expected).every(([key, value]) => ink[key] === value),
+          JSON.stringify(ink && { mix: ink.mix, hatch: ink.hatch, engrave: ink.engrave, halftone: ink.halftone }),
         );
         const view = await h.waitSettled(page, canvas, 0.01);
         await save(`${id}-${style}`, view.png);
@@ -123,7 +133,7 @@ export default {
         await page.evaluate((pose) => window.__lupiViewerMcp.execute({ id: 'ink-close', tool: 'lupi.set_camera', arguments: pose }), { position, target: rig.target });
         for (const style of EXPORTED) {
           await setViewer(page, { inkStyle: style, backgroundPreset: 'paper-plate' });
-          await waitInkRest(page);
+          await waitInkRest(page, style);
           const close = await h.waitSettled(page, canvas, 0.01);
           await save(`${id}-${style}-close`, close.png);
         }
@@ -135,7 +145,7 @@ export default {
       const specIds = new Set();
       for (const style of EXPORTED) {
         await setViewer(page, { inkStyle: style, backgroundPreset: 'paper-plate' });
-        await waitInkRest(page);
+        await waitInkRest(page, style);
         const out = await exportPng(page, h, `${id}-${style}`);
         let image = null;
         let painted = 0;
