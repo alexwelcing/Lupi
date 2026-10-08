@@ -561,6 +561,10 @@ async function runScenarioAttempt(browser, spec, attempt) {
   };
 
   const context = await browser.newContext(contextOptions(spec.profile));
+  // Screenshots and waits without their own timeout take --timeout, not
+  // Playwright's 30 s: a page screenshot waits for a composited frame, which
+  // a loaded software renderer can take longer than that to give.
+  context.setDefaultTimeout(timeout);
   const page = await context.newPage();
   attachDiagnostics(page, spec.baseUrl, outcome.errors, spec.name);
   await stubThirdParty(page);

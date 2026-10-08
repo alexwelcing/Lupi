@@ -156,24 +156,44 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
   }
 }
 
+/**
+ * Wait until two captures 250 ms apart match. A software renderer under load
+ * can take longer than that to draw one frame, so two matching captures alone
+ * may straddle no frame at all: where the viewer reports its frame loop
+ * (`__lupiPlay`), the view is settled only when the loop sleeps or at least
+ * two frames were drawn between the captures.
+ */
 async function waitSettled(page, canvas, minForeground, maxMs = 25_000) {
   const started = Date.now();
   let previous = await captureCanvas(page, canvas);
+  let previousLoop = await frameLoop(page);
   let frames = 1;
   let lastDiff = null;
   while (Date.now() - started < maxMs) {
     await page.waitForTimeout(250);
     const current = await captureCanvas(page, canvas);
+    const loop = await frameLoop(page);
     frames += 1;
     const area = current.image.width * current.image.height;
     lastDiff = diffImages(previous.image, current.image).changed / area;
     const fg = foreground(current.image).fraction;
+    const drawn = loop && previousLoop ? loop.rendered - previousLoop.rendered : null;
+    const quiet = !loop || !loop.awake || (drawn != null && drawn >= 2);
     previous = current;
-    if (lastDiff < 0.001 && fg >= minForeground) {
+    previousLoop = loop;
+    if (lastDiff < 0.001 && fg >= minForeground && quiet) {
       return { ...current, meta: { settled: true, ms: Date.now() - started, frames, lastDiff } };
     }
   }
   return { ...previous, meta: { settled: false, ms: Date.now() - started, frames, lastDiff } };
+}
+
+/** The viewer's frame loop ({ rendered, awake }), or null without the Play hooks. */
+async function frameLoop(page) {
+  return page.evaluate(() => {
+    const demand = window.__lupiPlay?.state?.()?.frameDemand;
+    return demand && Number.isFinite(demand.rendered) ? { rendered: demand.rendered, awake: demand.awake === true } : null;
+  }).catch(() => null);
 }
 
 async function assessRender(page, canvas, image, minForeground) {
@@ -290,7 +310,9 @@ async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
     }
     if (isTouchProfile(spec.profile)) await page.touchscreen.tap(point.x, point.y);
     else await page.mouse.click(point.x, point.y);
-    const shown = await card.first().waitFor({ state: 'visible', timeout: 4_000 }).then(() => true, () => false);
+    // The card follows the pick's frames: on SwiftShader under a shared
+    // machine's load that took 4-9 s after the click.
+    const shown = await card.first().waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
     tried.push({ ...point, shown });
     if (shown) {
       const info = await card.first().evaluate((node) => ({
