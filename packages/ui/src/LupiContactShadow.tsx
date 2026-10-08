@@ -379,7 +379,9 @@ function createShadowMaterial(): ShadowShading {
     smoothstep(0, rise, elapsed).oneMinus(),
     smoothstep(rise, duration.add(rise), elapsed),
   );
-  const arriving: N = select(M.uArrivalMode.greaterThan(2.5), scattering, condensing);
+  // Scatter is mode 3; condense, flat and the morph (4) fade in as they land.
+  const isScatter: N = M.uArrivalMode.greaterThan(2.5).and(M.uArrivalMode.lessThan(3.5));
+  const arriving: N = select(isScatter, scattering, condensing);
   const motionFade: N = mix(float(1), arriving, M.uMotionWeight.mul(M.uArrivalWeight).clamp(0, 1));
 
   const material = new THREE.MeshBasicNodeMaterial({

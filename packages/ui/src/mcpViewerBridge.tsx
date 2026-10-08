@@ -27,6 +27,7 @@ import { openMolecule } from './viewer/openMolecule';
 import { getCameraRig } from './camera/rigApi';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools, readMcpRendererStatus } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
+import { beginMcpActivity } from './mcp/activity';
 import { createLupiMcpDriver, type LupiMcpRendererStatus, type LupiMcpStatus } from './mcp/driver';
 import { listViewerBonds, readBondStatus } from './mcp/bondStatus';
 import type { BondProfile } from '@atlas/core/bonds';
@@ -1216,9 +1217,12 @@ async function executeLupiViewerMcpBatch(requests: LupiMcpRequest[]): Promise<Lu
 async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<LupiMcpResponse> {
   // Quiet Idle: an MCP command draws its result, whatever it changed.
   requestLupiFrames();
+  // A molecule a command loads opens at once (no morph arrival).
+  const endActivity = beginMcpActivity();
   try {
     return await runLupiViewerMcpRequest(request);
   } finally {
+    endActivity();
     requestLupiFrames();
   }
 }

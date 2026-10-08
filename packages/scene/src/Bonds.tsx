@@ -57,6 +57,7 @@ import { wrapDelta } from './interpolation';
 import { bondMaterialParams, createBondBoxGeometry } from './bondImpostor';
 import { markInstancedAttributeUpdateRange, resolveAtomQualityTier, type AtomQualityTier } from './AtomsOptimized';
 import { LUPI_JOB, LUPI_PHASE } from './framePhases';
+import { isDisplayMorphFor } from './tsl/displayMotion';
 import {
   createLupiEnvBinding,
   createLupiLightUniforms,
@@ -937,6 +938,10 @@ export function Bonds({
     colorEnd.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute(BOND_ATTR.colorStart, colorStart);
     geo.setAttribute(BOND_ATTR.colorEnd, colorEnd);
+    // The morph arrival's per-end atom indices (tsl/displayMotion.ts).
+    const pairAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
+    pairAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute(BOND_ATTR.pair, pairAttr);
     geo.instanceCount = 0;
     // Bonds live inside the atom cloud; the atom mesh already frustum-culls
     // the same volume, so fail open here.
@@ -1028,6 +1033,8 @@ export function Bonds({
         ? (interpolationFactor ?? 0)
         : 0;
     resources.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
+    // The morph arrival's starts belong to one frame: read them only for it.
+    resources.uniforms.uMorphOn.value = isDisplayMorphFor(frame.positions) ? 1 : 0;
   }, { phase: LUPI_PHASE.uniforms, id: uniformsJobId });
 
   // ─── Property data ─────────────────────────────────────────────────
@@ -1077,6 +1084,8 @@ export function Bonds({
     const endAttr = geometry.attributes[BOND_ATTR.end] as THREE.InstancedBufferAttribute;
     const startArr = startAttr.array as Float32Array;
     const endArr = endAttr.array as Float32Array;
+    const pairAttr = geometry.attributes[BOND_ATTR.pair] as THREE.InstancedBufferAttribute;
+    const pairArr = pairAttr.array as Float32Array;
     let startTargetArr: Float32Array | null = null;
     let endTargetArr: Float32Array | null = null;
     let startTarget: THREE.InstancedBufferAttribute | null = null;
@@ -1117,6 +1126,9 @@ export function Bonds({
       const o = i * 3;
       startArr[o] = ax; startArr[o + 1] = ay; startArr[o + 2] = az;
       endArr[o] = bx; endArr[o + 1] = by; endArr[o + 2] = bz;
+      // A collapsed stale bond's end is its start atom (b = a) for the morph too.
+      pairArr[i * 2] = a;
+      pairArr[i * 2 + 1] = stale ? a : b;
       if (startTargetArr && endTargetArr) {
         if (nextPos && !stale) {
           const nax = ax + wrapDelta(nextPos[a * 3] - ax, bsx);
@@ -1135,6 +1147,7 @@ export function Bonds({
     }
     markInstancedAttributeUpdateRange(startAttr, drawCount * 3);
     markInstancedAttributeUpdateRange(endAttr, drawCount * 3);
+    markInstancedAttributeUpdateRange(pairAttr, drawCount * 2);
     if (startTarget && endTarget) {
       markInstancedAttributeUpdateRange(startTarget, drawCount * 3);
       markInstancedAttributeUpdateRange(endTarget, drawCount * 3);

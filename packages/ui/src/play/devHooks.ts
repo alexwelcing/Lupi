@@ -35,6 +35,9 @@
  *                         Fuse); ink('hold', p) holds the fuse's front at p (the
  *                         next fuse's when none runs), ink('release') lets it burn
  *                         on, ink('pace', k) runs fuses k times slower
+ *   __lupiPlay.morph()  → plays the last switch's morph arrival again while its
+ *                         molecule is on screen ({ atoms, previousAtoms } or null);
+ *                         state().motion.morph reports a running morph's counts
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -65,7 +68,8 @@ export type PlayDevHookName =
   | 'follow'
   | 'replay'
   | 'remix'
-  | 'ink';
+  | 'ink'
+  | 'morph';
 
 export interface PlayRigState {
   position: Vec3;
@@ -118,6 +122,8 @@ export interface LupiPlayDevApi {
   remix?: DevHook;
   /** The Illustrate look: `{ mix, hatch, weight, target, holding, fading, arrival, fuse }` (ink/InkLookDriver.tsx). */
   ink?: DevHook;
+  /** The morph arrival: plays the last switch's morph again (play/PlayLayer.tsx). */
+  morph?: DevHook;
 }
 
 declare global {
@@ -140,7 +146,8 @@ type ExposedHookName =
   | 'follow'
   | 'replay'
   | 'remix'
-  | 'ink';
+  | 'ink'
+  | 'morph';
 const EXPOSED: ReadonlyArray<ExposedHookName> = [
   'poke',
   'flick',
@@ -155,6 +162,7 @@ const EXPOSED: ReadonlyArray<ExposedHookName> = [
   'replay',
   'remix',
   'ink',
+  'morph',
 ];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;
