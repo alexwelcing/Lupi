@@ -89,6 +89,11 @@ export const INK_CONTOUR_TUNING = {
   outerLine: 2.6,
   /** The depth ring's radius, as a share of the inner line. */
   innerReach: 0.6,
+  /**
+   * The ring is at least one texel per this many texels of picture height, so
+   * it spans the same share of a tall phone canvas as of a desktop one.
+   */
+  ringPicture: 900,
   /** Crease: the inward turn of the slope across the ring, from faint to full ink. */
   crease: [0.22, 0.6] as const,
   /** Step: the ring's Sobel gradient (a slope), from faint to full ink. */
@@ -99,8 +104,10 @@ export const INK_CONTOUR_TUNING = {
   content: [0.25, 0.75] as const,
   /** Slopes are clamped to this (the plate's depth is the far plane). */
   slopeLimit: 64,
-  /** Depth buffer resolution, in steps of [0, 1], used as a noise floor for creases. */
-  depthSteps: 2 ** 22,
+  /** Depth buffer resolution, in steps of [0, 1] (24-bit depth), used as a noise floor for creases. */
+  depthSteps: 2 ** 24,
+  /** How many depth steps of slope noise a crease must clear. */
+  grainMargin: 4,
 } as const;
 
 /**
@@ -186,7 +193,11 @@ export function inkContour(input: InkContourInput): Node {
     // crease line spans the ring on both sides of it and thins toward its
     // edges). Offsets are whole texels: a fractional one samples a stepped
     // edge differently on alternate rows and combs it.
-    const radius = max(round(innerPx.mul(T.innerReach)), 1.0).toVar();
+    // A tall canvas (a phone held upright, at DPR 2–3) keeps the ring's share
+    // of the picture: with one texel, its footprint shrinks while the depth
+    // grain at the fitted distance grows, and the grain swallows the creases.
+    const ringFloor = max(round(size.y.div(T.ringPicture)), 1.0);
+    const radius = max(round(innerPx.mul(T.innerReach)), ringFloor).toVar();
     const centreRaw = (depth.sample(at) as N).r.toVar();
     const zc = distanceAt(centreRaw).toVar();
     // The ring's footprint in world units at the centre's distance:
@@ -222,7 +233,7 @@ export function inkContour(input: InkContourInput): Node {
     let crease: N = float(0);
     for (const [a, c, span] of LINES) {
       const onSurface = max(abs(slopes[a]), abs(slopes[c])).lessThan(T.jump * span);
-      const turn = slopes[a].add(slopes[c]).negate().div(span).sub(grain.mul(4));
+      const turn = slopes[a].add(slopes[c]).negate().div(span).sub(grain.mul(T.grainMargin));
       crease = max(crease, select(onSurface, turn, float(0)));
     }
     const inner = max(step, smoothstep(T.crease[0], T.crease[1], crease))
