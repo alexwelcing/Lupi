@@ -3,19 +3,19 @@
 Short-list item 15 ([round 2: Ink and Light](brainstorm/2026-09-viewer-play/round2/signature-and-moonshots.md#r2-signature-and-moonshots-06)).
 Lupi's ink drawing (the home hero, the `/m` pages and their cards, Lupi Daily) is now a Look inside the 3D viewer, and the landing's molecule tiles are ink drawings that light up into the 3D molecule.
 
-Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the WebGPU and WebGL2 backends) through the `ink` smoke plugin; nothing here has been seen on a phone or a hardware GPU. Every tuning value is a first guess.
+Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the WebGPU and WebGL2 backends) through the `ink` smoke plugin, and Chalk through the `chalk` plugin; nothing here has been seen on a phone or a hardware GPU. Every tuning value is a first guess.
 
 ## What a visitor gets
 
 ### The Illustrate look
 
-- **Illustrate**: flat colour on the sage plate, ink at every edge. **Sketch**: pen hatching on the paper plate (`#e7ebe3`, the Daily's paper). **Engrave**: a banknote line engraving on the paper plate. **Halftone**: print dots on the paper plate, like a comic or a riso print.
+- **Illustrate**: flat colour on the sage plate, ink at every edge. **Sketch**: pen hatching on the paper plate (`#e7ebe3`, the Daily's paper). **Engrave**: a banknote line engraving on the paper plate. **Halftone**: print dots on the paper plate, like a comic or a riso print. **Chalk**: a chalkboard drawing on the sage plate, light on dark, the drawing made for Lupi's dark plate, where black ink is hard to read.
 - **Where to find it:**
-  - **Style → Looks**: Illustrate, Sketch, Engrave and Halftone, next to Studio, Paper, Night and Prism.
+  - **Style → Looks**: Illustrate, Sketch, Engrave, Halftone and Chalk, next to Studio, Paper, Night and Prism.
   - **The Play tray**: a Look row, *Lit · Ink*. Ink keeps your plate and light and only changes how the molecule is drawn. The pill flashes the change, and while the drawing is on its resting dot has an ink ring. No new chrome.
-  - **The palette**: Ink, Sketch, Engrave, Halftone and Lit. The `I` key toggles ink and light.
-  - **Ink and `I` bring back the last drawing used** in the tab (flat, hatched, engraved or halftone), whether it came from a Look or the Ink controls.
-  - **All visual mods → Ink**: the drawing (off, flat colour, hatched, engraved, halftone dots), the ink weight and a sage or paper plate.
+  - **The palette**: Ink, Sketch, Engrave, Halftone, Chalk and Lit. The `I` key toggles ink and light.
+  - **Ink and `I` bring back the last drawing used** in the tab (flat, hatched, engraved, halftone or chalk), whether it came from a Look or the Ink controls.
+  - **All visual mods → Ink**: the drawing (off, flat colour, hatched, engraved, halftone dots, chalk), the ink weight and a sage or paper plate.
 - **How the drawing is made:**
   - **Fills**: the CPK colour, lifted slightly toward paper, in three bands from the key light (shade, colour, lit) plus a cel catchlight. The bands follow the Light controls.
   - **Depth without screen-space AO**: crevices fall into the shade band through the baked contact occlusion, so the drawing holds still while it spins.
@@ -27,12 +27,18 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
   - **Sketch** adds strokes in the shade, crossed in the deepest shade.
   - **Engrave** cuts three plates of fine lines, as on a banknote: a base plate at 8°, a plate at 80° in the shade and one at −30° in the deepest shade. Lines swell with the shade until they merge, and thin away on the lit side. Each ball's lines are cut about its own centre (each stick's about its midpoint) and bow over it like the parallels of a slightly tilted globe, so the lines travel with the ball as the molecule turns. The burin meanders a little (Perlin noise). The colour shows between the lines.
   - **Halftone** lays ink dots on a 45° screen over the lifted colour. The dots grow with the shade and nearly merge in the deepest shade; the lit side and the catchlight stay clean, so the element colours read.
-  - Engraving and halftone are ported by hand into TSL from [Shaders](https://shaders.com) (MIT): the Engraving component's line plates and the Halftone component's dot plate. Their tone is the drawing's own light value (half-Lambert × baked occlusion), not screen brightness. Strokes and dots are laid out in full-picture pixels, like the hatching, so an export keeps the screen's weight and its tiles meet without seams. Neither reads time: a still view draws no frames.
+  - **Chalk** draws light on dark, the way a chalkboard drawing does, so the lit side carries the chalk and the shade shows the board:
+    - the outlines, and the contour, are chalk (`#eceadb`, a warm off-white) instead of ink;
+    - the element colour is a pastel, rubbed thinly over the board (the plate), thicker toward the light and smudged;
+    - three families of chalk strokes come in as the light rises: one at 45°, a crossing one at −45° on the lit side, and level strokes on the brightest faces, in the pastel lifted toward chalk white, with a chalk dab for the catchlight;
+    - the board has a tooth (value noise, a fine grain over a coarse one): chalk takes only where the tooth stands above one minus the stroke's pressure, so a light stroke breaks into specks, a heavy one holds, and the outlines fray now and then;
+    - over a light plate the board is the sage plate's colour, so Chalk chosen on paper draws on dark discs rather than white on white.
+  - Engraving, halftone and chalk are ported by hand into TSL from [Shaders](https://shaders.com) (MIT): the Engraving component's line plates, the Halftone component's dot plate and the Chalkboard component's hatch families and dust. Their tone is the drawing's own light value (half-Lambert × baked occlusion), not screen brightness. Strokes and dots are laid out in full-picture pixels, like the hatching, so an export keeps the screen's weight and its tiles meet without seams. Chalk's strokes and dust are laid out about each ball's centre (each stick's midpoint), so they travel with the ball as the molecule turns. None of them reads time: a still view draws no frames.
   - **Depth**: the far side of the molecule fades toward the plate (up to 40 %), as the drawings fade their back atoms.
 - **Transitions**: switching between ink and light from the tray, the palette or `I` runs as a Light Fuse (below), about a second. A change from anywhere else (an agent's `lupi.set_viewer`, the Looks grid, a link) fades over about half a second, and so does switching between any two drawings (each has its own weight).
 - **Effects**: while ink is on, the effect recipe rests (no AO, glow, focus, vignette or tone mapping), so the flat colours and the ink reach the screen exactly. Turning ink off brings the recipe back unchanged. The contour runs while the drawing shows (the look is on, or still fading out, or Ink-to-Light is handing over) and fades with it.
 - **A new molecule** keeps the Illustrate look.
-- **Sharing**: share links, saved views and settings remembered on the device all keep the look. In the `s=` state and the short `ink=` link the drawings are `f` (flat), `h` (hatched), `e` (engraved) and `d` (halftone dots); `f` and `h` read as before.
+- **Sharing**: share links, saved views and settings remembered on the device all keep the look. In the `s=` state and the short `ink=` link the drawings are `f` (flat), `h` (hatched), `e` (engraved), `d` (halftone dots) and `c` (chalk); `f` and `h` read as before.
 - **Exports** draw it: PNG, JPEG, WebP, thumbnails and MCP images. Line weight follows the export's size, so a 2160 px export has the screen's weight. The contour is drawn once over the whole assembled picture, so a tiled export shows no seam. Over a transparent background it inks the molecule only.
 
 ### Ink tiles and Ink-to-Light
@@ -69,7 +75,7 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 
 - **A Look, not toy motion.** Illustrate never moves an atom and never changes data, and exports carry it. The fades, the Light Fuse and the hand-off drawing are display-only: every capture renders the configured look (a capture guard sets the target value and turns the fuse off), never a half-faded or half-fused one.
 - **Agents see no fuse.** `lupi.set_viewer { inkStyle }` crossfades as before; only the UI's own toggles and Ink-to-Light fuse.
-- **Artifact identity.** The spec records `view.ink` only while the look is on, so every lit spec keeps its `specId`. `view.ink` requires `view.postprocess` to be `raw-scene`.
+- **Artifact identity.** The spec records `view.ink` only while the look is on, so every lit spec keeps its `specId`. `view.ink` requires `view.postprocess` to be `raw-scene`. `view.ink.ink` is the colour the drawing's outlines and contour draw in: the house ink, or chalk for Chalk.
 - **The contour in the spec.** `view.ink.contour` is `{ pipeline: 'ink-contour.v1', inner, outer }` (line widths in ink units), so a contoured drawing never shares a `specId` with the drawing before it. An ink spec without it (written before the contour) still validates and exports without one.
 - **The contour in the capture.** An ink capture assembles its tiles as a look capture does (colour clamped as the raw path clamps it, the nearest depth of each block, and coverage), then inks the contour once at the output resolution. It has no time and no noise, so a still view stays still and an export repeats. The renderer fingerprint's determinism facts name it (`ink-clamp=alpha`, `ink-contour.v1-output-resolution`), so every V2 render-parity candidate needs re-deriving.
 
@@ -77,7 +83,7 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 
 | Piece | File |
 |---|---|
-| The drawing: fills, outline, hatching, engraving, halftone, `uInkPx`, capture guard | `packages/scene/src/tsl/inkLook.ts` |
+| The drawing: fills, outline, hatching, engraving, halftone, chalk, the drawing's ink colour, `uInkPx`, capture guard | `packages/scene/src/tsl/inkLook.ts` |
 | Mixed into the impostors (one uniform branch each) | `packages/scene/src/tsl/atomImpostorMaterial.ts`, `bondImpostorMaterial.ts` |
 | Fades, Ink-to-Light and running the Light Fuse | `packages/ui/src/ink/InkLookDriver.tsx` |
 | The fuse's hops (bond steps, gaps between fragments, spatial fallback) and the centre-front seed | `packages/ui/src/ink/fuseHops.ts` |
@@ -85,14 +91,15 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 | Bonds handing their pairs to the fuse | `packages/scene/src/Bonds.tsx` |
 | Ink on and off (tray, palette, `I`), the last drawing used, the `ink=` link, and asking for a fuse | `packages/ui/src/ink/illustrate.ts` |
 | Looks and the paper plate | `packages/ui/src/sceneLooks.ts`, `backgroundPresets.ts` |
-| Local smoke (all four drawings, exports of Engrave and Halftone) | `tools/smoke/scenarios/ink.mjs` |
+| Local smoke (all five drawings, exports of Engrave and Halftone) | `tools/smoke/scenarios/ink.mjs` |
+| Local smoke for Chalk (light rim on the dark plate, live and exported, its own specId) | `tools/smoke/scenarios/chalk.mjs` |
 | The post recipe stepping aside | `packages/ui/src/postprocess/controls.ts` (`inkRecipe`) |
 | The contour (one TSL node, live and in exports) | `packages/ui/src/postprocess/inkContour.ts`, in `postPipeline.ts` and `export/captureLookPass.ts` |
 | The spec (`view.ink`) | `packages/ui/src/mcp/renderArtifactAdapter.ts`, `packages/core/src/renderArtifact.ts` |
 | Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `library/GalleryCollection.tsx`, `switcher/switchIndex.ts`, `relay/stage.ts` |
 | Tile poses, fit and drawing models | `scripts/molecule-pages/build.mts` (`/m/manifest.json`, `/og/m/<id>-ink.json`) |
 
-Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, weight, target, holding, fading, arrival, fuse }`, with `fuse: { running, seed, progress, mode, held }` (`mode` is `'graph'`, `'spatial'` or `'uniform'`, null before the first fuse). `__lupiPlay.ink('hold', p)` holds the front at `p` (0..1), the running fuse's or the next one's, `ink('release')` lets it burn on, and `ink('pace', k)` runs fuses `k` times slower; the fuse smoke (`tools/smoke/scenarios/fuse.mjs`) uses them on software renderers, which draw a frame or two a second, for its filmstrips and its export check.
+Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'chalk' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots*, *chalk*, *chalkboard*, *blackboard* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, chalk, weight, target, holding, fading, arrival, fuse }`, with `fuse: { running, seed, progress, mode, held }` (`mode` is `'graph'`, `'spatial'` or `'uniform'`, null before the first fuse). `__lupiPlay.ink('hold', p)` holds the front at `p` (0..1), the running fuse's or the next one's, `ink('release')` lets it burn on, and `ink('pace', k)` runs fuses `k` times slower; the fuse smoke (`tools/smoke/scenarios/fuse.mjs`) uses them on software renderers, which draw a frame or two a second, for its filmstrips and its export check.
 
 `?contour=0` (also inside a hash route) leaves the contour out of the live view and of exports, whose specs then carry no `view.ink.contour`: a debug switch for before-and-after comparisons. The local smoke plugin `tools/smoke/scenarios/contour.mjs` uses it.
 
@@ -106,7 +113,8 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
 | Hatching | spacing 4.4 units, strokes up to 52 % of it; single strokes from darkness 0.40, crossed from 0.62 | `INK_LOOK_TUNING` |
 | Engraving | lines 4 units apart (the shade plates 0.92× and 1.13× as dense) at 8°, +72° and −38°; each plate's axis leans 14° toward the viewer; tone contrast 1.6 about mid-grey, never darker than 0.12; brightness shifts the lines by 0.35 × 1.5 periods; a meander of 0.7 spacing over a 30-spacing wavelength; lines at 92 % ink; fills lifted 30 % toward paper, shade 10 % | `INK_LOOK_TUNING` |
 | Halftone | dot pitch 5.6 units on a 45° screen; dots from darkness 0.28 to their largest (0.64 of the pitch, nearly merged) at 0.86; 88 % ink; fills lifted 16 %, shade 6 % | `INK_LOOK_TUNING` |
-| Ink colour | `#0c1211` | `INK_LOOK_COLORS` |
+| Chalk | strokes 10 units apart with a soft core of 45 % of the period, at +45°, −45° and level from light values 0.42, 0.70 and 0.88 (± 0.06), at pressure 0.9, in the pastel (the element colour 42 % toward chalk) lifted 45 % toward chalk white; pastel rubbed 6 % (shade) to 34 % (lit) over the board, thinned to 55 % where the tooth is low; the tooth is value noise at 0.85 (65 %) and 0.2 cells per unit, chalk taking over ± 0.14 of one minus the pressure; outlines at pressure 0.93, the catchlight 0.95 | `INK_LOOK_TUNING` |
+| Ink colour | `#0c1211`; chalk `#eceadb`; the board over a light plate `#101817` | `INK_LOOK_COLORS` |
 | Depth cue | the back of the bounding sphere fades 40 % toward the plate, from 15 % of the depth on | `INK_LOOK_TUNING` |
 | Contour widths | inner lines 1.3, outer contour 2.6 ink units | `INK_CONTOUR_TUNING` |
 | Contour thresholds | meeting lines from a slope turn of 0.22 (full at 0.6); steps from a Sobel slope of 2.5 (full at 5); a tap steeper than 2.5 is across a step; coverage 0.25–0.75 reads as molecule | `INK_CONTOUR_TUNING` (part of `ink-contour.v1`) |
@@ -118,8 +126,9 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
 
 ## Half-done and next
 
-- **Unseen.** The band thresholds, line weights, hatching density and the hand-off timing are first guesses. Engrave, Halftone, the contour and the Light Fuse were tuned from headless SwiftShader screenshots only; the fuse was seen at a frame or two a second (held and slowed), never at 60 fps.
+- **Unseen.** The band thresholds, line weights, hatching density and the hand-off timing are first guesses. Engrave, Halftone, Chalk, the contour and the Light Fuse were tuned from headless SwiftShader screenshots only; the fuse was seen at a frame or two a second (held and slowed), never at 60 fps.
 - **Engrave and Halftone are screen-bound in one way each.** The engraving's meander and the halftone screen sit on the picture, not the molecule, so while the molecule turns the dots stay put on the page and the meander drifts slightly across the balls (the lines themselves travel with each ball). Small atoms (under about two line spacings across) and thin bonds lose their lines and dots, as they lose hatching.
+- **Chalk is seen on two molecules.** Caffeine and C60, in SwiftShader on both backends. Its strokes and tooth sit on each ball, so they travel with it, but they keep their size in picture pixels, so zooming in slides them across the ball (as every drawing's strokes do). The tooth is about a pixel fine on screen, so it may sparkle a little while the molecule turns on a real display. Small atoms keep their pastel and chalk outline but lose their strokes. Chalk chosen on a light plate draws on dark discs (the board), with its outline nearly lost against the paper.
 - **The post recipe does not wait for the fuse.** It follows the chosen look at once, as it did under the crossfade: turning ink on removes AO, glow and tone mapping from the lit part still burning, and turning it off brings them onto the ink still waiting. Over the fuse's second this shows as a slight change in the part not yet reached.
 - **The fuse has no ember.** The burning edge is a ragged blend between the two looks; a thin glowing line at the front would read more like a lit fuse.
 - **The match frame is close, not exact.**
@@ -127,7 +136,7 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
   - The viewer may fit a little tighter or looser than the drawing's size if the visitor's atom scale is not 1.
 - **No calibration goldens** between the SVG drawing and the TSL look. There is no CPU SVG engine for cards beyond the existing `/m` drawing, no resvg Worker cards from saved views, and no no-GPU fallback plate.
 - **The contour is tuned on two molecules.** Space-filling caffeine and ball-and-stick C60, in a software renderer (SwiftShader) on both backends. Its thresholds are first guesses.
-  - On the dark sage plate the outer contour is ink on near-black, so it reads only as a slightly smaller molecule; it shows on paper (Sketch) and light plates.
+  - On the dark sage plate the outer contour is ink on near-black, so it reads only as a slightly smaller molecule; it shows on paper (Sketch) and light plates, and in chalk under Chalk.
   - The holes of a cage are plate too, so the rims around them get the outer weight where the plate shows through.
   - Meeting lines come from depth alone (no normal buffer: the impostors write none). Far zoomed out, the depth buffer's own grain sets a floor and faint creases drop out.
   - The export contour has no anti-aliasing beyond its soft thresholds (the live view has FXAA after it).

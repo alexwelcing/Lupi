@@ -202,20 +202,23 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   software renderer. It never writes molecule data.
 - **The Illustrate look (Ink and Light).** Looks → Illustrate (flat colour on
   the sage plate), Sketch (hatched), Engrave (banknote line engraving) or
-  Halftone (print dots), the last three on the paper plate, the Play tray's
+  Halftone (print dots), those three on the paper plate, or Chalk (a
+  chalkboard drawing on the sage plate), the Play tray's
   Look row (Lit · Ink · Remix ⟳), the palette or the `I` key draw the molecule like the
   Lupi ink drawings: toon fills from the key light, crevices shaded by the
   baked contact occlusion, an ink outline at every atom and bond silhouette
   and, for Sketch, pen hatching; for Engrave, three line plates cut about
-  each ball and bowed over it; for Halftone, ink dots on a 45° screen (the
-  last two ported from Shaders, MIT; `packages/scene/src/tsl/inkLook.ts`,
+  each ball and bowed over it; for Halftone, ink dots on a 45° screen; for
+  Chalk, chalk outlines, a pastel of the element colour rubbed over the
+  board and three families of dusty chalk strokes thickening toward the
+  light (the last three ported from Shaders, MIT; `packages/scene/src/tsl/inkLook.ts`,
   mixed into both impostors by one weight, each drawing its own weight, so
   any change crossfades). Ink and `I` bring back the last drawing used. It
   is a Look, not toy motion: the store's `inkStyle` (`off`, `flat`, `hatch`,
-  `engrave`, `halftone`) and `inkWeight` ride share URLs (`ink`, `iw` in the
-  `s=` state; letters `f`, `h`, `e`, `d`), saved views and
+  `engrave`, `halftone`, `chalk`) and `inkWeight` ride share URLs (`ink`, `iw` in the
+  `s=` state; letters `f`, `h`, `e`, `d`, `c`), saved views and
   `lupi.set_viewer`, and replay and Remix links add a top-level
-  `ink=f|h|e|d`; a Foil finish steps
+  `ink=f|h|e|d|c`; a Foil finish steps
   aside under ink (a drawing carries no foil); while ink is on the post
   recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
   stays); exports draw it and their spec records `view.ink`. A toggle from
@@ -228,7 +231,8 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   A screen-space contour (`packages/ui/src/postprocess/inkContour.ts`) adds
   the lines an impostor cannot draw: where balls meet or a stick enters a
   ball, a line on the near side of every depth step, and a heavier outer
-  contour against the plate (inside the silhouette). It runs while the
+  contour against the plate (inside the silhouette), in the drawing's ink
+  (chalk under Chalk). It runs while the
   drawing shows, fades with it, and draws in exports (`view.ink.contour`);
   `?contour=0` leaves it out of the view and of exports (a debug switch).
   Ink-to-Light: a molecule opened from an ink drawing (the hero, a molecule
@@ -547,7 +551,7 @@ Common recognized keywords:
 - `hide bonds`, `show bonds`, `show cell`, `show axes`
 - `studio`, `paper`, `editorial`, `cinematic`, `diagram` — postprocess presets
 - `iso`, `top`, `side`, `front`, `free` — camera presets
-- `ink` / `illustrate`, `hatched` / `sketch`, `engrave` / `engraving` / `etching`, `halftone` / `print` / `dots`, `lit` — the Illustrate look (flat, hatched, engraved, halftone, off)
+- `ink` / `illustrate`, `hatched` / `sketch`, `engrave` / `engraving` / `etching`, `halftone` / `print` / `dots`, `chalk` / `chalkboard` / `blackboard`, `lit` — the Illustrate look (flat, hatched, engraved, halftone, chalk, off)
 
 ## Render artifact V2 truth
 
@@ -623,8 +627,9 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
 - The Illustrate look shades the impostors themselves, so its capture takes
   the raw path (`view.postprocess` is `raw-scene`), and the spec carries
   `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch' |
-  'engrave' | 'halftone', weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
-  `plate`), present only while the look is on, so every
+  'engrave' | 'halftone' | 'chalk', weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
+  `plate`; `ink` is the colour the drawing's lines and contour draw in,
+  chalk `#eceadb` for Chalk), present only while the look is on, so every
   lit spec keeps its identity. Ink line weight follows the capture's texel
   scale and the picture's short side, so an export keeps the screen's weight.
   The look's screen-space contour runs the way a recipe would: the tiles
@@ -856,7 +861,7 @@ pnpm verify:dual-backend
 browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
-Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
+Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chalk, chrome,
 first-minute, flick, foil, fuse, hero, ink, contour, morph, relay, settings, tap, toys, remix, replay, sheets, pages) run with the built-in
 scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
 `--reduced-motion` checks the Still comfort level.
