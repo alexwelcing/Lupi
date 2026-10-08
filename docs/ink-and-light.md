@@ -3,28 +3,32 @@
 Short-list item 15 ([round 2: Ink and Light](brainstorm/2026-09-viewer-play/round2/signature-and-moonshots.md#r2-signature-and-moonshots-06)).
 Lupi's ink drawing (the home hero, the `/m` pages and their cards, Lupi Daily) is now a Look inside the 3D viewer, and the landing's molecule tiles are ink drawings that light up into the 3D molecule.
 
-Nothing here has been seen running in a browser yet. Every tuning value is a first guess.
+Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the WebGPU and WebGL2 backends) through the `ink` smoke plugin; nothing here has been seen on a phone or a hardware GPU. Every tuning value is a first guess.
 
 ## What a visitor gets
 
 ### The Illustrate look
 
-- **Illustrate**: flat colour on the sage plate, ink at every edge. **Sketch**: pen hatching on the paper plate (`#e7ebe3`, the Daily's paper).
+- **Illustrate**: flat colour on the sage plate, ink at every edge. **Sketch**: pen hatching on the paper plate (`#e7ebe3`, the Daily's paper). **Engrave**: a banknote line engraving on the paper plate. **Halftone**: print dots on the paper plate, like a comic or a riso print.
 - **Where to find it:**
-  - **Style → Looks**: Illustrate and Sketch, next to Studio, Paper, Night and Prism.
+  - **Style → Looks**: Illustrate, Sketch, Engrave and Halftone, next to Studio, Paper, Night and Prism.
   - **The Play tray**: a Look row, *Lit · Ink*. Ink keeps your plate and light and only changes how the molecule is drawn. The pill flashes the change, and while the drawing is on its resting dot has an ink ring. No new chrome.
-  - **The palette**: Ink, Sketch and Lit. The `I` key toggles ink and light.
-  - **All visual mods → Ink**: the drawing (off, flat colour, hatched), the ink weight and a sage or paper plate.
+  - **The palette**: Ink, Sketch, Engrave, Halftone and Lit. The `I` key toggles ink and light.
+  - **Ink and `I` bring back the last drawing used** in the tab (flat, hatched, engraved or halftone), whether it came from a Look or the Ink controls.
+  - **All visual mods → Ink**: the drawing (off, flat colour, hatched, engraved, halftone dots), the ink weight and a sage or paper plate.
 - **How the drawing is made:**
   - **Fills**: the CPK colour, lifted slightly toward paper, in three bands from the key light (shade, colour, lit) plus a cel catchlight. The bands follow the Light controls.
   - **Depth without screen-space AO**: crevices fall into the shade band through the baked contact occlusion, so the drawing holds still while it spins.
   - **Ink**: an outline at every atom's silhouette and along both edges of every bond. Atoms too small to carry a line lose it, and bonds thinner than about two lines become a single ink stroke, as in the drawings.
   - **Sketch** adds strokes in the shade, crossed in the deepest shade.
+  - **Engrave** cuts three plates of fine lines, as on a banknote: a base plate at 8°, a plate at 80° in the shade and one at −30° in the deepest shade. Lines swell with the shade until they merge, and thin away on the lit side. Each ball's lines are cut about its own centre (each stick's about its midpoint) and bow over it like the parallels of a slightly tilted globe, so the lines travel with the ball as the molecule turns. The burin meanders a little (Perlin noise). The colour shows between the lines.
+  - **Halftone** lays ink dots on a 45° screen over the lifted colour. The dots grow with the shade and nearly merge in the deepest shade; the lit side and the catchlight stay clean, so the element colours read.
+  - Engraving and halftone are ported by hand into TSL from [Shaders](https://shaders.com) (MIT): the Engraving component's line plates and the Halftone component's dot plate. Their tone is the drawing's own light value (half-Lambert × baked occlusion), not screen brightness. Strokes and dots are laid out in full-picture pixels, like the hatching, so an export keeps the screen's weight and its tiles meet without seams. Neither reads time: a still view draws no frames.
   - **Depth**: the far side of the molecule fades toward the plate (up to 40 %), as the drawings fade their back atoms.
-- **Transitions**: switching between ink and light fades over about half a second.
+- **Transitions**: switching between ink and light fades over about half a second, and so does switching between any two drawings (each has its own weight).
 - **Effects**: while ink is on, the effect recipe rests (no AO, glow, focus, vignette or tone mapping), so the flat colours and the ink reach the screen exactly. Turning ink off brings the recipe back unchanged.
 - **A new molecule** keeps the Illustrate look.
-- **Sharing**: share links, saved views and settings remembered on the device all keep the look.
+- **Sharing**: share links, saved views and settings remembered on the device all keep the look. In the `s=` state and the short `ink=` link the drawings are `f` (flat), `h` (hatched), `e` (engraved) and `d` (halftone dots); `f` and `h` read as before.
 - **Exports** draw it: PNG, JPEG, WebP, thumbnails and MCP images. Line weight follows the export's size, so a 2160 px export has the screen's weight.
 
 ### Ink tiles and Ink-to-Light
@@ -49,17 +53,18 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
 
 | Piece | File |
 |---|---|
-| The drawing: fills, outline, hatching, `uInkPx`, capture guard | `packages/scene/src/tsl/inkLook.ts` |
+| The drawing: fills, outline, hatching, engraving, halftone, `uInkPx`, capture guard | `packages/scene/src/tsl/inkLook.ts` |
 | Mixed into the impostors (one uniform branch each) | `packages/scene/src/tsl/atomImpostorMaterial.ts`, `bondImpostorMaterial.ts` |
 | Fades and Ink-to-Light | `packages/ui/src/ink/InkLookDriver.tsx` |
-| Ink on and off (tray, palette, `I`) | `packages/ui/src/ink/illustrate.ts` |
+| Ink on and off (tray, palette, `I`), the last drawing used, the `ink=` link | `packages/ui/src/ink/illustrate.ts` |
 | Looks and the paper plate | `packages/ui/src/sceneLooks.ts`, `backgroundPresets.ts` |
+| Local smoke (all four drawings, exports of Engrave and Halftone) | `tools/smoke/scenarios/ink.mjs` |
 | The post recipe stepping aside | `packages/ui/src/postprocess/controls.ts` (`inkRecipe`) |
 | The spec (`view.ink`) | `packages/ui/src/mcp/renderArtifactAdapter.ts`, `packages/core/src/renderArtifact.ts` |
 | Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `library/GalleryCollection.tsx`, `switcher/switchIndex.ts`, `relay/stage.ts` |
 | Tile poses, fit and drawing models | `scripts/molecule-pages/build.mts` (`/m/manifest.json`, `/og/m/<id>-ink.json`) |
 
-Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, weight, target, holding, fading, arrival }`.
+Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, weight, target, holding, fading, arrival }`.
 
 ## Tuning points
 
@@ -69,13 +74,16 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'off', inkWeight }`; com
 | Bands | shade below 0.36, lit above 0.74 (half-Lambert × occlusion), catchlight at N·H > 0.968 | `INK_LOOK_TUNING` |
 | Fills | lifted toward paper 8 % (flat) or 40 % (hatched); shade 46 % (flat) or 14 % (hatched) toward `#1a2321` | `INK_LOOK_TUNING` |
 | Hatching | spacing 4.4 units, strokes up to 52 % of it; single strokes from darkness 0.40, crossed from 0.62 | `INK_LOOK_TUNING` |
+| Engraving | lines 4 units apart (the shade plates 0.92× and 1.13× as dense) at 8°, +72° and −38°; each plate's axis leans 14° toward the viewer; tone contrast 1.6 about mid-grey, never darker than 0.12; brightness shifts the lines by 0.35 × 1.5 periods; a meander of 0.7 spacing over a 30-spacing wavelength; lines at 92 % ink; fills lifted 30 % toward paper, shade 10 % | `INK_LOOK_TUNING` |
+| Halftone | dot pitch 5.6 units on a 45° screen; dots from darkness 0.28 to their largest (0.64 of the pitch, nearly merged) at 0.86; 88 % ink; fills lifted 16 %, shade 6 % | `INK_LOOK_TUNING` |
 | Ink colour | `#0c1211` | `INK_LOOK_COLORS` |
 | Depth cue | the back of the bounding sphere fades 40 % toward the plate, from 15 % of the depth on | `INK_LOOK_TUNING` |
-| Fades | lit ⇄ ink 480 ms; Ink-to-Light waits 200 ms after the first frame, then 520 ms | `InkLookDriver.tsx` |
+| Fades | lit ⇄ ink and drawing ⇄ drawing 480 ms; Ink-to-Light waits 200 ms after the first frame, then 520 ms | `InkLookDriver.tsx` |
 
 ## Half-done and next
 
-- **Unseen.** The band thresholds, line weights, hatching density and the hand-off timing are first guesses.
+- **Unseen.** The band thresholds, line weights, hatching density and the hand-off timing are first guesses. Engrave and Halftone were tuned from headless SwiftShader screenshots only.
+- **Engrave and Halftone are screen-bound in one way each.** The engraving's meander and the halftone screen sit on the picture, not the molecule, so while the molecule turns the dots stay put on the page and the meander drifts slightly across the balls (the lines themselves travel with each ball). Small atoms (under about two line spacings across) and thin bonds lose their lines and dots, as they lose hatching.
 - **The match frame is close, not exact.**
   - The relay's drawing is the lit SVG (gradient balls) at an orthographic pose, while the first 3D frame is the toon look in perspective. The pose, size and plate match; the shading style changes over the 120 ms crossfade.
   - The viewer may fit a little tighter or looser than the drawing's size if the visitor's atom scale is not 1.
