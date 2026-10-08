@@ -19,13 +19,17 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
   - **Fills**: the CPK colour, lifted slightly toward paper, in three bands from the key light (shade, colour, lit) plus a cel catchlight. The bands follow the Light controls.
   - **Depth without screen-space AO**: crevices fall into the shade band through the baked contact occlusion, so the drawing holds still while it spins.
   - **Ink**: an outline at every atom's silhouette and along both edges of every bond. Atoms too small to carry a line lose it, and bonds thinner than about two lines become a single ink stroke, as in the drawings.
+  - **Contour**: a screen-space pass over the finished picture adds the lines an impostor cannot draw for itself:
+    - **meeting lines** where two balls interpenetrate (space-filling) or a stick enters a ball, from the depth around each pixel;
+    - **steps**, a line on the near side wherever the depth jumps, so things without their own ink (far-LOD clusters, bricks) are outlined too;
+    - **the outer contour**, the molecule against the plate, about twice the inner weight. It lies inside the silhouette, so it never paints the plate. A feature with plate close on both sides (a thin bond across a hole in a cage) keeps its own outline instead of turning solid.
   - **Sketch** adds strokes in the shade, crossed in the deepest shade.
   - **Depth**: the far side of the molecule fades toward the plate (up to 40 %), as the drawings fade their back atoms.
 - **Transitions**: switching between ink and light fades over about half a second.
-- **Effects**: while ink is on, the effect recipe rests (no AO, glow, focus, vignette or tone mapping), so the flat colours and the ink reach the screen exactly. Turning ink off brings the recipe back unchanged.
+- **Effects**: while ink is on, the effect recipe rests (no AO, glow, focus, vignette or tone mapping), so the flat colours and the ink reach the screen exactly. Turning ink off brings the recipe back unchanged. The contour runs while the drawing shows (the look is on, or still fading out, or Ink-to-Light is handing over) and fades with it.
 - **A new molecule** keeps the Illustrate look.
 - **Sharing**: share links, saved views and settings remembered on the device all keep the look.
-- **Exports** draw it: PNG, JPEG, WebP, thumbnails and MCP images. Line weight follows the export's size, so a 2160 px export has the screen's weight.
+- **Exports** draw it: PNG, JPEG, WebP, thumbnails and MCP images. Line weight follows the export's size, so a 2160 px export has the screen's weight. The contour is drawn once over the whole assembled picture, so a tiled export shows no seam. Over a transparent background it inks the molecule only.
 
 ### Ink tiles and Ink-to-Light
 
@@ -43,7 +47,9 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
 ## Truth rules
 
 - **A Look, not toy motion.** Illustrate never moves an atom and never changes data, and exports carry it. The fades and the hand-off drawing are display-only: every capture renders the configured look (a capture guard sets the target value), never a half-faded one.
-- **Artifact identity.** The spec records `view.ink` only while the look is on, so every lit spec keeps its `specId`; the render-parity candidates do not need re-deriving for this change. `view.ink` requires `view.postprocess` to be `raw-scene`.
+- **Artifact identity.** The spec records `view.ink` only while the look is on, so every lit spec keeps its `specId`. `view.ink` requires `view.postprocess` to be `raw-scene`.
+- **The contour in the spec.** `view.ink.contour` is `{ pipeline: 'ink-contour.v1', inner, outer }` (line widths in ink units), so a contoured drawing never shares a `specId` with the drawing before it. An ink spec without it (written before the contour) still validates and exports without one.
+- **The contour in the capture.** An ink capture assembles its tiles as a look capture does (colour clamped as the raw path clamps it, the nearest depth of each block, and coverage), then inks the contour once at the output resolution. It has no time and no noise, so a still view stays still and an export repeats. The renderer fingerprint's determinism facts name it (`ink-clamp=alpha`, `ink-contour.v1-output-resolution`), so every V2 render-parity candidate needs re-deriving.
 
 ## Where it lives
 
@@ -55,11 +61,14 @@ Nothing here has been seen running in a browser yet. Every tuning value is a fir
 | Ink on and off (tray, palette, `I`) | `packages/ui/src/ink/illustrate.ts` |
 | Looks and the paper plate | `packages/ui/src/sceneLooks.ts`, `backgroundPresets.ts` |
 | The post recipe stepping aside | `packages/ui/src/postprocess/controls.ts` (`inkRecipe`) |
+| The contour (one TSL node, live and in exports) | `packages/ui/src/postprocess/inkContour.ts`, in `postPipeline.ts` and `export/captureLookPass.ts` |
 | The spec (`view.ink`) | `packages/ui/src/mcp/renderArtifactAdapter.ts`, `packages/core/src/renderArtifact.ts` |
 | Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `library/GalleryCollection.tsx`, `switcher/switchIndex.ts`, `relay/stage.ts` |
 | Tile poses, fit and drawing models | `scripts/molecule-pages/build.mts` (`/m/manifest.json`, `/og/m/<id>-ink.json`) |
 
 Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, weight, target, holding, fading, arrival }`.
+
+`?contour=0` (also inside a hash route) leaves the contour out of the live view and of exports, whose specs then carry no `view.ink.contour`: a debug switch for before-and-after comparisons. The local smoke plugin `tools/smoke/scenarios/contour.mjs` uses it.
 
 ## Tuning points
 
@@ -71,6 +80,8 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'off', inkWeight }`; com
 | Hatching | spacing 4.4 units, strokes up to 52 % of it; single strokes from darkness 0.40, crossed from 0.62 | `INK_LOOK_TUNING` |
 | Ink colour | `#0c1211` | `INK_LOOK_COLORS` |
 | Depth cue | the back of the bounding sphere fades 40 % toward the plate, from 15 % of the depth on | `INK_LOOK_TUNING` |
+| Contour widths | inner lines 1.3, outer contour 2.6 ink units | `INK_CONTOUR_TUNING` |
+| Contour thresholds | meeting lines from a slope turn of 0.22 (full at 0.6); steps from a Sobel slope of 2.5 (full at 5); a tap steeper than 2.5 is across a step; coverage 0.25–0.75 reads as molecule | `INK_CONTOUR_TUNING` (part of `ink-contour.v1`) |
 | Fades | lit ⇄ ink 480 ms; Ink-to-Light waits 200 ms after the first frame, then 520 ms | `InkLookDriver.tsx` |
 
 ## Half-done and next
@@ -80,6 +91,11 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'off', inkWeight }`; com
   - The relay's drawing is the lit SVG (gradient balls) at an orthographic pose, while the first 3D frame is the toon look in perspective. The pose, size and plate match; the shading style changes over the 120 ms crossfade.
   - The viewer may fit a little tighter or looser than the drawing's size if the visitor's atom scale is not 1.
 - **No calibration goldens** between the SVG drawing and the TSL look. There is no CPU SVG engine for cards beyond the existing `/m` drawing, no resvg Worker cards from saved views, and no no-GPU fallback plate.
-- **No screen-space contour.** The outline comes from each impostor's own silhouette, so the meeting line where two balls interpenetrate (space-filling) or where a stick enters a ball has no ink. A depth-discontinuity pass in the post chain (and in `captureLookPass.ts` for exports) would add it, with a heavier outer contour.
+- **The contour is tuned on two molecules.** Space-filling caffeine and ball-and-stick C60, in a software renderer (SwiftShader) on both backends. Its thresholds are first guesses.
+  - On the dark sage plate the outer contour is ink on near-black, so it reads only as a slightly smaller molecule; it shows on paper (Sketch) and light plates.
+  - The holes of a cage are plate too, so the rims around them get the outer weight where the plate shows through.
+  - Meeting lines come from depth alone (no normal buffer: the impostors write none). Far zoomed out, the depth buffer's own grain sets a floor and faint creases drop out.
+  - The export contour has no anti-aliasing beyond its soft thresholds (the live view has FXAA after it).
+- **Cost.** The contour reads 34 texels per pixel (nine of depth, 25 of coverage) in one full-screen pass, and the scene pass writes its coverage target while the drawing shows. Quiet Idle draws no frames on a still view, so it costs nothing at rest.
 - **Refractive glass** draws real spheres, so it has no ink. Far-LOD clusters and the billion-atom bricks are not inked either.
 - **Raster exports with bonds** still fail closed (an existing rule), so inked bonds appear in interactive exports only.
