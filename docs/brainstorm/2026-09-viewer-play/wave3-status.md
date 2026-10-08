@@ -151,6 +151,20 @@ Wave 2's escape hatches still apply: `?frameloop=always`, `?controls=orbit`, `?f
 
 ## Half-done and known limits
 
+> **Update 2026-10-08.**
+>
+> - **`test:ui` has run.** LUPI CI on `main` ran it green on the wave-3 merge
+>   (`66d6220`, 2026-10-03, run 37109926172) and on every merge since, most
+>   recently `11d1f4f` on 2026-10-05 (run 37303629773). That includes the
+>   edited phone Style assertions in `tests/ui/mobile-scene-controls.spec.ts`
+>   and `tests/ui/release-smoke.spec.ts`. The dual-backend smoke, render
+>   parity and the export verifiers are local checks; this note records no
+>   run of them.
+> - **Remix and export.** "Remixed views stay exportable" holds while the
+>   Remix sheet's worlds preference is off (the default). With it on, half
+>   the codes pick a world (a procedural field or an image), and an opaque
+>   artifact export of a world fails closed.
+
 - **Unseen.** No feature in this wave has run in a browser. The first real compile of the ink and Foil shader branches will be on the owner's device.
 - **Phone sheets.**
   - Only the handle and title bar drag a sheet; dragging down from scrolled-to-top content does not.
