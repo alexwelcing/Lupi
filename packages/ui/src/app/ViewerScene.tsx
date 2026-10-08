@@ -495,7 +495,7 @@ export function ViewerScene({
     const { min, max } = file.trajectory.globalBounds;
     const diag = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
     return diag * 3;
-  }, [file?.name]);
+  }, [file]);
   const clusterFadeFar = useMemo(() => clusterFadeNear * 3.3, [clusterFadeNear]);
 
   // Per-atom occlusion for large scenes: computed off-thread from the paused

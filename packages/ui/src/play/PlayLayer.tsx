@@ -18,8 +18,12 @@
  *   to 0 when nothing is live (the materials' `If` gate then skips it all).
  * - The arrival is armed in a layout effect on the file (before the first
  *   render): `t0` follows the clock, so the first frame already shows the
- *   mist. It releases on the file's first frame (+120 ms behind the relay
- *   stage), or 4.5 s after arming.
+ *   mist. It releases on the file's first-frame mark, the moment the plate
+ *   over the canvas leaves (+120 ms behind the relay stage), and never
+ *   earlier: on a slow device the mark can come many seconds after the file
+ *   (FirstFrameSignal marks within 4 s of it, or later when the first frame
+ *   holds the main thread). Until the mark the pill does not call it
+ *   Illustrative: nobody can see it yet.
  * - Any pointerdown, key or wheel lands the arrival instantly, synchronously
  *   in the capture phase, before any pick (`installArrivalCancel`).
  * - The morph: every drawn frame remembers what the screen showed (the
@@ -116,13 +120,6 @@ const ARRIVAL_D = { standard: 0.6, gentle: 0.3 } as const;
 const MORPH_D = { standard: 0.9, gentle: 0.55 } as const;
 /** Behind the relay stage the release waits for its hand-off fade. */
 const RELAY_RELEASE_MS = 120;
-/**
- * The release fallback when no first frame is reported. Until the first-frame
- * mark a plate covers the canvas (the relay stage, or FirstFrameOverlay on a
- * fresh canvas), and the mark can wait for the bonds, so an earlier release
- * would play the arrival unseen. FirstFrameSignal marks within 4 s anyway.
- */
-const RELEASE_FALLBACK_MS = 4500;
 /** Poke ripple amplitude at Standard (Å); Gentle halves it, Still skips it. */
 const POKE_AMPLITUDE = DISPLAY_MOTION_TUNING.rippleAmplitude;
 /** Stirring (Poke latched): amplitude, and at most one ripple per 60 ms and 10 px. */
@@ -211,6 +208,11 @@ interface LiveArrival {
   armed: boolean;
   /** Motion-clock second from which the offset is exactly zero (set on release). */
   end: number;
+  /**
+   * The file whose first-frame mark shows the arrival (a plate covers the
+   * canvas until then); null when it is on screen at once (a scatter).
+   */
+  key: object | null;
 }
 
 const driver = {
@@ -410,7 +412,9 @@ function anyLive(): boolean {
 
 function syncDisplaced(): void {
   const store = playStore.getState();
-  const mode = driver.arrival?.mode ?? null;
+  const arrival = driver.arrival;
+  // An arrival under the plate is not on screen yet: nothing to label.
+  const mode = arrival && (arrival.key === null || hasFirstFrame(arrival.key)) ? arrival.mode : null;
   store.setDisplaced('arrival', mode === ARRIVAL_MODE.condense || mode === ARRIVAL_MODE.flat || mode === ARRIVAL_MODE.morph);
   store.setDisplaced('scatter', mode === ARRIVAL_MODE.scatter);
   store.setDisplaced('ripple', rippleLive());
@@ -689,8 +693,12 @@ function viewDirFrom(camera: THREE.Camera, center: Vec3, out: THREE.Vector3): TH
   return out.normalize();
 }
 
-/** Arm an arrival: the first rendered frame already shows the mist (or the flat drawing). */
-function armArrival(mode: LiveMode, camera: THREE.Camera, seed: number, comfort: Comfort): void {
+/**
+ * Arm an arrival: the first rendered frame already shows the mist (or the
+ * flat drawing). `key` is the file whose first-frame mark shows it, or null
+ * when it is on screen at once.
+ */
+function armArrival(mode: LiveMode, camera: THREE.Camera, seed: number, comfort: Comfort, key: object | null = null): void {
   if (mode !== ARRIVAL_MODE.morph && driver.morph) {
     // A scatter replaces a running morph: its starts go.
     driver.morph = null;
@@ -698,7 +706,7 @@ function armArrival(mode: LiveMode, camera: THREE.Camera, seed: number, comfort:
   }
   const feel = arrivalFeel(mode, comfort);
   const now = motionNow();
-  driver.arrival = { mode, armed: true, end: Infinity };
+  driver.arrival = { mode, armed: true, end: Infinity, key };
   M.uMotionNow.value = now;
   M.uArrivalT0.value = now;
   M.uArrivalMode.value = mode;
@@ -720,11 +728,11 @@ function armArrival(mode: LiveMode, camera: THREE.Camera, seed: number, comfort:
  * Arm a morph from what the screen showed into `to`: the layers drawing `to`
  * open their gates now, and the starts are planned on its first frame.
  */
-function armMorph(from: ShownMolecule, to: Frame, center: Vec3, camera: THREE.Camera, comfort: Comfort): void {
+function armMorph(from: ShownMolecule, to: Frame, center: Vec3, camera: THREE.Camera, comfort: Comfort, key: object | null = null): void {
   driver.morph = { from, to, center: [center[0], center[1], center[2]], plan: null };
   lastMorph = { from, to };
   setDisplayMorph({ positions: to.positions, count: to.natoms, texels: null });
-  armArrival(ARRIVAL_MODE.morph, camera, 0, comfort);
+  armArrival(ARRIVAL_MODE.morph, camera, 0, comfort, key);
 }
 
 /** Start the armed arrival's clock (idempotent). */
@@ -910,7 +918,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       // A switch: the atoms on screen flow into the new molecule.
       previous.view.radius = sceneRadius(previous.frame, previous.view.center);
       adoptScene(opened, center);
-      armMorph(previous, opened, center, now.camera, input.comfort);
+      armMorph(previous, opened, center, now.camera, input.comfort, trajectory);
     } else {
       const mode = shouldPlayArrival(input);
       if (!mode) return undefined;
@@ -921,14 +929,18 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         now.camera,
         arrivalSeed(input.galleryId ?? 'lupi'),
         input.comfort === 'still' ? 'standard' : input.comfort,
+        trajectory,
       );
     }
     if (input.galleryId) markArrivalSeen(input.galleryId);
 
+    // The release waits for the mark, however late: the plate leaves on it.
     const behindRelay = isRelayActive();
     let relayTimer: ReturnType<typeof setTimeout> | null = null;
     const release = () => releaseArrival(live.current.camera);
     const onFirst = () => {
+      // On screen now: the pill calls it Illustrative (and a shared replay waits for it).
+      syncDisplaced();
       if (!behindRelay) release();
       else if (relayTimer === null) relayTimer = setTimeout(release, RELAY_RELEASE_MS);
     };
@@ -936,10 +948,8 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       if (key === trajectory) onFirst();
     });
     if (hasFirstFrame(trajectory)) onFirst();
-    const fallback = setTimeout(release, RELEASE_FALLBACK_MS);
     return () => {
       offFirst();
-      clearTimeout(fallback);
       if (relayTimer !== null) clearTimeout(relayTimer);
     };
   }, [trajectory]);

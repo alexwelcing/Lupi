@@ -15,12 +15,16 @@
  *    guessable and never the answer) is listed with its warmth and opens
  *    clue 2.
  * 3. /scale loads and offers its entries and Dive (it is a 3D page, not a
- *    zero-canvas one, and has no h1).
+ *    zero-canvas one, and has no h1). The slider's landmark labels that
+ *    print never overlap and stay on screen, on the opening entry and on
+ *    Copper.
  * 4. /play?sim=c60_buckyball opens C60 in the viewer. The Worker sends people
  *    from /play to /?…; tools/serve-web.mjs serves the app at /play itself,
  *    so either path counts, and the report says which one this server took.
  *    While the deep link opens, the viewer header never shows over the
- *    full-window "Opening…" plate (it arrives with the molecule).
+ *    full-window "Opening…" plate (it arrives with the molecule), and the
+ *    arrival waits for the plates to go: it never runs, and the pill never
+ *    says Illustrative, while one still covers the molecule.
  * Every page loads with no uncaught error and no console error (the smoke
  * tool fails the run on either); errors are also listed per page in
  * report.json under data.pages.
@@ -61,10 +65,14 @@ function installCanvasCounter() {
 
 /**
  * Page-side: every frame, whether the viewer header is drawn over the
- * full-window "Opening…" plate (the deep link's plate before the molecule).
+ * full-window "Opening…" plate (the deep link's plate before the molecule);
+ * and whether the arrival runs, or the pill calls it Illustrative where it
+ * can be seen, while a plate (that one, or the one over the canvas until the
+ * first frame) still covers the molecule. It records until the first frame
+ * and the arrival have both landed.
  */
 function installOpeningRecorder() {
-  const log = (window.__openingSmoke = { headerOverPlate: 0, plateFrames: 0 });
+  const log = (window.__openingSmoke = { headerOverPlate: 0, plateFrames: 0, coveredFrames: 0, arrivalUnderPlate: 0, labelUnderPlate: 0, arrivals: [] });
   const tick = () => {
     const plate = [...document.querySelectorAll('.lupi-plate')].find((node) => !node.dataset.inViewport && getComputedStyle(node).display !== 'none');
     const header = document.querySelector('.lupine-status-bar');
@@ -74,7 +82,19 @@ function installOpeningRecorder() {
       const hit = r && r.width > 0 ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
       if (hit && header.contains(hit)) log.headerOverPlate += 1;
     }
-    if (!window.__lupiPlay?.state?.().firstFrame) requestAnimationFrame(tick);
+    const state = window.__lupiPlay?.state?.();
+    const arrival = state?.motion?.arrival ?? null;
+    if (arrival !== (log.arrivals.at(-1) ?? null)) log.arrivals.push(arrival);
+    const covering = [...document.querySelectorAll('.lupi-plate')].some((node) => getComputedStyle(node).display !== 'none' && !node.hasAttribute('data-fading'));
+    if (covering) {
+      log.coveredFrames += 1;
+      if (arrival && !arrival.startsWith('armed')) log.arrivalUnderPlate += 1;
+      const status = document.querySelector('.lupi-play-pill__status-text');
+      const r = status?.getBoundingClientRect();
+      const hit = r && r.width > 0 ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+      if (hit && status.closest('.lupi-play-pill')?.contains(hit) && /Illustrative/.test(status.textContent)) log.labelUnderPlate += 1;
+    }
+    if (!state?.firstFrame || arrival !== null) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
@@ -111,6 +131,44 @@ const readPage = (page, stageSelector) => page.evaluate((stage) => {
     scrollWidth: document.documentElement.scrollWidth,
   };
 }, stageSelector);
+
+/**
+ * Page-side: the /scale slider's landmark labels that print (their text
+ * boxes), every pair of them that overlaps, and any that leaves the screen.
+ * A label hidden for crowding (or by CSS) is not printed and not judged.
+ */
+const readScaleTicks = (page) => page.evaluate(async () => {
+  await document.fonts?.ready;
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const boxes = [];
+  const ticks = [...document.querySelectorAll('.scale-tick')];
+  for (const tick of ticks) {
+    const label = tick.querySelector('.scale-tick-label') ?? tick;
+    const style = getComputedStyle(label);
+    if (getComputedStyle(tick).display === 'none' || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) continue;
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const r = range.getBoundingClientRect();
+    if (!(r.width > 0)) continue;
+    boxes.push({ text: label.textContent.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom });
+  }
+  const overlaps = [];
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const a = boxes[i];
+      const b = boxes[j];
+      if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) {
+        overlaps.push(`"${a.text}" × "${b.text}" (${Math.round(Math.min(a.right, b.right) - Math.max(a.left, b.left))} px)`);
+      }
+    }
+  }
+  return {
+    landmarks: ticks.length,
+    shown: boxes.map((b) => b.text),
+    overlaps,
+    offScreen: boxes.filter((b) => b.left < 0 || b.right > innerWidth).map((b) => b.text),
+  };
+});
 
 /** Wait until every ink image on the page has finished loading (or 10 s). */
 const inkImagesSettled = (page) => page.waitForFunction(
@@ -266,6 +324,25 @@ export default {
     check('/scale loads with its entries and Dive', scale.status === 200 && scaleUi && entries > 0, `status ${scale.status}, Dive ${scaleUi}, Copper entry ${entries}`);
     noErrorsOn('/scale', '/scale');
     await save('scale', await page.screenshot({ scale: 'css' }));
+    // The slider's landmark labels never print over each other: the opening
+    // entry (a googolplex, ten landmarks) and Copper (three).
+    const ticksJudged = async (label) => {
+      const ticks = await readScaleTicks(page);
+      outcome.data.scaleTicks = { ...outcome.data.scaleTicks, [label]: ticks };
+      check(`/scale (${label}): the slider's landmark labels never overlap`,
+        ticks.landmarks > 0 && ticks.shown.length >= 2 && ticks.overlaps.length === 0 && ticks.offScreen.length === 0,
+        `${ticks.shown.length}/${ticks.landmarks} printed [${ticks.shown.join(', ')}]; overlaps: ${ticks.overlaps.join(', ') || 'none'}; off screen: ${ticks.offScreen.join(', ') || 'none'}`);
+    };
+    await ticksJudged('opening entry');
+    const axis = page.locator('.scale-axis');
+    if (await axis.count()) await save('scale-axis', await axis.screenshot({ scale: 'css' }));
+    const copper = page.getByRole('button', { name: 'Copper' }).first();
+    if (entries > 0) {
+      await copper.click();
+      await page.waitForFunction(() => document.querySelector('.scale-page')?.getAttribute('data-scale-entry') === 'copper-billion', null, { timeout: 15_000, polling: 200 }).catch(() => {});
+      await ticksJudged('Copper');
+      if (await axis.count()) await save('scale-axis-copper', await axis.screenshot({ scale: 'css' }));
+    }
 
     // 4. The share path of a viewer link.
     current = '/play?sim=c60_buckyball';
@@ -286,6 +363,17 @@ export default {
     outcome.data.play.opening = opening;
     check('the header never shows over the full-window "Opening…" plate', opening?.headerOverPlate === 0,
       `${opening?.headerOverPlate ?? '?'} of ${opening?.plateFrames ?? '?'} plate frames had the header on top`);
+    // The arrival waits for the plate to go: it never runs, and the pill
+    // never says Illustrative, while a plate covers the molecule.
+    await page.waitForFunction(() => {
+      const state = window.__lupiPlay?.state?.();
+      return Boolean(state?.firstFrame) && (state.motion?.arrival ?? null) === null;
+    }, null, { timeout: 60_000, polling: 250 }).catch(() => {});
+    const covered = await page.evaluate(() => window.__openingSmoke ?? null);
+    outcome.data.play.opening = covered;
+    check('the arrival waits for the plate (it never runs, nor is labelled, under it)',
+      Boolean(covered) && covered.arrivalUnderPlate === 0 && covered.labelUnderPlate === 0 && covered.arrivals.some((a) => a && !a.startsWith('armed')),
+      `arrival ${covered?.arrivals.map(String).join(' -> ') ?? '?'}; of ${covered?.coveredFrames ?? '?'} covered frames, ${covered?.arrivalUnderPlate ?? '?'} with it running and ${covered?.labelUnderPlate ?? '?'} with "Illustrative" showing`);
     noErrorsOn('/play?sim=c60_buckyball', current);
   },
 };
