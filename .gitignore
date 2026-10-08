@@ -38,3 +38,7 @@ packages/parsers/wasm/target/
 # Wrangler local secrets (TYPESAFE_API_KEY, renderer tokens). Never commit.
 **/.dev.vars
 **/.dev.vars.*
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -203,5 +203,12 @@ cd packages/ui && npx vitest run --reporter=verbose
 | `@atlas/core` | vitest | node | Pure functions, types, data generators |
 | `@atlas/scene` | vitest | jsdom | R3F components via `@react-three/test-renderer` |
 | `@atlas/ui` | vitest + `@testing-library/react` | jsdom | React components, store integration |
+| `@atlas/chatgpt-widget` | vitest | node | Tool-result parsing, `@atlas/core` aliased to its source |
 
-All configs are in `vitest.config.ts` in each package.
+Only three packages have a `vitest.config.ts`: `packages/scene` and
+`packages/ui` (jsdom, globals, `src/setupTests.ts`) and `apps/chatgpt-widget`
+(node). The other workspace packages that run vitest (`@atlas/core`,
+`@atlas/assessment`, `@atlas/nist`, `@atlas/parsers`, `@atlas/renderer` and
+`@atlas/mcp-worker`) use vitest's defaults: the node environment and no setup
+file. There is no root vitest workspace: `pnpm test` runs each package's own
+`test` script through turbo.

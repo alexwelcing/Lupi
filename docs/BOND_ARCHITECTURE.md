@@ -1,6 +1,14 @@
 # Bond Visualization Architecture
 ## Bridging Molecular Dynamics Science to Real-Time GPU Rendering
 
+This explainer predates the WebGPURenderer port and the molecular bond recipe.
+CPU detection (the worker over `packages/scene/src/bondDetectCpu.ts`) is still
+the `lupi-bonds.distance.v1` path it describes. Drawing has changed: each bond is now
+one ray-cast cylinder impostor with two endpoint colours, a TSL node material
+(`packages/scene/src/tsl/bondImpostorMaterial.ts`), so the half-cylinder meshes,
+`radiusBT` and bulk upload of §5.4–§5.6 and the GLSL filament shader of §6 are
+historical. The molecular recipe is in `docs/omol25-bonds-and-discovery.md` §2.
+
 ---
 
 ## 1. The Physics Problem: Bonds Are Not Edges
@@ -287,7 +295,7 @@ For interactive use, systems up to ~50K atoms run comfortably within a 16 ms fra
 
 2. **Bond-length histogram ≠ g(r).** As discussed, our histogram minimum is a useful proxy but not a true g(r) minimum. A proper g(r) would require accumulating all pairwise distances (not just bonded ones) over multiple frames, which is a future analysis module.
 
-3. **No dynamic buffer growth.** The worker's `maxPairs` buffer is fixed at `min(natoms * 8, 50M)`. Dense systems with large cutoffs can overflow silently. Dynamic growth (e.g., `ArrayBuffer.transfer`) would solve this.
+3. **No dynamic buffer growth.** The worker's `maxPairs` buffer (`packages/scene/src/bondDetectCpu.ts`) is fixed at `min(natoms * 12, 50M)`. Dense systems with large cutoffs can overflow silently. Dynamic growth (e.g., `ArrayBuffer.transfer`) would solve this.
 
 4. **Periodic boundary conditions.** The current PBC handling in `uploadBonds` uses minimum-image convention but does not wrap bond visualization across cell boundaries. A bond crossing a periodic face is drawn as a long line across the cell instead of a short line across the boundary.
 

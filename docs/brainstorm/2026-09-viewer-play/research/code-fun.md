@@ -199,7 +199,7 @@ The phone gets the same DOM, reflowed; the reset added touch-sized actions and 3
 - **`lib/spring.ts`**: Euler–Cromer spring with default k=520, c=20 (ζ≈0.44) and a max step of 1/30 s (`:11-14, 38, 45`).
 - **`usePressSpring`**: writes `transform` directly with no React re-render and self-stops (`hooks/usePressSpring.ts:29-39`). Used by viewer controls (`controls.tsx:110, 166, 199, 230`; `studio/primitives.tsx:105, 580, 629`).
 - **`lib/clickSound.ts`**: "Opt-in and OFF by default — a scientific tool shouldn't make noise" (`:8-9`).
-  - No UI calls `setClickSoundEnabled`; the grep found no callers outside the module. The toggle described in `CONTROLS_RELEASE_NOTES.md` ("Look: … click-sound toggle") is stale.
+  - No UI calls `setClickSoundEnabled`; the grep found no callers outside the module. The toggle described in `docs/archive/CONTROLS_RELEASE_NOTES.md` ("Look: … click-sound toggle") is stale.
 
 ### 2.9 XR grab, throw and bounce (`xr/XRMoleculeInteraction.tsx`, `xr/grabMath.ts`)
 
@@ -414,4 +414,4 @@ Each opportunity is framed as problem → capability → where it plugs in.
 - `tests/ui/student-surface.spec.ts:9, 62`
 - `tools/atomize-media.mjs:1-38`; `apps/web/public/generated/atomized/*`; `apps/web/public/social-qr/*`
 - `apps/remotion-trailer/README.md`, `package.json`; `apps/mobile/README.md:1-21`; `apps/mobile/package.json:34-71`
-- Docs: `LUPINE.md`; `docs/product-ownership-contract.md`; `docs/product-reset-2026-09-04.md`; `docs/ux-redesign-2026.md`; `docs/gpu-studio-launch.md`; `docs/scan-pipeline.md`; `docs/jev-property-ranking.md:1-40`; `docs/historical-recovery-inventory.md:18-57`; `docs/mobile-expo.md:3, 244-256`; `MOBILE_VIEWER_RELEASE_NOTES.md`; `CONTROLS_RELEASE_NOTES.md`; `CHANGELOG.md:1-90`
+- Docs: `LUPINE.md`; `docs/product-ownership-contract.md`; `docs/product-reset-2026-09-04.md`; `docs/ux-redesign-2026.md`; `docs/gpu-studio-launch.md`; `docs/scan-pipeline.md`; `docs/jev-property-ranking.md:1-40`; `docs/historical-recovery-inventory.md:18-57`; `docs/mobile-expo.md:3, 244-256`; `docs/archive/MOBILE_VIEWER_RELEASE_NOTES.md`; `docs/archive/CONTROLS_RELEASE_NOTES.md`; `CHANGELOG.md:1-90`
