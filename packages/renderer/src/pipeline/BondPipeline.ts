@@ -55,8 +55,8 @@ export class BondPipeline {
   private bindGroup!: GPUBindGroup;
 
   // Storage Buffers
-  // positionBuffer is exposed publicly so BondRenderPipeline can bind it
-  // directly in its render-pipeline bind group (Phase-2 GPU rendering).
+  // positionBuffer is public, like getIndirectBuffer/getBondBuffer, so a GPU
+  // render pass can bind the compute results without a readback.
   public positionBuffer!: GPUBuffer; // vec4f(x, y, z, element_type)
   private elementRadiiBuffer!: GPUBuffer; // covalent radii array indexed by element_type
   private bondOutBuffer!: GPUBuffer;     // output bond indices (a, b, distance, _pad)

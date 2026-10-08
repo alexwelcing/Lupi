@@ -25,11 +25,6 @@ export const DEFAULT_SOCIAL_IMAGE = SEO_ROUTE_MANIFEST.defaultSocialImage;
 export const HOME_SEO = SEO_ROUTE_MANIFEST.routes.home;
 export const MASSIVE_LATTICE_SEO = SEO_ROUTE_MANIFEST.routes.massiveLattice;
 export const FUNCTIONAL_GROUPS_SEO = SEO_ROUTE_MANIFEST.routes.functionalGroups;
-export const FUNCTIONAL_GROUP_EXAMPLES_SEO = SEO_ROUTE_MANIFEST.routes.functionalGroupExamples;
-export const OCHEM_VIEWER_SEO = SEO_ROUTE_MANIFEST.routes.ochemViewer;
-export const OMOL25_SEO = SEO_ROUTE_MANIFEST.routes.omol25;
-export const OMOL25_GEOMETRY_SEO = SEO_ROUTE_MANIFEST.routes.omol25Geometry;
-export const MILLION_ATOM_VIEWER_SEO = SEO_ROUTE_MANIFEST.routes.millionAtomViewer;
 export const SCAN_SEO = SEO_ROUTE_MANIFEST.routes.scan;
 export const LIBRARY_SEO: Record<LibraryCollectionId, SeoConfig> = {
   all: SEO_ROUTE_MANIFEST.routes.library,

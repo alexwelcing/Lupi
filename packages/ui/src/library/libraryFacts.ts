@@ -13,8 +13,6 @@ const FACTS = new Map<string, Partial<Record<FacetId, number>>>(
 );
 const DERIVED = new Map<string, ReadonlySet<string>>(Object.entries(FILE.entries).map(([key, entry]) => [key, new Set(entry.derived ?? [])]));
 
-export const LIBRARY_FACTS_META = { taxonomy: FILE.taxonomy, prompt: FILE.prompt, model: FILE.model, generatedAt: FILE.generatedAt, entries: FACTS.size };
-
 export function factsFor(key: string): Partial<Record<FacetId, number>> | undefined {
   return FACTS.get(key);
 }

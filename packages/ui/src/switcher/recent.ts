@@ -24,8 +24,3 @@ export function subscribeRecent(listener: () => void): () => void {
     listeners.delete(listener);
   };
 }
-
-export function resetRecentSwitches(): void {
-  recent = [];
-  listeners.forEach((listener) => listener());
-}

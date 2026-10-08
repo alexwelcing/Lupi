@@ -90,28 +90,12 @@ export function getBgMedia(preset: BgPreset): BgMedia {
   return { kind: 'gradient', projection: 'equirectangular' };
 }
 
-export function getBgPoster(preset: BgPreset): string | undefined {
-  const media = getBgMedia(preset);
-  if (media.kind === 'image') return media.poster ?? media.src;
-  if (media.kind === 'video') return media.poster;
-  return preset.image;
-}
-
 export function isTexturedBgPreset(preset: BgPreset): boolean {
   return Boolean(preset.procedural) || getBgMedia(preset).kind !== 'gradient';
 }
 
 export function isPickerBgPreset(preset: BgPreset): boolean {
   return isTexturedBgPreset(preset) && preset.picker !== 'archive';
-}
-
-export function isVideoBgPreset(preset: BgPreset): boolean {
-  return getBgMedia(preset).kind === 'video';
-}
-
-export function getBgBadge(preset: BgPreset): string | undefined {
-  if (getBgMedia(preset).kind === 'video') return preset.badge ?? 'LOOP';
-  return preset.badge;
 }
 
 type MotionLoopTier = {
@@ -365,14 +349,6 @@ export const BG_PRESETS: Record<string, BgPreset> = {
   'spectrum-quiet': { top: '#151515', bottom: '#020203', label: 'Spectrum Quiet', image: '/backgrounds/bg_world_spectrum_quiet.png', category: 'neutral-world', badge: 'WORLD', intensity: 'balanced', context: 'Dark publication spectrum room with traces placed away from the inspection center.' },
   ...MOTION_LOOP_PRESETS,
 };
-
-export const BG_GRADIENT_PRESETS: BgPresetWithId[] = Object.entries(BG_PRESETS)
-  .filter(([, preset]) => preset.category === 'gradient')
-  .map(([id, preset]) => ({ id, ...preset }));
-
-export const BG_VIDEO_PRESETS: BgPresetWithId[] = Object.entries(BG_PRESETS)
-  .filter(([, preset]) => isVideoBgPreset(preset) && isPickerBgPreset(preset))
-  .map(([id, preset]) => ({ id, ...preset }));
 
 const TEXTURE_CATEGORY_ORDER = [
   { label: 'Neutral Worlds', categories: ['neutral-world'] },

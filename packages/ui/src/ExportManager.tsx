@@ -94,7 +94,6 @@ const MIN_NUMERIC_RANGE = 1e-6;
 // count. It posts no frames anywhere; the canvas is captured automatically.
 function VideoCaptureLoop({
   requestRef,
-  totalFrames,
   originalCameraPosition,
   file,
   isRecording,
@@ -609,8 +608,6 @@ export function ExportManager() {
   const captureStartRef = useRef<number | null>(null); // wall-clock anchor, set on first VideoCaptureLoop tick
   const recorderStoppedRef = useRef(false); // ensures recorder.stop() is called exactly once
   const requestRef = useRef<ExportRequest | null>(null);
-  const totalFrames = useRef(0);
-  const frameCount = useRef(0);
   const originalPixelRatio = useRef<number>(1);
   const originalCameraPosition = useRef<THREE.Vector3 | null>(null);
   const originalCameraFov = useRef<number | null>(null);
@@ -1148,8 +1145,6 @@ export function ExportManager() {
       console.error('[ExportManager] replay clip begin threw', error);
     }
 
-    totalFrames.current = fps * (req.replay ? req.replay.duration : req.durationSeconds || 5); // no longer used for completion; harmless
-    frameCount.current = 0;
     isRecording.current = true;
     setIsCapturing(true);
     // Kick the render loop: switching demand→always doesn't restart rAF on its own,
@@ -1193,7 +1188,6 @@ export function ExportManager() {
     if (exportRequest.type === 'glb' || exportRequest.type === 'usdz') {
       handle3DExportRef.current();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportRequest]);
 
   // Leaving the viewer mid-recording must not leave the toys suspended
@@ -1213,7 +1207,6 @@ export function ExportManager() {
       {isCapturing && (
         <VideoCaptureLoop
           requestRef={requestRef}
-          totalFrames={totalFrames}
           originalCameraPosition={originalCameraPosition}
           file={file}
           isRecording={isRecording}

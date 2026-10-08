@@ -22,7 +22,7 @@
  * - Textures are shared through a cache keyed by the text and its style, and
  *   disposed a moment after the last label using one unmounts.
  */
-import { useEffect, useMemo, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, type JSX } from 'react';
 import * as THREE from 'three/webgpu';
 
 export interface LupiTextProps {
@@ -264,11 +264,6 @@ function retain(entry: LabelEntry): () => void {
   };
 }
 
-/** Number of label textures currently cached. */
-export function labelTextureCount(): number {
-  return cache.size;
-}
-
 function anchorOffset(
   entry: LabelEntry,
   anchorX: NonNullable<LupiTextProps['anchorX']>,
@@ -353,9 +348,4 @@ export function LupiText({
       />
     </group>
   );
-}
-
-/** Label textures live in a module cache, so this stays a pass-through. */
-export function LupiTextProvider({ children }: { children: ReactNode }): JSX.Element {
-  return <>{children}</>;
 }

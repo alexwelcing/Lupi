@@ -20,7 +20,6 @@ function mockDevice() {
 describe('initWebGPU lifetime', () => {
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -39,7 +38,7 @@ describe('initWebGPU lifetime', () => {
         getPreferredCanvasFormat: vi.fn().mockReturnValue('bgra8unorm'),
       },
     });
-    const { initWebGPU } = await import('./AtomPipeline');
+    const { initWebGPU } = await import('./initWebGPU');
 
     await expect(initWebGPU(100)).resolves.toEqual({ device, format: 'bgra8unorm' });
     expect(device.destroy).not.toHaveBeenCalled();
@@ -56,7 +55,7 @@ describe('initWebGPU lifetime', () => {
         getPreferredCanvasFormat: vi.fn().mockReturnValue('bgra8unorm'),
       },
     });
-    const { initWebGPU } = await import('./AtomPipeline');
+    const { initWebGPU } = await import('./initWebGPU');
 
     const initialization = initWebGPU(10);
     await vi.advanceTimersByTimeAsync(10);
@@ -76,7 +75,7 @@ describe('initWebGPU lifetime', () => {
         getPreferredCanvasFormat: vi.fn().mockReturnValue('bgra8unorm'),
       },
     });
-    const { initWebGPU } = await import('./AtomPipeline');
+    const { initWebGPU } = await import('./initWebGPU');
 
     await expect(initWebGPU(100)).resolves.toBeNull();
     expect(adapter.requestDevice).toHaveBeenCalledTimes(2);
@@ -89,7 +88,7 @@ describe('initWebGPU lifetime', () => {
         getPreferredCanvasFormat: vi.fn(),
       },
     });
-    const { initWebGPU } = await import('./AtomPipeline');
+    const { initWebGPU } = await import('./initWebGPU');
 
     await expect(initWebGPU(100)).resolves.toBeNull();
   });
@@ -98,7 +97,6 @@ describe('initWebGPU lifetime', () => {
 describe('initWebGPU without an adapter', () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.spyOn(console, 'info').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
@@ -112,7 +110,7 @@ describe('initWebGPU without an adapter', () => {
     vi.useFakeTimers();
     const requestAdapter = vi.fn().mockResolvedValue(null);
     vi.stubGlobal('navigator', { gpu: { requestAdapter, getPreferredCanvasFormat: vi.fn() } });
-    const { initWebGPU, isWebGPUComputeUnavailable } = await import('./AtomPipeline');
+    const { initWebGPU, isWebGPUComputeUnavailable } = await import('./initWebGPU');
 
     expect(isWebGPUComputeUnavailable()).toBe(false);
     await expect(initWebGPU(5000)).resolves.toBeNull();
@@ -125,7 +123,7 @@ describe('initWebGPU without an adapter', () => {
 
   it('treats a missing navigator.gpu as unavailable without a handshake', async () => {
     vi.stubGlobal('navigator', {});
-    const { initWebGPU, isWebGPUComputeUnavailable } = await import('./AtomPipeline');
+    const { initWebGPU, isWebGPUComputeUnavailable } = await import('./initWebGPU');
     expect(isWebGPUComputeUnavailable()).toBe(true);
     await expect(initWebGPU(100)).resolves.toBeNull();
   });
