@@ -23,6 +23,9 @@
  *    the front held halfway has the artifactDigest of the export taken after
  *    the fuse (captures render the configured look, never a fuse).
  * 5. Quiet Idle: once the fuse is over the frame counter stands still.
+ * 6. Ink-to-Light: a tap on the home hero opens C60 in ink, and the light
+ *    comes on as a fuse (mode 'graph', arrival) from the centre-front atom,
+ *    ending lit.
  */
 
 const MOLECULES = ['c60_buckyball', 'caffeine'];
@@ -300,6 +303,46 @@ async function exportMidFuse(ctx, h) {
   outcome.data.exports = { held: held?.fuse ?? null, during: during?.fuse ?? null, mid, after };
   check('the spatial fuse (bonds hidden) runs from the centre-front atom', held?.fuse?.running === true && held.fuse.mode === 'spatial' && Number.isInteger(held.fuse.seed), JSON.stringify(held?.fuse));
   check('an export taken mid-fuse has the artifactDigest of the export after it', Boolean(mid.ok && after.ok && mid.digest) && mid.digest === after.digest && during?.fuse?.held === true, `${mid.digest} vs ${after.digest} ${JSON.stringify(mid.error ?? after.error)}`);
+  // The device remembers the look and the bonds: back to lit, with bonds, for Ink-to-Light.
+  await mcp(page, 'lupi.set_viewer', { inkStyle: 'off', showBonds: true });
+  await lookAtRest(page, h);
+  await viewAtRest(page, h);
+}
+
+async function inkToLight(ctx, h) {
+  const { page, spec, check, outcome, options } = ctx;
+  await page.goto(h.baseFor(page).href, { waitUntil: 'load', timeout: options.timeout });
+  const hero = page.locator('.bucky-hero__stage');
+  await hero.waitFor({ state: 'visible', timeout: options.timeout });
+  // Page side: every change of __lupiPlay.ink().fuse from the tap on.
+  await page.evaluate(() => {
+    const seen = [];
+    window.__fuseLog = seen;
+    let last = '';
+    setInterval(() => {
+      const state = window.__lupiPlay?.ink?.();
+      if (!state) return;
+      const row = { running: state.fuse?.running, mode: state.fuse?.mode, seed: state.fuse?.seed, arrival: state.arrival, holding: state.holding, mix: Math.round(state.mix * 100) / 100 };
+      const key = JSON.stringify(row);
+      if (key !== last) {
+        last = key;
+        seen.push(row);
+      }
+    }, 20);
+  });
+  const box = await hero.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const settled = await page.waitForFunction(() => {
+    const log = window.__fuseLog ?? [];
+    const state = window.__lupiPlay?.ink?.();
+    return log.some((row) => row.running) && state && !state.fuse?.running && !state.holding && state.mix === 0;
+  }, null, { timeout: 90_000, polling: 100 }).then(() => true, () => false);
+  const log = await page.evaluate(() => window.__fuseLog ?? []);
+  outcome.data.inkToLight = { log };
+  const burned = log.find((row) => row.running);
+  check('Ink-to-Light: the hero opens C60 in ink', log.some((row) => row.holding && row.mix === 1), JSON.stringify(log.slice(0, 3)));
+  check('Ink-to-Light: the light comes on as a fuse along the bonds', Boolean(burned) && burned.arrival === true && burned.mode === 'graph' && Number.isInteger(burned.seed), JSON.stringify(burned ?? log.at(-1)));
+  check('Ink-to-Light: it ends lit', settled, `${spec.backend}: ${JSON.stringify(log.at(-1))}`);
 }
 
 export default {
@@ -310,5 +353,6 @@ export default {
   async run(ctx, h) {
     for (const id of MOLECULES) await runMolecule(ctx, h, id);
     await exportMidFuse(ctx, h);
+    await inkToLight(ctx, h);
   },
 };
