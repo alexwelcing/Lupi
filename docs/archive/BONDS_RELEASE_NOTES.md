@@ -128,10 +128,10 @@ Bond recomputation distinguishes user interaction from playback:
 ### Documentation
 | File | Purpose |
 |------|---------|
-| `BOND_ARCHITECTURE.md` | PhD-level explainer: physics, algorithms, GPU bridge |
-| `TESTING_HANDOFF.md` | Junior-dev testing guide with copy-paste patterns |
-| `TESTING.md` | Quick-start testing reference |
-| `BONDS_RELEASE_NOTES.md` | This document |
+| `docs/BOND_ARCHITECTURE.md` | PhD-level explainer: physics, algorithms, GPU bridge |
+| `docs/archive/TESTING_HANDOFF.md` | Junior-dev testing guide with copy-paste patterns |
+| `docs/TESTING.md` | Quick-start testing reference |
+| `docs/archive/BONDS_RELEASE_NOTES.md` | This document |
 
 ---
 
