@@ -1,0 +1,156 @@
+/**
+ * ink.mjs - the Illustrate look's four shadings: Illustrate (flat), Sketch
+ * (hatch), Engrave and Halftone (LOCAL smoke plugin, not CI).
+ *
+ *   node tools/verify-viewer-smoke.mjs --scenarios=ink --backend=both \
+ *     --profile=desktop --strict-backend --out=.verify-artifacts/viewer-smoke/ink
+ *
+ * On caffeine and C60, lit first, then each shading through
+ * `lupi.set_viewer { inkStyle }` on the plate its Look uses:
+ * 1. The drawing settles (no fade left, `__lupiPlay.ink()` at its weights),
+ *    the canvas is painted and differs from the lit view, and a still view
+ *    draws no frames (Quiet Idle: nothing in the shading reads time).
+ * 2. With bonds hidden, `lupi.export_asset` PNG 1024 × 1024 for Engrave and
+ *    Halftone decodes at size with painted pixels. The MCP result carries no
+ *    spec, so the shading's place in it is checked through identity: each
+ *    shading gets its own specId (renderArtifactAdapter.test.ts checks
+ *    `view.ink.shading` itself).
+ * Every settled view and export is saved for a human to look at.
+ */
+
+const MOLECULES = ['caffeine', 'c60_buckyball'];
+/** Each shading, its weight in `__lupiPlay.ink()`, and the plate its Look draws on. */
+const SHADINGS = [
+  { style: 'flat', weight: null, plate: 'sage-plate' },
+  { style: 'hatch', weight: 'hatch', plate: 'paper-plate' },
+  { style: 'engrave', weight: 'engrave', plate: 'paper-plate' },
+  { style: 'halftone', weight: 'halftone', plate: 'paper-plate' },
+];
+const EXPORTED = ['engrave', 'halftone'];
+
+const fraction = (h, a, b) => h.diffImages(a, b).changed / (a.width * a.height);
+
+function setViewer(page, args) {
+  return page.evaluate(async (viewer) => {
+    const out = await window.__lupiViewerMcp.execute({ id: `ink-${JSON.stringify(viewer)}`, tool: 'lupi.set_viewer', arguments: viewer });
+    return { ok: out.ok, error: out.error ?? null };
+  }, args);
+}
+
+/** Wait until the ink driver rests at the configured look. */
+function waitInkRest(page, maxMs = 6_000) {
+  return page
+    .waitForFunction(() => {
+      const ink = window.__lupiPlay?.ink?.();
+      return ink && !ink.fading && !ink.holding && ink.mix === ink.target.mix ? ink : null;
+    }, null, { timeout: maxMs, polling: 50 })
+    .then((handle) => handle.jsonValue(), () => page.evaluate(() => window.__lupiPlay?.ink?.() ?? null));
+}
+
+/** Frames drawn over `ms` of a still view. */
+async function framesWhileStill(page, ms = 600) {
+  const before = (await page.evaluate(() => window.__lupiPlay?.state?.()?.frames ?? null));
+  await page.waitForTimeout(ms);
+  const after = (await page.evaluate(() => window.__lupiPlay?.state?.()?.frames ?? null));
+  return before === null || after === null ? null : after - before;
+}
+
+async function exportPng(page, h, label) {
+  return h.withTimeout(page.evaluate(async (id) => {
+    const out = await window.__lupiViewerMcp.execute({
+      id,
+      tool: 'lupi.export_asset',
+      arguments: { format: 'png', width: 1024, height: 1024, transparent: false, timeoutMs: 90_000 },
+    });
+    const asset = out.result?.asset;
+    return {
+      ok: out.ok,
+      error: out.error ?? null,
+      dataBase64: asset?.dataBase64 ?? null,
+      specId: asset?.specId ?? null,
+      artifactDigest: asset?.artifactDigest ?? null,
+    };
+  }, `ink-export-${label}`), 150_000, `export ${label}`);
+}
+
+export default {
+  name: 'ink',
+  profiles: ['desktop'],
+  description: 'Illustrate, Sketch, Engrave and Halftone draw on caffeine and C60, rest still, and export (Engrave, Halftone).',
+
+  async run(ctx, h) {
+    const { page, check, save, outcome } = ctx;
+    outcome.data.ink = {};
+    for (const id of MOLECULES) {
+      const data = { views: {}, exports: {} };
+      outcome.data.ink[id] = data;
+      const canvas = await h.openStructure(ctx, h.galleryEntry(id));
+      if (!canvas) return;
+      // A new molecule keeps the last look (and the device remembers it): start lit, with bonds.
+      const reset = await setViewer(page, { inkStyle: 'off', showBonds: true });
+      check(`${id}: opens lit with bonds`, reset.ok, JSON.stringify(reset.error));
+      await waitInkRest(page);
+      const lit = await h.waitSettled(page, canvas, 0.01);
+      await save(`${id}-lit`, lit.png);
+
+      // 1. Each shading on its Look's plate, against the lit view.
+      for (const { style, weight, plate } of SHADINGS) {
+        const applied = await setViewer(page, { inkStyle: style, backgroundPreset: plate });
+        check(`${id}: set_viewer inkStyle ${style}`, applied.ok, JSON.stringify(applied.error));
+        const ink = await waitInkRest(page);
+        const weights = ink ? { hatch: ink.hatch, engrave: ink.engrave, halftone: ink.halftone } : null;
+        const expected = { hatch: 0, engrave: 0, halftone: 0, ...(weight ? { [weight]: 1 } : {}) };
+        check(
+          `${id}: ${style} rests at its weights`,
+          Boolean(ink) && ink.mix === 1 && Object.entries(expected).every(([key, value]) => weights[key] === value),
+          JSON.stringify({ mix: ink?.mix, ...weights }),
+        );
+        const view = await h.waitSettled(page, canvas, 0.01);
+        await save(`${id}-${style}`, view.png);
+        const assessed = await h.assessRender(page, canvas, view.image, 0.01);
+        const changed = fraction(h, lit.image, view.image);
+        const still = await framesWhileStill(page);
+        data.views[style] = { settled: view.meta, changed: h.pct(changed), foreground: h.pct(assessed.foregroundFraction), distinctColors: assessed.distinctColors, stillFrames: still };
+        check(`${id}: ${style} paints the canvas`, assessed.nonBlank && assessed.foregroundFraction > 0.01, `fg=${h.pct(assessed.foregroundFraction)} colours=${assessed.distinctColors}`);
+        check(`${id}: ${style} differs from the lit view`, changed > 0.02, `changed=${h.pct(changed)}`);
+        check(`${id}: ${style} at rest draws no frames`, still === 0, `frames=${still}`);
+      }
+
+      // A closer look at the two print shadings with bonds, for a human.
+      const rig = await page.evaluate(() => window.__lupiPlay?.state?.()?.rig ?? null);
+      if (rig?.position && rig?.target) {
+        const position = rig.position.map((value, axis) => rig.target[axis] + (value - rig.target[axis]) * 0.5);
+        await page.evaluate((pose) => window.__lupiViewerMcp.execute({ id: 'ink-close', tool: 'lupi.set_camera', arguments: pose }), { position, target: rig.target });
+        for (const style of EXPORTED) {
+          await setViewer(page, { inkStyle: style, backgroundPreset: 'paper-plate' });
+          await waitInkRest(page);
+          const close = await h.waitSettled(page, canvas, 0.01);
+          await save(`${id}-${style}-close`, close.png);
+        }
+      }
+
+      // 2. Exports of the two print shadings (raster bonds fail closed: hide them).
+      const hidden = await setViewer(page, { showBonds: false });
+      check(`${id}: bonds hide for the raster export`, hidden.ok, JSON.stringify(hidden.error));
+      const specIds = new Set();
+      for (const style of EXPORTED) {
+        await setViewer(page, { inkStyle: style, backgroundPreset: 'paper-plate' });
+        await waitInkRest(page);
+        const out = await exportPng(page, h, `${id}-${style}`);
+        let image = null;
+        let painted = 0;
+        if (out.ok && out.dataBase64) {
+          const bytes = Buffer.from(out.dataBase64, 'base64');
+          await save(`${id}-${style}-export`, bytes);
+          image = h.decodePng(bytes);
+          painted = h.foreground(image).fraction;
+        }
+        if (out.specId) specIds.add(out.specId);
+        data.exports[style] = { ok: out.ok, error: out.error, specId: out.specId, artifactDigest: out.artifactDigest, size: image ? [image.width, image.height] : null, painted: h.pct(painted) };
+        check(`${id}: ${style} PNG export succeeds`, out.ok && Boolean(out.dataBase64), JSON.stringify(out.error));
+        check(`${id}: ${style} PNG decodes at 1024 × 1024 with painted pixels`, Boolean(image) && image.width === 1024 && image.height === 1024 && painted > 0.02, `painted=${h.pct(painted)}`);
+      }
+      check(`${id}: Engrave and Halftone exports have their own specId`, specIds.size === EXPORTED.length, [...specIds].join(' '));
+    }
+  },
+};
