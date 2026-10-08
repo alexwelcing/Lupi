@@ -22,7 +22,9 @@
  *    from /play to /?…; tools/serve-web.mjs serves the app at /play itself,
  *    so either path counts, and the report says which one this server took.
  *    While the deep link opens, the viewer header never shows over the
- *    full-window "Opening…" plate (it arrives with the molecule).
+ *    full-window "Opening…" plate (it arrives with the molecule), and the
+ *    arrival waits for the plates to go: it never runs, and the pill never
+ *    says Illustrative, while one still covers the molecule.
  * Every page loads with no uncaught error and no console error (the smoke
  * tool fails the run on either); errors are also listed per page in
  * report.json under data.pages.
@@ -63,10 +65,14 @@ function installCanvasCounter() {
 
 /**
  * Page-side: every frame, whether the viewer header is drawn over the
- * full-window "Opening…" plate (the deep link's plate before the molecule).
+ * full-window "Opening…" plate (the deep link's plate before the molecule);
+ * and whether the arrival runs, or the pill calls it Illustrative where it
+ * can be seen, while a plate (that one, or the one over the canvas until the
+ * first frame) still covers the molecule. It records until the first frame
+ * and the arrival have both landed.
  */
 function installOpeningRecorder() {
-  const log = (window.__openingSmoke = { headerOverPlate: 0, plateFrames: 0 });
+  const log = (window.__openingSmoke = { headerOverPlate: 0, plateFrames: 0, coveredFrames: 0, arrivalUnderPlate: 0, labelUnderPlate: 0, arrivals: [] });
   const tick = () => {
     const plate = [...document.querySelectorAll('.lupi-plate')].find((node) => !node.dataset.inViewport && getComputedStyle(node).display !== 'none');
     const header = document.querySelector('.lupine-status-bar');
@@ -76,7 +82,19 @@ function installOpeningRecorder() {
       const hit = r && r.width > 0 ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
       if (hit && header.contains(hit)) log.headerOverPlate += 1;
     }
-    if (!window.__lupiPlay?.state?.().firstFrame) requestAnimationFrame(tick);
+    const state = window.__lupiPlay?.state?.();
+    const arrival = state?.motion?.arrival ?? null;
+    if (arrival !== (log.arrivals.at(-1) ?? null)) log.arrivals.push(arrival);
+    const covering = [...document.querySelectorAll('.lupi-plate')].some((node) => getComputedStyle(node).display !== 'none' && !node.hasAttribute('data-fading'));
+    if (covering) {
+      log.coveredFrames += 1;
+      if (arrival && !arrival.startsWith('armed')) log.arrivalUnderPlate += 1;
+      const status = document.querySelector('.lupi-play-pill__status-text');
+      const r = status?.getBoundingClientRect();
+      const hit = r && r.width > 0 ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+      if (hit && status.closest('.lupi-play-pill')?.contains(hit) && /Illustrative/.test(status.textContent)) log.labelUnderPlate += 1;
+    }
+    if (!state?.firstFrame || arrival !== null) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
@@ -345,6 +363,17 @@ export default {
     outcome.data.play.opening = opening;
     check('the header never shows over the full-window "Opening…" plate', opening?.headerOverPlate === 0,
       `${opening?.headerOverPlate ?? '?'} of ${opening?.plateFrames ?? '?'} plate frames had the header on top`);
+    // The arrival waits for the plate to go: it never runs, and the pill
+    // never says Illustrative, while a plate covers the molecule.
+    await page.waitForFunction(() => {
+      const state = window.__lupiPlay?.state?.();
+      return Boolean(state?.firstFrame) && (state.motion?.arrival ?? null) === null;
+    }, null, { timeout: 60_000, polling: 250 }).catch(() => {});
+    const covered = await page.evaluate(() => window.__openingSmoke ?? null);
+    outcome.data.play.opening = covered;
+    check('the arrival waits for the plate (it never runs, nor is labelled, under it)',
+      Boolean(covered) && covered.arrivalUnderPlate === 0 && covered.labelUnderPlate === 0 && covered.arrivals.some((a) => a && !a.startsWith('armed')),
+      `arrival ${covered?.arrivals.map(String).join(' -> ') ?? '?'}; of ${covered?.coveredFrames ?? '?'} covered frames, ${covered?.arrivalUnderPlate ?? '?'} with it running and ${covered?.labelUnderPlate ?? '?'} with "Illustrative" showing`);
     noErrorsOn('/play?sim=c60_buckyball', current);
   },
 };
