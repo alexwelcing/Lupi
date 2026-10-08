@@ -159,11 +159,12 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
 /**
  * Wait until two captures 250 ms apart match. A software renderer under load
  * can take longer than that to draw one frame, so two matching captures alone
- * may straddle no frame at all, or show an arrival still held under the
- * opening plate (captures hide the page's chrome): where the viewer reports
- * its Play state (`__lupiPlay`), the view is settled only with no arrival
- * armed or running, and when the frame loop sleeps or at least two frames
- * were drawn between the captures.
+ * may straddle no frame at all, show an arrival still held under the opening
+ * plate (captures hide the page's chrome), or show a frame the WebGPU canvas
+ * has not yet replaced on screen: where the viewer reports its Play state
+ * (`__lupiPlay`), the view is settled only with no arrival armed or running
+ * and no display motion live, and when the frame loop sleeps or at least two
+ * frames were drawn between the captures.
  */
 async function waitSettled(page, canvas, minForeground, maxMs = 60_000) {
   const started = Date.now();
@@ -180,7 +181,7 @@ async function waitSettled(page, canvas, minForeground, maxMs = 60_000) {
     lastDiff = diffImages(previous.image, current.image).changed / area;
     const fg = foreground(current.image).fraction;
     const drawn = loop && previousLoop ? loop.rendered - previousLoop.rendered : null;
-    const quiet = !loop || (!loop.arriving && (!loop.awake || (drawn != null && drawn >= 2)));
+    const quiet = !loop || (!loop.arriving && !loop.moving && (!loop.awake || (drawn != null && drawn >= 2)));
     previous = current;
     previousLoop = loop;
     if (lastDiff < 0.001 && fg >= minForeground && quiet) {
@@ -190,13 +191,18 @@ async function waitSettled(page, canvas, minForeground, maxMs = 60_000) {
   return { ...previous, meta: { settled: false, ms: Date.now() - started, frames, lastDiff } };
 }
 
-/** The viewer's frame loop ({ rendered, awake, arriving }), or null without the Play hooks. */
+/** The viewer's frame loop ({ rendered, awake, arriving, moving }), or null without the Play hooks. */
 async function frameLoop(page) {
   return page.evaluate(() => {
     const state = window.__lupiPlay?.state?.();
     const demand = state?.frameDemand;
     if (!demand || !Number.isFinite(demand.rendered)) return null;
-    return { rendered: demand.rendered, awake: demand.awake === true, arriving: Boolean(state.motion?.arrival) };
+    return {
+      rendered: demand.rendered,
+      awake: demand.awake === true,
+      arriving: Boolean(state.motion?.arrival),
+      moving: state.motion?.active === true,
+    };
   }).catch(() => null);
 }
 
