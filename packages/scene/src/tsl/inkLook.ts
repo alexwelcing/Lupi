@@ -33,11 +33,13 @@
  * - chalk (`uInkChalk`): a chalkboard drawing, light on dark. The element
  *   colour is a pastel rubbed over the board (the plate), thicker toward the
  *   light; three families of chalk strokes (±45° and level) come in as the
- *   light rises, value-noise dust breaks strokes and outlines, and the ink
- *   itself turns to chalk (`inkLookInkColor`, which the contour draws in
- *   too). Strokes and dust are laid out about each atom's centre (each
- *   bond's midpoint) in full-picture pixels, so they travel with the ball
- *   and tile seamlessly. Adapted from Shaders (MIT), Chalkboard,
+ *   light rises; chalk takes only where the board's tooth (value noise)
+ *   stands above one minus the stroke's pressure, so strokes and outlines
+ *   break into chalk; and the ink itself turns to chalk (`inkLookInkColor`,
+ *   which the contour draws in too). Strokes and tooth are laid out about
+ *   each atom's centre (each bond's midpoint) in full-picture pixels, so
+ *   they travel with the ball and tile seamlessly. Adapted from Shaders
+ *   (MIT), Chalkboard,
  *   packages/core/src/std/effects/stylize.ts (`chalkSketch`) and
  *   packages/core/src/gpu/kit/stylizePaints.ts (`chalkHatchLine`,
  *   `chalkVnoise`, `chalkboardCompose`);
@@ -189,24 +191,30 @@ export const INK_LOOK_TUNING = {
   /** Chalk: how far the element colour lifts toward chalk for its pastel. */
   chalkPastel: 0.42,
   /** Chalk: how much pastel is rubbed over the board, from the shade band to the lit band. */
-  chalkRub: [0.1, 0.42] as const,
+  chalkRub: [0.06, 0.34] as const,
   /** Chalk: distance between strokes, and the share of a period a stroke's soft core spans (Shaders 0.35). */
-  chalkSpacing: 5,
-  chalkLine: 0.35,
+  chalkSpacing: 10,
+  chalkLine: 0.45,
   /** Chalk: the light values at which the +45°, −45° and level families come in (Shaders' darkness gates 0.22, 0.5, 0.78, read from the light), each over ± the gate. */
-  chalkFamilies: [0.3, 0.52, 0.76] as const,
-  chalkGate: 0.05,
-  /** Chalk: stroke opacity, and how far a stroke lifts from the pastel toward chalk white. */
-  chalkStroke: 0.8,
-  chalkStrokeLift: 0.4,
-  /** Chalk: dust (Shaders `grain`) on strokes, half of it on outlines; noise cells per ink unit. */
-  chalkGrain: 0.45,
-  chalkDustScale: 0.55,
-  /** Chalk: the rubbed pastel's smudge, its depth and its noise cells per ink unit. */
-  chalkSmudge: 0.35,
-  chalkSmudgeScale: 0.12,
-  /** Chalk: the catchlight dab, toward chalk. */
-  chalkHighlight: 0.9,
+  chalkFamilies: [0.42, 0.7, 0.88] as const,
+  chalkGate: 0.06,
+  /** Chalk: stroke pressure, and how far a stroke lifts from the pastel toward chalk white. */
+  chalkStroke: 0.9,
+  chalkStrokeLift: 0.45,
+  /** Chalk: the outline's pressure (a little below 1, so the board's tooth shows through now and then). */
+  chalkOutline: 0.93,
+  /**
+   * Chalk dust (Shaders `grain`): the board's tooth, value noise in two
+   * scales (cells per ink unit, fine and coarse) and their shares. Chalk
+   * takes where the tooth stands above one minus the pressure, over ±
+   * `chalkToothSoft`, so light strokes break into specks and heavy ones
+   * hold.
+   */
+  chalkToothScale: [0.85, 0.2] as const,
+  chalkToothMix: 0.65,
+  chalkToothSoft: 0.14,
+  /** Chalk: the catchlight dab's pressure. */
+  chalkHighlight: 0.95,
 } as const;
 
 type FloatUniform = UniformNode<'float', number>;
@@ -499,14 +507,22 @@ function chalkStrokes(coord: N, spacing: N): N {
 }
 
 /** A hash of a lattice cell, 0..1 (Hoskins' hash without sine: float only, any sign). */
-function chalkHash(cell: N): N {
+const chalkHash = (Fn(([cell]: [N]) => {
   const p3: N = fract(vec3(cell.x, cell.y, cell.x).mul(0.1031)).toVar();
   p3.addAssign(dot(p3, p3.yzx.add(33.33)));
   return fract(p3.x.add(p3.y).mul(p3.z));
-}
+}) as N).setLayout({
+  name: 'lupiChalkHash',
+  type: 'float',
+  inputs: [{ name: 'cell', type: 'vec2' }],
+});
 
-/** Smooth value noise, 0..1 (Shaders `chalkVnoise`): the chalk's dust and smudge. */
-function chalkNoise(at: N): N {
+/**
+ * Smooth value noise, 0..1 (Shaders `chalkVnoise`): the board's tooth.
+ * Shader functions, so the impostors carry one copy however often the
+ * drawing calls it.
+ */
+const chalkNoise = (Fn(([at]: [N]) => {
   const cell: N = floor(at).toVar();
   const t: N = fract(at).toVar();
   const u: N = t.mul(t).mul(t.mul(-2.0).add(3.0)).toVar();
@@ -515,7 +531,11 @@ function chalkNoise(at: N): N {
   const c = chalkHash(cell.add(vec2(0.0, 1.0)));
   const d = chalkHash(cell.add(vec2(1.0, 1.0)));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
+}) as N).setLayout({
+  name: 'lupiChalkNoise',
+  type: 'float',
+  inputs: [{ name: 'at', type: 'vec2' }],
+});
 
 /**
  * The drawing's ink (linear): the house ink, or chalk under the Chalk
@@ -669,22 +689,33 @@ export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node
     // the light rises (Shaders' Chalkboard, read from the light: the lit
     // side carries the most chalk, the shade shows the board). Laid out
     // about the atom's centre (the bond's midpoint) in full-picture device
-    // pixels, so strokes and dust travel with the ball. A uniform branch.
-    const outlineDust = float(1).toVar();
+    // pixels, so strokes and tooth travel with the ball. A uniform branch.
+    const outlineTooth = float(1).toVar();
     If(chalk.greaterThan(0.0), () => {
       const screen: N = picturePixels(hit, s.isOrtho).toVar();
       const anchor: N = s.center ? picturePixels(s.center as N, s.isOrtho) : vec2(0.0, 0.0);
       const offset: N = screen.sub(anchor).toVar();
-      // In ink units, so the dust has the same grain on screen and in an export.
+      // In ink units, so the tooth has the same grain on screen and in an export.
       const inUnits: N = offset.div(max(unit, 1e-3)).toVar();
       const chalkWhite = vec3(I.uChalkColor);
       // A light plate gets a board of its own: chalk needs the dark.
       const plate = vec3(I.uPlateColor);
       const board = mix(plate, vec3(I.uBoardColor), smoothstep(0.12, 0.4, luminance(plate)));
       const pastel = mix(base, chalkWhite, T.chalkPastel).toVar();
-      const smudge = mix(float(1 - T.chalkSmudge), float(1), chalkNoise(inUnits.mul(T.chalkSmudgeScale)));
-      const rub = mix(float(T.chalkRub[0]), float(T.chalkRub[1]), smoothstep(float(T.shadeBand), float(T.lightBand), value)).mul(smudge);
-      const chalked = mix(board, pastel, rub).toVar();
+      // The board's tooth (Shaders' dust): chalk takes where it stands above
+      // one minus the pressure, so a light touch leaves specks.
+      const tooth = mix(
+        chalkNoise(inUnits.mul(T.chalkToothScale[1]).add(vec2(17.3, 5.9))),
+        chalkNoise(inUnits.mul(T.chalkToothScale[0])),
+        T.chalkToothMix,
+      ).toVar();
+      const takes = (pressure: N): N => smoothstep(
+        float(1 - T.chalkToothSoft).sub(pressure),
+        float(1 + T.chalkToothSoft).sub(pressure),
+        tooth,
+      );
+      const rub = mix(float(T.chalkRub[0]), float(T.chalkRub[1]), smoothstep(float(T.shadeBand), float(T.lightBand), value));
+      const chalked = mix(board, pastel, rub.mul(mix(float(0.55), float(1.0), tooth))).toVar();
       const spacing = max(unit.mul(T.chalkSpacing), 2.5).toVar();
       const gate = (from: number): N => smoothstep(float(from - T.chalkGate), float(from + T.chalkGate), value);
       const diagonal = 0.70710678;
@@ -695,20 +726,17 @@ export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node
         ),
         chalkStrokes(offset.y, spacing).mul(gate(T.chalkFamilies[2])),
       );
-      // Dust (Shaders' grain) breaks the strokes, and half as much the outline.
-      const grain = chalkNoise(inUnits.mul(T.chalkDustScale)).toVar();
-      const dust = mix(float(1 - T.chalkGrain), float(1), grain);
-      outlineDust.assign(mix(float(1 - T.chalkGrain * 0.5), float(1), grain));
       // No strokes on atoms too small to hold two of them.
       const chalkFade = smoothstep(spacing.mul(0.9), spacing.mul(2.2), px);
       const strokeColor = mix(pastel, chalkWhite, T.chalkStrokeLift);
-      chalked.assign(mix(chalked, strokeColor, families.mul(dust).mul(chalkFade).mul(T.chalkStroke)));
-      chalked.assign(mix(chalked, chalkWhite, highlightT.mul(dust).mul(T.chalkHighlight)));
+      chalked.assign(mix(chalked, strokeColor, takes(families.mul(chalkFade).mul(T.chalkStroke))));
+      chalked.assign(mix(chalked, chalkWhite, takes(highlightT.mul(T.chalkHighlight))));
+      outlineTooth.assign(takes(float(T.chalkOutline)));
       if (s.emission) chalked.addAssign((s.emission as N).mul(0.6));
       fill.assign(mix(fill, chalked, chalk));
     });
 
-    const ink = clamp(max(outline, strokeInk), 0.0, 1.0).mul(mix(float(1), outlineDust, chalk));
+    const ink = clamp(max(outline, strokeInk), 0.0, 1.0).mul(mix(float(1), outlineTooth, chalk));
     const drawn = mix(fill, inkLookInkColor() as N, ink);
 
     // Depth cue: 0 at the front of the bounding sphere, 1 at its back, seen
