@@ -124,15 +124,16 @@ and exits on the device, the decisions waiting) and lists where the first
 compile will most likely fail; `apps/apple/README.md` is the how-to.
 
 The Linux gates: `swift test` in every package, and `swift test -c release`
-in LupiScale (its 4 ms `buildCut` gate counts only in release) and LupiGame
+in LupiScale (its 8 ms `buildCut` gate counts only in release) and LupiGame
 (its directive tests time frames); `tools/apple/parse-app.sh` (syntax);
 `tools/apple/typecheck-app.sh`, which type-checks the app against the
 packages' real modules and stand-ins for Apple's frameworks spelled as Apple
 documents them (`tools/apple/standin`; add a new Apple API there from its
 documentation page); and `pnpm apple:check`, which fails when the Swift generated from the web's
-TypeScript (`tools/apple/*.mts`: elements, bond fixtures, edge samples,
-starters, the known-molecule index, scale fixtures) is stale. The web
-counterpart of the scale play is `/scale` (`packages/ui/src/scale`).
+TypeScript (`tools/apple/*.mts`: elements, bond fixtures, the bond validation
+sample, edge samples, starters, the known-molecule index, scale fixtures) is
+stale. The web counterpart of the scale play is `/scale`
+(`packages/ui/src/scale`).
 
 The owner's decisions are `docs/ar/decisions.md`, the plan of record is
 `docs/ar/plan.md`, and the data contracts it shares with lupi.live are in
@@ -282,7 +283,10 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   mulberry32 stream, so a code gives the same look on any device, molecule
   and atom count (changing the catalog means r2; r1 resolves forever). r1
   has no transmission and no adjusted gradients, so a remixed view stays
-  exportable. Roll from the Play tray's Look row (it stays open), the pill's
+  exportable while worlds are off (the default); with worlds on, half the
+  codes pick an `R1_WORLDS` backdrop (a procedural field or an image world),
+  and an opaque artifact export of one fails closed like any such background
+  (transparent output still works). Roll from the Play tray's Look row (it stays open), the pill's
   "⟳ Again", M (Shift+M steps back), the scene deck, the palette, or a
   shake (phones; off until turned on in the Remix sheet, iOS asks
   permission in that tap). The Remix sheet (the tray's code chip) copies,
@@ -757,23 +761,51 @@ pnpm run generate:mcp-manifest
 
 ## Full CI Checklist
 
+### What CI runs
+
+LUPI CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to
+`main` that touch the apps, packages, docs, tools or build config. Its
+`build-test` job runs, in order:
+
 ```bash
-pnpm install
-pnpm run generate:mcp-manifest
-pnpm --filter @atlas/core test
-pnpm --filter @atlas/core build
-pnpm --filter @atlas/scene test
-pnpm --filter @atlas/ui build
-pnpm --filter @atlas/ui test
-pnpm cloudflare:build
+node tools/verify-pnpm-lock-bins.mjs
+pnpm install --frozen-lockfile
+pnpm verify:workflows        # actionlint; CI fetches a checksum-pinned 1.7.12
+node --test tools/run-actionlint.test.mjs
+node --test tools/verify-product-contract.test.mjs
+pnpm verify:product-contract
+pnpm lint
+NODE_OPTIONS=--max-old-space-size=8192 pnpm audit --prod --audit-level high
+node --test tools/verify-cloudflare-live.test.mjs
+pnpm build                   # every workspace; the web build regenerates the MCP manifest
+# wrangler versions upload --dry-run with the pinned Wrangler in .github/wrangler-runtime
+pnpm test                    # every workspace's unit tests
+cd functions && npm ci && npm audit --omit=dev --audit-level=high && npm run build && npm test && cd ..
 pnpm cloudflare:test
-pnpm run lint
+npm run nist:build           # fails if apps/web/public/nist changes
+pnpm exec playwright install --with-deps chromium
+pnpm test:ui
+```
+
+Its `mobile-testflight-source` job runs `pnpm --filter @lupi/mobile
+verify:testflight` on the frozen Expo app. Apple packages
+(`.github/workflows/apple.yml`) runs the Linux gates of "Native Apple app"
+above when `apps/apple`, `tools/apple`, `packages/core`, `packages/parsers`,
+the Worker's sources, the gallery or the datasets change.
+`pnpm cloudflare:build` is covered by `pnpm build`.
+
+### Local only
+
+No workflow runs these. Run them by hand when a change touches the bridge,
+exports or the renderer:
+
+```bash
 pnpm run verify:mcp-bridge
 pnpm run verify:asset-quality
 pnpm run verify:exports
 pnpm run verify:render-parity -- --backend=webgpu
 pnpm run verify:render-parity -- --backend=webgl2
-pnpm run test:ui
+pnpm verify:dual-backend
 ```
 
 `pnpm test:ui` runs the Playwright specs in the WebGL2 lane. The dual-backend
