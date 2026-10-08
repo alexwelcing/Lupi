@@ -29,8 +29,8 @@ The lead also fixed the bug p2 found: **on a portrait phone the ink contour lost
 | Web build | passes; the tree stays clean |
 | `pnpm apple:check` | passes (the Swift generated from the TypeScript is current) |
 | `tests/ui/render-artifact.spec.ts` (CI's WebGL2 lane) | 2/2 pass in 30 s; S1's timeout was the load |
-| Morph and contour smoke, WebGPU lane | see the end of this file |
-| V2 render-parity candidates | see the end of this file |
+| Morph and contour smoke, WebGPU lane | 57/57 pass, including the mid-morph export's `artifactDigest` (S1's failure was the load) and the contour's meeting lines and tile seam |
+| V2 render-parity candidates | re-derived for both backends at `b43ba46` (`VITE_LUPI_BUILD_SHA` set to it) and verified against the new candidates: both pass. The tool marks local derivation "dirty-worktree-mechanics-only"; a clean exact-SHA derivation in CI is still pending, as the tool always says for a local run. |
 
 ## Known gaps worth your eye
 
@@ -47,7 +47,3 @@ The seven in [S1's status](../2026-10-s1/status.md#decisions-waiting-on-you) sta
 
 - **(6) Sphere-grid labels**: the display is scrubbed (S2 p1); regenerating or stripping the data file is still your call.
 - **Unused dependencies** are now out of the lockfile (S2 p3), so that S1 gap is closed.
-
-## Final checks
-
-The WebGPU-lane morph and contour smoke and the V2 render-parity re-derivation were still running when this file was first committed; their results follow in the next commit.

@@ -3,6 +3,27 @@
 Since 2026-09-20 every merge to `main` deploys to lupi.live, so entries from
 then on are dated by the day they merged, with their pull requests.
 
+## Unreleased - Sprint S2, finishing S1 (branch `claude/nifty-volta-ophavr`)
+
+- **Chalk**, a fifth Illustrate drawing for the dark plate, after Shaders'
+  Chalkboard (MIT): chalk outlines and contour, a pastel of the element
+  colour, dusty strokes toward the light.
+- **One drawing everywhere**: the `/m`, card, tile, switcher and Daily ink
+  drawings take the viewer's toon Illustrate look, so the hand-off to 3D
+  lands on the same picture.
+- **The Light Fuse** rests the post recipe pixel by pixel with its front and
+  burns a lime ember along it.
+- **Instant Replay clips** are rendered frame by frame at 30 fps into MP4
+  through WebCodecs (MediaRecorder as the fallback).
+- **Fixes**: interpolated trajectories draw their bonds again on WebGPU; the
+  ink contour keeps its meeting lines on a portrait phone; `/scale`'s slider
+  labels no longer overlap; the arrival waits for the opening plate; the atom
+  card never shows a home directory; a CLI that does not exist is no longer
+  named in an error.
+- **Upkeep**: slow unit tests made cheaper; Rive, gifenc and unused renderer
+  dependencies out of the lockfile; every local verifier run and passing; V2
+  render-parity candidates re-derived. (`docs/sprints/2026-10-s2/status.md`)
+
 ## Unreleased - Sprint S1, Shaders week (branch `claude/nifty-volta-ophavr`)
 
 - **Engrave and Halftone**, two new Illustrate drawings ported into TSL from
