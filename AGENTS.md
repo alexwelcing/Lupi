@@ -298,8 +298,19 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   inputs and the pill's flashes. After a good flick, a chain of three named
   faces, Spin's flip or a toy moment, the pill offers "Replay ↗" for 7 s (R,
   the Play tray or the palette any time; with no moment it shares this view). The sheet
-  has the live link at once and records a 9:16 clip through the video
-  export, with "Illustrative" burned into each frame. The link adds
+  has the live link at once and makes a 9:16 clip (720×1280 on phones,
+  1080×1920 elsewhere) with "Illustrative" burned into each frame. Where
+  WebCodecs can encode it, the clip is rendered offline, frame by frame from
+  the tape at 30 fps (`replay/offlineClip.ts`): a clip camera of its own
+  follows the keys, the display-motion clock steps exactly 1/30 s per frame
+  (`play/motionClock.ts`), each frame renders through the capture engine at
+  the clip size (2× supersampled, the configured look, `illustrative: true`
+  so toys and Foil stay on), and `VideoEncoder` writes an MP4 through
+  `mp4-muxer` (H.264 High, then Constrained Baseline, then VP9, then AV1:
+  the first `isConfigSupported` accepts). The live canvas keeps its size and
+  holds its picture under the sheet meanwhile. Without WebCodecs or any of
+  those codecs (or if the encoder fails) the clip is recorded in real time
+  through the video export with MediaRecorder, as before. The link adds
   `replay=<base64url tape>` (versioned binary: camera keys at a 0.5 s pose
   snapshot plus where the motion bends, toy inputs, flashes; about 0.5–1.5
   KB, nothing stored) to `sim`, `load`, `molecule` or a saved view's route.
@@ -308,8 +319,12 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   Still sends and opens a still pose. The viewer drops `replay=` from the
   address bar as it reads it. `__lupiPlay.replay()` returns the offered or
   last moment as `{ moment, keys, events, bytes, link }`; `replay('watch')`
-  starts a waiting shared replay. Replays and clips are never artifacts:
-  MCP cannot request them.
+  starts a waiting shared replay; `replay('clip')` reports the clip
+  rendering now (`rendering: { frame, frames, ms }`) and how the last one was
+  made (`encoder`, `codec`, `frames`, `msPerFrame`, `split`);
+  `replay('clip-scale', k)` makes the next clips k× the size (a software
+  renderer's smoke). Replays and clips are never artifacts: MCP cannot
+  request them.
 - **Remix codes and Foil** (`packages/ui/src/remix`). Every Remix is a short
   versioned code, `r1-K7QDM`: five Crockford base32 characters (keep-colours
   and worlds flags, a 23-bit seed) that the frozen r1 catalog in
@@ -663,8 +678,10 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   settles and re-levels (y-up) before any capture reads the camera. An export
   mid-ripple has the same `artifactDigest` as one taken at rest. The one
   recording that keeps display motion is Instant Replay's clip
-  (`beginRecording({ illustrative: true })`): it is labelled "Illustrative"
-  in every frame and has no artifact identity. A Remix code's Foil finish
+  (`beginRecording({ illustrative: true })`; its offline frames render with
+  `renderSceneToPixels({ illustrative: true })`, which skips the capture
+  guards): it is labelled "Illustrative" in every frame and has no artifact
+  identity. A Remix code's Foil finish
   (Holo, Gold leaf, Pearl) follows the same rule: zero in every capture
   render and ordinary recording, kept only in that illustrative clip. A
   Remix look itself (lights, materials, backdrop) is ordinary viewer state
@@ -857,7 +874,7 @@ browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
 Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
-first-minute, flick, foil, fuse, hero, ink, contour, morph, relay, settings, tap, toys, remix, replay, sheets, pages) run with the built-in
+first-minute, flick, foil, fuse, hero, ink, contour, morph, relay, settings, tap, toys, remix, replay, replayclip, sheets, pages) run with the built-in
 scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
 `--reduced-motion` checks the Still comfort level.
 

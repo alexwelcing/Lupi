@@ -15,7 +15,7 @@ Short-list item 9: [Instant Replay](round2/capture-share-loops.md#r2-capture-sha
 - **The offer sits in the same pill.** It is one more segment before stow, so there is no new chrome on phones. It eases in and does not bounce. **R**, the Play tray's **Replay ↗** (last row, beside Settings…) and the palette's "Replay the last moment" open the same thing at any time. With no moment yet, R shares the current view as a still link.
 - **One tap opens the sheet.** It holds two things:
   - **The live link**, ready at once, with Copy and Share. It carries `replay=` with the moment's tape, typically 0.5 to 1.5 KB, and nothing is stored anywhere. The sheet shows the byte count.
-  - **A 9:16 clip**, recording right away in the sheet's preview. It is 720×1280 on phones and 1080×1920 on desktop, MP4 where the browser records MP4 (Safari) and WebM elsewhere. It is the normal video export, replaying the moment off screen with the toys allowed. Every frame carries the molecule's name, "Illustrative motion · lupi.live" and the pill's flash as it played (for example "Pentagon face-on · 5-fold axis"). It ends on a sage card reading "Your turn" with the molecule's `/m` page.
+  - **A 9:16 clip**, developing right away in the sheet's preview. It is 720×1280 on phones and 1080×1920 on desktop. Since Sprint S2 it is rendered frame by frame from the tape into an MP4 wherever WebCodecs can encode it (see [Frame-exact clips](#frame-exact-clips-sprint-s2)); elsewhere it is the normal video export, replaying the moment off screen with the toys allowed, MP4 where the browser records MP4 (Safari) and WebM elsewhere. Every frame carries the molecule's name, "Illustrative motion · lupi.live" and the pill's flash as it played (for example "Pentagon face-on · 5-fold axis"). It ends on a sage card reading "Your turn" with the molecule's `/m` page.
   - When the clip is ready, **Share clip + link** sends both together where the share sheet takes files, and **Save clip** downloads it. Closing the sheet cancels a clip that is still recording.
 - **Motion: Still.** The offer reads **Share ↗**. The link opens on the moment's last pose and nothing plays, and there is no clip.
 - **A molecule with no address** (a dropped file or a generated lattice) gets the clip only, and the sheet says why.
@@ -54,13 +54,44 @@ A chat preview of a viewer link to a gallery molecule that has a `/m` page now s
 | Sheet, clip frames | `replay/ReplaySheet.tsx`, `replay/replaySheet.css`, `replay/clipCompositor.ts` |
 | Pill segment (Replay ↗, ▶ Watch, Skip, ↺ Again) and the tray's Replay ↗ | `play/PlayPill.tsx`, `play/PlayTray.tsx`, `play/playPill.css`, `replay/actions.ts` |
 | Toys as replayable inputs | `play/toyTape.ts`, `play/PlayLayer.tsx` |
-| Clip recording in the video export | `ExportManager.tsx` (`replay`, `illustrative`, `compositor`, `signal` on `ExportRequest`) |
+| Frame-exact clip: the frame loop, the frame schedule, the encoder and muxer | `replay/offlineClip.ts`, `replay/clipSchedule.ts`, `replay/clipEncoder.ts` |
+| The display-motion clock a clip drives | `play/motionClock.ts`, `play/PlayLayer.tsx` |
+| Clip recording in the video export (the fallback) | `ExportManager.tsx` (`replay`, `illustrative`, `compositor`, `signal` on `ExportRequest`) |
 | Illustrative recordings, `camera.fling`, job ids | `scene/src/captureGuards.ts`, `intents.ts`, `framePhases.ts` |
 | Viewer-link unfurls | `apps/mcp-worker/src/index.ts` (`renderViewerLinkUnfurl`) |
 
 **One decision differs from the write-up.** The camera is stored as keys, not as rig inputs re-simulated with snapshots. Each key is a pose snapshot: one every 0.5 s, plus extra keys where the motion bends. Playback interpolates between them, so a replay cannot drift between browsers or frame rates, and it never depends on Object Facts being ready on the receiving side. Toy inputs are still inputs, re-run by the receiver's Play layer. In a scratch run, a 3 s flick into a face took 35 keys and about 450 base64url characters.
 
-**For agents.** `window.__lupiPlay.replay()` returns `{ moment, keys, events, bytes, link }` for the offered or last moment. `replay('watch')` starts a waiting shared replay, and `replay('moment')` offers the last 4 s as a moment.
+**For agents.** `window.__lupiPlay.replay()` returns `{ moment, keys, events, bytes, link }` for the offered or last moment. `replay('watch')` starts a waiting shared replay, and `replay('moment')` offers the last 4 s as a moment. `replay('clip')` reports the clip rendering now and how the last one was made; `replay('clip-scale', k)` makes the next clips k× the size.
+
+## Frame-exact clips (Sprint S2)
+
+The clip used to be MediaRecorder recording the live canvas in real time. A slow phone dropped frames, and the canvas was resized to 9:16 under the sheet while it recorded. Now the clip is rendered offline, one frame at a time, at a fixed 30 fps on the clip's own clock, so a slow phone and a fast desktop make the same clip.
+
+**For each frame** i, at clip time i / 30 s:
+
+1. The replay player puts a camera of the clip's own (the view's field of view at 9:16, no view offset) at that time on the tape and fires the toy inputs that are due. The live camera never moves.
+2. The display-motion clock steps by exactly 1/30 s (`play/motionClock.ts`). The Play layer advances the toys by the time between drawn frames; while a clip renders, that time is the clip's: 1/30 s for each clip frame and nothing for frames in between. A burst or a tug is where it would be at that time, whatever the device's frame rate.
+3. The next drawn frame renders the scene with the clip camera through the export capture engine (`renderSceneToPixels`): at the clip size, 2× supersampled, with the viewer's configured look, and `illustrative`, which skips the capture guards. Display motion, the overlays riding it and a Foil finish stay on, as on screen; no export, thumbnail or MCP artifact ever shows them. The recording guard (`beginRecording({ illustrative: true })`) holds the hover glow off and the camera rig still, as for any recording.
+4. The compositor puts the pixels on its canvas and burns in the labels. The pill's flash is read from the tape on the clip's clock (a face's name shows for as long as it did on the sender's pill), not from the live pill.
+5. `VideoEncoder` encodes the frame with timestamp round(i × 10⁶ / 30) µs, a keyframe every 2 s, and `mp4-muxer` writes it into an MP4 with its index up front.
+
+**The codec** is the first of this ladder that `VideoEncoder.isConfigSupported` accepts at the clip's size, at the lowest level that holds the frame:
+
+| Codec | 720×1280 | 1080×1920 |
+|---|---|---|
+| H.264 High | `avc1.64001F` | `avc1.640028` |
+| H.264 Constrained Baseline | `avc1.42E01F` | `avc1.42E028` |
+| VP9 profile 0, 8-bit | `vp09.00.31.08` | `vp09.00.40.08` |
+| AV1 Main, 8-bit | `av01.0.05M.08` | `av01.0.08M.08` |
+
+H.264 comes first because it plays everywhere a clip is posted. The file is always `.mp4` (`video/mp4`); the sheet names the codec ("MP4 clip (H.264), 9:16 · Illustrative").
+
+**The live view** keeps its size and its last picture. While the clip renders, ReplayDirector mounts a job in fiber's `render` phase that draws nothing, which takes the frame's render over: the device draws one picture per frame, the clip's, not two. The Play layer and every uniform job still run. The sheet covers the view and shows the frames as they are composed, with the progress.
+
+**Fallback.** Without WebCodecs, or without any of the four codecs, the clip is recorded in real time through the video export with MediaRecorder, exactly as before. So is a clip whose encoder fails mid-way (the console says so).
+
+**Still non-artifacts.** Clips and replays have no artifact identity, and MCP cannot ask for them.
 
 ## Try first
 
@@ -83,13 +114,15 @@ A chat preview of a viewer link to a gallery molecule that has a `/m` page now s
 | Keys | snapshot every 0.5 s; tolerance 0.35°, 0.4 % distance, target 0.3 % of distance; at most 360 keys; a link over 2,600 characters is rebuilt with looser keys | `replay/keyframes.ts`, `replay/session.ts` |
 | Receiving | autoplay 0.7 s after the arrival; "Your turn" 3.6 s; ↺ Again 9 s | `ReplayDirector.tsx`, `PlayPill.tsx` |
 | Reframing | the molecule's bounding sphere × 1.08 fits the narrower side; zoom between × 0.45 and × 2.4 | `replay/player.ts` |
-| Clip | 720×1280 on phones, 1080×1920 on desktop, 30 fps, 8 Mbps; end card 0.9 s | `ReplaySheet.tsx`, `clipCompositor.ts`, `ExportManager.tsx` |
+| Clip | 720×1280 on phones, 1080×1920 on desktop, 30 fps, 8 Mbps; end card 0.9 s | `offlineClip.ts`, `clipCompositor.ts`, `ExportManager.tsx` |
+| Frame-exact clip | supersampling 2× (`CLIP_SUPERSAMPLE`); a keyframe every 60 frames; at most 4 frames queued in the encoder; codec ladder above | `offlineClip.ts`, `clipEncoder.ts` |
 
 ## Half-done and known limits
 
-- **The clip is recorded in real time with MediaRecorder,** not frame-stepped. A slow phone can drop frames. The Shot's frame-exact encoder ladder (Mediabunny, gifenc) is not built.
-- **Recording takes over the canvas.** While the clip records, the live canvas is briefly resized to 9:16 under the sheet's veil, as the video export always did. The sheet's preview shows the frames as they are composed.
-- **Fallback without labels.** If a browser cannot draw the viewer canvas into the clip compositor, the clip records the canvas itself, without the burned-in labels (the console says so).
+- **The real-time fallback keeps its limits.** Where the clip is still recorded with MediaRecorder (no WebCodecs, or no codec), a slow phone can drop frames, the live canvas is briefly resized to 9:16 under the sheet's veil, and if a browser cannot draw the viewer canvas into the clip compositor, the clip records the canvas itself, without the burned-in labels (the console says so).
+- **A frame-exact clip takes as long as the device needs.** Nothing has been timed on a GPU yet. On SwiftShader (headless Chromium, 4 CPUs at a load average of 60 to 80) a quarter-size clip (270×480) took 3.0 to 4.1 s a frame, almost all of it the frame's render and readback (composing and encoding were under 3 ms a frame), and a full-size frame took about a minute. The sheet shows the progress, and closing it cancels the clip.
+- **Headless Chromium encodes no H.264.** Its `VideoEncoder` accepts VP9 and AV1 at 1080×1920 and neither H.264 profile, so the local smoke's clips are VP9 in MP4 (which it also plays back, so the sheet's preview is no longer blank there). H.264 is untested until a browser with an encoder (Safari, Chrome) makes one.
+- **What does not follow the clip's clock:** a moving procedural background, the selection ring's pulse and a Foil reveal sweep run on wall time, so on a slow device they move faster in the clip than they did on screen.
 - **What a replay does not carry:**
   - the sender's hand-tuned Look (background, material): it plays in the visitor's own view. Since the merge, the link does carry the sender's Remix code (`remix=`, when the look is exactly a code) and the Illustrate look (`ink=f|h`);
   - trajectory playback (a moment records the frame it started on, not playback);
