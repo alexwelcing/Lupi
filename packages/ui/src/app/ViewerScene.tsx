@@ -747,7 +747,6 @@ export function ViewerScene({
             junctionRadius={junctionRadius}
             junctionStrength={DEFAULT_CONTACT_OCCLUSION_STRENGTH}
             materialPreset={materialPreset}
-            materialIntensity={materialIntensity}
             rimLightIntensity={rimLightIntensity}
             surfaceRoughness={surfaceRoughness}
             surfacePolish={surfacePolish}

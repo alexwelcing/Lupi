@@ -173,7 +173,6 @@ export function MoleculeScene({
           radius={0.105}
           opacity={1}
           materialPreset="matte"
-          materialIntensity={0.4}
           qualityTier={1}
         />
       )}

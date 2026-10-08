@@ -239,13 +239,11 @@ interface BondsProps {
    *  pair when deciding whether two atoms are bonded. The user-facing slider
    *  drives this. Default 0.45 mirrors the Cordero pair-radius slack. */
   tolerance?: number;
-  typeCutoffs?: Map<string, number>;
   periodic?: boolean;
   cellBounds?: [number, number, number, number, number, number];
   radius?: number;
   opacity?: number;
   materialPreset?: 'default' | 'matte' | 'metallic' | 'glass' | 'plastic' | 'transmission';
-  materialIntensity?: number;
   rimLightIntensity?: number;
   surfaceRoughness?: number;
   surfacePolish?: number;
