@@ -1021,18 +1021,12 @@ function contextOptions(profile) {
   return { viewport: { width: 1024, height: 640 }, deviceScaleFactor: 1, ...common };
 }
 
-const NEUTRAL_HDR = Buffer.concat([
-  Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n', 'ascii'),
-  Buffer.from([128, 128, 128, 129]),
-]);
-
 async function stubThirdParty(page) {
   // Same stubs as the Playwright suites: optional third-party enhancements must
   // never decide whether the viewer works. Lupi's own assets are never stubbed.
   // Route promises reject once a page closes mid-request; that is not a finding.
   await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: '' }).catch(() => {}));
   await page.route('https://fonts.gstatic.com/**', (route) => route.abort().catch(() => {}));
-  await page.route('https://raw.githack.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/octet-stream', body: NEUTRAL_HDR }).catch(() => {}));
 }
 
 function attachDiagnostics(page, baseUrl, errors, scenario) {

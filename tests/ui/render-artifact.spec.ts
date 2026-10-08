@@ -4,10 +4,6 @@ import { expect, test, type Page } from 'playwright/test';
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const EXPORT_WIDTH = 256;
 const EXPORT_HEIGHT = 192;
-const NEUTRAL_HDR = Buffer.concat([
-  Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n', 'ascii'),
-  Buffer.from([128, 128, 128, 129]),
-]);
 
 type BridgeResponse = {
   ok: boolean;
@@ -60,13 +56,6 @@ type DecodedRaster = {
 
 async function preparePage(page: Page) {
   await page.route(/^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//, route => route.abort());
-  await page.route('https://raw.githack.com/**', route =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/octet-stream',
-      body: NEUTRAL_HDR,
-    }),
-  );
 }
 
 async function openMcpViewer(page: Page) {

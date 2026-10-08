@@ -33,10 +33,6 @@ const MOBILE_GALLERY_ATOM_COUNTS = {
 const CAFFEINE_ASSET = '/gallery/curated/popular/caffeine.xyz';
 const SPHERE_GRID_ASSET = '/generated/lupine-wiki/sphere-grid.lammpstrj';
 const TRAJECTORY_ID = 'this_is_water';
-const NEUTRAL_HDR = Buffer.concat([
-  Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n', 'ascii'),
-  Buffer.from([128, 128, 128, 129]),
-]);
 
 async function preparePage(page: Page) {
   // The app has system-font fallbacks; a third-party font CDN must never hold
@@ -49,15 +45,6 @@ async function preparePage(page: Page) {
     }),
   );
   await page.route('https://fonts.gstatic.com/**', route => route.abort());
-  // The reflection map is an optional third-party enhancement. Supply a tiny,
-  // deterministic neutral HDR so that CDN health cannot decide product health.
-  await page.route('https://raw.githack.com/**', route =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/octet-stream',
-      body: NEUTRAL_HDR,
-    }),
-  );
 }
 
 async function expectViewerReady(page: Page) {
