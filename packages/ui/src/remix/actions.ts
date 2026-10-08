@@ -93,7 +93,9 @@ export function describeRemix(code: RemixCode, foil: FoilKind | null): string {
 
 function announce(code: RemixCode, foil: FoilKind | null, source: RemixSource, rolled: boolean): void {
   const play = playStore.getState();
-  if (foil) {
+  // A drawing carries no foil: under the Illustrate look the finish rests
+  // unseen, so the pill does not announce it (it shows when the light does).
+  if (foil && useStore.getState().inkStyle === 'off') {
     play.flashText(`✦ ${FOIL_LABEL[foil]} foil · ${code.text}`, 'foil', 3600);
     cue('foil');
   } else {
