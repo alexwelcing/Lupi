@@ -1101,7 +1101,11 @@ export const RENDER_INK_SHADINGS_V1 = ['flat', 'hatch'] as const;
  */
 function validateRenderInkV1(view: RenderJsonObjectV1): void {
   const path = '$.spec.view.ink';
-  const ink = exactViewObject(view, 'ink', ['pipeline', 'shading', 'weight', 'ink', 'paper', 'shade', 'plate', 'depthCue']);
+  const keys = ['pipeline', 'shading', 'weight', 'ink', 'paper', 'shade', 'plate', 'depthCue'];
+  const ink = requireRecord(view.ink, path);
+  // `contour` is optional: specs written before the screen-space contour have none.
+  requireExactKeys(ink, [...keys, 'contour'], keys, path);
+  if ('contour' in ink) validateRenderInkContourV1(ink.contour);
   requireOneOf(ink.pipeline, RENDER_INK_PIPELINES_V1, `${path}.pipeline`);
   requireOneOf(ink.shading, RENDER_INK_SHADINGS_V1, `${path}.shading`);
   requireNumberInRange(ink.weight, 0.4, 2.5, `${path}.weight`);
@@ -1112,6 +1116,23 @@ function validateRenderInkV1(view: RenderJsonObjectV1): void {
   requireNumberInRange(ink.depthCue, 0, 1, `${path}.depthCue`);
   const postprocess = requireRecord(view.postprocess, '$.spec.view.postprocess');
   requireLiteral(postprocess.pipeline, 'raw-scene', '$.spec.view.postprocess.pipeline');
+}
+
+/**
+ * `view.ink.contour.pipeline`: the screen-space contour the browser capture
+ * inks over the assembled image (creases, depth steps and the outer contour
+ * against the plate), with its line widths in ink units.
+ */
+export const RENDER_INK_CONTOUR_PIPELINES_V1 = ['ink-contour.v1'] as const;
+
+function validateRenderInkContourV1(value: unknown): void {
+  const path = '$.spec.view.ink.contour';
+  const contour = requireRecord(value, path);
+  const keys = ['pipeline', 'inner', 'outer'];
+  requireExactKeys(contour, keys, keys, path);
+  requireOneOf(contour.pipeline, RENDER_INK_CONTOUR_PIPELINES_V1, `${path}.pipeline`);
+  requireNumberInRange(contour.inner, 0, 8, `${path}.inner`);
+  requireNumberInRange(contour.outer, 0, 8, `${path}.outer`);
 }
 
 function validateRenderPostprocessV1(view: RenderJsonObjectV1, transparent: boolean): void {

@@ -466,6 +466,64 @@ describe('render artifact V1 semantic validation', () => {
     );
   });
 
+  it('accepts the Illustrate look with and without its ink contour, and validates the contour', () => {
+    const ink = {
+      pipeline: 'impostor-ink.v1',
+      shading: 'flat',
+      weight: 1,
+      ink: '#0c1211',
+      paper: '#f3f5ef',
+      shade: '#1a2321',
+      plate: '#cfd8cc',
+      depthCue: 0.4,
+    };
+    const contour = { pipeline: 'ink-contour.v1', inner: 1.3, outer: 2.6 };
+    const inked = (value: Record<string, unknown>) => contentSpec({
+      view: { ...contentSpec().view, ink: value } as unknown as RenderJsonObjectV1,
+    });
+    expect(validateRenderArtifactSpecV1(inked(ink))).toMatchObject({ format: 'png' });
+    expect(validateRenderArtifactSpecV1(inked({ ...ink, contour }))).toMatchObject({ format: 'png' });
+    expect(() => validateRenderArtifactSpecV1(inked({ ...ink, contour: { ...contour, pipeline: 'ink-contour.v0' } })))
+      .toThrow(/ink\.contour\.pipeline: must be one of/);
+    expect(() => validateRenderArtifactSpecV1(inked({ ...ink, contour: { ...contour, outer: 9 } }))).toThrow(
+      /ink\.contour\.outer/,
+    );
+    expect(() => validateRenderArtifactSpecV1(inked({ ...ink, contour: { ...contour, inner: -1 } }))).toThrow(
+      /ink\.contour\.inner/,
+    );
+    expect(() => validateRenderArtifactSpecV1(inked({ ...ink, contour: { pipeline: 'ink-contour.v1', inner: 1.3 } })))
+      .toThrow(/ink\.contour/);
+    expect(() => validateRenderArtifactSpecV1(inked({ ...ink, contour: { ...contour, noise: 1 } }))).toThrow(
+      /unsupported field noise/,
+    );
+    expect(() => validateRenderArtifactSpecV1(inked({ ...ink, contour: 'on' }))).toThrow(/ink\.contour: must be a plain object/);
+    expect(() => validateRenderArtifactSpecV1(inked({ ...ink, outline: 1 }))).toThrow(/unsupported field outline/);
+  });
+
+  it('gives an ink spec with a contour its own specId', async () => {
+    const ink = {
+      pipeline: 'impostor-ink.v1',
+      shading: 'hatch',
+      weight: 1,
+      ink: '#0c1211',
+      paper: '#f3f5ef',
+      shade: '#1a2321',
+      plate: '#e7ebe3',
+      depthCue: 0.4,
+    };
+    const lit = await computeRenderSpecIdV1(contentSpec());
+    const drawn = await computeRenderSpecIdV1(contentSpec({
+      view: { ...contentSpec().view, ink } as unknown as RenderJsonObjectV1,
+    }));
+    const contoured = await computeRenderSpecIdV1(contentSpec({
+      view: {
+        ...contentSpec().view,
+        ink: { ...ink, contour: { pipeline: 'ink-contour.v1', inner: 1.3, outer: 2.6 } },
+      } as unknown as RenderJsonObjectV1,
+    }));
+    expect(new Set([lit, drawn, contoured]).size).toBe(3);
+  });
+
   it('rejects unknown fields and incomplete layer declarations', () => {
     expect(() => validateRenderArtifactSpecV1({ ...contentSpec(), quality: 1 })).toThrow(
       /unsupported field quality/,
