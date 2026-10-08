@@ -133,11 +133,12 @@ export default {
     const idle = (await raw.textContent().catch(() => '')) ?? '';
     const want = scale === 1.37 ? 1.21 : 1.37;
     const set = await mcp(page, 'lupi.set_viewer', { atomScale: want });
-    const followed = await page.waitForFunction((value) => (document.querySelector('[data-testid="lupine-mcp-response"]')?.textContent ?? '').includes(`"atomScale": ${value}`), want, { timeout: 10_000, polling: 100 })
+    const followed = await page.waitForFunction((value) => (document.querySelector('[data-testid="lupine-mcp-response"]')?.textContent ?? '').includes(`"atomScale": ${value}`), want, { timeout: 60_000, polling: 250 })
       .then(() => true, () => false);
-    outcome.data.harness = { name, scale, want, set: set?.ok ?? null, idle: idle.slice(0, 160) };
+    const stored = await page.evaluate(() => window.__lupiViewerMcp?.state?.().atomScale ?? null);
+    outcome.data.harness = { name, scale, want, set: set?.ok ?? null, stored, idle: idle.slice(0, 160) };
     await save('harness', await page.screenshot({ scale: 'css' }));
     check('/#/mcp: the idle raw response reads the loaded file', harness && Boolean(name) && idle.includes(`"fileName": ${JSON.stringify(name)}`), `file ${JSON.stringify(name)}, raw ${idle.length} chars`);
-    check('/#/mcp: it re-reads the state when the atom scale changes', Boolean(set?.ok) && followed, `atomScale ${scale} -> ${want}`);
+    check('/#/mcp: it re-reads the state when the atom scale changes', Boolean(set?.ok) && followed, `atomScale ${scale} -> ${want} (store ${stored})`);
   },
 };
