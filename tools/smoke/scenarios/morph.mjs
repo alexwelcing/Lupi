@@ -17,6 +17,9 @@
  * 4. With Motion: Still (prefers-reduced-motion), water -> benzene does not morph.
  * 5. The landed caffeine matches a plain open of caffeine at the same camera.
  * Under --reduced-motion the whole run is Still: the first switch must not morph.
+ * On a phone (phone390) the switcher is the command deck's Switch sheet (a
+ * tap), which stays open while the molecule switches, so the morph plays
+ * under the sheet's view inset; closing it gives the view back.
  * A software renderer presents a few frames a second, so frames are read from
  * a CDP screencast against a page-side timeline of __lupiPlay.state().motion.
  */
@@ -95,10 +98,11 @@ async function cropFrames(page, canvas, frames, h) {
 
 const fraction = (h, a, b) => h.diffImages(a, b).changed / (a.width * a.height);
 
-/** Open the switcher (key 7) and wait for the row that switches to `title`. */
-async function findRow(page, title) {
+/** Open the switcher (key 7; on a phone the deck's Switch sheet) and wait for the row that switches to `title`. */
+async function findRow(page, title, touch) {
   const open = await page.evaluate(() => Boolean(document.querySelector('input[aria-label="Switch molecule"]')));
-  if (!open) await page.keyboard.press('7');
+  if (!open && touch) await page.getByRole('button', { name: 'Switch command', exact: true }).tap();
+  else if (!open) await page.keyboard.press('7');
   const input = page.locator('input[aria-label="Switch molecule"]').first();
   await input.waitFor({ state: 'visible', timeout: 15_000 });
   await input.fill(title.toLowerCase());
@@ -116,8 +120,8 @@ async function findRow(page, title) {
  * frames count, not wall time or page ticks).
  */
 async function switchTo(ctx, h, canvas, title, atoms, { quietFrames = 12 } = {}) {
-  const { page } = ctx;
-  await findRow(page, title);
+  const { page, spec } = ctx;
+  await findRow(page, title, h.isTouchProfile(spec.profile));
   await page.evaluate(() => {
     window.__morph.log = [];
     window.__morph.last = '';
@@ -221,7 +225,7 @@ async function exportUnderMorph(page, h) {
 
 export default {
   name: 'morph',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'Switching molecules morphs the atoms on screen into the new one; exports stay at rest; Still cuts.',
 
   async run(ctx, h) {
@@ -277,7 +281,13 @@ export default {
     for (let i = 0; i < frames1.length; i += 1) await save(`morph-c60-caffeine-${i}`, h.encodePng(frames1[i].image));
 
     // The landed view, chrome hidden and the switcher closed, for step 5.
-    await page.keyboard.press('Escape');
+    outcome.data.c60ToCaffeine.inset = await page.evaluate(() => window.__lupiPlay?.viewInset?.() ?? null);
+    if (h.isTouchProfile(ctx.spec.profile)) {
+      await page.getByRole('button', { name: 'Switch command', exact: true }).tap();
+      await page.locator('input[aria-label="Switch molecule"]').first().waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => {});
+    } else {
+      await page.keyboard.press('Escape');
+    }
     const landed = await h.waitSettled(page, canvas, 0.01, 15_000);
     const pose = await page.evaluate(() => window.__lupiPlay?.state?.()?.rig ?? null);
     await save('caffeine-landed', landed.png);

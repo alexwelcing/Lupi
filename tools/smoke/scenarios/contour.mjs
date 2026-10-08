@@ -17,6 +17,16 @@
  *    (its spec records view.ink.contour) and differs from it; 2400x1600 (two
  *    tiles across at factor 2) shows no seam at the tile boundary column; a
  *    transparent 1024x1024 keeps its background clear and its molecule inked.
+ * 5. Line weight at the device's pixels: space-filling caffeine drawn flat
+ *    on the paper plate, captured at device resolution. The dark band at
+ *    the molecule's edge (full width at half depth, from the plate inward,
+ *    the median over the rows) measured in CSS px is the outer contour,
+ *    INK_CONTOUR_TUNING.outerLine ink units, and without the contour the
+ *    impostors' atom line (INK_LOOK_TUNING.atomLine); an ink unit is one
+ *    CSS px on a 900 px picture, clamped to 0.85 below 765 px, at any DPR.
+ * On a phone (phone390, DPR 3; 2 on the WebGL2 backend) steps 1 to 3 and 5
+ * run as on the desktop. The exports of step 4 run on the desktop only:
+ * the spec and its pixels do not depend on the device that asks.
  */
 
 // The Looks' plates: Illustrate on the sage plate, Sketch on paper.
@@ -25,6 +35,82 @@ const BALL_AND_STICK = { inkStyle: 'flat', backgroundPreset: 'sage-plate', showB
 const SKETCH = { inkStyle: 'hatch', backgroundPreset: 'paper-plate', atomScale: 2.6, showBonds: false };
 /** The export's own small-molecule boost would shrink the balls apart; keep them space-filling. */
 const EXPORT_ATOM_SCALE = 2.6;
+
+/** Outer contour and atom line widths (ink units) and the ink unit's floor (inkContour.ts, inkLook.ts). */
+const OUTER_LINE = 2.6;
+const ATOM_LINE = 1.5;
+const MIN_PICTURE_SCALE = 0.85;
+const LINE_VIEW = { inkStyle: 'flat', backgroundPreset: 'paper-plate', atomScale: 2.6, showBonds: false };
+
+/** The canvas at device pixels and the device pixels per CSS px. */
+async function captureDevice(page, h, canvas) {
+  const box = await canvas.boundingBox();
+  const client = await h.cdpFor(page);
+  await page.evaluate((text) => {
+    const style = document.createElement('style');
+    style.id = 'contour-device-capture';
+    style.textContent = text;
+    document.head.appendChild(style);
+    // Two frames, so 1 ms transitions (reduced motion) have hidden the chrome.
+    return new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+  }, h.HIDE_CHROME_CSS);
+  try {
+    const { data } = await client.send('Page.captureScreenshot', { format: 'png' });
+    const full = h.decodePng(Buffer.from(data, 'base64'));
+    const scale = full.width / (page.viewportSize()?.width ?? full.width);
+    const rect = { x: Math.floor(box.x * scale), y: Math.floor(box.y * scale), width: Math.floor(box.width * scale), height: Math.floor(box.height * scale) };
+    return { image: h.cropImage(full, rect, 1), scale };
+  } finally {
+    await page.evaluate(() => document.getElementById('contour-device-capture')?.remove());
+  }
+}
+
+/**
+ * The dark band at the molecule's edge, in image px: for each row, from each
+ * side, the first dip below the plate, measured at half its depth; the
+ * median over the rows that cross the molecule.
+ */
+function edgeBand(image) {
+  const { width: w, height: hgt, data } = image;
+  const plateAt = (x, y) => luma(data, (y * w + x) * 4);
+  const widths = [];
+  for (let y = 0; y < hgt; y += 1) {
+    const plate = (plateAt(0, y) + plateAt(w - 1, y)) / 2;
+    for (const dir of [1, -1]) {
+      let x = dir === 1 ? 0 : w - 1;
+      const end = dir === 1 ? w : -1;
+      // Into the dip: the first pixel clearly below the plate.
+      while (x !== end && luma(data, (y * w + x) * 4) > plate - 40) x += dir;
+      if (x === end) break;
+      // Its floor: the darkest pixel before the luma turns back up by a third of the depth.
+      let floor = luma(data, (y * w + x) * 4);
+      let probe = x;
+      while (probe !== end) {
+        const value = luma(data, (y * w + probe) * 4);
+        if (value < floor) floor = value;
+        if (value > floor + (plate - floor) / 3) break;
+        probe += dir;
+      }
+      if (plate - floor < 120) continue;
+      const half = (plate + floor) / 2;
+      // Full width at half depth, with the crossings interpolated.
+      let a = x - dir;
+      while (a !== end && luma(data, (y * w + a + dir) * 4) > half) a += dir;
+      let b = a + dir;
+      while (b !== end && luma(data, (y * w + b) * 4) <= half) b += dir;
+      if (b === end) continue;
+      const la0 = luma(data, (y * w + a) * 4);
+      const la1 = luma(data, (y * w + a + dir) * 4);
+      const lb0 = luma(data, (y * w + b - dir) * 4);
+      const lb1 = luma(data, (y * w + b) * 4);
+      const enter = (la0 - half) / Math.max(1e-6, la0 - la1);
+      const leave = (half - lb0) / Math.max(1e-6, lb1 - lb0);
+      widths.push(Math.abs(b - a) - 1 + leave - enter);
+    }
+  }
+  widths.sort((m, n) => m - n);
+  return { rows: widths.length, median: widths.length ? widths[Math.floor(widths.length / 2)] : null };
+}
 
 async function open(ctx, h, id, atoms, contour) {
   const { page, check, outcome } = ctx;
@@ -139,7 +225,7 @@ function columnStep(image, a, b) {
 
 export default {
   name: 'contour',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'Illustrate draws meeting lines and an outer contour, live and in tiled exports, without seams.',
 
   async run(ctx, h) {
@@ -182,7 +268,33 @@ export default {
     outcome.data.contour.sketch = sketchInk;
     check('Sketch caffeine: the contour adds ink', sketchInk.added > 150, `${sketchInk.added} px`);
 
-    // 4. Exports of the space-filling view, without and then with the contour.
+    // 5. Line weight at the device's pixels.
+    outcome.data.contour.lineWeight = {};
+    for (const contour of [true, false]) {
+      const canvas = await open(ctx, h, 'caffeine', 24, contour);
+      if (!canvas) return;
+      const set = await setViewer(page, LINE_VIEW);
+      if (!check(`line weight${contour ? '' : ' (?contour=0)'}: set_viewer`, set.ok, JSON.stringify(set.error))) return;
+      await page.waitForTimeout(900);
+      await h.waitSettled(page, canvas, 0.02);
+      const shot = await captureDevice(page, h, canvas);
+      const dpr = await canvas.evaluate((node) => node.width / node.getBoundingClientRect().width);
+      const cssShort = Math.min(...[shot.image.width, shot.image.height].map((side) => side / shot.scale));
+      const unit = Math.min(2.6, Math.max(MIN_PICTURE_SCALE, cssShort / 900));
+      const want = (contour ? OUTER_LINE : ATOM_LINE) * unit;
+      const band = edgeBand(shot.image);
+      const css = band.median === null ? null : band.median / shot.scale;
+      outcome.data.contour.lineWeight[contour ? 'contour' : 'atomLine'] = { dpr: Math.round(dpr * 100) / 100, screenshotScale: shot.scale, rows: band.rows, devicePx: band.median, cssPx: css, expectedCssPx: want };
+      await save(`line-weight-${contour ? 'contour' : 'before'}-device`, h.encodePng(shot.image));
+      check(
+        `${contour ? 'the outer contour' : 'the atom line (?contour=0)'} keeps its CSS width at DPR ${Math.round(dpr * 100) / 100}`,
+        css !== null && css > want * 0.65 && css < want * 1.5,
+        `${css === null ? 'n/a' : css.toFixed(2)} CSS px (${band.median?.toFixed(2)} device px over ${band.rows} edges), expected about ${want.toFixed(2)}`,
+      );
+    }
+
+    // 4. Exports of the space-filling view, without and then with the contour (device-independent).
+    if (h.isTouchProfile(ctx.spec.profile)) return;
     if (!(await open(ctx, h, 'caffeine', 24, false))) return;
     await setViewer(page, SPACE_FILLING);
     await page.waitForTimeout(900);

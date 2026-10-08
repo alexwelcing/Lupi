@@ -26,12 +26,46 @@
  * 6. Ink-to-Light: a tap on the home hero opens C60 in ink, and the light
  *    comes on as a fuse (mode 'graph', arrival) from the centre-front atom,
  *    ending lit.
+ * Under Motion: Still (--reduced-motion) no fuse burns: the toggle cuts the
+ * look between two frames each way, the end still matches the ink view, and
+ * the hero opens C60 lit, with no Ink-to-Light (steps 3 and 4 have no fuse
+ * to hold).
+ * On a phone (phone390) the toggle is the Play tray's Look row (Ink, Lit)
+ * instead of the `I` key, and the hero takes a tap. The atom is picked
+ * before the references are drawn: the phone's atom card makes room, so the
+ * molecule sits lower while it is open, and the fuse burns under that view
+ * inset.
  */
 
 const MOLECULES = ['c60_buckyball', 'caffeine'];
 const HIDE_ID = 'fuse-hide-chrome';
 
 const ink = (page, ...args) => page.evaluate((a) => window.__lupiPlay?.ink?.(...a) ?? null, args);
+
+/**
+ * The UI's ink toggle: the `I` key on the desktop; on a phone the Play
+ * tray's Look row, Ink or Lit (DOM clicks, as a tap runs them: the chrome is
+ * hidden from the screenshots while the fuse is filmed).
+ */
+async function toggleLook(page, h, touch) {
+  if (!touch) {
+    await page.keyboard.press('i');
+    return;
+  }
+  const opened = await page.evaluate(() => {
+    const button = document.querySelector('[data-lupi-pill] button[aria-haspopup="menu"]');
+    if (!document.querySelector('[data-lupi-pill] [role="menu"]')) button?.click();
+    return Boolean(button);
+  });
+  if (!opened) throw new Error('the Play pill is missing');
+  await page.waitForFunction(() => Boolean(document.querySelector('[data-lupi-pill] [role="menu"]')), null, { timeout: 8_000 });
+  await page.evaluate(() => {
+    const label = window.__lupiViewerMcp.state().inkStyle === 'off' ? 'Ink' : 'Lit';
+    const items = [...document.querySelectorAll('[data-lupi-pill] [role="menu"] [role="menuitemradio"]')];
+    items.find((item) => item.textContent.trim() === label)?.click();
+  });
+  await h.sleep(50);
+}
 
 async function mcp(page, tool, args) {
   return page.evaluate(({ name, input }) => window.__lupiViewerMcp.execute({ id: `fuse-${name}`, tool: name, arguments: input }), { name: tool, input: args });
@@ -176,14 +210,21 @@ async function exportDigest(page, h, label) {
 
 async function runMolecule(ctx, h, id) {
   const { page, spec, check, save, outcome } = ctx;
+  const touch = h.isTouchProfile(spec.profile);
   const data = (outcome.data[id] = {});
   const canvas = await h.openStructure(ctx, h.galleryEntry(id));
   if (!canvas) return;
   await lookAtRest(page, h);
   await viewAtRest(page, h);
 
-  // 1. References.
-  const lit = await h.waitSettled(page, canvas, 0.01);
+  // 1. References (on a phone, with the atom card open: it moves the molecule).
+  let lit = await h.waitSettled(page, canvas, 0.01);
+  if (touch) {
+    await h.pickAtom(ctx, canvas, lit.image);
+    await viewAtRest(page, h);
+    data.inset = await page.evaluate(() => window.__lupiPlay?.viewInset?.() ?? null);
+    lit = await h.waitSettled(page, canvas, 0.01);
+  }
   await save(`${id}-lit`, lit.png);
   const toInk = await mcp(page, 'lupi.set_viewer', { inkStyle: 'flat' });
   const afterMcp = await ink(page);
@@ -197,10 +238,14 @@ async function runMolecule(ctx, h, id) {
   await h.waitSettled(page, canvas, 0.01);
 
   // 2. Select an atom, then `I`: the fuse from it, sampled as presented.
-  await h.pickAtom(ctx, canvas, lit.image);
+  if (!touch) await h.pickAtom(ctx, canvas, lit.image);
   const picked = Number.parseInt(outcome.data.pick?.card?.atomIndex ?? '', 10);
   data.picked = Number.isFinite(picked) ? picked : null;
   await lookAtRest(page, h);
+  if (ctx.options.reducedMotion) {
+    await stillToggles(ctx, h, id, canvas, { lit, inked, touch, data });
+    return;
+  }
   const box = await canvas.boundingBox();
   const viewport = page.viewportSize();
   await setChromeHidden(page, true, h.HIDE_CHROME_CSS);
@@ -210,7 +255,7 @@ async function runMolecule(ctx, h, id) {
   const stop = await screencast(page, h);
   await h.sleep(400);
   const pressedAt = Date.now();
-  await page.keyboard.press('i');
+  await toggleLook(page, h, touch);
   const burning = await fuseStarted(page, h);
   await lookAtRest(page, h, 60_000);
   await h.sleep(600);
@@ -219,7 +264,7 @@ async function runMolecule(ctx, h, id) {
   await setChromeHidden(page, false);
   const started = await ink(page);
   data.started = started?.fuse ?? null;
-  check(`${id}: the I key fuses from the selected atom`, burning?.fuse?.running === true && started?.fuse?.seed === data.picked && started.fuse.progress === 1, `fuse ${JSON.stringify(started?.fuse)} picked #${data.picked}`);
+  check(`${id}: ${touch ? "the tray's Ink" : 'the I key'} fuses from the selected atom`, burning?.fuse?.running === true && started?.fuse?.seed === data.picked && started.fuse.progress === 1, `fuse ${JSON.stringify(started?.fuse)} picked #${data.picked}`);
   check(`${id}: the fuse follows the bond graph`, started?.fuse?.mode === 'graph', String(started?.fuse?.mode));
   const crop = ({ png }) => {
     const full = h.decodePng(png);
@@ -247,7 +292,7 @@ async function runMolecule(ctx, h, id) {
   // 3. The light coming on from the same atom, held at steps for a filmstrip.
   const strip = [];
   await ink(page, 'hold', 0);
-  await page.keyboard.press('i');
+  await toggleLook(page, h, touch);
   await fuseStarted(page, h);
   for (const p of [0, 0.2, 0.4, 0.6, 0.8]) {
     await ink(page, 'hold', p);
@@ -281,8 +326,51 @@ async function runMolecule(ctx, h, id) {
   check(`${id}: no frames drawn once the fuse is over`, framesA !== null && framesB !== null && framesB - framesA <= 2, `${framesA} -> ${framesB}`);
 }
 
+/** Every ink() reading for each animation frame while `act` runs and the look settles. */
+async function recordLook(page, h, act) {
+  await page.evaluate(() => {
+    const rec = (window.__lookSmoke = { rows: [], on: true });
+    const tick = () => {
+      if (!rec.on) return;
+      const state = window.__lupiPlay?.ink?.();
+      if (state) rec.rows.push({ mix: state.mix, fading: state.fading, fuse: state.fuse?.running ?? false });
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await act();
+  await lookAtRest(page, h);
+  await h.sleep(600);
+  return page.evaluate(() => {
+    window.__lookSmoke.on = false;
+    return window.__lookSmoke.rows;
+  });
+}
+
+/** Still: the UI toggle cuts both ways (no fuse, no fade, no frame between the looks). */
+async function stillToggles(ctx, h, id, canvas, { lit, inked, touch, data }) {
+  const { page, check, save } = ctx;
+  for (const [label, to, reference] of [['ink', 1, inked], ['lit', 0, lit]]) {
+    const rows = await recordLook(page, h, () => toggleLook(page, h, touch));
+    const between = rows.filter((row) => row.mix > 0.001 && row.mix < 0.999).length;
+    const burned = rows.some((row) => row.fuse || row.fading);
+    const last = rows.at(-1)?.mix ?? null;
+    data[`still-${label}`] = { rows: rows.length, between, burned, last };
+    check(`${id}: Still: the toggle to ${label} cuts (no fuse, no fade)`, !burned && between === 0 && last === to, JSON.stringify(data[`still-${label}`]));
+    const shown = await h.waitSettled(page, canvas, 0.01);
+    await save(`${id}-still-${label}`, shown.png);
+    const near = classify(shown.image, lit.image, inked.image);
+    check(`${id}: Still: the ${label} view matches its reference`, (to === 1 ? near.ink : near.lit) > 0.95, `near lit ${h.pct(near.lit)}, near ink ${h.pct(near.ink)}`);
+  }
+  await h.sleep(3_000);
+  const framesA = (await h.readPlay(page))?.frames ?? null;
+  await h.sleep(1_500);
+  const framesB = (await h.readPlay(page))?.frames ?? null;
+  check(`${id}: Still: no frames drawn once the look has cut`, framesA !== null && framesB !== null && framesB - framesA <= 2, `${framesA} -> ${framesB}`);
+}
+
 async function exportMidFuse(ctx, h) {
-  const { page, check, outcome } = ctx;
+  const { page, spec, check, outcome } = ctx;
   const canvas = await h.openStructure(ctx, h.galleryEntry('c60_buckyball'));
   if (!canvas) return;
   await lookAtRest(page, h);
@@ -291,7 +379,7 @@ async function exportMidFuse(ctx, h) {
   await h.waitSettled(page, canvas, 0.01);
   // The fuse with nothing selected starts at the centre-front atom.
   await ink(page, 'hold', 0.5);
-  await page.keyboard.press('i');
+  await toggleLook(page, h, h.isTouchProfile(spec.profile));
   await fuseStarted(page, h);
   await h.waitSettled(page, canvas, 0.01, 8_000);
   const held = await ink(page);
@@ -331,15 +419,21 @@ async function inkToLight(ctx, h) {
     }, 20);
   });
   const box = await hero.boundingBox();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  const settled = await page.waitForFunction(() => {
+  if (h.isTouchProfile(spec.profile)) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  else await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const settled = await page.waitForFunction((still) => {
     const log = window.__fuseLog ?? [];
     const state = window.__lupiPlay?.ink?.();
-    return log.some((row) => row.running) && state && !state.fuse?.running && !state.holding && state.mix === 0;
-  }, null, { timeout: 90_000, polling: 100 }).then(() => true, () => false);
+    const opened = window.__lupiViewerMcp?.status?.()?.atomCount === 60 && window.__lupiPlay?.state?.()?.firstFrame === true;
+    return (still ? opened : log.some((row) => row.running)) && state && !state.fuse?.running && !state.holding && state.mix === 0;
+  }, options.reducedMotion, { timeout: 90_000, polling: 100 }).then(() => true, () => false);
   const log = await page.evaluate(() => window.__fuseLog ?? []);
   outcome.data.inkToLight = { log };
   const burned = log.find((row) => row.running);
+  if (options.reducedMotion) {
+    check('Still: the hero opens C60 lit, with no Ink-to-Light', settled && !log.some((row) => row.holding || row.running || row.mix > 0), `${spec.backend}: ${JSON.stringify(log.slice(0, 4))}`);
+    return;
+  }
   check('Ink-to-Light: the hero opens C60 in ink', log.some((row) => row.holding && row.mix === 1), JSON.stringify(log.slice(0, 3)));
   check('Ink-to-Light: the light comes on as a fuse along the bonds', Boolean(burned) && burned.arrival === true && burned.mode === 'graph' && Number.isInteger(burned.seed), JSON.stringify(burned ?? log.at(-1)));
   check('Ink-to-Light: it ends lit', settled, `${spec.backend}: ${JSON.stringify(log.at(-1))}`);
@@ -347,12 +441,13 @@ async function inkToLight(ctx, h) {
 
 export default {
   name: 'fuse',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'The Light Fuse: ink turns to light along the bonds from a seed atom (C60, caffeine); exports never see it.',
 
   async run(ctx, h) {
     for (const id of MOLECULES) await runMolecule(ctx, h, id);
-    await exportMidFuse(ctx, h);
+    // Still: no fuse to hold halfway through an export.
+    if (!ctx.options.reducedMotion) await exportMidFuse(ctx, h);
     await inkToLight(ctx, h);
   },
 };

@@ -21,6 +21,8 @@
  * 6. Under the Illustrate look a Holo code (r1-K03DQ) is still Foil, but the
  *    pill names no finish (no "foil" flash, no foil chip); with ink off the
  *    chip comes back.
+ * Under Motion: Still (--reduced-motion) step 2 reads a cut instead: the
+ * roll lands its code exact at once, with no morph.
  * 7. A reload of /?sim=caffeine&remix=r1-K7QDM opens with that code exact,
  *    the same style fields in `__lupiViewerMcp.state()` as step 3, and no
  *    `remix=` left in the address bar.
@@ -90,7 +92,7 @@ export default {
   description: 'Remix: tray roll, morph, a known code, Quiet Idle, an MCP export that keeps the view, undo, Foil under ink, ?remix= on reload.',
 
   async run(ctx, h) {
-    const { page, spec, check, save, outcome, log } = ctx;
+    const { page, spec, check, save, outcome, log, options } = ctx;
     const touch = h.isTouchProfile(spec.profile);
     const press = (locator) => (touch ? locator.tap({ noWaitAfter: true }) : locator.click({ noWaitAfter: true }));
     const area = (image) => image.width * image.height;
@@ -131,7 +133,8 @@ export default {
     const rolled = await morphEnded(page);
     const rolledStyle = await style(page);
     outcome.data.roll = { rolling, rolled, style: rolledStyle };
-    check('a roll starts a morph', rolling?.morphing === true && CODE.test(rolling.code ?? ''), JSON.stringify(rolling));
+    if (options.reducedMotion) check('Still: a roll cuts to its code (no morph)', rolling?.morphing === false && rolling.status === 'exact' && CODE.test(rolling.code ?? ''), JSON.stringify(rolling));
+    else check('a roll starts a morph', rolling?.morphing === true && CODE.test(rolling.code ?? ''), JSON.stringify(rolling));
     check('the morph ends with the new code exact', rolled?.code === rolling?.code && rolled.status === 'exact' && rolled.morphing === false, JSON.stringify(rolled));
 
     // 3. A known code, then a still view.

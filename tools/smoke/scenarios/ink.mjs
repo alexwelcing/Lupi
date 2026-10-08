@@ -15,7 +15,9 @@
  *    spec, so the shading's place in it is checked through identity: each
  *    shading gets its own specId (renderArtifactAdapter.test.ts checks
  *    `view.ink.shading` itself).
- * Every settled view and export is saved for a human to look at.
+ * Every settled view and export is saved for a human to look at; on a phone
+ * the close-ups are also saved at the device's own pixels (`-device`), where
+ * the hatching, engraving and halftone screens meet the display's grid.
  */
 
 const MOLECULES = ['caffeine', 'c60_buckyball'];
@@ -66,6 +68,29 @@ async function framesWhileStill(page, ms = 600) {
   return before === null || after === null ? null : after - before;
 }
 
+/** The canvas at device pixels (no downsampling): what a DPR 3 screen shows. */
+async function captureDevice(page, h, canvas) {
+  const box = await canvas.boundingBox();
+  const client = await h.cdpFor(page);
+  await page.evaluate((text) => {
+    const style = document.createElement('style');
+    style.id = 'ink-device-capture';
+    style.textContent = text;
+    document.head.appendChild(style);
+    // Two frames, so 1 ms transitions (reduced motion) have hidden the chrome.
+    return new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+  }, h.HIDE_CHROME_CSS);
+  try {
+    const { data } = await client.send('Page.captureScreenshot', { format: 'png' });
+    const full = h.decodePng(Buffer.from(data, 'base64'));
+    const scale = full.width / (page.viewportSize()?.width ?? full.width);
+    const rect = { x: Math.floor(box.x * scale), y: Math.floor(box.y * scale), width: Math.floor(box.width * scale), height: Math.floor(box.height * scale) };
+    return { image: h.cropImage(full, rect, 1), scale };
+  } finally {
+    await page.evaluate(() => document.getElementById('ink-device-capture')?.remove());
+  }
+}
+
 async function exportPng(page, h, label) {
   return h.withTimeout(page.evaluate(async (id) => {
     const out = await window.__lupiViewerMcp.execute({
@@ -86,11 +111,12 @@ async function exportPng(page, h, label) {
 
 export default {
   name: 'ink',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'Illustrate, Sketch, Engrave and Halftone draw on caffeine and C60, rest still, and export (Engrave, Halftone).',
 
   async run(ctx, h) {
-    const { page, check, save, outcome } = ctx;
+    const { page, spec, check, save, outcome } = ctx;
+    const phone = h.isTouchProfile(spec.profile);
     outcome.data.ink = {};
     for (const id of MOLECULES) {
       const data = { views: {}, exports: {} };
@@ -136,6 +162,11 @@ export default {
           await waitInkRest(page, style);
           const close = await h.waitSettled(page, canvas, 0.01);
           await save(`${id}-${style}-close`, close.png);
+          if (phone) {
+            const device = await captureDevice(page, h, canvas);
+            data.deviceScale = device.scale;
+            await save(`${id}-${style}-close-device`, h.encodePng(device.image));
+          }
         }
       }
 
