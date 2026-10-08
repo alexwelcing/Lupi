@@ -17,10 +17,14 @@
  * - the graph is rebuilt only when the SET of effects (or the tone-mapping
  *   mode) changes. Strengths are uniforms, so the intensity knob and
  *   play/pause never rebuild; playback only drops the scene pass's MSAA.
+ * - the Illustrate look's ink contour is in the graph while the drawing
+ *   shows: the look is on, or the live drawing is still fading out or
+ *   handing over (Ink-to-Light). It fades with the drawing (a uniform).
+ *   `?contour=0` leaves it out (a debug switch, inkContour.ts).
  */
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useStore as useFiberStore } from '@react-three/fiber/webgpu';
-import { LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
+import { INK_LOOK, LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
 import type { Node, PassNode, Vector3 } from 'three/webgpu';
 import { useStore } from '../store';
 import { getDeviceTier, type DeviceTier } from '../deviceCapabilities';
@@ -28,6 +32,7 @@ import { useRenderPipeline } from '../render/tsl';
 import { resolveActivePostprocess } from './controls';
 import { postStructure, postStructureKey, scenePassSamples, type PostprocessPresetConfig } from './presets';
 import { applyPostParams, autofocus, buildPostChain, type PostChain } from './postPipeline';
+import { inkContourSwitchedOn } from './inkContour';
 
 /**
  * Changes each time this module is (re)evaluated in dev. Under Vite HMR an
@@ -47,6 +52,26 @@ export function aoResolutionScaleFor(tier: DeviceTier): number {
   return isReducedPostTier(tier) ? 0.5 : 1;
 }
 
+/**
+ * True while the Illustrate look is drawn: the look is on, or the live
+ * drawing (`uInkMix`) has not yet faded out, or is handing over to the light
+ * (Ink-to-Light). Checked on drawn frames after the ink driver's uniforms.
+ */
+function useInkDrawn(ink: boolean): boolean {
+  const [drawn, setDrawn] = useState(() => ink || INK_LOOK.uInkMix.value > 0);
+  const latest = useRef(drawn);
+  useFrame(
+    () => {
+      const next = ink || INK_LOOK.uInkMix.value > 0;
+      if (next === latest.current) return;
+      latest.current = next;
+      setDrawn(next);
+    },
+    { phase: LUPI_PHASE.overlays },
+  );
+  return ink || drawn;
+}
+
 export function ScenePostprocessing() {
   const presetId = useStore((s) => s.postprocessPreset);
   const intensity = useStore((s) => s.postprocessIntensity);
@@ -55,6 +80,7 @@ export function ScenePostprocessing() {
   const fullEffects = useStore((s) => s.fullSceneEffects);
   const ink = useStore((s) => s.inkStyle !== 'off');
   const deviceTier = useMemo(getDeviceTier, []);
+  const contour = useInkDrawn(ink) && inkContourSwitchedOn();
 
   const config = useMemo(
     () => resolveActivePostprocess({
@@ -68,12 +94,14 @@ export function ScenePostprocessing() {
     [presetId, intensity, overrides, playing, fullEffects, deviceTier, ink],
   );
 
-  return <LupiPostPipeline config={config} aoResolutionScale={aoResolutionScaleFor(deviceTier)} />;
+  return <LupiPostPipeline config={config} contour={contour} aoResolutionScale={aoResolutionScaleFor(deviceTier)} />;
 }
 
 export interface LupiPostPipelineProps {
   /** The resolved recipe (resolveActivePostprocess). */
   config: PostprocessPresetConfig;
+  /** Ink the Illustrate look's contour (inkContour.ts). */
+  contour?: boolean;
   /** GTAO resolution scale (1 = full). */
   aoResolutionScale?: number;
   /** Called after each graph build (tests count rebuilds). */
@@ -85,11 +113,11 @@ export interface LupiPostPipelineProps {
  * default render through the pipeline; unmounting it restores the default
  * render (`reset()`).
  */
-export function LupiPostPipeline({ config, aoResolutionScale = 1, onBuild }: LupiPostPipelineProps) {
+export function LupiPostPipeline({ config, contour = false, aoResolutionScale = 1, onBuild }: LupiPostPipelineProps) {
   const store = useFiberStore();
-  const structure = postStructure(config);
+  const structure = postStructure(config, contour);
   const key = `${postStructureKey(structure)}|ao×${aoResolutionScale}${HMR_TOKEN}`;
-  const samples = scenePassSamples(config);
+  const samples = scenePassSamples(config, contour);
 
   // Latest inputs for the pipeline callback. Written in a layout effect that
   // runs before useRenderPipeline's own (effects run in declaration order).

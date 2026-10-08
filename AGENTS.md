@@ -211,6 +211,12 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
   stays); exports draw it and their spec records `view.ink`. Changes fade
   (480 ms); every capture renders the configured look, never a fade.
+  A screen-space contour (`packages/ui/src/postprocess/inkContour.ts`) adds
+  the lines an impostor cannot draw: where balls meet or a stick enters a
+  ball, a line on the near side of every depth step, and a heavier outer
+  contour against the plate (inside the silhouette). It runs while the
+  drawing shows, fades with it, and draws in exports (`view.ink.contour`);
+  `?contour=0` leaves it out of the view and of exports (a debug switch).
   Ink-to-Light: a molecule opened from an ink drawing (the hero, a molecule
   page, an ink tile on the wall or in the finder) first draws in ink at the
   drawing's pose, then the light comes on; any touch completes it and Still
@@ -593,6 +599,16 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   `plate`), present only while the look is on, so every
   lit spec keeps its identity. Ink line weight follows the capture's texel
   scale and the picture's short side, so an export keeps the screen's weight.
+  The look's screen-space contour runs the way a recipe would: the tiles
+  assemble colour (clamped to alpha, as the raw path clamps it), the nearest
+  depth of each block and coverage (the `lupiContent` mean when opaque, alpha
+  when transparent), and `postprocess/inkContour.ts` inks the whole assembled
+  image once at the output resolution, so no tile edge shows and the line
+  keeps the screen's weight. `view.ink.contour` records it (`{ pipeline:
+  'ink-contour.v1', inner, outer }`, line widths in ink units), so a
+  contoured ink spec never shares a `specId` with the drawing before it; an
+  ink spec without it still validates and exports without a contour. Over a
+  transparent background it inks the molecule only.
 - The Specimen floor shadow (`contactShadows` layer) is part of the view: it
   sits under every molecule up to 50,000 atoms (off for Diagram and under the
   filter shell), and the spec's `view.contactShadows` states its blur,

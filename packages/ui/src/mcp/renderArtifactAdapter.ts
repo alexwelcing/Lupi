@@ -30,7 +30,7 @@ import { inkPlateColor } from '../ink/illustrate';
 import { getBgMedia, BG_PRESETS } from '../backgroundPresets';
 import { getDefaultQualityTier } from '../deviceCapabilities';
 import { environmentAssetIdentity } from '../sceneEnvironment';
-import { captureLookToSpec, resolveCaptureLook } from '../export/captureLook';
+import { captureInkContourToSpec, captureLookToSpec, resolveCaptureLook } from '../export/captureLook';
 import {
   SPECIMEN_SHADOW,
   specimenShadowEnabled,
@@ -263,7 +263,8 @@ export async function createBrowserRenderArtifactPlanV1(
     // 'viewer-look' recipe, or the raw-scene literal when it is empty
     // (export/captureLook.ts). Transparent output records no bloom, depth of
     // field or vignette, because the capture does not apply them.
-    view.postprocess = captureLookToSpec(resolveCaptureLook(state, { transparent: alpha === 'transparent' }));
+    const look = resolveCaptureLook(state, { transparent: alpha === 'transparent' });
+    view.postprocess = captureLookToSpec(look);
     // The Illustrate look shades the impostors themselves (scene
     // tsl/inkLook.ts); recorded only while it is on, so every lit spec keeps
     // its identity. The capture renders the configured look, never a fade.
@@ -279,6 +280,12 @@ export async function createBrowserRenderArtifactPlanV1(
         plate: inkPlateColor(state.backgroundPreset),
         depthCue: INK_LOOK_TUNING.depthCue,
       };
+    }
+    // The look's screen-space contour (creases, steps, the outer contour),
+    // which the capture inks over the assembled image. A contour-less ink
+    // spec is the drawing before it, so the two never share a specId.
+    if (view.ink && look.inkContour) {
+      (view.ink as Record<string, RenderJsonValueV1>).contour = captureInkContourToSpec(look.inkContour);
     }
   }
 
