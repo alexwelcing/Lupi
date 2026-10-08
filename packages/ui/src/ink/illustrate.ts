@@ -5,9 +5,9 @@
  * impostors' shading (`inkStyle`), and the post recipe steps aside while it
  * is on (postprocess/controls.ts `inkRecipe`).
  *
- * The last ink shading used (flat, hatched, engraved or halftone) is
+ * The last ink shading used (flat, hatched, engraved, halftone or chalk) is
  * remembered for the tab, so Ink brings back the drawing you had. The Looks
- * grid (Illustrate, Sketch, Engrave, Halftone) sets plate and shading
+ * grid (Illustrate, Sketch, Engrave, Halftone, Chalk) sets plate and shading
  * together instead (sceneLooks.ts).
  */
 import { INK_STYLE_LETTERS, sanitizeInkStyle, useStore, type InkStyle } from '../store';
@@ -48,6 +48,7 @@ const INK_STYLE_LABELS: Record<InkStyle, string> = {
   hatch: 'Sketch',
   engrave: 'Engrave',
   halftone: 'Halftone',
+  chalk: 'Chalk',
 };
 
 /**
@@ -128,8 +129,8 @@ export function inkPlateColor(backgroundPreset: string): string {
 
 /**
  * The Illustrate look in a short link: `ink=f` (flat colour), `ink=h`
- * (hatched), `ink=e` (engraved) or `ink=d` (halftone dots), the letters of
- * the `s=` state. Instant Replay and Remix links carry it beside `replay=` and
+ * (hatched), `ink=e` (engraved), `ink=d` (halftone dots) or `ink=c`
+ * (chalk), the letters of the `s=` state. Instant Replay and Remix links carry it beside `replay=` and
  * `remix=`, which travel without the full `s=` state, so whoever opens them
  * sees the drawing the sender was looking at.
  */

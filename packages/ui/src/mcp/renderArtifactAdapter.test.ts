@@ -6,6 +6,8 @@ import { useStore, type LoadedFile } from '../store';
 import type { LupiRendererRuntime } from '../viewer/createLupiRenderer';
 import { EXECUTION_CLASS_V2, FIBER_VERSION_V2 } from '../export/exportProfileV2';
 import { reportActiveTransmissionQuality } from './transmissionRuntime';
+import { INK_LOOK_COLORS } from '@atlas/scene';
+import { SAGE_PLATE_COLOR, SAGE_PLATE_PRESET_ID } from '../backgroundPresets';
 import {
   browserRendererRuntimeV2,
   canonicalArtifactCameraPlanesV1,
@@ -164,13 +166,28 @@ describe('browser render artifact adapter', () => {
     const lit = await plan();
     expect(lit.spec.view.ink).toBeUndefined();
     const ids = new Set([lit.specId]);
-    for (const shading of ['flat', 'hatch', 'engrave', 'halftone'] as const) {
+    for (const shading of ['flat', 'hatch', 'engrave', 'halftone', 'chalk'] as const) {
       const inked = await plan({ inkStyle: shading });
       expect(inked.spec.view.ink).toMatchObject({ pipeline: 'impostor-ink.v1', shading });
       expect((inked.spec.view.postprocess as { pipeline?: string }).pipeline).toBe('raw-scene');
       ids.add(inked.specId);
     }
-    expect(ids.size).toBe(5);
+    expect(ids.size).toBe(6);
+  });
+
+  it('records the ink a drawing draws in: chalk for Chalk, the house ink otherwise', async () => {
+    for (const shading of ['flat', 'hatch', 'engrave', 'halftone'] as const) {
+      expect((await plan({ inkStyle: shading })).spec.view.ink).toMatchObject({ ink: INK_LOOK_COLORS.ink });
+    }
+    const chalk = await plan({ inkStyle: 'chalk', backgroundPreset: SAGE_PLATE_PRESET_ID });
+    expect(chalk.spec.view.ink).toMatchObject({ shading: 'chalk', ink: INK_LOOK_COLORS.chalk, plate: SAGE_PLATE_COLOR });
+    expect(INK_LOOK_COLORS.chalk).not.toBe(INK_LOOK_COLORS.ink);
+    // The ink colour is part of the drawing's identity.
+    const inHouseInk = await computeRenderSpecIdV1({
+      ...chalk.spec,
+      view: { ...chalk.spec.view, ink: { ...(chalk.spec.view.ink as RenderJsonObjectV1), ink: INK_LOOK_COLORS.ink } },
+    });
+    expect(inHouseInk).not.toBe(chalk.specId);
   });
 
   it('addresses the active raster property range', async () => {

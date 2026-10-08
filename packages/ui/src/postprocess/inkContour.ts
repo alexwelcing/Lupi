@@ -34,7 +34,8 @@
  *
  * Line widths are ink units, like the impostors' outlines: `unit` device
  * pixels (or output pixels) per unit, times the ink weight. The colour is the
- * ink, faded toward the plate by the same depth cue the impostors apply. The
+ * drawing's ink (chalk under Chalk; scene `inkLookInkColor`), faded toward
+ * the plate by the same depth cue the impostors apply. The
  * whole pass scales by `strength` (the live look's fade); it has no time and
  * no noise, so a still view stays still (Quiet Idle) and an export repeats.
  *
@@ -68,7 +69,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
-import { INK_LOOK, INK_LOOK_TUNING } from '@atlas/scene';
+import { INK_LOOK, INK_LOOK_TUNING, inkLookInkColor } from '@atlas/scene';
 
 // Graph-building code works on untyped nodes (spike G13).
 type N = any;
@@ -253,7 +254,7 @@ export function inkContour(input: InkContourInput): Node {
     const cue = smoothstep(INK_LOOK_TUNING.depthCueFrom, 1.0, clamp(across, 0.0, 1.0))
       .mul(INK_LOOK_TUNING.depthCue)
       .mul(sphere.greaterThan(1e-3).select(float(1), float(0)));
-    const inkColor = mix(vec3(I.uInkColor), vec3(I.uPlateColor), cue);
+    const inkColor = mix(inkLookInkColor() as N, vec3(I.uPlateColor), cue);
 
     const amount = clamp(max(inner, outer), 0, 1).mul(clamp(input.strength as N, 0, 1));
     const color = input.color as N;

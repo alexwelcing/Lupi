@@ -353,9 +353,10 @@
               "flat",
               "hatch",
               "engrave",
-              "halftone"
+              "halftone",
+              "chalk"
             ],
-            "description": "The Illustrate look: toon fills and ink outlines (flat colour, hatched, engraved lines or halftone dots); off is the lit surface. Exports keep it."
+            "description": "The Illustrate look: toon fills and ink outlines (flat colour, hatched, engraved lines or halftone dots), or chalk on a dark plate; off is the lit surface. Exports keep it."
           },
           "inkWeight": {
             "type": "number",

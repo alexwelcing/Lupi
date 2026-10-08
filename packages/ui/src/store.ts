@@ -93,11 +93,11 @@ export type FilterShellPreset = 'haze' | 'cryo' | 'prism' | 'graphite';
 export type BackgroundBackdropShape = 'dome' | 'sphere' | 'cube';
 export type BackgroundBackdropPattern = 'image' | 'plain' | 'grid';
 export type ViewerControlMode = 'molecule' | 'scene' | 'export';
-/** The Illustrate look's shading: off (lit), flat colour, hatched, engraved or halftone dots (scene tsl/inkLook.ts). */
-export type InkStyle = 'off' | 'flat' | 'hatch' | 'engrave' | 'halftone';
+/** The Illustrate look's shading: off (lit), flat colour, hatched, engraved, halftone dots or chalk (scene tsl/inkLook.ts). */
+export type InkStyle = 'off' | 'flat' | 'hatch' | 'engrave' | 'halftone' | 'chalk';
 
 /** Each ink shading's letter in the `s=` state and the `ink=` short link (f and h since the first links). */
-export const INK_STYLE_LETTERS = { flat: 'f', hatch: 'h', engrave: 'e', halftone: 'd' } as const satisfies Record<Exclude<InkStyle, 'off'>, string>;
+export const INK_STYLE_LETTERS = { flat: 'f', hatch: 'h', engrave: 'e', halftone: 'd', chalk: 'c' } as const satisfies Record<Exclude<InkStyle, 'off'>, string>;
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -552,8 +552,8 @@ export interface AppState {
   fullSceneEffects: boolean;
   /**
    * The Illustrate look: toon fills and ink outlines on the impostors
-   * ('flat' colour, 'hatch'ed, 'engrave'd lines or 'halftone' dots), or
-   * 'off' for the lit Specimen surface.
+   * ('flat' colour, 'hatch'ed, 'engrave'd lines, 'halftone' dots or
+   * 'chalk' on the dark plate), or 'off' for the lit Specimen surface.
    * A Look, not toy motion: shared, saved and exported like any look.
    */
   inkStyle: InkStyle;
