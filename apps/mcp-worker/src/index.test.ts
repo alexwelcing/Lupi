@@ -572,7 +572,7 @@ describe('lupi Cloudflare MCP worker', () => {
     }), TEST_AUTH_ENV);
     const body = await res.json() as { error: { message: string } };
     expect(body.error.message).toMatch(/bounded fast mode only/i);
-    expect(body.error.message).toMatch(/Node CLI/i);
+    expect(body.error.message).toMatch(/@atlas\/assessment library from Node/);
   });
 
   it('assesses a configured public HTTPS asset with a bounded range request', async () => {

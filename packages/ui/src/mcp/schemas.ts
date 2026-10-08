@@ -179,7 +179,7 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
         type: 'string',
         enum: ['fast'],
         default: 'fast',
-        description: 'The browser bridge is intentionally bounded to fast mode; use the Node CLI for deep streaming inspection.',
+        description: 'The browser bridge is intentionally bounded to fast mode; deep streaming inspection runs only through the @atlas/assessment library in Node (mode "deep").',
       },
     },
   },

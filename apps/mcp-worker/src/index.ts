@@ -982,7 +982,7 @@ async function callTool(
 async function assessMoleculeAsset(args: Record<string, unknown>, env: Env) {
   const requestedMode = typeof args.mode === 'string' ? args.mode : 'fast';
   if (requestedMode !== 'fast') {
-    throw new Error(`Cloudflare assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Use the Node CLI for deep streaming inspection.`);
+    throw new Error(`Cloudflare assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Deep streaming inspection has no command-line tool: call the @atlas/assessment library from Node (assessAsset or assessMany with mode 'deep').`);
   }
   const context = isRecord(args.context) ? args.context as AssessmentContext : undefined;
   const requestedSource = typeof args.source === 'string' ? args.source : args.url ? 'url' : 'envelope';

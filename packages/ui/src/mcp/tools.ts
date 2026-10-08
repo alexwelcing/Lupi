@@ -751,7 +751,7 @@ async function handleAssessAsset(request: LupiMcpRequest): Promise<LupiMcpRespon
   const requestedSource = readString(args.source) ?? (args.url ? 'url' : args.envelope ? 'envelope' : 'active');
   const requestedMode = readString(args.mode) ?? 'fast';
   if (requestedMode !== 'fast') {
-    throw new Error(`Browser assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Use the Node CLI for deep streaming inspection.`);
+    throw new Error(`Browser assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Deep streaming inspection has no command-line tool: call the @atlas/assessment library from Node (assessAsset or assessMany with mode 'deep').`);
   }
   let context = args.context && typeof args.context === 'object' && !Array.isArray(args.context)
     ? args.context as AssessmentContext
