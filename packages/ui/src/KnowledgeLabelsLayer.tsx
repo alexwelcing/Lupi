@@ -64,7 +64,6 @@ export function KnowledgeLabelsLayer({
   const threshold = useStore((s) => s.knowledgeLabelThreshold);
   const maxCount = useStore((s) => s.knowledgeLabelMaxCount);
   const cullDistance = useStore((s) => s.knowledgeLabelCullDistance);
-  const showPerfHud = useStore((s) => s.showLabelPerfHud);
   const searchQuery = useStore((s) => s.knowledgeLabelSearchQuery);
   const searchFilter = useStore((s) => s.knowledgeLabelSearchFilter);
   const pinnedIds = useStore((s) => s.pinnedKnowledgeLabelIds);

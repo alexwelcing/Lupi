@@ -1747,7 +1747,7 @@ export const useStore = create<AppState>()(
       lastBondDetail: null,
     }),
 
-    triggerExport: (req) => set(s => ({ exportRequest: { ...req, type: req.type ?? null } as ExportRequest })),
+    triggerExport: (req) => set(() => ({ exportRequest: { ...req, type: req.type ?? null } as ExportRequest })),
     clearExportRequest: () => set({ exportRequest: { type: null } }),
 
     // ─── Flythrough Actions ───
@@ -1921,7 +1921,7 @@ export const useStore = create<AppState>()(
       }
     },
 
-    applyVisualProfile: (profileId) => set((s) => {
+    applyVisualProfile: (profileId) => set(() => {
       switch (profileId) {
         case 'publication':
           return {
@@ -2227,7 +2227,6 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
   // Helpful console one-liners — log on first access, not on every read.
   if (!(window as any).__atlas.__intro) {
     (window as any).__atlas.__intro = true;
-    // eslint-disable-next-line no-console
     console.log(
       '%c[lupi dev]%c window.__lupi/window.__atlas available - store, getState(), three (after Canvas mount)',
       'color:#1edce0;font-weight:bold', 'color:#94a3b8',

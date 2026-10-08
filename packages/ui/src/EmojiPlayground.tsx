@@ -90,7 +90,6 @@ const playPhysicalSound = (type: 'leica_click' | 'relay_clank' | 'plasma_crackle
       const modulator = ctx.createOscillator();
       const modGain = ctx.createGain();
       const gain = ctx.createGain();
-      const noise = ctx.createOscillator(); // Mock noise
 
       carrier.type = 'sine';
       carrier.frequency.setValueAtTime(95, now);
@@ -161,7 +160,7 @@ const playPhysicalSound = (type: 'leica_click' | 'relay_clank' | 'plasma_crackle
       osc.start(now);
       osc.stop(now + 0.12);
     }
-  } catch (e) {
+  } catch {
     // Unhandled exception
   }
 };
