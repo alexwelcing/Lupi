@@ -37,9 +37,10 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 
 ### Ink tiles and Ink-to-Light
 
+- **One drawing everywhere**: the SVG ink drawings (the `/m` pages and their cards, the ink tiles, the switcher rows, the OMol25 picks, the Daily's named drawing) are the Illustrate look itself, drawn in SVG from the same key light: toon balls in three hard bands with a cel catchlight and an ink outline, toon sticks with ink along both edges and the bands across them, a colour per half, and the back fading toward the plate. The relay therefore lands on the same picture as the first 3D frame. The home hero's C60 has its own engine (`landing/hero/buckyStage.ts`) and keeps its lit gradient balls.
 - **Ink tiles:**
   - Every molecule with a page (69 small gallery molecules) shows its own ink drawing on its molecule-wall tile, its finder row and its library card, on the sage plate. It is the `/m` page's drawing at its opening pose.
-  - A tap lights the drawing with a lime glow. The relay then grows it to the size the 3D view will draw the molecule at.
+  - A tap lights the drawing with a lime glow. The relay then grows it to the size the 3D view will draw the molecule at, and eases it from the tile's flat view into the 3D view's perspective (the hero's ease), so near atoms hand over as large as the 3D view draws them.
   - While the viewer loads, the drawing turns like the hero's: drag it, flick it, and it clicks onto a ring or axis view and names it. Its model (`/og/m/<id>-ink.json`, a couple of kB) is fetched as a finger or pointer reaches the tile, or as a finder match appears. The 3D view opens at the pose you leave, with your spin.
   - Inside the viewer, the molecule switcher's rows are ink drawings too. Picking one opens the molecule at the row's angle, in ink, and the light comes on (there is no relay inside the viewer).
 - **Ink-to-Light:**
@@ -90,6 +91,8 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 | The contour (one TSL node, live and in exports) | `packages/ui/src/postprocess/inkContour.ts`, in `postPipeline.ts` and `export/captureLookPass.ts` |
 | The spec (`view.ink`) | `packages/ui/src/mcp/renderArtifactAdapter.ts`, `packages/core/src/renderArtifact.ts` |
 | Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `library/GalleryCollection.tsx`, `switcher/switchIndex.ts`, `relay/stage.ts` |
+| The SVG drawing in the Illustrate look (`INK_TOON`, the `INK_DRAWING_STYLE` switch, perspective) | `packages/ui/src/moleculePage/ink.ts`; live nodes in `moleculePage/inkStage.ts` |
+| Local smoke (the drawing against the first 3D ink frame, C60 and caffeine) | `tools/smoke/scenarios/onedrawing.mjs` |
 | Tile poses, fit and drawing models | `scripts/molecule-pages/build.mts` (`/m/manifest.json`, `/og/m/<id>-ink.json`) |
 
 Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, weight, target, holding, fading, arrival, fuse }`, with `fuse: { running, seed, progress, mode, held }` (`mode` is `'graph'`, `'spatial'` or `'uniform'`, null before the first fuse). `__lupiPlay.ink('hold', p)` holds the front at `p` (0..1), the running fuse's or the next one's, `ink('release')` lets it burn on, and `ink('pace', k)` runs fuses `k` times slower; the fuse smoke (`tools/smoke/scenarios/fuse.mjs`) uses them on software renderers, which draw a frame or two a second, for its filmstrips and its export check.
@@ -115,6 +118,11 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
 | Fuse edge | half-width 0.3 bond steps (normalised 0.02–0.15); the noise moves the front by about a hop either way (2.5 bond steps of weight, at least 0.05 of the run); 3 noise cells per bond length | `FUSE_EDGE` |
 | Fuse reach | the bond graph up to 2,000 atoms, a spherical wavefront up to 250,000, a crossfade above; gaps measured in bond lengths (the drawn bonds' mean, else 1.5 Å) | `FUSE_HOPS` |
 | Centre-front seed | closest to the centre line, with depth behind the nearest atom counted at 0.5 per unit | `FUSE_HOPS.frontDepthWeight` |
+| SVG drawing style | `'toon'` (the Illustrate look); `'lit'` brings back the gradient balls | `INK_DRAWING_STYLE` in `moleculePage/ink.ts` |
+| SVG bands, fills, lines, depth cue | the flat look's values (`INK_TOON` mirrors `INK_LOOK_TUNING`; a unit test keeps them equal) | `INK_TOON` |
+| SVG occlusion stand-in | 1 (every face open); 0.8 measured a little closer to the 3D view (a smaller lit band) | `TOON_OPEN` |
+| SVG line weight | 0.32 viewBox units per ink unit (the relay draws the 200-unit box at about 0.8 of the window's short side); atoms 0.48, sticks 0.37 | `INK_UNIT` |
+| SVG sticks | the viewer's stick radius, 0.12 Å; stripes narrower than 0.15 units are left out | `STICK_R`, `STRIPE_MIN` |
 
 ## Half-done and next
 
@@ -123,9 +131,16 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
 - **The post recipe does not wait for the fuse.** It follows the chosen look at once, as it did under the crossfade: turning ink on removes AO, glow and tone mapping from the lit part still burning, and turning it off brings them onto the ink still waiting. Over the fuse's second this shows as a slight change in the part not yet reached.
 - **The fuse has no ember.** The burning edge is a ragged blend between the two looks; a thin glowing line at the front would read more like a lit fuse.
 - **The match frame is close, not exact.**
-  - The relay's drawing is the lit SVG (gradient balls) at an orthographic pose, while the first 3D frame is the toon look in perspective. The pose, size and plate match; the shading style changes over the 120 ms crossfade.
+  - The relay's drawing is now the toon look in the 3D view's perspective, at its pose, size and plate. What still differs:
+    - **Ball sizes.** The drawings keep their own radii (the viewer's ball-and-stick radius × 0.9, hydrogens 0.2 Å), so carbon balls grow about 10 % and hydrogens half again at the hand-off. Drawing at the viewer's radii means a model change (`drawRadius` in `scripts/molecule-pages/catalog.mts`, which the Daily and the desk models also read).
+    - **No contact occlusion.** The drawing counts every face as open (`TOON_OPEN`); the 3D view darkens where a stick meets a ball and where balls crowd, so its lit band is a little smaller.
+    - **Meeting lines.** Where a stick enters a ball behind it, the drawing ends the stick square; the 3D view's contour draws the meeting curve in ink.
+    - **The post recipe during the hand-off.** Ink-to-Light draws its ink with the visitor's recipe (AO, tone mapping) still on until the light comes on, so the 3D frame is a little darker than the configured Illustrate look the drawing follows.
+    - **Bands in perspective.** The bands are worked out per ball for an orthographic view; at the relay's distance the 3D view's bands sit a few degrees off near the edge of the picture.
   - The viewer may fit a little tighter or looser than the drawing's size if the visitor's atom scale is not 1.
-- **No calibration goldens** between the SVG drawing and the TSL look. There is no CPU SVG engine for cards beyond the existing `/m` drawing, no resvg Worker cards from saved views, and no no-GPU fallback plate.
+  - The 120 ms crossfade stays: on a software renderer the hand-off is two frames, too few to judge a shorter one.
+  - The home hero's C60 (`landing/hero/buckyStage.ts`) is its own engine and still draws lit gradient balls.
+- **Measured, not calibrated.** The local `onedrawing` smoke compares the relay's drawing with the first 3D ink frame inside the molecule's bounds (mean colour difference over 0–255, and the share of pixels within 24); there are no goldens. On SwiftShader at 1024 × 640, from the lit drawing to this one: C60 36.4 → 18.4 (WebGL2) and 33.5 → 18.2 (WebGPU), pixels within 24 from 60 % to 77 %; caffeine 14.2 → 11.9 and 14.0 → 11.8, from 87 % to 91 %. Against the configured Illustrate look (no post recipe) C60 comes to 16.0 and caffeine to 11.1. The SVG drawings are larger than the lit ones: C60's is 48 kB (8.5 kB gzipped) against 14 kB (2 kB), caffeine's 24 kB against 6 kB. There is no resvg Worker card from saved views, and no no-GPU fallback plate.
 - **The contour is tuned on two molecules.** Space-filling caffeine and ball-and-stick C60, in a software renderer (SwiftShader) on both backends. Its thresholds are first guesses.
   - On the dark sage plate the outer contour is ink on near-black, so it reads only as a slightly smaller molecule; it shows on paper (Sketch) and light plates.
   - The holes of a cage are plate too, so the rims around them get the outer weight where the plate shows through.
