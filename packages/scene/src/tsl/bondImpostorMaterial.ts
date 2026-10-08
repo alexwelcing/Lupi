@@ -11,7 +11,9 @@
  * - the display-motion offset (tsl/displayMotion.ts) on both ends, the same
  *   closed form and seed as the atoms, so bonds follow them; a bond the toys
  *   stretch thins like taffy and glows lime with the strain (a compressed
- *   one thickens a little), exactly as at rest while the motion is off;
+ *   one thickens a little), exactly as at rest while the motion is off; the
+ *   morph arrival reads each end's start at its atom index
+ *   (`instanceAtomPair`) while the layer's `uMorphOn` gate is on;
  * - the two-tone split at the geometric midpoint;
  * - the distance fade (`uBondFadeStart`/`uBondFadeEnd`) times `uOpacity`;
  * - the bond's style code in the start colour's alpha byte (strategy §2.7):
@@ -30,9 +32,10 @@
  * `cross(dir, u)` mirrored the box, so FrontSide drew its far faces.
  *
  * Instance layout (D4): endpoints and their targets as float32 ×3, the radius
- * as float32 ×1, and the endpoint colours as normalized Uint8×4 display-sRGB
+ * as float32 ×1, the endpoint colours as normalized Uint8×4 display-sRGB
  * bytes, decoded with `sRGBTransferEOTF` (WebGPU has no unorm8x3 format, and
- * a ×3 byte attribute is padded to ×4 on the CPU at every upload).
+ * a ×3 byte attribute is padded to ×4 on the CPU at every upload), and the
+ * two atom indices as float32 ×2 (exact below 2^24; read only by the morph).
  *
  * Static frames and trajectories use different programs (`interpolate`), for
  * the same reason as the atoms (tsl/atomImpostorMaterial.ts): three r186's
@@ -101,6 +104,8 @@ export const BOND_ATTR = {
   radius: 'instanceRadius',
   colorStart: 'instanceColorStart',
   colorEnd: 'instanceColorEnd',
+  /** The atom index of each end (float32 ×2), for the morph arrival's starts. */
+  pair: 'instanceAtomPair',
 } as const;
 
 /** Bytes per endpoint colour: display-sRGB RGB plus the style code byte (255 = solid). */
@@ -152,6 +157,8 @@ export interface BondImpostorUniforms extends LupiUniformBag {
    */
   uJunctionRadius: UniformNode<'float', number>;
   uJunctionStrength: UniformNode<'float', number>;
+  /** 1 while the morph arrival's texture belongs to this layer's frame (tsl/displayMotion.ts). */
+  uMorphOn: UniformNode<'float', number>;
 }
 
 /** The uniform bag shared by every tier's material of one bond layer (v9 defaults). */
@@ -169,6 +176,7 @@ export function createBondImpostorUniforms(): BondImpostorUniforms {
     uCullPixelRadius: uniform(0),
     uJunctionRadius: uniform(0),
     uJunctionStrength: uniform(0),
+    uMorphOn: uniform(0),
   };
 }
 
@@ -205,11 +213,17 @@ export function createBondImpostorMaterial({
   const end: N = attribute(BOND_ATTR.end, 'vec3');
   const restA: N = interpolate ? mix(start, attribute(BOND_ATTR.startTarget, 'vec3'), u.uProgress) : start;
   const restB: N = interpolate ? mix(end, attribute(BOND_ATTR.endTarget, 'vec3'), u.uProgress) : end;
+  // ── Morph arrival source (tsl/displayMotion.ts) ──────────────────
+  // Each end reads its own atom's texel, so a bond spans its two atoms in
+  // flight (a collapsed stale bond carries its start atom's index twice).
+  const pair: N = attribute(BOND_ATTR.pair, 'vec2');
+  const morphA = { index: pair.x, on: u.uMorphOn };
+  const morphB = { index: pair.y, on: u.uMorphOn };
   // Display-only motion: each end is a bit-exact copy of its atom's position,
   // so the same closed form and seed move it with the atom (a collapsed stale
   // bond, b = a, stays degenerate). Exactly zero at rest and in captures.
-  const a: N = restA.add(lupiDisplayOffset(restA, start));
-  const b: N = restB.add(lupiDisplayOffset(restB, end));
+  const a: N = restA.add(lupiDisplayOffset(restA, start, morphA));
+  const b: N = restB.add(lupiDisplayOffset(restB, end, morphB));
   const viewA: N = modelViewMatrix.mul(vec4(a, 1.0)).xyz;
   const viewB: N = modelViewMatrix.mul(vec4(b, 1.0)).xyz;
   const axis: N = viewB.sub(viewA);

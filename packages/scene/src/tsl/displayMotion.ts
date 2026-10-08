@@ -1,7 +1,7 @@
 /**
- * displayMotion.ts — display-only motion (arrival, poke ripple, scatter, and
- * the Play verbs Tug, Burst and Heat) as a GPU offset on atom and bond
- * centres.
+ * displayMotion.ts — display-only motion (arrival, poke ripple, scatter, the
+ * morph arrival, and the Play verbs Tug, Burst and Heat) as a GPU offset on
+ * atom and bond centres.
  *
  * One closed form, `lupiDisplayOffset(rest, rawPosition)`, is added to every
  * atom centre and to both bond ends before the view transform, so the cull,
@@ -32,13 +32,25 @@
  *   sits behind its own weight and the master gate, so the capture guard
  *   zeroes them with everything else.
  *
+ * The morph arrival (`ARRIVAL_MODE.morph`) is the one term with per-atom
+ * data: where each atom of the new molecule starts, a matched atom of the
+ * previous one as the screen showed it (`@atlas/ui` play/morphMatch.ts). The
+ * starts live in one RGBA32F texture (`DISPLAY_MORPH_TEXTURE`, one texel per
+ * atom: the start in the old view's frame, depth-normalized, and a delay),
+ * read with `textureLoad` at the atom's index. Atoms pass their instance
+ * index and bonds the atom index of each end (`instanceAtomPair`), so both
+ * ends of a bond follow their atoms. A layer reads the texture only while
+ * its own gate is on (`uMorphOn`: the texture belongs to the frame it draws,
+ * `isDisplayMorphFor`), so another layer or canvas never picks up a stranger's
+ * starts.
+ *
  * Seeds: three r186's `hash` (PCG) of the raw position's float bits. On the
  * WebGL2 backend `floatBitsToUint` and uint multiply-wrap are GLSL ES 3.00
  * core; the `play@webgl2` testbed case proves the GPU seeds equal the CPU
  * twin's (displayMotionTwin.ts).
  */
-import { Vector3, Vector4 } from 'three/webgpu';
-import type { Node, UniformNode } from 'three/webgpu';
+import { DataTexture, FloatType, NearestFilter, RGBAFormat, Vector3, Vector4 } from 'three/webgpu';
+import type { Node, TextureNode, UniformNode } from 'three/webgpu';
 import {
   Fn,
   If,
@@ -50,6 +62,8 @@ import {
   floatBitsToUint,
   fract,
   hash,
+  int,
+  ivec2,
   length,
   max,
   min,
@@ -59,6 +73,8 @@ import {
   sin,
   smoothstep,
   sqrt,
+  texture,
+  textureLoad,
   uint,
   uniform,
   vec3,
@@ -106,7 +122,11 @@ export const DISPLAY_MOTION_TUNING = {
 } as const;
 
 /** Arrival modes (`uArrivalMode`). */
-export const ARRIVAL_MODE = { none: 0, condense: 1, flat: 2, scatter: 3 } as const;
+export const ARRIVAL_MODE = { none: 0, condense: 1, flat: 2, scatter: 3, morph: 4 } as const;
+
+/** The morph texture: texels per row, and floats per atom (start x, y, z, delay s). */
+export const MORPH_TEXTURE_WIDTH = 1024;
+export const MORPH_TEXEL_STRIDE = 4;
 
 /** Ripple slots: four, as eight plain vec4 uniforms (no uniformArray). */
 export const RIPPLE_SLOTS = 4;
@@ -150,6 +170,14 @@ export interface DisplayMotionUniforms {
   uArrivalZeta: FloatUniform;
   /** Scales the landing stagger (Gentle's shorter D). */
   uArrivalDelayScale: FloatUniform;
+  /** Morph: the new view's anchor, on its view axis at the molecule centre's depth (Å). */
+  uMorphOrigin: Vec3Uniform;
+  /** Morph: the new camera's right, up and back axes, each times the anchor depth (texels are depth-normalized). */
+  uMorphAxisX: Vec3Uniform;
+  uMorphAxisY: Vec3Uniform;
+  uMorphAxisZ: Vec3Uniform;
+  /** Morph: atoms with a texel; an index at or past it never morphs. */
+  uMorphCount: FloatUniform;
   uRippleWeight: FloatUniform;
   /** Hard bound on the summed ripple (Å). */
   uMaxRipple: FloatUniform;
@@ -208,6 +236,11 @@ export const DISPLAY_MOTION: DisplayMotionUniforms = {
   uArrivalOmega: f(16),
   uArrivalZeta: f(0.75),
   uArrivalDelayScale: f(1),
+  uMorphOrigin: v3(0, 0, 0),
+  uMorphAxisX: v3(1, 0, 0),
+  uMorphAxisY: v3(0, 1, 0),
+  uMorphAxisZ: v3(0, 0, 1),
+  uMorphCount: f(0),
   uRippleWeight: f(0),
   uMaxRipple: f(DISPLAY_MOTION_TUNING.rippleAmplitude),
   uRipple0A: slotA(),
@@ -239,6 +272,86 @@ const RIPPLE_B = [DISPLAY_MOTION.uRipple0B, DISPLAY_MOTION.uRipple1B, DISPLAY_MO
 
 const BURST_A = [DISPLAY_MOTION.uBurst0A, DISPLAY_MOTION.uBurst1A, DISPLAY_MOTION.uBurst2A];
 const BURST_B = [DISPLAY_MOTION.uBurst0B, DISPLAY_MOTION.uBurst1B, DISPLAY_MOTION.uBurst2B];
+
+// ─── The morph arrival's per-atom starts ────────────────────────────
+
+/** One morph: the frame it lands on and its starts. */
+export interface DisplayMorphData {
+  /**
+   * The new frame's positions array. Only a layer drawing exactly this array
+   * reads the texture (`isDisplayMorphFor`), and the CPU twin finds an atom
+   * by its rest point in it.
+   */
+  positions: ArrayLike<number>;
+  /** Atoms with a texel (the new frame's atom count). */
+  count: number;
+  /**
+   * MORPH_TEXEL_STRIDE floats per atom: the start in the old view's frame
+   * (x right, y up, z back, divided by that view's anchor depth) and the
+   * delay before it leaves (s, at Standard). Null while the starts wait to
+   * be planned: the layers' gates are open, and every atom stays at rest.
+   */
+  texels: Float32Array | null;
+}
+
+let emptyMorph: DataTexture | null = null;
+
+/** A 1×1 zero texel, bound while no morph is set (never read: `uMorphCount` is 0). */
+function emptyMorphTexture(): DataTexture {
+  if (!emptyMorph) {
+    emptyMorph = new DataTexture(new Float32Array(4), 1, 1, RGBAFormat, FloatType);
+    emptyMorph.minFilter = NearestFilter;
+    emptyMorph.magFilter = NearestFilter;
+    emptyMorph.needsUpdate = true;
+  }
+  return emptyMorph;
+}
+
+/** The morph texture node every atom and bond material reads (swap `.value`, never the node). */
+export const DISPLAY_MORPH_TEXTURE = texture(emptyMorphTexture()) as unknown as TextureNode;
+
+let morph: { data: DisplayMorphData; texture: DataTexture | null } | null = null;
+
+/**
+ * Set (or clear, with null) the morph's starts: one RGBA32F texel per atom,
+ * MORPH_TEXTURE_WIDTH to a row. Data without texels opens the gates of the
+ * layers drawing its frame and moves nothing yet. The previous morph's
+ * texture is released.
+ */
+export function setDisplayMorph(data: DisplayMorphData | null): void {
+  const previous = morph;
+  morph = null;
+  DISPLAY_MORPH_TEXTURE.value = emptyMorphTexture();
+  DISPLAY_MOTION.uMorphCount.value = 0;
+  if (data) {
+    const texels = data.texels;
+    let tex: DataTexture | null = null;
+    if (texels && data.count > 0 && texels.length >= data.count * MORPH_TEXEL_STRIDE) {
+      const rows = Math.ceil(data.count / MORPH_TEXTURE_WIDTH);
+      const pixels = new Float32Array(MORPH_TEXTURE_WIDTH * rows * MORPH_TEXEL_STRIDE);
+      pixels.set(texels.subarray(0, data.count * MORPH_TEXEL_STRIDE));
+      tex = new DataTexture(pixels, MORPH_TEXTURE_WIDTH, rows, RGBAFormat, FloatType);
+      tex.minFilter = NearestFilter;
+      tex.magFilter = NearestFilter;
+      tex.generateMipmaps = false;
+      tex.needsUpdate = true;
+      DISPLAY_MORPH_TEXTURE.value = tex;
+      DISPLAY_MOTION.uMorphCount.value = data.count;
+    }
+    morph = { data, texture: tex };
+  }
+  previous?.texture?.dispose();
+}
+
+/** The morph set now, or null. */
+export function displayMorph(): DisplayMorphData | null {
+  return morph?.data ?? null;
+}
+
+/** A layer's gate (`uMorphOn`): the morph set now lands on the frame whose positions these are. */
+export function isDisplayMorphFor(positions: ArrayLike<number> | null | undefined): boolean {
+  return morph !== null && positions != null && morph.data.positions === positions;
+}
 
 /** Slot `i`'s A (origin, t0) and B (amplitude, speed, ω, ζ) uniforms. */
 export function rippleSlotUniforms(i: number): { a: Vec4Uniform; b: Vec4Uniform } {
@@ -286,7 +399,7 @@ function stepResponseNode(omega: N, zeta: N, t: N): N {
   return select(zeta.greaterThanEqual(0.9999), critical, under);
 }
 
-const offsetFn = Fn(([rest, raw]: [N, N]) => {
+const offsetFn = Fn(([rest, raw, morphIndex, morphOn]: [N, N, N, N]) => {
   const M = DISPLAY_MOTION as unknown as Record<keyof DisplayMotionUniforms, N>;
   const T = DISPLAY_MOTION_TUNING;
   const off = vec3(0).toVar('lupiMotionOffset');
@@ -300,10 +413,32 @@ const offsetFn = Fn(([rest, raw]: [N, N]) => {
       const rel = rest.sub(C).toVar();
       const elapsed = M.uMotionNow.sub(M.uArrivalT0).toVar();
       const D = M.uArrivalDuration;
+      const isMorph = M.uArrivalMode.greaterThan(3.5);
       const isFlat = M.uArrivalMode.greaterThan(1.5).and(M.uArrivalMode.lessThan(2.5));
-      const isScatter = M.uArrivalMode.greaterThan(2.5);
+      const isScatter = M.uArrivalMode.greaterThan(2.5).and(M.uArrivalMode.lessThan(3.5));
 
-      If(isFlat, () => {
+      If(isMorph, () => {
+        // Morph: each atom starts where its matched atom of the previous
+        // molecule was on screen (its texel, carried into this view's frame)
+        // and flies home, the centre first. Only for this layer's own frame
+        // and a real atom index; anything else stays at rest.
+        const live = morphOn.greaterThan(0.5)
+          .and(morphIndex.greaterThan(-0.5))
+          .and(morphIndex.lessThan(M.uMorphCount.sub(0.5)));
+        If(live, () => {
+          const index = int(morphIndex.add(0.5)).toVar();
+          const coord = ivec2(index.mod(int(MORPH_TEXTURE_WIDTH)), index.div(int(MORPH_TEXTURE_WIDTH)));
+          const texel = (textureLoad(DISPLAY_MORPH_TEXTURE, coord) as N).toVar('lupiMorphTexel');
+          const start = M.uMorphOrigin
+            .add(M.uMorphAxisX.mul(texel.x))
+            .add(M.uMorphAxisY.mul(texel.y))
+            .add(M.uMorphAxisZ.mul(texel.z));
+          const tau = max(elapsed.sub(texel.w.mul(M.uArrivalDelayScale)), 0);
+          const S = stepResponseNode(M.uArrivalOmega, M.uArrivalZeta, tau);
+          const E = smoothstep(D.sub(T.endFadeS), D, elapsed).oneMinus();
+          arrival.assign(start.sub(rest).mul(S.oneMinus()).mul(E));
+        });
+      }).ElseIf(isFlat, () => {
         // Flat: every atom starts on the centre plane facing the camera and
         // inflates into depth, the nearest side first.
         const v = M.uArrivalViewDir;
@@ -447,14 +582,23 @@ const offsetFn = Fn(([rest, raw]: [N, N]) => {
   return off;
 });
 
+/** Which morph texel a centre reads: its atom's index and its layer's gate (`uMorphOn`). */
+export interface LupiMorphSource {
+  /** The atom index (float): an atom's instance index, a bond end's `instanceAtomPair` entry. */
+  index: Node;
+  /** 1 while the morph texture belongs to the frame this layer draws (`isDisplayMorphFor`). */
+  on: Node;
+}
+
 /**
  * The display offset (world space, Å) to add to a rest centre. `rest` is the
  * rest centre (vec3, after any trajectory lerp) and `rawPosition` the raw
- * instance attribute it came from (the seed source). Exactly vec3(0) while
- * `uMotionWeight` is 0.
+ * instance attribute it came from (the seed source). `morph` names the
+ * centre's morph texel; without it the centre never morphs. Exactly vec3(0)
+ * while `uMotionWeight` is 0.
  */
-export function lupiDisplayOffset(rest: Node, rawPosition: Node): Node {
-  return (offsetFn as N)(rest, rawPosition) as Node;
+export function lupiDisplayOffset(rest: Node, rawPosition: Node, morph?: LupiMorphSource): Node {
+  return (offsetFn as N)(rest, rawPosition, morph?.index ?? float(-1), morph?.on ?? float(0)) as Node;
 }
 
 /** Save and zero the master weight for one capture render; returns the restore. */
@@ -483,12 +627,13 @@ export function isDisplayMotionSuspended(): boolean {
   return suspended;
 }
 
-/** Zero every display-motion weight, mode, ripple and burst slot, tug and heat. */
+/** Zero every display-motion weight, mode, ripple and burst slot, tug and heat, and drop the morph's starts. */
 export function resetLupiDisplayMotion(): void {
   const M = DISPLAY_MOTION;
   M.uMotionWeight.value = 0;
   M.uArrivalWeight.value = 0;
   M.uArrivalMode.value = ARRIVAL_MODE.none;
+  setDisplayMorph(null);
   M.uRippleWeight.value = 0;
   for (let i = 0; i < RIPPLE_SLOTS; i += 1) {
     RIPPLE_A[i].value.set(0, 0, 0, -1);

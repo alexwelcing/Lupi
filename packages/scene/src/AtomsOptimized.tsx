@@ -49,7 +49,7 @@ import { DEFAULT_PROFILE, getElementProfile } from './materials';
 import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
 import { buildTypeRenderTable, typeRenderTablesEqual, type TypeRenderTable } from './typeRenderTable';
 import { LUPI_JOB, LUPI_PHASE } from './framePhases';
-import { isLupiDisplayMotionActive } from './tsl/displayMotion';
+import { isDisplayMorphFor, isLupiDisplayMotionActive } from './tsl/displayMotion';
 import {
   createLupiEnvBinding,
   createLupiLightUniforms,
@@ -939,6 +939,11 @@ export function AtomsOptimized({
         ? (interpolationFactor ?? 0)
         : 0;
     resources.uniforms.uProgress.value = prog < 0 ? 0 : prog > 1 ? 1 : prog;
+
+    // ── Morph arrival gate (tsl/displayMotion.ts) ───────────────────
+    // The morph's starts are indexed by atom: read them only while they
+    // belong to the frame this layer draws.
+    resources.uniforms.uMorphOn.value = isDisplayMorphFor(frame.positions) ? 1 : 0;
 
     // Display motion can carry atoms outside the rest bound (the arrival
     // cloud is 1.6× the radius): fail open while it is live.
