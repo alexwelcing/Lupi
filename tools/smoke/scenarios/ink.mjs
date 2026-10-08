@@ -17,8 +17,9 @@
  *    `view.ink.shading` itself). Desktop only: the spec and its pixels do
  *    not depend on the device that asks.
  * Every settled view and export is saved for a human to look at; on a phone
- * the close-ups are also saved at the device's own pixels (`-device`), where
- * the hatching, engraving and halftone screens meet the display's grid.
+ * the close-ups are also saved at the screenshot's own pixels (`-device`:
+ * device pixels where CDP returns them; the phone lanes here return CSS
+ * size, downsampled by the browser rather than picked pixel by pixel).
  */
 
 const MOLECULES = ['caffeine', 'c60_buckyball'];
@@ -70,7 +71,7 @@ async function framesWhileStill(page, ms = 600) {
   return before === null || after === null ? null : after - before;
 }
 
-/** The canvas at device pixels (no downsampling): what a DPR 3 screen shows. */
+/** The canvas at the screenshot's own pixels (no nearest-pixel crop to CSS size). */
 async function captureDevice(page, h, canvas) {
   const box = await canvas.boundingBox();
   const client = await h.cdpFor(page);

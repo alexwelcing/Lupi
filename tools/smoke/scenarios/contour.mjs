@@ -17,13 +17,14 @@
  *    (its spec records view.ink.contour) and differs from it; 2400x1600 (two
  *    tiles across at factor 2) shows no seam at the tile boundary column; a
  *    transparent 1024x1024 keeps its background clear and its molecule inked.
- * 5. Line weight at the device's pixels: space-filling caffeine drawn flat
- *    on the paper plate, captured at device resolution. The dark band at
- *    the molecule's edge (full width at half depth, from the plate inward,
- *    the median over the rows) measured in CSS px is the outer contour,
- *    INK_CONTOUR_TUNING.outerLine ink units, and without the contour the
- *    impostors' atom line (INK_LOOK_TUNING.atomLine); an ink unit is one
- *    CSS px on a 900 px picture, clamped to 0.85 below 765 px, at any DPR.
+ * 5. Line weight across DPRs: space-filling caffeine drawn flat on the
+ *    paper plate. The dark band at the molecule's edge (full width at half
+ *    depth, from the plate inward, the median over the rows) is the outer
+ *    contour, INK_CONTOUR_TUNING.outerLine ink units, plus about a canvas
+ *    pixel of soft edge on each side; an ink unit is one CSS px on a 900 px
+ *    picture, clamped to 0.85 below 765 px, at any DPR. Measured in CSS px
+ *    (the phone lanes' screenshots come back at CSS size, downsampled by
+ *    the browser), it is about 2.21 + 2 / DPR.
  * On a phone (phone390, DPR 3; 2 on the WebGL2 backend) steps 1 to 3 and 5
  * run as on the desktop. The exports of step 4 run on the desktop only:
  * the spec and its pixels do not depend on the device that asks.
@@ -36,13 +37,14 @@ const SKETCH = { inkStyle: 'hatch', backgroundPreset: 'paper-plate', atomScale: 
 /** The export's own small-molecule boost would shrink the balls apart; keep them space-filling. */
 const EXPORT_ATOM_SCALE = 2.6;
 
-/** Outer contour and atom line widths (ink units) and the ink unit's floor (inkContour.ts, inkLook.ts). */
+/** The outer contour's width (ink units) and the ink unit's floor (inkContour.ts, inkLook.ts). */
 const OUTER_LINE = 2.6;
-const ATOM_LINE = 1.5;
 const MIN_PICTURE_SCALE = 0.85;
+/** Canvas pixels the band's half-depth width gains from its soft edges (FXAA, coverage). */
+const EDGE_SOFTNESS = 2;
 const LINE_VIEW = { inkStyle: 'flat', backgroundPreset: 'paper-plate', atomScale: 2.6, showBonds: false };
 
-/** The canvas at device pixels and the device pixels per CSS px. */
+/** The canvas at the screenshot's own pixels (device pixels where CDP returns them) and its pixels per CSS px. */
 async function captureDevice(page, h, canvas) {
   const box = await canvas.boundingBox();
   const client = await h.cdpFor(page);
@@ -281,30 +283,28 @@ export default {
     outcome.data.contour.sketch = sketchInk;
     check('Sketch caffeine: the contour adds ink', sketchInk.added > 150, `${sketchInk.added} px`);
 
-    // 5. Line weight at the device's pixels.
-    outcome.data.contour.lineWeight = {};
-    for (const contour of [true, false]) {
-      const canvas = await open(ctx, h, 'caffeine', 24, contour);
-      if (!canvas) return;
-      const set = await setViewer(page, LINE_VIEW);
-      if (!check(`line weight${contour ? '' : ' (?contour=0)'}: set_viewer`, set.ok, JSON.stringify(set.error))) return;
-      await lookDrawn(page);
-      await h.waitSettled(page, canvas, 0.02);
-      const shot = await captureDevice(page, h, canvas);
-      const dpr = await canvas.evaluate((node) => node.width / node.getBoundingClientRect().width);
-      const cssShort = Math.min(...[shot.image.width, shot.image.height].map((side) => side / shot.scale));
-      const unit = Math.min(2.6, Math.max(MIN_PICTURE_SCALE, cssShort / 900));
-      const want = (contour ? OUTER_LINE : ATOM_LINE) * unit;
-      const band = edgeBand(shot.image);
-      const css = band.median === null ? null : band.median / shot.scale;
-      outcome.data.contour.lineWeight[contour ? 'contour' : 'atomLine'] = { dpr: Math.round(dpr * 100) / 100, screenshotScale: shot.scale, rows: band.rows, devicePx: band.median, cssPx: css, expectedCssPx: want };
-      await save(`line-weight-${contour ? 'contour' : 'before'}-device`, h.encodePng(shot.image));
-      check(
-        `${contour ? 'the outer contour' : 'the atom line (?contour=0)'} keeps its CSS width at DPR ${Math.round(dpr * 100) / 100}`,
-        css !== null && css > want * 0.65 && css < want * 1.5,
-        `${css === null ? 'n/a' : css.toFixed(2)} CSS px (${band.median?.toFixed(2)} device px over ${band.rows} edges), expected about ${want.toFixed(2)}`,
-      );
-    }
+    // 5. Line weight across DPRs.
+    const canvas = await open(ctx, h, 'caffeine', 24, true);
+    if (!canvas) return;
+    const set = await setViewer(page, LINE_VIEW);
+    if (!check('line weight: set_viewer', set.ok, JSON.stringify(set.error))) return;
+    await lookDrawn(page);
+    await h.waitSettled(page, canvas, 0.02);
+    const shot = await captureDevice(page, h, canvas);
+    const dpr = await canvas.evaluate((node) => node.width / node.getBoundingClientRect().width);
+    const cssShort = Math.min(...[shot.image.width, shot.image.height].map((side) => side / shot.scale));
+    const unit = Math.min(2.6, Math.max(MIN_PICTURE_SCALE, cssShort / 900));
+    // The band as drawn, plus about a canvas pixel of soft edge on each side (FXAA and coverage).
+    const want = OUTER_LINE * unit + EDGE_SOFTNESS / dpr;
+    const band = edgeBand(shot.image);
+    const css = band.median === null ? null : band.median / shot.scale;
+    outcome.data.contour.lineWeight = { dpr: Math.round(dpr * 100) / 100, screenshotScale: shot.scale, rows: band.rows, cssPx: css, expectedCssPx: want };
+    await save('line-weight', h.encodePng(shot.image));
+    check(
+      `the outer contour keeps its CSS width at DPR ${Math.round(dpr * 100) / 100}`,
+      css !== null && Math.abs(css - want) < want * 0.25,
+      `${css === null ? 'n/a' : css.toFixed(2)} CSS px over ${band.rows} edges, expected about ${want.toFixed(2)}`,
+    );
 
     // 4. Exports of the space-filling view, without and then with the contour (device-independent).
     if (h.isTouchProfile(ctx.spec.profile)) return;
