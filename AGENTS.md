@@ -224,6 +224,20 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   halved by Gentle, off in Still, and never in an export. On desktop the
   atom under the cursor glows lime and selected atoms glow stronger
   (`tsl/atomGlow.ts`); captures and videos never carry the glow.
+- **The morph arrival.** A switch inside the viewer (the switcher, finder,
+  library, random, palette) from one molecule to another morphs: each new
+  atom starts where a matched atom of the previous molecule was on screen
+  (same element first, nearest pairs, each old atom once; extra new atoms
+  bud from a neighbour, extra old ones vanish) and flies home in 0.9 s, the
+  centre first, bonds following (`packages/ui/src/play/morphMatch.ts`; the
+  fifth arrival mode in `tsl/displayMotion.ts`, starts in a per-atom
+  texture, mirrored by the CPU twin). Gentle halves it, Still cuts; never
+  for the first open, more than 20,000 atoms, trajectories, MCP loads or
+  the home/page relay (which keeps its flat inflate); Ink-to-Light still
+  fades to light alongside. Display-only and zero in every capture.
+  `__lupiPlay.state().motion.morph` reports a running morph and its counts
+  by element; `__lupiPlay.morph()` replays the last one. See
+  `docs/morph-arrival.md`.
 - **Overlays ride display motion.** Selection, hover and neighbour rings,
   annotations, atom-bound knowledge labels, measurements (line, letters,
   value label), the desktop atom card's anchor and trail heads follow their
@@ -781,7 +795,7 @@ browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
 Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
-first-minute, flick, hero, relay, settings, tap, toys) run with the built-in
+first-minute, flick, hero, morph, relay, settings, tap, toys) run with the built-in
 scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
 `--reduced-motion` checks the Still comfort level.
 

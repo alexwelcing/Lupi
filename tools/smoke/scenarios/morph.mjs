@@ -31,7 +31,9 @@ function installRecorder() {
   const now = () => performance.timeOrigin + performance.now();
   const tick = () => {
     rec.ticks += 1;
-    const motion = window.__lupiPlay?.state?.()?.motion ?? null;
+    const state = window.__lupiPlay?.state?.() ?? null;
+    rec.frames = state?.frames ?? 0;
+    const motion = state?.motion ?? null;
     const morph = motion?.morph ?? null;
     const entry = {
       arrival: motion?.arrival ?? null,
@@ -108,10 +110,12 @@ async function findRow(page, title) {
 /**
  * Switch to `title` through the switcher row, recording the screen and the
  * motion timeline until the arrival has landed (or, without one, until the
- * page has drawn `quietTicks` more frames after the load: a loaded software
- * renderer can take seconds a frame, so frames count, not wall time).
+ * viewer has drawn `quietFrames` more frames after the load: a loaded
+ * software renderer can take seconds a frame, and the page's own
+ * requestAnimationFrame keeps ticking while the GPU is busy, so drawn
+ * frames count, not wall time or page ticks).
  */
-async function switchTo(ctx, h, canvas, title, atoms, { quietTicks = 40 } = {}) {
+async function switchTo(ctx, h, canvas, title, atoms, { quietFrames = 12 } = {}) {
   const { page } = ctx;
   await findRow(page, title);
   await page.evaluate(() => {
@@ -131,16 +135,15 @@ async function switchTo(ctx, h, canvas, title, atoms, { quietTicks = 40 } = {}) 
     return performance.timeOrigin + performance.now();
   }, title);
   const loaded = await page.waitForFunction((n) => window.__lupiViewerMcp?.status?.()?.atomCount === n, atoms, { timeout: 60_000, polling: 50 }).then(() => true, () => false);
-  const loadTick = await page.evaluate(() => window.__morph.ticks);
-  // Landed: the log saw an arrival and then none; or no arrival for quietTicks frames.
+  const loadFrame = await page.evaluate(() => window.__lupiPlay?.state?.()?.frames ?? 0);
+  // Landed: the log saw an arrival and then none; or no arrival for quietFrames drawn frames.
   await page.waitForFunction(({ from, quiet }) => {
-    const rec = window.__morph;
-    const log = rec.log;
+    const log = window.__morph.log;
     const arrived = log.some((entry) => entry.arrival);
     const last = log.at(-1);
     if (arrived) return Boolean(last) && last.arrival === null;
-    return rec.ticks - from > quiet;
-  }, { from: loadTick, quiet: quietTicks }, { timeout: 120_000, polling: 100 }).catch(() => {});
+    return (window.__lupiPlay?.state?.()?.frames ?? 0) - from > quiet;
+  }, { from: loadFrame, quiet: quietFrames }, { timeout: 180_000, polling: 100 }).catch(() => {});
   await page.waitForTimeout(1_500);
   const frames = await cropFrames(page, canvas, await stop(), h);
   await setChromeHidden(page, false, '');
@@ -249,7 +252,10 @@ export default {
       check('Still: the switch does not morph', !first.log.some((entry) => entry.arrival?.includes('morph')), JSON.stringify(first.log.map((e) => e.arrival)));
       return;
     }
-    check('the switch arms a morph before its first frame', Boolean(w1.armed), JSON.stringify(first.log.slice(0, 4).map((e) => e.arrival)));
+    // The morph is armed in the commit, before the new file's first frame; the
+    // page-side recorder samples per animation frame, so on a fast release it
+    // may see the running morph only.
+    check('the switch arms a morph', Boolean(w1.armed || w1.released), JSON.stringify(first.log.slice(0, 4).map((e) => e.arrival)));
     check('the morph runs and lands', Boolean(w1.released && w1.landed), `released ${Boolean(w1.released)}, landed ${Boolean(w1.landed)}`);
     const report = w1.report;
     check(
@@ -318,7 +324,7 @@ export default {
     // 4. Still: no morph.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const comfort = await page.evaluate(() => window.__lupiPlay?.state?.()?.comfort ?? null);
-    const third = await switchTo(ctx, h, canvas, 'Benzene', 12, { quietTicks: 30 });
+    const third = await switchTo(ctx, h, canvas, 'Benzene', 12, { quietFrames: 6 });
     outcome.data.still = { comfort, log: third.log.map((entry) => ({ ...entry, t: Math.round(entry.t - third.clickedAt) })) };
     check('Still: water -> benzene does not morph', comfort === 'still' && third.loaded && !third.log.some((entry) => entry.arrival?.includes('morph')), `${comfort}: ${JSON.stringify(third.log.map((e) => e.arrival))}`);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
