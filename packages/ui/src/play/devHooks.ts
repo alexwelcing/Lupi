@@ -31,6 +31,9 @@
  *                         remix('r1-K7QDM') applies a code
  *   __lupiPlay.ink()    → { mix, hatch, weight, target, holding, fading, arrival }:
  *                         the Illustrate look's live weights and Ink-to-Light state
+ *   __lupiPlay.morph()  → plays the last switch's morph arrival again while its
+ *                         molecule is on screen ({ atoms, previousAtoms } or null);
+ *                         state().motion.morph reports a running morph's counts
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
@@ -61,7 +64,8 @@ export type PlayDevHookName =
   | 'follow'
   | 'replay'
   | 'remix'
-  | 'ink';
+  | 'ink'
+  | 'morph';
 
 export interface PlayRigState {
   position: Vec3;
@@ -114,6 +118,8 @@ export interface LupiPlayDevApi {
   remix?: DevHook;
   /** The Illustrate look: `{ mix, hatch, weight, target, holding, fading, arrival }` (ink/InkLookDriver.tsx). */
   ink?: DevHook;
+  /** The morph arrival: plays the last switch's morph again (play/PlayLayer.tsx). */
+  morph?: DevHook;
 }
 
 declare global {
@@ -136,7 +142,8 @@ type ExposedHookName =
   | 'follow'
   | 'replay'
   | 'remix'
-  | 'ink';
+  | 'ink'
+  | 'morph';
 const EXPOSED: ReadonlyArray<ExposedHookName> = [
   'poke',
   'flick',
@@ -151,6 +158,7 @@ const EXPOSED: ReadonlyArray<ExposedHookName> = [
   'replay',
   'remix',
   'ink',
+  'morph',
 ];
 let installs = 0;
 let api: LupiPlayDevApi | null = null;

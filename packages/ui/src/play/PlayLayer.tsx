@@ -1,7 +1,8 @@
 /**
  * PlayLayer — the display-motion driver inside the Canvas: the arrival (a
  * first open condenses out of a seeded mist, or the hero's flat drawing
- * inflates), the poke ripple, stirring with Poke, Scatter, and the latched
+ * inflates; a switch from another molecule morphs: its atoms flow into the
+ * new one), the poke ripple, stirring with Poke, Scatter, and the latched
  * verbs Tug (drag an atom; its neighbourhood follows on springs and twangs
  * home), Burst (a tap pops the atoms outward and they spring back) and Heat
  * (hold to jiggle; the jiggle grows with hold time and cools on release).
@@ -21,6 +22,14 @@
  *   stage), or 4.5 s after arming.
  * - Any pointerdown, key or wheel lands the arrival instantly, synchronously
  *   in the capture phase, before any pick (`installArrivalCancel`).
+ * - The morph: every drawn frame remembers what the screen showed (the
+ *   molecule, whether it was whole, the camera). When a switch brings another
+ *   molecule (both at most 20,000 atoms, not MCP, not a relay hand-off, not
+ *   Still), the arrival is a morph: on the new file's first frame the plan
+ *   (morphMatch.ts) gives each new atom a start where a matched old atom was
+ *   on screen, and the atoms fly home on the arrival's clock. Until it is
+ *   released the start frame follows the live camera, so the old shape stays
+ *   where the screen showed it.
  *
  * It also installs `window.__lupiPlay` (ref-counted; the canvas's
  * FrameDemandDriver installs it too) and registers the `motion`, `poke` and
@@ -31,6 +40,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
+import { resolveAtomicNumber } from '@atlas/core';
 import { MOTION, type MotionToken } from '@atlas/core/motion';
 import {
   ARRIVAL_MODE,
@@ -51,12 +61,14 @@ import {
   requestLupiFrames,
   resetLupiDisplayMotion,
   rippleSlotUniforms,
+  setDisplayMorph,
   setDisplayMotionSuspended,
 } from '@atlas/scene';
 import { useStore } from '../store';
 import type { Vec3 } from '../camera/rigApi';
 import { displayMotionScale, getComfort, subscribeComfort, type Comfort } from '../motion/comfort';
 import { isRelayActive, peekBaton } from '../relay/baton';
+import { mcpActiveWithin } from '../mcp/activity';
 import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { cue } from './feedback';
 import { installPlayDevHooks, registerPlayDevHook } from './devHooks';
@@ -69,6 +81,15 @@ import {
   shouldPlayArrival,
   type ArrivalRuleInput,
 } from './arrivalRules';
+import {
+  morphFrame,
+  planMorph,
+  shouldMorph,
+  type MorphPlan,
+  type MorphReport,
+  type MorphVec3,
+  type MorphView,
+} from './morphMatch';
 
 export interface PlayLayerProps {
   frame: Frame;
@@ -77,10 +98,21 @@ export interface PlayLayerProps {
   playing: boolean;
 }
 
-type LiveMode = typeof ARRIVAL_MODE.condense | typeof ARRIVAL_MODE.flat | typeof ARRIVAL_MODE.scatter;
+type LiveMode =
+  | typeof ARRIVAL_MODE.condense
+  | typeof ARRIVAL_MODE.flat
+  | typeof ARRIVAL_MODE.scatter
+  | typeof ARRIVAL_MODE.morph;
 
 /** Arrival duration D (s) at Standard and Gentle. */
 const ARRIVAL_D = { standard: 0.6, gentle: 0.3 } as const;
+/**
+ * The morph: D (s) and spring at Standard (the settle token, critically
+ * damped: it leaves softly and glides home) and Gentle (half the travel on
+ * the glide token, half the stagger). The stagger (morphMatch.ts) fits inside
+ * D, so every atom is home before the end fade.
+ */
+const MORPH_D = { standard: 0.9, gentle: 0.55 } as const;
 /** Behind the relay stage the release waits for its hand-off fade. */
 const RELAY_RELEASE_MS = 120;
 /**
@@ -96,7 +128,7 @@ const POKE_AMPLITUDE = DISPLAY_MOTION_TUNING.rippleAmplitude;
 const STROKE_AMPLITUDE = 0.2;
 const STROKE_MIN_MS = 60;
 const STROKE_MIN_PX = 10;
-const MODE_NAMES = ['none', 'condense', 'flat', 'scatter'] as const;
+const MODE_NAMES = ['none', 'condense', 'flat', 'scatter', 'morph'] as const;
 /**
  * The motion clock advances by the frame time, capped at 0.1 s: a hitch (a
  * shader compile right after the first frame, a slow device) slows the
@@ -193,7 +225,129 @@ const driver = {
   center: [0, 0, 0] as Vec3,
   radius: 1,
   lastStroke: { t: -Infinity, x: 0, y: 0 },
+  /** The morph armed or running, or null. */
+  morph: null as MorphRun | null,
 };
+
+// ─── The morph arrival ─────────────────────────────────────────────────
+
+/** A molecule as the screen showed it: the morph's source. */
+interface ShownMolecule {
+  /** The file's trajectory (one per open). */
+  key: object;
+  frame: Frame;
+  /** Every atom was resident (a streamed file may still be filling in). */
+  resident: boolean;
+  view: MorphView;
+}
+
+interface MorphRun {
+  from: ShownMolecule;
+  to: Frame;
+  center: Vec3;
+  /** Planned on the new file's first frame, when the live camera shows the new view. */
+  plan: MorphPlan | null;
+}
+
+/** What the last drawn frame showed (rewritten every frame). */
+let shown: ShownMolecule | null = null;
+/** The last switch that morphed: `__lupiPlay.morph()` plays it again. */
+let lastMorph: { from: ShownMolecule; to: Frame } | null = null;
+/** The last morph's plan report, for `__lupiPlay.state().motion.morph`. */
+let lastMorphReport: (MorphReport & { planMs: number }) | null = null;
+
+const axisX = new THREE.Vector3();
+const axisY = new THREE.Vector3();
+const axisZ = new THREE.Vector3();
+
+/** How `camera` shows a molecule centred at `center` (radius `radius`). */
+function viewOf(camera: THREE.Camera, center: Vec3, radius: number): MorphView {
+  const q = camera.quaternion;
+  axisX.set(1, 0, 0).applyQuaternion(q);
+  axisY.set(0, 1, 0).applyQuaternion(q);
+  axisZ.set(0, 0, 1).applyQuaternion(q);
+  const p = camera.position;
+  return {
+    eye: [p.x, p.y, p.z],
+    right: [axisX.x, axisX.y, axisX.z],
+    up: [axisY.x, axisY.y, axisY.z],
+    back: [axisZ.x, axisZ.y, axisZ.z],
+    perspective: (camera as THREE.PerspectiveCamera).isPerspectiveCamera === true,
+    center: [center[0], center[1], center[2]],
+    radius,
+  };
+}
+
+/** Atomic numbers per atom (0 where the frame declares no element). */
+function elementsOf(frame: Frame): Uint8Array {
+  const out = new Uint8Array(frame.natoms);
+  const byType = new Map<number, number>();
+  for (let i = 0; i < frame.natoms; i += 1) {
+    const type = frame.types[i];
+    let z = byType.get(type);
+    if (z === undefined) {
+      z = resolveAtomicNumber(frame, type) ?? 0;
+      byType.set(type, z);
+    }
+    out[i] = z;
+  }
+  return out;
+}
+
+function setVec(target: THREE.Vector3, v: MorphVec3): void {
+  target.set(v[0], v[1], v[2]);
+}
+
+/** Put the run's start frame in the new view as `camera` shows it now. */
+function writeMorphFrame(run: MorphRun, camera: THREE.Camera): void {
+  if (!run.plan) return;
+  const frame = morphFrame(viewOf(camera, run.center, driver.radius), run.plan.mode);
+  setVec(M.uMorphOrigin.value, frame.origin);
+  setVec(M.uMorphAxisX.value, frame.axisX);
+  setVec(M.uMorphAxisY.value, frame.axisY);
+  setVec(M.uMorphAxisZ.value, frame.axisZ);
+}
+
+/** Plan the run's starts with the live camera (the new view) and hand them to the GPU. */
+function planRun(run: MorphRun, camera: THREE.Camera): void {
+  const started = performance.now();
+  const from = run.from;
+  const plan = planMorph(
+    { positions: from.frame.positions, elements: elementsOf(from.frame), count: from.frame.natoms, view: from.view },
+    {
+      positions: run.to.positions,
+      elements: elementsOf(run.to),
+      count: run.to.natoms,
+      view: viewOf(camera, run.center, driver.radius),
+    },
+  );
+  if (!plan) {
+    cancelArrival();
+    return;
+  }
+  run.plan = plan;
+  setDisplayMorph({ positions: run.to.positions, count: run.to.natoms, texels: plan.texels });
+  writeMorphFrame(run, camera);
+  lastMorphReport = { ...plan.report, planMs: Math.round((performance.now() - started) * 10) / 10 };
+}
+
+/** A copy of what the screen shows now (the snapshot is rewritten every frame). */
+function copyShown(source: ShownMolecule): ShownMolecule {
+  const v = source.view;
+  return {
+    key: source.key,
+    frame: source.frame,
+    resident: source.resident,
+    view: {
+      ...v,
+      eye: [...v.eye] as MorphVec3,
+      right: [...v.right] as MorphVec3,
+      up: [...v.up] as MorphVec3,
+      back: [...v.back] as MorphVec3,
+      center: [...v.center] as MorphVec3,
+    },
+  };
+}
 
 type V3 = [number, number, number];
 
@@ -259,7 +413,7 @@ function anyLive(): boolean {
 function syncDisplaced(): void {
   const store = playStore.getState();
   const mode = driver.arrival?.mode ?? null;
-  store.setDisplaced('arrival', mode === ARRIVAL_MODE.condense || mode === ARRIVAL_MODE.flat);
+  store.setDisplaced('arrival', mode === ARRIVAL_MODE.condense || mode === ARRIVAL_MODE.flat || mode === ARRIVAL_MODE.morph);
   store.setDisplaced('scatter', mode === ARRIVAL_MODE.scatter);
   store.setDisplaced('ripple', rippleLive());
   store.setDisplaced('tug', tug.active);
@@ -447,6 +601,10 @@ function advanceHeat(dt: number): void {
 }
 
 function clearArrival(): void {
+  if (driver.morph) {
+    driver.morph = null;
+    setDisplayMorph(null);
+  }
   driver.arrival = null;
   M.uArrivalWeight.value = 0;
   M.uArrivalMode.value = ARRIVAL_MODE.none;
@@ -460,9 +618,10 @@ export function cancelArrival(): void {
   requestLupiFrames();
 }
 
-/** Zero everything: arrival, scatter, every ripple and burst, the tug and the heat. */
+/** Zero everything: arrival, morph, scatter, every ripple and burst, the tug and the heat. */
 export function resetDisplayMotion(): void {
   driver.arrival = null;
+  driver.morph = null;
   driver.slotEnds.fill(-1);
   driver.nextSlot = 0;
   bursts.ends.fill(-1);
@@ -509,9 +668,14 @@ interface ArrivalFeel {
  * Standard: D 0.6 s on MOTION.land (condense and scatter, ≈3 % overshoot) or
  * MOTION.glide (flat). Gentle: half the travel in D 0.3 s with half the
  * stagger, on MOTION.snap (critically damped): MOTION.glide cannot settle
- * inside 0.3 s and would visibly snap in the end fade.
+ * inside 0.3 s and would visibly snap in the end fade. The morph: MORPH_D.
  */
 function arrivalFeel(mode: LiveMode, comfort: Comfort): ArrivalFeel {
+  if (mode === ARRIVAL_MODE.morph) {
+    return comfort === 'gentle'
+      ? { duration: MORPH_D.gentle, token: MOTION.glide, delayScale: 0.5, weight: 0.5 }
+      : { duration: MORPH_D.standard, token: MOTION.settle, delayScale: 1, weight: 1 };
+  }
   if (comfort === 'gentle') return { duration: ARRIVAL_D.gentle, token: MOTION.snap, delayScale: 0.5, weight: 0.5 };
   return {
     duration: ARRIVAL_D.standard,
@@ -529,6 +693,11 @@ function viewDirFrom(camera: THREE.Camera, center: Vec3, out: THREE.Vector3): TH
 
 /** Arm an arrival: the first rendered frame already shows the mist (or the flat drawing). */
 function armArrival(mode: LiveMode, camera: THREE.Camera, seed: number, comfort: Comfort): void {
+  if (mode !== ARRIVAL_MODE.morph && driver.morph) {
+    // A scatter replaces a running morph: its starts go.
+    driver.morph = null;
+    setDisplayMorph(null);
+  }
   const feel = arrivalFeel(mode, comfort);
   const now = motionNow();
   driver.arrival = { mode, armed: true, end: Infinity };
@@ -549,6 +718,17 @@ function armArrival(mode: LiveMode, camera: THREE.Camera, seed: number, comfort:
   requestLupiFrames();
 }
 
+/**
+ * Arm a morph from what the screen showed into `to`: the layers drawing `to`
+ * open their gates now, and the starts are planned on its first frame.
+ */
+function armMorph(from: ShownMolecule, to: Frame, center: Vec3, camera: THREE.Camera, comfort: Comfort): void {
+  driver.morph = { from, to, center: [center[0], center[1], center[2]], plan: null };
+  lastMorph = { from, to };
+  setDisplayMorph({ positions: to.positions, count: to.natoms, texels: null });
+  armArrival(ARRIVAL_MODE.morph, camera, 0, comfort);
+}
+
 /** Start the armed arrival's clock (idempotent). */
 function releaseArrival(camera: THREE.Camera | null): void {
   const arrival = driver.arrival;
@@ -559,6 +739,8 @@ function releaseArrival(camera: THREE.Camera | null): void {
   arrival.end = now + rise + M.uArrivalDuration.value;
   M.uArrivalT0.value = now;
   if (camera) viewDirFrom(camera, driver.center, M.uArrivalViewDir.value);
+  // The morph's start frame holds from here (any touch lands it anyway).
+  if (camera && driver.morph) writeMorphFrame(driver.morph, camera);
   requestLupiFrames();
 }
 
@@ -615,6 +797,41 @@ function arrivalSeed(id: string): number {
   return (h ^ (h >>> 24)) & 0xffffff;
 }
 
+/** The page's query: `search`, then the hash route's own query (as arrivalRules reads it). */
+function pageQuery(): URLSearchParams {
+  const params = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+  const query = hash.indexOf('?');
+  if (query >= 0) new URLSearchParams(hash.slice(query + 1)).forEach((value, key) => params.set(key, value));
+  return params;
+}
+
+/** A saved view's route (`/view/<slug>`, in the path or the hash). */
+function onSavedViewRoute(): boolean {
+  const route = window.location.hash.replace(/^#/, '').split('?')[0].toLowerCase();
+  return route.startsWith('/view/') || window.location.pathname.toLowerCase().startsWith('/view/');
+}
+
+/** True when this file should morph out of what the screen showed (`previous`). */
+function morphWanted(input: ArrivalRuleInput, previous: ShownMolecule | null, key: object): boolean {
+  const params = pageQuery();
+  const baton = input.baton;
+  // The home hero's or a molecule page's drawing inflates flat, as it always has.
+  const drawingHandOff = isRelayActive()
+    || ((baton?.source === 'hero' || baton?.source === 'page') && baton.galleryId === input.galleryId);
+  return shouldMorph({
+    sceneAllows: canPlayScatter(input),
+    arrivalOff: params.get('arrival') === '0',
+    machine: mcpActiveWithin() || params.has('mcpCommand') || params.has('command') || params.get('batchExport') === 'true',
+    drawingHandOff,
+    savedView: onSavedViewRoute(),
+    previous: previous
+      ? { natoms: previous.frame.natoms, resident: previous.resident, sameFile: previous.key === key }
+      : null,
+    natoms: input.natoms,
+  });
+}
+
 function galleryIdOf(): string | null {
   const state = useStore.getState();
   if (state.activeCardId) return state.activeCardId;
@@ -648,8 +865,8 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
   const camera = useThree((state) => state.camera);
   const renderer = useThree((state) => state.renderer);
   const trajectory = useStore((state) => state.file?.trajectory ?? null);
-  const live = useRef({ frame, center, camera, renderer, transmissionActive, playing });
-  live.current = { frame, center, camera, renderer, transmissionActive, playing };
+  const live = useRef({ frame, center, camera, renderer, transmissionActive, playing, trajectory });
+  live.current = { frame, center, camera, renderer, transmissionActive, playing, trajectory };
 
   useEffect(() => installPlayDevHooks(), []);
   useEffect(() => installArrivalCancel(), []);
@@ -670,26 +887,37 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     () => () => {
       resetDisplayMotion();
       radiusCache.frame = null; // do not keep the last file's Frame alive
+      shown = null;
+      lastMorph = null;
     },
     [],
   );
 
   // Arm the arrival before the first render of a newly opened file.
   useLayoutEffect(() => {
+    // What the screen showed before this file (the last drawn frame).
+    const previous = shown && shown.key !== trajectory ? copyShown(shown) : null;
     resetDisplayMotion();
     if (!trajectory) return undefined;
     const now = live.current;
     const input = ruleInput(now.frame, trajectory.totalFrames, now.transmissionActive, now.playing);
-    const mode = shouldPlayArrival(input);
-    if (!mode) return undefined;
-    adoptScene(now.frame, now.center);
-    // `?arrival=1` forces past Still: play it at Standard then.
-    armArrival(
-      mode === 'flat' ? ARRIVAL_MODE.flat : ARRIVAL_MODE.condense,
-      now.camera,
-      arrivalSeed(input.galleryId ?? 'lupi'),
-      input.comfort === 'still' ? 'standard' : input.comfort,
-    );
+    if (previous && morphWanted(input, previous, trajectory)) {
+      // A switch: the atoms on screen flow into the new molecule.
+      previous.view.radius = sceneRadius(previous.frame, previous.view.center);
+      adoptScene(now.frame, now.center);
+      armMorph(previous, now.frame, now.center, now.camera, input.comfort);
+    } else {
+      const mode = shouldPlayArrival(input);
+      if (!mode) return undefined;
+      adoptScene(now.frame, now.center);
+      // `?arrival=1` forces past Still: play it at Standard then.
+      armArrival(
+        mode === 'flat' ? ARRIVAL_MODE.flat : ARRIVAL_MODE.condense,
+        now.camera,
+        arrivalSeed(input.galleryId ?? 'lupi'),
+        input.comfort === 'still' ? 'standard' : input.comfort,
+      );
+    }
     if (input.galleryId) markArrivalSeen(input.galleryId);
 
     const behindRelay = isRelayActive();
@@ -1023,6 +1251,12 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         active: M.uMotionWeight.value > 0,
         weight: M.uMotionWeight.value,
         arrival: driver.arrival ? `${driver.arrival.armed ? 'armed ' : ''}${MODE_NAMES[driver.arrival.mode]}` : null,
+        // The morph armed or running (else null) with its plan's counts: new
+        // atoms from an old atom of their element, of another, budded.
+        morph: driver.morph
+          ? { running: driver.arrival?.armed === false, planned: driver.morph.plan !== null, ...lastMorphReport }
+          : null,
+        lastMorph: lastMorphReport,
         ripples: driver.slotEnds.filter((end) => end >= 0).length,
         bursts: bursts.ends.filter((end) => end >= 0).length,
         tug: tug.active ? { held: tug.held, atom: tug.atom, stretch: Math.hypot(...tug.core.x) } : null,
@@ -1060,6 +1294,21 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         return slot >= 0 ? { slot, atomIndex: index } : null;
       }),
       registerPlayDevHook('scatter', () => scatter()),
+      // __lupiPlay.morph(): play the last switch's morph again (from the
+      // molecule as the screen showed it then) while its molecule is on screen.
+      registerPlayDevHook('morph', () => {
+        const now = live.current;
+        const last = lastMorph;
+        if (!last || last.to !== now.frame) return null;
+        const totalFrames = useStore.getState().file?.trajectory.totalFrames ?? 0;
+        const input = ruleInput(now.frame, totalFrames, now.transmissionActive, now.playing);
+        if (!canPlayScatter(input)) return null;
+        cancelArrival();
+        adoptScene(now.frame, now.center);
+        armMorph(last.from, now.frame, now.center, now.camera, input.comfort);
+        releaseArrival(now.camera);
+        return { atoms: now.frame.natoms, previousAtoms: last.from.frame.natoms };
+      }),
     ];
 
     // Keyboard: with a verb latched, Enter plays it on the selected atom (or
@@ -1151,6 +1400,14 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       driver.lastWall = wall;
       if (anyLive()) driver.clock += step;
       const now = driver.clock;
+      const { camera: cam, frame: current, center: c } = live.current;
+      // The morph: planned on its first frame (the live camera shows the new
+      // view now); while armed, its start frame follows the camera.
+      const run = driver.morph;
+      if (run && driver.arrival?.mode === ARRIVAL_MODE.morph) {
+        if (!run.plan) planRun(run, cam);
+        else if (driver.arrival.armed) writeMorphFrame(run, cam);
+      }
       const arrival = driver.arrival;
       if (arrival) {
         if (arrival.armed) M.uArrivalT0.value = now;
@@ -1183,6 +1440,19 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         M.uMotionNow.value = now;
       }
       syncWeights();
+
+      // What the screen shows: the next switch morphs out of it. The file
+      // this layer rendered (the store may already hold the next one).
+      const key = live.current.trajectory;
+      if (key) {
+        shown = {
+          key,
+          frame: current,
+          resident: useStore.getState().loadedAtomCount >= current.natoms,
+          // The radius is measured only if this molecule is morphed from.
+          view: viewOf(cam, c, 0),
+        };
+      }
     },
     { phase: LUPI_PHASE.uniforms, id: LUPI_JOB.displayMotion },
   );
