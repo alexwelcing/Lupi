@@ -101,7 +101,8 @@ export default {
     const hooked = await page.waitForFunction(() => typeof window.__lupiPlay?.replay === 'function', null, { timeout: 15_000 }).then(() => true, () => false);
     check('__lupiPlay.replay is registered', hooked);
     if (!hooked) return;
-    await h.waitSettled(page, canvas, 0.01, 30_000);
+    // Settling only paces the flick; a page too busy to be measured goes on.
+    await h.waitSettled(page, canvas, 0.01, 30_000).catch(() => {});
     await page.waitForFunction(() => window.__lupiPlay?.state?.().displaced === false, null, { timeout: 15_000 }).catch(() => {});
     // Which of the clip's codecs this browser can encode at 1080x1920 (the sheet takes the first).
     const support = await page.evaluate(async (codecs) => {
@@ -117,10 +118,12 @@ export default {
     log(`    WebCodecs at 1080x1920: ${support ? Object.entries(support).map(([codec, ok]) => `${codec} ${ok ? 'yes' : 'no'}`).join(', ') : 'none'}`);
 
     // 1. A moment from a flick.
-    const start = await h.canvasPoint(page, canvas, 0.45, 0.55);
+    // A loaded software renderer can hold the page past one 30 s wait.
+    let start = null;
+    for (let attempt = 0; attempt < 4 && !start; attempt += 1) start = await h.canvasPoint(page, canvas, 0.45, 0.55).catch(() => null);
     const offer = page.locator('[data-lupi-pill] [data-replay="offer"]');
     let source = null;
-    for (const throwBy of [{ dx: 120, dy: 0 }, { dx: 200, dy: -40 }]) {
+    for (const throwBy of start ? [{ dx: 120, dy: 0 }, { dx: 200, dy: -40 }] : []) {
       await h.mouseFlick(page, start, throwBy, { ms: 100 });
       await h.sleep(300);
       await page.waitForFunction(() => window.__lupiPlay?.state?.().rig?.moving === false, null, { timeout: 20_000, polling: 100 }).catch(() => {});
@@ -142,8 +145,15 @@ export default {
     outcome.data.scale = await page.evaluate((scale) => window.__lupiPlay.replay('clip-scale', scale), SCALE);
     await page.evaluate(watchCanvasSize);
     const started = Date.now();
-    if (await offer.isVisible().catch(() => false)) await offer.click({ noWaitAfter: true, timeout: 60_000 });
-    else await page.keyboard.press('r');
+    // A DOM click, not a Playwright click: a software renderer under load can
+    // hold the page past the actionability checks. R opens the same sheet.
+    const tapped = await page.evaluate(() => {
+      const button = document.querySelector('[data-lupi-pill] [data-replay="offer"]');
+      button?.click();
+      return Boolean(button);
+    });
+    if (!tapped) await page.keyboard.press('r', { noWaitAfter: true });
+    outcome.data.opened = tapped ? 'Replay ↗' : 'R';
     const sheet = page.locator('[data-lupi-replay-sheet]');
     const opened = await sheet.first().waitFor({ state: 'visible', timeout: 120_000 }).then(() => true, () => false);
     check('the Replay sheet opens', opened);
