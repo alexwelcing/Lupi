@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { getAtomicNumberBySymbol } from '../elements';
 import {
   ASCII,
@@ -46,7 +46,7 @@ import {
   type View,
 } from './index';
 import { KG_PER_MICRO_DALTON, scientific } from './magnitude';
-import { loadMassive1m } from './scale.test-support';
+import { loadMassive1m, type Massive1m } from './scale.test-support';
 
 const GALLERY = join(dirname(fileURLToPath(import.meta.url)), '../../../../apps/web/public/gallery/curated');
 
@@ -554,30 +554,34 @@ describe('§12.6 packs', () => {
 });
 
 describe('§12.6 massive_1m.glimbin through lupi.bake.partition@1', () => {
-  it('953,312 Cu atoms → 233 leaves (the last 3,040) and 35 groups, depth 4, root', async () => {
-    const m = await loadMassive1m();
+  // The fixture is inherently heavy: 953,312 atoms sorted and baked into 233 leaves, each hashed
+  // by the pure-JS SHA-256, about 1.5 s of CPU on its own. It is baked once, here, under its own
+  // timeout, rather than inside whichever test runs first.
+  let m: Massive1m;
+  beforeAll(async () => {
+    m = await loadMassive1m();
+  }, 60_000);
+
+  it('953,312 Cu atoms → 233 leaves (the last 3,040) and 35 groups, depth 4, root', () => {
     const lastLeaf = m.part.records[m.part.leaves - 1];
     expect([m.z.length, m.part.leaves, new DataView(lastLeaf.buffer).getUint32(12, true), m.part.groups, m.part.depth, toHex(m.part.root)])
       .toEqual([953312, 233, 3040, 35, 4, '08588107c1be69ef9816bb4226c25e65b2dae3d2da2edf3fb9420fff76664cca']);
   });
-  it('its pack (root massive_1m): length, contentId, file SHA-256, and the resolver counts 953,312', async () => {
-    const m = await loadMassive1m();
+  it('its pack (root massive_1m): length, contentId, file SHA-256, and the resolver counts 953,312', () => {
     const p = readPack(m.pack);
     const r = new Resolver(p);
     expect([m.pack.length, toHex(p.contentId), toHex(sha256(m.pack)), formatMagnitude(r.count(r.root(p.rootId('massive_1m'))))]).toEqual([
       12484608, 'c760f77ae2225153e842d6f1dd164fe6470de5741a75f2bd9e0603f92b307f08',
       'b12f3e7a79ac58774e4b79b0066b08f91f79a669816c672d3748b978177e9b85', '953,312']);
   });
-  it('keeping its first leaf: 55,171 bytes embedding the leaf and three groups, 73,567 characters, resolving with no pack', async () => {
-    const m = await loadMassive1m();
+  it('keeping its first leaf: 55,171 bytes embedding the leaf and three groups, 73,567 characters, resolving with no pack', () => {
     const p = readPack(m.pack);
     const path: Step[] = [{ tag: 'child', index: 0 }, { tag: 'child', index: 0 }, { tag: 'child', index: 0 }];
     const ref = writeRef({ root: m.part.root, path, store: p });
     const sizes = decodeRef(ref).records.map((r) => r.length).sort((a, b) => a - b);
     expect([ref.length, sizes, refText(ref).length, formatMagnitude(resolveRef(ref).count)]).toEqual([55171, [368, 720, 720, 53264], 73567, '4,096']);
   });
-  it('by dependency alone it would be 115 bytes', async () => {
-    const m = await loadMassive1m();
+  it('by dependency alone it would be 115 bytes', () => {
     const p = readPack(m.pack);
     const path: Step[] = [{ tag: 'child', index: 0 }, { tag: 'child', index: 0 }, { tag: 'child', index: 0 }];
     const probe = decodeRef(writeRef({ root: m.part.root, path, store: p })).probe;
