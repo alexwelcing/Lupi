@@ -429,9 +429,9 @@ function engraveAxis(angle: number): [number, number, number] {
 
 /**
  * The Illustrate surface (linear RGB): toon fill, hatching, engraving or
- * halftone dots, and ink. View
- * space with V = +z, like `lupiSurface`; the key light's direction is the
- * light uniforms', so the bands follow the Light controls.
+ * halftone dots, and ink. View space with V = +z, like `lupiSurface`; the
+ * key light's direction is the light uniforms', so the bands follow the
+ * Light controls.
  */
 export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node {
   return (Fn(() => {
