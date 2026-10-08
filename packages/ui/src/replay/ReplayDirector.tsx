@@ -37,6 +37,7 @@ import { installMomentDetector, offerMoment } from './moments';
 import { cameraFov, ReplayPlayer } from './player';
 import { clearRecorder, pauseRecorder, recordPose, recorderNow } from './recorder';
 import { replayStore, type IncomingReplay } from './replayStore';
+import { lastClipReport } from './offlineClip';
 import { buildTape, registerReplayViewContext, replayLink } from './session';
 import type { MomentGesture, Tape } from './tape';
 
@@ -371,11 +372,13 @@ export function ReplayDirector({ frame, center }: ReplayDirectorProps): null {
   }, []);
 
   // Dev hook: __lupiPlay.replay() → the offer or last moment as a tape and link;
-  // __lupiPlay.replay('watch') starts a waiting shared replay.
+  // __lupiPlay.replay('watch') starts a waiting shared replay;
+  // __lupiPlay.replay('clip') → how the last clip was made (offlineClip.ts).
   useEffect(
     () =>
       registerPlayDevHook('replay', (command?: string) => {
         const store = replayStore.getState();
+        if (command === 'clip') return { clipping: store.clipping, ...(lastClipReport() ?? {}) };
         if (command === 'watch') {
           if (store.incoming?.phase === 'waiting') store.setIncomingPhase('playing');
           return store.incoming?.phase ?? null;

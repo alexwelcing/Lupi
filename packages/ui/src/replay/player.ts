@@ -17,11 +17,12 @@ import type { Vec3 } from '../camera/rigApi';
 import { cue } from '../play/feedback';
 import { playStore } from '../play/playStore';
 import { getToyReplaySink, type ToyEvent } from '../play/toyTape';
+import { CLIP_FLASH_MS } from './clipSchedule';
 import { buildCurve, createPoseSample, samplePose, type KeyCurve, type PoseSample } from './keyframes';
 import type { Tape, TapeEvent } from './tape';
 
-/** How long a replayed flash shows (ms), as the live ones do. */
-const FLASH_MS = { detent: 1200, flip: 1800, catch: 700, info: 1400 } as const;
+/** How long a replayed flash shows (ms), as the live ones do (the offline clip draws them for as long). */
+const FLASH_MS = CLIP_FLASH_MS;
 /** The molecule's bounding sphere fills at most this much of the narrow side. */
 const FIT_MARGIN = 1.08;
 /** A replay never zooms out more than this to fit a narrower screen… */
