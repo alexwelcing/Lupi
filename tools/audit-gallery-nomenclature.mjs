@@ -118,7 +118,7 @@ function identityIssues(entry, identity, assetFormula) {
   return issues;
 }
 
-async function inspectAsset(entry, identity) {
+async function inspectAsset(entry) {
   if (entry.file === 'procedural') {
     return { kind: 'procedural' };
   }
@@ -152,7 +152,7 @@ async function main() {
   const manifestEntries = [];
   for (const entry of gallery) {
     const identity = nomenclature[entry.id];
-    const asset = await inspectAsset(entry, identity);
+    const asset = await inspectAsset(entry);
     const issues = [
       ...(asset.kind === 'missing' ? [issue('error', 'missing-asset', `Missing local asset ${asset.path}.`)] : []),
       ...identityIssues(entry, identity, asset.coordinateFormula),
