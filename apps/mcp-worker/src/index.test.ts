@@ -577,7 +577,7 @@ describe('lupi Cloudflare MCP worker', () => {
 
   it('assesses a configured public HTTPS asset with a bounded range request', async () => {
     const xyz = '1\ncopper\nCu 0 0 0\n';
-    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(xyz, {
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(xyz, {
       status: 206,
       headers: {
         'content-range': `bytes 0-${xyz.length - 1}/${xyz.length}`,
