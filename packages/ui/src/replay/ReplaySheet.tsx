@@ -29,7 +29,7 @@ import { getToyReplaySink } from '../play/toyTape';
 import { createClipCompositor, ENDCARD_S, type ClipCompositor } from './clipCompositor';
 import { chooseClipCodec, hasClipEncoder } from './clipEncoder';
 import { tapeFlashes, type ClipFlash } from './clipSchedule';
-import { ClipAbortError, noteClipReport, renderOfflineClip } from './offlineClip';
+import { ClipAbortError, clipSize, noteClipReport, renderOfflineClip } from './offlineClip';
 import { ReplayPlayer, type ReplayFraming } from './player';
 import { pauseRecorder } from './recorder';
 import { replayStore, useReplayStore, type ReplayMoment } from './replayStore';
@@ -172,8 +172,7 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
       return undefined;
     }
     const phone = matches(MOBILE_MEDIA_QUERY) || matches('(hover: none) and (pointer: coarse)');
-    const width = phone ? 720 : 1080;
-    const height = phone ? 1280 : 1920;
+    const { width, height } = clipSize(phone);
     const duration = built.tape.duration + ENDCARD_S;
     const finish = shownFinish(remixStore.getState());
     const framing: ReplayFraming | null = context
@@ -261,6 +260,7 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
               duration,
               ms: Math.round(performance.now() - startedAt),
               msPerFrame: null,
+              split: null,
               bytes: blob.size,
               backend: null,
             });

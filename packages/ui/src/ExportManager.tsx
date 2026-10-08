@@ -11,7 +11,9 @@
  *           Safari/iOS, webm (vp9/vp8) on Chromium/Firefox. The capture loop only
  *           drives the camera/scene by wall-clock time; the canvas is recorded
  *           automatically.
- *           Instant Replay's clip rides the same path: its driver moves the
+ *           Instant Replay's clip is rendered offline, frame by frame, where
+ *           WebCodecs can encode it (replay/offlineClip.ts, not this path).
+ *           Elsewhere it rides this path: its driver moves the
  *           camera and toys by the clip clock, display motion stays live (an
  *           illustrative recording), and a compositor draws each frame plus
  *           its "Illustrative" labels into a 2D canvas, which is what gets

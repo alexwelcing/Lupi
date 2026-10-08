@@ -18,10 +18,13 @@
  * 4. the compositor burns in the labels and the flash on the tape at that
  *    time, and WebCodecs encodes the frame into the MP4 (clipEncoder.ts).
  *
- * The live canvas keeps its size and keeps drawing; the camera rig waits,
- * as for any recording (`beginRecording({ illustrative: true })`, which also
- * holds the hover glow off). Nothing here is an artifact, and MCP cannot ask
- * for it.
+ * The live canvas keeps its size and its last picture: while the clip
+ * renders, ReplayDirector holds the live view's own render (the sheet covers
+ * it), so the device draws one picture per frame, not two. The Play layer
+ * and every uniform job still run each frame. The camera rig waits, as for
+ * any recording (`beginRecording({ illustrative: true })`, which also holds
+ * the hover glow off). Nothing here is an artifact, and MCP cannot ask for
+ * it.
  */
 import * as THREE from 'three';
 import { beginRecording, requestLupiFrames } from '@atlas/scene';
@@ -59,6 +62,57 @@ export interface OfflineClipOptions {
   onProgress?: (fraction: number) => void;
 }
 
+/**
+ * The clip size × this (1 for everyone). `__lupiPlay.replay('clip-scale', k)`
+ * sets it for a software renderer's smoke, which draws a 1080×1920 frame in
+ * tens of seconds.
+ */
+let clipScale = 1;
+
+export function setClipScale(scale: number): number {
+  clipScale = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
+  return clipScale;
+}
+
+/** The clip's size: 720×1280 on phones, 1080×1920 elsewhere (× the clip scale, even). */
+export function clipSize(phone: boolean): { width: number; height: number } {
+  const even = (value: number) => Math.max(2, Math.round((value * clipScale) / 2) * 2);
+  return phone ? { width: even(720), height: even(1280) } : { width: even(1080), height: even(1920) };
+}
+
+/** A clip rendering now: the frames done, and the time so far (ms). */
+export interface ClipProgress {
+  frame: number;
+  frames: number;
+  ms: number;
+}
+
+let progress: ClipProgress | null = null;
+const holdListeners = new Set<() => void>();
+
+/** The clip in progress, or null. */
+export function clipProgress(): ClipProgress | null {
+  return progress;
+}
+
+/** True while a clip renders (ReplayDirector holds the live view's render). */
+export function isClipRendering(): boolean {
+  return progress !== null;
+}
+
+export function subscribeClipRendering(listener: () => void): () => void {
+  holdListeners.add(listener);
+  return () => {
+    holdListeners.delete(listener);
+  };
+}
+
+function setProgress(next: ClipProgress | null): void {
+  const changed = (progress === null) !== (next === null);
+  progress = next;
+  if (changed) for (const listener of Array.from(holdListeners)) listener();
+}
+
 /** What made the last clip (for the sheet and `__lupiPlay.replay('clip')`). */
 export interface ClipReport {
   encoder: 'webcodecs' | 'mediarecorder';
@@ -75,6 +129,11 @@ export interface ClipReport {
   /** Wall time from the first frame to the file (ms), and per frame. */
   ms: number;
   msPerFrame: number | null;
+  /**
+   * Where the time went (ms, the offline clip): waiting for the frame to be
+   * drawn and read back, burning in the labels, and handing it to the encoder.
+   */
+  split: { render: number; compose: number; encode: number } | null;
   bytes: number;
   backend: string | null;
 }
@@ -135,8 +194,10 @@ export async function renderOfflineClip(options: OfflineClipOptions): Promise<{ 
   const resetToys = () => getToyReplaySink()?.play({ kind: 'reset' });
   resetToys();
   player.start();
-  const started = base;
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const split = { render: 0, compose: 0, encode: 0 };
   let backend: string | null = null;
+  setProgress({ frame: 0, frames, ms: 0 });
 
   try {
     for (let index = 0; index < frames; index += 1) {
@@ -145,6 +206,7 @@ export async function renderOfflineClip(options: OfflineClipOptions): Promise<{ 
       // The toys step by exactly this frame; the camera and the inputs due follow the tape.
       clock = base + seconds * 1000;
       player.seek(Math.min(seconds, tape.duration), camera, null);
+      const asked = now();
       const pending = runViewerCapture(({ renderer, scene, camera: live, plate }) => {
         syncLens(camera, live);
         return renderSceneToPixels({
@@ -164,12 +226,21 @@ export async function renderOfflineClip(options: OfflineClipOptions): Promise<{ 
       const pixels = await pending;
       backend = pixels.backend;
       if (signal.aborted) throw new ClipAbortError();
+      const drawn = now();
       compositor.compose(pixels, seconds);
+      const composed = now();
       await encoder.encode(compositor.canvas, index);
+      const encoded = now();
+      split.render += drawn - asked;
+      split.compose += composed - drawn;
+      split.encode += encoded - composed;
+      setProgress({ frame: index + 1, frames, ms: Math.round(encoded - base) });
       options.onProgress?.((index + 1) / frames);
     }
+    const flushed = now();
     const blob = await encoder.finish();
-    const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started;
+    split.encode += now() - flushed;
+    const ms = now() - base;
     const report: ClipReport = {
       encoder: 'webcodecs',
       codec: choice.codec,
@@ -181,12 +252,14 @@ export async function renderOfflineClip(options: OfflineClipOptions): Promise<{ 
       duration,
       ms: Math.round(ms),
       msPerFrame: Math.round((ms / frames) * 10) / 10,
+      split: { render: Math.round(split.render), compose: Math.round(split.compose), encode: Math.round(split.encode) },
       bytes: blob.size,
       backend,
     };
     noteClipReport(report);
     return { blob, report };
   } finally {
+    setProgress(null);
     encoder.close();
     player.stop();
     resetToys();
