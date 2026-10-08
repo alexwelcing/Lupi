@@ -8,7 +8,7 @@
  * On /?sim=lupine_sphere_grid (1,513 atoms, 1,513 labels whose node ids are
  * mostly local paths):
  * 1. Knowledge labels render, and a camera move recomputes them.
- * 2. Clicking an atom opens its card with the node's path, and no visible
+ * 2. A node's label opens its atom's card with the node's path, and no visible
  *    text, tooltip or accessible name on the page shows a home directory
  *    (/home/<user>/, /Users/<user>/, C:\Users\): the display is scrubbed.
  * 3. lupi.knowledge_graph still returns the label's node id as the labels
@@ -61,17 +61,17 @@ export default {
     check('a camera move recomputes the labels', moved && after?.renderedLabels > 0, `${after?.renderedLabels ?? 0} labels after the top preset`);
     await mcp(page, 'lupi.fit_camera', {});
 
-    // 2. The atom card: a node's path, never a home directory. Click atoms
-    // until a card opens (a software renderer can take seconds to pick).
-    const settled = await h.waitSettled(page, canvas, 0.01);
+    // 2. The atom card: a node's path, never a home directory. A node's label
+    // card selects its atom (a DOM click: a loaded software renderer can take
+    // longer than a screenshot timeout to capture the canvas for a pick).
     const card = page.locator('[data-testid="atom-info-card"]').first();
-    const box = await canvas.boundingBox();
-    let shown = false;
-    for (const candidate of h.atomCandidates(settled.image, 4)) {
-      await page.mouse.click(Math.round(box.x + candidate.x), Math.round(box.y + candidate.y));
-      shown = await card.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
-      if (shown) break;
-    }
+    const picked = await page.evaluate(() => {
+      const label = [...document.querySelectorAll('div[title*="connection"]')].find((node) => node.getAttribute('title').includes('\n'));
+      label?.click();
+      return label ? label.getAttribute('title').split('\n')[0] : null;
+    });
+    outcome.data.pickedLabel = picked;
+    const shown = picked !== null && await card.waitFor({ state: 'visible', timeout: 60_000 }).then(() => true, () => false);
     const nodeLine = shown
       ? await card.evaluate((node) => {
         const line = [...node.querySelectorAll('div[title]')].find((el) => el.getAttribute('title')?.includes('://'));
@@ -81,8 +81,9 @@ export default {
     outcome.data.card = nodeLine;
     const leaks = await homePathsShown(page);
     outcome.data.homePathsShown = leaks;
-    if (shown) await save('card', await page.screenshot({ scale: 'css' }));
-    check('clicking an atom opens its card with the node path', shown && Boolean(nodeLine?.text), JSON.stringify(nodeLine));
+    const shot = shown ? await page.screenshot({ scale: 'css', timeout: 120_000 }).catch(() => null) : null;
+    if (shot) await save('card', shot);
+    check('a node\'s label opens its atom\'s card with the node path', shown && Boolean(nodeLine?.text), `${picked}: ${JSON.stringify(nodeLine)}`);
     check('no visible text, tooltip or accessible name shows a home directory', shown && leaks.length === 0, leaks.join(' | ') || 'none');
 
     // 3. MCP output is unchanged: the id as the labels file has it.
@@ -137,7 +138,8 @@ export default {
       .then(() => true, () => false);
     const stored = await page.evaluate(() => window.__lupiViewerMcp?.state?.().atomScale ?? null);
     outcome.data.harness = { name, scale, want, set: set?.ok ?? null, stored, idle: idle.slice(0, 160) };
-    await save('harness', await page.screenshot({ scale: 'css' }));
+    const harnessShot = await page.screenshot({ scale: 'css', timeout: 120_000 }).catch(() => null);
+    if (harnessShot) await save('harness', harnessShot);
     check('/#/mcp: the idle raw response reads the loaded file', harness && Boolean(name) && idle.includes(`"fileName": ${JSON.stringify(name)}`), `file ${JSON.stringify(name)}, raw ${idle.length} chars`);
     check('/#/mcp: it re-reads the state when the atom scale changes', Boolean(set?.ok) && followed, `atomScale ${scale} -> ${want} (store ${stored})`);
   },
