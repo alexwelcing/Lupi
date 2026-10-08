@@ -31,6 +31,22 @@ function writeLast(style: Exclude<InkStyle, 'off'>): void {
   }
 }
 
+/**
+ * A change made here (the Play tray, the palette, `I`) burns through the
+ * molecule as a Light Fuse from the selected, hovered or centre-front atom
+ * (ink/InkLookDriver.tsx). Changes from anywhere else (an agent's
+ * `lupi.set_viewer`, the Looks grid, a link) crossfade as before.
+ */
+const FUSE_REQUEST_MS = 500;
+let fuseRequestedAt = Number.NEGATIVE_INFINITY;
+
+/** True once for a look change this module made in the last moment (the ink driver asks as the look changes). */
+export function takeInkFuseRequest(now: number = performance.now()): boolean {
+  const requested = now - fuseRequestedAt <= FUSE_REQUEST_MS;
+  fuseRequestedAt = Number.NEGATIVE_INFINITY;
+  return requested;
+}
+
 /** A short name for a shading, for the pill and announcements. */
 export function inkStyleLabel(style: InkStyle): string {
   return style === 'hatch' ? 'Sketch' : style === 'flat' ? 'Illustrate' : 'Lit';
@@ -44,6 +60,7 @@ export function setIllustrate(on: boolean, options: { flash?: boolean } = {}): v
   const state = useStore.getState();
   const current = state.inkStyle;
   if (on === (current !== 'off')) return;
+  fuseRequestedAt = performance.now();
   if (on) {
     // Refractive glass draws real spheres, which take no ink: the drawing
     // needs the impostors, so the finish goes back to the Looks' plastic.
