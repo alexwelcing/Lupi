@@ -221,7 +221,7 @@ export default {
       );
       check(
         `${id}: the chalk export has its own specId`,
-        Boolean(exported.chalk.out.specId) && exported.chalk.out.specId !== exported.flat.out.specId,
+        Boolean(exported.chalk.out.specId) && Boolean(exported.flat.out.specId) && exported.chalk.out.specId !== exported.flat.out.specId,
         `${exported.flat.out.specId} ${exported.chalk.out.specId}`,
       );
     }
