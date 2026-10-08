@@ -107,6 +107,7 @@ export const INK_TOON = {
   flatShade: 0.46,
   lightLift: 0.26,
   highlightLift: 0.82,
+  occlusionGain: 0.55,
   atomLine: 1.5,
   bondLine: 1.15,
   bondSolidFrom: 1.1,
@@ -383,8 +384,18 @@ export function inkToonFills(color: string): InkToonFills {
   };
 }
 
-/** The N·L where the half-Lambert light value crosses `band` (a drawing's baked occlusion is open). */
-const bandDot = (band: number) => 2 * band - 1;
+/**
+ * How open a drawn face is (1 open, 0 buried): the drawing's stand-in for the
+ * viewer's baked contact occlusion, which shades a ball-and-stick atom a
+ * little where its neighbours and bond stubs sit. Measured offline against
+ * the 3D view's Illustrate frames of C60 and caffeine, 0.8 came a little
+ * closer than 1 (a smaller lit band); 1 keeps the drawing's bands where the
+ * light alone puts them.
+ */
+const TOON_OPEN = 1;
+
+/** The N·L where the half-Lambert light value, pulled down by the occlusion as the shaders pull it, crosses `band`. */
+const bandDot = (band: number) => (2 * band) / (1 - INK_TOON.occlusionGain * (1 - TOON_OPEN)) - 1;
 
 /** SVG arc flags for the arc from a to b through `via`, on a conic centred at c. */
 function arcFlags(ax: number, ay: number, viaX: number, viaY: number, bx: number, by: number, cx: number, cy: number): string {

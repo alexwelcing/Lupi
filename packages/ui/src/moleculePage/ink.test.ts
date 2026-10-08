@@ -87,7 +87,7 @@ describe('ink drawing style', () => {
 
   it('follows the Illustrate look: the same bands, fills, lines, depth cue and palette', () => {
     for (const key of [
-      'shadeBand', 'lightBand', 'highlight', 'flatLift', 'flatShade', 'lightLift', 'highlightLift',
+      'shadeBand', 'lightBand', 'highlight', 'flatLift', 'flatShade', 'lightLift', 'highlightLift', 'occlusionGain',
       'atomLine', 'bondLine', 'bondSolidFrom', 'bondSolidTo', 'depthCue', 'depthCueFrom',
     ] as const) {
       expect(INK_TOON[key], key).toBe(INK_LOOK_TUNING[key]);
