@@ -10,9 +10,11 @@
  * deterministic bridge returns. USDZ is exercised as a required fail-closed
  * capability until its exporter is byte-stable. Rasters are decoded in the
  * browser for dimensions, alpha, and appearance comparisons; model containers
- * are checked structurally. Bytes are compared only within a backend: the two
- * backends are separate execution classes, so the same spec must keep its
- * specId and change its rendererFingerprint and artifactKey across them.
+ * are checked structurally. One Illustrate drawing (Engrave) exports next to
+ * the lit baseline and must get its own specId and pixels. Bytes are compared
+ * only within a backend: the two backends are separate execution classes, so
+ * the same spec must keep its specId and change its rendererFingerprint and
+ * artifactKey across them.
  * Exact returned bytes plus a viewer screenshot are dropped under
  * .verify-artifacts/asset-quality/<run>/<backend>/ for human inspection.
  *
@@ -820,7 +822,7 @@ function laneReport() {
   return report.lanes[lane];
 }
 
-/** Run every flow in one browser lane; returns the caffeine opaque artifact for cross-lane checks. */
+/** Run every flow in one browser lane; returns the caffeine opaque artifacts (lit, Engrave) for cross-lane checks. */
 async function runLane(backend) {
   lanePrefix = `[${backend}] `;
   ARTIFACTS = join(ARTIFACTS_ROOT, backend);
@@ -832,6 +834,7 @@ async function runLane(backend) {
     args: [...LANE_ARGS[backend]],
   });
   let opaqueElement = null;
+  let opaqueEngrave = null;
   try {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
@@ -906,6 +909,37 @@ async function runLane(backend) {
         opaqueElement,
         opaqueElementRepeat,
       );
+
+      // The Engrave drawing (Illustrate look) takes the raw capture path with
+      // `view.ink` in the spec: same scene and size as the lit baseline, so
+      // only the look separates the two specs and their pixels.
+      await executeToolAndSettle(page, 'Caffeine switches to the Engrave drawing', 'lupi.set_viewer', {
+        inkStyle: 'engrave',
+      });
+      opaqueEngrave = await runAssetFlow(page, 'caffeine-png-opaque-256-engrave', {
+        id: 'caffeine-png-opaque-256-engrave',
+        tool: 'lupi.export_asset',
+        arguments: { format: 'png', width: 256, height: 256, transparent: false },
+      }, { targetWidth: 256, targetHeight: 256, alphaPolicy: 'opaque' });
+      check(
+        'Engrave PNG has its own specId next to the lit baseline',
+        Boolean(opaqueEngrave?.asset?.specId && opaqueElement?.asset?.specId)
+          && opaqueEngrave.asset.specId !== opaqueElement.asset.specId,
+        `lit=${opaqueElement?.asset?.specId} engrave=${opaqueEngrave?.asset?.specId}`,
+      );
+      // Both share the slate plate and the fitted caffeine covers about 5 %
+      // of the frame, so little more than that can change (4.7 % did).
+      await compareRasterAppearance(
+        page,
+        'Engrave and the lit look produce materially different pixels',
+        opaqueElement,
+        opaqueEngrave,
+        { minimumMeanDelta: 2, minimumDifferingRatio: 0.02 },
+      );
+      await executeToolAndSettle(page, 'Caffeine returns to the lit look', 'lupi.set_viewer', {
+        inkStyle: 'off',
+      });
+
       await runAssetFlow(page, 'caffeine-png-1024', {
         id: 'caffeine-png-1024',
         tool: 'lupi.export_asset',
@@ -1051,7 +1085,7 @@ async function runLane(backend) {
     if (!args['keep-server']) await browser.close().catch(() => {});
     browser = null;
   }
-  return opaqueElement;
+  return { lit: opaqueElement, engrave: opaqueEngrave };
 }
 
 try {
@@ -1073,8 +1107,8 @@ try {
   lanePrefix = '';
   ARTIFACTS = ARTIFACTS_ROOT;
 
-  const webgpu = laneArtifacts.webgpu?.asset;
-  const webgl2 = laneArtifacts.webgl2?.asset;
+  const webgpu = laneArtifacts.webgpu?.lit?.asset;
+  const webgl2 = laneArtifacts.webgl2?.lit?.asset;
   if (webgpu && webgl2) {
     check(
       'one spec keeps its specId across the two backends',
@@ -1085,6 +1119,15 @@ try {
       'the two backends are separate execution classes (fingerprint and artifactKey differ)',
       webgpu.rendererFingerprint !== webgl2.rendererFingerprint && webgpu.artifactKey !== webgl2.artifactKey,
       `webgpu=${webgpu.artifactKey} webgl2=${webgl2.artifactKey}`,
+    );
+  }
+  const webgpuEngrave = laneArtifacts.webgpu?.engrave?.asset;
+  const webgl2Engrave = laneArtifacts.webgl2?.engrave?.asset;
+  if (webgpuEngrave && webgl2Engrave) {
+    check(
+      'the Engrave spec keeps its specId across the two backends',
+      webgpuEngrave.specId === webgl2Engrave.specId,
+      `webgpu=${webgpuEngrave.specId} webgl2=${webgl2Engrave.specId}`,
     );
   }
 } catch (err) {
