@@ -122,8 +122,8 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
       },
       inkStyle: {
         type: 'string',
-        enum: ['off', 'flat', 'hatch'],
-        description: 'The Illustrate look: toon fills and ink outlines (flat colour or hatched); off is the lit surface. Exports keep it.',
+        enum: ['off', 'flat', 'hatch', 'engrave', 'halftone'],
+        description: 'The Illustrate look: toon fills and ink outlines (flat colour, hatched, engraved lines or halftone dots); off is the lit surface. Exports keep it.',
       },
       inkWeight: { type: 'number', minimum: 0.4, maximum: 2.5, description: 'Ink line weight multiplier (1 = the house weight).' },
     },

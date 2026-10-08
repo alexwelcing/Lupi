@@ -198,15 +198,21 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   registered them; `ink()` reports the Illustrate look's live weights and
   Ink-to-Light state. It never writes molecule data.
 - **The Illustrate look (Ink and Light).** Looks → Illustrate (flat colour on
-  the sage plate) or Sketch (hatched, on the paper plate), the Play tray's
+  the sage plate), Sketch (hatched), Engrave (banknote line engraving) or
+  Halftone (print dots), the last three on the paper plate, the Play tray's
   Look row (Lit · Ink · Remix ⟳), the palette or the `I` key draw the molecule like the
   Lupi ink drawings: toon fills from the key light, crevices shaded by the
   baked contact occlusion, an ink outline at every atom and bond silhouette
-  and, for Sketch, pen hatching (`packages/scene/src/tsl/inkLook.ts`, mixed
-  into both impostors by one weight). It is a Look, not toy motion: the
-  store's `inkStyle` (`off`, `flat`, `hatch`) and `inkWeight` ride share URLs
-  (`ink`, `iw` in the `s=` state), saved views and `lupi.set_viewer`, and
-  replay and Remix links add a top-level `ink=f|h`; a Foil finish steps
+  and, for Sketch, pen hatching; for Engrave, three line plates cut about
+  each ball and bowed over it; for Halftone, ink dots on a 45° screen (the
+  last two ported from Shaders, MIT; `packages/scene/src/tsl/inkLook.ts`,
+  mixed into both impostors by one weight, each drawing its own weight, so
+  any change crossfades). Ink and `I` bring back the last drawing used. It
+  is a Look, not toy motion: the store's `inkStyle` (`off`, `flat`, `hatch`,
+  `engrave`, `halftone`) and `inkWeight` ride share URLs (`ink`, `iw` in the
+  `s=` state; letters `f`, `h`, `e`, `d`), saved views and
+  `lupi.set_viewer`, and replay and Remix links add a top-level
+  `ink=f|h|e|d`; a Foil finish steps
   aside under ink (a drawing carries no foil); while ink is on the post
   recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
   stays); exports draw it and their spec records `view.ink`. Changes fade
@@ -519,7 +525,7 @@ Common recognized keywords:
 - `hide bonds`, `show bonds`, `show cell`, `show axes`
 - `studio`, `paper`, `editorial`, `cinematic`, `diagram` — postprocess presets
 - `iso`, `top`, `side`, `front`, `free` — camera presets
-- `ink` / `illustrate`, `hatched` / `sketch`, `lit` — the Illustrate look (flat, hatched, off)
+- `ink` / `illustrate`, `hatched` / `sketch`, `engrave` / `engraving` / `etching`, `halftone` / `print` / `dots`, `lit` — the Illustrate look (flat, hatched, engraved, halftone, off)
 
 ## Render artifact V2 truth
 
@@ -594,8 +600,8 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   view's only anti-aliasing and never runs on an export; supersampling is.
 - The Illustrate look shades the impostors themselves, so its capture takes
   the raw path (`view.postprocess` is `raw-scene`), and the spec carries
-  `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch',
-  weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
+  `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch' |
+  'engrave' | 'halftone', weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
   `plate`), present only while the look is on, so every
   lit spec keeps its identity. Ink line weight follows the capture's texel
   scale and the picture's short side, so an export keeps the screen's weight.
@@ -829,7 +835,7 @@ browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
 Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
-first-minute, flick, hero, relay, settings, tap, toys) run with the built-in
+first-minute, flick, hero, ink, relay, settings, tap, toys) run with the built-in
 scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
 `--reduced-motion` checks the Still comfort level.
 

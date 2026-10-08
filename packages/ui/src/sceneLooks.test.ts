@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 import { resetStore } from './test-utils';
 import { useStore } from './store';
-import { currentSceneLook, SCENE_LOOKS, sceneLookPatch } from './sceneLooks';
+import { currentSceneLook, inkStyleForLook, lookForInkStyle, SCENE_LOOKS, sceneLookPatch } from './sceneLooks';
+import { PAPER_PLATE_PRESET_ID, SAGE_PLATE_PRESET_ID } from './backgroundPresets';
 
 describe('learner scene looks', () => {
   beforeEach(resetStore);
@@ -21,6 +22,27 @@ describe('learner scene looks', () => {
   });
   it.each(SCENE_LOOKS)('$id keeps one rig at every scale', ({ id }) => {
     expect(sceneLookPatch(id, 200_000)).toEqual(sceneLookPatch(id, 24));
+  });
+  it('maps each ink shading to its Look and back; every other Look is lit', () => {
+    for (const style of ['flat', 'hatch', 'engrave', 'halftone'] as const) {
+      const look = lookForInkStyle(style);
+      expect(inkStyleForLook(look)).toBe(style);
+      expect(sceneLookPatch(look, 24).inkStyle).toBe(style);
+    }
+    expect(lookForInkStyle('off')).toBe('studio');
+    for (const id of ['studio', 'paper', 'night', 'prism'] as const) expect(inkStyleForLook(id)).toBe('off');
+    expect(sceneLookPatch('ink', 24).backgroundPreset).toBe(SAGE_PLATE_PRESET_ID);
+    for (const id of ['sketch', 'engrave', 'halftone'] as const) {
+      expect(sceneLookPatch(id, 24).backgroundPreset).toBe(PAPER_PLATE_PRESET_ID);
+    }
+  });
+  it('a new molecule keeps an Engrave or Halftone look', () => {
+    for (const id of ['engrave', 'halftone'] as const) {
+      useStore.setState(sceneLookPatch(id, 24));
+      useStore.getState().setFile({ name: `${id}.xyz`, size: 100, trajectory: createMockTrajectory(1, 24), thermo: null });
+      expect(useStore.getState().inkStyle).toBe(id);
+      expect(currentSceneLook(useStore.getState())).toBe(id);
+    }
   });
   it('saved scene state remains authoritative after a fresh file default', () => {
     useStore.setState(sceneLookPatch('night', 24));

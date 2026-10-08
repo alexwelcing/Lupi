@@ -59,9 +59,9 @@ describe('focused style controls', () => {
     expect(useStore.getState().bondProfile).toBe('distance');
     expect(screen.queryByRole('checkbox', { name: 'Ionic contacts' })).toBeNull();
   });
-  it('starts with six real look choices and keeps fine controls secondary', () => {
+  it('starts with eight real look choices and keeps fine controls secondary', () => {
     render(<StudioControlDeck mode="scene" />);
-    expect(screen.getAllByRole('button', { name: / look$/ })).toHaveLength(6);
+    expect(screen.getAllByRole('button', { name: / look$/ })).toHaveLength(8);
     expect(screen.queryByRole('slider')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Studio look' }));
     expect(screen.getByRole('button', { name: 'Studio look' }).getAttribute('aria-pressed')).toBe('true');

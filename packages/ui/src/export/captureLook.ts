@@ -87,7 +87,7 @@ export interface CaptureLookState {
   postprocessIntensity: number;
   effectOverrides: EffectOverrides | null;
   /** The Illustrate look sets the recipe aside (postprocess/controls.ts inkRecipe) and adds its contour. Absent = off. */
-  inkStyle?: string;
+  inkStyle?: 'off' | 'flat' | 'hatch' | 'engrave' | 'halftone';
   cameraPosition: readonly [number, number, number] | readonly number[];
   cameraTarget: readonly [number, number, number] | readonly number[];
 }

@@ -382,6 +382,32 @@ describe('render artifact V1 semantic validation', () => {
     })).toThrow(/camera\.far.*greater than camera\.near/);
   });
 
+  it('accepts every Illustrate shading in view.ink and rejects unknown ones', () => {
+    const base = contentSpec();
+    const ink = {
+      pipeline: 'impostor-ink.v1',
+      shading: 'flat',
+      weight: 1,
+      ink: '#0c1211',
+      paper: '#f3f5ef',
+      shade: '#1a2321',
+      plate: '#e7ebe3',
+      depthCue: 0.4,
+    };
+    for (const shading of ['flat', 'hatch', 'engrave', 'halftone']) {
+      expect(() => validateRenderArtifactSpecV1({
+        ...base,
+        view: { ...base.view, ink: { ...ink, shading } },
+      })).not.toThrow();
+    }
+    for (const shading of ['stipple', 'Engrave', 'dots', '', 3, null]) {
+      expect(() => validateRenderArtifactSpecV1({
+        ...base,
+        view: { ...base.view, ink: { ...ink, shading } },
+      })).toThrow(/view\.ink\.shading/);
+    }
+  });
+
   it('requires explicit legal raster dimensions and alpha modes', () => {
     expect(validateRenderArtifactSpecV1(contentSpec())).toEqual(contentSpec());
     expect(() => validateRenderArtifactSpecV1(contentSpec({ width: 32 }))).toThrow(/64 through 4096/);

@@ -6,8 +6,9 @@
  * - The look: `inkStyle` and `inkWeight` set the target every capture
  *   renders (`setInkLookTarget`). A change fades the live drawing toward it
  *   (TOGGLE_MS, the settle token's shape): the ink thins away as the light
- *   comes on, or the lit molecule draws itself in ink. The first value a
- *   viewer opens on is cut, never faded.
+ *   comes on, or the lit molecule draws itself in ink. Each shading (hatch,
+ *   engrave, halftone) has its own weight, so a change between two of them
+ *   crossfades too. The first value a viewer opens on is cut, never faded.
  * - Ink-to-Light: a molecule opened from an ink drawing (the home hero, a
  *   molecule page, an ink tile or finder row; the relay baton) first draws
  *   in ink, so the relay's drawing hands over to a drawing at the same pose.
@@ -40,7 +41,7 @@ import { getComfort, glidesAnimate } from '../motion/comfort';
 import { peekBaton, type RelayBaton } from '../relay/baton';
 import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { registerPlayDevHook } from '../play/devHooks';
-import { inkPlateColor } from './illustrate';
+import { inkPlateColor, rememberInkStyle } from './illustrate';
 
 /** A look change: lit ⇄ ink (ms). */
 export const INK_TOGGLE_MS = 480;
@@ -67,8 +68,12 @@ export function isDrawingBaton(baton: Pick<RelayBaton, 'source' | 'ink'> | null 
 interface FadeState {
   fromMix: number;
   fromHatch: number;
+  fromEngrave: number;
+  fromHalftone: number;
   toMix: number;
   toHatch: number;
+  toEngrave: number;
+  toHalftone: number;
   /** performance.now() at the fade's first frame; -1 idle; -2 starts on the next frame. */
   start: number;
   duration: number;
@@ -86,6 +91,8 @@ function cutTo(fade: FadeState): void {
   const target = inkLookTarget();
   INK_LOOK.uInkMix.value = target.mix;
   INK_LOOK.uInkHatch.value = target.hatch;
+  INK_LOOK.uInkEngrave.value = target.engrave;
+  INK_LOOK.uInkHalftone.value = target.halftone;
   fade.start = -1;
   fade.holding = false;
   fade.holdKey = null;
@@ -101,11 +108,17 @@ function beginFade(fade: FadeState, durationMs: number, arrival: boolean): void 
   }
   fade.fromMix = INK_LOOK.uInkMix.value;
   fade.fromHatch = INK_LOOK.uInkHatch.value;
+  fade.fromEngrave = INK_LOOK.uInkEngrave.value;
+  fade.fromHalftone = INK_LOOK.uInkHalftone.value;
   fade.toMix = target.mix;
   fade.toHatch = target.hatch;
+  fade.toEngrave = target.engrave;
+  fade.toHalftone = target.halftone;
   fade.duration = durationMs;
   fade.arrival = arrival;
-  fade.start = fade.fromMix === fade.toMix && fade.fromHatch === fade.toHatch ? -1 : -2;
+  const still = fade.fromMix === fade.toMix && fade.fromHatch === fade.toHatch
+    && fade.fromEngrave === fade.toEngrave && fade.fromHalftone === fade.toHalftone;
+  fade.start = still ? -1 : -2;
 }
 
 export function InkLookDriver(): null {
@@ -118,8 +131,12 @@ export function InkLookDriver(): null {
   const fadeRef = useRef<FadeState>({
     fromMix: 0,
     fromHatch: 0,
+    fromEngrave: 0,
+    fromHalftone: 0,
     toMix: 0,
     toHatch: 0,
+    toEngrave: 0,
+    toHalftone: 0,
     start: -1,
     duration: INK_TOGGLE_MS,
     holding: false,
@@ -134,7 +151,14 @@ export function InkLookDriver(): null {
   useLayoutEffect(() => {
     const fade = fadeRef.current;
     const target = inkLookTarget();
-    setInkLookTarget({ mix: inkStyle !== 'off' ? 1 : 0, hatch: inkStyle === 'hatch' ? 1 : 0, weight: target.weight });
+    setInkLookTarget({
+      mix: inkStyle !== 'off' ? 1 : 0,
+      hatch: inkStyle === 'hatch' ? 1 : 0,
+      engrave: inkStyle === 'engrave' ? 1 : 0,
+      halftone: inkStyle === 'halftone' ? 1 : 0,
+      weight: target.weight,
+    });
+    rememberInkStyle(inkStyle);
     if (!lookSeen.current) {
       // The look a viewer opens on is drawn at once (unless a hand-off holds the drawing).
       lookSeen.current = true;
@@ -193,6 +217,8 @@ export function InkLookDriver(): null {
     if (getComfort() === 'still' || state.inkStyle !== 'off' || hasFirstFrame(trajectory)) return undefined;
     INK_LOOK.uInkMix.value = 1;
     INK_LOOK.uInkHatch.value = 0;
+    INK_LOOK.uInkEngrave.value = 0;
+    INK_LOOK.uInkHalftone.value = 0;
     fade.start = -1;
     fade.holding = true;
     fade.holdKey = trajectory;
@@ -246,6 +272,8 @@ export function InkLookDriver(): null {
       return {
         mix: INK_LOOK.uInkMix.value,
         hatch: INK_LOOK.uInkHatch.value,
+        engrave: INK_LOOK.uInkEngrave.value,
+        halftone: INK_LOOK.uInkHalftone.value,
         weight: INK_LOOK.uInkWeight.value,
         target: inkLookTarget(),
         holding: fade.holding,
@@ -260,7 +288,9 @@ export function InkLookDriver(): null {
   useEffect(() => () => {
     INK_LOOK.uInkMix.value = 0;
     INK_LOOK.uInkHatch.value = 0;
-    setInkLookTarget({ mix: 0, hatch: 0, weight: 1 });
+    INK_LOOK.uInkEngrave.value = 0;
+    INK_LOOK.uInkHalftone.value = 0;
+    setInkLookTarget({ mix: 0, hatch: 0, engrave: 0, halftone: 0, weight: 1 });
     lookSeen.current = false;
   }, []);
 
@@ -281,9 +311,13 @@ export function InkLookDriver(): null {
       const p = fadeProgress(now - fade.start, fade.duration);
       INK_LOOK.uInkMix.value = fade.fromMix + (fade.toMix - fade.fromMix) * p;
       INK_LOOK.uInkHatch.value = fade.fromHatch + (fade.toHatch - fade.fromHatch) * p;
+      INK_LOOK.uInkEngrave.value = fade.fromEngrave + (fade.toEngrave - fade.fromEngrave) * p;
+      INK_LOOK.uInkHalftone.value = fade.fromHalftone + (fade.toHalftone - fade.fromHalftone) * p;
       if (p >= 1) {
         INK_LOOK.uInkMix.value = fade.toMix;
         INK_LOOK.uInkHatch.value = fade.toHatch;
+        INK_LOOK.uInkEngrave.value = fade.toEngrave;
+        INK_LOOK.uInkHalftone.value = fade.toHalftone;
         fade.start = -1;
         fade.arrival = false;
       }

@@ -93,8 +93,11 @@ export type FilterShellPreset = 'haze' | 'cryo' | 'prism' | 'graphite';
 export type BackgroundBackdropShape = 'dome' | 'sphere' | 'cube';
 export type BackgroundBackdropPattern = 'image' | 'plain' | 'grid';
 export type ViewerControlMode = 'molecule' | 'scene' | 'export';
-/** The Illustrate look's shading: off (lit), flat colour, or hatched (scene tsl/inkLook.ts). */
-export type InkStyle = 'off' | 'flat' | 'hatch';
+/** The Illustrate look's shading: off (lit), flat colour, hatched, engraved or halftone dots (scene tsl/inkLook.ts). */
+export type InkStyle = 'off' | 'flat' | 'hatch' | 'engrave' | 'halftone';
+
+/** Each ink shading's letter in the `s=` state and the `ink=` short link (f and h since the first links). */
+export const INK_STYLE_LETTERS = { flat: 'f', hatch: 'h', engrave: 'e', halftone: 'd' } as const satisfies Record<Exclude<InkStyle, 'off'>, string>;
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -165,8 +168,9 @@ export function sanitizeBondProfile(value: unknown): BondProfile {
 }
 
 export function sanitizeInkStyle(value: unknown): InkStyle {
-  if (value === 'f' || value === 'flat') return 'flat';
-  if (value === 'h' || value === 'hatch') return 'hatch';
+  for (const [style, letter] of Object.entries(INK_STYLE_LETTERS)) {
+    if (value === letter || value === style) return style as InkStyle;
+  }
   return 'off';
 }
 
@@ -548,7 +552,8 @@ export interface AppState {
   fullSceneEffects: boolean;
   /**
    * The Illustrate look: toon fills and ink outlines on the impostors
-   * ('flat' colour or 'hatch'ed), or 'off' for the lit Specimen surface.
+   * ('flat' colour, 'hatch'ed, 'engrave'd lines or 'halftone' dots), or
+   * 'off' for the lit Specimen surface.
    * A Look, not toy motion: shared, saved and exported like any look.
    */
   inkStyle: InkStyle;
@@ -1159,7 +1164,7 @@ export function buildStateDelta(s: AppState): Record<string, unknown> {
   if (s.postprocessPreset !== DEFAULTS.postprocessPreset) delta.pp = s.postprocessPreset;
   if (r(s.postprocessIntensity) !== DEFAULTS.postprocessIntensity) delta.pi = r(s.postprocessIntensity);
   if (s.effectOverrides) delta.pfx = s.effectOverrides;
-  if (s.inkStyle !== 'off')                        delta.ink = s.inkStyle === 'hatch' ? 'h' : 'f';
+  if (s.inkStyle !== 'off')                        delta.ink = INK_STYLE_LETTERS[s.inkStyle];
   if (r(s.inkWeight) !== DEFAULTS.inkWeight)       delta.iw = r(s.inkWeight);
   if (r(s.propertyEmissionStrength) !== DEFAULTS.propertyEmissionStrength) delta.pe = r(s.propertyEmissionStrength);
   if (!s.ssao)                                     delta.ssao = 0;

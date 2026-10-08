@@ -351,9 +351,11 @@
             "enum": [
               "off",
               "flat",
-              "hatch"
+              "hatch",
+              "engrave",
+              "halftone"
             ],
-            "description": "The Illustrate look: toon fills and ink outlines (flat colour or hatched); off is the lit surface. Exports keep it."
+            "description": "The Illustrate look: toon fills and ink outlines (flat colour, hatched, engraved lines or halftone dots); off is the lit surface. Exports keep it."
           },
           "inkWeight": {
             "type": "number",
