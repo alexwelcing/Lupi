@@ -1,6 +1,5 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-10-03T18:20:30.639Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
