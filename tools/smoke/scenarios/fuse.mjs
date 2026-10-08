@@ -350,7 +350,7 @@ async function recordLook(page, h, act) {
 /** Still: the UI toggle cuts both ways (no fuse, no fade, no frame between the looks). */
 async function stillToggles(ctx, h, id, canvas, { lit, inked, touch, data }) {
   const { page, check, save } = ctx;
-  for (const [label, to, reference] of [['ink', 1, inked], ['lit', 0, lit]]) {
+  for (const [label, to] of [['ink', 1], ['lit', 0]]) {
     const rows = await recordLook(page, h, () => toggleLook(page, h, touch));
     const between = rows.filter((row) => row.mix > 0.001 && row.mix < 0.999).length;
     const burned = rows.some((row) => row.fuse || row.fading);
