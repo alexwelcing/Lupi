@@ -1,5 +1,136 @@
 # Changelog
 
+Since 2026-09-20 every merge to `main` deploys to lupi.live, so entries from
+then on are dated by the day they merged, with their pull requests.
+
+## 2026-10-05 - The native Apple app and /scale
+
+- **`apps/apple`**, a native SwiftUI + RealityKit app for iPhone Pro and iPad
+  Pro (`live.lupi.app`, iOS 26.0), replaces the Expo app (owner decision D1);
+  `apps/mobile` is frozen as a reference. M0–M2, M3a and M4 of
+  `docs/ar/plan.md` are built: the play session, keeping and shelves with the
+  Lupi account, building from atoms, the scale content (the salt ladder to a
+  googolplex, copper, diamond, the diamondoids), and personalities, sound and
+  polish. M3b is not started. (#123, #125)
+- Its four Swift packages (LupiKit, LupiScale, LupiGame, LupiCloud) build and
+  test on Linux. Nothing has been compiled against Apple's SDK or run on a
+  device; `docs/ar/status.md` is the owner's checklist.
+- **LupiScale**, the scale spine of `docs/ar/scale-spec.md`, agrees byte for
+  byte with the TypeScript reference in `packages/core/src/scale`. Its release
+  `buildCut` gate is 8 ms, twice a GitHub-hosted runner's time. (#124)
+- **`/scale`** on lupi.live draws the same records with exact counts
+  (`packages/ui/src/scale`). (#123)
+- **CI**: `.github/workflows/apple.yml` runs `swift test` in every package,
+  parses and type-checks the app against stand-ins for Apple's frameworks, and
+  runs `pnpm apple:check`.
+
+## 2026-10-03 - OMol25 front and centre, with inferred bonds
+
+- **`lupi-bonds.molecular.v1`** (`packages/core/src/bonds/`): a non-periodic
+  XYZ frame of at most 2,000 atoms that declares chemistry gets covalent
+  sticks, dashed metal coordination and dotted s-block ionic contacts,
+  labelled as Lupi's inference in the legend, Learn, the atom card, MCP and
+  exports. Everything else keeps `lupi-bonds.distance.v1`. (#122,
+  `docs/omol25-bonds-and-discovery.md`)
+- The edge writes each OMol25 row's charge, spin multiplicity and their
+  provenance into the XYZ comment, and the parser reads them into
+  `Frame.chemistry`.
+- OMol25 on the home shelf, the finder, the Library, the switcher, the palette
+  and the random pick, with 24 featured neutral-validation rows and their ink
+  drawings (`/datasets/omol25/featured.v1.json`).
+- MCP: `lupi.set_viewer { bondProfile, showBondContacts }`,
+  `lupi.viewer_state { includeBonds }` and the bond fields of `status()`. A
+  molecular GLB exports covalent bonds, coordination and contacts as three
+  meshes.
+- **ChatGPT plugin**: a public, read-only MCP endpoint at `/chatgpt/mcp` with
+  five tools over OMol25 and PubChem, and the embedded viewer
+  `ui://lupi/molecule-v2.html` (`apps/chatgpt-widget`, `plugins/lupi-live`).
+  (#119, `docs/chatgpt-plugin.md`)
+
+## 2026-10-03 - Wave 3: phone sheets, Instant Replay, Remix, Lupi Daily, Ink and Light
+
+- **Phone sheets** with Peek, Half and Full heights; the molecule eases into
+  the free area, display only. (#118,
+  `docs/brainstorm/2026-09-viewer-play/wave3-status.md`)
+- **Overlays ride display motion**: rings, labels, measurements, trails and
+  vector glyphs follow their atoms through the toys and are at rest in every
+  capture.
+- **Instant Replay**: a `replay=` link (about 0.5–1.5 KB, nothing stored) and
+  a 9:16 clip labelled "Illustrative"; `/play?sim=…` links to a gallery
+  molecule unfurl with its ink card.
+- **Remix codes and Foil**: `r1-` codes resolve to the same look on any
+  device from the frozen r1 catalog. One code in 24 is Foil (Holo, Gold leaf
+  or Pearl), which never reaches an export.
+- **Lupi Daily** at `/daily/`: one mystery molecule a day from 2026-10-01, six
+  clues, shares that never name the answer, and `/daily/text`
+  (`docs/daily.md`).
+- **The Illustrate look** (Ink and Sketch), ink tiles on the wall, the finder
+  and the Library, and Ink-to-Light (`docs/ink-and-light.md`).
+
+## 2026-10-03 - Wave 2: Quiet Idle, the grounded look and /m pages
+
+- **Quiet Idle**: the canvas draws only when something changes. (#117,
+  `docs/brainstorm/2026-09-viewer-play/wave2-status.md`)
+- **Tug, Burst and Heat** join Poke as one-finger verbs, and the atom under
+  the cursor glows on desktop.
+- **The look**: baked contact occlusion, a floor shadow under every molecule
+  up to 50,000 atoms, one softbox rig and Neutral tone mapping for Paper and
+  Studio. Exports, MCP images and thumbnails now carry AO, bloom, depth of
+  field, tone mapping and vignette.
+- **Phone**: the compact atom card and the Switch caption.
+- **`/m/<id>`**: zero-canvas molecule pages with Open Graph cards and ink
+  drawings. Environment HDRs are self-hosted.
+
+## 2026-10-02 - Wave 1, the Buckyball Minute, and graphic fidelity
+
+- **The Lupi camera rig** replaces OrbitControls: a 1:1 drag, a flick that
+  coasts and clicks into a named symmetry face, a tap that catches, a
+  double-tap that glides to an atom; `?controls=orbit` brings the old
+  controls back. (#115, `docs/brainstorm/2026-09-viewer-play/wave1-status.md`)
+- **The home page** opens on an ink C60 (SVG, zero canvases) and hands over
+  to the viewer with no splash.
+- **Display motion**: the arrival, the poke ripple, Scatter and Spin,
+  labelled "Illustrative · Reset" and never in an export.
+- **One Play pill** and the Play tray; Motion comfort (Standard, Gentle,
+  Still); sound and haptics off by default.
+- **Graphic fidelity**: near-native DPR budgeted by structure size, FXAA on
+  impostor edges, and supersampled, tiled raster exports. (#116)
+
+## 2026-09-29 - The R3F v10 port and Export V2
+
+- The viewer runs on React Three Fiber v10 and three r186's
+  `WebGPURenderer`, on WebGPU or on its WebGL2 backend (`?renderer=webgl2`
+  forces it). (#113, `docs/brainstorm/2026-09-viewer-play/port-status.md`)
+- Atoms and bonds are TSL ray-cast impostors, and every material and the post
+  pipeline (GTAO, bloom, depth of field, tone mapping, vignette) are TSL. No
+  GLSL remains.
+- The viewer opens on the sage plate; labels are canvas sprites and the axes
+  gizmo an SVG overlay.
+- **Export V2**: captures render into their own render targets, and WebGPU
+  and WebGL2 are separate execution classes (the same `specId`, a different
+  `rendererFingerprint` and `artifactKey`).
+- **Removed**: GPU Studio, immersive XR (USDZ Quick Look stays), `r3f-perf`
+  and `leva`.
+
+## 2026-09-22 to 2026-09-28 - /scan and a smarter switcher
+
+- **`/scan`**: a photo becomes molecules, with a vgpu swirl, Jev's sculpting
+  judgments, and SAM 3 and SAM 3D Objects through Hugging Face. (#108,
+  `docs/scan-pipeline.md`)
+- **The switcher**: the particles form what you search for (#109); Jev reads
+  property questions and code ranks by measured values, and
+  `lupi.search_molecules` gains library facets and sorting (#110,
+  `docs/library-facts.md`).
+- **Vision on Hugging Face**: the scanner's vision hop runs on Hugging Face
+  (`HF_TOKEN`) instead of Anthropic, and defaults to an instruct VLM. (#111,
+  #112)
+
+## 2026-09-21 - The atom card
+
+- The clicked-atom card lays its facts out as labelled tiles, stays a
+  constant size on screen, and docks as a full-width sheet under the header
+  on phones. (#106)
+
 ## [Unreleased] - Jev on the edge and the molecule switcher
 
 ### Added

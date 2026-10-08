@@ -1,5 +1,11 @@
 # GPU Studio (removed)
 
+> **Historical.** GPU Studio was removed by owner decision ("GPU Studio:
+> Remove it now", [decisions.md](brainstorm/2026-09-viewer-play/decisions.md)).
+> This page records what it was and why it went; only "What stays" describes
+> the current app. As of 2026-10-08 the snowglobe Look described at the end
+> has not been built.
+
 GPU Studio was removed in the React-Three-Fiber v10 / three r186 port
 (September 2026). It will come back as a **Look** in the main viewer rather
 than as a separate modal.
