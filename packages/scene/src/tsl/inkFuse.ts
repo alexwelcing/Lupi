@@ -246,8 +246,3 @@ export function lupiFuseMix(inkMix: Node, hop: Node, surface: Node): Node {
     return mixed;
   }) as N)();
 }
-
-/** True while a fuse runs (otherwise the impostors read `uInkMix` alone). */
-export function isInkFuseActive(): boolean {
-  return INK_FUSE.uFuseActive.value > 0;
-}
