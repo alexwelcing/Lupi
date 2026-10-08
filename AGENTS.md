@@ -857,9 +857,12 @@ browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
 Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
-first-minute, flick, foil, fuse, hero, ink, contour, morph, relay, settings, tap, toys, remix, replay, sheets, pages) run with the built-in
+first-minute, flick, foil, fuse, hero, ink, contour, morph, relay, settings, tap, toys, remix, replay, sheets, pages, comfort) run with the built-in
 scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
-`--reduced-motion` checks the Still comfort level.
+`--reduced-motion` checks the Still comfort level. `comfort` chooses
+Standard, Gentle and Still in the Play tray in one page and checks the
+Light Fuse's pace and the morph's length and travel at each
+(`__lupiPlay.state().motion.feel`).
 
 These are local/CI checks only. They do not prove a deployment, live API, or
 public-site revision; record those release-truth lanes separately.
