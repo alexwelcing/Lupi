@@ -14,7 +14,8 @@
  *    Halftone decodes at size with painted pixels. The MCP result carries no
  *    spec, so the shading's place in it is checked through identity: each
  *    shading gets its own specId (renderArtifactAdapter.test.ts checks
- *    `view.ink.shading` itself).
+ *    `view.ink.shading` itself). Desktop only: the spec and its pixels do
+ *    not depend on the device that asks.
  * Every settled view and export is saved for a human to look at; on a phone
  * the close-ups are also saved at the device's own pixels (`-device`), where
  * the hatching, engraving and halftone screens meet the display's grid.
@@ -172,6 +173,7 @@ export default {
       }
 
       // 2. Exports of the two print shadings (raster bonds fail closed: hide them).
+      if (phone) continue;
       const hidden = await setViewer(page, { showBonds: false });
       check(`${id}: bonds hide for the raster export`, hidden.ok, JSON.stringify(hidden.error));
       const specIds = new Set();
