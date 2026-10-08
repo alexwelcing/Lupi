@@ -14,9 +14,16 @@
  *   (a 3-octave fbm coverage and a feathered front remapped so that progress
  *   0 and 1 are exact). The noise is taken at the hit point in the molecule's
  *   own space, so it sticks to the balls and sticks while the camera turns.
- * - Per fragment, `lupiFuseMix` returns the ink mix: `uFuseFrom` where the
+ * - Per fragment, `lupiFuse` returns the ink mix: `uFuseFrom` where the
  *   front has not arrived, `uFuseTo` where it has passed. With `uFuseActive`
  *   at 0 it returns exactly `clamp(uInkMix, 0, 1)`, behind one uniform branch.
+ * - The ember: a thin band of the brand lime (FUSE_EMBER) rides the noisy
+ *   front, wider on its light side, and fades in and out with the run. It
+ *   reads the front's own progress, never time.
+ * - The post recipe follows the front: each impostor fragment leaves its mix
+ *   minus `uInkMix` in `LUPI_FUSE_OFFSET`, which the post chain's scene pass
+ *   writes to its content target (ui postprocess/backgroundMask.ts), so AO,
+ *   glow, defocus, tone mapping and vignette rest only where the ink is.
  *
  * The ink driver keeps `uInkMix` strictly between the two looks while a fuse
  * runs, so the impostors' uniform branches evaluate both surfaces; the mix
@@ -25,7 +32,8 @@
  * Truth rules: the fuse is a look change in progress, never an artifact. The
  * capture guard below turns it off inside every capture render, where the ink
  * look's own guard has already set `uInkMix` to the configured look, so no
- * export, thumbnail or MCP raster carries a half-fused molecule.
+ * export, thumbnail or MCP raster carries a half-fused molecule or an ember
+ * (the offset is then exactly 0).
  *
  * Module singletons, like inkLook's: one write reaches every atom and bond
  * impostor material.
@@ -38,22 +46,29 @@ import type { Node, TextureNode, UniformNode } from 'three/webgpu';
 import {
   Fn,
   If,
+  abs,
   cameraWorldMatrix,
   clamp,
+  color,
+  float,
   int,
   ivec2,
   max,
   mix,
   modelWorldMatrixInverse,
   mx_noise_float,
+  property,
+  select,
   smoothstep,
   texture,
   textureLoad,
   uniform,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl';
 import { registerCaptureGuard } from '../captureGuards';
+import { ATOM_GLOW_COLOR } from './atomGlow';
 
 // Graph-building code works on untyped nodes (spike G13).
 type N = any;
@@ -116,6 +131,32 @@ export const INK_FUSE: InkFuseUniforms = {
 };
 
 const F = INK_FUSE as unknown as Record<keyof InkFuseUniforms, N>;
+
+/**
+ * The ember (tuning points): a thin band of the brand lime on the front.
+ * Widths are in front half-widths (`uFuseEdge`), so the band scales with
+ * the edge: narrow on the ink side, wider on the side the light is on.
+ */
+export const FUSE_EMBER = {
+  color: ATOM_GLOW_COLOR,
+  /** Reach of the band into the light, and into the ink, in front half-widths. */
+  lightWidth: 0.7,
+  inkWidth: 0.22,
+  /** How far the band's core turns toward the lime (0..1). */
+  strength: 0.7,
+  /** The lime's brightness at the core: a little above the surface, so it reads as a glow. */
+  glow: 1.2,
+  /** The band fades in over the run's first part and out over its last (progress). */
+  fade: 0.12,
+} as const;
+
+/**
+ * Each impostor fragment's ink mix minus `uInkMix`: 0 except where a Light
+ * Fuse's front holds the fragment ahead of or behind the look's fade. Read
+ * by the post chain's content output (ui postprocess/backgroundMask.ts);
+ * every other material reads the placeholder, 0.
+ */
+export const LUPI_FUSE_OFFSET = property('float', 'LupiFuseOffset', float(0));
 
 // ─── CPU: the hop textures ─────────────────────────────────────────────
 
@@ -224,14 +265,18 @@ function fbmCoverage(p: N): N {
 }
 
 /**
- * The ink mix for one fragment. `hop` is read only while a fuse runs (pass
- * an unmaterialized node: it is built inside the branch). `surface` is the
- * fragment in the object's space (`lupiFuseSurfacePoint`). Idle, it is
- * exactly `clamp(inkMix, 0, 1)`.
+ * The Light Fuse at one fragment: x, the ink mix; y, the ember (0 off the
+ * front, up to FUSE_EMBER.strength on it). `hop` is read only while a fuse
+ * runs (pass an unmaterialized node: it is built inside the branch).
+ * `surface` is the fragment in the object's space (`lupiFuseSurfacePoint`).
+ * Idle, the mix is exactly `clamp(inkMix, 0, 1)` and the ember 0. It also
+ * leaves the fragment's offset from `inkMix` in LUPI_FUSE_OFFSET.
  */
-export function lupiFuseMix(inkMix: Node, hop: Node, surface: Node): Node {
+export function lupiFuse(inkMix: Node, hop: Node, surface: Node): Node {
   return (Fn(() => {
-    const mixed = clamp(inkMix as N, 0.0, 1.0).toVar();
+    const look = clamp(inkMix as N, 0.0, 1.0).toVar();
+    const mixed = look.toVar();
+    const ember = float(0).toVar();
     If(F.uFuseActive.greaterThan(0.0), () => {
       // Coverage: when the front reaches this fragment, 0 (first) to 1 (last).
       // The hop orders it; the noise breaks up the edge. Both lie in [0, 1].
@@ -239,10 +284,27 @@ export function lupiFuseMix(inkMix: Node, hop: Node, surface: Node): Node {
       const coverage = mix(clamp(hop as N, 0.0, 1.0), noise, clamp(F.uFuseNoise, 0.0, 1.0));
       // NoiseDissolve's front, remapped by ±edge so that 0 and 1 are exact.
       const edge = max(F.uFuseEdge, 1e-4).toVar();
-      const front = F.uFuseFront.mul(edge.mul(2.0).add(1.0)).sub(edge);
+      const front = F.uFuseFront.mul(edge.mul(2.0).add(1.0)).sub(edge).toVar();
       const waiting = smoothstep(front.sub(edge), front.add(edge), coverage);
       mixed.assign(clamp(mix(F.uFuseTo, F.uFuseFrom, waiting), 0.0, 1.0));
+      // The ember: how far past the front toward the light this fragment lies,
+      // in edges (the light is behind the front when it burns toward light).
+      const towardLight = select(F.uFuseTo.lessThan(F.uFuseFrom), float(-1.0), float(1.0));
+      const ahead = coverage.sub(front).div(edge).mul(towardLight).toVar();
+      const width = select(ahead.greaterThan(0.0), float(FUSE_EMBER.lightWidth), float(FUSE_EMBER.inkWidth));
+      const band = float(1).sub(smoothstep(0.0, 1.0, abs(ahead).div(width)));
+      const run = smoothstep(0.0, FUSE_EMBER.fade, F.uFuseFront)
+        .mul(float(1).sub(smoothstep(1.0 - FUSE_EMBER.fade, 1.0, F.uFuseFront)));
+      ember.assign(band.mul(run).mul(FUSE_EMBER.strength));
     });
-    return mixed;
+    LUPI_FUSE_OFFSET.assign(mixed.sub(look));
+    return vec2(mixed, ember);
   }) as N)();
+}
+
+const EMBER_RGB = new THREE.Color(FUSE_EMBER.color);
+
+/** The ember over a finished fragment colour (exactly `rgb` where it is 0). */
+export function lupiFuseEmber(rgb: Node, ember: Node): Node {
+  return mix(rgb as N, (color(EMBER_RGB) as N).mul(FUSE_EMBER.glow), ember as N);
 }

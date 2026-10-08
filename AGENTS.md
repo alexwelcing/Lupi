@@ -221,13 +221,15 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   `ink=f|h|e|d|c`; a Foil finish steps
   aside under ink (a drawing carries no foil); while ink is on the post
   recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
-  stays); exports draw it and their spec records `view.ink`. A toggle from
+  stays), and while the look changes it rests pixel by pixel only where the
+  ink is; exports draw it and their spec records `view.ink`. A toggle from
   the tray, the palette or `I`, and Ink-to-Light, run as a Light Fuse
   (about 1.1 s): the change starts at the selected, hovered or centre-front
-  atom and travels along the drawn bonds with a burning-paper edge
-  (`scene/src/tsl/inkFuse.ts`, `ui/src/ink/fuseHops.ts`); other changes,
-  `lupi.set_viewer { inkStyle }` included, fade (480 ms). Every capture
-  renders the configured look, never a fade or a fuse.
+  atom and travels along the drawn bonds with a burning-paper edge and a
+  thin lime ember (`scene/src/tsl/inkFuse.ts`, `ui/src/ink/fuseHops.ts`);
+  other changes, `lupi.set_viewer { inkStyle }` included, fade (480 ms).
+  Every capture renders the configured look, never a fade, a fuse or an
+  ember.
   A screen-space contour (`packages/ui/src/postprocess/inkContour.ts`) adds
   the lines an impostor cannot draw: where balls meet or a stick enters a
   ball, a line on the near side of every depth step, and a heavier outer

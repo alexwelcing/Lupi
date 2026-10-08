@@ -21,15 +21,21 @@
  *   shows: the look is on, or the live drawing is still fading out or
  *   handing over (Ink-to-Light). It fades with the drawing (a uniform).
  *   `?contour=0` leaves it out (a debug switch, inkContour.ts).
+ * - the recipe follows the drawing: at rest in ink it steps aside (the ink
+ *   recipe's cheaper graph); while the look changes (a fade, a Light Fuse,
+ *   Ink-to-Light) the lit recipe's graph stays, and every stage rests pixel
+ *   by pixel where the ink is (`inkFade`), so the part the front has not
+ *   reached keeps its look.
  */
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useStore as useFiberStore } from '@react-three/fiber/webgpu';
-import { INK_LOOK, LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
+import { INK_FUSE, INK_LOOK, LUPI_JOB, LUPI_PHASE } from '@atlas/scene';
 import type { Node, PassNode, Vector3 } from 'three/webgpu';
 import { useStore } from '../store';
 import { getDeviceTier, type DeviceTier } from '../deviceCapabilities';
+import { glidesAnimate } from '../motion/comfort';
 import { useRenderPipeline } from '../render/tsl';
-import { resolveActivePostprocess } from './controls';
+import { inkPhase, resolveActivePostprocess, type InkPhase } from './controls';
 import { postStructure, postStructureKey, scenePassSamples, type PostprocessPresetConfig } from './presets';
 import { applyPostParams, autofocus, buildPostChain, type PostChain } from './postPipeline';
 import { inkContourSwitchedOn } from './inkContour';
@@ -72,6 +78,31 @@ function useInkDrawn(ink: boolean): boolean {
   return ink || drawn;
 }
 
+/**
+ * Where the Illustrate look stands for the recipe (controls.ts `inkPhase`),
+ * read from the live drawing on drawn frames, after the ink driver's
+ * uniforms. A look chosen in the store counts as changing from the render
+ * that brings it (the driver starts its fade or fuse just after), so the
+ * recipe never switches ahead of the drawing; Still cuts, so there the new
+ * look is at rest at once.
+ */
+function useInkPhase(ink: boolean): InkPhase {
+  const [phase, setPhase] = useState<InkPhase>(() => (ink ? 'ink' : 'lit'));
+  const latest = useRef(phase);
+  useFrame(
+    () => {
+      const next = inkPhase(ink, INK_LOOK.uInkMix.value, INK_FUSE.uFuseActive.value > 0);
+      if (next === latest.current) return;
+      latest.current = next;
+      setPhase(next);
+    },
+    { phase: LUPI_PHASE.overlays },
+  );
+  const settled: InkPhase = ink ? 'ink' : 'lit';
+  if (phase === 'changing' || phase === settled) return phase;
+  return glidesAnimate() ? 'changing' : settled;
+}
+
 export function ScenePostprocessing() {
   const presetId = useStore((s) => s.postprocessPreset);
   const intensity = useStore((s) => s.postprocessIntensity);
@@ -81,6 +112,8 @@ export function ScenePostprocessing() {
   const ink = useStore((s) => s.inkStyle !== 'off');
   const deviceTier = useMemo(getDeviceTier, []);
   const contour = useInkDrawn(ink) && inkContourSwitchedOn();
+  const phase = useInkPhase(ink);
+  const inkAtRest = phase === 'ink';
 
   const config = useMemo(
     () => resolveActivePostprocess({
@@ -89,12 +122,19 @@ export function ScenePostprocessing() {
       overrides,
       playing,
       reduced: !fullEffects && isReducedPostTier(deviceTier),
-      ink,
+      ink: inkAtRest,
     }),
-    [presetId, intensity, overrides, playing, fullEffects, deviceTier, ink],
+    [presetId, intensity, overrides, playing, fullEffects, deviceTier, inkAtRest],
   );
 
-  return <LupiPostPipeline config={config} contour={contour} aoResolutionScale={aoResolutionScaleFor(deviceTier)} />;
+  return (
+    <LupiPostPipeline
+      config={config}
+      contour={contour}
+      inkFade={phase === 'changing'}
+      aoResolutionScale={aoResolutionScaleFor(deviceTier)}
+    />
+  );
 }
 
 export interface LupiPostPipelineProps {
@@ -102,6 +142,8 @@ export interface LupiPostPipelineProps {
   config: PostprocessPresetConfig;
   /** Ink the Illustrate look's contour (inkContour.ts). */
   contour?: boolean;
+  /** The look is changing between lit and ink: rest each stage where the pixel is inked (PostStructure.inkFade). */
+  inkFade?: boolean;
   /** GTAO resolution scale (1 = full). */
   aoResolutionScale?: number;
   /** Called after each graph build (tests count rebuilds). */
@@ -113,9 +155,9 @@ export interface LupiPostPipelineProps {
  * default render through the pipeline; unmounting it restores the default
  * render (`reset()`).
  */
-export function LupiPostPipeline({ config, contour = false, aoResolutionScale = 1, onBuild }: LupiPostPipelineProps) {
+export function LupiPostPipeline({ config, contour = false, inkFade = false, aoResolutionScale = 1, onBuild }: LupiPostPipelineProps) {
   const store = useFiberStore();
-  const structure = postStructure(config, contour);
+  const structure = postStructure(config, contour, inkFade);
   const key = `${postStructureKey(structure)}|ao×${aoResolutionScale}${HMR_TOKEN}`;
   const samples = scenePassSamples(config, contour);
 
