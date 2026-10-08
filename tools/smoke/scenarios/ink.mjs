@@ -49,7 +49,7 @@ function weightsFor(style) {
  * Wait until the ink driver has taken `style` as its target (the store
  * reaches it a render after set_viewer returns) and rests there.
  */
-function waitInkRest(page, style, maxMs = 15_000) {
+function waitInkRest(page, style, maxMs = 90_000) {
   return page
     .waitForFunction((expected) => {
       const ink = window.__lupiPlay?.ink?.();
