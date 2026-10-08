@@ -32,8 +32,9 @@
  *   __lupiPlay.ink()    → { mix, hatch, weight, target, holding, fading, arrival, fuse }:
  *                         the Illustrate look's live weights and Ink-to-Light state;
  *                         fuse is { running, seed, progress, mode, held } (the Light
- *                         Fuse); ink('hold', p) holds a running fuse's front at p,
- *                         ink('release') lets it burn on
+ *                         Fuse); ink('hold', p) holds the fuse's front at p (the
+ *                         next fuse's when none runs), ink('release') lets it burn
+ *                         on, ink('pace', k) runs fuses k times slower
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.

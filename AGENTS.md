@@ -195,7 +195,10 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   `burst(atomIndex)`, `tug(atomIndex, [dx, dy, dz], holdMs)`,
   `heat(level)`, `replay()` and `remix()` appear once the viewer has
   registered them; `ink()` reports the Illustrate look's live weights and
-  Ink-to-Light state. It never writes molecule data.
+  Ink-to-Light state, with `fuse: { running, seed, progress, mode, held }`
+  (`mode` `'graph'`, `'spatial'` or `'uniform'`), and `ink('hold', p)`,
+  `ink('release')` and `ink('pace', k)` hold or slow the Light Fuse for a
+  software renderer. It never writes molecule data.
 - **The Illustrate look (Ink and Light).** Looks → Illustrate (flat colour on
   the sage plate) or Sketch (hatched, on the paper plate), the Play tray's
   Look row (Lit · Ink · Remix ⟳), the palette or the `I` key draw the molecule like the
@@ -208,8 +211,13 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   replay and Remix links add a top-level `ink=f|h`; a Foil finish steps
   aside under ink (a drawing carries no foil); while ink is on the post
   recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
-  stays); exports draw it and their spec records `view.ink`. Changes fade
-  (480 ms); every capture renders the configured look, never a fade.
+  stays); exports draw it and their spec records `view.ink`. A toggle from
+  the tray, the palette or `I`, and Ink-to-Light, run as a Light Fuse
+  (about 1.1 s): the change starts at the selected, hovered or centre-front
+  atom and travels along the drawn bonds with a burning-paper edge
+  (`scene/src/tsl/inkFuse.ts`, `ui/src/ink/fuseHops.ts`); other changes,
+  `lupi.set_viewer { inkStyle }` included, fade (480 ms). Every capture
+  renders the configured look, never a fade or a fuse.
   Ink-to-Light: a molecule opened from an ink drawing (the hero, a molecule
   page, an ink tile on the wall or in the finder) first draws in ink at the
   drawing's pose, then the light comes on; any touch completes it and Still
@@ -781,7 +789,7 @@ browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
 Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
-first-minute, flick, hero, relay, settings, tap, toys) run with the built-in
+first-minute, flick, fuse, hero, relay, settings, tap, toys) run with the built-in
 scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
 `--reduced-motion` checks the Still comfort level.
 
