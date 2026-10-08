@@ -206,10 +206,15 @@ async function closeSwitcher(page, touch) {
 
 /**
  * The fuse's run as the drawn frames saw it. The front steps on the wall
- * clock, once per drawn frame, from the frame it starts on (progress 0) to
- * the first frame at or past its whole run, so the run lies between the
- * last burning frame and the frame it ended on, whatever the frame rate:
- * `{ atLeast, below }` ms bounds it (null when the frames do not show it).
+ * clock once per drawn frame, from the frame it starts on (progress 0) to
+ * the first frame at or past its whole run. The recorder knows when each
+ * frame finished (`frameDemand.lastFrameAgoMs`), not when the fuse stepped
+ * at its start, and a frame can take seconds between the two (the first
+ * ink frame builds the contour pass). So the run is bounded by whole
+ * frames: it is longer than the start frame's end to the end of the frame
+ * before the last burning one, and shorter than the end of the frame
+ * before the start to the end of the frame it ended on. `{ atLeast, below }`
+ * in ms, null when the frames do not show it.
  */
 function fuseRun(log) {
   const frames = [];
@@ -229,11 +234,13 @@ function fuseRun(log) {
     }
   }
   if (end < 0) return { atLeast: null, below: null, frames: frames.length };
-  const start = frames[first].frameAt;
+  const lastBurning = end - 1;
   return {
-    atLeast: Math.round(frames[end - 1].frameAt - start),
-    below: Math.round(frames[end].frameAt - start),
+    atLeast: lastBurning > first ? Math.round(frames[lastBurning - 1].frameAt - frames[first].frameAt) : 0,
+    below: Math.round(frames[end].frameAt - frames[Math.max(0, first - 1)].frameAt),
     frames: end - first + 1,
+    // Per frame from the start: ms since the start frame ended, and the front.
+    trace: frames.slice(Math.max(0, first - 1), end + 1).map((row) => [Math.round(row.frameAt - frames[first].frameAt), row.fuse?.running ? Math.round(row.fuse.progress * 1000) / 1000 : null]),
   };
 }
 
