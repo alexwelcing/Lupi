@@ -62,6 +62,8 @@ Options:
                  pnpm --filter @atlas/web build first) or dev (Vite dev server).
   --url=URL      Test an already-running app instead.
   --chromium=P   Chromium binary (default: Chromium 1194 when installed).
+  --export-timeout=MS
+                 timeoutMs for each lupi.export_asset (default 300000).
 `);
   process.exit(0);
 }
@@ -77,6 +79,11 @@ if (!['webgpu', 'webgl2', 'both'].includes(backendArg)) {
 }
 const BACKENDS = backendArg === 'both' ? ['webgpu', 'webgl2'] : [backendArg];
 const serverMode = args.server === 'dev' ? 'dev' : 'dist';
+// The tool's default export budget (30 s for a raster) is sized for a GPU. On
+// SwiftShader in a shared 4-CPU container a 256 px capture took 10 s to over
+// 90 s as the machine's load rose, so every export here asks for this budget
+// unless its request names its own. The checks are about the bytes, not speed.
+const EXPORT_TIMEOUT_MS = Number(args['export-timeout'] ?? 300_000);
 
 let server = null;
 let browser = null;
@@ -532,12 +539,17 @@ async function executeToolAndSettle(page, label, tool, toolArguments) {
   return response;
 }
 
+/** The request with the verifier's export budget, unless it names its own. */
+function withExportTimeout(request) {
+  return { ...request, arguments: { timeoutMs: EXPORT_TIMEOUT_MS, ...request.arguments } };
+}
+
 async function expectAssetRejection(page, label, request, messagePattern) {
   const response = await page.evaluate(async (req) => {
     const driver = window.__lupiViewerMcp;
     if (!driver?.ready) throw new Error('MCP driver is not ready');
     return driver.execute(req);
-  }, request);
+  }, withExportTimeout(request));
   const message = response.error?.message ?? '';
   check(
     label,
@@ -552,7 +564,7 @@ async function runAssetFlow(page, label, request, options = {}) {
     const driver = window.__lupiViewerMcp;
     if (!driver?.ready) throw new Error('MCP driver is not ready');
     return driver.execute(req);
-  }, request);
+  }, withExportTimeout(request));
 
   if (!response.ok) {
     if (request.arguments?.format === 'usdz') {
@@ -1029,10 +1041,12 @@ async function runLane(backend) {
     }
 
     // Viewer screenshot (raw DOM) so a human can sanity-check the live frame
-    // the assets are taken from.
+    // the assets are taken from. It waits for a composited frame, which a
+    // loaded software GPU can take longer than Playwright's 30 s default to give.
     const screenshotPath = join(ARTIFACTS, 'viewer-screenshot.png');
-    await page.screenshot({ path: screenshotPath, fullPage: false });
-    check('viewer screenshot captured', existsSync(screenshotPath));
+    const shot = await page.screenshot({ path: screenshotPath, fullPage: false, timeout: 180_000 })
+      .then(() => null, (error) => error?.message ?? String(error));
+    check('viewer screenshot captured', !shot && existsSync(screenshotPath), shot ?? '');
   } finally {
     if (!args['keep-server']) await browser.close().catch(() => {});
     browser = null;
@@ -1048,7 +1062,13 @@ try {
 
   const laneArtifacts = {};
   for (const backend of BACKENDS) {
-    laneArtifacts[backend] = await runLane(backend);
+    // One lane's exception must not hide the other lane's result.
+    try {
+      laneArtifacts[backend] = await runLane(backend);
+    } catch (err) {
+      log(`${lanePrefix}EXCEPTION ${err?.message ?? String(err)}`);
+      check('lane completes without an exception', false, err?.message ?? String(err));
+    }
   }
   lanePrefix = '';
   ARTIFACTS = ARTIFACTS_ROOT;
