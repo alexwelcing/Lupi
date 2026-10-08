@@ -1255,6 +1255,8 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         active: M.uMotionWeight.value > 0,
         weight: M.uMotionWeight.value,
         arrival: driver.arrival ? `${driver.arrival.armed ? 'armed ' : ''}${MODE_NAMES[driver.arrival.mode]}` : null,
+        // The arrival's length (s) and travel (1 Standard, 0.5 Gentle) while one is live.
+        feel: driver.arrival ? { duration: M.uArrivalDuration.value, weight: M.uArrivalWeight.value } : null,
         // The morph armed or running (else null) with its plan's counts: new
         // atoms from an old atom of their element, of another, budded.
         morph: driver.morph

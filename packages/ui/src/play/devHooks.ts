@@ -37,7 +37,9 @@
  *                         on, ink('pace', k) runs fuses k times slower
  *   __lupiPlay.morph()  → plays the last switch's morph arrival again while its
  *                         molecule is on screen ({ atoms, previousAtoms } or null);
- *                         state().motion.morph reports a running morph's counts
+ *                         state().motion.morph reports a running morph's counts,
+ *                         and state().motion.feel a live arrival's { duration, weight }
+ *                         (seconds; travel 1 at Standard, 0.5 at Gentle)
  *
  * It only reads state and triggers the same intents as the UI; it never
  * writes molecule data.
