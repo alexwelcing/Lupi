@@ -124,6 +124,7 @@ export type { DisplayMotionTwinState, TwinTermScales, TwinVec3 } from './tsl/dis
 export * from './tsl/atomGlow';
 export * from './tsl/atomFoil';
 export * from './tsl/inkLook';
+export * from './tsl/inkFuse';
 
 // Shared constants
 export {

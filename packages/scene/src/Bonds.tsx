@@ -72,6 +72,7 @@ import {
   type BondImpostorUniforms,
 } from './tsl/bondImpostorMaterial';
 import { useLupiCommitFrames } from './frameDemand';
+import { setInkFuseBondPairs } from './tsl/inkFuse';
 
 /**
  * Content-equality check for bond-pair Int32Arrays. Used by the bond-
@@ -1139,6 +1140,14 @@ export function Bonds({
       markInstancedAttributeUpdateRange(endTarget, drawCount * 3);
     }
   }, [bondPairs, bondKinds, bondCount, capacity, geometry, frame, nextFrame, canInterpolateToNextFrame, periodic, cellBounds, ensureTargetAttributes, topologyMode, tolerance]);
+
+  // ─── The Light Fuse: bond instances read their atoms' hops ────────
+  // Instance i draws pairs[2i], pairs[2i + 1] (tsl/inkFuse.ts). No bonds
+  // drawn once the layer unmounts.
+  useLayoutEffect(() => {
+    setInkFuseBondPairs(bondPairs);
+  }, [bondPairs]);
+  useEffect(() => () => setInkFuseBondPairs(null), []);
 
   // ─── Color + radius upload — runs on bond-set or scheme changes ───────
   // Bond-stability cache: a fresh Int32Array with identical contents (same
