@@ -771,6 +771,8 @@ export function McpViewerHarness() {
 
   const responseText = useMemo(
     () => JSON.stringify(response ?? { status: 'ready', state: readViewerState() }, null, 2),
+    // readViewerState() reads the store, not these: they are listed so the idle panel re-reads it when they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [response, file?.name, showBonds, atomScale, loadedAtomCount]
   );
 

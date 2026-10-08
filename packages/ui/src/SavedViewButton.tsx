@@ -109,7 +109,8 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
   // updates it in place instead of quietly forking "<file> Publish".
   const ownsActiveView = Boolean(activeSavedView && user && activeSavedView.ownerId === user.uid);
 
-  const defaultTitle = useMemo(() => defaultSavedViewTitle(file), [file?.name]);
+  // A string: a new file with the same name leaves it, and the draft, as they are.
+  const defaultTitle = useMemo(() => defaultSavedViewTitle(file), [file]);
   const cleanSlug = slugifySavedViewTitle(slug || title || defaultTitle);
   const urlPreview = makeSavedViewUrl(cleanSlug);
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
@@ -173,8 +174,12 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     };
   }, [open, close]);
 
+  // A draft kept across sign-in opens once an account and a molecule are both
+  // here: keyed on who and which file, not on a refreshed user or file object.
+  const userId = user?.uid ?? null;
+  const fileName = file?.name ?? null;
   useEffect(() => {
-    if (!user || !file) return;
+    if (userId === null || fileName === null) return;
     const pending = readPendingDraft();
     if (!pending) return;
     setTitle(pending.title);
@@ -183,7 +188,7 @@ export function SavedViewButton({ compact = false }: { compact?: boolean }) {
     setOpen(true);
     setStatus('Ready to save.');
     localStorage.removeItem(PENDING_SAVE_KEY);
-  }, [user?.uid, file?.name]);
+  }, [userId, fileName]);
 
   // TanStack Query for recent saved views (caching, loading states, refetch on save)
   const recentViewsQuery = useQuery({

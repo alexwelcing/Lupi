@@ -18,7 +18,7 @@
  * back at rest when it ends. Region labels (sphere centroids) stay put.
  */
 
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Html, Billboard } from '@react-three/drei/webgpu';
 import { LupiText } from './labels/LupiText';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
@@ -79,30 +79,37 @@ export function KnowledgeLabelsLayer({
   const [renderedCount, setRenderedCount] = useState(0);
   const lastReportRef = useRef(0);
 
-  const computeVisible = (camPos: THREE.Vector3) =>
-    selectVisibleLabels({
-      labels,
-      visibleKinds,
-      visible,
-      threshold,
-      maxCount,
-      cullDistance,
-      cameraPosition: [camPos.x, camPos.y, camPos.z],
-      hoveredAtom,
-    });
-
-  const reportLabelPerf = (count: number) => {
-    if (typeof window !== 'undefined') {
-      const w = window as any;
-      w.__atlas = w.__atlas ?? {};
-      w.__atlas.labelPerf = {
-        renderedLabels: count,
+  // Memoized on their inputs, so the effect below reruns exactly when one changes.
+  const computeVisible = useCallback(
+    (camPos: THREE.Vector3) =>
+      selectVisibleLabels({
+        labels,
+        visibleKinds,
+        visible,
+        threshold,
         maxCount,
         cullDistance,
-        timestamp: performance.now(),
-      };
-    }
-  };
+        cameraPosition: [camPos.x, camPos.y, camPos.z],
+        hoveredAtom,
+      }),
+    [labels, visibleKinds, visible, threshold, maxCount, cullDistance, hoveredAtom],
+  );
+
+  const reportLabelPerf = useCallback(
+    (count: number) => {
+      if (typeof window !== 'undefined') {
+        const w = window as any;
+        w.__atlas = w.__atlas ?? {};
+        w.__atlas.labelPerf = {
+          renderedLabels: count,
+          maxCount,
+          cullDistance,
+          timestamp: performance.now(),
+        };
+      }
+    },
+    [maxCount, cullDistance],
+  );
 
   // Recompute immediately when non-camera dependencies change.
   useEffect(() => {
@@ -115,7 +122,7 @@ export function KnowledgeLabelsLayer({
     reportLabelPerf(count);
     lastCamRef.current.copy(camPosRef.current);
     lastHoverRef.current = hoveredAtom;
-  }, [labels, visibleKinds, visible, threshold, maxCount, cullDistance, hoveredAtom, camera]);
+  }, [computeVisible, reportLabelPerf, hoveredAtom, camera]);
 
   // Recompute as the camera moves so distance culling stays accurate. A
   // camera at rest recomputes nothing (Quiet Idle: no state churn, so a
