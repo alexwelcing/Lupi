@@ -30,7 +30,7 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
   - Engraving and halftone are ported by hand into TSL from [Shaders](https://shaders.com) (MIT): the Engraving component's line plates and the Halftone component's dot plate. Their tone is the drawing's own light value (half-Lambert × baked occlusion), not screen brightness. Strokes and dots are laid out in full-picture pixels, like the hatching, so an export keeps the screen's weight and its tiles meet without seams. Neither reads time: a still view draws no frames.
   - **Depth**: the far side of the molecule fades toward the plate (up to 40 %), as the drawings fade their back atoms.
 - **Transitions**: switching between ink and light from the tray, the palette or `I` runs as a Light Fuse (below), about a second. A change from anywhere else (an agent's `lupi.set_viewer`, the Looks grid, a link) fades over about half a second, and so does switching between any two drawings (each has its own weight).
-- **Effects**: while ink is on, the effect recipe rests (no AO, glow, focus, vignette or tone mapping), so the flat colours and the ink reach the screen exactly. Turning ink off brings the recipe back unchanged. The contour runs while the drawing shows (the look is on, or still fading out, or Ink-to-Light is handing over) and fades with it.
+- **Effects**: while ink is on, the effect recipe rests (no AO, glow, focus, vignette or tone mapping), so the flat colours and the ink reach the screen exactly. Turning ink off brings the recipe back unchanged. While the look changes (a fade, a Light Fuse, Ink-to-Light's hand-off) the recipe follows the drawing pixel by pixel: it rests only where the ink is, so the part not yet reached keeps its look. The contour runs while the drawing shows (the look is on, or still fading out, or Ink-to-Light is handing over) and fades with it, pixel by pixel too.
 - **A new molecule** keeps the Illustrate look.
 - **Sharing**: share links, saved views and settings remembered on the device all keep the look. In the `s=` state and the short `ink=` link the drawings are `f` (flat), `h` (hatched), `e` (engraved) and `d` (halftone dots); `f` and `h` read as before.
 - **Exports** draw it: PNG, JPEG, WebP, thumbnails and MCP images. Line weight follows the export's size, so a 2160 px export has the screen's weight. The contour is drawn once over the whole assembled picture, so a tiled export shows no seam. Over a transparent background it inks the molecule only.
@@ -52,6 +52,8 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 
 - **What it is**: the change between ink and light starts at one atom and travels through the molecule along its bonds, like a lit fuse. Each atom takes the new look when the front reaches its hop distance from the seed, and on every bond the front runs down the stick from one atom to the other.
 - **The edge** is broken up like burning paper: a soft front pushed about by three octaves of noise that sit on the balls and sticks themselves, so the edge does not swim when the molecule turns (after the Shaders NoiseDissolve).
+- **The ember**: a thin line of the brand lime (`#d5ef9c`) burns along the front, on the noisy edge itself. It reaches further into the light than into the ink, so it glows on the side the light is on, whichever way the fuse burns. It fades in over the run's first eighth and out over its last. It reads the front's progress only, never a clock, so a held fuse stands still.
+- **The effects follow the front**: the part the front has not reached keeps its look. Ink coming in leaves the lit part its AO, glow, vignette and tone mapping until the front gets there; the light coming on leaves the waiting ink exactly as drawn. The inked part neither glows nor takes glow from the lit part.
 - **The seed**:
   - Ink-to-Light: the atom nearest you at the centre of the screen.
   - The tray, the palette or `I`: the selected atom, else the atom under the pointer, else the centre-front atom.
@@ -63,11 +65,12 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
   - Above 250,000 atoms, the whole molecule crossfades as before.
 - **Changing your mind**: a second toggle while the fuse burns turns its front round, back toward the seed.
 - **Motion**: Still cuts it (no fuse). Gentle runs it at the same pace: it is a change of look, not motion. Any touch, click, wheel or key completes Ink-to-Light.
-- **Quiet Idle**: the loop stays awake only while a fuse burns.
+- **Quiet Idle**: the loop stays awake only while a fuse burns. When it settles, the recipe moves to the look's own graph, and the picture does not change.
 
 ## Truth rules
 
-- **A Look, not toy motion.** Illustrate never moves an atom and never changes data, and exports carry it. The fades, the Light Fuse and the hand-off drawing are display-only: every capture renders the configured look (a capture guard sets the target value and turns the fuse off), never a half-faded or half-fused one.
+- **A Look, not toy motion.** Illustrate never moves an atom and never changes data, and exports carry it. The fades, the Light Fuse, its ember and the hand-off drawing are display-only: every capture renders the configured look (a capture guard sets the target value and turns the fuse off), never a half-faded or half-fused one, and never an ember.
+- **The recipe at rest is unchanged.** Exports never go through the live post chain, and at rest the live chain is the look's own graph (the cheaper ink graph under the drawing), so an export's bytes do not depend on the fuse or on how the recipe follows it.
 - **Agents see no fuse.** `lupi.set_viewer { inkStyle }` crossfades as before; only the UI's own toggles and Ink-to-Light fuse.
 - **Artifact identity.** The spec records `view.ink` only while the look is on, so every lit spec keeps its `specId`. `view.ink` requires `view.postprocess` to be `raw-scene`.
 - **The contour in the spec.** `view.ink.contour` is `{ pipeline: 'ink-contour.v1', inner, outer }` (line widths in ink units), so a contoured drawing never shares a `specId` with the drawing before it. An ink spec without it (written before the contour) still validates and exports without one.
@@ -81,18 +84,19 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 | Mixed into the impostors (one uniform branch each) | `packages/scene/src/tsl/atomImpostorMaterial.ts`, `bondImpostorMaterial.ts` |
 | Fades, Ink-to-Light and running the Light Fuse | `packages/ui/src/ink/InkLookDriver.tsx` |
 | The fuse's hops (bond steps, gaps between fragments, spatial fallback) and the centre-front seed | `packages/ui/src/ink/fuseHops.ts` |
-| The fuse on the impostors: uniforms, hop textures, the noisy front, its capture guard | `packages/scene/src/tsl/inkFuse.ts` |
+| The fuse on the impostors: uniforms, hop textures, the noisy front, the ember, the fragment's offset for the recipe, its capture guard | `packages/scene/src/tsl/inkFuse.ts` |
 | Bonds handing their pairs to the fuse | `packages/scene/src/Bonds.tsx` |
 | Ink on and off (tray, palette, `I`), the last drawing used, the `ink=` link, and asking for a fuse | `packages/ui/src/ink/illustrate.ts` |
 | Looks and the paper plate | `packages/ui/src/sceneLooks.ts`, `backgroundPresets.ts` |
 | Local smoke (all four drawings, exports of Engrave and Halftone) | `tools/smoke/scenarios/ink.mjs` |
 | The post recipe stepping aside | `packages/ui/src/postprocess/controls.ts` (`inkRecipe`) |
+| The recipe following a change pixel by pixel: the phase (lit, ink, changing), the fuse offset beside coverage, the stages resting by the live mix | `controls.ts` (`inkPhase`), `ScenePostprocessing.tsx` (`useInkPhase`), `backgroundMask.ts`, `postPipeline.ts` (`inkFade`) |
 | The contour (one TSL node, live and in exports) | `packages/ui/src/postprocess/inkContour.ts`, in `postPipeline.ts` and `export/captureLookPass.ts` |
 | The spec (`view.ink`) | `packages/ui/src/mcp/renderArtifactAdapter.ts`, `packages/core/src/renderArtifact.ts` |
 | Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `library/GalleryCollection.tsx`, `switcher/switchIndex.ts`, `relay/stage.ts` |
 | Tile poses, fit and drawing models | `scripts/molecule-pages/build.mts` (`/m/manifest.json`, `/og/m/<id>-ink.json`) |
 
-Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, weight, target, holding, fading, arrival, fuse }`, with `fuse: { running, seed, progress, mode, held }` (`mode` is `'graph'`, `'spatial'` or `'uniform'`, null before the first fuse). `__lupiPlay.ink('hold', p)` holds the front at `p` (0..1), the running fuse's or the next one's, `ink('release')` lets it burn on, and `ink('pace', k)` runs fuses `k` times slower; the fuse smoke (`tools/smoke/scenarios/fuse.mjs`) uses them on software renderers, which draw a frame or two a second, for its filmstrips and its export check.
+Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, weight, target, holding, fading, arrival, fuse }`, with `fuse: { running, seed, progress, mode, held }` (`mode` is `'graph'`, `'spatial'` or `'uniform'`, null before the first fuse). `__lupiPlay.ink('hold', p)` holds the front at `p` (0..1), the running fuse's or the next one's, `ink('release')` lets it burn on, and `ink('pace', k)` runs fuses `k` times slower; the fuse smoke (`tools/smoke/scenarios/fuse.mjs`) uses them on software renderers, which draw a frame or two a second, for its filmstrips, its export check and its held fronts (the part not yet reached against the plain lit and ink views, and the ember's lime on the front).
 
 `?contour=0` (also inside a hash route) leaves the contour out of the live view and of exports, whose specs then carry no `view.ink.contour`: a debug switch for before-and-after comparisons. The local smoke plugin `tools/smoke/scenarios/contour.mjs` uses it.
 
@@ -113,6 +117,7 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
 | Fades | lit ⇄ ink and drawing ⇄ drawing 480 ms (agents, Looks, frames above 250,000 atoms); Ink-to-Light waits 200 ms after the first frame | `InkLookDriver.tsx` |
 | Light Fuse pace | 1,100 ms from the seed to the last atom, at a constant speed | `INK_FUSE_MS` |
 | Fuse edge | half-width 0.3 bond steps (normalised 0.02–0.15); the noise moves the front by about a hop either way (2.5 bond steps of weight, at least 0.05 of the run); 3 noise cells per bond length | `FUSE_EDGE` |
+| Ember | `#d5ef9c` at 1.2× brightness, turning the surface up to 70 % toward it at the front; reaching 0.7 of the edge's half-width into the light and 0.22 into the ink; fading in and out over the first and last 12 % of the run | `FUSE_EMBER` |
 | Fuse reach | the bond graph up to 2,000 atoms, a spherical wavefront up to 250,000, a crossfade above; gaps measured in bond lengths (the drawn bonds' mean, else 1.5 Å) | `FUSE_HOPS` |
 | Centre-front seed | closest to the centre line, with depth behind the nearest atom counted at 0.5 per unit | `FUSE_HOPS.frontDepthWeight` |
 
@@ -120,8 +125,9 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
 
 - **Unseen.** The band thresholds, line weights, hatching density and the hand-off timing are first guesses. Engrave, Halftone, the contour and the Light Fuse were tuned from headless SwiftShader screenshots only; the fuse was seen at a frame or two a second (held and slowed), never at 60 fps.
 - **Engrave and Halftone are screen-bound in one way each.** The engraving's meander and the halftone screen sit on the picture, not the molecule, so while the molecule turns the dots stay put on the page and the meander drifts slightly across the balls (the lines themselves travel with each ball). Small atoms (under about two line spacings across) and thin bonds lose their lines and dots, as they lose hatching.
-- **The post recipe does not wait for the fuse.** It follows the chosen look at once, as it did under the crossfade: turning ink on removes AO, glow and tone mapping from the lit part still burning, and turning it off brings them onto the ink still waiting. Over the fuse's second this shows as a slight change in the part not yet reached.
-- **The fuse has no ember.** The burning edge is a ragged blend between the two looks; a thin glowing line at the front would read more like a lit fuse.
+- **The ember was seen in SwiftShader only**, held still. Its width, strength and fade are first guesses; on a real screen at 60 fps it may want to be brighter, or to flicker with the front's own progress.
+- **The plate around the molecule follows the look's fade, not the front.** Pixels without an impostor (the plate, cell lines, far-LOD clusters) take the recipe by `uInkMix`, so the glow spilling onto the plate around the lit part fades evenly over the fuse instead of with the front.
+- **A change costs two graph builds.** The recipe's graph is rebuilt into the lit graph (with every stage resting by the mix) when the look starts changing and into the look's own graph when it settles; the lit recipe's AO, glow and defocus passes run through the change, under ink too. Still cuts, so it builds once. Diagram has no stage to rest and keeps one graph.
 - **The match frame is close, not exact.**
   - The relay's drawing is the lit SVG (gradient balls) at an orthographic pose, while the first 3D frame is the toon look in perspective. The pose, size and plate match; the shading style changes over the 120 ms crossfade.
   - The viewer may fit a little tighter or looser than the drawing's size if the visitor's atom scale is not 1.
