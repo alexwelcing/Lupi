@@ -107,6 +107,7 @@ import { sceneLookPatch } from './sceneLooks';
 import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
 import { FirstFrameOverlay } from './relay/FirstFrameOverlay';
+import { opensMolecule } from './relay/preview';
 import { withCameraGlide } from './camera/rigApi';
 
 const EMPTY_TRAJECTORY_FRAMES: Array<import('@atlas/core/types').Frame | undefined> = [];
@@ -634,6 +635,11 @@ export function ViewerApp() {
     window.location.assign('/');
   }, []);
 
+  // A deep link still opening shows LandingFallback's "Opening…" plate alone,
+  // as the splash before it did: the header arrives with the molecule.
+  const deepLinkOpening = !file && !automaticLoadFailed && !isMcpViewerRoute && !isSavedViewRoute
+    && !isCopperSceneRoute && !seoEducationKind && opensMolecule();
+
   return (
     <div
       className="lupine-app-root"
@@ -656,7 +662,7 @@ export function ViewerApp() {
           setCommandPaletteOpen={setCommandPaletteOpen}
         />
       )}
-      {!isEmbeddedMobileViewer && (
+      {!isEmbeddedMobileViewer && !deepLinkOpening && (
         <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
           <AppHeader
             isMobile={isMobile}
