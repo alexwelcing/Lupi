@@ -779,9 +779,8 @@ NODE_OPTIONS=--max-old-space-size=8192 pnpm audit --prod --audit-level high
 node --test tools/verify-cloudflare-live.test.mjs
 pnpm build                   # every workspace; the web build regenerates the MCP manifest
 # wrangler versions upload --dry-run with the pinned Wrangler in .github/wrangler-runtime
-pnpm test                    # every workspace's unit tests
+pnpm test                    # every workspace's unit tests, the Worker's included
 cd functions && npm ci && npm audit --omit=dev --audit-level=high && npm run build && npm test && cd ..
-pnpm cloudflare:test
 npm run nist:build           # fails if apps/web/public/nist changes
 pnpm exec playwright install --with-deps chromium
 pnpm test:ui
@@ -792,7 +791,8 @@ verify:testflight` on the frozen Expo app. Apple packages
 (`.github/workflows/apple.yml`) runs the Linux gates of "Native Apple app"
 above when `apps/apple`, `tools/apple`, `packages/core`, `packages/parsers`,
 the Worker's sources, the gallery or the datasets change.
-`pnpm cloudflare:build` is covered by `pnpm build`.
+`pnpm cloudflare:build` is covered by `pnpm build`, and `pnpm cloudflare:test`
+by `pnpm test`.
 
 ### Local only
 
