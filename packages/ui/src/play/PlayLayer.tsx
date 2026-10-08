@@ -74,6 +74,7 @@ import { cue } from './feedback';
 import { installPlayDevHooks, registerPlayDevHook } from './devHooks';
 import { heatKelvin, playStore } from './playStore';
 import { emitToyEvent, registerToyReplaySink, type ToyEvent } from './toyTape';
+import { motionWallMs } from './motionClock';
 import {
   canPlayScatter,
   markArrivalSeen,
@@ -1401,7 +1402,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
 
   useFrame(
     () => {
-      const wall = performance.now();
+      const wall = motionWallMs();
       const step = driver.lastWall < 0 ? 0 : Math.min(MAX_STEP_S, Math.max(0, (wall - driver.lastWall) / 1000));
       driver.lastWall = wall;
       if (anyLive()) driver.clock += step;

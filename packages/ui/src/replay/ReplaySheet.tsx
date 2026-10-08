@@ -4,10 +4,14 @@
  * - **The live link**, ready at once: the moment as a `replay=` parameter
  *   (about a kilobyte, nothing stored anywhere). Whoever opens it watches the
  *   same moment happen in their own 3D view, then gets "Your turn".
- * - **A 9:16 clip** of the moment, developing in the sheet as it records
- *   (the viewer replays the moment off screen through the normal video
- *   export, with "Illustrative" burned into every frame). Share sends the
- *   clip and the link together; Save downloads the clip.
+ * - **A 9:16 clip** of the moment, developing in the sheet as it is made,
+ *   with "Illustrative" burned into every frame. Where WebCodecs can encode
+ *   it, the clip is rendered frame by frame from the tape at 30 fps into an
+ *   MP4 (offlineClip.ts), so a slow device makes the same clip as a fast
+ *   one and the live canvas never changes size. Elsewhere the viewer replays
+ *   the moment off screen through the normal video export, recorded in real
+ *   time by MediaRecorder. Share sends the clip and the link together; Save
+ *   downloads the clip.
  *
  * Motion: Still sends a still pose link and makes no clip. A molecule with no
  * address (a dropped file) gets the clip only. Closing the sheet cancels a
@@ -23,7 +27,10 @@ import { MOBILE_MEDIA_QUERY } from '../hooks/useMediaQuery';
 import { useComfort } from '../motion/comfort';
 import { getToyReplaySink } from '../play/toyTape';
 import { createClipCompositor, ENDCARD_S, type ClipCompositor } from './clipCompositor';
-import { ReplayPlayer } from './player';
+import { chooseClipCodec, hasClipEncoder } from './clipEncoder';
+import { tapeFlashes, type ClipFlash } from './clipSchedule';
+import { ClipAbortError, clipSize, noteClipReport, renderOfflineClip } from './offlineClip';
+import { ReplayPlayer, type ReplayFraming } from './player';
 import { pauseRecorder } from './recorder';
 import { replayStore, useReplayStore, type ReplayMoment } from './replayStore';
 import { buildTape, moleculePageLabel, replayLink, replayViewContext, tapeHasToys, type BuiltTape } from './session';
@@ -34,8 +41,11 @@ import './replaySheet.css';
 type ClipState =
   | { kind: 'off'; reason: string }
   | { kind: 'recording'; progress: number }
-  | { kind: 'ready'; blob: Blob; url: string; filename: string; type: string }
+  | { kind: 'ready'; blob: Blob; url: string; filename: string; type: string; encoder: ClipEncoderKind; codec: string | null }
   | { kind: 'failed'; reason: string };
+
+/** How the clip was made: rendered frame by frame (WebCodecs), or recorded in real time (MediaRecorder). */
+type ClipEncoderKind = 'webcodecs' | 'mediarecorder';
 
 function matches(query: string): boolean {
   try {
@@ -143,14 +153,16 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
     });
   }, []);
 
-  // The clip: record the moment again, off screen, through the video export.
+  // The clip: rendered frame by frame where WebCodecs can encode it, else
+  // recorded again, off screen and in real time, through the video export.
   useEffect(() => {
     if (!built) return undefined;
     if (still) {
       setClip({ kind: 'off', reason: comfort === 'still' ? 'Motion is Still: the link opens on this pose, and there is no clip.' : '' });
       return undefined;
     }
-    if (!canRecordVideo()) {
+    const offline = hasClipEncoder();
+    if (!offline && !canRecordVideo()) {
       setClip({ kind: 'off', reason: 'This browser can’t record a clip. The link still plays it.' });
       return undefined;
     }
@@ -160,101 +172,174 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
       return undefined;
     }
     const phone = matches(MOBILE_MEDIA_QUERY) || matches('(hover: none) and (pointer: coarse)');
-    const width = phone ? 720 : 1080;
-    const height = phone ? 1280 : 1920;
+    const { width, height } = clipSize(phone);
     const duration = built.tape.duration + ENDCARD_S;
     const finish = shownFinish(remixStore.getState());
-    const compositor = createClipCompositor({
-      width,
-      height,
-      title: name,
-      toys,
-      linkLabel: moleculePageLabel(context),
-      duration,
-      finish: finish ? FOIL_LABEL[finish] : null,
-    });
-    compositorRef.current = compositor;
-
-    const player = new ReplayPlayer(built.tape, {
-      framing: context
-        ? { center: context.center, radius: context.radius, fov: context.fov, aspect: width / height }
-        : null,
-      flashes: true,
-      toys: true,
-    });
-    let resume: (() => void) | null = null;
-    let ended = false;
-    const resetToys = () => getToyReplaySink()?.play({ kind: 'reset' });
+    const framing: ReplayFraming | null = context
+      ? { center: context.center, radius: context.radius, fov: context.fov, aspect: width / height }
+      : null;
+    const makeCompositor = (flashes: ClipFlash[] | null): ClipCompositor => {
+      compositorRef.current?.canvas.remove();
+      const compositor = createClipCompositor({
+        width,
+        height,
+        title: name,
+        toys,
+        linkLabel: moleculePageLabel(context),
+        duration,
+        finish: finish ? FOIL_LABEL[finish] : null,
+        flashes,
+      });
+      compositorRef.current = compositor;
+      return compositor;
+    };
     const abort = new AbortController();
     abortRef.current = abort;
     replayStore.getState().setClipping(true);
     setClip({ kind: 'recording', progress: 0 });
+    const onProgress = (fraction: number) => {
+      setClip((current) => (current.kind === 'recording' && Math.abs(current.progress - fraction) < 0.02 ? current : { kind: 'recording', progress: fraction }));
+    };
+    const failed = () => {
+      replayStore.getState().setClipping(false);
+      setClip({ kind: 'failed', reason: 'The clip didn’t record in this browser. The link still plays it.' });
+    };
 
-    store.triggerExport({
-      type: 'video',
-      resolution: { width, height },
-      durationSeconds: duration,
-      baseName: `lupi-${safeName(name)}-replay`,
-      illustrative: true,
-      compositor,
-      signal: abort.signal,
-      replay: {
-        duration,
-        begin: () => {
-          resume = pauseRecorder();
-          resetToys();
-          player.start();
+    // Real time: MediaRecorder records the composed canvas while the video export replays the moment.
+    const record = () => {
+      const compositor = makeCompositor(null);
+      const player = new ReplayPlayer(built.tape, { framing, flashes: true, toys: true });
+      let resume: (() => void) | null = null;
+      let ended = false;
+      const resetToys = () => getToyReplaySink()?.play({ kind: 'reset' });
+      const startedAt = performance.now();
+      setClip({ kind: 'recording', progress: 0 });
+
+      useStore.getState().triggerExport({
+        type: 'video',
+        resolution: { width, height },
+        durationSeconds: duration,
+        baseName: `lupi-${safeName(name)}-replay`,
+        illustrative: true,
+        compositor,
+        signal: abort.signal,
+        replay: {
+          duration,
+          begin: () => {
+            resume = pauseRecorder();
+            resetToys();
+            player.start();
+          },
+          drive: (seconds, camera, target) => {
+            player.seek(Math.min(seconds, built.tape.duration), camera, target);
+          },
+          end: () => {
+            if (ended) return;
+            ended = true;
+            player.stop();
+            resetToys();
+            resume?.();
+            resume = null;
+          },
         },
-        drive: (seconds, camera, target) => {
-          player.seek(Math.min(seconds, built.tape.duration), camera, target);
+        onRecordProgress: onProgress,
+        onComplete: (success, blob, filename, failure) => {
+          replayStore.getState().setClipping(false);
+          if (abort.signal.aborted || failure?.code === 'aborted') return;
+          if (success && blob) {
+            const type = blob.type || 'video/webm';
+            const ext = type.includes('mp4') ? 'mp4' : 'webm';
+            noteClipReport({
+              encoder: 'mediarecorder',
+              codec: type,
+              container: ext,
+              width,
+              height,
+              fps: 30,
+              frames: null,
+              duration,
+              ms: Math.round(performance.now() - startedAt),
+              msPerFrame: null,
+              split: null,
+              bytes: blob.size,
+              backend: null,
+            });
+            setClip({
+              kind: 'ready',
+              blob,
+              url: URL.createObjectURL(blob),
+              filename: filename ?? `lupi-${safeName(name)}-replay.${ext}`,
+              type,
+              encoder: 'mediarecorder',
+              codec: null,
+            });
+          } else {
+            failed();
+          }
         },
-        end: () => {
-          if (ended) return;
-          ended = true;
-          player.stop();
-          resetToys();
-          resume?.();
-          resume = null;
-        },
-      },
-      onRecordProgress: (fraction) => {
-        setClip((current) => (current.kind === 'recording' && Math.abs(current.progress - fraction) < 0.02 ? current : { kind: 'recording', progress: fraction }));
-      },
-      onComplete: (success, blob, filename, failure) => {
+      });
+    };
+
+    // Frame by frame: the codec first (an async question), then the clip.
+    void (async () => {
+      const choice = offline ? await chooseClipCodec(width, height) : null;
+      if (abort.signal.aborted) return;
+      if (!choice) {
+        if (canRecordVideo()) record();
+        else failed();
+        return;
+      }
+      const compositor = makeCompositor(tapeFlashes(built.tape));
+      setClip({ kind: 'recording', progress: 0 });
+      try {
+        const { blob } = await renderOfflineClip({
+          tape: built.tape,
+          width,
+          height,
+          duration,
+          framing,
+          compositor,
+          choice,
+          signal: abort.signal,
+          onProgress,
+        });
+        if (abort.signal.aborted) return;
         replayStore.getState().setClipping(false);
-        if (abort.signal.aborted || failure?.code === 'aborted') return;
-        if (success && blob) {
-          const type = blob.type || 'video/webm';
-          const ext = type.includes('mp4') ? 'mp4' : 'webm';
-          setClip({
-            kind: 'ready',
-            blob,
-            url: URL.createObjectURL(blob),
-            filename: filename ?? `lupi-${safeName(name)}-replay.${ext}`,
-            type,
-          });
-        } else {
-          setClip({ kind: 'failed', reason: 'The clip didn’t record in this browser. The link still plays it.' });
-        }
-      },
-    });
+        setClip({
+          kind: 'ready',
+          blob,
+          url: URL.createObjectURL(blob),
+          filename: `lupi-${safeName(name)}-replay.mp4`,
+          type: blob.type || 'video/mp4',
+          encoder: 'webcodecs',
+          codec: choice.name,
+        });
+      } catch (error) {
+        if (abort.signal.aborted || error instanceof ClipAbortError) return;
+        // An encoder or GPU failure mid-clip: record it in real time instead.
+        console.warn('[ReplaySheet] the frame-by-frame clip failed; recording it instead', error);
+        if (canRecordVideo() && !useStore.getState().exportRequest.type) record();
+        else failed();
+      }
+    })();
 
     return () => {
       abort.abort();
       replayStore.getState().setClipping(false);
-      compositor.canvas.remove();
+      compositorRef.current?.canvas.remove();
       compositorRef.current = null;
     };
     // The clip is made once per sheet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [built]);
 
-  // The developing clip shows in the preview frame (the compositor's own canvas).
+  // The developing clip shows in the preview frame (the compositor's own canvas,
+  // which the clip may make a moment after the sheet opens).
   useEffect(() => {
     const host = previewRef.current;
     const compositor = compositorRef.current;
     if (host && compositor && compositor.canvas.parentElement !== host) host.prepend(compositor.canvas);
-  }, [clip.kind]);
+  }, [clip]);
 
   // Free the clip's object URL with the sheet.
   useEffect(() => () => {
@@ -331,7 +416,7 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
   const progress = clip.kind === 'recording' ? clip.progress : clip.kind === 'ready' ? 1 : 0;
   let clipNote = '';
   if (clip.kind === 'recording') clipNote = `Developing the clip… ${Math.round(progress * 100)} %`;
-  else if (clip.kind === 'ready') clipNote = `${clip.type.includes('mp4') ? 'MP4' : 'WebM'} clip, 9:16 · Illustrative`;
+  else if (clip.kind === 'ready') clipNote = `${clip.type.includes('mp4') ? 'MP4' : 'WebM'} clip${clip.codec ? ` (${clip.codec})` : ''}, 9:16 · Illustrative`;
   else clipNote = clip.reason;
 
   return (
@@ -339,6 +424,7 @@ function ReplaySheetBody({ moment }: { moment: ReplayMoment }) {
       className="lupi-replay-sheet"
       data-lupi-replay-sheet=""
       data-recording={recording || undefined}
+      data-clip-encoder={clip.kind === 'ready' ? clip.encoder : undefined}
       role="presentation"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) close();
