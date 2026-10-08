@@ -1,0 +1,57 @@
+name: ChatGPT widget checks
+
+on:
+  push:
+    branches: [codex/chatgpt-omol-bonds-hover]
+  pull_request:
+    paths:
+      - 'apps/chatgpt-widget/**'
+      - 'apps/mcp-worker/src/chatgpt*'
+      - 'packages/core/src/omol25/**'
+      - 'packages/core/src/bonds/**'
+      - 'plugins/lupi-live/**'
+      - '.github/workflows/chatgpt-widget.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatgpt-widget-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  widget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Capture reviewed source
+        run: |
+          mkdir -p .verify-artifacts/chatgpt-ci
+          git archive --format=tar.gz HEAD apps/chatgpt-widget apps/mcp-worker packages/core packages/scene packages/ui plugins/lupi-live tools/chatgpt-host tools/copy-chatgpt-widget.mjs tools/package-chatgpt-plugin.mjs tools/verify-chatgpt-plugin.mts tools/serve-chatgpt-plugin.mts tools/lib/browser-lanes.mjs package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json > .verify-artifacts/chatgpt-ci/source.tar.gz
+          git rev-parse HEAD > .verify-artifacts/chatgpt-ci/commit.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: chatgpt-source-${{ github.sha }}
+          path: .verify-artifacts/chatgpt-ci/
+          retention-days: 3
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test source estimation, picking, and tool contracts
+        run: pnpm chatgpt:test
+      - name: Build embedded UI and Worker
+        run: pnpm chatgpt:build
+      - name: Check development package
+        run: pnpm chatgpt:package --check
+      - name: Upload built component
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: chatgpt-widget-${{ github.sha }}
+          path: apps/chatgpt-widget/dist/index.html
+          if-no-files-found: ignore
+          retention-days: 7
