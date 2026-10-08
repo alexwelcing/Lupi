@@ -233,8 +233,6 @@ const driver = {
 
 /** A molecule as the screen showed it: the morph's source. */
 interface ShownMolecule {
-  /** The file's trajectory (one per open). */
-  key: object;
   frame: Frame;
   /** Every atom was resident (a streamed file may still be filling in). */
   resident: boolean;
@@ -335,7 +333,6 @@ function planRun(run: MorphRun, camera: THREE.Camera): void {
 function copyShown(source: ShownMolecule): ShownMolecule {
   const v = source.view;
   return {
-    key: source.key,
     frame: source.frame,
     resident: source.resident,
     view: {
@@ -812,8 +809,8 @@ function onSavedViewRoute(): boolean {
   return route.startsWith('/view/') || window.location.pathname.toLowerCase().startsWith('/view/');
 }
 
-/** True when this file should morph out of what the screen showed (`previous`). */
-function morphWanted(input: ArrivalRuleInput, previous: ShownMolecule | null, key: object): boolean {
+/** True when the file opening should morph out of what the screen showed (`previous`; `sameFile`: a frame of this file). */
+function morphWanted(input: ArrivalRuleInput, previous: ShownMolecule | null, sameFile: boolean): boolean {
   const params = pageQuery();
   const baton = input.baton;
   // The home hero's or a molecule page's drawing inflates flat, as it always has.
@@ -826,7 +823,7 @@ function morphWanted(input: ArrivalRuleInput, previous: ShownMolecule | null, ke
     drawingHandOff,
     savedView: onSavedViewRoute(),
     previous: previous
-      ? { natoms: previous.frame.natoms, resident: previous.resident, sameFile: previous.key === key }
+      ? { natoms: previous.frame.natoms, resident: previous.resident, sameFile }
       : null,
     natoms: input.natoms,
   });
@@ -896,20 +893,27 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
   // Arm the arrival before the first render of a newly opened file.
   useLayoutEffect(() => {
     // What the screen showed before this file (the last drawn frame).
-    const previous = shown && shown.key !== trajectory ? copyShown(shown) : null;
+    const previous = shown ? copyShown(shown) : null;
     resetDisplayMotion();
     if (!trajectory) return undefined;
+    const sameFile = previous !== null && trajectory.frames.includes(previous.frame);
     const now = live.current;
-    const input = ruleInput(now.frame, trajectory.totalFrames, now.transmissionActive, now.playing);
-    if (previous && morphWanted(input, previous, trajectory)) {
+    // This layer's own store subscription can render it with the new file
+    // before the scene passes the new frame and centre: take both from the
+    // file itself (the scene draws the same frame, centred on its bounds).
+    const opened = trajectory.frames[useStore.getState().frame] ?? trajectory.frames[0] ?? now.frame;
+    const { min, max } = trajectory.globalBounds;
+    const center: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+    const input = ruleInput(opened, trajectory.totalFrames, now.transmissionActive, now.playing);
+    if (previous && morphWanted(input, previous, sameFile)) {
       // A switch: the atoms on screen flow into the new molecule.
       previous.view.radius = sceneRadius(previous.frame, previous.view.center);
-      adoptScene(now.frame, now.center);
-      armMorph(previous, now.frame, now.center, now.camera, input.comfort);
+      adoptScene(opened, center);
+      armMorph(previous, opened, center, now.camera, input.comfort);
     } else {
       const mode = shouldPlayArrival(input);
       if (!mode) return undefined;
-      adoptScene(now.frame, now.center);
+      adoptScene(opened, center);
       // `?arrival=1` forces past Still: play it at Standard then.
       armArrival(
         mode === 'flat' ? ARRIVAL_MODE.flat : ARRIVAL_MODE.condense,
@@ -1254,7 +1258,7 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         // The morph armed or running (else null) with its plan's counts: new
         // atoms from an old atom of their element, of another, budded.
         morph: driver.morph
-          ? { running: driver.arrival?.armed === false, planned: driver.morph.plan !== null, ...lastMorphReport }
+          ? { running: driver.arrival?.armed === false, planned: driver.morph.plan !== null, ...(driver.morph.plan ? lastMorphReport : {}) }
           : null,
         lastMorph: lastMorphReport,
         ripples: driver.slotEnds.filter((end) => end >= 0).length,
@@ -1441,12 +1445,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       }
       syncWeights();
 
-      // What the screen shows: the next switch morphs out of it. The file
-      // this layer rendered (the store may already hold the next one).
-      const key = live.current.trajectory;
-      if (key) {
+      // What the screen shows: the next switch morphs out of it.
+      if (live.current.trajectory) {
         shown = {
-          key,
           frame: current,
           resident: useStore.getState().loadedAtomCount >= current.natoms,
           // The radius is measured only if this molecule is morphed from.
