@@ -10,6 +10,7 @@ on:
       - 'packages/core/src/omol25/**'
       - 'packages/core/src/bonds/**'
       - 'plugins/lupi-live/**'
+      - 'tools/verify-chatgpt-inspection.mts'
       - '.github/workflows/chatgpt-widget.yml'
 
 permissions:
@@ -28,7 +29,7 @@ jobs:
       - name: Capture reviewed source
         run: |
           mkdir -p .verify-artifacts/chatgpt-ci
-          git archive --format=tar.gz HEAD apps/chatgpt-widget apps/mcp-worker packages/core packages/scene packages/ui plugins/lupi-live tools/chatgpt-host tools/copy-chatgpt-widget.mjs tools/package-chatgpt-plugin.mjs tools/verify-chatgpt-plugin.mts tools/serve-chatgpt-plugin.mts tools/lib/browser-lanes.mjs package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json > .verify-artifacts/chatgpt-ci/source.tar.gz
+          git archive --format=tar.gz HEAD apps/chatgpt-widget apps/mcp-worker packages/core packages/scene packages/ui plugins/lupi-live tools/chatgpt-host tools/copy-chatgpt-widget.mjs tools/package-chatgpt-plugin.mjs tools/verify-chatgpt-plugin.mts tools/verify-chatgpt-inspection.mts tools/serve-chatgpt-plugin.mts tools/lib/browser-lanes.mjs package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json > .verify-artifacts/chatgpt-ci/source.tar.gz
           git rev-parse HEAD > .verify-artifacts/chatgpt-ci/commit.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -45,13 +46,20 @@ jobs:
         run: pnpm chatgpt:test
       - name: Build embedded UI and Worker
         run: pnpm chatgpt:build
+      - name: Install browser runtime
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test hover and touch inspection in a sandboxed MCP host
+        run: node --import tsx tools/verify-chatgpt-inspection.mts
       - name: Check development package
         run: pnpm chatgpt:package --check
-      - name: Upload built component
+      - name: Upload built component and inspection evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: chatgpt-widget-${{ github.sha }}
-          path: apps/chatgpt-widget/dist/index.html
+          path: |
+            apps/chatgpt-widget/dist/index.html
+            .verify-artifacts/chatgpt-inspection/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7

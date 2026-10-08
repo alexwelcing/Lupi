@@ -4,7 +4,12 @@ import { getElementSpec } from '@atlas/core';
 import { LupiCanvas } from '@atlas/ui/viewer/LupiCanvas';
 import { detectRenderCapability } from '@atlas/ui/renderCapability';
 import { MoleculeScene, type CameraActions } from './MoleculeScene';
-import { elementAtomIds, readMoleculeToolResult, type MoleculeCard, type MoleculeView } from './toolResult';
+import { bondMethodParagraph } from '@atlas/core/bonds';
+import { omol25BondSummary } from '@atlas/core/omol25/widget';
+import { InspectionPanel } from './InspectionPanel';
+import './inspection.css';
+import { inspectionDetails, sameTarget, type InspectionTarget } from './inspection';
+import { displayedPairCount, elementAtomIds, readMoleculeToolResult, type MoleculeCard, type MoleculeView } from './toolResult';
 
 declare global {
   interface Window {
@@ -48,6 +53,15 @@ export function MoleculeApp() {
   const contextQueue = useRef(Promise.resolve());
   const cameraActions = useRef<CameraActions | null>(null);
   const [card, setCard] = useState<MoleculeCard | null>(null);
+  const [inspection, setInspection] = useState<{ target: InspectionTarget | null; pinned: boolean }>({ target: null, pinned: false });
+  const inspectionRef = useRef(inspection);
+  const hoverInspection = useCallback((target: InspectionTarget | null) => {
+    const previous = inspectionRef.current;
+    if (previous.pinned || sameTarget(previous.target, target)) return;
+    const next = { target, pinned: false };
+    inspectionRef.current = next;
+    setInspection(next);
+  }, []);
   const [hostState, setHostState] = useState<'connecting' | 'connected' | 'unavailable'>('connecting');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -65,7 +79,7 @@ export function MoleculeApp() {
         const current = cardRef.current;
         const molecule = current?.molecule;
         const scene = cameraActions.current?.sceneSnapshot();
-        const expectedBondCount = current?.view.style === 'ball-and-stick' ? molecule?.bonds.aid1.length ?? 0 : 0;
+        const expectedBondCount = current ? displayedPairCount(current) : 0;
         return {
           ready: document.querySelector('.viewport')?.getAttribute('data-render-state') === 'ready'
             && scene?.atomLayerInstanceCounts.includes(molecule?.atoms.ids.length ?? -1) === true
@@ -83,7 +97,11 @@ export function MoleculeApp() {
           atomCount: molecule?.atoms.ids.length ?? 0,
           atomIds: molecule?.atoms.ids.slice() ?? [],
           atomicNumbers: molecule?.atoms.elements.slice() ?? [],
-          bondCount: molecule?.bonds.aid1.length ?? 0,
+          bondCount: current?.perceivedBonds ? omol25BondSummary(current.perceivedBonds).bondCount : molecule?.bonds.aid1.length ?? 0,
+          sourceBondCount: molecule?.bonds.aid1.length ?? 0,
+          estimatedBondSummary: current?.perceivedBonds ? omol25BondSummary(current.perceivedBonds) : null,
+          expectedDrawnPairCount: expectedBondCount,
+          inspection: current ? inspectionDetails(current, inspectionRef.current.target) : null,
           bonds: molecule ? { aid1: molecule.bonds.aid1.slice(), aid2: molecule.bonds.aid2.slice(), order: molecule.bonds.order.slice() } : null,
           view: current ? { ...current.view, highlightAtomIds: current.view.highlightAtomIds.slice(), highlightElements: current.view.highlightElements.slice() } : null,
           camera: cameraActions.current?.snapshot() ?? null,
@@ -102,7 +120,7 @@ export function MoleculeApp() {
       setHostState('unavailable');
       return;
     }
-    const app = new App({ name: 'Lupi Live', version: '0.2.0' }, {}, { autoResize: true });
+    const app = new App({ name: 'Lupi Live', version: '0.3.0' }, {}, { autoResize: true });
     appRef.current = app;
     let active = true;
     // Register before connect: the host may replay the initial result during
@@ -111,6 +129,8 @@ export function MoleculeApp() {
       if (!active) return;
       try {
         const incoming = readMoleculeToolResult(result);
+        inspectionRef.current = { target: null, pinned: false };
+        setInspection(inspectionRef.current);
         cardRef.current = incoming;
         setCard(incoming);
         setError(null);
@@ -120,6 +140,8 @@ export function MoleculeApp() {
         setResetVersion((version) => version + 1);
         setResultVersion((version) => version + 1);
       } catch (cause) {
+        inspectionRef.current = { target: null, pinned: false };
+        setInspection(inspectionRef.current);
         cardRef.current = null;
         setCard(null);
         setError(cause instanceof Error ? cause.message : 'The molecule result could not be read.');
@@ -181,6 +203,8 @@ export function MoleculeApp() {
           sourceUrl: current.molecule.sourceUrl,
           dimension: current.molecule.dimension,
           view: next,
+          ...(current.perceivedBonds ? omol25BondSummary(current.perceivedBonds) : {}),
+          inspection: inspectionRef.current.pinned ? inspectionDetails(updated, inspectionRef.current.target) : null,
         },
         content: [{ type: 'text', text: `This Lupi card shows ${current.molecule.name}, ${sourceIdentity}. Its ${next.highlightAtomIds.length} highlighted atoms have ${current.molecule.schemaVersion === 'lupi.omol25.v1' ? 'IDs generated from source row order' : 'source AIDs'} ${next.highlightAtomIds.join(', ') || '(none)'}. Use this structureRef for a follow-up; another card can show a different molecule.` }],
       });
@@ -188,6 +212,24 @@ export function MoleculeApp() {
       if (cardRef.current === updated) setNotice('The view changed here, but ChatGPT could not receive this selection.');
     });
   }, []);
+
+  const pinInspection = useCallback((target: InspectionTarget | null) => {
+    const current = cardRef.current;
+    if (!current) return;
+    const valid = target && inspectionDetails(current, target) ? target : null;
+    inspectionRef.current = { target: valid, pinned: Boolean(valid) };
+    setInspection(inspectionRef.current);
+    // An explicit pin is useful model context. Ordinary hovering stays local.
+    publishView(current.view);
+  }, [publishView]);
+
+  useEffect(() => {
+    const dismiss = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') pinInspection(null);
+    };
+    window.addEventListener('keydown', dismiss);
+    return () => window.removeEventListener('keydown', dismiss);
+  }, [pinInspection]);
 
   const openLink = useCallback((url: string, event: MouseEvent<HTMLAnchorElement>) => {
     const app = appRef.current;
@@ -201,6 +243,8 @@ export function MoleculeApp() {
   const resetView = useCallback(() => {
     const current = cardRef.current;
     if (!current) return;
+    inspectionRef.current = { target: null, pinned: false };
+    setInspection(inspectionRef.current);
     publishView({ ...current.view, highlightAtomIds: [], highlightElements: [] });
     setResetVersion((version) => version + 1);
   }, [publishView]);
@@ -214,6 +258,7 @@ export function MoleculeApp() {
     else if (event.key === '-') cameraActions.current?.zoom(1.18);
     else if (event.key === 'Home') resetView();
     else return;
+    hoverInspection(null);
     event.preventDefault();
   };
 
@@ -273,7 +318,7 @@ export function MoleculeApp() {
                 background="#142820"
                 onRuntime={() => setRendererReady(true)}
               >
-                <MoleculeScene frame={card.frame} view={card.view} is3d={card.molecule.dimension === '3d'} resetVersion={resetVersion} actions={cameraActions} />
+                <MoleculeScene card={card} is3d={card.molecule.dimension === '3d'} resetVersion={resetVersion} actions={cameraActions} onHover={hoverInspection} onPin={pinInspection} />
               </LupiCanvas>
             )}
             {!unavailable && <><div className="viewport-label"><span className="live-dot" />{rendererReady ? card.molecule.dimension === '3d' ? 'Interactive structure' : 'Source depiction' : 'Starting viewer…'}</div><div className="viewport-actions"><button type="button" className="viewport-button reset-button" onClick={resetView} aria-label="Reset view and clear atom highlights" title="Reset view and clear highlights"><Icon name="reset" /><span>Reset view</span></button>{canExpand && <button type="button" className="viewport-button" aria-label={displayMode === 'fullscreen' ? 'Return to inline view' : 'Expand molecule viewer'} title="Expand molecule viewer" onClick={() => { void appRef.current?.requestDisplayMode({ mode: displayMode === 'fullscreen' ? 'inline' : 'fullscreen' }).catch(() => setNotice('Expanded viewing is unavailable in this host.')); }}><Icon name="expand" /></button>}</div><div className="zoom-controls"><button type="button" className="viewport-button" aria-label="Zoom in" onClick={() => cameraActions.current?.zoom(0.82)}><Icon name="plus" /></button><button type="button" className="viewport-button" aria-label="Zoom out" onClick={() => cameraActions.current?.zoom(1.22)}><Icon name="minus" /></button></div><p className="interaction-hint"><span>{card.molecule.dimension === '3d' ? 'Drag to rotate' : '2D source depiction'}</span><span className="hint-separator" aria-hidden="true">·</span><span>Pinch or scroll to zoom</span></p></>}
@@ -285,12 +330,26 @@ export function MoleculeApp() {
               const pressed = ids.every((id) => selectedIds.has(id));
               return <button key={element.number} type="button" className="element-button" disabled={unavailable} aria-pressed={pressed} title={`Highlight ${element.name.toLowerCase()} (${element.count} atoms)`} onClick={() => publishView({ ...card.view, highlightAtomIds: pressed ? [] : ids, highlightElements: pressed ? [] : [element.symbol] })}><span className="element-dot" style={{ backgroundColor: element.color }} /><span>{element.symbol}</span><span className="element-count">{element.count}</span></button>;
             })}</div>
-            <div className="style-switch" role="group" aria-label="Molecule representation"><button type="button" disabled={unavailable} aria-pressed={card.view.style === 'ball-and-stick'} onClick={() => publishView({ ...card.view, style: 'ball-and-stick' })}>{isOmol ? 'Atoms' : 'Ball & stick'}</button><button type="button" disabled={unavailable} aria-pressed={card.view.style === 'spacefill'} onClick={() => publishView({ ...card.view, style: 'spacefill' })}>Space fill</button></div>
+            <div className="style-switch" role="group" aria-label="Molecule representation"><button type="button" disabled={unavailable} aria-pressed={card.view.style === 'ball-and-stick'} onClick={() => publishView({ ...card.view, style: 'ball-and-stick' })}>{isOmol && !card.perceivedBonds ? 'Atoms' : 'Ball & stick'}</button><button type="button" disabled={unavailable} aria-pressed={card.view.style === 'spacefill'} onClick={() => publishView({ ...card.view, style: 'spacefill' })}>Space fill</button></div>
           </section>
+
+          {card.perceivedBonds && <div className="bond-legend" aria-label="Estimated bond legend">
+            <span className="bond-legend-title">Estimated · Molecular v1</span>
+            <span><i className="bond-swatch covalent" />Covalent {card.perceivedBonds.counts.covalent}</span>
+            <span><i className="bond-swatch coordination" />Coordination {card.perceivedBonds.counts.coordination}</span>
+            <label><input type="checkbox" checked={card.view.showContacts !== false} onChange={(event) => {
+              if (inspectionRef.current.target?.kind === 'bond') {
+                inspectionRef.current = { target: null, pinned: false };
+                setInspection(inspectionRef.current);
+              }
+              publishView({ ...card.view, showContacts: event.target.checked });
+            }} /><i className="bond-swatch ionic" />Ionic contacts {card.perceivedBonds.counts.ionicContact}</label>
+          </div>}
+          {!unavailable && <InspectionPanel card={card} target={inspection.target} pinned={inspection.pinned} onPin={pinInspection} />}
 
           <div className="selection-status" aria-live="polite">{unavailable ? <span>Source data is available; interactive controls need graphics.</span> : selectedIds.size ? <><span className="selection-dot" /><span>{selectedNames.length ? `${selectedNames.join(', ')} highlighted` : 'Atoms highlighted'}<span className="selection-count"> · {selectedIds.size} {selectedIds.size === 1 ? 'atom' : 'atoms'}</span></span><button type="button" onClick={() => publishView({ ...card.view, highlightAtomIds: [], highlightElements: [] })}>Clear</button></> : <span>Choose an element to highlight its atoms.</span>}</div>
 
-          <footer className="card-footer"><details className="source-details"><summary>Source &amp; structure details</summary><dl><div><dt>Source</dt><dd><SourceLink href={card.molecule.sourceUrl} open={openLink}>{sourceLabel}</SourceLink></dd></div><div><dt>Coordinates</dt><dd>{card.molecule.dimension === '3d' ? '3D coordinates · ångström (Å)' : '2D depiction · no physical distance units'}</dd></div><div><dt>Connectivity</dt><dd>{isOmol ? 'No source bond topology; atoms shown without bonds' : `${card.molecule.bonds.aid1.length} source bonds${multipleBonds > 0 ? ` · ${multipleBonds} multiple bonds` : ''}`}</dd></div><div><dt>Retrieved</dt><dd>{readableTime(card.molecule.retrievedAt)}</dd></div></dl><p>{isOmol ? 'Coordinates come from the OMol25 source row. Displayed atom IDs are generated from row order; bonds are not supplied. Atom radii are scaled for illustration.' : `Atoms and connectivity come from the retrieved PubChem record. Cylinders show connectivity; the source record retains bond orders. Atom radii are scaled for illustration.${card.molecule.dimension === '2d' ? ' Hydrogens may be implicit in 2D records.' : ''}`}</p><SourceLink href={card.molecule.recordUrl} open={openLink}>Open source record<Icon name="arrow" /></SourceLink></details><SourceLink className="open-lupi" href={websiteUrl} open={openLink}>Open in Lupi<Icon name="arrow" /></SourceLink></footer>
+          <footer className="card-footer"><details className="source-details"><summary>Source &amp; structure details</summary><dl><div><dt>Source</dt><dd><SourceLink href={card.molecule.sourceUrl} open={openLink}>{sourceLabel}</SourceLink></dd></div><div><dt>Coordinates</dt><dd>{card.molecule.dimension === '3d' ? '3D coordinates · ångström (Å)' : '2D depiction · no physical distance units'}</dd></div><div><dt>Connectivity</dt><dd>{card.perceivedBonds ? `${omol25BondSummary(card.perceivedBonds).bondCount} estimated bonds · ${card.perceivedBonds.counts.ionicContact} ionic contacts · no bond orders` : isOmol ? 'Original result: source bond topology not provided' : `${card.molecule.bonds.aid1.length} source bonds${multipleBonds > 0 ? ` · ${multipleBonds} multiple bonds` : ''}`}</dd></div>{card.molecule.schemaVersion === 'lupi.omol25.v1' && card.molecule.chemistry && <div><dt>Structure</dt><dd>Charge {card.molecule.chemistry.totalCharge ?? 'unavailable'} · spin multiplicity {card.molecule.chemistry.spinMultiplicity ?? 'unavailable'} ({card.molecule.chemistry.source})</dd></div>}<div><dt>Retrieved</dt><dd>{readableTime(card.molecule.retrievedAt)}</dd></div></dl><p>{isOmol ? `Coordinates come from the OMol25 source row; atom IDs are generated from row order. ${card.perceivedBonds ? bondMethodParagraph(card.perceivedBonds.params) : 'This original tool result contains no bond estimate.'} Bond orders are not estimated. Display radii are illustrative.` : `Atoms and connectivity come from the retrieved PubChem record. Cylinders show connectivity; the source record retains bond orders. Atom radii are scaled for illustration.${card.molecule.dimension === '2d' ? ' Hydrogens may be implicit in 2D records.' : ''}`}</p><SourceLink href={card.molecule.recordUrl} open={openLink}>Open source record<Icon name="arrow" /></SourceLink></details><SourceLink className="open-lupi" href={websiteUrl} open={openLink}>Open in Lupi<Icon name="arrow" /></SourceLink></footer>
         </>
       )}
       {notice && <p className="host-notice" role="status">{notice}</p>}

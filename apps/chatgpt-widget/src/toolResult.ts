@@ -4,7 +4,8 @@ import {
   validatePubChemMolecule,
   type PubChemMolecule,
 } from '@atlas/core/pubchem';
-import { frameFromOmol25Molecule, validateOmol25Molecule, type Omol25Molecule } from '@atlas/core/omol25/widget';
+import type { PerceivedBonds } from '@atlas/core/bonds';
+import { estimateOmol25Bonds, omol25BondSummary, frameFromOmol25Molecule, validateOmol25Molecule, type Omol25Molecule } from '@atlas/core/omol25/widget';
 
 export type LupiMolecule = PubChemMolecule | Omol25Molecule;
 
@@ -12,6 +13,7 @@ export interface MoleculeView {
   style: 'ball-and-stick' | 'spacefill';
   highlightAtomIds: number[];
   highlightElements: string[];
+  showContacts?: boolean;
 }
 
 export interface MoleculeCard {
@@ -19,6 +21,7 @@ export interface MoleculeCard {
   frame: Frame;
   structureRef: string;
   view: MoleculeView;
+  perceivedBonds: PerceivedBonds | null;
 }
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -50,8 +53,10 @@ function parseView(value: unknown, molecule: LupiMolecule): MoleculeView {
     getElementSpec(molecule.atoms.elements[index]).symbol === symbol && !selectedIds.has(id)))) {
     throw new Error('The named element selection and selected source atom IDs disagree.');
   }
+  if (data.showContacts !== undefined && typeof data.showContacts !== 'boolean') throw new Error('Invalid contact display option.');
   return {
     style: data.style,
+    ...(data.showContacts !== undefined ? { showContacts: data.showContacts as boolean } : {}),
     highlightAtomIds: [...new Set(selected)].sort((a, b) => a - b),
     highlightElements: [...new Set(elements)].sort(),
   };
@@ -74,11 +79,25 @@ export function readMoleculeToolResult(value: unknown): MoleculeCard {
       (summary.dimension !== undefined && summary.dimension !== molecule.dimension)) {
     throw new Error('The visible structure and tool summary disagree. The card has not rendered that result.');
   }
+  let perceivedBonds: PerceivedBonds | null = null;
   if (molecule.schemaVersion === 'lupi.omol25.v1') {
     if (summary.source !== 'OMol25' || summary.collection !== molecule.collection
       || summary.rowIndex !== molecule.rowIndex || summary.repository !== molecule.repository
-      || summary.atomIdKind !== 'synthetic-row' || summary.bondSource !== 'not-provided') {
+      || summary.atomIdKind !== 'synthetic-row' || !['not-provided', 'inferred'].includes(String(summary.bondSource))) {
       throw new Error('The visible OMol25 row and tool summary disagree.');
+    }
+    if (summary.chemistry !== undefined && !sameJson(summary.chemistry, molecule.chemistry ?? null)) {
+      throw new Error('The OMol25 chemistry and model-readable summary disagree.');
+    }
+    if (summary.bondSource === 'inferred') {
+      perceivedBonds = estimateOmol25Bonds(molecule);
+      const expected = omol25BondSummary(perceivedBonds);
+      // Order-independent JSON-object comparison; extra fields also fail.
+      if (!sameJson(Object.fromEntries(Object.keys(expected).map((key) => [key, summary[key]])), expected)) {
+        throw new Error('The OMol25 bond estimate and model-readable summary disagree.');
+      }
+    } else if (summary.bondRecipe !== undefined) {
+      throw new Error('An OMol25 source-only replay cannot declare an inferred recipe.');
     }
   } else if (summary.cid !== molecule.cid || summary.source !== undefined && summary.source !== 'PubChem') {
     throw new Error('The visible PubChem compound and tool summary disagree.');
@@ -86,7 +105,7 @@ export function readMoleculeToolResult(value: unknown): MoleculeCard {
   const facts: Record<string, unknown> = {
     formula: molecule.formula, sourceUrl: molecule.sourceUrl,
     recordUrl: molecule.recordUrl, coordinateUnits: molecule.coordinateUnits,
-    atomCount: molecule.atoms.ids.length, bondCount: molecule.bonds.aid1.length,
+    atomCount: molecule.atoms.ids.length, bondCount: perceivedBonds ? omol25BondSummary(perceivedBonds).bondCount : molecule.bonds.aid1.length,
   };
   if (Object.entries(facts).some(([key, expected]) => summary[key] !== undefined && summary[key] !== expected)) {
     throw new Error('The source record and model-readable molecule facts disagree.');
@@ -104,7 +123,7 @@ export function readMoleculeToolResult(value: unknown): MoleculeCard {
     throw new Error('The visible atom selection and tool summary disagree. Ask Lupi to show the molecule again.');
   }
   return {
-    molecule,
+    molecule, perceivedBonds,
     frame: molecule.schemaVersion === 'lupi.omol25.v1' ? frameFromOmol25Molecule(molecule) : frameFromPubChemMolecule(molecule),
     structureRef: structureRef as string,
     view,
@@ -131,4 +150,19 @@ export function selectedAtomFrame(frame: Frame, sourceAtomIds: readonly number[]
     bonds: new Int32Array(0),
     properties: new Map(),
   };
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  const left = object(a), right = object(b);
+  if (!left || !right) return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && sameJson(left[key], right[key]));
+}
+
+/** Rendered cylinders include visible ionic contacts; scientific bondCount does not. */
+export function displayedPairCount(card: MoleculeCard): number {
+  if (card.view.style !== 'ball-and-stick') return 0;
+  const p = card.perceivedBonds;
+  return p ? p.counts.covalent + p.counts.coordination + (card.view.showContacts === false ? 0 : p.counts.ionicContact) : card.frame.bonds.length / 2;
 }
