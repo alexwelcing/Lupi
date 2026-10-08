@@ -111,7 +111,8 @@ async function viewAtRest(page, h, maxMs = 30_000) {
   while (Date.now() < deadline) {
     const play = await h.readPlay(page);
     const frames = play?.frames ?? null;
-    if (play && play.rig?.moving !== true && frames !== null && frames === last) return true;
+    // The loop asleep too: at a frame every few seconds the counter can hold still between two polls.
+    if (play && play.rig?.moving !== true && play.frameDemand?.awake === false && frames !== null && frames === last) return true;
     last = frames;
     await h.sleep(700);
   }

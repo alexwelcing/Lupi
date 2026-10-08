@@ -53,7 +53,8 @@ function waitInkRest(page, style, maxMs = 90_000) {
   return page
     .waitForFunction((expected) => {
       const ink = window.__lupiPlay?.ink?.();
-      if (!ink || ink.fading || ink.holding) return null;
+      // The loop asleep too, so the last drawn frame shows the shading.
+      if (!ink || ink.fading || ink.holding || window.__lupiPlay.state().frameDemand?.awake !== false) return null;
       const at = (values) => Object.entries(expected).every(([key, value]) => values[key] === value);
       return at(ink.target) && at(ink) ? ink : null;
     }, weightsFor(style), { timeout: maxMs, polling: 50 })

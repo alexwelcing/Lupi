@@ -142,7 +142,7 @@ async function viewAtRest(page, h, maxMs = 60_000) {
   while (Date.now() < deadline) {
     const play = await h.readPlay(page);
     const frames = play?.frames ?? null;
-    if (play && play.motion?.arrival == null && play.rig?.moving !== true && frames !== null && frames === last) return true;
+    if (play && play.motion?.arrival == null && play.rig?.moving !== true && play.frameDemand?.awake === false && frames !== null && frames === last) return true;
     last = frames;
     await h.sleep(700);
   }

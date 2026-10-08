@@ -128,6 +128,19 @@ async function open(ctx, h, id, atoms, contour) {
   return canvas;
 }
 
+/**
+ * Wait until the drawing has landed and the loop has gone quiet, so the last
+ * drawn frame shows it. A loaded software renderer draws a frame every few
+ * seconds: two screenshots 250 ms apart can both show the look before.
+ */
+async function lookDrawn(page) {
+  await page.waitForFunction(() => {
+    const ink = window.__lupiPlay?.ink?.();
+    const demand = window.__lupiPlay?.state?.()?.frameDemand;
+    return Boolean(ink && demand) && ink.target.mix === 1 && ink.mix === 1 && !ink.fading && !ink.fuse?.running && !ink.holding && demand.awake === false;
+  }, null, { timeout: 120_000, polling: 250 }).catch(() => {});
+}
+
 async function setViewer(page, args) {
   return page.evaluate(async (input) => {
     const out = await window.__lupiViewerMcp.execute({ id: 'contour-view', tool: 'lupi.set_viewer', arguments: input });
@@ -144,8 +157,8 @@ async function drawPair(ctx, h, id, atoms, view, label) {
     if (!canvas) return null;
     const set = await setViewer(page, view);
     if (!check(`${label}: set_viewer`, set.ok, JSON.stringify(set.error))) return null;
-    // The look fades in over about half a second; wait until the screen holds still.
-    await page.waitForTimeout(900);
+    // The look fades in over about half a second; wait until it is drawn and the screen holds still.
+    await lookDrawn(page);
     const settled = await h.waitSettled(page, canvas, 0.02);
     await save(`${label}-${contour ? 'contour' : 'before'}`, settled.png);
     shots[contour ? 'on' : 'off'] = settled.image;
@@ -275,7 +288,7 @@ export default {
       if (!canvas) return;
       const set = await setViewer(page, LINE_VIEW);
       if (!check(`line weight${contour ? '' : ' (?contour=0)'}: set_viewer`, set.ok, JSON.stringify(set.error))) return;
-      await page.waitForTimeout(900);
+      await lookDrawn(page);
       await h.waitSettled(page, canvas, 0.02);
       const shot = await captureDevice(page, h, canvas);
       const dpr = await canvas.evaluate((node) => node.width / node.getBoundingClientRect().width);
@@ -297,13 +310,13 @@ export default {
     if (h.isTouchProfile(ctx.spec.profile)) return;
     if (!(await open(ctx, h, 'caffeine', 24, false))) return;
     await setViewer(page, SPACE_FILLING);
-    await page.waitForTimeout(900);
+    await lookDrawn(page);
     const before = await exportPng(page, h, 2048, 2048, 'before-2048');
     check('export 2048 without the contour', before.ok, JSON.stringify(before.error));
 
     if (!(await open(ctx, h, 'caffeine', 24, true))) return;
     await setViewer(page, SPACE_FILLING);
-    await page.waitForTimeout(900);
+    await lookDrawn(page);
     const square = await exportPng(page, h, 2048, 2048, 'contour-2048');
     if (!check('export 2048 with the contour', square.ok, JSON.stringify(square.error))) return;
     const squareImage = h.decodePng(Buffer.from(square.base64, 'base64'));
