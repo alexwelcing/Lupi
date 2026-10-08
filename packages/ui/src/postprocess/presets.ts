@@ -203,15 +203,19 @@ export interface PostStructure {
   dof: boolean;
   vignette: boolean;
   toneMapping: PostprocessPresetConfig['toneMapping'];
+  /** The Illustrate look's ink contour (inkContour.ts), while the drawing shows. */
+  contour: boolean;
 }
 
-export function postStructure(config: PostprocessPresetConfig): PostStructure {
+/** The graph a config needs; `contour` while the Illustrate look is drawn. */
+export function postStructure(config: PostprocessPresetConfig, contour = false): PostStructure {
   return {
     ao: config.ssao.enabled,
     bloom: config.bloom.enabled,
     dof: config.dof.enabled,
     vignette: config.vignette.enabled,
     toneMapping: config.toneMapping,
+    contour,
   };
 }
 
@@ -223,20 +227,22 @@ export function postStructureKey(structure: PostStructure): string {
     structure.dof ? 'dof' : '_',
     structure.vignette ? 'vg' : '_',
     structure.toneMapping,
+    structure.contour ? 'ink' : '_',
   ].join('|');
 }
 
 /**
- * True when the graph samples the scene pass's depth (AO and DOF do). Such a
- * graph renders the scene pass without MSAA: the sample count of a depth
- * texture is baked into the shaders that read it, so it cannot follow
- * play/pause, and a multisampled depth read is not portable across backends.
+ * True when the graph samples the scene pass's depth (AO, DOF and the ink
+ * contour do). Such a graph renders the scene pass without MSAA: the sample
+ * count of a depth texture is baked into the shaders that read it, so it
+ * cannot follow play/pause, and a multisampled depth read is not portable
+ * across backends.
  */
 export function postReadsDepth(structure: PostStructure): boolean {
-  return structure.ao || structure.dof;
+  return structure.ao || structure.dof || structure.contour;
 }
 
 /** MSAA samples for the scene pass: the preset's, unless the graph reads depth. */
-export function scenePassSamples(config: PostprocessPresetConfig): number {
-  return postReadsDepth(postStructure(config)) ? 0 : config.multisampling;
+export function scenePassSamples(config: PostprocessPresetConfig, contour = false): number {
+  return postReadsDepth(postStructure(config, contour)) ? 0 : config.multisampling;
 }
