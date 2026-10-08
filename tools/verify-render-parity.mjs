@@ -94,7 +94,6 @@ const RENDERER_SOURCE_FILES_V2 = Object.freeze([
   'packages/scene/src/materials/elementProfiles.ts',
   'packages/scene/src/materials/index.ts',
   'packages/scene/src/materials/scenes.ts',
-  'packages/scene/src/useTimer.ts',
   'packages/scene/src/useBondGpuPipeline.ts',
   'packages/ui/src/ExportManager.tsx',
   'packages/ui/src/AnnotationsLayer.tsx',
