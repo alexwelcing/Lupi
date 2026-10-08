@@ -362,6 +362,7 @@ export function createBondImpostorMaterial({
           edgePx,
           lineWidth: INK_LOOK_TUNING.bondLine,
           hit: hit.xyz,
+          center: vA.add(vB).mul(0.5),
           isOrtho,
           emission: strainGlow,
           thinSolid: true,

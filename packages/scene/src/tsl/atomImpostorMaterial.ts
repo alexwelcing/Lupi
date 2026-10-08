@@ -494,6 +494,7 @@ export function createAtomImpostorMaterial({
           edgePx,
           lineWidth: INK_LOOK_TUNING.atomLine,
           hit: hit.xyz,
+          center: vViewCenter,
           isOrtho,
           emission,
         },
