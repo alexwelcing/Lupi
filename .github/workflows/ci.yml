@@ -133,7 +133,7 @@ jobs:
       - name: Validate GitHub workflow schemas
         run: pnpm verify:workflows
 
-      - name: Test actionlint compatibility filter
+      - name: Test actionlint runner
         run: node --test tools/run-actionlint.test.mjs
 
       - name: Test product contract verifier
