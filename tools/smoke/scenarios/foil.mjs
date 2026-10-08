@@ -131,7 +131,7 @@ async function finishOff(page, h) {
 
 export default {
   name: 'foil',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'Holo, Gold leaf and Pearl on C60 and caffeine: the finish shows, follows a camera turn, a still view draws no frames, exports never carry it.',
 
   async run(ctx, h) {

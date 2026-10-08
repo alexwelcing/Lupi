@@ -14,8 +14,12 @@
  *    Halftone decodes at size with painted pixels. The MCP result carries no
  *    spec, so the shading's place in it is checked through identity: each
  *    shading gets its own specId (renderArtifactAdapter.test.ts checks
- *    `view.ink.shading` itself).
- * Every settled view and export is saved for a human to look at.
+ *    `view.ink.shading` itself). Desktop only: the spec and its pixels do
+ *    not depend on the device that asks.
+ * Every settled view and export is saved for a human to look at; on a phone
+ * the close-ups are also saved at the screenshot's own pixels (`-device`:
+ * device pixels where CDP returns them; the phone lanes here return CSS
+ * size, downsampled by the browser rather than picked pixel by pixel).
  */
 
 const MOLECULES = ['caffeine', 'c60_buckyball'];
@@ -47,11 +51,12 @@ function weightsFor(style) {
  * Wait until the ink driver has taken `style` as its target (the store
  * reaches it a render after set_viewer returns) and rests there.
  */
-function waitInkRest(page, style, maxMs = 15_000) {
+function waitInkRest(page, style, maxMs = 90_000) {
   return page
     .waitForFunction((expected) => {
       const ink = window.__lupiPlay?.ink?.();
-      if (!ink || ink.fading || ink.holding) return null;
+      // The loop asleep too, so the last drawn frame shows the shading.
+      if (!ink || ink.fading || ink.holding || window.__lupiPlay.state().frameDemand?.awake !== false) return null;
       const at = (values) => Object.entries(expected).every(([key, value]) => values[key] === value);
       return at(ink.target) && at(ink) ? ink : null;
     }, weightsFor(style), { timeout: maxMs, polling: 50 })
@@ -64,6 +69,29 @@ async function framesWhileStill(page, ms = 600) {
   await page.waitForTimeout(ms);
   const after = (await page.evaluate(() => window.__lupiPlay?.state?.()?.frames ?? null));
   return before === null || after === null ? null : after - before;
+}
+
+/** The canvas at the screenshot's own pixels (no nearest-pixel crop to CSS size). */
+async function captureDevice(page, h, canvas) {
+  const box = await canvas.boundingBox();
+  const client = await h.cdpFor(page);
+  await page.evaluate((text) => {
+    const style = document.createElement('style');
+    style.id = 'ink-device-capture';
+    style.textContent = text;
+    document.head.appendChild(style);
+    // Two frames, so 1 ms transitions (reduced motion) have hidden the chrome.
+    return new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+  }, h.HIDE_CHROME_CSS);
+  try {
+    const { data } = await client.send('Page.captureScreenshot', { format: 'png' });
+    const full = h.decodePng(Buffer.from(data, 'base64'));
+    const scale = full.width / (page.viewportSize()?.width ?? full.width);
+    const rect = { x: Math.floor(box.x * scale), y: Math.floor(box.y * scale), width: Math.floor(box.width * scale), height: Math.floor(box.height * scale) };
+    return { image: h.cropImage(full, rect, 1), scale };
+  } finally {
+    await page.evaluate(() => document.getElementById('ink-device-capture')?.remove());
+  }
 }
 
 async function exportPng(page, h, label) {
@@ -86,11 +114,12 @@ async function exportPng(page, h, label) {
 
 export default {
   name: 'ink',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'Illustrate, Sketch, Engrave and Halftone draw on caffeine and C60, rest still, and export (Engrave, Halftone).',
 
   async run(ctx, h) {
-    const { page, check, save, outcome } = ctx;
+    const { page, spec, check, save, outcome } = ctx;
+    const phone = h.isTouchProfile(spec.profile);
     outcome.data.ink = {};
     for (const id of MOLECULES) {
       const data = { views: {}, exports: {} };
@@ -136,10 +165,16 @@ export default {
           await waitInkRest(page, style);
           const close = await h.waitSettled(page, canvas, 0.01);
           await save(`${id}-${style}-close`, close.png);
+          if (phone) {
+            const device = await captureDevice(page, h, canvas);
+            data.deviceScale = device.scale;
+            await save(`${id}-${style}-close-device`, h.encodePng(device.image));
+          }
         }
       }
 
       // 2. Exports of the two print shadings (raster bonds fail closed: hide them).
+      if (phone) continue;
       const hidden = await setViewer(page, { showBonds: false });
       check(`${id}: bonds hide for the raster export`, hidden.ok, JSON.stringify(hidden.error));
       const specIds = new Set();

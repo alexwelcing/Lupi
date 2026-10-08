@@ -126,7 +126,10 @@ async function cdpFor(page) {
  * font/caret/animation-frame round trips more than double the capture time.
  * The viewport is captured whole and cropped here: a clipped CDP capture
  * drops the page's emulated device scale factor (the phone profile would run
- * at DPR 1 after its first screenshot).
+ * at DPR 1 after its first screenshot). The hiding style is given two
+ * animation frames before the capture: under prefers-reduced-motion the app's
+ * CSS shortens transitions to 1 ms on every property, visibility included,
+ * and a capture in the frame that starts one still shows the chrome.
  */
 async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
   const box = await canvas.boundingBox();
@@ -144,6 +147,10 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
       document.head.appendChild(style);
     }
     style.textContent = text;
+    return new Promise((done) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => done()));
+      setTimeout(done, 500);
+    });
   }, css);
   try {
     const client = await cdpFor(page);
@@ -290,7 +297,7 @@ async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
     }
     if (isTouchProfile(spec.profile)) await page.touchscreen.tap(point.x, point.y);
     else await page.mouse.click(point.x, point.y);
-    const shown = await card.first().waitFor({ state: 'visible', timeout: 4_000 }).then(() => true, () => false);
+    const shown = await card.first().waitFor({ state: 'visible', timeout: 12_000 }).then(() => true, () => false);
     tried.push({ ...point, shown });
     if (shown) {
       const info = await card.first().evaluate((node) => ({

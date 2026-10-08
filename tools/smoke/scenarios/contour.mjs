@@ -17,6 +17,17 @@
  *    (its spec records view.ink.contour) and differs from it; 2400x1600 (two
  *    tiles across at factor 2) shows no seam at the tile boundary column; a
  *    transparent 1024x1024 keeps its background clear and its molecule inked.
+ * 5. Line weight across DPRs: space-filling caffeine drawn flat on the
+ *    paper plate. The dark band at the molecule's edge (full width at half
+ *    depth, from the plate inward, the median over the rows) is the outer
+ *    contour, INK_CONTOUR_TUNING.outerLine ink units, plus about a canvas
+ *    pixel of soft edge on each side; an ink unit is one CSS px on a 900 px
+ *    picture, clamped to 0.85 below 765 px, at any DPR. Measured in CSS px
+ *    (the phone lanes' screenshots come back at CSS size, downsampled by
+ *    the browser), it is about 2.21 + 2 / DPR.
+ * On a phone (phone390, DPR 3; 2 on the WebGL2 backend) steps 1 to 3 and 5
+ * run as on the desktop. The exports of step 4 run on the desktop only:
+ * the spec and its pixels do not depend on the device that asks.
  */
 
 // The Looks' plates: Illustrate on the sage plate, Sketch on paper.
@@ -25,6 +36,83 @@ const BALL_AND_STICK = { inkStyle: 'flat', backgroundPreset: 'sage-plate', showB
 const SKETCH = { inkStyle: 'hatch', backgroundPreset: 'paper-plate', atomScale: 2.6, showBonds: false };
 /** The export's own small-molecule boost would shrink the balls apart; keep them space-filling. */
 const EXPORT_ATOM_SCALE = 2.6;
+
+/** The outer contour's width (ink units) and the ink unit's floor (inkContour.ts, inkLook.ts). */
+const OUTER_LINE = 2.6;
+const MIN_PICTURE_SCALE = 0.85;
+/** Canvas pixels the band's half-depth width gains from its soft edges (FXAA, coverage). */
+const EDGE_SOFTNESS = 2;
+const LINE_VIEW = { inkStyle: 'flat', backgroundPreset: 'paper-plate', atomScale: 2.6, showBonds: false };
+
+/** The canvas at the screenshot's own pixels (device pixels where CDP returns them) and its pixels per CSS px. */
+async function captureDevice(page, h, canvas) {
+  const box = await canvas.boundingBox();
+  const client = await h.cdpFor(page);
+  await page.evaluate((text) => {
+    const style = document.createElement('style');
+    style.id = 'contour-device-capture';
+    style.textContent = text;
+    document.head.appendChild(style);
+    // Two frames, so 1 ms transitions (reduced motion) have hidden the chrome.
+    return new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+  }, h.HIDE_CHROME_CSS);
+  try {
+    const { data } = await client.send('Page.captureScreenshot', { format: 'png' });
+    const full = h.decodePng(Buffer.from(data, 'base64'));
+    const scale = full.width / (page.viewportSize()?.width ?? full.width);
+    const rect = { x: Math.floor(box.x * scale), y: Math.floor(box.y * scale), width: Math.floor(box.width * scale), height: Math.floor(box.height * scale) };
+    return { image: h.cropImage(full, rect, 1), scale };
+  } finally {
+    await page.evaluate(() => document.getElementById('contour-device-capture')?.remove());
+  }
+}
+
+/**
+ * The dark band at the molecule's edge, in image px: for each row, from each
+ * side, the first dip below the plate, measured at half its depth; the
+ * median over the rows that cross the molecule.
+ */
+function edgeBand(image) {
+  const { width: w, height: hgt, data } = image;
+  const plateAt = (x, y) => luma(data, (y * w + x) * 4);
+  const widths = [];
+  for (let y = 0; y < hgt; y += 1) {
+    const plate = (plateAt(0, y) + plateAt(w - 1, y)) / 2;
+    for (const dir of [1, -1]) {
+      let x = dir === 1 ? 0 : w - 1;
+      const end = dir === 1 ? w : -1;
+      // Into the dip: the first pixel clearly below the plate.
+      while (x !== end && luma(data, (y * w + x) * 4) > plate - 40) x += dir;
+      if (x === end) break;
+      // Its floor: the darkest pixel before the luma turns back up by a third of the depth.
+      let floor = luma(data, (y * w + x) * 4);
+      let probe = x;
+      while (probe !== end) {
+        const value = luma(data, (y * w + probe) * 4);
+        if (value < floor) floor = value;
+        if (value > floor + (plate - floor) / 3) break;
+        probe += dir;
+      }
+      if (plate - floor < 120) continue;
+      const half = (plate + floor) / 2;
+      // Full width at half depth, with the crossings interpolated.
+      let a = x - dir;
+      while (a !== end && luma(data, (y * w + a + dir) * 4) > half) a += dir;
+      let b = a + dir;
+      while (b !== end && luma(data, (y * w + b) * 4) <= half) b += dir;
+      if (b === end) continue;
+      const la0 = luma(data, (y * w + a) * 4);
+      const la1 = luma(data, (y * w + a + dir) * 4);
+      const lb0 = luma(data, (y * w + b - dir) * 4);
+      const lb1 = luma(data, (y * w + b) * 4);
+      const enter = (la0 - half) / Math.max(1e-6, la0 - la1);
+      const leave = (half - lb0) / Math.max(1e-6, lb1 - lb0);
+      widths.push(Math.abs(b - a) - 1 + leave - enter);
+    }
+  }
+  widths.sort((m, n) => m - n);
+  return { rows: widths.length, median: widths.length ? widths[Math.floor(widths.length / 2)] : null };
+}
 
 async function open(ctx, h, id, atoms, contour) {
   const { page, check, outcome } = ctx;
@@ -40,6 +128,19 @@ async function open(ctx, h, id, atoms, contour) {
   if (!check('viewer canvas is present', Boolean(canvas))) return null;
   await canvas.evaluate((node) => node.setAttribute('data-smoke-main', '1'));
   return canvas;
+}
+
+/**
+ * Wait until the drawing has landed and the loop has gone quiet, so the last
+ * drawn frame shows it. A loaded software renderer draws a frame every few
+ * seconds: two screenshots 250 ms apart can both show the look before.
+ */
+async function lookDrawn(page) {
+  await page.waitForFunction(() => {
+    const ink = window.__lupiPlay?.ink?.();
+    const demand = window.__lupiPlay?.state?.()?.frameDemand;
+    return Boolean(ink && demand) && ink.target.mix === 1 && ink.mix === 1 && !ink.fading && !ink.fuse?.running && !ink.holding && demand.awake === false;
+  }, null, { timeout: 120_000, polling: 250 }).catch(() => {});
 }
 
 async function setViewer(page, args) {
@@ -58,8 +159,8 @@ async function drawPair(ctx, h, id, atoms, view, label) {
     if (!canvas) return null;
     const set = await setViewer(page, view);
     if (!check(`${label}: set_viewer`, set.ok, JSON.stringify(set.error))) return null;
-    // The look fades in over about half a second; wait until the screen holds still.
-    await page.waitForTimeout(900);
+    // The look fades in over about half a second; wait until it is drawn and the screen holds still.
+    await lookDrawn(page);
     const settled = await h.waitSettled(page, canvas, 0.02);
     await save(`${label}-${contour ? 'contour' : 'before'}`, settled.png);
     shots[contour ? 'on' : 'off'] = settled.image;
@@ -139,7 +240,7 @@ function columnStep(image, a, b) {
 
 export default {
   name: 'contour',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'Illustrate draws meeting lines and an outer contour, live and in tiled exports, without seams.',
 
   async run(ctx, h) {
@@ -182,16 +283,40 @@ export default {
     outcome.data.contour.sketch = sketchInk;
     check('Sketch caffeine: the contour adds ink', sketchInk.added > 150, `${sketchInk.added} px`);
 
-    // 4. Exports of the space-filling view, without and then with the contour.
+    // 5. Line weight across DPRs.
+    const canvas = await open(ctx, h, 'caffeine', 24, true);
+    if (!canvas) return;
+    const set = await setViewer(page, LINE_VIEW);
+    if (!check('line weight: set_viewer', set.ok, JSON.stringify(set.error))) return;
+    await lookDrawn(page);
+    await h.waitSettled(page, canvas, 0.02);
+    const shot = await captureDevice(page, h, canvas);
+    const dpr = await canvas.evaluate((node) => node.width / node.getBoundingClientRect().width);
+    const cssShort = Math.min(...[shot.image.width, shot.image.height].map((side) => side / shot.scale));
+    const unit = Math.min(2.6, Math.max(MIN_PICTURE_SCALE, cssShort / 900));
+    // The band as drawn, plus about a canvas pixel of soft edge on each side (FXAA and coverage).
+    const want = OUTER_LINE * unit + EDGE_SOFTNESS / dpr;
+    const band = edgeBand(shot.image);
+    const css = band.median === null ? null : band.median / shot.scale;
+    outcome.data.contour.lineWeight = { dpr: Math.round(dpr * 100) / 100, screenshotScale: shot.scale, rows: band.rows, cssPx: css, expectedCssPx: want };
+    await save('line-weight', h.encodePng(shot.image));
+    check(
+      `the outer contour keeps its CSS width at DPR ${Math.round(dpr * 100) / 100}`,
+      css !== null && Math.abs(css - want) < want * 0.25,
+      `${css === null ? 'n/a' : css.toFixed(2)} CSS px over ${band.rows} edges, expected about ${want.toFixed(2)}`,
+    );
+
+    // 4. Exports of the space-filling view, without and then with the contour (device-independent).
+    if (h.isTouchProfile(ctx.spec.profile)) return;
     if (!(await open(ctx, h, 'caffeine', 24, false))) return;
     await setViewer(page, SPACE_FILLING);
-    await page.waitForTimeout(900);
+    await lookDrawn(page);
     const before = await exportPng(page, h, 2048, 2048, 'before-2048');
     check('export 2048 without the contour', before.ok, JSON.stringify(before.error));
 
     if (!(await open(ctx, h, 'caffeine', 24, true))) return;
     await setViewer(page, SPACE_FILLING);
-    await page.waitForTimeout(900);
+    await lookDrawn(page);
     const square = await exportPng(page, h, 2048, 2048, 'contour-2048');
     if (!check('export 2048 with the contour', square.ok, JSON.stringify(square.error))) return;
     const squareImage = h.decodePng(Buffer.from(square.base64, 'base64'));

@@ -63,7 +63,7 @@ const canvasSize = (page) => page.evaluate(() => {
 });
 
 /** Wait until the framing has reached its target (or `ms`). */
-async function eased(page, ms = 6_000) {
+async function eased(page, ms = 20_000) {
   await page.waitForFunction(() => {
     const view = window.__lupiPlay?.viewInset?.();
     if (!view) return true;
@@ -119,10 +119,10 @@ export default {
       } else {
         await page.getByRole('button', { name: 'Play: toys and view' }).tap();
         const item = page.locator('[data-lupi-pill] [role="menu"]').getByRole('menuitem', { name: panel.tray });
-        if (await item.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true, () => false)) await item.tap();
+        if (await item.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true, () => false)) await item.tap();
       }
       const region = page.locator(panel.region).first();
-      const opened = await region.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false);
+      const opened = await region.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true, () => false);
       check(`${panel.name}: the sheet opens`, opened);
       if (!opened) continue;
       await eased(page);
@@ -143,7 +143,7 @@ export default {
       // Close it the way it was opened (Settings has no deck button).
       if (panel.close) await page.getByRole('button', { name: panel.close, exact: true }).tap();
       else await page.getByRole('button', { name: panel.deck, exact: true }).tap();
-      const closed = await region.waitFor({ state: 'hidden', timeout: 8_000 }).then(() => true, () => false);
+      const closed = await region.waitFor({ state: 'hidden', timeout: 30_000 }).then(() => true, () => false);
       await eased(page);
       const after = await framing(page);
       const back = await drawn(page, h, canvas);

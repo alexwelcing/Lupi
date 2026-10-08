@@ -18,6 +18,12 @@
  *    starts it if it has not after 10 s) -> done, with the camera moving
  *    while it plays.
  * 4. It ends on "Your turn" in the pill.
+ * Under Motion: Still (--reduced-motion) a flick does not coast, so the
+ * moment is taken with `replay('moment')`: it is a still tape (one key, no
+ * events), and the link opens C60 at that pose without playing anything
+ * ("Shared view · your turn"; the camera stays put).
+ * On a phone (phone390) the flick is a touch flick and the pill and the
+ * sheet take taps.
  */
 
 const ID = 'c60_buckyball';
@@ -54,11 +60,14 @@ async function rigRest(page, ms = 20_000) {
 
 export default {
   name: 'replay',
-  profiles: ['desktop'],
+  profiles: ['desktop', 'phone390'],
   description: 'Instant Replay: a flick offers Replay ↗ with a replay= link; the link plays the moment and ends on Your turn.',
 
   async run(ctx, h) {
-    const { page, check, save, outcome } = ctx;
+    const { page, spec, check, save, outcome, options } = ctx;
+    const touch = h.isTouchProfile(spec.profile);
+    const still = options.reducedMotion;
+    const press = (locator) => (touch ? locator.tap() : locator.click());
     await page.addInitScript(installReplayRecorder);
     const canvas = await h.openStructure(ctx, h.galleryEntry(ID));
     if (!canvas) return;
@@ -75,7 +84,8 @@ export default {
     let source = null;
     const throws = [{ dx: 120, dy: 0 }, { dx: 200, dy: -40 }];
     for (const throwBy of throws) {
-      await h.mouseFlick(page, start, throwBy, { ms: 100 });
+      if (touch) await h.touchFlick(page, start, throwBy, { ms: 100 });
+      else await h.mouseFlick(page, start, throwBy, { ms: 100 });
       await h.sleep(300);
       await rigRest(page);
       const offered = await offer.waitFor({ state: 'visible', timeout: 6_000 }).then(() => true, () => false);
@@ -89,18 +99,19 @@ export default {
       source = "replay('moment') fallback";
     }
     outcome.data.source = source;
-    check('a flick offers a moment ("Replay ↗" on the pill)', !source.includes('fallback'), source);
+    if (!still) check('a flick offers a moment ("Replay ↗" on the pill)', !source.includes('fallback'), source);
     const sent = await replayHook(page);
     outcome.data.sent = sent;
     const link = typeof sent?.link === 'string' ? new URL(sent.link) : null;
     check('replay() returns the moment with a replay= link', Boolean(link && link.searchParams.get('replay') && link.searchParams.get('sim') === ID),
       sent ? `${sent.moment}, ${sent.keys} keys, ${sent.events} events, ${sent.bytes} bytes, ${sent.link?.slice(0, 120)}` : 'null');
-    check('the tape is small (100 B to 3 KB)', sent?.bytes >= 100 && sent.bytes <= 3_000 && sent.keys > 1, `${sent?.bytes} bytes, ${sent?.keys} keys`);
+    if (still) check('Still: the tape is a still pose (one key, no events)', sent?.keys === 1 && sent.events === 0 && sent.bytes > 0, `${sent?.bytes} bytes, ${sent?.keys} keys, ${sent?.events} events`);
+    else check('the tape is small (100 B to 3 KB)', sent?.bytes >= 100 && sent.bytes <= 3_000 && sent.keys > 1, `${sent?.bytes} bytes, ${sent?.keys} keys`);
     await save('offer', await page.screenshot({ scale: 'css' }));
 
     // 2. The share sheet carries the same live link.
     if (await offer.isVisible().catch(() => false)) {
-      await offer.click();
+      await press(offer);
       // The clip records at once (1080x1920 on desktop), which can hold a
       // software renderer's main thread for seconds: wait generously.
       const sheetLink = page.locator('[data-lupi-replay-sheet] input[aria-label="Live link"]');
@@ -110,7 +121,7 @@ export default {
       outcome.data.sheet = { opened, recording: recording > 0, value: value.slice(0, 160) };
       check('"Replay ↗" opens the share sheet with a replay= live link', opened && value.includes('replay='), value.slice(0, 120));
       await save('sheet', await page.screenshot({ scale: 'css' }));
-      await page.locator('[data-lupi-replay-sheet] button[aria-label="Close"]').first().click().catch(() => {});
+      await press(page.locator('[data-lupi-replay-sheet] button[aria-label="Close"]').first()).catch(() => {});
       await page.locator('[data-lupi-replay-sheet]').first().waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => {});
     }
     if (!link) return;
@@ -131,6 +142,20 @@ export default {
     const address = new URL(page.url());
     check('the address bar drops replay= after reading it', !address.searchParams.has('replay'), `${address.pathname}${address.search}`);
 
+    if (still) {
+      // Still: the moment opens at its pose, nothing plays, and the pill hands over.
+      const done = await page.waitForFunction(() => window.__replaySmoke.phases.at(-1)?.phase === 'done', null, { timeout: 60_000, polling: 250 }).then(() => true, () => false);
+      await h.sleep(3_000);
+      const log = await page.evaluate(() => window.__replaySmoke);
+      const phases = log.phases.map((entry) => entry.phase);
+      const rig = await page.evaluate(() => window.__lupiPlay?.state?.().rig ?? null);
+      outcome.data.received = { phases: log.phases, flashes: log.flashes, rig };
+      check('Still: the shared view opens without playing', done && !phases.includes('playing'), phases.join(' -> '));
+      check('Still: the pill says "Shared view · your turn"', log.flashes.some((flash) => /Shared view/.test(flash.text)), log.flashes.map((flash) => flash.text).join(' | '));
+      check('Still: the camera rests', rig?.moving === false, JSON.stringify(rig));
+      await save('still-view', await page.screenshot({ scale: 'css' }));
+      return;
+    }
     const playing = await page.waitForFunction(() => window.__replaySmoke.phases.some((entry) => entry.phase === 'playing'), null, { timeout: 10_000, polling: 100 }).then(() => true, () => false);
     if (!playing) await replayHook(page, 'watch');
     outcome.data.autoplay = playing;

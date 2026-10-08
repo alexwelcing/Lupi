@@ -562,6 +562,9 @@ async function runScenarioAttempt(browser, spec, attempt) {
 
   const context = await browser.newContext(contextOptions(spec.profile));
   const page = await context.newPage();
+  // Actions (boundingBox, tap) wait as long as any other wait: a software
+  // renderer compiling a new shader can hold the main thread past 30 s.
+  page.setDefaultTimeout(timeout);
   attachDiagnostics(page, spec.baseUrl, outcome.errors, spec.name);
   await stubThirdParty(page);
 
