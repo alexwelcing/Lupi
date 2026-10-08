@@ -205,17 +205,33 @@ export interface PostStructure {
   toneMapping: PostprocessPresetConfig['toneMapping'];
   /** The Illustrate look's ink contour (inkContour.ts), while the drawing shows. */
   contour: boolean;
+  /**
+   * The look is changing between lit and ink (a fade or a Light Fuse): every
+   * stage rests where the pixel's live ink mix is, so the recipe follows the
+   * drawing instead of switching at the toggle. Only when there is a stage
+   * to rest.
+   */
+  inkFade: boolean;
 }
 
-/** The graph a config needs; `contour` while the Illustrate look is drawn. */
-export function postStructure(config: PostprocessPresetConfig, contour = false): PostStructure {
+/**
+ * The graph a config needs; `contour` while the Illustrate look is drawn,
+ * `inkFade` while it changes (the config is then the lit recipe).
+ */
+export function postStructure(config: PostprocessPresetConfig, contour = false, inkFade = false): PostStructure {
+  const ao = config.ssao.enabled;
+  const bloom = config.bloom.enabled;
+  const dof = config.dof.enabled;
+  const vignette = config.vignette.enabled;
+  const toneMapping = config.toneMapping;
   return {
-    ao: config.ssao.enabled,
-    bloom: config.bloom.enabled,
-    dof: config.dof.enabled,
-    vignette: config.vignette.enabled,
-    toneMapping: config.toneMapping,
+    ao,
+    bloom,
+    dof,
+    vignette,
+    toneMapping,
     contour,
+    inkFade: inkFade && (ao || bloom || dof || vignette || toneMapping !== 'none'),
   };
 }
 
@@ -228,6 +244,7 @@ export function postStructureKey(structure: PostStructure): string {
     structure.vignette ? 'vg' : '_',
     structure.toneMapping,
     structure.contour ? 'ink' : '_',
+    structure.inkFade ? 'fade' : '_',
   ].join('|');
 }
 
