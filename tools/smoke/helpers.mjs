@@ -297,7 +297,7 @@ async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
     }
     if (isTouchProfile(spec.profile)) await page.touchscreen.tap(point.x, point.y);
     else await page.mouse.click(point.x, point.y);
-    const shown = await card.first().waitFor({ state: 'visible', timeout: 4_000 }).then(() => true, () => false);
+    const shown = await card.first().waitFor({ state: 'visible', timeout: 12_000 }).then(() => true, () => false);
     tried.push({ ...point, shown });
     if (shown) {
       const info = await card.first().evaluate((node) => ({

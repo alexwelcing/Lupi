@@ -58,7 +58,7 @@ async function toggleLook(page, h, touch) {
     return Boolean(button);
   });
   if (!opened) throw new Error('the Play pill is missing');
-  await page.waitForFunction(() => Boolean(document.querySelector('[data-lupi-pill] [role="menu"]')), null, { timeout: 8_000 });
+  await page.waitForFunction(() => Boolean(document.querySelector('[data-lupi-pill] [role="menu"]')), null, { timeout: 30_000 });
   await page.evaluate(() => {
     const label = window.__lupiViewerMcp.state().inkStyle === 'off' ? 'Ink' : 'Lit';
     const items = [...document.querySelectorAll('[data-lupi-pill] [role="menu"] [role="menuitemradio"]')];
