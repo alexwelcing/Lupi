@@ -21,7 +21,8 @@
  *   and picking see the same holes (CPU twin: bondDashSegments in
  *   ui/src/export/exportSceneBuilder.ts);
  * - the Illustrate look (tsl/inkLook.ts): toon fills, ink along both edges,
- *   and thin bonds drawn as one ink stroke, mixed in by `uInkMix`;
+ *   and thin bonds drawn as one ink stroke, mixed in by `uInkMix`, or per
+ *   fragment by the Light Fuse while one runs (tsl/inkFuse.ts);
  * - degenerate, sub-pixel and fully faded bonds collapse to a degenerate
  *   vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -54,6 +55,7 @@ import {
   float,
   floor,
   fract,
+  instanceIndex,
   length,
   max,
   min,
@@ -77,6 +79,7 @@ import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
 import { ATOM_GLOW } from './atomGlow';
 import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
+import { lupiBondFuseHop, lupiFuseMix, lupiFuseSurfacePoint } from './inkFuse';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
@@ -260,6 +263,8 @@ export function createBondImpostorMaterial({
   // Constant per instance; rounded again in the fragment against interpolation error.
   const vStyle: N = varying(floor(attribute(BOND_ATTR.colorStart, 'vec4').a.mul(3).add(0.5)), 'vBondStyle');
   const vFoilSweep: N = varying(lupiFoilSweep(mid), 'vBondFoilSweep');
+  // The Light Fuse reads this bond's two hops by instance (tsl/inkFuse.ts).
+  const vBondId: N = varying(float(instanceIndex), 'vBondId');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // Distance fade (LOD): far bonds thin out before the vertex cull drops them.
@@ -323,6 +328,13 @@ export function createBondImpostorMaterial({
     // The lit surface, the Illustrate surface (tsl/inkLook.ts), or a blend
     // while the look fades; uniform branches, as on the atoms.
     const inkMix: N = INK_LOOK.uInkMix as N;
+    // The Light Fuse (tsl/inkFuse.ts): while a fuse runs, the front runs down
+    // the stick between its atoms' hops; exactly `uInkMix` otherwise.
+    const fusedMix: N = (lupiFuseMix(
+      inkMix,
+      lupiBondFuseHop(vBondId, axial.div(max(segLen, 1e-6))),
+      lupiFuseSurfacePoint(hit.xyz),
+    ) as N).toVar();
     const lit = vec3(0).toVar();
     If(inkMix.lessThan(1.0), () => {
       lit.assign(lupiSurface(
@@ -368,7 +380,7 @@ export function createBondImpostorMaterial({
         },
         lights,
       ) as N;
-      lit.assign(mix(lit, ink, clamp(inkMix, 0.0, 1.0)));
+      lit.assign(mix(lit, ink, fusedMix));
     });
     // Foil: gilded edges and the same finish as the atoms (none in captures,
     // and none under the Illustrate look, which is a drawing).
@@ -381,7 +393,7 @@ export function createBondImpostorMaterial({
       pixelRadius: vPixelRadius,
       sweep: vFoilSweep,
       bond: true,
-      mute: inkMix,
+      mute: fusedMix,
     });
     return vec4(finished, u.uOpacity.mul(fadeAt(hit.z)));
   }) as N)();

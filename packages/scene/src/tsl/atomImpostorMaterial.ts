@@ -21,7 +21,8 @@
  * - the Foil finishes of a Remix code (tsl/atomFoil.ts): Holo, Gold leaf
  *   and Pearl on the rims and highlights, exactly absent in every capture;
  * - the Illustrate look (tsl/inkLook.ts): toon fills and an ink outline at
- *   the disc's silhouette, mixed over the lit surface by `uInkMix`;
+ *   the disc's silhouette, mixed over the lit surface by `uInkMix`, or per
+ *   fragment by the Light Fuse while one runs (tsl/inkFuse.ts);
  * - hidden types (zero palette radius) and sub-pixel atoms collapse to a
  *   degenerate vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -89,6 +90,7 @@ import { lupiDisplayOffset } from './displayMotion';
 import { lupiAtomGlow, lupiAtomGlowStrength, lupiAtomSwell } from './atomGlow';
 import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
+import { lupiAtomFuseHop, lupiFuseMix, lupiFuseSurfacePoint } from './inkFuse';
 import { CONTACT_OCCLUSION_NEIGHBORS, CONTACT_TEXTURE_WIDTH } from '../atomContactOcclusion';
 import {
   blendMaterialPreset,
@@ -458,6 +460,9 @@ export function createAtomImpostorMaterial({
     // blend of the two while the look fades. Uniform branches: a still look
     // runs one of them only.
     const inkMix: N = INK_LOOK.uInkMix as N;
+    // The Light Fuse (tsl/inkFuse.ts): per fragment while a fuse runs, the
+    // front reaching this atom at its hop; exactly `uInkMix` otherwise.
+    const fusedMix: N = (lupiFuseMix(inkMix, lupiAtomFuseHop(vAtomId), lupiFuseSurfacePoint(hit.xyz)) as N).toVar();
     const lit = vec3(0).toVar();
     If(inkMix.lessThan(1.0), () => {
       lit.assign(lupiSurface(
@@ -499,7 +504,7 @@ export function createAtomImpostorMaterial({
         },
         lights,
       ) as N;
-      lit.assign(mix(lit, ink, clamp(inkMix, 0.0, 1.0)));
+      lit.assign(mix(lit, ink, fusedMix));
     });
 
     // Etched annotation: the view-space normal is the stamp UV (the text
@@ -524,7 +529,7 @@ export function createAtomImpostorMaterial({
       pixelRadius: vPixelRadius,
       sweep: vFoilSweep,
       // The Illustrate look is a drawing: a finish steps aside as ink comes in.
-      mute: inkMix,
+      mute: fusedMix,
     });
     // Hover / selection / grab rim and the heat tint (zero in captures).
     const glow = lupiAtomGlow(vGlow, facing);
