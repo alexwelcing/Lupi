@@ -5,11 +5,18 @@ import { ElementDetailCard } from './ElementDetailCard';
 
 afterEach(() => cleanup());
 
+// jsdom resolves every cell's inline styles (border shorthands, colours) each
+// time it computes a style, and `*ByRole` computes one per candidate for its
+// hidden check and accessible name: across 118 cells that cost most of each
+// test. The cells are found by their aria-label instead, and counted with
+// `hidden: true` (nothing in the grid is hidden).
+const cell = (name: string) => screen.getByLabelText(name, { selector: 'button' });
+
 describe('PeriodicTableGrid', () => {
   it('renders exactly 118 element buttons plus the 2 f-block placeholders', () => {
     render(<PeriodicTableGrid selected={[]} onToggle={() => {}} />);
 
-    expect(screen.getAllByRole('button')).toHaveLength(118);
+    expect(screen.getAllByRole('button', { hidden: true })).toHaveLength(118);
     expect(screen.getByText('57–71')).toBeTruthy();
     expect(screen.getByText('89–103')).toBeTruthy();
   });
@@ -18,8 +25,8 @@ describe('PeriodicTableGrid', () => {
     const onToggle = vi.fn();
     render(<PeriodicTableGrid selected={[26]} onToggle={onToggle} />);
 
-    const iron = screen.getByRole('button', { name: 'Iron, atomic number 26' });
-    const oxygen = screen.getByRole('button', { name: 'Oxygen, atomic number 8' });
+    const iron = cell('Iron, atomic number 26');
+    const oxygen = cell('Oxygen, atomic number 8');
     expect(iron.getAttribute('aria-pressed')).toBe('true');
     expect(oxygen.getAttribute('aria-pressed')).toBe('false');
 
@@ -31,13 +38,13 @@ describe('PeriodicTableGrid', () => {
     const onToggle = vi.fn();
     render(<PeriodicTableGrid selected={[26]} onToggle={onToggle} maxSelection={1} />);
 
-    const oxygen = screen.getByRole('button', { name: 'Oxygen, atomic number 8' });
+    const oxygen = cell('Oxygen, atomic number 8');
     expect(oxygen).toHaveProperty('disabled', true);
     fireEvent.click(oxygen);
     expect(onToggle).not.toHaveBeenCalled();
 
     // The already-selected cell stays interactive so it can be deselected.
-    const iron = screen.getByRole('button', { name: 'Iron, atomic number 26' });
+    const iron = cell('Iron, atomic number 26');
     expect(iron).toHaveProperty('disabled', false);
   });
 
@@ -45,12 +52,12 @@ describe('PeriodicTableGrid', () => {
     const onToggle = vi.fn();
     render(<PeriodicTableGrid selected={[]} onToggle={onToggle} filterText="oxy" />);
 
-    const oxygen = screen.getByRole('button', { name: 'Oxygen, atomic number 8' });
+    const oxygen = cell('Oxygen, atomic number 8');
     expect(oxygen).toHaveProperty('disabled', false);
     fireEvent.click(oxygen);
     expect(onToggle).toHaveBeenCalledWith(8);
 
-    const iron = screen.getByRole('button', { name: 'Iron, atomic number 26' });
+    const iron = cell('Iron, atomic number 26');
     expect(iron).toHaveProperty('disabled', true);
     expect(iron.style.opacity).toBe('0.22');
     fireEvent.click(iron);
