@@ -165,14 +165,15 @@ export function createClipEncoder(choice: ClipCodecChoice, width: number, height
   });
   encoder.configure(choice.config);
 
-  // The encoder took a frame (or 20 ms passed: not every browser fires `dequeue`).
+  // The encoder took a frame (or 20 ms passed: not every browser fires `dequeue`,
+  // or makes the encoder an event target at all).
   const drained = () =>
     new Promise<void>((resolve) => {
       const done = () => {
-        encoder.removeEventListener('dequeue', done);
+        encoder.removeEventListener?.('dequeue', done);
         resolve();
       };
-      encoder.addEventListener('dequeue', done);
+      encoder.addEventListener?.('dequeue', done);
       setTimeout(done, 20);
     });
 

@@ -186,15 +186,15 @@ export async function renderOfflineClip(options: OfflineClipOptions): Promise<{ 
   // The view as configured (never the phone budget), like an export.
   const look = resolveCaptureLook(useStore.getState(), { transparent: false });
 
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const stopRecording = beginRecording({ illustrative: true });
   const resumeRecorder = pauseRecorder();
-  const base = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const base = now();
   let clock = base;
   const releaseClock = driveMotionClock(() => clock);
   const resetToys = () => getToyReplaySink()?.play({ kind: 'reset' });
   resetToys();
   player.start();
-  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const split = { render: 0, compose: 0, encode: 0 };
   let backend: string | null = null;
   setProgress({ frame: 0, frames, ms: 0 });
