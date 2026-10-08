@@ -120,8 +120,8 @@ export const INK_TOON = {
 /**
  * viewBox units per ink unit. An ink unit is a CSS pixel on a 900 px
  * picture (0.85 of one below about 765 px), and the relay draws the 200-unit
- * box at about 0.8 of the window's short side, so a unit there is 0.3 to
- * 0.35 of the box: the outline hands over at the 3D view's weight.
+ * box at about 0.8 of the window's short side, so an ink unit there is 0.3
+ * to 0.35 viewBox units: the outline hands over at the 3D view's weight.
  */
 const INK_UNIT = 0.32;
 /** The viewer's stick radius (Å): scene/src/Bonds.tsx `radius`. */
@@ -686,16 +686,21 @@ function toonBond(layout: InkLayout, palette: InkToonPalette, b: number, out: In
   const halves: Array<[number, number, number, number, number]> = ki === kj
     ? [[sx, sy, ex, ey, ki]]
     : [[sx, sy, mx, my, ki], [mx, my, ex, ey, kj]];
-  out.push({ tag: 'line', x1: sx, y1: sy, x2: ex, y2: ey, stroke: ink, width: 2 * half, round: true, ...(style === 1 || style === 2 ? { dash: KIND_DASH[style]! } : {}) });
-  // Thinner than about two lines: the ink stroke is the stick (the shaders' thinSolid).
-  if (half < line * ((INK_TOON.bondSolidFrom + INK_TOON.bondSolidTo) / 2)) return;
+  const dash = style === 1 || style === 2 ? KIND_DASH[style]! : undefined;
+  // Thinner than about two lines: the ink stroke is the stick (the shaders' thinSolid), a pen line.
+  if (half < line * ((INK_TOON.bondSolidFrom + INK_TOON.bondSolidTo) / 2)) {
+    out.push({ tag: 'line', x1: sx, y1: sy, x2: ex, y2: ey, stroke: ink, width: 2 * half, round: true, dash });
+    return;
+  }
+  // A full stick ends square where it meets each ball, its ink only along the edges (dashes stay round).
+  out.push({ tag: 'line', x1: sx, y1: sy, x2: ex, y2: ey, stroke: ink, width: 2 * half, round: dash !== undefined, dash });
   const inner = half - line;
-  if (style === 1 || style === 2) {
-    // Coordination dashed, ionic contacts dotted: each dash outlined, the dashes running on across the halves.
+  if (dash) {
+    // Coordination dashed, ionic contacts dotted: each dash outlined, the pattern running on into the second half.
     let offset = 0;
     for (const [x1, y1, x2, y2, kind] of halves) {
-      out.push({ tag: 'line', x1, y1, x2, y2, stroke: palette.color(kind, 'color', cue), width: 2 * inner, round: true, dash: KIND_DASH[style]!, dashOffset: offset });
-      offset -= Math.hypot(x2 - x1, y2 - y1);
+      out.push({ tag: 'line', x1, y1, x2, y2, stroke: palette.color(kind, 'color', cue), width: 2 * inner, round: true, dash, dashOffset: offset });
+      offset += Math.hypot(x2 - x1, y2 - y1);
     }
     return;
   }
