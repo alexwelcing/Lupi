@@ -24,7 +24,7 @@ describe('learner scene looks', () => {
     expect(sceneLookPatch(id, 200_000)).toEqual(sceneLookPatch(id, 24));
   });
   it('maps each ink shading to its Look and back; every other Look is lit', () => {
-    for (const style of ['flat', 'hatch', 'engrave', 'halftone'] as const) {
+    for (const style of ['flat', 'hatch', 'engrave', 'halftone', 'chalk'] as const) {
       const look = lookForInkStyle(style);
       expect(inkStyleForLook(look)).toBe(style);
       expect(sceneLookPatch(look, 24).inkStyle).toBe(style);
@@ -32,12 +32,14 @@ describe('learner scene looks', () => {
     expect(lookForInkStyle('off')).toBe('studio');
     for (const id of ['studio', 'paper', 'night', 'prism'] as const) expect(inkStyleForLook(id)).toBe('off');
     expect(sceneLookPatch('ink', 24).backgroundPreset).toBe(SAGE_PLATE_PRESET_ID);
+    // Chalk is drawn for the dark plate.
+    expect(sceneLookPatch('chalk', 24).backgroundPreset).toBe(SAGE_PLATE_PRESET_ID);
     for (const id of ['sketch', 'engrave', 'halftone'] as const) {
       expect(sceneLookPatch(id, 24).backgroundPreset).toBe(PAPER_PLATE_PRESET_ID);
     }
   });
-  it('a new molecule keeps an Engrave or Halftone look', () => {
-    for (const id of ['engrave', 'halftone'] as const) {
+  it('a new molecule keeps an Engrave, Halftone or Chalk look', () => {
+    for (const id of ['engrave', 'halftone', 'chalk'] as const) {
       useStore.setState(sceneLookPatch(id, 24));
       useStore.getState().setFile({ name: `${id}.xyz`, size: 100, trajectory: createMockTrajectory(1, 24), thermo: null });
       expect(useStore.getState().inkStyle).toBe(id);

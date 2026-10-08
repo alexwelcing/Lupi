@@ -1,6 +1,7 @@
 /**
- * ink.mjs - the Illustrate look's four shadings: Illustrate (flat), Sketch
- * (hatch), Engrave and Halftone (LOCAL smoke plugin, not CI).
+ * ink.mjs - the Illustrate look's five shadings: Illustrate (flat), Sketch
+ * (hatch), Engrave, Halftone and Chalk (LOCAL smoke plugin, not CI; Chalk's
+ * own checks are in chalk.mjs).
  *
  *   node tools/verify-viewer-smoke.mjs --scenarios=ink --backend=both \
  *     --profile=desktop --strict-backend --out=.verify-artifacts/viewer-smoke/ink
@@ -29,6 +30,7 @@ const SHADINGS = [
   { style: 'hatch', weight: 'hatch', plate: 'paper-plate' },
   { style: 'engrave', weight: 'engrave', plate: 'paper-plate' },
   { style: 'halftone', weight: 'halftone', plate: 'paper-plate' },
+  { style: 'chalk', weight: 'chalk', plate: 'sage-plate' },
 ];
 const EXPORTED = ['engrave', 'halftone'];
 
@@ -44,7 +46,7 @@ function setViewer(page, args) {
 /** The ink driver's weights for a shading ('off' is lit). */
 function weightsFor(style) {
   const weight = SHADINGS.find((shading) => shading.style === style)?.weight;
-  return { mix: style === 'off' ? 0 : 1, hatch: 0, engrave: 0, halftone: 0, ...(weight ? { [weight]: 1 } : {}) };
+  return { mix: style === 'off' ? 0 : 1, hatch: 0, engrave: 0, halftone: 0, chalk: 0, ...(weight ? { [weight]: 1 } : {}) };
 }
 
 /**
@@ -115,7 +117,7 @@ async function exportPng(page, h, label) {
 export default {
   name: 'ink',
   profiles: ['desktop', 'phone390'],
-  description: 'Illustrate, Sketch, Engrave and Halftone draw on caffeine and C60, rest still, and export (Engrave, Halftone).',
+  description: 'Illustrate, Sketch, Engrave, Halftone and Chalk draw on caffeine and C60, rest still, and export (Engrave, Halftone).',
 
   async run(ctx, h) {
     const { page, spec, check, save, outcome } = ctx;
@@ -142,7 +144,7 @@ export default {
         check(
           `${id}: ${style} rests at its weights`,
           Boolean(ink) && Object.entries(expected).every(([key, value]) => ink[key] === value),
-          JSON.stringify(ink && { mix: ink.mix, hatch: ink.hatch, engrave: ink.engrave, halftone: ink.halftone }),
+          JSON.stringify(ink && { mix: ink.mix, hatch: ink.hatch, engrave: ink.engrave, halftone: ink.halftone, chalk: ink.chalk }),
         );
         const view = await h.waitSettled(page, canvas, 0.01);
         await save(`${id}-${style}`, view.png);

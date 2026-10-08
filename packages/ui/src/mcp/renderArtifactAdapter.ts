@@ -25,7 +25,7 @@ import {
   type RenderSpecIdV1,
   type Sha256DigestV1,
 } from '@atlas/core';
-import { INK_LOOK_COLORS, INK_LOOK_TUNING } from '@atlas/scene';
+import { INK_LOOK_COLORS, INK_LOOK_TUNING, inkLookInkHex } from '@atlas/scene';
 import { inkPlateColor } from '../ink/illustrate';
 import { getBgMedia, BG_PRESETS } from '../backgroundPresets';
 import { getDefaultQualityTier } from '../deviceCapabilities';
@@ -273,7 +273,8 @@ export async function createBrowserRenderArtifactPlanV1(
         pipeline: INK_LOOK_PIPELINE_ID,
         shading: state.inkStyle,
         weight: Number(state.inkWeight.toPrecision(6)),
-        ink: INK_LOOK_COLORS.ink,
+        // The drawing's ink: chalk under Chalk (its outlines and contour).
+        ink: inkLookInkHex(state.inkStyle),
         paper: INK_LOOK_COLORS.paper,
         shade: INK_LOOK_COLORS.shade,
         // The far side fades toward the plate (transparent output too).

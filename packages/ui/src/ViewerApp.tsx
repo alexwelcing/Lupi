@@ -1083,6 +1083,13 @@ export function ViewerApp() {
               onSelect: () => useStore.setState(sceneLookPatch('halftone', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
             },
             {
+              id: 'look-chalk',
+              label: 'Chalk: a chalkboard drawing on the dark plate (Chalk look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('chalk', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
               id: 'look-lit',
               label: 'Lit: turn the light back on (leave the ink look)',
               group: 'Scene',

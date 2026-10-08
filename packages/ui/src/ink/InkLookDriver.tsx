@@ -7,8 +7,8 @@
  *   renders (`setInkLookTarget`). A change fades the live drawing toward it
  *   (TOGGLE_MS, the settle token's shape): the ink thins away as the light
  *   comes on, or the lit molecule draws itself in ink. Each shading (hatch,
- *   engrave, halftone) has its own weight, so a change between two of them
- *   crossfades too. The first value a viewer opens on is cut, never faded.
+ *   engrave, halftone, chalk) has its own weight, so a change between two of
+ *   them crossfades too. The first value a viewer opens on is cut, never faded.
  * - Ink-to-Light: a molecule opened from an ink drawing (the home hero, a
  *   molecule page, an ink tile or finder row; the relay baton) first draws
  *   in ink, so the relay's drawing hands over to a drawing at the same pose.
@@ -91,10 +91,12 @@ interface FadeState {
   fromHatch: number;
   fromEngrave: number;
   fromHalftone: number;
+  fromChalk: number;
   toMix: number;
   toHatch: number;
   toEngrave: number;
   toHalftone: number;
+  toChalk: number;
   /** performance.now() at the fade's first frame; -1 idle; -2 starts on the next frame. */
   start: number;
   duration: number;
@@ -147,10 +149,11 @@ function endFuse(fade: FadeState): void {
 }
 
 /** Set the drawing's shading weights to the target at once (a fuse draws the arriving shading from its first atom). */
-function applyInkShading(target: { hatch: number; engrave: number; halftone: number }): void {
+function applyInkShading(target: { hatch: number; engrave: number; halftone: number; chalk: number }): void {
   INK_LOOK.uInkHatch.value = target.hatch;
   INK_LOOK.uInkEngrave.value = target.engrave;
   INK_LOOK.uInkHalftone.value = target.halftone;
+  INK_LOOK.uInkChalk.value = target.chalk;
 }
 
 function cutTo(fade: FadeState): void {
@@ -160,6 +163,7 @@ function cutTo(fade: FadeState): void {
   INK_LOOK.uInkHatch.value = target.hatch;
   INK_LOOK.uInkEngrave.value = target.engrave;
   INK_LOOK.uInkHalftone.value = target.halftone;
+  INK_LOOK.uInkChalk.value = target.chalk;
   fade.start = -1;
   fade.holding = false;
   fade.holdKey = null;
@@ -179,14 +183,17 @@ function beginFade(fade: FadeState, durationMs: number, arrival: boolean): void 
   fade.fromHatch = INK_LOOK.uInkHatch.value;
   fade.fromEngrave = INK_LOOK.uInkEngrave.value;
   fade.fromHalftone = INK_LOOK.uInkHalftone.value;
+  fade.fromChalk = INK_LOOK.uInkChalk.value;
   fade.toMix = target.mix;
   fade.toHatch = target.hatch;
   fade.toEngrave = target.engrave;
   fade.toHalftone = target.halftone;
+  fade.toChalk = target.chalk;
   fade.duration = durationMs;
   fade.arrival = arrival;
   const still = fade.fromMix === fade.toMix && fade.fromHatch === fade.toHatch
-    && fade.fromEngrave === fade.toEngrave && fade.fromHalftone === fade.toHalftone;
+    && fade.fromEngrave === fade.toEngrave && fade.fromHalftone === fade.toHalftone
+    && fade.fromChalk === fade.toChalk;
   fade.start = still ? -1 : -2;
 }
 
@@ -360,10 +367,12 @@ export function InkLookDriver(): null {
     fromHatch: 0,
     fromEngrave: 0,
     fromHalftone: 0,
+    fromChalk: 0,
     toMix: 0,
     toHatch: 0,
     toEngrave: 0,
     toHalftone: 0,
+    toChalk: 0,
     start: -1,
     duration: INK_TOGGLE_MS,
     holding: false,
@@ -385,6 +394,7 @@ export function InkLookDriver(): null {
       hatch: inkStyle === 'hatch' ? 1 : 0,
       engrave: inkStyle === 'engrave' ? 1 : 0,
       halftone: inkStyle === 'halftone' ? 1 : 0,
+      chalk: inkStyle === 'chalk' ? 1 : 0,
       weight: target.weight,
     });
     rememberInkStyle(inkStyle);
@@ -452,6 +462,7 @@ export function InkLookDriver(): null {
     INK_LOOK.uInkHatch.value = 0;
     INK_LOOK.uInkEngrave.value = 0;
     INK_LOOK.uInkHalftone.value = 0;
+    INK_LOOK.uInkChalk.value = 0;
     fade.start = -1;
     fade.holding = true;
     fade.holdKey = trajectory;
@@ -530,6 +541,7 @@ export function InkLookDriver(): null {
         hatch: INK_LOOK.uInkHatch.value,
         engrave: INK_LOOK.uInkEngrave.value,
         halftone: INK_LOOK.uInkHalftone.value,
+        chalk: INK_LOOK.uInkChalk.value,
         weight: INK_LOOK.uInkWeight.value,
         target: inkLookTarget(),
         holding: fade.holding,
@@ -554,7 +566,8 @@ export function InkLookDriver(): null {
     INK_LOOK.uInkHatch.value = 0;
     INK_LOOK.uInkEngrave.value = 0;
     INK_LOOK.uInkHalftone.value = 0;
-    setInkLookTarget({ mix: 0, hatch: 0, engrave: 0, halftone: 0, weight: 1 });
+    INK_LOOK.uInkChalk.value = 0;
+    setInkLookTarget({ mix: 0, hatch: 0, engrave: 0, halftone: 0, chalk: 0, weight: 1 });
     lookSeen.current = false;
   }, []);
 
@@ -579,11 +592,13 @@ export function InkLookDriver(): null {
       INK_LOOK.uInkHatch.value = fade.fromHatch + (fade.toHatch - fade.fromHatch) * p;
       INK_LOOK.uInkEngrave.value = fade.fromEngrave + (fade.toEngrave - fade.fromEngrave) * p;
       INK_LOOK.uInkHalftone.value = fade.fromHalftone + (fade.toHalftone - fade.fromHalftone) * p;
+      INK_LOOK.uInkChalk.value = fade.fromChalk + (fade.toChalk - fade.fromChalk) * p;
       if (p >= 1) {
         INK_LOOK.uInkMix.value = fade.toMix;
         INK_LOOK.uInkHatch.value = fade.toHatch;
         INK_LOOK.uInkEngrave.value = fade.toEngrave;
         INK_LOOK.uInkHalftone.value = fade.toHalftone;
+        INK_LOOK.uInkChalk.value = fade.toChalk;
         fade.start = -1;
         fade.arrival = false;
       }

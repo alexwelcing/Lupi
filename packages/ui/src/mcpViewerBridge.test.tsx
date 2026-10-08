@@ -257,6 +257,8 @@ describe('MCP viewer bridge', () => {
       ['etching', 'engrave'],
       ['halftone', 'halftone'],
       ['dots', 'halftone'],
+      ['chalk', 'chalk'],
+      ['chalkboard', 'chalk'],
       ['sketch', 'hatch'],
       ['flat', 'flat'],
       ['off', 'off'],
@@ -267,6 +269,8 @@ describe('MCP viewer bridge', () => {
     }
     expect(driver.parseCommand('render caffeine png 512x384 engraving')[0].arguments.viewer).toMatchObject({ inkStyle: 'engrave' });
     expect(driver.parseCommand('render caffeine png 512x384 halftone print')[0].arguments.viewer).toMatchObject({ inkStyle: 'halftone' });
+    expect(driver.parseCommand('render caffeine png 512x384 chalk')[0].arguments.viewer).toMatchObject({ inkStyle: 'chalk' });
+    expect(driver.parseCommand('render c60 png 512x384 on a blackboard')[0].arguments.viewer).toMatchObject({ inkStyle: 'chalk' });
     expect(driver.parseCommand('render caffeine png 512x384 blueprint')[0].arguments.viewer?.inkStyle).toBeUndefined();
   });
 

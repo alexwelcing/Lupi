@@ -24,12 +24,13 @@ describe('the Illustrate look on and off', () => {
     expect(inkParamValue('hatch')).toBe('h');
     expect(inkParamValue('engrave')).toBe('e');
     expect(inkParamValue('halftone')).toBe('d');
+    expect(inkParamValue('chalk')).toBe('c');
     useStore.getState().setInkStyle('halftone');
     expect(inkParamValue()).toBe('d');
   });
 
   it('takes ?ink= from the address bar for every shading and drops it', () => {
-    for (const [letter, style] of [['f', 'flat'], ['h', 'hatch'], ['e', 'engrave'], ['d', 'halftone']] as const) {
+    for (const [letter, style] of [['f', 'flat'], ['h', 'hatch'], ['e', 'engrave'], ['d', 'halftone'], ['c', 'chalk']] as const) {
       resetStore();
       window.history.replaceState({}, '', `/?sim=caffeine&ink=${letter}`);
       expect(intakeInkParam()).toBe(true);
@@ -47,7 +48,7 @@ describe('the Illustrate look on and off', () => {
   it('brings back the last shading used when Ink turns on again', () => {
     setIllustrate(true);
     expect(useStore.getState().inkStyle).toBe('flat');
-    for (const style of ['engrave', 'halftone', 'hatch'] as const) {
+    for (const style of ['engrave', 'halftone', 'chalk', 'hatch'] as const) {
       chooseInkStyle(style);
       toggleIllustrate();
       expect(useStore.getState().inkStyle).toBe('off');
@@ -69,7 +70,7 @@ describe('the Illustrate look on and off', () => {
   });
 
   it('names every shading for the pill', () => {
-    expect(['off', 'flat', 'hatch', 'engrave', 'halftone'].map((style) => inkStyleLabel(style as never)))
-      .toEqual(['Lit', 'Illustrate', 'Sketch', 'Engrave', 'Halftone']);
+    expect(['off', 'flat', 'hatch', 'engrave', 'halftone', 'chalk'].map((style) => inkStyleLabel(style as never)))
+      .toEqual(['Lit', 'Illustrate', 'Sketch', 'Engrave', 'Halftone', 'Chalk']);
   });
 });

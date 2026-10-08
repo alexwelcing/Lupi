@@ -202,7 +202,7 @@ describe('Store — URL Serialization', () => {
 
   it('round-trips every ink shading (ink) and still reads the first links\' f and h', () => {
     expect(decodeStateDelta(getStoreState().encodeToURL())).not.toHaveProperty('ink');
-    for (const [style, letter] of [['flat', 'f'], ['hatch', 'h'], ['engrave', 'e'], ['halftone', 'd']] as const) {
+    for (const [style, letter] of [['flat', 'f'], ['hatch', 'h'], ['engrave', 'e'], ['halftone', 'd'], ['chalk', 'c']] as const) {
       resetStore();
       getStoreState().setInkStyle(style);
       const encoded = getStoreState().encodeToURL();
@@ -226,7 +226,8 @@ describe('Store — URL Serialization', () => {
       ['hatch', 'hatch'], ['h', 'hatch'],
       ['engrave', 'engrave'], ['e', 'engrave'],
       ['halftone', 'halftone'], ['d', 'halftone'],
-      ['off', 'off'], ['dots', 'off'], ['ENGRAVE', 'off'], ['toString', 'off'], [null, 'off'], [3, 'off'],
+      ['chalk', 'chalk'], ['c', 'chalk'],
+      ['off', 'off'], ['dots', 'off'], ['ENGRAVE', 'off'], ['chalkboard', 'off'], ['C', 'off'], ['toString', 'off'], [null, 'off'], [3, 'off'],
     ] as const) {
       expect(sanitizeInkStyle(value)).toBe(style);
     }

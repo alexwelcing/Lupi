@@ -394,13 +394,18 @@ describe('render artifact V1 semantic validation', () => {
       plate: '#e7ebe3',
       depthCue: 0.4,
     };
-    for (const shading of ['flat', 'hatch', 'engrave', 'halftone']) {
+    for (const shading of ['flat', 'hatch', 'engrave', 'halftone', 'chalk']) {
       expect(() => validateRenderArtifactSpecV1({
         ...base,
         view: { ...base.view, ink: { ...ink, shading } },
       })).not.toThrow();
     }
-    for (const shading of ['stipple', 'Engrave', 'dots', '', 3, null]) {
+    // Chalk draws its lines in chalk, on the sage plate.
+    expect(() => validateRenderArtifactSpecV1({
+      ...base,
+      view: { ...base.view, ink: { ...ink, shading: 'chalk', ink: '#eceadb', plate: '#101817' } },
+    })).not.toThrow();
+    for (const shading of ['stipple', 'Engrave', 'dots', 'Chalk', 'c', '', 3, null]) {
       expect(() => validateRenderArtifactSpecV1({
         ...base,
         view: { ...base.view, ink: { ...ink, shading } },

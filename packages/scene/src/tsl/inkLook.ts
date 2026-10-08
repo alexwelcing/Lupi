@@ -1,8 +1,8 @@
 /**
  * inkLook.ts — the Illustrate look on the ray-cast impostors: flat (cel),
- * hatched, engraved or halftone toon shading with ink outlines, the house ink
- * drawing's voice (the home hero, the /m pages and their cards, Lupi Daily)
- * inside the 3D view.
+ * hatched, engraved or halftone toon shading with ink outlines, or a chalk
+ * drawing on the dark plate, the house ink drawing's voice (the home hero,
+ * the /m pages and their cards, Lupi Daily) inside the 3D view.
  *
  * One closed form, `lupiInkSurface`, that the atom and bond impostors mix
  * over their lit surface by a shared weight (`uInkMix`):
@@ -30,6 +30,19 @@
  *   (MIT), Halftone, packages/core/src/gpu/kit/patternPaints.ts
  *   (`halftonePlateGrid`). Engraving and halftone use the same full-picture
  *   pixels as the hatching, so exports keep their weight and tile seamlessly;
+ * - chalk (`uInkChalk`): a chalkboard drawing, light on dark. The element
+ *   colour is a pastel rubbed over the board (the plate), thicker toward the
+ *   light; three families of chalk strokes (±45° and level) come in as the
+ *   light rises; chalk takes only where the board's tooth (value noise)
+ *   stands above one minus the stroke's pressure, so strokes and outlines
+ *   break into chalk; and the ink itself turns to chalk (`inkLookInkColor`,
+ *   which the contour draws in too). Strokes and tooth are laid out about
+ *   each atom's centre (each bond's midpoint) in full-picture pixels, so
+ *   they travel with the ball and tile seamlessly. Adapted from Shaders
+ *   (MIT), Chalkboard,
+ *   packages/core/src/std/effects/stylize.ts (`chalkSketch`) and
+ *   packages/core/src/gpu/kit/stylizePaints.ts (`chalkHatchLine`,
+ *   `chalkVnoise`, `chalkboardCompose`);
  * - each shading has its own weight, so a change between any two of them
  *   crossfades like lit ⇄ ink. Nothing in them reads time: a still view
  *   draws no frames;
@@ -65,8 +78,10 @@ import {
   clamp,
   dot,
   float,
+  floor,
   fract,
   length,
+  luminance,
   max,
   mix,
   mx_noise_float,
@@ -94,6 +109,10 @@ export const INK_LOOK_COLORS = {
   paper: '#f3f5ef',
   /** The drawings' shade tint. */
   shade: '#1a2321',
+  /** Chalk's ink: Shaders Chalkboard's chalk, a warm off-white. */
+  chalk: '#eceadb',
+  /** The board chalk draws on over a light plate (the sage plate); a dark plate is its own board. */
+  board: '#101817',
 } as const;
 
 /** Tuning points (owner feedback). Widths and spacing are in ink units. */
@@ -169,6 +188,33 @@ export const INK_LOOK_TUNING = {
   halftoneMaxDot: 0.64,
   /** Halftone: ink opacity of the dots. */
   halftoneInk: 0.88,
+  /** Chalk: how far the element colour lifts toward chalk for its pastel. */
+  chalkPastel: 0.42,
+  /** Chalk: how much pastel is rubbed over the board, from the shade band to the lit band. */
+  chalkRub: [0.06, 0.34] as const,
+  /** Chalk: distance between strokes, and the share of a period a stroke's soft core spans (Shaders 0.35). */
+  chalkSpacing: 10,
+  chalkLine: 0.45,
+  /** Chalk: the light values at which the +45°, −45° and level families come in (Shaders' darkness gates 0.22, 0.5, 0.78, read from the light), each over ± the gate. */
+  chalkFamilies: [0.42, 0.7, 0.88] as const,
+  chalkGate: 0.06,
+  /** Chalk: stroke pressure, and how far a stroke lifts from the pastel toward chalk white. */
+  chalkStroke: 0.9,
+  chalkStrokeLift: 0.45,
+  /** Chalk: the outline's pressure (a little below 1, so the board's tooth shows through now and then). */
+  chalkOutline: 0.93,
+  /**
+   * Chalk dust (Shaders `grain`): the board's tooth, value noise in two
+   * scales (cells per ink unit, fine and coarse) and their shares. Chalk
+   * takes where the tooth stands above one minus the pressure, over ±
+   * `chalkToothSoft`, so light strokes break into specks and heavy ones
+   * hold.
+   */
+  chalkToothScale: [0.85, 0.2] as const,
+  chalkToothMix: 0.65,
+  chalkToothSoft: 0.14,
+  /** Chalk: the catchlight dab's pressure. */
+  chalkHighlight: 0.95,
 } as const;
 
 type FloatUniform = UniformNode<'float', number>;
@@ -182,6 +228,8 @@ export interface InkLookUniforms {
   uInkEngrave: FloatUniform;
   /** 0 = flat colour, 1 = halftone dots. */
   uInkHalftone: FloatUniform;
+  /** 0 = flat colour, 1 = chalk on the board. */
+  uInkChalk: FloatUniform;
   /** Line weight multiplier (the store's ink weight). */
   uInkWeight: FloatUniform;
   /** Device (or capture texel) pixels per ink unit, recomputed per render. */
@@ -189,6 +237,10 @@ export interface InkLookUniforms {
   uInkColor: UniformNode<'color', Color>;
   uPaperColor: UniformNode<'color', Color>;
   uShadeColor: UniformNode<'color', Color>;
+  /** Chalk's ink, its strokes' white and its catchlight. */
+  uChalkColor: UniformNode<'color', Color>;
+  /** The board chalk draws on over a light plate. */
+  uBoardColor: UniformNode<'color', Color>;
   /** The plate the drawing sits on (the far side fades toward it). */
   uPlateColor: UniformNode<'color', Color>;
   /** The molecule's bounding sphere in world space (the depth cue's range); radius 0 turns the cue off. */
@@ -256,11 +308,14 @@ export const INK_LOOK: InkLookUniforms = {
   uInkHatch: f(0),
   uInkEngrave: f(0),
   uInkHalftone: f(0),
+  uInkChalk: f(0),
   uInkWeight: f(1),
   uInkPx: (uniform(1) as unknown as N).onRenderUpdate((frame: FrameLike) => inkPixelsForFrame(frame)) as FloatUniform,
   uInkColor: uniform(new Color(INK_LOOK_COLORS.ink)) as unknown as UniformNode<'color', Color>,
   uPaperColor: uniform(new Color(INK_LOOK_COLORS.paper)) as unknown as UniformNode<'color', Color>,
   uShadeColor: uniform(new Color(INK_LOOK_COLORS.shade)) as unknown as UniformNode<'color', Color>,
+  uChalkColor: uniform(new Color(INK_LOOK_COLORS.chalk)) as unknown as UniformNode<'color', Color>,
+  uBoardColor: uniform(new Color(INK_LOOK_COLORS.board)) as unknown as UniformNode<'color', Color>,
   uPlateColor: uniform(new Color('#101817')) as unknown as UniformNode<'color', Color>,
   uInkCenter: uniform(new Vector3()) as unknown as UniformNode<'vec3', Vector3>,
   uInkRadius: f(0),
@@ -277,21 +332,24 @@ export interface InkLookTarget {
   engrave: number;
   /** 0 flat, 1 halftone. */
   halftone: number;
+  /** 0 flat, 1 chalk. */
+  chalk: number;
   /** Line weight multiplier. */
   weight: number;
 }
 
-let target: InkLookTarget = { mix: 0, hatch: 0, engrave: 0, halftone: 0, weight: 1 };
+let target: InkLookTarget = { mix: 0, hatch: 0, engrave: 0, halftone: 0, chalk: 0, weight: 1 };
 
 const unitWeight = (value: number | undefined) => (value !== undefined && value > 0 ? Math.min(1, value) : 0);
 
 /** The configured look (what every capture renders), set by the viewer's ink driver. Absent shadings are 0. */
-export function setInkLookTarget(next: Omit<InkLookTarget, 'engrave' | 'halftone'> & Partial<InkLookTarget>): void {
+export function setInkLookTarget(next: Omit<InkLookTarget, 'engrave' | 'halftone' | 'chalk'> & Partial<InkLookTarget>): void {
   target = {
     mix: unitWeight(next.mix),
     hatch: unitWeight(next.hatch),
     engrave: unitWeight(next.engrave),
     halftone: unitWeight(next.halftone),
+    chalk: unitWeight(next.chalk),
     weight: Number.isFinite(next.weight) && next.weight > 0 ? next.weight : 1,
   };
 }
@@ -305,7 +363,13 @@ export function isInkLookFading(): boolean {
   return INK_LOOK.uInkMix.value !== target.mix
     || INK_LOOK.uInkHatch.value !== target.hatch
     || INK_LOOK.uInkEngrave.value !== target.engrave
-    || INK_LOOK.uInkHalftone.value !== target.halftone;
+    || INK_LOOK.uInkHalftone.value !== target.halftone
+    || INK_LOOK.uInkChalk.value !== target.chalk;
+}
+
+/** The colour a drawing draws its lines in (the spec's `view.ink.ink`): chalk for Chalk, the house ink otherwise. */
+export function inkLookInkHex(shading: string): string {
+  return shading === 'chalk' ? INK_LOOK_COLORS.chalk : INK_LOOK_COLORS.ink;
 }
 
 // Every capture renders the configured look, never a fade in progress.
@@ -316,18 +380,21 @@ registerCaptureGuard({
       hatch: INK_LOOK.uInkHatch.value,
       engrave: INK_LOOK.uInkEngrave.value,
       halftone: INK_LOOK.uInkHalftone.value,
+      chalk: INK_LOOK.uInkChalk.value,
       weight: INK_LOOK.uInkWeight.value,
     };
     INK_LOOK.uInkMix.value = target.mix;
     INK_LOOK.uInkHatch.value = target.hatch;
     INK_LOOK.uInkEngrave.value = target.engrave;
     INK_LOOK.uInkHalftone.value = target.halftone;
+    INK_LOOK.uInkChalk.value = target.chalk;
     INK_LOOK.uInkWeight.value = target.weight;
     return () => {
       INK_LOOK.uInkMix.value = saved.mix;
       INK_LOOK.uInkHatch.value = saved.hatch;
       INK_LOOK.uInkEngrave.value = saved.engrave;
       INK_LOOK.uInkHalftone.value = saved.halftone;
+      INK_LOOK.uInkChalk.value = saved.chalk;
       INK_LOOK.uInkWeight.value = saved.weight;
     };
   },
@@ -428,8 +495,61 @@ function engraveAxis(angle: number): [number, number, number] {
 }
 
 /**
- * The Illustrate surface (linear RGB): toon fill, hatching, engraving or
- * halftone dots, and ink. View space with V = +z, like `lupiSurface`; the
+ * One family of chalk strokes (Shaders `chalkHatchLine`): a triangle wave
+ * across lines `spacing` device pixels apart, 0 midway between them, whose
+ * soft core spans `T.chalkLine` of a period (at least about a pixel either
+ * side, so a dense family never shimmers).
+ */
+function chalkStrokes(coord: N, spacing: N): N {
+  const across = abs(fract(coord.div(spacing)).sub(0.5)).mul(2.0);
+  const core = max(float(INK_LOOK_TUNING.chalkLine), float(2.0).div(spacing));
+  return float(1).sub(smoothstep(0.0, core, across));
+}
+
+/** A hash of a lattice cell, 0..1 (Hoskins' hash without sine: float only, any sign). */
+const chalkHash = (Fn(([cell]: [N]) => {
+  const p3: N = fract(vec3(cell.x, cell.y, cell.x).mul(0.1031)).toVar();
+  p3.addAssign(dot(p3, p3.yzx.add(33.33)));
+  return fract(p3.x.add(p3.y).mul(p3.z));
+}) as N).setLayout({
+  name: 'lupiChalkHash',
+  type: 'float',
+  inputs: [{ name: 'cell', type: 'vec2' }],
+});
+
+/**
+ * Smooth value noise, 0..1 (Shaders `chalkVnoise`): the board's tooth.
+ * Shader functions, so the impostors carry one copy however often the
+ * drawing calls it.
+ */
+const chalkNoise = (Fn(([at]: [N]) => {
+  const cell: N = floor(at).toVar();
+  const t: N = fract(at).toVar();
+  const u: N = t.mul(t).mul(t.mul(-2.0).add(3.0)).toVar();
+  const a = chalkHash(cell);
+  const b = chalkHash(cell.add(vec2(1.0, 0.0)));
+  const c = chalkHash(cell.add(vec2(0.0, 1.0)));
+  const d = chalkHash(cell.add(vec2(1.0, 1.0)));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}) as N).setLayout({
+  name: 'lupiChalkNoise',
+  type: 'float',
+  inputs: [{ name: 'at', type: 'vec2' }],
+});
+
+/**
+ * The drawing's ink (linear): the house ink, or chalk under the Chalk
+ * drawing, mixed by its weight so the outlines crossfade with the drawing.
+ * The impostors' outlines and the screen-space contour (ui
+ * postprocess/inkContour.ts) both draw in it, live and in every capture.
+ */
+export function inkLookInkColor(): Node {
+  return mix(vec3(I.uInkColor), vec3(I.uChalkColor), clamp(I.uInkChalk, 0.0, 1.0));
+}
+
+/**
+ * The Illustrate surface (linear RGB): toon fill, hatching, engraving,
+ * halftone dots or chalk, and ink. View space with V = +z, like `lupiSurface`; the
  * key light's direction is the light uniforms', so the bands follow the
  * Light controls.
  */
@@ -441,6 +561,7 @@ export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node
     const hatch = clamp(I.uInkHatch, 0.0, 1.0).toVar();
     const engrave = clamp(I.uInkEngrave, 0.0, 1.0).toVar();
     const halftone = clamp(I.uInkHalftone, 0.0, 1.0).toVar();
+    const chalk = clamp(I.uInkChalk, 0.0, 1.0).toVar();
     // A tuning value per shading, weighted by the shadings' shares (they sum
     // to at most 1 through any crossfade; the rest is flat colour).
     const byShading = (flat: number, hatched: number, engraved: number, dotted: number): N =>
@@ -563,8 +684,60 @@ export function lupiInkSurface(s: LupiInkInput, lights: LupiLightUniforms): Node
       strokeInk.assign(max(strokeInk, dots.mul(halftone).mul(halftoneFade).mul(T.halftoneInk)));
     });
 
-    const ink = clamp(max(outline, strokeInk), 0.0, 1.0);
-    const drawn = mix(fill, vec3(I.uInkColor), ink);
+    // Chalk: a pastel of the element colour rubbed over the board, thicker
+    // toward the light, then three families of chalk strokes coming in as
+    // the light rises (Shaders' Chalkboard, read from the light: the lit
+    // side carries the most chalk, the shade shows the board). Laid out
+    // about the atom's centre (the bond's midpoint) in full-picture device
+    // pixels, so strokes and tooth travel with the ball. A uniform branch.
+    const outlineTooth = float(1).toVar();
+    If(chalk.greaterThan(0.0), () => {
+      const screen: N = picturePixels(hit, s.isOrtho).toVar();
+      const anchor: N = s.center ? picturePixels(s.center as N, s.isOrtho) : vec2(0.0, 0.0);
+      const offset: N = screen.sub(anchor).toVar();
+      // In ink units, so the tooth has the same grain on screen and in an export.
+      const inUnits: N = offset.div(max(unit, 1e-3)).toVar();
+      const chalkWhite = vec3(I.uChalkColor);
+      // A light plate gets a board of its own: chalk needs the dark.
+      const plate = vec3(I.uPlateColor);
+      const board = mix(plate, vec3(I.uBoardColor), smoothstep(0.12, 0.4, luminance(plate)));
+      const pastel = mix(base, chalkWhite, T.chalkPastel).toVar();
+      // The board's tooth (Shaders' dust): chalk takes where it stands above
+      // one minus the pressure, so a light touch leaves specks.
+      const tooth = mix(
+        chalkNoise(inUnits.mul(T.chalkToothScale[1]).add(vec2(17.3, 5.9))),
+        chalkNoise(inUnits.mul(T.chalkToothScale[0])),
+        T.chalkToothMix,
+      ).toVar();
+      const takes = (pressure: N): N => smoothstep(
+        float(1 - T.chalkToothSoft).sub(pressure),
+        float(1 + T.chalkToothSoft).sub(pressure),
+        tooth,
+      );
+      const rub = mix(float(T.chalkRub[0]), float(T.chalkRub[1]), smoothstep(float(T.shadeBand), float(T.lightBand), value));
+      const chalked = mix(board, pastel, rub.mul(mix(float(0.55), float(1.0), tooth))).toVar();
+      const spacing = max(unit.mul(T.chalkSpacing), 2.5).toVar();
+      const gate = (from: number): N => smoothstep(float(from - T.chalkGate), float(from + T.chalkGate), value);
+      const diagonal = 0.70710678;
+      const families = max(
+        max(
+          chalkStrokes(offset.x.add(offset.y).mul(diagonal), spacing).mul(gate(T.chalkFamilies[0])),
+          chalkStrokes(offset.y.sub(offset.x).mul(diagonal), spacing).mul(gate(T.chalkFamilies[1])),
+        ),
+        chalkStrokes(offset.y, spacing).mul(gate(T.chalkFamilies[2])),
+      );
+      // No strokes on atoms too small to hold two of them.
+      const chalkFade = smoothstep(spacing.mul(0.9), spacing.mul(2.2), px);
+      const strokeColor = mix(pastel, chalkWhite, T.chalkStrokeLift);
+      chalked.assign(mix(chalked, strokeColor, takes(families.mul(chalkFade).mul(T.chalkStroke))));
+      chalked.assign(mix(chalked, chalkWhite, takes(highlightT.mul(T.chalkHighlight))));
+      outlineTooth.assign(takes(float(T.chalkOutline)));
+      if (s.emission) chalked.addAssign((s.emission as N).mul(0.6));
+      fill.assign(mix(fill, chalked, chalk));
+    });
+
+    const ink = clamp(max(outline, strokeInk), 0.0, 1.0).mul(mix(float(1), outlineTooth, chalk));
+    const drawn = mix(fill, inkLookInkColor() as N, ink);
 
     // Depth cue: 0 at the front of the bounding sphere, 1 at its back, seen
     // through the camera rendering now (view space looks down −z).

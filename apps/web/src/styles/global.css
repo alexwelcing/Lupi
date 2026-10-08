@@ -971,7 +971,7 @@ button:focus:not(:focus-visible) {
 .scene-look__sample i:nth-child(3) { width: 16px; height: 16px; left: calc(50% - 33px); top: 30px; }
 .scene-look[data-look='paper'] i { box-shadow: 2px 4px 6px #52645830; }
 .scene-look[data-look='night'] i { filter: contrast(1.2); }
-/* Illustrate, Sketch, Engrave and Halftone: the sample is drawn, flat colour, hatching, engraved lines or print dots, in ink. */
+/* Illustrate, Sketch, Engrave and Halftone: the sample is drawn, flat colour, hatching, engraved lines or print dots, in ink; Chalk in chalk on the dark plate. */
 .scene-look[data-look='ink'] .scene-look__sample { background: #101817; }
 .scene-look[data-look='ink'] .scene-look__sample i { box-shadow: none; border: 2px solid #0c1211; background: radial-gradient(circle at 34% 30%, #f3f5ef 0 12%, #b9c0b6 13% 54%, #66726b 55%); }
 .scene-look[data-look='ink'] .scene-look__sample i:nth-child(2) { background: radial-gradient(circle at 34% 30%, #fff1ec 0 12%, #e2584a 13% 54%, #8f362b 55%); }
@@ -984,6 +984,9 @@ button:focus:not(:focus-visible) {
 .scene-look[data-look='halftone'] .scene-look__sample { background: #e7ebe3; }
 .scene-look[data-look='halftone'] .scene-look__sample i { box-shadow: none; border: 1.5px solid #0c1211; background: radial-gradient(circle, #0c1211b3 0 1px, transparent 1.4px) 0 0 / 4px 4px, radial-gradient(circle at 34% 30%, #fbfcf8 0 38%, #cfd6cb 39%); }
 .scene-look[data-look='halftone'] .scene-look__sample i:nth-child(2) { background: radial-gradient(circle, #0c1211b3 0 1px, transparent 1.4px) 0 0 / 4px 4px, radial-gradient(circle at 34% 30%, #fff6f3 0 38%, #e98f80 39%); }
+.scene-look[data-look='chalk'] .scene-look__sample { background: #101817; }
+.scene-look[data-look='chalk'] .scene-look__sample i { box-shadow: none; border: 1.5px solid #eceadbd9; background: radial-gradient(circle at 34% 30%, #eceadbe6 0 9%, transparent 10%), repeating-linear-gradient(45deg, transparent 0 3px, #eceadb66 3px 4px) 0 0 / 62% 62% no-repeat, radial-gradient(circle at 34% 30%, #a4ab9f80 0 40%, #a4ab9f1f 72%, transparent 73%); }
+.scene-look[data-look='chalk'] .scene-look__sample i:nth-child(2) { background: radial-gradient(circle at 34% 30%, #eceadbe6 0 9%, transparent 10%), repeating-linear-gradient(45deg, transparent 0 3px, #f2c4ba73 3px 4px) 0 0 / 62% 62% no-repeat, radial-gradient(circle at 34% 30%, #e98f8080 0 40%, #e98f801f 72%, transparent 73%); }
 .scene-mod-plates { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .scene-mod-plates .scene-controls__button[aria-pressed='true'] { border-color: var(--scene-accent); box-shadow: 0 0 0 1px var(--scene-accent); }
 .scene-controls__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; position: sticky; bottom: 0; background: #14241e; padding-block: 4px; }

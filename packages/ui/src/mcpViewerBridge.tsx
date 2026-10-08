@@ -2133,8 +2133,8 @@ function readBondProfile(value: unknown): BondProfile | undefined {
 
 /**
  * The Illustrate look from an MCP argument: 'off' | 'flat' | 'hatch' |
- * 'engrave' | 'halftone' (also true/false, 'ink', 'sketch', 'engraving',
- * 'dots').
+ * 'engrave' | 'halftone' | 'chalk' (also true/false, 'ink', 'sketch',
+ * 'engraving', 'dots', 'chalkboard', 'blackboard').
  */
 function readInkStyle(value: unknown): InkStyle | undefined {
   if (value === true) return 'flat';
@@ -2145,6 +2145,7 @@ function readInkStyle(value: unknown): InkStyle | undefined {
   if (raw === 'hatch' || raw === 'hatched' || raw === 'sketch') return 'hatch';
   if (raw === 'engrave' || raw === 'engraved' || raw === 'engraving' || raw === 'etching') return 'engrave';
   if (raw === 'halftone' || raw === 'dots' || raw === 'print') return 'halftone';
+  if (raw === 'chalk' || raw === 'chalkboard' || raw === 'blackboard') return 'chalk';
   return undefined;
 }
 
@@ -2296,11 +2297,13 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\bcinematic\b/.test(normalized)) patch.postprocessPreset = 'cinematic';
   if (/\bdiagram\b/.test(normalized)) patch.postprocessPreset = 'diagram';
   // The Illustrate look: "ink", "illustrate", "hatched"/"sketch",
-  // "engrave"/"etching", "halftone"/"print"/"dots", "lit".
+  // "engrave"/"etching", "halftone"/"print"/"dots",
+  // "chalk"/"chalkboard"/"blackboard", "lit".
   if (/\b(ink|inked|illustrate|illustrated)\b/.test(normalized)) patch.inkStyle = 'flat';
   if (/\b(hatch|hatched|hatching|sketch)\b/.test(normalized)) patch.inkStyle = 'hatch';
   if (/\b(engrave|engraved|engraving|etching)\b/.test(normalized)) patch.inkStyle = 'engrave';
   if (/\b(halftone|print|dots)\b/.test(normalized)) patch.inkStyle = 'halftone';
+  if (/\b(chalk|chalkboard|blackboard)\b/.test(normalized)) patch.inkStyle = 'chalk';
   if (/\b(no\s+ink|ink\s+off|lit)\b/.test(normalized)) patch.inkStyle = 'off';
   if (/\bproperty\b/.test(normalized)) patch.colorScheme = 'property';
   if (/\bcolorway\b/.test(normalized) || /\bfamily\b/.test(normalized)) patch.colorScheme = 'colorway';
