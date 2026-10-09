@@ -105,9 +105,33 @@ struct DurabilityTests {
       #expect(try await sync.outbox() == [OutboxEntry(id: "t1", kind: .upsert)])
       #expect(try await store.load()?.records["t1"]?.payload?.name == "Caffeine")
     }
-    try await sync.save(.make("t1", name: "Changed"), ifUnchanged: condition)
+    let retry = try await sync.saveCondition(for: "t1")
+    try await sync.save(.make("t1", name: "Changed"), ifUnchanged: retry)
     #expect(try await sync.trophy(id: "t1")?.name == "Changed")
     #expect(try await sync.snapshot().records["t1"]?.revision == 2)
+  }
+
+  @Test("a pre-erase absent UUID cannot repopulate the erased collection")
+  func eraseInvalidatesAbsentCondition() async throws {
+    let store = ControlledStateStore()
+    let sync = await durabilityEngine(FakeFirebase(), store: store)
+    try await sync.save(.make("existing"))
+    let beforeErase = try await sync.saveCondition(for: "new")
+    await store.plan(pause: true)
+    let erasure = Task { try await sync.eraseLocal() }
+    await store.entered(2)
+    let delayed = Task {
+      await #expect(throws: SyncError.localRecordChanged(id: "new")) {
+        try await sync.save(.make("new"), ifUnchanged: beforeErase)
+      }
+    }
+    await store.resume()
+    try await erasure.value
+    await delayed.value
+    #expect(try await sync.trophies().isEmpty)
+    let deliberate = try await sync.saveCondition(for: "new")
+    try await sync.save(.make("new"), ifUnchanged: deliberate)
+    #expect(try await sync.trophies().map(\.id) == ["new"])
   }
 
   @Test("readers never see a suspended candidate and a later edit excludes the failed one")
