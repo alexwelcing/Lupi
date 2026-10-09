@@ -1,0 +1,129 @@
+{
+  "schema": "lupi.starters.v1",
+  "generator": "tools/apple/bundle-starters.mts",
+  "starters": [
+    {
+      "id": "hydrogen",
+      "name": "Hydrogen",
+      "formula": "H2",
+      "atoms": 2,
+      "file": "hydrogen.xyz",
+      "source": "tools/apple/bundle-starters.mts",
+      "geometry": "r(H-H) 0.7414 A, NIST CCCBDB experimental",
+      "sha256": "928ef784da7d43ab1a79e56ce0eb64188e2765e594e9846149a4bd7a830b692d"
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "formula": "H2O",
+      "atoms": 3,
+      "file": "water.xyz",
+      "source": "apps/web/public/gallery/curated/popular/water.xyz",
+      "sha256": "fa9f513efa3a3ca16ffc23b9cfbdefc4efb388f271fd8977fae91674e2795334"
+    },
+    {
+      "id": "carbon_dioxide",
+      "name": "Carbon dioxide",
+      "formula": "CO2",
+      "atoms": 3,
+      "file": "carbon_dioxide.xyz",
+      "source": "tools/apple/bundle-starters.mts",
+      "geometry": "r(C=O) 1.160 A linear, NIST CCCBDB experimental",
+      "sha256": "fb34e1e9cd0d41aa0c55b183276c6c5461d7690f1060b58f065790271b746cde"
+    },
+    {
+      "id": "methane",
+      "name": "Methane",
+      "formula": "CH4",
+      "atoms": 5,
+      "file": "methane.xyz",
+      "source": "tools/apple/bundle-starters.mts",
+      "geometry": "r(C-H) 1.087 A Td, NIST CCCBDB experimental",
+      "sha256": "780674aadd44bd5cbc867209fffc5bd05b539729e31ea2dca8f25c4d616c4f16"
+    },
+    {
+      "id": "ammonia",
+      "name": "Ammonia",
+      "formula": "H3N",
+      "atoms": 4,
+      "file": "ammonia.xyz",
+      "source": "tools/apple/bundle-starters.mts",
+      "geometry": "r(N-H) 1.012 A, HNH 106.7 deg, NIST CCCBDB experimental",
+      "sha256": "8c2b777ff500eef0793f4860c5478389ae4646d6ca52fc9ce7b0bbfad175cefd"
+    },
+    {
+      "id": "ethanol",
+      "name": "Ethanol",
+      "formula": "C2H6O",
+      "atoms": 9,
+      "file": "ethanol.xyz",
+      "source": "apps/web/public/gallery/curated/popular/ethanol.xyz",
+      "sha256": "d9439e7dd9f0690ca552db461cd089326628bf84d4f17a907292890171d01a1a"
+    },
+    {
+      "id": "benzene",
+      "name": "Benzene",
+      "formula": "C6H6",
+      "atoms": 12,
+      "file": "benzene.xyz",
+      "source": "apps/web/public/gallery/curated/popular/benzene.xyz",
+      "sha256": "174ba9f64f1e3f58419b98fd1aa8e92175f368c063a7acb5a399509d3c7bddd2"
+    },
+    {
+      "id": "caffeine",
+      "name": "Caffeine",
+      "formula": "C8H10N4O2",
+      "atoms": 24,
+      "file": "caffeine.xyz",
+      "source": "apps/web/public/gallery/curated/popular/caffeine.xyz",
+      "sha256": "912c14862af853b2234e6cff6c67d0462a25acab38fed1ada8bbf9967233d80a"
+    },
+    {
+      "id": "c60_buckyball",
+      "name": "Buckminsterfullerene",
+      "formula": "C60",
+      "atoms": 60,
+      "file": "c60_buckyball.xyz",
+      "source": "apps/web/public/gallery/curated/c60_buckyball.xyz",
+      "sha256": "f7104d40f36a18846debc93e154dc63c9a5d9f2b9c0ff1f8ead4cd31eea9b0f8"
+    },
+    {
+      "id": "glucose",
+      "name": "Glucose",
+      "formula": "C6H12O6",
+      "atoms": 24,
+      "file": "glucose.xyz",
+      "source": "apps/web/public/gallery/curated/popular/glucose.xyz",
+      "sha256": "8b32702263cdcd6b32cfe601a28652ac3d26f999b6dc086ba237270d07c1fe19"
+    },
+    {
+      "id": "salt_cluster",
+      "name": "Salt cluster",
+      "formula": "Cl4Na4",
+      "atoms": 8,
+      "file": "salt_cluster.xyz",
+      "source": "tools/apple/bundle-starters.mts",
+      "geometry": "rock-salt Na4Cl4, Na-Cl 2.820 A (a = 5.640 A)",
+      "sha256": "657bec3b51e16ec740c4d521c8cc98e0f5ff31e4e678d96c0e2d159a693a85a8"
+    },
+    {
+      "id": "tryptophan",
+      "name": "Tryptophan",
+      "formula": "C11H12N2O2",
+      "atoms": 27,
+      "file": "tryptophan.xyz",
+      "source": "apps/web/public/gallery/curated/popular/tryptophan.xyz",
+      "sha256": "d3b2802d5d164fece9bd39edb9a238e0e956b769c5c68ba7a6e165d8f4a82920"
+    },
+    {
+      "id": "hydrogen_peroxide",
+      "name": "Hydrogen peroxide",
+      "formula": "H2O2",
+      "atoms": 4,
+      "file": "hydrogen_peroxide.xyz",
+      "source": "tools/apple/bundle-starters.mts",
+      "geometry": "PubChem CID 784 3D conformer, r(O-O) 1.449 A",
+      "sha256": "b7ec5add82bc14d7ee00e377b5e4c54b01269cb003250adcfa4f5e0c41b71986"
+    }
+  ]
+}

@@ -34,6 +34,8 @@ import { checkRateLimit, clientIp } from './rateLimit';
 // First-party analytics collector (Phase 0 sink → structured Cloud Logging).
 export { collectAnalytics } from './analytics';
 export { lupiViewShare } from './socialView';
+// Trophy-case backstop: clears users/{uid} when an Auth user is deleted.
+export { deleteUserData } from './accountCleanup';
 
 initializeApp();
 const db = getFirestore();

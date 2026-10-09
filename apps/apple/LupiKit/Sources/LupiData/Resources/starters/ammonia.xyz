@@ -1,0 +1,6 @@
+4
+ammonia | source=lupi-starter geometry="r(N-H) 1.012 A, HNH 106.7 deg, NIST CCCBDB experimental"
+N 0.000000 0.000000 0.000000
+H 0.937530 0.000000 -0.381028
+H -0.468765 0.811924 -0.381028
+H -0.468765 -0.811924 -0.381028

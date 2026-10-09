@@ -37,6 +37,12 @@ Core endpoints:
   `scripts/generate-daily-pages.mts`), with sealed puzzle files
   (`/daily/p/<token>.json`), the guess pool and per-day silhouette cards
   (`/og/daily/<date>.jpg`) that never name the answer (see `docs/daily.md`)
+- `GET /scale` — the scale page: the salt ladder from one ion to a
+  googolplex, copper's billion and the twelve diamondoids, drawn from
+  LupiScale records by the TypeScript reference (`packages/ui/src/scale`,
+  `docs/ar/scale-spec.md` §11.2) with exact counts; `?e=<entry>` opens an
+  entry and `?ref=lsr1:…` a shared piece. A static SEO shell like `/scan`,
+  no Worker route
 - `POST /collectAnalytics` — first-party analytics edge collector
 - `GET /__/auth/*` — Firebase Auth reserved-path proxy for popup sign-in
 - `POST /mcp` — MCP JSON-RPC (`initialize`, `tools/list`, `tools/call`)
@@ -79,6 +85,58 @@ renderer and retrieval path.
 See `docs/cloudflare-migration.md` for the whole-app cutover and
 `docs/cloudflare-mcp.md` for MCP setup, bindings, example `curl`, and renderer
 backend contract.
+
+## Native Apple app (apps/apple)
+
+`apps/apple` is the native SwiftUI + RealityKit AR app for iPhone Pro and
+iPad Pro (bundle id `live.lupi.app`, iOS 26.0): a physics sandbox whose
+building blocks are molecules, played against the room's LiDAR mesh. It
+replaces the Expo app, and `apps/mobile` is frozen as a reference. It has no
+MCP bridge. Its pure-Swift logic lives in four packages that build and test on
+Linux (`swift build`, `swift test`); the app itself (`apps/apple/Lupi`)
+compiles only on a macOS runner with Xcode, so never claim device behaviour
+from a Linux session.
+
+- **`LupiKit`**: elements, XYZ, both bond recipes, inertia, felt mass, the
+  throw estimator, juice and synthesized sound (four families tuned per
+  personality, `SoundTuning`), the drawn flop, personalities to
+  `lupi.personality.rules.v1` with plaque reasons; building from atoms
+  (`LupiChem/Build`: snap geometry, `Snapper`, `HydrogenFill`,
+  `MolecularGraph`); `LupiData`: the bundled starters, `KnownMolecules` (what
+  a built molecule is named after), `lupi.trophy.v1` and `lupi.shelf.v1`.
+- **`LupiScale`**: the scale spine of `docs/ar/scale-spec.md` (records,
+  paths, Magnitude, packs, `lupi.scale-ref.v1`, frames, the cut, proxies,
+  breaks), byte for byte with the TypeScript reference in
+  `packages/core/src/scale`.
+- **`LupiGame`**: the play session, tested headless against `LupiGameSim`:
+  spawn, grab, throw, pinch and breaks (M0); keeping, the Collection and
+  shelves (M1); the atom tray, the snap magnet, Fill H and "Built it" (M2);
+  the scale content from the bundled pack (the salt ladder to a googolplex,
+  copper, diamond, the diamondoids), flight, Life size, Grow ×2, chunks,
+  chips and terrain colliders (M3a); the flop, the cage ring, VoiceOver
+  descriptions, the thermal policy and the first-run card (M4).
+- **`LupiCloud`**: the Lupi account, Firebase Auth and Firestore over REST.
+
+M0–M2, M3a and M4 (plan §8) are built; M3b (LupiEngine) is not started.
+Nothing has been compiled against Apple's SDK or run on a device:
+`docs/ar/status.md` is the owner's checklist (build on the Mac, the spikes
+and exits on the device, the decisions waiting) and lists where the first
+compile will most likely fail; `apps/apple/README.md` is the how-to.
+
+The Linux gates: `swift test` in every package, and `swift test -c release`
+in LupiScale (its 4 ms `buildCut` gate counts only in release) and LupiGame
+(its directive tests time frames); `tools/apple/parse-app.sh` (syntax);
+`tools/apple/typecheck-app.sh`, which type-checks the app against the
+packages' real modules and stand-ins for Apple's frameworks spelled as Apple
+documents them (`tools/apple/standin`; add a new Apple API there from its
+documentation page); and `pnpm apple:check`, which fails when the Swift generated from the web's
+TypeScript (`tools/apple/*.mts`: elements, bond fixtures, edge samples,
+starters, the known-molecule index, scale fixtures) is stale. The web
+counterpart of the scale play is `/scale` (`packages/ui/src/scale`).
+
+The owner's decisions are `docs/ar/decisions.md`, the plan of record is
+`docs/ar/plan.md`, and the data contracts it shares with lupi.live are in
+`docs/ar/contracts.md`; `docs/ar/README.md` indexes the folder.
 
 ## Browser execution and visual QA
 
