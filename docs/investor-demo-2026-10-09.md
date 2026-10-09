@@ -4,11 +4,12 @@ The current chat lane is the `plugins/lupi-live` MCP plugin and its embedded mol
 
 The demo progression is the same compound across two experiences:
 
-The chat finder and native client/catalogue can land independently. The native Home screen is prepared on `codex/iphone-jev-discovery-screen` and is held for the Mac SDK build required before app changes merge. Steps 2–3 describe the intended rehearsal after that build and screen merge, not accepted current device behavior.
+The chat finder and native client/catalogue can land independently. The native Home screen is prepared in [PR #129](https://github.com/alexwelcing/Lupi/pull/129) and is held for the Mac SDK build required before app changes merge. The phone steps below describe the intended rehearsal after that build and screen merge, not accepted current device behavior.
 
-1. In ChatGPT ask Lupi to find “a hollow carbon cage”. Inspect the inferred catalogue match, resolve its returned PubChem CID, and show the pinned source structure. Pin an atom and ask a follow-up using that card's exact reference.
-2. On the native Home screen tap **Find a molecule**, enter the same description, then choose **Play with Buckminsterfullerene**. Map the room, place the bundled cage, toss it, and keep it in the Collection. These gestures and physics are illustrative.
-3. Repeat with “the molecule in coffee”. Use the native scale receipt separately to show exact represented counts versus drawn atoms.
+1. In ChatGPT ask Lupi to find “the molecule in coffee”. Inspect the inferred Caffeine match, resolve its returned PubChem CID 2519, and show the pinned source structure. The live rehearsal on 2026-10-09 returned 24 atoms with 3D coordinates in angstroms. Pin an atom and ask a follow-up using that card's exact reference.
+2. On the native Home screen tap **Find a molecule**, enter the same description, then choose **Play with Caffeine**. Map the room, place the bundled molecule, toss it, and keep it in the Collection. These gestures and physics are illustrative; the native and PubChem conformers need not be identical.
+3. Optionally ask for “a hollow carbon cage” and open Buckminsterfullerene on the phone. PubChem CID 123591 returned a **2D depiction** in the live rehearsal, so its chat view must retain that label; do not describe it as retrieved 3D geometry or use its depiction distances as angstrom measurements.
+4. Use the native scale receipt separately to show exact represented counts versus drawn atoms.
 
 For an offline phone rehearsal, use `buckyball`, `caffeine`, `H2O` or another exact catalogue name/formula. Those searches and bundled structures require no network. A description timeout withholds the recommendation and leaves all existing starters available. Chat requires live PubChem retrieval; its geometry is never silently replaced by an offline fixture. Live OMol25 browsing can be unavailable or warming, and the catalogue recommendation is not a claim about the complete research dataset.
 

@@ -46,9 +46,10 @@ try {
   const recommendation = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'buckyball' } });
   check('MCP recommendation returns the owned C60 CID', !recommendation.isError && (recommendation.structuredContent?.candidates as { pubchemCid: number }[])?.[0]?.pubchemCid === 123591, recommendation.structuredContent);
   if (!process.argv.includes('--no-source')) {
-    for (const cid of [123591, 2519]) {
+    for (const cid of [2519, 123591]) {
       const resolved = await client.callTool({ name: 'resolve_molecule', arguments: { query: `cid:${cid}`, cacheMode: 'refresh' } });
       check(`Retrieve live PubChem CID ${cid}`, !resolved.isError && resolved.structuredContent?.cid === cid && resolved.structuredContent?.status === 'resolved', resolved.structuredContent);
+      if (cid === 2519) check('Caffeine opening demo has actual 3D source coordinates', resolved.structuredContent?.dimension === '3d' && resolved.structuredContent?.coordinateUnits === 'angstrom', resolved.structuredContent);
       const shown = await client.callTool({ name: 'show_molecule', arguments: { structureRef: resolved.structuredContent?.structureRef } });
       check(`Prepare source-bound viewer CID ${cid}`, !shown.isError && shown.structuredContent?.structureRef === resolved.structuredContent?.structureRef && Boolean(shown._meta?.molecule), shown.structuredContent);
     }
