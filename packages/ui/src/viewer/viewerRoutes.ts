@@ -43,6 +43,13 @@ export function isScanRoute(route: string): boolean {
   return normalizedPathRoute(route.split('?')[0] || '/') === SCAN_PATH;
 }
 
+/** The scale page (`/scale`): one ion to a googolplex, its own chunk and canvas (docs/ar/scale-spec.md §11.2). */
+export const SCALE_PATH = '/scale';
+
+export function isScaleRoute(route: string): boolean {
+  return normalizedPathRoute(route.split('?')[0] || '/') === SCALE_PATH;
+}
+
 export function isTestbedRoute(search = typeof window === 'undefined' ? '' : window.location.search) {
   return new URLSearchParams(search).has('testbed');
 }
@@ -116,8 +123,8 @@ export function libraryCollectionFromRoute(route: string): LibraryCollectionId |
 }
 
 /**
- * Pre-reset homepage tabs and the retired OMol25 education URLs now live in
- * the Library. Returns the path to redirect to, or null when the URL is not a
+ * Pre-reset homepage tabs, the retired OMol25 education URLs and the short
+ * `/omol25` address now live in the Library. Returns the path to redirect to, or null when the URL is not a
  * legacy library entry point. Research execution tabs stay retired.
  */
 export function libraryRedirectTarget(pathname: string, search: string): string | null {
@@ -125,6 +132,8 @@ export function libraryRedirectTarget(pathname: string, search: string): string 
   if (path === '/materials/omol25' || path === '/materials/omol25-molecule-geometry') {
     return '/library/omol25';
   }
+  // The short nav address keeps its query (`/omol25?view=facets&q=C6H6`).
+  if (path === '/omol25') return `/library/omol25${search}`;
   if (path !== '/') return null;
   const tab = new URLSearchParams(search).get('tab');
   switch (tab) {

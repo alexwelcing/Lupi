@@ -1,5 +1,9 @@
 import { useMemo, type CSSProperties } from 'react';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
 import { useStore } from './store';
+import { getPerceivedBonds, resolveFrameRecipe } from './bonds/perceivedBonds';
+import { BondMethodSection } from './bonds/BondMethodSection';
+import { Omol25SourceCard } from './omol25/Omol25SourceCard';
 import { buildMoleculeStudyFacts } from './studyFacts';
 import { studentPromptForFile } from './gallery/studentCollection';
 import { usePhoneSheet } from './panels/usePhoneSheet';
@@ -28,7 +32,10 @@ export function StudyLensPanel({
   const frame = useStore(state => state.frame);
   const selectedAtoms = useStore(state => state.selectedAtoms);
   const lastBondCount = useStore(state => state.lastBondCount);
+  const lastBondDetail = useStore(state => state.lastBondDetail);
   const showBonds = useStore(state => state.showBonds);
+  const bondProfile = useStore(state => state.bondProfile);
+  const bondTolerance = useStore(state => state.bondTolerance);
   const measurement = useStore(state => state.measurement);
   const facts = useMemo(
     () =>
@@ -37,11 +44,20 @@ export function StudyLensPanel({
         frameIndex: frame,
         selectedAtoms,
         lastBondCount,
+        lastBondDetail,
         showBonds,
         measurement,
       }),
-    [file, frame, selectedAtoms, lastBondCount, showBonds, measurement],
+    [file, frame, selectedAtoms, lastBondCount, lastBondDetail, showBonds, measurement],
   );
+  const sourceFrame = file ? file.trajectory.frames[frame] ?? file.trajectory.frames[0] : undefined;
+  // The same cached graph the view draws, before any display filter.
+  const perceived = useMemo(() => {
+    if (!sourceFrame || !showBonds) return null;
+    const frameCount = file?.trajectory.totalFrames ?? 1;
+    if (resolveFrameRecipe(sourceFrame, { profile: bondProfile, frameCount }) !== MOLECULAR_RECIPE_ID) return null;
+    return getPerceivedBonds(sourceFrame, { recipe: MOLECULAR_RECIPE_ID, tolerance: bondTolerance });
+  }, [sourceFrame, showBonds, bondProfile, bondTolerance, file]);
   const sheet = usePhoneSheet({
     id: 'learn',
     memoryKey: 'learn',
@@ -196,6 +212,10 @@ export function StudyLensPanel({
             </a>
           )}
         </details>
+        {perceived && sourceFrame && (
+          <BondMethodSection perceived={perceived} frame={sourceFrame} muted={muted} heading={heading} />
+        )}
+        {sourceFrame && <Omol25SourceCard frame={sourceFrame} muted={muted} heading={heading} />}
         <a
           href="/study/organic-functional-groups"
           style={{ display: 'block', marginTop: 20, color: '#d5ef9c' }}

@@ -9,7 +9,7 @@ import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/valida
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { getAtomicNumberBySymbol, getElementSpec } from '@atlas/core/elements';
-import type { Omol25Molecule } from '@atlas/core/omol25';
+import type { Omol25Molecule } from '@atlas/core/omol25/widget';
 import {
   PubChemError,
   resolvePubChemMolecule,

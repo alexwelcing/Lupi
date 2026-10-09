@@ -1,0 +1,22 @@
+{
+  "schema": "lupi.trophy.v1",
+  "id": "C3A1F0D2-5B6E-4A7C-9D8E-0F1A2B3C4D5E",
+  "name": "Salt, 10⁹ atoms",
+  "molecule": {
+    "source": "scale",
+    "sha256": "7c820440c2c8da1d1ce79129a06ebdcf60071811919f21f880dc86ce0f71c630",
+    "formula": "BrCl499Na500",
+    "atoms": 1000000000,
+    "scale": {
+      "schema": "lupi.scale-ref.v1",
+      "ref": "lsr1:TFNSAQACAACCRJFP--HcLvb8ydPU3TPH-QTYybBsb3YPqCJN1iROJzQAAABMVVBOAwEAACgAAAAFAAsR-WgBAAUAAAAAAAAABQAAAAAAAAAFAAAAAAAAAAAAAAAAAAAAfwAAAExVUE4EAQAAcwAAAC74UC_NIuSwmMV-hcC9G2eT_4vhP5szDQAX8clWHj8-CgEAAHQzHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdDMcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB0MxwAAAAAAAEABhEjAQAAAA",
+      "count": "1,000,000,000",
+      "spanMetres": 0.15,
+      "aggregate": { "extents": [1, 1, 1], "colour": "#87afbf" }
+    }
+  },
+  "origin": { "kind": "spawned", "at": "2026-10-04T21:39:50.456Z" },
+  "look": { "scale": 0 },
+  "createdAt": "2026-10-04T21:40:00.123Z",
+  "updatedAt": "2026-10-04T21:40:00.123Z"
+}

@@ -11,6 +11,12 @@ function encodeStateDelta(delta: Record<string, unknown>) {
     .replace(/=+$/, '');
 }
 
+function decodeStateDelta(encoded: string): Record<string, unknown> {
+  let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  return JSON.parse(atob(b64));
+}
+
 function encodeRawStateJson(json: string) {
   return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -169,6 +175,38 @@ describe('Store — URL Serialization', () => {
     expect(restored.showBonds).toBe(true);
     expect(restored.bondCutoff).toBeCloseTo(3.2);
     expect(restored.bondTolerance).toBeCloseTo(0.7);
+  });
+
+  it('round-trips the bond rule (brp) and contacts toggle (bco) and omits their defaults', () => {
+    const s = getStoreState();
+    expect(s.bondProfile).toBe('auto');
+    expect(s.showBondContacts).toBe(true);
+    const defaults = decodeStateDelta(s.encodeToURL());
+    expect(defaults).not.toHaveProperty('brp');
+    expect(defaults).not.toHaveProperty('bco');
+
+    s.setBondProfile('molecular');
+    s.setShowBondContacts(false);
+    const encoded = getStoreState().encodeToURL();
+    const delta = decodeStateDelta(encoded);
+    expect(delta.brp).toBe('m');
+    expect(delta.bco).toBe(0);
+    resetStore();
+    getStoreState().decodeFromURL(encoded);
+    expect(getStoreState().bondProfile).toBe('molecular');
+    expect(getStoreState().showBondContacts).toBe(false);
+
+    getStoreState().setBondProfile('distance');
+    expect(decodeStateDelta(getStoreState().encodeToURL()).brp).toBe('d');
+  });
+
+  it('keeps existing links with bp (background pitch) and bc (bond cutoff) restoring as before', () => {
+    getStoreState().decodeFromURL(encodeStateDelta({ bp: 12, bc: 3.5 }));
+    const restored = getStoreState();
+    expect(restored.backgroundPitchDegrees).toBe(12);
+    expect(restored.bondCutoff).toBe(3.5);
+    expect(restored.bondProfile).toBe('auto');
+    expect(restored.showBondContacts).toBe(true);
   });
 
   it('round-trips shareable look settings through URL', () => {

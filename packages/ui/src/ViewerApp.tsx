@@ -89,6 +89,7 @@ import { TelemetryHUD } from './TelemetryHUD';
 import { StateInspector } from './StateInspector';
 import { LabelPerfHUD } from './LabelPerfHUD';
 import { PropertyLegendHUD } from './PropertyLegendHUD';
+import { BondLegendHUD } from './bonds/BondLegendHUD';
 import { DevProbe } from './DevProbe';
 import { ScaleBar } from '@atlas/scene/ScaleBar';
 import { emitIntent } from '@atlas/scene';
@@ -777,6 +778,9 @@ export function ViewerApp() {
                 bottomOffset={isMobile ? 118 : 100}
               />
             )}
+            {!isEmbeddedMobileViewer && (
+              <BondLegendHUD frame={currentFrame} bottomOffset={isMobile ? 118 : 100} />
+            )}
           </div>
         )}
 
@@ -917,6 +921,28 @@ export function ViewerApp() {
               group: 'Discover',
               onSelect: () => {
                 window.location.href = '/daily/';
+              },
+            },
+            {
+              id: 'omol25-browse',
+              label: 'Browse OMol25 · 34.3M DFT structures',
+              group: 'Discover',
+              onSelect: () => {
+                window.location.href = '/library/omol25';
+              },
+            },
+            {
+              id: 'omol25-random',
+              label: 'Open a random OMol25 structure',
+              group: 'Discover',
+              onSelect: () => {
+                // One row of the 34.3M neutral split, opened in place; a failure lands in the store's error.
+                void Promise.all([import('./analytics/openEntry'), import('./molecules/randomOmol')]).then(
+                  ([{ markOpenEntry }, { openRandomOmol25Molecule }]) => {
+                    markOpenEntry('palette');
+                    return openRandomOmol25Molecule();
+                  },
+                );
               },
             },
             {

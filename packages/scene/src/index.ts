@@ -44,8 +44,8 @@ export { buildClusters, MAX_GRID_DIM, clusterCellRadius } from './ClusterBuilder
 export type { Clusters } from './ClusterBuilder';
 export { SimulationCell } from './SimulationCell';
 export { Bonds, DEFAULT_CUTOFFS, buildTypeCutoffs } from './Bonds';
-export { resolveBondTopologyMode, validateSourceBondTopology } from './bondTopology';
-export type { BondTopologyMode, SourceBondTopologyValidation } from './bondTopology';
+export { bondsUpdateDetail, resolveBondTopologyMode, validateSourceBondTopology } from './bondTopology';
+export type { BondTopologyMode, BondsUpdateDetail, SourceBondTopologyValidation } from './bondTopology';
 export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
 export { AtomPicker, pickAtomAtClient } from './AtomPicker';

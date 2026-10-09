@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Frame } from '@atlas/core/types';
 import {
+  bondsUpdateDetail,
   resolveBondTopologyMode,
   shouldUseGpuBondInference,
   validateSourceBondTopology,
@@ -41,6 +42,14 @@ describe('bond topology backend ownership', () => {
     expect(shouldUseGpuBondInference(10, undefined, false)).toBe(false);
   });
 
+  it('never routes the molecular recipe to the GPU, and is unchanged for distance', () => {
+    expect(shouldUseGpuBondInference(10, undefined, true, 200_000, 'lupi-bonds.molecular.v1')).toBe(false);
+    expect(shouldUseGpuBondInference(1_000, undefined, false, 200_000, 'lupi-bonds.molecular.v1')).toBe(false);
+    expect(shouldUseGpuBondInference(10, undefined, true, 200_000, 'lupi-bonds.distance.v1')).toBe(true);
+    expect(shouldUseGpuBondInference(200_001, undefined, false, 200_000, 'lupi-bonds.distance.v1')).toBe(true);
+    expect(shouldUseGpuBondInference(10, undefined, false, 200_000, 'lupi-bonds.distance.v1')).toBe(false);
+  });
+
   it('keeps source pairs but rejects unsupported covalent inference', () => {
     expect(resolveBondTopologyMode(frame([0, 1], false, false))).toBe('source');
     expect(resolveBondTopologyMode(frame([], false, false))).toBe('none');
@@ -65,5 +74,26 @@ describe('bond topology backend ownership', () => {
     expect(resolveBondTopologyMode(odd, true)).toBe('none');
     expect(resolveBondTopologyMode(outOfRange, true)).toBe('none');
     expect(resolveBondTopologyMode(selfPair, true)).toBe('none');
+  });
+});
+
+describe('bondsUpdateDetail', () => {
+  it('counts drawn kinds and carries the molecular evidence', () => {
+    const counts = {
+      covalent: 12, coordination: 0, ionicContact: 6, long: 1, removed: 2, nearMiss: 3,
+      clashes: 0, fragments: 7, bridgingH: 0, ionCarbonClose: 0,
+    };
+    const detail = bondsUpdateDetail('lupi-bonds.molecular.v1', 4, 0.45, { kinds: [0, 2, 1, 0], counts });
+    expect(detail.kinds).toEqual({ covalent: 2, coordination: 1, ionicContact: 1 });
+    expect(detail.evidence).toEqual({ long: 1, removed: 2, nearMiss: 3, clashes: 0 });
+  });
+
+  it('counts every drawn bond as covalent outside the molecular recipe', () => {
+    expect(bondsUpdateDetail('lupi-bonds.distance.v1', 5, 0.6)).toEqual({
+      recipe: 'lupi-bonds.distance.v1',
+      kinds: { covalent: 5, coordination: 0, ionicContact: 0 },
+      evidence: { long: 0, removed: 0, nearMiss: 0, clashes: 0 },
+      tolerance: 0.6,
+    });
   });
 });

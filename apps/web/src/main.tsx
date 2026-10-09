@@ -13,6 +13,7 @@ import {
   isMcpViewerRoute,
   isScienceDemoRoute,
   isScanRoute,
+  isScaleRoute,
   libraryCollectionFromRoute,
   libraryRedirectTarget,
   SEO_EDUCATION_ROUTES,
@@ -49,6 +50,7 @@ const retiredResearchRoute =
 const libraryCollection = libraryCollectionFromRoute(normalizedPathRoute(currentPathRoute()));
 const educationKind = SEO_EDUCATION_ROUTES[normalizedPathRoute(currentPathRoute())] ?? null;
 const scanRoute = isScanRoute(currentPathRoute());
+const scaleRoute = isScaleRoute(currentPathRoute());
 
 /**
  * URL-only signals that the viewer (App) should load immediately instead of the
@@ -208,6 +210,16 @@ async function mountScan() {
   }
 }
 
+/** /scale: its own chunk (LupiScale, three, the impostors) and canvas; nothing else on the site loads it. */
+async function mountScale() {
+  try {
+    const mod = await import('@atlas/ui/scale/ScaleShell');
+    root.render(withProviders(<mod.ScaleShell />));
+  } catch (err) {
+    renderError('Scale page import', err);
+  }
+}
+
 async function mountEducation(kind: NonNullable<typeof educationKind>) {
   try {
     const mod = await import('@atlas/ui/landing/SeoEducationShell');
@@ -236,12 +248,17 @@ if (libraryRedirect) {
         <p>Lupi</p>
         <h1>This research workspace has retired from Lupi.</h1>
         <p>
-          Lupi now focuses on exploring and learning from molecular structures. Research execution and large
-          dataset browsing are separate from the learning app.
+          Lupi now focuses on exploring and learning from molecular structures. Research execution is separate
+          from the learning app; large datasets, OMol25 among them, are browsed in the Library.
         </p>
         <p>
           <a style={{ color: '#d5ef9c' }} href="/">
             Explore the learning collection
+          </a>
+        </p>
+        <p>
+          <a style={{ color: '#d5ef9c' }} href="/library/omol25">
+            Browse OMol25 in the Library
           </a>
         </p>
         <p>
@@ -252,6 +269,8 @@ if (libraryRedirect) {
       </main>
     </div>,
   );
+} else if (scaleRoute) {
+  void mountScale();
 } else if (wantsViewerImmediately()) {
   void mountViewer();
 } else if (scanRoute) {

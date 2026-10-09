@@ -1,4 +1,5 @@
 import { canInferCovalentBonds } from '@atlas/core';
+import { MOLECULAR_RECIPE_ID, type BondRecipeId, type PerceivedBonds } from '@atlas/core/bonds';
 import type { Frame } from '@atlas/core/types';
 
 export type BondTopologyMode = 'source' | 'infer' | 'none';
@@ -40,13 +41,52 @@ export function resolveBondTopologyMode(
   return (inferenceAllowed ?? canInferCovalentBonds(frame)) ? 'infer' : 'none';
 }
 
-/** CPU source pairs are authoritative; WebGPU is only an inference backend. */
+/** CPU source pairs are authoritative; WebGPU is only an inference backend.
+ * The molecular recipe runs on the main thread, never on the GPU. */
 export function shouldUseGpuBondInference(
   natoms: number,
   sourceBonds: Int32Array | null | undefined,
   gpuRequested: boolean,
   forceGpuAtomThreshold = 200_000,
+  recipe?: BondRecipeId | 'source' | null,
 ): boolean {
   if (sourceBonds && sourceBonds.length > 0) return false;
+  if (recipe === MOLECULAR_RECIPE_ID) return false;
   return gpuRequested || natoms > forceGpuAtomThreshold;
+}
+
+/** What the drawn bond layer reports upward (store `lastBondDetail`, MCP status). */
+export interface BondsUpdateDetail {
+  recipe: BondRecipeId | 'source';
+  /** Drawn bonds by kind, after hidden types and the contacts toggle. */
+  kinds: { covalent: number; coordination: number; ionicContact: number };
+  /** The recipe's evidence for the whole frame (zeros outside the molecular recipe). */
+  evidence: { long: number; removed: number; nearMiss: number; clashes: number };
+  tolerance: number;
+}
+
+const NO_EVIDENCE = { long: 0, removed: 0, nearMiss: 0, clashes: 0 } as const;
+
+/**
+ * The detail for one drawn bond set. `kinds` is per drawn bond (0 covalent,
+ * 1 coordination, 2 ionic contact); without kinds every drawn bond is covalent.
+ */
+export function bondsUpdateDetail(
+  recipe: BondRecipeId | 'source',
+  drawnCount: number,
+  tolerance: number,
+  molecular?: { kinds: ArrayLike<number>; counts: PerceivedBonds['counts'] } | null,
+): BondsUpdateDetail {
+  if (!molecular) {
+    return { recipe, kinds: { covalent: drawnCount, coordination: 0, ionicContact: 0 }, evidence: { ...NO_EVIDENCE }, tolerance };
+  }
+  const kinds = { covalent: 0, coordination: 0, ionicContact: 0 };
+  for (let k = 0; k < drawnCount; k += 1) {
+    const kind = molecular.kinds[k];
+    if (kind === 1) kinds.coordination += 1;
+    else if (kind === 2) kinds.ionicContact += 1;
+    else kinds.covalent += 1;
+  }
+  const { long, removed, nearMiss, clashes } = molecular.counts;
+  return { recipe, kinds, evidence: { long, removed, nearMiss, clashes }, tolerance };
 }

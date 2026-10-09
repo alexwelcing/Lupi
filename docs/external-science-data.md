@@ -15,17 +15,32 @@ publicly browsable. Its browser uses the public
 [ColabFit conversions](https://huggingface.co/collections/colabfit/omol25-open-molecules-2025-colabfit)
 through the [Hugging Face Dataset Viewer row API](https://huggingface.co/docs/dataset-viewer/en/rows):
 
-| Lupi collection | Public repository | Indexed rows | Coverage shown in the UI |
-| --- | --- | ---: | --- |
-| `neutral-train` | `colabfit/OMol25_train_neutral` | 34,335,828 | Complete public neutral training split |
-| `neutral-validation` | `colabfit/OMol25_neutral_validation` | 27,697 | Complete public neutral validation split |
-| `all-train-preview` | `colabfit/OMol25_train` | 841,736 of an estimated 65,331,709 | Indexed preview |
-| `train-4m-preview` | `colabfit/OMol25_train_4M` | 1,000,000 of an estimated 2,657,915 | Indexed preview |
-| `validation-preview` | `colabfit/OMol25_validation` | 800,000 of an estimated 1,842,258 | Indexed preview |
+| Lupi collection | Public repository | Indexed rows | Source rows | Coverage shown in the UI |
+| --- | --- | ---: | ---: | --- |
+| `neutral-train` | `colabfit/OMol25_train_neutral` | 34,335,828 | 34,335,828 | Complete public neutral training split |
+| `neutral-validation` | `colabfit/OMol25_neutral_validation` | 27,697 | 27,697 | Complete public neutral validation split |
+| `all-train-preview` | `colabfit/OMol25_train` | 841,736 | 101,666,280 | Indexed preview |
+| `train-4m-preview` | `colabfit/OMol25_train_4M` | 1,000,000 | 3,986,754 | Indexed preview |
+| `validation-preview` | `colabfit/OMol25_validation` | 800,000 | 2,762,021 | Indexed preview |
 
-OMol25 supplies atomic numbers and source coordinates. It does **not** supply
-source bond topology in this browsing path. Bonds that Lupi draws are a viewer
-inference for display and must not be presented as dataset truth.
+*Indexed rows* are the rows the Hugging Face Dataset Viewer serves (the edge
+rejects any row past them). *Source rows* are the configurations in the split,
+from the ColabFit dataset cards (they match arXiv:2505.08762 Table 1 for the 4M,
+validation and neutral splits). The manifest and row pages report both, plus
+the Dataset Viewer's `estimatedRows`, which understates the larger
+repositories (65,331,709 / 2,657,915 / 1,842,258).
+
+These collections, their row counts, the structure URLs and every provenance
+sentence live in one module, `@atlas/core/omol25`
+(`packages/core/src/omol25/`). The edge, the Library, the URL policy and the
+MCP tools import it rather than keeping their own lists.
+
+OMol25 supplies atomic numbers, source coordinates, energies and forces, and
+(outside neutral-train) each record's total charge and spin. It does **not**
+supply bond topology: OMol25 supplies no bond topology; Lupi infers bonds with
+a published rule (`lupi-bonds.molecular.v1`, see
+`docs/omol25-bonds-and-discovery.md`) and labels them. Inferred bonds must never
+be presented as dataset truth.
 
 ### Same-origin validation index
 
@@ -50,18 +65,118 @@ OMol25 bond topology.
 
 All routes accept `GET` and `HEAD`:
 
-- `/v1/datasets/omol25` returns coverage, attribution, and collection URLs.
+- `/v1/datasets/omol25` returns coverage (`indexedRows`, `estimatedRows`,
+  `sourceRows`), attribution, the citation and collection URLs.
 - `/v1/datasets/omol25/:collection/rows?offset=0&limit=24` returns compact row
   metadata. Add either `query=...` or an exact `formula=...`, never both.
 - `/v1/datasets/omol25/:collection/structures/:row.xyz` materializes one XYZ
   file from the selected source row. Its comment and response headers preserve
-  coordinate and bond-topology provenance.
+  coordinate, charge and bond-topology provenance.
 
 Rows are streamed from Hugging Face rather than copied into Lupi. A page is
 limited to 36 rows and a synthesized XYZ to 1,000 atoms. When a Hugging Face
 search/filter index is still warming, the edge returns `202`, `Retry-After: 15`,
 and an explicit `warming` state; it does not silently substitute a different
 result set.
+
+#### Row fields
+
+Each row carries `rowIndex`, `id`, `configurationId`, `propertyId`, `formula`
+(Hill), `reducedFormula`, `elements`, `atomCount`, `method`, `software`,
+`energy` (eV), `maxForceNorm` (eV/Å), `name` (a ColabFit shard id, not a
+chemical name), `loadUrl`, `coordinateProvenance: 'source'` and
+`bondTopology: 'not-provided'`, plus the record's chemistry:
+
+| Field | Meaning |
+| --- | --- |
+| `charge` | Total charge, an integer with \|q\| ≤ 10, or `null` |
+| `spinMultiplicity` | 2S+1, an integer from 1 to 11, or `null` |
+| `chargeSource` | `record` (from `property_metadata`), `split-definition` (neutral-train: charge-neutral singlets by definition, no metadata column) or `unavailable` |
+| `domain` | The record's `data_id` subset (`spice`, `ani2x`, `orbnet_denali`, …), or `null` |
+| `homoLumoGapEv` | The first entry of `property_metadata.homo_lumo_gap` (eV), or `null` |
+| `metaTruncated` | Present (`true`) when Hugging Face truncated `property_metadata`; charge and spin are then `unavailable` |
+| `multiplicity` | ColabFit's column, kept for compatibility. It is **not** the spin multiplicity (it reads 1 for a Pr triplet) and no UI reads it |
+
+`property_metadata` is parsed defensively: a truncated, unparsable or
+out-of-range cell gives `chargeSource: 'unavailable'` and never fails the page.
+
+#### XYZ comment and headers
+
+The structure comment is `key=value` pairs separated by ` | `, in this order,
+with no spaces inside values and no `Properties=` columns:
+
+```
+OMol25 {collection} row={row} | collection={collection} | formula={hill} |
+configuration_id=… | property_id=… | method=ωB97M-V | charge={int} |
+multiplicity={int} | charge_source={record|split-definition|unavailable} |
+data_id={id} | energy_eV={num} | max_force_eV_per_A={num} |
+homo_lumo_gap_eV={num} | coordinates=source | bonds=not-provided |
+license=CC-BY-4.0 | source={hf repo}
+```
+
+(one line in the file). `charge=` and `multiplicity=` are omitted when the
+charge source is `unavailable`; `data_id=`, the energy, the force and the gap
+are omitted when absent. The XYZ parser reads these keys into `Frame.chemistry`
+and `Frame.sourceRecord`; none of them enters the decoded-frame digest.
+
+Response headers: `x-lupi-coordinate-provenance: source`,
+`x-lupi-bond-topology: not-provided`, `x-lupi-charge-provenance` (the charge
+source) and `x-lupi-bond-inference: lupi-bonds.molecular.v1`. The Worker's CORS
+`access-control-expose-headers` list includes all four.
+
+#### Timeouts, truncation and caching
+
+- Every upstream call runs under `AbortSignal.timeout`: 9 s for rows, filter
+  and search, 12 s for a structure (the deadline covers reading the body). A
+  timeout answers `504 {status: 'slow'}` with `cache-control: no-store`; the
+  browser maps it to a typed `OmolSlowError`, separate from `warming`.
+- A structure whose `positions` or `atomic_numbers` cell Hugging Face
+  truncated answers an explicit `502` naming the truncation.
+- Structure responses are cached through the Workers Cache API under a key
+  that includes `omol25-xyz-v2` (bump it whenever the XYZ text changes). The
+  cache is injectable and guarded: without one (plain Node tests, `tsc` with
+  `types: []`) the route simply does not cache. After a deploy that changes the
+  XYZ text, purge `/v1/datasets/omol25/*/structures/*`; a client holding an
+  older file falls back to the distance recipe, which is older, never wrong.
+
+### Featured picks
+
+Lupi keeps same-origin copies of a small featured set (at most 48 rows,
+CC BY 4.0, attributed, each with a sha256 receipt) for the home shelf, the
+Library shelves, the finder and agents; every other row stays stream-only.
+
+- `tools/omol25-featured.picks.json` is hand-edited: neutral-validation rows
+  (the split with a verified 1:1 row map), each with a shelf (`drug-like`,
+  `amino-acid-ligand`, `conformers`, `off-equilibrium`, `salt-complexes`,
+  `small`), a `home` flag and why it was picked. Home picks are listed first,
+  cycling through the shelves, because the home shelf shows six consecutive
+  home picks a day.
+- `tools/build-omol25-featured.mjs` (run once by hand with
+  `pnpm exec tsx`; it needs the network and `@atlas/core/bonds`, and the web
+  build never fetches) builds each XYZ with the edge module itself, so the
+  committed file is byte-for-byte what the edge serves, and writes:
+  - `apps/web/public/datasets/omol25/featured/omol25_nv_<row>.xyz`;
+  - `apps/web/public/datasets/omol25/featured.v1.json`
+    (`lupi.omol25-featured.v1`: every pick's ids, formula, elements, shelf,
+    domain, charge and spin from the record, energy, largest force, gap,
+    title, file, edge and ink paths, sha256 and fetch time; this is also the
+    agent-parity surface);
+  - `packages/ui/src/landing/omolShelf.data.ts`, the landing-safe slice the
+    home shelf renders (imports nothing; about 0.8 KB gzip);
+  - a curation contact sheet under `.verify-artifacts/omol25-featured/`.
+- Gates (fatal): 12–120 atoms; no pair closer than 0.7 Å; charge and spin
+  from the record; under `perceiveBonds` (`lupi-bonds.molecular.v1`, τ 0.45)
+  every H has exactly one covalent partner, no atom exceeds its covalent cap
+  and no s-block ion has a covalent stick; across the set all 17 neutral-lane
+  elements appear, every shelf is filled and at least 12 picks are home.
+- Titles are Hill formulas. A ChEMBL or PubChem name needs owner approval and
+  a matching Hill formula; the tool does not resolve names.
+- `--check` re-gates the committed files without the network and exits 1 when
+  `featured.v1.json` or the landing data is stale; `--reuse` keeps committed
+  XYZ files and fetches only new rows.
+- The remote-URL policy trusts exactly
+  `^/datasets/omol25/featured/omol25_nv_\d+\.xyz$` on the same origin (no query
+  or hash), next to the edge structure route.
 
 ## Fixed LAMMPS research catalog
 

@@ -23,7 +23,15 @@ import type { Frame } from '@atlas/core/types';
 import { firebaseDb } from './auth/firebase';
 import { loadInlineMolecule, loadMoleculeSource } from './loadMoleculeSource';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
-import { useStore, sanitizeEnvironmentPreset, sanitizeInkStyle, type AppState, type LoadedFile, type SavedViewVisibility } from './store';
+import {
+  useStore,
+  sanitizeBondProfile,
+  sanitizeEnvironmentPreset,
+  sanitizeInkStyle,
+  type AppState,
+  type LoadedFile,
+  type SavedViewVisibility,
+} from './store';
 import {
   measurementForInlineSnapshot,
   sanitizeMolecularMeasurement,
@@ -90,6 +98,8 @@ export interface CanonicalMolecularView {
     | 'showBonds'
     | 'bondCutoff'
     | 'bondTolerance'
+    | 'bondProfile'
+    | 'showBondContacts'
     | 'bondColorMode'
     | 'bondThresholdMode'
     | 'bondPercentileRange'
@@ -404,6 +414,8 @@ function captureCanonicalView(): CanonicalMolecularView {
       'showBonds',
       'bondCutoff',
       'bondTolerance',
+      'bondProfile',
+      'showBondContacts',
       'bondColorMode',
       'bondThresholdMode',
       'bondPercentileRange',
@@ -500,9 +512,15 @@ function applyCanonicalView(view: CanonicalMolecularView) {
       ? Math.max(0.4, Math.min(2.5, view.effects.inkWeight))
       : 1,
   };
+  // Views saved before the bond rule existed open on auto with contacts shown.
+  const display = {
+    ...(view.display ?? {}),
+    bondProfile: sanitizeBondProfile(view.display?.bondProfile),
+    showBondContacts: view.display?.showBondContacts !== false,
+  };
   useStore.setState({
     ...(view.color ?? {}),
-    ...(view.display ?? {}),
+    ...display,
     ...material,
     ...(view.lighting ?? {}),
     ...effects,
@@ -553,7 +571,7 @@ function frameToXyz(name: string, frame: Frame): string {
   if (!hasAngstromDistances(frame)) {
     throw new Error('Inline XYZ serialization requires coordinates known to be in angstroms.');
   }
-  const lines = [String(frame.natoms), name];
+  const lines = [String(frame.natoms), chemistryComment(frame, name)];
   for (let i = 0; i < frame.natoms; i += 1) {
     const atomicNumber = resolveAtomicNumber(frame, frame.types[i])!;
     const element = ELEMENT_DATA[atomicNumber].symbol;
@@ -563,6 +581,23 @@ function frameToXyz(name: string, frame: Frame): string {
     lines.push(`${element} ${x.toFixed(6)} ${y.toFixed(6)} ${z.toFixed(6)}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * The comment line of an inline copy: declared chemistry first (the parser
+ * keeps a key's first value, so a file name cannot shadow it), then the name.
+ * Without these keys a reloaded copy would lose its charge and spin, and with
+ * them the molecular bond recipe.
+ */
+function chemistryComment(frame: Frame, name: string): string {
+  const chemistry = frame.chemistry;
+  if (!chemistry) return name;
+  const keys: string[] = [];
+  if (chemistry.totalCharge !== null) keys.push(`charge=${chemistry.totalCharge}`);
+  if (chemistry.spinMultiplicity !== null) keys.push(`multiplicity=${chemistry.spinMultiplicity}`);
+  keys.push(`charge_source=${chemistry.source}`);
+  if (chemistry.domain) keys.push(`data_id=${chemistry.domain.replace(/[\s|"']+/g, '_')}`);
+  return `${keys.join(' ')} ${name}`;
 }
 
 function pick<T extends object, K extends keyof T>(source: T, keys: K[]): Pick<T, K> {

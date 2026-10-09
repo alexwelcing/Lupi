@@ -25,7 +25,7 @@ Answers to the open questions in [README.md §8](README.md#8-decisions-only-the-
 | Question | Decision | What changes in the plan |
 |---|---|---|
 | Priority and staffing | **Resources are not the constraint; the R3F v10 port is the priority.** | Plan by dependency order, not engineer-weeks. The port goes first; v9-only feel work is not built separately unless it survives the port unchanged. |
-| Immersive XR | **Defer.** | Remove immersive XR from the v10 viewer. iPhone AR stays on USDZ Quick Look (hosted `.usdz` behind a real tap); Android on Scene Viewer. |
+| Immersive XR | **Defer.** | Remove immersive XR from the v10 viewer. iPhone AR stays on USDZ Quick Look (hosted `.usdz` behind a real tap); Android on Scene Viewer. (Amended 2026-10-04 below: native Apple AR is now a separate app.) |
 | Export V2 | **Cut early, at the platform swap.** | The WebGPURenderer path ships with the V2 export profile (render-target readback, new renderer fingerprint and artifact keys); AGENTS.md's "V1 truth" is rewritten in the same change. |
 | GPU Studio | **Fold into Looks + Play.** | The snowglobe becomes a Look and "shake" a Play verb in the main viewer; the modal, its second GPU device and its render loop go away. |
 | Preview lane | **None; straight to production.** | This is an early site and heavy disruption is acceptable. No `/next` build. |
@@ -49,3 +49,11 @@ Answers to the open questions in [README.md §8](README.md#8-decisions-only-the-
 | Testing | **Less testing; no new automated checks in CI.** | No new CI lanes or end-to-end specs. Existing CI stays green; tests that only assert removed internals are deleted or rewritten. The dual-backend smoke tool is a local check, not a CI gate. No real-phone checklist. |
 | Export background | **Exports use the view as configured in the viewer.** | Raster exports default to whatever background (and, where feasible, look) the user set in the viewer. |
 | Landing, labels, three version, axes gizmo | Decided by the lead under "it works". | All port work merges into this branch; 3D labels are canvas-texture sprites; ship on three 0.186.1; the axes gizmo becomes a small overlay. |
+
+## Amendment 2026-10-04: native Apple AR
+
+Owner decision ([docs/ar/decisions.md](../../ar/decisions.md), D1–D13): AR on iPhone and iPad becomes a native SwiftUI + RealityKit app at `apps/apple`, "Lupi" with bundle id `live.lupi.app`, which replaces the Expo app (`apps/mobile`, now frozen as a reference). It is a physics sandbox whose building blocks are molecules, played against the LiDAR mesh of the real room. The plan of record is [docs/ar/plan.md](../../ar/plan.md).
+
+| Question | 2026-09-28 decision | 2026-10-04 amendment |
+|---|---|---|
+| Immersive XR | Defer. Remove it from the v10 viewer; iPhone AR stays on USDZ Quick Look, Android on Scene Viewer. | Unchanged for the web viewer: no WebXR, and the `/m` pages keep their USDZ Quick Look and Scene Viewer desk models. Native iPhone and iPad AR is no longer deferred: it is the `apps/apple` app above, and it does not depend on Quick Look. |

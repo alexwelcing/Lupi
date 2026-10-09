@@ -415,6 +415,57 @@ describe('render artifact V1 semantic validation', () => {
     );
   });
 
+  it('accepts model bonds with topology, recipe and contacts, keeps them optional, and rejects sourceBondCount', () => {
+    const modelBonds = {
+      tolerance: 0.45,
+      atomColorSource: 'element',
+      atomColorMode: 'type',
+      colorProperty: null,
+      colormap: 'viridis',
+      uniformColor: '#ffffff',
+      elementColorOverrides: {},
+      materialPreset: 'default',
+      roughness: 0,
+      polish: 0,
+      execution: 'cpu-export-v1',
+    };
+    const modelWithBonds = (bonds: Record<string, unknown>) => {
+      const model = contentSpec({
+        format: 'glb',
+        alpha: 'not-applicable',
+        layers: createRenderLayerStateV1(['atoms', 'bonds']),
+        view: { ...modelView('glb'), bonds } as unknown as RenderJsonObjectV1,
+      }) as unknown as Record<string, unknown>;
+      delete model.width;
+      delete model.height;
+      return model;
+    };
+    expect(validateRenderArtifactSpecV1(modelWithBonds(modelBonds))).toMatchObject({ format: 'glb' });
+    expect(validateRenderArtifactSpecV1(modelWithBonds({
+      ...modelBonds,
+      topology: 'molecular-inference-v1',
+      recipe: 'lupi-bonds.molecular.v1',
+      contacts: true,
+    }))).toMatchObject({ format: 'glb' });
+    expect(validateRenderArtifactSpecV1(modelWithBonds({
+      ...modelBonds,
+      topology: 'covalent-inference-v1',
+      recipe: 'lupi-bonds.distance.v1',
+    }))).toMatchObject({ format: 'glb' });
+    expect(() => validateRenderArtifactSpecV1(modelWithBonds({ ...modelBonds, sourceBondCount: 3 }))).toThrow(
+      /unsupported field sourceBondCount/,
+    );
+    expect(() => validateRenderArtifactSpecV1(modelWithBonds({ ...modelBonds, topology: 'guessed-v1' }))).toThrow(
+      /bonds\.topology: must be one of/,
+    );
+    expect(() => validateRenderArtifactSpecV1(modelWithBonds({ ...modelBonds, recipe: 'lupi-bonds.v2' }))).toThrow(
+      /bonds\.recipe: must be one of/,
+    );
+    expect(() => validateRenderArtifactSpecV1(modelWithBonds({ ...modelBonds, contacts: 'yes' }))).toThrow(
+      /contacts/,
+    );
+  });
+
   it('rejects unknown fields and incomplete layer declarations', () => {
     expect(() => validateRenderArtifactSpecV1({ ...contentSpec(), quality: 1 })).toThrow(
       /unsupported field quality/,

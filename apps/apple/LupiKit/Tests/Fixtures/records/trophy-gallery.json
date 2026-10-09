@@ -1,0 +1,17 @@
+{
+  "schema": "lupi.trophy.v1",
+  "id": "6F1C2D9E-3B7A-4E58-9C21-0A5D7B8E4F13",
+  "name": "Caffeine",
+  "molecule": {
+    "source": "gallery",
+    "id": "caffeine",
+    "url": "https://lupi.live/gallery/curated/popular/caffeine.xyz",
+    "sha256": "912c14862af853b2234e6cff6c67d0462a25acab38fed1ada8bbf9967233d80a",
+    "formula": "C8H10N4O2",
+    "atoms": 24
+  },
+  "origin": { "kind": "spawned", "at": "2026-10-04T18:02:11.204Z" },
+  "look": { "scale": 0.0156 },
+  "createdAt": "2026-10-04T18:02:41.877Z",
+  "updatedAt": "2026-10-04T18:02:41.877Z"
+}

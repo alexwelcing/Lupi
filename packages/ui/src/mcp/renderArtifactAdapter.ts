@@ -55,6 +55,8 @@ import {
   type LupiRendererRuntime,
 } from '../viewer/createLupiRenderer';
 import { LUPI_VIEWER_MCP_VERSION } from './protocol';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
+import { resolveFrameRecipe } from '../bonds/perceivedBonds';
 import { activeTransmissionQualityV1 } from './transmissionRuntime';
 
 export const BROWSER_RENDERER_MODULE_ID_V1 = '@atlas/ui/mcp/renderArtifactAdapter';
@@ -333,9 +335,18 @@ export async function createBrowserRenderArtifactPlanV1(
       throw new Error('Hide bonds before deterministic raster export; the live asynchronous bond result is not snapshot-addressable yet.');
     }
     layers.bonds = true;
+    // Which graph the export draws: source pairs, or the recipe Lupi infers with.
+    const recipe = resolveFrameRecipe(frame, {
+      profile: state.bondProfile,
+      frameCount: file.trajectory.totalFrames ?? file.trajectory.frames.length,
+    });
+    const provenance: RenderJsonObjectV1 = recipe === 'source' || recipe === null
+      ? { topology: 'source-frame-v1' }
+      : recipe === MOLECULAR_RECIPE_ID
+        ? { topology: 'molecular-inference-v1', recipe, contacts: state.showBondContacts }
+        : { topology: 'covalent-inference-v1', recipe };
     view.bonds = {
-      topology: frame.bonds.length > 0 ? 'source-frame-v1' : 'covalent-inference-v1',
-      sourceBondCount: frame.bonds.length / 2,
+      ...provenance,
       tolerance: state.bondTolerance,
       atomColorSource: state.atomColorSource,
       atomColorMode: state.colorMode,

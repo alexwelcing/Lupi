@@ -2,11 +2,12 @@
 /**
  * verify-exports — headless scaling benchmark for the 3D export pipeline.
  *
- * Run: node tools/verify-exports.mjs [--skip-500k]
+ * Run: pnpm exec tsx tools/verify-exports.mjs [--skip-500k]
  *
  * Imports the SAME scene-building modules the app ships
  * (packages/ui/src/export/exportSceneBuilder.ts + instanceBake.ts — pure
- * three, no React/DOM, loaded via Node's built-in TypeScript type stripping)
+ * three, no React/DOM, loaded through tsx because @atlas/core/bonds
+ * re-exports extensionless relative modules that plain node cannot resolve)
  * and drives them over synthetic frames:
  *
  *   GLB  @ 10k / 100k / 500k atoms — full build + GLTFExporter binary encode.

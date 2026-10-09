@@ -1,13 +1,15 @@
 /**
  * Federated search: fan out across providers, merge, rank.
  *
- * Providers run in parallel and a slow/failing one can't sink the whole search
- * (each is wrapped so it resolves to []). Ranking is a pure function so it's
- * unit-testable independent of any data source.
+ * Providers run in parallel and a slow/failing one can't sink the whole search:
+ * each races a 6 s timeout and resolves to [] on failure or timeout. Ranking is
+ * a pure function so it's unit-testable independent of any data source.
  */
 import type { MoleculeHit, MoleculeProvider, MoleculeQuery, MoleculeSourceId } from './types';
 
 const DEFAULT_PER_SOURCE = 25;
+/** A provider still pending after this long is left out of the results. */
+export const PROVIDER_TIMEOUT_MS = 6_000;
 
 // Source ordering used only as a stable tie-break (local/curated first).
 const SOURCE_PRIORITY: Record<MoleculeSourceId, number> = {
@@ -16,7 +18,7 @@ const SOURCE_PRIORITY: Record<MoleculeSourceId, number> = {
   library: 2,
   saved: 4,
   nist: 5,
-  omol: 6,
+  omol: 2,
   social: 3,
   pubchem: 7,
 };
@@ -79,11 +81,27 @@ export async function searchMolecules(
 
   const batches = await Promise.all(
     enabled.map((p) =>
-      p
-        .search(scoped)
-        .then((hits) => hits.slice(0, perSource))
-        .catch(() => [] as MoleculeHit[]),
+      withinTimeout(
+        p.search(scoped).then((hits) => hits.slice(0, perSource)),
+        PROVIDER_TIMEOUT_MS,
+      ),
     ),
   );
   return rankHits(batches.flat(), query);
+}
+
+function withinTimeout(search: Promise<MoleculeHit[]>, ms: number): Promise<MoleculeHit[]> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve([]), ms);
+    search.then(
+      (hits) => {
+        clearTimeout(timer);
+        resolve(hits);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve([]);
+      },
+    );
+  });
 }

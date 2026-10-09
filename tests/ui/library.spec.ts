@@ -11,9 +11,14 @@ test('library route lists every collection and browses same-origin sources witho
   await page.goto('/library');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Every connected source, one search.');
   const nav = page.getByRole('navigation', { name: 'Library collections' });
-  for (const name of ['All sources', 'Lupi gallery', 'OMol25', 'Zenodo research', 'NIST potentials', 'Surprise me']) {
+  const order = ['All sources', 'OMol25', 'Lupi gallery', 'Zenodo research', 'NIST potentials', 'Surprise me'];
+  for (const name of order) {
     await expect(nav.getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
   }
+  await expect(nav.getByRole('link')).toHaveText(order.map((name) => new RegExp(`^${name}`)));
+  // Six of today's featured OMol25 picks sit above the grid, from bundled data.
+  await expect(page.getByRole('heading', { name: 'OMol25 picks', exact: true })).toBeVisible();
+  await expect(page.locator('.omol-shelf--library a.omol-tile')).toHaveCount(6);
   await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Library' })).toHaveAttribute(
     'aria-current',
     'page',
@@ -65,9 +70,20 @@ test('legacy tabs and OMol25 education URLs redirect into the library; research 
 
 test('OMol25 page states its coverage and fails honestly when the dataset edge is unreachable', async ({ page }) => {
   await page.goto('/library/omol25');
-  await expect(page.getByRole('heading', { name: 'Open Molecules 2025' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Open Molecules 2025', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'OMol25' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
   await expect(page.getByText(/OMol25 supplies no bond topology/)).toBeVisible();
+  await expect(page.getByText(/Lupi pages rows on demand and keeps 24 hand-picked rows, credited, for its shelves/)).toBeVisible();
   await expect(page.locator('.library-coverage')).toContainText('colabfit/OMol25_train_neutral');
+  // The featured shelves are same-origin copies, so they show without the edge.
+  await expect(page.getByRole('group', { name: 'OMol25 shelves' })).toBeVisible();
+  await expect(page.locator('.omol-shelf--library a.omol-tile').first()).toHaveAttribute(
+    'href',
+    /^\/\?load=\/datasets\/omol25\/featured\/omol25_nv_\d+\.xyz$/,
+  );
   // Either rows arrive (deployed run with the edge) or the alert explains why not.
   await expect(page.locator('.library-card--omol').first().or(page.getByRole('alert'))).toBeVisible({ timeout: 45_000 });
   await expect(page.locator('canvas')).toHaveCount(0);
@@ -103,9 +119,10 @@ test('OMol25 facets and NIST potentials work from same-origin assets, no externa
   const chips = page.getByRole('group', { name: 'Elements in this slice' });
   await expect(chips).toBeVisible();
   await expect(chips.getByRole('button')).not.toHaveCount(0, { timeout: 30_000 });
-  await expect(page.getByRole('status')).toHaveText(/\d+\+? structures/, { timeout: 30_000 });
+  await expect(page.getByRole('status')).toHaveText(/^1–36 of [\d,]+ structures$/, { timeout: 30_000 });
   await chips.getByRole('button', { name: 'Chlorine (Cl)' }).click();
   await expect(page).toHaveURL(/elements=Cl/);
+  await expect(page.getByRole('status')).toHaveText(/^1–\d+ of [\d,]+ structures? containing Cl$/);
   await expect(page.locator('.library-card--omol').first()).toBeVisible();
   await expect(page.locator('.library-truth').first()).toContainText('OMol25 supplies no bonds');
   expect(external.filter((href) => href.includes('storage.googleapis.com'))).toEqual([]);

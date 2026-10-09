@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockFrame, createMockTrajectory } from '@atlas/core/test-utils';
 import { getStoreState, resetStore } from './test-utils';
+import { markOpenEntry, takeOpenEntry } from './analytics/openEntry';
 import {
   importDumpFileStreaming,
   loadMoleculeSource,
   MAX_REMOTE_LEGACY_BYTES,
   readResponseBlobWithinLimit,
+  sourceKind,
 } from './loadMoleculeSource';
 
 const seams = vi.hoisted(() => ({
@@ -72,6 +74,13 @@ describe('loadMoleculeSource strict remote mode', () => {
       { redirect: 'error' },
     );
     expect(getStoreState().file).toBeTruthy();
+  });
+
+  it('drops the entry mark when the load fails, so the next load is not credited to it', async () => {
+    markOpenEntry('home-surprise');
+    fetchMock.mockResolvedValue({ ok: false, status: 502, redirected: false, headers: new Headers() });
+    await expect(loadMoleculeSource('/v1/datasets/omol25/neutral-train/structures/7.xyz')).rejects.toThrow(/502/);
+    expect(takeOpenEntry()).toBeNull();
   });
 
   it('rejects an oversized monolithic remote text file before buffering it', async () => {
@@ -209,5 +218,21 @@ describe('loadMoleculeSource strict remote mode', () => {
     expect(mountedDistanceSemantics).toEqual({ kind: 'unknown', provenance: 'lammps-dump' });
     expect(getStoreState().file?.trajectory.frames[0]?.identity)
       .toEqual({ kind: 'source-id', unique: true });
+  });
+});
+
+describe('sourceKind', () => {
+  it('counts OMol25 edge rows and featured copies as omol25', () => {
+    expect(sourceKind('/v1/datasets/omol25/neutral-train/structures/123.xyz')).toBe('omol25');
+    expect(sourceKind('https://lupi.live/v1/datasets/omol25/neutral-validation/structures/0.xyz')).toBe('omol25');
+    expect(sourceKind('/datasets/omol25/featured/omol25_nv_23477.xyz')).toBe('omol25');
+  });
+
+  it('keeps the other classes', () => {
+    expect(sourceKind('inline-firestore')).toBe('inline');
+    expect(sourceKind('https://assets.lupi.live/x.glimbin')).toBe('streaming');
+    expect(sourceKind('https://example.com/water.xyz')).toBe('remote');
+    expect(sourceKind('/gallery/curated/water.xyz')).toBe('other');
+    expect(sourceKind('/v1/datasets/omol25/no-such-split/structures/1.xyz')).toBe('other');
   });
 });

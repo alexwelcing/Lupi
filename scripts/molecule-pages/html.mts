@@ -81,6 +81,7 @@ function topBar(): string {
   <a class="mp-brand" href="/">Lupi</a>
   <nav aria-label="Site">
     <a href="/m/">All molecules</a>
+    <a href="/library/omol25">OMol25</a>
     <a href="/daily/">Daily</a>
     <a href="/library">Library</a>
   </nav>

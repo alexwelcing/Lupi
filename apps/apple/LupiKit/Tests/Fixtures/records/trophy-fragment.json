@@ -1,0 +1,20 @@
+{
+  "schema": "lupi.trophy.v1",
+  "id": "B0E4A1C7-58D2-4F3B-A6E9-7C1D2F0A9B34",
+  "name": "Hydroxyl (fragment)",
+  "molecule": {
+    "source": "fragment",
+    "sha256": "04e7405073c8d19ba68487132d7abead4938d9b454beb0cd1e2a144ff8aee25e",
+    "formula": "HO",
+    "atoms": 2,
+    "xyz": "2\nLupi fragment | formula=HO | charge_source=unavailable | parent=H2O2 | coordinates=lupi-play\nO 0.05749 0.00000 0.00000\nH -0.91251 0.00000 0.00000\n"
+  },
+  "origin": {
+    "kind": "broken",
+    "at": "2026-10-04T18:05:02.530Z",
+    "parent": { "name": "Hydrogen peroxide", "formula": "H2O2", "source": "pubchem", "id": "cid:784" }
+  },
+  "look": { "scale": 0.031 },
+  "createdAt": "2026-10-04T18:05:09.112Z",
+  "updatedAt": "2026-10-04T18:05:09.112Z"
+}

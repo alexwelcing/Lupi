@@ -8,7 +8,7 @@
   "routes": {
     "home": {
       "title": "Lupi — explore molecules and learn in 3D",
-      "description": "Explore a curated collection of molecules, open your own structure, and learn from an interactive 3D view. Free to explore, with no account required.",
+      "description": "Explore curated molecules, browse 34.3 million OMol25 DFT structures, open your own file, and learn in an interactive 3D view. Free, with no account required.",
       "canonicalPath": "/",
       "image": "https://lupi.live/og-lupi.png",
       "imageAlt": "Lupi molecular learning app",
@@ -17,7 +17,7 @@
         "@type": "WebSite",
         "name": "Lupi — explore molecules and learn in 3D",
         "url": "https://lupi.live/",
-        "description": "Explore a curated collection of molecules, open your own structure, and learn from an interactive 3D view. Free to explore, with no account required."
+        "description": "Explore curated molecules, browse 34.3 million OMol25 DFT structures, open your own file, and learn in an interactive 3D view. Free, with no account required."
       }
     },
     "massiveLattice": {
@@ -152,7 +152,7 @@
     },
     "libraryOmol25": {
       "title": "Open Molecules 2025 (OMol25) browser | Lupi",
-      "description": "Browse tens of millions of OMol25 DFT structures from the public ColabFit conversions, paged on demand, and open any structure in 3D.",
+      "description": "Browse 34.3 million Open Molecules 2025 (OMol25) DFT structures, paged on demand from the public ColabFit conversions, with featured picks, element filters and clearly labelled inferred bonds.",
       "canonicalPath": "/library/omol25",
       "image": "https://lupi.live/gallery/snapshots/water_cluster_64.jpg",
       "imageAlt": "Lupi molecular library",
@@ -161,7 +161,7 @@
         "@type": "CollectionPage",
         "name": "Open Molecules 2025 (OMol25) browser | Lupi",
         "url": "https://lupi.live/library/omol25",
-        "description": "Browse tens of millions of OMol25 DFT structures from the public ColabFit conversions, paged on demand, and open any structure in 3D."
+        "description": "Browse 34.3 million Open Molecules 2025 (OMol25) DFT structures, paged on demand from the public ColabFit conversions, with featured picks, element filters and clearly labelled inferred bonds."
       }
     },
     "libraryResearch": {
@@ -204,6 +204,20 @@
         "name": "Scan anything and see its molecules | Lupi",
         "url": "https://lupi.live/scan",
         "description": "Point your camera at an everyday thing. Lupi names what it is made of, molecule by molecule, and opens each one in 3D."
+      }
+    },
+    "scale": {
+      "title": "From one ion to a googolplex | Lupi",
+      "description": "Dive from a grain of salt to ten to the googol ions and back, with every count exact. Smash the googolplex bar into ten cubes and dive into any of them.",
+      "canonicalPath": "/scale",
+      "image": "https://lupi.live/og-lupi.png",
+      "imageAlt": "A googolplex of salt in Lupi",
+      "jsonLd": {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "From one ion to a googolplex | Lupi",
+        "url": "https://lupi.live/scale",
+        "description": "Dive from a grain of salt to ten to the googol ions and back, with every count exact. Smash the googolplex bar into ten cubes and dive into any of them."
       }
     }
   }

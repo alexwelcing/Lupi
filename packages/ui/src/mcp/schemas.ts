@@ -7,6 +7,7 @@
  */
 
 import { FACETS, MEASURED_PROPERTIES } from '@atlas/core';
+import { OMOL25_COLLECTION_IDS } from '@atlas/core/omol25';
 
 export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
   'lupi.generate_molecule': {
@@ -85,7 +86,7 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
     properties: {
       collection: {
         type: 'string',
-        enum: ['neutral-train', 'neutral-validation', 'all-train-preview', 'train-4m-preview', 'validation-preview'],
+        enum: [...OMOL25_COLLECTION_IDS],
       },
       offset: { type: 'number', minimum: 0 },
       limit: { type: 'number', minimum: 1, maximum: 36 },
@@ -110,6 +111,15 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
       cameraPreset: { type: 'string', enum: ['top', 'side', 'front', 'iso', 'free'] },
       bondTolerance: { type: 'number' },
       bondColorMode: { type: 'string' },
+      bondProfile: {
+        type: 'string',
+        enum: ['auto', 'distance', 'molecular'],
+        description: 'Bond rule. auto uses lupi-bonds.molecular.v1 for non-periodic XYZ frames (≤ 2,000 atoms) that declare chemistry and are a single frame or an OMol25 record, else lupi-bonds.distance.v1; source bonds always win.',
+      },
+      showBondContacts: {
+        type: 'boolean',
+        description: 'Draw the molecular recipe\'s dotted s-block ionic contacts (default true). They are never counted as bonds.',
+      },
       inkStyle: {
         type: 'string',
         enum: ['off', 'flat', 'hatch'],
@@ -150,7 +160,12 @@ export const LUPI_MCP_SCHEMAS: Record<string, unknown> = {
 
   'lupi.viewer_state': {
     type: 'object',
-    properties: {},
+    properties: {
+      includeBonds: {
+        type: 'boolean',
+        description: 'Add bonds: [i, j, kind, lengthÅ, excessÅ] for the drawn graph (at most 5,000; bondsTruncated), with bondsFilter { hiddenTypes, contacts }. Inferred graphs are listed for frames of at most 2,000 atoms.',
+      },
+    },
   },
 
   'lupi.assess_asset': {

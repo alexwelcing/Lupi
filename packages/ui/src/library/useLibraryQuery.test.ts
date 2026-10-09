@@ -4,10 +4,19 @@ import { EMPTY_LIBRARY_QUERY, parseLibraryQuery, serializeLibraryQuery, useLibra
 
 describe('library query serialization', () => {
   it('round-trips every parameter and drops empty ones', () => {
-    const query = { q: 'benzene', source: 'omol', elements: ['C', 'H'], collection: 'neutral-train', offset: 48, view: 'facets' };
+    const query = {
+      q: 'benzene',
+      source: 'omol',
+      elements: ['C', 'H'],
+      groups: ['ketone', 'ester'],
+      collection: 'neutral-train',
+      offset: 48,
+      view: 'facets',
+    };
     expect(parseLibraryQuery(`?${serializeLibraryQuery(query)}`)).toEqual(query);
+    expect(serializeLibraryQuery({ ...EMPTY_LIBRARY_QUERY, groups: ['ketone'] })).toBe('groups=ketone');
     expect(serializeLibraryQuery(EMPTY_LIBRARY_QUERY)).toBe('');
-    expect(parseLibraryQuery('?offset=-4&elements=,,&q=%20')).toEqual(EMPTY_LIBRARY_QUERY);
+    expect(parseLibraryQuery('?offset=-4&elements=,,&groups=,&q=%20')).toEqual(EMPTY_LIBRARY_QUERY);
   });
 });
 

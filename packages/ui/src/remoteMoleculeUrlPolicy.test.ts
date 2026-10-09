@@ -66,6 +66,7 @@ describe('assertAllowedRemoteMoleculeUrl', () => {
   it.each([
     '/v1/datasets/omol25/neutral-train/structures/34335827.xyz',
     '/v1/datasets/research/gst-phase-change-ace-start/files/GST_config.data',
+    '/datasets/omol25/featured/omol25_nv_273.xyz',
   ])('accepts an exact same-origin scientific catalog asset %s', (url) => {
     expect(assertAllowedRemoteMoleculeUrl(url, 'human-load', 'http://127.0.0.1:5177')).toMatchObject({
       url,
@@ -96,6 +97,12 @@ describe('assertAllowedRemoteMoleculeUrl', () => {
     '/v1/datasets/omol25/neutral-train/structures/1.xyz?redirect=https://evil.example',
     '/v1/datasets/research/not-in-catalog/files/sample.data',
     '/v1/datasets/research/gst-phase-change-ace-start/files/GST_config.data#other',
+    '/datasets/omol25/featured/other.xyz',
+    '/datasets/omol25/featured/omol25_nv_273.xyz?v=2',
+    '/datasets/omol25/featured/nested/omol25_nv_273.xyz',
+    '/datasets/omol25/featured/../private.xyz',
+    '/datasets/omol25/neutral-validation.xyz',
+    '/datasets/other/omol25_nv_273.xyz',
   ])('rejects unsafe source %s', (url) => {
     expect(() => assertAllowedRemoteMoleculeUrl(url, 'saved-view', ORIGIN)).toThrow(/remote molecule|supported molecule|not allowed/i);
   });

@@ -216,14 +216,17 @@ export function omolFacets(): Promise<OmolFacets> {
   return facetCache;
 }
 
-/** Search only the compact, facet-enriched neutral-validation index. */
-export async function searchOmolValidation(query: MoleculeQuery): Promise<MoleculeHit[]> {
-  const records = await index();
-  if (records.length === 0) return [];
+/**
+ * The records a validation query selects, in the order they are shown: exact
+ * formula matches first (so "C6H6" is on the first page however many
+ * "C6H6O…" rows precede it in the index), then the rest in index order.
+ * Pure, so the ranking is testable without the index.
+ */
+export function filterOmolRecords(records: readonly OmolRecord[], query: MoleculeQuery): OmolRecord[] {
   const q = query.text.toLowerCase().trim();
   const wantElements = query.elements ?? [];
   const wantGroups = normalizeFunctionalGroups(query.functionalGroups);
-  let hits = records;
+  let hits = [...records];
   if (wantElements.length) {
     hits = hits.filter((record) => wantElements.every((element) => record.elements.includes(element)));
   }
@@ -240,8 +243,28 @@ export async function searchOmolValidation(query: MoleculeQuery): Promise<Molecu
         record.elements.some((element) => element.toLowerCase() === q) ||
         groupSearchText(record.functionalGroups).toLowerCase().includes(q),
     );
+    const exact = hits.filter((record) => record.formula.toLowerCase() === q);
+    if (exact.length) hits = [...exact, ...hits.filter((record) => record.formula.toLowerCase() !== q)];
   }
-  return hits.slice(0, query.limit ?? 25).map((record) => {
+  return hits;
+}
+
+/** Search only the compact, facet-enriched neutral-validation index. */
+export async function searchOmolValidation(query: MoleculeQuery): Promise<MoleculeHit[]> {
+  return (await searchOmolValidationPage(query)).hits;
+}
+
+/** One page of a validation query, with the total it matched (for "1–36 of N"). */
+export async function searchOmolValidationPage(
+  query: MoleculeQuery,
+  offset = 0,
+): Promise<{ hits: MoleculeHit[]; total: number }> {
+  const records = await index();
+  if (records.length === 0) return { hits: [], total: 0 };
+  const q = query.text.toLowerCase().trim();
+  const matched = filterOmolRecords(records, query);
+  const start = Math.max(0, Math.trunc(offset));
+  const hits = matched.slice(start, start + (query.limit ?? 25)).map((record) => {
     const concepts = groupConcepts(record.functionalGroups);
     const groupLabels = concepts.map((group) => group.label);
     const groupAliases = concepts.flatMap((group) => group.aliases);
@@ -264,6 +287,7 @@ export async function searchOmolValidation(query: MoleculeQuery): Promise<Molecu
             : undefined,
     } satisfies MoleculeHit;
   });
+  return { hits, total: matched.length };
 }
 
 export const omolProvider: MoleculeProvider = {
