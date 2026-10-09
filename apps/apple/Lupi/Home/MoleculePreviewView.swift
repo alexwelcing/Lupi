@@ -2,7 +2,7 @@ import Foundation
 import LupiChem
 import LupiData
 import LupiGame
-import LupiScaleCore
+import struct LupiScaleCore.LeafNode
 import RealityKit
 import SwiftUI
 
