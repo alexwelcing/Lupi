@@ -52,8 +52,7 @@
  *
  * Seeds: three r186's `hash` (PCG) of the raw position's float bits. On the
  * WebGL2 backend `floatBitsToUint` and uint multiply-wrap are GLSL ES 3.00
- * core; the `play@webgl2` testbed case proves the GPU seeds equal the CPU
- * twin's (displayMotionTwin.ts).
+ * core, so the GPU seeds equal the CPU twin's (displayMotionTwin.ts).
  */
 import { DataTexture, FloatType, NearestFilter, RGBAFormat, Vector3, Vector4 } from 'three/webgpu';
 import type { Node, TextureNode, UniformNode } from 'three/webgpu';
@@ -657,6 +656,6 @@ export function resetLupiDisplayMotion(): void {
   M.uHeatAmplitude.value = 0;
 }
 
-// Every raster capture (exports, MCP rasters, thumbnails, the testbed)
+// Every raster capture (exports, MCP rasters, thumbnails)
 // renders with the master weight at zero.
 registerCaptureGuard({ begin: suspendLupiDisplayMotion });

@@ -1,34 +1,15 @@
 name: Deploy Lupi render backend
 
 on:
+  # The render image carries a copy of the viewer: dispatch this workflow to
+  # refresh it after viewer changes. A push redeploys only for the backend.
   workflow_dispatch: {}
   push:
     branches:
       - main
     paths:
       - apps/render-backend/**
-      - apps/mcp-worker/**
       - .github/workflows/deploy-render-backend.yml
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - apps/web/**
-      # The render image needs the viewer code, but not large presentation-only
-      # captures and marketing artwork. Excluding them prevents asset-only
-      # changes from consuming a full Cloud Build and Cloud Run rollout.
-      - '!apps/web/public/backgrounds/**'
-      - '!apps/web/public/brand/**'
-      - '!apps/web/public/gallery/snapshots/**'
-      - '!apps/web/public/generated/atomized/**'
-      - '!apps/web/public/recordings/**'
-      - '!apps/web/public/apple-touch-icon.png'
-      - '!apps/web/public/favicon-32x32.png'
-      - '!apps/web/public/og-lupi.png'
-      - packages/core/**
-      - packages/parsers/**
-      - packages/renderer/**
-      - packages/scene/**
-      - packages/ui/**
 
 concurrency:
   group: lupi-render-backend-production

@@ -127,13 +127,14 @@ unverified. See `docs/ar/mac-build-2026-10-05.md`.
 and exits on the device, the decisions waiting) and lists where the first
 compile will most likely fail; `apps/apple/README.md` is the how-to.
 
-The Linux gates: `swift test` in every package, and `swift test -c release`
-in LupiScale (its 8 ms `buildCut` gate counts only in release) and LupiGame
-(its directive tests time frames); `tools/apple/parse-app.sh` (syntax);
+On Linux, `.github/workflows/apple.yml` runs (only on Apple pull requests)
+`swift test` in every package, `tools/apple/parse-app.sh` (syntax) and
 `tools/apple/typecheck-app.sh`, which type-checks the app against the
 packages' real modules and stand-ins for Apple's frameworks spelled as Apple
 documents them (`tools/apple/standin`; add a new Apple API there from its
-documentation page); and `pnpm apple:check`, which fails when the Swift generated from the web's
+documentation page). Local tools when they help: `swift test -c release` in
+LupiScale (its 8 ms `buildCut` gate counts only in release) and LupiGame, and
+`pnpm apple:check`, which fails when the Swift generated from the web's
 TypeScript (`tools/apple/*.mts`: elements, bond fixtures, the bond validation
 sample, edge samples, starters, the known-molecule index, scale fixtures) is
 stale. The web counterpart of the scale play is `/scale`
@@ -195,7 +196,7 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   only: the store pose, saved views, share URLs, the axes gizmo, picking (it
   raycasts what is drawn) and every capture (exports, thumbnails, MCP, video)
   never see it. `__lupiPlay.viewInset()` reports `{ current, target, occluder }`.
-- **`window.__lupiPlay`** is the Play layer's handle for smoke plugins and
+- **`window.__lupiPlay`** is the Play layer's handle for
   agents (installed in production, like `__lupiViewerMcp`): `state()` returns
   `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame,
   frames, frameDemand }`,
@@ -747,63 +748,8 @@ currently validates only opaque PNG atom specs and returns
 The containerized render backend (`apps/render-backend`) launches Chromium
 with `--disable-webgpu`, so its artifacts are in the WebGL2 execution class.
 
-The V1 (WebGL renderer) goldens stay archived read-only in
-`tests/fixtures/render-artifact-v1/`. V2 parity candidates live per backend in
-`tests/fixtures/render-artifact-v2/<backend>/`, and
-`pnpm verify:render-parity -- --backend=<webgpu|webgl2> --derive-candidate`
-derives them automatically. There is no owner approval gate. Derive them again
-whenever the tool reports a renderer-validity digest change.
-
-## Verification Harness
-
-Run the Playwright-based smoke test against the built-in dev server:
-
-```bash
-pnpm run verify:mcp-bridge
-```
-
-Or point it at an already-running dev server:
-
-```bash
-node tools/verify-mcp-bridge.mjs --url=http://127.0.0.1:5173/#/mcp --json
-```
-
-The `--json` flag emits a machine-readable report to stdout. Non-zero exit code indicates failure.
-
-## Asset Quality Verification
-
-For visual and structural verification of `lupi.export_asset`, drive a real
-browser in each backend lane, render the advertised raster/model profiles, and
-inspect the bytes:
-
-```bash
-pnpm --filter @atlas/web build
-pnpm run verify:asset-quality                      # both lanes, built app
-node tools/verify-asset-quality.mjs --backend=webgpu
-node tools/verify-asset-quality.mjs --server=dev   # Vite dev server instead
-# or, against an existing server:
-node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/
-```
-
-The verifier exercises fixed molecule and lattice cases with unsupported raster
-  bonds disabled. It covers opaque/transparent PNG and WebP, opaque JPEG plus
-  transparent-JPEG rejection, GLB, required USDZ fail-closed behavior, exact dimensions, and appearance
-mutations. It asserts, as applicable:
-
-- declared `byteLength` matches the file written to disk
-- decoded raster alpha and dimensions match the request
-- the binary/container structure is well-formed (PNG IHDR, JPEG SOF, WebP
-  VP8/VP8L/VP8X, and GLB magic/chunks)
-- `dataUrl` MIME prefix matches the response `mimeType`
-- the on-disk file matches the round-tripped base64
-- color/material/lighting changes produce material image differences, and an
-  Engrave (Illustrate) PNG gets its own `specId` and pixels next to the lit one
-- each lane reports its backend, and the same spec keeps its `specId` across
-  the two lanes while its `rendererFingerprint` and `artifactKey` differ
-
-Artifacts (real rasters/models plus a viewer screenshot and JSON report) are written
-under `.verify-artifacts/asset-quality/<run>/<backend>/` so a human can inspect them.
-Add `--skip-glb` to skip the model tier when iterating on raster formats.
+There are no committed golden images: a renderer change needs no
+re-derivation step.
 
 Use `node tools/inspect-glb.mjs <file.glb>` to dump scene/mesh contents of
 an exported GLB without a browser.
@@ -836,68 +782,29 @@ After changing tool definitions or schemas, regenerate the manifest before testi
 pnpm run generate:mcp-manifest
 ```
 
-## Full CI Checklist
+## CI and checks
 
-### What CI runs
+Owner decision (2026-10-09): punch and solve. Checks cost time; if main
+breaks, fix forward and redeploy.
 
-LUPI CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to
-`main` that touch the apps, packages, docs, tools or build config. Its
-`build-test` job runs, in order:
-
-```bash
-node tools/verify-pnpm-lock-bins.mjs
-pnpm install --frozen-lockfile
-pnpm verify:workflows        # actionlint; CI fetches a checksum-pinned 1.7.12
-node --test tools/run-actionlint.test.mjs
-node --test tools/verify-product-contract.test.mjs
-pnpm verify:product-contract
-pnpm lint
-NODE_OPTIONS=--max-old-space-size=8192 pnpm audit --prod --audit-level high
-node --test tools/verify-cloudflare-live.test.mjs
-pnpm build                   # every workspace; the web build regenerates the MCP manifest
-# wrangler versions upload --dry-run with the pinned Wrangler in .github/wrangler-runtime
-pnpm test                    # every workspace's unit tests, the Worker's included
-cd functions && npm ci && npm audit --omit=dev --audit-level=high && npm run build && npm test && cd ..
-npm run nist:build           # fails if apps/web/public/nist changes
-pnpm exec playwright install --with-deps chromium
-pnpm test:ui
-```
-
-Its `mobile-testflight-source` job runs `pnpm --filter @lupi/mobile
-verify:testflight` on the frozen Expo app. Apple packages
-(`.github/workflows/apple.yml`) runs the Linux gates of "Native Apple app"
-above when `apps/apple`, `tools/apple`, `packages/core`, `packages/parsers`,
-the Worker's sources, the gallery or the datasets change.
-`pnpm cloudflare:build` is covered by `pnpm build`, and `pnpm cloudflare:test`
-by `pnpm test`.
-
-### Local only
-
-No workflow runs these. Run them by hand when a change touches the bridge,
-exports or the renderer:
-
-```bash
-pnpm run verify:mcp-bridge
-pnpm run verify:asset-quality
-pnpm run verify:exports
-pnpm run verify:render-parity -- --backend=webgpu
-pnpm run verify:render-parity -- --backend=webgl2
-pnpm verify:dual-backend
-```
-
-`pnpm test:ui` runs the Playwright specs in the WebGL2 lane. The dual-backend
-browser check is local only (not in CI): build the web app, then run
-`pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
---profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
-Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chalk, chrome,
-comfort, contour, first-minute, flick, foil, fuse, hero, ink, knowledge,
-morph, onedrawing, pages, pick, relay, remix, replay, replayclip, settings,
-sheets, tap, toys) run with the built-in
-scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
-`--reduced-motion` checks the Still comfort level. `comfort` chooses
-Standard, Gentle and Still in the Play tray in one page and checks the
-Light Fuse's pace and the morph's length and travel at each
-(`__lupiPlay.state().motion.feel`).
-
-These are local/CI checks only. They do not prove a deployment, live API, or
-public-site revision; record those release-truth lanes separately.
+- **Pull requests:** `.github/workflows/ci.yml` runs one job, `build-test`
+  (about 3 min): `pnpm install --frozen-lockfile`, `pnpm build` (every
+  workspace's typecheck and the web build, which regenerates the MCP
+  manifest) and a pinned-Wrangler `versions upload --dry-run` of the Worker.
+  `apple.yml`, `mobile.yml` and `chatgpt-widget.yml` run only when their own
+  code changes.
+- **Push to main is the release:** `deploy-cloudflare.yml` builds, deploys,
+  checks that `/health` reports the commit and that `/` and its bundle load.
+  `deploy-render-backend.yml` redeploys the render backend only when
+  `apps/render-backend` changes; dispatch it by hand to refresh its copy of
+  the viewer.
+- **Optional local tools**, not steps to run before merging: `pnpm test`
+  (unit tests), `pnpm lint`, `pnpm test:ui` (the one browser spec,
+  `tests/ui/release-smoke.spec.ts`; against a deployed origin with
+  `UI_TEST_URL=https://lupi.live UI_TEST_EXPECT_HEALTH=true pnpm test:ui`),
+  `pnpm verify:viewer-smoke` (build first: home stays zero-canvas, caffeine
+  renders and picks, the bridge exports a PNG, the no-GPU fallback; WebGL2
+  lane, about a minute), `pnpm apple:check`.
+- **Do not add** smoke plugins, verifiers, golden fixtures, receipts or new
+  CI jobs. To look at a feature in a browser, drive it from a scratch
+  Playwright script (see Quick Start) and keep the script out of the repo.

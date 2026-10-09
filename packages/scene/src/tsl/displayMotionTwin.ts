@@ -13,9 +13,7 @@
  * position, as a bond end copies it), so it reads the same texel.
  *
  * Used by:
- * - the unit tests and the `play` testbed case, which puts probes where the
- *   twin says an atom is mid-flight: a GPU that hashed or bit-cast
- *   differently (the WebGL2 risk) would miss them;
+ * - the unit tests;
  * - the live view's overlays (labels, selection rings, the atom card's
  *   anchor, measurements, trails: `@atlas/ui` play/displayFollow), which ride
  *   with their atoms while display motion runs. Only the handful of atoms

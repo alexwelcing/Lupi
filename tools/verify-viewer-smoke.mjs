@@ -17,10 +17,6 @@
  *            32,000 atoms) renders.
  *   export   the MCP bridge (window.__lupiViewerMcp) returns a valid PNG of
  *            the requested size from lupi.export_asset with bonds hidden.
- *   testbed  each `/?testbed&case=<id>` harness case (--cases) reports ready,
- *            its assertions pass, its backend matches the lane, and every
- *            probe pixel (median of a 3x3 patch) matches its expectation. In
- *            the webgpu lane the plate case also runs with &renderer=webgl2.
  *   churn    (desktop) the viewer canvas unmounts and remounts five times in
  *            one document (history navigation away from ?sim=caffeine and
  *            Back): at most one <canvas> per visit, no device-lost or
@@ -28,12 +24,6 @@
  *   fallback a separate browser with neither WebGPU nor WebGL shows the
  *            renderer fallback screen without an uncaught error (console
  *            errors from the canvas error boundary are allowed here only).
- *
- * Scenario plugins: every tools/smoke/scenarios/*.mjs whose name does not
- * start with `_` is imported at startup and runs like a built-in scenario
- * (listed by --help, selected by --scenarios, reported in report.json). See
- * tools/smoke/scenarios/_example.mjs for the shape; plugins get the shared
- * helpers of tools/smoke/helpers.mjs as their second argument.
  *
  * Profiles: desktop (1024x640, DPR 1, mouse), phone (Pixel 7, touch) and
  * phone390 (390x844, DPR 3, iPhone 13 user agent, touch; the phone scenario
@@ -64,12 +54,11 @@
 
 import { chromium, devices } from 'playwright';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
-import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { LANE_ARGS, chromiumExecutable } from './lib/browser-lanes.mjs';
-import * as smokeHelpers from './smoke/helpers.mjs';
 import {
   PNG_SIGNATURE,
   assessRender,
@@ -88,7 +77,6 @@ import {
   openStructure,
   pct,
   pickAtom,
-  rendererAlert,
   sleep,
   touchDrag,
   waitSettled,
@@ -98,31 +86,22 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const DIST_INDEX = resolve(REPO_ROOT, 'apps/web/dist/index.html');
-const SCENARIO_DIR = resolve(__dirname, 'smoke', 'scenarios');
 
 const PROFILES = ['desktop', 'phone', 'phone390'];
-const PLUGIN_LANES = ['webgl', 'webgpu'];
-const BUILTIN_SCENARIOS = ['home', 'caffeine', 'c60', 'lattice', 'export', 'testbed', 'churn', 'fallback'];
+const BUILTIN_SCENARIOS = ['home', 'caffeine', 'c60', 'lattice', 'export', 'churn', 'fallback'];
 const BUILTIN_PROFILE_SCENARIOS = {
-  desktop: ['home', 'caffeine', 'c60', 'lattice', 'export', 'testbed', 'churn', 'fallback'],
+  desktop: ['home', 'caffeine', 'c60', 'lattice', 'export', 'churn', 'fallback'],
   // Export and churn are device-independent; the phone lane covers layout,
   // touch input, DPR > 1 and the mobile tier instead.
-  phone: ['home', 'caffeine', 'c60', 'lattice', 'testbed', 'fallback'],
-  phone390: ['home', 'caffeine', 'c60', 'lattice', 'testbed', 'fallback'],
+  phone: ['home', 'caffeine', 'c60', 'lattice', 'fallback'],
+  phone390: ['home', 'caffeine', 'c60', 'lattice', 'fallback'],
 };
-/** Scenario plugins from tools/smoke/scenarios/*.mjs, by name. */
-const PLUGINS = new Map((await loadPlugins()).map((plugin) => [plugin.name, plugin]));
-const ALL_SCENARIOS = [...BUILTIN_SCENARIOS, ...PLUGINS.keys()];
-const PROFILE_SCENARIOS = Object.fromEntries(PROFILES.map((profile) => [
-  profile,
-  [...BUILTIN_PROFILE_SCENARIOS[profile], ...[...PLUGINS.values()].filter((plugin) => plugin.profiles.includes(profile)).map((plugin) => plugin.name)],
-]));
+const ALL_SCENARIOS = BUILTIN_SCENARIOS;
+const PROFILE_SCENARIOS = BUILTIN_PROFILE_SCENARIOS;
 /** Scenarios that run in a backend lane; `fallback` has its own no-GPU lane. */
 const LANE_SCENARIOS = ALL_SCENARIOS.filter((name) => name !== 'fallback');
 const LEVELS = ['boot', 'full'];
 const CHURN_ROUNDS = 5;
-/** The testbed plate (#101817) and the §5.15 probe judgements. */
-const PLATE_RGB = [16, 24, 23];
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -133,7 +112,6 @@ Usage:
   node tools/verify-viewer-smoke.mjs                      # both backends, both profiles
   node tools/verify-viewer-smoke.mjs --backend=webgl      # WebGL2 lane only
   node tools/verify-viewer-smoke.mjs --url=http://localhost:5173/ --backend=webgpu
-  node tools/verify-viewer-smoke.mjs --scenarios=testbed --cases=plate --strict-backend
 
 Options:
   --url=<url>            Test an already-running app instead of serving apps/web/dist.
@@ -141,12 +119,9 @@ Options:
   --profile=<p>          desktop | phone | phone390 | both | all, or a comma list (default: both).
                          both = desktop,phone; all = desktop,phone,phone390. phone390 is
                          390x844 at DPR 3 with an iPhone 13 user agent and touch.
-  --scenarios=<list>     Comma list from: ${ALL_SCENARIOS.join(', ')} (default: all,
-                         plugins included).
+  --scenarios=<list>     Comma list from: ${ALL_SCENARIOS.join(', ')} (default: all).
   --level=<l>            boot | full (default: full). boot: the viewer scenarios check only
                          that the structure loads, the canvas mounts and the backend is recorded.
-  --cases=<list>         Testbed cases for the testbed scenario, comma separated, or all
-                         (default: all). <id>@webgl2 adds &renderer=webgl2 and expects WebGL2.
   --lattice=<galleryId>  Larger structure for the lattice scenario (default: al_polycrystal).
   --server=<mode>        serve-web (default, tools/serve-web.mjs) | preview (vite preview).
   --executable=<path>    Chromium binary (default: Chromium 1194 when present, else
@@ -163,9 +138,6 @@ Options:
   --headless=<bool>      Default true.
   --json                 Print the JSON report to stdout instead of human logs.
   --help                 Show this message.
-
-Scenario plugins (tools/smoke/scenarios/*.mjs; names starting with _ are skipped):
-${describePlugins()}
 
 Environment:
   VERIFY_URL             Same as --url.
@@ -198,11 +170,8 @@ for (const name of scenarioFilter) {
 }
 const level = typeof args.level === 'string' ? args.level : 'full';
 if (!LEVELS.includes(level)) usageError(`Unknown level "${level}". Use: ${LEVELS.join(', ')}`);
-/** Handed to every scenario (built-in and plugin) as ctx.options. */
+/** Handed to every scenario as ctx.options. */
 const scenarioOptions = Object.freeze({ level, reducedMotion: reducedMotion === 'reduce', strictBackend, timeout });
-const casesArg = typeof args.cases === 'string' && args.cases !== 'all'
-  ? args.cases.split(',').map((value) => value.trim()).filter(Boolean)
-  : 'all';
 
 const runId = stamp();
 const ARTIFACTS = typeof args.out === 'string'
@@ -236,7 +205,6 @@ const report = {
     profiles,
     scenarios: scenarioFilter,
     level,
-    cases: casesArg,
     lattice: latticeId,
     strictBackend,
     reducedMotion,
@@ -245,7 +213,6 @@ const report = {
     headless,
     extraChromeArgs,
     allowConsole: allowConsole?.source ?? null,
-    plugins: [...PLUGINS.values()].map(({ name, file, profiles: only, lanes }) => ({ name, file, profiles: only, lanes })),
   },
   lanes: [],
   summary: null,
@@ -308,79 +275,6 @@ async function main() {
   process.exit(exitCode);
 }
 
-// ---------------------------------------------------------------------------
-// Scenario plugins
-// ---------------------------------------------------------------------------
-
-/**
- * Import every tools/smoke/scenarios/*.mjs whose name does not start with `_`.
- * Each default-exports { name, profiles, lanes?, description?, run(ctx, h) }
- * (see _example.mjs). A missing directory means no plugins; a plugin that
- * fails to load or has the wrong shape is a usage error.
- */
-async function loadPlugins() {
-  if (!existsSync(SCENARIO_DIR)) return [];
-  const files = readdirSync(SCENARIO_DIR).filter((file) => file.endsWith('.mjs') && !file.startsWith('_')).sort();
-  const plugins = [];
-  for (const file of files) {
-    const path = join(SCENARIO_DIR, file);
-    const label = relative(REPO_ROOT, path);
-    let plugin;
-    try {
-      plugin = (await import(pathToFileURL(path).href)).default;
-    } catch (error) {
-      usageError(`scenario plugin ${label} failed to load: ${errorMessage(error)}`);
-    }
-    const problem = pluginProblem(plugin, plugins);
-    if (problem) usageError(`scenario plugin ${label}: ${problem}`);
-    const lanes = plugin.lanes == null ? null : [...new Set(plugin.lanes.map((lane) => (lane === 'webgl2' ? 'webgl' : lane)))];
-    plugins.push({
-      name: plugin.name,
-      profiles: [...new Set(plugin.profiles)],
-      lanes,
-      description: typeof plugin.description === 'string' ? plugin.description : '',
-      run: plugin.run,
-      file: label,
-    });
-  }
-  return plugins;
-}
-
-async function runPlugin(ctx) {
-  await PLUGINS.get(ctx.spec.name).run(ctx, smokeHelpers);
-  // Plugin-only runs still prove the lane's backend (--strict-backend judges it
-  // per lane): record what the viewer canvas the plugin opened rendered through.
-  if (!ctx.spec.lane.actualBackend) {
-    const backend = await detectBackend(ctx.page);
-    if (backend.kind !== 'unknown') ctx.spec.lane.actualBackend = { ...backend, source: `${backend.source} (plugin ${ctx.spec.name})` };
-  }
-}
-
-function pluginProblem(plugin, loaded) {
-  if (!plugin || typeof plugin !== 'object') return 'no default export object';
-  if (typeof plugin.name !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/i.test(plugin.name)) return `name must match /^[a-z0-9][a-z0-9_-]*$/i (got ${JSON.stringify(plugin.name)})`;
-  if (BUILTIN_SCENARIOS.includes(plugin.name)) return `name "${plugin.name}" is a built-in scenario`;
-  const twin = loaded.find((other) => other.name === plugin.name);
-  if (twin) return `name "${plugin.name}" is already used by ${twin.file}`;
-  if (!Array.isArray(plugin.profiles) || plugin.profiles.length === 0 || !plugin.profiles.every((profile) => PROFILES.includes(profile))) {
-    return `profiles must be a non-empty array of ${PROFILES.join(', ')} (got ${JSON.stringify(plugin.profiles)})`;
-  }
-  if (plugin.lanes != null && (!Array.isArray(plugin.lanes) || plugin.lanes.length === 0 || !plugin.lanes.every((lane) => [...PLUGIN_LANES, 'webgl2'].includes(lane)))) {
-    return `lanes, when given, must be a non-empty array of ${PLUGIN_LANES.join(', ')} (got ${JSON.stringify(plugin.lanes)})`;
-  }
-  if (typeof plugin.run !== 'function') return 'run(ctx, h) must be a function';
-  return null;
-}
-
-function describePlugins() {
-  if (PLUGINS.size === 0) return '  (none)';
-  const width = Math.max(...[...PLUGINS.keys()].map((name) => name.length));
-  return [...PLUGINS.values()].map((plugin) => {
-    const where = `${plugin.profiles.join(',')}; lanes ${(plugin.lanes ?? PLUGIN_LANES).join(',')}`;
-    return `  ${plugin.name.padEnd(width)}  ${where}  (${plugin.file})${plugin.description ? `\n  ${' '.repeat(width)}  ${plugin.description}` : ''}`;
-  }).join('\n');
-}
-
 /** --profile: both (default) = desktop,phone; all = every profile; or a comma list. */
 function profileArg(value) {
   if (value === undefined || value === true || value === 'both') return ['desktop', 'phone'];
@@ -422,7 +316,6 @@ async function runLane(backend, baseUrl) {
       lane.profiles.push(profileResult);
       for (const name of PROFILE_SCENARIOS[profile]) {
         if (!scenarioFilter.includes(name) || !LANE_SCENARIOS.includes(name)) continue;
-        if (PLUGINS.get(name)?.lanes?.includes(backend) === false) continue;
         profileResult.scenarios.push(await runScenario(browser, { backend, profile, name, baseUrl, lane }));
       }
     }
@@ -579,10 +472,8 @@ async function runScenarioAttempt(browser, spec, attempt) {
     else if (spec.name === 'c60') await scenarioStructure(ctx, { id: 'c60_buckyball', minForeground: 0.01 });
     else if (spec.name === 'lattice') await scenarioStructure(ctx, { id: latticeId, minForeground: 0.03, loadTimeout: Math.max(timeout, 120_000) });
     else if (spec.name === 'export') await scenarioExport(ctx);
-    else if (spec.name === 'testbed') await scenarioTestbed(ctx);
     else if (spec.name === 'churn') await scenarioChurn(ctx);
     else if (spec.name === 'fallback') await scenarioFallback(ctx);
-    else if (PLUGINS.has(spec.name)) await runPlugin(ctx);
     else throw new Error(`no runner for scenario "${spec.name}"`);
   } catch (error) {
     outcome.exception = errorMessage(error);
@@ -806,129 +697,6 @@ async function recordBackend({ page, spec, check, outcome }) {
     const expected = spec.backend === 'webgpu' ? 'webgpu' : 'webgl2';
     check(`app renders through ${expected}`, backend.kind === expected, `${backend.kind} via ${backend.source}`);
   }
-}
-
-async function scenarioTestbed(ctx) {
-  const cases = await testbedCases(ctx);
-  if (!cases) return;
-  ctx.outcome.data.testbed = [];
-  for (const item of cases) ctx.outcome.data.testbed.push(await runTestbedCase(ctx, item));
-}
-
-/** The requested cases; `all` reads the router's list from `/?testbed`. */
-async function testbedCases({ page, spec, check }) {
-  let ids = casesArg;
-  if (ids === 'all') {
-    await page.goto(new URL('?testbed', baseFor(page)).href, { waitUntil: 'commit', timeout });
-    const listed = await page.waitForFunction(
-      () => (window.__lupiHarness?.ready === true ? window.__lupiHarness.cases : null),
-      null,
-      { timeout, polling: 100 },
-    ).then((handle) => handle.jsonValue(), () => null);
-    if (!check('testbed lists its cases', Array.isArray(listed) && listed.length > 0, Array.isArray(listed) ? listed.join(', ') : 'no window.__lupiHarness.cases')) return null;
-    ids = listed;
-  }
-  const items = ids.map((id) => {
-    const [caseId, variant = null] = id.split('@');
-    return { id, caseId, variant, forced: variant === 'webgl2' };
-  });
-  // The reference case also proves ?renderer=webgl2 in the WebGPU lane.
-  if (spec.backend === 'webgpu' && items.some((item) => item.caseId === 'plate' && !item.variant) && !items.some((item) => item.id === 'plate@webgl2')) {
-    items.push({ id: 'plate@webgl2', caseId: 'plate', variant: 'webgl2', forced: true });
-  }
-  return items;
-}
-
-async function runTestbedCase({ page, spec, check, save, outcome }, item) {
-  const label = item.id;
-  const result = { id: label, url: '', ready: false };
-  if (item.variant && !item.forced) {
-    check(`${label}: known case variant`, false, `use <id> or <id>@webgl2, not @${item.variant}`);
-    return result;
-  }
-  result.url = new URL(`?testbed&case=${encodeURIComponent(item.caseId)}${item.forced ? '&renderer=webgl2' : ''}`, baseFor(page)).href;
-  outcome.url ||= result.url;
-  await page.goto(result.url, { waitUntil: 'commit', timeout });
-  const harness = await page.waitForFunction(
-    (id) => {
-      const state = window.__lupiHarness;
-      return state && state.case === id && state.ready === true ? state : null;
-    },
-    item.caseId,
-    { timeout, polling: 100 },
-  ).then((handle) => handle.jsonValue(), () => null);
-  if (!harness) {
-    const current = await page.evaluate(() => window.__lupiHarness ?? null).catch(() => null);
-    const alert = await rendererAlert(page);
-    check(`${label}: harness reports ready`, false, `${alert ? `renderer fallback: ${alert}; ` : ''}state=${JSON.stringify(current)?.slice(0, 300)}`);
-    return result;
-  }
-  result.ready = true;
-  result.backend = harness.backend;
-  result.assertions = harness.assertions;
-  check(`${label}: harness reports ready`, true);
-
-  const expected = item.forced || spec.backend !== 'webgpu' ? 'webgl2' : 'webgpu';
-  if (!item.forced) spec.lane.actualBackend ??= { kind: harness.backend ?? 'unknown', source: 'testbed harness' };
-  if (strictBackend || item.forced) check(`${label}: backend is ${expected}`, harness.backend === expected, `harness.backend=${harness.backend}`);
-  else if (harness.backend !== expected) warn(`${spec.backend}/${spec.profile}/testbed ${label}: backend ${harness.backend}, expected ${expected} (report only; pass --strict-backend to enforce)`);
-  for (const assertion of harness.assertions) check(`${label}: ${assertion.name}`, assertion.pass, assertion.detail ?? '');
-
-  const canvas = page.locator('#lupi-testbed-canvas canvas').first();
-  if (!(await canvas.isVisible().catch(() => false))) {
-    check(`${label}: testbed canvas is visible`, false);
-    return result;
-  }
-  await canvas.evaluate((node) => node.setAttribute('data-smoke-main', '1'));
-  const shot = await waitSettled(page, canvas, 0, 10_000);
-  result.screenshot = await save(`case-${label.replace(/[^a-z0-9-]+/gi, '-')}`, shot.png);
-  result.probes = harness.probes.map((probe) => judgeProbe(shot.image, probe));
-  for (const probe of result.probes) check(`${label}: probe ${probe.name}`, probe.pass, probe.detail);
-  return result;
-}
-
-/** A §5.15 probe: the median of the 3x3 patch at (x, y) CSS pixels of the canvas. */
-function judgeProbe(image, probe) {
-  const x = Math.round(probe.x);
-  const y = Math.round(probe.y);
-  const base = { name: probe.name, x, y, expect: probe.expect };
-  if (!(x >= 1 && y >= 1 && x < image.width - 1 && y < image.height - 1)) {
-    return { ...base, rgb: null, pass: false, detail: `(${x},${y}) is outside the ${image.width}x${image.height} canvas` };
-  }
-  const rgb = [0, 1, 2].map((channel) => {
-    const values = [];
-    for (let dy = -1; dy <= 1; dy += 1) {
-      for (let dx = -1; dx <= 1; dx += 1) values.push(image.data[((y + dy) * image.width + (x + dx)) * 4 + channel]);
-    }
-    values.sort((a, b) => a - b);
-    return values[4];
-  });
-  const pass = probeMatches(rgb, probe.expect);
-  return { ...base, rgb, pass, detail: `(${x},${y}) rgb=${rgb.join(',')} expect ${describeExpectation(probe.expect)}` };
-}
-
-function probeMatches([r, g, b], expect) {
-  const near = (target, tol) => Math.abs(r - target[0]) <= tol && Math.abs(g - target[1]) <= tol && Math.abs(b - target[2]) <= tol;
-  if (expect === 'plate') return near(PLATE_RGB, 6);
-  if (expect === 'not-plate') return !near(PLATE_RGB, 12);
-  if (Array.isArray(expect?.rgb)) return near(expect.rgb, Number(expect.tol ?? 0));
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  switch (expect?.family) {
-    case 'C': return max - min < 40 && (r + g + b) / 3 >= 60 && (r + g + b) / 3 <= 200;
-    case 'O': return r > g + 40 && r > b + 40;
-    case 'N': return b > r + 30 && b >= g;
-    case 'H': return min >= 170;
-    case 'S': return r > 150 && g > 120 && b < 110;
-    default: return false;
-  }
-}
-
-function describeExpectation(expect) {
-  if (typeof expect === 'string') return expect;
-  if (Array.isArray(expect?.rgb)) return `rgb ${expect.rgb.join(',')} ±${expect.tol ?? 0}`;
-  if (expect?.family) return `family ${expect.family}`;
-  return JSON.stringify(expect);
 }
 
 const LOST_MESSAGE = /device(?: was)? lost|lost the device|context[ _-]?lost|webglcontextlost/i;

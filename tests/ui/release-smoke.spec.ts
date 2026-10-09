@@ -1,8 +1,7 @@
 import { expect, test, type Page } from 'playwright/test';
 
-// release-smoke-v1: bounded deployment checks, also included in full CI.
-// Keep this file self-contained: release receipts hash it and playwright.config.mjs.
-// Full visual matrices, high-resolution exports and security regressions stay in CI.
+// release-smoke-v1: the one browser check, run by hand (`pnpm test:ui`, or
+// against a deployed origin with UI_TEST_URL=https://lupi.live).
 
 test.use({ viewport: { width: 1024, height: 640 }, deviceScaleFactor: 1 });
 

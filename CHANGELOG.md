@@ -3,6 +3,22 @@
 Since 2026-09-20 every merge to `main` deploys to lupi.live, so entries from
 then on are dated by the day they merged, with their pull requests.
 
+## Unreleased - picking and a lighter CI (branch `claude/nifty-volta-ophavr`)
+
+- **A click picks the atom under the pointer.** The picker treated every
+  atom as a 2 Å sphere and took the first one the ray entered, so a
+  neighbour in front stole clicks: a core Si in the gallery SiO2 was picked
+  from its own centre pixel about 9% of the time, ATP's P never. It now
+  ray-casts the drawn atoms and sticks (front-most wins, a stick picks the
+  atom of its half), with a 5 / 8 / 14 px near-miss allowance for mouse,
+  pen and touch (`packages/scene/src/atomPick.ts`). The selection ring and
+  the atom card follow the drawn radius.
+- **CI is one ~3 min build check on pull requests**; a push to main deploys
+  without waiting. Playwright (bar the release smoke), audits, lint and the
+  unit tests left CI, and the retired release controller, the local
+  verifiers, render-parity goldens, smoke plugins and the testbed were
+  deleted (about 20,000 lines). See AGENTS.md "CI and checks".
+
 ## Unreleased - Sprint S2, finishing S1 (branch `claude/nifty-volta-ophavr`)
 
 - **Chalk**, a fifth Illustrate drawing for the dark plate, after Shaders'

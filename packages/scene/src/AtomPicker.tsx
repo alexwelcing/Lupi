@@ -20,7 +20,7 @@
  *   `canvas.doubleTap` focuses the atom (or zooms toward empty space), and
  *   `canvas.hover` picks at most once per animation frame.
  * - **Window listeners** (`pointerdown` / `mousemove` / `click`), only while
- *   no canvas input source is active: `?controls=orbit` and the testbed.
+ *   no canvas input source is active: `?controls=orbit`.
  * The Escape / `m` keys are handled either way.
  *
  * The pick geometry (per-type radii, drawn count, bond adjacency) is built
@@ -437,7 +437,7 @@ export function AtomPicker({
     };
   }, [enabled, intentInput, picker]);
 
-  // ── Legacy path: window listeners (`?controls=orbit`, the testbed). ──
+  // ── Legacy path: window listeners (`?controls=orbit`). ──
   useEffect(() => {
     if (!enabled || intentInput) return;
     const canvasOf = () => get().renderer?.domElement as HTMLCanvasElement | undefined;
