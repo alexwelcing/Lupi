@@ -17,8 +17,8 @@ done
 script_dir=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 repo_root=$(CDPATH='' cd "$script_dir/../.." && pwd)
 source_revision=$(git -C "$repo_root" rev-parse HEAD)
-if ! git -C "$repo_root" diff --quiet || ! git -C "$repo_root" diff --cached --quiet; then
-  echo 'Commit or preserve tracked changes first; a build receipt must identify exact source.' >&2
+if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]; then
+  echo 'Use a clean checkout; preserve modified and untracked files before this source-revision check.' >&2
   exit 1
 fi
 mkdir -p "$repo_root/.verify-artifacts/apple-sdk"
@@ -52,8 +52,8 @@ for lane in device simulator; do
     exit 1
   fi
 done
-if ! git -C "$repo_root" diff --quiet || ! git -C "$repo_root" diff --cached --quiet; then
-  echo 'Tracked source changed during the build; do not accept this receipt.' >&2
+if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]; then
+  echo 'Source changed during the build; do not accept this receipt.' >&2
   exit 1
 fi
 date -u '+finished_at=%Y-%m-%dT%H:%M:%SZ' >> "$receipt_dir/receipt.txt"
