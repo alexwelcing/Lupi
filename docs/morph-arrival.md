@@ -56,7 +56,6 @@ Seen running on SwiftShader only (both backends, desktop), at a few frames a sec
 | The CPU twin | `packages/scene/src/tsl/displayMotionTwin.ts` |
 | Atom and bond plumbing | `atomImpostorMaterial.ts`, `bondImpostorMaterial.ts`, `AtomsOptimized.tsx`, `Bonds.tsx` |
 | MCP loads stay instant | `packages/ui/src/mcp/activity.ts`, `mcpViewerBridge.tsx` |
-| Local smoke | `tools/smoke/scenarios/morph.mjs` |
 
 Agents: `__lupiPlay.state().motion.arrival` reads `armed morph`, then `morph`; `.motion.morph` is `{ running, planned, atoms, previousAtoms, sameElement, crossElement, budded, vanished, frame, planMs }` while one runs, and `.motion.lastMorph` keeps the last plan's counts; `.motion.feel` is the live arrival's `{ duration, weight }` (0.9 s and 1 at Standard, 0.55 s and 0.5 at Gentle). `__lupiPlay.morph()` plays the last switch's morph again while its molecule is on screen.
 

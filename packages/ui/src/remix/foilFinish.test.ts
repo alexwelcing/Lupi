@@ -8,8 +8,7 @@ describe('Foil finishes', () => {
     expect(FOIL_KINDS.map((kind) => FOIL_FINISH_ID[kind])).toEqual([1, 2, 3]);
   });
 
-  it('keeps the codes the foil smoke plugin applies (frozen r1)', () => {
-    // tools/smoke/scenarios/foil.mjs finds the first code per finish with both flags off.
+  it('keeps the first code per finish with both flags off (frozen r1)', () => {
     const foilOf = (text: string) => {
       const parse = parseRemixCode(text);
       if (!parse.ok) throw new Error(text);

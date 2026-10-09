@@ -373,19 +373,17 @@ This makes the UI itself teach the integration path.
 
 ## Verification commands
 
-For a model or external integrator, verify against the live website:
+For a model or external integrator, verify against the live website by
+driving the bridge at `https://lupi.live/#/mcp` from a scratch Playwright
+script, as in the "Quick Start" of [AGENTS.md](../AGENTS.md#quick-start).
 
-```bash
-node tools/verify-mcp-bridge.mjs --url=https://lupi.live/#/mcp
-```
-
-For developers changing bridge behavior in the repo, run the local checks before deployment:
+For developers changing bridge behavior in the repo, run the local checks before deployment,
+then drive the bridge the same way against a local server:
 
 ```bash
 pnpm run generate:mcp-manifest
 pnpm --filter @atlas/ui build
 pnpm run lint
-pnpm run verify:mcp-bridge
 ```
 
 The full test suite is intentionally separate and can be run later:
@@ -394,9 +392,9 @@ The full test suite is intentionally separate and can be run later:
 pnpm run test
 ```
 
-## Current known good smoke result
+## Last known good smoke result
 
-As of this brief, the Playwright MCP smoke verifies:
+Before it was removed, the Playwright MCP smoke verified:
 
 - driver ready on `window`
 - 30 live tools

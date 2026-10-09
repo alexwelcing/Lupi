@@ -3,7 +3,7 @@
 Short-list item 15 ([round 2: Ink and Light](brainstorm/2026-09-viewer-play/round2/signature-and-moonshots.md#r2-signature-and-moonshots-06)).
 Lupi's ink drawing (the home hero, the `/m` pages and their cards, Lupi Daily) is now a Look inside the 3D viewer, and the landing's molecule tiles are ink drawings that light up into the 3D molecule.
 
-Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the WebGPU and WebGL2 backends) through the `ink` smoke plugin, and Chalk through the `chalk` plugin; nothing here has been seen on a phone or a hardware GPU. Every tuning value is a first guess.
+Engrave, Halftone and Chalk have been seen in headless Chromium (SwiftShader, on the WebGPU and WebGL2 backends); nothing here has been seen on a phone or a hardware GPU. Every tuning value is a first guess.
 
 ## What a visitor gets
 
@@ -95,20 +95,17 @@ Engrave and Halftone have been seen in headless Chromium (SwiftShader, on the We
 | Bonds handing their pairs to the fuse | `packages/scene/src/Bonds.tsx` |
 | Ink on and off (tray, palette, `I`), the last drawing used, the `ink=` link, and asking for a fuse | `packages/ui/src/ink/illustrate.ts` |
 | Looks and the paper plate | `packages/ui/src/sceneLooks.ts`, `backgroundPresets.ts` |
-| Local smoke (all five drawings, exports of Engrave and Halftone) | `tools/smoke/scenarios/ink.mjs` |
-| Local smoke for Chalk (light rim on the dark plate, live and exported, its own specId) | `tools/smoke/scenarios/chalk.mjs` |
 | The post recipe stepping aside | `packages/ui/src/postprocess/controls.ts` (`inkRecipe`) |
 | The recipe following a change pixel by pixel: the phase (lit, ink, changing), the fuse offset beside coverage, the stages resting by the live mix | `controls.ts` (`inkPhase`), `ScenePostprocessing.tsx` (`useInkPhase`), `backgroundMask.ts`, `postPipeline.ts` (`inkFade`) |
 | The contour (one TSL node, live and in exports) | `packages/ui/src/postprocess/inkContour.ts`, in `postPipeline.ts` and `export/captureLookPass.ts` |
 | The spec (`view.ink`) | `packages/ui/src/mcp/renderArtifactAdapter.ts`, `packages/core/src/renderArtifact.ts` |
 | Ink tiles | `packages/ui/src/landing/inkTiles.ts`, `MoleculeWall.tsx`, `MoleculeFinder.tsx`, `library/GalleryCollection.tsx`, `switcher/switchIndex.ts`, `relay/stage.ts` |
 | The SVG drawing in the Illustrate look (`INK_TOON`, the `INK_DRAWING_STYLE` switch, perspective) | `packages/ui/src/moleculePage/ink.ts`; live nodes in `moleculePage/inkStage.ts` |
-| Local smoke (the drawing against the first 3D ink frame, C60 and caffeine) | `tools/smoke/scenarios/onedrawing.mjs` |
 | Tile poses, fit and drawing models | `scripts/molecule-pages/build.mts` (`/m/manifest.json`, `/og/m/<id>-ink.json`) |
 
-Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'chalk' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots*, *chalk*, *chalkboard*, *blackboard* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, chalk, weight, target, holding, fading, arrival, fuse }`, with `fuse: { running, seed, progress, mode, held }` (`mode` is `'graph'`, `'spatial'` or `'uniform'`, null before the first fuse). `__lupiPlay.ink('hold', p)` holds the front at `p` (0..1), the running fuse's or the next one's, `ink('release')` lets it burn on, and `ink('pace', k)` runs fuses `k` times slower; the fuse smoke (`tools/smoke/scenarios/fuse.mjs`) uses them on software renderers, which draw a frame or two a second, for its filmstrips, its export check and its held fronts (the part not yet reached against the plain lit and ink views, and the ember's lime on the front).
+Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' | 'chalk' | 'off', inkWeight }`; commands understand *ink*, *illustrate*, *hatched*, *sketch*, *engrave*, *engraving*, *etching*, *halftone*, *print*, *dots*, *chalk*, *chalkboard*, *blackboard* and *lit*; `__lupiPlay.ink()` reports `{ mix, hatch, engrave, halftone, chalk, weight, target, holding, fading, arrival, fuse }`, with `fuse: { running, seed, progress, mode, held }` (`mode` is `'graph'`, `'spatial'` or `'uniform'`, null before the first fuse). `__lupiPlay.ink('hold', p)` holds the front at `p` (0..1), the running fuse's or the next one's, `ink('release')` lets it burn on, and `ink('pace', k)` runs fuses `k` times slower: for software renderers, which draw a frame or two a second, so a scratch script can hold a front still (the part not yet reached against the plain lit and ink views, and the ember's lime on the front).
 
-`?contour=0` (also inside a hash route) leaves the contour out of the live view and of exports, whose specs then carry no `view.ink.contour`: a debug switch for before-and-after comparisons. The local smoke plugin `tools/smoke/scenarios/contour.mjs` uses it.
+`?contour=0` (also inside a hash route) leaves the contour out of the live view and of exports, whose specs then carry no `view.ink.contour`: a debug switch for before-and-after comparisons.
 
 ## Tuning points
 
@@ -155,7 +152,7 @@ Agents: `lupi.set_viewer { inkStyle: 'flat' | 'hatch' | 'engrave' | 'halftone' |
   - The viewer may fit a little tighter or looser than the drawing's size if the visitor's atom scale is not 1.
   - The 120 ms crossfade stays: on a software renderer the hand-off is two frames, too few to judge a shorter one.
   - The home hero's C60 (`landing/hero/buckyStage.ts`) is its own engine and still draws lit gradient balls.
-- **Measured, not calibrated.** The local `onedrawing` smoke compares the relay's drawing with the first 3D ink frame inside the molecule's bounds (mean colour difference over 0–255, and the share of pixels within 24); there are no goldens. On SwiftShader at 1024 × 640, from the lit drawing to this one: C60 36.4 → 18.4 (WebGL2) and 33.5 → 18.2 (WebGPU), pixels within 24 from 60 % to 77 %; caffeine 14.2 → 11.9 and 14.0 → 11.8, from 87 % to 91 %. Against the configured Illustrate look (no post recipe) C60 comes to 16.0 and caffeine to 11.1. The SVG drawings are larger than the lit ones: C60's is 48 kB (8.5 kB gzipped) against 14 kB (2 kB), caffeine's 24 kB against 6 kB. There is no resvg Worker card from saved views, and no no-GPU fallback plate.
+- **Measured, not calibrated.** A local smoke check (since removed) compared the relay's drawing with the first 3D ink frame inside the molecule's bounds (mean colour difference over 0–255, and the share of pixels within 24); there are no goldens. On SwiftShader at 1024 × 640, from the lit drawing to this one: C60 36.4 → 18.4 (WebGL2) and 33.5 → 18.2 (WebGPU), pixels within 24 from 60 % to 77 %; caffeine 14.2 → 11.9 and 14.0 → 11.8, from 87 % to 91 %. Against the configured Illustrate look (no post recipe) C60 comes to 16.0 and caffeine to 11.1. The SVG drawings are larger than the lit ones: C60's is 48 kB (8.5 kB gzipped) against 14 kB (2 kB), caffeine's 24 kB against 6 kB. There is no resvg Worker card from saved views, and no no-GPU fallback plate.
 - **The contour is tuned on two molecules.** Space-filling caffeine and ball-and-stick C60, in a software renderer (SwiftShader) on both backends. Its thresholds are first guesses.
   - On the dark sage plate the outer contour is ink on near-black, so it reads only as a slightly smaller molecule; it shows on paper (Sketch) and light plates, and in chalk under Chalk.
   - The holes of a cage are plate too, so the rims around them get the outer weight where the plate shows through.

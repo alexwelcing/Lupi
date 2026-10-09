@@ -684,8 +684,9 @@ export function ExportManager() {
   // ─── 3D Model Export (GLB / USDZ) ─────────────────────
   // Scene construction (instancing, LOD, chunked bond detection, progress)
   // lives in export/exportSceneBuilder so the exact same code path runs
-  // headless from Node (tools/verify-exports.mjs). This handler only wires
-  // store state into the builder and drives the format-specific encoders.
+  // headless in its unit tests (exportSceneBuilder.test.ts). This handler
+  // only wires store state into the builder and drives the format-specific
+  // encoders.
   const handle3DExport = useCallback(async () => {
     const req = exportRequest;
     if (!req) return;

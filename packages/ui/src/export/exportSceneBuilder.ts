@@ -3,7 +3,7 @@
  *
  * All the heavy lifting of `handle3DExport` lives here, with zero React /
  * store / DOM dependencies so the exact code path the app ships can also be
- * driven headless from Node (tools/verify-exports.mjs) and unit tests.
+ * driven headless by its unit tests (exportSceneBuilder.test.ts).
  *
  * Scaling decisions this module owns:
  *   Bonds     — spatial-hash detection via @atlas/scene's detectBondsCpu,
