@@ -211,6 +211,9 @@ public actor TrophySync<Payload: SyncPayload> {
   /// An unfinished account deletion stays marked, so it can still be finished.
   public func eraseLocal() async throws {
     guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
+    // An erase intent also invalidates absent UUIDs, which are not among the
+    // record generations advanced by the eventual durable transaction.
+    accountGeneration &+= 1
     try await loadIfNeeded()
     if let running = syncRun { _ = await running.task.result }
     try await transact {
