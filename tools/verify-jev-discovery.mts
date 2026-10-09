@@ -1,8 +1,7 @@
 /** Live demo receipt. API/MCP checks, not installed ChatGPT or device acceptance. */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { Client } from '@modelcontextprotocol/client';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client/streamableHttp';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { CHATGPT_UI_URI } from '../apps/mcp-worker/src/chatgpt';
 import { DISCOVERY_CATALOG, DISCOVERY_SCHEMA } from '../packages/core/src/jev/moleculeDiscovery';
 
