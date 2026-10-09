@@ -39,12 +39,18 @@ const CAMERA_ACTIONS = [
 const APPEARANCE_ACTIONS = [
   commandAction("appearance-lit", "Lit", "lupi.set_viewer", {
     inkStyle: "off",
+    backgroundPreset: "sage-plate",
+    postprocessPreset: "paper",
   }),
   commandAction("appearance-illustrate", "Illustrate", "lupi.set_viewer", {
     inkStyle: "flat",
+    backgroundPreset: "sage-plate",
+    postprocessPreset: "paper",
   }),
   commandAction("appearance-sketch", "Sketch", "lupi.set_viewer", {
     inkStyle: "hatch",
+    backgroundPreset: "paper-plate",
+    postprocessPreset: "paper",
   }),
   commandAction("appearance-studio", "Studio", "lupi.set_viewer", {
     backgroundPreset: "studio",

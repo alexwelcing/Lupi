@@ -43,6 +43,12 @@ export interface Omol25Page {
   rows: Omol25Row[];
 }
 
+/** Partial source pages can contain fewer rows than the requested page size. */
+export function hasNextOmol25Page(page: Omol25Page): boolean {
+  const end = Math.min(page.indexedRows, page.matchedRows ?? page.indexedRows);
+  return page.offset + OMOL25_PAGE_SIZE < end;
+}
+
 export function isOmol25CollectionId(
   value: unknown,
 ): value is Omol25CollectionId {

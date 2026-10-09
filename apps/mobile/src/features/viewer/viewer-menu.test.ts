@@ -31,9 +31,9 @@ test("appearance choices expose current ink looks and background presets", () =>
       action.kind === "command" ? action.command.arguments : null,
     ),
     [
-      { inkStyle: "off" },
-      { inkStyle: "flat" },
-      { inkStyle: "hatch" },
+      { inkStyle: "off", backgroundPreset: "sage-plate", postprocessPreset: "paper" },
+      { inkStyle: "flat", backgroundPreset: "sage-plate", postprocessPreset: "paper" },
+      { inkStyle: "hatch", backgroundPreset: "paper-plate", postprocessPreset: "paper" },
       { backgroundPreset: "studio", postprocessPreset: "studio" },
       { backgroundPreset: "white", postprocessPreset: "paper" },
       { backgroundPreset: "blueprint", postprocessPreset: "diagram" },

@@ -23,6 +23,7 @@ import {
   Omol25RequestError,
 } from "./omol25-client";
 import {
+  hasNextOmol25Page,
   OMOL25_PAGE_SIZE,
   omol25MoleculeSummary,
   type Omol25Collection,
@@ -153,13 +154,7 @@ export function Omol25Screen() {
       ? pageState.page
       : null;
   const hasPrevious = offset > 0;
-  const hasNext = Boolean(
-    page &&
-    collection &&
-    page.rows.length === OMOL25_PAGE_SIZE &&
-    offset + OMOL25_PAGE_SIZE < collection.indexedRows &&
-    (page.matchedRows === null || offset + OMOL25_PAGE_SIZE < page.matchedRows),
-  );
+  const hasNext = page !== null && hasNextOmol25Page(page);
 
   return (
     <FlatList

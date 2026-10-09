@@ -7,10 +7,12 @@ import {
   Omol25RequestError,
 } from "./omol25-client";
 import {
+  hasNextOmol25Page,
   omol25MoleculeSummary,
   omol25StructureUrl,
   parseOmol25RowKey,
   type Omol25Collection,
+  type Omol25Page,
 } from "./omol25";
 
 const ORIGIN = "https://lupi.live";
@@ -33,6 +35,25 @@ const ROW = {
   coordinateProvenance: "source",
   bondTopology: "not-provided",
 };
+
+test("partial and empty pages retain navigation until the source bounds", () => {
+  const page: Omol25Page = {
+    collection: COLLECTION.id,
+    coverage: COLLECTION.coverage,
+    indexedRows: 100,
+    matchedRows: null,
+    offset: 0,
+    partial: true,
+    rows: [],
+  };
+  assert.equal(hasNextOmol25Page(page), true);
+  assert.equal(hasNextOmol25Page({ ...page, rows: [ROW] }), true);
+  assert.equal(hasNextOmol25Page({ ...page, offset: 80 }), false);
+  assert.equal(hasNextOmol25Page({ ...page, matchedRows: 21 }), true);
+  assert.equal(hasNextOmol25Page({ ...page, matchedRows: 20 }), false);
+  assert.equal(hasNextOmol25Page({ ...page, matchedRows: 0 }), false);
+  assert.equal(hasNextOmol25Page({ ...page, offset: 20, matchedRows: 21 }), false);
+});
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
