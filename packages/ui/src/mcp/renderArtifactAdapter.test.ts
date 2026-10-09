@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Frame, Trajectory } from '@atlas/core';
+import { computeRenderSpecIdV1, type Frame, type RenderJsonObjectV1, type Trajectory } from '@atlas/core';
 import { useStore, type LoadedFile } from '../store';
 import type { LupiRendererRuntime } from '../viewer/createLupiRenderer';
 import { EXECUTION_CLASS_V2, FIBER_VERSION_V2 } from '../export/exportProfileV2';
 import { reportActiveTransmissionQuality } from './transmissionRuntime';
+import { INK_LOOK_COLORS } from '@atlas/scene';
+import { SAGE_PLATE_COLOR, SAGE_PLATE_PRESET_ID } from '../backgroundPresets';
 import {
   browserRendererRuntimeV2,
   canonicalArtifactCameraPlanesV1,
@@ -129,6 +131,63 @@ describe('browser render artifact adapter', () => {
       delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
     });
     expect(appearanceChanged.specId).not.toBe(contentChanged.specId);
+  });
+
+  it('records the Illustrate look and its ink contour only while the look is on', async () => {
+    const lit = await plan();
+    expect(lit.spec.view.ink).toBeUndefined();
+    expect(lit.spec.view.postprocess).toMatchObject({ pipeline: 'viewer-look' });
+
+    const drawn = await plan({ inkStyle: 'flat' });
+    expect(drawn.spec.view.postprocess).toMatchObject({ pipeline: 'raw-scene' });
+    expect(drawn.spec.view.ink).toMatchObject({
+      pipeline: 'impostor-ink.v1',
+      shading: 'flat',
+      contour: { pipeline: 'ink-contour.v1', inner: 1.3, outer: 2.6 },
+    });
+    expect(drawn.specId).not.toBe(lit.specId);
+
+    // The drawing before the contour is another spec.
+    const { contour: _contour, ...withoutContour } = drawn.spec.view.ink as Record<string, unknown>;
+    const before = await computeRenderSpecIdV1({
+      ...drawn.spec,
+      view: { ...drawn.spec.view, ink: withoutContour as RenderJsonObjectV1 },
+    });
+    expect(before).not.toBe(drawn.specId);
+
+    const transparent = await createBrowserRenderArtifactPlanV1(useStore.getState(), {
+      format: 'png', width: 320, height: 240, transparent: true,
+      delivery: createInlineBrowserDeliveryV1(1_000_000), buildSha: TEST_BUILD_SHA,
+    });
+    expect(transparent.spec.view.ink).toMatchObject({ contour: { pipeline: 'ink-contour.v1' } });
+  });
+
+  it('records each ink shading in view.ink, and no view.ink while lit', async () => {
+    const lit = await plan();
+    expect(lit.spec.view.ink).toBeUndefined();
+    const ids = new Set([lit.specId]);
+    for (const shading of ['flat', 'hatch', 'engrave', 'halftone', 'chalk'] as const) {
+      const inked = await plan({ inkStyle: shading });
+      expect(inked.spec.view.ink).toMatchObject({ pipeline: 'impostor-ink.v1', shading });
+      expect((inked.spec.view.postprocess as { pipeline?: string }).pipeline).toBe('raw-scene');
+      ids.add(inked.specId);
+    }
+    expect(ids.size).toBe(6);
+  });
+
+  it('records the ink a drawing draws in: chalk for Chalk, the house ink otherwise', async () => {
+    for (const shading of ['flat', 'hatch', 'engrave', 'halftone'] as const) {
+      expect((await plan({ inkStyle: shading })).spec.view.ink).toMatchObject({ ink: INK_LOOK_COLORS.ink });
+    }
+    const chalk = await plan({ inkStyle: 'chalk', backgroundPreset: SAGE_PLATE_PRESET_ID });
+    expect(chalk.spec.view.ink).toMatchObject({ shading: 'chalk', ink: INK_LOOK_COLORS.chalk, plate: SAGE_PLATE_COLOR });
+    expect(INK_LOOK_COLORS.chalk).not.toBe(INK_LOOK_COLORS.ink);
+    // The ink colour is part of the drawing's identity.
+    const inHouseInk = await computeRenderSpecIdV1({
+      ...chalk.spec,
+      view: { ...chalk.spec.view, ink: { ...(chalk.spec.view.ink as RenderJsonObjectV1), ink: INK_LOOK_COLORS.ink } },
+    });
+    expect(inHouseInk).not.toBe(chalk.specId);
   });
 
   it('addresses the active raster property range', async () => {

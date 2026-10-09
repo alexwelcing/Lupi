@@ -5,11 +5,12 @@
  * impostors' shading (`inkStyle`), and the post recipe steps aside while it
  * is on (postprocess/controls.ts `inkRecipe`).
  *
- * The last ink shading used (flat or hatched) is remembered for the tab, so
- * Ink brings back the drawing you had. The Looks grid (Illustrate, Sketch)
- * sets plate and shading together instead (sceneLooks.ts).
+ * The last ink shading used (flat, hatched, engraved, halftone or chalk) is
+ * remembered for the tab, so Ink brings back the drawing you had. The Looks
+ * grid (Illustrate, Sketch, Engrave, Halftone, Chalk) sets plate and shading
+ * together instead (sceneLooks.ts).
  */
-import { sanitizeInkStyle, useStore, type InkStyle } from '../store';
+import { INK_STYLE_LETTERS, sanitizeInkStyle, useStore, type InkStyle } from '../store';
 import { playStore } from '../play/playStore';
 import { BG_PRESETS, SAGE_PLATE_COLOR } from '../backgroundPresets';
 
@@ -17,7 +18,8 @@ const LAST_KEY = 'lupi.ink.last';
 
 function readLast(): Exclude<InkStyle, 'off'> {
   try {
-    return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(LAST_KEY) === 'hatch' ? 'hatch' : 'flat';
+    const last = sanitizeInkStyle(typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(LAST_KEY) : null);
+    return last === 'off' ? 'flat' : last;
   } catch {
     return 'flat';
   }
@@ -31,9 +33,43 @@ function writeLast(style: Exclude<InkStyle, 'off'>): void {
   }
 }
 
+/**
+ * Remember a drawing chosen anywhere (a Look, the Ink controls, a shared
+ * link) as the one Ink and `I` bring back. The viewer's ink driver calls it
+ * on every change of `inkStyle`.
+ */
+export function rememberInkStyle(style: InkStyle): void {
+  if (style !== 'off') writeLast(style);
+}
+
+const INK_STYLE_LABELS: Record<InkStyle, string> = {
+  off: 'Lit',
+  flat: 'Illustrate',
+  hatch: 'Sketch',
+  engrave: 'Engrave',
+  halftone: 'Halftone',
+  chalk: 'Chalk',
+};
+
+/**
+ * A change made here (the Play tray, the palette, `I`) burns through the
+ * molecule as a Light Fuse from the selected, hovered or centre-front atom
+ * (ink/InkLookDriver.tsx). Changes from anywhere else (an agent's
+ * `lupi.set_viewer`, the Looks grid, a link) crossfade as before.
+ */
+const FUSE_REQUEST_MS = 500;
+let fuseRequestedAt = Number.NEGATIVE_INFINITY;
+
+/** True once for a look change this module made in the last moment (the ink driver asks as the look changes). */
+export function takeInkFuseRequest(now: number = performance.now()): boolean {
+  const requested = now - fuseRequestedAt <= FUSE_REQUEST_MS;
+  fuseRequestedAt = Number.NEGATIVE_INFINITY;
+  return requested;
+}
+
 /** A short name for a shading, for the pill and announcements. */
 export function inkStyleLabel(style: InkStyle): string {
-  return style === 'hatch' ? 'Sketch' : style === 'flat' ? 'Illustrate' : 'Lit';
+  return INK_STYLE_LABELS[style] ?? 'Lit';
 }
 
 /**
@@ -44,6 +80,7 @@ export function setIllustrate(on: boolean, options: { flash?: boolean } = {}): v
   const state = useStore.getState();
   const current = state.inkStyle;
   if (on === (current !== 'off')) return;
+  fuseRequestedAt = performance.now();
   if (on) {
     // Refractive glass draws real spheres, which take no ink: the drawing
     // needs the impostors, so the finish goes back to the Looks' plastic.
@@ -91,8 +128,9 @@ export function inkPlateColor(backgroundPreset: string): string {
 }
 
 /**
- * The Illustrate look in a short link: `ink=f` (flat colour) or `ink=h`
- * (hatched). Instant Replay and Remix links carry it beside `replay=` and
+ * The Illustrate look in a short link: `ink=f` (flat colour), `ink=h`
+ * (hatched), `ink=e` (engraved), `ink=d` (halftone dots) or `ink=c`
+ * (chalk), the letters of the `s=` state. Instant Replay and Remix links carry it beside `replay=` and
  * `remix=`, which travel without the full `s=` state, so whoever opens them
  * sees the drawing the sender was looking at.
  */
@@ -100,7 +138,7 @@ export const INK_PARAM = 'ink';
 
 /** The `ink=` value for a shading, or null when the look is lit. */
 export function inkParamValue(style: InkStyle = useStore.getState().inkStyle): string | null {
-  return style === 'flat' ? 'f' : style === 'hatch' ? 'h' : null;
+  return style === 'off' ? null : INK_STYLE_LETTERS[style] ?? null;
 }
 
 /**

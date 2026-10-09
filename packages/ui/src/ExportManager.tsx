@@ -11,7 +11,9 @@
  *           Safari/iOS, webm (vp9/vp8) on Chromium/Firefox. The capture loop only
  *           drives the camera/scene by wall-clock time; the canvas is recorded
  *           automatically.
- *           Instant Replay's clip rides the same path: its driver moves the
+ *           Instant Replay's clip is rendered offline, frame by frame, where
+ *           WebCodecs can encode it (replay/offlineClip.ts, not this path).
+ *           Elsewhere it rides this path: its driver moves the
  *           camera and toys by the clip clock, display motion stays live (an
  *           illustrative recording), and a compositor draws each frame plus
  *           its "Illustrative" labels into a 2D canvas, which is what gets
@@ -94,7 +96,6 @@ const MIN_NUMERIC_RANGE = 1e-6;
 // count. It posts no frames anywhere; the canvas is captured automatically.
 function VideoCaptureLoop({
   requestRef,
-  totalFrames,
   originalCameraPosition,
   file,
   isRecording,
@@ -518,7 +519,7 @@ function ImageCaptureFrameLifecycle({
       // The viewer's look: an artifact applies exactly the look its spec
       // records; an interactive export applies the configured one.
       const look = request.artifactSpec
-        ? captureLookFromSpec(request.artifactSpec.view.postprocess)
+        ? captureLookFromSpec(request.artifactSpec.view.postprocess, request.artifactSpec.view.ink)
         : resolveCaptureLook(useStore.getState(), { transparent });
       // The render into the target and the scene restore both happen inside
       // this call; only the readback resolves later.
@@ -609,8 +610,6 @@ export function ExportManager() {
   const captureStartRef = useRef<number | null>(null); // wall-clock anchor, set on first VideoCaptureLoop tick
   const recorderStoppedRef = useRef(false); // ensures recorder.stop() is called exactly once
   const requestRef = useRef<ExportRequest | null>(null);
-  const totalFrames = useRef(0);
-  const frameCount = useRef(0);
   const originalPixelRatio = useRef<number>(1);
   const originalCameraPosition = useRef<THREE.Vector3 | null>(null);
   const originalCameraFov = useRef<number | null>(null);
@@ -685,8 +684,9 @@ export function ExportManager() {
   // ─── 3D Model Export (GLB / USDZ) ─────────────────────
   // Scene construction (instancing, LOD, chunked bond detection, progress)
   // lives in export/exportSceneBuilder so the exact same code path runs
-  // headless from Node (tools/verify-exports.mjs). This handler only wires
-  // store state into the builder and drives the format-specific encoders.
+  // headless in its unit tests (exportSceneBuilder.test.ts). This handler
+  // only wires store state into the builder and drives the format-specific
+  // encoders.
   const handle3DExport = useCallback(async () => {
     const req = exportRequest;
     if (!req) return;
@@ -1148,8 +1148,6 @@ export function ExportManager() {
       console.error('[ExportManager] replay clip begin threw', error);
     }
 
-    totalFrames.current = fps * (req.replay ? req.replay.duration : req.durationSeconds || 5); // no longer used for completion; harmless
-    frameCount.current = 0;
     isRecording.current = true;
     setIsCapturing(true);
     // Kick the render loop: switching demand→always doesn't restart rAF on its own,
@@ -1193,7 +1191,6 @@ export function ExportManager() {
     if (exportRequest.type === 'glb' || exportRequest.type === 'usdz') {
       handle3DExportRef.current();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportRequest]);
 
   // Leaving the viewer mid-recording must not leave the toys suspended
@@ -1213,7 +1210,6 @@ export function ExportManager() {
       {isCapturing && (
         <VideoCaptureLoop
           requestRef={requestRef}
-          totalFrames={totalFrames}
           originalCameraPosition={originalCameraPosition}
           file={file}
           isRecording={isRecording}

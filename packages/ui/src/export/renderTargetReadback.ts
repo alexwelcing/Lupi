@@ -44,7 +44,10 @@
  * the background alone, content coverage (the live pipeline's lupiContent
  * MRT) into output-sized targets, and captureLookPass.ts runs the look once
  * over the whole assembled image before the readback. An empty look is the
- * raw path above, byte for byte.
+ * raw path above, byte for byte. The Illustrate look's contour (`inkContour`)
+ * takes the same assembly with no recipe: each texel clamped as the raw path
+ * clamps it, the nearest depth, and coverage (an opaque capture's MRT, or a
+ * transparent one's alpha), then the contour alone at the output resolution.
  *
  * Captures run inside the frame loop, in the `lupi-capture` phase after the
  * default render (never in `render`): ExportManager drives image exports, and
@@ -77,7 +80,7 @@ import type { SavedViewThumbnail } from '../savedViews';
 import { clearLiveViewOffset } from './renderCaptureState';
 import type { LupiBackend } from '../viewer/createLupiRenderer';
 import { LUPI_CONTENT_OUTPUT, contentCoverage } from '../postprocess/backgroundMask';
-import { captureLookIsEmpty, captureLookTouchesBackground, type CaptureLook } from './captureLook';
+import { captureLookIsEmpty, captureLookRunsPass, captureLookTouchesBackground, type CaptureLook } from './captureLook';
 import { renderCaptureLook } from './captureLookPass';
 
 export interface RasterReadback {
@@ -102,10 +105,20 @@ export interface RenderSceneToPixelsOptions {
    */
   clearColor?: THREE.ColorRepresentation;
   /**
-   * The viewer's look to apply (captureLook.ts). Null, absent or empty
-   * renders the raw scene.
+   * The viewer's look to apply (captureLook.ts). Null, absent or empty (no
+   * recipe and no ink contour) renders the raw scene.
    */
   look?: CaptureLook | null;
+  /**
+   * An illustrative frame (Instant Replay's offline clip): the capture guards
+   * do not run, so display motion, the overlays riding it and a Foil finish
+   * render as the live view shows them. Only a caller inside an illustrative
+   * recording (`beginRecording({ illustrative: true })`, which holds the
+   * glow off) sets it, and what it renders is never an artifact.
+   */
+  illustrative?: boolean;
+  /** Caps the supersampling factor (1 to CAPTURE_SUPERSAMPLE_MAX_FACTOR; default the max). */
+  maxSupersample?: number;
 }
 
 /**
@@ -144,16 +157,23 @@ export interface CaptureSupersamplePlan {
  * tile holds it (up to 1365 px), else 2, in as few equal tiles of at most 4096
  * texels a side as cover it (one up to 2048 px). Untiled (`tileable` false):
  * one target, factor min(3, floor(4096 / longest side)), at least 1.
+ * `maxFactor` caps the factor (Instant Replay's clip frames use 2).
  */
-export function captureSupersamplePlan(width: number, height: number, tileable = true): CaptureSupersamplePlan {
+export function captureSupersamplePlan(
+  width: number,
+  height: number,
+  tileable = true,
+  maxFactor: number = CAPTURE_SUPERSAMPLE_MAX_FACTOR,
+): CaptureSupersamplePlan {
   const w = Math.max(1, Math.floor(width));
   const h = Math.max(1, Math.floor(height));
+  const cap = Math.max(1, Math.min(CAPTURE_SUPERSAMPLE_MAX_FACTOR, Math.floor(maxFactor) || 1));
   const fit = Math.floor(CAPTURE_TILE_MAX_SIDE / Math.max(w, h));
   if (!tileable) {
-    const factor = Math.max(1, Math.min(CAPTURE_SUPERSAMPLE_MAX_FACTOR, fit));
+    const factor = Math.max(1, Math.min(cap, fit));
     return { factor, columns: 1, rows: 1, tileWidth: w, tileHeight: h };
   }
-  const factor = fit >= CAPTURE_SUPERSAMPLE_MAX_FACTOR ? CAPTURE_SUPERSAMPLE_MAX_FACTOR : 2;
+  const factor = Math.min(cap, fit >= CAPTURE_SUPERSAMPLE_MAX_FACTOR ? CAPTURE_SUPERSAMPLE_MAX_FACTOR : 2);
   const maxTile = Math.floor(CAPTURE_TILE_MAX_SIDE / factor);
   const columns = Math.ceil(w / maxTile);
   const rows = Math.ceil(h / maxTile);
@@ -204,11 +224,11 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
     throw new Error(`renderSceneToPixels: invalid size ${width}x${height}.`);
   }
-  if (options.look && !captureLookIsEmpty(options.look)) {
+  if (options.look && captureLookRunsPass(options.look)) {
     return renderSceneToPixelsWithLook(options, options.look);
   }
   const backend = rendererBackendOf(renderer);
-  const plan = captureSupersamplePlan(width, height, canTileCapture(scene, camera));
+  const plan = captureSupersamplePlan(width, height, canTileCapture(scene, camera), options.maxSupersample);
   const { factor, columns, rows, tileWidth, tileHeight } = plan;
   const tiled = columns > 1 || rows > 1;
   const tile = new THREE.RenderTarget(tileWidth * factor, tileHeight * factor, {
@@ -250,7 +270,7 @@ export async function renderSceneToPixels(options: RenderSceneToPixelsOptions): 
     renderer.autoClearStencil = true;
     if (transparent) renderer.setClearColor(0x000000, 0);
     else renderer.setClearColor(options.clearColor ?? previousClearColor, 1);
-    restoreGuards = beginCaptureRender();
+    if (!options.illustrative) restoreGuards = beginCaptureRender();
     // Tiles in a fixed order, row by row; each is rendered, then reduced into
     // its rectangle of the output before the next one reuses the tile target.
     for (let row = 0; row < rows; row += 1) {
@@ -316,10 +336,13 @@ async function renderSceneToPixelsWithLook(
 ): Promise<RasterReadback> {
   const { renderer, scene, camera, width, height, transparent } = options;
   const backend = rendererBackendOf(renderer);
-  const plan = captureSupersamplePlan(width, height, canTileCapture(scene, camera));
+  const plan = captureSupersamplePlan(width, height, canTileCapture(scene, camera), options.maxSupersample);
   const { factor, columns, rows, tileWidth, tileHeight } = plan;
   const tiled = columns > 1 || rows > 1;
-  const coverage = !transparent && captureLookTouchesBackground(look);
+  // The ink contour finds the plate by coverage too (a transparent capture's alpha is its coverage).
+  const coverage = !transparent && (captureLookTouchesBackground(look) || look.inkContour !== null);
+  // Only a recipe tone-maps afterwards; the contour alone keeps the raw path's clamp.
+  const ceiling = captureLookIsEmpty(look) ? 1 : CAPTURE_LOOK_HDR_CEILING;
 
   const tile = new THREE.RenderTarget(tileWidth * factor, tileHeight * factor, {
     type: THREE.HalfFloatType,
@@ -366,7 +389,7 @@ async function renderSceneToPixelsWithLook(
     renderer.autoClearStencil = true;
     if (transparent) renderer.setClearColor(0x000000, 0);
     else renderer.setClearColor(options.clearColor ?? previousClearColor, 1);
-    restoreGuards = beginCaptureRender();
+    if (!options.illustrative) restoreGuards = beginCaptureRender();
     for (let row = 0; row < rows; row += 1) {
       for (let column = 0; column < columns; column += 1) {
         const x = column * tileWidth;
@@ -385,7 +408,7 @@ async function renderSceneToPixelsWithLook(
         renderer.setMRT(sceneMrt);
         renderer.autoClear = true;
         renderer.render(scene, camera);
-        const reduce = captureLookDownsampler(factor, coverage, tile);
+        const reduce = captureLookDownsampler(factor, coverage, ceiling, tile);
         reduce.source.value = tile.textures[0];
         reduce.depth.value = tile.depthTexture!;
         if (coverage) reduce.content.value = tile.textures[1];
@@ -474,13 +497,19 @@ const lookDownsamplers = new Map<string, LookDownsampler>();
 
 /**
  * The look capture's reduction for one factor: like captureDownsampler, but
- * each texel is clamped to the HDR ceiling (the look tone-maps afterwards),
- * the alpha of an opaque background-preserving capture carries the averaged
- * content coverage, and the fragment depth is the nearest depth of the block
- * (so the look's AO and defocus see the front surface at every pixel).
+ * each texel is clamped to `ceiling` × alpha (the HDR ceiling when the look
+ * tone-maps afterwards, 1 for the ink contour alone), the alpha of an opaque
+ * capture whose look needs coverage carries the averaged content coverage,
+ * and the fragment depth is the nearest depth of the block (so the look's
+ * AO, defocus and contour see the front surface at every pixel).
  */
-function captureLookDownsampler(factor: number, coverage: boolean, initial: THREE.RenderTarget): LookDownsampler {
-  const key = `${factor}|${coverage ? 'coverage' : 'alpha'}`;
+function captureLookDownsampler(
+  factor: number,
+  coverage: boolean,
+  ceiling: number,
+  initial: THREE.RenderTarget,
+): LookDownsampler {
+  const key = `${factor}|${coverage ? 'coverage' : 'alpha'}|${ceiling}`;
   const cached = lookDownsamplers.get(key);
   if (cached) return cached;
   const source: any = texture(initial.textures[0]);
@@ -491,7 +520,7 @@ function captureLookDownsampler(factor: number, coverage: boolean, initial: THRE
   const tileSize: any = uniform(new THREE.Vector2(1, 1));
   const local = (): any => (screenCoordinate as any).xy.sub(origin);
   const material = new THREE.NodeMaterial();
-  material.name = `lupi-capture-look-downsample-${factor}x${coverage ? '-coverage' : ''}`;
+  material.name = `lupi-capture-look-downsample-${factor}x${coverage ? '-coverage' : ''}-clamp${ceiling}`;
   material.fragmentNode = (Fn(() => {
     const at: any = local().toVar();
     If(
@@ -508,7 +537,7 @@ function captureLookDownsampler(factor: number, coverage: boolean, initial: THRE
         const coord: any = base.add(ivec2(dx, dy));
         const texel: any = (textureLoad(source, coord) as any).toVar();
         const alpha: any = clamp(texel.a, 0, 1);
-        sum = sum.add(vec4(texel.rgb.max(vec3(0)).min(vec3(alpha.mul(CAPTURE_LOOK_HDR_CEILING))), alpha));
+        sum = sum.add(vec4(texel.rgb.max(vec3(0)).min(vec3(alpha.mul(ceiling))), alpha));
         if (coverage) covered = covered.add(clamp((textureLoad(content, coord) as any).r, 0, 1));
       }
     }

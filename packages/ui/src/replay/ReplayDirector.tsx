@@ -19,7 +19,7 @@
  *   the pill says "Your turn" with the gesture the sender used, and a toy
  *   moment latches that toy's verb, so the next touch tries it.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/webgpu';
 import * as THREE from 'three';
 import type { Frame } from '@atlas/core/types';
@@ -34,6 +34,7 @@ import { hasFirstFrame, onFirstFrame } from '../relay/firstFrame';
 import { moleculePageIdFor } from '../moleculePage/pages';
 import { consumeIntakeFailure } from './intake';
 import { installMomentDetector, offerMoment } from './moments';
+import { clipProgress, isClipRendering, lastClipReport, setClipScale, subscribeClipRendering } from './offlineClip';
 import { cameraFov, ReplayPlayer } from './player';
 import { clearRecorder, pauseRecorder, recordPose, recorderNow } from './recorder';
 import { replayStore, type IncomingReplay } from './replayStore';
@@ -44,6 +45,15 @@ export interface ReplayDirectorProps {
   frame: Frame;
   center: Vec3;
 }
+
+/**
+ * The job that holds the live view's render while a clip renders offline: a
+ * job in fiber's `render` phase takes the frame's render over, and this one
+ * draws nothing, so the canvas keeps its last picture under the sheet.
+ */
+const CLIP_HOLD_JOB = 'lupi/replay-clip-hold';
+
+const noop = () => {};
 
 /** Standard autoplay waits this long after the molecule lands (and its arrival ends) (ms). */
 const AUTOPLAY_DELAY_MS = 700;
@@ -371,11 +381,16 @@ export function ReplayDirector({ frame, center }: ReplayDirectorProps): null {
   }, []);
 
   // Dev hook: __lupiPlay.replay() → the offer or last moment as a tape and link;
-  // __lupiPlay.replay('watch') starts a waiting shared replay.
+  // __lupiPlay.replay('watch') starts a waiting shared replay;
+  // __lupiPlay.replay('clip') → the clip rendering now and how the last one was
+  // made (offlineClip.ts); replay('clip-scale', k) makes the next clips k× the
+  // size (a software renderer's smoke).
   useEffect(
     () =>
-      registerPlayDevHook('replay', (command?: string) => {
+      registerPlayDevHook('replay', (command?: string, arg?: unknown) => {
         const store = replayStore.getState();
+        if (command === 'clip') return { clipping: store.clipping, rendering: clipProgress(), ...(lastClipReport() ?? {}) };
+        if (command === 'clip-scale') return setClipScale(Number(arg));
         if (command === 'watch') {
           if (store.incoming?.phase === 'waiting') store.setIncomingPhase('playing');
           return store.incoming?.phase ?? null;
@@ -398,6 +413,10 @@ export function ReplayDirector({ frame, center }: ReplayDirectorProps): null {
       }),
     [],
   );
+
+  // An offline clip renders its own frames: the live view holds its picture meanwhile.
+  const holdLive = useSyncExternalStore(subscribeClipRendering, isClipRendering, isClipRendering);
+  useFrame(noop, { phase: 'render', id: CLIP_HOLD_JOB, enabled: holdLive });
 
   // The shared replay plays in `update` (before the render; the rig adopts the pose).
   useFrame(

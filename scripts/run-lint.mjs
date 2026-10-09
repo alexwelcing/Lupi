@@ -111,7 +111,7 @@ console.log(`[lint] Turbo summary covers all ${expectedWorkspaces.length} app/pa
 const nonWorkspaceLanes = [
   ['tools', 'tools/**/*.{js,mjs,cjs,ts,tsx}'],
   ['scripts', 'scripts/**/*.{js,mjs,cjs,ts,tsx}'],
-  ['Playwright and root test config', 'tests/**/*.{js,mjs,cjs,ts,tsx}', 'playwright.config.mjs', 'vitest.workspace.ts'],
+  ['Playwright and root test config', 'tests/**/*.{js,mjs,cjs,ts,tsx}', 'playwright.config.mjs'],
   ['Cloud Functions', 'functions/src/**/*.{js,mjs,cjs,ts,tsx}'],
 ];
 

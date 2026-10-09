@@ -15,9 +15,16 @@
  *
  * The last ENDCARD_S seconds fade to the sage plate with "Your turn" and the
  * molecule's page. Colours are the house's: sage #101817, lime #d5ef9c.
+ *
+ * Two ways in: `compose` takes a frame the offline clip rendered (its pixels
+ * and its time on the clip's clock, with the flashes read from the tape);
+ * `draw` takes the viewer canvas while MediaRecorder records in real time
+ * (the flash is the one on the pill).
  */
 import type { VideoCompositor } from '../store';
+import type { RasterReadback } from '../export/renderTargetReadback';
 import { playStore } from '../play/playStore';
+import { flashAt, type ClipFlash } from './clipSchedule';
 
 /** The end card's length (s). */
 export const ENDCARD_S = 0.9;
@@ -41,11 +48,15 @@ export interface ClipCompositorOptions {
   duration: number;
   /** A Remix code's Foil finish on screen ("Holo"), labelled as cosmetic. */
   finish?: string | null;
+  /** The tape's flashes on the clip's clock (an offline clip); without them the pill's live flash is drawn. */
+  flashes?: readonly ClipFlash[] | null;
 }
 
 export interface ClipCompositor extends VideoCompositor {
   width: number;
   height: number;
+  /** An offline frame: its pixels (w×h, from the capture engine), then the labels at `seconds` on the clip's clock. */
+  compose(frame: RasterReadback, seconds: number): void;
 }
 
 function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -102,9 +113,8 @@ export function createClipCompositor(options: ClipCompositorOptions): ClipCompos
 
     const left = 22 * u;
     // The pill's flash as it played (a face's name, "Flip!").
-    const flash = playStore.getState().flash;
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    if (flash && flash.until > now && flash.kind !== 'info') {
+    const flash = options.flashes ? flashAt(options.flashes, seconds) : livePillFlash();
+    if (flash) {
       ctx.font = `650 ${13.5 * u}px ${FONT}`;
       const text = clampText(ctx, flash.text, width - 2 * left - 28 * u);
       const textWidth = ctx.measureText(text).width;
@@ -189,5 +199,24 @@ export function createClipCompositor(options: ClipCompositorOptions): ClipCompos
     return ok;
   };
 
-  return { canvas, width, height, draw };
+  const compose = (frame: RasterReadback, seconds: number): void => {
+    if (!ctx) return;
+    // The capture engine decodes into a plain ArrayBuffer, which ImageData takes as it is.
+    ctx.putImageData(new ImageData(frame.rgba as Uint8ClampedArray<ArrayBuffer>, frame.width, frame.height), 0, 0);
+    // Anything the capture left see-through sits on the plate, as on screen.
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = SAGE;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = 'source-over';
+    drawLabels(seconds);
+  };
+
+  return { canvas, width, height, draw, compose };
+}
+
+/** The flash on the pill right now, unless it is the pill talking (`info`). */
+function livePillFlash(): { text: string } | null {
+  const flash = playStore.getState().flash;
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  return flash && flash.until > now && flash.kind !== 'info' ? flash : null;
 }

@@ -217,7 +217,7 @@ Notes:
   - `SpatialHash.ts` (typed-array counting sort, good)
   - `atomOcclusion.ts:98-160` (a second counting-sort copy)
   - `ClusterBuilder.ts:124-160` (a third grid)
-  - `bondDetectCpu.ts:32-92`: **string-key `Map<string, number[]>`** with `results.push({index,d2})` per neighbour. This is `BOND_ARCHITECTURE.md` known limitation #1, and it is still present even though `SpatialHash3D` already solves it.
+  - `bondDetectCpu.ts:32-92`: **string-key `Map<string, number[]>`** with `results.push({index,d2})` per neighbour. This is `docs/BOND_ARCHITECTURE.md` known limitation #1, and it is still present even though `SpatialHash3D` already solves it.
 - **`AtomPicker.tsx:57-141`** ray-marches in 0.5 Å steps up to 1000 Å (≤ 2000 steps).
   - Each step allocates `new THREE.Vector3` (`:74`) and calls `spatialHash.query`, which allocates an object per hit and **sorts** (`SpatialHash.ts:133-170`).
   - Each candidate atom allocates a `Vector3` and projects (`:85-99`).
@@ -298,22 +298,22 @@ There are **32 static call sites in 26 non-test files**. `AtomPicker.tsx:9` impo
 
 **Bonds**
 - GPU forced above 200k atoms. The GPU pipeline starts at 100k atoms × 12 bonds and grows; grid 32³-80³ with 48-64 atoms per cell (`useBondGpuPipeline.ts:7-37`). Bonds/atom budget drops to 6 above 100k and 4 above 500k atoms, which is a possible silent drop in dense systems (UNVERIFIED in practice).
-- CPU `maxPairs = min(natoms*12, 50M)`. `BOND_ARCHITECTURE.md:290` still says `natoms * 8`; the doc is stale.
+- CPU `maxPairs = min(natoms*12, 50M)`. `docs/BOND_ARCHITECTURE.md:298` still says `natoms * 8`; the doc is stale.
 
 **Mobile budget**
 - DPR ≤ 1.25; no AO, Bloom or DOF; MSAA ≤ 2 (`presets.ts:138-146`).
 - Tier detection is by UA, touch and screen size (`deviceCapabilities.ts:91-139`). Every iPad counts as "mobile". There is no GPU-benchmark or FPS feedback.
 
 **Known pain, by document**
-- `BOND_ARCHITECTURE.md:269-296`:
+- `docs/BOND_ARCHITECTURE.md:277-304`:
   - 100k atoms / 565k bonds costs about 109 ms per detection (35 ms worker + 59 ms MEAM + 15 ms upload)
   - "Up to ~50K atoms run comfortably within 16 ms"
   - Limitations: string-key hash GC pressure, fixed `maxPairs` can silently overflow, no PBC-wrapped bond drawing (cross-cell bonds)
   - The doc also describes an older mesh/"filament" bond renderer; the code now uses ray-cast impostors
 - `docs/gpu-studio-launch.md:64, 144`: software-adapter results are "not phone FPS proof", and "the existing large regular-viewer and XR bundles remain a separate optimization task".
 - `docs/product-reset-2026-09-04.md:77-78`: "The remaining 3D viewer is still a large bundle and is not being relabeled as a complete performance rewrite"; no device-FPS claims.
-- `MOBILE_VIEWER_RELEASE_NOTES.md`: chrome-only changes ("no renderer … behavior is touched").
-- `VIEWER_RELEASE_NOTES_2026-06-14.md`: the homepage hero is a 953,312-atom FCC copper scene; verification is functional, not FPS.
+- `docs/archive/MOBILE_VIEWER_RELEASE_NOTES.md`: chrome-only changes ("no renderer … behavior is touched").
+- `docs/archive/VIEWER_RELEASE_NOTES_2026-06-14.md`: the homepage hero is a 953,312-atom FCC copper scene; verification is functional, not FPS.
 - `docs/trajectory-architecture.md:128-137`: OPFS eviction and quota; the device ceiling still gates rendering.
 
 ---
@@ -342,7 +342,7 @@ There are **32 static call sites in 26 non-test files**. `AtomPicker.tsx:9` impo
 9. `AtomPicker.tsx:57-141`: rewrite as a grid DDA over `SpatialHash3D` cells, using `raycast3.intersectsBox3` for cell rejection and a hand-written ray-sphere test. Throttle to one pick per frame. This makes hover cheap enough for "magnet cursor" and hover-glow effects on every molecule size.
 10. `BillionAtomBlock.tsx:303-386` and `AtomPipeline.ts:335-348`: use `frustum.setFromViewProjectionMatrix{NO,ZO}` + `frustum.intersectsBox3` into caller-owned scratch. Also remove the per-frame arrays and Set, and skip texture uploads when the camera has not moved.
 11. `MoleculeFilterShell.tsx` (shapes: sphere, cube, off): `quickhull3` would add a molecule-hugging convex-hull shell. `obb3` would give an oriented bounding cube and a PCA-aligned "fit" camera in `cameraFit.ts`; an OBB fitter from points is not listed in `math` (UNVERIFIED), so PCA would be local code.
-12. `bondDetectCpu.ts`: reuse `SpatialHash3D` (typed counting sort) instead of the string-key Map. This closes `BOND_ARCHITECTURE.md` limitation #1. Plain code, no library needed.
+12. `bondDetectCpu.ts`: reuse `SpatialHash3D` (typed counting sort) instead of the string-key Map. This closes `docs/BOND_ARCHITECTURE.md` limitation #1. Plain code, no library needed.
 
 **D. Procedural fun (`math/noise`, `math/random`, `math/color`, `math/ik`)**
 13. Swap `Math.random` in `sceneRemix.ts:27`, `FlythroughPanel.tsx:253-282` and `SceneControls.tsx:124/135` for `mulberry32` + `random.choice`/`random.float`. A URL seed then reproduces a remix or random tour exactly, which also suits the export determinism contract (`AtomsTransmission.tsx:212-219` already hand-rolls an LCG for this).
@@ -391,4 +391,4 @@ There are **32 static call sites in 26 non-test files**. `AtomPicker.tsx:9` impo
 - Scene layers and presets: `packages/ui/src/` — `AtomTrails.tsx`, `GhostAtoms.tsx`, `ProceduralBackground.tsx`, `MoleculeFilterShell.tsx`, `MoleculeShadow.tsx`, `sceneLooks.ts`, `sceneRemix.ts`, `KnowledgeLabelsLayer.tsx`, `knowledgeLabels/selectVisibleLabels.ts`, `SelectionMarkers.tsx`, `AnnotationsLayer.tsx`, `SpatialAnchor.tsx`, `DevProbe.tsx`, `ExportManager.tsx`, `store.ts`
 - XR: `packages/ui/src/xr/` — `grabMath.ts`, `XRControlPanel.tsx`, `XRMoleculeInteraction.tsx`
 - Other code: `packages/ui/src/gpu-studio/runtime.ts`, `packages/core/src/elements.ts`, `pnpm-lock.yaml`, `packages/*/package.json`
-- Docs: `BOND_ARCHITECTURE.md`, `MOBILE_VIEWER_RELEASE_NOTES.md`, `VIEWER_RELEASE_NOTES_2026-06-14.md`, `docs/trajectory-architecture.md`, `docs/gpu-studio-launch.md`, `docs/product-reset-2026-09-04.md`
+- Docs: `docs/BOND_ARCHITECTURE.md`, `docs/archive/MOBILE_VIEWER_RELEASE_NOTES.md`, `docs/archive/VIEWER_RELEASE_NOTES_2026-06-14.md`, `docs/trajectory-architecture.md`, `docs/gpu-studio-launch.md`, `docs/product-reset-2026-09-04.md`

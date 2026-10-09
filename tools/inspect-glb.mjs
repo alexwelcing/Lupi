@@ -12,7 +12,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import * as THREE from 'three';
 
 const [, , glbPath] = process.argv;
 if (!glbPath) {

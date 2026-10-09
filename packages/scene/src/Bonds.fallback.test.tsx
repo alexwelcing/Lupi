@@ -159,4 +159,57 @@ describe('bond inference backend fallback', () => {
       reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
     }
   });
+
+  it('reports the drawn bonds to the picker, collapsing a stale inferred pair, and null once none are drawn', async () => {
+    const frame = inferableFrame();
+    const reports: unknown[] = [];
+    const onDrawnBonds = vi.fn((bonds: unknown) => {
+      reports.push(bonds);
+    });
+    const render = (current: Frame, hiddenAtomTypes = new Set<number>()) =>
+      React.createElement(Bonds, {
+        frame: current,
+        inferenceAllowed: true,
+        hiddenAtomTypes,
+        onDrawnBonds,
+      });
+    const reactGlobal = globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT?: boolean;
+    };
+    const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT;
+    reactGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+    const renderer = await ReactThreeTestRenderer.create(render(frame));
+    try {
+      await vi.waitFor(() => expect(fallbackMocks.workerPostMessage).toHaveBeenCalled());
+      expect(reports.at(-1)).toBeNull();
+      const request = fallbackMocks.workerPostMessage.mock.calls.at(-1)?.[0] as { requestId: number };
+      fallbackMocks.deliverWorkerMessage?.({
+        requestId: request.requestId,
+        bondPairs: new Int32Array([0, 1]),
+        count: 1,
+        distances: new Float32Array([1.2]),
+      });
+      await vi.waitFor(() => expect(reports.at(-1)).not.toBeNull());
+      const drawn = reports.at(-1) as { pairs: Int32Array; radius: number; radii: Float32Array | null; fadeEnd: number };
+      expect(Array.from(drawn.pairs)).toEqual([0, 1]);
+      expect(drawn.radius).toBe(0.12);
+      expect(Array.from(drawn.radii ?? [])).toEqual([Math.fround(0.12)]);
+      expect(drawn.fadeEnd).toBe(200);
+
+      // The same pair on a frame where the atoms moved apart: drawn collapsed.
+      const apart: Frame = { ...frame, positions: new Float32Array([0, 0, 0, 3.5, 0, 0]) };
+      await renderer.update(render(apart));
+      await vi.waitFor(() => {
+        const last = reports.at(-1) as { radii: Float32Array | null } | null;
+        expect(last && Array.from(last.radii ?? [])).toEqual([0]);
+      });
+
+      await renderer.update(render(frame, new Set([6])));
+      await vi.waitFor(() => expect(reports.at(-1)).toBeNull());
+    } finally {
+      await renderer.unmount();
+      reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+    expect(reports.at(-1)).toBeNull();
+  });
 });

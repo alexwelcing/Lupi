@@ -2,8 +2,8 @@
  * instanceBake — bake an InstancedMesh into ONE merged indexed BufferGeometry.
  *
  * Extracted from USDZExportPipeline so the bake is a pure three-only module:
- * it powers the USDZ export path in the browser AND runs headless from Node
- * (tools/verify-exports.mjs). This is what lets USDZ scale: N instances become
+ * it powers the USDZ export path in the browser AND runs headless in its unit
+ * tests (instanceBake.test.ts). This is what lets USDZ scale: N instances become
  * a single mesh + palette texture instead of N scene-graph objects, so
  * three's USDZExporter writes one geometry prim rather than exploding the
  * .usda string (and the JS heap) with one Xform per atom.

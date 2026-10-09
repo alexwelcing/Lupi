@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MOTION } from '@atlas/core/motion';
 import { stepResponse } from '@atlas/core/motion/stepResponse';
-import { DISPLAY_MOTION_TUNING, ARRIVAL_MODE } from './displayMotion';
+import { DISPLAY_MOTION_TUNING, ARRIVAL_MODE, MORPH_TEXEL_STRIDE, type DisplayMorphData } from './displayMotion';
 import {
   displayOffsetTwin,
   pcgHash,
@@ -130,5 +130,99 @@ describe('display motion twin', () => {
     }
     expect(peak).toBeGreaterThan(0.1);
     expect(peak).toBeLessThanOrEqual(0.3 + 1e-12);
+  });
+});
+
+describe('display motion twin: the morph arrival', () => {
+  // The new molecule: the shell's first 24 points; each starts from a point
+  // of the old frame (a scaled, shifted copy of another shell point) after a
+  // delay that grows with the index.
+  const count = 24;
+  const positions = new Float32Array(count * 3);
+  const texels = new Float32Array(count * MORPH_TEXEL_STRIDE);
+  for (let i = 0; i < count; i += 1) {
+    positions.set(atoms[i], i * 3);
+    const from = atoms[(i * 7 + 3) % atoms.length];
+    texels.set([from[0] / 12, from[1] / 12, (from[2] - 1) / 12, 0.006 * i], i * MORPH_TEXEL_STRIDE);
+  }
+  const morph: DisplayMorphData = { positions, count, texels };
+  const rest = (i: number): TwinVec3 => [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];
+
+  /** A morph 0.9 s long on the settle token, in a view frame turned about y and scaled by its depth (12 Å). */
+  function morphState(elapsed: number, gentle = false): DisplayMotionTwinState {
+    const state = restTwinState();
+    const token = gentle ? MOTION.glide : MOTION.settle;
+    state.motionWeight = 1;
+    state.arrivalWeight = gentle ? 0.5 : 1;
+    state.arrivalMode = ARRIVAL_MODE.morph;
+    state.arrivalT0 = 3;
+    state.now = 3 + elapsed;
+    state.arrivalDuration = gentle ? 0.55 : 0.9;
+    state.arrivalOmega = 2 / token.smoothTime;
+    state.arrivalZeta = token.dampingRatio;
+    state.arrivalDelayScale = gentle ? 0.5 : 1;
+    const c = Math.cos(0.4) * 12;
+    const s = Math.sin(0.4) * 12;
+    state.morphOrigin = [0.5, -0.25, 1];
+    state.morphAxisX = [c, 0, -s];
+    state.morphAxisY = [0, 12, 0];
+    state.morphAxisZ = [s, 0, c];
+    state.morphCount = count;
+    state.morph = morph;
+    return state;
+  }
+
+  /** The morph term transcribed independently: the core step response, the texel carried into the view. */
+  function reference(state: DisplayMotionTwinState, i: number): TwinVec3 {
+    const t = Array.from(texels.subarray(i * MORPH_TEXEL_STRIDE, (i + 1) * MORPH_TEXEL_STRIDE));
+    const start = [0, 1, 2].map((k) => state.morphOrigin[k] + state.morphAxisX[k] * t[0] + state.morphAxisY[k] * t[1] + state.morphAxisZ[k] * t[2]);
+    const elapsed = state.now - state.arrivalT0;
+    const token = { smoothTime: 2 / state.arrivalOmega, dampingRatio: state.arrivalZeta };
+    const left = 1 - stepResponse(token, Math.max(elapsed - t[3] * state.arrivalDelayScale, 0));
+    const D = state.arrivalDuration;
+    const x = Math.min(1, Math.max(0, (elapsed - (D - DISPLAY_MOTION_TUNING.endFadeS)) / DISPLAY_MOTION_TUNING.endFadeS));
+    const fade = 1 - x * x * (3 - 2 * x);
+    const p = rest(i);
+    return [0, 1, 2].map((k) => (start[k] - p[k]) * left * fade * state.arrivalWeight) as TwinVec3;
+  }
+
+  it('mirrors the GPU formula at every sampled time', () => {
+    for (const gentle of [false, true]) {
+      for (const elapsed of [0, 0.02, 0.05, 0.1, 0.17, 0.25, 0.4, 0.6, 0.8, 0.85, 0.88]) {
+        const state = morphState(elapsed, gentle);
+        for (let i = 0; i < count; i += 1) {
+          const twin = displayOffsetTwin(state, rest(i));
+          const ref = reference(state, i);
+          for (let k = 0; k < 3; k += 1) expect(twin[k]).toBeCloseTo(ref[k], 9);
+        }
+      }
+    }
+  });
+
+  it('starts every atom exactly at its texel and lands it exactly at rest', () => {
+    const start = morphState(0);
+    for (let i = 0; i < count; i += 1) {
+      const off = displayOffsetTwin(start, rest(i));
+      const t = texels.subarray(i * MORPH_TEXEL_STRIDE);
+      const at = [0, 1, 2].map((k) => rest(i)[k] + off[k]);
+      const want = [0, 1, 2].map((k) => start.morphOrigin[k] + start.morphAxisX[k] * t[0] + start.morphAxisY[k] * t[1] + start.morphAxisZ[k] * t[2]);
+      for (let k = 0; k < 3; k += 1) expect(at[k]).toBeCloseTo(want[k], 9);
+      expect(zero(displayOffsetTwin(morphState(0.9), rest(i)))).toBe(true);
+      expect(zero(displayOffsetTwin(morphState(2), rest(i)))).toBe(true);
+      const idle = morphState(0.3);
+      idle.motionWeight = 0;
+      expect(zero(displayOffsetTwin(idle, rest(i)))).toBe(true);
+    }
+  });
+
+  it('leaves points that are not this morph\'s atoms at rest', () => {
+    const state = morphState(0.1);
+    expect(zero(displayOffsetTwin(state, [9, 9, 9]))).toBe(true);
+    // An index past the texture's count never morphs, as on the GPU.
+    state.morphCount = 10;
+    expect(zero(displayOffsetTwin(state, rest(12)))).toBe(true);
+    expect(zero(displayOffsetTwin(state, rest(3)))).toBe(false);
+    state.morph = null;
+    expect(zero(displayOffsetTwin(state, rest(3)))).toBe(true);
   });
 });

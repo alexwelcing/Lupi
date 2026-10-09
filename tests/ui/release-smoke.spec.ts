@@ -1,12 +1,7 @@
 import { expect, test, type Page } from 'playwright/test';
 
-// release-smoke-v1: bounded deployment checks, also included in full CI.
-// Keep this file self-contained: release receipts hash it and playwright.config.mjs.
-// Full visual matrices, high-resolution exports and security regressions stay in CI.
-const NEUTRAL_HDR = Buffer.concat([
-  Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n', 'ascii'),
-  Buffer.from([128, 128, 128, 129]),
-]);
+// release-smoke-v1: the one browser check, run by hand (`pnpm test:ui`, or
+// against a deployed origin with UI_TEST_URL=https://lupi.live).
 
 test.use({ viewport: { width: 1024, height: 640 }, deviceScaleFactor: 1 });
 
@@ -15,8 +10,6 @@ test.beforeEach(async ({ page }) => {
   await page.route('https://fonts.googleapis.com/**', route =>
     route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await page.route('https://fonts.gstatic.com/**', route => route.abort());
-  await page.route('https://raw.githack.com/**', route =>
-    route.fulfill({ status: 200, contentType: 'application/octet-stream', body: NEUTRAL_HDR }));
 });
 
 test.afterEach(async ({ page }) => {

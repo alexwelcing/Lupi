@@ -36,6 +36,7 @@ import { setViewOccluder } from './camera/viewInset';
 import { MOLECULAR_RECIPE_ID, filterPerceivedBonds } from '@atlas/core/bonds';
 import { atomBondPartners, getPerceivedBonds, resolveFrameRecipe, type AtomBondPartner } from './bonds/perceivedBonds';
 import { atomRestPoint, useDisplayFollower } from './play/displayFollow';
+import { nodePathLabel, nodePathTitle } from './knowledgeLabels/nodePath';
 
 /** The phone sheet's id among the overlays the live view makes room for. */
 const OCCLUDER_ID = 'atom-card';
@@ -139,6 +140,8 @@ export function AtomInfoHUD({
   const bondTolerance = useStore(s => s.bondTolerance);
   const showBondContacts = useStore(s => s.showBondContacts);
   const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
+  const atomScale = useStore(s => s.atomScale);
+  const atomTypeScales = useStore(s => s.atomTypeScales);
   const frameCount = useStore(s => s.file?.trajectory.totalFrames ?? 1);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const radiusRef = useRef(0);
@@ -231,12 +234,13 @@ export function AtomInfoHUD({
   const element = atomicNumber === undefined ? undefined : ELEMENT_DATA[atomicNumber];
   const typeLabel = resolveTypeLabel(frame, type);
   const typeColor = resolveTypeColor(frame, type);
-  const displayRadius = resolveTypeDisplayRadius(frame, type);
-  radiusRef.current = displayRadius;
+  // The card keeps clear of the atom as drawn (atomScale and the type's scale included).
+  radiusRef.current = resolveTypeDisplayRadius(frame, type) * atomScale * (atomTypeScales[type] ?? 1);
   const coordinateUnit = hasAngstromDistances(frame) ? 'Å' : 'source units';
   const properties = getPropertyRows(frame, atomIndex, activeProperty);
   const knowledge = getKnowledgeRows(knowledgeLabels, frame, atomIndex);
-  const nodePath = nodeLabel?.nodeId ? formatNodePath(nodeLabel.nodeId) : undefined;
+  // Never a home directory, in the line or its tooltip (the id itself is untouched).
+  const nodePath = nodePathLabel(nodeLabel?.nodeId);
   // Molecular frames: this atom's drawn partners, from the same graph and filter as the view.
   let bondRows: { label: string; value: string }[] = [];
   if (showBonds && resolveFrameRecipe(frame, { profile: bondProfile, frameCount }) === MOLECULAR_RECIPE_ID) {
@@ -333,7 +337,7 @@ export function AtomInfoHUD({
             {element?.name ?? typeLabel}
           </div>
           <div
-            title={nodeLabel?.nodeId}
+            title={nodePathTitle(nodeLabel?.nodeId)}
             style={{
               marginTop: 3,
               color: COLOR_MUTED,
@@ -847,20 +851,6 @@ function getKnowledgeRows(labels: KnowledgeLabel[], frame: Frame, atomIndex: num
   }
 
   return rows.slice(0, MAX_KNOWLEDGE_ROWS);
-}
-
-/** Format a node id/path for display: keep the last meaningful segment and
- *  truncate very long paths so the HUD stays compact. */
-function formatNodePath(path: string | undefined): string | undefined {
-  if (!path) return undefined;
-  const cleaned = path.replace(/^[a-z]+:\/\//i, '').replace(/^\//, '');
-  if (cleaned.length <= 42) return cleaned;
-  const parts = cleaned.split('/');
-  const file = parts.pop() ?? '';
-  const dir = parts.join('/');
-  if (file.length > 38) return `…/${file.slice(0, 36)}…`;
-  const prefix = dir.slice(0, 40 - file.length - 4);
-  return `${prefix}…/${file}`;
 }
 
 /** Two decimals with a typographic minus, and no "-0.00". */

@@ -1,12 +1,17 @@
 /**
- * <AtomPicker /> — Raycast-based atom selection
+ * <AtomPicker /> — picks the atom under the pointer, as it is drawn.
  *
- * Uses spatial hash for O(1) closest-atom lookup instead of
- * O(n) iteration through all atoms. Picking is CPU-only, so it behaves the
- * same on the WebGPU backend and the WebGL2 fallback. The pointer is taken
- * from each event's own client coordinates against the renderer's canvas,
- * so a phone tap (which may arrive without a prior pointermove) picks where
- * it landed.
+ * The rule lives in atomPick.ts: the pointer ray against every drawn atom
+ * sphere (display radius × atomScale × per-type scale, hidden types and
+ * undrawn atoms skipped, the hovered or grabbed atom swollen as the impostor
+ * swells it) and every drawn bond; the front-most hit wins, and a bond hit
+ * picks the atom whose half was hit. On a miss, a near miss within 5 CSS px
+ * of a visible silhouette (8 for a pen, 14 for a finger) picks that atom.
+ * Picking is CPU-only, so it behaves the same on the WebGPU backend and the
+ * WebGL2 fallback. The pointer is taken from each event's own client
+ * coordinates against the renderer's canvas, so a phone tap (which may
+ * arrive without a prior pointermove) picks where it landed, through the
+ * live projection (the phone view inset included).
  *
  * Input comes from one of two places:
  * - **The intent bus**, while a canvas input source (the Lupi camera rig's
@@ -15,11 +20,12 @@
  *   `canvas.doubleTap` focuses the atom (or zooms toward empty space), and
  *   `canvas.hover` picks at most once per animation frame.
  * - **Window listeners** (`pointerdown` / `mousemove` / `click`), only while
- *   no canvas input source is active: `?controls=orbit` and the testbed.
+ *   no canvas input source is active: `?controls=orbit`.
  * The Escape / `m` keys are handled either way.
  *
- * The march reuses module-scope scratch vectors: a pick allocates nothing
- * beyond the canvas rect.
+ * The pick geometry (per-type radii, drawn count, bond adjacency) is built
+ * once per frame, look and bond set; a pick itself allocates nothing beyond
+ * the canvas rect.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -32,13 +38,39 @@ import {
   isCanvasInputSourceActive,
   onIntent,
   subscribeCanvasInputSource,
+  type PointerKind,
 } from './intents';
+import {
+  atomSilhouetteGapPx,
+  buildAtomPickGeometry,
+  buildPickBondSet,
+  pickAtom,
+  pickTolerancePx,
+  type AtomPickGeometry,
+  type AtomPickOptions,
+  type AtomPickResult,
+  type AtomPickSwell,
+  type PickBonds,
+} from './atomPick';
+import { ATOM_GLOW, ATOM_GLOW_TUNING } from './tsl/atomGlow';
 
 interface AtomPickerProps {
+  /** The frame the atom layer draws (interpolatedFrame ?? currentFrame). */
   frame: Frame;
   spatialHash: SpatialHash3D;
   enabled?: boolean;
-  radius?: number;
+  /** The atom layer's scale controls: the store's atomScale and per-type scales. */
+  atomScale?: number;
+  atomTypeScales?: Readonly<Record<number, number>> | null;
+  /** Streamed atoms resident so far, and the atom layer's capacity clamp. */
+  loadedAtomCount?: number;
+  maxAtoms?: number;
+  /** The impostor's sub-pixel cull (device px; 0 off). */
+  cullPixelRadius?: number;
+  /** The impostor swells the hovered and grabbed atom (off for the glass layer). */
+  swell?: boolean;
+  /** The drawn bonds (they occlude, and a hit picks the atom whose half it is), or null. */
+  bonds?: PickBonds | null;
   onHover?: (atomIndex: number | null) => void;
   /** A tap or click on the canvas: the picked atom (null on empty space) and whether Shift was held. */
   onClick?: (atomIndex: number | null, info?: { shiftKey: boolean }) => void;
@@ -56,143 +88,40 @@ export interface PickedAtom {
 
 /** A double-tap on empty space zooms this factor (distance) toward the point. */
 const DOUBLE_TAP_ZOOM = 0.6;
-const MARCH_STEP = 0.5; // Check every 0.5 Angstrom
-const MARCH_MAX = 1000; // Maximum search distance
-const SOFT_PICK_PX = 15; // 15px forgiveness zone
-
-// ─── The march (module scope: no allocation per pick) ────────────────
-
-const scratchRaycaster = new THREE.Raycaster();
-const scratchPointer = new THREE.Vector2();
-const scratchSample = new THREE.Vector3();
-const scratchAtom = new THREE.Vector3();
 const NO_HIDDEN: ReadonlySet<number> = new Set<number>();
-const NO_VALUES = new Float32Array(0);
 
-/** Per-pick state read by `visitNear`; reset at the start of every pick. */
-const march = {
-  positions: NO_VALUES as ArrayLike<number>,
-  types: NO_VALUES as ArrayLike<number>,
-  hidden: NO_HIDDEN,
-  camera: null as THREE.Camera | null,
-  ray: scratchRaycaster.ray,
-  halfWidth: 0,
-  halfHeight: 0,
-  worldRadius: 0,
-  sliceSolid: -1,
-  sliceSolidDist: 0,
-  soft: -1,
-  softScreen: 0,
-};
+// ─── The impostor's swell (atomGlow.ts), read at pick time ──────────
 
-function visitNear(index: number): void {
-  const m = march;
-  if (m.hidden.size > 0 && m.hidden.has(m.types[index])) return;
-  const x = m.positions[index * 3];
-  const y = m.positions[index * 3 + 1];
-  const z = m.positions[index * 3 + 2];
-  scratchAtom.set(x, y, z);
+const liveSwell: AtomPickSwell = { hoverAtom: -1, hoverScale: 1, focusAtom: -1, focusScale: 1 };
+/** Reused per pick (a pick allocates nothing beyond the canvas rect). */
+const pickOptions: AtomPickOptions = { pointerType: 'mouse', swell: null, bufferHeight: 0 };
 
-  // 1. World-space intersection (Solves the zoomed-in bug)
-  const distToRay = m.ray.distanceToPoint(scratchAtom);
-
-  // 2. Screen-space intersection (Solves the zoomed-out bug)
-  scratchAtom.project(m.camera!);
-  const dxPixels = (scratchAtom.x - scratchPointer.x) * m.halfWidth;
-  const dyPixels = (scratchAtom.y - scratchPointer.y) * m.halfHeight;
-  const screenDistPixels = Math.hypot(dxPixels, dyPixels);
-
-  // Must be in front of the camera (NDC z < 1.0)
-  if (!(scratchAtom.z < 1.0)) return;
-  if (distToRay < m.worldRadius) {
-    if (m.sliceSolid < 0 || distToRay < m.sliceSolidDist) {
-      m.sliceSolid = index;
-      m.sliceSolidDist = distToRay;
-    }
-  } else if (screenDistPixels < SOFT_PICK_PX) {
-    // Only record soft hits if we haven't hit a solid target yet
-    if (m.sliceSolid < 0 && (m.soft < 0 || screenDistPixels < m.softScreen)) {
-      m.soft = index;
-      m.softScreen = screenDistPixels;
-    }
-  }
-}
-
-interface PickRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-/**
- * The atom under a client-space point (CSS px, as on pointer events), or -1.
- * A 0.5 Å march along the pointer ray: the first slice with an atom within
- * `radius·1.2` of the ray wins (closest to the ray); failing that, the atom
- * nearest on screen within 15 px.
- */
-function pickAtomIndex(
-  camera: THREE.Camera,
-  rect: PickRect,
-  clientX: number,
-  clientY: number,
-  frame: Frame,
-  spatialHash: SpatialHash3D,
-  radius: number,
-  hidden: ReadonlySet<number>,
-): number {
-  if (!(rect.width > 0) || !(rect.height > 0)) return -1;
-  scratchPointer.set(
-    ((clientX - rect.left) / rect.width) * 2 - 1,
-    -((clientY - rect.top) / rect.height) * 2 + 1,
-  );
-  scratchRaycaster.setFromCamera(scratchPointer, camera);
-  const ray = scratchRaycaster.ray;
-  const m = march;
-  m.positions = frame.positions;
-  m.types = frame.types;
-  m.hidden = hidden;
-  m.camera = camera;
-  m.ray = ray;
-  m.halfWidth = rect.width / 2;
-  m.halfHeight = rect.height / 2;
-  m.worldRadius = radius * 1.2;
-  m.soft = -1;
-  m.softScreen = 0;
-  let hit = -1;
-  for (let t = 0; t < MARCH_MAX; t += MARCH_STEP) {
-    ray.at(t, scratchSample);
-    m.sliceSolid = -1;
-    m.sliceSolidDist = 0;
-    spatialHash.forEachNear(scratchSample.x, scratchSample.y, scratchSample.z, radius, visitNear);
-    if (m.sliceSolid >= 0) {
-      hit = m.sliceSolid; // Found the closest solid hit, stop marching!
-      break;
-    }
-  }
-  if (hit < 0) hit = m.soft;
-  // Hold no frame or camera between picks.
-  m.camera = null;
-  m.positions = NO_VALUES;
-  m.types = NO_VALUES;
-  m.hidden = NO_HIDDEN;
-  return hit;
+/** The hover and grab swell the impostor draws right now (1 + max(term) × the master weight). */
+function readImpostorSwell(): AtomPickSwell {
+  const G = ATOM_GLOW;
+  const weight = G.uGlowWeight.value;
+  liveSwell.hoverAtom = Math.round(G.uHoverAtom.value);
+  liveSwell.hoverScale = 1 + G.uHoverLevel.value * ATOM_GLOW_TUNING.hoverSwell * weight;
+  liveSwell.focusAtom = Math.round(G.uFocusAtom.value);
+  liveSwell.focusScale = 1 + ATOM_GLOW_TUNING.focusSwell * weight;
+  return liveSwell;
 }
 
 // ─── The mounted picker, for toys (Tug, Burst) ──────────────────────
 
-type ClientPick = (clientX: number, clientY: number) => number | null;
+type ClientPick = (clientX: number, clientY: number, pointerType?: PointerKind) => number | null;
 let activeClientPick: ClientPick | null = null;
 
 /**
  * The atom under a client-space point (CSS px), picked exactly as a tap
- * would pick it (rest positions, hidden types skipped), or null. Null too
- * while no picker is mounted (playback, very large scenes).
+ * would pick it (rest positions, what is drawn, the pointer's near-miss
+ * tolerance), or null. Null too while no picker is mounted (playback, very
+ * large scenes).
  */
-export function pickAtomAtClient(clientX: number, clientY: number): number | null {
+export function pickAtomAtClient(clientX: number, clientY: number, pointerType?: PointerKind): number | null {
   if (!activeClientPick) return null;
   try {
-    return activeClientPick(clientX, clientY);
+    return activeClientPick(clientX, clientY, pointerType);
   } catch (error) {
     console.error('[lupi] atom pick threw', error);
     return null;
@@ -216,11 +145,23 @@ function isViewerCanvasEvent(event: MouseEvent, canvas: HTMLCanvasElement): bool
     && event.clientY >= rect.top && event.clientY <= rect.bottom;
 }
 
+/** The pointer kind of a legacy click (a PointerEvent in current browsers; a mouse otherwise). */
+function pointerKindOf(event: MouseEvent): PointerKind {
+  const kind = (event as PointerEvent).pointerType;
+  return kind === 'touch' || kind === 'pen' ? kind : 'mouse';
+}
+
 export function AtomPicker({
   frame,
   spatialHash,
   enabled = true,
-  radius = 2.0,
+  atomScale = 1,
+  atomTypeScales = null,
+  loadedAtomCount,
+  maxAtoms,
+  cullPixelRadius = 0,
+  swell = true,
+  bonds = null,
   onHover,
   onClick,
   onSelect,
@@ -236,9 +177,33 @@ export function AtomPicker({
     [hiddenAtomTypesKey],
   );
 
+  // The bond index costs O(bonds): build it only when the bonds or positions
+  // change, never on a look change (atom scale, type scales, hidden types).
+  const positions = frame.positions;
+  const natoms = frame.natoms;
+  const bondSet = useMemo(
+    () => (bonds ? buildPickBondSet(bonds, positions, natoms) : null),
+    [bonds, positions, natoms],
+  );
+
+  // What is drawn: per-type radii, the drawn count, the cull and the bonds.
+  const geometry = useMemo<AtomPickGeometry>(
+    () => buildAtomPickGeometry({
+      frame,
+      loadedAtomCount,
+      maxAtoms,
+      atomScale,
+      atomTypeScales,
+      hiddenAtomTypes: hiddenTypes,
+      cullPixelRadius,
+      bondSet,
+    }),
+    [frame, loadedAtomCount, maxAtoms, atomScale, atomTypeScales, hiddenTypes, cullPixelRadius, bondSet],
+  );
+
   // Listeners live across renders and read the latest props from here.
-  const latest = useRef({ frame, spatialHash, radius, hiddenTypes, onHover, onClick, onSelect, selectionMode, maxMeasureAtoms });
-  latest.current = { frame, spatialHash, radius, hiddenTypes, onHover, onClick, onSelect, selectionMode, maxMeasureAtoms };
+  const latest = useRef({ frame, spatialHash, geometry, swell, onHover, onClick, onSelect, selectionMode, maxMeasureAtoms });
+  latest.current = { frame, spatialHash, geometry, swell, onHover, onClick, onSelect, selectionMode, maxMeasureAtoms };
 
   const hoveredRef = useRef<number | null>(null);
   const selectedRef = useRef<Set<number>>(new Set());
@@ -247,23 +212,46 @@ export function AtomPicker({
   // One picker toolkit for both input paths (stable for the component's life).
   const picker = useMemo(() => {
     const canvasOf = () => get().renderer?.domElement as HTMLCanvasElement | undefined;
+    const result: AtomPickResult = { index: -1, via: 'miss', t: Number.NaN };
 
     /** The atom under a client point, or null. */
-    const pick = (clientX: number, clientY: number): number | null => {
+    const pick = (clientX: number, clientY: number, pointerType: PointerKind = 'mouse'): number | null => {
       const canvas = canvasOf();
+      result.via = 'unavailable';
       if (!canvas) return null;
       const p = latest.current;
-      const index = pickAtomIndex(
+      pickOptions.pointerType = pointerType;
+      pickOptions.swell = p.swell ? readImpostorSwell() : null;
+      pickOptions.bufferHeight = canvas.height;
+      const index = pickAtom(
+        p.geometry,
+        p.spatialHash,
         get().camera,
         canvas.getBoundingClientRect(),
         clientX,
         clientY,
-        p.frame,
-        p.spatialHash,
-        p.radius,
-        p.hiddenTypes,
+        pickOptions,
+        result,
       );
       return index >= 0 ? index : null;
+    };
+
+    /** How far (CSS px) a client point lies outside an atom's drawn silhouette (+Infinity if not drawn). */
+    const gapTo = (atomIndex: number, clientX: number, clientY: number): number => {
+      const canvas = canvasOf();
+      if (!canvas) return Infinity;
+      const p = latest.current;
+      pickOptions.swell = p.swell ? readImpostorSwell() : null;
+      pickOptions.bufferHeight = canvas.height;
+      return atomSilhouetteGapPx(
+        p.geometry,
+        get().camera,
+        canvas.getBoundingClientRect(),
+        clientX,
+        clientY,
+        atomIndex,
+        pickOptions,
+      );
     };
 
     const setHovered = (index: number | null) => {
@@ -272,10 +260,19 @@ export function AtomPicker({
       latest.current.onHover?.(index);
     };
 
-    /** A tap or click at a client point: pick once, report it, then select. */
-    const tap = (clientX: number, clientY: number, shiftKey: boolean): number | null => {
+    /** A tap or click at a client point: pick once (or take `picked`), report it, then select. */
+    const tap = (
+      clientX: number,
+      clientY: number,
+      shiftKey: boolean,
+      pointerType: PointerKind = 'mouse',
+      picked?: number | null,
+    ): number | null => {
       const p = latest.current;
-      const index = pick(clientX, clientY);
+      const index = picked !== undefined ? picked : pick(clientX, clientY, pointerType);
+      // A stale hash over a huge frame says nothing about the point: not a
+      // miss, so the selection and a half-finished measurement stay.
+      if (index === null && picked === undefined && result.via === 'unavailable') return null;
       p.onClick?.(index, { shiftKey });
 
       if (index !== null) {
@@ -306,7 +303,8 @@ export function AtomPicker({
         }
         p.onSelect?.(Array.from(selected));
       } else if (p.selectionMode === 'single' || p.selectionMode === 'measure') {
-        // We missed all atoms but hit the canvas. Clear selection!
+        // A tap on empty canvas clears the selection (and, in measure mode,
+        // a half-finished measurement).
         selectedRef.current = new Set();
         measureAtomsRef.current = [];
         p.onSelect?.([]);
@@ -314,7 +312,7 @@ export function AtomPicker({
       return index;
     };
 
-    return { pick, setHovered, tap };
+    return { pick, gapTo, setHovered, tap };
   }, [get]);
 
   useEffect(() => {
@@ -322,7 +320,7 @@ export function AtomPicker({
     selectedRef.current = new Set();
   }, [frame, selectionMode]);
 
-  // Toys pick through the same march (`pickAtomAtClient`).
+  // Toys pick by the same rule (`pickAtomAtClient`).
   useEffect(() => {
     if (!enabled) return undefined;
     const pick = picker.pick;
@@ -383,17 +381,28 @@ export function AtomPicker({
     };
 
     const offs = [
-      onIntent('canvas.tap', ({ clientX, clientY, shiftKey }) => {
-        lastTap = { index: picker.tap(clientX, clientY, shiftKey) };
+      onIntent('canvas.tap', ({ clientX, clientY, shiftKey, pointerType }) => {
+        lastTap = { index: picker.tap(clientX, clientY, shiftKey, pointerType) };
       }),
-      onIntent('canvas.doubleTap', ({ clientX, clientY }) => {
-        const index = picker.pick(clientX, clientY);
+      onIntent('canvas.doubleTap', ({ clientX, clientY, pointerType }) => {
+        let index = picker.pick(clientX, clientY, pointerType);
         const first = lastTap;
         lastTap = null;
+        // Affinity: a second tap that lands just off the first tap's atom
+        // (within the pointer's near-miss tolerance of its silhouette) is
+        // still on it, even where another atom is drawn there.
+        if (
+          first
+          && first.index !== null
+          && first.index !== index
+          && picker.gapTo(first.index, clientX, clientY) <= pickTolerancePx(pointerType)
+        ) {
+          index = first.index;
+        }
         if (first && first.index !== index) {
           // Two quick taps on different things (two atoms, or an atom and
           // empty space) are two taps, not a double-tap.
-          lastTap = { index: picker.tap(clientX, clientY, false) };
+          lastTap = { index: picker.tap(clientX, clientY, false, pointerType, index) };
           return;
         }
         if (index !== null) emitIntent({ type: 'camera.focusAtom', atomIndex: index });
@@ -428,7 +437,7 @@ export function AtomPicker({
     };
   }, [enabled, intentInput, picker]);
 
-  // ── Legacy path: window listeners (`?controls=orbit`, the testbed). ──
+  // ── Legacy path: window listeners (`?controls=orbit`). ──
   useEffect(() => {
     if (!enabled || intentInput) return;
     const canvasOf = () => get().renderer?.domElement as HTMLCanvasElement | undefined;
@@ -461,7 +470,7 @@ export function AtomPicker({
       if (!canvas || !isViewerCanvasEvent(e, canvas)) return;
       // Distinguish click from drag (especially on mobile)
       if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
-      picker.tap(e.clientX, e.clientY, e.shiftKey);
+      picker.tap(e.clientX, e.clientY, e.shiftKey, pointerKindOf(e));
     };
 
     window.addEventListener('pointerdown', handlePointerDown);

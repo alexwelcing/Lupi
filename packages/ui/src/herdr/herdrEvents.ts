@@ -22,24 +22,3 @@ export function emitHerdrTask(payload: HerdrTaskPayload) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(HERDR_TASK_EVENT, { detail: payload }));
 }
-
-/** Read the current knowledge graph as a JSON-serializable structure.
- *  Callers should pass labels from useStore.getState().knowledgeLabels
- *  to avoid circular dependencies. */
-export function readKnowledgeGraph(labels: any[]) {
-  return {
-    total: labels.length,
-    nodes: labels.map((l: any) => ({
-      id: l.id,
-      nodeId: l.nodeId,
-      kind: l.kind,
-      nodeKind: l.nodeKind,
-      text: l.text,
-      detail: l.detail,
-      sphereId: l.sphereId,
-      degree: l.degree,
-      salience: l.salience,
-      position: l.position,
-    })),
-  };
-}

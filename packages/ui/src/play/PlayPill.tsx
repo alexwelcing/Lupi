@@ -33,7 +33,9 @@
  *   reads "✦ Holo foil · r1-K7QDM" with its chime);
  * - "⟳ Again" for 8 s after a roll rolls the next one;
  * - while a Foil finish is on screen, a small foil chip ("✦ Holo") stays as
- *   the "cosmetic finish" badge and opens the Remix sheet.
+ *   the "cosmetic finish" badge and opens the Remix sheet;
+ * - under the Illustrate look the finish rests (a drawing carries no foil),
+ *   so neither the flash nor the chip names it until the light comes back.
  *
  * Instant Replay lives in the same pill, as one more segment before stow:
  * - "Replay ↗" for 7 s after a moment (a good flick, a detent chain, a flip,
@@ -386,7 +388,9 @@ function RemixSegment() {
   const applied = useRemixStore((state) => state.applied);
   const chosenFinish = useRemixStore((state) => state.chosenFinish);
   const sheetOpen = useRemixStore((state) => state.sheetOpen);
-  const finish = shownFinish({ applied, chosenFinish });
+  // Foil rests under ink (a drawing carries no foil): no chip for a finish that is not drawn.
+  const inked = useStore((state) => state.inkStyle !== 'off');
+  const finish = inked ? null : shownFinish({ applied, chosenFinish });
   const [againOpen, setAgainOpen] = useState(false);
   useEffect(() => {
     if (rolledAt === null) {

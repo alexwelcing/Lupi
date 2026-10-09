@@ -107,7 +107,7 @@ export function buildMaterialsScienceCompanion({
   };
 }
 
-function chooseCourseUnit(context: ReturnType<typeof contextType>): string {
+function chooseCourseUnit(context: CompanionContext): string {
   if (context.text.includes('sinter')) return 'Diffusion, surfaces, and sintering';
   if (context.text.includes('melt') || context.text.includes('solidify') || context.text.includes('quench')) {
     return 'Phase transformations and kinetics';
@@ -120,7 +120,7 @@ function chooseCourseUnit(context: ReturnType<typeof contextType>): string {
   return 'Structure-processing-properties-performance';
 }
 
-function buildInstructorFrame(title: string, context: ReturnType<typeof contextType>): string {
+function buildInstructorFrame(title: string, context: CompanionContext): string {
   if (context.text.includes('sinter')) {
     return `${title} is a diffusion story: identify the free surfaces, the neck, and the grain boundary before talking about strength.`;
   }
@@ -149,7 +149,7 @@ function buildInstructorFrame(title: string, context: ReturnType<typeof contextT
 }
 
 function buildCurriculumAxes(
-  context: ReturnType<typeof contextType>,
+  context: CompanionContext,
   composition: MaterialsCompositionFact[],
   propertyStats: MaterialsPropertyFact[],
   bondEvidence: MaterialsBondEvidence,
@@ -192,7 +192,7 @@ function buildCurriculumAxes(
 }
 
 function buildCharacterizationChecks(
-  context: ReturnType<typeof contextType>,
+  context: CompanionContext,
   propertyStats: MaterialsPropertyFact[],
 ): MaterialsCharacterizationCheck[] {
   const checks: MaterialsCharacterizationCheck[] = [];
@@ -236,7 +236,7 @@ function buildCharacterizationChecks(
 }
 
 function buildPracticeCards(
-  context: ReturnType<typeof contextType>,
+  context: CompanionContext,
   bondEvidence: MaterialsBondEvidence,
   propertyStats: MaterialsPropertyFact[],
 ): MaterialsPracticeCard[] {
@@ -285,7 +285,7 @@ function buildPracticeCards(
 }
 
 function buildCommonTraps(
-  context: ReturnType<typeof contextType>,
+  context: CompanionContext,
   bondEvidence: MaterialsBondEvidence,
 ): MaterialsMisconception[] {
   const traps: MaterialsMisconception[] = [
@@ -316,7 +316,7 @@ function buildCommonTraps(
 }
 
 function buildExamPrompts(
-  context: ReturnType<typeof contextType>,
+  context: CompanionContext,
   bondEvidence: MaterialsBondEvidence,
 ): string[] {
   const prompts = [
@@ -331,7 +331,7 @@ function buildExamPrompts(
   return prompts.slice(0, 5);
 }
 
-function buildPerformancePrompt(context: ReturnType<typeof contextType>): string {
+function buildPerformancePrompt(context: CompanionContext): string {
   if (context.text.includes('sinter')) return 'Predict how neck growth changes strength, porosity, and surface area.';
   if (context.text.includes('melt') || context.text.includes('solidify') || context.text.includes('quench')) {
     return 'Connect thermal history to crystallinity, disorder, and downstream transport or strength.';
@@ -346,16 +346,14 @@ function buildPerformancePrompt(context: ReturnType<typeof contextType>): string
   return 'State a structure-property hypothesis, then name the missing measurement needed to test it.';
 }
 
-function contextType() {
-  return {
-    carbonNetwork: false,
-    domain: '',
-    hasCell: false,
-    hasMetal: false,
-    hasOxygenNetwork: false,
-    hasSourceProperties: false,
-    isTrajectory: false,
-    organicRich: false,
-    text: '',
-  };
+interface CompanionContext {
+  carbonNetwork: boolean;
+  domain: string;
+  hasCell: boolean;
+  hasMetal: boolean;
+  hasOxygenNetwork: boolean;
+  hasSourceProperties: boolean;
+  isTrajectory: boolean;
+  organicRich: boolean;
+  text: string;
 }
