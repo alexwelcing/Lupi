@@ -1,6 +1,7 @@
 /** Live demo receipt. API/MCP checks, not installed ChatGPT or device acceptance. */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { CHATGPT_UI_URI } from '../apps/mcp-worker/src/chatgpt';
 import { DISCOVERY_CATALOG, DISCOVERY_SCHEMA } from '../packages/core/src/jev/moleculeDiscovery';
@@ -33,9 +34,12 @@ try {
     ['a six-carbon aromatic ring', 'benzene'],
     ['an imaginary compound outside this catalogue', null],
   ] as const) {
+    const started = performance.now();
     const response = await fetchBounded(`${origin}/v1/discovery/molecule`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query }) });
     const result = await response.json() as { schema: string; query: string; method: string; model: string | null; confidence: number | null; candidates: { id: string }[] };
-    check(`Discovery: ${query}`, response.ok && result.schema === DISCOVERY_SCHEMA && result.query === query && (result.candidates[0]?.id ?? null) === expected, result);
+    const correctMethod = query === 'H2O' ? result.method === 'exact' : expected === null
+      ? result.method === 'uncertain' : result.method === 'jev' && Boolean(result.model) && (result.confidence ?? 0) >= 0.8;
+    check(`Discovery: ${query}`, response.ok && result.schema === DISCOVERY_SCHEMA && result.query === query && (result.candidates[0]?.id ?? null) === expected && correctMethod, { ...result, elapsedMs: Math.round(performance.now() - started) });
     if (expected) assert.deepEqual(result.candidates, [DISCOVERY_CATALOG.find((c) => c.id === expected)]);
   }
   await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/chatgpt/mcp`), { fetch: fetchBounded }));
@@ -43,8 +47,13 @@ try {
   check('Live MCP advertises six read-only tools', tools.tools.length === 6 && tools.tools.some((t) => t.name === 'recommend_molecule') && tools.tools.every((t) => t.annotations?.readOnlyHint === true));
   const resources = await client.listResources();
   check('Live MCP advertises molecule-v3', resources.resources.some((r) => r.uri === CHATGPT_UI_URI));
+  const resource = await client.readResource({ uri: CHATGPT_UI_URI });
+  const html = resource.contents.find((c) => 'text' in c)?.text;
+  check('Live molecule-v3 component is self-contained', typeof html === 'string' && html.includes('content="molecule-v3"') && !/<script\b[^>]*\bsrc=/i.test(html), typeof html === 'string' ? { bytes: Buffer.byteLength(html), sha256: createHash('sha256').update(html).digest('hex') } : null);
   const recommendation = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'buckyball' } });
   check('MCP recommendation returns the owned C60 CID', !recommendation.isError && (recommendation.structuredContent?.candidates as { pubchemCid: number }[])?.[0]?.pubchemCid === 123591, recommendation.structuredContent);
+  const coffee = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'the molecule in coffee' } });
+  check('MCP uses real Jev for the coffee description', !coffee.isError && coffee.structuredContent?.method === 'jev' && (coffee.structuredContent?.candidates as { pubchemCid: number }[])?.[0]?.pubchemCid === 2519, coffee.structuredContent);
   if (!process.argv.includes('--no-source')) {
     for (const cid of [2519, 123591]) {
       const resolved = await client.callTool({ name: 'resolve_molecule', arguments: { query: `cid:${cid}`, cacheMode: 'refresh' } });
