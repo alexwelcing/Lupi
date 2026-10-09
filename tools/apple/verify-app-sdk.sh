@@ -52,10 +52,14 @@ for lane in device simulator; do
     exit 1
   fi
 done
-if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]; then
-  echo 'Source changed during the build; do not accept this receipt.' >&2
+source_revision_end=$(git -C "$repo_root" rev-parse HEAD)
+printf 'source_revision_end=%s\n' "$source_revision_end" >> "$receipt_dir/receipt.txt"
+if [ "$source_revision_end" != "$source_revision" ] || [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]; then
+  echo 'source_verification=fail' >> "$receipt_dir/receipt.txt"
+  echo 'Source revision or working tree changed during the build; do not accept this receipt.' >&2
   exit 1
 fi
+echo 'source_verification=pass' >> "$receipt_dir/receipt.txt"
 date -u '+finished_at=%Y-%m-%dT%H:%M:%SZ' >> "$receipt_dir/receipt.txt"
 printf 'Unsigned device and Simulator SDK builds passed. Receipt: %s/receipt.txt\n' "$receipt_dir"
 echo 'Signing, installation, AR, audio, haptics and installed-host acceptance remain separate checks.'
