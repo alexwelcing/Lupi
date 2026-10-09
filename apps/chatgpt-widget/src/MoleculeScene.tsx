@@ -4,7 +4,9 @@ import { OrbitControls } from '@react-three/drei/webgpu';
 import { AtomsOptimized, Bonds, LUPI_SHADER_TAG_KEY } from '@atlas/scene';
 import { resolveTypeDisplayRadius, type Frame } from '@atlas/core';
 import { Mesh, PerspectiveCamera, Vector3, type InstancedBufferGeometry, type Object3D } from 'three';
-import { selectedAtomFrame, type MoleculeView } from './toolResult';
+import { selectedAtomFrame, type MoleculeCard } from './toolResult';
+import { InspectionPicker } from './InspectionPicker';
+import type { InspectionTarget } from './inspection';
 
 export interface CameraActions {
   zoom: (factor: number) => void;
@@ -113,18 +115,21 @@ function CameraFit({
 }
 
 export function MoleculeScene({
-  frame,
-  view,
+  card,
   is3d,
   resetVersion,
   actions,
+  onHover,
+  onPin,
 }: {
-  frame: Frame;
-  view: MoleculeView;
+  card: MoleculeCard;
   is3d: boolean;
   resetVersion: number;
   actions: MutableRefObject<CameraActions | null>;
+  onHover: (target: InspectionTarget | null) => void;
+  onPin: (target: InspectionTarget | null) => void;
 }) {
+  const { frame, view, perceivedBonds } = card;
   const highlighted = useMemo(() => selectedAtomFrame(frame, view.highlightAtomIds), [frame, view.highlightAtomIds]);
   const scale = view.style === 'spacefill' ? 2.8 : 1;
   const dimmed = Boolean(highlighted);
@@ -160,11 +165,14 @@ export function MoleculeScene({
           qualityTier={1}
         />
       )}
-      {view.style === 'ball-and-stick' && frame.bonds.length > 0 && (
+      {view.style === 'ball-and-stick' && (frame.bonds.length > 0 || perceivedBonds) && (
         <Bonds
           frame={frame}
           sourceKey={frame}
-          inferenceAllowed={false}
+          inferenceAllowed={Boolean(perceivedBonds)}
+          recipe={perceivedBonds?.recipe ?? 'source'}
+          perceivedBonds={perceivedBonds}
+          showBondContacts={view.showContacts !== false}
           useGpu={false}
           periodic={false}
           atomColorSource="element"
@@ -177,6 +185,7 @@ export function MoleculeScene({
           qualityTier={1}
         />
       )}
+      <InspectionPicker card={card} onHover={onHover} onPin={onPin} />
       <OrbitControls
         makeDefault
         enablePan={false}

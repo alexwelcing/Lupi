@@ -1,0 +1,26 @@
+/* Local inspection: fixed-height body avoids resizing the host for each hover. */
+.bond-legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:12px 22px; font-size:10px; color:var(--muted); }
+.bond-legend-title { color:var(--ink); font-weight:600; }
+.bond-legend span, .bond-legend label { display:inline-flex; gap:5px; align-items:center; }
+.bond-swatch { display:inline-block; width:19px; border-top:2px solid currentColor; }
+.bond-swatch.coordination { border-top-style:dashed; }
+.bond-swatch.ionic { border-top-style:dotted; }
+.inspection-panel { margin:12px 22px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--paper-raised); font-size:11px; }
+.inspection-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.inspection-toolbar label { display:flex; align-items:center; gap:8px; }
+.inspection-toolbar select { max-width:190px; font:inherit; color:var(--ink); background:var(--paper); border:1px solid var(--line); padding:6px; border-radius:5px; }
+.inspection-panel button { font:inherit; color:var(--accent); background:transparent; border:1px solid var(--line); border-radius:5px; padding:5px 8px; }
+.inspection-body { height:126px; overflow:auto; padding-top:10px; }
+.inspection-body strong { display:block; font-size:13px; }
+.inspection-label { color:var(--muted); font-size:10px; }
+.inspection-body p { margin:5px 0; line-height:1.5; color:var(--muted); }
+.inspection-coordinates { font-variant-numeric:tabular-nums; }
+.inspection-neighbors { display:flex; gap:5px; flex-wrap:wrap; margin:7px 0; }
+.inspection-provenance { font-size:10px; overflow-wrap:anywhere; }
+@media(max-width:530px) {
+  .inspection-panel { margin:10px 16px; }
+  .inspection-toolbar select, .inspection-panel button { min-height:44px; }
+  .inspection-body { height:150px; }
+  .bond-legend { margin:12px 16px; }
+  .bond-legend label { min-height:44px; }
+}

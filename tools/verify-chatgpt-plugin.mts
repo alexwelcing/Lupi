@@ -1,12 +1,16 @@
 #!/usr/bin/env node
-/** Release evidence for the Lupi plugin's local SDK integration. Live PubChem
- * responses are required. A successful run is not a ChatGPT installation test. */
+/** Release evidence for the Lupi plugin's local SDK integration. Live OMol25
+ * and PubChem responses are required. A successful run is not a ChatGPT installation test. */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { Client, StreamableHTTPClientTransport, type CallToolResult } from '@modelcontextprotocol/client';
 import { chromium, type Page, type Frame, type BrowserContext } from 'playwright';
+import { CHATGPT_UI_URI } from '../apps/mcp-worker/src/chatgpt';
+import { DEFAULT_BOND_TOLERANCE, MOLECULAR_RECIPE_ID } from '../packages/core/src/bonds/index';
+import { estimateOmol25Bonds, omol25BondSummary, type Omol25Molecule } from '../packages/core/src/omol25/widget';
 import { LANE_ARGS, chromiumExecutable } from './lib/browser-lanes.mjs';
 import { gitEvidence, REPO_ROOT, runStamp, startChatGptDevServer } from './serve-chatgpt-plugin.mts';
 
@@ -15,7 +19,7 @@ const argumentsMap = Object.fromEntries(process.argv.slice(2).map((item) => {
   return [key, parts.length ? parts.join('=') : true];
 }));
 if (argumentsMap.help) {
-  console.log(`Verify the real local MCP + PubChem + iframe viewer path.
+  console.log(`Verify the real local MCP + OMol25 + PubChem + iframe viewer path.
 Usage: pnpm chatgpt:verify [--backend=both|webgpu|webgl2] [--profile=both|desktop|mobile]
        [--no-browser] [--skip-no-gpu] [--executable=/path/to/chromium] [--port=0]
 Build the widget first. All live requests and responses, screenshots, SDK bridge
@@ -65,7 +69,9 @@ try {
     JSON.stringify(toolList.tools.map((tool) => tool.name).sort()) === JSON.stringify(['list_omol25_collections', 'open_omol25', 'resolve_molecule', 'search_omol25', 'show_molecule']));
   const showTool = toolList.tools.find((tool) => tool.name === 'show_molecule')!;
   const ui = showTool._meta?.ui as { resourceUri?: string } | undefined;
-  check('show_molecule advertises a versioned MCP App resource', ui?.resourceUri === 'ui://lupi/molecule-v2.html');
+  check('show_molecule advertises the current versioned MCP App resource', ui?.resourceUri === CHATGPT_UI_URI, { actual: ui?.resourceUri, expected: CHATGPT_UI_URI });
+  const openTool = toolList.tools.find((tool) => tool.name === 'open_omol25')!;
+  check('open_omol25 advertises the same current MCP App resource', (openTool._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri === CHATGPT_UI_URI);
   const resources = await client.listResources();
   check('The UI resource is discoverable', resources.resources.some((resource) => resource.uri === ui!.resourceUri));
   const resource = await client.readResource({ uri: ui!.resourceUri! });
@@ -92,12 +98,29 @@ try {
   const chosenOmolRow = omolPage.rows[0].rowIndex as number;
   const omolOpened = await client.callTool({ name: 'open_omol25', arguments: { collection: 'neutral-train', rowIndex: chosenOmolRow } }) as CallToolResult;
   const omolIdentity = objectResult(omolOpened);
-  check('Live OMol25 source coordinates open without invented bonds',
-    !omolOpened.isError && omolIdentity.source === 'OMol25' && omolIdentity.rowIndex === chosenOmolRow
-      && omolIdentity.bondCount === 0 && omolIdentity.bondSource === 'not-provided'
-      && (omolOpened._meta?.molecule as any)?.atoms.ids.length > 0
-      && (omolOpened._meta?.molecule as any)?.bonds.aid1.length === 0, omolIdentity);
+  const omolMolecule = omolOpened._meta?.molecule as Omol25Molecule | undefined;
   await saveJson('omol25-opened.json', omolOpened);
+  check('Live OMol25 source coordinates retain empty original bond arrays',
+    !omolOpened.isError && omolIdentity.source === 'OMol25' && omolIdentity.rowIndex === chosenOmolRow
+      && omolMolecule?.atoms.ids.length > 0 && omolMolecule?.bondTopology === 'not-provided'
+      && omolMolecule?.bonds.aid1.length === 0 && omolMolecule?.bonds.aid2.length === 0
+      && omolMolecule?.bonds.order.length === 0, omolIdentity);
+  const expectedOmolSummary = omol25BondSummary(estimateOmol25Bonds(omolMolecule!));
+  check('OMol25 advertises the shared Molecular v1 recipe and default tolerance',
+    omolIdentity.bondRecipe === MOLECULAR_RECIPE_ID
+      && omolIdentity.bondParameters?.tolerance === DEFAULT_BOND_TOLERANCE, omolIdentity);
+  check('OMol25 model-visible inference matches every shared recipe summary field',
+    Object.entries(expectedOmolSummary).every(([key, value]) => isDeepStrictEqual(omolIdentity[key], value)),
+    { actual: omolIdentity, expected: expectedOmolSummary });
+  check('OMol25 chemical bonds exclude ionic contacts and never invent bond orders',
+    omolIdentity.bondSource === 'inferred' && omolIdentity.sourceBondTopology === 'not-provided'
+      && omolIdentity.bondCount === omolIdentity.bondKinds.covalent + omolIdentity.bondKinds.coordination
+      && omolIdentity.contactCount === omolIdentity.bondKinds.ionicContact
+      && omolIdentity.bondOrders === 'not-estimated');
+  report.omol25Retrieval = {
+    structureRef: omolIdentity.structureRef, rowIndex: chosenOmolRow,
+    atomCount: omolMolecule!.atoms.ids.length, summary: expectedOmolSummary,
+  };
 
   const lookupStartedAt = Date.now();
   const resolved = await client.callTool({ name: 'resolve_molecule', arguments: { query: 'L-theanine', cacheMode: 'refresh' } }) as CallToolResult;
@@ -327,12 +350,50 @@ async function verifyBrowserLane(origin: string, backend: 'webgpu' | 'webgl2' | 
         await page.getByRole('button', { name: 'Explore OMol25 first row', exact: true }).click();
         const omolFrame = await waitForCard(page, 4);
         const omolState = await widgetState(omolFrame);
-        laneCheck('OMol25 source row renders atoms without inferred bonds',
+        const expectedSummary = report.omol25Retrieval.summary;
+        const visibleContacts = omolState.view.showContacts === false ? 0 : expectedSummary.contactCount;
+        const expectedDrawnPairs = omolState.view.style === 'spacefill' ? 0 : expectedSummary.bondCount + visibleContacts;
+        laneCheck('OMol25 source identity and empty source bond arrays survive inferred rendering',
           omolState.source === 'OMol25' && omolState.collection === 'neutral-train'
-            && omolState.atomCount > 0 && omolState.bondCount === 0
-            && omolState.scene?.bondInstanceCount === 0, omolState);
-        laneCheck('OMol25 missing bond topology is visible in the card',
-          await omolFrame.getByText('No source bond topology; atoms shown without bonds').count() === 1);
+            && omolState.structureRef === report.omol25Retrieval.structureRef
+            && omolState.rowIndex === report.omol25Retrieval.rowIndex
+            && omolState.atomCount === report.omol25Retrieval.atomCount
+            && omolState.sourceBondCount === 0
+            && isDeepStrictEqual(omolState.bonds, { aid1: [], aid2: [], order: [] }), omolState);
+        laneCheck('OMol25 iframe inference matches the server and shared Molecular v1 recipe',
+          isDeepStrictEqual(omolState.estimatedBondSummary, expectedSummary)
+            && omolState.bondCount === expectedSummary.bondCount, omolState.estimatedBondSummary);
+        laneCheck('OMol25 renders all atoms and only visible inferred connections',
+          omolState.scene?.atomLayerInstanceCounts.includes(omolState.atomCount)
+            && omolState.expectedDrawnPairCount === expectedDrawnPairs
+            && omolState.scene?.bondInstanceCount === expectedDrawnPairs, omolState.scene);
+        laneCheck('OMol25 estimates are explicitly labeled in the visible card',
+          await omolFrame.getByText('Estimated · Molecular v1', { exact: true }).isVisible());
+        await omolFrame.getByText('Source & structure details', { exact: true }).click();
+        laneCheck('OMol25 source identity and bond-order limitations are visible in details',
+          await omolFrame.locator('.source-details').getByText(/Coordinates come from the OMol25 source row; atom IDs are generated from row order\./).isVisible()
+            && /Bond orders are not estimated\./.test(await omolFrame.locator('.source-details').innerText()));
+        const contacts = omolFrame.getByRole('checkbox', { name: /Ionic contacts/ });
+        await contacts.uncheck();
+        await omolFrame.waitForFunction(() => {
+          const state = (window as any).__lupiChatgpt.state();
+          return state.view.showContacts === false && state.scene.bondInstanceCount === state.estimatedBondSummary.bondCount;
+        });
+        const withoutContacts = await widgetState(omolFrame);
+        laneCheck('Hiding ionic contacts changes only rendered connections, not source or chemical counts',
+          withoutContacts.structureRef === omolState.structureRef
+            && isDeepStrictEqual(withoutContacts.bonds, omolState.bonds)
+            && isDeepStrictEqual(withoutContacts.estimatedBondSummary, expectedSummary)
+            && withoutContacts.bondCount === expectedSummary.bondCount
+            && withoutContacts.expectedDrawnPairCount === expectedSummary.bondCount
+            && withoutContacts.scene.bondInstanceCount === expectedSummary.bondCount);
+        await contacts.check();
+        await omolFrame.waitForFunction(() => {
+          const state = (window as any).__lupiChatgpt.state();
+          return state.view.showContacts === true && state.scene.bondInstanceCount === state.estimatedBondSummary.bondCount + state.estimatedBondSummary.contactCount;
+        });
+        laneCheck('Showing ionic contacts restores chemical bonds plus separate contacts',
+          (await widgetState(omolFrame)).scene.bondInstanceCount === expectedSummary.bondCount + expectedSummary.contactCount);
         await page.locator('iframe.widget').nth(4).screenshot({ path: join(directory, 'omol25-card.png') });
       }
       lane.finalState = await widgetState(frame);

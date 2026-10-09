@@ -25,7 +25,7 @@ import {
 import { OmolService } from './chatgptOmol';
 
 const ENDPOINT = `https://lupi.live${CHATGPT_MCP_PATH}`;
-const FIXTURE_HTML = '<!doctype html><html><head><meta name="lupi-widget" content="molecule-v2"></head><body>Protocol-test widget placeholder</body></html>';
+const FIXTURE_HTML = '<!doctype html><html><head><meta name="lupi-widget" content="molecule-v3"></head><body>Protocol-test widget placeholder</body></html>';
 const RETRIEVED_AT = '2026-09-29T20:00:00.000Z';
 const NO_GEOMETRY = ['molecule', 'atoms', 'bonds', 'positions', 'geometry'];
 
@@ -165,7 +165,7 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     expect(initialize.status).toBe(200);
     expect(initialize.result?.result).toMatchObject({
       protocolVersion: initializeVersion,
-      serverInfo: { name: 'lupi-live', version: '0.2.0' },
+      serverInfo: { name: 'lupi-live', version: '0.3.0' },
       capabilities: { tools: {}, resources: {} },
     });
     expect(exchanges).toContainEqual(expect.objectContaining({ rpc: expect.objectContaining({ method: 'notifications/initialized' }), status: 202 }));
@@ -185,7 +185,7 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
       if (['open_omol25', 'resolve_molecule', 'show_molecule'].includes(tool.name)) expect(tool.outputSchema).toBeDefined();
     }
     const renderTool = tools.find((tool) => tool.name === 'show_molecule')!;
-    expect(renderTool._meta).toMatchObject({ ui: { resourceUri: 'ui://lupi/molecule-v2.html' } });
+    expect(renderTool._meta).toMatchObject({ ui: { resourceUri: 'ui://lupi/molecule-v3.html' } });
     expect(renderTool.inputSchema.properties?.view).toMatchObject({ additionalProperties: false });
     expect(upstream.fetch).not.toHaveBeenCalled();
   });
@@ -230,13 +230,13 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     const opened = await client.callTool({ name: 'open_omol25', arguments: { collection: 'neutral-train', rowIndex: 7 } });
     expect(opened.isError).not.toBe(true);
     const identity = summary(opened);
-    expect(identity).toMatchObject({ source: 'OMol25', collection: 'neutral-train', rowIndex: 7, atomCount: 3, bondCount: 0, bondSource: 'not-provided', atomIdKind: 'synthetic-row' });
+    expect(identity).toMatchObject({ source: 'OMol25', collection: 'neutral-train', rowIndex: 7, atomCount: 3, bondCount: 2, bondSource: 'inferred', sourceBondTopology: 'not-provided', bondRecipe: 'lupi-bonds.molecular.v1', contactCount: 0, bondOrders: 'not-estimated', atomIdKind: 'synthetic-row' });
     const molecule = (opened._meta as { molecule: { atoms: { ids: number[] }; bonds: { aid1: number[] } } }).molecule;
     expect(molecule.atoms.ids).toEqual([1, 2, 3]);
     expect(molecule.bonds.aid1).toEqual([]);
-    const shown = await client.callTool({ name: 'show_molecule', arguments: { structureRef: identity.structureRef, view: { highlightElements: ['O'] } } });
+    const shown = await client.callTool({ name: 'show_molecule', arguments: { structureRef: identity.structureRef, view: { highlightElements: ['O'], showContacts: false } } });
     expect(shown.isError).not.toBe(true);
-    expect(summary(shown)).toMatchObject({ source: 'OMol25', structureRef: identity.structureRef, view: { highlightAtomIds: [1], highlightElements: ['O'] } });
+    expect(summary(shown)).toMatchObject({ source: 'OMol25', structureRef: identity.structureRef, bondCount: 2, bondRecipe: 'lupi-bonds.molecular.v1', view: { highlightAtomIds: [1], highlightElements: ['O'], showContacts: false } });
     expect(route).toHaveBeenCalledTimes(3);
   });
 
