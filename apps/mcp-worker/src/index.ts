@@ -22,6 +22,7 @@ import {
 import { routeScienceData } from './scienceData';
 import { CHATGPT_MCP_PATH, handleChatGptMcp } from './chatgpt';
 import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } from './jev';
+import { DISCOVERY_PATH, handleMoleculeDiscovery } from './discovery';
 import { SCAN_ROUTE, handleScanIdentify, scanConfigured, scanVisionModel } from './scan';
 import { GIST_ROUTE, SCULPT_ROUTE, handleScanGist, handleScanSculpt } from './gist';
 import { RECIPE_ROUTE, handleScanRecipe } from './recipe';
@@ -751,6 +752,10 @@ export async function handleRequest(
 
     const scienceDataResponse = await routeScienceData(request);
     if (scienceDataResponse) return withCors(scienceDataResponse, cors);
+
+    if (url.pathname === DISCOVERY_PATH) {
+      return withCors(await handleMoleculeDiscovery(request, env), cors);
+    }
 
     if (url.pathname === '/v1/switch/judge') {
       return withCors(await handleSwitchJudge(request, env), cors);
@@ -2184,7 +2189,7 @@ function statusPayload(env: Env) {
         timestamp: release.timestamp,
       },
     } : {}),
-    jev: { configured: jevConfigured(env), routes: [...JEV_ROUTES] },
+    jev: { configured: jevConfigured(env), routes: [...JEV_ROUTES, DISCOVERY_PATH] },
     scan: {
       configured: scanConfigured(env),
       routes: [SCAN_ROUTE, GIST_ROUTE, SCULPT_ROUTE, RECIPE_ROUTE, PLAN_ROUTE, SEGMENT_ROUTE, RECONSTRUCT_ROUTE],

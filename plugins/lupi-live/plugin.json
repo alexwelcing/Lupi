@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "lupi-live",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Explore OMol25 research structures and PubChem compounds in the interactive Lupi Live viewer.",
   "author": {
     "name": "Lupine Science, Inc.",
@@ -10,17 +10,36 @@
   "homepage": "https://lupi.live",
   "repository": "https://github.com/alexwelcing/Lupi",
   "license": "AGPL-3.0-or-later",
-  "keywords": ["molecules", "chemistry", "OMol25", "PubChem", "3D", "research"],
+  "keywords": [
+    "molecules",
+    "chemistry",
+    "OMol25",
+    "PubChem",
+    "3D",
+    "research"
+  ],
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Lupi Live",
         "shortDescription": "Explore molecules in ChatGPT",
-        "longDescription": "Browse OMol25 public molecule collections and inspect source 3D coordinates with Lupi's Molecular v1 bond estimates. Covalent bonds, coordination and ionic contacts are visually distinct and explicitly inferred, not source-supplied; bond orders are not estimated. Hover over atoms or bonds for details, or tap to pin them on a phone. Pin an atom or bond to give ChatGPT context for a follow-up. PubChem lookup retains its source atom IDs and bond table. Rotate, zoom and highlight atoms. Public viewing needs no Lupi account; simulations and private files are outside this release.",
+        "longDescription": "Browse OMol25 public molecule collections and inspect source 3D coordinates with Lupi's Molecular v1 bond estimates. Covalent bonds, coordination and ionic contacts are visually distinct and explicitly inferred, not source-supplied; bond orders are not estimated. Hover over atoms or bonds for details, or tap to pin them on a phone. Pin an atom or bond to give ChatGPT context for a follow-up. PubChem lookup retains its source atom IDs and bond table. Rotate, zoom and highlight atoms. Public viewing needs no Lupi account; simulations and private files are outside this release. Describe a familiar molecule and Jev can suggest one of twelve known compounds; exact names and formulas work without AI. Recommendations are inferred matches, not scientific predictions.",
         "developerName": "Lupine Science, Inc.",
-        "capabilities": ["Browse OMol25 molecules", "Retrieve PubChem compounds", "View molecular structures", "Highlight atoms", "Estimate OMol25 bonds", "Inspect atoms and bonds"],
+        "capabilities": [
+          "Browse OMol25 molecules",
+          "Retrieve PubChem compounds",
+          "View molecular structures",
+          "Highlight atoms",
+          "Estimate OMol25 bonds",
+          "Inspect atoms and bonds",
+          "Find molecules with Jev"
+        ],
         "websiteURL": "https://lupi.live",
-        "defaultPrompt": ["Explore OMol25 molecules and show me a structure.", "Search OMol25 for H2O and open a result.", "Show me L-theanine from PubChem and highlight nitrogen."],
+        "defaultPrompt": [
+          "Find a hollow carbon cage and show its PubChem structure.",
+          "Explore OMol25 molecules and show me a structure.",
+          "Show me L-theanine from PubChem and highlight nitrogen."
+        ],
         "brandColor": "#12394A",
         "composerIcon": "./assets/lupi-icon.png",
         "logo": "./assets/lupi-icon.png"

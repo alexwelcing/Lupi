@@ -4,6 +4,8 @@ The Lupi ChatGPT plugin connects to the public, read-only Streamable HTTP MCP en
 
 ## Source choice
 
+For everyday descriptions, `recommend_molecule` matches one of 12 known compounds from the native app's starter catalogue. Exact names/formulas work without AI. Jev description matches return a model and inferred confidence, or an explicit withheld answer. This does not retrieve a structure or predict a property. Use the returned `pubchemCid` with `resolve_molecule`, then the resulting `structureRef` with `show_molecule`. Native play uses bundled coordinates and chat uses retrieved PubChem coordinates, so discovery shares compound choices rather than guaranteeing conformer parity. See [shared discovery](jev-discovery.md).
+
 Use **OMol25** for research molecule discovery. The plugin advertises the complete public neutral training collection (34,335,828 indexed rows), complete neutral validation, and three explicitly labeled indexed previews of larger collections. `list_omol25_collections` reports coverage. `search_omol25` pages or searches one collection by text or exact formula and returns source row indexes. `open_omol25` loads the selected row's source 3D XYZ coordinates and creates a pinned structure reference. `show_molecule` can reuse that reference for highlights or display changes.
 
 The OMol25 conversion exposed by Lupi has atomic coordinates but no source bond table. Original `molecule.bonds` arrays and `Frame.bonds` remain empty. New tool results separately advertise geometry-based estimates from the shared `lupi-bonds.molecular.v1` recipe, using the standalone viewer's Float32 coordinates and default tolerance. `bondCount` includes inferred covalent and coordination bonds; `contactCount` reports ionic contacts separately. `bondKinds`, `bondEvidence`, and `bondParameters` describe the estimate, not chemical ground truth or a confidence score. `sourceBondTopology: "not-provided"` preserves source provenance, and `bondOrders: "not-estimated"` makes the limitation explicit. Displayed atom IDs are generated from row order. Charge and spin are whole-structure provenance, not per-atom charges or inputs to this geometry-based recipe. Indexed-preview collections do not claim complete coverage of the wider OMol25 corpus.
@@ -14,7 +16,7 @@ Use **PubChem** when the user names a specific compound or CID. `resolve_molecul
 
 Hover over an atom or connection on desktop to inspect it locally. Click or tap to pin details, or use the accessible **Inspect atom** selector and neighboring-atom controls. Explicit pins send inspection context tied to that card's structure reference; ordinary hovering does not. Orbit drags and multi-touch must not pin. **Close details** and Escape clear inspection. Distances are shown only where the source coordinate units support them, and inferred connections never acquire invented source bond orders.
 
-The public ChatGPT route is separate from Lupi's existing `/mcp` control plane. All five plugin tools are read-only. They do not run simulations, access private files, or change saved molecules.
+The public ChatGPT route is separate from Lupi's existing `/mcp` control plane. All six plugin tools are read-only. They do not run simulations, access private files, or change saved molecules.
 
 ## Source locations
 
