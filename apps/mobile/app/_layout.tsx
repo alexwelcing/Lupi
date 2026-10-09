@@ -40,6 +40,7 @@ function RootNavigation() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="viewer" options={VIEWER_STACK_OPTIONS} />
+        <Stack.Screen name="omol25" options={{ title: "OMol25", headerLargeTitle: false }} />
         <Stack.Screen
           name="ar"
           options={{
