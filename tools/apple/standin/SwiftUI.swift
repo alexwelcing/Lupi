@@ -203,9 +203,6 @@ extension View {
     public func opacity(_ o: Double) -> some View { self }
     public func ignoresSafeArea() -> some View { self }
     public func buttonStyle<S: ButtonStyle>(_ s: S) -> some View { self }
-    // Apple declaration checked 2026-10-09:
-    // developer.apple.com/tutorials/data/documentation/swiftui/view/disabled(_:).json
-    public nonisolated func disabled(_ disabled: Bool) -> some View { self }
     public func pickerStyle<S: PickerStyle>(_ s: S) -> some View { self }
     public func labelsHidden() -> some View { self }
     public func lineLimit(_ n: Int?) -> some View { self }

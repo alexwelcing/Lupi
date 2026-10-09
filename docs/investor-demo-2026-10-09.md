@@ -4,6 +4,8 @@ The current chat lane is the `plugins/lupi-live` MCP plugin and its embedded mol
 
 The demo progression is the same compound across two experiences:
 
+The chat finder and native client/catalogue can land independently. The native Home screen is prepared on `codex/iphone-jev-discovery-screen` and is held for the Mac SDK build required before app changes merge. Steps 2–3 describe the intended rehearsal after that build and screen merge, not accepted current device behavior.
+
 1. In ChatGPT ask Lupi to find “a hollow carbon cage”. Inspect the inferred catalogue match, resolve its returned PubChem CID, and show the pinned source structure. Pin an atom and ask a follow-up using that card's exact reference.
 2. On the native Home screen tap **Find a molecule**, enter the same description, then choose **Play with Buckminsterfullerene**. Map the room, place the bundled cage, toss it, and keep it in the Collection. These gestures and physics are illustrative.
 3. Repeat with “the molecule in coffee”. Use the native scale receipt separately to show exact represented counts versus drawn atoms.

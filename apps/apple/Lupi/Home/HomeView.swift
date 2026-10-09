@@ -5,8 +5,6 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @State private var showingSettings = false
-    @State private var showingDiscovery = false
-    @State private var discoveryStarter: String?
 
     var body: some View {
         NavigationStack {
@@ -15,11 +13,6 @@ struct HomeView: View {
                     header
                     if let catalog = app.catalog {
                         if let first = catalog.tray.first { hero(first) }
-                        Button { showingDiscovery = true } label: {
-                            Label("Find a molecule", systemImage: "magnifyingglass")
-                                .font(.headline)
-                                .foregroundStyle(Color.lime)
-                        }
                         collectionButton
                         starters(Array(catalog.tray.dropFirst()))
                         receipt(catalog.receipt)
@@ -48,14 +41,6 @@ struct HomeView: View {
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
                     .environment(app)
-            }
-            .sheet(isPresented: $showingDiscovery, onDismiss: {
-                if let id = discoveryStarter {
-                    discoveryStarter = nil
-                    app.play(.starter(id))
-                }
-            }) {
-                DiscoveryView { discoveryStarter = $0 }
             }
         }
     }
