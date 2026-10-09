@@ -2,7 +2,7 @@
 
 The ChatGPT plugin and native SwiftUI app share a small catalogue of 12 familiar compounds. A person can ask for “the molecule in coffee”, “a hollow carbon cage”, or “a six-carbon aromatic ring”, then choose to open the suggested compound. Exact names, formulas and explicit aliases bypass Jev; the native app handles these entirely offline.
 
-The native Home screen's **Find a molecule** opens a searchable sheet. A match offers **Play with …**; play and its camera explanation open after the sheet closes. The native app spawns an existing bundled starter and keeps its existing provenance, physics and Collection behavior. No model output enters the molecular graph or AR controls. The Expo app remains a frozen reference.
+The native client and generated catalogue are available in `LupiData`. Its companion Home screen change is prepared in [PR #129](https://github.com/alexwelcing/Lupi/pull/129) and waits for the Apple SDK build required by `docs/ar/plan.md` §9 before merging. That screen offers **Find a molecule**, then **Play with …**; play and its camera explanation open after the sheet closes. It spawns an existing bundled starter and keeps its provenance, physics and Collection behavior. No model output enters the molecular graph or AR controls. The Expo app remains a frozen reference.
 
 ChatGPT's read-only `recommend_molecule` accepts `{ query }`. A match returns the code-owned `pubchemCid`; call `resolve_molecule` with that CID, then `show_molecule` with the returned source reference. The recommendation itself has no geometry and does not claim retrieval or rendering. The native bundled conformer and the PubChem conformer need not be identical.
 
@@ -23,4 +23,4 @@ sh tools/apple/typecheck-app.sh
 node --import tsx tools/verify-jev-discovery.mts --expected-sha=<deployed-main-sha>
 ```
 
-The app type-check against stand-ins is a Linux check. This screen needs an Apple SDK build before merge, a Simulator interaction check and a physical iPhone demo rehearsal. On the owner's Mac run `sh tools/apple/verify-app-sdk.sh` from the clean screen revision. It generates the project, runs unsigned device and Simulator builds, and writes the revision, toolchain and results to `.verify-artifacts/apple-sdk/`. Return the receipt path and pass/fail results; the logs stay local. The plugin also needs acceptance in an actual installed ChatGPT host. Source merge, CI and a public MCP response do not establish those device/host results.
+The app type-check against stand-ins is a Linux check. The companion screen still needs an Apple SDK build before merge, a Simulator interaction check and a physical iPhone demo rehearsal. The plugin still needs acceptance in an actual installed ChatGPT host. Source merge, CI and a public MCP response do not establish those device/host results.
