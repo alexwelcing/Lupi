@@ -1,6 +1,6 @@
 # Lupi AR: status for the owner
 
-*2026-10-05, branch `ar/m0` (M2, M3a and M4 from `ar/native`, merged with the web's `/scale` page from `ar/web`). What is built, how to build and run it on your Mac, what to check on the iPhone 15 Pro and the iPad Pro, and where the first compile is most likely to fail. "Built" means the code exists and its Linux tests pass. The app itself (`apps/apple/Lupi`) has been parsed and type-checked against stand-ins for Apple's frameworks (`tools/apple/typecheck-app.sh`); it has never been compiled in Xcode, signed or run. Nothing here has run on a device.*
+*2026-10-05, branch `ar/m0` (M2, M3a and M4 from `ar/native`, merged with the web's `/scale` page from `ar/web`). What is built, how to build and run it on your Mac, and what to check on the iPhone 15 Pro and the iPad Pro. The first Mac compile is now complete: unsigned Debug builds pass against Apple's iOS 26.5 device and Simulator SDKs with Xcode 26.6, and a signed development device build passes with automatic provisioning. Home, Collection, Settings and the camera explanation were checked in the Simulator. The connected iPhone still needs Xcode pairing; nothing here has run on a physical device. See [the Mac build record](mac-build-2026-10-05.md) for the fixes, checks and remaining steps.*
 
 The plan of record is [plan.md](plan.md); the scale spine is [scale.md](scale.md) and [scale-spec.md](scale-spec.md); the per-feature how-to is [apps/apple/README.md](../../apps/apple/README.md). On the web, `/scale` on lupi.live draws the same records (the salt ladder to a googolplex, copper's billion, the diamondoids) with the TypeScript reference, so you can compare a rung's exact count and mass on a laptop with what the app shows.
 
@@ -95,7 +95,7 @@ Each exit is in the README with its steps; in short:
 
 ## 4. Where the first compile will most likely fail
 
-Every Apple API below is unverified by a compiler. "Docs-checked" means its signature and availability were read from Apple's documentation data (`developer.apple.com/tutorials/data/documentation/...`); the rest come from earlier milestones' research ([research/apple-ar-platform.md §7](research/apple-ar-platform.md#7-capability-table)) or from memory. The project is Swift 6 language mode with complete strict concurrency, so actor-isolation and Sendable diagnostics are errors.
+The original first-compile risk list is retained below. The current app now compiles against Apple's SDK after the three fixes in [the Mac build record](mac-build-2026-10-05.md); runtime AR behaviour still needs a physical device. "Docs-checked" describes the original source of each declaration: its signature and availability were read from Apple's documentation data (`developer.apple.com/tutorials/data/documentation/...`); the rest came from earlier milestones' research ([research/apple-ar-platform.md §7](research/apple-ar-platform.md#7-capability-table)) or from memory. The project is Swift 6 language mode with complete strict concurrency, so actor-isolation and Sendable diagnostics are errors.
 
 **The likeliest failures, first:**
 
