@@ -25,7 +25,7 @@ import {
 import { OmolService } from './chatgptOmol';
 
 const ENDPOINT = `https://lupi.live${CHATGPT_MCP_PATH}`;
-const FIXTURE_HTML = '<!doctype html><html><head><meta name="lupi-widget" content="molecule-v2"></head><body>Protocol-test widget placeholder</body></html>';
+const FIXTURE_HTML = '<!doctype html><html><head><meta name="lupi-widget" content="molecule-v3"></head><body>Protocol-test widget placeholder</body></html>';
 const RETRIEVED_AT = '2026-09-29T20:00:00.000Z';
 const NO_GEOMETRY = ['molecule', 'atoms', 'bonds', 'positions', 'geometry'];
 
@@ -165,7 +165,7 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     expect(initialize.status).toBe(200);
     expect(initialize.result?.result).toMatchObject({
       protocolVersion: initializeVersion,
-      serverInfo: { name: 'lupi-live', version: '0.2.0' },
+      serverInfo: { name: 'lupi-live', version: '0.4.0' },
       capabilities: { tools: {}, resources: {} },
     });
     expect(exchanges).toContainEqual(expect.objectContaining({ rpc: expect.objectContaining({ method: 'notifications/initialized' }), status: 202 }));
@@ -175,17 +175,28 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     expect(toolsRequest.request.headers.get('Accept')).toContain('text/event-stream');
   });
 
+  it('recommends an owned compound through MCP without retrieving geometry', async () => {
+    const { client, upstream } = await connected();
+    const named = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'buckyball' } });
+    expect(named.isError).not.toBe(true);
+    expect(summary(named)).toMatchObject({ status: 'matched', method: 'exact', candidates: [{ id: 'c60_buckyball', pubchemCid: 123591 }] });
+    noGeometry(named);
+    const withheld = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'a molecule not in this catalogue' } });
+    expect(summary(withheld)).toMatchObject({ status: 'no-match', method: 'unavailable', candidates: [] });
+    expect(upstream.fetch).not.toHaveBeenCalled();
+  });
+
   it('advertises OMol25 discovery and PubChem lookup with bounded read-only tools', async () => {
     const { client, upstream } = await connected();
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['list_omol25_collections', 'open_omol25', 'resolve_molecule', 'search_omol25', 'show_molecule']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['list_omol25_collections', 'open_omol25', 'recommend_molecule', 'resolve_molecule', 'search_omol25', 'show_molecule']);
     for (const tool of tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true, idempotentHint: true });
       expect(tool.inputSchema).toMatchObject({ type: 'object', additionalProperties: false });
-      if (['open_omol25', 'resolve_molecule', 'show_molecule'].includes(tool.name)) expect(tool.outputSchema).toBeDefined();
+      if (['open_omol25', 'recommend_molecule', 'resolve_molecule', 'show_molecule'].includes(tool.name)) expect(tool.outputSchema).toBeDefined();
     }
     const renderTool = tools.find((tool) => tool.name === 'show_molecule')!;
-    expect(renderTool._meta).toMatchObject({ ui: { resourceUri: 'ui://lupi/molecule-v2.html' } });
+    expect(renderTool._meta).toMatchObject({ ui: { resourceUri: 'ui://lupi/molecule-v3.html' } });
     expect(renderTool.inputSchema.properties?.view).toMatchObject({ additionalProperties: false });
     expect(upstream.fetch).not.toHaveBeenCalled();
   });
@@ -230,13 +241,13 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     const opened = await client.callTool({ name: 'open_omol25', arguments: { collection: 'neutral-train', rowIndex: 7 } });
     expect(opened.isError).not.toBe(true);
     const identity = summary(opened);
-    expect(identity).toMatchObject({ source: 'OMol25', collection: 'neutral-train', rowIndex: 7, atomCount: 3, bondCount: 0, bondSource: 'not-provided', atomIdKind: 'synthetic-row' });
+    expect(identity).toMatchObject({ source: 'OMol25', collection: 'neutral-train', rowIndex: 7, atomCount: 3, bondCount: 2, bondSource: 'inferred', sourceBondTopology: 'not-provided', bondRecipe: 'lupi-bonds.molecular.v1', contactCount: 0, bondOrders: 'not-estimated', atomIdKind: 'synthetic-row' });
     const molecule = (opened._meta as { molecule: { atoms: { ids: number[] }; bonds: { aid1: number[] } } }).molecule;
     expect(molecule.atoms.ids).toEqual([1, 2, 3]);
     expect(molecule.bonds.aid1).toEqual([]);
-    const shown = await client.callTool({ name: 'show_molecule', arguments: { structureRef: identity.structureRef, view: { highlightElements: ['O'] } } });
+    const shown = await client.callTool({ name: 'show_molecule', arguments: { structureRef: identity.structureRef, view: { highlightElements: ['O'], showContacts: false } } });
     expect(shown.isError).not.toBe(true);
-    expect(summary(shown)).toMatchObject({ source: 'OMol25', structureRef: identity.structureRef, view: { highlightAtomIds: [1], highlightElements: ['O'] } });
+    expect(summary(shown)).toMatchObject({ source: 'OMol25', structureRef: identity.structureRef, bondCount: 2, bondRecipe: 'lupi-bonds.molecular.v1', view: { highlightAtomIds: [1], highlightElements: ['O'], showContacts: false } });
     expect(route).toHaveBeenCalledTimes(3);
   });
 

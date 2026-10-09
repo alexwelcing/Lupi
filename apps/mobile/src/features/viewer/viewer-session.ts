@@ -3,6 +3,8 @@ import {
   type MoleculeLoadInput,
   type MoleculeSummary,
 } from "@/src/domain/molecules";
+import { getLupiWebBaseUrl } from "@/src/config/lupi";
+import { omol25StructureUrl } from "@/src/features/omol25/omol25";
 import type {
   ViewerBridgeResponse,
   ViewerBridgeStatus,
@@ -14,7 +16,7 @@ export const HISTORY_PERSISTENCE_WARNING =
 export const INITIAL_VIEWER_COMMAND_TIMEOUT_MS = 20_000;
 
 export interface InitialViewerCommand {
-  tool: "lupi.generate_molecule" | "lupi.open_gallery_example";
+  tool: "lupi.generate_molecule" | "lupi.open_gallery_example" | "lupi.load_molecule_url";
   arguments: Record<string, unknown>;
 }
 
@@ -41,6 +43,12 @@ export interface InitialViewerTimeoutResolution {
 export function initialViewerCommand(
   molecule: MoleculeLoadInput,
 ): InitialViewerCommand {
+  if (molecule.inputType === "omol25") {
+    return {
+      tool: "lupi.load_molecule_url",
+      arguments: { url: omol25StructureUrl(getLupiWebBaseUrl(), molecule.input) },
+    };
+  }
   if (molecule.inputType === "gallery") {
     return {
       tool: "lupi.open_gallery_example",

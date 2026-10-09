@@ -3,8 +3,9 @@ import {
   mobileGalleryAtomCount,
   type MobileGalleryId,
 } from "./mobile-gallery";
+import { OMOL25_MAX_ATOMS, parseOmol25RowKey } from "@/src/features/omol25/omol25";
 
-export type MoleculeInputType = "template" | "procedural" | "xyz" | "gallery";
+export type MoleculeInputType = "template" | "procedural" | "xyz" | "gallery" | "omol25";
 export const MOBILE_MAX_ATOMS = 50_000;
 const MAX_CATALOG_INPUT_LENGTH = 256;
 const MAX_ROUTE_SUMMARY_ID_LENGTH = 128;
@@ -25,6 +26,7 @@ export type MoleculeLoadInput =
   | ({ inputType: "template" } & MoleculeLoadBase)
   | ({ inputType: "procedural"; atomCount: number } & MoleculeLoadBase)
   | ({ inputType: "xyz" } & MoleculeLoadBase)
+  | ({ inputType: "omol25"; atomCount: number } & MoleculeLoadBase)
   | ({
       inputType: "gallery";
       input: MobileGalleryId;
@@ -95,7 +97,8 @@ function moleculeLoadFromRouteParams(
   const inputType =
     requestedInputType === "template" ||
     requestedInputType === "procedural" ||
-    requestedInputType === "gallery"
+    requestedInputType === "gallery" ||
+    requestedInputType === "omol25"
       ? requestedInputType
       : requestedInputType === undefined && allowDefault
         ? "template"
@@ -161,6 +164,10 @@ export function moleculeSummaryFromRouteParams(
   if (id === null || name === null || formula === null || !tags || !load)
     return null;
   if (load.inputType === "gallery" && id !== load.input) return null;
+  if (load.inputType === "omol25") {
+    const row = parseOmol25RowKey(load.input);
+    if (!row || id !== `omol25:${row.collection}:${row.rowIndex}`) return null;
+  }
 
   return { id, name, formula, tags, load };
 }
@@ -264,6 +271,10 @@ export function normalizeMoleculeSummary(
   );
   if (!load || load.inputType === "xyz") return null;
   if (load.inputType === "gallery" && id !== load.input) return null;
+  if (load.inputType === "omol25") {
+    const row = parseOmol25RowKey(load.input);
+    if (!row || id !== `omol25:${row.collection}:${row.rowIndex}`) return null;
+  }
 
   return {
     id,
@@ -282,7 +293,8 @@ export function normalizeMobileMoleculeLoad(
     !load ||
     (load.inputType !== "template" &&
       load.inputType !== "procedural" &&
-      load.inputType !== "gallery") ||
+      load.inputType !== "gallery" &&
+      load.inputType !== "omol25") ||
     typeof load.input !== "string" ||
     !load.input.trim() ||
     load.input.length > MAX_CATALOG_INPUT_LENGTH
@@ -300,6 +312,10 @@ export function normalizeMobileMoleculeLoad(
   )
     return null;
   if (load.inputType === "procedural" && atomCount === undefined) return null;
+  if (load.inputType === "omol25") {
+    if (!parseOmol25RowKey(input) || typeof atomCount !== "number" || atomCount > OMOL25_MAX_ATOMS) return null;
+    return { inputType: "omol25", input, atomCount };
+  }
   if (load.inputType === "gallery") {
     if (!isMobileGalleryId(input)) return null;
     if (

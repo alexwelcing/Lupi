@@ -59,12 +59,18 @@ final class ARHost {
     /// Runs the session through RealityKit, so RealityView renders our ARSession's camera and
     /// scene understanding uses its mesh (`run(_:session:arConfiguration:)`, iOS 18).
     func start(worldMap: ARWorldMap? = nil) async {
+        #if targetEnvironment(simulator)
+        // The Simulator SDK omits the overload that takes an owned ARSession.
+        // Home and Collection can run there; room tracking needs a device camera.
+        unavailable = "AR needs a camera on an iPhone or iPad."
+        #else
         let understanding: Set<SpatialTrackingSession.Configuration.SceneUnderstandingCapability> =
             hasLiDAR ? [.collision, .physics, .occlusion, .shadow] : []
         let spatial = SpatialTrackingSession.Configuration(tracking: [.plane, .world], sceneUnderstanding: understanding, camera: .back)
         if let missing = await tracking.run(spatial, session: session, arConfiguration: configuration(worldMap: worldMap)) {
             unavailable = missing.debugDescription
         }
+        #endif
     }
 
     func stop() async {

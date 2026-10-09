@@ -9,7 +9,8 @@ import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/valida
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { getAtomicNumberBySymbol, getElementSpec } from '@atlas/core/elements';
-import type { Omol25Molecule } from '@atlas/core/omol25/widget';
+import { estimateOmol25Bonds, omol25BondSummary, type Omol25Molecule } from '@atlas/core/omol25/widget';
+import { MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
 import {
   PubChemError,
   resolvePubChemMolecule,
@@ -18,14 +19,17 @@ import {
 } from '@atlas/core/pubchem';
 import { OmolService, OMOL_STRUCTURE_REF } from './chatgptOmol';
 import { OMOL_DATASETS } from './scienceData';
+import { recommendMolecule } from './discovery';
+import type { JevEnv } from './jev';
+import { DISCOVERY_CATALOG_VERSION, DISCOVERY_MAX_CHARS, DISCOVERY_SCHEMA } from '@atlas/core/jev';
 
 // Cloudflare Workers do not allow runtime code generation.
 z.config({ jitless: true });
 
 export const CHATGPT_MCP_PATH = '/chatgpt/mcp';
-export const CHATGPT_UI_URI = 'ui://lupi/molecule-v2.html';
+export const CHATGPT_UI_URI = 'ui://lupi/molecule-v3.html';
 export const CHATGPT_WIDGET_PATH = '/chatgpt-widget/index.html';
-export const CHATGPT_VERSION = '0.2.0';
+export const CHATGPT_VERSION = '0.4.0';
 export const MAX_PLUGIN_ATOMS = 1_000;
 export const MAX_PENDING_PLUGIN_LOOKUPS = 4;
 const MAX_REQUEST_BYTES = 8192;
@@ -34,9 +38,9 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const MAX_CACHED_STRUCTURES = 64;
 const MAX_CACHED_QUERIES = 128;
 const STRUCTURE_REF = /^pubchem:([1-9]\d{0,9}):(3d|2d):([a-f0-9]{64})$/;
-const WIDGET_MARKER = /<meta\s+name=["']lupi-widget["']\s+content=["']molecule-v2["']\s*\/?>/i;
+const WIDGET_MARKER = /<meta\s+name=["']lupi-widget["']\s+content=["']molecule-v3["']\s*\/?>/i;
 
-export interface ChatGptEnv {
+export interface ChatGptEnv extends JevEnv {
   WEB_ASSETS?: { fetch(request: Request): Promise<Response> };
   CORS_ORIGINS?: string;
 }
@@ -45,6 +49,7 @@ export interface MoleculeView {
   style: 'ball-and-stick' | 'spacefill';
   highlightElements: string[];
   highlightAtomIds: number[];
+  showContacts?: boolean;
 }
 
 type ViewInput = Partial<MoleculeView>;
@@ -134,8 +139,8 @@ function omolSummary(molecule: Omol25Molecule, structureRef: string, cacheHit: b
     coordinateUnits: molecule.coordinateUnits,
     atomCount: molecule.atoms.ids.length,
     atomIdKind: molecule.atomIdKind,
-    bondCount: 0,
-    bondSource: molecule.bondTopology,
+    ...omol25BondSummary(estimateOmol25Bonds(molecule)),
+    chemistry: molecule.chemistry ?? null,
     elements: elementSummary(molecule),
     cacheHit,
   };
@@ -158,6 +163,7 @@ export function resolveMoleculeView(molecule: PubChemMolecule | Omol25Molecule, 
   }
   return {
     style: input.style ?? 'ball-and-stick',
+    ...(input.showContacts !== undefined ? { showContacts: input.showContacts } : {}),
     highlightElements: elements,
     highlightAtomIds: [...selected].sort((a, b) => a - b),
   };
@@ -306,7 +312,7 @@ function shownOmol(loaded: Awaited<ReturnType<OmolService['load']>>, input: View
   const { molecule, structureRef, cacheHit } = loaded;
   const view = resolveMoleculeView(molecule, input);
   return {
-    content: textContent(`Prepared an interactive view of OMol25 ${molecule.collection} row ${molecule.rowIndex}: ${molecule.formula}, ${molecule.atoms.ids.length} source-coordinate atoms. OMol25 does not supply bond topology; the displayed atom IDs are generated from this row order.`),
+    content: textContent(`Prepared an interactive view of OMol25 ${molecule.collection} row ${molecule.rowIndex}: ${molecule.formula}, ${molecule.atoms.ids.length} source-coordinate atoms. Bonds and contacts are estimated by lupi-bonds.molecular.v1, not supplied by OMol25. Bond orders are not estimated. Hover over atoms or bonds for details, or tap to pin them. Atom IDs are generated from this row order.`),
     structuredContent: {
       status: 'shown' as const,
       ...omolSummary(molecule, structureRef, cacheHit),
@@ -321,6 +327,7 @@ export interface CreatePluginServerOptions {
   service?: MoleculeService;
   omolService?: OmolService;
   loadWidgetHtml: () => Promise<string>;
+  discoveryEnv?: JevEnv;
 }
 
 const identityOutputSchema = z.object({
@@ -360,8 +367,16 @@ const omolIdentityOutputSchema = z.object({
   coordinateUnits: z.literal('angstrom'),
   atomCount: z.number().int().min(1).max(MAX_PLUGIN_ATOMS),
   atomIdKind: z.literal('synthetic-row'),
-  bondCount: z.literal(0),
-  bondSource: z.literal('not-provided'),
+  bondCount: z.number().int().nonnegative(),
+  contactCount: z.number().int().nonnegative(),
+  bondSource: z.literal('inferred'),
+  sourceBondTopology: z.literal('not-provided'),
+  bondRecipe: z.literal(MOLECULAR_RECIPE_ID),
+  bondOrders: z.literal('not-estimated'),
+  bondKinds: z.object({ covalent: z.number().int().nonnegative(), coordination: z.number().int().nonnegative(), ionicContact: z.number().int().nonnegative() }).strict(),
+  bondEvidence: z.object({ long: z.number().int().nonnegative(), removed: z.number().int().nonnegative(), nearMiss: z.number().int().nonnegative(), clashes: z.number().int().nonnegative(), fragments: z.number().int().nonnegative(), bridgingH: z.number().int().nonnegative(), ionCarbonClose: z.number().int().nonnegative() }).strict(),
+  bondParameters: z.object({ tolerance: z.number(), contactMargin: z.number(), clashFloor: z.number(), longExcess: z.number() }).strict(),
+  chemistry: z.object({ totalCharge: z.number().int().nullable(), spinMultiplicity: z.number().int().positive().nullable(), source: z.enum(['record', 'split-definition', 'unavailable']), domain: z.string().nullable() }).nullable(),
   elements: z.array(z.object({ atomicNumber: z.number().int().min(1).max(118), symbol: z.string(), count: z.number().int().positive() })),
   cacheHit: z.boolean(),
 }).strict();
@@ -370,6 +385,17 @@ const viewOutputSchema = z.object({
   style: z.enum(['ball-and-stick', 'spacefill']),
   highlightElements: z.array(z.string()),
   highlightAtomIds: z.array(z.number().int().positive()),
+  showContacts: z.boolean().optional(),
+}).strict();
+const discoveryOutputSchema = z.object({
+  schema: z.literal(DISCOVERY_SCHEMA), catalogVersion: z.literal(DISCOVERY_CATALOG_VERSION),
+  query: z.string().min(1).max(DISCOVERY_MAX_CHARS), status: z.enum(['matched', 'no-match']),
+  method: z.enum(['exact', 'jev', 'unavailable', 'uncertain']), model: z.string().nullable(),
+  confidence: z.number().min(0).max(1).nullable(), note: z.string(),
+  candidates: z.array(z.object({
+    id: z.string(), name: z.string(), formula: z.string(), atoms: z.number().int().positive(),
+    pubchemCid: z.number().int().positive(), aliases: z.array(z.string()), description: z.string(),
+  }).strict()).max(1),
 }).strict();
 // Each branch has an object root. SDK v2 can consequently advertise this
 // union to 2025 protocol clients without introducing a result wrapper.
@@ -387,13 +413,26 @@ const showOutputSchema = z.union([
   errorOutputSchema,
 ]);
 
-export function createPluginServer({ service = defaultService, omolService = defaultOmolService, loadWidgetHtml }: CreatePluginServerOptions) {
+export function createPluginServer({ service = defaultService, omolService = defaultOmolService, loadWidgetHtml, discoveryEnv = {} }: CreatePluginServerOptions) {
   const server = new McpServer({ name: 'lupi-live', version: CHATGPT_VERSION }, { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
   const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: true, idempotentHint: true };
 
+  server.registerTool('recommend_molecule', {
+    title: 'Find a molecule from an everyday description',
+    description: 'Match a name, formula, or everyday description to one of 12 known compounds shared with the native Lupi app. Exact names work without AI. Jev may recommend a listed compound with explicitly inferred confidence, or withhold a weak match. This is a small discovery catalogue, not a scientific property prediction or medical recommendation. For a match, pass the returned pubchemCid to resolve_molecule, then show_molecule with its exact structureRef. For broader research discovery use OMol25 tools.',
+    inputSchema: z.object({ query: z.string().trim().min(1).max(DISCOVERY_MAX_CHARS) }).strict(),
+    outputSchema: discoveryOutputSchema,
+    annotations,
+  }, async ({ query }) => {
+    try {
+      const result = await recommendMolecule(query, discoveryEnv);
+      return { content: textContent(result.note), structuredContent: { ...result } };
+    } catch (error) { return toolFailure(error); }
+  });
+
   server.registerTool('list_omol25_collections', {
     title: 'Explore the OMol25 molecule collections',
-    description: 'Start here for Open Molecules 2025 discovery. Describe the complete 34.3-million-row neutral training collection, complete neutral validation collection, and explicitly limited indexed previews. OMol25 source records include 3D atomic coordinates but no bond topology.',
+    description: 'Start here for Open Molecules 2025 discovery. Describe the complete 34.3-million-row neutral training collection, complete neutral validation collection, and explicitly limited indexed previews. OMol25 source records include 3D coordinates but no bond topology. Lupi estimates covalent bonds, coordination and ionic contacts using lupi-bonds.molecular.v1.',
     inputSchema: z.object({}).strict(),
     annotations,
   }, async () => {
@@ -424,12 +463,13 @@ export function createPluginServer({ service = defaultService, omolService = def
 
   registerAppTool(server, 'open_omol25', {
     title: 'Open an OMol25 molecule in the Lupi viewer',
-    description: 'Open the exact OMol25 collection and rowIndex returned by search_omol25. Show its source 3D coordinates in an interactive Lupi card. Bonds are not source supplied and are not drawn as known connectivity. Follow-up highlights may reuse the returned structureRef with show_molecule.',
+    description: 'Open the exact OMol25 collection and rowIndex returned by search_omol25. Show its source 3D coordinates in an interactive Lupi card. Draw estimated covalent bonds as solid, coordination as dashed, and ionic contacts as dotted guides using lupi-bonds.molecular.v1. These are inferred, not source bonds or bond orders. Hover or tap atoms and bonds for details. Follow-up highlights may reuse the returned structureRef with show_molecule.',
     inputSchema: z.object({
       collection: z.enum(OMOL_DATASETS.map((dataset) => dataset.id) as [string, ...string[]]),
       rowIndex: z.number().int().nonnegative(),
       view: z.object({
         style: z.enum(['ball-and-stick', 'spacefill']).optional(),
+        showContacts: z.boolean().optional().describe('Show dotted ionic contacts for OMol25 estimates; defaults to true. Contacts are not covalent bonds.'),
         highlightElements: z.array(z.string().regex(/^[A-Z][a-z]?$/)).max(12).optional(),
         highlightAtomIds: z.array(z.number().int().positive()).max(MAX_PLUGIN_ATOMS).optional(),
       }).strict().optional(),
@@ -455,11 +495,12 @@ export function createPluginServer({ service = defaultService, omolService = def
 
   registerAppTool(server, 'show_molecule', {
     title: 'Show an interactive molecule',
-    description: 'Display an exact pinned OMol25 or PubChem structure in Lupi Live. Reuse the structureRef returned by open_omol25 or resolve_molecule for follow-up highlights and styles. OMol25 atom IDs are generated from row order and its source has no bond table; PubChem IDs and bonds come from its source record. Each result is a complete view.',
+    description: 'Display an exact pinned OMol25 or PubChem structure in Lupi Live. Reuse the structureRef returned by open_omol25 or resolve_molecule for follow-up highlights and styles. OMol25 atom IDs are generated from row order; bonds and ionic contacts are explicitly inferred with lupi-bonds.molecular.v1, with no bond-order prediction. PubChem IDs and bonds remain source supplied. view.showContacts controls OMol25 ionic contacts. Each result is a complete view.',
     inputSchema: z.object({
       structureRef: z.string().regex(/^(?:pubchem:[1-9]\d{0,9}:(?:3d|2d):[a-f0-9]{64}|omol25:[a-z0-9-]+:\d+:[a-f0-9]{64})$/).max(160),
       view: z.object({
         style: z.enum(['ball-and-stick', 'spacefill']).optional(),
+        showContacts: z.boolean().optional().describe('Show dotted ionic contacts for OMol25 estimates; defaults to true. Contacts are not covalent bonds.'),
         highlightElements: z.array(z.string().regex(/^[A-Z][a-z]?$/)).max(12).optional(),
         highlightAtomIds: z.array(z.number().int().positive().max(2_147_483_647)).max(MAX_PLUGIN_ATOMS).optional(),
       }).strict().optional(),
@@ -549,7 +590,7 @@ export async function handleChatGptMcp(request: Request, env: ChatGptEnv = {}, s
     }
   }
 
-  const server = createPluginServer({ service, omolService, loadWidgetHtml: () => loadWidget(env) });
+  const server = createPluginServer({ service, omolService, loadWidgetHtml: () => loadWidget(env), discoveryEnv: env });
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {
     await server.connect(transport);

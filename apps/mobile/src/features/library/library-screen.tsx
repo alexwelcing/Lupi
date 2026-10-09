@@ -16,6 +16,7 @@ import {
   moleculeRouteParams,
   type MoleculeSummary,
 } from "@/src/domain/molecules";
+import { Omol25EntryCard } from "@/src/features/omol25/omol25-entry-card";
 import {
   clearRecentMolecules,
   getRecentMolecules,
@@ -332,25 +333,29 @@ export function LibraryScreen() {
       }}
       keyExtractor={(item) => item.id}
       ListHeaderComponent={
-        process.env.EXPO_OS === "web" ? (
-          <View style={{ gap: spacing.xxs, paddingBottom: spacing.lg }}>
-            <Text
-              accessibilityRole="header"
-              style={{ color: colors.text, fontSize: 28, fontWeight: "800" }}
-            >
-              Library
-            </Text>
-            <Text
-              style={{
-                color: colors.textMuted,
-                fontSize: typeScale.body,
-                lineHeight: 22,
-              }}
-            >
-              Return to structures you have opened on this device.
-            </Text>
-          </View>
-        ) : null
+        <View style={{ gap: spacing.md, paddingBottom: spacing.lg }}>
+          {process.env.EXPO_OS === "web" ? (
+            <View style={{ gap: spacing.xxs }}>
+              <Text
+                accessibilityRole="header"
+                style={{ color: colors.text, fontSize: 28, fontWeight: "800" }}
+              >
+                Library
+              </Text>
+              <Text
+                style={{
+                  color: colors.textMuted,
+                  fontSize: typeScale.body,
+                  lineHeight: 22,
+                }}
+              >
+                Discover source molecules or return to structures opened on this
+                device.
+              </Text>
+            </View>
+          ) : null}
+          <Omol25EntryCard onPress={() => router.push("/omol25")} />
+        </View>
       }
       renderItem={renderItem}
       renderSectionHeader={({ section }) => (
