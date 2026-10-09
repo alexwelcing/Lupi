@@ -74,6 +74,7 @@ import {
 } from './tsl/bondImpostorMaterial';
 import { useLupiCommitFrames } from './frameDemand';
 import { setInkFuseBondPairs } from './tsl/inkFuse';
+import type { PickBonds } from './atomPick';
 
 /**
  * Content-equality check for bond-pair Int32Arrays. Used by the bond-
@@ -297,6 +298,15 @@ interface BondsProps {
   /** Telemetry hook — fires when the GPU pipeline's status changes. */
   onGpuStatusChange?: (status: 'idle' | 'ready' | 'unsupported') => void;
   /**
+   * The bonds this layer draws, for the atom picker (they occlude atoms, and
+   * a hit picks the atom whose half it is): the drawn pairs and kinds after
+   * hidden types and contacts, the radius (per bond in property colour mode)
+   * and the distance fade. Null when none are drawn and on unmount. Fires on
+   * a bond-set or look change, never per frame of a trajectory's playback
+   * unless the owner keeps it attached then.
+   */
+  onDrawnBonds?: (bonds: PickBonds | null) => void;
+  /**
    * Radius of the atom balls at the bond ends (the smallest drawn, so no
    * visible stick darkens past its ball). With `junctionStrength` > 0 the
    * stick darkens where it enters the ball (the Contact look). 0 disables it.
@@ -352,6 +362,7 @@ export function Bonds({
   showBondContacts = true,
   onBondsUpdate,
   onGpuStatusChange,
+  onDrawnBonds,
 }: BondsProps) {
   // Imperative uniform/attribute writes on commit (and async results) get drawn.
   useLupiCommitFrames();
@@ -1312,6 +1323,75 @@ export function Bonds({
     // do refresh per frame for property coloring.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bondPairs, bondKinds, bondDistances, bondCount, capacity, geometry, frame.types, frame.typeSemantics, frame.natoms, colormap, colorMode, uniformColor, elementColorOverrides, isPropMode, propData, propRange, radius, atomColorSource, bondColorMode, nextFrame, canInterpolateToNextFrame, interpolationFactor, colorProperty]);
+
+  // ─── The drawn bonds, for the picker ─────────────────────────────
+  // Per-bond radius where it is not simply radius × the kind's scale:
+  // property colour mode scales each tube by its two atoms' values (as the
+  // upload above, at rest), and an inferred pair that no longer meets the
+  // bond criterion in this frame is collapsed (drawn as nothing: radius 0).
+  const pickRadii = useMemo(() => {
+    const prop = isPropMode && propData ? propData : null;
+    const infer = topologyMode === 'infer';
+    if (!onDrawnBonds || bondCount === 0 || (!prop && !infer)) return null;
+    let pMin = propRange?.[0] ?? 0;
+    let pMax = propRange?.[1] ?? 1;
+    if (prop && !propRange) {
+      pMin = Infinity;
+      pMax = -Infinity;
+      for (let i = 0; i < frame.natoms; i++) {
+        if (prop[i] < pMin) pMin = prop[i];
+        if (prop[i] > pMax) pMax = prop[i];
+      }
+    }
+    const norm = (value: number) => (pMax > pMin ? (value - pMin) / (pMax - pMin) : 0.5);
+    const covalent = new Map<number, number>();
+    const covalentRadiusOf = (type: number): number => {
+      let r = covalent.get(type);
+      if (r === undefined) {
+        const atomicNumber = resolveAtomicNumber(frame, type);
+        r = atomicNumber === undefined ? STALE_BOND_UNKNOWN_RADIUS : getElementSpec(atomicNumber).radius;
+        covalent.set(type, r);
+      }
+      return r;
+    };
+    const positions = frame.positions;
+    const radii = new Float32Array(bondCount);
+    for (let i = 0; i < bondCount; i++) {
+      const a = bondPairs[i * 2];
+      const b = bondPairs[i * 2 + 1];
+      const kind = bondKinds ? bondKinds[i] : 0;
+      if (infer && kind === 0) {
+        const dx = positions[b * 3] - positions[a * 3];
+        const dy = positions[b * 3 + 1] - positions[a * 3 + 1];
+        const dz = positions[b * 3 + 2] - positions[a * 3 + 2];
+        const limit = (covalentRadiusOf(frame.types[a]) + covalentRadiusOf(frame.types[b]) + tolerance) * STALE_BOND_SLACK;
+        if (dx * dx + dy * dy + dz * dz > limit * limit) continue;
+      }
+      const kindScale = BOND_KIND_RADIUS_SCALE[kind] ?? 1;
+      radii[i] = prop
+        ? radius * (0.2 + 1.8 * 0.5 * (norm(prop[a]) + norm(prop[b]))) * kindScale
+        : radius * kindScale;
+    }
+    return radii;
+  }, [onDrawnBonds, isPropMode, propData, propRange, topologyMode, bondCount, bondPairs, bondKinds, radius, frame, tolerance]);
+  const onDrawnBondsRef = useRef(onDrawnBonds);
+  onDrawnBondsRef.current = onDrawnBonds;
+  useEffect(() => {
+    if (!onDrawnBonds) return;
+    if (!visible || bondCount === 0) {
+      onDrawnBonds(null);
+      return;
+    }
+    onDrawnBonds({
+      pairs: bondPairs,
+      kinds: bondKinds,
+      radius,
+      radii: pickRadii,
+      fadeStart: resources.uniforms.uBondFadeStart.value,
+      fadeEnd: resources.uniforms.uBondFadeEnd.value,
+    });
+  }, [onDrawnBonds, visible, bondCount, bondPairs, bondKinds, radius, pickRadii, resources]);
+  useEffect(() => () => onDrawnBondsRef.current?.(null), []);
 
   return (
     <mesh

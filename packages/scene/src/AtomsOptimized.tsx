@@ -47,7 +47,7 @@ import { SpatialHash3D } from './SpatialHash';
 import { COLORMAPS, DEFAULT_TYPE_COLOR } from './constants';
 import { DEFAULT_PROFILE, getElementProfile } from './materials';
 import { framesShareAtomOrder, hexToRgb } from '@atlas/core';
-import { buildTypeRenderTable, typeRenderTablesEqual, type TypeRenderTable } from './typeRenderTable';
+import { buildTypeRenderTable, resolveSlotRadius, typeRenderTablesEqual, type TypeRenderTable } from './typeRenderTable';
 import { LUPI_JOB, LUPI_PHASE } from './framePhases';
 import { isDisplayMorphFor, isLupiDisplayMotionActive } from './tsl/displayMotion';
 import {
@@ -422,21 +422,9 @@ export function buildRadiusPaletteTexture(
   return tex;
 }
 
-/**
- * World radius for one render slot given the viewer's scale controls.
- * Hidden types resolve to 0, which the vertex stage treats as "cull".
- */
-export function resolveSlotRadius(
-  entry: { rawType: number; displayRadius: number } | undefined,
-  scale: number,
-  hiddenAtomTypes?: { has(type: number): boolean } | null,
-  atomTypeScales?: Record<number, number> | null,
-): number {
-  if (!entry) return 0;
-  if (hiddenAtomTypes?.has(entry.rawType)) return 0;
-  const radius = entry.displayRadius * scale * (atomTypeScales?.[entry.rawType] ?? 1);
-  return Number.isFinite(radius) && radius > 0 ? radius : 0;
-}
+// The slot radius rule lives with the type table so the picker (atomPick.ts)
+// sizes atoms by the very same rule.
+export { resolveSlotRadius };
 
 /** Fill the 256×2 per-element material palette (see buildMaterialPaletteTexture). */
 export function writeMaterialPaletteTexture(
@@ -975,7 +963,11 @@ export function AtomsOptimized({
     let cleanupIdle = () => {};
     if (onSpatialHash) {
       const build = () => {
-        spatialHashRef.current.build(frame.positions, frame.natoms);
+        // Only the atoms loaded so far: a streamed file fills positions in place,
+        // and a hash over the whole array would bin the unfilled tail at the
+        // origin. A lagging hash is smaller than the drawn count, which the
+        // picker reads as stale.
+        spatialHashRef.current.build(frame.positions, renderAtomCount);
         onSpatialHash(spatialHashRef.current);
       };
       if (typeof requestIdleCallback !== 'undefined') {

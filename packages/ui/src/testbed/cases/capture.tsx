@@ -361,10 +361,12 @@ export default function CaptureCase() {
       <Quad at={GREY} color="#808080" />
       <Quad at={ORANGE} color="#ff8000" opacity={0.5} />
       <AxesGizmo alignment="bottom-left" margin={[72, 72]} axisColors={['#ff4060', '#40ff80', '#4080ff']} labelColor="white" />
+      {/* The picker sizes each atom as the atom layer would (neutral 0.5 here:
+          the frame declares no elements or units); a click at a projected
+          centre hits it. */}
       <AtomPicker
         frame={frame}
         spatialHash={spatialHash}
-        radius={0.5}
         onSelect={(indices) => {
           selectedRef.current = indices;
         }}

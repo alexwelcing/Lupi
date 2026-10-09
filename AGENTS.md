@@ -168,8 +168,12 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   (`packages/ui/src/camera`). A drag turns 1:1, a flick coasts on the
   molecule's inertia and clicks into a symmetry face (C60: "Pentagon face-on ·
   5-fold axis"), a tap during a coast catches it, a tap picks an atom without
-  moving the camera, and a double-tap glides to it. `?controls=orbit` brings
-  the old OrbitControls back for this wave as an escape hatch.
+  moving the camera, and a double-tap glides to it. A tap, click, hover or toy
+  picks the front-most drawn atom or bond half under the pointer (drawn radii,
+  hidden types skipped, a stick picks the atom of its half); a near miss
+  within 5 px (mouse), 8 (pen) or 14 (touch) of a visible silhouette picks
+  that atom (`packages/scene/src/atomPick.ts`). `?controls=orbit` brings the
+  old OrbitControls back for this wave as an escape hatch.
 - **The store camera is written at rest.** `cameraPosition`, `cameraTarget`
   and `cameraPreset` are written once, when the rig comes to rest, never per
   frame. Anything else that moves the camera (MCP, CameraManager snaps, saved
@@ -882,9 +886,9 @@ browser check is local only (not in CI): build the web app, then run
 `pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
 --profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
 Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chalk, chrome,
-comfort, contour, first-minute, flick, foil, fuse, hero, ink, morph,
-onedrawing, pages, relay, remix, replay, replayclip, settings, sheets, tap,
-toys) run with the built-in
+comfort, contour, first-minute, flick, foil, fuse, hero, ink, knowledge,
+morph, onedrawing, pages, pick, relay, remix, replay, replayclip, settings,
+sheets, tap, toys) run with the built-in
 scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
 `--reduced-motion` checks the Still comfort level. `comfort` chooses
 Standard, Gentle and Still in the Play tray in one page and checks the

@@ -40,6 +40,10 @@ interface SelectionMarkersProps {
   /** Optional raw-type display override. Core provenance resolution is used
    * when no explicit override exists. */
   typeRadii?: Record<number, number>;
+  /** The atom layer's scale controls (store atomScale, per-type scales): a
+   * ring sits just outside the atom as drawn. */
+  atomScale?: number;
+  atomTypeScales?: Readonly<Record<number, number>>;
   /** Atom indices to highlight as neighbors (dim everything else). */
   highlightedNeighbors?: Set<number>;
   /** Whether to dim non-neighbor atoms when a node is selected/hovered. */
@@ -53,15 +57,19 @@ export function SelectionMarkers({
   selectedAtoms,
   hoveredAtom,
   typeRadii,
+  atomScale = 1,
+  atomTypeScales,
   highlightedNeighbors = new Set(),
   dimNonNeighbors = false,
   showHoverRing = true,
 }: SelectionMarkersProps) {
+  /** The atom's drawn radius: its display radius × atomScale × its type's scale. */
   const radiusFor = (atomIndex: number): number => {
     if (atomIndex < 0 || atomIndex >= frame.natoms) return 0.5;
     const t = frame.types[atomIndex];
-    if (typeRadii && typeRadii[t] != null) return typeRadii[t];
-    return resolveTypeDisplayRadius(frame, t);
+    const base = typeRadii && typeRadii[t] != null ? typeRadii[t] : resolveTypeDisplayRadius(frame, t);
+    const drawn = base * atomScale * (atomTypeScales?.[t] ?? 1);
+    return Number.isFinite(drawn) && drawn > 0 ? drawn : base;
   };
 
   const positionOf = (atomIndex: number): [number, number, number] | null => {

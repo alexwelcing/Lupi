@@ -418,10 +418,11 @@ export default function PlayCase() {
           if (info.count > 0) setBondsReady(true);
         }}
       />
+      {/* Picks the atoms as drawn (the same scale as the atom layer above). */}
       <AtomPicker
         frame={frame}
         spatialHash={spatialHash}
-        radius={0.2}
+        atomScale={ATOM_R / NEUTRAL_RADIUS}
         onSelect={(indices) => {
           selectedRef.current = indices;
         }}

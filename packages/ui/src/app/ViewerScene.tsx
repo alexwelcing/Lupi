@@ -81,6 +81,7 @@ import type { BackgroundBackdropShape, BackgroundBackdropPattern } from '../stor
 import type { Frame } from '@atlas/core/types';
 import type { MutableRefObject } from 'react';
 import type { SpatialHash3D } from '@atlas/scene/SpatialHash';
+import type { PickBonds } from '@atlas/scene';
 import type { BgMedia, BgPreset } from '../backgroundPresets';
 import { MAX_INTERACTIVE_PICKING_ATOMS } from '../deviceCapabilities';
 
@@ -577,6 +578,11 @@ export function ViewerScene({
   useEffect(() => {
     if (playing || !atomPickingEnabled) setSpatialHash(null);
   }, [playing, atomPickingEnabled]);
+  // The drawn bonds, for the picker (sticks occlude atoms; a hit picks the
+  // half's atom). Reported only while the picker can be mounted, so a
+  // trajectory's per-frame bond sets never re-render the scene.
+  const [pickBonds, setPickBonds] = useState<PickBonds | null>(null);
+  const bondsDrawn = Boolean(bondRenderPlan.available && renderedFrame && loadedAtomCount >= renderedFrame.natoms);
   const ghostFrame = ghostFile
     ? ghostFile.trajectory.frames[Math.min(interpState.frameIndex, Math.max(ghostFile.trajectory.totalFrames - 1, 0))]
     : null;
@@ -727,7 +733,7 @@ export function ViewerScene({
             />
           )}
           <AtomClusters clusters={clusters} visible={!playing} fadeNear={clusterFadeNear} fadeFar={clusterFadeFar} />
-          {bondRenderPlan.available && renderedFrame && loadedAtomCount >= renderedFrame.natoms && <Bonds
+          {bondsDrawn && renderedFrame && <Bonds
             frame={renderedFrame}
             nextFrame={interpolatedNextFrame}
             interpolationFactor={interpolationFactor}
@@ -771,6 +777,7 @@ export function ViewerScene({
             showBondContacts={showBondContacts}
             onBondsUpdate={(info) => useStore.getState().reportBondsUpdate(info.source, info.count, info.detail)}
             onGpuStatusChange={(status) => useStore.getState().setGpuBondsStatus(status)}
+            onDrawnBonds={!playing && atomPickingEnabled ? setPickBonds : undefined}
           />}
           {showCell && <SimulationCell bounds={currentFrame.boxBounds} color="#1e3050" opacity={0.3} />}
 
@@ -803,6 +810,8 @@ export function ViewerScene({
             frame={currentFrame}
             selectedAtoms={visibleSelectedAtoms}
             hoveredAtom={visibleHoveredAtom}
+            atomScale={atomScale}
+            atomTypeScales={atomTypeScales}
             // The impostor's own glow marks the hovered atom; the glass
             // renderer has none, so it keeps the hover ring.
             showHoverRing={transmissionActive}
@@ -851,9 +860,19 @@ export function ViewerScene({
 
           {!playing && atomPickingEnabled && spatialHash && (
             <AtomPicker
-              frame={currentFrame}
+              // What the atom layer draws: its frame, radii, count and cull,
+              // the impostor's hover swell (the glass layer has none) and
+              // the drawn bonds.
+              frame={renderedFrame ?? currentFrame}
               spatialHash={spatialHash}
               hiddenAtomTypes={hiddenAtomTypes}
+              atomScale={atomScale}
+              atomTypeScales={atomTypeScales}
+              loadedAtomCount={loadedAtomCount}
+              maxAtoms={transmissionActive ? undefined : deviceMaxAtoms}
+              cullPixelRadius={transmissionActive ? 0 : atomCullPixelRadius}
+              swell={!transmissionActive}
+              bonds={bondsDrawn ? pickBonds : null}
               enabled={!measurementTool || Boolean(measurementFrame)}
               onClick={(atomIndex, info?: { shiftKey: boolean }) => {
                 if (atomIndex == null) return;

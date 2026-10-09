@@ -140,6 +140,8 @@ export function AtomInfoHUD({
   const bondTolerance = useStore(s => s.bondTolerance);
   const showBondContacts = useStore(s => s.showBondContacts);
   const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
+  const atomScale = useStore(s => s.atomScale);
+  const atomTypeScales = useStore(s => s.atomTypeScales);
   const frameCount = useStore(s => s.file?.trajectory.totalFrames ?? 1);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const radiusRef = useRef(0);
@@ -232,8 +234,8 @@ export function AtomInfoHUD({
   const element = atomicNumber === undefined ? undefined : ELEMENT_DATA[atomicNumber];
   const typeLabel = resolveTypeLabel(frame, type);
   const typeColor = resolveTypeColor(frame, type);
-  const displayRadius = resolveTypeDisplayRadius(frame, type);
-  radiusRef.current = displayRadius;
+  // The card keeps clear of the atom as drawn (atomScale and the type's scale included).
+  radiusRef.current = resolveTypeDisplayRadius(frame, type) * atomScale * (atomTypeScales[type] ?? 1);
   const coordinateUnit = hasAngstromDistances(frame) ? 'Å' : 'source units';
   const properties = getPropertyRows(frame, atomIndex, activeProperty);
   const knowledge = getKnowledgeRows(knowledgeLabels, frame, atomIndex);

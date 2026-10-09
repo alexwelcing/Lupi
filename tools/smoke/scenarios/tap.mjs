@@ -90,18 +90,32 @@ async function atomPositions(page) {
   return lines.slice(2, 2 + count).map((line) => line.trim().split(/\s+/).slice(1, 4).map(Number));
 }
 
+/** Generous bound on any drawn atom radius here (C60's C is 0.38 Å × atomScale). */
+const DRAWN_RADIUS_BOUND = 1.5;
+/** The picker's widest near-miss tolerance (touch, CSS px) plus a margin. */
+const NEAR_MISS_PX = 14 + 4;
+
 /**
- * A client point on the bare canvas whose pointer ray passes > 3 Å from every
- * atom (the picker's solid radius is 2.4 Å), nearest the canvas edge middle.
+ * A client point on the bare canvas, nearest the canvas edge middle, that
+ * picks nothing: its pointer ray passes more than 3 Å, and more than any
+ * drawn radius plus the touch near-miss tolerance (14 CSS px at the atom's
+ * depth), from every atom centre. The picker hits drawn spheres and bonds,
+ * and on a miss takes an atom whose silhouette is within 5 / 8 / 14 px
+ * (mouse / pen / touch).
  */
 async function emptyPoint(page, box, rig, atoms) {
   const fractions = [[0.12, 0.3], [0.88, 0.3], [0.12, 0.7], [0.88, 0.7], [0.12, 0.12], [0.88, 0.12], [0.5, 0.1], [0.5, 0.9], [0.12, 0.88], [0.88, 0.88]];
+  const { f } = basis(rig);
+  // World units per CSS px at unit depth (fov 50 over the canvas height).
+  const perPx = (2 * Math.tan((FOV * Math.PI) / 360)) / box.height;
   for (const [fx, fy] of fractions) {
     const point = { x: Math.round(box.x + box.width * fx), y: Math.round(box.y + box.height * fy) };
     const dir = rayThrough(rig, box, point);
     const clear = atoms.every((a) => {
       const d = sub(a, rig.position);
-      return dot(d, dir) <= 0 || len(cross(d, dir)) > 3;
+      const depth = dot(d, f);
+      const reach = Math.max(3, DRAWN_RADIUS_BOUND + NEAR_MISS_PX * perPx * Math.max(depth, 0));
+      return dot(d, dir) <= 0 || len(cross(d, dir)) > reach;
     });
     if (!clear) continue;
     const onCanvas = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.hasAttribute?.('data-smoke-main') ?? false, point);

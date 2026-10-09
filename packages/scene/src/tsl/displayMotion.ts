@@ -25,8 +25,14 @@
  *   three's object group, re-read per draw) and restores it afterwards.
  * - A video recording suspends it (`setDisplayMotionSuspended`), because it
  *   records the live canvas.
- * - The ripple is bounded (`uMaxRipple`, 0.3 Å), far under the picker's
- *   2.4 Å solid radius; the arrival is cancelled synchronously on any touch.
+ * - The ripple is bounded (`uMaxRipple`, 0.3 Å) and decays in about 0.1 s.
+ *   Picking hits the rest spheres, so a press on a still-ringing atom's
+ *   displaced rim misses its rest sphere by at most 0.3 Å; the soft pick (an
+ *   exact miss within 5 / 8 / 14 CSS px of a silhouette, mouse / pen /
+ *   touch, picks that atom) absorbs it where the rim lies over empty space
+ *   and 0.3 Å projects under the tolerance. The arrival is cancelled
+ *   synchronously on any touch; a desktop hover (no press) during the
+ *   arrival or morph, and Tug, Burst and Heat offsets, pick at rest.
  *
  * - Tug, Burst and Heat are illustrative toys like the ripple: every term
  *   sits behind its own weight and the master gate, so the capture guard

@@ -67,6 +67,7 @@ import {
   rippleSlotUniforms,
   setDisplayMorph,
   setDisplayMotionSuspended,
+  type PointerKind,
 } from '@atlas/scene';
 import { useStore } from '../store';
 import type { Vec3 } from '../camera/rigApi';
@@ -1015,8 +1016,8 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
     };
 
     /** The atom under a client point (as a tap would pick it), if it is a real atom of this frame. */
-    const atomAt = (clientX: number, clientY: number): number => {
-      const index = pickAtomAtClient(clientX, clientY);
+    const atomAt = (clientX: number, clientY: number, pointerType?: PointerKind): number => {
+      const index = pickAtomAtClient(clientX, clientY, pointerType);
       return index !== null && index >= 0 && index < live.current.frame.natoms ? index : -1;
     };
 
@@ -1044,13 +1045,19 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
 
     // Tug latched: grab the atom under the finger (or the point in space
     // there) and pull; the neighbourhood follows, and lets go with a twang.
-    const tugGrab = (clientX: number, clientY: number, atomIndex: number | null, point?: Vec3): boolean => {
+    const tugGrab = (
+      clientX: number,
+      clientY: number,
+      atomIndex: number | null,
+      point?: Vec3,
+      pointerType?: PointerKind,
+    ): boolean => {
       const { frame: current, center: c, transmissionActive: glass } = live.current;
       const scale = displayMotionScale();
       if (glass) glassNotice();
       if (!(scale > 0) || glass) return false;
       adoptScene(current, c);
-      const atom = atomIndex ?? (point ? -1 : atomAt(clientX, clientY));
+      const atom = atomIndex ?? (point ? -1 : atomAt(clientX, clientY, pointerType));
       let grab: Vec3;
       if (atom >= 0) grab = atomPosition(atom);
       else if (point) grab = [point[0], point[1], point[2]];
@@ -1090,9 +1097,9 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       emitToyEvent({ kind: 'tugPull', d: [dx, dy, dz] });
     };
 
-    const tugStroke = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end') => {
+    const tugStroke = (clientX: number, clientY: number, phase: 'start' | 'move' | 'end', pointerType?: PointerKind) => {
       if (phase === 'start') {
-        tugGrab(clientX, clientY, null);
+        tugGrab(clientX, clientY, null, undefined, pointerType);
         return;
       }
       if (!tug.held) return;
@@ -1117,8 +1124,8 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
       return true;
     };
 
-    const burstAtClient = (clientX: number, clientY: number): boolean => {
-      const atom = atomAt(clientX, clientY);
+    const burstAtClient = (clientX: number, clientY: number, pointerType?: PointerKind): boolean => {
+      const atom = atomAt(clientX, clientY, pointerType);
       if (atom >= 0) return burstAt(atomPosition(atom));
       if (!clientToPlane(clientX, clientY, live.current.center, hit)) return false;
       return burstAt([hit.x, hit.y, hit.z]);
@@ -1171,17 +1178,17 @@ export function PlayLayer({ frame, center, transmissionActive, playing }: PlayLa
         if (verbNow() === 'burst') return;
         if (poke(atomIndex) >= 0) cue('poke');
       }),
-      onIntent('verb.tap', ({ clientX, clientY }) => {
+      onIntent('verb.tap', ({ clientX, clientY, pointerType }) => {
         if (verbNow() !== 'burst') return;
-        if (burstAtClient(clientX, clientY)) cue('burst');
+        if (burstAtClient(clientX, clientY, pointerType)) cue('burst');
       }),
-      onIntent('verb.stroke', ({ clientX, clientY, phase }) => {
+      onIntent('verb.stroke', ({ clientX, clientY, phase, pointerType }) => {
         switch (verbNow()) {
           case 'poke':
             stir(clientX, clientY, phase);
             break;
           case 'tug':
-            tugStroke(clientX, clientY, phase);
+            tugStroke(clientX, clientY, phase, pointerType);
             break;
           case 'heat':
             heatRub(clientX, clientY, phase);
