@@ -43,9 +43,9 @@ it twice.
 - vgpu 0.4.0 remains a dependency: the `/scan` swirl and gist particles and
   the action-light buttons still create their own small vgpu devices (see
   `docs/scan-pipeline.md` and `packages/ui/src/action-light/`).
-- `pnpm test:action-light` runs the action-light shader check on the WebGPU
-  software lane (`tools/lib/browser-lanes.mjs`); its config now extends
-  `playwright.config.mjs` directly.
+- The action-light buttons have no committed browser check since
+  2026-10-09; look at them in the WebGPU lane (`tools/lib/browser-lanes.mjs`)
+  with a scratch Playwright script.
 
 ## Coming back as a Look
 

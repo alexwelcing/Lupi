@@ -31,7 +31,7 @@ Owns:
   `packages/ui`, `packages/ui-core`
 - `functions`: viewer Firebase functions
 - `firestore.rules`, `firestore.indexes.json`, `firebase.json`
-- `tools`: viewer smoke tests, gallery checks, export checks, MCP checks, asset tools
+- `tools`: the viewer smoke check, gallery checks, asset tools
 - public gallery assets and viewer-owned manifests
 
 Does not own:
@@ -90,26 +90,34 @@ the local helper, replacing broad identity exchange with the scoped agent
 contract, testing the UI/client, and proving the live flow before this section
 may become user instructions.
 
-## Focused Verification
+## Optional Local Checks
+
+CI is one pull-request build check, and a push to `main` deploys (see
+[docs/ci-trigger-policy.md](docs/ci-trigger-policy.md)). These run only when
+you run them:
 
 ```bash
+pnpm test
+pnpm lint
 pnpm build
 pnpm exec playwright install --with-deps chromium
+pnpm verify:viewer-smoke
 pnpm test:ui
-pnpm verify:mcp-bridge
-pnpm verify:exports
 ```
 
-`pnpm test:ui` serves the production build and exercises homepage discovery,
-the real molecule viewer and settings, and the mobile controls. To run the
-deployment-safe subset against a public preview or Worker URL:
+`pnpm verify:viewer-smoke` drives the built app in the WebGL2 lane (home,
+caffeine, an export, the renderer fallback; about a minute) and writes under
+`.verify-artifacts/viewer-smoke/`. `pnpm test:ui` runs the one release smoke,
+`tests/ui/release-smoke.spec.ts`, against the local build. Against a deployed
+origin:
 
 ```bash
-UI_TEST_URL=https://PREVIEW_URL pnpm test:ui:deployed
+UI_TEST_URL=https://lupi.live UI_TEST_EXPECT_HEALTH=true pnpm test:ui
 ```
 
 Playwright writes failure diagnostics under `playwright-report/` and
-`test-results/`. The focused legacy verifiers write under `.verify-artifacts/`.
+`test-results/`. To look at your own change, write a scratch Playwright script
+and don't commit it.
 
 ## App Map
 
@@ -151,19 +159,16 @@ Playwright writes failure diagnostics under `playwright-report/` and
 Production deploy is owned by this standalone repo. A merge to `main` is the
 release: `.github/workflows/deploy-cloudflare.yml` builds the app and edge
 Worker, deploys through the pinned Wrangler, and confirms `https://lupi.live`
-reports the merged commit. The owner-only checkpoint controller was retired on
-2026-09-20.
-`.github/workflows/deploy-viewer.yml` remains the manual Cloud Run fallback.
-That job is partial evidence against a mutable direct `workers.dev` endpoint;
-it does not record immutable Worker Version identity and is not proof of the
-custom domain or public product. See the
+reports the merged commit, then checks that `/` and its bundle load. Nothing
+gates it; if `main` breaks, fix it and push again. That check is not proof that
+the public product works. See the
 [release truth contract](docs/release-truth-contract.md).
 
 ## Docs
 
 - [LUPINE.md](LUPINE.md): how this repo fits the Lupine constellation
 - [docs/product-ownership-contract.md](docs/product-ownership-contract.md): normative product boundary
-- [docs/release-truth-contract.md](docs/release-truth-contract.md): five-lane evidence contract
+- [docs/release-truth-contract.md](docs/release-truth-contract.md): what a check proves, and what it does not
 - [docs/extraction-packet.md](docs/extraction-packet.md): original split plan
 - [docs/api-keys.md](docs/api-keys.md): legacy API-key backend inventory and Plan 026 target
 - [docs/lupi-mcp-roadmap.md](docs/lupi-mcp-roadmap.md): agent/MCP roadmap

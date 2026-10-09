@@ -79,9 +79,10 @@ scenarios reuse.
   `glimbin` block (bytes, frames, atoms/frame) for the gallery card.
 - Upload `name.glimbin` + `name.manifest.json` to the
   `shed-489901-nist-demos` GCS bucket under `sims/`. Two hard
-  requirements, both enforced: Range support (`pnpm verify:streaming-ux`
-  checks it end to end) and CORS (`access-control-allow-origin: *` —
-  the legacy `glim-datasets` bucket has no CORS policy, which is why
+  requirements: Range support (check by hand that the bucket answers a
+  `Range` request with 206; `packages/parsers/src/realDumpPipeline.test.ts`
+  covers parse, transcode and read-back, not the bucket) and CORS
+  (`access-control-allow-origin: *` — the legacy `glim-datasets` bucket has no CORS policy, which is why
   `gallery-data.test.ts` rejects it for browser-streamed entries).
 - Add the gallery card. Card metadata (atoms, frames, title, physics
   blurb) should come from the manifest, not be hand-typed.
@@ -203,8 +204,9 @@ promotion ladder again.
 
 **Failure modes worth designing for, per scenario:**
 - ❶ CDN edge without Range support → loader appears to work but
-  downloads whole files; `verify:streaming-ux` exists precisely to catch
-  this.
+  downloads whole files; the loader caps a non-Range body
+  (`packages/parsers/src/StreamingLoader.rangeFallback.test.ts`), so check
+  a new host answers `Range` with 206 before pointing cards at it.
 - ❷ OPFS eviction between sessions → library entry with no bytes:
   detect on open, mark the record, offer re-import (or re-download if
   mirrored).
@@ -236,6 +238,6 @@ promotion ladder again.
 | Local library (OPFS + manifest) | `packages/ui/src/trajectoryLibrary.ts` · UI: `SavedTrajectories.tsx` |
 | Orchestration | `packages/ui/src/loadMoleculeSource.ts` (`importDumpFileStreaming`, `openSavedTrajectory`) |
 | Auth / Firestore precedents | `packages/ui/src/auth/`, `savedViews.ts`, `firestore.rules` |
-| Perf + correctness harnesses | `tools/lupi-doctor.mjs` (`pnpm doctor`), `tools/verify-streaming-ux.mjs` (`pnpm verify:streaming-ux`) and the parser tests (`packages/parsers/src/realDumpPipeline.test.ts` runs real LAMMPS dumps through parse, transcode and read-back). `tools/bench-ingest.mjs`, `verify-real-trajectory.mjs` and `verify-streaming.mjs` are not in this repo. |
+| Perf + correctness harnesses | `tools/lupi-doctor.mjs` (`pnpm doctor`), the parser tests (`packages/parsers/src/realDumpPipeline.test.ts` runs real LAMMPS dumps through parse, transcode and read-back) and the playback UI tests (`packages/ui/src/app/PlaybackScrubber.test.tsx`, `PlaybackSpeedControl.test.tsx`, `PlaybackStatus.test.tsx`). `tools/bench-ingest.mjs`, `verify-real-trajectory.mjs` and `verify-streaming.mjs` are not in this repo. |
 | Gallery bake CLI | `tools/bake-glimbin.mjs` (`npm run bake:glimbin`) |
 | Reference data generator | `tools/sims/make_phase_trajectories.py` |

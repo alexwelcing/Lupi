@@ -62,20 +62,8 @@ Before a molecule becomes a selected Lupi example:
 
 ## Commands
 
-Run the local audit without writing artifacts:
-
-```bash
-pnpm audit:nomenclature
-```
-
-Write a reproducibility manifest and local asset backup under ignored
-`.verify-artifacts/gallery-reliability/`:
-
-```bash
-pnpm backup:gallery
-```
-
-Run the focused gallery guard after metadata changes:
+The nomenclature audit and gallery backup scripts were removed on
+2026-10-09. Run the focused gallery guard after metadata changes:
 
 ```bash
 pnpm --filter @atlas/ui test -- src/gallery-data.test.ts

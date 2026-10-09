@@ -40,7 +40,6 @@ Run from the repository root with Node 22.13+ and pnpm 9.0.0:
 ```bash
 pnpm install --frozen-lockfile
 pnpm audit --prod --audit-level high
-pnpm verify:product-contract
 pnpm chatgpt:build
 pnpm chatgpt:test
 pnpm chatgpt:package --check

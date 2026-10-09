@@ -6,19 +6,17 @@ Lupi has two measurement lanes:
   Events go to `collectAnalytics`. On lupi.live that is the edge Worker's
   collector (`VITE_LUPI_ANALYTICS_URL=/collectAnalytics`), which writes each
   event as a `component: "lupi_analytics"` line to the Worker's logs
-  (`apps/mcp-worker/src/index.ts`). The Cloud Run fallback build
-  (`.github/workflows/deploy-viewer.yml`) posts to the Firebase Functions
-  collector instead, which writes structured Cloud Logging entries with
-  `jsonPayload.component="lupi_analytics"`.
+  (`apps/mcp-worker/src/index.ts`). The Firebase Functions collector
+  (`functions/src/analytics.ts`) writes structured Cloud Logging entries
+  with `jsonPayload.component="lupi_analytics"`, but no shipped build posts
+  to it since the Cloud Run fallback was removed on 2026-10-09.
 - Firebase/GA4: available, but intentionally disabled by default. Only enable it
   with `VITE_FIREBASE_ANALYTICS_ENABLED=true` and
   `VITE_FIREBASE_ANALYTICS_CONSENT=granted` after consent/legal basis is handled.
 
 ## Live Verification
 
-There is no scripted live check: `pnpm verify:analytics-live` and its tool
-are not in this repo, and `pnpm verify:cloudflare-live` is read-only and
-writes no analytics. To check by hand after a deploy, open
+There is no scripted live check. To check by hand after a deploy, open
 `https://lupi.live/?utm_source=codex_verify&utm_campaign=verify` and confirm in
 the browser's network panel that:
 
