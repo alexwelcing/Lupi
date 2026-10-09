@@ -71,10 +71,6 @@ export function assertAllowedRemoteMoleculeUrl(
       ? 'MCP molecule URLs must be absolute HTTPS URLs.'
       : undefined);
   }
-  if (context === 'mcp' && /^http:\/\//i.test(input)) {
-    throw new RemoteMoleculeUrlPolicyError('MCP molecule URLs must be absolute HTTPS URLs.');
-  }
-
   let parsed: URL;
   try {
     parsed = new URL(input);
@@ -86,12 +82,23 @@ export function assertAllowedRemoteMoleculeUrl(
     && isLocalDevelopmentHost(hostname)
     && isLocalDevelopmentHost(origin.hostname.toLowerCase())
     && isDevelopmentOrTest();
-  assertSafeUrlShape(parsed, localDevelopmentTarget);
+  // The development phone bridge loads a row from the same local Worker as
+  // its embedded viewer. Keep this exception to canonical OMol25 source rows,
+  // the identical origin and dev/test builds; automatic redirects stay off.
+  const localMcpOmolTarget = context === 'mcp'
+    && parsed.origin === origin.origin
+    && isLocalDevelopmentHost(hostname)
+    && isDevelopmentOrTest()
+    && isTrustedOmol25RowUrl(parsed);
+  if (context === 'mcp' && parsed.protocol === 'http:' && !localMcpOmolTarget) {
+    throw new RemoteMoleculeUrlPolicyError('MCP molecule URLs must be absolute HTTPS URLs.');
+  }
+  assertSafeUrlShape(parsed, localDevelopmentTarget || localMcpOmolTarget);
   assertMoleculePath(parsed.pathname);
 
   if (isLocalDevelopmentHost(hostname)) {
-    if (!localDevelopmentTarget) throw new RemoteMoleculeUrlPolicyError();
-    return { url: parsed.toString(), absoluteUrl: parsed.toString(), sameOriginStrict: false };
+    if (!localDevelopmentTarget && !localMcpOmolTarget) throw new RemoteMoleculeUrlPolicyError();
+    return { url: parsed.toString(), absoluteUrl: parsed.toString(), sameOriginStrict: localMcpOmolTarget };
   }
 
   if (isIpLiteral(hostname) || hostname.endsWith('.local')) throw new RemoteMoleculeUrlPolicyError();
@@ -139,8 +146,13 @@ function isDevelopmentOrTest(): boolean {
 
 function isTrustedScienceDataUrl(url: URL): boolean {
   if (url.search || url.hash) return false;
-  const omol = url.pathname.match(/^\/v1\/datasets\/omol25\/([a-z0-9-]+)\/structures\/\d+\.xyz$/);
-  return Boolean(omol && OMOL_COLLECTION_IDS.has(omol[1]))
+  return isTrustedOmol25RowUrl(url)
     || OMOL25_FEATURED_PATH_RE.test(url.pathname)
     || RESEARCH_DATA_PATHS.has(url.pathname);
+}
+
+function isTrustedOmol25RowUrl(url: URL): boolean {
+  if (url.search || url.hash) return false;
+  const omol = url.pathname.match(/^\/v1\/datasets\/omol25\/([a-z0-9-]+)\/structures\/\d+\.xyz$/);
+  return Boolean(omol && OMOL_COLLECTION_IDS.has(omol[1]));
 }

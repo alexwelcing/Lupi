@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   checkViewerCompatibility,
   GALLERY_VIEWER_TOOL,
+  OMOL25_VIEWER_TOOL,
   isSupportedViewerBridgeVersion,
   REQUIRED_VIEWER_TOOLS,
 } from "./viewer-compatibility";
@@ -96,4 +97,16 @@ test("requires the optional gallery command only for gallery loads", () => {
     ),
     { compatible: true },
   );
+});
+
+test("requires the trusted URL loader before opening an OMol25 row", () => {
+  const status = {
+    ready: true,
+    version: "2026-07-07.asset-export",
+    toolNames: [...REQUIRED_VIEWER_TOOLS],
+  };
+  const missing = checkViewerCompatibility(status, [OMOL25_VIEWER_TOOL]);
+  assert.equal(missing.compatible, false);
+  assert.match(missing.message ?? "", /lupi\.load_molecule_url/);
+  assert.deepEqual(checkViewerCompatibility({ ...status, toolNames: [...status.toolNames, OMOL25_VIEWER_TOOL] }, [OMOL25_VIEWER_TOOL]), { compatible: true });
 });

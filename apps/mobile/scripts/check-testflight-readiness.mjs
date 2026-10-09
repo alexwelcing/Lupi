@@ -120,7 +120,11 @@ check(
     rootPackageJson.pnpm?.overrides?.["js-yaml@4.3.1"] === "4.3.2" &&
     rootPackageJson.pnpm?.overrides?.["@xmldom/xmldom@0.8.13"] === "0.8.15" &&
     rootPackageJson.pnpm?.overrides?.["@xmldom/xmldom@0.9.10"] === "0.9.12" &&
-    rootPackageJson.pnpm?.overrides?.["sharp@0.35.0"] === "0.35.4" &&
+    rootPackageJson.pnpm?.overrides?.["sharp@0.35.0"] === "0.35.5" &&
+    rootPackageJson.pnpm?.overrides?.["sharp@0.35.4"] === "0.35.5" &&
+    rootPackageJson.pnpm?.overrides?.["shell-quote@1.10.0"] === "1.11.0" &&
+    rootPackageJson.pnpm?.overrides?.["source-map-js@1.2.1"] === "1.2.2" &&
+    rootPackageJson.pnpm?.overrides?.["compression@1.8.1"] === "1.8.2" &&
     rootPackageJson.pnpm?.overrides?.["nanoid@3.3.17"] === "3.3.18" &&
     rootPackageJson.pnpm?.overrides?.["nanoid@<3.3.17"] === undefined,
   "Patched transitive releases close the reviewed high-severity audit findings",

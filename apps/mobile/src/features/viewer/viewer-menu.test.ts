@@ -23,7 +23,7 @@ test("camera menu maps native choices to exact bridge presets", () => {
   );
 });
 
-test("appearance choices update background and postprocess together", () => {
+test("appearance choices expose current ink looks and background presets", () => {
   const appearance = viewerMenuDefinition("appearance");
 
   assert.deepEqual(
@@ -31,6 +31,9 @@ test("appearance choices update background and postprocess together", () => {
       action.kind === "command" ? action.command.arguments : null,
     ),
     [
+      { inkStyle: "off", backgroundPreset: "sage-plate", postprocessPreset: "paper" },
+      { inkStyle: "flat", backgroundPreset: "sage-plate", postprocessPreset: "paper" },
+      { inkStyle: "hatch", backgroundPreset: "paper-plate", postprocessPreset: "paper" },
       { backgroundPreset: "studio", postprocessPreset: "studio" },
       { backgroundPreset: "white", postprocessPreset: "paper" },
       { backgroundPreset: "blueprint", postprocessPreset: "diagram" },

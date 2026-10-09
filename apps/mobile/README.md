@@ -1,5 +1,40 @@
 # Lupi for iPhone
 
+## October 2026 development candidate
+
+This branch starts from main `4babe94e2f8f0e58bd10f45f959d31f2e5369bf5`,
+the OMol25-first ChatGPT plugin merge. Gallery and Library now put a native
+OMol25 entry first. The `/omol25` screen reads the public Lupi catalog, keeps
+complete neutral collections distinct from indexed previews, supports text and
+exact-formula search, and opens a selected source row through the existing
+trusted `lupi.load_molecule_url` browser bridge. It accepts only canonical
+collection/row paths and rows of at most 1,000 atoms. The selected row can be
+reopened from on-device Recents after its viewer load succeeds. The UI states
+that OMol25 supplies coordinates but no source bonds; any bonds the web viewer
+shows are display inferences. Viewer Look now exposes the web release's Lit,
+Illustrate, and Sketch styles.
+
+The ChatGPT plugin is a separate read-only MCP experience at
+`https://lupi.live/chatgpt/mcp`; it is not embedded in the iPhone app. The
+public endpoint was checked on 2026-10-03 and advertised
+`list_omol25_collections`, `search_omol25`, `open_omol25`,
+`resolve_molecule`, and `show_molecule`. The public Worker `/health` release
+tag matched `4babe94`, and the browser manifest advertised
+`lupi.load_molecule_url` and `inkStyle`. An installed ChatGPT card still needs
+its own host-side acceptance; the endpoint check does not prove one rendered.
+
+This is a JavaScript-only mobile change. The native checkpoint remains Expo
+SDK 57, React Native 0.86.2, React 19.2.3, Router 57, Viro 2.57.5, and
+runtime `1.0.1`. SDK 58 is still a beta as of this candidate. A successful
+local export does not install an update or prove iPhone behavior. Record the
+new EAS update/build IDs and physical-device results in
+[the mobile checklist](../../docs/mobile-testflight-checklist.md) when those
+lanes complete.
+
+The detailed release snapshot below is the **2026-08-17 historical handoff**.
+Its old source SHA, test counts, deployment tag, and build/update IDs describe
+that earlier checkpoint, not this candidate.
+
 `apps/mobile` is the Expo Router app for Lupi. Native Gallery, grouped Library,
 bounded XYZ import, and viewer controls surround a WebView-backed version of
 the existing molecular viewer. The standard shell is eligible for Expo Go only
@@ -20,7 +55,7 @@ discovers unit tests fail-closed, disables Viewer back-swipe so horizontal
 drags remain available for molecule rotation, and validates Expo dependencies
 against the installed SDK's immutable compatibility map.
 
-## Current release snapshot
+## August 17 release snapshot (historical)
 
 - Expo login: `alexwelcing`
 - EAS project: `@alexwelcing/lupi`

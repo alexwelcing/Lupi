@@ -82,6 +82,23 @@ test("gallery route params round-trip only curated IDs with their canonical atom
   );
 });
 
+test("OMol25 recents round-trip a bounded source row without accepting arbitrary URLs", () => {
+  const source = {
+    id: "omol25:neutral-train:7",
+    name: "H2O · OMol25 row 7",
+    formula: "H2O",
+    tags: ["OMol25", "neutral-train", "source coordinates", "bonds not provided"],
+    load: { inputType: "omol25" as const, input: "neutral-train/7", atomCount: 3 },
+  };
+  const params = moleculeRouteParams(source);
+  assert.deepEqual(moleculeFromRouteParams(params), source.load);
+  assert.deepEqual(moleculeSummaryFromRouteParams(params), source);
+  assert.deepEqual(normalizeMoleculeSummary(source), source);
+  assert.equal(normalizeMoleculeSummary({ ...source, id: "omol25:neutral-train:8" }), null);
+  assert.equal(normalizeMoleculeSummary({ ...source, load: { ...source.load, input: "https://evil.example/x.xyz" } }), null);
+  assert.equal(normalizeMoleculeSummary({ ...source, load: { ...source.load, atomCount: 1001 } }), null);
+});
+
 test("route summaries fail closed when metadata is missing, malformed, or oversized", () => {
   const params = moleculeRouteParams(GALLERY_MOLECULE);
   assert.equal(
