@@ -1,5 +1,44 @@
 # Lupi iPhone TestFlight checklist
 
+## October 3 development-app delta
+
+This development candidate starts from main merge
+`4babe94e2f8f0e58bd10f45f959d31f2e5369bf5`. The August snapshot and
+checked boxes below remain historical receipts until repeated on the final
+candidate SHA. The mobile app now has native OMol25 discovery, bounded source
+row loading, Recents reopen, source/coverage labels, and Lit/Illustrate/Sketch
+viewer choices. It keeps the SDK 57 / React Native 0.86.2 / Router 57 / Viro
+2.57.5 native checkpoint and runtime `1.0.1`; no native dependency, permission,
+or app identity changed in this candidate.
+
+Public service check on 2026-10-03: `/health` was ready at release tag
+`4babe94`, the browser manifest exposed 31 tools including
+`lupi.load_molecule_url` and `inkStyle`, and `/chatgpt/mcp` initialized and
+listed five read-only tools. This verifies the deployed endpoint contract,
+not an installed ChatGPT card or an iPhone viewer session.
+
+Development-candidate acceptance still requires:
+
+- [ ] Record the final clean Git SHA and repeat the frozen install, mobile
+      source ladder, web/iOS exports, and resolved development EAS config.
+- [ ] Record an EAS development-channel update ID, group, runtime, exact Git
+      SHA, and clean-working-tree status if an update is published. Confirm an
+      installed compatible Lupi Dev binary actually receives and runs it.
+- [ ] If a new device needs an Ad Hoc build, confirm its UDID is registered,
+      build with the development profile, and record the exact build ID,
+      signing/device scope, version/build, builder result, and installation.
+- [ ] On a physical iPhone, browse neutral train and one indexed preview;
+      search a formula, open a row, rotate the source structure, check the
+      no-source-bonds label, return from Recents, and retry a warming/offline
+      page. Verify Lit, Illustrate, and Sketch on the actual viewer.
+- [ ] Recheck Gallery/Library/Settings, Viewer Back and horizontal drag,
+      imported XYZ, background/resume, and the existing Room AR matrix on the
+      named iPhone and exact binary/update/Worker revisions. Simulator or web
+      composition screenshots do not close physical Room or TestFlight gates.
+
+No new TestFlight processing, App Store Connect assignment, or physical-device
+acceptance is implied by this section.
+
 Status snapshot: **2026-08-17**
 
 This is the gated path from the current `apps/mobile` source to an iPhone

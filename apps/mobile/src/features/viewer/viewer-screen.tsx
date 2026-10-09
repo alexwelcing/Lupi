@@ -43,6 +43,7 @@ import {
 import {
   checkViewerCompatibility,
   GALLERY_VIEWER_TOOL,
+  OMOL25_VIEWER_TOOL,
 } from "./viewer-compatibility";
 import { ViewerControlBar } from "./viewer-control-bar";
 import { shouldProbeViewerOnAppStateChange } from "./viewer-recovery";
@@ -255,7 +256,11 @@ function ViewerScreenSession({
 
     const compatibility = checkViewerCompatibility(
       status,
-      molecule.inputType === "gallery" ? [GALLERY_VIEWER_TOOL] : [],
+      molecule.inputType === "gallery"
+        ? [GALLERY_VIEWER_TOOL]
+        : molecule.inputType === "omol25"
+          ? [OMOL25_VIEWER_TOOL]
+          : [],
     );
     if (!compatibility.compatible) {
       clearInitialRequestTimeout();
@@ -783,6 +788,24 @@ function ViewerScreenSession({
         </View>
       </View>
 
+      {molecule.inputType === "omol25" ? (
+        <View
+          style={{
+            backgroundColor: colors.backgroundElevated,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+          }}
+        >
+          <Text
+            selectable
+            style={{ color: colors.textMuted, fontSize: 12, lineHeight: 17 }}
+          >
+            OMol25 source coordinates · Source bonds not provided; any visible
+            bonds are viewer inferences.
+          </Text>
+        </View>
+      ) : null}
+
       {lastError && !showBlockingState ? (
         <ViewerNoticeBanner
           icon="exclamationmark.circle.fill"
@@ -1049,12 +1072,15 @@ function productViewerName(
   const requested = displayName?.trim().slice(0, 160);
   if (requested) return requested;
   if (molecule.inputType === "xyz") return "Imported structure";
+  if (molecule.inputType === "omol25")
+    return `OMol25 row ${molecule.input.split("/")[1]}`;
   if (molecule.inputType === "procedural") return "Generated structure";
   return molecule.input.trim().slice(0, 160) || "Molecule";
 }
 
 function moleculeKindLabel(molecule: MoleculeLoadInput): string {
   if (molecule.inputType === "gallery") return "Gallery structure";
+  if (molecule.inputType === "omol25") return "OMol25 source row";
   if (molecule.inputType === "procedural") return "Generated structure";
   if (molecule.inputType === "xyz") return "Imported XYZ structure";
   return "Molecular model";

@@ -1,9 +1,38 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertAllowedRemoteMoleculeUrl } from './remoteMoleculeUrlPolicy';
 
 const ORIGIN = 'https://lupi.live';
 
 describe('assertAllowedRemoteMoleculeUrl', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('allows only same-origin OMol25 rows for the local development MCP bridge', () => {
+    const origin = 'http://127.0.0.1:8787';
+    const row = '/v1/datasets/omol25/neutral-train/structures/7.xyz';
+    const url = `${origin}${row}`;
+    expect(assertAllowedRemoteMoleculeUrl(url, 'mcp', origin)).toEqual({
+      url,
+      absoluteUrl: url,
+      sameOriginStrict: true,
+    });
+    for (const target of [
+      `http://127.0.0.1:5177${row}`,
+      `http://localhost:8787${row}`,
+      `${origin}/gallery/caffeine.xyz`,
+      `${origin}/datasets/omol25/featured/omol25_nv_273.xyz`,
+      `${origin}/v1/datasets/omol25/not-a-collection/structures/7.xyz`,
+      `${url}?redirect=elsewhere`,
+      `${url}#other`,
+    ]) {
+      expect(() => assertAllowedRemoteMoleculeUrl(target, 'mcp', origin)).toThrow();
+    }
+    expect(() => assertAllowedRemoteMoleculeUrl(url, 'mcp', ORIGIN)).toThrow();
+    expect(() => assertAllowedRemoteMoleculeUrl(row, 'mcp', origin)).toThrow();
+    expect(() => assertAllowedRemoteMoleculeUrl(url, 'saved-view', origin)).toThrow();
+    vi.stubEnv('DEV', false);
+    vi.stubEnv('MODE', 'production');
+    expect(() => assertAllowedRemoteMoleculeUrl(url, 'mcp', origin)).toThrow();
+  });
   it.each([
     'https://lupi.live/gallery/curated/caffeine.xyz',
     'https://www.lupi.live/gallery/a/sample.glimbin',
