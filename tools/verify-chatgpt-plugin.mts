@@ -66,7 +66,12 @@ try {
   const toolList = await client.listTools();
   await saveJson('tools.json', toolList);
   check('The public adapter exposes OMol25 discovery and PubChem lookup',
-    JSON.stringify(toolList.tools.map((tool) => tool.name).sort()) === JSON.stringify(['list_omol25_collections', 'open_omol25', 'resolve_molecule', 'search_omol25', 'show_molecule']));
+    JSON.stringify(toolList.tools.map((tool) => tool.name).sort()) === JSON.stringify(['list_omol25_collections', 'open_omol25', 'recommend_molecule', 'resolve_molecule', 'search_omol25', 'show_molecule']));
+  const recommendation = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'buckyball' } }) as CallToolResult;
+  check('Exact discovery returns a code-owned PubChem CID without claiming source geometry',
+    recommendation.structuredContent?.method === 'exact'
+      && (recommendation.structuredContent?.candidates as { pubchemCid: number }[])?.[0]?.pubchemCid === 123591
+      && recommendation._meta?.molecule === undefined);
   const showTool = toolList.tools.find((tool) => tool.name === 'show_molecule')!;
   const ui = showTool._meta?.ui as { resourceUri?: string } | undefined;
   check('show_molecule advertises the current versioned MCP App resource', ui?.resourceUri === CHATGPT_UI_URI, { actual: ui?.resourceUri, expected: CHATGPT_UI_URI });

@@ -2,15 +2,19 @@ name: ChatGPT widget checks
 
 on:
   push:
-    branches: [codex/chatgpt-omol-bonds-hover]
+    branches: [main, codex/chatgpt-omol-bonds-hover]
   pull_request:
     paths:
       - 'apps/chatgpt-widget/**'
       - 'apps/mcp-worker/src/chatgpt*'
+      - 'apps/mcp-worker/src/discovery*'
+      - 'packages/core/src/jev/**'
       - 'packages/core/src/omol25/**'
       - 'packages/core/src/bonds/**'
       - 'plugins/lupi-live/**'
       - 'tools/verify-chatgpt-inspection.mts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/chatgpt-widget.yml'
 
 permissions:

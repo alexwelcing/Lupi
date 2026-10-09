@@ -165,7 +165,7 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     expect(initialize.status).toBe(200);
     expect(initialize.result?.result).toMatchObject({
       protocolVersion: initializeVersion,
-      serverInfo: { name: 'lupi-live', version: '0.3.0' },
+      serverInfo: { name: 'lupi-live', version: '0.4.0' },
       capabilities: { tools: {}, resources: {} },
     });
     expect(exchanges).toContainEqual(expect.objectContaining({ rpc: expect.objectContaining({ method: 'notifications/initialized' }), status: 202 }));
@@ -175,14 +175,25 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     expect(toolsRequest.request.headers.get('Accept')).toContain('text/event-stream');
   });
 
+  it('recommends an owned compound through MCP without retrieving geometry', async () => {
+    const { client, upstream } = await connected();
+    const named = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'buckyball' } });
+    expect(named.isError).not.toBe(true);
+    expect(summary(named)).toMatchObject({ status: 'matched', method: 'exact', candidates: [{ id: 'c60_buckyball', pubchemCid: 123591 }] });
+    noGeometry(named);
+    const withheld = await client.callTool({ name: 'recommend_molecule', arguments: { query: 'a molecule not in this catalogue' } });
+    expect(summary(withheld)).toMatchObject({ status: 'no-match', method: 'unavailable', candidates: [] });
+    expect(upstream.fetch).not.toHaveBeenCalled();
+  });
+
   it('advertises OMol25 discovery and PubChem lookup with bounded read-only tools', async () => {
     const { client, upstream } = await connected();
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['list_omol25_collections', 'open_omol25', 'resolve_molecule', 'search_omol25', 'show_molecule']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['list_omol25_collections', 'open_omol25', 'recommend_molecule', 'resolve_molecule', 'search_omol25', 'show_molecule']);
     for (const tool of tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true, idempotentHint: true });
       expect(tool.inputSchema).toMatchObject({ type: 'object', additionalProperties: false });
-      if (['open_omol25', 'resolve_molecule', 'show_molecule'].includes(tool.name)) expect(tool.outputSchema).toBeDefined();
+      if (['open_omol25', 'recommend_molecule', 'resolve_molecule', 'show_molecule'].includes(tool.name)) expect(tool.outputSchema).toBeDefined();
     }
     const renderTool = tools.find((tool) => tool.name === 'show_molecule')!;
     expect(renderTool._meta).toMatchObject({ ui: { resourceUri: 'ui://lupi/molecule-v3.html' } });
