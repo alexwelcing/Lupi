@@ -13,6 +13,11 @@ then on are dated by the day they merged, with their pull requests.
   atom of its half), with a 5 / 8 / 14 px near-miss allowance for mouse,
   pen and touch (`packages/scene/src/atomPick.ts`). The selection ring and
   the atom card follow the drawn radius.
+- **The gallery's amorphous silica is silica glass now.** The old file held a
+  quartz-like crystal with as many Si as O (Si–Si 1.80 Å). It is replaced by
+  a real melt-quenched glass (LAMMPS, Vashishta 1990 potential; inputs in
+  `scripts/gallery-sio2/`): 4,000 SiO₂ at 2.20 g/cm³, Si–O 1.62 Å, Si–O–Si
+  146°, 96% four-coordinated Si, with a new thumbnail.
 - **CI is one ~3 min build check on pull requests**; a push to main deploys
   without waiting. Playwright (bar the release smoke), audits, lint and the
   unit tests left CI, and the retired release controller, the local
