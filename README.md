@@ -174,6 +174,6 @@ the public product works. See the
 - [docs/lupi-mcp-roadmap.md](docs/lupi-mcp-roadmap.md): agent/MCP roadmap
 - [docs/operations.md](docs/operations.md): local, CI, deploy, and live checks
 - [docs/deploy-cutover.md](docs/deploy-cutover.md): production deploy split
-- [docs/release-checklist.md](docs/release-checklist.md): cutover checklist
+- [docs/release-checklist.md](docs/release-checklist.md): what to look at before and after a release
 - [docs/ar/README.md](docs/ar/README.md): the native Apple app's plan, decisions, contracts and status
 - [docs/mobile-macbook-air-handoff.md](docs/mobile-macbook-air-handoff.md): Apple Silicon handoff for the frozen Expo app
