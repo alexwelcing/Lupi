@@ -8,7 +8,7 @@
  * Chain (the v9 order; every step up to the encode in linear light):
  *   scene pass → GTAO (depth-reconstructed normals, denoised) → bloom →
  *   depth of field → tone mapping (renderOutput, linear out) → vignette →
- *   sRGB encode → FXAA
+ *   ink contour (while the Illustrate look is drawn) → sRGB encode → FXAA
  * The chain ends display-referred: its own renderOutput is the single sRGB
  * encode (plan-final D14), the pipeline runs with `outputColorTransform =
  * false` and the renderer at NoToneMapping, so nothing tone-maps or encodes
@@ -37,17 +37,35 @@
  * the difference between its raw colour and what tone mapping and vignette
  * alone would make of it. A plate pixel therefore shows its configured
  * colour exactly, while glow and defocus spilling over it are kept.
+ *
+ * While the Illustrate look is drawn (`contour`), the chain inks the
+ * screen-space contour (inkContour.ts) last in linear light, after the look,
+ * so the ink keeps its colour; FXAA smooths it with everything else. It
+ * reads the scene pass's depth and content coverage, and fades with the
+ * live look.
+ *
+ * The live look is per pixel: `uInkMix` (the look's fade) plus the Light
+ * Fuse's offset, which the scene pass writes beside coverage
+ * (backgroundMask.ts), so it is 0 where the pixel is lit and 1 where it is
+ * inked, front and all. While the look changes (`inkFade`) the graph is the
+ * lit recipe's, and every stage rests by that mix: AO and the vignette fade
+ * toward none, inked pixels neither glow nor take glow, defocus gives way to
+ * the sharp image, and the tone-mapped colour blends back to the untouched
+ * one, so the ink reaches the screen exactly at 1 and the lit part keeps its
+ * look at 0. At rest the graph is the look's own (the ink recipe is cheaper).
  */
 import * as THREE from 'three/webgpu';
 import type { Camera, Node, PassNode, UniformNode } from 'three/webgpu';
-import { distance, float, mrt, output, renderOutput, rtt, smoothstep, uniform, uv, vec2, vec4 } from 'three/tsl';
+import { clamp, distance, float, mix, mrt, output, reference, renderOutput, rtt, smoothstep, uniform, uv, vec2, vec4 } from 'three/tsl';
 import { ao, type default as GTAONode } from 'three/examples/jsm/tsl/display/GTAONode.js';
 import { bloom, type default as BloomNode } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import { dof, type default as DepthOfFieldNode } from 'three/examples/jsm/tsl/display/DepthOfFieldNode.js';
 import { denoise } from 'three/examples/jsm/tsl/display/DenoiseNode.js';
 import { fxaa } from 'three/examples/jsm/tsl/display/FXAANode.js';
+import { INK_LOOK } from '@atlas/scene';
 import type { PostprocessPresetConfig, PostStructure } from './presets';
 import { LUPI_CONTENT_OUTPUT, contentCoverage } from './backgroundMask';
+import { INK_CONTOUR_TUNING, inkContour } from './inkContour';
 
 export interface PostChain {
   /**
@@ -103,7 +121,9 @@ export function buildPostChain(
 
   // Tone mapping and vignette would restyle the background; keep it as set.
   const keepBackground = structure.toneMapping !== 'none' || structure.vignette;
-  if (keepBackground) {
+  // The ink contour finds the plate by the same coverage; a changing look
+  // reads the fuse's offset beside it.
+  if (keepBackground || structure.contour || structure.inkFade) {
     const passMrt = mrt({ output, [LUPI_CONTENT_OUTPUT]: contentCoverage() });
     passMrt.setBlendMode(LUPI_CONTENT_OUTPUT, new THREE.BlendMode(THREE.MaterialBlending));
     passMrt.setClearColor(LUPI_CONTENT_OUTPUT, 0x000000, 0);
@@ -114,6 +134,18 @@ export function buildPostChain(
 
   const raw: Node<'vec4'> = scenePass.getTextureNode('output');
   let color: Node<'vec4'> = raw;
+
+  // The live ink mix of each pixel: 0 lit, 1 inked (the look's fade plus the fuse's offset).
+  const inkLive: Node<'float'> | null = structure.contour || structure.inkFade
+    ? clamp(INK_LOOK.uInkMix.add(scenePass.getTextureNode(LUPI_CONTENT_OUTPUT).g), 0, 1)
+    : null;
+  // While the look changes, a stage's lit value rests toward the ink
+  // recipe's (`inked`) by the live mix: exact at 0 and at 1.
+  const rest = <T extends Node>(lit: T, inked: Node): T =>
+    (structure.inkFade && inkLive
+      ? mix(lit as unknown as Node<'vec4'>, inked as unknown as Node<'vec4'>, inkLive) as unknown as T
+      : lit);
+  const glowing: Node<'float'> | null = structure.inkFade && inkLive ? float(1).sub(inkLive) : null;
 
   let aoNode: GTAONode | null = null;
   if (structure.ao) {
@@ -127,20 +159,22 @@ export function buildPostChain(
     aoNode.resolutionScale = options.aoResolutionScale;
     aoNode.samples.value = AO_SAMPLES;
     const occlusion = denoise(aoNode.getTextureNode(), depth, noNormals, camera) as unknown as Node<'vec4'>;
-    color = vec4(color.rgb.mul(occlusion.r), color.a);
+    color = vec4(color.rgb.mul(rest(occlusion.r, float(1))), color.a);
   }
 
   let bloomNode: BloomNode | null = null;
   if (structure.bloom) {
-    bloomNode = bloom(color);
+    // While the look changes, inked pixels neither glow nor take glow.
+    bloomNode = bloom(glowing ? vec4(color.rgb.mul(glowing), color.a) : color);
     bloomNode.radius.value = BLOOM_RADIUS;
-    color = vec4(color.rgb.add(bloomNode.rgb), color.a);
+    color = vec4(color.rgb.add(glowing ? bloomNode.rgb.mul(glowing) : bloomNode.rgb), color.a);
   }
 
   let dofNode: DepthOfFieldNode | null = null;
   if (structure.dof) {
     dofNode = dof(color, scenePass.getViewZNode(), focusDistance, focusRange, bokehScale);
-    color = dofNode as unknown as Node<'vec4'>;
+    // Its input (the sharp image) where the pixel is inked.
+    color = rest(dofNode as unknown as Node<'vec4'>, dofNode.textureNode);
   }
 
   // Tone mapping then vignette: the "look" every pixel gets.
@@ -149,13 +183,15 @@ export function buildPostChain(
     if (structure.toneMapping !== 'none') {
       // Tone map only; the working space stays linear. The pipeline's output
       // transform encodes sRGB after the vignette.
-      styled = renderOutput(styled, TONE_MAPPING[structure.toneMapping], THREE.LinearSRGBColorSpace);
+      const toned = renderOutput(styled, TONE_MAPPING[structure.toneMapping], THREE.LinearSRGBColorSpace);
+      // Never on ink: a changing look blends back to the untouched colour.
+      styled = structure.inkFade ? vec4(rest(toned.rgb, styled.rgb), toned.a) : toned;
     }
     if (structure.vignette) {
       // The postprocessing library's default vignette, written as
       // 1 - smoothstep(lo, hi, x) so the edges stay ordered (lo < hi).
       const radial = distance(uv(), vec2(0.5, 0.5)).mul(vignetteDarkness.add(vignetteOffset));
-      const falloff = float(1).sub(smoothstep(vignetteOffset.mul(0.799), float(0.8), radial));
+      const falloff = rest(float(1).sub(smoothstep(vignetteOffset.mul(0.799), float(0.8), radial)), float(1));
       styled = vec4(styled.rgb.mul(falloff), styled.a);
     }
     return styled;
@@ -169,6 +205,25 @@ export function buildPostChain(
     const content = scenePass.getTextureNode(LUPI_CONTENT_OUTPUT).r.clamp(0, 1);
     const restore = raw.rgb.sub(look(raw).rgb).mul(float(1).sub(content));
     color = vec4(color.rgb.add(restore).max(0), color.a);
+  }
+
+  if (structure.contour) {
+    // The Illustrate look's contour, after the look so the ink keeps its colour.
+    const contentNode = scenePass.getTextureNode(LUPI_CONTENT_OUTPUT);
+    color = inkContour({
+      color,
+      alpha: color.a,
+      depth: scenePass.getTextureNode('depth'),
+      coverage: (at) => contentNode.sample(at).r,
+      projectionMatrix: uniform(camera.projectionMatrix),
+      viewMatrix: uniform(camera.matrixWorldInverse),
+      near: reference('near', 'float', camera),
+      far: reference('far', 'float', camera),
+      unit: INK_LOOK.uInkPx,
+      strength: inkLive ?? INK_LOOK.uInkMix,
+      inner: INK_CONTOUR_TUNING.innerLine,
+      outer: INK_CONTOUR_TUNING.outerLine,
+    }) as Node<'vec4'>;
   }
 
   // The single sRGB encode (no tone mapping here: the look did that), then

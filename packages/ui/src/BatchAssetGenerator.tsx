@@ -95,7 +95,6 @@ function wait(ms: number) {
 
 export function BatchAssetGenerator() {
   const [currentIndex, setCurrentIndex] = useState(-1);
-  const [currentId, setCurrentId] = useState<string | null>(null);
   const [phase, setPhase] = useState<'idle' | 'loading' | 'snapshot' | 'glb' | 'uploading' | 'done' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
   const [errors, setErrors] = useState<string[]>([]);
@@ -112,7 +111,6 @@ export function BatchAssetGenerator() {
     for (let i = 0; i < total; i++) {
       const example = EXAMPLES[i];
       setCurrentIndex(i);
-      setCurrentId(example.id);
       setPhase('loading');
       setProgress(i / total);
 
@@ -209,7 +207,6 @@ export function BatchAssetGenerator() {
 
     setPhase('done');
     setProgress(1);
-    setCurrentId(null);
     running.current = false;
     console.log('[BatchAssetGenerator] Batch complete');
   }, []);

@@ -12,9 +12,10 @@
  *   An ink tile grows its own ink drawing instead, to the size the viewer
  *   will draw the molecule at, from the pose the viewer opens on. Once its
  *   model is in (fetched as the finger reached the tile), the drawing turns
- *   like the hero's while the viewer loads, and every turn goes into the
- *   baton. The 3D view then opens in ink at that pose and the light comes on
- *   (ink/InkLookDriver.tsx).
+ *   like the hero's while the viewer loads, eases into the viewer's
+ *   perspective, and every turn goes into the baton. The 3D view then opens
+ *   in ink at that pose, on the same picture (the drawing is the Illustrate
+ *   look, moleculePage/ink.ts), and the light comes on (ink/InkLookDriver.tsx).
  * - At 1.2 s a hairline lime ring traces the stage; at 10 s the stage says it
  *   is still loading and offers Retry (a plain deep link).
  * - end(): pointer-events off at once, a 120 ms fade, then the layer is gone.
@@ -135,9 +136,9 @@ interface Relay {
   face: HTMLParagraphElement;
   wait: HTMLDivElement;
   stage: BuckyStage | null;
-  /** The viewer's fitted camera distance (Å) the hero drawing is put in perspective from. */
+  /** The viewer's fitted camera distance (Å) the hero or ink drawing is put in perspective from. */
   distance: number;
-  /** The drawing is still easing from the hero's orthographic view into that perspective. */
+  /** The drawing is still easing from its orthographic view into that perspective. */
   easing: boolean;
   timers: Array<ReturnType<typeof setTimeout>>;
   cleanup: Array<() => void>;
@@ -215,13 +216,18 @@ function layout(relay: Relay): void {
     below = cy + ring / 2;
   } else if (relay.inkSrc) {
     // The drawing at the size the viewer will fit the molecule (its widest
-    // turn fills 88 % of the square), or a plate-sized square before the
-    // manifest has said.
+    // turn fills 88 % of the square), in the viewer's perspective, or a
+    // plate-sized square before the manifest has said.
     const short = Math.min(width, height);
     const tile = relay.inkTile;
-    const size = tile
-      ? Math.min(short * INK_MAX_SHARE, (viewerFitFor(width, height, tile.fit).pxPerAngstrom * tile.inkRadius) / INK_DRAWING_FILL * 2)
+    const fit = tile ? viewerFitFor(width, height, tile.fit) : null;
+    const size = tile && fit
+      ? Math.min(short * INK_MAX_SHARE, (fit.pxPerAngstrom * tile.inkRadius) / INK_DRAWING_FILL * 2)
       : Math.min(short * 0.8, PREVIEW_MAX_PX);
+    if (fit) {
+      relay.distance = fit.distance;
+      if (relay.inkStage && !relay.easing) relay.inkStage.setPerspective(fit.distance);
+    }
     place(relay.stageEl, cx - size / 2, cy - size / 2, size, size);
     const foot = Math.min(cy + (size * INK_DRAWING_FILL) / 2 + 14, height - PLATE_RING_PX - 40);
     place(relay.ring, cx - PLATE_RING_PX / 2, foot, PLATE_RING_PX, PLATE_RING_PX);
@@ -323,13 +329,14 @@ function mountHero(relay: Relay): void {
 }
 
 /**
- * The home page draws the ball orthographically; the viewer sees it from a
- * camera a few radii away. While the drawing swells into place (FLIP_MS, the
- * same glide), the perspective eases in, so at the hand-off the drawing and
- * the lit cage share their shape as well as their pose and size.
+ * The home page and the tiles draw orthographically; the viewer sees the
+ * molecule from a camera a few radii away. While the drawing swells into
+ * place (FLIP_MS, the same glide), the perspective eases in, so at the
+ * hand-off the drawing and the 3D view share their shape as well as their
+ * pose and size.
  */
 function easeIntoPerspective(relay: Relay): void {
-  const stage = relay.stage;
+  const stage = relay.stage ?? relay.inkStage;
   if (!stage) return;
   if (relay.layer.dataset.still !== undefined) {
     stage.setPerspective(relay.distance);
@@ -340,10 +347,11 @@ function easeIntoPerspective(relay: Relay): void {
   let frame = 0;
   const step = () => {
     frame = 0;
-    if (current !== relay || !relay.stage) return;
+    const live = relay.stage ?? relay.inkStage;
+    if (current !== relay || !live) return;
     const progress = glideProgress(performance.now() - started);
     // Ease 1/distance from 0 (orthographic) to the viewer's.
-    relay.stage.setPerspective(progress >= 1 ? relay.distance : progress > 1e-3 ? relay.distance / progress : null);
+    live.setPerspective(progress >= 1 ? relay.distance : progress > 1e-3 ? relay.distance / progress : null);
     if (progress >= 1) relay.easing = false;
     else frame = requestAnimationFrame(step);
   };
@@ -402,6 +410,7 @@ function mountInkStage(relay: Relay, model: InkModel): void {
   });
   // The pose the drawing opens on is the one the viewer will take.
   mirror();
+  if (relay.distance > 0) easeIntoPerspective(relay);
   // Nothing under the relay scrolls: every swipe on the drawing turns it.
   stageEl.style.touchAction = 'none';
 }

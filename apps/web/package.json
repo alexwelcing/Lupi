@@ -19,8 +19,6 @@
     "@react-three/drei": "11.0.0-alpha.7",
     "@react-three/fiber": "10.0.0-canary.14007b4",
     "@react-three/tsl": "10.0.0-canary.14007b4",
-    "@rive-app/react-canvas": "^4.28.6",
-    "gifenc": "^1.0.3",
     "mp4-muxer": "^5.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",

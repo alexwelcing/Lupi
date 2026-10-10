@@ -27,6 +27,14 @@
  *
  * Transparent output keeps AO and tone mapping (on un-premultiplied colour);
  * captureLook.ts never asks it for bloom, defocus or a vignette.
+ *
+ * Under the Illustrate look there is no recipe, only the look's contour
+ * (`look.inkContour`, postprocess/inkContour.ts, the node the live chain
+ * runs): it inks the assembled image last, from the assembled depth and
+ * coverage, with the line weight of an output-sized picture (one ink unit is
+ * `inkPixelsPerUnit` output pixels, as the impostors drew it in the tiles).
+ * Over a transparent background it inks the molecule only; the background
+ * stays clear.
  */
 import * as THREE from 'three/webgpu';
 import type { Node, TextureNode } from 'three/webgpu';
@@ -50,7 +58,9 @@ import { bloom, type default as BloomNode } from 'three/examples/jsm/tsl/display
 import { dof, type default as DepthOfFieldNode } from 'three/examples/jsm/tsl/display/DepthOfFieldNode.js';
 import { denoise } from 'three/examples/jsm/tsl/display/DenoiseNode.js';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+import { inkPixelsPerUnit } from '@atlas/scene';
 import { toneMappingConstant } from '../postprocess/postPipeline';
+import { inkContour } from '../postprocess/inkContour';
 import { captureLookStructureKey, type CaptureLook } from './captureLook';
 
 // Graph-building code works on untyped nodes (spike G13).
@@ -88,6 +98,10 @@ interface LookChain {
   bokehScale: { value: number };
   vignetteOffset: { value: number };
   vignetteDarkness: { value: number };
+  /** The ink contour: output pixels per ink unit, and its line widths (ink units). */
+  inkUnit: { value: number };
+  inkInner: { value: number };
+  inkOuter: { value: number };
 }
 
 const chains = new Map<string, LookChain>();
@@ -156,6 +170,9 @@ function buildChain(look: CaptureLook, transparent: boolean, coverage: boolean, 
   const bokehScale: N = uniform(1);
   const vignetteOffset: N = uniform(0.5);
   const vignetteDarkness: N = uniform(0.3);
+  const inkUnit: N = uniform(1);
+  const inkInner: N = uniform(1);
+  const inkOuter: N = uniform(2);
   const passes: LookChain['passes'] = [];
   const resizable: LookChain['resizable'] = [];
 
@@ -231,6 +248,24 @@ function buildChain(look: CaptureLook, transparent: boolean, coverage: boolean, 
     const restore: N = raw.rgb.sub(styled(raw).rgb).mul(float(1).sub(content));
     out = vec4(out.rgb.add(restore).max(vec3(0)), out.a);
   }
+  if (look.inkContour) {
+    // The Illustrate look's contour, last: an opaque capture's alpha is its
+    // coverage (and its colour straight), a transparent one's is its own.
+    out = inkContour({
+      color: out,
+      alpha: transparent ? out.a : float(1),
+      depth,
+      coverage: (at: N) => color.sample(at).a,
+      projectionMatrix: uniform(camera.projectionMatrix),
+      viewMatrix: uniform(camera.matrixWorldInverse),
+      near,
+      far,
+      unit: inkUnit,
+      strength: float(1),
+      inner: inkInner,
+      outer: inkOuter,
+    });
+  }
   const final: N = transparent
     ? vec4(out.rgb.max(vec3(0)).min(vec3(out.a.clamp(0, 1))), out.a.clamp(0, 1))
     : vec4(out.rgb.max(vec3(0)), 1);
@@ -262,6 +297,9 @@ function buildChain(look: CaptureLook, transparent: boolean, coverage: boolean, 
     bokehScale,
     vignetteOffset,
     vignetteDarkness,
+    inkUnit,
+    inkInner,
+    inkOuter,
   };
 }
 
@@ -325,6 +363,11 @@ export function renderCaptureLook(options: CaptureLookPassOptions): void {
   if (look.vignette) {
     chain.vignetteOffset.value = look.vignette.offset;
     chain.vignetteDarkness.value = look.vignette.darkness;
+  }
+  if (look.inkContour) {
+    chain.inkUnit.value = inkPixelsPerUnit({ pixelScale: 1, width, height });
+    chain.inkInner.value = Math.max(0, look.inkContour.inner);
+    chain.inkOuter.value = Math.max(0, look.inkContour.outer);
   }
 
   // The stages size their targets from the drawing buffer: give them the

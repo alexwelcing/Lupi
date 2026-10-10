@@ -15,13 +15,15 @@
  * - the `uProgress` GPU lerp between two instance position buffers;
  * - the display-motion offset (tsl/displayMotion.ts) on the centre: arrival,
  *   ripple, scatter, tug, burst and heat, exactly zero at rest and in every
- *   capture;
+ *   capture; the morph arrival reads the atom's start at its instance index
+ *   while the layer's `uMorphOn` gate is on;
  * - the hover, selection and grab glow and the heat tint (tsl/atomGlow.ts):
  *   a lime rim and a small swell, exactly absent in every capture;
  * - the Foil finishes of a Remix code (tsl/atomFoil.ts): Holo, Gold leaf
  *   and Pearl on the rims and highlights, exactly absent in every capture;
  * - the Illustrate look (tsl/inkLook.ts): toon fills and an ink outline at
- *   the disc's silhouette, mixed over the lit surface by `uInkMix`;
+ *   the disc's silhouette, mixed over the lit surface by `uInkMix`, or per
+ *   fragment by the Light Fuse while one runs (tsl/inkFuse.ts);
  * - hidden types (zero palette radius) and sub-pixel atoms collapse to a
  *   degenerate vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -89,6 +91,7 @@ import { lupiDisplayOffset } from './displayMotion';
 import { lupiAtomGlow, lupiAtomGlowStrength, lupiAtomSwell } from './atomGlow';
 import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
+import { lupiAtomFuseHop, lupiFuse, lupiFuseEmber, lupiFuseSurfacePoint } from './inkFuse';
 import { CONTACT_OCCLUSION_NEIGHBORS, CONTACT_TEXTURE_WIDTH } from '../atomContactOcclusion';
 import {
   blendMaterialPreset,
@@ -198,6 +201,8 @@ export interface AtomImpostorUniforms extends LupiUniformBag {
   uBondStubRadius: UniformNode<'float', number>;
   /** Neighbours closer than this (world units) carry a bond stub. */
   uBondStubReach: UniformNode<'float', number>;
+  /** 1 while the morph arrival's texture belongs to this layer's frame (tsl/displayMotion.ts). */
+  uMorphOn: UniformNode<'float', number>;
   // Base texture nodes: set `.value` to swap a texture for every tier.
   uPalette: TextureNode;
   uColormap: TextureNode;
@@ -257,6 +262,7 @@ export function createAtomImpostorUniforms(textures: AtomImpostorTextures): Atom
     uContactStrength: uniform(0),
     uBondStubRadius: uniform(0),
     uBondStubReach: uniform(0),
+    uMorphOn: uniform(0),
     uPalette: texture(textures.palette) as unknown as TextureNode,
     uColormap: texture(textures.colormap) as unknown as TextureNode,
     uRadiusPalette: texture(textures.radiusPalette) as unknown as TextureNode,
@@ -323,9 +329,15 @@ export function createAtomImpostorMaterial({
   const restCenter: N = interpolate
     ? mix(rawPosition, attribute(ATOM_ATTR.target, 'vec3'), u.uProgress)
     : rawPosition;
-  // Display-only motion (arrival, ripple, scatter): exactly zero at rest and
-  // in every capture; everything below follows the displaced centre.
-  const displayOffset: N = (lupiDisplayOffset(restCenter, rawPosition) as N).toVar('atomDisplayOffset');
+  // ── Morph arrival source (tsl/displayMotion.ts) ──────────────────
+  // The instance index is the atom index: this atom's texel in the morph
+  // texture, read only while the layer's gate says the texture is this
+  // frame's.
+  const morphSource = { index: atomId, on: u.uMorphOn };
+  // Display-only motion (arrival, morph, ripple, scatter, the verbs): exactly
+  // zero at rest and in every capture; everything below follows the
+  // displaced centre.
+  const displayOffset: N = (lupiDisplayOffset(restCenter, rawPosition, morphSource) as N).toVar('atomDisplayOffset');
   const center: N = restCenter.add(displayOffset);
   const viewCenter: N = modelViewMatrix.mul(vec4(center, 1.0)).xyz;
   const viewDepth: N = max(viewCenter.z.negate(), 1e-4);
@@ -458,6 +470,11 @@ export function createAtomImpostorMaterial({
     // blend of the two while the look fades. Uniform branches: a still look
     // runs one of them only.
     const inkMix: N = INK_LOOK.uInkMix as N;
+    // The Light Fuse (tsl/inkFuse.ts): per fragment while a fuse runs, the
+    // front reaching this atom at its hop, and its ember; exactly `uInkMix`
+    // and no ember otherwise.
+    const fuse: N = (lupiFuse(inkMix, lupiAtomFuseHop(vAtomId), lupiFuseSurfacePoint(hit.xyz)) as N).toVar();
+    const fusedMix: N = fuse.x;
     const lit = vec3(0).toVar();
     If(inkMix.lessThan(1.0), () => {
       lit.assign(lupiSurface(
@@ -494,12 +511,13 @@ export function createAtomImpostorMaterial({
           edgePx,
           lineWidth: INK_LOOK_TUNING.atomLine,
           hit: hit.xyz,
+          center: vViewCenter,
           isOrtho,
           emission,
         },
         lights,
       ) as N;
-      lit.assign(mix(lit, ink, clamp(inkMix, 0.0, 1.0)));
+      lit.assign(mix(lit, ink, fusedMix));
     });
 
     // Etched annotation: the view-space normal is the stamp UV (the text
@@ -524,11 +542,13 @@ export function createAtomImpostorMaterial({
       pixelRadius: vPixelRadius,
       sweep: vFoilSweep,
       // The Illustrate look is a drawing: a finish steps aside as ink comes in.
-      mute: inkMix,
+      mute: fusedMix,
     });
+    // The fuse's ember along its front (zero in captures, which run no fuse).
+    const embered: N = lupiFuseEmber(shaded, fuse.y);
     // Hover / selection / grab rim and the heat tint (zero in captures).
     const glow = lupiAtomGlow(vGlow, facing);
-    return vec4((shaded as N).add(glow), 1.0);
+    return vec4(embered.add(glow), 1.0);
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

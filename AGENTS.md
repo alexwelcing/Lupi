@@ -127,16 +127,18 @@ unverified. See `docs/ar/mac-build-2026-10-05.md`.
 and exits on the device, the decisions waiting) and lists where the first
 compile will most likely fail; `apps/apple/README.md` is the how-to.
 
-The Linux gates: `swift test` in every package, and `swift test -c release`
-in LupiScale (its 4 ms `buildCut` gate counts only in release) and LupiGame
-(its directive tests time frames); `tools/apple/parse-app.sh` (syntax);
+On Linux, `.github/workflows/apple.yml` runs (only on Apple pull requests)
+`swift test` in every package, `tools/apple/parse-app.sh` (syntax) and
 `tools/apple/typecheck-app.sh`, which type-checks the app against the
 packages' real modules and stand-ins for Apple's frameworks spelled as Apple
 documents them (`tools/apple/standin`; add a new Apple API there from its
-documentation page); and `pnpm apple:check`, which fails when the Swift generated from the web's
-TypeScript (`tools/apple/*.mts`: elements, bond fixtures, edge samples,
-starters, the known-molecule index, scale fixtures) is stale. The web
-counterpart of the scale play is `/scale` (`packages/ui/src/scale`).
+documentation page). Local tools when they help: `swift test -c release` in
+LupiScale (its 8 ms `buildCut` gate counts only in release) and LupiGame, and
+`pnpm apple:check`, which fails when the Swift generated from the web's
+TypeScript (`tools/apple/*.mts`: elements, bond fixtures, the bond validation
+sample, edge samples, starters, the known-molecule index, scale fixtures) is
+stale. The web counterpart of the scale play is `/scale`
+(`packages/ui/src/scale`).
 
 The owner's decisions are `docs/ar/decisions.md`, the plan of record is
 `docs/ar/plan.md`, and the data contracts it shares with lupi.live are in
@@ -171,8 +173,12 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   (`packages/ui/src/camera`). A drag turns 1:1, a flick coasts on the
   molecule's inertia and clicks into a symmetry face (C60: "Pentagon face-on ·
   5-fold axis"), a tap during a coast catches it, a tap picks an atom without
-  moving the camera, and a double-tap glides to it. `?controls=orbit` brings
-  the old OrbitControls back for this wave as an escape hatch.
+  moving the camera, and a double-tap glides to it. A tap, click, hover or toy
+  picks the front-most drawn atom or bond half under the pointer (drawn radii,
+  hidden types skipped, a stick picks the atom of its half); a near miss
+  within 5 px (mouse), 8 (pen) or 14 (touch) of a visible silhouette picks
+  that atom (`packages/scene/src/atomPick.ts`). `?controls=orbit` brings the
+  old OrbitControls back for this wave as an escape hatch.
 - **The store camera is written at rest.** `cameraPosition`, `cameraTarget`
   and `cameraPreset` are written once, when the rig comes to rest, never per
   frame. Anything else that moves the camera (MCP, CameraManager snaps, saved
@@ -190,7 +196,7 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   only: the store pose, saved views, share URLs, the axes gizmo, picking (it
   raycasts what is drawn) and every capture (exports, thumbnails, MCP, video)
   never see it. `__lupiPlay.viewInset()` reports `{ current, target, occluder }`.
-- **`window.__lupiPlay`** is the Play layer's handle for smoke plugins and
+- **`window.__lupiPlay`** is the Play layer's handle for
   agents (installed in production, like `__lupiViewerMcp`): `state()` returns
   `{ verb, trayOpen, displaced, flash, comfort, rig, motion, firstFrame,
   frames, frameDemand }`,
@@ -199,21 +205,47 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   `burst(atomIndex)`, `tug(atomIndex, [dx, dy, dz], holdMs)`,
   `heat(level)`, `replay()` and `remix()` appear once the viewer has
   registered them; `ink()` reports the Illustrate look's live weights and
-  Ink-to-Light state. It never writes molecule data.
+  Ink-to-Light state, with `fuse: { running, seed, progress, mode, held }`
+  (`mode` `'graph'`, `'spatial'` or `'uniform'`), and `ink('hold', p)`,
+  `ink('release')` and `ink('pace', k)` hold or slow the Light Fuse for a
+  software renderer. It never writes molecule data.
 - **The Illustrate look (Ink and Light).** Looks → Illustrate (flat colour on
-  the sage plate) or Sketch (hatched, on the paper plate), the Play tray's
+  the sage plate), Sketch (hatched), Engrave (banknote line engraving) or
+  Halftone (print dots), those three on the paper plate, or Chalk (a
+  chalkboard drawing on the sage plate), the Play tray's
   Look row (Lit · Ink · Remix ⟳), the palette or the `I` key draw the molecule like the
   Lupi ink drawings: toon fills from the key light, crevices shaded by the
   baked contact occlusion, an ink outline at every atom and bond silhouette
-  and, for Sketch, pen hatching (`packages/scene/src/tsl/inkLook.ts`, mixed
-  into both impostors by one weight). It is a Look, not toy motion: the
-  store's `inkStyle` (`off`, `flat`, `hatch`) and `inkWeight` ride share URLs
-  (`ink`, `iw` in the `s=` state), saved views and `lupi.set_viewer`, and
-  replay and Remix links add a top-level `ink=f|h`; a Foil finish steps
+  and, for Sketch, pen hatching; for Engrave, three line plates cut about
+  each ball and bowed over it; for Halftone, ink dots on a 45° screen; for
+  Chalk, chalk outlines, a pastel of the element colour rubbed over the
+  board and three families of dusty chalk strokes thickening toward the
+  light (the last three ported from Shaders, MIT; `packages/scene/src/tsl/inkLook.ts`,
+  mixed into both impostors by one weight, each drawing its own weight, so
+  any change crossfades). Ink and `I` bring back the last drawing used. It
+  is a Look, not toy motion: the store's `inkStyle` (`off`, `flat`, `hatch`,
+  `engrave`, `halftone`, `chalk`) and `inkWeight` ride share URLs (`ink`, `iw` in the
+  `s=` state; letters `f`, `h`, `e`, `d`, `c`), saved views and
+  `lupi.set_viewer`, and replay and Remix links add a top-level
+  `ink=f|h|e|d|c`; a Foil finish steps
   aside under ink (a drawing carries no foil); while ink is on the post
   recipe steps aside (no AO, glow, defocus, vignette or tone mapping; FXAA
-  stays); exports draw it and their spec records `view.ink`. Changes fade
-  (480 ms); every capture renders the configured look, never a fade.
+  stays), and while the look changes it rests pixel by pixel only where the
+  ink is; exports draw it and their spec records `view.ink`. A toggle from
+  the tray, the palette or `I`, and Ink-to-Light, run as a Light Fuse
+  (about 1.1 s): the change starts at the selected, hovered or centre-front
+  atom and travels along the drawn bonds with a burning-paper edge and a
+  thin lime ember (`scene/src/tsl/inkFuse.ts`, `ui/src/ink/fuseHops.ts`);
+  other changes, `lupi.set_viewer { inkStyle }` included, fade (480 ms).
+  Every capture renders the configured look, never a fade, a fuse or an
+  ember.
+  A screen-space contour (`packages/ui/src/postprocess/inkContour.ts`) adds
+  the lines an impostor cannot draw: where balls meet or a stick enters a
+  ball, a line on the near side of every depth step, and a heavier outer
+  contour against the plate (inside the silhouette), in the drawing's ink
+  (chalk under Chalk). It runs while the
+  drawing shows, fades with it, and draws in exports (`view.ink.contour`);
+  `?contour=0` leaves it out of the view and of exports (a debug switch).
   Ink-to-Light: a molecule opened from an ink drawing (the hero, a molecule
   page, an ink tile on the wall or in the finder) first draws in ink at the
   drawing's pose, then the light comes on; any touch completes it and Still
@@ -228,6 +260,20 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   halved by Gentle, off in Still, and never in an export. On desktop the
   atom under the cursor glows lime and selected atoms glow stronger
   (`tsl/atomGlow.ts`); captures and videos never carry the glow.
+- **The morph arrival.** A switch inside the viewer (the switcher, finder,
+  library, random, palette) from one molecule to another morphs: each new
+  atom starts where a matched atom of the previous molecule was on screen
+  (same element first, nearest pairs, each old atom once; extra new atoms
+  bud from a neighbour, extra old ones vanish) and flies home in 0.9 s, the
+  centre first, bonds following (`packages/ui/src/play/morphMatch.ts`; the
+  fifth arrival mode in `tsl/displayMotion.ts`, starts in a per-atom
+  texture, mirrored by the CPU twin). Gentle halves it, Still cuts; never
+  for the first open, more than 20,000 atoms, trajectories, MCP loads or
+  the home/page relay (which keeps its flat inflate); Ink-to-Light still
+  fades to light alongside. Display-only and zero in every capture.
+  `__lupiPlay.state().motion.morph` reports a running morph and its counts
+  by element; `__lupiPlay.morph()` replays the last one. See
+  `docs/morph-arrival.md`.
 - **Overlays ride display motion.** Selection, hover and neighbour rings,
   annotations, atom-bound knowledge labels, measurements (line, letters,
   value label), the desktop atom card's anchor and trail heads follow their
@@ -267,8 +313,19 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   inputs and the pill's flashes. After a good flick, a chain of three named
   faces, Spin's flip or a toy moment, the pill offers "Replay ↗" for 7 s (R,
   the Play tray or the palette any time; with no moment it shares this view). The sheet
-  has the live link at once and records a 9:16 clip through the video
-  export, with "Illustrative" burned into each frame. The link adds
+  has the live link at once and makes a 9:16 clip (720×1280 on phones,
+  1080×1920 elsewhere) with "Illustrative" burned into each frame. Where
+  WebCodecs can encode it, the clip is rendered offline, frame by frame from
+  the tape at 30 fps (`replay/offlineClip.ts`): a clip camera of its own
+  follows the keys, the display-motion clock steps exactly 1/30 s per frame
+  (`play/motionClock.ts`), each frame renders through the capture engine at
+  the clip size (2× supersampled, the configured look, `illustrative: true`
+  so toys and Foil stay on), and `VideoEncoder` writes an MP4 through
+  `mp4-muxer` (H.264 High, then Constrained Baseline, then VP9, then AV1:
+  the first `isConfigSupported` accepts). The live canvas keeps its size and
+  holds its picture under the sheet meanwhile. Without WebCodecs or any of
+  those codecs (or if the encoder fails) the clip is recorded in real time
+  through the video export with MediaRecorder, as before. The link adds
   `replay=<base64url tape>` (versioned binary: camera keys at a 0.5 s pose
   snapshot plus where the motion bends, toy inputs, flashes; about 0.5–1.5
   KB, nothing stored) to `sim`, `load`, `molecule` or a saved view's route.
@@ -277,8 +334,12 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   Still sends and opens a still pose. The viewer drops `replay=` from the
   address bar as it reads it. `__lupiPlay.replay()` returns the offered or
   last moment as `{ moment, keys, events, bytes, link }`; `replay('watch')`
-  starts a waiting shared replay. Replays and clips are never artifacts:
-  MCP cannot request them.
+  starts a waiting shared replay; `replay('clip')` reports the clip
+  rendering now (`rendering: { frame, frames, ms }`) and how the last one was
+  made (`encoder`, `codec`, `frames`, `msPerFrame`, `split`);
+  `replay('clip-scale', k)` makes the next clips k× the size (a software
+  renderer's smoke). Replays and clips are never artifacts: MCP cannot
+  request them.
 - **Remix codes and Foil** (`packages/ui/src/remix`). Every Remix is a short
   versioned code, `r1-K7QDM`: five Crockford base32 characters (keep-colours
   and worlds flags, a 23-bit seed) that the frozen r1 catalog in
@@ -286,7 +347,10 @@ both local lanes live in `tools/lib/browser-lanes.mjs` (`LANE_ARGS.webgpu`,
   mulberry32 stream, so a code gives the same look on any device, molecule
   and atom count (changing the catalog means r2; r1 resolves forever). r1
   has no transmission and no adjusted gradients, so a remixed view stays
-  exportable. Roll from the Play tray's Look row (it stays open), the pill's
+  exportable while worlds are off (the default); with worlds on, half the
+  codes pick an `R1_WORLDS` backdrop (a procedural field or an image world),
+  and an opaque artifact export of one fails closed like any such background
+  (transparent output still works). Roll from the Play tray's Look row (it stays open), the pill's
   "⟳ Again", M (Shift+M steps back), the scene deck, the palette, or a
   shake (phones; off until turned on in the Remix sheet, iOS asks
   permission in that tap). The Remix sheet (the tray's code chip) copies,
@@ -513,7 +577,7 @@ Common recognized keywords:
 - `hide bonds`, `show bonds`, `show cell`, `show axes`
 - `studio`, `paper`, `editorial`, `cinematic`, `diagram` — postprocess presets
 - `iso`, `top`, `side`, `front`, `free` — camera presets
-- `ink` / `illustrate`, `hatched` / `sketch`, `lit` — the Illustrate look (flat, hatched, off)
+- `ink` / `illustrate`, `hatched` / `sketch`, `engrave` / `engraving` / `etching`, `halftone` / `print` / `dots`, `chalk` / `chalkboard` / `blackboard`, `lit` — the Illustrate look (flat, hatched, engraved, halftone, chalk, off)
 
 ## Render artifact V2 truth
 
@@ -588,11 +652,22 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   view's only anti-aliasing and never runs on an export; supersampling is.
 - The Illustrate look shades the impostors themselves, so its capture takes
   the raw path (`view.postprocess` is `raw-scene`), and the spec carries
-  `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch',
-  weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
-  `plate`), present only while the look is on, so every
+  `view.ink`: `{ pipeline: 'impostor-ink.v1', shading: 'flat' | 'hatch' |
+  'engrave' | 'halftone' | 'chalk', weight, ink, paper, shade, plate, depthCue }` (the far side fades toward
+  `plate`; `ink` is the colour the drawing's lines and contour draw in,
+  chalk `#eceadb` for Chalk), present only while the look is on, so every
   lit spec keeps its identity. Ink line weight follows the capture's texel
   scale and the picture's short side, so an export keeps the screen's weight.
+  The look's screen-space contour runs the way a recipe would: the tiles
+  assemble colour (clamped to alpha, as the raw path clamps it), the nearest
+  depth of each block and coverage (the `lupiContent` mean when opaque, alpha
+  when transparent), and `postprocess/inkContour.ts` inks the whole assembled
+  image once at the output resolution, so no tile edge shows and the line
+  keeps the screen's weight. `view.ink.contour` records it (`{ pipeline:
+  'ink-contour.v1', inner, outer }`, line widths in ink units), so a
+  contoured ink spec never shares a `specId` with the drawing before it; an
+  ink spec without it still validates and exports without a contour. Over a
+  transparent background it inks the molecule only.
 - The Specimen floor shadow (`contactShadows` layer) is part of the view: it
   sits under every molecule up to 50,000 atoms (off for Diagram and under the
   filter shell), and the spec's `view.contactShadows` states its blur,
@@ -619,8 +694,10 @@ straight alpha. The canvas keeps its size, and the live view does not flicker.
   settles and re-levels (y-up) before any capture reads the camera. An export
   mid-ripple has the same `artifactDigest` as one taken at rest. The one
   recording that keeps display motion is Instant Replay's clip
-  (`beginRecording({ illustrative: true })`): it is labelled "Illustrative"
-  in every frame and has no artifact identity. A Remix code's Foil finish
+  (`beginRecording({ illustrative: true })`; its offline frames render with
+  `renderSceneToPixels({ illustrative: true })`, which skips the capture
+  guards): it is labelled "Illustrative" in every frame and has no artifact
+  identity. A Remix code's Foil finish
   (Holo, Gold leaf, Pearl) follows the same rule: zero in every capture
   render and ordinary recording, kept only in that illustrative clip. A
   Remix look itself (lights, materials, backdrop) is ordinary viewer state
@@ -671,62 +748,8 @@ currently validates only opaque PNG atom specs and returns
 The containerized render backend (`apps/render-backend`) launches Chromium
 with `--disable-webgpu`, so its artifacts are in the WebGL2 execution class.
 
-The V1 (WebGL renderer) goldens stay archived read-only in
-`tests/fixtures/render-artifact-v1/`. V2 parity candidates live per backend in
-`tests/fixtures/render-artifact-v2/<backend>/`, and
-`pnpm verify:render-parity -- --backend=<webgpu|webgl2> --derive-candidate`
-derives them automatically. There is no owner approval gate. Derive them again
-whenever the tool reports a renderer-validity digest change.
-
-## Verification Harness
-
-Run the Playwright-based smoke test against the built-in dev server:
-
-```bash
-pnpm run verify:mcp-bridge
-```
-
-Or point it at an already-running dev server:
-
-```bash
-node tools/verify-mcp-bridge.mjs --url=http://127.0.0.1:5173/#/mcp --json
-```
-
-The `--json` flag emits a machine-readable report to stdout. Non-zero exit code indicates failure.
-
-## Asset Quality Verification
-
-For visual and structural verification of `lupi.export_asset`, drive a real
-browser in each backend lane, render the advertised raster/model profiles, and
-inspect the bytes:
-
-```bash
-pnpm --filter @atlas/web build
-pnpm run verify:asset-quality                      # both lanes, built app
-node tools/verify-asset-quality.mjs --backend=webgpu
-node tools/verify-asset-quality.mjs --server=dev   # Vite dev server instead
-# or, against an existing server:
-node tools/verify-asset-quality.mjs --url=http://127.0.0.1:5173/
-```
-
-The verifier exercises fixed molecule and lattice cases with unsupported raster
-  bonds disabled. It covers opaque/transparent PNG and WebP, opaque JPEG plus
-  transparent-JPEG rejection, GLB, required USDZ fail-closed behavior, exact dimensions, and appearance
-mutations. It asserts, as applicable:
-
-- declared `byteLength` matches the file written to disk
-- decoded raster alpha and dimensions match the request
-- the binary/container structure is well-formed (PNG IHDR, JPEG SOF, WebP
-  VP8/VP8L/VP8X, and GLB magic/chunks)
-- `dataUrl` MIME prefix matches the response `mimeType`
-- the on-disk file matches the round-tripped base64
-- color/material/lighting changes produce material image differences
-- each lane reports its backend, and the same spec keeps its `specId` across
-  the two lanes while its `rendererFingerprint` and `artifactKey` differ
-
-Artifacts (real rasters/models plus a viewer screenshot and JSON report) are written
-under `.verify-artifacts/asset-quality/<run>/<backend>/` so a human can inspect them.
-Add `--skip-glb` to skip the model tier when iterating on raster formats.
+There are no committed golden images: a renderer change needs no
+re-derivation step.
 
 Use `node tools/inspect-glb.mjs <file.glb>` to dump scene/mesh contents of
 an exported GLB without a browser.
@@ -759,35 +782,29 @@ After changing tool definitions or schemas, regenerate the manifest before testi
 pnpm run generate:mcp-manifest
 ```
 
-## Full CI Checklist
+## CI and checks
 
-```bash
-pnpm install
-pnpm run generate:mcp-manifest
-pnpm --filter @atlas/core test
-pnpm --filter @atlas/core build
-pnpm --filter @atlas/scene test
-pnpm --filter @atlas/ui build
-pnpm --filter @atlas/ui test
-pnpm cloudflare:build
-pnpm cloudflare:test
-pnpm run lint
-pnpm run verify:mcp-bridge
-pnpm run verify:asset-quality
-pnpm run verify:exports
-pnpm run verify:render-parity -- --backend=webgpu
-pnpm run verify:render-parity -- --backend=webgl2
-pnpm run test:ui
-```
+Owner decision (2026-10-09): punch and solve. Checks cost time; if main
+breaks, fix forward and redeploy.
 
-`pnpm test:ui` runs the Playwright specs in the WebGL2 lane. The dual-backend
-browser check is local only (not in CI): build the web app, then run
-`pnpm verify:dual-backend` (`tools/verify-viewer-smoke.mjs --backend=both
---profile=both --strict-backend`; `--scenarios=` and `--cases=` narrow it).
-Scenario plugins in `tools/smoke/scenarios/*.mjs` (camera, chrome,
-first-minute, flick, hero, relay, settings, tap, toys) run with the built-in
-scenarios; `--profile=phone390` (or `all`) adds a 390 px touch phone, and
-`--reduced-motion` checks the Still comfort level.
-
-These are local/CI checks only. They do not prove a deployment, live API, or
-public-site revision; record those release-truth lanes separately.
+- **Pull requests:** `.github/workflows/ci.yml` runs one job, `build-test`
+  (about 3 min): `pnpm install --frozen-lockfile`, `pnpm build` (every
+  workspace's typecheck and the web build, which regenerates the MCP
+  manifest) and a pinned-Wrangler `versions upload --dry-run` of the Worker.
+  `apple.yml`, `mobile.yml` and `chatgpt-widget.yml` run only when their own
+  code changes.
+- **Push to main is the release:** `deploy-cloudflare.yml` builds, deploys,
+  checks that `/health` reports the commit and that `/` and its bundle load.
+  `deploy-render-backend.yml` redeploys the render backend only when
+  `apps/render-backend` changes; dispatch it by hand to refresh its copy of
+  the viewer.
+- **Optional local tools**, not steps to run before merging: `pnpm test`
+  (unit tests), `pnpm lint`, `pnpm test:ui` (the one browser spec,
+  `tests/ui/release-smoke.spec.ts`; against a deployed origin with
+  `UI_TEST_URL=https://lupi.live UI_TEST_EXPECT_HEALTH=true pnpm test:ui`),
+  `pnpm verify:viewer-smoke` (build first: home stays zero-canvas, caffeine
+  renders and picks, the bridge exports a PNG, the no-GPU fallback; WebGL2
+  lane, about a minute), `pnpm apple:check`.
+- **Do not add** smoke plugins, verifiers, golden fixtures, receipts or new
+  CI jobs. To look at a feature in a browser, drive it from a scratch
+  Playwright script (see Quick Start) and keep the script out of the repo.

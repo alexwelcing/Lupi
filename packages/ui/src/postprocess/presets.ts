@@ -203,15 +203,35 @@ export interface PostStructure {
   dof: boolean;
   vignette: boolean;
   toneMapping: PostprocessPresetConfig['toneMapping'];
+  /** The Illustrate look's ink contour (inkContour.ts), while the drawing shows. */
+  contour: boolean;
+  /**
+   * The look is changing between lit and ink (a fade or a Light Fuse): every
+   * stage rests where the pixel's live ink mix is, so the recipe follows the
+   * drawing instead of switching at the toggle. Only when there is a stage
+   * to rest.
+   */
+  inkFade: boolean;
 }
 
-export function postStructure(config: PostprocessPresetConfig): PostStructure {
+/**
+ * The graph a config needs; `contour` while the Illustrate look is drawn,
+ * `inkFade` while it changes (the config is then the lit recipe).
+ */
+export function postStructure(config: PostprocessPresetConfig, contour = false, inkFade = false): PostStructure {
+  const ao = config.ssao.enabled;
+  const bloom = config.bloom.enabled;
+  const dof = config.dof.enabled;
+  const vignette = config.vignette.enabled;
+  const toneMapping = config.toneMapping;
   return {
-    ao: config.ssao.enabled,
-    bloom: config.bloom.enabled,
-    dof: config.dof.enabled,
-    vignette: config.vignette.enabled,
-    toneMapping: config.toneMapping,
+    ao,
+    bloom,
+    dof,
+    vignette,
+    toneMapping,
+    contour,
+    inkFade: inkFade && (ao || bloom || dof || vignette || toneMapping !== 'none'),
   };
 }
 
@@ -223,20 +243,23 @@ export function postStructureKey(structure: PostStructure): string {
     structure.dof ? 'dof' : '_',
     structure.vignette ? 'vg' : '_',
     structure.toneMapping,
+    structure.contour ? 'ink' : '_',
+    structure.inkFade ? 'fade' : '_',
   ].join('|');
 }
 
 /**
- * True when the graph samples the scene pass's depth (AO and DOF do). Such a
- * graph renders the scene pass without MSAA: the sample count of a depth
- * texture is baked into the shaders that read it, so it cannot follow
- * play/pause, and a multisampled depth read is not portable across backends.
+ * True when the graph samples the scene pass's depth (AO, DOF and the ink
+ * contour do). Such a graph renders the scene pass without MSAA: the sample
+ * count of a depth texture is baked into the shaders that read it, so it
+ * cannot follow play/pause, and a multisampled depth read is not portable
+ * across backends.
  */
 export function postReadsDepth(structure: PostStructure): boolean {
-  return structure.ao || structure.dof;
+  return structure.ao || structure.dof || structure.contour;
 }
 
 /** MSAA samples for the scene pass: the preset's, unless the graph reads depth. */
-export function scenePassSamples(config: PostprocessPresetConfig): number {
-  return postReadsDepth(postStructure(config)) ? 0 : config.multisampling;
+export function scenePassSamples(config: PostprocessPresetConfig, contour = false): number {
+  return postReadsDepth(postStructure(config, contour)) ? 0 : config.multisampling;
 }

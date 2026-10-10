@@ -7,7 +7,6 @@ import {
   normalizedPathRoute,
   savedViewSlugFromRoute,
   isBillionAtomsRoute,
-  isTestbedRoute,
   isEmojiRoute,
   isEmbeddedMobileViewerRoute,
   isMcpViewerRoute,
@@ -55,13 +54,13 @@ const scaleRoute = isScaleRoute(currentPathRoute());
 /**
  * URL-only signals that the viewer (App) should load immediately instead of the
  * landing shell: an explicit molecule/state to restore, or any non-landing
- * route (saved view, scene, SEO study page, MLIP, MCP, testbed, emoji).
+ * route (saved view, scene, SEO study page, MLIP, MCP, emoji).
  */
 function wantsViewerImmediately(): boolean {
   if (params.has('load') || params.has('sim') || params.has('molecule') || params.has('s') || params.has('fly')) {
     return true;
   }
-  if (isTestbedRoute() || isEmojiRoute() || isBillionAtomsRoute()) return true;
+  if (isEmojiRoute() || isBillionAtomsRoute()) return true;
   if (isScienceDemoRoute()) return true;
   const hashPath = currentHashRoute().split('?')[0] || '/';
   if (hashPath === '/system/mlip-flywheel') return true;
