@@ -149,6 +149,7 @@ final class PlayController {
     @ObservationIgnored private(set) var session: PlaySession
     @ObservationIgnored let collection: CollectionModel
     @ObservationIgnored let shelf: ShelfHost
+    let diagnostics = PlaySessionDiagnostics()
 
     private(set) var plaque: PlaqueText?
     private(set) var caption: String?
@@ -238,6 +239,9 @@ final class PlayController {
         session = PlaySession(catalog: catalog, settings: settings)
         self.collection = collection
         shelf = ShelfHost(store: collection.shelves)
+        shelf.onMapSaveOutcome = { [weak diagnostics] outcome in
+            diagnostics?.recordSave(.worldMap, outcome: outcome)
+        }
         content.addChild(scene.root)
         // The plane fallback arena shares the bodies' simulation, custom (A2) or not.
         scene.root.addChild(ar.planeArena)
@@ -308,6 +312,7 @@ final class PlayController {
 
     func stop() async {
         await transition(to: .stopped)?.value
+        diagnostics.recordStage(.finish)
     }
 
     func sceneChanged(_ phase: ScenePhase) {
@@ -362,6 +367,7 @@ final class PlayController {
                     return
                 }
                 if let missing = self.ar.unavailable {
+                    self.diagnostics.sample(hud: nil, frame: nil, now: ProcessInfo.processInfo.systemUptime)
                     self.arFailure = "Room tracking isn’t available. You can still explore molecules and your Collection from Home."
                     self.note("Unavailable: \(missing)")
                     await self.ar.stop()
@@ -494,6 +500,7 @@ final class PlayController {
         )
         touchBuffer.removeAll(keepingCapacity: true)
         let out = session.step(input)
+        diagnostics.sample(hud: out.hud, frame: arFrame, now: now)
         // At critical the thermal policy turns particles off, poofs included (plan §7.4).
         let particles = session.thermalStage.particles
         scene.apply(out.physics) { if particles { self.sparks.poof(at: $0) } }
@@ -798,6 +805,7 @@ final class PlayController {
     private func finishKeep(_ id: BodyID, support: Vec3?, generation: UInt64,
                             roomGeneration: UInt64, restingSince: Double?) async {
         defer { keeping.remove(id) }
+        var saveKind: SessionSaveKind = .collection
         do {
             var attempt: KeepAttempt
             if let prior = keepAttempts[id], session.canCommitKeep(prior.prepared) {
@@ -821,6 +829,7 @@ final class PlayController {
                 return
             }
             try await collection.keep(attempt.prepared.record, ifUnchanged: condition)
+            diagnostics.recordSave(.collection, outcome: .saved)
             let durable = try await collection.trophyCase.trophy(attempt.prepared.record.id)
             guard generation == keepGeneration,
                   keepAttempts[id]?.prepared.record.id == attempt.prepared.record.id else { return }
@@ -838,6 +847,7 @@ final class PlayController {
             // Once durable, the UUID belongs to this body even if shelf placement fails.
             guard session.commitKeep(attempt.prepared, celebrate: running && support == nil, allowingResize: true) else { return }
             if support != nil {
+                saveKind = .placement
                 guard running, shelf.generation == roomGeneration, shelf.acceptsPins,
                       let body = session.body(id), body.atRest, body.restingSince == restingSince,
                       let currentSupport = session.shelfSupport(of: id), let camera = lastCamera,
@@ -845,6 +855,7 @@ final class PlayController {
                 let now = ProcessInfo.processInfo.systemUptime
                 let root = try shelf.ensureShelf(support: currentSupport, camera: camera.position, ar: ar, now: now)
                 guard try shelf.place(trophy: record.id, pose: pose, root: root, now: now) else { throw ShelfKeepError.full }
+                diagnostics.recordSave(.placement, outcome: .saved)
                 session.pin(id)
                 session.celebrateKeep(id, trophyID: record.id)
                 show("Kept on the shelf: \(record.name)")
@@ -855,6 +866,8 @@ final class PlayController {
             keepFailure = nil
             refreshPlaque()
         } catch {
+            diagnostics.recordSave(saveKind,
+                                   outcome: error is CancellationError ? .cancelled : .failed)
             guard generation == keepGeneration, session.body(id) != nil else { return }
             let message: String
             if case SyncError.localRecordChanged = error {
@@ -909,8 +922,11 @@ final class PlayController {
         }
         let root = ShelfMath.rootPose(at: hit, camera: camera.position)
         do {
-            for e in try shelf.place(root: root, ar: ar, now: ProcessInfo.processInfo.systemUptime) { handle(e) }
+            let events = try shelf.place(root: root, ar: ar, now: ProcessInfo.processInfo.systemUptime)
+            if !events.isEmpty { diagnostics.recordSave(.placement, outcome: .saved) }
+            for e in events { handle(e) }
         } catch {
+            diagnostics.recordSave(.placement, outcome: .failed)
             collection.report("Could not move the shelf: \(error)")
             show("Could not save the shelf here. Tap again to retry.")
         }

@@ -30,6 +30,8 @@ final class ShelfHost {
     private var saves = MapSaveCoordinator()
     private var saveTask: Task<Void, Never>?
     private var contextGeneration: UInt64 = 0
+    /// Structured persistence outcomes, without room identifiers or probe text.
+    var onMapSaveOutcome: (@MainActor (SessionSaveOutcome) -> Void)?
     var mapPolicy: MapSavePolicy { saves.policy }
     // The first shelf's creation keeps the same room context for concurrent auto-keeps.
     var generation: UInt64 { contextGeneration }
@@ -165,6 +167,7 @@ final class ShelfHost {
     /// Cancellation is a hint to ARKit; generation checks reject callbacks that still arrive.
     func cancelSaves() {
         contextGeneration &+= 1
+        if saveTask != nil { onMapSaveOutcome?(.cancelled) }
         saveTask?.cancel()
         saveTask = nil
         saves.invalidate()
@@ -204,6 +207,7 @@ final class ShelfHost {
         let started = ProcessInfo.processInfo.systemUptime
         let pixels = PixelBox(buffer: frame.capturedImage)
         saveTask = Task {
+            var mapWritten = false
             do {
                 let map = try await ar.session.currentWorldMap()
                 guard map.anchors.contains(where: { $0.identifier == request.rootAnchorID }) else {
@@ -216,10 +220,16 @@ final class ShelfHost {
                 }.value
                 let jpeg = await Task.detached(priority: .utility) { pixels.jpeg() }.value
                 // No suspension from this guard through the disk writes and publication.
-                guard !Task.isCancelled, saves.accepts(request), shelf?.id == request.roomID,
-                      shelf?.rootAnchorId == request.rootAnchorID else { return }
+                guard !Task.isCancelled else { return }
+                guard saves.accepts(request), shelf?.id == request.roomID,
+                      shelf?.rootAnchorId == request.rootAnchorID else {
+                    onMapSaveOutcome?(.staleIgnored)
+                    return
+                }
                 var saved = shelf ?? room
                 try store.saveMap(data, shelf: &saved, status: status.rawValue, at: Date())
+                mapWritten = true
+                onMapSaveOutcome?(.saved)
                 if let jpeg {
                     try store.saveSnapshot(jpeg, shelf: &saved)
                     snapshot = UIImage(data: jpeg)
@@ -230,16 +240,25 @@ final class ShelfHost {
                 saves.finish(request, at: ProcessInfo.processInfo.systemUptime, saved: true)
                 saveTask = nil
             } catch {
-                guard !Task.isCancelled, saves.accepts(request) else { return }
+                guard !Task.isCancelled else { return }
+                guard saves.accepts(request) else {
+                    onMapSaveOutcome?(.staleIgnored)
+                    return
+                }
                 if case ShelfStoreError.missing = error {
+                    saveTask = nil
+                    onMapSaveOutcome?(.staleIgnored)
                     cancelSaves()
                     return
                 }
                 if case ShelfStoreError.rootChanged = error {
+                    saveTask = nil
+                    onMapSaveOutcome?(.staleIgnored)
                     cancelSaves()
                     return
                 }
                 probe.saveFailed(at: ProcessInfo.processInfo.systemUptime, reason: error.localizedDescription)
+                if !mapWritten { onMapSaveOutcome?(.failed) }
                 saves.finish(request, at: ProcessInfo.processInfo.systemUptime, saved: false)
                 saveTask = nil
             }

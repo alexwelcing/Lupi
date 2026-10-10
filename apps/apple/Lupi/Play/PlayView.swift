@@ -101,7 +101,9 @@ struct PlayView: View {
                     .background(.ultraThinMaterial, in: Capsule())
             }
             if app.showDebugHUD {
-                DebugPanel(controller: controller)
+                DebugPanel(controller: controller, stage: controller.diagnostics.receiptStage,
+                           onStageChange: { controller.diagnostics.recordStage($0) },
+                           receiptJSON: { try controller.diagnostics.json() })
             }
             if let prompt = controller.shelfPrompt {
                 ShelfCard(prompt: prompt, snapshot: controller.shelfSnapshot, controller: controller)

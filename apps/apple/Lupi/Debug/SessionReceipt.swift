@@ -33,15 +33,15 @@ struct SessionDeviceInfo: Codable, Equatable, Sendable {
 struct SessionSample: Codable, Equatable, Sendable {
     var at: Date
     var stage: SessionStage
-    var bodies: Int
-    var toys: Int
+    var bodies: Int?
+    var toys: Int?
     /// Preserves Magnitude.formatted, including ≈ when the displayed count is approximate.
     /// This is display text, not a canonical exact-count representation.
     var atomCountDisplay: String?
-    var drawnAtoms: Int
-    var items: Int
-    var visited: Int
-    var overBudget: Bool
+    var drawnAtoms: Int?
+    var items: Int?
+    var visited: Int?
+    var overBudget: Bool?
     var fps: Double?
     var worstFrameMs: Double?
     var cutMs: Double?
@@ -49,23 +49,26 @@ struct SessionSample: Codable, Equatable, Sendable {
     var lastDeltaV: Double?
     var lastThrowSpeed: Double?
     var thermal: SessionThermalState
+    /// The effective game policy may be a debug override; thermal above is the actual device state.
+    var policyThermal: SessionThermalState?
     var tracking: SessionTrackingState
     var mapping: SessionMappingState
 
-    init(at: Date = Date(), stage: SessionStage, bodies: Int = 0, toys: Int = 0,
-         atomCountDisplay: String? = nil, drawnAtoms: Int = 0, items: Int = 0, visited: Int = 0,
-         overBudget: Bool = false, fps: Double? = nil, worstFrameMs: Double? = nil, cutMs: Double? = nil,
+    init(at: Date = Date(), stage: SessionStage, bodies: Int? = nil, toys: Int? = nil,
+         atomCountDisplay: String? = nil, drawnAtoms: Int? = nil, items: Int? = nil, visited: Int? = nil,
+         overBudget: Bool? = nil, fps: Double? = nil, worstFrameMs: Double? = nil, cutMs: Double? = nil,
          lastImpulse: Double? = nil, lastDeltaV: Double? = nil, lastThrowSpeed: Double? = nil,
-         thermal: SessionThermalState = .unknown, tracking: SessionTrackingState = .unknown,
+         thermal: SessionThermalState = .unknown, policyThermal: SessionThermalState? = nil,
+         tracking: SessionTrackingState = .unknown,
          mapping: SessionMappingState = .unknown) {
         self.at = at
         self.stage = stage
-        self.bodies = max(0, bodies)
-        self.toys = max(0, toys)
+        self.bodies = bodies.map { max(0, $0) }
+        self.toys = toys.map { max(0, $0) }
         self.atomCountDisplay = Self.countNotation(atomCountDisplay)
-        self.drawnAtoms = max(0, drawnAtoms)
-        self.items = max(0, items)
-        self.visited = max(0, visited)
+        self.drawnAtoms = drawnAtoms.map { max(0, $0) }
+        self.items = items.map { max(0, $0) }
+        self.visited = visited.map { max(0, $0) }
         self.overBudget = overBudget
         self.fps = Self.measurement(fps)
         self.worstFrameMs = Self.measurement(worstFrameMs)
@@ -74,6 +77,7 @@ struct SessionSample: Codable, Equatable, Sendable {
         self.lastDeltaV = Self.measurement(lastDeltaV)
         self.lastThrowSpeed = Self.measurement(lastThrowSpeed)
         self.thermal = thermal
+        self.policyThermal = policyThermal
         self.tracking = tracking
         self.mapping = mapping
     }
@@ -129,7 +133,10 @@ struct SessionReceipt: Codable, Equatable, Sendable {
             let fps = sample.fps.map { String(format: "%.1f", $0) } ?? "unavailable"
             let frame = sample.worstFrameMs.map { String(format: "%.2f", $0) } ?? "unavailable"
             let cut = sample.cutMs.map { String(format: "%.2f", $0) } ?? "unavailable"
-            var line = "\(date.string(from: sample.at)) \(sample.stage.rawValue): \(fps) fps, worst \(frame) ms, cut \(cut) ms; bodies \(sample.bodies), toys \(sample.toys), atom count display \(sample.atomCountDisplay ?? "unavailable"), drawn \(sample.drawnAtoms), items \(sample.items), visited \(sample.visited), overBudget \(sample.overBudget); \(sample.thermal.rawValue), tracking \(sample.tracking.rawValue), map \(sample.mapping.rawValue)"
+            let count: (Int?) -> String = { $0.map(String.init) ?? "unavailable" }
+            let overBudget = sample.overBudget.map { String($0) } ?? "unavailable"
+            var line = "\(date.string(from: sample.at)) \(sample.stage.rawValue): \(fps) fps, worst \(frame) ms, cut \(cut) ms; bodies \(count(sample.bodies)), toys \(count(sample.toys)), atom count display \(sample.atomCountDisplay ?? "unavailable"), drawn \(count(sample.drawnAtoms)), items \(count(sample.items)), visited \(count(sample.visited)), overBudget \(overBudget); thermal \(sample.thermal.rawValue), tracking \(sample.tracking.rawValue), map \(sample.mapping.rawValue)"
+            if let policy = sample.policyThermal { line += "; policy thermal \(policy.rawValue)" }
             if let impulse = sample.lastImpulse { line += String(format: "; impulse %.4f N·s", impulse) }
             if let delta = sample.lastDeltaV { line += String(format: "; Δv %.2f m/s", delta) }
             if let speed = sample.lastThrowSpeed { line += String(format: "; throw %.2f m/s", speed) }

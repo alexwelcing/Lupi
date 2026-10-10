@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var copiedBuild = false
+    @State private var copiedSession = false
 
     var body: some View {
         @Bindable var model = app
@@ -59,10 +60,16 @@ struct SettingsView: View {
                         UIPasteboard.general.string = BuildIdentity.current.diagnosticText
                         copiedBuild = true
                     }
+                    if let receipt = app.lastSessionReceiptJSON {
+                        Button(copiedSession ? "Last session receipt copied" : "Copy last session receipt (JSON)") {
+                            UIPasteboard.general.string = receipt
+                            copiedSession = true
+                        }
+                    }
                 } header: {
                     Text("This build")
                 } footer: {
-                    Text("Copies the version, source revision and build time. Account details and room data stay out of the report.")
+                    Text("Copies the version, source revision and build time. A completed session receipt is available until Lupi closes. Account details and room data stay out of the report.")
                 }
             }
             .navigationTitle("Settings")
