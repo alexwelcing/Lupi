@@ -12,6 +12,8 @@ struct DiscoveryView: View {
     @State private var message: String?
     @State private var searching = false
     @State private var requestTask: Task<Void, Never>?
+    @State private var preview: MoleculePreviewSelection?
+    @State private var previewStarterToPlay: String?
 
     var body: some View {
         NavigationStack {
@@ -45,6 +47,10 @@ struct DiscoveryView: View {
                                 Text("Exact name or formula · available offline")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
+                            Button("Preview in 3D") {
+                                preview = MoleculePreviewSelection(id: candidate.id, recommendation: result)
+                            }
+                            .buttonStyle(.bordered)
                             Button("Play with \(candidate.name)") {
                                 onSelect(candidate.id)
                                 dismiss()
@@ -60,6 +66,17 @@ struct DiscoveryView: View {
             }
             .navigationTitle("Find a molecule")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .sheet(item: $preview, onDismiss: {
+                // First close the nested preview. Home opens AR only after this
+                // discovery sheet has also finished dismissing.
+                if let id = previewStarterToPlay {
+                    previewStarterToPlay = nil
+                    onSelect(id)
+                    dismiss()
+                }
+            }) { selection in
+                MoleculePreviewView(selection: selection) { previewStarterToPlay = $0 }
+            }
             .onDisappear { requestTask?.cancel() }
         }
     }
