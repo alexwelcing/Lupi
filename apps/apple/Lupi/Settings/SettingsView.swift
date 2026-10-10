@@ -6,6 +6,7 @@ import UIKit
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @State private var copiedBuild = false
 
     var body: some View {
         @Bindable var model = app
@@ -52,7 +53,16 @@ struct SettingsView: View {
                 }
                 AccountSections()
                 Section {
-                    LabeledContent("Version", value: Self.version)
+                    LabeledContent("Version", value: BuildIdentity.current.versionLabel)
+                    LabeledContent("Revision", value: BuildIdentity.current.revisionLabel)
+                    Button(copiedBuild ? "Build diagnostics copied" : "Copy build diagnostics") {
+                        UIPasteboard.general.string = BuildIdentity.current.diagnosticText
+                        copiedBuild = true
+                    }
+                } header: {
+                    Text("This build")
+                } footer: {
+                    Text("Copies the version, source revision and build time. Account details and room data stay out of the report.")
                 }
             }
             .navigationTitle("Settings")
@@ -66,9 +76,6 @@ struct SettingsView: View {
     }
 
     static var version: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(short) (\(build))"
+        BuildIdentity.current.versionLabel
     }
 }

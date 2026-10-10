@@ -33,7 +33,16 @@ public actor TrophySync<Payload: SyncPayload> {
   private var state = SyncState<Payload>()
   private var loaded = false
   private var loadTask: Task<SyncState<Payload>?, any Error>?
-  private var lastPersist: Task<Void, any Error>?
+  private var mutationBusy = false
+  private var mutationWaiters: [CheckedContinuation<Void, Never>] = []
+  private let engineID = UUID()
+  /// Kept even after a record is removed, preventing delete/recreate from
+  /// making an old prepared edit valid again. This is an in-process condition,
+  /// not part of the sync or trophy contracts.
+  private var recordGenerations: [String: UInt64] = [:]
+  /// Account intents invalidate prepared edits before their first suspension,
+  /// including a switch away and back to the same account.
+  private var accountGeneration: UInt64 = 0
   /// The newest sync run. Each run waits for the one before it, so runs never
   /// overlap.
   private var syncRun: SyncRun?
@@ -95,47 +104,82 @@ public actor TrophySync<Payload: SyncPayload> {
   /// Adds or replaces a trophy locally and queues it for the account. A
   /// record that marks its own deletion (`isSyncTombstone`) is `delete(id:)`.
   public func save(_ payload: Payload) async throws {
+    try await save(payload, condition: nil)
+  }
+
+  /// Captures the committed record's identity before preparing a Keep. A
+  /// delayed Keep must not recreate a deleted trophy or overwrite a newer one.
+  public func saveCondition(for id: String) async throws -> LocalSaveCondition {
+    try Self.validate(id: id)
+    try await loadIfNeeded()
+    let uid = await session.currentUID()
+    let exists = state.records[id].map { isVisible($0) && !$0.isTombstone } ?? false
+    return LocalSaveCondition(recordExists: exists, engine: engineID, id: id, generation: recordGenerations[id] ?? 0,
+                              activeOwner: state.activeOwner, accountUID: uid, accountGeneration: accountGeneration)
+  }
+
+  public func save(_ payload: Payload, ifUnchanged condition: LocalSaveCondition) async throws {
+    try await save(payload, condition: condition)
+  }
+
+  private func save(_ payload: Payload, condition: LocalSaveCondition?) async throws {
     try await loadIfNeeded()
     let id = payload.syncID
     try Self.validate(id: id)
     if payload.isSyncTombstone {
-      try await delete(id: id)
+      try await delete(id: id, condition: condition)
       return
     }
     _ = try encodePayload(payload)
+    await acquireMutation()
+    defer { releaseMutation() }
+    // Account state is sampled after our turn starts, not before a possibly
+    // long disk queue. currentUID only reads the local session; no network.
     let uid = await session.currentUID()
-    var record: LocalRecord<Payload>
-    if let existing = state.records[id], isVisible(existing) {
-      record = existing
-    } else {
-      record = LocalRecord(id: id, owner: uid, payload: nil, clientUpdatedAt: .epoch, remote: nil, revision: 0)
-    }
-    if record.owner == nil, let uid { record.owner = uid }
-    record.payload = payload
-    record.clientUpdatedAt = stamp(after: record.clientUpdatedAt)
-    record.revision += 1
-    state.records[id] = record
-    enqueue(id)
-    try await persist()
-  }
-
-  /// Deletes a trophy locally and queues a tombstone so the deletion reaches
-  /// the owner's other devices.
-  public func delete(id: String) async throws {
-    try await loadIfNeeded()
-    guard var record = state.records[id], isVisible(record), !record.isTombstone else { return }
-    if record.owner == nil && record.remote == nil {
-      // Never left this device: nothing to tell anyone.
-      state.records[id] = nil
-      dequeue(id)
-    } else {
-      record.payload = nil
+    try await commitMutation {
+      try check(condition, id: id, uid: uid)
+      guard !deletionUnderway, state.deletingAccount == nil else { throw SyncError.accountDeletionInProgress }
+      var record: LocalRecord<Payload>
+      if let existing = state.records[id], isVisible(existing) {
+        record = existing
+      } else {
+        record = LocalRecord(id: id, owner: uid, payload: nil, clientUpdatedAt: .epoch, remote: nil, revision: 0)
+      }
+      if record.owner == nil, let uid { record.owner = uid }
+      record.payload = payload
       record.clientUpdatedAt = stamp(after: record.clientUpdatedAt)
       record.revision += 1
       state.records[id] = record
       enqueue(id)
     }
-    try await persist()
+  }
+
+  /// Deletes a trophy locally and queues a tombstone so the deletion reaches
+  /// the owner's other devices.
+  public func delete(id: String) async throws {
+    try await delete(id: id, condition: nil)
+  }
+
+  private func delete(id: String, condition: LocalSaveCondition?) async throws {
+    try await loadIfNeeded()
+    await acquireMutation()
+    defer { releaseMutation() }
+    let uid = await session.currentUID()
+    try await commitMutation {
+      try check(condition, id: id, uid: uid)
+      guard var record = state.records[id], isVisible(record), !record.isTombstone else { return }
+      if record.owner == nil && record.remote == nil {
+        // Never left this device: nothing to tell anyone.
+        state.records[id] = nil
+        dequeue(id)
+      } else {
+        record.payload = nil
+        record.clientUpdatedAt = stamp(after: record.clientUpdatedAt)
+        record.revision += 1
+        state.records[id] = record
+        enqueue(id)
+      }
+    }
   }
 
   // MARK: - Account
@@ -145,6 +189,7 @@ public actor TrophySync<Payload: SyncPayload> {
   /// any network call, so an offline first sync loses nothing.
   @discardableResult
   public func signIn(with credential: AppleCredential) async throws -> SyncReport {
+    accountGeneration &+= 1
     try await loadIfNeeded()
     try await session.signInWithApple(credential)
     return try await sync()
@@ -153,6 +198,7 @@ public actor TrophySync<Payload: SyncPayload> {
   /// Stops syncing. Local copies stay and remain visible; changes made while
   /// signed out queue for whoever signs in next. `flush` tries one last sync.
   public func signOut(flush: Bool = true) async throws {
+    accountGeneration &+= 1
     if flush, await session.currentUID() != nil {
       _ = try? await sync()
     }
@@ -165,12 +211,17 @@ public actor TrophySync<Payload: SyncPayload> {
   /// An unfinished account deletion stays marked, so it can still be finished.
   public func eraseLocal() async throws {
     guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
+    // An erase intent also invalidates absent UUIDs, which are not among the
+    // record generations advanced by the eventual durable transaction.
+    accountGeneration &+= 1
     try await loadIfNeeded()
     if let running = syncRun { _ = await running.task.result }
-    let deleting = state.deletingAccount
-    state = SyncState()
-    state.deletingAccount = deleting
-    try await persist()
+    try await transact {
+      guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
+      let deleting = state.deletingAccount
+      state = SyncState()
+      state.deletingAccount = deleting
+    }
   }
 
   /// Pull then push for the signed-in account. Concurrent callers for the
@@ -220,6 +271,7 @@ public actor TrophySync<Payload: SyncPayload> {
     // after edits) refuses, so nothing can be pushed or pulled back in while
     // documents are deleted and the uid forgotten.
     deletionUnderway = true
+    accountGeneration &+= 1
     defer { deletionUnderway = false }
     try await loadIfNeeded()
     guard let uid = await session.currentUID() else { throw SyncError.notSignedIn }
@@ -230,14 +282,14 @@ public actor TrophySync<Payload: SyncPayload> {
     } catch AuthError.reauthenticationMismatch {
       throw SyncError.reauthenticatedAsDifferentAccount
     }
-    state.deletingAccount = uid
-    try await persist()
+    try await transact { state.deletingAccount = uid }
     try await deleteRemoteRecords(of: uid)
     try await session.revokeApple(authorizationCode: code)
     try await session.deleteUser()
-    forget(uid)
-    state.deletingAccount = nil
-    try await persist()
+    try await transact {
+      forget(uid)
+      state.deletingAccount = nil
+    }
   }
 
   // MARK: - Sync
@@ -249,24 +301,21 @@ public actor TrophySync<Payload: SyncPayload> {
     var report = SyncReport()
     // Adopt on a change of account, and whenever trophies were made signed
     // out since (a sign-out keeps the same account active).
-    if state.activeOwner != uid || state.records.values.contains(where: { $0.owner == nil }) {
-      report.adopted = adopt(into: uid)
-      try await persist()
+    report.adopted = try await transact {
+      guard !deletionUnderway, state.deletingAccount != uid else { throw SyncError.accountDeletionInProgress }
+      return state.activeOwner != uid || state.records.values.contains(where: { $0.owner == nil }) ? adopt(into: uid) : 0
     }
     do {
       try await pull(uid: uid, full: full, report: &report)
       try await push(uid: uid, report: &report)
     } catch AuthError.userNotFound {
       // The account was deleted elsewhere: nothing tied to it may stay here.
-      forget(uid)
-      try await persist()
+      try await transact { forget(uid) }
       throw AuthError.userNotFound
     } catch {
-      // Keep whatever was merged or acknowledged before the failure.
-      try? await persist()
+      // Each completed merge and acknowledgement is already durable.
       throw error
     }
-    try await persist()
     return report
   }
 
@@ -312,12 +361,17 @@ public actor TrophySync<Payload: SyncPayload> {
           after = (updatedAt, document.name)
           if newest.map({ updatedAt > $0 }) ?? true { newest = updatedAt }
         }
-        merge(document, uid: uid, report: &report)
+      }
+      let pageCursor = newest
+      report = try await transact {
+        var next = report
+        for document in result.documents { merge(document, uid: uid, report: &next) }
+        if let pageCursor { state.cursors[uid] = pageCursor }
+        return next
       }
       let advanced = after.map { current in previous.map { $0 != current } ?? true } ?? false
       if result.documents.count < configuration.pageSize || !advanced { break }
     }
-    if let newest { state.cursors[uid] = newest }
   }
 
   /// Folds one server document into the local store.
@@ -391,10 +445,12 @@ public actor TrophySync<Payload: SyncPayload> {
   }
 
   private func push(uid: String, report: inout SyncReport) async throws {
-    for id in state.outbox {
-      if let record = state.records[id], record.owner == uid, record.isTombstone, record.remote == nil {
-        state.records[id] = nil
-        dequeue(id)
+    try await transact {
+      for id in state.outbox {
+        if let record = state.records[id], record.owner == uid, record.isTombstone, record.remote == nil {
+          state.records[id] = nil
+          dequeue(id)
+        }
       }
     }
     let ids = state.outbox.filter { state.records[$0]?.owner == uid }
@@ -422,8 +478,12 @@ public actor TrophySync<Payload: SyncPayload> {
     for _ in 0..<configuration.maxPushAttempts {
       guard let record = state.records[id], record.owner == uid, state.outbox.contains(id) else { return }
       if record.isTombstone && record.remote == nil {
-        state.records[id] = nil
-        dequeue(id)
+        try await transact {
+          if let current = state.records[id], current.owner == uid, current.isTombstone, current.remote == nil {
+            state.records[id] = nil
+            dequeue(id)
+          }
+        }
         return
       }
       do {
@@ -436,11 +496,16 @@ public actor TrophySync<Payload: SyncPayload> {
         return
       } catch let error as FirestoreError where error.isPreconditionFailure {
         // Another device wrote first: read that version and settle by LWW.
-        if let current = try await firestore.getDocument(documentPath(uid, id)) {
-          merge(current, uid: uid, report: &report)
-        } else if var stale = state.records[id] {
-          stale.remote = nil
-          state.records[id] = stale
+        let current = try await firestore.getDocument(documentPath(uid, id))
+        report = try await transact {
+          var next = report
+          if let current {
+            merge(current, uid: uid, report: &next)
+          } else if var stale = state.records[id], stale.owner == uid {
+            stale.remote = nil
+            state.records[id] = stale
+          }
+          return next
         }
       } catch let error as FirestoreError where error.isRejection {
         report.rejected[id] = error.status ?? "rejected"
@@ -478,16 +543,23 @@ public actor TrophySync<Payload: SyncPayload> {
     guard !writes.isEmpty else { return }
     let response = try await firestore.commit(writes)
     if let commitTime = response.commitTime { observeServerTime(commitTime) }
+    // Validate the whole acknowledgement before persisting any of it. A
+    // newer local edit may have committed while the network was in flight.
+    var acknowledged: [(Sent, RemoteVersion)] = []
     for (index, entry) in sent.enumerated() {
       let result = response.writeResults.flatMap { index < $0.count ? $0[index] : nil }
       guard let updateTime = result?.updateTime ?? response.commitTime else {
         throw FirestoreError.malformedResponse("commit returned no update time")
       }
       let updatedAt = result?.transformResults?.first?.timestampValue ?? updateTime
-      acknowledge(entry.id, revision: entry.revision, stamp: entry.stamp, tombstone: entry.tombstone,
-                  version: RemoteVersion(updateTime: updateTime, updatedAt: updatedAt))
-      report.pushed += 1
+      acknowledged.append((entry, RemoteVersion(updateTime: updateTime, updatedAt: updatedAt)))
     }
+    try await transact {
+      for (entry, version) in acknowledged {
+        acknowledge(entry.id, revision: entry.revision, stamp: entry.stamp, tombstone: entry.tombstone, version: version)
+      }
+    }
+    report.pushed += acknowledged.count
   }
 
   /// What one write in a commit carried, to match it with its result.
@@ -632,15 +704,67 @@ public actor TrophySync<Payload: SyncPayload> {
     }
   }
 
-  /// Saves in call order even when the store is slow.
-  private func persist() async throws {
-    let snapshot = state
-    let previous = lastPersist
-    let task = Task { [store] in
-      _ = await previous?.result
-      try await store.save(snapshot)
+  private func check(_ condition: LocalSaveCondition?, id: String, uid: String?) throws {
+    guard let condition else { return }
+    guard condition.engine == engineID, condition.id == id,
+          condition.generation == (recordGenerations[id] ?? 0),
+          condition.accountGeneration == accountGeneration,
+          condition.activeOwner == state.activeOwner, condition.accountUID == uid,
+          state.records[id].map({ isVisible($0) }) ?? true else {
+      throw SyncError.localRecordChanged(id: id)
     }
-    lastPersist = task
-    try await task.value
+  }
+
+  /// Serializes mutations, not already-mutated snapshots. Readers keep seeing
+  /// the last committed state during a slow write. The synchronous closure
+  /// can reuse the merge helpers, but cannot suspend or publish a candidate.
+  /// Network requests always happen outside this short disk transaction.
+  private func transact<Value: Sendable>(_ change: () throws -> Value) async throws -> Value {
+    await acquireMutation()
+    defer { releaseMutation() }
+    return try await commitMutation(change)
+  }
+
+  /// Called only with the mutation turn held, including by local saves that
+  /// first sample the session while holding their turn.
+  private func commitMutation<Value: Sendable>(_ change: () throws -> Value) async throws -> Value {
+    let before = state
+    let value: Value
+    do {
+      value = try change()
+    } catch {
+      state = before
+      throw error
+    }
+    let candidate = state
+    state = before
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    // A no-op must not turn a read/empty sync into a disk failure.
+    guard try encoder.encode(candidate) != encoder.encode(before) else { return value }
+    var changedIDs: [String] = []
+    for id in Set(before.records.keys).union(candidate.records.keys) {
+      if try encoder.encode(before.records[id]) != encoder.encode(candidate.records[id]) { changedIDs.append(id) }
+    }
+    try await store.save(candidate)
+    state = candidate
+    for id in changedIDs { recordGenerations[id, default: 0] &+= 1 }
+    return value
+  }
+
+  private func acquireMutation() async {
+    if !mutationBusy {
+      mutationBusy = true
+      return
+    }
+    await withCheckedContinuation { mutationWaiters.append($0) }
+  }
+
+  private func releaseMutation() {
+    if mutationWaiters.isEmpty {
+      mutationBusy = false
+    } else {
+      mutationWaiters.removeFirst().resume()
+    }
   }
 }

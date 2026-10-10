@@ -7,6 +7,8 @@ struct HomeView: View {
     @State private var showingSettings = false
     @State private var showingDiscovery = false
     @State private var discoveryStarter: String?
+    @State private var preview: MoleculePreviewSelection?
+    @State private var previewStarterToPlay: String?
 
     var body: some View {
         NavigationStack {
@@ -20,6 +22,18 @@ struct HomeView: View {
                                 .font(.headline)
                                 .foregroundStyle(Color.lime)
                         }
+                        Menu {
+                            ForEach(catalog.tray) { item in
+                                Button(item.title) {
+                                    preview = MoleculePreviewSelection(id: item.id)
+                                }
+                            }
+                        } label: {
+                            Label("Preview in 3D", systemImage: "cube.transparent")
+                                .font(.headline)
+                                .foregroundStyle(Color.lime)
+                        }
+                        .accessibilityHint("Inspect a bundled molecule without the camera")
                         collectionButton
                         starters(Array(catalog.tray.dropFirst()))
                         receipt(catalog.receipt)
@@ -56,6 +70,14 @@ struct HomeView: View {
                 }
             }) {
                 DiscoveryView { discoveryStarter = $0 }
+            }
+            .sheet(item: $preview, onDismiss: {
+                if let id = previewStarterToPlay {
+                    previewStarterToPlay = nil
+                    app.play(.starter(id))
+                }
+            }) { selection in
+                MoleculePreviewView(selection: selection) { previewStarterToPlay = $0 }
             }
         }
     }

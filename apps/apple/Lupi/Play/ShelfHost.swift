@@ -27,7 +27,12 @@ final class ShelfHost {
     let store: ShelfStore
     private(set) var shelf: ShelfRecord?
     private(set) var ladder = ShelfRecovery()
-    private(set) var mapPolicy = MapSavePolicy()
+    private var saves = MapSaveCoordinator()
+    private var saveTask: Task<Void, Never>?
+    private var contextGeneration: UInt64 = 0
+    var mapPolicy: MapSavePolicy { saves.policy }
+    // The first shelf's creation keeps the same room context for concurrent auto-keeps.
+    var generation: UInt64 { contextGeneration }
     private(set) var probe = A1Probe()
     private(set) var snapshot: UIImage?
     private(set) var mapping: MappingInput = .notAvailable
@@ -39,6 +44,8 @@ final class ShelfHost {
     /// The room opened last, and the world map to run the session from (plan §6.3).
     func openLastRoom(now: Double) -> (map: ARWorldMap?, events: [RecoveryEvent]) {
         guard let id = store.lastUsed, let room = try? store.load(id) else { return (nil, []) }
+        cancelSaves()
+        saves.activate(roomID: room.id, rootAnchorID: room.rootAnchorId)
         shelf = room
         snapshot = store.snapshot(of: room).flatMap { UIImage(data: $0) }
         guard let data = store.map(of: room) else {
@@ -76,7 +83,7 @@ final class ShelfHost {
         }
     }
 
-    func needsCoverage(now: Double) -> Bool { mapPolicy.needsCoverage(at: now, mapping: mapping) }
+    func needsCoverage(now: Double) -> Bool { saves.needsCoverage(at: now, mapping: mapping) }
 
     /// Pins can join a shelf only once it is found, or before a room has one.
     var acceptsPins: Bool { ladder.phase == .idle || ladder.phase == .shown }
@@ -88,7 +95,14 @@ final class ShelfHost {
         if let root = ladder.root, shelf != nil, ladder.phase == .shown { return root }
         let root = ShelfMath.rootPose(at: support, camera: camera)
         let anchor = ar.addAnchor(named: ShelfRecord.rootAnchorName, at: root)
-        shelf = try store.create(rootAnchorId: anchor, at: Date())
+        do {
+            let room = try store.create(rootAnchorId: anchor, at: Date())
+            shelf = room
+            saves.activate(roomID: room.id, rootAnchorID: room.rootAnchorId)
+        } catch {
+            ar.removeAnchor(anchor)
+            throw error
+        }
         ladder.created(root: root, at: now)
         return root
     }
@@ -100,7 +114,7 @@ final class ShelfHost {
         switch try store.pin(placement, on: id, at: Date()) {
         case let .pinned(updated):
             shelf = updated
-            mapPolicy.pinned(at: now)
+            saves.pinned(at: now)
             return true
         case .full:
             return false
@@ -114,28 +128,58 @@ final class ShelfHost {
     func choosePutHere(now: Double) { ladder.choosePutHere(at: now) }
 
     /// "Put the shelf here": the root moves to the tapped surface with the whole arrangement.
-    func place(root: RigidD, ar: ARHost, now: Double) -> [RecoveryEvent] {
-        let events = ladder.place(root: root, at: now)
-        guard !events.isEmpty, var room = shelf else { return events }
+    func place(root: RigidD, ar: ARHost, now: Double) throws -> [RecoveryEvent] {
+        var next = ladder
+        let events = next.place(root: root, at: now)
+        guard !events.isEmpty, let room = shelf else { return [] }
+        let anchor = ar.addAnchor(named: ShelfRecord.rootAnchorName, at: root)
+        let updated: ShelfRecord
+        do {
+            updated = try store.updateRoot(on: room.id, to: anchor, expecting: room.rootAnchorId, at: Date())
+        } catch {
+            ar.removeAnchor(anchor)
+            throw error
+        }
+        cancelSaves()
+        saves.activate(roomID: updated.id, rootAnchorID: updated.rootAnchorId)
         ar.removeAnchor(room.rootAnchorId)
-        room.rootAnchorId = ar.addAnchor(named: ShelfRecord.rootAnchorName, at: root)
-        room.updatedAt = Date()
-        try? store.save(room)
-        shelf = room
+        shelf = updated
+        ladder = next
         probe.note(at: now, "root placed by hand")
         return events
     }
 
     /// "Start a new room" (step 4): the old shelf stays on the device until deleted.
     func startNewRoom(ar: ARHost) {
+        cancelSaves()
         if let room = shelf { ar.removeAnchor(room.rootAnchorId) }
         shelf = nil
         snapshot = nil
         ladder.startNewRoom()
-        mapPolicy = MapSavePolicy()
+        probe = A1Probe()
+        mapping = .notAvailable
     }
 
-    func saveSoon(now: Double) { mapPolicy.saveSoon(at: now) }
+    func saveSoon(now: Double) { saves.saveSoon(at: now) }
+
+    /// Cancellation is a hint to ARKit; generation checks reject callbacks that still arrive.
+    func cancelSaves() {
+        contextGeneration &+= 1
+        saveTask?.cancel()
+        saveTask = nil
+        saves.invalidate()
+    }
+
+    func resumeSaves(now: Double) {
+        guard let room = shelf else { return }
+        saves.activate(roomID: room.id, rootAnchorID: room.rootAnchorId)
+        if ladder.phase == .shown { saves.saveSoon(at: now) }
+    }
+
+    func roomDeleted(_ id: UUID, ar: ARHost) {
+        guard shelf?.id == id else { return }
+        startNewRoom(ar: ar)
+    }
 
     /// Where each placement's trophy goes under `root`, at the size it was pinned at.
     func placements(under root: RigidD, trophies: [UUID: TrophyRecord]) -> [(TrophyRecord, RigidD)] {
@@ -155,33 +199,49 @@ final class ShelfHost {
 
     /// Saves the map and a snapshot when the policy says so; never two at once.
     func saveIfDue(ar: ARHost, frame: ARFrame, now: Double) {
-        guard mapPolicy.shouldSave(at: now, mapping: mapping), let room = shelf else { return }
-        mapPolicy.began()
+        guard let room = shelf, let request = saves.begin(at: now, mapping: mapping) else { return }
         let status = mapping
         let started = ProcessInfo.processInfo.systemUptime
         let pixels = PixelBox(buffer: frame.capturedImage)
-        Task {
+        saveTask = Task {
             do {
                 let map = try await ar.session.currentWorldMap()
+                guard map.anchors.contains(where: { $0.identifier == request.rootAnchorID }) else {
+                    throw MapSaveError.rootMissing
+                }
                 let anchors = map.anchors.count
                 let box = MapBox(map: map)
                 let data = try await Task.detached(priority: .utility) {
                     try NSKeyedArchiver.archivedData(withRootObject: box.map, requiringSecureCoding: true)
                 }.value
                 let jpeg = await Task.detached(priority: .utility) { pixels.jpeg() }.value
-                var saved = shelf?.id == room.id ? (shelf ?? room) : room
+                // No suspension from this guard through the disk writes and publication.
+                guard !Task.isCancelled, saves.accepts(request), shelf?.id == request.roomID,
+                      shelf?.rootAnchorId == request.rootAnchorID else { return }
+                var saved = shelf ?? room
                 try store.saveMap(data, shelf: &saved, status: status.rawValue, at: Date())
                 if let jpeg {
                     try store.saveSnapshot(jpeg, shelf: &saved)
                     snapshot = UIImage(data: jpeg)
                 }
-                if shelf?.id == saved.id { shelf = saved }
+                shelf = saved
                 let ms = (ProcessInfo.processInfo.systemUptime - started) * 1000
                 probe.saved(at: ProcessInfo.processInfo.systemUptime, bytes: data.count, milliseconds: ms, mapping: status, anchors: anchors)
-                mapPolicy.finished(at: ProcessInfo.processInfo.systemUptime, saved: true)
+                saves.finish(request, at: ProcessInfo.processInfo.systemUptime, saved: true)
+                saveTask = nil
             } catch {
+                guard !Task.isCancelled, saves.accepts(request) else { return }
+                if case ShelfStoreError.missing = error {
+                    cancelSaves()
+                    return
+                }
+                if case ShelfStoreError.rootChanged = error {
+                    cancelSaves()
+                    return
+                }
                 probe.saveFailed(at: ProcessInfo.processInfo.systemUptime, reason: error.localizedDescription)
-                mapPolicy.finished(at: ProcessInfo.processInfo.systemUptime, saved: false)
+                saves.finish(request, at: ProcessInfo.processInfo.systemUptime, saved: false)
+                saveTask = nil
             }
         }
     }
@@ -194,6 +254,8 @@ final class ShelfHost {
             probe.note(at: now, "no saved map to relocalize from")
             return false
         }
+        cancelSaves()
+        saves.activate(roomID: room.id, rootAnchorID: room.rootAnchorId)
         ar.rerun(worldMap: map)
         ladder = ShelfRecovery()
         ladder.begin(at: now)
@@ -204,6 +266,8 @@ final class ShelfHost {
 
     func note(_ text: String, now: Double) { probe.note(at: now, text) }
 }
+
+private enum MapSaveError: Error { case rootMissing }
 
 /// An `ARWorldMap` is immutable once ARKit hands it over, so it may be archived off the main actor.
 private struct MapBox: @unchecked Sendable {
