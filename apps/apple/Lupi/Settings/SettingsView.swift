@@ -6,6 +6,8 @@ import UIKit
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @State private var copiedBuild = false
+    @State private var copiedSession = false
 
     var body: some View {
         @Bindable var model = app
@@ -52,7 +54,22 @@ struct SettingsView: View {
                 }
                 AccountSections()
                 Section {
-                    LabeledContent("Version", value: Self.version)
+                    LabeledContent("Version", value: BuildIdentity.current.versionLabel)
+                    LabeledContent("Revision", value: BuildIdentity.current.revisionLabel)
+                    Button(copiedBuild ? "Build diagnostics copied" : "Copy build diagnostics") {
+                        UIPasteboard.general.string = BuildIdentity.current.diagnosticText
+                        copiedBuild = true
+                    }
+                    if let receipt = app.lastSessionReceiptJSON {
+                        Button(copiedSession ? "Last session receipt copied" : "Copy last session receipt (JSON)") {
+                            UIPasteboard.general.string = receipt
+                            copiedSession = true
+                        }
+                    }
+                } header: {
+                    Text("This build")
+                } footer: {
+                    Text("Copies the version, source revision and build time. A completed session receipt is available until Lupi closes. Account details and room data stay out of the report.")
                 }
             }
             .navigationTitle("Settings")
@@ -66,9 +83,6 @@ struct SettingsView: View {
     }
 
     static var version: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(short) (\(build))"
+        BuildIdentity.current.versionLabel
     }
 }
