@@ -806,6 +806,7 @@ final class PlayController {
                             roomGeneration: UInt64, restingSince: Double?) async {
         defer { keeping.remove(id) }
         var saveKind: SessionSaveKind = .collection
+        var collectionWritten = false
         do {
             var attempt: KeepAttempt
             if let prior = keepAttempts[id], session.canCommitKeep(prior.prepared) {
@@ -829,6 +830,7 @@ final class PlayController {
                 return
             }
             try await collection.keep(attempt.prepared.record, ifUnchanged: condition)
+            collectionWritten = true
             diagnostics.recordSave(.collection, outcome: .saved)
             let durable = try await collection.trophyCase.trophy(attempt.prepared.record.id)
             guard generation == keepGeneration,
@@ -867,7 +869,8 @@ final class PlayController {
             refreshPlaque()
         } catch {
             diagnostics.recordSave(saveKind,
-                                   outcome: error is CancellationError ? .cancelled : .failed)
+                                   outcome: saveKind == .collection && collectionWritten ? .staleIgnored :
+                                       (error is CancellationError ? .cancelled : .failed))
             guard generation == keepGeneration, session.body(id) != nil else { return }
             let message: String
             if case SyncError.localRecordChanged = error {
