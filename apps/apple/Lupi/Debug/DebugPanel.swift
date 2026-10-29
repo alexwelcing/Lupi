@@ -1,15 +1,43 @@
 import SwiftUI
+import UIKit
 
 /// The debug HUD (plan §8 M0), behind a long press on the Lupi badge: frame time, bodies, the
 /// cut's counts, thermal state and the last impulse, with the day-one device spikes.
 struct DebugPanel: View {
     @Bindable var controller: PlayController
+    /// Optional integration keeps existing call sites usable until the controller records receipts.
+    var stage: SessionStage = .roomScan
+    var onStageChange: ((SessionStage) -> Void)? = nil
+    var receiptJSON: (() throws -> String)? = nil
     @State private var showingSoundLab = false
+    @State private var copyStatus: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
                 lines(controller.hudLines)
+                Button("Copy current HUD") {
+                    UIPasteboard.general.string = controller.hudLines.joined(separator: "\n")
+                    copyStatus = "Current HUD copied."
+                }
+                .disabled(controller.hudLines.isEmpty)
+                Divider().overlay(Color.white.opacity(0.3))
+                Picker("Session step", selection: Binding(
+                    get: { stage },
+                    set: { next in
+                        onStageChange?(next)
+                        copyStatus = nil
+                    }
+                )) {
+                    ForEach(SessionStage.allCases, id: \.self) { step in
+                        Text(stageTitle(step)).tag(step)
+                    }
+                }
+                .disabled(onStageChange == nil)
+                Text("Choose the step you are trying, then copy the session after testing.")
+                Button("Copy session receipt (JSON)") { copyReceipt() }
+                    .disabled(receiptJSON == nil)
+                if let copyStatus { Text(copyStatus) }
                 Divider().overlay(Color.white.opacity(0.3))
                 HStack {
                     Button("A1 save shelf map") { controller.saveShelfMap() }
@@ -70,6 +98,40 @@ struct DebugPanel: View {
         ForEach(Array(list.enumerated()), id: \.offset) { _, line in
             Text(line)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func copyReceipt() {
+        guard let receiptJSON else {
+            copyStatus = "The session receipt is not ready yet."
+            return
+        }
+        do {
+            let json = try receiptJSON()
+            guard !json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                copyStatus = "The session receipt is empty. Try copying it again."
+                return
+            }
+            UIPasteboard.general.string = json
+            copyStatus = "Session receipt copied as JSON."
+        } catch {
+            // Raw errors may contain file paths or account details; the receipt stays sanitized.
+            copyStatus = "Could not copy the session receipt. Try again."
+        }
+    }
+
+    private func stageTitle(_ stage: SessionStage) -> String {
+        switch stage {
+        case .roomScan: "1 · Scan the room"
+        case .firstThrow: "2 · First throw"
+        case .stack: "3 · Stack three"
+        case .breakApart: "4 · Break a molecule"
+        case .keep: "5 · Keep on the shelf"
+        case .reopen: "6 · Reopen the shelf"
+        case .scaleReceipt: "7 · Try the scale receipt"
+        case .buildFromAtoms: "8 · Build from atoms"
+        case .thermal: "9 · Longer play and heat"
+        case .finish: "10 · Finish the session"
         }
     }
 }

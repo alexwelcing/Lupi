@@ -7,6 +7,7 @@ public enum UIUserInterfaceIdiom: Sendable { case phone, pad }
 @MainActor open class UIDevice {
     public static var current: UIDevice { UIDevice() }
     public var userInterfaceIdiom: UIUserInterfaceIdiom { .phone }
+    public var model: String { "iPhone" }
 }
 @MainActor public enum UIAccessibility {
     public static var isReduceMotionEnabled: Bool { false }

@@ -63,6 +63,8 @@ final class AppModel {
     var showingPlay = false
     /// The play screen's controller, made when Play opens and released when it closes.
     private(set) var playController: PlayController?
+    /// The last completed scalar receipt survives Return Home, in memory until the app closes.
+    private(set) var lastSessionReceiptJSON: String?
     var showDebugHUD = false
     var showingCollection = false
     /// The trophy chosen in the collection, spawned once its sheet has closed.
@@ -202,5 +204,6 @@ final class AppModel {
         let controller = playController
         playController = nil
         await controller?.stop()
+        if let controller { lastSessionReceiptJSON = try? controller.diagnostics.json() }
     }
 }

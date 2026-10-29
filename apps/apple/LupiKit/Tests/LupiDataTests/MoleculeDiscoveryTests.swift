@@ -14,6 +14,44 @@ private actor DiscoveryStub: DiscoveryTransport {
     }
 }
 
+/// Deliberately ignores cancellation in the transport: a response already in flight
+/// can still arrive after a view has cancelled its search.
+private actor DelayedDiscoveryStub: DiscoveryTransport {
+    let reply: EdgeResponse
+    private var response: CheckedContinuation<EdgeResponse, Never>?
+    private var requestStarted: CheckedContinuation<Void, Never>?
+    private var requested = false
+
+    init(_ result: MoleculeRecommendation) throws {
+        reply = EdgeResponse(status: 200, body: try JSONEncoder().encode(result))
+    }
+
+    func post(_ url: URL, body: Data) async throws -> EdgeResponse {
+        await withCheckedContinuation { continuation in
+            response = continuation
+            requested = true
+            requestStarted?.resume()
+            requestStarted = nil
+        }
+    }
+
+    func waitForRequest() async {
+        if requested { return }
+        await withCheckedContinuation { requestStarted = $0 }
+    }
+
+    func deliverResponse() {
+        response?.resume(returning: reply)
+        response = nil
+    }
+}
+
+private struct UnavailableDiscoveryStub: DiscoveryTransport {
+    func post(_ url: URL, body: Data) async throws -> EdgeResponse {
+        throw URLError(.timedOut)
+    }
+}
+
 @Suite("native molecule discovery")
 struct MoleculeDiscoveryTests {
     private func result(_ catalog: DiscoveryCatalog, query: String = "the molecule in coffee") -> MoleculeRecommendation {
@@ -86,5 +124,24 @@ struct MoleculeDiscoveryTests {
         let client = MoleculeDiscoveryClient(catalog: catalog, transport: stub)
         await #expect(throws: EdgeError.self) { _ = try await client.recommend(String(repeating: "a", count: 201)) }
         #expect(await stub.requests.isEmpty)
+    }
+
+    @Test func cancelledSearchRejectsAResponseThatArrivesLater() async throws {
+        let catalog = try DiscoveryCatalog.bundled()
+        let stub = try DelayedDiscoveryStub(result(catalog))
+        let client = MoleculeDiscoveryClient(catalog: catalog, transport: stub)
+        let request = Task { try await client.recommend("the molecule in coffee") }
+        await stub.waitForRequest()
+        request.cancel()
+        await stub.deliverResponse()
+        await #expect(throws: CancellationError.self) { try await request.value }
+    }
+
+    @Test func exactSearchStillWorksWhenDescriptionTransportIsUnavailable() async throws {
+        let client = MoleculeDiscoveryClient(catalog: try DiscoveryCatalog.bundled(), transport: UnavailableDiscoveryStub())
+        let answer = try await client.recommend("caffeine")
+        #expect(answer.candidate?.atoms == 24)
+        #expect(answer.method == .exact)
+        await #expect(throws: URLError.self) { try await client.recommend("the molecule in coffee") }
     }
 }

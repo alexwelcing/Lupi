@@ -84,24 +84,29 @@ account on (D7):
 
 ## What CI covers
 
-The Apple workflow (`.github/workflows/apple.yml`) runs on Linux:
+The Apple workflow (`.github/workflows/apple.yml`) runs on Apple pull
+requests (or manual dispatch) on Linux. It parses the app's Swift sources,
+tests each Swift package in Debug, and type-checks the app against real
+package modules and stand-ins for Apple's frameworks. The combined demo
+branch also runs its focused build-identity/diagnostics check in that same
+job.
 
-- `swift test` for every package here (LupiKit, LupiScale, LupiGame,
-  LupiCloud), and LupiScale again in release (run LupiGame's in release
-  yourself with `swift test -c release`: its directive tests time frames);
-- `tools/apple/parse-app.sh`, which runs `swiftc -parse` over every Swift file
-  in `Lupi/`. It catches syntax errors only: Linux has no SwiftUI, RealityKit
-  or ARKit, so it cannot type-check, link or sign the app;
-- `tools/apple/typecheck-app.sh`, which type-checks `Lupi/` against the
-  packages' real modules and stand-ins for the Apple frameworks
-  (`tools/apple/standin`, each declaration spelled as developer.apple.com
-  documents it). It catches the app calling a package API that changed, its
-  own typos, and isolation errors against documented signatures; it proves
-  nothing about the frameworks, so a stand-in that is wrong about Apple's API
-  passes code Xcode will reject. When the app uses a new Apple API, add it to
-  the stand-in from its documentation page;
-- `pnpm apple:check`: the Swift sources generated from the web's TypeScript
-  are current.
+Those checks prove neither Apple SDK compatibility nor RealityKit physics,
+ARKit tracking, audio or haptics. A stand-in that misstates an Apple API can
+pass code that Xcode rejects.
+
+Release package checks and generated-source checking are optional local
+tools under the owner's October 9 CI policy, rather than additional CI jobs:
+
+```bash
+swift test -c release --package-path apps/apple/LupiScale
+swift test -c release --package-path apps/apple/LupiGame
+pnpm apple:check
+```
+
+The build and physical observations below describe the earlier baseline,
+not acceptance of every later draft. The source to finish and the remaining
+checks are in [the current handoff](../../docs/ar/status.md#current-handoff-2026-10-29).
 
 The app's unsigned Debug builds now pass on the owner's Mac with Xcode 26.6
 against the iOS 26.5 device and Simulator SDKs. Home, Collection, Settings and

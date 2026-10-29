@@ -25,6 +25,9 @@ final class CollectionModel {
 
     /// Called when a trophy leaves the collection, so play can let its bodies go.
     @ObservationIgnored var onForget: ((UUID) -> Void)?
+    @ObservationIgnored var onCollectionErased: (() -> Void)?
+    @ObservationIgnored var onRoomDeleted: ((UUID) -> Void)?
+    @ObservationIgnored var onRoomsErased: (() -> Void)?
 
     enum Keys {
         static let lastFullSync = "lupi.lastFullSync"
@@ -66,9 +69,13 @@ final class CollectionModel {
 
     func refresh() async {
         do {
-            trophies = try await trophyCase.trophies()
+            let previous = Set(trophies.map(\.id))
+            let updated = try await trophyCase.trophies()
+            let known = try await trophyCase.knownTrophyIDs()
+            trophies = updated
+            for id in previous.subtracting(known) { onForget?(id) }
             // A placement whose trophy left the collection is dropped (contracts.md §2.3).
-            try shelves.dropMissing(keeping: try await trophyCase.knownTrophyIDs())
+            try shelves.dropMissing(keeping: known)
         } catch {
             notice = "Could not read the collection: \(error)"
         }
@@ -78,11 +85,26 @@ final class CollectionModel {
 
     // MARK: Editing, signed in or not
 
-    func keep(_ record: TrophyRecord) async {
+    func keepCondition(for prepared: PreparedKeep) async throws -> LocalSaveCondition {
+        let condition = try await trophyCase.saveCondition(for: prepared.record.id)
+        if let prior = prepared.priorRecord {
+            guard condition.recordExists, try await trophyCase.trophy(prior.id) == prior else {
+                throw SyncError.localRecordChanged(id: prior.id.uuidString)
+            }
+        } else if condition.recordExists {
+            throw SyncError.localRecordChanged(id: prepared.record.id.uuidString)
+        }
+        return condition
+    }
+
+    /// Returns only after the local file is durable; callers decide when to celebrate.
+    func keep(_ record: TrophyRecord, ifUnchanged condition: LocalSaveCondition) async throws {
         do {
-            try await trophyCase.keep(record)
+            try await trophyCase.keep(record, ifUnchanged: condition)
+            notice = nil
         } catch {
             notice = "Could not keep \(record.name): \(error)"
+            throw error
         }
         await refresh()
         scheduleSync()
@@ -101,21 +123,25 @@ final class CollectionModel {
     func delete(_ id: UUID) async {
         do {
             try await trophyCase.delete(id, at: Date())
+            onForget?(id)
         } catch {
             notice = "Could not delete it: \(error)"
         }
-        onForget?(id)
         await refresh()
         scheduleSync()
     }
 
     func deleteRoom(_ id: UUID) {
-        try? shelves.delete(id)
+        do {
+            try shelves.delete(id)
+            onRoomDeleted?(id)
+        } catch { notice = "Could not delete the room: \(error)" }
         rooms = shelves.list()
     }
 
     func openNext(_ room: UUID) {
-        try? shelves.setLastUsed(room)
+        do { try shelves.setLastUsed(room) }
+        catch { notice = "Could not open the room: \(error)" }
         rooms = shelves.list()
     }
 
@@ -162,9 +188,12 @@ final class CollectionModel {
 
     func eraseDevice() async {
         do {
-            for trophy in trophies { onForget?(trophy.id) }
+            let erased = trophies.map(\.id)
             try await trophyCase.eraseDevice()
+            onCollectionErased?()
+            for id in erased { onForget?(id) }
             try shelves.deleteAll()
+            onRoomsErased?()
             Self.excludeFromBackup(shelves.directory)
         } catch {
             notice = "Could not erase: \(error)"
