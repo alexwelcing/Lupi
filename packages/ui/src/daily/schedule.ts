@@ -90,11 +90,6 @@ export function formatShortDate(key: DateKey): string {
   return `${WEEKDAYS[p.weekday].slice(0, 3)} ${p.day} ${MONTHS[p.month].slice(0, 3)}`;
 }
 
-/** "Saturday". */
-export function formatWeekday(key: DateKey): string {
-  return WEEKDAYS[parts(key).weekday];
-}
-
 /** Milliseconds until the visitor's next local midnight. */
 export function msUntilLocalMidnight(now: Date = new Date()): number {
   const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);

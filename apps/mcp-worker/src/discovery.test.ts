@@ -37,7 +37,7 @@ describe('shared discovery edge', () => {
   it('routes public REST through the shared service and retains CORS/no-store', async () => {
     const request = post({ query: 'H2O' });
     request.headers.set('Origin', 'https://lupi.live');
-    const response = await worker.fetch(request, {}, {});
+    const response = await worker.fetch(request, {} as never);
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('access-control-allow-origin')).toBe('https://lupi.live');

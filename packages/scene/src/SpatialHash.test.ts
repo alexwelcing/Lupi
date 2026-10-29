@@ -79,6 +79,44 @@ describe('SpatialHash3D (typed-array grid)', () => {
     expect(nan.query(1, 1, 1, 0.5)).toEqual([]);
   });
 
+  it('exposes the positions it was built from, its bounds, size and cell', () => {
+    const positions = new Float32Array([1, -2, 3, 4, 5, -6, -1, 0, 2]);
+    const hash = new SpatialHash3D(2.0);
+    expect(hash.bounds).toBeNull();
+    expect(hash.size).toBe(0);
+    expect(hash.cellSize).toBe(2);
+    hash.build(positions, 3);
+    expect(hash.positions).toBe(positions);
+    expect(hash.size).toBe(3);
+    expect(Array.from(hash.bounds!)).toEqual([-1, -2, -6, 4, 5, 3]);
+    // Only the first `natoms` atoms are binned and bounded.
+    hash.build(positions, 2);
+    expect(hash.size).toBe(2);
+    expect(Array.from(hash.bounds!)).toEqual([1, -2, -6, 4, 5, 3]);
+    hash.clear();
+    expect(hash.positions).not.toBe(positions);
+    expect(hash.positions.length).toBe(0);
+    expect(hash.bounds).toBeNull();
+    expect(hash.size).toBe(0);
+  });
+
+  it('bounds only finite coordinates, and has none when an axis has no finite one', () => {
+    const hash = new SpatialHash3D(1.0);
+    hash.build(new Float32Array([Number.NaN, 0, 0, Infinity, 1, 1, 2, -1, 3]), 3);
+    expect(Array.from(hash.bounds!)).toEqual([2, -1, 0, 2, 1, 3]);
+    expect(hash.query(2, -1, 3, 0.5).map((hit) => hit.index)).toEqual([2]);
+    hash.build(new Float32Array([Number.NaN, 0, 0, Infinity, 1, 1]), 2);
+    expect(hash.bounds).toBeNull();
+    expect(hash.query(0, 1, 1, 5)).toEqual([]);
+  });
+
+  it('reports the coarsened cell of a sparse cloud', () => {
+    const hash = new SpatialHash3D(0.001);
+    hash.build(new Float32Array([0, 0, 0, 1e5, 1e5, 1e5]), 2);
+    expect(hash.cellSize).toBeGreaterThan(0.001);
+    expect(Array.from(hash.bounds!)).toEqual([0, 0, 0, 1e5, 1e5, 1e5]);
+  });
+
   it('coarsens the grid instead of allocating one cell per empty unit of a sparse cloud', () => {
     const positions = new Float32Array([0, 0, 0, 1e5, 1e5, 1e5]);
     const hash = new SpatialHash3D(0.001);

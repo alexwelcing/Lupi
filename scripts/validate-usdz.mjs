@@ -11,8 +11,7 @@
  * Usage: node scripts/validate-usdz.mjs <path-to-file.usdz>
  */
 
-import { readFileSync, mkdirSync, writeFileSync } from 'fs';
-import { join, basename } from 'path';
+import { readFileSync } from 'fs';
 
 // USDZ is a zip file (uncompressed) per Apple's spec
 // We'll parse it manually since it's just a zip with 0-level compression

@@ -27,6 +27,7 @@ import { openMolecule } from './viewer/openMolecule';
 import { getCameraRig } from './camera/rigApi';
 import { LUPI_MCP_TOOL_MAP, listLupiMcpTools, readMcpRendererStatus } from './mcp/tools';
 import { createMcpCommandBus } from './mcp/commandBus';
+import { beginMcpActivity } from './mcp/activity';
 import { createLupiMcpDriver, type LupiMcpRendererStatus, type LupiMcpStatus } from './mcp/driver';
 import { listViewerBonds, readBondStatus } from './mcp/bondStatus';
 import type { BondProfile } from '@atlas/core/bonds';
@@ -770,6 +771,8 @@ export function McpViewerHarness() {
 
   const responseText = useMemo(
     () => JSON.stringify(response ?? { status: 'ready', state: readViewerState() }, null, 2),
+    // readViewerState() reads the store, not these: they are listed so the idle panel re-reads it when they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [response, file?.name, showBonds, atomScale, loadedAtomCount]
   );
 
@@ -1216,9 +1219,12 @@ async function executeLupiViewerMcpBatch(requests: LupiMcpRequest[]): Promise<Lu
 async function executeLupiViewerMcpRequest(request: LupiMcpRequest): Promise<LupiMcpResponse> {
   // Quiet Idle: an MCP command draws its result, whatever it changed.
   requestLupiFrames();
+  // A molecule a command loads opens at once (no morph arrival).
+  const endActivity = beginMcpActivity();
   try {
     return await runLupiViewerMcpRequest(request);
   } finally {
+    endActivity();
     requestLupiFrames();
   }
 }
@@ -2121,13 +2127,17 @@ function readBondColorMode(value: unknown): BondColorMode | undefined {
   return undefined;
 }
 
-/** The Illustrate look from an MCP argument: 'off' | 'flat' | 'hatch' (also true/false, 'ink', 'sketch'). */
 function readBondProfile(value: unknown): BondProfile | undefined {
   if (value === undefined || value === null) return undefined;
   if (value === 'auto' || value === 'distance' || value === 'molecular') return value;
   throw new Error(`bondProfile must be one of auto, distance, molecular (received ${JSON.stringify(value)}).`);
 }
 
+/**
+ * The Illustrate look from an MCP argument: 'off' | 'flat' | 'hatch' |
+ * 'engrave' | 'halftone' | 'chalk' (also true/false, 'ink', 'sketch',
+ * 'engraving', 'dots', 'chalkboard', 'blackboard').
+ */
 function readInkStyle(value: unknown): InkStyle | undefined {
   if (value === true) return 'flat';
   if (value === false) return 'off';
@@ -2135,6 +2145,9 @@ function readInkStyle(value: unknown): InkStyle | undefined {
   if (raw === 'off' || raw === 'lit' || raw === 'none') return 'off';
   if (raw === 'flat' || raw === 'ink' || raw === 'illustrate' || raw === 'on') return 'flat';
   if (raw === 'hatch' || raw === 'hatched' || raw === 'sketch') return 'hatch';
+  if (raw === 'engrave' || raw === 'engraved' || raw === 'engraving' || raw === 'etching') return 'engrave';
+  if (raw === 'halftone' || raw === 'dots' || raw === 'print') return 'halftone';
+  if (raw === 'chalk' || raw === 'chalkboard' || raw === 'blackboard') return 'chalk';
   return undefined;
 }
 
@@ -2285,9 +2298,14 @@ function extractViewerPatch(command: string): ViewerPatch {
   if (/\beditorial\b/.test(normalized)) patch.postprocessPreset = 'editorial';
   if (/\bcinematic\b/.test(normalized)) patch.postprocessPreset = 'cinematic';
   if (/\bdiagram\b/.test(normalized)) patch.postprocessPreset = 'diagram';
-  // The Illustrate look: "ink", "illustrate", "hatched"/"sketch", "lit".
+  // The Illustrate look: "ink", "illustrate", "hatched"/"sketch",
+  // "engrave"/"etching", "halftone"/"print"/"dots",
+  // "chalk"/"chalkboard"/"blackboard", "lit".
   if (/\b(ink|inked|illustrate|illustrated)\b/.test(normalized)) patch.inkStyle = 'flat';
   if (/\b(hatch|hatched|hatching|sketch)\b/.test(normalized)) patch.inkStyle = 'hatch';
+  if (/\b(engrave|engraved|engraving|etching)\b/.test(normalized)) patch.inkStyle = 'engrave';
+  if (/\b(halftone|print|dots)\b/.test(normalized)) patch.inkStyle = 'halftone';
+  if (/\b(chalk|chalkboard|blackboard)\b/.test(normalized)) patch.inkStyle = 'chalk';
   if (/\b(no\s+ink|ink\s+off|lit)\b/.test(normalized)) patch.inkStyle = 'off';
   if (/\bproperty\b/.test(normalized)) patch.colorScheme = 'property';
   if (/\bcolorway\b/.test(normalized) || /\bfamily\b/.test(normalized)) patch.colorScheme = 'colorway';

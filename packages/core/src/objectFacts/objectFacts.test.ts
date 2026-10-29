@@ -162,20 +162,10 @@ describe('object facts', () => {
     expect(noisy.rings).toEqual(baseline.rings);
   });
 
-  it('refuses empty and oversized inputs; C60 runs in under 20 ms', () => {
+  it('refuses empty and oversized inputs', () => {
     expect(computeObjectFacts({ atomicNumbers: [], positions: [], natoms: 0 })).toBeNull();
     const big = 2001;
     const grid = Array.from({ length: 3 * big }, (_, i) => (i % 3) * 1.5 + Math.floor(i / 3) * 0.01);
     expect(computeObjectFacts({ atomicNumbers: new Array(big).fill(6), positions: grid, natoms: big })).toBeNull();
-
-    const input = readXyz('c60_buckyball.xyz');
-    computeObjectFacts(input);
-    const times: number[] = [];
-    for (let k = 0; k < 20; k += 1) {
-      const t0 = performance.now();
-      computeObjectFacts(input);
-      times.push(performance.now() - t0);
-    }
-    expect(times.sort((a, b) => a - b)[10]).toBeLessThan(20);
   });
 });

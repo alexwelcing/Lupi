@@ -11,7 +11,9 @@
  * - the display-motion offset (tsl/displayMotion.ts) on both ends, the same
  *   closed form and seed as the atoms, so bonds follow them; a bond the toys
  *   stretch thins like taffy and glows lime with the strain (a compressed
- *   one thickens a little), exactly as at rest while the motion is off;
+ *   one thickens a little), exactly as at rest while the motion is off; the
+ *   morph arrival reads each end's start at its atom index
+ *   (`instanceAtomPair`) while the layer's `uMorphOn` gate is on;
  * - the two-tone split at the geometric midpoint;
  * - the distance fade (`uBondFadeStart`/`uBondFadeEnd`) times `uOpacity`;
  * - the bond's style code in the start colour's alpha byte (strategy §2.7):
@@ -21,7 +23,8 @@
  *   and picking see the same holes (CPU twin: bondDashSegments in
  *   ui/src/export/exportSceneBuilder.ts);
  * - the Illustrate look (tsl/inkLook.ts): toon fills, ink along both edges,
- *   and thin bonds drawn as one ink stroke, mixed in by `uInkMix`;
+ *   and thin bonds drawn as one ink stroke, mixed in by `uInkMix`, or per
+ *   fragment by the Light Fuse while one runs (tsl/inkFuse.ts);
  * - degenerate, sub-pixel and fully faded bonds collapse to a degenerate
  *   vertex (culling);
  * - orthographic cameras cast parallel rays (spike G11, D7).
@@ -30,15 +33,18 @@
  * `cross(dir, u)` mirrored the box, so FrontSide drew its far faces.
  *
  * Instance layout (D4): endpoints and their targets as float32 ×3, the radius
- * as float32 ×1, and the endpoint colours as normalized Uint8×4 display-sRGB
+ * as float32 ×1, the endpoint colours as normalized Uint8×4 display-sRGB
  * bytes, decoded with `sRGBTransferEOTF` (WebGPU has no unorm8x3 format, and
- * a ×3 byte attribute is padded to ×4 on the CPU at every upload).
+ * a ×3 byte attribute is padded to ×4 on the CPU at every upload), and the
+ * two atom indices as float32 ×2 (exact below 2^24; read only by the morph).
  *
  * Static frames and trajectories use different programs (`interpolate`), for
  * the same reason as the atoms (tsl/atomImpostorMaterial.ts): three r186's
  * WebGPU pipeline cache does not see whether two attribute names share one
  * buffer, so a program must never be drawn with both an aliased and a
- * separate target buffer. The static program never reads the targets.
+ * separate target buffer. The static program never reads the targets, and
+ * the interpolating one never reads the atom indices (8 vertex buffers, the
+ * WebGPU limit, with the box's positions).
  */
 import * as THREE from 'three/webgpu';
 import type { UniformNode } from 'three/webgpu';
@@ -54,6 +60,7 @@ import {
   float,
   floor,
   fract,
+  instanceIndex,
   length,
   max,
   min,
@@ -77,6 +84,7 @@ import { DISPLAY_MOTION, lupiDisplayOffset } from './displayMotion';
 import { ATOM_GLOW } from './atomGlow';
 import { lupiFoilFinish, lupiFoilSweep } from './atomFoil';
 import { INK_LOOK, INK_LOOK_TUNING, lupiInkSurface } from './inkLook';
+import { lupiBondFuseHop, lupiFuse, lupiFuseEmber, lupiFuseSurfacePoint } from './inkFuse';
 import {
   cappedCylinderNormal,
   impostorDepthPrelude,
@@ -101,6 +109,8 @@ export const BOND_ATTR = {
   radius: 'instanceRadius',
   colorStart: 'instanceColorStart',
   colorEnd: 'instanceColorEnd',
+  /** The atom index of each end (float32 ×2), for the morph arrival's starts. */
+  pair: 'instanceAtomPair',
 } as const;
 
 /** Bytes per endpoint colour: display-sRGB RGB plus the style code byte (255 = solid). */
@@ -152,6 +162,8 @@ export interface BondImpostorUniforms extends LupiUniformBag {
    */
   uJunctionRadius: UniformNode<'float', number>;
   uJunctionStrength: UniformNode<'float', number>;
+  /** 1 while the morph arrival's texture belongs to this layer's frame (tsl/displayMotion.ts). */
+  uMorphOn: UniformNode<'float', number>;
 }
 
 /** The uniform bag shared by every tier's material of one bond layer (v9 defaults). */
@@ -169,6 +181,7 @@ export function createBondImpostorUniforms(): BondImpostorUniforms {
     uCullPixelRadius: uniform(0),
     uJunctionRadius: uniform(0),
     uJunctionStrength: uniform(0),
+    uMorphOn: uniform(0),
   };
 }
 
@@ -205,11 +218,20 @@ export function createBondImpostorMaterial({
   const end: N = attribute(BOND_ATTR.end, 'vec3');
   const restA: N = interpolate ? mix(start, attribute(BOND_ATTR.startTarget, 'vec3'), u.uProgress) : start;
   const restB: N = interpolate ? mix(end, attribute(BOND_ATTR.endTarget, 'vec3'), u.uProgress) : end;
+  // ── Morph arrival source (tsl/displayMotion.ts) ──────────────────
+  // Each end reads its own atom's texel, so a bond spans its two atoms in
+  // flight (a collapsed stale bond carries its start atom's index twice).
+  // The morph never runs on a trajectory, and the interpolating program is
+  // already at WebGPU's 8 vertex buffers (the box, both ends and their
+  // targets, radius, both colours): only the static program reads the pair.
+  const pair: N | null = interpolate ? null : attribute(BOND_ATTR.pair, 'vec2');
+  const morphA = pair ? { index: pair.x, on: u.uMorphOn } : undefined;
+  const morphB = pair ? { index: pair.y, on: u.uMorphOn } : undefined;
   // Display-only motion: each end is a bit-exact copy of its atom's position,
   // so the same closed form and seed move it with the atom (a collapsed stale
   // bond, b = a, stays degenerate). Exactly zero at rest and in captures.
-  const a: N = restA.add(lupiDisplayOffset(restA, start));
-  const b: N = restB.add(lupiDisplayOffset(restB, end));
+  const a: N = restA.add(lupiDisplayOffset(restA, start, morphA));
+  const b: N = restB.add(lupiDisplayOffset(restB, end, morphB));
   const viewA: N = modelViewMatrix.mul(vec4(a, 1.0)).xyz;
   const viewB: N = modelViewMatrix.mul(vec4(b, 1.0)).xyz;
   const axis: N = viewB.sub(viewA);
@@ -260,6 +282,8 @@ export function createBondImpostorMaterial({
   // Constant per instance; rounded again in the fragment against interpolation error.
   const vStyle: N = varying(floor(attribute(BOND_ATTR.colorStart, 'vec4').a.mul(3).add(0.5)), 'vBondStyle');
   const vFoilSweep: N = varying(lupiFoilSweep(mid), 'vBondFoilSweep');
+  // The Light Fuse reads this bond's two hops by instance (tsl/inkFuse.ts).
+  const vBondId: N = varying(float(instanceIndex), 'vBondId');
 
   // ── Fragment ────────────────────────────────────────────────────────
   // Distance fade (LOD): far bonds thin out before the vertex cull drops them.
@@ -323,6 +347,15 @@ export function createBondImpostorMaterial({
     // The lit surface, the Illustrate surface (tsl/inkLook.ts), or a blend
     // while the look fades; uniform branches, as on the atoms.
     const inkMix: N = INK_LOOK.uInkMix as N;
+    // The Light Fuse (tsl/inkFuse.ts): while a fuse runs, the front (and its
+    // ember) runs down the stick between its atoms' hops; exactly `uInkMix`
+    // and no ember otherwise.
+    const fuse: N = (lupiFuse(
+      inkMix,
+      lupiBondFuseHop(vBondId, axial.div(max(segLen, 1e-6))),
+      lupiFuseSurfacePoint(hit.xyz),
+    ) as N).toVar();
+    const fusedMix: N = fuse.x;
     const lit = vec3(0).toVar();
     If(inkMix.lessThan(1.0), () => {
       lit.assign(lupiSurface(
@@ -362,13 +395,14 @@ export function createBondImpostorMaterial({
           edgePx,
           lineWidth: INK_LOOK_TUNING.bondLine,
           hit: hit.xyz,
+          center: vA.add(vB).mul(0.5),
           isOrtho,
           emission: strainGlow,
           thinSolid: true,
         },
         lights,
       ) as N;
-      lit.assign(mix(lit, ink, clamp(inkMix, 0.0, 1.0)));
+      lit.assign(mix(lit, ink, fusedMix));
     });
     // Foil: gilded edges and the same finish as the atoms (none in captures,
     // and none under the Illustrate look, which is a drawing).
@@ -381,9 +415,9 @@ export function createBondImpostorMaterial({
       pixelRadius: vPixelRadius,
       sweep: vFoilSweep,
       bond: true,
-      mute: inkMix,
+      mute: fusedMix,
     });
-    return vec4(finished, u.uOpacity.mul(fadeAt(hit.z)));
+    return vec4(lupiFuseEmber(finished, fuse.y) as N, u.uOpacity.mul(fadeAt(hit.z)));
   }) as N)();
 
   attachLupiUniforms(material, uniforms);

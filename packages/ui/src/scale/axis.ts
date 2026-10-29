@@ -114,3 +114,44 @@ export function phiDeltaOfRatio(ratio: number, phiNow: number, decadesOfDecades 
   if (Math.abs(phiNow) <= LINEAR_DECADES) return d;
   return d * decadesOfDecades * LINEAR_DECADES * Math.LN10;
 }
+
+/** A landmark label on the slider: where its tick sits (0 to 1) and how wide it prints (px). */
+export interface TickLabel {
+  pos: number;
+  width: number;
+}
+
+/** Whether a landmark's label prints, and how far (px) it moves off its tick to stay on the track. */
+export interface TickPlacement {
+  shown: boolean;
+  nudge: number;
+}
+
+/**
+ * Which landmark labels the slider prints, so that none touches another:
+ * the deepest landmark first (a dive ends there), then the largest, then
+ * the rest from the deep end up, each only where it clears every label
+ * already placed by `gap` px. Landmarks run from the largest piece to one
+ * ion. A label at either end moves inward to stay within `overhang` px of
+ * the track. A hidden label keeps its tick.
+ */
+export function placeTickLabels(labels: readonly TickLabel[], trackWidth: number, gap: number, overhang = 0): TickPlacement[] {
+  const out = labels.map<TickPlacement>(() => ({ shown: false, nudge: 0 }));
+  const n = labels.length;
+  if (!(trackWidth > 0) || n === 0) return out;
+  const order = [n - 1];
+  if (n > 1) order.push(0);
+  for (let i = n - 2; i >= 1; i -= 1) order.push(i);
+  const placed: Array<[number, number]> = [];
+  for (const i of order) {
+    const { pos, width } = labels[i];
+    if (!(width > 0)) continue;
+    const centred = pos * trackWidth - width / 2;
+    const left = Math.max(-overhang, Math.min(trackWidth + overhang - width, centred));
+    const right = left + width;
+    if (placed.some(([l, r]) => left < r + gap && right > l - gap)) continue;
+    placed.push([left, right]);
+    out[i] = { shown: true, nudge: left - centred };
+  }
+  return out;
+}

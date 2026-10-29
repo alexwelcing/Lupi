@@ -33,7 +33,9 @@ describe('DropZoneSection retry behavior', () => {
 
     let input = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
-    await screen.findByRole('button', { name: 'Choose another molecular data file' });
+    // By its aria-label: findByRole would compute jsdom styles for the whole
+    // section on every poll, which under load took longer than the test's limit.
+    await screen.findByLabelText('Choose another molecular data file', { selector: 'button' });
     expect(parseFile).toHaveBeenCalledTimes(1);
 
     input = container.querySelector('input[type="file"]') as HTMLInputElement;

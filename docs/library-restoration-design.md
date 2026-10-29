@@ -193,8 +193,8 @@ additions keep the agent and human paths equal:
 
 ## Phases
 
-Each phase is one PR, each with its own local, CI, and deployed-smoke
-receipt under the [release truth contract](release-truth-contract.md).
+Each phase is one PR, checked under the
+[release truth contract](release-truth-contract.md).
 
 **Phase 0, decision.** Ratify the contract amendment above and record it in
 `docs/product-ownership-contract.md` and `docs/product-reset-2026-09-04.md`.
@@ -233,7 +233,7 @@ Unit (vitest, `packages/ui`):
 - `Omol25RemoteBrowser` shows the warming message on a 202 and keeps the
   previous page.
 
-Browser (Playwright, `tests/ui`):
+Browser (a scratch Playwright script, not committed):
 
 - `/library` renders results for an empty query from at least gallery,
   research, and NIST without network beyond same-origin.
@@ -241,15 +241,12 @@ Browser (Playwright, `tests/ui`):
   viewer with the Learn prompt intact.
 - `/library/research` opens one Zenodo record through the proxy and the
   viewer shows opaque types unless a map exists.
-- `student-surface.spec.ts` still passes: the six retired research entry
-  points stay retired, the twelve student cards still load, 320 px reflow
-  holds on `/library`.
-- Deployed smoke (`@deployed-smoke`): `/v1/datasets/omol25` manifest and
-  one rows page respond, `/library/omol25` paints at least one card.
+- The six retired research entry points stay retired, the twelve student
+  cards still load, and 320 px reflow holds on `/library`.
+- On lupi.live: `/v1/datasets/omol25` manifest and one rows page respond,
+  and `/library/omol25` paints at least one card.
 
-Verifiers: `pnpm verify:product-contract` (update its required-doc list
-with this design and the amendment), `pnpm audit:gallery-claims`,
-`pnpm lint`, `pnpm build`.
+Checks: `pnpm audit:gallery-claims`, `pnpm lint`, `pnpm build`.
 
 ## Risks
 

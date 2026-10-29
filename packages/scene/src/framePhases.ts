@@ -48,8 +48,6 @@ export const LUPI_JOB = {
   cameraSync: 'lupi/camera-sync',
   /** The eased move to a clicked atom in `update`. */
   cameraFocus: 'lupi/camera-focus',
-  /** The testbed harness: probe projection and the readiness count. */
-  harness: 'lupi/harness',
   /** The Lupi camera rig (drag, coast, glide, detents) in fiber's `update` phase. */
   cameraRig: 'lupi/camera-rig',
   /** Display-only motion (arrival, ripple, scatter, tug, burst, heat) uniforms in `lupi-uniforms`. */

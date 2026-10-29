@@ -1,7 +1,6 @@
 /**
- * helpers.mjs - the viewer smoke's page and pixel helpers, shared by the
- * built-in scenarios in tools/verify-viewer-smoke.mjs and the scenario plugins
- * in tools/smoke/scenarios/*.mjs (which receive this module as `h`).
+ * helpers.mjs - the page and pixel helpers that tools/verify-viewer-smoke.mjs
+ * uses for its built-in scenarios.
  *
  * Rendering is judged from page screenshots (never readPixels), so every
  * helper holds for WebGPURenderer on WebGPU and on its WebGL2 fallback.
@@ -126,7 +125,10 @@ async function cdpFor(page) {
  * font/caret/animation-frame round trips more than double the capture time.
  * The viewport is captured whole and cropped here: a clipped CDP capture
  * drops the page's emulated device scale factor (the phone profile would run
- * at DPR 1 after its first screenshot).
+ * at DPR 1 after its first screenshot). The hiding style is given two
+ * animation frames before the capture: under prefers-reduced-motion the app's
+ * CSS shortens transitions to 1 ms on every property, visibility included,
+ * and a capture in the frame that starts one still shows the chrome.
  */
 async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
   const box = await canvas.boundingBox();
@@ -144,6 +146,10 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
       document.head.appendChild(style);
     }
     style.textContent = text;
+    return new Promise((done) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => done()));
+      setTimeout(done, 500);
+    });
   }, css);
   try {
     const client = await cdpFor(page);
@@ -156,24 +162,54 @@ async function captureCanvas(page, canvas, css = HIDE_CHROME_CSS) {
   }
 }
 
-async function waitSettled(page, canvas, minForeground, maxMs = 25_000) {
+/**
+ * Wait until two captures 250 ms apart match. A software renderer under load
+ * can take longer than that to draw one frame, so two matching captures alone
+ * may straddle no frame at all, show an arrival still held under the opening
+ * plate (captures hide the page's chrome), or show a frame the WebGPU canvas
+ * has not yet replaced on screen: where the viewer reports its Play state
+ * (`__lupiPlay`), the view is settled only with no arrival armed or running
+ * and no display motion live, and when the frame loop sleeps or at least two
+ * frames were drawn between the captures.
+ */
+async function waitSettled(page, canvas, minForeground, maxMs = 60_000) {
   const started = Date.now();
   let previous = await captureCanvas(page, canvas);
+  let previousLoop = await frameLoop(page);
   let frames = 1;
   let lastDiff = null;
   while (Date.now() - started < maxMs) {
     await page.waitForTimeout(250);
     const current = await captureCanvas(page, canvas);
+    const loop = await frameLoop(page);
     frames += 1;
     const area = current.image.width * current.image.height;
     lastDiff = diffImages(previous.image, current.image).changed / area;
     const fg = foreground(current.image).fraction;
+    const drawn = loop && previousLoop ? loop.rendered - previousLoop.rendered : null;
+    const quiet = !loop || (!loop.arriving && !loop.moving && (!loop.awake || (drawn != null && drawn >= 2)));
     previous = current;
-    if (lastDiff < 0.001 && fg >= minForeground) {
+    previousLoop = loop;
+    if (lastDiff < 0.001 && fg >= minForeground && quiet) {
       return { ...current, meta: { settled: true, ms: Date.now() - started, frames, lastDiff } };
     }
   }
   return { ...previous, meta: { settled: false, ms: Date.now() - started, frames, lastDiff } };
+}
+
+/** The viewer's frame loop ({ rendered, awake, arriving, moving }), or null without the Play hooks. */
+async function frameLoop(page) {
+  return page.evaluate(() => {
+    const state = window.__lupiPlay?.state?.();
+    const demand = state?.frameDemand;
+    if (!demand || !Number.isFinite(demand.rendered)) return null;
+    return {
+      rendered: demand.rendered,
+      awake: demand.awake === true,
+      arriving: Boolean(state.motion?.arrival),
+      moving: state.motion?.active === true,
+    };
+  }).catch(() => null);
 }
 
 async function assessRender(page, canvas, image, minForeground) {
@@ -290,7 +326,9 @@ async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
     }
     if (isTouchProfile(spec.profile)) await page.touchscreen.tap(point.x, point.y);
     else await page.mouse.click(point.x, point.y);
-    const shown = await card.first().waitFor({ state: 'visible', timeout: 4_000 }).then(() => true, () => false);
+    // The card follows the pick's frames: on SwiftShader under a shared
+    // machine's load that took 4-9 s after the click.
+    const shown = await card.first().waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
     tried.push({ ...point, shown });
     if (shown) {
       const info = await card.first().evaluate((node) => ({
@@ -319,15 +357,7 @@ async function pickAtom({ page, spec, check, save, outcome }, canvas, image) {
 // during the hold (a real finger or mouse held still sends none either; touch
 // moves that do not move are dropped by Chromium anyway).
 //
-// Flicks release at speed. Every event carries a planned CDP timestamp and is
-// dispatched on schedule without waiting for the page, so event.timeStamp
-// shows the intended speed even when a software renderer keeps the main
-// thread busy and the events arrive in a burst. A rig must therefore measure
-// release velocity from event.timeStamp, never from performance.now() at
-// handling time.
-//
-// Touch gestures (touchDrag, touchFlick, pinch, twoFingerDrag) need a context
-// with hasTouch (the phone and phone390 profiles).
+// touchDrag needs a context with hasTouch (the phone and phone390 profiles).
 // ---------------------------------------------------------------------------
 
 const DRAG_STEPS = 16;
@@ -336,11 +366,6 @@ const DRAG_STEP_MS = 16;
 /** True for the touch device profiles (phone, phone390). */
 function isTouchProfile(profile) {
   return profile === 'phone' || profile === 'phone390';
-}
-
-/** Epoch milliseconds with sub-millisecond resolution (CDP timestamps are epoch seconds). */
-function epochMs() {
-  return performance.timeOrigin + performance.now();
 }
 
 /** Resolve once the page's main thread has run a frame, i.e. handled the input queued before it. */
@@ -377,32 +402,6 @@ async function touchDrag(page, start, { dx, dy }, { holdMs = 150 } = {}) {
   await touchStroke(page, points, { holdMs });
 }
 
-/** Two fingers `gap` px apart (horizontally) move together by {dx, dy}, hold still holdMs, lift. */
-async function twoFingerDrag(page, start, { dx, dy }, { gap = 80, holdMs = 150 } = {}) {
-  const points = (i) => {
-    const x = start.x + (dx * i) / DRAG_STEPS;
-    const y = start.y + (dy * i) / DRAG_STEPS;
-    return [{ x: x - gap / 2, y }, { x: x + gap / 2, y }];
-  };
-  await touchStroke(page, points, { holdMs });
-}
-
-/**
- * Two fingers centred on `center`, `fromPx` apart, spread (or close) to `toPx`
- * apart over `ms`, hold still holdMs, lift. `angle` (degrees) turns the finger
- * axis from horizontal.
- */
-async function pinch(page, center, { fromPx = 80, toPx = 220, ms = 256, holdMs = 150, angle = 0 } = {}) {
-  const steps = Math.max(4, Math.round(ms / DRAG_STEP_MS));
-  const ux = Math.cos((angle * Math.PI) / 180);
-  const uy = Math.sin((angle * Math.PI) / 180);
-  const points = (i) => {
-    const half = (fromPx + ((toPx - fromPx) * i) / steps) / 2;
-    return [{ x: center.x - ux * half, y: center.y - uy * half }, { x: center.x + ux * half, y: center.y + uy * half }];
-  };
-  await touchStroke(page, points, { holdMs, steps, stepMs: ms / steps });
-}
-
 /** Touch down at points(0), move through points(1..steps) in real time, hold, lift. */
 async function touchStroke(page, points, { holdMs = 150, steps = DRAG_STEPS, stepMs = DRAG_STEP_MS } = {}) {
   const client = await cdpFor(page);
@@ -416,151 +415,6 @@ async function touchStroke(page, points, { holdMs = 150, steps = DRAG_STEPS, ste
     await page.waitForTimeout(holdMs);
   }
   await touchEvent(client, 'touchEnd', []);
-}
-
-/**
- * Play timed events (`at` ms from now) on schedule with planned timestamps,
- * without waiting for the page between them; resolves when all are acknowledged.
- */
-async function playTimed(events, send) {
-  const origin = epochMs();
-  const pending = [];
-  for (const event of events) {
-    const wait = origin + event.at - epochMs();
-    if (wait > 1) await sleep(wait);
-    pending.push(send(event, origin + event.at));
-  }
-  await Promise.all(pending);
-}
-
-function flickPlan(start, { dx, dy }, ms) {
-  const steps = Math.max(4, Math.round(ms / DRAG_STEP_MS));
-  const plan = [{ type: 'down', at: 0, x: start.x, y: start.y }];
-  for (let i = 1; i <= steps; i += 1) plan.push({ type: 'move', at: (ms * i) / steps, x: start.x + (dx * i) / steps, y: start.y + (dy * i) / steps });
-  // Lift half a frame after the last move: released at full speed.
-  plan.push({ type: 'up', at: ms + 8, x: start.x + dx, y: start.y + dy });
-  return plan;
-}
-
-/** Press at start and throw the pointer by {dx, dy} in `ms`, releasing at speed. */
-async function mouseFlick(page, start, { dx, dy }, { ms = 120 } = {}) {
-  const client = await cdpFor(page);
-  await page.mouse.move(start.x, start.y);
-  const type = { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased' };
-  await playTimed(flickPlan(start, { dx, dy }, ms), (event, at) => client.send('Input.dispatchMouseEvent', {
-    type: type[event.type],
-    x: event.x,
-    y: event.y,
-    button: 'left',
-    buttons: event.type === 'up' ? 0 : 1,
-    clickCount: event.type === 'move' ? 0 : 1,
-    timestamp: at / 1000,
-  }));
-}
-
-/** One finger thrown by {dx, dy} in `ms`, lifting at speed. */
-async function touchFlick(page, start, { dx, dy }, { ms = 120 } = {}) {
-  const client = await cdpFor(page);
-  const type = { down: 'touchStart', move: 'touchMove', up: 'touchEnd' };
-  await playTimed(flickPlan(start, { dx, dy }, ms), (event, at) => touchEvent(client, type[event.type], [event], at));
-}
-
-// ---------------------------------------------------------------------------
-// Frames and play state
-// ---------------------------------------------------------------------------
-
-/**
- * What the screen showed, every `every` ms for `ms`: floor(ms / every) + 1
- * full-viewport PNG Buffers (CSS-pixel size, DOM chrome visible; decode with
- * decodePng()).
- *
- * Frames come from a CDP screencast, so every frame the page presents is seen
- * at the rate it presents them (software renderers manage a few per second;
- * polled screenshots would add seconds each). The timeline starts at the first
- * presented frame; slot i holds the latest frame presented at or before
- * i * every ms, so a page that presents nothing new repeats its last frame.
- * Each Buffer carries `t` (the slot, ms) and `frameT` (when the frame it shows
- * was presented, ms, <= t): count distinct `frameT` values for distinct frames.
- * One sampleFrames per page at a time.
- */
-async function sampleFrames(page, { ms = 500, every = 50 } = {}) {
-  const client = await cdpFor(page);
-  const step = Math.max(1, every);
-  const count = Math.max(1, Math.floor(ms / step) + 1);
-  const presented = [];
-  let wake = null;
-  const onFrame = ({ data, metadata, sessionId }) => {
-    client.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
-    const at = Number.isFinite(metadata?.timestamp) ? metadata.timestamp * 1000 : Date.now();
-    presented.push({ at, png: Buffer.from(data, 'base64') });
-    wake?.();
-  };
-  const nextFrame = (maxMs) => new Promise((done) => {
-    const timer = setTimeout(done, maxMs);
-    wake = () => {
-      clearTimeout(timer);
-      done();
-    };
-  });
-  const viewport = page.viewportSize();
-  client.on('Page.screencastFrame', onFrame);
-  try {
-    await client.send('Page.startScreencast', {
-      format: 'png',
-      everyNthFrame: 1,
-      ...(viewport ? { maxWidth: viewport.width, maxHeight: viewport.height } : {}),
-    });
-    if (presented.length === 0) await nextFrame(Math.min(timeout, 15_000));
-    if (presented.length === 0) {
-      // Nothing presented yet: seed the timeline with a forced capture.
-      const { data } = await withTimeout(client.send('Page.captureScreenshot', { format: 'png' }), timeout, 'frame capture');
-      presented.push({ at: Date.now(), png: Buffer.from(data, 'base64') });
-    }
-    const origin = presented[0].at;
-    const end = origin + (count - 1) * step;
-    while (Date.now() < end) await nextFrame(end - Date.now());
-    // Frames reach us a few ms after they are presented.
-    await sleep(100);
-  } finally {
-    wake = null;
-    client.off('Page.screencastFrame', onFrame);
-    await client.send('Page.stopScreencast').catch(() => {});
-  }
-  presented.sort((a, b) => a.at - b.at);
-  const origin = presented[0].at;
-  const frames = [];
-  let shown = 0;
-  for (let i = 0; i < count; i += 1) {
-    const t = i * step;
-    while (shown + 1 < presented.length && presented[shown + 1].at - origin <= t) shown += 1;
-    const source = presented[shown].png;
-    const png = Buffer.from(source.buffer, source.byteOffset, source.length);
-    png.t = t;
-    png.frameT = Math.round(presented[shown].at - origin);
-    frames.push(png);
-  }
-  return frames;
-}
-
-/** The Play store's state (window.__lupiPlay.state()), or null when it is absent. */
-async function readPlay(page) {
-  return page.evaluate(() => window.__lupiPlay?.state?.() ?? null).catch(() => null);
-}
-
-/**
- * Emit a Lupi intent exactly as the UI would (window.__lupiPlay.emit), e.g.
- * { type: 'play.spin' } before the pill that emits it exists. Resolves false
- * when the Play hooks are absent.
- */
-async function playEmit(page, intent) {
-  return page
-    .evaluate((value) => {
-      const play = window.__lupiPlay;
-      if (typeof play?.emit !== 'function') return false;
-      play.emit(value);
-      return true;
-    }, intent)
-    .catch(() => false);
 }
 
 // ---------------------------------------------------------------------------
@@ -919,13 +773,6 @@ export {
   isTouchProfile,
   mouseDrag,
   touchDrag,
-  mouseFlick,
-  touchFlick,
-  pinch,
-  twoFingerDrag,
-  sampleFrames,
-  readPlay,
-  playEmit,
   PNG_SIGNATURE,
   decodePng,
   cropImage,

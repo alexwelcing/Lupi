@@ -80,11 +80,6 @@ export function IconRemix() {
     <path d="m14 8 3 2 1-3M10 16l-3-2-1 3" />
     <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /></LupiGlyph>;
 }
-export function IconOptics() {
-  return <LupiGlyph><ellipse cx="12" cy="12" rx="6" ry="2.6" transform="rotate(-40 12 12)" />
-    <ellipse cx="12" cy="12" rx="2.6" ry="6" transform="rotate(-40 12 12)" opacity=".6" />
-    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /></LupiGlyph>;
-}
 export function IconRecenter() {
   return <LupiGlyph><circle cx="12" cy="12" r="3.1" />
     <path d="M12 5v2M19 12h-2M12 19v-2M5 12h2" /></LupiGlyph>;

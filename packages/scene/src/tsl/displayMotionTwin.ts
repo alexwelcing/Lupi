@@ -3,13 +3,17 @@
  *
  * The same formulas, term for term, in double precision, with three r186's
  * PCG `hash` mirrored exactly through `Math.imul` and `>>> 0` and the seed
- * built from the same float32 bits. Every term is mirrored: the arrival, the
- * ripple and the Play verbs Tug, Burst and Heat.
+ * built from the same float32 bits. Every term is mirrored: the arrival
+ * (condense, flat, scatter and the morph), the ripple and the Play verbs Tug,
+ * Burst and Heat.
+ *
+ * The morph reads per-atom starts the GPU reads from its texture. The twin
+ * finds the atom by its rest point: the point's float32 bits are a key into
+ * the morph's own positions array (an overlay hangs on its atom's frame
+ * position, as a bond end copies it), so it reads the same texel.
  *
  * Used by:
- * - the unit tests and the `play` testbed case, which puts probes where the
- *   twin says an atom is mid-flight: a GPU that hashed or bit-cast
- *   differently (the WebGL2 risk) would miss them;
+ * - the unit tests;
  * - the live view's overlays (labels, selection rings, the atom card's
  *   anchor, measurements, trails: `@atlas/ui` play/displayFollow), which ride
  *   with their atoms while display motion runs. Only the handful of atoms
@@ -23,11 +27,14 @@ import {
   DISPLAY_MOTION,
   DISPLAY_MOTION_TUNING,
   HEAT_SALT,
+  MORPH_TEXEL_STRIDE,
   RIPPLE_SLOTS,
   SEED_MIX_Y,
   SEED_MIX_Z,
   burstSlotUniforms,
+  displayMorph,
   rippleSlotUniforms,
+  type DisplayMorphData,
 } from './displayMotion';
 
 export type TwinVec3 = [number, number, number];
@@ -62,6 +69,14 @@ export interface DisplayMotionTwinState {
   arrivalOmega: number;
   arrivalZeta: number;
   arrivalDelayScale: number;
+  /** The morph frame: the anchor and the axes (each times the anchor depth). */
+  morphOrigin: TwinVec3;
+  morphAxisX: TwinVec3;
+  morphAxisY: TwinVec3;
+  morphAxisZ: TwinVec3;
+  morphCount: number;
+  /** The morph's starts (the GPU's texture), or null. */
+  morph: DisplayMorphData | null;
   rippleWeight: number;
   maxRipple: number;
   ripples: DisplayMotionTwinRipple[];
@@ -107,6 +122,12 @@ export function restTwinState(): DisplayMotionTwinState {
     arrivalOmega: 16,
     arrivalZeta: 0.75,
     arrivalDelayScale: 1,
+    morphOrigin: [0, 0, 0],
+    morphAxisX: [1, 0, 0],
+    morphAxisY: [0, 1, 0],
+    morphAxisZ: [0, 0, 1],
+    morphCount: 0,
+    morph: null,
     rippleWeight: 0,
     maxRipple: DISPLAY_MOTION_TUNING.rippleAmplitude,
     ripples: Array.from({ length: RIPPLE_SLOTS }, () => ({ a: [0, 0, 0, -1], b: [0, 0, 0, 0] })),
@@ -141,6 +162,12 @@ export function readTwinState(): DisplayMotionTwinState {
     arrivalOmega: M.uArrivalOmega.value,
     arrivalZeta: M.uArrivalZeta.value,
     arrivalDelayScale: M.uArrivalDelayScale.value,
+    morphOrigin: v(M.uMorphOrigin.value),
+    morphAxisX: v(M.uMorphAxisX.value),
+    morphAxisY: v(M.uMorphAxisY.value),
+    morphAxisZ: v(M.uMorphAxisZ.value),
+    morphCount: M.uMorphCount.value,
+    morph: displayMorph(),
     rippleWeight: M.uRippleWeight.value,
     maxRipple: M.uMaxRipple.value,
     ripples: Array.from({ length: RIPPLE_SLOTS }, (_, i) => {
@@ -214,6 +241,50 @@ const sub = (a: TwinVec3, b: TwinVec3): TwinVec3 => [a[0] - b[0], a[1] - b[1], a
 const scale = (a: TwinVec3, k: number): TwinVec3 => [a[0] * k, a[1] * k, a[2] * k];
 const len = (a: TwinVec3) => Math.hypot(a[0], a[1], a[2]);
 
+const morphIndexes = new WeakMap<DisplayMorphData, Map<string, number>>();
+
+function pointKey(x: number, y: number, z: number): string {
+  return `${floatBits(x)}:${floatBits(y)}:${floatBits(z)}`;
+}
+
+/** The atom whose rest point `rest` is, in the morph's positions (float32 bits), or -1. */
+export function twinMorphAtom(morph: DisplayMorphData, rest: TwinVec3): number {
+  let index = morphIndexes.get(morph);
+  if (!index) {
+    index = new Map();
+    const p = morph.positions;
+    for (let i = 0; i < morph.count; i += 1) {
+      const key = pointKey(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
+      if (!index.has(key)) index.set(key, i);
+    }
+    morphIndexes.set(morph, index);
+  }
+  return index.get(pointKey(rest[0], rest[1], rest[2])) ?? -1;
+}
+
+/** The morph branch of the arrival: from the atom's texel toward its rest point. */
+function twinMorph(state: DisplayMotionTwinState, rest: TwinVec3, elapsed: number, D: number): TwinVec3 {
+  const morph = state.morph;
+  if (!morph?.texels) return [0, 0, 0];
+  const atom = twinMorphAtom(morph, rest);
+  if (!(atom > -0.5 && atom < state.morphCount - 0.5)) return [0, 0, 0];
+  const t = morph.texels;
+  const o = atom * MORPH_TEXEL_STRIDE;
+  const O = state.morphOrigin;
+  const X = state.morphAxisX;
+  const Y = state.morphAxisY;
+  const Z = state.morphAxisZ;
+  const start: TwinVec3 = [
+    O[0] + X[0] * t[o] + Y[0] * t[o + 1] + Z[0] * t[o + 2],
+    O[1] + X[1] * t[o] + Y[1] * t[o + 1] + Z[1] * t[o + 2],
+    O[2] + X[2] * t[o] + Y[2] * t[o + 1] + Z[2] * t[o + 2],
+  ];
+  const tau = Math.max(elapsed - t[o + 3] * state.arrivalDelayScale, 0);
+  const S = twinStepResponse(state.arrivalOmega, state.arrivalZeta, tau);
+  const E = 1 - smoothstep(D - DISPLAY_MOTION_TUNING.endFadeS, D, elapsed);
+  return scale(sub(start, rest), (1 - S) * E);
+}
+
 /** The arrival term (before its weights). */
 export function twinArrival(state: DisplayMotionTwinState, rest: TwinVec3, raw: TwinVec3 = rest): TwinVec3 {
   const T = DISPLAY_MOTION_TUNING;
@@ -223,8 +294,11 @@ export function twinArrival(state: DisplayMotionTwinState, rest: TwinVec3, raw: 
   const elapsed = state.now - state.arrivalT0;
   const D = state.arrivalDuration;
   const mode = state.arrivalMode;
+  const isMorph = mode > 3.5;
   const isFlat = mode > 1.5 && mode < 2.5;
-  const isScatter = mode > 2.5;
+  const isScatter = mode > 2.5 && mode < 3.5;
+
+  if (isMorph) return twinMorph(state, rest, elapsed, D);
 
   if (isFlat) {
     const v = state.arrivalViewDir;

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockFrame } from '@atlas/core/test-utils';
 import { AtomInfoHUD } from './AtomInfoHUD';
 import { resetStore } from './test-utils';
+import { useStore } from './store';
 
 vi.mock('@react-three/drei/webgpu', () => ({
   Html: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -108,5 +109,22 @@ describe('AtomInfoHUD chemistry truth', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss atom details' }));
 
     expect(onDismissCard).toHaveBeenCalledWith(1);
+  });
+
+  it('never shows a home directory from a knowledge node path, in the line or its tooltip', () => {
+    const frame = createMockFrame({ natoms: 1, types: [6] });
+    const nodeId = 'hermes-core://config//home/alex/.hermes/SOUL.md';
+    useStore.getState().setKnowledgeLabels([
+      { id: `node-${nodeId}`, kind: 'node', text: 'SOUL.md', nodeKind: 'config', nodeId, atomIndex: 0, position: [0, 0, 0] },
+    ]);
+
+    const { container } = render(<AtomInfoHUD frame={frame} selectedAtoms={[0]} />);
+
+    const line = screen.getByText('~/.hermes/SOUL.md');
+    expect(line.getAttribute('title')).toBe('hermes-core://config/~/.hermes/SOUL.md');
+    expect(container.textContent).not.toMatch(/\/home\//);
+    for (const node of container.querySelectorAll('[title]')) expect(node.getAttribute('title')).not.toMatch(/\/home\//);
+    // The label itself keeps its id (pinning, search and MCP use it).
+    expect(useStore.getState().knowledgeLabels[0].nodeId).toBe(nodeId);
   });
 });

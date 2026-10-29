@@ -239,10 +239,3 @@ export async function deleteTrajectory(id: string): Promise<void> {
     records.filter((r) => r.id !== id),
   );
 }
-
-/** Best-effort storage usage estimate for a library quota UI. */
-export async function estimateLibraryUsage(): Promise<{ usage: number; quota: number } | null> {
-  if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return null;
-  const { usage = 0, quota = 0 } = await navigator.storage.estimate();
-  return { usage, quota };
-}

@@ -58,22 +58,6 @@ export function silhouetteMarkup(layout: InkLayout, color = DAILY_INK): string {
   return `${out}</g>`;
 }
 
-/** Outline (colour = false) or colour (true): ringed atoms and ink bonds, back to front. */
-export function outlineMarkup(layout: InkLayout, colour: boolean): string {
-  const { model } = layout;
-  let out = `<g stroke="${DAILY_INK}" stroke-linecap="round">`;
-  for (const item of layout.order) {
-    if (item < layout.atomCount) {
-      const fill = colour ? model.kinds[model.k[item]].c : DAILY_PAPER;
-      out += `<circle cx="${fmt(layout.cx[item])}" cy="${fmt(layout.cy[item])}" r="${fmt(layout.r[item])}" fill="${fill}" stroke-width="${colour ? COLOUR_RING_WIDTH : OUTLINE_WIDTH}" stroke-opacity="${fmt(outlineOpacity(layout, item))}"/>`;
-    } else {
-      const b = item - layout.atomCount;
-      out += `<line x1="${fmt(layout.x1[b])}" y1="${fmt(layout.y1[b])}" x2="${fmt(layout.x2[b])}" y2="${fmt(layout.y2[b])}" stroke-width="${fmt(outlineBondWidth(layout))}" stroke-opacity="${fmt(outlineBondOpacity(layout, b))}"/>`;
-    }
-  }
-  return `${out}</g>`;
-}
-
 /** A standalone silhouette SVG (the yesterday tile, before it is tapped). */
 export function silhouetteSvg(model: InkModel, pose: InkPose, attrs: Record<string, string> = {}): string {
   const layout = new InkLayout(model);

@@ -22,8 +22,6 @@
       "@atlas/scene/*": ["../../packages/scene/src/*"],
       "@atlas/ui": ["../../packages/ui/src"],
       "@atlas/ui/*": ["../../packages/ui/src/*"],
-      "@atlas/export": ["../../packages/export/src"],
-      "@atlas/export/*": ["../../packages/export/src/*"],
       "three": ["../../packages/ui/node_modules/@types/three"],
       "three/addons/*": ["../../packages/ui/node_modules/@types/three/examples/jsm/*"]
     }

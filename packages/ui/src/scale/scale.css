@@ -163,17 +163,22 @@
   bottom: 0;
   height: 18px;
 }
+/* Each tick is a narrow button on its mark; its label is centred on it, moved
+   by --nudge at the ends, and hidden (data-crowded) where it would touch
+   another label, so a crowded landmark keeps only its mark. */
 .scale-tick {
   position: absolute;
+  top: 0;
   left: calc(var(--pos) * 100%);
-  transform: translateX(-50%);
-  padding: 0 2px;
+  width: 12px;
+  height: 100%;
+  margin-left: -6px;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--scale-muted);
   font: inherit;
   font-size: 0.68rem;
-  white-space: nowrap;
   cursor: pointer;
 }
 .scale-tick::before {
@@ -185,8 +190,22 @@
   height: 6px;
   background: var(--scale-line);
 }
+.scale-tick-label {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  padding: 0 2px;
+  white-space: nowrap;
+  transform: translateX(calc(-50% + var(--nudge, 0px)));
+}
+.scale-tick[data-crowded] .scale-tick-label {
+  visibility: hidden;
+}
 .scale-tick:hover {
   color: var(--scale-accent);
+}
+.scale-tick:hover::before {
+  background: var(--scale-accent);
 }
 
 .scale-actions {
@@ -276,9 +295,6 @@
   }
   .scale-tick {
     font-size: 0.6rem;
-  }
-  .scale-tick:nth-child(even) {
-    display: none;
   }
   .scale-chip,
   .scale-button {

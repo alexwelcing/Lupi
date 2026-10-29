@@ -107,6 +107,7 @@ import { sceneLookPatch } from './sceneLooks';
 import { getComfort } from './motion/comfort';
 import { LandingFallback } from './relay/LandingFallback';
 import { FirstFrameOverlay } from './relay/FirstFrameOverlay';
+import { opensMolecule } from './relay/preview';
 import { withCameraGlide } from './camera/rigApi';
 
 const EMPTY_TRAJECTORY_FRAMES: Array<import('@atlas/core/types').Frame | undefined> = [];
@@ -634,6 +635,11 @@ export function ViewerApp() {
     window.location.assign('/');
   }, []);
 
+  // A deep link still opening shows LandingFallback's "Opening…" plate alone,
+  // as the splash before it did: the header arrives with the molecule.
+  const deepLinkOpening = !file && !automaticLoadFailed && !isMcpViewerRoute && !isSavedViewRoute
+    && !isCopperSceneRoute && !seoEducationKind && opensMolecule();
+
   return (
     <div
       className="lupine-app-root"
@@ -656,7 +662,7 @@ export function ViewerApp() {
           setCommandPaletteOpen={setCommandPaletteOpen}
         />
       )}
-      {!isEmbeddedMobileViewer && (
+      {!isEmbeddedMobileViewer && !deepLinkOpening && (
         <div className="lupine-viewer-chrome lupine-viewer-chrome--header">
           <AppHeader
             isMobile={isMobile}
@@ -1061,6 +1067,27 @@ export function ViewerApp() {
               group: 'Scene',
               disabled: !file,
               onSelect: () => useStore.setState(sceneLookPatch('sketch', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
+              id: 'look-engrave',
+              label: 'Ink: banknote line engraving on paper (Engrave look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('engrave', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
+              id: 'look-halftone',
+              label: 'Ink: halftone print dots on paper (Halftone look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('halftone', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
+            },
+            {
+              id: 'look-chalk',
+              label: 'Chalk: a chalkboard drawing on the dark plate (Chalk look)',
+              group: 'Scene',
+              disabled: !file,
+              onSelect: () => useStore.setState(sceneLookPatch('chalk', useStore.getState().file?.trajectory.frames[0]?.natoms ?? 0)),
             },
             {
               id: 'look-lit',

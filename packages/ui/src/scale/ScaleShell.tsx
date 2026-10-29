@@ -5,12 +5,12 @@
  * the picture is the cut of §9 drawn with the viewer's impostors. Its own
  * route and chunk: nothing here loads on any other page.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { invalidate } from '@react-three/fiber/webgpu';
 import { LupiCanvas } from '../viewer/LupiCanvas';
 import { detectRenderCapability } from '../renderCapability';
 import { DEFAULT_ENTRY_ID, entryById, scaleCatalog, type ScaleEntry } from './catalog';
-import { phiOfLambda, phiOfSlider, sliderOfPhi } from './axis';
+import { phiOfLambda, phiOfSlider, placeTickLabels, sliderOfPhi, type TickPlacement } from './axis';
 import { rayThrough, ScaleScene, type ScaleFrameInfo } from './ScaleScene';
 import { CAMERA, ScaleWorld, webBudgets, type Comfort, type Readout, type Viewport } from './world';
 import { readScaleUrl, scaleUrl } from './share';
@@ -56,6 +56,14 @@ function hudOf(world: ScaleWorld, viewport: Viewport): Hud {
 }
 
 const SALT_IDS = ['salt-1e3', 'salt-1e6', 'salt-1e9', 'salt-1e30', 'googol', 'googolplex'];
+
+/** Clear space between two printed landmark labels (px). */
+const TICK_GAP_PX = 6;
+/** How far a label at either end may reach past the track (px): the thumb's half width the ticks are inset by. */
+const TICK_OVERHANG_PX = 9;
+
+const samePlacement = (a: TickPlacement[], b: TickPlacement[]) =>
+  a.length === b.length && a.every((p, i) => p.shown === b[i].shown && Math.abs(p.nudge - b[i].nudge) < 0.5);
 
 export function ScaleShell() {
   const [capability] = useState(detectRenderCapability);
@@ -317,9 +325,37 @@ export function ScaleShell() {
     act(() => world.flyTo(phiOfSlider(value / 1000, range), centreFocus()));
   };
   const releaseSlider = () => setSliderHeld(null);
-  const ticks = world.landmarks
-    .map((l) => ({ ...l, pos: sliderOfPhi(phiOfLambda(l.lambda), range) }))
-    .filter((t) => t.pos >= 0 && t.pos <= 1);
+  const ticks = useMemo(
+    () => world.landmarks
+      .map((l) => ({ ...l, pos: sliderOfPhi(phiOfLambda(l.lambda), world.range) }))
+      .filter((t) => t.pos >= 0 && t.pos <= 1),
+    [world],
+  );
+  // A label that would touch another hides (its tick stays), and the end
+  // labels keep to the track: measured, so it holds at any width and font.
+  const ticksRef = useRef<HTMLDivElement | null>(null);
+  const [placed, setPlaced] = useState<TickPlacement[]>([]);
+  useLayoutEffect(() => {
+    const host = ticksRef.current;
+    if (!host) return undefined;
+    const labels = [...host.querySelectorAll<HTMLElement>('.scale-tick-label')];
+    const place = () => {
+      const next = placeTickLabels(
+        ticks.map((t, i) => ({ pos: t.pos, width: labels[i]?.offsetWidth ?? 0 })),
+        host.clientWidth,
+        TICK_GAP_PX,
+        TICK_OVERHANG_PX,
+      );
+      setPlaced((previous) => (samePlacement(previous, next) ? previous : next));
+    };
+    place();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    // The track's width, and each label's once the page's font has loaded.
+    const observer = new ResizeObserver(place);
+    observer.observe(host);
+    for (const label of labels) observer.observe(label);
+    return () => observer.disconnect();
+  }, [ticks]);
 
   const salt = SALT_IDS.map((id) => entryById(id)!).filter(Boolean);
   const diamondoids = scaleCatalog().filter((e) => e.group === 'diamondoid');
@@ -398,17 +434,19 @@ export function ScaleShell() {
             aria-label="Scale"
             aria-valuetext={hud?.readout.magnification ?? undefined}
           />
-          <div className="scale-ticks" aria-hidden="true">
-            {ticks.map((t) => (
+          <div className="scale-ticks" aria-hidden="true" ref={ticksRef}>
+            {ticks.map((t, i) => (
               <button
                 key={t.label}
                 type="button"
                 tabIndex={-1}
                 className="scale-tick"
-                style={{ '--pos': t.pos } as CSSProperties}
+                data-crowded={placed[i]?.shown ? undefined : ''}
+                title={placed[i]?.shown ? undefined : t.label}
+                style={{ '--pos': t.pos, '--nudge': `${placed[i]?.nudge ?? 0}px` } as CSSProperties}
                 onClick={() => act(() => world.flyTo(phiOfLambda(t.lambda), centreFocus()))}
               >
-                {t.label}
+                <span className="scale-tick-label">{t.label}</span>
               </button>
             ))}
           </div>

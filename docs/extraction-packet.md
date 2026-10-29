@@ -3,6 +3,10 @@
 **Goal:** extract the LUPI viewer into a dedicated repo that owns the browser
 viewer, auth, saved views, molecule search, and agent-control surface.
 
+**Status:** done; kept as the original split plan. Production now deploys to
+Cloudflare on every push to `main`, and the Cloud Run viewer deploy is gone
+(removed 2026-10-09). See [operations](operations.md) for the current loop.
+
 ## Purpose
 
 `lupi.live` owns the inspectable molecular viewer. It should be the natural
@@ -42,7 +46,7 @@ After extraction, viewer work gets faster and safer:
 | `atlas/atlas-view/docs/api-keys.md` | API-key auth flow |
 | `atlas/atlas-view/docs/lupi-mcp-roadmap.md` | agent/MCP roadmap |
 | `.github/workflows/atlas-view-ci.yml` | viewer CI |
-| `.github/workflows/deploy-glim-viewer.yml` | current Cloud Run deploy |
+| `.github/workflows/deploy-glim-viewer.yml` | Cloud Run deploy at the time of the split |
 
 ## Destination Shape
 
@@ -75,8 +79,7 @@ lupi.live/
   .github/
     workflows/
       ci.yml
-      deploy-viewer.yml
-      deploy-functions.yml
+      deploy-cloudflare.yml
 ```
 
 ## Move
@@ -126,11 +129,11 @@ Viewer-owned contracts:
 
 Viewer repo secrets should include only viewer infra:
 
-- `GCP_PROJECT_ID`
-- `GCP_REGION`
-- `GCP_WORKLOAD_IDENTITY_PROVIDER`
-- `GCP_SERVICE_ACCOUNT`
-- `GCP_SERVICE_NAME_VIEWER`
+- `LUPI_CLOUDFLARE_WRITE_TOKEN_V2` (environment `lupi-production-write-v2`)
+  and the `CLOUDFLARE_ACCOUNT_ID` variable
+- `LUPI_FIREBASE_WEB_API_KEY` (build-only)
+- `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
+  `GCP_SERVICE_ACCOUNT` and `GCP_SERVICE_NAME_RENDERER` for the render backend
 - Firebase project deploy credentials/config
 - Cloud Functions deploy secrets
 - optional deploy telemetry token if added later
@@ -150,10 +153,7 @@ Target commands:
 ```powershell
 pnpm install
 pnpm build
-pnpm verify:viewer
-pnpm verify:controls
-pnpm verify:study-lens
-pnpm verify:mcp-bridge
+pnpm verify:viewer-smoke
 ```
 
 For active development:
@@ -175,7 +175,7 @@ Expected local smoke:
 1. Install pnpm deps.
 2. Build viewer app.
 3. Build only viewer deploy bundle, not the old research route.
-4. Deploy Cloud Run viewer service.
+4. Deploy the Cloudflare Worker (a push to `main`).
 5. Deploy Firebase functions/rules/indexes when relevant files change.
 6. Smoke test live `https://lupi.live`.
 7. Smoke test auth helper paths, saved views, search providers, and MCP bridge.
@@ -191,7 +191,7 @@ Expected local smoke:
 5. Move Firebase functions/config/rules with the app.
 6. Recreate viewer CI and deploy workflows with viewer-only secrets.
 7. Prove local build and focused verifier scripts.
-8. Deploy preview Cloud Run service.
+8. Deploy a preview of the viewer.
 9. Verify saved views, API-key exchange, search providers, and MCP bridge.
 10. Cut over `lupi.live` only after live preview proof.
 11. Remove viewer deploy workflow and moved viewer paths from the
@@ -201,11 +201,9 @@ Expected local smoke:
 
 - `pnpm install` succeeds from a clean clone.
 - `pnpm build` succeeds.
-- `pnpm verify:viewer` succeeds.
-- `pnpm verify:controls` and mobile controls smoke succeed.
-- `pnpm verify:study-lens` succeeds.
-- `pnpm verify:mcp-bridge` succeeds or reports an expected gated-auth state.
-- Cloud Run deploy succeeds.
+- `pnpm verify:viewer-smoke` succeeds.
+- The Cloudflare deploy succeeds and `https://lupi.live/health` reports the
+  commit.
 - Firebase functions/rules deploy succeeds when touched.
 - Live viewer loads at `https://lupi.live`.
 - Federated search returns gallery, saved-view, NIST, OMol25, Library, and

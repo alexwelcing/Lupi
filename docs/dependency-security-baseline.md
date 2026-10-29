@@ -100,7 +100,9 @@ entry as soon as a fixed release exists.
 pnpm 9 expands every advisory path across the combined Expo/R3F peer graph and
 exceeds Node's default 4 GiB heap before applying CVE exceptions. CI and the
 Cloudflare release package therefore give only this audit step an 8 GiB heap.
-The accepted run peaked at approximately 4.9 GiB and completed in 272.7 seconds.
+The run that set this baseline peaked at approximately 4.9 GiB and took 272.7
+seconds. On CI the step now takes about 11 seconds (LUPI CI on `main`,
+2026-10-05, run 37303629773).
 This is capacity for the audited graph, not an exception to the audit result.
 
 ## Remediated Cloud Functions advisories

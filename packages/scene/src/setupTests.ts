@@ -1,5 +1,3 @@
-import { vi } from 'vitest';
-
 globalThis.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}

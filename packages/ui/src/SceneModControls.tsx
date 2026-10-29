@@ -125,13 +125,16 @@ function InkMods() {
   const preset = useStore(s => s.backgroundPreset);
   const transmission = useStore(s => s.materialPreset === 'transmission');
   return <>
-    <p className="scene-controls__hint">Draw the molecule like the Lupi drawings: flat colour or pen hatching, with ink at every edge.
+    <p className="scene-controls__hint">Draw the molecule like the Lupi drawings: flat colour, pen hatching, an engraver's lines or print dots, with ink at every edge, or in chalk on the dark plate.
       Ink is a look, so exports and shared links keep it. The data never changes.</p>
     <label className="scene-mod-select"><span>Drawing</span><select aria-label="Ink drawing" value={style}
       onChange={e => chooseInkStyle(e.target.value as AppState['inkStyle'])}>
       <option value="off">Off (lit)</option>
       <option value="flat">Flat colour</option>
       <option value="hatch">Hatched</option>
+      <option value="engrave">Engraved</option>
+      <option value="halftone">Halftone dots</option>
+      <option value="chalk">Chalk</option>
     </select></label>
     {style !== 'off' && <>
       <Range field="inkWeight" label="Ink weight" min={.4} max={2.5} step={.05} />

@@ -149,6 +149,8 @@ function usageOf(cut: Cut) {
 }
 
 describe('§9.8.1 budgets', () => {
+  // Inherently heavy: 144 cuts at the device budgets, thousands of visits each for the deep salt,
+  // the copper and the baked roots, about 3 s of CPU on its own. Hence its own timeout.
   it('no budget is exceeded and no frame makes more than items + visits pops, over random roots and cameras', () => {
     const rand = prng(981);
     const roots: Array<{ resolver: Resolver; root: Uint8Array }> = [];
@@ -180,7 +182,7 @@ describe('§9.8.1 budgets', () => {
         }
       }
     }
-  });
+  }, HEAVY ? 240_000 : 60_000);
 });
 
 describe('§9.3 τ controllers', () => {
@@ -262,10 +264,11 @@ describe('§9.8.2 same footprint, same cost', () => {
 function coverage(frame: BodyFrame, cut: Cut, root: View, rand: () => number, samples = 400, body?: Geometry, removed: Array<{ min: Vec3; max: Vec3 }> = []) {
   const g = new Geometries(frame.resolver);
   const sigma = frame.metresPerAnchorUnit;
+  // Each region's inverse is taken once here, not once per sample: a cut holds thousands of regions.
   const regions = [
     ...cut.items.filter((i) => i.kind !== 'facePlane').map((i) => ({ sim: i.anchorFromItem, min: i.extras.min, max: i.extras.max, atoms: i.extras.atoms !== undefined })),
     ...(cut.skipped ?? []).filter((s) => s.why === 'enclosed').map((s) => ({ sim: s.anchorFromNode, min: s.min, max: s.max, atoms: false })),
-  ];
+  ].flatMap((r) => (r.min && r.max ? [{ fromAnchor: invertSim(r.sim), min: r.min, max: r.max, atoms: r.atoms }] : []));
   const rootGeometry = g.of(root);
   void rootGeometry;
   let checked = 0;
@@ -295,9 +298,8 @@ function coverage(frame: BodyFrame, cut: Cut, root: View, rand: () => number, sa
     let hits = 0;
     let boxHits = 0;
     for (const r of regions) {
-      if (!r.min || !r.max) continue;
-      const local = applySim(invertSim(r.sim), p);
-      if ([0, 1, 2].every((a) => local[a] >= r.min![a] - 1e-9 && local[a] < r.max![a] + 1e-9)) {
+      const local = applySim(r.fromAnchor, p);
+      if ([0, 1, 2].every((a) => local[a] >= r.min[a] - 1e-9 && local[a] < r.max[a] + 1e-9)) {
         hits += 1;
         if (!r.atoms) boxHits += 1;
       }
@@ -401,21 +403,26 @@ describe('§9.8.3 coverage', () => {
       expect([c.doubled, c.missing, c.drawnRemoved]).toEqual([0, 0, 0]);
       expect(c.checked).toBeGreaterThan(300);
       expect(cut.overBudget).toBe(false);
-      // No atom drawn lies in a removed box.
+      // No atom drawn lies in a removed box. Counted, then asserted once: an expect per atom
+      // (tens of thousands) cost most of this test's time.
       let atoms = 0;
+      let atomsInRemoved = 0;
       for (const item of cut.items.filter((i) => i.extras.atoms !== undefined)) {
         const leaf = resolver.materialize(resolver.resolve(nodeId(edit), item.path));
         const indices = item.extras.atomIndices ?? Array.from(leaf.z, (_z, i) => i);
         for (const i of indices) {
           const x = applySim(item.anchorFromItem, [leaf.positions[3 * i], leaf.positions[3 * i + 1], leaf.positions[3 * i + 2]]);
-          expect(boxes.some((b) => [0, 1, 2].every((a) => x[a] > b.min[a] && x[a] < b.max[a]))).toBe(false);
+          if (boxes.some((b) => [0, 1, 2].every((a) => x[a] > b.min[a] && x[a] < b.max[a]))) atomsInRemoved += 1;
           atoms += 1;
         }
       }
+      expect(atomsInRemoved).toBe(0);
       expect(atoms).toBeGreaterThan(0);
     }
   });
 
+  // Inherently heavy: 24 cuts of a 45-level tower refining up to the item budget as the camera
+  // closes in, about 3.5 s of CPU on its own. Hence its own timeout.
   it('a water grown by Grow ×2 is drawn exactly once as the camera approaches, monotone and within budgets (scale-spec §9.2: not gradual)', () => {
     // §9.8.3's "at most twice the items per halving" cannot hold here: a non-solid level's ε is the
     // same at every level (§9.2), so every copy within ε·σ·K/τ of the eye refines at once.
@@ -441,7 +448,7 @@ describe('§9.8.3 coverage', () => {
     // Outside that ball (ε·σ·K/τ ≈ 0.2 m here) the block stays a handful of boxes.
     expect(counts.slice(0, 3).every((c) => c <= 8)).toBe(true);
     expect(counts[counts.length - 1]).toBeGreaterThan(counts[0]);
-  });
+  }, 60_000);
 });
 
 describe('§9.8.4 monotone error', () => {
@@ -459,6 +466,7 @@ describe('§9.8.4 monotone error', () => {
     const baked = bakePartition(new Uint8Array(n).fill(6), Float32Array.from({ length: 3 * n }, () => rand() * 80));
     cases.push({ resolver: new Resolver(new MemoryStore(baked.records)), root: baked.root });
     let checked = 0;
+    const larger: Array<[number, number]> = [];
     for (const { resolver, root } of cases) {
       const ctx = { resolver, geometries: new Geometries(resolver) };
       for (let walk = 0; walk < 6; walk += 1) {
@@ -469,13 +477,15 @@ describe('§9.8.4 monotone error', () => {
           const parentEpsilon = childEpsilon(ctx, v);
           for (const c of kids) {
             const w = resolver.step(v, c.step);
-            expect(parentEpsilon).toBeGreaterThanOrEqual(childEpsilon(ctx, w) * c.placement.s * (1 - 1e-12));
+            const child = childEpsilon(ctx, w) * c.placement.s * (1 - 1e-12);
+            if (!(parentEpsilon >= child)) larger.push([parentEpsilon, child]);
             checked += 1;
           }
           v = resolver.step(v, kids[Math.floor(rand() * kids.length)].step);
         }
       }
     }
+    expect(larger).toEqual([]);
     expect(checked).toBeGreaterThan(100);
   });
 });

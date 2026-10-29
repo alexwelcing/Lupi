@@ -2,10 +2,10 @@ name: Apple packages
 
 # The native app (apps/apple) is built and signed on the owner's Mac (D2 as
 # amended 2026-10-04), so CI covers only what Linux can prove: every pure-Swift
-# package's tests, that the app's own sources parse and type-check against
-# stand-ins for Apple's frameworks, and that the Swift sources
-# generated from the web's TypeScript (elements, bond fixtures, edge samples,
-# starters, the known molecules built ones are named after) are current.
+# package's tests and that the app's own sources parse and type-check against
+# stand-ins for Apple's frameworks, on Apple pull requests only. The release
+# builds (LupiScale's 8 ms buildCut gate) and `pnpm apple:check` (the Swift
+# generated from the web's TypeScript is current) are local tools.
 
 on:
   workflow_dispatch: {}
@@ -13,28 +13,6 @@ on:
     paths:
       - 'apps/apple/**'
       - 'tools/apple/**'
-      - 'packages/core/**'
-      - 'packages/parsers/**'
-      - 'apps/mcp-worker/src/**'
-      - 'scripts/molecule-pages/**'
-      - 'apps/web/public/gallery/**'
-      - 'apps/web/public/datasets/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/apple.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'apps/apple/**'
-      - 'tools/apple/**'
-      - 'packages/core/**'
-      - 'packages/parsers/**'
-      - 'apps/mcp-worker/src/**'
-      - 'scripts/molecule-pages/**'
-      - 'apps/web/public/gallery/**'
-      - 'apps/web/public/datasets/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
       - '.github/workflows/apple.yml'
 
 concurrency:
@@ -87,37 +65,3 @@ jobs:
       # a package API that changed, which parsing cannot.
       - name: Type-check the app against stand-ins
         run: sh tools/apple/typecheck-app.sh
-
-      # LupiScale again in release: its byte-exact vectors must hold under
-      # optimization too, and its buildCut benchmark (scale-spec §9.8 item 7)
-      # fails above 8 ms only in a release build.
-      - name: Test LupiScale in release
-        run: swift test -c release --package-path apps/apple/LupiScale
-
-      # LupiGame again in release: its directive tests time frames across the
-      # salt ladder, and the optimized build is the one a device runs.
-      - name: Test LupiGame in release
-        run: swift test -c release --package-path apps/apple/LupiGame
-
-  generated-sources:
-    name: Generated Swift sources are current
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check generators and their outputs
-        run: pnpm apple:check

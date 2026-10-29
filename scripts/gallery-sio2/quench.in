@@ -1,0 +1,35 @@
+# Amorphous silica by melt-quench, Vashishta et al. 1990 SiO2 potential.
+# 4,000 SiO2 units (12,000 atoms) at 2.20 g/cm3, periodic cube.
+units metal
+atom_style atomic
+boundary p p p
+region box block 0 56.62 0 56.62 0 56.62
+create_box 2 box
+mass 1 28.0855
+mass 2 15.999
+create_atoms 1 random 4000 12345 box overlap 2.2 maxtry 200
+create_atoms 2 random 8000 67890 box overlap 1.9 maxtry 200
+pair_style vashishta
+pair_coeff * * SiO.1990.vashishta Si O
+neighbor 1.0 bin
+neigh_modify every 1 delay 0 check yes
+minimize 1e-4 1e-6 500 5000
+reset_timestep 0
+timestep 0.001
+thermo 1000
+thermo_style custom step temp press density pe
+velocity all create 5000 4928459 mom yes rot yes dist gaussian
+# Melt 15 ps at 5000 K
+fix melt all nvt temp 5000 5000 0.1
+run 15000
+unfix melt
+# Quench 5000 -> 300 K in 50 ps (~1e14 K/s)
+fix quench all nvt temp 5000 300 0.1
+run 50000
+unfix quench
+# Relax at 300 K and zero pressure, 10 ps
+fix relax all npt temp 300 300 0.1 iso 0.0 0.0 1.0
+run 10000
+unfix relax
+minimize 1e-8 1e-10 2000 20000
+write_data quenched.data

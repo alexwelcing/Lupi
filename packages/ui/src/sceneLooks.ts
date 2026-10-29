@@ -9,18 +9,33 @@ export const SCENE_LOOKS = [
   { id: 'prism', label: 'Prism', description: 'Iridescent · luminous' },
   { id: 'ink', label: 'Illustrate', description: 'Ink · flat colour' },
   { id: 'sketch', label: 'Sketch', description: 'Ink · hatched · paper' },
+  { id: 'engrave', label: 'Engrave', description: 'Ink · engraved lines · paper' },
+  { id: 'halftone', label: 'Halftone', description: 'Ink · print dots · paper' },
+  { id: 'chalk', label: 'Chalk', description: 'Chalk · pastel · dark plate' },
 ] as const;
 export type SceneLookId = typeof SCENE_LOOKS[number]['id'];
 
+/** The Illustrate looks and their shadings (every other Look is lit). */
+const INK_LOOKS = [
+  ['ink', 'flat'],
+  ['sketch', 'hatch'],
+  ['engrave', 'engrave'],
+  ['halftone', 'halftone'],
+  ['chalk', 'chalk'],
+] as const satisfies ReadonlyArray<readonly [SceneLookId, Exclude<InkStyle, 'off'>]>;
+
 /** The Illustrate looks' shading (every other Look is lit). */
 export function inkStyleForLook(id: SceneLookId): InkStyle {
-  return id === 'ink' ? 'flat' : id === 'sketch' ? 'hatch' : 'off';
+  return INK_LOOKS.find(([look]) => look === id)?.[1] ?? 'off';
 }
 
 /** The Look a molecule opens on for an ink style (a new file keeps an Illustrate look). */
 export function lookForInkStyle(style: InkStyle): SceneLookId {
-  return style === 'flat' ? 'ink' : style === 'hatch' ? 'sketch' : 'studio';
+  return INK_LOOKS.find(([, shading]) => shading === style)?.[0] ?? 'studio';
 }
+
+/** The ink looks drawn on the paper plate (Illustrate and Chalk keep the sage plate). */
+const PAPER_LOOKS: ReadonlySet<SceneLookId> = new Set<SceneLookId>(['sketch', 'engrave', 'halftone']);
 
 /** The post recipe every Look renders through (the Specimen rig). */
 const LOOK_POSTPROCESS = 'paper' as const;
@@ -28,8 +43,10 @@ const LOOK_POSTPROCESS = 'paper' as const;
 /** Presentation only. Never reset color encodings, visibility, bonds or source data.
  * All looks avoid transmission, animated backdrops, bloom and depth of field.
  *
- * Illustrate (flat colour on the sage plate) and Sketch (hatched, on the
- * paper plate) are the ink drawing's voice in 3D: the same rig and recipe as
+ * Illustrate (flat colour on the sage plate), Sketch (hatched), Engrave
+ * (banknote line engraving) and Halftone (print dots), those three on the
+ * paper plate, and Chalk (a chalkboard drawing on the sage plate) are the
+ * ink drawing's voice in 3D: the same rig and recipe as
  * Studio and Paper, with the impostors' toon shading and ink outlines on
  * (`inkStyle`); the post recipe steps aside while ink is on
  * (postprocess/controls.ts). Every other Look turns ink off.
@@ -46,7 +63,7 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
   const post = POSTPROCESS_PRESETS[LOOK_POSTPROCESS];
   return {
     backgroundPreset: id === 'paper' ? 'white' : id === 'night' ? 'slate' : id === 'prism' ? 'midnight'
-      : id === 'sketch' ? PAPER_PLATE_PRESET_ID : SAGE_PLATE_PRESET_ID,
+      : PAPER_LOOKS.has(id) ? PAPER_PLATE_PRESET_ID : SAGE_PLATE_PRESET_ID,
     backgroundStyle: 'radial',
     backgroundBackdropShape: 'dome',
     backgroundBackdropPattern: 'image',
@@ -67,7 +84,7 @@ export function sceneLookPatch(id: SceneLookId, atomCount: number) {
     filterShellPreset: 'prism',
     filterShellOpacity: 0.38,
     filterShellRadius: 1.08,
-    ambientLightIntensity: id === 'paper' || id === 'sketch' ? 0.85 : id === 'night' ? 0.4 : 0.6,
+    ambientLightIntensity: id === 'paper' || PAPER_LOOKS.has(id) ? 0.85 : id === 'night' ? 0.4 : 0.6,
     dirLightIntensity: id === 'night' ? 1.65 : 1.35,
     // A gentle rim on every Look; Night leans on it.
     rimLightIntensity: id === 'night' ? 0.42 : 0.22,

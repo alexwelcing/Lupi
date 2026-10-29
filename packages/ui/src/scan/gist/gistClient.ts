@@ -42,12 +42,6 @@ export interface SculptReply {
 let gistUnavailable = false;
 let sculptUnavailable = false;
 
-export function resetGistAvailability(): void {
-  gistUnavailable = false;
-  sculptUnavailable = false;
-  recipeUnavailable = false;
-}
-
 async function post<T extends { configured: boolean }>(path: string, body: unknown, timeoutMs: number, signal?: AbortSignal): Promise<T | null> {
   if (typeof fetch !== 'function') return null;
   const controller = new AbortController();

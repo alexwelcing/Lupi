@@ -25,7 +25,7 @@ The public ChatGPT route is separate from Lupi's existing `/mcp` control plane. 
 | OMol25 collection API | `apps/mcp-worker/src/scienceData.ts` |
 | OMol25 plugin adapter | `apps/mcp-worker/src/chatgptOmol.ts` |
 | PubChem parser | `packages/core/src/pubchem.ts` |
-| Shared OMol25 frame, estimate, and summary | `packages/core/src/omol25/widget.ts` |
+| Shared OMol25 frame, estimate, and summary | `packages/core/src/omol25/widget.ts` (collections, URLs and truth strings: `packages/core/src/omol25/`) |
 | Shared bond recipe | `packages/core/src/bonds/` |
 | MCP route, version constants, and tools | `apps/mcp-worker/src/chatgpt.ts` |
 | Embedded viewer and inspection | `apps/chatgpt-widget/` |
@@ -40,7 +40,6 @@ Run from the repository root with Node 22.13+ and pnpm 9.0.0:
 ```bash
 pnpm install --frozen-lockfile
 pnpm audit --prod --audit-level high
-pnpm verify:product-contract
 pnpm chatgpt:build
 pnpm chatgpt:test
 pnpm chatgpt:package --check

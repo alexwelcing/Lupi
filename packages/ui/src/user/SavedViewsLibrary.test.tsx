@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../store';
@@ -37,6 +37,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
+// A card's buttons by their text, inside that card. `*ByRole` would compute
+// jsdom styles for every button in the sheet (its hidden check and accessible
+// name), which on these inline-styled cards cost most of the test.
+const cardButton = (card: HTMLElement, label: string) => within(card).getByText(label, { selector: 'button' });
+
 describe('SavedViewsLibrary', () => {
   it('lists the owner’s views and routes rename, visibility and confirmed delete to the data layer', async () => {
     render(
@@ -49,19 +54,19 @@ describe('SavedViewsLibrary', () => {
     expect(screen.getByText('On screen')).toBeTruthy();
     expect(screen.getByText('Unlisted')).toBeTruthy();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Rename' })[0]);
+    fireEvent.click(cardButton(cards[0], 'Rename'));
     const input = screen.getByLabelText('View name') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'Morning coffee' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(seams.renameSavedView).toHaveBeenCalledWith('caffeine', 'Morning coffee'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Make unlisted' }));
+    fireEvent.click(cardButton(cards[0], 'Make unlisted'));
     await waitFor(() => expect(seams.updateSavedViewVisibility).toHaveBeenCalledWith('caffeine', 'unlisted'));
 
     // Delete is two-step: the first tap only arms the confirmation.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1]);
+    fireEvent.click(cardButton(cards[1], 'Delete'));
     expect(seams.deleteSavedView).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+    fireEvent.click(cardButton(cards[1], 'Confirm delete'));
     await waitFor(() => expect(seams.deleteSavedView).toHaveBeenCalledWith('water'));
   });
 

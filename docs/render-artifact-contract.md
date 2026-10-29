@@ -289,12 +289,8 @@ Three Fiber v10). The profile lives in
   a 2D canvas, which stores them premultiplied in 8 bits. Very low alpha
   therefore loses colour precision. This is deterministic, and the fingerprint
   records it as `rasterAlphaStorage`.
-- **Goldens.** The V1 (WebGL renderer) goldens stay archived read-only in
-  `tests/fixtures/render-artifact-v1/`. V2 parity candidates are derived
-  automatically per backend into `tests/fixtures/render-artifact-v2/<backend>/`
-  with `verify-render-parity.mjs --backend=<backend> --derive-candidate`. There
-  is no owner approval gate; automated derivation is still not a visual
-  approval.
+- **Goldens.** There are no committed goldens, so a renderer change needs no
+  re-derivation.
 
 ## Format and byte-validation rules
 

@@ -148,14 +148,6 @@ export class ScanError extends Error {
 
 let unavailable = false;
 
-export function resetScanAvailability(): void {
-  unavailable = false;
-}
-
-export function scanUnavailable(): boolean {
-  return unavailable;
-}
-
 /** Element symbols in a plain formula, in order of first appearance. */
 export function elementsFromFormula(formula: string): string[] {
   const symbols = new Set<string>();

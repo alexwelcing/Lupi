@@ -13,12 +13,19 @@
  * every material flagged with `markBackgroundMaterial` (the panorama dome,
  * backdrops, the procedural sky and its field); cleared pixels read 0.
  *
+ * Its second channel carries the Light Fuse's offset (scene tsl/inkFuse.ts,
+ * `LUPI_FUSE_OFFSET`): how far an impostor fragment's ink mix stands from
+ * the look's fade, `uInkMix`. It is 0 everywhere else, and everywhere when
+ * no fuse burns, so `uInkMix` plus it is the live ink mix of every pixel,
+ * which the post recipe follows while the look changes (postPipeline.ts).
+ *
  * Only the pipeline's scene pass carries this output. A material never sets
  * `mrtNode` for it: a material-level MRT would replace the colour output of
  * every other render into a target (export capture, PMREM, transmission).
  */
 import type * as THREE from 'three/webgpu';
 import { Fn, diffuseColor, float, vec4 } from 'three/tsl';
+import { LUPI_FUSE_OFFSET } from '@atlas/scene';
 
 /** `material.userData` flag for background materials. */
 export const LUPI_BACKGROUND_MATERIAL_KEY = 'lupiBackground';
@@ -41,12 +48,13 @@ export function isBackgroundMaterial(material: THREE.Material | null | undefined
 }
 
 /**
- * The `lupiContent` value for the material being built: (content, 0, 0, the
- * material's alpha), so material blending turns it into coverage. Decided per
- * material at build time; background and content materials never share a
- * graph, so they never share a compiled program.
+ * The `lupiContent` value for the material being built: (content, the fuse
+ * offset, 0, the material's alpha), so material blending turns it into
+ * coverage. Decided per material at build time; background and content
+ * materials never share a graph, so they never share a compiled program.
+ * Materials that never write the offset read its placeholder, 0.
  */
 export const contentCoverage = Fn((builder) => {
   const background = isBackgroundMaterial(builder.material as THREE.Material | null | undefined);
-  return vec4(float(background ? 0 : 1), 0, 0, diffuseColor.a);
+  return vec4(float(background ? 0 : 1), LUPI_FUSE_OFFSET, 0, diffuseColor.a);
 });

@@ -34,8 +34,7 @@
     "@lupine/ui#build": { "outputs": [] },
     "@atlas/remotion-trailer#build": { "outputs": [] },
     "test": {
-      "outputs": [],
-      "dependsOn": ["build"]
+      "outputs": []
     },
     "lint": {
       "outputs": []

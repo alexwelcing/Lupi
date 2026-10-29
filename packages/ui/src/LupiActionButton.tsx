@@ -87,11 +87,8 @@ export const LupiActionButton = forwardRef<HTMLButtonElement, Props>(function Lu
         node.dataset.actionRenderer = 'vgpu';
         // Don't start a delayed flourish after a touch has already navigated away.
         if (performance.now() - lastActivity < 700) animate();
-      } catch (error) {
-        if (!closed && version === generation) {
-          console.debug('[Lupi action light] Using static feedback.', error);
-          fail();
-        }
+      } catch {
+        if (!closed && version === generation) fail();
       }
       finally { if (version === generation) loading = false; }
     };

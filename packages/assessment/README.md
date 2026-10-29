@@ -4,20 +4,21 @@
 
 ## Fast path
 
-```bash
-pnpm lupi:assess -- ./asset.xyz ./catalog --mode fast --format json
-pnpm lupi:assess -- https://lupi.live/gallery/example.glimbin --format ndjson
-pnpm lupi:assess -- http://127.0.0.1:8787/asset.xyz --allow-private
-Get-Content envelopes.ndjson | pnpm lupi:assess -- --stdin --format ndjson
+The package is a library with no command-line tool: `pnpm lupi:assess`, its report cache and its flags were never part of this repo. Its callers are the browser bridge's `lupi.assess_asset` (`packages/ui/src/mcp/tools.ts`) and the edge Worker's (`apps/mcp-worker/src/index.ts`), both in fast mode. From Node, assess files with the library directly:
+
+```ts
+import { assessMany, rankAssessments } from '@atlas/assessment';
+import { byteSourcesFromPath } from '@atlas/assessment/node';
+
+const batch = await assessMany(await byteSourcesFromPath('./catalog'), { mode: 'fast' });
+const ranked = rankAssessments(batch.results.map((run) => run.report));
 ```
 
-Fast mode is the default. It reads at most 128 KiB from an asset, uses at most two range operations, never materializes the complete trajectory, and continues when another batch item fails. The CLI runs up to eight local and four remote assessments concurrently, applies a five-second remote timeout, and caches reports under `.verify-artifacts/assessment-cache` using source metadata, a sampled-byte fingerprint, the ruleset, mode, and canonical assessment context. Private-network URL inputs require the explicit local-operator `--allow-private` flag. Cache-hit telemetry reports the bytes and operations used to establish cache identity.
+Fast mode is the default. It reads at most 128 KiB from an asset (`maxFastBytes`), uses at most two range operations (`maxReadOperations`) and never materializes the complete trajectory. `assessMany` runs up to eight local and four remote assessments concurrently and continues when another batch item fails, listing it under `failures`. `byteSourceFromUrl` applies a five-second remote timeout and rejects private-network URLs unless the caller passes `allowPrivate: true`.
 
-Low grades are successful results. `--strict-errors` changes the exit code only for operationally unreadable inputs; unsupported but readable formats return partial `Unrated` reports.
+Low grades are successful results. Unsupported but readable formats return partial `Unrated` reports; operationally unreadable inputs throw, or land in `failures` from `assessMany`.
 
-An stdin wrapper may supply `immutableContentId` to enable envelope caching only when that identifier covers the complete immutable payload. The CLI still includes canonical assessment context in the cache identity; mutable database record IDs are not sufficient.
-
-Deep scans are reused only for stdin envelopes carrying a caller-verified `immutableContentId`. Path metadata or a bounded URL/file prefix is not a safe identity for an entire mutable object, so deep local-file and remote results are not cached by default.
+Each source carries a `cacheKey` for callers that cache reports. `envelopeSource(envelope, name, { immutableContentId })` sets one only when the caller supplies `immutableContentId`, which must cover the complete immutable payload; mutable database record IDs are not sufficient. A cache should also key on the canonical assessment context, the ruleset version and the mode. Path metadata or a bounded URL/file prefix is not a safe identity for an entire mutable object, so deep results for local files and URLs should not be reused on those keys.
 
 ## Library contract
 
@@ -60,7 +61,7 @@ Rule-backed strengths, gaps, limitations, evidence, and diagnostics carry stable
 
 ## Deep mode
 
-`--mode deep` streams supported complete text trajectories, inspects every currently resident frame of a materialized Lupi trajectory, checks coordinate consistency, records named properties, and computes a full content hash when the adapter supports it. Sparse trajectories continue to report authoritative, resident, and inspected frame counts separately; deep mode does not pretend non-resident frames were examined. It supplements the same schema and ruleset and is intentionally unavailable from browser or Cloudflare MCP operations.
+`mode: 'deep'` streams supported complete text trajectories, inspects every currently resident frame of a materialized Lupi trajectory, checks coordinate consistency, records named properties, and computes a full content hash when the adapter supports it. Sparse trajectories continue to report authoritative, resident, and inspected frame counts separately; deep mode does not pretend non-resident frames were examined. It supplements the same schema and ruleset and is intentionally unavailable from browser or Cloudflare MCP operations.
 
 ## MCP surfaces
 
@@ -76,4 +77,4 @@ pnpm --filter @atlas/ui test
 pnpm cloudflare:test
 ```
 
-The performance fixture evaluates 100 small local assets in under three seconds on the CI reference environment (Windows x64, Node 22, warm dependency install). Fast-mode memory and source bytes remain bounded by concurrency and sample size, not source-file size.
+The performance fixture evaluates 100 small local assets in under three seconds (`assessment.test.ts`; CI runs it on Ubuntu with Node 22). Fast-mode memory and source bytes remain bounded by concurrency and sample size, not source-file size.

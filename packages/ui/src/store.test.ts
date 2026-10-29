@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { resetStore, getStoreState, setStoreState } from './test-utils';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 import { DEFAULT_SCENE_ID } from '@atlas/scene/materials';
-import { getDefaultVectorDensity, useStore } from './store';
+import { getDefaultVectorDensity, sanitizeInkStyle, useStore } from './store';
 
 function encodeStateDelta(delta: Record<string, unknown>) {
   return btoa(JSON.stringify(delta))
@@ -198,6 +198,41 @@ describe('Store — URL Serialization', () => {
 
     getStoreState().setBondProfile('distance');
     expect(decodeStateDelta(getStoreState().encodeToURL()).brp).toBe('d');
+  });
+
+  it('round-trips every ink shading (ink) and still reads the first links\' f and h', () => {
+    expect(decodeStateDelta(getStoreState().encodeToURL())).not.toHaveProperty('ink');
+    for (const [style, letter] of [['flat', 'f'], ['hatch', 'h'], ['engrave', 'e'], ['halftone', 'd'], ['chalk', 'c']] as const) {
+      resetStore();
+      getStoreState().setInkStyle(style);
+      const encoded = getStoreState().encodeToURL();
+      expect(decodeStateDelta(encoded).ink).toBe(letter);
+      resetStore();
+      getStoreState().decodeFromURL(encoded);
+      expect(getStoreState().inkStyle).toBe(style);
+    }
+    resetStore();
+    getStoreState().decodeFromURL(encodeStateDelta({ ink: 'f' }));
+    expect(getStoreState().inkStyle).toBe('flat');
+    getStoreState().decodeFromURL(encodeStateDelta({ ink: 'h' }));
+    expect(getStoreState().inkStyle).toBe('hatch');
+    getStoreState().decodeFromURL(encodeStateDelta({ ink: 'x' }));
+    expect(getStoreState().inkStyle).toBe('off');
+  });
+
+  it('sanitizes ink shadings by name or letter and turns anything else off', () => {
+    for (const [value, style] of [
+      ['flat', 'flat'], ['f', 'flat'],
+      ['hatch', 'hatch'], ['h', 'hatch'],
+      ['engrave', 'engrave'], ['e', 'engrave'],
+      ['halftone', 'halftone'], ['d', 'halftone'],
+      ['chalk', 'chalk'], ['c', 'chalk'],
+      ['off', 'off'], ['dots', 'off'], ['ENGRAVE', 'off'], ['chalkboard', 'off'], ['C', 'off'], ['toString', 'off'], [null, 'off'], [3, 'off'],
+    ] as const) {
+      expect(sanitizeInkStyle(value)).toBe(style);
+    }
+    getStoreState().setInkStyle('stipple' as never);
+    expect(getStoreState().inkStyle).toBe('off');
   });
 
   it('keeps existing links with bp (background pitch) and bc (bond cutoff) restoring as before', () => {

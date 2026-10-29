@@ -49,6 +49,24 @@ export type { BondTopologyMode, BondsUpdateDetail, SourceBondTopologyValidation 
 export { useBondGpuPipeline } from './useBondGpuPipeline';
 export type { BondGpuComputeInput, UseBondGpuPipelineResult } from './useBondGpuPipeline';
 export { AtomPicker, pickAtomAtClient } from './AtomPicker';
+export {
+  PICK_BRUTE_FORCE_MAX_ATOMS,
+  PICK_MAX_BONDS,
+  PICK_TOLERANCE_PX,
+  atomSilhouetteGapPx,
+  buildAtomPickGeometry,
+  pickAtom,
+  pickTolerancePx,
+} from './atomPick';
+export type {
+  AtomPickGeometry,
+  AtomPickGeometryInput,
+  AtomPickOptions,
+  AtomPickResult,
+  AtomPickSwell,
+  PickBonds,
+  PickRect,
+} from './atomPick';
 export { SpatialHash3D } from './SpatialHash';
 export { VectorGlyphs, LUPI_ARTIFACT_VECTOR_GLYPHS_LAYER } from './VectorGlyphs';
 export type { VectorGlyphStats } from './VectorGlyphs';
@@ -124,6 +142,7 @@ export type { DisplayMotionTwinState, TwinTermScales, TwinVec3 } from './tsl/dis
 export * from './tsl/atomGlow';
 export * from './tsl/atomFoil';
 export * from './tsl/inkLook';
+export * from './tsl/inkFuse';
 
 // Shared constants
 export {

@@ -73,13 +73,11 @@ for (const file of files) {
     try {
       const t0 = Date.now();
       let frames = 0;
-      let natoms = 0;
       let first = null;
       let last = null;
       const types = new Set();
       for await (const ev of parseDumpStreamFromBytes(fileBytes(file), { multiFrame: true })) {
         if (ev.type === 'header') {
-          natoms = ev.frame.natoms;
           first = ev.frame; // filled in place by the stream
           frames = 1;
         } else if (ev.type === 'frame') {

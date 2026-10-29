@@ -5,9 +5,10 @@ import { MCP_TOOL_DEFINITIONS } from '../packages/ui/src/mcp/toolManifest.ts';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const manifestPath = resolve(repoRoot, 'apps/web/public/browser-mcp-manifest.json');
+// No timestamp: the manifest is committed and rewritten by every web build, so
+// it must depend on the tool definitions alone to leave the tree clean.
 const manifest = {
   schemaVersion: '0.3.0',
-  generatedAt: new Date().toISOString(),
   tools: MCP_TOOL_DEFINITIONS,
 };
 

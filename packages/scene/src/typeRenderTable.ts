@@ -87,3 +87,21 @@ export function buildTypeRenderTable(
     byRawType: new Map(entries.map((entry) => [entry.rawType, entry])),
   };
 }
+
+/**
+ * World radius for one render slot given the viewer's scale controls: the
+ * type's display radius × `scale` (the store's atomScale) × its per-type
+ * scale. Hidden types resolve to 0, which the vertex stage treats as "cull"
+ * and the picker as "not drawn".
+ */
+export function resolveSlotRadius(
+  entry: { rawType: number; displayRadius: number } | undefined,
+  scale: number,
+  hiddenAtomTypes?: { has(type: number): boolean } | null,
+  atomTypeScales?: Record<number, number> | null,
+): number {
+  if (!entry) return 0;
+  if (hiddenAtomTypes?.has(entry.rawType)) return 0;
+  const radius = entry.displayRadius * scale * (atomTypeScales?.[entry.rawType] ?? 1);
+  return Number.isFinite(radius) && radius > 0 ? radius : 0;
+}

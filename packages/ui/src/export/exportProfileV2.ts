@@ -69,6 +69,12 @@ export type ExecutionClassV2 = (typeof EXECUTION_CLASS_V2)[LupiBackend];
  *   whole image is the tile-seam rule: no stage ever sees a tile edge.
  *   Transparent output applies AO and tone mapping only (on un-premultiplied
  *   colour), never bloom, depth of field or a vignette.
+ * - The Illustrate look has no recipe (`view.postprocess` is 'raw-scene'),
+ *   but its screen-space contour (`view.ink.contour`, ink-contour.v1) runs
+ *   the same way: the tiles assemble colour clamped to alpha as the raw path
+ *   clamps it, the nearest depth of each block and coverage (the lupiContent
+ *   mean when opaque, alpha when transparent), and the contour inks the
+ *   whole assembled image once at the output resolution (no time, no noise).
  * - Opaque artifact captures draw the spec's gradient as `scene.background`,
  *   which covers every pixel, so the clear colour never reaches the bytes.
  */
@@ -76,14 +82,14 @@ export const DETERMINISM_V2 = {
   pixelRatio: 1,
   readback: 'render-target-async',
   renderTarget: 'rgba16f-linear-premultiplied-samples0',
-  supersample: 'ssaa-box-premultiplied-clamped.v2;factor=max(w,h)<=1365?3:2;tiles=view-offset<=4096;gpu-f32-sum-rgba16f;untiled-transmission=min(3,floor(4096/max(w,h)));look-clamp=alpha*64;look-depth=block-min-f32;look-coverage=lupiContent-mean',
+  supersample: 'ssaa-box-premultiplied-clamped.v2;factor=max(w,h)<=1365?3:2;tiles=view-offset<=4096;gpu-f32-sum-rgba16f;untiled-transmission=min(3,floor(4096/max(w,h)));look-clamp=alpha*64;ink-clamp=alpha;look-depth=block-min-f32;look-coverage=lupiContent-mean',
   pixelEncode: 'cpu-linear-unpremultiply-srgb-oetf-round.v1',
   rowOrder: 'top-left;destride-256;flip-webgl2',
   alpha: 'straight',
   rasterAlphaStorage: 'canvas2d-premultiplied-rgba8',
   outputColorSpace: 'srgb',
   rendererToneMapping: 'none',
-  postprocessPipeline: 'viewer-look-output-resolution.v1;raw-scene-when-empty;gtao16-denoise-seed-0x4c757069;bloom-radius-0.4;transparent=ao+tonemap-unpremultiplied',
+  postprocessPipeline: 'viewer-look-output-resolution.v1;raw-scene-when-empty;gtao16-denoise-seed-0x4c757069;bloom-radius-0.4;transparent=ao+tonemap-unpremultiplied;ink-contour.v1-output-resolution',
   opaqueBackground: 'spec-gradient-scene-background',
   rasterEncoder: 'browser-canvas-native',
   axesOverlay: 'canvas-overlay-v1',

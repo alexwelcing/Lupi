@@ -138,6 +138,16 @@ describe('captureSupersamplePlan', () => {
     expect(captureSupersamplePlan(2048, 1024, false)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 2048, tileHeight: 1024 });
     expect(captureSupersamplePlan(2160, 2160, false)).toEqual({ factor: 1, columns: 1, rows: 1, tileWidth: 2160, tileHeight: 2160 });
   });
+
+  it('caps the factor when asked (Instant Replay clip frames use 2)', () => {
+    expect(captureSupersamplePlan(720, 1280, true, 2)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 720, tileHeight: 1280 });
+    expect(captureSupersamplePlan(1080, 1920, true, 2)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 1080, tileHeight: 1920 });
+    expect(captureSupersamplePlan(1080, 1920, true, 1)).toEqual({ factor: 1, columns: 1, rows: 1, tileWidth: 1080, tileHeight: 1920 });
+    expect(captureSupersamplePlan(320, 200, false, 2)).toEqual({ factor: 2, columns: 1, rows: 1, tileWidth: 320, tileHeight: 200 });
+    // Out of range caps clamp to 1..3.
+    expect(captureSupersamplePlan(320, 200, true, 9).factor).toBe(3);
+    expect(captureSupersamplePlan(320, 200, true, 0).factor).toBe(1);
+  });
 });
 
 describe('renderSceneToPixels capture guards', () => {
@@ -164,5 +174,30 @@ describe('renderSceneToPixels capture guards', () => {
       off();
     }
     expect(log).toEqual(['setRenderTarget', 'begin', 'render', 'restore', 'setRenderTarget']);
+  });
+
+  it('runs no capture guard for an illustrative frame (Instant Replay clip)', async () => {
+    const log: string[] = [];
+    const off = registerCaptureGuard({ begin: () => (log.push('begin'), () => log.push('restore')) });
+    const renderer = {
+      backend: { isWebGPUBackend: true },
+      autoClear: true, autoClearColor: true, autoClearDepth: true, autoClearStencil: true,
+      getRenderTarget: () => null, getActiveCubeFace: () => 0, getActiveMipmapLevel: () => 0, getMRT: () => null,
+      getClearColor: (color: { set: (hex: number) => unknown }) => color.set(0),
+      getClearAlpha: () => 1,
+      setRenderTarget: () => log.push('setRenderTarget'), setMRT: () => {}, setClearColor: () => {},
+      render: () => {
+        log.push('render');
+        throw new Error('render failed');
+      },
+    } as unknown as THREE.WebGPURenderer;
+    try {
+      await expect(renderSceneToPixels({
+        renderer, scene: {} as THREE.Scene, camera: {} as THREE.Camera, width: 2, height: 2, transparent: false, illustrative: true,
+      })).rejects.toThrow('render failed');
+    } finally {
+      off();
+    }
+    expect(log).toEqual(['setRenderTarget', 'render', 'setRenderTarget']);
   });
 });

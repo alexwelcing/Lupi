@@ -59,10 +59,28 @@ export interface ActivePostprocessInput {
   /** Phone/low-power budget (reduceForMobile), unless the user asked for full effects. */
   reduced: boolean;
   /**
-   * The Illustrate look is on (the store's `inkStyle` is not 'off'): the
-   * drawing carries its own shading, so the recipe steps aside (inkRecipe).
+   * The Illustrate look is on and at rest (inkPhase is 'ink'): the drawing
+   * carries its own shading, so the recipe steps aside (inkRecipe). While
+   * the look changes the lit recipe stays, and the graph rests it pixel by
+   * pixel where the ink is (PostStructure.inkFade).
    */
   ink?: boolean;
+}
+
+/** Where the Illustrate look stands for the recipe: lit or ink at rest, or changing between them. */
+export type InkPhase = 'lit' | 'ink' | 'changing';
+
+/**
+ * The phase of the live look: the store's look (`ink`, a drawing) against
+ * the live drawing's mix (`uInkMix`) and whether a Light Fuse burns. It is
+ * 'changing' through a fade or a fuse, and through Ink-to-Light's hand-off
+ * drawing (lit in the store, inked on screen).
+ */
+export function inkPhase(ink: boolean, mix: number, fusing: boolean): InkPhase {
+  if (fusing) return 'changing';
+  if (ink && mix >= 1) return 'ink';
+  if (!ink && mix <= 0) return 'lit';
+  return 'changing';
 }
 
 /**

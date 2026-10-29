@@ -437,7 +437,6 @@ export default defineConfig(({ command }) => ({
       '@atlas/renderer': path.resolve(__dirname, '../../packages/renderer/src'),
       '@atlas/scene': path.resolve(__dirname, '../../packages/scene/src'),
       '@atlas/ui': path.resolve(__dirname, '../../packages/ui/src'),
-      '@atlas/export': path.resolve(__dirname, '../../packages/export/src'),
     },
   },
   optimizeDeps: {

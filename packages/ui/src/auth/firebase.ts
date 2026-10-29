@@ -31,12 +31,8 @@ const requiredFirebaseEnv = [
   'VITE_FIREBASE_APP_ID',
 ] as const;
 
-export const firebaseMissingKeys = requiredFirebaseEnv.filter((key) => !env[key]);
+const firebaseMissingKeys = requiredFirebaseEnv.filter((key) => !env[key]);
 export const firebaseConfigured = firebaseMissingKeys.length === 0;
-export const firebaseAuthDomain = (env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined) ?? null;
-export const firebaseProjectId = (env.VITE_FIREBASE_PROJECT_ID as string | undefined) ?? null;
-export const lupiMcpEndpoint =
-  (env.VITE_LUPI_MCP_ENDPOINT as string | undefined) ?? 'http://127.0.0.1:8787/mcp';
 
 export const firebaseApp: FirebaseApp | null = firebaseConfigured
   ? getApps().length > 0

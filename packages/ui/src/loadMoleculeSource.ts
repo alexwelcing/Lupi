@@ -24,11 +24,6 @@ import {
   type ViewerLoadGuard,
 } from './viewer/loadGuard';
 
-/** Trajectories at or above this many frames are worth moving onto the
- *  streaming substrate: the in-memory store would otherwise pin every
- *  frame. Single/few-frame structures stay in memory (simpler, and the
- *  per-frame box fidelity of the in-memory path is preserved). */
-const STREAMING_FRAME_THRESHOLD = 12;
 /** Raw text formats are monolithic in the current parser path. Keep remote
  * loads bounded; larger research trajectories belong in range-streamed
  * GLIMBIN rather than a browser-resident text Blob. */
@@ -363,60 +358,6 @@ export async function openLocalTrajectoryBlob(
   });
 
   track(ANALYTICS_EVENTS.MOLECULE_LOADED, { source: 'local-streaming', frames: meta.totalFrames });
-}
-
-/**
- * Bring-your-own-data entry point for an already-parsed trajectory.
- *
- * Multi-frame trajectories (simulations over time) are transcoded to
- * .glimbin, persisted in the local library when supported, and opened
- * through the streaming substrate so only the frames in view stay
- * resident — the reliability win for large files. Single/few-frame
- * structures, or trajectories the binary format can't represent
- * losslessly (atom type ids beyond a byte), stay on the in-memory path.
- *
- * Returns the persisted record id when the trajectory was stored, so the
- * caller can deep-link to it; null when it stayed in memory.
- */
-export async function importParsedTrajectory(args: {
-  name: string;
-  trajectory: Trajectory;
-  thermo?: import('@atlas/core/types').ThermoData | null;
-  size: number;
-  persist?: boolean;
-}): Promise<{ persistedId: string | null }> {
-  const { name, trajectory, thermo = null, size, persist = true } = args;
-  const frames = trajectory.frames.filter(
-    (frame): frame is import('@atlas/core/types').Frame => frame !== undefined,
-  );
-
-  const { canEncodeGlimbin, assembleGlimbinBlob } = await import('@atlas/core/glimbin');
-  const shouldStream =
-    trajectory.totalFrames >= STREAMING_FRAME_THRESHOLD && canEncodeGlimbin(frames);
-
-  if (!shouldStream) {
-    clearPreviousStreaming();
-    useStore.getState().setFile({ name, size, trajectory, thermo });
-    track(ANALYTICS_EVENTS.MOLECULE_LOADED, { source: 'memory', frames: trajectory.totalFrames });
-    return { persistedId: null };
-  }
-
-  const { blob, meta } = assembleGlimbinBlob(trajectory);
-
-  let persistedId: string | null = null;
-  if (persist && isTrajectoryLibrarySupported()) {
-    try {
-      const record = await saveTrajectory({ name, blob, meta });
-      persistedId = record.id;
-    } catch (err) {
-      // Persistence is best-effort; still stream from the in-memory Blob.
-      console.warn('[trajectory-library] save failed, streaming without persisting:', err);
-    }
-  }
-
-  const sourceUrl = persistedId ? `opfs://${persistedId}` : `local://${name}`;
-  await openLocalTrajectoryBlob(blob, name, sourceUrl, thermo);
-  return { persistedId };
 }
 
 /**

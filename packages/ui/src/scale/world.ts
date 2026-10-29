@@ -957,9 +957,3 @@ export function faceTowardCamera(face: { axis: number; sign: 1 | -1 }): Mat3 {
   else base = axisAngle([0, 1, 0], face.sign > 0 ? -Math.PI / 2 : Math.PI / 2);
   return orthonormalize(mulMat(mulMat(axisAngle([1, 0, 0], 0.18), axisAngle([0, 1, 0], -0.22)), base));
 }
-
-/** u(A) of a body's anchor, for drawing atoms in anchor units. */
-export function anchorUnit(frame: BodyFrame): { u: bigint; f: number } {
-  const a = anchorView(frame);
-  return a.type === 'level' ? { u: unitExponent(a.k), f: a.tower.factor } : { u: 0n, f: 10 };
-}

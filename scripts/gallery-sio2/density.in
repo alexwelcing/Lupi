@@ -1,0 +1,19 @@
+# Back to the experimental glass density (2.20 g/cm3) at fixed volume.
+units metal
+atom_style atomic
+boundary p p p
+read_data quenched.data
+pair_style vashishta
+pair_coeff * * SiO.1990.vashishta Si O
+neighbor 1.0 bin
+neigh_modify every 1 delay 0 check yes
+change_box all x scale 1.03622 y scale 1.03622 z scale 1.03622 remap
+timestep 0.001
+thermo 1000
+thermo_style custom step temp press density pe
+velocity all create 300 99173 mom yes rot yes dist gaussian
+fix anneal all nvt temp 300 300 0.1
+run 5000
+unfix anneal
+minimize 1e-8 1e-10 2000 20000
+write_data glass220.data

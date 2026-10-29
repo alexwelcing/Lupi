@@ -1,7 +1,7 @@
 /**
  * LupiCanvas.tsx — the only <Canvas> in Lupi (plan-final D2).
  *
- * Every scene (the viewer, the billion-atom page, the testbed) mounts through
+ * Every scene (the viewer, the billion-atom page) mounts through
  * it, so each one gets the same renderer stack:
  *
  * - the fiber v10 WebGPU entry with createLupiRenderer (WebGPU, or the WebGL2

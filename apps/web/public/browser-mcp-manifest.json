@@ -1,6 +1,5 @@
 {
   "schemaVersion": "0.3.0",
-  "generatedAt": "2026-10-03T18:20:30.639Z",
   "tools": [
     {
       "name": "lupi.generate_molecule",
@@ -352,9 +351,12 @@
             "enum": [
               "off",
               "flat",
-              "hatch"
+              "hatch",
+              "engrave",
+              "halftone",
+              "chalk"
             ],
-            "description": "The Illustrate look: toon fills and ink outlines (flat colour or hatched); off is the lit surface. Exports keep it."
+            "description": "The Illustrate look: toon fills and ink outlines (flat colour, hatched, engraved lines or halftone dots), or chalk on a dark plate; off is the lit surface. Exports keep it."
           },
           "inkWeight": {
             "type": "number",
@@ -511,7 +513,7 @@
               "fast"
             ],
             "default": "fast",
-            "description": "The browser bridge is intentionally bounded to fast mode; use the Node CLI for deep streaming inspection."
+            "description": "The browser bridge is intentionally bounded to fast mode; deep streaming inspection runs only through the @atlas/assessment library in Node (mode \"deep\")."
           }
         }
       }

@@ -184,7 +184,6 @@ interface JsonRpcRequest {
 }
 
 const SERVER_VERSION = '2026-07-20.remote-science-data.1';
-const LEGACY_RENDERER_VERSION = 'lupi-render-contract@2026-07-09';
 const LEGACY_DEFAULT_MAX_INLINE_BYTES = 8 * 1024 * 1024;
 const PRIVATE_RENDER_REQUEST_PROTOCOL = 'lupi.renderer-request.legacy-v0.1';
 const PRIVATE_RENDER_RESPONSE_PROTOCOL = 'lupi.renderer-response.legacy-v0.1';
@@ -683,15 +682,14 @@ const TEMPLATE_INDEX = [
 ];
 
 export default {
-  fetch(request: Request, env: Env, ctx: { waitUntil?: (promise: Promise<unknown>) => void }): Promise<Response> {
-    return handleRequest(request, env, ctx);
+  fetch(request: Request, env: Env): Promise<Response> {
+    return handleRequest(request, env);
   },
 };
 
 export async function handleRequest(
   request: Request,
   env: Env = {},
-  ctx: { waitUntil?: (promise: Promise<unknown>) => void } = {},
 ): Promise<Response> {
   const url = new URL(request.url);
   const cors = corsHeaders(request, env);
@@ -745,7 +743,7 @@ export async function handleRequest(
       } catch {
         return json(rpcError(null, -32700, 'Parse error'), { headers: cors });
       }
-      const result = await handleJsonRpc(body, request, env, ctx);
+      const result = await handleJsonRpc(body, request, env);
       if (result === null) return new Response(null, { status: 204, headers: cors });
       return json(result, { headers: cors });
     }
@@ -796,7 +794,7 @@ export async function handleRequest(
         return json({ error: 'Content-Type must be application/json.' }, { status: 415, headers: cors });
       }
       await assertAuthorized(request, env);
-      return json(await renderMoleculeAsset(await readJsonRequestBody(request, 256 * 1024), env, ctx), { headers: cors });
+      return json(await renderMoleculeAsset(await readJsonRequestBody(request, 256 * 1024), env), { headers: cors });
     }
 
     const provenanceMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)\/provenance$/);
@@ -896,22 +894,20 @@ export async function handleJsonRpc(
   body: unknown,
   request: Request,
   env: Env,
-  ctx: { waitUntil?: (promise: Promise<unknown>) => void },
 ): Promise<unknown | null> {
   if (Array.isArray(body)) {
     if (body.length === 0) return rpcError(null, -32600, 'Invalid JSON-RPC batch');
-    const responses = await Promise.all(body.map((entry) => handleSingleJsonRpc(entry, request, env, ctx)));
+    const responses = await Promise.all(body.map((entry) => handleSingleJsonRpc(entry, request, env)));
     const filtered = responses.filter((entry) => entry !== null);
     return filtered.length > 0 ? filtered : null;
   }
-  return handleSingleJsonRpc(body, request, env, ctx);
+  return handleSingleJsonRpc(body, request, env);
 }
 
 async function handleSingleJsonRpc(
   body: unknown,
   request: Request,
   env: Env,
-  ctx: { waitUntil?: (promise: Promise<unknown>) => void },
 ): Promise<unknown | null> {
   const rpc = body as JsonRpcRequest;
   const hasId = isRecord(body) && Object.prototype.hasOwnProperty.call(body, 'id');
@@ -942,7 +938,7 @@ async function handleSingleJsonRpc(
         if (name !== 'lupi.status' && name !== 'lupi.search_molecules' && name !== 'lupi.viewer_manifest') {
           await assertAuthorized(request, env);
         }
-        const toolResult = await callTool(name, args, env, ctx);
+        const toolResult = await callTool(name, args, env);
         return result(toolContent(toolResult));
       }
       default:
@@ -967,7 +963,6 @@ async function callTool(
   name: string,
   args: Record<string, unknown>,
   env: Env,
-  ctx: { waitUntil?: (promise: Promise<unknown>) => void },
 ): Promise<unknown> {
   switch (name) {
     case 'lupi.status':
@@ -977,7 +972,7 @@ async function callTool(
     case 'lupi.assess_asset':
       return await assessMoleculeAsset(args, env);
     case 'lupi.render_molecule_asset':
-      return await renderMoleculeAsset(args, env, ctx);
+      return await renderMoleculeAsset(args, env);
     case 'lupi.get_render_job':
       return await readJob(String(args.jobId ?? ''), env);
     case 'lupi.get_asset':
@@ -992,7 +987,7 @@ async function callTool(
 async function assessMoleculeAsset(args: Record<string, unknown>, env: Env) {
   const requestedMode = typeof args.mode === 'string' ? args.mode : 'fast';
   if (requestedMode !== 'fast') {
-    throw new Error(`Cloudflare assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Use the Node CLI for deep streaming inspection.`);
+    throw new Error(`Cloudflare assessment supports bounded fast mode only (received ${JSON.stringify(requestedMode)}). Deep streaming inspection has no command-line tool: call the @atlas/assessment library from Node (assessAsset or assessMany with mode 'deep').`);
   }
   const context = isRecord(args.context) ? args.context as AssessmentContext : undefined;
   const requestedSource = typeof args.source === 'string' ? args.source : args.url ? 'url' : 'envelope';
@@ -1044,7 +1039,6 @@ function assessmentAllowedOrigins(env: Env): string[] {
 async function renderMoleculeAsset(
   input: unknown,
   env: Env,
-  ctx: { waitUntil?: (promise: Promise<unknown>) => void },
 ) {
   if (isRecord(input) && input.version === RENDER_REQUEST_VERSION_V1) {
     return renderArtifactRequestV1(input);
@@ -1772,234 +1766,6 @@ function strictNumber(value: unknown, min: number, max: number, path: string): n
   return value;
 }
 
-async function renderLegacyMoleculeAsset(
-  args: LegacyRenderMoleculeAssetArgs,
-  env: Env,
-  ctx: { waitUntil?: (promise: Promise<unknown>) => void },
-) {
-  const normalized = normalizeLegacyRenderRequest(args);
-  const canonical = canonicalJson(normalizeJson(normalized) ?? {});
-  const hash = await sha256Hex(canonical);
-  const assetId = `sha256-${hash}`;
-  const cacheKey = `${assetId}.${normalized.asset.format}`;
-  const assetKey = assetObjectKey(assetId, normalized.asset.format);
-  const jobId = `job-${hash.slice(0, 24)}`;
-  const cached = env.ASSETS ? await env.ASSETS.head(assetKey) : null;
-
-  if (cached) {
-    const result = {
-      jobId,
-      assetId,
-      cacheKey,
-      status: 'complete',
-      cached: true,
-      profile: 'legacy-v0',
-      asset: {
-        format: normalized.asset.format,
-        mimeType: cached.httpMetadata?.contentType ?? mimeForFormat(normalized.asset.format),
-        byteLength: cached.size ?? Number(cached.customMetadata?.byteLength ?? 0),
-        sha256: cached.customMetadata?.sha256 ?? hash,
-        url: publicAssetUrl(assetId, normalized.asset.format, env),
-      },
-      request: normalized,
-    };
-    await upsertJob(env, { ...result, assetKey });
-    return result;
-  }
-
-  const useSyncRenderer = Boolean(env.RENDERER_ENDPOINT && args.sync !== false);
-  const rendererMode = useSyncRenderer ? 'http' : env.RENDER_QUEUE ? 'queue' : 'unconfigured';
-  const created = {
-    jobId,
-    assetId,
-    cacheKey,
-    status: rendererMode === 'unconfigured' ? 'awaiting_renderer' : 'queued',
-    cached: false,
-    profile: 'legacy-v0',
-    renderer: {
-      mode: rendererMode,
-      configured: rendererMode !== 'unconfigured',
-    },
-    request: normalized,
-    asset: {
-      format: normalized.asset.format,
-      mimeType: mimeForFormat(normalized.asset.format),
-      url: publicAssetUrl(assetId, normalized.asset.format, env),
-    },
-    next: {
-      pollTool: 'lupi.get_render_job',
-      pollArguments: { jobId },
-      message: rendererMode === 'unconfigured'
-        ? 'The legacy control plane accepted the request, but no renderer backend or queue is configured.'
-        : 'Legacy render job accepted. Poll lupi.get_render_job or fetch the returned asset URL after completion.',
-    },
-  };
-
-  await upsertJob(env, { ...created, assetKey });
-
-  if (rendererMode === 'queue' && env.RENDER_QUEUE) {
-    const message: LegacyRenderQueueMessage = { jobId, assetId, cacheKey, request: normalized };
-    const send = env.RENDER_QUEUE.send(message).catch(async (error) => {
-      const failure = error instanceof Error ? error.message : String(error);
-      await updateJobStatus(env, jobId, 'failed', failure);
-      throw error;
-    });
-    if (ctx.waitUntil) ctx.waitUntil(send);
-    else await send;
-  }
-
-  if (useSyncRenderer) {
-    const rendered = await tryLegacySynchronousRenderer(env, {
-      jobId,
-      assetId,
-      cacheKey,
-      request: normalized,
-      assetKey,
-    });
-    if (rendered) return rendered;
-  }
-
-  return created;
-}
-
-function normalizeLegacyRenderRequest(args: LegacyRenderMoleculeAssetArgs): LegacyNormalizedRenderRequest {
-  if (!args || !isRecord(args) || !isRecord(args.molecule)) {
-    throw new Error('lupi.render_molecule_asset requires a molecule object or a versioned RenderRequestV1.');
-  }
-  const moleculeArgs = args.molecule;
-  const input = readString(moleculeArgs.input)
-    ?? readString(moleculeArgs.name)
-    ?? readString(moleculeArgs.smiles)
-    ?? readString(moleculeArgs.xyz)
-    ?? 'Caffeine';
-  const inputType = readInputType(moleculeArgs.inputType, moleculeArgs) ?? 'template';
-  const assetArgs = isRecord(args.asset) ? args.asset : {};
-  const format = normalizeFormat(assetArgs.format) ?? 'png';
-  const image = format === 'png' || format === 'jpeg' || format === 'webp';
-  const width = image ? clampInt(readNumber(assetArgs.width) ?? 1024, 64, 4096) : undefined;
-  const height = image ? clampInt(readNumber(assetArgs.height) ?? width ?? 1024, 64, 4096) : undefined;
-  return {
-    molecule: compactRecord({
-      inputType,
-      input,
-      name: readString(moleculeArgs.name),
-      smiles: readString(moleculeArgs.smiles),
-      xyz: readString(moleculeArgs.xyz),
-      atomCount: normalizeJsonScalar(moleculeArgs.atomCount),
-      element: readString(moleculeArgs.element),
-      elements: normalizeElements(moleculeArgs.elements),
-      lattice: readString(moleculeArgs.lattice),
-      spacing: normalizeJsonScalar(moleculeArgs.spacing),
-    }) as LegacyNormalizedRenderRequest['molecule'],
-    asset: {
-      format,
-      width,
-      height,
-      transparent: Boolean(assetArgs.transparent),
-      inline: Boolean(assetArgs.inline),
-      maxInlineBytes: clampInt(
-        readNumber(assetArgs.maxInlineBytes) ?? LEGACY_DEFAULT_MAX_INLINE_BYTES,
-        1024,
-        64 * 1024 * 1024,
-      ),
-    },
-    viewer: isRecord(args.viewer) ? normalizeRecord(args.viewer) : {},
-    rendererVersion: LEGACY_RENDERER_VERSION,
-  };
-}
-
-async function tryLegacySynchronousRenderer(
-  env: Env,
-  job: {
-    jobId: string;
-    assetId: string;
-    cacheKey: string;
-    request: LegacyNormalizedRenderRequest;
-    assetKey: string;
-  },
-) {
-  if (!env.RENDERER_ENDPOINT) return null;
-  let payload: { asset?: { dataBase64?: string; mimeType?: string; sha256?: string; byteLength?: number } };
-  try {
-    const response = await fetch(env.RENDERER_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(env.RENDERER_TOKEN ? { authorization: `Bearer ${env.RENDERER_TOKEN}` } : {}),
-      },
-      body: JSON.stringify({ jobId: job.jobId, assetId: job.assetId, request: job.request }),
-    });
-    if (!response.ok) return await markLegacyRenderFailed(env, job, `Renderer HTTP ${response.status}`);
-    payload = await response.json() as typeof payload;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return await markLegacyRenderFailed(env, job, message);
-  }
-  const dataBase64 = payload.asset?.dataBase64;
-  if (!dataBase64) return await markLegacyRenderFailed(env, job, 'Renderer response did not include asset.dataBase64');
-  const bytes = base64ToUint8Array(dataBase64);
-  const sha256 = payload.asset?.sha256 ?? await sha256Hex(bytes);
-  const mimeType = payload.asset?.mimeType ?? mimeForFormat(job.request.asset.format);
-  if (env.ASSETS) {
-    await env.ASSETS.put(job.assetKey, bytes, {
-      httpMetadata: { contentType: mimeType },
-      customMetadata: { sha256, byteLength: String(bytes.byteLength), jobId: job.jobId },
-    });
-  }
-  const result = {
-    jobId: job.jobId,
-    assetId: job.assetId,
-    cacheKey: job.cacheKey,
-    status: 'complete',
-    cached: false,
-    profile: 'legacy-v0',
-    asset: {
-      format: job.request.asset.format,
-      mimeType,
-      byteLength: bytes.byteLength,
-      sha256,
-      url: publicAssetUrl(job.assetId, job.request.asset.format, env),
-      dataBase64: job.request.asset.inline && bytes.byteLength <= job.request.asset.maxInlineBytes
-        ? dataBase64
-        : undefined,
-    },
-    request: job.request,
-  };
-  await upsertJob(env, { ...result, assetKey: job.assetKey });
-  return result;
-}
-
-async function markLegacyRenderFailed(
-  env: Env,
-  job: {
-    jobId: string;
-    assetId: string;
-    cacheKey: string;
-    request: LegacyNormalizedRenderRequest;
-    assetKey: string;
-  },
-  error: string,
-) {
-  const result = {
-    jobId: job.jobId,
-    assetId: job.assetId,
-    cacheKey: job.cacheKey,
-    status: 'failed',
-    cached: false,
-    profile: 'legacy-v0',
-    error,
-    renderer: { mode: 'http', configured: true },
-    asset: {
-      format: job.request.asset.format,
-      mimeType: mimeForFormat(job.request.asset.format),
-      url: publicAssetUrl(job.assetId, job.request.asset.format, env),
-    },
-    request: job.request,
-  };
-  await upsertJob(env, { ...result, assetKey: job.assetKey });
-  return result;
-}
-
 function assertEdgeRenderCapability(spec: RenderRequestSpecV1): void {
   const formatCapability = EDGE_RENDER_CAPABILITY_V1.formats[spec.format];
   if (!formatCapability.enabled) {
@@ -2117,42 +1883,6 @@ async function readAssetResponse(
   headers.set('x-content-type-options', 'nosniff');
   const body = headOnly ? null : object.body ?? await object.arrayBuffer?.();
   return new Response(body, { headers });
-}
-
-async function upsertJob(env: Env, job: Record<string, unknown>) {
-  if (!env.DB) return;
-  const requestJson = JSON.stringify(job.request ?? {});
-  await env.DB.prepare(`
-    INSERT INTO render_jobs (id, asset_id, cache_key, status, request_json, asset_key, mime_type, byte_length, sha256, error, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(id) DO UPDATE SET
-      status = excluded.status,
-      request_json = excluded.request_json,
-      asset_key = excluded.asset_key,
-      mime_type = excluded.mime_type,
-      byte_length = excluded.byte_length,
-      sha256 = excluded.sha256,
-      error = excluded.error,
-      updated_at = CURRENT_TIMESTAMP
-  `).bind(
-    job.jobId,
-    job.assetId,
-    job.cacheKey,
-    job.status,
-    requestJson,
-    job.assetKey ?? null,
-    (job.asset as Record<string, unknown> | undefined)?.mimeType ?? null,
-    (job.asset as Record<string, unknown> | undefined)?.byteLength ?? null,
-    (job.asset as Record<string, unknown> | undefined)?.sha256 ?? null,
-    job.error ?? null,
-  ).run();
-}
-
-async function updateJobStatus(env: Env, jobId: string, status: string, error?: string) {
-  if (!env.DB) return;
-  await env.DB.prepare('UPDATE render_jobs SET status = ?, error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .bind(status, error ?? null, jobId)
-    .run();
 }
 
 function statusPayload(env: Env) {
@@ -2340,12 +2070,6 @@ function mimeForFormat(format: Exclude<AssetFormat, 'jpg'>) {
 
 function assetObjectKey(assetId: string, format: Exclude<AssetFormat, 'jpg'>) {
   return `assets/${assetId}.${format === 'jpeg' ? 'jpg' : format}`;
-}
-
-function publicAssetUrl(assetId: string, format: Exclude<AssetFormat, 'jpg'>, env: Env) {
-  const base = env.ASSET_BASE_URL?.replace(/\/$/, '');
-  const ext = format === 'jpeg' ? 'jpg' : format;
-  return base ? `${base}/assets/${assetId}.${ext}` : `/assets/${assetId}.${ext}`;
 }
 
 function isFirebaseReservedPath(pathname: string) {
@@ -2978,36 +2702,6 @@ function readNumber(value: unknown): number | undefined {
 
 function clampInt(value: number, min: number, max: number) {
   return Math.round(Math.max(min, Math.min(max, value)));
-}
-
-function readInputType(value: unknown, molecule: Record<string, unknown>): MoleculeInputType | undefined {
-  if (
-    value === 'name'
-    || value === 'template'
-    || value === 'smiles'
-    || value === 'xyz'
-    || value === 'description'
-    || value === 'procedural'
-  ) return value;
-  if (molecule.atomCount !== undefined || molecule.lattice !== undefined) return 'procedural';
-  if (molecule.smiles !== undefined) return 'smiles';
-  if (molecule.xyz !== undefined) return 'xyz';
-  return undefined;
-}
-
-function normalizeElements(value: unknown): JsonValue | undefined {
-  if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === 'string');
-  if (typeof value === 'string') return value.split(',').map((entry) => entry.trim()).filter(Boolean);
-  return undefined;
-}
-
-function normalizeJsonScalar(value: unknown): JsonValue | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  return typeof value === 'string' || typeof value === 'boolean' || value === null ? value : undefined;
-}
-
-function normalizeRecord(record: Record<string, unknown>): Record<string, JsonValue> {
-  return compactRecord(record) as Record<string, JsonValue>;
 }
 
 function compactRecord(record: Record<string, unknown>): Record<string, JsonValue> {

@@ -8,17 +8,14 @@ compatibility auth routes, edge analytics, saved-view share HTML, and MCP.
 
 The repo has:
 
-- standalone CI in `.github/workflows/ci.yml`
-- break-glass Cloud Run fallback in `.github/workflows/deploy-viewer.yml`
+- one pull-request build check in `.github/workflows/ci.yml`
 - push-to-main Cloudflare release in `.github/workflows/deploy-cloudflare.yml`
-  (the owner-gated checkpoint controller and its reconciliation workflow were
-  retired on 2026-09-20; the sections below that describe them are history)
 - a root `start` script that serves `apps/web/dist`
 - Cloudflare edge runtime in `apps/mcp-worker`
-- local build verification passing from this extracted copy
 
-Cloudflare is the production path. Cloud Run is retained only as a separately
-authorized break-glass fallback.
+Cloudflare is the only production path. The owner-gated checkpoint controller
+and its reconciliation workflow were retired on 2026-09-20, and the Cloud Run
+viewer fallback on 2026-10-09.
 
 ## Cutover Requirements
 
@@ -29,7 +26,8 @@ The production deploy must continue to satisfy these constraints:
 3. Do not build or upload retired research-site output.
 4. Package only files needed by the viewer runtime.
 5. Deploy to the intended Cloudflare Worker (`lupi-edge`).
-6. Move `lupi.live` traffic only after Cloudflare preview smoke checks pass.
+6. Deploy on every push to `main`; `https://lupi.live/health` must then report
+   the pushed commit.
 7. Keep Firebase functions/rules/indexes deploys separate until those backends are fully replaced.
 8. Report deploy status to `glim-think` `/ops/report` once the Cloudflare workflow is promoted to production.
 
@@ -54,17 +52,11 @@ science/control-plane repo at runtime.
 
 ## Required Release Authority
 
-The v2 controller uses literal GitHub environments and separately scoped
-credentials:
-
-- `lupi-production-read-v2`: `LUPI_CLOUDFLARE_READ_TOKEN_V2`
-- `lupi-production-write-v2`: `LUPI_CLOUDFLARE_WRITE_TOKEN_V2`
-- `lupi-production-reanchor-v2`: `LUPI_CLOUDFLARE_READ_TOKEN_V2`
-
-Each environment carries the non-secret `CLOUDFLARE_ACCOUNT_ID` variable. A
-protected repository variable named `LUPI_RELEASE_CUTOVER_RECEIPT_SHA256` binds
-the separately approved cutover receipt. The legacy `prod` token is removed
-after the v2 environments are populated and verified.
+The deploy runs in the `lupi-production-write-v2` GitHub environment with
+`LUPI_CLOUDFLARE_WRITE_TOKEN_V2` and the non-secret `CLOUDFLARE_ACCOUNT_ID`
+variable. The read and re-anchor environments, the read token and
+`LUPI_RELEASE_CUTOVER_RECEIPT_SHA256` belonged to the retired controller; no
+workflow uses them.
 
 The repository-level `LUPI_FIREBASE_WEB_API_KEY` secret is build-only release
 configuration. The Cloudflare release passes it to Vite together with the
@@ -74,7 +66,7 @@ bundle, remains API- and referrer-restricted in Google Cloud, and is not a
 Cloudflare control-plane credential.
 
 Runtime Worker secrets remain attached to the Worker and are preserved by
-`keep_vars = true` during version upload:
+`keep_vars = true` during deploy:
 
 - `LUPI_MCP_SHARED_SECRET`
 - `RENDERER_TOKEN`
@@ -90,21 +82,18 @@ Do not add:
 - Phoenix keys unrelated to viewer telemetry
 - Library or landing-site deploy secrets
 
-## Candidate First
+## Checking a Deploy
 
-Production release is manual and owner-only. It requires an exact current-main
-SHA, a fresh self-contained checkpoint, the protected cutover-receipt digest,
-and the typed confirmation documented in `operations.md`. The workflow uploads
-an immutable no-traffic version and validates its direct preview with
-Playwright before promotion. It then verifies `https://lupi.live` separately.
-For manual pre-release checks against any preview URL, run:
+There is no candidate step: a push to `main` deploys straight to
+`https://lupi.live`. To run the release smoke against it (or any preview
+origin with a Worker):
 
 ```bash
 pnpm exec playwright install --with-deps chromium
-UI_TEST_URL=https://PREVIEW_URL pnpm test:ui:deployed
+UI_TEST_URL=https://lupi.live UI_TEST_EXPECT_HEALTH=true pnpm test:ui
 ```
 
-Then verify manually:
+Then look by hand, when the change touches them:
 
 - Gallery opens
 - drag-and-drop path works
@@ -115,20 +104,20 @@ Then verify manually:
 
 ## Cloudflare Deploy Workflow
 
-The Cloudflare deploy workflow:
+The Cloudflare deploy workflow, on every push to `main`:
 
-1. Installs pnpm dependencies from this repo.
-2. Builds the viewer with Cloudflare same-origin and Firebase browser values,
-   then proves those values reached the compiled entry bundle.
-3. Typechecks and tests the edge Worker.
-4. Uses the read environment to validate the active predecessor and rollback target.
-5. Uses the write environment to upload an immutable no-traffic version.
-6. Checks structured `/health` readiness and runs `release-smoke-v1` against the direct preview URL; full UI regression remains in CI.
-7. Records durable release intent, promotes the candidate, and verifies the custom domain.
-8. Performs bounded rollback when post-promotion proof fails and retains all receipts for reconciliation.
+1. Installs pnpm dependencies from the frozen lockfile.
+2. Builds the viewer and the edge Worker with Cloudflare same-origin and
+   Firebase browser values.
+3. Deploys `lupi-edge` with the pinned Wrangler, setting `LUPI_BUILD_SHA` to
+   the commit.
+4. Waits for `https://lupi.live/health` to report the commit.
+5. Checks that `/` and its `/assets/index-*.js` load.
+
+Nothing gates it. If `main` breaks, revert or fix it and push again.
 
 ## Done State
 
-Cutover is complete only when a fresh clone of this repo can build, verify, and
+Cutover is complete only when a fresh clone of this repo can build and
 deploy the viewer to Cloudflare without the science/control-plane repo, and
 `https://lupi.live` is proven live against the Cloudflare Worker.

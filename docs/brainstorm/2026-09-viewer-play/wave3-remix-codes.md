@@ -29,10 +29,11 @@ Short-list item 12: [C062 Remix Codes that Morph](round1-catalog.md#c062) with [
   - The pill reads "✦ Holo foil · r1-…".
   - A bright band sweeps across the molecule from the key-light side (about 900 ms) and leaves the finish behind.
   - Sound and haptics, when turned on in Settings, give a three-note chime.
-- **Cosmetic, on the rims.** Element colours stay the base of every atom.
-  - **Holo** is a thin-film rainbow on the rims that slides as you turn the molecule.
-  - **Gold leaf** adds a gold Fresnel rim and a gold key highlight, gilds the bond edges and warms the light a little.
-  - **Pearl** is a milky nacre sheen with a faint play of colour.
+- **Cosmetic, on the rims.** Element colours stay the base of every atom. Since Sprint S1 each finish follows a Shaders (MIT) finish, ported by hand into `tsl/atomFoil.ts`.
+  - **Holo** (Shaders Holographic) is a holographic laminate. Its rainbow, mixed with silver, comes from a blotch field, the surface's orientation, its tilt toward the key light and the viewing angle, so it slides across the rims as you turn the molecule. Laminate wrinkles bend the sheen, and glitter flakes stick to each atom: each flake glints when it mirrors the key light or the overhead strip to your eye. Bonds take the rainbow and the sheen, not the flakes.
+  - **Gold leaf** (Shaders Chrome) mirrors a photo studio in gold on the rims: a floor-to-ceiling gradient, black flags at the sides, an amber glow and a cool wash, and the Specimen rig's own key softbox, overhead strip and floor card, so the gold reflects the lights the atoms are lit by. The softbox edge splits faintly into red and blue toward the rims. The atom's own colour stays in the middle, the bond edges are gilded, and the light warms a little.
+  - **Pearl** (Shaders ThinFilm) is a milky nacre with a whitened thin-film rim: soft pink, green and lilac that turn with the key light and ring in toward the centre.
+- **Still means still.** No finish runs on a clock. Glitter, sheen and colour change only as the view or the molecule turns, so a still view draws no frames (Quiet Idle).
 - **The badge.** While a finish shows, a small foil-bordered chip ("✦ Holo") stays on the pill. It is the "cosmetic finish" label, and it opens the Remix sheet.
 - **Published odds.** The tray prints "Foil 1 in 24 · each finish 1 in 72" under Remix, and the sheet repeats it: rolls are free and unlimited, and nothing is counted.
 - **Pure function of the code.** A shared Foil code is Foil for whoever opens it. There is no hidden state, pity timer or streak.
@@ -133,9 +134,10 @@ Any change to the catalog is r2, and r1 keeps resolving. If a catalog id ever le
 | Softbox re-bake during a morph | at most every 200 ms | `SceneLighting.tsx` |
 | Foil odds | 1 in 24, finish from the next digits | `remix/code.ts` |
 | Foil sweep | 900 ms, band half-width 0.16 of the molecule, glint 0.7; fade out 300 ms | `remix/FoilDriver.tsx`, `tsl/atomFoil.ts` |
-| Holo | rim 0.95 (power 1.8), sheen 0.1, hue travel 1.6 | `ATOM_FOIL_TUNING` |
-| Gold leaf | rim 1.15 (power 3; bonds ×1.25), highlight 0.85 at shininess 70, warmth 0.07 | `ATOM_FOIL_TUNING` |
-| Pearl | lift 0.16, sheen 0.32, play of colour 0.24 | `ATOM_FOIL_TUNING` |
+| Holo | rim 0.95 (power 1.8), sheen 0.1; hue: blotch 0.45, orientation 0.55, key tilt 0.5, angle 0.6; silver ↔ spectrum 0.8; wrinkles 0.3 at frequency 3.2; Blinn sheen and specular 0.45 (roughness 0.25) | `ATOM_FOIL_TUNING` |
+| Holo glitter | 9 cells across the unit normal, facet tilt 0.6, glint sharpness 10, gain 1.1; Shaders' 0.52–0.62 threshold; fades out under 1.5 px per cell and at the grazing rim; atoms only | `ATOM_FOIL_TUNING` |
+| Gold leaf | leaf 1.5 × (1 − n·v)³, at most 0.92 (bonds ×1.25); studio exposure 1.3; catchlights 0.3; Chrome's softness 0.3, accents 0.9, flags 0.7, dispersion 0.3; warmth 0.07 | `ATOM_FOIL_TUNING` |
+| Pearl | lift 0.16, play of colour 0.24; thin-film rim 0.4 (power 1.5), dispersion 0.5, thickness 0.8, saturation 0.5, hue shift 0.9, light angle 300° | `ATOM_FOIL_TUNING` |
 | Far atoms | finish fades to 35 % under about 5 px radius | `ATOM_FOIL_TUNING.lodPixels` |
 | Shake | 3 jolts over 13 m/s² in 0.9 s; 90 ms between jolts; 1.2 s rest | `remix/shake.ts` |
 | Pill "Again" | 8 s after a roll | `play/PlayPill.tsx` |
@@ -143,7 +145,8 @@ Any change to the catalog is r2, and r1 keeps resolving. If a catalog id ever le
 ## Half-done and known limits
 
 - **Unseen on a device.**
-  - The finishes have not been looked at, and the Holo hue and the Gold and Pearl strengths need an art director's eye.
+  - The finishes have been looked at only in headless Chromium (SwiftShader, both backends; `tools/smoke/scenarios/foil.mjs`), never on a phone or a real GPU. The Holo hue and glitter and the Gold and Pearl strengths still need an art director's eye.
+  - Glitter has a fixed size on the atom: at the default C60 view on a 1× screen the cells are about 1.5 px and show at half strength; zoomed in they read as square flakes.
   - The sweep direction from the key light and the cross-fade dome's match with `scene.background` are untested.
 - **The morph writes the store every frame for 600 ms.** That re-renders the viewer scene each frame, which may cost a phone some frames.
 - **The softbox catchlight steps.** During a morph it moves in up to three steps (one re-bake every 200 ms) while the direct lights swing smoothly.
@@ -161,7 +164,7 @@ Any change to the catalog is r2, and r1 keeps resolving. If a catalog id ever le
 ## Try first
 
 1. **C60 on desktop.** Open the Play tray and tap **Remix ⟳** a few times. Each look should morph, not snap, and the code should change under your finger. Then press **M** a few times, and **Shift+M** to go back.
-2. **Foil.** Open the tray's code chip and tick **Show all finishes**. Try **Holo**, **Gold leaf** and **Pearl** on caffeine, turning the molecule each time: the Holo rim should slide as it turns. Then export a PNG: no finish.
+2. **Foil.** Open the tray's code chip and tick **Show all finishes**. Try **Holo**, **Gold leaf** and **Pearl** on caffeine, turning the molecule each time: the Holo rim should slide as it turns, and zoomed in, its glitter should catch the light. Then export a PNG: no finish.
 3. **Share.** Copy a code from the sheet, open a private window on another molecule, and paste it anywhere on the viewer. The look should land. Then open **Copy link** on your phone.
 4. **Phone.** Open the sheet, switch on **Shake to roll** (iOS asks), and shake. With the sheet open, the molecule should sit above it.
 5. **Still.** Settings → Motion: Still. A roll should cut, and a Foil should appear with no sweep.

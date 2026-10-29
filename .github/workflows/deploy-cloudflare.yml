@@ -36,7 +36,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     environment: lupi-production-write-v2
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -97,3 +97,9 @@ jobs:
           assert.equal(last?.status, 200, 'health route is not answering 200');
           assert.equal(last?.tag, expected, 'lupi.live is not serving the deployed commit yet');
           NODE
+
+      - name: Confirm the app shell and its bundle load
+        run: |
+          js=$(curl -fsS https://lupi.live/ | grep -oE 'src="/assets/index-[^"]+\.js"' | head -1 | cut -d'"' -f2)
+          test -n "$js"
+          curl -fsS -o /dev/null "https://lupi.live$js"

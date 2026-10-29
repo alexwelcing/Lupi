@@ -557,7 +557,7 @@ export function AtomsTransmission({
       ? cancelIdleCallback
       : clearTimeout;
     const idleId = idleCallback(() => {
-      spatialHashRef.current.build(frame.positions, frame.natoms);
+      spatialHashRef.current.build(frame.positions, renderAtomCount);
       onSpatialHash(spatialHashRef.current);
     });
     return () => cancelIdle(idleId as ReturnType<typeof setTimeout> & number);

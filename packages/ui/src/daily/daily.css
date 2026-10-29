@@ -256,6 +256,8 @@ html[data-opening] .dl-stage {
   position: relative;
   display: flex;
   gap: 8px;
+  /* A grid item: without this it never narrows below the input's own width. */
+  min-width: 0;
 }
 .dl-combo input {
   flex: 1;
@@ -781,6 +783,8 @@ html[data-comfort='still'] .dl-title--rise .dl-letter {
   .dl-main {
     display: flex;
     flex-direction: column;
+    /* Full width: the grid's `start` would shrink each block to its content. */
+    align-items: stretch;
     gap: 18px;
     padding-top: 0;
   }

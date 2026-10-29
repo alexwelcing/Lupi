@@ -170,7 +170,3 @@ export const MCP_TOOL_DEFINITIONS: McpToolManifestEntry[] = [
     parameters: LUPI_MCP_SCHEMAS['lupi.reset_viewer'],
   },
 ];
-
-export const MCP_TOOL_DEFINITIONS_MAP = new Map(
-  MCP_TOOL_DEFINITIONS.map((t) => [t.name, t]),
-);

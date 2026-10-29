@@ -150,7 +150,6 @@ export function track(event: AnalyticsEvent, props: AnalyticsProps = {}): void {
       // No sink configured yet — the client is still complete. Surface the
       // event in dev so the funnel is observable while wiring backends.
       if (isDev()) {
-        // eslint-disable-next-line no-console
         console.debug('[analytics]', event, payload);
       }
       return;

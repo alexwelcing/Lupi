@@ -2,9 +2,9 @@
  * inkStage.ts — the spinnable ink drawing on a molecule page (/m/<id>).
  *
  * The home hero's stage (landing/hero/buckyStage.ts) generalised to any small
- * molecule: one <svg> of ink lines and CPK-lit circles laid out by ink.ts,
- * projected from a camera at (azimuth, elevation) about world +Y, the viewer's
- * own convention, so the pose carries into 3D.
+ * molecule: one <svg> of the ink drawing laid out by ink.ts (the viewer's
+ * Illustrate look), projected from a camera at (azimuth, elevation) about
+ * world +Y, the viewer's own convention, so the pose carries into 3D.
  *
  * Nothing moves until it is touched: requestAnimationFrame runs only while a
  * drag is drawing or a release is settling. A drag turns it 1:1; a release
@@ -21,7 +21,21 @@
  */
 import { wrapAngle } from 'math';
 import { MOTION, createSpring1, isSettled, springTo } from '@atlas/core/motion';
-import { INK_PLATE, INK_BOND, INK_VIEW, InkLayout, inkGradientStops, type InkDetent, type InkModel, type InkPose } from './ink';
+import {
+  INK_DRAWING_STYLE,
+  INK_PLATE,
+  INK_BOND,
+  INK_VIEW,
+  InkLayout,
+  InkToonPalette,
+  inkGradientStops,
+  inkShapeAttrs,
+  inkToonShapes,
+  type InkDetent,
+  type InkModel,
+  type InkPose,
+  type InkShape,
+} from './ink';
 
 export type InkComfort = 'standard' | 'gentle' | 'still';
 
@@ -38,12 +52,18 @@ export interface InkStage {
   viewDir(): [number, number, number];
   /** Step to the next detent (+1: the way a leftward drag turns it). */
   hop(dir: 1 | -1): void;
+  /**
+   * Draw in perspective from `distance` Å (the viewer's fitted camera
+   * distance), or orthographic (null, the default): the relay eases into the
+   * viewer's perspective so the drawing hands over in the 3D view's shape.
+   */
+  setPerspective(distance: number | null): void;
   destroy(): void;
 }
 
 /**
  * What the stage paints with. The stage owns the pose, the motion and the
- * pointer; a painter owns the nodes. The default is the lit ink drawing
+ * pointer; a painter owns the nodes. The default is the house ink drawing
  * (createLitInkPainter); the Daily paints silhouettes and outlines with the
  * same motion.
  */
@@ -542,6 +562,12 @@ export function createInkStage(host: HTMLElement, opts: InkStageOptions): InkSta
     redraw() {
       if (!destroyed) draw();
     },
+    setPerspective(distance) {
+      const next = distance && distance > 0 ? distance : 0;
+      if (next === layout.perspective || destroyed) return;
+      layout.setPerspective(next);
+      draw();
+    },
     destroy() {
       setInteractive(false);
       destroyed = true;
@@ -554,12 +580,15 @@ export function createInkStage(host: HTMLElement, opts: InkStageOptions): InkSta
 }
 
 /**
- * The lit ink drawing: CPK circles shaded by one radial gradient per element,
- * ink bond lines, painted back to front (the /m pages and the home hero's
- * look). Nodes are made once; a draw only moves them, and reorders the DOM
- * only when the painter's order changed.
+ * The house ink drawing in its style (ink.ts INK_DRAWING_STYLE), painted back
+ * to front: the toon drawing of the viewer's Illustrate look, or the older
+ * lit one, CPK circles shaded by one radial gradient per element and ink
+ * bond lines (the /m pages, the relay, the Daily's named drawing). Nodes are
+ * made once; a draw only moves them, and reorders the DOM only when the
+ * painter's order changed. `rim` is the plate behind the drawing.
  */
 export function createLitInkPainter(model: InkModel, idPrefix: string, opts: { rim?: string } = {}): InkPainter {
+  if (INK_DRAWING_STYLE === 'toon') return createToonInkPainter(model, opts.rim ?? INK_PLATE);
   const atomCount = model.k.length;
   const bondCount = model.b.length / 2;
   const itemCount = atomCount + bondCount;
@@ -632,6 +661,67 @@ export function createLitInkPainter(model: InkModel, idPrefix: string, opts: { r
       reorder(group, items, shown, layout.order);
     },
   };
+}
+
+/**
+ * The toon drawing as live nodes: a <g> per atom and bond, reordered back to
+ * front, holding that item's shapes (ink.ts inkToonShapes) for the pose. A
+ * draw sets their attributes again and replaces a node only when its kind of
+ * shape changes (a band that appears, a stick seen end-on).
+ */
+function createToonInkPainter(model: InkModel, plate: string): InkPainter {
+  const itemCount = model.k.length + model.b.length / 2;
+  const palette = new InkToonPalette(model, plate);
+  const root = svg('svg', {
+    viewBox: `0 0 ${INK_VIEW} ${INK_VIEW}`,
+    width: '100%',
+    height: '100%',
+    'aria-hidden': 'true',
+    focusable: 'false',
+    class: 'ink-stage',
+  });
+  const group = svg('g', {});
+  root.appendChild(group);
+  const items: SVGElement[] = [];
+  for (let item = 0; item < itemCount; item += 1) items.push(svg('g', {}));
+  const shown = new Int32Array(itemCount).fill(-1);
+  const shapes: InkShape[] = [];
+  return {
+    root,
+    draw(layout) {
+      for (let item = 0; item < itemCount; item += 1) {
+        shapes.length = 0;
+        inkToonShapes(layout, palette, item, shapes);
+        paintShapes(items[item], shapes);
+      }
+      reorder(group, items, shown, layout.order);
+    },
+  };
+}
+
+/** The attribute names each shape node was last given, so a dropped one (a dash, an opacity) is removed. */
+const shapeAttrNames = new WeakMap<Element, string[]>();
+
+/** Make `host`'s children the shapes, reusing each node whose tag still fits. */
+function paintShapes(host: SVGElement, shapes: InkShape[]): void {
+  for (let k = 0; k < shapes.length; k += 1) {
+    const shape = shapes[k];
+    let node = host.children[k] as SVGElement | undefined;
+    if (!node || node.tagName !== shape.tag) {
+      const fresh = document.createElementNS(SVG_NS, shape.tag);
+      if (node) host.replaceChild(fresh, node);
+      else host.appendChild(fresh);
+      node = fresh;
+    }
+    const attrs = inkShapeAttrs(shape);
+    const names = attrs.map(([name]) => name);
+    for (const name of shapeAttrNames.get(node) ?? []) {
+      if (!names.includes(name)) node.removeAttribute(name);
+    }
+    for (const [name, value] of attrs) node.setAttribute(name, value);
+    shapeAttrNames.set(node, names);
+  }
+  while (host.children.length > shapes.length) host.lastElementChild?.remove();
 }
 
 /** Painter's order, back to front; the DOM is touched only when it changed. */

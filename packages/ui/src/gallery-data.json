@@ -784,10 +784,10 @@
       "#ffd700"
     ],
     "metadata": {
-      "method": "Melt-quench with Vashishta potential",
-      "potential": "Vashishta (SiO₂)",
-      "temperature": "300-4000 K",
-      "reference": "Continuous random network"
+      "method": "Melt-quench in LAMMPS: 5000 K melt, quenched to 300 K in 50 ps, annealed at 2.20 g/cm³",
+      "potential": "Vashishta et al. 1990 (SiO₂)",
+      "temperature": "300-5000 K",
+      "reference": "Continuous random network: Si–O 1.62 Å, Si–O–Si 146°, 96% four-coordinated Si"
     },
     "featured": true
   },

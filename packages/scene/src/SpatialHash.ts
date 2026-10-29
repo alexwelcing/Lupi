@@ -18,10 +18,13 @@
 const MAX_GRID_CELLS = 8_000_000;
 
 export class SpatialHash3D {
-  private cellSize: number;
+  private cell: number;
   private invCellSize: number;
-  private positions: Float32Array = new Float32Array(0);
+  private pts: Float32Array = new Float32Array(0);
   private count = 0;
+  /** [minX, minY, minZ, maxX, maxY, maxZ] of the binned atoms (see `bounds`). */
+  private readonly box = new Float64Array(6);
+  private boxValid = false;
   private minX = 0;
   private minY = 0;
   private minZ = 0;
@@ -32,8 +35,37 @@ export class SpatialHash3D {
   private cellItems: Int32Array = new Int32Array(0);
 
   constructor(cellSize: number = 3.0) {
-    this.cellSize = Number.isFinite(cellSize) && cellSize > 0 ? cellSize : 3.0;
-    this.invCellSize = 1 / this.cellSize;
+    this.cell = Number.isFinite(cellSize) && cellSize > 0 ? cellSize : 3.0;
+    this.invCellSize = 1 / this.cell;
+  }
+
+  /**
+   * The positions array the grid was last built from (the caller's own
+   * array, not a copy; an empty array after `clear`). A picker compares it
+   * with the frame it draws: a different array means the grid is stale.
+   */
+  get positions(): Float32Array {
+    return this.pts;
+  }
+
+  /** Atoms binned by the last build. */
+  get size(): number {
+    return this.count;
+  }
+
+  /** The grid's cell edge (the configured size, coarsened on a sparse cloud). */
+  get cellSize(): number {
+    return this.cell;
+  }
+
+  /**
+   * The box every binned atom lies in, `[minX, minY, minZ, maxX, maxY, maxZ]`
+   * over the finite coordinates (a live view of the grid's own array: do not
+   * write it). Null when empty, or when an axis had no finite coordinate (the
+   * grid then degrades to one cell and the box says nothing).
+   */
+  get bounds(): Readonly<Float64Array> | null {
+    return this.boxValid ? this.box : null;
   }
 
   /**
@@ -42,8 +74,9 @@ export class SpatialHash3D {
    */
   build(positions: Float32Array, natoms: number) {
     const count = Math.max(0, Math.min(Math.trunc(natoms) || 0, Math.floor(positions.length / 3)));
-    this.positions = positions;
+    this.pts = positions;
     this.count = count;
+    this.boxValid = false;
 
     if (count === 0) {
       this.dimX = this.dimY = this.dimZ = 0;
@@ -54,27 +87,41 @@ export class SpatialHash3D {
 
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    // Finite coordinates only (NaN fails every comparison; ±Infinity is
+    // excluded explicitly). A non-finite atom is clamped into an edge cell
+    // and never within any query radius.
     for (let i = 0, end = count * 3; i < end; i += 3) {
       const x = positions[i], y = positions[i + 1], z = positions[i + 2];
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-      if (z < minZ) minZ = z;
-      if (z > maxZ) maxZ = z;
+      if (x > -Infinity && x < Infinity) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+      }
+      if (y > -Infinity && y < Infinity) {
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      if (z > -Infinity && z < Infinity) {
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+      }
     }
     if (!Number.isFinite(minX) || !Number.isFinite(maxX)
       || !Number.isFinite(minY) || !Number.isFinite(maxY)
       || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
-      // Non-finite coordinates cannot be binned; degrade to a single cell so
-      // queries still scan every finite atom.
+      // An axis with no finite coordinate cannot be binned; degrade to a
+      // single cell so queries still scan every finite atom.
       minX = minY = minZ = 0;
       maxX = maxY = maxZ = 0;
+    } else {
+      const box = this.box;
+      box[0] = minX; box[1] = minY; box[2] = minZ;
+      box[3] = maxX; box[4] = maxY; box[5] = maxZ;
+      this.boxValid = true;
     }
 
     // Choose the cell size: the configured size unless the grid would exceed
     // the cell budget, in which case coarsen uniformly.
-    let cellSize = this.cellSize;
+    let cellSize = this.cell;
     const extentX = maxX - minX;
     const extentY = maxY - minY;
     const extentZ = maxZ - minZ;
@@ -85,7 +132,7 @@ export class SpatialHash3D {
       if (dx * dy * dz <= MAX_GRID_CELLS) break;
       cellSize *= 2;
     }
-    this.cellSize = cellSize;
+    this.cell = cellSize;
     this.invCellSize = 1 / cellSize;
     this.minX = minX;
     this.minY = minY;
@@ -135,7 +182,7 @@ export class SpatialHash3D {
     const results: Array<{ index: number; dist: number }> = [];
     if (this.count === 0 || !(radius > 0)) return results;
 
-    const positions = this.positions;
+    const positions = this.pts;
     const r2 = radius * radius;
     const cx0 = Math.max(0, Math.floor((x - radius - this.minX) * this.invCellSize));
     const cx1 = Math.min(this.dimX - 1, Math.floor((x + radius - this.minX) * this.invCellSize));
@@ -178,7 +225,7 @@ export class SpatialHash3D {
    */
   forEachNear(x: number, y: number, z: number, radius: number, cb: (index: number, dist: number) => void): void {
     if (this.count === 0 || !(radius > 0)) return;
-    const positions = this.positions;
+    const positions = this.pts;
     const r2 = radius * radius;
     const cx0 = Math.max(0, Math.floor((x - radius - this.minX) * this.invCellSize));
     const cx1 = Math.min(this.dimX - 1, Math.floor((x + radius - this.minX) * this.invCellSize));
@@ -214,7 +261,7 @@ export class SpatialHash3D {
    */
   closest(x: number, y: number, z: number, maxRadius: number = 10): { index: number; dist: number } | null {
     // Search in expanding spheres for efficiency
-    let searchRadius = this.cellSize;
+    let searchRadius = this.cell;
 
     while (searchRadius <= maxRadius) {
       const found = this.query(x, y, z, searchRadius);
@@ -249,7 +296,7 @@ export class SpatialHash3D {
     void typeCutoffs;
     const bonds: Array<[number, number]> = [];
     if (this.count === 0 || !(maxBondLength > 0)) return bonds;
-    const positions = this.positions;
+    const positions = this.pts;
     const cutoffSq = maxBondLength * maxBondLength;
     const reach = Math.ceil(maxBondLength * this.invCellSize);
     const strideY = this.dimX;
@@ -295,8 +342,9 @@ export class SpatialHash3D {
 
   /** Clear all data */
   clear() {
-    this.positions = new Float32Array(0);
+    this.pts = new Float32Array(0);
     this.count = 0;
+    this.boxValid = false;
     this.dimX = this.dimY = this.dimZ = 0;
     this.cellStart = new Int32Array(1);
     this.cellItems = new Int32Array(0);

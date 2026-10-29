@@ -279,31 +279,3 @@ function EtchedAnnotation({
     </Billboard>
   );
 }
-
-/**
- * Build a small RGBA texture with the annotation text rendered via Canvas2D.
- * Used by the impostor shader for the 'etched' label style. Returns the
- * texture plus its width/height so the shader can sample correctly.
- *
- * Exported here (rather than inline in AtomsOptimized) because the
- * Canvas2D rasterization is annotation-specific and may evolve to support
- * multi-line / different fonts as the etched style matures.
- */
-export function buildAnnotationTexture(text: string): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 64;
-  const ctx = canvas.getContext('2d')!;
-  ctx.clearRect(0, 0, 256, 64);
-  ctx.fillStyle = 'rgba(255,255,255,1)';
-  ctx.font = 'bold 38px ui-monospace, "SF Mono", Consolas, monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text.slice(0, 16), 128, 36);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
-  return tex;
-}
-

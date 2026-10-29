@@ -1,26 +1,21 @@
 /**
  * Studio control primitives — the reusable, store-agnostic building blocks of
- * the control deck (groups, segmented buttons, sliders, the rotary knob, color
- * pickers). Extracted out of StudioControlDeck so the deck reads as composition
- * and these pieces can be reused.
+ * the control deck (groups, segmented buttons, sliders, color pickers).
+ * Extracted out of StudioControlDeck so the deck reads as composition and
+ * these pieces can be reused.
  *
  * CSS coupling: a few of these reference global classes that the StudioControlDeck
  * <style> block injects — `lupi-rive-snap` / `lupi-rive-flash` (SegmentButton
- * pulse), `lupi-rive-dial` (RiveKnob focus ring), `lupi-native-color` (the color
- * inputs). Those classes are global once the deck mounts, and these primitives
- * only ever render inside the deck, so the styling resolves without duplicating
- * the CSS here.
+ * pulse), `lupi-native-color` (the color inputs). Those classes are global once
+ * the deck mounts, and these primitives only ever render inside the deck, so
+ * the styling resolves without duplicating the CSS here.
  */
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { usePressSpring } from '../hooks/usePressSpring';
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-export function snap(value: number, step: number): number {
-  return Math.round(value / step) * step;
 }
 
 // Progressive disclosure — the easy path stays visible; finicky controls live
@@ -229,165 +224,6 @@ export function CompactSlider({
         }}
       />
     </label>
-  );
-}
-
-export function RiveKnob({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  format = value => value.toFixed(2),
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-  format?: (value: number) => string;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef({ y: 0, value });
-  const percent = clamp((value - min) / (max - min), 0, 1);
-  const angle = -135 + percent * 270;
-  const accent = dragging ? '#f59e0b' : '#1edce0';
-
-  const setValue = (nextValue: number) => {
-    onChange(clamp(snap(nextValue, step), min, max));
-  };
-
-  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    dragRef.current = { y: event.clientY, value };
-    setDragging(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragging) return;
-    const dy = dragRef.current.y - event.clientY;
-    setValue(dragRef.current.value + (dy / 118) * (max - min));
-  };
-
-  const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      setValue(value + step);
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      setValue(value - step);
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      setValue(min);
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      setValue(max);
-    }
-  };
-
-  return (
-    <div style={{
-      minHeight: 66,
-      display: 'grid',
-      gridTemplateColumns: '50px minmax(0, 1fr)',
-      alignItems: 'center',
-      gap: 8,
-      minWidth: 0,
-      padding: '7px 8px',
-      borderRadius: 8,
-      border: dragging ? '1px solid rgba(245,158,11,0.62)' : '1px solid rgba(148,163,184,0.2)',
-      background: dragging
-        ? 'linear-gradient(180deg, rgba(245,158,11,0.12), rgba(9,14,22,0.72))'
-        : 'linear-gradient(180deg, rgba(15,23,42,0.58), rgba(9,14,22,0.48))',
-      boxShadow: dragging
-        ? '0 0 20px rgba(245,158,11,0.18), inset 0 1px 0 rgba(255,255,255,0.06)'
-        : 'inset 0 1px 0 rgba(255,255,255,0.05), 0 1px 0 rgba(0,0,0,0.2)',
-    }}>
-      <div
-        role="slider"
-        tabIndex={0}
-        aria-label={label}
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        aria-valuetext={format(value)}
-        className="lupi-rive-dial"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onKeyDown={handleKeyDown}
-        style={{
-          width: 46,
-          height: 46,
-          borderRadius: '50%',
-          position: 'relative',
-          cursor: 'ns-resize',
-          outline: 'none',
-          touchAction: 'none',
-          background: `conic-gradient(from 225deg, ${accent} 0deg, ${accent} ${percent * 270}deg, #1f2937 ${percent * 270}deg, #1f2937 270deg, transparent 270deg)`,
-          boxShadow: dragging ? `0 0 18px ${accent}52` : '0 6px 18px rgba(0,0,0,0.34)',
-        }}
-      >
-        <div style={{
-          position: 'absolute',
-          inset: 4,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle at 35% 30%, #334155, #0f172a 72%)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: 'inset 0 1px 4px rgba(255,255,255,0.08)',
-        }} />
-        <div style={{
-          position: 'absolute',
-          inset: 4,
-          borderRadius: '50%',
-          transform: `rotate(${angle}deg)`,
-          transition: dragging ? 'none' : 'transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-        }}>
-          <div style={{
-            position: 'absolute',
-            top: 2,
-            left: '50%',
-            width: 3,
-            height: 9,
-            transform: 'translateX(-50%)',
-            borderRadius: 3,
-            background: accent,
-            boxShadow: `0 0 10px ${accent}78`,
-          }} />
-        </div>
-      </div>
-      <div style={{ minWidth: 0, display: 'grid', gap: 5 }}>
-        <span style={{ color: '#94a3b8', fontSize: 10, fontWeight: 820, textTransform: 'uppercase', lineHeight: 1 }}>{label}</span>
-        <span style={{ color: '#e2e8f0', fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 820, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-          {format(value)}
-        </span>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          aria-label={`${label} fine control`}
-          onChange={(event) => setValue(Number(event.currentTarget.value))}
-          style={{
-            width: '100%',
-            height: 4,
-            accentColor: accent,
-          }}
-        />
-      </div>
-    </div>
   );
 }
 

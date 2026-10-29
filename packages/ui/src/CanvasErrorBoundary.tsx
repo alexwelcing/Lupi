@@ -39,7 +39,6 @@ export class CanvasErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error) {
     // Server-side logging is N/A here (client component); console keeps the
     // signal for field debugging without leaking anything sensitive.
-    // eslint-disable-next-line no-console
     console.error('[canvas] renderer init failed:', error?.message ?? error);
     // The silent-blank-canvas bounce was previously invisible to analytics —
     // render_failed was defined but never fired. Emit it here, the one place a

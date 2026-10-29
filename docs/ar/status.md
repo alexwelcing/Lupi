@@ -1,5 +1,76 @@
 # Lupi AR: status for the owner
 
+## Current handoff, 2026-10-29
+
+Finish the native demo in [PR #132](https://github.com/alexwelcing/Lupi/pull/132)
+(`codex/native-tonight-demo`). It contains preview, durable Keep, isolated
+room saves, AR recovery and the wired bounded diagnostics recorder.
+[PR #130](https://github.com/alexwelcing/Lupi/pull/130)
+(`codex/native-demo-reliability`) is the preserved earlier integration
+checkpoint; do not integrate both as separate deliveries. Keep #132 draft
+until its outstanding Mac acceptance is actually observed. Close #130 as
+superseded when the combined change is accepted.
+
+The source checkpoint reviewed for this handoff is
+`aade828052a195c6dcac91c07dbc0e12db7626c6`
+(native tree `4f70675b8499a61751d90fadc8f7b0ff74be137b`).
+Its [web build](https://github.com/alexwelcing/Lupi/actions/runs/38017276469)
+and [Linux Apple job](https://github.com/alexwelcing/Lupi/actions/runs/38017276417)
+passed. That does not establish a final combined Mac build or phone result.
+The branch reconciliation retains current main's reduced CI design and its
+web/tooling changes, adds the existing diagnostics step to the same Apple
+job, and corrects documentation. Native application code is unchanged from
+that checkpoint; the native README is documentation only.
+
+The October 5 Mac record below and the accepted #129 baseline establish
+earlier SDK/signing/Simulator results. They must not be presented as fresh
+acceptance of #132. No final combined SDK/signature/Simulator result was
+present in the inspected #132 discussion on October 29. Physical behavior
+and the overnight shelf check remain unverified.
+
+### Finish on the Mac
+
+1. Preserve the existing checkout, uncommitted work, local account
+   configuration, signing assets and Simulator/device data. Fetch the
+   combined branch and create an isolated clean worktree at its exact current
+   commit. Confirm `git status --porcelain --untracked-files=all` is empty.
+   Record that SHA; do not build an unpinned moving branch or cherry-pick
+   #130 again.
+2. From that worktree root run `sh tools/apple/verify-app-sdk.sh`, then
+   `sh tools/apple/test-build-diagnostics.sh`. The existing SDK script
+   prints its local output path. Both unsigned device and Simulator builds
+   must succeed, with identical start/end revision and clean source state.
+   Preserve outputs locally, outside tracked files.
+3. In the Simulator exercise Home and Discovery preview (formula, count,
+   provenance, orbit, Recenter, no camera request), explicit Play after
+   dismissal, AR-unavailable Return Home/Retry, Collection, Settings build
+   identity copy and session export. Distinguish an automation/control
+   failure from a product failure. A launch alone is not a UI pass.
+4. Build and sign that same clean revision using the existing development
+   team and automatic provisioning. In Settings and the built
+   `LupiBuildIdentity.json`, verify the exact SHA, clean source state,
+   version 0.1.0 and build 2. Verify the normal deep/strict code signature.
+   The established build/signing commands are in
+   [the Mac build guide](mac-build-2026-10-05.md).
+5. Refresh actual device eligibility. If the intended iPhone is available,
+   install and launch through Xcode/CoreDevice; otherwise keep installation
+   blocked with its concrete reason. Never delete pairing records, app data
+   or existing Simulators to force eligibility.
+6. On physical hardware check camera/tracking, spawn/throw, impacts,
+   audio/haptics, background/foreground/Home, manual/automatic Keep and
+   force-quit/reopen, shelf placement/relocalization and salt counts/cost.
+   Keep the next-day shelf recovery as a separate observation. Do not
+   substitute Simulator or headless tests for any of these results.
+
+The account is optional for local play. Account sync requires the separate
+[setup](account-and-sync.md#7-owner-checklist); the known remote-delete/local-
+cleanup failure edge remains separate unfinished work. Expo stays frozen,
+M3b remains deferred, and this handoff does not create a TestFlight or
+App Store release. No new CI jobs, release gates or committed test reports
+are introduced.
+
+---
+
 **2026-10-09 demo iteration:** current main is `1520ada`, with shared Jev/native
 Find accepted on the Mac. Today's reliability, camera-free preview, diagnostics
 and signed-build scope is tracked in [the iteration record](demo-iteration-2026-10-09.md).

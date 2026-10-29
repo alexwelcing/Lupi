@@ -91,16 +91,6 @@ export function scienceBundleForPathIndex(pathIndex: number): ScienceViewerBundl
   }
 }
 
-/** Compatibility resolver; production gallery loading resolves the digest directly. */
-export async function verifiedScienceBundleForPathIndex(
-  pathIndex: number,
-  trajectory: Trajectory,
-): Promise<ScienceViewerBundle | null> {
-  const entry = CANONICAL_BUNDLE_REGISTRY[pathIndex];
-  if (!entry) return null;
-  return verifiedScienceBundleForManifestSha256(entry.manifestSha256, trajectory, pathIndex);
-}
-
 /** Resolve and verify an exact serialized-manifest content digest as one load gate. */
 export async function verifiedScienceBundleForManifestSha256(
   manifestSha256: string,

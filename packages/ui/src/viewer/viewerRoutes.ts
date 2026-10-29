@@ -50,10 +50,6 @@ export function isScaleRoute(route: string): boolean {
   return normalizedPathRoute(route.split('?')[0] || '/') === SCALE_PATH;
 }
 
-export function isTestbedRoute(search = typeof window === 'undefined' ? '' : window.location.search) {
-  return new URLSearchParams(search).has('testbed');
-}
-
 export function isEmojiRoute(hashRoute = currentHashRoute(), search = typeof window === 'undefined' ? '' : window.location.search) {
   return new URLSearchParams(search).has('emoji') || hashRoute.split('?')[0] === '/system/emoji';
 }

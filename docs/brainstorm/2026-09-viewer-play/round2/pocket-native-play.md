@@ -90,7 +90,7 @@ Reduced motion: offsets and refits jump straight to their end state. Determinist
 
 **WebGL2 fallback:** Identical on the WebGL2 backend (camera projection only). Low Power Mode: sheet drags invalidate frames only while the sheet moves; the offset spring settles, the loop sleeps, and nothing ambient runs.
 
-**Where in code:** packages/ui/src/ViewerApp.tsx (mobile layout; timeline dock calc(64px + env(safe-area-inset-bottom))); packages/ui/src/controls.tsx (MobileTabButton); packages/ui/src/AtomInfoHUD.tsx (MOBILE_DOCK_TOP and its close target); packages/ui/src/app/CameraManager.tsx (styleLayoutChanged refit); packages/ui/src/hooks/useMediaQuery.ts; MOBILE_VIEWER_RELEASE_NOTES.md (launchers at safe-area + 108 px, sheet clamp heights)
+**Where in code:** packages/ui/src/ViewerApp.tsx (mobile layout; timeline dock calc(64px + env(safe-area-inset-bottom))); packages/ui/src/controls.tsx (MobileTabButton); packages/ui/src/AtomInfoHUD.tsx (MOBILE_DOCK_TOP and its close target); packages/ui/src/app/CameraManager.tsx (styleLayoutChanged refit); packages/ui/src/hooks/useMediaQuery.ts; docs/archive/MOBILE_VIEWER_RELEASE_NOTES.md (launchers at safe-area + 108 px, sheet clamp heights)
 
 **Risks:** Existing users lose their muscle memory. Handedness can be misclassified, which is why the layout offers and never forces. iPad and foldables need a width breakpoint. Pick coordinates must be remapped under setViewOffset. The Expo shell would show two rails if the web Rail isn't hidden there.
 

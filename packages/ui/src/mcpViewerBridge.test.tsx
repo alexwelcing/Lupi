@@ -249,6 +249,31 @@ describe('MCP viewer bridge', () => {
     expect(requests[1].arguments).toMatchObject({ format: 'png', width: 512, height: 384 });
   });
 
+  it('reads every ink shading from set_viewer arguments and from plain words', async () => {
+    const driver = mountBridge();
+    await loadBenzene(driver);
+    for (const [inkStyle, expected] of [
+      ['engrave', 'engrave'],
+      ['etching', 'engrave'],
+      ['halftone', 'halftone'],
+      ['dots', 'halftone'],
+      ['chalk', 'chalk'],
+      ['chalkboard', 'chalk'],
+      ['sketch', 'hatch'],
+      ['flat', 'flat'],
+      ['off', 'off'],
+    ] as const) {
+      const response = await driver.execute({ id: `ink-${inkStyle}`, tool: 'lupi.set_viewer', arguments: { inkStyle } });
+      expect(response.ok).toBe(true);
+      expect(getStoreState().inkStyle).toBe(expected);
+    }
+    expect(driver.parseCommand('render caffeine png 512x384 engraving')[0].arguments.viewer).toMatchObject({ inkStyle: 'engrave' });
+    expect(driver.parseCommand('render caffeine png 512x384 halftone print')[0].arguments.viewer).toMatchObject({ inkStyle: 'halftone' });
+    expect(driver.parseCommand('render caffeine png 512x384 chalk')[0].arguments.viewer).toMatchObject({ inkStyle: 'chalk' });
+    expect(driver.parseCommand('render c60 png 512x384 on a blackboard')[0].arguments.viewer).toMatchObject({ inkStyle: 'chalk' });
+    expect(driver.parseCommand('render caffeine png 512x384 blueprint')[0].arguments.viewer?.inkStyle).toBeUndefined();
+  });
+
   it('does not auto-execute production-shaped URL commands, but permits explicit execution', async () => {
     const command = JSON.stringify({
       id: 'url-caffeine',

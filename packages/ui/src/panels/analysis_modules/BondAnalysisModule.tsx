@@ -24,7 +24,6 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
 export function BondAnalysisModule() {
   const bondStats = useStore((state) => state.bondStats);
   const bondCutoff = useStore((state) => state.bondCutoff);
-  const setBondCutoff = useStore((state) => state.setBondCutoff);
   const bondColorMode = useStore((state) => state.bondColorMode);
   const setBondColorMode = useStore((state) => state.setBondColorMode);
   const bondThresholdMode = useStore((state) => state.bondThresholdMode);
