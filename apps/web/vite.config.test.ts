@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { reactPerformanceTrackGuardPlugin, resolveLupiBrowserBuildSha } from './vite.config';
+import { audienceScriptPlugin, reactPerformanceTrackGuardPlugin, resolveLupiBrowserBuildSha } from './vite.config';
 
 const HEAD_SHA = '0123456789abcdef0123456789abcdef01234567';
 const OTHER_SHA = '89abcdef0123456789abcdef0123456789abcdef';
@@ -52,5 +52,27 @@ describe('development React performance-track guard', () => {
     expect(tags[0].children).toContain("get('reactProfile') === '1'");
     expect(tags[0].children).toContain("console, 'timeStamp'");
     expect(tags[0].children).toContain('__lupiReactPerformanceTracksDisabled');
+  });
+});
+
+describe('first-party audience script', () => {
+  it('adds only a deferred own-host tracker after Vite processes production HTML', () => {
+    const plugin = audienceScriptPlugin();
+    expect(plugin.apply).toBe('build');
+    expect(plugin.transformIndexHtml.order).toBe('post');
+    const tags = plugin.transformIndexHtml.handler();
+    expect(tags).toEqual([{
+      tag: 'script',
+      injectTo: 'head-prepend',
+      attrs: {
+        defer: true,
+        src: '/audience.js',
+        'data-site': 'lupi',
+        'data-endpoint': '/api/audience/events',
+      },
+    }]);
+    expect(tags[0]).not.toHaveProperty('children');
+    expect(tags[0].attrs.src).not.toMatch(/^\/\//);
+    expect(tags[0].attrs['data-endpoint']).not.toMatch(/^\/\//);
   });
 });
