@@ -115,10 +115,10 @@ export async function handleAudienceRequest(request: Request, env: AudienceEnv):
   if (payload === null) return error(400, 'Invalid event batch.');
   if (!env.AUDIENCE_COLLECTOR) return error(503, 'Audience collection is unavailable.');
   const headers = new Headers({ 'content-type': 'text/plain', origin, 'user-agent': coarseUserAgent(request.headers.get('user-agent') ?? '') });
-  const forwarded = new Request('https://audience-events/v1/events', { method: 'POST', headers, body: payload, credentials: 'omit', redirect: 'error' });
   const cf = (request as Request & { cf?: Record<string, unknown> }).cf;
   try {
-    const response = await env.AUDIENCE_COLLECTOR.fetch(forwarded, { credentials: 'omit', redirect: 'error', ...(cf ? { cf } : {}) });
+    const forwarded = new Request('https://audience-events/v1/events', { method: 'POST', headers, body: payload, credentials: 'omit', redirect: 'manual' });
+    const response = await env.AUDIENCE_COLLECTOR.fetch(forwarded, { credentials: 'omit', redirect: 'manual', ...(cf ? { cf } : {}) });
     // Never relay upstream cookies, private bodies, authorization, or redirects.
     if (!response.ok) return error(503, 'Audience collection is unavailable.');
     return new Response(null, { status: 204, headers: RESPONSE_HEADERS });
