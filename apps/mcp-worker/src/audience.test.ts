@@ -28,6 +28,7 @@ describe('cookieless first-party audience routes', () => {
     expect(await response.text()).toBe('');
     expect(headerNames(response.headers)).not.toEqual(expect.arrayContaining(['set-cookie', 'authorization', 'location']));
     expect(forwarded!.url).toBe('https://audience-events/v1/events');
+    expect(forwarded!.redirect).toBe('manual');
     expect(headerNames(forwarded!.headers)).toEqual(['content-type', 'origin', 'user-agent']);
     expect(forwarded!.headers.get('user-agent')).toBe('Lupi browser');
     expect(forwarded!.headers.get('origin')).toBe('https://lupi.live');
@@ -91,5 +92,8 @@ describe('cookieless first-party audience routes', () => {
     const upstream = await handleAudienceRequest(request(), { AUDIENCE_COLLECTOR: { fetch: vi.fn(async () => new Response('secret', { status: 400 })) } });
     expect(upstream.status).toBe(503);
     expect(await upstream.text()).not.toContain('secret');
+    const redirect = await handleAudienceRequest(request(), { AUDIENCE_COLLECTOR: { fetch: vi.fn(async (_input, init) => { expect(init?.redirect).toBe('manual'); return new Response(null, { status: 302, headers: { location: 'https://private.invalid' } }); }) } });
+    expect(redirect.status).toBe(503);
+    expect(redirect.headers.has('location')).toBe(false);
   });
 });
