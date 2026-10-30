@@ -8,7 +8,7 @@ const { openMolecule } = vi.hoisted(() => ({
 vi.mock('../viewer/openMolecule', () => ({ openMolecule }));
 
 import { OMOL25_COORDINATE_TRUTH } from '@atlas/core/omol25';
-import { OPEN_ENTRY_STORAGE_KEY } from '../analytics/openEntry';
+import { takeOpenEntry } from '../analytics/openEntry';
 import { OmolShelf } from './OmolShelf';
 import { OMOL_PICKS, type OmolPick } from './omolShelf.data';
 import {
@@ -187,6 +187,6 @@ describe('OmolShelf', () => {
     await waitFor(() => expect(openMolecule).toHaveBeenCalledTimes(1));
     const file = tile.getAttribute('href')!.replace('/?load=', '');
     expect(openMolecule.mock.calls[0][0]).toEqual({ kind: 'url', url: file, title: expect.stringMatching(/ \(OMol25\)$/), history: 'push' });
-    expect(JSON.parse(sessionStorage.getItem(OPEN_ENTRY_STORAGE_KEY)!).entry).toBe('home-shelf');
+    expect(takeOpenEntry()).toBe('home-shelf');
   });
 });
