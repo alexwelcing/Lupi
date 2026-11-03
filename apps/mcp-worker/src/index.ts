@@ -20,6 +20,7 @@ import {
   type RenderRequestSpecV1,
 } from '@atlas/core';
 import { routeScienceData } from './scienceData';
+import { AUDIENCE_EVENTS_PATH, AUDIENCE_SCRIPT_PATH, handleAudienceRequest, type AudienceCollectorBinding } from './audience';
 import { CHATGPT_MCP_PATH, handleChatGptMcp } from './chatgpt';
 import { JEV_ROUTES, handleSwitchJudge, handleViewerCommand, jevConfigured } from './jev';
 import { DISCOVERY_PATH, handleMoleculeDiscovery } from './discovery';
@@ -89,6 +90,7 @@ interface WorkerVersionMetadata {
 }
 
 export interface Env {
+  AUDIENCE_COLLECTOR?: AudienceCollectorBinding;
   WEB_ASSETS?: FetcherLike;
   ASSETS?: R2BucketLike;
   /** Private, bearer-gated render receipts and bytes. Never bind this bucket
@@ -693,6 +695,9 @@ export async function handleRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   const cors = corsHeaders(request, env);
+
+  // First-party anonymous analytics owns its narrow origin/method policy.
+  if (url.pathname === AUDIENCE_SCRIPT_PATH || url.pathname === AUDIENCE_EVENTS_PATH) return handleAudienceRequest(request, env);
 
   // The public ChatGPT plugin owns its transport and CORS policy independently
   // from the authenticated legacy viewer control plane.

@@ -60,6 +60,30 @@ export function reactPerformanceTrackGuardPlugin() {
   };
 }
 
+/** Attach the same cookieless, first-party tracker to every built HTML entry. */
+export function audienceScriptPlugin() {
+  return {
+    name: 'lupi-cookieless-audience',
+    apply: 'build' as const,
+    transformIndexHtml: {
+      // The Worker serves this classic script; Vite must not try to bundle it.
+      order: 'post' as const,
+      handler() {
+        return [{
+          tag: 'script',
+          injectTo: 'head-prepend' as const,
+          attrs: {
+            defer: true,
+            src: '/audience.js',
+            'data-site': 'lupi',
+            'data-endpoint': '/api/audience/events',
+          },
+        }];
+      },
+    },
+  };
+}
+
 /** Resolve the exact identity Vite will compile into browser renderer code. */
 export function resolveLupiBrowserBuildSha(
   command: 'build' | 'serve',
@@ -411,6 +435,7 @@ export default defineConfig(({ command }) => ({
   base: '/',
   plugins: [
     reactPerformanceTrackGuardPlugin(),
+    audienceScriptPlugin(),
     react(),
     wgslVitePlugin({ minify: true }),
     galleryAssetUploadPlugin(),
