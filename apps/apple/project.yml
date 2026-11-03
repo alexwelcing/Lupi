@@ -30,6 +30,23 @@ packages:
   LupiCloud:
     path: LupiCloud
 
+# Shared scheme: archives always use the shipping Release configuration.
+schemes:
+  Lupi:
+    build:
+      targets:
+        Lupi: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+    management:
+      shared: true
+
 targets:
   Lupi:
     type: application

@@ -1,3 +1,4 @@
+#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -135,3 +136,4 @@ struct DebugPanel: View {
         }
     }
 }
+#endif

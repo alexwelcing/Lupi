@@ -1,0 +1,150 @@
+{
+  "schema": "lupi.app-store-listing-provenance.v1",
+  "status": "draft-not-submitted",
+  "locale": "en-US",
+  "preparedOn": "2026-11-03",
+  "sourceCommit": "eca99a5e3b301944c4dce87fa789ddd22eafd4f3",
+  "productIdentity": {
+    "name": "Lupi",
+    "bundleId": "live.lupi.app",
+    "projectMarketingVersion": "0.1.0",
+    "projectBuildNumber": "2",
+    "appPrice": "Free",
+    "physicalMerchandiseDestination": "US",
+    "appStoreDistributionTerritories": null,
+    "distributionNote": "App Store distribution territories and the submitted version/build must be recorded in App Store Connect. US physical shipping does not determine app distribution territories.",
+    "initialReleaseAccountSignInEnabled": false,
+    "initialReleaseCloudSyncEnabled": false,
+    "accountConfigurationNote": "Review copy targets the intended initial archive with blank account configuration. The parent release workflow must verify the actual distribution archive configuration."
+  },
+  "fieldLimits": {
+    "name": {
+      "minimumCharacters": 2,
+      "maximumCharacters": 30
+    },
+    "subtitle": {
+      "maximumCharacters": 30
+    },
+    "promotionalText": {
+      "maximumCharacters": 170
+    },
+    "description": {
+      "maximumCharacters": 4000
+    },
+    "keywords": {
+      "maximumUtf8Bytes": 100,
+      "minimumCharactersPerKeywordExclusive": 2
+    },
+    "reviewNotes": {
+      "maximumUtf8Bytes": 4000
+    }
+  },
+  "categoryDecision": {
+    "primary": "Entertainment",
+    "secondary": null,
+    "basis": "The current native experience is interactive molecular play and visual exploration. No educational outcomes, scientific accuracy, health effects or research capabilities are promised. A secondary category is optional and has not been selected."
+  },
+  "missingFields": [
+    {
+      "field": "marketingUrl",
+      "required": false,
+      "neededRoute": "https://lupi.live/app/",
+      "neededContent": "A public native iPhone/iPad app page describing the actual free app, compatibility and optional AR. Use actual approved screenshots and an App Store link only after the app record is confirmed.",
+      "verification": "On 2026-11-03 /app returned HTTP 200 generic Lupi web-app HTML. The root site is live, but native-app-specific marketing content was not verified."
+    }
+  ],
+  "submissionItemsOutsideListing": [
+    "Actual review contact name, email and international-format telephone number, provided through the authorized App Store Connect account.",
+    "Name availability, app record, version/build selection, free pricing and app distribution territories.",
+    "Screenshots from the submitted app, age-rating answers and content-rights declarations.",
+    "Privacy labels and any optional account-service configuration must match the submitted binary.",
+    "Physical-device AR, audio and haptics QA remains outstanding; no physical-device acceptance is claimed by these drafts."
+  ],
+  "behaviorEvidence": [
+    {
+      "path": "apps/apple/Lupi/Home/HomeView.swift",
+      "supports": "Home preview, discovery and collection entry points"
+    },
+    {
+      "path": "apps/apple/Lupi/Home/MoleculePreviewView.swift",
+      "supports": "Camera-free 3D orbit/recenter, formula, atom count, provenance and explicit Play handoff"
+    },
+    {
+      "path": "apps/apple/Lupi/Home/DiscoveryView.swift",
+      "supports": "Offline exact matching, optional online description matching and explicit submitted-text disclosure"
+    },
+    {
+      "path": "apps/apple/Lupi/Account/AccountView.swift",
+      "supports": "Optional Apple sign-in, collection sync and in-app deletion"
+    },
+    {
+      "path": "apps/apple/LupiKit/Sources/LupiData/Resources/merchandise.json",
+      "supports": "Empty, closed default registry; no visible shop CTA"
+    },
+    {
+      "path": "apps/apple/README.md",
+      "supports": "Interaction controls, collection, room data, ARKit requirement and optional LiDAR"
+    },
+    {
+      "path": "docs/ar/us-dual-launch.md",
+      "supports": "Free native app, US physical goods, separated release gates and deferred physical-device acceptance"
+    },
+    {
+      "path": "apps/apple/project.yml",
+      "supports": "Bundle identity, iOS 26 target and current source version/build settings"
+    }
+  ],
+  "appleSources": [
+    {
+      "title": "App information",
+      "url": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information/",
+      "verifiedOn": "2026-11-03",
+      "supports": "Name and subtitle limits; required privacy policy; bundle identity"
+    },
+    {
+      "title": "Platform version information",
+      "url": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/",
+      "verifiedOn": "2026-11-03",
+      "supports": "Promotional text, description, keyword byte and review-note byte limits; support URL, copyright and review contact requirements"
+    },
+    {
+      "title": "Choosing a category",
+      "url": "https://developer.apple.com/app-store/categories/",
+      "verifiedOn": "2026-11-03",
+      "supports": "Current Entertainment category and optional primary/secondary category selection"
+    }
+  ],
+  "externalWrites": {
+    "appStoreConnect": false,
+    "webDeployment": false,
+    "messagesSent": false
+  },
+  "urlPublicationRequirements": [
+    {
+      "field": "supportUrl",
+      "url": "https://lupi.live/support/ios/",
+      "sourcePath": "apps/web/public/support/ios/index.html",
+      "status": "source-ready-not-yet-public",
+      "publicContentVerified": false,
+      "acceptance": "Deploy the source page, then verify the public URL returns the native-app support title and actual authorized contact information rather than the generic SPA shell."
+    },
+    {
+      "field": "privacyPolicyUrl",
+      "url": "https://lupi.live/privacy/ios/",
+      "sourcePath": "apps/web/public/privacy/ios/index.html",
+      "status": "source-ready-not-yet-public",
+      "publicContentVerified": false,
+      "acceptance": "Deploy the source policy, then verify its public native-app title and actual content. Confirm that the submitted archive has accounts disabled and matches the policy and App Store privacy labels."
+    }
+  ],
+  "copyrightIdentityVerification": {
+    "requestedOwnerType": "company legal name",
+    "draftValue": "2026 Lupine Science, Inc.",
+    "sourceCompanyName": "Lupine Science, Inc.",
+    "userDirection": "Use the company name for copyright rather than the founder personal name.",
+    "registeredNameVerified": false,
+    "appleSellerLegalEntityConfirmed": false,
+    "verificationNote": "Draft copyright follows the user company selection and the explicit Company field in the owner business document. This records the supporting source, not an incorporation-record audit or confirmation of the Apple seller legal entity.",
+    "sourceBasis": "Owner-directed company copyright, checked against the Company field in an owner business record. Private document identifiers are retained only in local release receipts."
+  }
+}

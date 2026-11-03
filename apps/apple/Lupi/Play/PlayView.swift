@@ -45,7 +45,9 @@ struct PlayView: View {
             chrome
         }
         .onChange(of: app.settings, initial: true) { _, settings in controller.apply(settings) }
+        #if DEBUG
         .onChange(of: app.showDebugHUD, initial: true) { _, on in controller.showsHUD = on }
+        #endif
         .onChange(of: app.autoKeep, initial: true) { _, on in controller.autoKeep = on }
         .onChange(of: scenePhase, initial: true) { _, phase in controller.sceneChanged(phase) }
         .sheet(isPresented: $showingSettings) {
@@ -100,11 +102,13 @@ struct PlayView: View {
                     .padding(.vertical, 6)
                     .background(.ultraThinMaterial, in: Capsule())
             }
+            #if DEBUG
             if app.showDebugHUD {
                 DebugPanel(controller: controller, stage: controller.diagnostics.receiptStage,
                            onStageChange: { controller.diagnostics.recordStage($0) },
                            receiptJSON: { try controller.diagnostics.json() })
             }
+            #endif
             if let prompt = controller.shelfPrompt {
                 ShelfCard(prompt: prompt, snapshot: controller.shelfSnapshot, controller: controller)
             }
@@ -147,8 +151,10 @@ struct PlayView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
+                #if DEBUG
                 .onLongPressGesture(minimumDuration: 0.6) { app.showDebugHUD.toggle() }
                 .accessibilityHint("Touch and hold to show the debug HUD")
+                #endif
             Spacer()
             RoundButton(symbol: "gearshape", label: "Settings") { showingSettings = true }
         }

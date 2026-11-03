@@ -1,3 +1,4 @@
+#if DEBUG
 import LupiPlay
 import SwiftUI
 import UIKit
@@ -138,3 +139,4 @@ struct SoundLabView: View {
         }
     }
 }
+#endif

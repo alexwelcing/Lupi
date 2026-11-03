@@ -54,6 +54,16 @@ struct SettingsView: View {
                 }
                 AccountSections()
                 Section {
+                    Link(destination: URL(string: "https://lupi.live/support/ios/")!) {
+                        Label("Lupi support", systemImage: "questionmark.circle")
+                    }
+                    Link(destination: URL(string: "https://lupi.live/privacy/ios/")!) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                    }
+                } header: {
+                    Text("Help and privacy")
+                }
+                Section {
                     LabeledContent("Version", value: BuildIdentity.current.versionLabel)
                     LabeledContent("Revision", value: BuildIdentity.current.revisionLabel)
                     Button(copiedBuild ? "Build diagnostics copied" : "Copy build diagnostics") {

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How Lupi for iPhone and iPad handles camera access, local collections, online molecule search and physical merchandise links.">
+  <title>Lupi for iPhone and iPad · Privacy</title>
+  <style>
+    :root { color-scheme: dark; font: 17px/1.65 system-ui, sans-serif; background: #0c1b19; color: #f4f1e7; }
+    body { margin: 0; }
+    main { max-width: 68ch; margin: auto; padding: 42px 24px 64px; }
+    a { color: #ffd38a; text-underline-offset: .2em; }
+    a:focus-visible { outline: 3px solid #ffd38a; outline-offset: 5px; }
+    nav { display: flex; flex-wrap: wrap; gap: 20px; }
+    h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; margin-top: 34px; }
+    h2 { font-size: 1.25rem; margin-top: 36px; }
+    .date, footer { color: #c4d1c9; }
+    footer { border-top: 1px solid #50635a; margin-top: 42px; padding-top: 20px; }
+  </style>
+</head>
+<body>
+<main>
+  <nav aria-label="Lupi links"><a href="https://lupi.live/">Lupi</a><a href="/support/ios/">App support</a></nav>
+  <h1>Privacy for Lupi on iPhone and iPad</h1>
+  <p class="date">Updated November 3, 2026</p>
+  <p>This policy describes the native Lupi app. Lupi lets you explore bundled molecules, build a collection and play with molecules in your room. The initial App Store release does not offer account sign-in or cloud collection sync.</p>
+
+  <h2>Camera and your room</h2>
+  <p>Lupi asks for camera access when you choose Play. It uses ARKit to track surfaces and, on supported hardware, understand a room mesh. Room maps, shelf placements and the small room images used to find a saved shelf are kept on your device. The app does not upload these camera images or room records to Lupi or its molecule-search provider.</p>
+  <p>You can change camera permission in iOS Settings. Molecule previews and your local collection remain available without opening the camera.</p>
+
+  <h2>Your local collection and preferences</h2>
+  <p>Trophies, their names and molecular structures, rooms, shelves and app preferences are stored locally. In Lupi Settings, <strong>Erase this device’s collection</strong> removes the local trophies, rooms and shelves. This cannot be undone through Lupi.</p>
+
+  <h2>Online molecule descriptions</h2>
+  <p>Exact bundled molecule names and formulas are matched on your device. If you tap Find for a description that is not an exact local match, the app sends that description, up to 200 characters, to Lupi’s service on Cloudflare. The service sends the description and a fixed molecule catalogue rubric to TypeSafe’s Jev service to suggest a bundled molecule.</p>
+  <p>The search request does not include your camera image, room map, trophy collection, Apple account credentials or an app-generated visitor identifier. Servers processing a network request also receive connection information and request headers. TypeSafe receives the request from Lupi’s service rather than directly from your device.</p>
+  <p>Lupi’s description endpoint does not maintain an application search-history database or deliberately log the description text. This does not mean the request has zero retention: hosting and inference providers may retain service records or input under their policies. TypeSafe states that it does not train Jev on customer requests or responses. Its published documents describe retention by purpose rather than giving this route a fixed deletion deadline. Please avoid entering personal or sensitive information.</p>
+  <p>Read <a href="https://typesafe.ai/legal/privacy-policy">TypeSafe’s privacy policy</a>, its <a href="https://typesafe.ai/legal/data-processing">data processing addendum</a> and <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare’s privacy policy</a>. You can use exact names and formulas offline instead of sending descriptions.</p>
+
+  <h2>Physical merchandise</h2>
+  <p>Opening a molecule preview checks a public Lupi feed for currently available physical merchandise. The feed request carries no account identifier or camera or collection data. When a verified offer is available, a link may open the Lupi merch shop in your browser with a product variant and campaign reference. These references identify an offer or campaign, not a person.</p>
+  <p>The shop uses Shopify and handles its own checkout, orders, delivery and privacy information. The native app does not receive your card details or a copy of your shop order. Buying merchandise is optional and does not unlock app features. Merchandise offers are for supported US delivery addresses.</p>
+
+  <h2>Diagnostics and support</h2>
+  <p>The app keeps a bounded diagnostic receipt in memory. It contains build information, device family and operating-system version, elapsed performance measurements, counts and tracking or save outcomes. It does not contain camera images, room maps, account credentials or molecule-search text. It is not automatically uploaded. If you choose to copy it and send it to support, we receive what you send.</p>
+  <p>If you email support, we receive your email address, message and any attachments. We use that information to handle your request. You can ask about access to or deletion of information you have provided; provider retention limits or other obligations may affect what can be removed.</p>
+
+  <h2>Advertising and changes</h2>
+  <p>The native app does not include advertising SDKs, use the advertising identifier, fingerprint your device or link your activity across other companies’ apps and websites for targeted advertising. This policy does not describe the separate Lupi website or the Shopify shop.</p>
+  <p>We will update this page when the native app’s data handling changes. Questions about this policy or a data request can be sent to <a href="mailto:alex@lupinesci.com">alex@lupinesci.com</a>.</p>
+  <footer>Lupi · <a href="/support/ios/">Support for iPhone and iPad</a></footer>
+</main>
+</body>
+</html>
