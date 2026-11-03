@@ -6,6 +6,19 @@ import Testing
 
 private enum DiskFailure: Error, Equatable { case refused }
 
+private actor ControlledTokenStore: TokenStore {
+  private let backing = InMemoryTokenStore()
+  private var refuseClear = false
+
+  func failNextClear() { refuseClear = true }
+  func load() async throws -> Session? { try await backing.load() }
+  func save(_ session: Session) async throws { try await backing.save(session) }
+  func clear() async throws {
+    if refuseClear { refuseClear = false; throw DiskFailure.refused }
+    try await backing.clear()
+  }
+}
+
 /// The real in-memory store behind deterministic disk failures and a single
 /// suspended write. Tests observe entry/release through continuations.
 private actor ControlledStateStore: SyncStateStore {
@@ -49,12 +62,12 @@ private actor ControlledStateStore: SyncStateStore {
 }
 
 private func durabilityEngine(
-  _ cloud: FakeFirebase, store: any SyncStateStore<TestTrophy>
+  _ cloud: FakeFirebase, store: any SyncStateStore<TestTrophy>, tokens: any TokenStore = InMemoryTokenStore()
 ) async -> TrophySync<TestTrophy> {
   let clock = TestClock(await cloud.now)
   let sessions = SessionManager(
     client: AuthClient(configuration: AuthConfiguration(apiKey: "test-api-key"), transport: cloud),
-    store: InMemoryTokenStore(), now: clock.function
+    store: tokens, now: clock.function
   )
   let firestore = FirestoreClient(configuration: FirestoreConfiguration(projectID: "demo-lupi"), transport: cloud, tokens: sessions)
   return TrophySync(session: sessions, firestore: firestore, store: store, now: clock.function)
@@ -300,6 +313,146 @@ struct DurabilityTests {
     try await sync.deleteAccount(reauthentication: appleCredential(code: "retry"))
     #expect(try await sync.trophies().isEmpty)
     #expect(try await sync.snapshot().deletingAccount == nil)
+  }
+
+  @Test("account deletion retries local cleanup after its remote user and session are gone")
+  func deletionCleanupFailure() async throws {
+    let cloud = FakeFirebase()
+    let store = ControlledStateStore()
+    let tokens = InMemoryTokenStore()
+    let sync = await durabilityEngine(cloud, store: store, tokens: tokens)
+    try await sync.signIn(with: appleCredential())
+    let uid = try #require(await cloud.uid(forAppleSub: "apple-owner"))
+    try await sync.save(.make("t1"))
+    try await sync.sync()
+    await cloud.onceBefore("auth.delete") { await store.plan(fail: true) }
+    await #expect(throws: DiskFailure.refused) {
+      try await sync.deleteAccount(reauthentication: appleCredential(code: "first"))
+    }
+    #expect(await !cloud.userExists(uid))
+    #expect(try await tokens.load() == nil)
+    #expect(try await store.load()?.deletingAccount == uid)
+    #expect(try await store.load()?.finalizingAccountDeletion == uid)
+    #expect(try await sync.snapshot().records["t1"] != nil)
+    await cloud.clearCalls()
+    await #expect(throws: SyncError.accountDeletionInProgress) { try await sync.signIn(with: appleCredential()) }
+    await #expect(throws: SyncError.accountDeletionInProgress) { try await sync.signOut() }
+    await #expect(throws: SyncError.accountDeletionInProgress) { try await sync.sync() }
+
+    // No fresh Apple code is required once only local cleanup remains.
+    try await sync.deleteAccount(reauthentication: appleCredential())
+    #expect(await cloud.callKinds.isEmpty)
+    #expect(await cloud.uid(forAppleSub: "apple-owner") == nil)
+    let state = try await sync.snapshot()
+    #expect(state.records.isEmpty && state.outbox.isEmpty && state.cursors.isEmpty)
+    #expect(state.activeOwner == nil && state.deletingAccount == nil && state.finalizingAccountDeletion == nil)
+  }
+
+  @Test("the persisted terminal deletion intent survives restart and local erase")
+  func deletionCleanupAfterRestart() async throws {
+    let cloud = FakeFirebase()
+    let store = ControlledStateStore()
+    let tokens = InMemoryTokenStore()
+    let sync = await durabilityEngine(cloud, store: store, tokens: tokens)
+    try await sync.signIn(with: appleCredential())
+    try await sync.save(.make("t1"))
+    await cloud.onceBefore("auth.delete") { await store.plan(fail: true) }
+    await #expect(throws: DiskFailure.refused) {
+      try await sync.deleteAccount(reauthentication: appleCredential(code: "first"))
+    }
+    let restarted = await durabilityEngine(cloud, store: store, tokens: tokens)
+    try await restarted.eraseLocal()
+    #expect(try await restarted.snapshot().finalizingAccountDeletion != nil)
+    await cloud.clearCalls()
+    try await restarted.deleteAccount(reauthentication: appleCredential())
+    #expect(await cloud.callKinds.isEmpty)
+    #expect(try await store.load()?.finalizingAccountDeletion == nil)
+    #expect(try await store.load()?.deletingAccount == nil)
+  }
+
+  @Test("failure to persist terminal deletion intent cannot delete the Firebase user")
+  func deletionTerminalIntentFailure() async throws {
+    let cloud = FakeFirebase()
+    let store = ControlledStateStore()
+    let sync = await durabilityEngine(cloud, store: store)
+    try await sync.signIn(with: appleCredential())
+    let uid = try #require(await cloud.uid(forAppleSub: "apple-owner"))
+    await cloud.onceBefore("auth.revokeToken") { await store.plan(fail: true) }
+    await cloud.clearCalls()
+    await #expect(throws: DiskFailure.refused) {
+      try await sync.deleteAccount(reauthentication: appleCredential(code: "first"))
+    }
+    #expect(await cloud.userExists(uid))
+    #expect(await !cloud.callKinds.contains("auth.delete"))
+    #expect(try await store.load()?.deletingAccount == uid)
+    #expect(try await store.load()?.finalizingAccountDeletion == nil)
+    try await sync.deleteAccount(reauthentication: appleCredential(code: "retry"))
+    #expect(await !cloud.userExists(uid))
+  }
+
+  @Test("a terminal remote failure retries with the existing token and never reauthenticates")
+  func deletionTerminalRemoteFailure() async throws {
+    let cloud = FakeFirebase()
+    let store = ControlledStateStore()
+    let sync = await durabilityEngine(cloud, store: store)
+    try await sync.signIn(with: appleCredential())
+    let uid = try #require(await cloud.uid(forAppleSub: "apple-owner"))
+    await cloud.failNext("auth.delete", with: .googleError(503, message: "Service Unavailable", rpcStatus: "UNAVAILABLE"))
+    await #expect(throws: AuthError.self) {
+      try await sync.deleteAccount(reauthentication: appleCredential(code: "first"))
+    }
+    #expect(await cloud.userExists(uid))
+    #expect(try await store.load()?.finalizingAccountDeletion == uid)
+    await cloud.clearCalls()
+    try await sync.deleteAccount(reauthentication: appleCredential())
+    #expect(await cloud.callKinds == ["auth.lookup", "auth.delete"])
+    #expect(await !cloud.userExists(uid))
+  }
+
+  @Test("a failed Keychain clear confirms deletion after restart without replaying it")
+  func deletionTokenClearFailure() async throws {
+    let cloud = FakeFirebase()
+    let store = ControlledStateStore()
+    let tokens = ControlledTokenStore()
+    let sync = await durabilityEngine(cloud, store: store, tokens: tokens)
+    try await sync.signIn(with: appleCredential())
+    let uid = try #require(await cloud.uid(forAppleSub: "apple-owner"))
+    await tokens.failNextClear()
+    await #expect(throws: DiskFailure.refused) {
+      try await sync.deleteAccount(reauthentication: appleCredential(code: "first"))
+    }
+    #expect(await !cloud.userExists(uid))
+    #expect(try await tokens.load() != nil)
+    #expect(try await store.load()?.finalizingAccountDeletion == uid)
+    let restarted = await durabilityEngine(cloud, store: store, tokens: tokens)
+    await cloud.clearCalls()
+    try await restarted.deleteAccount(reauthentication: appleCredential())
+    #expect(await cloud.callKinds == ["auth.lookup"])
+    #expect(try await tokens.load() == nil)
+    #expect(try await store.load()?.deletingAccount == nil)
+  }
+
+  @Test("an unverifiable terminal deletion remains pending without refreshing or signing in")
+  func deletionTerminalUnknownOutcome() async throws {
+    let cloud = FakeFirebase()
+    let store = ControlledStateStore()
+    let tokens = InMemoryTokenStore()
+    let sync = await durabilityEngine(cloud, store: store, tokens: tokens)
+    try await sync.signIn(with: appleCredential())
+    let uid = try #require(await cloud.uid(forAppleSub: "apple-owner"))
+    await cloud.failNext("auth.delete", with: .googleError(503, message: "Service Unavailable", rpcStatus: "UNAVAILABLE"))
+    await #expect(throws: AuthError.self) {
+      try await sync.deleteAccount(reauthentication: appleCredential(code: "first"))
+    }
+    await cloud.advance(3700)
+    await cloud.clearCalls()
+    await #expect(throws: AuthError.invalidIDToken) {
+      try await sync.deleteAccount(reauthentication: appleCredential(code: "unused"))
+    }
+    #expect(await cloud.callKinds == ["auth.lookup"])
+    #expect(await cloud.userExists(uid))
+    #expect(try await tokens.load() != nil)
+    #expect(try await store.load()?.finalizingAccountDeletion == uid)
   }
 
   @Test("an actual file-system failure leaves no visible trophy and permits a restart-safe retry")

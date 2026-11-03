@@ -27,6 +27,12 @@ the owner's checklist of everything to build, run and measure.
 
 ## Build and run on a Mac
 
+The [US app-and-merch launch](../../docs/ar/us-dual-launch.md) records the free native app,
+physical-product handoff and separate release gates. The optional product registry starts empty
+while the storefront and exact products await acceptance. Native preview and AR remain available
+without purchasing merchandise. `Lupi/PrivacyInfo.xcprivacy` declares the app's accessed APIs and
+confirmed optional account-sync data; App Store labels and provider retention need their own review.
+
 You need Xcode with the iOS 26 SDK or later, and XcodeGen.
 
 ```bash

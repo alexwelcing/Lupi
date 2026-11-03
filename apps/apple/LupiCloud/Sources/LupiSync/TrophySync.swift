@@ -191,6 +191,7 @@ public actor TrophySync<Payload: SyncPayload> {
   public func signIn(with credential: AppleCredential) async throws -> SyncReport {
     accountGeneration &+= 1
     try await loadIfNeeded()
+    guard !deletionUnderway, state.deletingAccount == nil else { throw SyncError.accountDeletionInProgress }
     try await session.signInWithApple(credential)
     return try await sync()
   }
@@ -198,6 +199,9 @@ public actor TrophySync<Payload: SyncPayload> {
   /// Stops syncing. Local copies stay and remain visible; changes made while
   /// signed out queue for whoever signs in next. `flush` tries one last sync.
   public func signOut(flush: Bool = true) async throws {
+    guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
+    try await loadIfNeeded()
+    guard state.deletingAccount == nil else { throw SyncError.accountDeletionInProgress }
     accountGeneration &+= 1
     if flush, await session.currentUID() != nil {
       _ = try? await sync()
@@ -219,8 +223,10 @@ public actor TrophySync<Payload: SyncPayload> {
     try await transact {
       guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
       let deleting = state.deletingAccount
+      let finalizing = state.finalizingAccountDeletion
       state = SyncState()
       state.deletingAccount = deleting
+      state.finalizingAccountDeletion = finalizing
     }
   }
 
@@ -263,9 +269,9 @@ public actor TrophySync<Payload: SyncPayload> {
   /// 4. delete the Firebase user;
   /// 5. forget everything local that belonged to the account.
   /// An interruption leaves `deletingAccount` set: sync stays off for that
-  /// account until a retry (with a new Apple credential) completes.
+  /// account until a retry completes. Once Apple revocation is complete, retries
+  /// use the existing session only; they never sign in and recreate a deleted user.
   public func deleteAccount(reauthentication credential: AppleCredential) async throws {
-    guard let code = credential.authorizationCode, !code.isEmpty else { throw SyncError.missingAuthorizationCode }
     guard !deletionUnderway else { throw SyncError.accountDeletionInProgress }
     // Before the first suspension: a sync started from here on (the app syncs
     // after edits) refuses, so nothing can be pushed or pulled back in while
@@ -274,9 +280,14 @@ public actor TrophySync<Payload: SyncPayload> {
     accountGeneration &+= 1
     defer { deletionUnderway = false }
     try await loadIfNeeded()
-    guard let uid = await session.currentUID() else { throw SyncError.notSignedIn }
     // Runs are chained, so the newest one finishes after every earlier one.
     if let running = syncRun { _ = await running.task.result }
+    if let uid = state.finalizingAccountDeletion {
+      try await finishAccountDeletion(of: uid, confirmRemote: true)
+      return
+    }
+    guard let code = credential.authorizationCode, !code.isEmpty else { throw SyncError.missingAuthorizationCode }
+    guard let uid = try await session.currentSession()?.uid else { throw SyncError.notSignedIn }
     do {
       try await session.reauthenticate(with: credential)
     } catch AuthError.reauthenticationMismatch {
@@ -285,10 +296,31 @@ public actor TrophySync<Payload: SyncPayload> {
     try await transact { state.deletingAccount = uid }
     try await deleteRemoteRecords(of: uid)
     try await session.revokeApple(authorizationCode: code)
-    try await session.deleteUser()
+    try await transact { state.finalizingAccountDeletion = uid }
+    try await finishAccountDeletion(of: uid, confirmRemote: false)
+  }
+
+  private func finishAccountDeletion(of uid: String, confirmRemote: Bool) async throws {
+    if let current = try await session.currentSession() {
+      guard current.uid == uid else { throw SyncError.reauthenticatedAsDifferentAccount }
+      do {
+        if confirmRemote {
+          // A lost response or failed Keychain clear can leave the old token.
+          // Lookup proves whether deletion is needed without a new Apple sign-in.
+          _ = try await session.client.lookup(idToken: current.idToken)
+        }
+        try await session.client.deleteAccount(idToken: current.idToken)
+      } catch AuthError.userNotFound {
+        // Already deleted. An expired/unverifiable token remains pending instead.
+      }
+    }
+    // Only this terminal path may clear the session while deletion is pending.
+    // Retrying the Keychain clear is local and idempotent, including after restart.
+    try await session.signOut()
     try await transact {
       forget(uid)
       state.deletingAccount = nil
+      state.finalizingAccountDeletion = nil
     }
   }
 
@@ -296,8 +328,8 @@ public actor TrophySync<Payload: SyncPayload> {
 
   private func runSync(full: Bool) async throws -> SyncReport {
     try await loadIfNeeded()
+    if deletionUnderway || state.deletingAccount != nil { throw SyncError.accountDeletionInProgress }
     guard let uid = await session.currentUID() else { throw SyncError.notSignedIn }
-    if deletionUnderway || state.deletingAccount == uid { throw SyncError.accountDeletionInProgress }
     var report = SyncReport()
     // Adopt on a change of account, and whenever trophies were made signed
     // out since (a sign-out keeps the same account active).

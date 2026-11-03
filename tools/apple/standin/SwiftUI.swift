@@ -81,6 +81,11 @@ public struct Image: View {
 }
 extension View { public func scaledToFill() -> some View { self } }
 public struct Label: View { public init(_ title: String, systemImage: String) {}; public var body: Never { fatalError() } }
+// https://developer.apple.com/documentation/swiftui/link/init(destination:label:)
+public struct Link<L: View>: View {
+    public init(destination: URL, @ViewBuilder label: () -> L) {}
+    public var body: Never { fatalError() }
+}
 public struct ButtonRole: Sendable { public static let destructive = ButtonRole(), cancel = ButtonRole() }
 public struct Button<L: View>: View {
     public init(action: @escaping @MainActor () -> Void, @ViewBuilder label: () -> L) {}

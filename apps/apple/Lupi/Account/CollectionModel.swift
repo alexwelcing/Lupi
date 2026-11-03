@@ -179,7 +179,7 @@ final class CollectionModel {
             deleted = true
             notice = "Your Lupi account is deleted."
         } catch {
-            notice = "The deletion did not finish: \(error). Sign in with Apple again to finish it."
+            notice = "The deletion did not finish: \(error). Try deleting again to finish it."
         }
         if deleted && eraseDevice { await self.eraseDevice() }
         await refresh()

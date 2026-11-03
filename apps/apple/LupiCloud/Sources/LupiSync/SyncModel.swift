@@ -109,6 +109,9 @@ public struct SyncState<Payload: SyncPayload>: Codable, Sendable {
   public var cursors: [String: FirestoreTimestamp]
   /// Set while an account deletion is underway; sync stays off for it.
   public var deletingAccount: String?
+  /// Trophy deletion and Apple revocation are complete. Persisted before deleting
+  /// the Firebase user, so a cleared session can finish local cleanup after restart.
+  public var finalizingAccountDeletion: String?
 
   public init() {
     format = "lupi.sync-state.v1"
@@ -117,6 +120,7 @@ public struct SyncState<Payload: SyncPayload>: Codable, Sendable {
     outbox = []
     cursors = [:]
     deletingAccount = nil
+    finalizingAccountDeletion = nil
   }
 }
 

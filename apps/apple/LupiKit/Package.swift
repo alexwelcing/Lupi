@@ -17,7 +17,7 @@ let package = Package(
         .target(
             name: "LupiData",
             dependencies: ["LupiChem"],
-            resources: [.copy("Resources/starters"), .copy("Resources/known-molecules.json"), .copy("Resources/discovery.json")]
+            resources: [.copy("Resources/starters"), .copy("Resources/known-molecules.json"), .copy("Resources/discovery.json"), .copy("Resources/merchandise.json")]
         ),
         .testTarget(name: "LupiChemTests", dependencies: ["LupiChem"]),
         .testTarget(name: "LupiPlayTests", dependencies: ["LupiPlay", "LupiChem"]),

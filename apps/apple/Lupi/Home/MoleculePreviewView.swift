@@ -49,6 +49,7 @@ struct MoleculePreviewView: View {
                                 .foregroundStyle(.secondary)
                         }
                         provenance(data)
+                        MerchandiseLinkView(moleculeID: data.starter.id)
                         Button {
                             guard !playing else { return }
                             playing = true
