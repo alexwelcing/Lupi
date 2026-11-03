@@ -3,7 +3,6 @@
   "status": "draft-not-submitted",
   "locale": "en-US",
   "preparedOn": "2026-11-03",
-  "sourceCommit": "eca99a5e3b301944c4dce87fa789ddd22eafd4f3",
   "productIdentity": {
     "name": "Lupi",
     "bundleId": "live.lupi.app",
@@ -15,7 +14,7 @@
     "distributionNote": "App Store distribution territories and the submitted version/build must be recorded in App Store Connect. US physical shipping does not determine app distribution territories.",
     "initialReleaseAccountSignInEnabled": false,
     "initialReleaseCloudSyncEnabled": false,
-    "accountConfigurationNote": "Review copy targets the intended initial archive with blank account configuration. The parent release workflow must verify the actual distribution archive configuration."
+    "accountConfigurationNote": "The inspected build-3 archive has account configuration disabled. Recheck the actual binary selected for submission if it differs from this archive."
   },
   "fieldLimits": {
     "name": {
@@ -79,7 +78,7 @@
     },
     {
       "path": "apps/apple/LupiKit/Sources/LupiData/Resources/merchandise.json",
-      "supports": "Empty, closed default registry; no visible shop CTA"
+      "supports": "Empty, closed bundled fallback. It does not alone determine visible offers because the app also reads the remote feed."
     },
     {
       "path": "apps/apple/README.md",
@@ -92,6 +91,14 @@
     {
       "path": "apps/apple/project.yml",
       "supports": "Bundle identity, iOS 26 target and current source version/build settings"
+    },
+    {
+      "path": "apps/apple/LupiKit/Sources/LupiData/MerchandiseClient.swift",
+      "supports": "Anonymous fixed-endpoint remote feed read, bounded response, no cookie or credential storage and hidden fallback"
+    },
+    {
+      "path": "apps/apple/Lupi/Home/MerchandiseLinkView.swift",
+      "supports": "Remote registry-driven optional physical-goods link and expiry/foreground revalidation"
     }
   ],
   "appleSources": [
@@ -116,7 +123,7 @@
   ],
   "externalWrites": {
     "appStoreConnect": false,
-    "webDeployment": false,
+    "webDeployment": true,
     "messagesSent": false
   },
   "urlPublicationRequirements": [
@@ -124,17 +131,23 @@
       "field": "supportUrl",
       "url": "https://lupi.live/support/ios/",
       "sourcePath": "apps/web/public/support/ios/index.html",
-      "status": "source-ready-not-yet-public",
-      "publicContentVerified": false,
-      "acceptance": "Deploy the source page, then verify the public URL returns the native-app support title and actual authorized contact information rather than the generic SPA shell."
+      "status": "published-content-verified",
+      "publicContentVerified": true,
+      "acceptance": "Public native-app title, substantive committed content and authorized contact verified. Recheck the exact URL before submission and keep the policy aligned with the selected archive.",
+      "deploymentCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
+      "workflowRun": "41659688363",
+      "checkedAt": "2026-11-03T15:08:31.758193+00:00"
     },
     {
       "field": "privacyPolicyUrl",
       "url": "https://lupi.live/privacy/ios/",
       "sourcePath": "apps/web/public/privacy/ios/index.html",
-      "status": "source-ready-not-yet-public",
-      "publicContentVerified": false,
-      "acceptance": "Deploy the source policy, then verify its public native-app title and actual content. Confirm that the submitted archive has accounts disabled and matches the policy and App Store privacy labels."
+      "status": "published-content-verified",
+      "publicContentVerified": true,
+      "acceptance": "Public native-app title, substantive committed content and authorized contact verified. Recheck the exact URL before submission and keep the policy aligned with the selected archive.",
+      "deploymentCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
+      "workflowRun": "41659688363",
+      "checkedAt": "2026-11-03T15:08:31.758193+00:00"
     }
   ],
   "copyrightIdentityVerification": {
@@ -146,5 +159,39 @@
     "appleSellerLegalEntityConfirmed": false,
     "verificationNote": "Draft copyright follows the user company selection and the explicit Company field in the owner business document. This records the supporting source, not an incorporation-record audit or confirmation of the Apple seller legal entity.",
     "sourceBasis": "Owner-directed company copyright, checked against the Company field in an owner business record. Private document identifiers are retained only in local release receipts."
+  },
+  "behaviorEvidenceCommit": "eca99a5e3b301944c4dce87fa789ddd22eafd4f3",
+  "behaviorEvidenceNote": "Initial listing behavior evidence was collected at this commit. Archive and publication evidence below identify separate later outcomes.",
+  "archiveEvidence": {
+    "sourceCommit": "130df4a6c69ec0dd396e4331c524fccf8d99e9cb",
+    "marketingVersion": "0.1.0",
+    "buildNumber": "3",
+    "signingClass": "Development",
+    "uploadedToAppStoreConnect": false,
+    "appStoreDistributionSigningEstablished": false,
+    "evidenceOwner": "Coordinating native release workflow",
+    "note": "The inspected local archive is development-signed. It is not an uploaded or App Store distribution-signed build. The project default build number remains 2; the inspected archive used build 3."
+  },
+  "publicDeploymentEvidence": {
+    "sourceCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
+    "workflowRun": "41659688363",
+    "workflowUrl": "https://github.com/alexwelcing/Lupi/actions/runs/41659688363",
+    "verifiedAt": "2026-11-03T15:08:31.758193+00:00",
+    "receipt": ".verify-artifacts/app-store/public-pages-production-784b3e3.json",
+    "checks": {
+      "releaseTagMatches": true,
+      "productionWorkflowPassed": true,
+      "closedFeedByteExact": true,
+      "htmlCommittedContentMatches": true
+    },
+    "htmlComparisonNote": "Substantive committed content matches after removal of the two identified edge-injected script blocks; raw response bytes are not identical to source.",
+    "feed": {
+      "url": "https://lupi.live/commerce/merchandise.v1.json",
+      "contentType": "application/json",
+      "storefrontPublic": false,
+      "offers": [],
+      "recheckAtSubmission": true
+    },
+    "scope": "Public policy/support/feed publication only; no App Store Connect submission or every-client accessibility claim."
   }
 }

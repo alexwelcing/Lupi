@@ -1,0 +1,120 @@
+{
+  "schema": "lupi.app-store-privacy-answers.v1",
+  "status": "draft-not-submitted",
+  "locale": "en-US",
+  "preparedOn": "2026-11-03",
+  "sourceCommit": "130df4a6c69ec0dd396e4331c524fccf8d99e9cb",
+  "releaseConfiguration": {
+    "bundleId": "live.lupi.app",
+    "marketingVersion": "0.1.0",
+    "inspectedArchiveBuildNumber": "3",
+    "signingClass": "Development",
+    "accountSignInEnabled": false,
+    "cloudCollectionSyncEnabled": false,
+    "appStoreDistributionTerritories": null,
+    "scope": "Answers target the inspected account-disabled candidate; revalidate the actual binary selected for submission. Development signing does not establish App Store upload readiness."
+  },
+  "stagedAnswers": {
+    "collectsData": true,
+    "dataTypes": [
+      {
+        "appleType": "NSPrivacyCollectedDataTypeSearchHistory",
+        "label": "Search History",
+        "purposes": [
+          "App Functionality"
+        ],
+        "linkedToUser": true,
+        "usedForTracking": false
+      }
+    ],
+    "usesDataForTracking": false
+  },
+  "linkageAssessment": {
+    "classification": "conservative-linked-pending-operational-verification",
+    "sourceFacts": [
+      "Non-exact description text is sent as a POST body to the Lupi Cloudflare discovery endpoint and then to TypeSafe.",
+      "The discovery route has no application database write, cache write or console logging of the query.",
+      "The shared TypeSafe client constructs its own service-authentication headers and does not deliberately forward the app caller IP, cookies, account UID or device identifier.",
+      "Wrangler contains no explicit observability/logging configuration; this does not establish that live logging is disabled."
+    ],
+    "ipAndRawSearchBodyCoRetentionVerified": false,
+    "reasonForLinkedTrue": "The source does not establish all deployed hosting/provider de-identification and log-retention controls needed to attest to an unlinked answer. Linked=true is a conservative draft classification, not a claim that a retained IP-to-query join was observed.",
+    "unresolved": [
+      "Actual Workers observability, invocation logs, Logpush/Tail/export destinations and retention for the deployed route.",
+      "Any applicable WAF or other payload-logging configuration that could retain description text with request metadata.",
+      "The applicable TypeSafe account terms, retention settings and whether any end-user linkage exists beyond the service account."
+    ]
+  },
+  "retention": {
+    "zeroDataRetentionVerified": false,
+    "fixedQueryDeletionDeadline": null,
+    "providerPolicySummary": "TypeSafe states customer Input is not used to train models and describes purpose-based retention. Enterprise ZDR is an available option; no Lupi-specific ZDR agreement or fixed deletion SLA was verified.",
+    "importantDistinction": "No-training, no application query log and no-store response caching do not establish zero retention."
+  },
+  "notIncludedForThisRelease": [
+    {
+      "dataType": "User ID and Gameplay Content from account sync",
+      "reason": "Account sign-in and cloud collection sync are disabled in the inspected archive."
+    },
+    {
+      "dataType": "Photos, Environment Scanning and room location",
+      "reason": "Native room/camera data is processed and saved locally; no upload in the audited feature paths."
+    },
+    {
+      "dataType": "Payment Info and Purchase History",
+      "reason": "Physical checkout opens in an external browser; native app receives no card or shop-order payload."
+    },
+    {
+      "dataType": "Automatic diagnostics or native usage analytics",
+      "reason": "The audited native app has no automatic diagnostic or analytics uploader; copying a receipt does not send it to support."
+    }
+  ],
+  "additionalInfrastructureData": "Do not infer a Device ID, location or other data category merely from network IP processing. Classify any actually retained infrastructure data according to its verified use before final submission.",
+  "purposesNotSelected": [
+    "Third-Party Advertising",
+    "Developer Advertising or Marketing",
+    "Analytics",
+    "Product Personalization",
+    "Other Purposes"
+  ],
+  "privacyPolicy": {
+    "url": "https://lupi.live/privacy/ios/",
+    "publishedContentVerified": true,
+    "deploymentCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
+    "workflowRun": "41659688363",
+    "receipt": ".verify-artifacts/app-store/public-pages-production-784b3e3.json"
+  },
+  "sources": [
+    {
+      "title": "Apple App Privacy Details",
+      "url": "https://developer.apple.com/app-store/app-privacy-details/"
+    },
+    {
+      "title": "Cloudflare Workers Logs",
+      "url": "https://developers.cloudflare.com/workers/observability/logs/workers-logs/"
+    },
+    {
+      "title": "Cloudflare WAF AI Security logging modes",
+      "url": "https://developers.cloudflare.com/waf/detections/ai-security-for-apps/log-mode-vs-production-mode/"
+    },
+    {
+      "title": "TypeSafe Privacy Policy",
+      "url": "https://typesafe.ai/legal/privacy-policy"
+    },
+    {
+      "title": "TypeSafe Data Processing Addendum",
+      "url": "https://typesafe.ai/legal/data-processing"
+    },
+    {
+      "title": "TypeSafe Legal and enterprise ZDR option",
+      "url": "https://docs.typesafe.ai/legal"
+    }
+  ],
+  "appStoreConnectWrites": false,
+  "submissionConditions": [
+    "Confirm these answers against the actual upload binary, its bundled manifest and the applicable deployed route/provider settings.",
+    "Resolve operational linkage questions without asserting that an IP and raw search body were retained when that has not been observed.",
+    "Recheck policy/support URLs and the remote closed merchandise feed at submission.",
+    "Review and publish App Store privacy answers only through the authorized App Store Connect workflow."
+  ]
+}
