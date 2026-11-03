@@ -28,6 +28,7 @@ struct OnboardingView: View {
                 } label: {
                     Text(action)
                         .font(.headline)
+                        .foregroundStyle(Color.sage)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }

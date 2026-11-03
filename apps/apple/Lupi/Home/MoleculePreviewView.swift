@@ -58,6 +58,7 @@ struct MoleculePreviewView: View {
                         } label: {
                             Label("Play with \(data.starter.name)", systemImage: "arkit")
                                 .font(.headline)
+                                .foregroundStyle(Color.sage)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                         }
