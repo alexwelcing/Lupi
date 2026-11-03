@@ -73,9 +73,11 @@ struct CollectionView: View {
                 if collection.accountsEnabled {
                     Section {
                         LabeledContent("Account", value: accountLine(collection.status))
-                        if let notice = collection.notice {
-                            Text(notice).font(.footnote).foregroundStyle(.secondary)
-                        }
+                    }
+                }
+                if let notice = collection.notice {
+                    Section {
+                        Text(notice).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
             }

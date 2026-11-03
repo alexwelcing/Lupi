@@ -176,11 +176,16 @@ public struct MapSavePolicy: Sendable, Equatable {
         !mapping.isSavable && (dueAt.map { t >= $0 + Self.coachAfter } ?? false)
     }
 
-    public mutating func began() { saving = true }
+    /// Consume only the work this save began for. Pins and explicit save requests that
+    /// arrive while it is in flight create a new deadline, which its completion must keep.
+    public mutating func began() {
+        saving = true
+        dueAt = nil
+    }
 
     public mutating func finished(at t: Double, saved: Bool) {
         saving = false
-        dueAt = saved ? nil : t + Self.debounce
+        if !saved { dueAt = min(dueAt ?? (t + Self.debounce), t + Self.debounce) }
     }
 }
 

@@ -1,0 +1,262 @@
+{
+  "schema": "lupi.app-store-listing-provenance.v1",
+  "status": "saved-in-app-store-connect-not-submitted",
+  "locale": "en-US",
+  "preparedOn": "2026-11-03",
+  "productIdentity": {
+    "name": "Lupi: Molecules in AR",
+    "bundleId": "live.lupi.app",
+    "projectMarketingVersion": "0.1.0",
+    "projectBuildNumber": "4",
+    "appPrice": "Free",
+    "physicalMerchandiseDestination": "US",
+    "appStoreDistributionTerritories": [
+      "US"
+    ],
+    "distributionNote": "App Store Connect persistence was freshly verified: Availability shows one country, United States, Available on App Release; all other countries/regions are Not Available. This is a saved distribution configuration, not a public app release.",
+    "initialReleaseAccountSignInEnabled": false,
+    "initialReleaseCloudSyncEnabled": false,
+    "accountConfigurationNote": "The inspected build-3 archive has account configuration disabled. Recheck the actual binary selected for submission if it differs from this archive.",
+    "brandName": "Lupi",
+    "appStoreConnectAppId": "6830237119",
+    "requestedName": "Lupi",
+    "requestedNameAvailability": "unavailable-in-app-store-connect",
+    "appStoreVersion": "0.1.0"
+  },
+  "fieldLimits": {
+    "name": {
+      "minimumCharacters": 2,
+      "maximumCharacters": 30
+    },
+    "subtitle": {
+      "maximumCharacters": 30
+    },
+    "promotionalText": {
+      "maximumCharacters": 170
+    },
+    "description": {
+      "maximumCharacters": 4000
+    },
+    "keywords": {
+      "maximumUtf8Bytes": 100,
+      "minimumCharactersPerKeywordExclusive": 2
+    },
+    "reviewNotes": {
+      "maximumUtf8Bytes": 4000
+    }
+  },
+  "categoryDecision": {
+    "primary": "Entertainment",
+    "secondary": null,
+    "basis": "The current native experience is interactive molecular play and visual exploration. No educational outcomes, scientific accuracy, health effects or research capabilities are promised. A secondary category is optional and has not been selected."
+  },
+  "missingFields": [
+    {
+      "field": "marketingUrl",
+      "required": false,
+      "neededRoute": "https://lupi.live/app/",
+      "neededContent": "A public native iPhone/iPad app page describing the actual free app, compatibility and optional AR. Use actual approved screenshots and an App Store link only after the app record is confirmed.",
+      "verification": "On 2026-11-03 /app returned HTTP 200 generic Lupi web-app HTML. The root site is live, but native-app-specific marketing content was not verified."
+    }
+  ],
+  "submissionItemsOutsideListing": [
+    "Content-rights audit remains incomplete pending evidence for third-party scientific data and other distributed content.",
+    "The Search History privacy questionnaire is saved but unpublished pending the specific requested user confirmation of legal accuracy.",
+    "App Store export is waiting for owner authorization of macOS Keychain private-key use. Computer-use policy blocks SecurityAgent access.",
+    "No completed distribution export, App Store upload, passed App Store validation or review submission is claimed.",
+    "The complete required screenshot set for the selected submission has not been established in this checkpoint.",
+    "Physical-device AR, audio and haptics QA remains deferred by the owner and is not claimed passed."
+  ],
+  "behaviorEvidence": [
+    {
+      "path": "apps/apple/Lupi/Home/HomeView.swift",
+      "supports": "Home preview, discovery and collection entry points"
+    },
+    {
+      "path": "apps/apple/Lupi/Home/MoleculePreviewView.swift",
+      "supports": "Camera-free 3D orbit/recenter, formula, atom count, provenance and explicit Play handoff"
+    },
+    {
+      "path": "apps/apple/Lupi/Home/DiscoveryView.swift",
+      "supports": "Offline exact matching, optional online description matching and explicit submitted-text disclosure"
+    },
+    {
+      "path": "apps/apple/Lupi/Account/AccountView.swift",
+      "supports": "Optional Apple sign-in, collection sync and in-app deletion"
+    },
+    {
+      "path": "apps/apple/LupiKit/Sources/LupiData/Resources/merchandise.json",
+      "supports": "Empty, closed bundled fallback. It does not alone determine visible offers because the app also reads the remote feed."
+    },
+    {
+      "path": "apps/apple/README.md",
+      "supports": "Interaction controls, collection, room data, ARKit requirement and optional LiDAR"
+    },
+    {
+      "path": "docs/ar/us-dual-launch.md",
+      "supports": "Free native app, US physical goods, separated release gates and deferred physical-device acceptance"
+    },
+    {
+      "path": "apps/apple/project.yml",
+      "supports": "Bundle identity, iOS 26 target and current source version/build settings"
+    },
+    {
+      "path": "apps/apple/LupiKit/Sources/LupiData/MerchandiseClient.swift",
+      "supports": "Anonymous fixed-endpoint remote feed read, bounded response, no cookie or credential storage and hidden fallback"
+    },
+    {
+      "path": "apps/apple/Lupi/Home/MerchandiseLinkView.swift",
+      "supports": "Remote registry-driven optional physical-goods link and expiry/foreground revalidation"
+    }
+  ],
+  "appleSources": [
+    {
+      "title": "App information",
+      "url": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information/",
+      "verifiedOn": "2026-11-03",
+      "supports": "Name and subtitle limits; required privacy policy; bundle identity"
+    },
+    {
+      "title": "Platform version information",
+      "url": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/",
+      "verifiedOn": "2026-11-03",
+      "supports": "Promotional text, description, keyword byte and review-note byte limits; support URL, copyright and review contact requirements"
+    },
+    {
+      "title": "Choosing a category",
+      "url": "https://developer.apple.com/app-store/categories/",
+      "verifiedOn": "2026-11-03",
+      "supports": "Current Entertainment category and optional primary/secondary category selection"
+    }
+  ],
+  "externalWrites": {
+    "appStoreConnect": true,
+    "webDeployment": true,
+    "messagesSent": false
+  },
+  "urlPublicationRequirements": [
+    {
+      "field": "supportUrl",
+      "url": "https://lupi.live/support/ios/",
+      "sourcePath": "apps/web/public/support/ios/index.html",
+      "status": "published-content-verified",
+      "publicContentVerified": true,
+      "acceptance": "Public native-app title, substantive committed content and authorized contact verified. Recheck the exact URL before submission and keep the policy aligned with the selected archive.",
+      "deploymentCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
+      "workflowRun": "41659688363",
+      "checkedAt": "2026-11-03T15:08:31.758193+00:00"
+    },
+    {
+      "field": "privacyPolicyUrl",
+      "url": "https://lupi.live/privacy/ios/",
+      "sourcePath": "apps/web/public/privacy/ios/index.html",
+      "status": "published-content-verified",
+      "publicContentVerified": true,
+      "acceptance": "Public native-app title, substantive committed content and authorized contact verified. Recheck the exact URL before submission and keep the policy aligned with the selected archive.",
+      "deploymentCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
+      "workflowRun": "41659688363",
+      "checkedAt": "2026-11-03T15:08:31.758193+00:00"
+    }
+  ],
+  "copyrightIdentityVerification": {
+    "requestedOwnerType": "company legal name",
+    "draftValue": "2026 Lupine Science, Inc.",
+    "sourceCompanyName": "Lupine Science, Inc.",
+    "userDirection": "Use the company name for copyright rather than the founder personal name.",
+    "registeredNameVerified": false,
+    "appleSellerLegalEntityConfirmed": false,
+    "verificationNote": "Draft copyright follows the user company selection and the explicit Company field in the owner business document. This records the supporting source, not an incorporation-record audit or confirmation of the Apple seller legal entity.",
+    "sourceBasis": "Owner-directed company copyright, checked against the Company field in an owner business record. Private document identifiers are retained only in local release receipts."
+  },
+  "behaviorEvidenceCommit": "eca99a5e3b301944c4dce87fa789ddd22eafd4f3",
+  "behaviorEvidenceNote": "Initial listing behavior evidence was collected at this commit. Archive and publication evidence below identify separate later outcomes.",
+  "archiveEvidence": {
+    "sourceCommit": "130df4a6c69ec0dd396e4331c524fccf8d99e9cb",
+    "marketingVersion": "0.1.0",
+    "buildNumber": "3",
+    "signingClass": "Development",
+    "uploadedToAppStoreConnect": false,
+    "appStoreDistributionSigningEstablished": false,
+    "evidenceOwner": "Coordinating native release workflow",
+    "note": "Build3 remains a verified Development archive and pending signing exercise. The source now targets build4 with required data credits and procedural C60 provenance; regenerate the Xcode project and produce a fresh clean archive before upload. No SDK or distribution-acceptance result is claimed for these later source changes.",
+    "distributionMaterialsStatus": "A valid local distribution signing identity and exact-bundle App Store profile were created and installed; export has not completed.",
+    "exportStatus": "waiting-for-owner-keychain-private-key-authorization",
+    "freshArchiveRequired": true,
+    "nextSourceBuildNumber": "4",
+    "pendingSourceChanges": [
+      "Offline scientific data credits",
+      "Procedural C60 coordinates and explicit illustrative provenance"
+    ]
+  },
+  "publicDeploymentEvidence": {
+    "sourceCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
+    "workflowRun": "41659688363",
+    "workflowUrl": "https://github.com/alexwelcing/Lupi/actions/runs/41659688363",
+    "verifiedAt": "2026-11-03T15:08:31.758193+00:00",
+    "receipt": ".verify-artifacts/app-store/public-pages-production-784b3e3.json",
+    "checks": {
+      "releaseTagMatches": true,
+      "productionWorkflowPassed": true,
+      "closedFeedByteExact": true,
+      "htmlCommittedContentMatches": true
+    },
+    "htmlComparisonNote": "Substantive committed content matches after removal of the two identified edge-injected script blocks; raw response bytes are not identical to source.",
+    "feed": {
+      "url": "https://lupi.live/commerce/merchandise.v1.json",
+      "contentType": "application/json",
+      "storefrontPublic": false,
+      "offers": [],
+      "recheckAtSubmission": true
+    },
+    "scope": "Public policy/support/feed publication only; no App Store Connect submission or every-client accessibility claim."
+  },
+  "updatedOn": "2026-11-03",
+  "appStoreConnectEvidence": {
+    "verifiedOn": "2026-11-03",
+    "evidenceOwner": "Coordinating release workflow; fresh App Store Connect UI readback",
+    "appId": "6830237119",
+    "savedName": "Lupi: Molecules in AR",
+    "version": "0.1.0",
+    "metadataSaved": [
+      "name",
+      "subtitle",
+      "categoryPrimary",
+      "promotionalText",
+      "description",
+      "keywords",
+      "copyright",
+      "supportUrl",
+      "privacyPolicyUrl",
+      "reviewNotes",
+      "reviewContact"
+    ],
+    "reviewContactDetailsInRepository": false,
+    "signInRequired": false,
+    "releaseMode": "manual",
+    "freePriceUsd": "0.00",
+    "priceConfirmed": true,
+    "availability": {
+      "countries": [
+        "US"
+      ],
+      "persistedSelectionVerified": true,
+      "unitedStatesState": "Available on App Release",
+      "allOtherCountriesAndRegions": "Not Available",
+      "publicReleaseOccurred": false
+    },
+    "appleSiliconMacAvailability": false,
+    "appleVisionAvailability": false,
+    "macAndVisionExclusionsSaved": true,
+    "ageRatingSaved": true,
+    "ageRating": "13+",
+    "ageRatingOverride": false,
+    "privacyQuestionnaireSaved": true,
+    "privacyQuestionnairePublished": false,
+    "privacyPublishGate": "Specific user confirmation of the legal accuracy of the staged data-handling answers remains pending.",
+    "contentRights": {
+      "containsThirdPartyContent": true,
+      "necessaryRightsDeclarationSaved": true,
+      "finalArchiveCondition": "Include offline scientific data credits and original procedural C60 geometry from the build4 source candidate; do not upload the earlier build3 archive as final."
+    }
+  }
+}

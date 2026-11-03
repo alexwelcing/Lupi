@@ -574,10 +574,10 @@
       "#444444"
     ],
     "metadata": {
-      "method": "Theoretical Geometry",
-      "potential": "DFT Optimized",
-      "temperature": "0 K",
-      "reference": "Nobel Prize in Chemistry 1996."
+      "method": "Procedural regular truncated icosahedron",
+      "potential": "Illustrative model; uniform C-C edges 1.42 Å; not DFT or a source conformer",
+      "temperature": "Not applicable",
+      "reference": "Lupi geometric construction. PubChem CID 123591 identifies the compound, not these illustrative coordinates."
     },
     "featured": true
   },

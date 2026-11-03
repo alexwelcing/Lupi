@@ -1,0 +1,22 @@
+{
+  "schema": "lupi.app-store-age-rating-answers.v1",
+  "status": "saved-in-app-store-connect",
+  "locale": "en-US",
+  "verifiedOn": "2026-11-03",
+  "appId": "6830237119",
+  "appName": "Lupi: Molecules in AR",
+  "version": "0.1.0",
+  "computedAppleAgeRating": "13+",
+  "overrideSelected": false,
+  "contentAnswers": {
+    "alcoholTobaccoOrDrugUseOrReferences": "Infrequent",
+    "allOtherContentCategories": "None"
+  },
+  "featureAnswers": {
+    "allFeatures": "No"
+  },
+  "classificationReason": "Conservative answer for neutral ethanol and other known compound names. This records references, not promotion or depiction of substance use.",
+  "verificationOwner": "Coordinating release workflow; saved Apple questionnaire and computed rating readback",
+  "regionalRatingsIndividuallyAudited": false,
+  "note": "13+ is the observed Apple rating for the saved answers. No manual override or educational, medical or health claim is made."
+}

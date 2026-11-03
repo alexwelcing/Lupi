@@ -19,6 +19,7 @@ final class ARHost {
     /// Thin static boxes on detected planes, only without LiDAR.
     let planeArena = Entity()
     private var planeColliders: [UUID: ModelEntity] = [:]
+    private var addedAnchors: [UUID: ARAnchor] = [:]
     private var lastPlaneUpdate: TimeInterval = 0
     private(set) var floorY: Double?
     private(set) var unavailable: String?
@@ -59,6 +60,7 @@ final class ARHost {
     /// Runs the session through RealityKit, so RealityView renders our ARSession's camera and
     /// scene understanding uses its mesh (`run(_:session:arConfiguration:)`, iOS 18).
     func start(worldMap: ARWorldMap? = nil) async {
+        unavailable = nil
         #if targetEnvironment(simulator)
         // The Simulator SDK omits the overload that takes an owned ARSession.
         // Home and Collection can run there; room tracking needs a device camera.
@@ -152,18 +154,20 @@ final class ARHost {
     /// goes through `SpatialTrackingSession`; whether RealityView keeps drawing after a direct
     /// re-run like this is part of spike A1.
     func rerun(worldMap: ARWorldMap?) {
+        addedAnchors.removeAll()
         session.run(configuration(worldMap: worldMap), options: [.resetTracking, .removeExistingAnchors])
     }
 
     /// Adds an anchor at a pose; returns its identifier.
     func addAnchor(named name: String, at pose: RigidD) -> UUID {
         let anchor = ARAnchor(name: name, transform: pose.transform.matrix)
+        addedAnchors[anchor.identifier] = anchor
         session.add(anchor: anchor)
         return anchor.identifier
     }
 
     func removeAnchor(_ id: UUID) {
-        guard let anchor = session.currentFrame?.anchors.first(where: { $0.identifier == id }) else { return }
+        guard let anchor = addedAnchors.removeValue(forKey: id) ?? session.currentFrame?.anchors.first(where: { $0.identifier == id }) else { return }
         session.remove(anchor: anchor)
     }
 

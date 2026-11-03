@@ -85,7 +85,8 @@
       "atoms": 60,
       "file": "c60_buckyball.xyz",
       "source": "apps/web/public/gallery/curated/c60_buckyball.xyz",
-      "sha256": "f7104d40f36a18846debc93e154dc63c9a5d9f2b9c0ff1f8ead4cd31eea9b0f8"
+      "geometry": "Lupi procedural regular truncated icosahedron; uniform C-C 1.420 A; illustrative model, not DFT or a source conformer",
+      "sha256": "52670574df133d253f86332bea3af1d7de046c4ed41ae9e59dd59c91f1b97df7"
     },
     {
       "id": "glucose",

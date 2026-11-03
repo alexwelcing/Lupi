@@ -81,6 +81,11 @@ public struct Image: View {
 }
 extension View { public func scaledToFill() -> some View { self } }
 public struct Label: View { public init(_ title: String, systemImage: String) {}; public var body: Never { fatalError() } }
+// https://developer.apple.com/documentation/swiftui/link/init(destination:label:)
+public struct Link<L: View>: View {
+    public init(destination: URL, @ViewBuilder label: () -> L) {}
+    public var body: Never { fatalError() }
+}
 public struct ButtonRole: Sendable { public static let destructive = ButtonRole(), cancel = ButtonRole() }
 public struct Button<L: View>: View {
     public init(action: @escaping @MainActor () -> Void, @ViewBuilder label: () -> L) {}
@@ -220,9 +225,12 @@ extension View {
     public func navigationTitle(_ s: String) -> some View { self }
     public func navigationBarTitleDisplayMode(_ m: NavigationBarItem.TitleDisplayMode) -> some View { self }
     public func tag<V: Hashable>(_ v: V) -> some View { self }
+    // Apple SDK: View.id and View.sheet(item:onDismiss:content:).
+    public nonisolated func id<ID: Hashable>(_ id: ID) -> some View { self }
     public func toolbar<C: View>(@ViewBuilder content: () -> C) -> some View { self }
     public func environment<T: AnyObject & Observable>(_ object: T?) -> some View { self }
     public func sheet<C: View>(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> C) -> some View { self }
+    public nonisolated func sheet<Item: Identifiable, C: View>(item: Binding<Item?>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping (Item) -> C) -> some View { self }
     public func fullScreenCover<C: View>(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> C) -> some View { self }
     public func alert<A: View>(_ title: String, isPresented: Binding<Bool>, @ViewBuilder actions: () -> A) -> some View { self }
     public func confirmationDialog<A: View>(_ title: String, isPresented: Binding<Bool>, titleVisibility: Visibility = .automatic, @ViewBuilder actions: () -> A) -> some View { self }

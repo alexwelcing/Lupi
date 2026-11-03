@@ -68,7 +68,13 @@ brew install xcodegen
 cd apps/apple && xcodegen generate && open Lupi.xcodeproj
 ```
 
-Nothing has been compiled against Apple's SDK or run on a device yet.
+The baseline app has passed unsigned device and Simulator SDK builds and a
+signed development build on the owner's Mac. Physical-device installation and
+AR behavior remain unverified. The combined preview/durability iteration is
+tracked in [PR #132](https://github.com/alexwelcing/Lupi/pull/132); its final
+Mac and device acceptance is still outstanding. See
+[the current handoff](docs/ar/status.md#current-handoff-2026-10-29) before
+choosing a source revision to build.
 [apps/apple/README.md](apps/apple/README.md) is the how-to,
 [docs/ar/status.md](docs/ar/status.md) the owner's checklist, and AGENTS.md,
 "Native Apple app", the summary for agents.

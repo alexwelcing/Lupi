@@ -16,7 +16,7 @@ struct AccountSections: View {
         Section {
             switch collection.status {
             case .unavailable:
-                Text("This build has no Lupi account configured. Your collection stays on this device.")
+                Text("Your collection is saved on this device.")
                     .foregroundStyle(.secondary)
             case .signedOut:
                 SignInWithAppleButton(.signIn) { request in
@@ -45,14 +45,18 @@ struct AccountSections: View {
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Lupi account")
+            Text(collection.accountsEnabled ? "Lupi account" : "Your collection")
         } footer: {
-            Text("Signed in, your collection follows you to your other iPhone or iPad. Rooms and shelves never leave this device.")
+            Text(collection.accountsEnabled
+                ? "Signed in, your collection follows you to your other iPhone or iPad. Rooms and shelves never leave this device."
+                : "Your trophies, rooms and shelves stay on this device.")
         }
         Section {
             Button("Erase this device's collection", role: .destructive) { confirmingErase = true }
         } footer: {
-            Text("Removes every trophy, room and shelf from this device. Trophies on your Lupi account stay there.")
+            Text(collection.accountsEnabled
+                ? "Removes every trophy, room and shelf from this device. Trophies on your Lupi account stay there."
+                : "Removes every trophy, room and shelf from this device.")
         }
         .confirmationDialog("Erase this device's collection?", isPresented: $confirmingErase, titleVisibility: .visible) {
             Button("Erase", role: .destructive) { Task { await collection.eraseDevice() } }

@@ -6,6 +6,9 @@ import UIKit
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @State private var copiedBuild = false
+    @State private var copiedSession = false
+    @State private var showingDataCredits = false
 
     var body: some View {
         @Bindable var model = app
@@ -52,7 +55,37 @@ struct SettingsView: View {
                 }
                 AccountSections()
                 Section {
-                    LabeledContent("Version", value: Self.version)
+                    Link(destination: URL(string: "https://lupi.live/support/ios/")!) {
+                        Label("Lupi support", systemImage: "questionmark.circle")
+                    }
+                    Link(destination: URL(string: "https://lupi.live/privacy/ios/")!) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                    }
+                    Button {
+                        showingDataCredits = true
+                    } label: {
+                        Label("Molecule data credits", systemImage: "books.vertical")
+                    }
+                } header: {
+                    Text("Help and privacy")
+                }
+                Section {
+                    LabeledContent("Version", value: BuildIdentity.current.versionLabel)
+                    LabeledContent("Revision", value: BuildIdentity.current.revisionLabel)
+                    Button(copiedBuild ? "Build diagnostics copied" : "Copy build diagnostics") {
+                        UIPasteboard.general.string = BuildIdentity.current.diagnosticText
+                        copiedBuild = true
+                    }
+                    if let receipt = app.lastSessionReceiptJSON {
+                        Button(copiedSession ? "Last session receipt copied" : "Copy last session receipt (JSON)") {
+                            UIPasteboard.general.string = receipt
+                            copiedSession = true
+                        }
+                    }
+                } header: {
+                    Text("This build")
+                } footer: {
+                    Text("Copies the version, source revision and build time. A completed session receipt is available until Lupi closes. Account details and room data stay out of the report.")
                 }
             }
             .navigationTitle("Settings")
@@ -62,13 +95,13 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showingDataCredits) {
+                DataCreditsView()
+            }
         }
     }
 
     static var version: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(short) (\(build))"
+        BuildIdentity.current.versionLabel
     }
 }
