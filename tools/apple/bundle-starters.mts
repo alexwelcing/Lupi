@@ -86,7 +86,10 @@ const STARTERS: StarterSpec[] = [
   { id: 'ethanol', name: 'Ethanol', gallery: 'popular/ethanol.xyz' },
   { id: 'benzene', name: 'Benzene', gallery: 'popular/benzene.xyz' },
   { id: 'caffeine', name: 'Caffeine', gallery: 'popular/caffeine.xyz' },
-  { id: 'c60_buckyball', name: 'Buckminsterfullerene', gallery: 'c60_buckyball.xyz' },
+  {
+    id: 'c60_buckyball', name: 'Buckminsterfullerene', gallery: 'c60_buckyball.xyz',
+    geometry: 'Lupi procedural regular truncated icosahedron; uniform C-C 1.420 A; illustrative model, not DFT or a source conformer',
+  },
   { id: 'glucose', name: 'Glucose', gallery: 'popular/glucose.xyz' },
   { id: 'salt_cluster', name: 'Salt cluster', atoms: saltCube(), geometry: 'rock-salt Na4Cl4, Na-Cl 2.820 A (a = 5.640 A)' },
   { id: 'tryptophan', name: 'Tryptophan', gallery: 'popular/tryptophan.xyz' },

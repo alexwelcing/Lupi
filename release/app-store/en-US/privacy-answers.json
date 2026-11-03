@@ -1,6 +1,6 @@
 {
   "schema": "lupi.app-store-privacy-answers.v1",
-  "status": "draft-not-submitted",
+  "status": "saved-in-app-store-connect-unpublished",
   "locale": "en-US",
   "preparedOn": "2026-11-03",
   "sourceCommit": "130df4a6c69ec0dd396e4331c524fccf8d99e9cb",
@@ -11,8 +11,13 @@
     "signingClass": "Development",
     "accountSignInEnabled": false,
     "cloudCollectionSyncEnabled": false,
-    "appStoreDistributionTerritories": null,
-    "scope": "Answers target the inspected account-disabled candidate; revalidate the actual binary selected for submission. Development signing does not establish App Store upload readiness."
+    "appStoreDistributionTerritories": [
+      "US"
+    ],
+    "scope": "Answers target the inspected account-disabled candidate; revalidate the actual binary selected for submission. Development signing does not establish App Store upload readiness.",
+    "availabilitySelectionVerified": true,
+    "nextSourceBuildNumber": "4",
+    "freshArchiveRequired": true
   },
   "stagedAnswers": {
     "collectsData": true,
@@ -110,11 +115,25 @@
       "url": "https://docs.typesafe.ai/legal"
     }
   ],
-  "appStoreConnectWrites": false,
+  "appStoreConnectWrites": true,
   "submissionConditions": [
     "Confirm these answers against the actual upload binary, its bundled manifest and the applicable deployed route/provider settings.",
     "Resolve operational linkage questions without asserting that an IP and raw search body were retained when that has not been observed.",
     "Recheck policy/support URLs and the remote closed merchandise feed at submission.",
     "Review and publish App Store privacy answers only through the authorized App Store Connect workflow."
-  ]
+  ],
+  "updatedOn": "2026-11-03",
+  "appStoreConnectState": {
+    "appId": "6830237119",
+    "version": "0.1.0",
+    "policyUrlSaved": true,
+    "questionnaireSaved": true,
+    "published": false,
+    "savedDataType": "Search History",
+    "savedPurpose": "App Functionality",
+    "linkedToUser": true,
+    "usedForTracking": false,
+    "publicationGate": "Awaiting the specific requested user confirmation that these answers accurately represent the app and applicable provider data handling.",
+    "verificationOwner": "Coordinating release workflow; saved questionnaire readback"
+  }
 }

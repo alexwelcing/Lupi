@@ -1,20 +1,27 @@
 {
   "schema": "lupi.app-store-listing-provenance.v1",
-  "status": "draft-not-submitted",
+  "status": "saved-in-app-store-connect-not-submitted",
   "locale": "en-US",
   "preparedOn": "2026-11-03",
   "productIdentity": {
-    "name": "Lupi",
+    "name": "Lupi: Molecules in AR",
     "bundleId": "live.lupi.app",
     "projectMarketingVersion": "0.1.0",
-    "projectBuildNumber": "2",
+    "projectBuildNumber": "4",
     "appPrice": "Free",
     "physicalMerchandiseDestination": "US",
-    "appStoreDistributionTerritories": null,
-    "distributionNote": "App Store distribution territories and the submitted version/build must be recorded in App Store Connect. US physical shipping does not determine app distribution territories.",
+    "appStoreDistributionTerritories": [
+      "US"
+    ],
+    "distributionNote": "App Store Connect persistence was freshly verified: Availability shows one country, United States, Available on App Release; all other countries/regions are Not Available. This is a saved distribution configuration, not a public app release.",
     "initialReleaseAccountSignInEnabled": false,
     "initialReleaseCloudSyncEnabled": false,
-    "accountConfigurationNote": "The inspected build-3 archive has account configuration disabled. Recheck the actual binary selected for submission if it differs from this archive."
+    "accountConfigurationNote": "The inspected build-3 archive has account configuration disabled. Recheck the actual binary selected for submission if it differs from this archive.",
+    "brandName": "Lupi",
+    "appStoreConnectAppId": "6830237119",
+    "requestedName": "Lupi",
+    "requestedNameAvailability": "unavailable-in-app-store-connect",
+    "appStoreVersion": "0.1.0"
   },
   "fieldLimits": {
     "name": {
@@ -53,11 +60,12 @@
     }
   ],
   "submissionItemsOutsideListing": [
-    "Actual review contact name, email and international-format telephone number, provided through the authorized App Store Connect account.",
-    "Name availability, app record, version/build selection, free pricing and app distribution territories.",
-    "Screenshots from the submitted app, age-rating answers and content-rights declarations.",
-    "Privacy labels and any optional account-service configuration must match the submitted binary.",
-    "Physical-device AR, audio and haptics QA remains outstanding; no physical-device acceptance is claimed by these drafts."
+    "Content-rights audit remains incomplete pending evidence for third-party scientific data and other distributed content.",
+    "The Search History privacy questionnaire is saved but unpublished pending the specific requested user confirmation of legal accuracy.",
+    "App Store export is waiting for owner authorization of macOS Keychain private-key use. Computer-use policy blocks SecurityAgent access.",
+    "No completed distribution export, App Store upload, passed App Store validation or review submission is claimed.",
+    "The complete required screenshot set for the selected submission has not been established in this checkpoint.",
+    "Physical-device AR, audio and haptics QA remains deferred by the owner and is not claimed passed."
   ],
   "behaviorEvidence": [
     {
@@ -122,7 +130,7 @@
     }
   ],
   "externalWrites": {
-    "appStoreConnect": false,
+    "appStoreConnect": true,
     "webDeployment": true,
     "messagesSent": false
   },
@@ -170,7 +178,15 @@
     "uploadedToAppStoreConnect": false,
     "appStoreDistributionSigningEstablished": false,
     "evidenceOwner": "Coordinating native release workflow",
-    "note": "The inspected local archive is development-signed. It is not an uploaded or App Store distribution-signed build. The project default build number remains 2; the inspected archive used build 3."
+    "note": "Build3 remains a verified Development archive and pending signing exercise. The source now targets build4 with required data credits and procedural C60 provenance; regenerate the Xcode project and produce a fresh clean archive before upload. No SDK or distribution-acceptance result is claimed for these later source changes.",
+    "distributionMaterialsStatus": "A valid local distribution signing identity and exact-bundle App Store profile were created and installed; export has not completed.",
+    "exportStatus": "waiting-for-owner-keychain-private-key-authorization",
+    "freshArchiveRequired": true,
+    "nextSourceBuildNumber": "4",
+    "pendingSourceChanges": [
+      "Offline scientific data credits",
+      "Procedural C60 coordinates and explicit illustrative provenance"
+    ]
   },
   "publicDeploymentEvidence": {
     "sourceCommit": "784b3e3aa6530c4ab89f75422363928e84761e37",
@@ -193,5 +209,54 @@
       "recheckAtSubmission": true
     },
     "scope": "Public policy/support/feed publication only; no App Store Connect submission or every-client accessibility claim."
+  },
+  "updatedOn": "2026-11-03",
+  "appStoreConnectEvidence": {
+    "verifiedOn": "2026-11-03",
+    "evidenceOwner": "Coordinating release workflow; fresh App Store Connect UI readback",
+    "appId": "6830237119",
+    "savedName": "Lupi: Molecules in AR",
+    "version": "0.1.0",
+    "metadataSaved": [
+      "name",
+      "subtitle",
+      "categoryPrimary",
+      "promotionalText",
+      "description",
+      "keywords",
+      "copyright",
+      "supportUrl",
+      "privacyPolicyUrl",
+      "reviewNotes",
+      "reviewContact"
+    ],
+    "reviewContactDetailsInRepository": false,
+    "signInRequired": false,
+    "releaseMode": "manual",
+    "freePriceUsd": "0.00",
+    "priceConfirmed": true,
+    "availability": {
+      "countries": [
+        "US"
+      ],
+      "persistedSelectionVerified": true,
+      "unitedStatesState": "Available on App Release",
+      "allOtherCountriesAndRegions": "Not Available",
+      "publicReleaseOccurred": false
+    },
+    "appleSiliconMacAvailability": false,
+    "appleVisionAvailability": false,
+    "macAndVisionExclusionsSaved": true,
+    "ageRatingSaved": true,
+    "ageRating": "13+",
+    "ageRatingOverride": false,
+    "privacyQuestionnaireSaved": true,
+    "privacyQuestionnairePublished": false,
+    "privacyPublishGate": "Specific user confirmation of the legal accuracy of the staged data-handling answers remains pending.",
+    "contentRights": {
+      "containsThirdPartyContent": true,
+      "necessaryRightsDeclarationSaved": true,
+      "finalArchiveCondition": "Include offline scientific data credits and original procedural C60 geometry from the build4 source candidate; do not upload the earlier build3 archive as final."
+    }
   }
 }

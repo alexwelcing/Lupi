@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var copiedBuild = false
     @State private var copiedSession = false
+    @State private var showingDataCredits = false
 
     var body: some View {
         @Bindable var model = app
@@ -60,6 +61,11 @@ struct SettingsView: View {
                     Link(destination: URL(string: "https://lupi.live/privacy/ios/")!) {
                         Label("Privacy Policy", systemImage: "hand.raised")
                     }
+                    Button {
+                        showingDataCredits = true
+                    } label: {
+                        Label("Molecule data credits", systemImage: "books.vertical")
+                    }
                 } header: {
                     Text("Help and privacy")
                 }
@@ -88,6 +94,9 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showingDataCredits) {
+                DataCreditsView()
             }
         }
     }

@@ -10,11 +10,11 @@
       "atoms": 60,
       "file": "/gallery/curated/c60_buckyball.xyz",
       "pose": [
-        0.29175,
-        0.31077
+        0.36486,
+        0
       ],
-      "inkRadius": 3.858,
-      "fit": 6.31916
+      "inkRadius": 3.861,
+      "fit": 6.34865
     },
     {
       "id": "caffeine",
