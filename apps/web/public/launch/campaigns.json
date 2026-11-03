@@ -1,0 +1,70 @@
+{
+  "schema": "lupi.launch.v1",
+  "app": {
+    "id": "6830237119",
+    "public": false,
+    "campaignProviderToken": null
+  },
+  "campaigns": [
+    {
+      "id": "us26-caffeine-01",
+      "slug": "caffeine",
+      "moleculeId": "caffeine",
+      "name": "Caffeine",
+      "formula": "C8H10N4O2",
+      "atoms": 24,
+      "headline": "Your first cup. A closer look.",
+      "body": "A familiar ritual, seen molecule by molecule. Explore caffeine in Lupi. Physical merchandise is optional.",
+      "moleculePath": "/m/caffeine",
+      "stage": "first-drop-candidate",
+      "heroImage": "/launch/assets/caffeine-app.png",
+      "heroAlt": "Caffeine in Lupi's native molecule preview, captured from the app.",
+      "placements": [
+        { "id": "youtube-orbit-a", "source": "youtube", "medium": "paid-video", "creativeId": "youtube-orbit-a", "appStoreToken": "us26-caf-yt-orbit-a" },
+        { "id": "reddit-detail-a", "source": "reddit", "medium": "paid-social", "creativeId": "reddit-detail-a", "appStoreToken": "us26-caf-reddit-detail-a" },
+        { "id": "instagram-carousel-a", "source": "instagram", "medium": "paid-social", "creativeId": "instagram-carousel-a", "appStoreToken": "us26-caf-ig-carousel-a" },
+        { "id": "creator-cr01-a", "source": "creator-cr01", "medium": "creator", "creativeId": "creator-cr01-a", "appStoreToken": "us26-caf-creator-cr01-a" }
+      ]
+    },
+    {
+      "id": "us26-water-01",
+      "slug": "water",
+      "moleculeId": "water",
+      "name": "Water",
+      "formula": "H2O",
+      "atoms": 3,
+      "headline": "Something ordinary. Look again.",
+      "body": "Two hydrogens. One oxygen. Three atoms to explore.",
+      "moleculePath": "/m/water",
+      "stage": "next-drop-candidate",
+      "heroImage": "/learn/water.svg",
+      "heroAlt": "Static molecular drawing of water with one oxygen and two hydrogens.",
+      "placements": [
+        { "id": "youtube-orbit-a", "source": "youtube", "medium": "paid-video", "creativeId": "youtube-orbit-a", "appStoreToken": "us26-water-yt-orbit-a" },
+        { "id": "reddit-detail-a", "source": "reddit", "medium": "paid-social", "creativeId": "reddit-detail-a", "appStoreToken": "us26-water-reddit-detail-a" },
+        { "id": "instagram-carousel-a", "source": "instagram", "medium": "paid-social", "creativeId": "instagram-carousel-a", "appStoreToken": "us26-water-ig-carousel-a" },
+        { "id": "creator-cr01-a", "source": "creator-cr01", "medium": "creator", "creativeId": "creator-cr01-a", "appStoreToken": "us26-water-creator-cr01-a" }
+      ]
+    },
+    {
+      "id": "us26-c60-01",
+      "slug": "c60",
+      "moleculeId": "c60_buckyball",
+      "name": "C60",
+      "formula": "C60",
+      "atoms": 60,
+      "headline": "Sixty atoms. One remarkable shape.",
+      "body": "Turn a carbon cage around in Lupi. Find the pentagons and hexagons. Illustrative geometric model.",
+      "moleculePath": "/m/c60_buckyball",
+      "stage": "exploration",
+      "heroImage": "/launch/assets/c60-app.png",
+      "heroAlt": "C60's illustrative geometric model in Lupi's native molecule preview, captured from the app.",
+      "placements": [
+        { "id": "youtube-orbit-a", "source": "youtube", "medium": "paid-video", "creativeId": "youtube-orbit-a", "appStoreToken": "us26-c60-yt-orbit-a" },
+        { "id": "reddit-detail-a", "source": "reddit", "medium": "paid-social", "creativeId": "reddit-detail-a", "appStoreToken": "us26-c60-reddit-detail-a" },
+        { "id": "instagram-carousel-a", "source": "instagram", "medium": "paid-social", "creativeId": "instagram-carousel-a", "appStoreToken": "us26-c60-ig-carousel-a" },
+        { "id": "creator-cr01-a", "source": "creator-cr01", "medium": "creator", "creativeId": "creator-cr01-a", "appStoreToken": "us26-c60-creator-cr01-a" }
+      ]
+    }
+  ]
+}

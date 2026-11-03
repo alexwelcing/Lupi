@@ -1,3 +1,4 @@
+import { handleLaunchRequest } from './launch';
 import externalAssetPathConfig from '../../web/cloudflare-assets-exclude.json';
 import {
   MAX_INLINE_BYTES_V1,
@@ -698,6 +699,9 @@ export async function handleRequest(
 
   // First-party anonymous analytics owns its narrow origin/method policy.
   if (url.pathname === AUDIENCE_SCRIPT_PATH || url.pathname === AUDIENCE_EVENTS_PATH) return handleAudienceRequest(request, env);
+
+  const launch = await handleLaunchRequest(request, env.WEB_ASSETS);
+  if (launch) return launch;
 
   // The public ChatGPT plugin owns its transport and CORS policy independently
   // from the authenticated legacy viewer control plane.
