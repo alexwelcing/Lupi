@@ -20,7 +20,7 @@
     "deploy": "pnpm --filter @atlas/web build && npx -y wrangler@4.110.0 deploy",
     "deploy:worker": "npx -y wrangler@4.110.0 deploy",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "node --test tests/launch.node.mjs && vitest run"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

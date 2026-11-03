@@ -1,0 +1,92 @@
+{%- liquid
+  assign matching_products = 0
+  assign companion_path = ''
+  assign companion_block = nil
+
+  if request.page_type == 'product' and product != blank
+    for block in section.blocks
+      if block.type == 'product_molecule' and block.settings.product != blank
+        if block.settings.product.id == product.id
+          assign matching_products = matching_products | plus: 1
+          assign companion_block = block
+          assign companion_path = ''
+          case block.settings.molecule
+            when 'caffeine'
+              assign companion_path = '/launch/caffeine/'
+            when 'water'
+              assign companion_path = '/launch/water/'
+            when 'c60_buckyball'
+              assign companion_path = '/launch/c60/'
+          endcase
+        endif
+      endif
+    endfor
+  endif
+-%}
+
+{%- if matching_products == 1 and companion_path != blank -%}
+  <aside class="lupi-molecule-companion" aria-labelledby="LupiCompanionTitle-{{ section.id | escape }}" {{ companion_block.shopify_attributes }}>
+    <div class="lupi-molecule-companion__content">
+      <p class="lupi-molecule-companion__eyebrow">Lupi</p>
+      <h2 id="LupiCompanionTitle-{{ section.id | escape }}">Meet the molecule</h2>
+      <p>Explore molecules in Lupi, a free molecular sandbox. The app is optional.</p>
+      <a class="lupi-molecule-companion__link" href="https://lupi.live{{ companion_path }}" rel="noreferrer">Explore this molecule in Lupi <span aria-hidden="true">↗</span></a>
+    </div>
+  </aside>
+{%- endif -%}
+
+{% stylesheet %}
+  .lupi-molecule-companion {
+    margin: 1.5rem auto;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    max-width: 72rem;
+    border: 1px solid #d8ded1;
+    border-radius: 0.75rem;
+    background: #f5f4ec;
+    color: #173e36;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .lupi-molecule-companion__content { max-width: 40rem; }
+  .lupi-molecule-companion__eyebrow { margin: 0 0 0.5rem; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .lupi-molecule-companion h2 { margin: 0 0 0.75rem; color: inherit; font: inherit; font-size: clamp(1.25rem, 2vw, 1.5rem); font-weight: 600; }
+  .lupi-molecule-companion p { line-height: 1.6; }
+  .lupi-molecule-companion__link { display: inline-block; padding: 0.65rem 0; color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 0.25em; }
+  .lupi-molecule-companion__link:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 2px; }
+{% endstylesheet %}
+
+{% schema %}
+{
+  "name": "Lupi molecule companion",
+  "limit": 1,
+  "enabled_on": { "templates": ["product"] },
+  "max_blocks": 20,
+  "blocks": [
+    {
+      "type": "product_molecule",
+      "name": "Product mapping",
+      "settings": [
+        {
+          "type": "product",
+          "id": "product",
+          "label": "Exact reviewed product",
+          "info": "Choose the reviewed product. Product names and tags are not used."
+        },
+        {
+          "type": "select",
+          "id": "molecule",
+          "label": "Reviewed molecule",
+          "default": "none",
+          "options": [
+            { "value": "none", "label": "No mapping (hidden)" },
+            { "value": "caffeine", "label": "Caffeine" },
+            { "value": "water", "label": "Water" },
+            { "value": "c60_buckyball", "label": "Buckminsterfullerene (C60)" }
+          ]
+        }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Lupi molecule companion" }]
+}
+{% endschema %}
