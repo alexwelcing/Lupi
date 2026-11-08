@@ -5,6 +5,17 @@ import LupiScale
 import LupiScaleCore
 
 extension PlaySession {
+    /// Background and exit cancel the hand rather than interpreting its last movement as a
+    /// throw. Bodies and queued spawns remain; only Clear removes them.
+    public mutating func endInteractions() {
+        let now = time ?? 0
+        endPinch(now: now)
+        endGrab(now: now, cancelled: true)
+        endFly()
+        arbiter.reset()
+        magnet = nil
+    }
+
     // MARK: Touches in
 
     mutating func handleTouches(_ touches: [TouchSample], now: Double) {
@@ -145,6 +156,11 @@ extension PlaySession {
         b.spec.continuousCollision = true
         bodies[g.body] = b
         out.physics.append(.setMode(g.body, .dynamic))
+        if cancelled {
+            bodies[g.body]?.motion.linearVelocity = .zero
+            bodies[g.body]?.motion.angularVelocity = .zero
+            out.physics.append(.move(g.body, pose: pose, linearVelocity: .zero, angularVelocity: .zero))
+        }
         if !release.held {
             let impulses = launchImpulses(spec: b.spec, entityRotation: pose.rotation, linear: release.linear, angular: release.angular)
             out.physics.append(.launch(g.body, linearImpulse: impulses.linear, angularImpulse: impulses.angular))

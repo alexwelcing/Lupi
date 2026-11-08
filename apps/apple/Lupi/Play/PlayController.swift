@@ -6,6 +6,7 @@ import LupiData
 import LupiGame
 import LupiPlay
 import LupiScale
+import LupiSync
 import Observation
 import RealityKit
 import SwiftUI
@@ -155,6 +156,9 @@ final class PlayController {
     private(set) var ready = false
     /// The tracking state while it is not normal.
     private(set) var limited: String?
+    /// Persistent recovery UI; these do not disappear with a transient caption.
+    private(set) var arFailure: String?
+    private(set) var keepFailure: String?
     /// The camera is inside a crystal's matter (scale-spec §10.1): the toys wait outside.
     private(set) var insideSolid = false
     private(set) var hudLines: [String] = []
@@ -180,10 +184,17 @@ final class PlayController {
     @ObservationIgnored private var pixelsPerPoint: CGFloat = 1
     @ObservationIgnored private var orientation = UIInterfaceOrientation.portrait
     @ObservationIgnored private var subscriptions: [EventSubscription] = []
-    @ObservationIgnored private var pending: [SpawnSource] = []
-    @ObservationIgnored private var pendingReceipt = false
-    @ObservationIgnored private var pendingAtoms: [Int] = []
+    @ObservationIgnored private var pending = PendingSpawns()
     @ObservationIgnored private var running = false
+    @ObservationIgnored private var lifecycle = PlayLifecycle()
+    @ObservationIgnored private var transitionTask: Task<Void, Never>?
+    @ObservationIgnored private var started = false
+    @ObservationIgnored private var sceneActive = true
+    @ObservationIgnored private var openedRoom = false
+    @ObservationIgnored private var keepGeneration: UInt64 = 0
+    @ObservationIgnored private var keeping: Set<BodyID> = []
+    @ObservationIgnored private var keepAttempts: [BodyID: KeepAttempt] = [:]
+    @ObservationIgnored private var failedKeep: (body: BodyID, support: Vec3?)?
     @ObservationIgnored private var lastPublish: TimeInterval = 0
     @ObservationIgnored private var lastCamera: CameraState?
     @ObservationIgnored private var lastMotions: [BodyID: BodyMotion] = [:]
@@ -208,6 +219,21 @@ final class PlayController {
         var b: BodyID?
     }
 
+    private struct KeepAttempt {
+        let prepared: PreparedKeep
+        var condition: LocalSaveCondition?
+    }
+
+    private enum ShelfKeepError: Error, CustomStringConvertible {
+        case full, changed
+        var description: String {
+            switch self {
+            case .full: "This shelf is full: 60 trophies. The molecule is saved in Collection."
+            case .changed: "The room or molecule moved before placement. The molecule is saved in Collection."
+            }
+        }
+    }
+
     init(catalog: Catalog, settings: GameSettings, collection: CollectionModel) {
         session = PlaySession(catalog: catalog, settings: settings)
         self.collection = collection
@@ -220,6 +246,25 @@ final class PlayController {
         scene.root.addChild(joints.anchor)
         content.addChild(sounds.anchor)
         content.addChild(sparks.anchor)
+        collection.onCollectionErased = { [weak self] in
+            guard let self else { return }
+            self.keepGeneration &+= 1
+            self.keepAttempts.removeAll()
+            self.failedKeep = nil
+            self.keepFailure = nil
+            for (_, trophy) in self.session.trophyBodies() { self.session.forget(trophy: trophy) }
+            self.refreshPlaque()
+        }
+        collection.onRoomDeleted = { [weak self] id in
+            guard let self else { return }
+            self.shelf.roomDeleted(id, ar: self.ar)
+            self.shelfPrompt = self.shelf.prompt
+        }
+        collection.onRoomsErased = { [weak self] in
+            guard let self else { return }
+            self.shelf.startNewRoom(ar: self.ar)
+            self.shelfPrompt = self.shelf.prompt
+        }
     }
 
     var hasLiDAR: Bool { ar.hasLiDAR }
@@ -253,28 +298,95 @@ final class PlayController {
     }
 
     func start() async {
-        guard !running else { return }
-        running = true
+        guard !started else { return }
+        started = true
         Task { await sounds.load() }
         // Without LiDAR the arena is the detected planes alone (plan §3.3).
         if !ar.hasLiDAR { show("No LiDAR on this device: molecules land on the floors and tables Lupi finds") }
-        // The room opened last relocalizes from its map (plan §6.3, §6.4).
-        let opened = shelf.openLastRoom(now: ProcessInfo.processInfo.systemUptime)
-        await ar.start(worldMap: opened.map)
-        if let missing = ar.unavailable { note("Unavailable: \(missing)") }
-        for e in opened.events { handle(e) }
+        if sceneActive { await transition(to: .active)?.value }
     }
 
     func stop() async {
+        await transition(to: .stopped)?.value
+    }
+
+    func sceneChanged(_ phase: ScenePhase) {
+        // Permission sheets and app menus temporarily become inactive without leaving AR.
+        guard phase != .inactive else { return }
+        sceneActive = phase == .active
+        guard started, lifecycle.phase != .stopped else { return }
+        let next: PlayLifecycle.Phase = sceneActive ? .active : .suspended
+        guard lifecycle.phase != next else { return }
+        _ = transition(to: next)
+    }
+
+    func retryAR() {
+        guard sceneActive, started, lifecycle.phase != .stopped else { return }
+        _ = transition(to: .active)
+    }
+
+    /// Serialize framework calls and identify every completion, including a start that
+    /// finishes after Home or background was requested.
+    private func transition(to phase: PlayLifecycle.Phase) -> Task<Void, Never>? {
+        guard let request = lifecycle.request(phase) else { return transitionTask }
         running = false
-        for s in subscriptions { s.cancel() }
-        subscriptions = []
-        await ar.stop()
+        content.isEnabled = false
+        session.endInteractions()
+        ready = false
+        limited = nil
+        lastCamera = nil
+        lastFrameTime = nil
+        a5 = nil
+        touchBuffer.removeAll()
+        contactBuffer.removeAll()
+        shelf.cancelSaves()
+        if phase == .stopped {
+            keepGeneration &+= 1
+            pending.clear()
+            keepAttempts.removeAll()
+            keepFailure = nil
+            failedKeep = nil
+            for s in subscriptions { s.cancel() }
+            subscriptions = []
+        }
+        let previous = transitionTask
+        let task = Task { [weak self] in
+            await previous?.value
+            guard let self, self.lifecycle.accepts(request) else { return }
+            if phase == .active {
+                let opened = self.openedRoom ? (map: nil as ARWorldMap?, events: [RecoveryEvent]()) :
+                    self.shelf.openLastRoom(now: ProcessInfo.processInfo.systemUptime)
+                await self.ar.start(worldMap: opened.map)
+                guard self.lifecycle.accepts(request) else {
+                    await self.ar.stop()
+                    return
+                }
+                if let missing = self.ar.unavailable {
+                    self.arFailure = "Room tracking isn’t available. You can still explore molecules and your Collection from Home."
+                    self.note("Unavailable: \(missing)")
+                    await self.ar.stop()
+                } else {
+                    self.openedRoom = true
+                    self.arFailure = nil
+                    self.content.isEnabled = true
+                    self.running = true
+                    self.shelf.resumeSaves(now: ProcessInfo.processInfo.systemUptime)
+                    for event in opened.events { self.handle(event) }
+                }
+            } else {
+                await self.ar.stop()
+            }
+        }
+        transitionTask = task
+        return task
     }
 
     // MARK: Input from the views
 
-    func touches(_ samples: [TouchSample]) { touchBuffer.append(contentsOf: samples) }
+    func touches(_ samples: [TouchSample]) {
+        guard running else { return }
+        touchBuffer.append(contentsOf: samples)
+    }
 
     func layout(_ size: CGSize, _ scale: CGFloat, _ orientation: UIInterfaceOrientation) {
         viewport = size
@@ -288,7 +400,7 @@ final class PlayController {
 
     func spawn(_ source: SpawnSource) {
         guard ready else {
-            pending.append(source)
+            pending.enqueue(source)
             show("Look around slowly so Lupi can find the room")
             return
         }
@@ -297,7 +409,7 @@ final class PlayController {
 
     func spawnReceipt() {
         guard ready else {
-            pendingReceipt = true
+            pending.enqueueReceipt()
             show("Look around slowly so Lupi can find the room")
             return
         }
@@ -307,7 +419,7 @@ final class PlayController {
     /// A tray atom: a 3 cm bead ahead of the camera, beside the last (plan §4.5).
     func spawnAtom(_ z: Int) {
         guard ready else {
-            pendingAtoms.append(z)
+            pending.enqueueAtom(z)
             show("Look around slowly so Lupi can find the room")
             return
         }
@@ -320,7 +432,15 @@ final class PlayController {
         session.fillHydrogens(id)
     }
 
-    func clear() { session.clear() }
+    func clear() {
+        pending.clear()
+        keepGeneration &+= 1
+        keepAttempts.removeAll()
+        keepFailure = nil
+        failedKeep = nil
+        session.clear()
+        refreshPlaque()
+    }
     func deselect() { session.select(nil) }
 
     func dive() {
@@ -398,14 +518,10 @@ final class PlayController {
     }
 
     private func flushPending() {
-        for s in pending { session.spawn(s) }
-        pending.removeAll()
-        for z in pendingAtoms { session.spawnAtom(z) }
-        pendingAtoms.removeAll()
-        if pendingReceipt {
-            pendingReceipt = false
-            session.spawnReceipt()
-        }
+        let requests = pending.drain()
+        for source in requests.sources { session.spawn(source) }
+        for z in requests.atoms { session.spawnAtom(z) }
+        if requests.receipt { session.spawnReceipt() }
     }
 
     private func track(_ state: ARCamera.TrackingState) {
@@ -471,6 +587,7 @@ final class PlayController {
     // MARK: Contacts
 
     private func collision(_ a: Entity, _ b: Entity, impulse: Float, direction: SIMD3<Float>, position: SIMD3<Float>, began: Bool) {
+        guard running else { return }
         let ia = scene.body(of: a)
         let ib = scene.body(of: b)
         guard ia != nil || ib != nil else { return }
@@ -651,40 +768,110 @@ final class PlayController {
     /// Keep: the selected body becomes a trophy in the collection.
     func keepSelected() {
         guard let id = session.selection else { return }
-        do {
-            let record = try session.keep(id, now: Date())
-            save(record)
-            show("Kept: \(record.name)")
-            refreshPlaque()
-        } catch {
-            show("\(error)")
-        }
+        beginKeep(id, support: nil)
     }
 
     /// Three seconds at rest on a shelf: kept, and placed relative to the room's root.
     private func pin(_ id: BodyID, support: Vec3) {
-        guard autoKeep, shelf.acceptsPins, let camera = lastCamera else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        do {
-            let root = try shelf.ensureShelf(support: support, camera: camera.position, ar: ar, now: now)
-            let record = try session.keep(id, now: Date())
-            guard let pose = session.keptPose(id) else { return }
-            save(record)
-            if try shelf.place(trophy: record.id, pose: pose, root: root, now: now) {
-                session.pin(id)
-                show("Kept on the shelf: \(record.name)")
-            } else {
-                show("This shelf is full: 60 trophies")
-            }
-        } catch {
-            show("\(error)")
+        guard autoKeep, shelf.acceptsPins, lastCamera != nil else { return }
+        beginKeep(id, support: support)
+    }
+
+    func retryKeep() {
+        guard let failedKeep else { return }
+        beginKeep(failedKeep.body, support: failedKeep.support)
+    }
+
+    private func beginKeep(_ id: BodyID, support: Vec3?) {
+        guard running, !keeping.contains(id), session.body(id) != nil else { return }
+        keeping.insert(id)
+        keepFailure = nil
+        let generation = keepGeneration
+        let roomGeneration = shelf.generation
+        let restingSince = session.body(id)?.restingSince
+        Task { [weak self] in
+            await self?.finishKeep(id, support: support, generation: generation,
+                                  roomGeneration: roomGeneration, restingSince: restingSince)
         }
     }
 
-    /// Writes a kept record unless the collection already has it as it is.
-    private func save(_ record: TrophyRecord) {
-        guard collection.trophy(record.id) != record else { return }
-        Task { await collection.keep(record) }
+    private func finishKeep(_ id: BodyID, support: Vec3?, generation: UInt64,
+                            roomGeneration: UInt64, restingSince: Double?) async {
+        defer { keeping.remove(id) }
+        do {
+            var attempt: KeepAttempt
+            if let prior = keepAttempts[id], session.canCommitKeep(prior.prepared) {
+                attempt = prior
+            } else {
+                attempt = KeepAttempt(prepared: try session.prepareKeep(id, now: Date()), condition: nil)
+                keepAttempts[id] = attempt
+            }
+            if attempt.condition == nil {
+                let condition = try await collection.keepCondition(for: attempt.prepared)
+                guard generation == keepGeneration,
+                      keepAttempts[id]?.prepared.record.id == attempt.prepared.record.id else { return }
+                attempt.condition = condition
+                keepAttempts[id] = attempt
+            }
+            guard generation == keepGeneration, session.canCommitKeep(attempt.prepared),
+                  let condition = attempt.condition else { return }
+            guard running else {
+                failedKeep = (id, support)
+                keepFailure = "Keep paused. Resume room tracking and retry."
+                return
+            }
+            try await collection.keep(attempt.prepared.record, ifUnchanged: condition)
+            let durable = try await collection.trophyCase.trophy(attempt.prepared.record.id)
+            guard generation == keepGeneration,
+                  keepAttempts[id]?.prepared.record.id == attempt.prepared.record.id else { return }
+            guard durable == attempt.prepared.record else {
+                keepAttempts[id] = nil
+                throw SyncError.localRecordChanged(id: attempt.prepared.record.id.uuidString)
+            }
+            guard session.canCommitKeep(attempt.prepared, allowingResize: true),
+                  keepAttempts[id]?.prepared.record.id == attempt.prepared.record.id else {
+                keepAttempts[id] = nil
+                return
+            }
+            let record = attempt.prepared.record
+            keepAttempts[id] = nil
+            // Once durable, the UUID belongs to this body even if shelf placement fails.
+            guard session.commitKeep(attempt.prepared, celebrate: running && support == nil, allowingResize: true) else { return }
+            if support != nil {
+                guard running, shelf.generation == roomGeneration, shelf.acceptsPins,
+                      let body = session.body(id), body.atRest, body.restingSince == restingSince,
+                      let currentSupport = session.shelfSupport(of: id), let camera = lastCamera,
+                      let pose = session.keptPose(id) else { throw ShelfKeepError.changed }
+                let now = ProcessInfo.processInfo.systemUptime
+                let root = try shelf.ensureShelf(support: currentSupport, camera: camera.position, ar: ar, now: now)
+                guard try shelf.place(trophy: record.id, pose: pose, root: root, now: now) else { throw ShelfKeepError.full }
+                session.pin(id)
+                session.celebrateKeep(id, trophyID: record.id)
+                show("Kept on the shelf: \(record.name)")
+            } else {
+                if running { show("Kept: \(record.name)") }
+            }
+            failedKeep = nil
+            keepFailure = nil
+            refreshPlaque()
+        } catch {
+            guard generation == keepGeneration, session.body(id) != nil else { return }
+            let message: String
+            if case SyncError.localRecordChanged = error {
+                keepAttempts[id] = nil
+                message = "The saved copy or account changed. Open the current molecule from Collection, then Keep again."
+            } else if let failure = error as? ShelfKeepError {
+                message = failure.description
+            } else if let failure = error as? KeepError {
+                message = failure.description
+            } else {
+                message = "Could not save this molecule on your device. Check available storage and retry."
+            }
+            failedKeep = (id, support)
+            keepFailure = message
+            collection.report(message)
+            refreshPlaque()
+        }
     }
 
     private func handle(_ e: RecoveryEvent) {
@@ -721,7 +908,12 @@ final class PlayController {
             return
         }
         let root = ShelfMath.rootPose(at: hit, camera: camera.position)
-        for e in shelf.place(root: root, ar: ar, now: ProcessInfo.processInfo.systemUptime) { handle(e) }
+        do {
+            for e in try shelf.place(root: root, ar: ar, now: ProcessInfo.processInfo.systemUptime) { handle(e) }
+        } catch {
+            collection.report("Could not move the shelf: \(error)")
+            show("Could not save the shelf here. Tap again to retry.")
+        }
         shelfPrompt = shelf.prompt
     }
 
@@ -741,6 +933,14 @@ final class PlayController {
 
     /// A trophy left the collection: its bodies stay as copies.
     func forget(trophy: UUID) {
+        // A new trophy may still be awaiting its first attachment when deletion finishes.
+        for (id, attempt) in keepAttempts where attempt.prepared.record.id == trophy {
+            keepAttempts[id] = nil
+            if failedKeep?.body == id {
+                failedKeep = nil
+                keepFailure = nil
+            }
+        }
         session.forget(trophy: trophy)
         refreshPlaque()
     }

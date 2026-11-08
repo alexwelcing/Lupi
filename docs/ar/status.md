@@ -1,5 +1,10 @@
 # Lupi AR: status for the owner
 
+**2026-10-09 demo iteration:** current main is `1520ada`, with shared Jev/native
+Find accepted on the Mac. Today's reliability, camera-free preview, diagnostics
+and signed-build scope is tracked in [the iteration record](demo-iteration-2026-10-09.md).
+Physical installation waits for the owner's phone connection tonight.
+
 *2026-10-05, branch `ar/m0` (M2, M3a and M4 from `ar/native`, merged with the web's `/scale` page from `ar/web`). What is built, how to build and run it on your Mac, and what to check on the iPhone 15 Pro and the iPad Pro. The first Mac compile is now complete: unsigned Debug builds pass against Apple's iOS 26.5 device and Simulator SDKs with Xcode 26.6, and a signed development device build passes with automatic provisioning. Home, Collection, Settings and the camera explanation were checked in the Simulator. The connected iPhone still needs Xcode pairing; nothing here has run on a physical device. See [the Mac build record](mac-build-2026-10-05.md) for the fixes, checks and remaining steps.*
 
 The plan of record is [plan.md](plan.md); the scale spine is [scale.md](scale.md) and [scale-spec.md](scale-spec.md); the per-feature how-to is [apps/apple/README.md](../../apps/apple/README.md). On the web, `/scale` on lupi.live draws the same records (the salt ladder to a googolplex, copper's billion, the diamondoids) with the TypeScript reference, so you can compare a rung's exact count and mass on a laptop with what the app shows.

@@ -40,6 +40,14 @@ targets:
         excludes:
           - Info.plist
           - Lupi.entitlements
+    # Stamped at build time so Settings and receipts identify the app actually installed.
+    postBuildScripts:
+      - name: Stamp native build identity
+        script: /bin/sh "$SRCROOT/../../tools/apple/stamp-build.sh" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/LupiBuildIdentity.json"
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/LupiBuildIdentity.json
     # The Firebase API key and project id come from Config/Secrets.xcconfig, which the
     # owner fills in on the Mac and git ignores; Config/Lupi.xcconfig includes it if present.
     configFiles:
@@ -95,7 +103,7 @@ targets:
         PRODUCT_NAME: Lupi
         PRODUCT_BUNDLE_IDENTIFIER: live.lupi.app
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "2"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -104,3 +112,5 @@ targets:
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         ENABLE_PREVIEWS: YES
         SWIFT_STRICT_CONCURRENCY: complete
+        # The stamp reads Git's index and refs, including linked-worktree metadata.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO

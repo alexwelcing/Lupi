@@ -8,6 +8,7 @@ import UIKit
 struct PlayView: View {
     let controller: PlayController
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingSettings = false
     @State private var showingCollection = false
     /// The atom tray's row, opened from the tray's Atoms chip (plan §4.5).
@@ -46,6 +47,7 @@ struct PlayView: View {
         .onChange(of: app.settings, initial: true) { _, settings in controller.apply(settings) }
         .onChange(of: app.showDebugHUD, initial: true) { _, on in controller.showsHUD = on }
         .onChange(of: app.autoKeep, initial: true) { _, on in controller.autoKeep = on }
+        .onChange(of: scenePhase, initial: true) { _, phase in controller.sceneChanged(phase) }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environment(app)
@@ -61,6 +63,28 @@ struct PlayView: View {
     private var chrome: some View {
         VStack(spacing: 10) {
             topBar
+            if let failure = controller.arFailure {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(failure).font(.callout)
+                    HStack {
+                        Button("Return Home") { app.showingPlay = false }
+                            .buttonStyle(.borderedProminent)
+                        Button("Retry tracking") { controller.retryAR() }
+                            .buttonStyle(.bordered)
+                    }
+                }
+                .padding(14)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            if let failure = controller.keepFailure {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(failure).font(.callout)
+                    Button("Retry Keep") { controller.retryKeep() }
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding(14)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
             if let limited = controller.limited {
                 Text("Tracking: \(limited)")
                     .font(.caption.weight(.medium))
