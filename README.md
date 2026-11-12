@@ -1,6 +1,8 @@
 # lupi.live
 
-Standalone LUPI molecular viewer repo.
+Standalone LUPI molecular viewer repo. LUPI (lupi.live) opens structures and
+LAMMPS dump files in a WebGPU-capable browser with no installation. Where the
+browser has no WebGPU adapter, the viewer uses three.js's WebGL2 backend.
 
 This repo owns the browser-native molecular viewer at `lupi.live`: the WebGPU
 viewer app, shared viewer packages, parser/runtime packages, viewer verification

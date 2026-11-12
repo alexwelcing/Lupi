@@ -2,7 +2,7 @@
   "name": "lupi-live",
   "version": "0.3.0",
   "private": true,
-  "description": "WebGPU-powered LAMMPS molecular dynamics visualization platform",
+  "description": "LUPI (lupi.live) opens structures and LAMMPS dump files in a WebGPU-capable browser with no installation.",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
