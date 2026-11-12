@@ -179,7 +179,9 @@ the code:
   device class and allowlisted action names. It sends nothing under Global
   Privacy Control or Do Not Track. The Worker (`apps/mcp-worker/src/audience.ts`)
   forwards a reduced event, a coarse browser class and Cloudflare's request
-  metadata to the `audience-events` service binding, which is not in this repo.
+  metadata (the whole `request.cf` object, which can include country, region,
+  city, postal code, coordinates and ASN) to the `audience-events` service
+  binding, which is not in this repo.
 - **No Google Analytics**: `packages/ui/src/analytics/firebaseSink.ts` is not
   imported anywhere, and the deploy sets `VITE_FIREBASE_ANALYTICS_ENABLED=false`.
 - **Sign-in is optional** (Google or GitHub through Firebase Authentication)
