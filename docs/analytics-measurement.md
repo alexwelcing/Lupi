@@ -1,5 +1,17 @@
 # Lupi Analytics Measurement
 
+> **Current state (2026-11-12).** The web client no longer posts to
+> `collectAnalytics` and no code reads `VITE_LUPI_ANALYTICS_URL`. Built pages
+> load the cookieless `/audience.js` tracker (`apps/web/vite.config.ts`,
+> `apps/mcp-worker/src/audience-tracker.ts`), which posts to
+> `/api/audience/events`; the Worker forwards a reduced event to the
+> `audience-events` service binding (`apps/mcp-worker/src/audience.ts`).
+> `packages/ui/src/analytics/firebaseSink.ts` is not imported anywhere, so
+> Firebase/GA4 is never loaded whatever the env flags say. The public summary
+> is [`apps/web/public/privacy/index.html`](../apps/web/public/privacy/index.html)
+> (`https://lupi.live/privacy/`). The sections below are older and describe the
+> previous lanes.
+
 Lupi has two measurement lanes:
 
 - First-party analytics: enabled in production through `VITE_LUPI_ANALYTICS_URL`.

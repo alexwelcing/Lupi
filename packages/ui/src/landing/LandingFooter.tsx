@@ -15,6 +15,7 @@ export function LandingFooter() {
         <a href="/daily/">Lupi Daily</a>
         <a href="/study/organic-functional-groups">Learning guide</a>
         <a href="https://github.com/alexwelcing/Lupi">Source code ↗</a>
+        <a href="/privacy/">Privacy</a>
       </nav>
     </footer>
   );
