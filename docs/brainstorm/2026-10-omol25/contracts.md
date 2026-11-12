@@ -1,4 +1,4 @@
-All paths are under /home/user/Lupi. These contracts are frozen before the tracks start.
+All paths are relative to the repo root. These contracts are frozen before the tracks start.
 
 // ===== @atlas/core/bonds  (packages/core/src/bonds/index.ts; package.json exports "./bonds") =====
 export const MOLECULAR_RECIPE_ID = 'lupi-bonds.molecular.v1' as const;

@@ -1,6 +1,6 @@
 # VIS-2B science panel data contract
 
-Adopted from the parallel HUD-integration prototype (hermes t_1abe8048, web-integrator + reviewer); the standalone demo panel in this branch follows this mapping.
+Adopted from the parallel HUD-integration prototype; the standalone demo panel in this branch follows this mapping.
 
 
 Status: implementation mapping for the Phase 0 prototype  

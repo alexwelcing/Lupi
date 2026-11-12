@@ -63,13 +63,13 @@ SOURCES:
 - PubChem3D conformer generation: https://jcheminf.biomedcentral.com/articles/10.1186/1758-2946-3-4
 
 KEY REPO FILES:
-- /home/user/Lupi/packages/ui/src/gallery/studentCollection.ts
-- /home/user/Lupi/packages/ui/src/StudyLensPanel.tsx
-- /home/user/Lupi/packages/ui/src/galleryNomenclature.ts
-- /home/user/Lupi/tools/sims/make_phase_trajectories.py
-- /home/user/Lupi/scripts/generate_timeseries_animations.py
-- /home/user/Lupi/apps/web/public/archive/w_cascade_150keV.lammpstrj
-- /home/user/Lupi/packages/ui/src/molecules/pubchemLoad.ts
+- packages/ui/src/gallery/studentCollection.ts
+- packages/ui/src/StudyLensPanel.tsx
+- packages/ui/src/galleryNomenclature.ts
+- tools/sims/make_phase_trajectories.py
+- scripts/generate_timeseries_animations.py
+- apps/web/public/archive/w_cascade_150keV.lammpstrj
+- packages/ui/src/molecules/pubchemLoad.ts
 
 <a id="r2-real-twins-science-01"></a>
 ## The Evidence Ladder and the Twin Door

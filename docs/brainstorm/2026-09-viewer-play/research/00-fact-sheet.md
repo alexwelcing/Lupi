@@ -12,7 +12,7 @@ Compiled 2026-09-27 by the completeness critic from the eight digests in this fo
 - **[PLAY]** `playful-web.md`
 - **[SCI]** `science-toys.md`
 - **[CRIT]** re-verified or corrected by this pass (evidence is in the section at the end)
-- **[AGENTS]** `/home/user/Lupi/AGENTS.md`
+- **[AGENTS]** `AGENTS.md`
 
 ---
 

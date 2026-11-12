@@ -1,6 +1,6 @@
 # Native Apple AR for Lupi: what's in the repo today
 
-Read-only survey of `/home/user/Lupi` at HEAD `5816359`, done on 2026-10-04. Nothing was edited, built or run. Citations are `path:line`. Where I say something about Apple platforms that the repo doesn't, I mark it **(external, verify)**.
+Read-only survey of the Lupi repo at HEAD `5816359`, done on 2026-10-04. Nothing was edited, built or run. Citations are `path:line`. Where I say something about Apple platforms that the repo doesn't, I mark it **(external, verify)**.
 
 ---
 

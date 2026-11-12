@@ -1259,7 +1259,7 @@ These are Lupi prerequisites, in dependency order.
 - `packages/ui/src/switcher/ElementChips.tsx`
 - `packages/ui/src/gallery/previews.json` (`atomCap: 1200`)
 - `packages/scene/src/useBondGpuPipeline.ts:4`
-- `/home/user/Lupi/AGENTS.md` (V1 export truth, scan endpoints)
+- `AGENTS.md` (V1 export truth, scan endpoints)
 
 **Earlier digests in this folder**
 - `00-fact-sheet.md`, `r3f-releases.md` [R3F], `pmndrs-ecosystem.md` [ECO], `threejs-webgpu.md` [TJS], `code-core.md` [CORE]
