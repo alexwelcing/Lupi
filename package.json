@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "description": "LUPI (lupi.live) opens structures and LAMMPS dump files in a WebGPU-capable browser with no installation.",
-  "license": "AGPL-3.0-or-later",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/alexwelcing/Lupi.git"

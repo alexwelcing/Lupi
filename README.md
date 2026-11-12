@@ -197,6 +197,14 @@ the code:
 What the collector service stores, and how long Cloudflare and Firebase keep
 logs, is set outside this repo.
 
+## License
+
+Code is MIT ([LICENSE](LICENSE)). First-party prose, figures and data are
+CC BY 4.0 ([LICENSE-CONTENT.md](LICENSE-CONTENT.md),
+[LICENSE-DATA.md](LICENSE-DATA.md)). Third-party material keeps its own terms
+([NOTICE.md](NOTICE.md)). You can reuse our code (MIT) and our first-party
+text and data (CC BY 4.0) with attribution and no share-alike obligations.
+
 ## Docs
 
 - [LUPINE.md](LUPINE.md): how this repo fits the Lupine constellation

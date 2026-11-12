@@ -210,7 +210,7 @@ ONE SCHEMA, lupi-provenance/1. It is a superset of lupi-sim-manifest/1, and old 
 - verification {expect: kind-specific}
 - citations [{doi|url, what}]
 - steward and reviewedBy
-- license: ODbL-1.0 for first-party data per LICENSE-DATA.md; upstream licences kept
+- license: CC-BY-4.0 for first-party data per LICENSE-DATA.md (relicensed 2026-11-11; was ODbL-1.0); upstream licences kept
 - reproduce (the exact command) and generatedAt
 
 PUBLISHER. A named Science Steward, the same role STUDENT_COLLECTION already names ('Steward: Lupi product owner'), with a second reviewer for any new kind. A PR adds the bake script output plus its manifest. Small outputs (up to about 1 MB: modes, maps, lattice descriptors) live in apps/web/public/science/<id>/. Large runs go to the existing GCS sims bucket beside their manifest, as tools/sims/README already prescribes.
