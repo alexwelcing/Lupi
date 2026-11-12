@@ -27,7 +27,7 @@
   <p>This page describes the lupi.live website and viewer, from its source code. The iPhone and iPad app has <a href="/privacy/ios/">its own page</a>. The Lupi merch shop runs on Shopify under its own terms and is not covered here.</p>
 
   <h2>Visit counts, without cookies</h2>
-  <p>Pages built from the viewer app (the viewer, molecule pages and Lupi Daily) load a small first-party script, <code>/audience.js</code>. It sets no cookies and writes nothing to browser storage. It keeps a random visit ID and session ID in page memory only, so a reload counts as a new visit.</p>
+  <p>Pages built from the web app, such as the home page, the viewer, the Library, molecule pages and Lupi Daily, load a small first-party script, <code>/audience.js</code> (this page does not). The script sets no cookies and writes nothing to browser storage. It keeps a random visit ID and session ID in page memory only, so a reload counts as a new visit.</p>
   <p>It sends page views (with numbers, IDs and email-like parts of the address replaced), the host name of the referring site, a device class (phone, tablet or desktop), whether the browser reports being automated, active-time counts, and the names of a fixed list of actions such as saving or sharing a view, a Library search, a download or a link to another site. It does not send what you typed, the files you open or who you are.</p>
   <p>If your browser sends Global Privacy Control or Do Not Track, the script sends nothing, and our edge drops any event request that carries either signal. Our edge passes the events on to a separate collector service with a coarse browser class (not your full user-agent string) and Cloudflare's request metadata, which can include approximate location such as country.</p>
   <p>The site does not load Google Analytics, advertising tags or third-party trackers.</p>
@@ -43,7 +43,7 @@
 
   <h2>Features that send your input to other services</h2>
   <ul>
-    <li><strong>Looking up a molecule by name</strong>: your browser asks PubChem directly.</li>
+    <li><strong>Looking up a molecule by name</strong>, including the PubChem results in a Library search: your browser asks PubChem directly.</li>
     <li><strong>The command palette and the molecule switcher</strong>: your text goes through our edge to TypeSafe's Jev service.</li>
     <li><strong>Photo scan</strong>: your photo goes through our edge to models hosted on Hugging Face, and the identification to Jev. Our edge caches the answer, keyed by a hash of the photo, for up to an hour; it does not store the photo.</li>
     <li><strong>Opening a saved view or searching the Library</strong> can read from Firestore. Some gallery and Library structures load from Google Cloud Storage, and OMol25 rows come from Hugging Face through our edge.</li>
