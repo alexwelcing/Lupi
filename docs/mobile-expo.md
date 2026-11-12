@@ -20,7 +20,7 @@ This document describes the verified runtime source on exact main revision
 from earlier signed revisions. For the Apple Silicon development-machine
 transition, also read the
 [M2 MacBook Air handoff guide](mobile-macbook-air-handoff.md).
-The native 24-item Gallery, root-stack Viewer, focused Library, Settings, gallery
+The native 23-item Gallery, root-stack Viewer, focused Library, Settings, gallery
 browser tool, atom-cap contract, and success-only recent-history correlation
 passed their full source/browser ladder at historical SDK 55 commit `1a56e398`.
 SDK 56 has a historical green local ladder at commit `42536acd`. SDK 57 now has
@@ -125,7 +125,7 @@ tree.
 ```mermaid
 flowchart LR
   subgraph Native["apps/mobile - Expo Router"]
-    Gallery["Gallery: 24 curated structures"]
+    Gallery["Gallery: 23 curated structures"]
     Import["Import: document picker and XYZ validation"]
     Library["Library: success-gated recents"]
     Settings["Settings: open, privacy, diagnostics"]
@@ -167,7 +167,7 @@ flowchart LR
 The current vertical slice is:
 
 - `/(tabs)/(explore)` retains its internal route name but presents a native
-  **Gallery**. Its metadata is a closed, bundled set of 24 curated molecules,
+  **Gallery**. Its metadata is a closed, bundled set of 23 curated molecules,
   materials, and trajectories. iPhone search lives in the native large-title
   header; filtering uses an iOS action sheet for All Structures, Featured,
   Molecules, Materials, and Trajectories. The direct-root list adapts between
@@ -918,7 +918,7 @@ physical-device smoke separately:
 
 - app build/runtime version, Git SHA, iPhone model, iOS version, Expo Go or
   development-client version;
-- all 24 Gallery cards, native-header search for Aspirin, category filtering,
+- all 23 Gallery cards, native-header search for Aspirin, category filtering,
   reset behavior, one/two-column adaptation, and bundled-metadata browsing while
   offline;
 - an unknown gallery ID, mismatched atom count, and crafted over-50,000-atom

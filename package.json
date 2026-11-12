@@ -46,8 +46,6 @@
     "mcp:worker:deploy": "pnpm --filter @atlas/mcp-worker run deploy",
     "mcp:worker:test": "pnpm --filter @atlas/mcp-worker test",
     "atomize:media": "node tools/atomize-media.mjs",
-    "generate:sphere-grid": "node tools/generate-sphere-grid-gallery.mjs",
-    "generate:sphere-grid:assets": "node tools/generate-sphere-grid-gallery.mjs --no-snapshot",
     "analytics:report": "node tools/analytics-report.mjs",
     "lint": "node scripts/run-lint.mjs",
     "clean": "turbo run clean",

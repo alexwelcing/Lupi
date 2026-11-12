@@ -2,8 +2,8 @@
  * <KnowledgeLabelsLayer /> — Auto-generated semantic labels for gallery assets.
  *
  * Unlike user annotations, these labels are tied to a fixed 3D position
- * supplied by the loaded asset's metadata (e.g. sphere centroids and key
- * node positions from the Lupine Wiki sphere-grid export). They are always
+ * supplied by the loaded asset's metadata (e.g. cluster centroids and key
+ * node positions from a gallery entry's labels file). They are always
  * billboarded toward the camera and use a small callout style that stays
  * readable against the molecular scene.
  *

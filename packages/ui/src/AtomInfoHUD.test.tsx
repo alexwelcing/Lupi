@@ -113,15 +113,15 @@ describe('AtomInfoHUD chemistry truth', () => {
 
   it('never shows a home directory from a knowledge node path, in the line or its tooltip', () => {
     const frame = createMockFrame({ natoms: 1, types: [6] });
-    const nodeId = 'hermes-core://config//home/alex/.hermes/SOUL.md';
+    const nodeId = 'example-core://config//home/sam/.config/app/notes.md';
     useStore.getState().setKnowledgeLabels([
-      { id: `node-${nodeId}`, kind: 'node', text: 'SOUL.md', nodeKind: 'config', nodeId, atomIndex: 0, position: [0, 0, 0] },
+      { id: `node-${nodeId}`, kind: 'node', text: 'notes.md', nodeKind: 'config', nodeId, atomIndex: 0, position: [0, 0, 0] },
     ]);
 
     const { container } = render(<AtomInfoHUD frame={frame} selectedAtoms={[0]} />);
 
-    const line = screen.getByText('~/.hermes/SOUL.md');
-    expect(line.getAttribute('title')).toBe('hermes-core://config/~/.hermes/SOUL.md');
+    const line = screen.getByText('~/.config/app/notes.md');
+    expect(line.getAttribute('title')).toBe('example-core://config/~/.config/app/notes.md');
     expect(container.textContent).not.toMatch(/\/home\//);
     for (const node of container.querySelectorAll('[title]')) expect(node.getAttribute('title')).not.toMatch(/\/home\//);
     // The label itself keeps its id (pinning, search and MCP use it).

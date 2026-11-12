@@ -39,11 +39,11 @@ The lead also fixed the bug p2 found: **on a portrait phone the ink contour lost
 - **The SVG drawings keep the model's ball sizes**, so carbon grows about 10 % and hydrogen about 50 % at the hand-off to 3D. Matching them means changing `drawRadius`, which the Daily and the desk models also read.
 - **Replay clips on a phone**: the frame-exact path allocates render targets per frame; memory pressure on phones is unmeasured. A drifting procedural background, the selection ring and the Foil reveal still run on wall time, so a slow device shows them faster in the clip.
 - **Wall-clock unit tests** (`objectFacts` "C60 under 20 ms", the scale cost bound) flake under heavy load; they pass on a quiet machine.
-- **The sphere-grid local paths** are scrubbed from the screen only: `lupi.knowledge_graph`, Herdr task events, label search and the `/#/mcp` harness still carry them, and the data file's `description` field holds 1,302 more.
+- **The sphere-grid local paths** were scrubbed from the screen only: `lupi.knowledge_graph`, Herdr task events, label search and the `/#/mcp` harness still carried them, and the data file's `description` field held 1,302 more. Resolved 2026-11-12: the sphere-grid gallery entry, its data files and its generator were removed from the repo.
 
 ## Decisions waiting on you
 
 The seven in [S1's status](../2026-10-s1/status.md#decisions-waiting-on-you) stand. S2 changes two of them:
 
-- **(6) Sphere-grid labels**: the display is scrubbed (S2 p1); regenerating or stripping the data file is still your call.
+- **(6) Sphere-grid labels**: the display is scrubbed (S2 p1). Resolved 2026-11-12: the sphere-grid gallery entry, its data files and its generator were removed from the repo.
 - **Unused dependencies** are now out of the lockfile (S2 p3), so that S1 gap is closed.

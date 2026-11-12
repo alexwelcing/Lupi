@@ -1281,14 +1281,6 @@
     "synthetic": 0.76
    }
   },
-  "gallery:lupine_sphere_grid": {
-   "inputHash": "4fdec7c8",
-   "facts": {
-    "demo": 0.91,
-    "simulation": 0.3,
-    "synthetic": 0.34
-   }
-  },
   "gallery:massive_1m": {
    "inputHash": "cc3177aa",
    "facts": {

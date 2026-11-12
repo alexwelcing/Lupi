@@ -73,7 +73,7 @@ These came out of the audit and are deliberately not done in S1:
 1. **Retire the old release-controller tooling** (`tools/cloudflare-release-*.mjs`, `build-cloudflare-release-package*.mjs`, `verify-release-authority-freeze*.mjs`, about 5,500 lines). The workflow it served was retired; 8 of 28 of its tests already fail and none run in CI.
 2. **Leave the workspace or stay**: `apps/remotion-trailer` (48.5 MB, build is an `echo`), `apps/lupine-app` (a separate Stripe SaaS, not deployed from here) and the frozen `apps/mobile` (its Expo graph carries 4 of the 5 ignored CVEs and a 2.5-minute CI job on every PR).
 3. **A Content-Security-Policy.** Lupi sends none. A report-only policy first would show what an enforced one would break (Firebase auth, HDRI fallback, analytics, Hugging Face calls).
-4. **Regenerate the sphere-grid gallery labels**: the copy the gallery uses still carries 3,906 local `/home/...` paths; regenerating needs the external lupine-wiki checkout.
+4. **Regenerate the sphere-grid gallery labels**: the copy the gallery used carried 3,906 local `/home/...` paths. Resolved 2026-11-12: the sphere-grid gallery entry, its data files and its generator were removed from the repo.
 5. **`infra/` vs `scripts/gcs/`**: two GCS CORS configs disagree; one should go.
 
 ## Open pull requests: triage

@@ -51,26 +51,11 @@ const FEATURED_DISCOVERY_ORDER: readonly MobileGalleryId[] = [
   "this_is_water",
   "c60_buckyball",
   "aspirin",
-  "lupine_sphere_grid",
   "z1_science_path_27",
   "elliott_gst_crystallization",
 ];
 
 export const CURATED_GALLERY: readonly CuratedGalleryItem[] = [
-  galleryItem({
-    id: "lupine_sphere_grid",
-    name: "Lupine Sphere Grid",
-    formula: "1,513 nodes",
-    subtitle: "A live knowledge graph rendered as an atomistic structure.",
-    domain: "Atomized Media",
-    atomCount: 1_513,
-    frameCount: 1,
-    category: "material",
-    featured: true,
-    tags: ["knowledge graph", "atomized", "featured"],
-    palette: ["#FF9F43", "#5F27CD", "#10AC84"],
-    thumbnail: true,
-  }),
   galleryItem({
     id: "caffeine",
     name: "Caffeine",

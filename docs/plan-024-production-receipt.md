@@ -111,7 +111,8 @@ and postMessage execution successfully.
 7. Measure current adaptive DPR/frustum behavior and resolve the React 19,
    R3F 9, Three 0.184, postprocessing, and `r3f-perf` peer-version debt.
 8. Recover historical research assets only through versioned, provenance-aware
-   ingestion: the three Cu MD showcases moved by `0b241d69`, and the expanded
-   910-node/1,789-edge sphere graph from `wip/sphere-grid-assets-2026-07-11`.
-   Do not restore hard-coded research endpoints or stale root assets.
+   ingestion: the three Cu MD showcases moved by `0b241d69`. Do not restore
+   the sphere graph from `wip/sphere-grid-assets-2026-07-11` (the sphere-grid
+   gallery entry was removed on 2026-11-12 because its labels mapped local
+   home-directory paths), hard-coded research endpoints or stale root assets.
 

@@ -254,7 +254,7 @@ been deployed; a local Vite success is not production evidence.
 - Expo Router tabs for Gallery, Library, and Settings, presented in the app's
   dark native visual system; Viewer opens as an immersive root-stack detail
   with native Back behavior instead of occupying a permanent tab
-- a 24-item curated Gallery whose metadata is bundled for offline browsing;
+- a 23-item curated Gallery whose metadata is bundled for offline browsing;
   iPhone uses the native navigation-bar search field and an iOS action sheet for
   All Structures, Featured, Molecules, Materials, and Trajectories, while the
   list adapts between one and two compact columns for width and Dynamic Type
@@ -506,7 +506,7 @@ TestFlight acceptance report must capture the remote identity it actually loads.
 Record the Git SHA, iPhone model, iOS version, and Expo Go or development-client
 version, then verify:
 
-1. Gallery shows all 24 curated items in the dark native UI. Search for
+1. Gallery shows all 23 curated items in the dark native UI. Search for
    `aspirin` from the native header and confirm only the 21-atom Aspirin card
    remains; clear search and verify all items return.
 2. Open the filter action sheet and verify Featured, Molecules, Materials, and

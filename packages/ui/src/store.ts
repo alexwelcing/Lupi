@@ -53,8 +53,8 @@ export interface Annotation {
 }
 
 /** A knowledge label anchored to a 3D position rather than an atom index.
- *  These are auto-generated from gallery metadata (e.g. Lupine Wiki sphere
- *  centroids) so the viewer can display exact semantic names on top of the
+ *  These come from a gallery entry's labels file (e.g. cluster centroids
+ *  and named nodes) so the viewer can display exact semantic names on top of the
  *  molecular view. Unlike user annotations, they belong to the loaded asset
  *  and are cleared/replaced on every file load. */
 export interface KnowledgeLabel {
@@ -654,8 +654,8 @@ export interface AppState {
   setLabelStyle: (style: LabelStyle) => void;
 
   // ─── Knowledge labels ───
-  // Auto-generated semantic labels tied to the loaded molecule (e.g. sphere
-  // names and key node names from the Lupine Wiki sphere-grid export).
+  // Semantic labels tied to the loaded molecule (e.g. cluster names and key
+  // node names from a gallery entry's labels file).
   knowledgeLabels: KnowledgeLabel[];
   knowledgeLabelKinds: Set<string>;
   showKnowledgeLabels: boolean;

@@ -45,9 +45,9 @@ describe('parseKnowledgeLabelsPayload', () => {
         {
           id: 'node-1',
           kind: 'node',
-          text: 'hermes-agent',
+          text: 'agent-repo',
           node_kind: 'repo',
-          node_id: '/home/alex/.hermes/hermes-agent',
+          node_id: '/home/sam/work/agent-repo',
           atom_index: 5,
           sphere_id: 'core',
           sphere_index: 1,
@@ -62,9 +62,9 @@ describe('parseKnowledgeLabelsPayload', () => {
     expect(labels[0]).toMatchObject({
       id: 'node-1',
       kind: 'node',
-      text: 'hermes-agent',
+      text: 'agent-repo',
       nodeKind: 'repo',
-      nodeId: '/home/alex/.hermes/hermes-agent',
+      nodeId: '/home/sam/work/agent-repo',
       atomIndex: 5,
       sphereId: 'core',
       sphereIndex: 1,

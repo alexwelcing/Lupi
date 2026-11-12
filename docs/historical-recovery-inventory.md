@@ -35,8 +35,9 @@ Plan 023 changes from the historical candidate list.
   artifact route. Recover them only through a versioned research-artifact
   ingestion seam after verifying the live artifact owner and provenance.
 - `wip/sphere-grid-assets-2026-07-11` expands the sphere graph from 635
-  nodes/1,238 edges to 910 nodes/1,789 edges. Regenerate it into current paths
-  with privacy and provenance review; do not cherry-pick its stale root assets.
+  nodes/1,238 edges to 910 nodes/1,789 edges. Do not recover it: the
+  sphere-grid gallery entry was removed on 2026-11-12 because its labels
+  mapped local home-directory paths.
 
 ## Preserve as product boundaries
 

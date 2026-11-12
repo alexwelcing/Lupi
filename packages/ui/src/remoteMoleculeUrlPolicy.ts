@@ -27,9 +27,6 @@ const GCS_PREFIXES = [
 ] as const;
 const OMOL_COLLECTION_IDS = new Set<string>(OMOL25_COLLECTION_IDS);
 const RESEARCH_DATA_PATHS = new Set(EXTERNAL_RESEARCH_DATASETS.map(externalResearchLoadPath));
-const GENERATED_GALLERY_PATHS = new Set([
-  '/generated/lupine-wiki/sphere-grid.lammpstrj',
-]);
 
 /**
  * The sole trust boundary for automatic remote molecule loads.
@@ -55,7 +52,6 @@ export function assertAllowedRemoteMoleculeUrl(
     assertSafeUrlShape(parsed, isLocalDevelopmentHost(origin.hostname.toLowerCase()));
     assertMoleculePath(parsed.pathname);
     if (!parsed.pathname.startsWith('/gallery/')
-      && !GENERATED_GALLERY_PATHS.has(parsed.pathname)
       && !isTrustedScienceDataUrl(parsed)) {
       throw new RemoteMoleculeUrlPolicyError();
     }

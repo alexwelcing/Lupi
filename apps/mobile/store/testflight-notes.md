@@ -108,7 +108,7 @@ by About & Diagnostics.
 This beta is intentionally hybrid, but it is more than a website shortcut. The
 native app owns the iPhone-shaped workflow around the remote 3D surface:
 
-- a native 24-item Gallery with bundled search/filter metadata, canonical atom
+- a native 23-item Gallery with bundled search/filter metadata, canonical atom
   counts, and a global 50,000-atom policy;
 - native Files/iCloud Drive selection plus on-device `.xyz` extension, byte,
   atom-count, row, and coordinate validation before WebView injection;
