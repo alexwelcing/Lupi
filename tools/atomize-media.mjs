@@ -4,6 +4,22 @@ import path from 'node:path';
 import process from 'node:process';
 import QRCode from 'qrcode';
 import { createCanvas, loadImage } from 'canvas';
+import { fileURLToPath } from 'node:url';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * How a source image is recorded in the outputs. The files are served
+ * publicly, so never write an absolute local path (it names the machine and
+ * its user): a file inside the repo is recorded repo-relative, anything else
+ * by its file name only.
+ */
+function publicSourcePath(file) {
+  const absolute = path.resolve(String(file));
+  const relative = path.relative(REPO_ROOT, absolute);
+  if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) return relative.split(path.sep).join('/');
+  return path.basename(absolute);
+}
 
 const DEFAULTS = {
   outDir: 'apps/web/public/generated/atomized',
@@ -425,7 +441,7 @@ async function main() {
     const meta = {
       name,
       mode: 'frames',
-      source: inputs,
+      source: inputs.map(publicSourcePath),
       width: frames[0]?.width ?? 0,
       height: frames[0]?.height ?? 0,
       frameCount: frames.length,
@@ -474,7 +490,7 @@ async function main() {
     if (!args.input) throw new Error('image mode requires --input');
     const input = Array.isArray(args.input) ? args.input[0] : args.input;
     matrix = await imageMatrix(String(input), Number(args.maxImageSize), Number(args.threshold), Boolean(args.invert), Number(args.quietZone));
-    source = path.resolve(String(input));
+    source = publicSourcePath(input);
   } else {
     throw new Error(`Unknown mode: ${args.mode}`);
   }

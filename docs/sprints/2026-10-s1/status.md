@@ -51,12 +51,12 @@ Each track also ran its own smoke plugin in both lanes before merging (counts ar
 - **The morph holds the old shape in the new colours** until the new file's first frame (up to 0.6 s), and stretched bonds glow lime during a long flight.
 - **`/scale`'s last four slider labels overlap** at 1024 px and 390 px (found by p1, not fixed).
 - **Analytics** (found by p4): lupi.live posts events to the Worker, which only logs them; `pnpm analytics:report` reads Cloud Logging, which only the old Firebase function writes, so it probably sees no lupi.live traffic since the Cloudflare cutover.
-- **The sphere-grid labels the gallery uses** (`generated/lupine-wiki/sphere-grid.labels.json`) carry 3,906 local paths such as `hermes-core://config//home/alex/.hermes/SOUL.md`, and the atom card shows a shortened form of them (found by p2). Regenerating needs the external lupine-wiki checkout.
+- **The sphere-grid labels the gallery uses** (`generated/lupine-wiki/sphere-grid.labels.json`) carried 3,906 local home-directory paths, and the atom card showed a shortened form of them (found by p2). Resolved 2026-11-12: the sphere-grid gallery entry, its data files and its generator were removed from the repo.
 - **Unused dependencies** (Rive, mp4-muxer, gifenc, and three/@atlas/core in `packages/renderer`) are confirmed unused but still in the lockfile: the offline re-lock could not resolve.
 
 ## Decisions waiting on you
 
 The five in [README.md](README.md#decisions-waiting-on-the-owner) stand, plus:
 
-6. **The sphere-grid labels' local paths** (above): regenerate, strip the paths at build time, or drop that gallery entry.
+6. **The sphere-grid labels' local paths** (above): regenerate, strip the paths at build time, or drop that gallery entry. Resolved 2026-11-12: the sphere-grid gallery entry, its data files and its generator were removed from the repo.
 7. **Analytics after the cutover** (above): ship Worker logs somewhere `analytics:report` can read, or retire the report.

@@ -2,7 +2,7 @@
  * nodePath.ts — how a knowledge-graph node id shows in the UI.
  *
  * A node id is often a local path from the export that wrote the labels
- * (`hermes-core://config//home/<user>/.hermes/SOUL.md`). The ids stay as they
+ * (`example-core://config//home/<user>/.config/app/notes.md`). The ids stay as they
  * are: pinning, label search, Herdr events and `lupi.knowledge_graph` use
  * them. What the UI prints, and its tooltips, never names a home directory:
  * `/home/<user>`, `/Users/<user>` and `C:\Users\<user>` read as `~`, and the
@@ -40,7 +40,7 @@ export function nodePathTitle(nodeId: string | undefined): string | undefined {
 
 /**
  * The node id as the atom card prints it: from the home directory on when it
- * has one (`~/.hermes/SOUL.md`), else without its scheme
+ * has one (`~/.config/app/notes.md`), else without its scheme
  * (`claim/S5`); very long paths keep their last segment.
  */
 export function nodePathLabel(nodeId: string | undefined): string | undefined {

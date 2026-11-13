@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "license": "AGPL-3.0-or-later",
+  "license": "MIT",
   "description": "Bounded localhost-browser executor for Lupi's legacy PNG renderer handoff.",
   "main": "src/supervisor.mjs",
   "scripts": {

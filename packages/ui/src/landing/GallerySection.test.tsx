@@ -8,7 +8,7 @@ describe('student collection', () => {
     render(<GallerySection />);
     expect(screen.getAllByRole('article')).toHaveLength(12);
     expect(screen.getByRole('link', { name: 'Explore Water' }).getAttribute('href')).toBe('/?sim=water');
-    expect(screen.queryByText(/Research Payload|Potential Benchmark|OMol25|Sphere Grid/)).toBeNull();
+    expect(screen.queryByText(/Research Payload|Potential Benchmark|OMol25/)).toBeNull();
   });
   it('filters by learner topic and can return to all examples', () => {
     render(<GallerySection />);

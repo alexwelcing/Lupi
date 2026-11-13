@@ -151,7 +151,7 @@ ARKit-capable iPhone.
       stays thin and delegates behavior to feature screens. **Owner:** Codex.
       **Receipt:** [`app/_layout.tsx`](../apps/mobile/app/_layout.tsx) and
       [`apps/mobile/README.md`](../apps/mobile/README.md).
-- [x] **Native Gallery discovery exists in source.** Exactly 24 curated records
+- [x] **Native Gallery discovery exists in source.** Exactly 23 curated records
       are bundled for offline browsing. iPhone uses native large-title header
       search and an iOS action sheet for All Structures, Featured, Molecules,
       Materials, and Trajectories; the direct-root list adapts between one and
@@ -1001,13 +1001,13 @@ network type, configured web origin, deployed web revision, and Worker revision.
       report. **Owner:** Tester + Codex. **Receipt:** report and screenshot with no
       secrets/personal data.
 - [ ] **Verify the complete native Gallery.** It opens in the dark UI with exactly
-      24 curated cards and accurate names, formulas, atom/frame counts, and
+      23 curated cards and accurate names, formulas, atom/frame counts, and
       thumbnails or intentional thumbnail fallbacks. **Owner:** Tester + Codex.
       **Receipt:** full-list capture and catalog comparison.
 - [ ] **Search through the native header.** Search `aspirin`; confirm the single
       21-atom Aspirin card remains and the result count is announced. Clear it,
       enter a no-match query, verify the native empty/reset state, then return to
-      all 24 without stale results. **Owner:** Tester. **Receipt:** screen recording
+      all 23 without stale results. **Owner:** Tester. **Receipt:** screen recording
       with VoiceOver announcement notes.
 - [ ] **Filter through the iOS action sheet.** Exercise Featured, Molecules,
       Materials, Trajectories, and All Structures; reconcile each count to the

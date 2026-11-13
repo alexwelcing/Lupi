@@ -5,14 +5,14 @@ const HOME = /\/home\/[^/]+\/|\/Users\/[^/]+\/|[A-Za-z]:\\Users\\/;
 
 describe('knowledge node paths', () => {
   it('prints a home path from the home directory on', () => {
-    expect(nodePathLabel('hermes-core://config//home/alex/.hermes/SOUL.md')).toBe('~/.hermes/SOUL.md');
-    expect(nodePathTitle('hermes-core://config//home/alex/.hermes/SOUL.md')).toBe('hermes-core://config/~/.hermes/SOUL.md');
+    expect(nodePathLabel('example-core://config//home/sam/.config/app/notes.md')).toBe('~/.config/app/notes.md');
+    expect(nodePathTitle('example-core://config//home/sam/.config/app/notes.md')).toBe('example-core://config/~/.config/app/notes.md');
   });
 
   it('folds .. segments after the home directory', () => {
-    const id = 'lupine-public://file//home/alex/Dev/lupine/lupine/../lupine-science/.env';
-    expect(nodePathLabel(id)).toBe('~/Dev/lupine/lupine-science/.env');
-    expect(nodePathTitle(id)).toBe('lupine-public://file/~/Dev/lupine/lupine-science/.env');
+    const id = 'example-public://file//home/sam/work/proj/a/../b/notes.txt';
+    expect(nodePathLabel(id)).toBe('~/work/proj/b/notes.txt');
+    expect(nodePathTitle(id)).toBe('example-public://file/~/work/proj/b/notes.txt');
   });
 
   it('scrubs macOS and Windows home directories too', () => {
@@ -29,7 +29,7 @@ describe('knowledge node paths', () => {
   });
 
   it('shortens long paths to their last segment, and never shows a home path', () => {
-    const id = 'lupine-science://file//home/alex/Dev/lupine/lupine/glim-think/evals/fixtures/deep/nested/report.json';
+    const id = 'example-science://file//home/sam/work/proj/a/tools/evals/fixtures/deep/nested/report.json';
     const label = nodePathLabel(id)!;
     expect(label.length).toBeLessThanOrEqual(42);
     expect(label.endsWith('/report.json')).toBe(true);

@@ -374,21 +374,21 @@ All of these are solve rates, not correctness: there is no reference graph yet.
 
 ---
 
-**Files (scratchpad, absolute paths):**
+**Files (in a session scratch directory, `bench/`; not committed):**
 - Benchmark scripts:
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/bench.py
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/bench2.py
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/bench3.py
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/omolbench.py
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/layered.py
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/analyze.py
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/conn.mjs
+  - bench/bench.py
+  - bench/bench2.py
+  - bench/bench3.py
+  - bench/omolbench.py
+  - bench/layered.py
+  - bench/analyze.py
+  - bench/conn.mjs
 - Raw results:
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/omol_results.jsonl
-  - /tmp/claude-0/-home-user-Lupi/42eb61f3-cc7c-558d-8ada-8bfe7b608889/scratchpad/bench/layered_results.jsonl
+  - bench/omol_results.jsonl
+  - bench/layered_results.jsonl
 
 **Lupi files referenced:**
-- /home/user/Lupi/packages/scene/src/bondDetectCpu.ts
-- /home/user/Lupi/packages/core/src/elements.ts
-- /home/user/Lupi/packages/ui/src/molecules/remoteOmol.ts
-- /home/user/Lupi/packages/ui/src/molecules/providers/omol.ts
+- packages/scene/src/bondDetectCpu.ts
+- packages/core/src/elements.ts
+- packages/ui/src/molecules/remoteOmol.ts
+- packages/ui/src/molecules/providers/omol.ts

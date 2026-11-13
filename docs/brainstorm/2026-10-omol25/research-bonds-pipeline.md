@@ -1,6 +1,6 @@
 # How Lupi infers, stores, renders and exports bonds, and what an OMol25 bond strategy has to change
 
-All repo paths are relative to `/home/user/Lupi`. This was a read-only study: no builds, no browser runs, no timing measurements. Claims marked **code-derived** come from reading the code, not from running it. Claims I could not confirm are marked **UNCONFIRMED**.
+All repo paths are relative to the repo root. This was a read-only study: no builds, no browser runs, no timing measurements. Claims marked **code-derived** come from reading the code, not from running it. Claims I could not confirm are marked **UNCONFIRMED**.
 
 ## Summary
 

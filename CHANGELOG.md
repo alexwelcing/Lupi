@@ -3,6 +3,24 @@
 Since 2026-09-20 every merge to `main` deploys to lupi.live, so entries from
 then on are dated by the day they merged, with their pull requests.
 
+## Unreleased - privacy page, licence and clean-up (branch `claude/sleepy-edison-taqk9i`)
+
+- **The Lupine Sphere Grid gallery entry is gone.** Its data files mapped a
+  local agent installation (home-directory file paths); they, the gallery
+  snapshot and `tools/generate-sphere-grid-gallery.mjs` are removed, with
+  every reference (gallery data, featured ids, library facts, the URL
+  allowlist, the frozen mobile gallery, now 23 items). Served files and docs
+  no longer carry local-machine paths, and `tools/atomize-media.mjs` and
+  `tools/build-omol25-validation-index.mjs` record sources repo-relative or
+  by file name.
+- **A privacy page at `/privacy/`**, linked from the landing footer and
+  summarised in the README: the cookieless first-party visit counter, the
+  optional sign-in for saving views, the one hint cookie, and the features
+  that send input to PubChem, Jev or Hugging Face.
+- **Relicensed** by the copyright holder (2026-11-11): code MIT (was
+  AGPL-3.0-or-later); first-party prose and data CC BY 4.0 (was CC BY-SA 4.0 /
+  ODbL). Third-party material keeps its own terms (`NOTICE.md`).
+
 ## Unreleased - picking and a lighter CI (branch `claude/nifty-volta-ophavr`)
 
 - **A click picks the atom under the pointer.** The picker treated every

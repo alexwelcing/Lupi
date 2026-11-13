@@ -27,7 +27,7 @@ const GALLERY_MOLECULE = {
 } satisfies import("./molecules").MoleculeSummary;
 
 test("the curated native gallery is bounded and contains no duplicate IDs", () => {
-  assert.equal(MOBILE_GALLERY_IDS.length, 24);
+  assert.equal(MOBILE_GALLERY_IDS.length, 23);
   assert.equal(new Set(MOBILE_GALLERY_IDS).size, MOBILE_GALLERY_IDS.length);
   for (const atomCount of Object.values(MOBILE_GALLERY_ATOM_COUNTS)) {
     assert.ok(Number.isSafeInteger(atomCount));

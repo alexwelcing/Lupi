@@ -7,13 +7,36 @@ development and provenance remain available in:
 
 https://github.com/alexwelcing/lupine
 
-The project-owned code is licensed under AGPL-3.0-or-later. First-party
-non-code content is licensed under CC BY-SA 4.0 unless otherwise noted.
-First-party structured databases and manifests are licensed under ODbL 1.0
-unless otherwise noted.
+## Licensing
+
+Relicensed 2026-11-11 by the copyright holder: code MIT (was
+AGPL-3.0-or-later where applicable); first-party prose and data CC BY 4.0 (was
+CC BY-SA 4.0 / ODbL).
+
+- Project-owned code: MIT (`LICENSE`).
+- First-party prose, figures, documentation and visual assets: CC BY 4.0
+  (`LICENSE-CONTENT.md`).
+- First-party structured data, viewer manifests and catalogs: CC BY 4.0
+  (`LICENSE-DATA.md`).
+
+You can reuse our code (MIT) and our first-party text and data (CC BY 4.0) with
+attribution and no share-alike obligations.
+
+## Third-party material
 
 Third-party dependencies and imported scientific data retain their upstream
-licenses.
+licenses; MIT and CC BY 4.0 above do not apply to them. In this repo that
+includes, for example:
+
+- packages installed through `package.json`, `pnpm-lock.yaml` and
+  `packages/parsers/wasm/Cargo.toml`, each under its own licence;
+- the OMol25 featured rows under `apps/web/public/datasets/omol25/` (Open
+  Molecules 2025, CC BY 4.0, cited in `featured.v1.json`);
+- NIST Interatomic Potentials Repository catalog data under
+  `apps/web/public/nist/` and `nist_ipr/`;
+- molecule structures and identities taken from PubChem and other public
+  sources (see the source fields in `packages/ui/src/gallery-nomenclature.json`);
+- the environment HDRIs and the adapted TSL shading described below.
 
 The environment HDRIs in `apps/web/public/hdri/` are from Poly Haven and are
 CC0 1.0 (public domain); see `apps/web/public/hdri/NOTICE.md`.

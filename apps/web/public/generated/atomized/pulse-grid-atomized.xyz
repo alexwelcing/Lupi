@@ -1,5 +1,5 @@
 2916
-atomized_media=pulse-grid-atomized frame=0 source=C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-000.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-001.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-002.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-003.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-004.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-005.png matrix=18x18 dark=36
+atomized_media=pulse-grid-atomized frame=0 source=apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-000.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-001.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-002.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-003.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-004.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-005.png matrix=18x18 dark=36
 C -11.35 11.35 0
 C -11.05 11.35 0
 C -10.75 11.35 0
@@ -2917,7 +2917,7 @@ C 10.75 -11.35 0
 C 11.05 -11.35 0
 C 11.35 -11.35 0
 2916
-atomized_media=pulse-grid-atomized frame=1 source=C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-000.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-001.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-002.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-003.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-004.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-005.png matrix=18x18 dark=41
+atomized_media=pulse-grid-atomized frame=1 source=apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-000.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-001.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-002.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-003.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-004.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-005.png matrix=18x18 dark=41
 H -11.35 11.35 -0.08
 H -11.05 11.35 -0.08
 H -10.75 11.35 -0.08
@@ -5835,7 +5835,7 @@ H 10.75 -11.35 -0.08
 H 11.05 -11.35 -0.08
 H 11.35 -11.35 -0.08
 2916
-atomized_media=pulse-grid-atomized frame=2 source=C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-000.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-001.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-002.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-003.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-004.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-005.png matrix=18x18 dark=43
+atomized_media=pulse-grid-atomized frame=2 source=apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-000.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-001.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-002.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-003.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-004.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-005.png matrix=18x18 dark=43
 H -11.35 11.35 -0.08
 H -11.05 11.35 -0.08
 H -10.75 11.35 -0.08
@@ -8753,7 +8753,7 @@ H 10.75 -11.35 -0.08
 H 11.05 -11.35 -0.08
 H 11.35 -11.35 -0.08
 2916
-atomized_media=pulse-grid-atomized frame=3 source=C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-000.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-001.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-002.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-003.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-004.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-005.png matrix=18x18 dark=45
+atomized_media=pulse-grid-atomized frame=3 source=apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-000.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-001.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-002.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-003.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-004.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-005.png matrix=18x18 dark=45
 H -11.35 11.35 -0.08
 H -11.05 11.35 -0.08
 H -10.75 11.35 -0.08
@@ -11671,7 +11671,7 @@ H 10.75 -11.35 -0.08
 H 11.05 -11.35 -0.08
 H 11.35 -11.35 -0.08
 2916
-atomized_media=pulse-grid-atomized frame=4 source=C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-000.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-001.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-002.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-003.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-004.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-005.png matrix=18x18 dark=45
+atomized_media=pulse-grid-atomized frame=4 source=apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-000.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-001.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-002.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-003.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-004.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-005.png matrix=18x18 dark=45
 H -11.35 11.35 -0.08
 H -11.05 11.35 -0.08
 H -10.75 11.35 -0.08
@@ -14589,7 +14589,7 @@ H 10.75 -11.35 -0.08
 H 11.05 -11.35 -0.08
 H 11.35 -11.35 -0.08
 2916
-atomized_media=pulse-grid-atomized frame=5 source=C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-000.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-001.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-002.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-003.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-004.png,C:\Users\alexw\Downloads\shed\atlas\atlas-view\apps\web\public\generated\atomized\frame-sources\pulse-grid\pulse-005.png matrix=18x18 dark=46
+atomized_media=pulse-grid-atomized frame=5 source=apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-000.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-001.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-002.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-003.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-004.png,apps/web/public/generated/atomized/frame-sources/pulse-grid/pulse-005.png matrix=18x18 dark=46
 H -11.35 11.35 -0.08
 H -11.05 11.35 -0.08
 H -10.75 11.35 -0.08

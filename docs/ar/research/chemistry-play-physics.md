@@ -24,11 +24,11 @@ Scope: this covers only the physics layer for the native AR trophy case: grab, t
 
 | Asset | Where | Use in AR physics |
 |---|---|---|
-| `lupi.object-facts.v1`: centre of mass, principal `moments`, `axes`, `principalQuat`, rotor type, rings, symmetry axes, detents | `/home/user/Lupi/packages/core/src/objectFacts/types.ts` | Mass properties for RealityKit; rigidity hints from rings; symmetry detents |
-| `trueSpinCoast.ts`: torque-free Euler equations (RK4, 1/240 s substep), Dzhanibekov flip detection, inertia floor at 0.02·I_max for linear rotors | `/home/user/Lupi/packages/ui/src/camera/trueSpinCoast.ts` | In-flight tumble after a throw; port as is |
-| Display-only motion with the capture guard (weights zeroed in every capture; ripple bounded to 0.3 Å) | `/home/user/Lupi/packages/scene/src/tsl/displayMotion.ts` | The rule that snapshots and exports show the rest pose |
-| Honesty labels "Illustrative · Reset", "Illustrative motion, your atoms haven't moved"; Heat tooltip "Illustrative heat … Not a simulation."; thermometer reads 300 K at rest | `/home/user/Lupi/packages/ui/src/play/PlayPill.tsx` | Bottom step of the honesty ladder (§6) |
-| `lupi-bonds.molecular.v1` (inferred bonds, coordination dashed, ionic contacts dotted) | `/home/user/Lupi/docs/omol25-bonds-and-discovery.md` | The bond graph the card is built on |
+| `lupi.object-facts.v1`: centre of mass, principal `moments`, `axes`, `principalQuat`, rotor type, rings, symmetry axes, detents | `packages/core/src/objectFacts/types.ts` | Mass properties for RealityKit; rigidity hints from rings; symmetry detents |
+| `trueSpinCoast.ts`: torque-free Euler equations (RK4, 1/240 s substep), Dzhanibekov flip detection, inertia floor at 0.02·I_max for linear rotors | `packages/ui/src/camera/trueSpinCoast.ts` | In-flight tumble after a throw; port as is |
+| Display-only motion with the capture guard (weights zeroed in every capture; ripple bounded to 0.3 Å) | `packages/scene/src/tsl/displayMotion.ts` | The rule that snapshots and exports show the rest pose |
+| Honesty labels "Illustrative · Reset", "Illustrative motion, your atoms haven't moved"; Heat tooltip "Illustrative heat … Not a simulation."; thermometer reads 300 K at rest | `packages/ui/src/play/PlayPill.tsx` | Bottom step of the honesty ladder (§6) |
+| `lupi-bonds.molecular.v1` (inferred bonds, coordination dashed, ionic contacts dotted) | `docs/omol25-bonds-and-discovery.md` | The bond graph the card is built on |
 | `lupi-bond-orders.v1`: specified (phase B, opt-in) but **no code references found** | same doc §2.6 | **Dependency.** BDE by bond order, rotatable-bond detection and amide or double-bond locking all need it |
 | Instant Replay tape: inputs plus 0.5 s camera keyframes | `packages/ui/src/replay` | The replay model for AR (§5.7) |
 

@@ -64,7 +64,7 @@ const scenarios = [
       labelCheck("gallery-root", "Lupi molecular gallery"),
       labelCheck("gallery-omol25", "Explore OMol25 molecules"),
       labelCheck("gallery-search", "Search gallery"),
-      textCheck("gallery-count", "24 structures"),
+      textCheck("gallery-count", "23 structures"),
       roleCheck("gallery-featured-heading", "heading", "Featured"),
       labelCheck("gallery-filter", "Filter gallery"),
       textCheck("gallery-caffeine-card", "Caffeine"),

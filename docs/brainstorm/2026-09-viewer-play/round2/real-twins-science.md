@@ -63,13 +63,13 @@ SOURCES:
 - PubChem3D conformer generation: https://jcheminf.biomedcentral.com/articles/10.1186/1758-2946-3-4
 
 KEY REPO FILES:
-- /home/user/Lupi/packages/ui/src/gallery/studentCollection.ts
-- /home/user/Lupi/packages/ui/src/StudyLensPanel.tsx
-- /home/user/Lupi/packages/ui/src/galleryNomenclature.ts
-- /home/user/Lupi/tools/sims/make_phase_trajectories.py
-- /home/user/Lupi/scripts/generate_timeseries_animations.py
-- /home/user/Lupi/apps/web/public/archive/w_cascade_150keV.lammpstrj
-- /home/user/Lupi/packages/ui/src/molecules/pubchemLoad.ts
+- packages/ui/src/gallery/studentCollection.ts
+- packages/ui/src/StudyLensPanel.tsx
+- packages/ui/src/galleryNomenclature.ts
+- tools/sims/make_phase_trajectories.py
+- scripts/generate_timeseries_animations.py
+- apps/web/public/archive/w_cascade_150keV.lammpstrj
+- packages/ui/src/molecules/pubchemLoad.ts
 
 <a id="r2-real-twins-science-01"></a>
 ## The Evidence Ladder and the Twin Door
@@ -210,7 +210,7 @@ ONE SCHEMA, lupi-provenance/1. It is a superset of lupi-sim-manifest/1, and old 
 - verification {expect: kind-specific}
 - citations [{doi|url, what}]
 - steward and reviewedBy
-- license: ODbL-1.0 for first-party data per LICENSE-DATA.md; upstream licences kept
+- license: CC-BY-4.0 for first-party data per LICENSE-DATA.md (relicensed 2026-11-11; was ODbL-1.0); upstream licences kept
 - reproduce (the exact command) and generatedAt
 
 PUBLISHER. A named Science Steward, the same role STUDENT_COLLECTION already names ('Steward: Lupi product owner'), with a second reviewer for any new kind. A PR adds the bake script output plus its manifest. Small outputs (up to about 1 MB: modes, maps, lattice descriptors) live in apps/web/public/science/<id>/. Large runs go to the existing GCS sims bucket beside their manifest, as tools/sims/README already prescribes.

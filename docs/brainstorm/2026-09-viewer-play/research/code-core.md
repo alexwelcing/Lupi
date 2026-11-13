@@ -1,6 +1,6 @@
 # Lupi core viewer: render path, hand-rolled math, perf hotspots, upgrade hooks
 
-Research digest, 2026-09-27. I read the code only and changed nothing in the repo. Paths are relative to `/home/user/Lupi`. I checked external facts against the npm registry and against the published tarballs of `math@0.1.0`, `@react-three/fiber@10.0.0-alpha.5`, `@pmndrs/scheduler@0.2.0`, `postprocessing@6.38.3`, `n8ao@1.10.1` and `@react-three/drei@10.7.9`. Anything I could not verify is marked UNVERIFIED.
+Research digest, 2026-09-27. I read the code only and changed nothing in the repo. Paths are relative to the repo root. I checked external facts against the npm registry and against the published tarballs of `math@0.1.0`, `@react-three/fiber@10.0.0-alpha.5`, `@pmndrs/scheduler@0.2.0`, `postprocessing@6.38.3`, `n8ao@1.10.1` and `@react-three/drei@10.7.9`. Anything I could not verify is marked UNVERIFIED.
 
 ---
 

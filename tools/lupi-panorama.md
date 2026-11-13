@@ -23,24 +23,28 @@ Generation writes reviewable candidates under `tools/lupi-environment-candidates
 and appends a run record to `tools/lupi-panorama-runs.jsonl`. It does not publish
 directly into `apps/web/public/backgrounds`.
 
+The commands below use ComfyUI's embedded Python. Replace
+`<ComfyUI_windows_portable>` with the folder where your portable ComfyUI
+install lives.
+
 Smoke one asset:
 
 ```powershell
-C:\Users\alexw\Downloads\USE_THIS_COMFY\ComfyUI_windows_portable\python_embeded\python.exe `
+<ComfyUI_windows_portable>\python_embeded\python.exe `
   .\tools\lupi_comfy_panorama.py --asset nebula --target-width 2048 --target-height 1024
 ```
 
 Full static candidate batch:
 
 ```powershell
-C:\Users\alexw\Downloads\USE_THIS_COMFY\ComfyUI_windows_portable\python_embeded\python.exe `
+<ComfyUI_windows_portable>\python_embeded\python.exe `
   .\tools\lupi_comfy_panorama.py
 ```
 
 Variant sweep without touching the manifest:
 
 ```powershell
-C:\Users\alexw\Downloads\USE_THIS_COMFY\ComfyUI_windows_portable\python_embeded\python.exe `
+<ComfyUI_windows_portable>\python_embeded\python.exe `
   .\tools\lupi_comfy_panorama.py --asset crystal --seed-offset 1000 `
   --prompt-suffix "single continuous environment, no repeated tiles" `
   --negative-suffix "repeating tile, mirrored quadrants"
@@ -61,7 +65,7 @@ The current static flow is:
 Promote a reviewed candidate run into the public viewer assets:
 
 ```powershell
-C:\Users\alexw\Downloads\USE_THIS_COMFY\ComfyUI_windows_portable\python_embeded\python.exe `
+<ComfyUI_windows_portable>\python_embeded\python.exe `
   .\tools\lupi_comfy_panorama.py --promote-run <run-id>
 ```
 
@@ -74,7 +78,7 @@ Add `--asset <id>` to promote only reviewed winners from a larger sweep.
 Validate the promoted still pack:
 
 ```powershell
-C:\Users\alexw\Downloads\USE_THIS_COMFY\ComfyUI_windows_portable\python_embeded\python.exe `
+<ComfyUI_windows_portable>\python_embeded\python.exe `
   .\tools\lupi_environment_qa.py
 ```
 

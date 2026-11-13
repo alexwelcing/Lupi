@@ -6,7 +6,9 @@ research machinery.
 
 ## This Repo
 
-**Lupi** is the browser-native molecular viewer at `https://lupi.live`.
+**Lupi** is the browser-native molecular viewer at `https://lupi.live`. It
+opens structures and LAMMPS dump files in a WebGPU-capable browser with no
+installation.
 
 It owns molecule inspection, trajectories, visual controls, saved views,
 exports, Firebase viewer support, and agent-driven viewer workflows.

@@ -1,6 +1,6 @@
 # Lupi experiential and playful surfaces: a code map for the "make it a toy" brainstorm
 
-Scope: read-only survey of `/home/user/Lupi` as of 2026-09-27. File references are `path:line`. Quality ratings are code-read assessments, not visual QA. Anything not verified in code is marked UNVERIFIED.
+Scope: read-only survey of the Lupi repo as of 2026-09-27. File references are `path:line`. Quality ratings are code-read assessments, not visual QA. Anything not verified in code is marked UNVERIFIED.
 
 ---
 

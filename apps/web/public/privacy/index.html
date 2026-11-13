@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="What the lupi.live viewer collects: cookieless visit counts, optional sign-in to save views, and the features that send your input to other services.">
+  <title>Lupi · Privacy</title>
+  <style>
+    :root { color-scheme: dark; font: 17px/1.65 system-ui, sans-serif; background: #0c1b19; color: #f4f1e7; }
+    body { margin: 0; }
+    main { max-width: 68ch; margin: auto; padding: 42px 24px 64px; }
+    a { color: #ffd38a; text-underline-offset: .2em; }
+    a:focus-visible { outline: 3px solid #ffd38a; outline-offset: 5px; }
+    nav { display: flex; flex-wrap: wrap; gap: 20px; }
+    h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; margin-top: 34px; }
+    h2 { font-size: 1.25rem; margin-top: 36px; }
+    code { font-size: .9em; }
+    .date, footer { color: #c4d1c9; }
+    footer { border-top: 1px solid #50635a; margin-top: 42px; padding-top: 20px; }
+  </style>
+</head>
+<body>
+<main>
+  <nav aria-label="Lupi links"><a href="/">Lupi</a><a href="/privacy/ios/">iPhone and iPad app privacy</a><a href="https://github.com/alexwelcing/Lupi">Source code</a></nav>
+  <h1>Privacy on lupi.live</h1>
+  <p class="date">Updated 12 November 2026</p>
+  <p>This page describes the lupi.live website and viewer, from its source code. The iPhone and iPad app has <a href="/privacy/ios/">its own page</a>. The Lupi merch shop runs on Shopify under its own terms and is not covered here.</p>
+
+  <h2>Visit counts, without cookies</h2>
+  <p>Pages built from the web app, such as the home page, the viewer, the Library, molecule pages and Lupi Daily, load a small first-party script, <code>/audience.js</code> (this page does not). The script sets no cookies and writes nothing to browser storage. It keeps a random visit ID and session ID in page memory only, so a reload counts as a new visit.</p>
+  <p>It sends page views (with numbers, IDs and email-like parts of the address replaced), the host name of the referring site, a device class (phone, tablet or desktop), whether the browser reports being automated, active-time counts, and the names of a fixed list of actions such as saving or sharing a view, a Library search, a download or a link to another site. It does not send what you typed, the files you open or who you are.</p>
+  <p>If your browser sends Global Privacy Control or Do Not Track, the script sends nothing, and our edge drops any event request that carries either signal. Our edge passes the events on to a separate collector service with a coarse browser class (not your full user-agent string) and Cloudflare's request metadata, which can include approximate location (country, region, city, postal code and coordinates) and the network you connect from (its ASN).</p>
+  <p>The site does not load Google Analytics, advertising tags or third-party trackers.</p>
+
+  <h2>Files you open</h2>
+  <p>Structures and LAMMPS files you open from your computer are read in your browser. They are not uploaded unless you save a view (below).</p>
+
+  <h2>Signing in is optional</h2>
+  <p>You can explore, open files and export without an account. Signing in is needed to save views. It uses Google or GitHub through Google's Firebase Authentication, which receives the basic profile your provider shares. Firebase keeps your signed-in session in your browser's storage, and we set one first-party cookie, <code>lupi_viewer_auth=1</code>, for 30 days; it records only that you are signed in.</p>
+
+  <h2>Saved views</h2>
+  <p>A saved view is stored in Google Cloud Firestore with your account ID. Anyone with its link can open it. Public views can also appear in listings; unlisted views open only from their link. If the structure came from a file on your computer and has 5,000 atoms or fewer, its coordinates are stored inside the view. You can delete your own views.</p>
+
+  <h2>Features that send your input to other services</h2>
+  <ul>
+    <li><strong>Looking up a molecule by name</strong>, including the PubChem results in a Library search: your browser asks PubChem directly.</li>
+    <li><strong>The command palette and the molecule switcher</strong>: your text goes through our edge to TypeSafe's Jev service.</li>
+    <li><strong>Photo scan</strong>: your photo goes through our edge to models hosted on Hugging Face, and the identification to Jev. Our edge caches the answer, keyed by a hash of the photo, for up to an hour; it does not store the photo.</li>
+    <li><strong>Opening a saved view or searching the Library</strong> can read from Firestore. Some gallery and Library structures load from Google Cloud Storage, and OMol25 rows come from Hugging Face through our edge.</li>
+  </ul>
+  <p>Please do not put personal or sensitive information into searches or photos. These services keep records under their own policies.</p>
+
+  <h2>Settings kept in your browser</h2>
+  <p>Your viewer settings (turn off "Remember settings on this device" in Settings to stop this), motion, sound and haptics preferences, Remix preferences and finds, Lupi Daily results, a view waiting to be saved while you sign in, recent agent-bridge responses and a few short-lived interface flags are kept in your browser's local or session storage. They stay on your device. Clearing this site's data removes them.</p>
+
+  <h2>Hosting and logs</h2>
+  <p>lupi.live runs on Cloudflare. As with any website, the servers that handle a request see your IP address and request headers. Our edge writes short operational log lines, for example which model answered and how many candidates it ranked, not your query text or photo. How long hosting providers keep logs is set in their account settings, not in this code.</p>
+
+  <h2>Questions</h2>
+  <p>Questions about this page or a data request can be sent to <a href="mailto:alex@lupinesci.com">alex@lupinesci.com</a>. We will update this page when the site's data handling changes.</p>
+  <footer>Lupi · <a href="/">lupi.live</a></footer>
+</main>
+</body>
+</html>

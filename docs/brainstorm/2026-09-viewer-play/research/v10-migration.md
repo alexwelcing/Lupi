@@ -1,6 +1,6 @@
 # Lupi migration map: R3F v10 alpha, three r186 and WebGPURenderer
 
-Researched 2026-09-27. This is research only: nothing in `/home/user/Lupi` was modified. Repo HEAD is `e4a099b`.
+Researched 2026-09-27. This is research only: nothing in the repo was modified. Repo HEAD is `e4a099b`.
 
 **Baseline decided by the owner:** "Assume we are upgrading to v10 alpha for R3F."
 - `@react-three/fiber` 10 alpha
@@ -11,7 +11,7 @@ Researched 2026-09-27. This is research only: nothing in `/home/user/Lupi` was m
 - the v10 scheduler
 
 **How I verified things.**
-- Code facts are cited as `path:line` (relative to `/home/user/Lupi`).
+- Code facts are cited as `path:line` (relative to the repo root).
 - Package facts come from the published tarballs I unpacked:
   - `@react-three/fiber@10.0.0-alpha.5` and `10.0.0-canary.14007b4`
   - `@react-three/drei@11.0.0-alpha.7`
@@ -613,7 +613,7 @@ If the performance loss is unacceptable, keep a WebGL-backend or depth-prepass v
 - `00-fact-sheet.md`, `r3f-releases.md`, `pmndrs-ecosystem.md`, `threejs-webgpu.md`, `code-core.md`
 
 **Lupi code**
-- Every `path:line` cited above, relative to `/home/user/Lupi`. Primary files:
+- Every `path:line` cited above, relative to the repo root. Primary files:
   - `packages/scene/src/{AtomsOptimized,Bonds,bondImpostor,AtomClusters,VectorGlyphs,BillionAtomBlock,AtomsTransmission,AtomPicker}.ts(x)`
   - `packages/ui/src/{viewer/ViewerCanvas,postprocess/ScenePostprocessing,postprocess/presets,ExportManager,export/renderCaptureState,mcp/renderArtifactAdapter,viewer/captureViewerThumbnail,SceneLighting,equirectTexture,ProceduralBackground,app/AppBackground,app/ViewerScene,MoleculeFilterShell,KnowledgeLabelsLayer,AnnotationsLayer,MeasurementLayer,SpatialAnchor,xr/*,gpu-studio/runtime,scan/gist/*,action-light/runtime}.ts(x)`
   - `docs/render-artifact-contract.md`, `AGENTS.md`

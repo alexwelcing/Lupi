@@ -139,7 +139,9 @@ writeFileSync(path.join(OUT_DIR, `${COLLECTION}.${VERSION}.json`), `${indexJson}
 writeFileSync(path.join(OUT_DIR, `${COLLECTION}.${VERSION}.facets.json`), `${JSON.stringify(facets, null, 2)}\n`);
 const receipt = {
   builtAt: new Date().toISOString(),
-  source: SOURCE,
+  // A local --source is recorded by file name only: this receipt is served
+  // publicly, and an absolute path would name the machine that built it.
+  source: /^https?:\/\//i.test(SOURCE) ? SOURCE : `local:${path.basename(SOURCE)}`,
   sourceIndexVersion: source.indexVersion ?? null,
   edge: VERIFY ? EDGE : null,
   verification: VERIFY ? { sampled: checks.length, allMatched: checks.every((check) => check.ok), checks } : { skipped: true },

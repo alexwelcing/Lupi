@@ -110,12 +110,12 @@ WWDC26 had no iOS ARKit session I could find. On iOS 27 the visionOS-27 guide on
 
 Lupi already contains most of the algorithms:
 
-- `/home/user/Lupi/packages/scene/src/AtomsOptimized.tsx`: 12 B position plus a packed 4 B word per atom, palette textures, sub-pixel culling, "far-LOD cluster splats carry the silhouette".
-- `/home/user/Lupi/packages/scene/src/BillionAtomBlock.tsx`: four LOD tiers over 9,261 bricks (atoms, then 2³-cell, 6³-cell and per-brick splats). Positions are derived from the instance index, so there is no per-atom data.
-- `/home/user/Lupi/packages/scene/src/atomOcclusion.ts`: density AO bake in the QuteMol style.
-- `/home/user/Lupi/packages/scene/src/atomContactOcclusion.ts`: contact AO.
+- `packages/scene/src/AtomsOptimized.tsx`: 12 B position plus a packed 4 B word per atom, palette textures, sub-pixel culling, "far-LOD cluster splats carry the silhouette".
+- `packages/scene/src/BillionAtomBlock.tsx`: four LOD tiers over 9,261 bricks (atoms, then 2³-cell, 6³-cell and per-brick splats). Positions are derived from the instance index, so there is no per-atom data.
+- `packages/scene/src/atomOcclusion.ts`: density AO bake in the QuteMol style.
+- `packages/scene/src/atomContactOcclusion.ts`: contact AO.
 
-The current mobile AR draws one `ViroSphere` per atom (`/home/user/Lupi/apps/mobile/src/features/ar/molecule-ar-surface.native.tsx`, React Native with `@reactvision/react-viro`). That is the "slapped on" part, and it cannot scale.
+The current mobile AR draws one `ViroSphere` per atom (`apps/mobile/src/features/ar/molecule-ar-surface.native.tsx`, React Native with `@reactvision/react-viro`). That is the "slapped on" part, and it cannot scale.
 
 ---
 
@@ -258,7 +258,7 @@ For 1M atoms: about 8 MB atoms, 0.75 MB clusters, 3–5 MB bonds, under 1 MB LOD
 | Chunks: capsid subunits, chains, domains, crystal grains | Physical | One body per chunk (60–180 for a capsid) plus `PhysicsJoint` (fixed or spherical, iOS 18); "breakable" means our code removes a joint when relative impulse or separation crosses a threshold scaled from interface chemistry (covalent ≫ coordination > ionic contact > H-bond; Lupi's molecular.v1 bond kinds) | ≤200 bodies, about 0.5–1 ms CPU (**UNCONFIRMED**) |
 | Rigid vs flexible personality | Derived from data | Rigidity analysis of the bond graph (FIRST pebble game: [Jacobs et al. 2001](https://doi.org/10.1002/prot.1081)) yields rigid clusters and hinges, which become bodies and joints | Offline bake |
 | Flexible: stretch, wobble, breathe | Physical-ish | Elastic-network normal modes on coarse beads ([Atilgan et al. 2001](https://doi.org/10.1016/S0006-3495(01)76033-X)); project the user's drag onto 10–20 modes; GPU-skin atoms to 1–4 beads. Sheets (graphene, membranes) can use `ClothBodyComponent` (iOS 27) with target shapes as the rest pose. Coarse-graining at about 4 heavy atoms per bead follows Martini ([Souza et al. 2021](https://doi.org/10.1038/s41592-021-01098-3)) | Skinning 1M atoms <0.5 ms GPU |
-| Poke, Tug, Burst, Heat, Scatter | Visual only | Port Lupi's `/home/user/Lupi/packages/scene/src/tsl/displayMotion.ts` and its CPU twin to Metal compute, applied to atoms in touched clusters only; keep the "Illustrative" labelling | <0.3 ms |
+| Poke, Tug, Burst, Heat, Scatter | Visual only | Port Lupi's `packages/scene/src/tsl/displayMotion.ts` and its CPU twin to Metal compute, applied to atoms in touched clusters only; keep the "Illustrative" labelling | <0.3 ms |
 | True interactive dynamics | Out of scope at 1M | Interactive MD in VR has been run server-side ([O'Connor et al. 2018](https://doi.org/10.1126/sciadv.aat2731)); on device only for small molecules | — |
 
 **Picking:**
@@ -400,10 +400,10 @@ Papers and tools:
 [QuteMol, Tarini 2006](https://doi.org/10.1109/TVCG.2006.115) · [Grottel 2010](https://doi.org/10.1111/j.1467-8659.2009.01698.x) · [Lindow 2012](https://doi.org/10.1111/j.1467-8659.2012.03128.x) · [Falk 2013](https://doi.org/10.1111/cgf.12197) · [cellVIEW 2015](https://doi.org/10.2312/vcbm.20151209) · [HyperBalls, Chavent 2011](https://doi.org/10.1002/jcc.21861) · [Mol* 2021](https://doi.org/10.1093/nar/gkab314) · [Mesoscale Explorer 2024](https://doi.org/10.1002/pro.5177) · [VTX 2025](https://doi.org/10.3389/fbinf.2025.1588661) · [Schütz 2022](https://doi.org/10.1145/3543863) · [Mobile-GS 2026](https://arxiv.org/abs/2603.11531) · [BinaryCIF 2020](https://doi.org/10.1371/journal.pcbi.1008247) · [PDBj large structures](https://pdbj.org/help/large-structures?lang=en) · [ChimeraX VR docs](https://www.cgl.ucsf.edu/chimerax/docs/user/vr.html) · [Goddard 2018 Holodeck](https://doi.org/10.1016/j.jmb.2018.06.040) · [iMD-VR, O'Connor 2018](https://doi.org/10.1126/sciadv.aat2731) · [STMV MD, Freddolino 2006](https://doi.org/10.1016/j.str.2005.11.014) · [FIRST rigidity, Jacobs 2001](https://doi.org/10.1002/prot.1081) · [ANM, Atilgan 2001](https://doi.org/10.1016/S0006-3495(01)76033-X) · [Martini 3, Souza 2021](https://doi.org/10.1038/s41592-021-01098-3) · [GPU-driven pipelines, Haar and Aaltonen 2015](https://advances.realtimerendering.com/s2015/aaltonenhaar_siggraph2015_combined_final_footer_220dpi.pdf) · [Nanite course, SIGGRAPH 2021](https://advances.realtimerendering.com/s2021/index.html) · [Linebender mesh-shader notes](https://linebender.org/wiki/gpu/mesh-shaders/) · [Jolt Physics](https://github.com/jrouwe/JoltPhysics)
 
 Repo files referenced:
-- /home/user/Lupi/packages/scene/src/AtomsOptimized.tsx
-- /home/user/Lupi/packages/scene/src/BillionAtomBlock.tsx
-- /home/user/Lupi/packages/scene/src/atomOcclusion.ts
-- /home/user/Lupi/packages/scene/src/atomContactOcclusion.ts
-- /home/user/Lupi/packages/scene/src/tsl/displayMotion.ts
-- /home/user/Lupi/apps/mobile/src/features/ar/molecule-ar-surface.native.tsx
-- /home/user/Lupi/apps/mobile/package.json
+- packages/scene/src/AtomsOptimized.tsx
+- packages/scene/src/BillionAtomBlock.tsx
+- packages/scene/src/atomOcclusion.ts
+- packages/scene/src/atomContactOcclusion.ts
+- packages/scene/src/tsl/displayMotion.ts
+- apps/mobile/src/features/ar/molecule-ar-surface.native.tsx
+- apps/mobile/package.json

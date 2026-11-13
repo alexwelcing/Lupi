@@ -266,34 +266,6 @@
     "featured": true
   },
   {
-    "id": "lupine_sphere_grid",
-    "title": "Lupine Sphere Grid",
-    "subtitle": "Live knowledge graph of the Lupine ecosystem — 7 spheres, 1513 nodes, 2919 edges — rendered as a molecule. Sphere colors the cluster; node kind scales the atom.",
-    "domain": "Atomized Media",
-    "atoms": "1513",
-    "frames": "1",
-    "file": "generated/lupine-wiki/sphere-grid.lammpstrj",
-    "available": true,
-    "colors": [
-      "#ff9f43",
-      "#5f27cd",
-      "#10ac84"
-    ],
-    "metadata": {
-      "method": "Lupine Wiki Knowledge Graph → Molecular Structure",
-      "source": "lupine-wiki export-molecule",
-      "spheres": "7",
-      "nodes": "1513",
-      "edges": "2919",
-      "color_by": "sphere (element type)",
-      "size_by": "kind (radius property)"
-    },
-    "featured": true,
-    "initialAtomScale": 1.3,
-    "initialBackgroundPreset": "deep",
-    "labelsUrl": "generated/lupine-wiki/sphere-grid.labels.json"
-  },
-  {
     "id": "research_cu",
     "title": "Cu Potential Benchmark",
     "subtitle": "NIST evaluation of 9 interatomic potentials. Max error: 83.1%. Color by error to see where potentials fail.",

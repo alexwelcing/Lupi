@@ -1,5 +1,4 @@
 export const MOBILE_GALLERY_ATOM_COUNTS = {
-  lupine_sphere_grid: 1_513,
   caffeine: 24,
   aspirin: 21,
   dopamine: 22,
