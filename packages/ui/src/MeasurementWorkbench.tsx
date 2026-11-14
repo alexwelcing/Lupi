@@ -1,324 +1,150 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { hasUsableSourceIds, resolveTypeLabel } from '@atlas/core';
 import type { Frame } from '@atlas/core/types';
 import { useStore } from './store';
-import {
-  captureMeasurement,
-  measurementValueLabel,
-  resolveMolecularMeasurement,
-  type MeasurementKind,
-} from './measurements';
+import { playStore } from './play/playStore';
+import { useViewOccluder } from './camera/useViewOccluder';
+import { captureMeasurement, measurementValueLabel, resolveMeasurementAtomIndices, resolveMolecularMeasurement, requiredMeasurementAtoms, type MeasurementKind } from './measurements';
 
-export function MeasurementWorkbench({
-  frame,
-  frameIndex,
-}: {
-  frame: Frame | undefined;
-  frameIndex: number;
-}) {
-  const measurementTool = useStore((state) => state.measurementTool);
-  const measurement = useStore((state) => state.measurement);
-  const playing = useStore((state) => state.playing);
-  const setMeasurementTool = useStore((state) => state.setMeasurementTool);
-  const setMeasurement = useStore((state) => state.setMeasurement);
-  const setSelectedAtoms = useStore((state) => state.setSelectedAtoms);
-  const resolved = useMemo(
-    () => frame && !playing ? resolveMolecularMeasurement(frame, frameIndex, measurement) : null,
-    [frame, frameIndex, measurement, playing],
-  );
-
+/** A small persistent workspace: the molecule stays touchable while a pair is built. */
+export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | undefined; frameIndex: number }) {
+  const measurement = useStore(s => s.measurement);
+  const tool = useStore(s => s.measurementTool);
+  const target = useStore(s => s.measurementTarget);
+  const playing = useStore(s => s.playing);
+  const file = useStore(s => s.file);
+  const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
+  const [finding, setFinding] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  useEffect(() => { setFinding(null); }, [measurement]);
+  const resolved = useMemo(() => frame && !playing ? resolveMolecularMeasurement(frame, frameIndex, measurement) : null, [frame, frameIndex, measurement, playing]);
+  const baseline = useMemo(() => {
+    const source = measurement && file?.trajectory.frames[measurement.capturedFrame];
+    if (!source || !measurement || measurement.atoms.some(atom => atom.identity === 'frame-row')) return null;
+    return resolveMolecularMeasurement(source, measurement.capturedFrame, measurement);
+  }, [file, measurement]);
+  const delta = resolved?.status === 'ready' && baseline?.status === 'ready'
+    && resolved.kind === 'distance' && resolved.unit === 'angstrom' && baseline.unit === 'angstrom'
+    && measurement?.capturedFrame !== frameIndex
+    ? resolved.value! - baseline.value! : null;
   const start = (kind: MeasurementKind) => {
     if (!frame) return;
-    if (measurementTool === kind) {
-      setMeasurementTool(null);
-      return;
-    }
-    // Measurement is defined on an integer source frame. Pause before the
-    // first pick so the R3F interpolation pose, picker, and reported value do
-    // not disagree about which geometry the user addressed.
-    useStore.setState({ playing: false });
-    setSelectedAtoms([]);
-    setMeasurement(captureMeasurement(frame, frameIndex, kind, []));
-    setMeasurementTool(kind);
+    playStore.getState().setVerb('orbit');
+    playStore.getState().setTrayOpen(false);
+    useStore.setState({ playing: false, selectedAtoms: [], measurement: captureMeasurement(frame, frameIndex, kind, []), measurementTool: kind, measurementTarget: 0, activePanel: null });
+    useStore.getState().fitCameraView();
+    setFinding(null);
   };
-
   const clear = () => {
-    setMeasurementTool(null);
-    setMeasurement(null);
-    setSelectedAtoms([]);
+    useStore.setState({ measurement: null, measurementTool: null, measurementTarget: null, selectedAtoms: [] });
+    setFinding(null);
   };
-
-  return (
-    <section aria-label="Coordinate measurement" style={sectionStyle}>
-      <div style={headingRowStyle}>
-        <div>
-          <div style={eyebrowStyle}>COORDINATE MEASUREMENT</div>
-          <div style={helperStyle}>Pick atoms directly in the 3D view.</div>
-        </div>
-        {measurement && (
-          <button type="button" onClick={clear} style={clearButtonStyle}>CLEAR</button>
-        )}
-      </div>
-
-      <div role="group" aria-label="Measurement type" style={toolGridStyle}>
-        <ToolButton
-          label="Distance"
-          detail="A–B"
-          active={measurementTool === 'distance'}
-          disabled={!frame}
-          onClick={() => start('distance')}
-        />
-        <ToolButton
-          label="Angle"
-          detail="A–B–C"
-          active={measurementTool === 'angle'}
-          disabled={!frame}
-          onClick={() => start('angle')}
-        />
-      </div>
-
-      {measurementTool && (
-        <div role="status" style={pickCueStyle}>
-          {measurementTool === 'distance' ? 'Select two distinct atoms.' : 'Select three distinct atoms; B is the angle vertex.'}
-        </div>
-      )}
-
-      {measurement && playing && (
-        <div role="status" style={pickCueStyle}>
-          Measurement is hidden during interpolated playback. Pause to read the exact integer source frame.
-        </div>
-      )}
-
-      {resolved && (
-        <article style={resultStyle}>
-          <div style={valueRowStyle}>
-            <div>
-              <div style={resultKindStyle}>{resolved.kind === 'distance' ? 'DISTANCE A–B' : 'ANGLE A–B–C'}</div>
-              <output aria-live="polite" style={valueStyle}>{measurementValueLabel(resolved)}</output>
-            </div>
-            <div style={atomSequenceStyle}>
-              {Array.from({ length: resolved.requiredAtoms }, (_, index) => (
-                <span key={index} style={atomChipStyle(Boolean(resolved.atoms[index]))}>
-                  {String.fromCharCode(65 + index)}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {resolved.atoms.length > 0 && (
-            <div style={atomListStyle}>
-              {resolved.atoms.map((atom, index) => (
-                <span key={`${atom.id}-${index}`}>
-                  {String.fromCharCode(65 + index)}: {atom.label}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <p style={messageStyle}>{resolved.message}</p>
-          <dl style={provenanceStyle}>
-            <ProvenanceRow label="Frame" value={`Frame ${frameIndex + 1}; source timestep ${frame?.timestep ?? 'unknown'}. No physical time conversion is implied.`} />
-            <ProvenanceRow label="Coordinates" value={resolved.coordinateProvenance} />
-            <ProvenanceRow label="Identity" value={resolved.identityLabel} />
-            <ProvenanceRow
-              label="Periodic boundary"
-              value="Not applied. This is the direct displayed Cartesian geometry, without minimum-image or trajectory unwrapping."
-            />
-          </dl>
-        </article>
-      )}
-    </section>
-  );
-}
-
-function ToolButton({
-  label,
-  detail,
-  active,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  detail: string;
-  active: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      disabled={disabled}
-      onClick={onClick}
-      style={toolButtonStyle(active, disabled)}
-    >
-      <strong>{label}</strong>
-      <span>{detail}</span>
-    </button>
-  );
-}
-
-function ProvenanceRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={provenanceRowStyle}>
-      <dt style={provenanceTermStyle}>{label}</dt>
-      <dd style={provenanceValueStyle}>{value}</dd>
+  const arm = (slot: number) => {
+    if (!measurement) return;
+    playStore.getState().setVerb('orbit');
+    playStore.getState().setTrayOpen(false);
+    useStore.setState({ playing: false, measurementTool: measurement.kind, measurementTarget: slot, selectedAtoms: [] });
+    setFinding(finding === slot ? null : slot);
+    setQuery('');
+  };
+  const choose = (index: number) => {
+    if (!frame || !measurement || finding === null) return;
+    const indices = resolveMeasurementAtomIndices(frame, frameIndex, measurement);
+    if (indices.some((value, slot) => value === index && slot !== finding)) return;
+    indices[Math.min(finding, indices.length)] = index;
+    const next = captureMeasurement(frame, frameIndex, measurement.kind, indices);
+    const done = next.atoms.length === requiredMeasurementAtoms(measurement.kind);
+    const visibleTypes = new Set(useStore.getState().hiddenAtomTypes);
+    visibleTypes.delete(frame.types[index]);
+    useStore.setState({ hiddenAtomTypes: visibleTypes, playing: false, measurement: next, measurementTool: done ? null : next.kind, measurementTarget: done ? null : next.atoms.length, selectedAtoms: [] });
+    setFinding(null);
+  };
+  const candidates = useMemo(() => {
+    if (!frame || finding === null) return [];
+    const q = query.trim().toLowerCase();
+    const result: { index: number; label: string }[] = [];
+    for (let index = 0; index < frame.natoms && result.length < 30; index++) {
+      const label = `${resolveTypeLabel(frame, frame.types[index])} · ${hasUsableSourceIds(frame) ? `ID ${frame.ids[index]} · ` : ""}row ${index + 1}`;
+      if (!q || label.toLowerCase().includes(q)) result.push({ index, label });
+    }
+    return result;
+  }, [frame, finding, query]);
+  const count = file?.trajectory.totalFrames ?? 1;
+  const seek = (index: number) => {
+    useStore.setState({ playing: false, measurementTool: null, measurementTarget: null, selectedAtoms: [] });
+    useStore.getState().setFrame(index);
+    setFinding(null);
+  };
+  if (!measurement) return <section aria-label="Coordinate measurement" style={panel}>
+    <strong>Measure atoms</strong><p style={hint}>Tap two atoms for a distance. Rotate to see more, or choose an exact atom.</p>
+    <div style={row}><button style={button} onClick={() => start('distance')} disabled={!frame}>Distance A–B</button><button style={button} onClick={() => start('angle')} disabled={!frame}>Angle A–B–C</button></div>
+  </section>;
+  const nextSlot = target ?? resolved?.atoms.length ?? 0;
+  return <section aria-label="Measure atoms" style={panel}>
+    <div style={{ ...row, justifyContent: 'space-between' }}>
+      <div><span style={hint}>{measurement.kind === 'distance' ? 'DISTANCE A–B' : 'ANGLE A–B–C'}</span><output aria-live="polite" style={value}>{playing ? 'Pause to measure' : resolved ? measurementValueLabel(resolved) : '—'}</output></div>
+      <button style={button} onClick={clear} aria-label="Clear measurement">Clear</button>
     </div>
-  );
+    <div style={{ ...hint, margin: '3px 0 0' }}>Direct Cartesian · no periodic correction</div>
+    <div style={{ ...row, marginTop: 8 }}>
+      {Array.from({ length: requiredMeasurementAtoms(measurement.kind) }, (_, slot) => <button key={slot} style={{ ...button, flex: 1, opacity: slot > (resolved?.atoms.length ?? 0) ? 0.45 : 1, borderColor: tool && nextSlot === slot ? '#fbbf24' : '#586967' }} disabled={slot > (resolved?.atoms.length ?? 0)} onClick={() => arm(slot)} aria-label={`Choose atom ${String.fromCharCode(65 + slot)}`} aria-pressed={Boolean(tool && nextSlot === slot)}>
+        <b style={{ color: '#fbbf24' }}>{String.fromCharCode(65 + slot)}</b> {resolved?.atoms[slot]?.label ?? 'Choose atom'}
+      </button>)}
+    </div>
+    <p role="status" style={hint}>{playing ? 'Readouts use paused source frames, not interpolated playback.' : tool ? `Tap atom ${String.fromCharCode(65 + Math.min(nextSlot, requiredMeasurementAtoms(measurement.kind) - 1))} in the scene. Drag to rotate. Tap a slot for exact selection.` : !frame ? 'This source frame is not loaded yet.' : resolved?.status === 'unavailable' ? resolved.message : 'Tap an endpoint to replace it. Gold line is a ruler, not a bond.'}</p>
+    {finding !== null && <div style={{ marginTop: 8 }}>
+      <label style={hint}>Exact atom for {String.fromCharCode(65 + finding)}<input aria-label="Find atom" value={query} onChange={e => setQuery(e.target.value)} placeholder="Element, ID or row" style={{ ...button, display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 4, fontSize: 16 }} /></label>
+      <div style={{ maxHeight: 144, overflowY: 'auto', display: 'grid', gap: 4, marginTop: 4 }}>
+        {candidates.map(atom => <button key={atom.index} style={{ ...button, textAlign: 'left' }} disabled={resolved?.atoms.some((a, slot) => a.index === atom.index && slot !== finding)} onClick={() => choose(atom.index)}>{atom.label}{hiddenAtomTypes.has(frame!.types[atom.index]) ? ' · hidden: reveal' : ''}</button>)}
+        {!candidates.length && <p style={hint}>No matching atoms.</p>}
+      </div><p style={hint}>Showing up to 30 matches. Refine to find a hidden or crowded atom.</p>
+    </div>}
+    {frame && resolved?.atoms.some(atom => hiddenAtomTypes.has(frame.types[atom.index])) && <p role="status" style={hint}>
+      A measured atom is hidden by the element filter. <button style={button} onClick={() => {
+        const visibleTypes = new Set(hiddenAtomTypes);
+        for (const atom of resolved.atoms) visibleTypes.delete(frame.types[atom.index]);
+        useStore.setState({ hiddenAtomTypes: visibleTypes });
+      }}>Show measured atoms</button>
+    </p>}
+    <div style={{ ...row, flexWrap: 'wrap' }}>
+      <button style={button} onClick={() => useStore.getState().fitCameraView()}>Fit molecule</button>
+      <button style={button} onClick={() => start(measurement.kind === 'distance' ? 'angle' : 'distance')}>{measurement.kind === 'distance' ? 'Angle…' : 'Distance…'}</button>
+      {playing && <button style={button} onClick={() => useStore.setState({ playing: false })}>Pause</button>}
+      {count > 1 && <button style={button} onClick={() => seek(Math.floor((count - 1) / 2))}>Middle frame</button>}
+      {resolved?.status === 'unavailable' && <button style={button} onClick={() => seek(measurement.capturedFrame)}>Capture frame</button>}
+    </div>
+    {count > 1 && <label style={{ ...hint, display: 'block', marginTop: 8 }}>Frame {frameIndex + 1} / {count}<input aria-label="Measurement frame" type="range" min={0} max={count - 1} value={frameIndex} onChange={e => seek(Number(e.target.value))} style={{ width: '100%', minHeight: 44 }} /></label>}
+    {delta !== null && <p style={hint}>Δ {delta >= 0 ? '+' : ''}{delta.toFixed(3)} Å vs capture frame {measurement.capturedFrame + 1} · direct Cartesian, no periodic correction</p>}
+    <details style={{ marginTop: 8, fontSize: 12, color: '#b4c6c4' }}><summary style={{ cursor: 'pointer', minHeight: 28 }}>Source & measurement limits</summary>
+      <p>{resolved?.coordinateProvenance}</p><p>{resolved?.identityLabel}</p>
+      <p>Direct Cartesian separation. Periodic minimum-image and unwrapping are not applied. Not a bond assignment.</p>
+      <p>Frame {frameIndex + 1}; source timestep {frame?.timestep ?? 'unknown'}. No physical time conversion.</p>
+    </details>
+  </section>;
 }
 
-const sectionStyle: CSSProperties = {
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--border-subtle)',
-  background: 'color-mix(in srgb, var(--bg-elevated) 76%, transparent)',
-};
-
-const headingRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  gap: 12,
-  marginBottom: 9,
-};
-
-const eyebrowStyle: CSSProperties = {
-  color: '#fbbf24',
-  fontSize: 9,
-  fontWeight: 800,
-  letterSpacing: '0.1em',
-};
-
-const helperStyle: CSSProperties = {
-  marginTop: 3,
-  color: 'var(--text-dim)',
-  fontSize: 10,
-};
-
-const clearButtonStyle: CSSProperties = {
-  padding: '4px 7px',
-  color: 'var(--text-secondary)',
-  background: 'transparent',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 4,
-  cursor: 'pointer',
-  font: '700 9px/1 var(--font-mono)',
-};
-
-const toolGridStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 6,
-};
-
-const toolButtonStyle = (active: boolean, disabled: boolean): CSSProperties => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '7px 9px',
-  color: active ? '#111827' : 'var(--text-primary)',
-  background: active ? '#fbbf24' : 'var(--bg-surface)',
-  border: `1px solid ${active ? '#fbbf24' : 'var(--border-subtle)'}`,
-  borderRadius: 5,
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  opacity: disabled ? 0.45 : 1,
-  fontSize: 11,
-});
-
-const pickCueStyle: CSSProperties = {
-  marginTop: 7,
-  padding: '6px 8px',
-  color: '#fde68a',
-  background: 'rgba(251, 191, 36, 0.08)',
-  border: '1px solid rgba(251, 191, 36, 0.24)',
-  borderRadius: 4,
-  fontSize: 10,
-};
-
-const resultStyle: CSSProperties = {
-  marginTop: 9,
-  padding: 10,
-  background: 'var(--bg-surface)',
-  border: '1px solid var(--border-subtle)',
-  borderLeft: '3px solid #fbbf24',
-  borderRadius: 5,
-};
-
-const valueRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-};
-
-const resultKindStyle: CSSProperties = {
-  color: 'var(--text-dim)',
-  fontSize: 8,
-  fontWeight: 800,
-  letterSpacing: '0.08em',
-};
-
-const valueStyle: CSSProperties = {
-  display: 'block',
-  marginTop: 3,
-  color: '#fbbf24',
-  font: '750 20px/1.15 var(--font-mono)',
-};
-
-const atomSequenceStyle: CSSProperties = {
-  display: 'flex',
-  gap: 4,
-};
-
-const atomChipStyle = (filled: boolean): CSSProperties => ({
-  display: 'grid',
-  placeItems: 'center',
-  width: 24,
-  height: 24,
-  borderRadius: '50%',
-  color: filled ? '#111827' : 'var(--text-dim)',
-  background: filled ? '#fbbf24' : 'transparent',
-  border: `1px solid ${filled ? '#fbbf24' : 'var(--border-default)'}`,
-  font: '800 10px/1 var(--font-mono)',
-});
-
-const atomListStyle: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: '3px 10px',
-  marginTop: 7,
-  color: 'var(--text-secondary)',
-  font: '500 9px/1.3 var(--font-mono)',
-};
-
-const messageStyle: CSSProperties = {
-  margin: '8px 0 0',
-  color: 'var(--text-secondary)',
-  fontSize: 10,
-  lineHeight: 1.4,
-};
-
-const provenanceStyle: CSSProperties = {
-  display: 'grid',
-  gap: 5,
-  margin: '8px 0 0',
-  paddingTop: 8,
-  borderTop: '1px solid var(--border-subtle)',
-};
-
-const provenanceRowStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '76px 1fr',
-  gap: 7,
-  fontSize: 9,
-  lineHeight: 1.35,
-};
-
-const provenanceTermStyle: CSSProperties = {
-  margin: 0,
-  color: 'var(--text-dim)',
-  fontWeight: 700,
-};
-
-const provenanceValueStyle: CSSProperties = {
-  margin: 0,
-  color: 'var(--text-secondary)',
-};
+export function MeasurementDock() {
+  const file = useStore(s => s.file);
+  const frame = useStore(s => s.frame);
+  const measurement = useStore(s => s.measurement);
+  const activePanel = useStore(s => s.activePanel);
+  const visible = Boolean(file && measurement && !activePanel);
+  const occluder = useViewOccluder('measurement-workbench', visible);
+  if (!visible) {
+    if (!file || activePanel || measurement) return null;
+    return <button aria-label="Measure" style={{ ...button, position: 'absolute', zIndex: 270, right: 14, bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', borderColor: '#fbbf24', borderRadius: 24 }} onClick={() => {
+      const source = file.trajectory.frames[frame];
+      if (!source) return;
+      playStore.getState().setVerb('orbit');
+      playStore.getState().setTrayOpen(false);
+      useStore.setState({ playing: false, selectedAtoms: [], measurement: captureMeasurement(source, frame, 'distance', []), measurementTool: 'distance', measurementTarget: 0 });
+      useStore.getState().fitCameraView();
+    }}>↔ Measure</button>;
+  }
+  return <aside ref={occluder.ref} style={{ position: 'absolute', zIndex: 45, right: 12, bottom: 'calc(132px + env(safe-area-inset-bottom, 0px))', width: 'min(360px, calc(100% - 24px))', maxHeight: 'min(48dvh, 460px)', overflowY: 'auto', border: '1px solid #586967', borderRadius: 18, boxShadow: '0 8px 30px #0006' }}><MeasurementWorkbench frame={file?.trajectory.frames[frame]} frameIndex={frame} /></aside>;
+}
+const panel: CSSProperties = { padding: 14, background: '#10201f', color: '#f2f8f6', borderRadius: 16, fontFamily: 'var(--font-sans, sans-serif)' };
+const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 };
+const hint: CSSProperties = { color: '#bdceca', fontSize: 12, lineHeight: 1.45, margin: '7px 0' };
+const button: CSSProperties = { minHeight: 44, padding: '8px 12px', borderRadius: 10, border: '1px solid #586967', background: '#203330', color: '#f2f8f6', fontSize: 13, cursor: 'pointer' };
+const value: CSSProperties = { display: 'block', fontSize: 27, fontWeight: 750, color: '#ffe49a', fontVariantNumeric: 'tabular-nums' };

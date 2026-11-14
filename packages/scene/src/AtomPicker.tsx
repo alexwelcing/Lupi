@@ -385,6 +385,12 @@ export function AtomPicker({
         lastTap = { index: picker.tap(clientX, clientY, shiftKey, pointerType) };
       }),
       onIntent('canvas.doubleTap', ({ clientX, clientY, pointerType }) => {
+        // In Measure every deliberate tap addresses an endpoint. Ordinary
+        // double-tap affinity would steal a nearby B and focus A instead.
+        if (latest.current.selectionMode === 'measure') {
+          lastTap = { index: picker.tap(clientX, clientY, false, pointerType) };
+          return;
+        }
         let index = picker.pick(clientX, clientY, pointerType);
         const first = lastTap;
         lastTap = null;

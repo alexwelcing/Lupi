@@ -196,7 +196,7 @@ export function resolveMolecularMeasurement(
   const atoms = indices.map((index): ResolvedMeasurementAtom => ({
     index,
     id: frame.ids[index] ?? index,
-    label: `${resolveTypeLabel(frame, frame.types[index])} ${frame.ids[index] ?? index}`,
+    label: `${resolveTypeLabel(frame, frame.types[index])} ${hasUsableSourceIds(frame) ? `ID ${frame.ids[index]}` : `row ${index + 1}`}`,
     position: [
       frame.positions[index * 3],
       frame.positions[index * 3 + 1],

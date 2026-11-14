@@ -45,7 +45,7 @@ export function MeasurementLayer({
 }) {
   if (playing) return null;
   const resolved = resolveMolecularMeasurement(frame, frameIndex, measurement);
-  if (!resolved || resolved.status !== 'ready') return null;
+  if (!resolved || resolved.status === 'unavailable' || resolved.atoms.length === 0) return null;
   if (resolved.atoms.some((atom) => hiddenAtomTypes?.has(frame.types[atom.index]))) return null;
   return <MeasurementShape frame={frame} resolved={resolved} />;
 }
@@ -81,12 +81,13 @@ function valueLabelPosition(kind: ResolvedMolecularMeasurement['kind'], points: 
 
 function MeasurementShape({ frame, resolved }: { frame: Frame; resolved: ResolvedMolecularMeasurement }) {
   const points = resolved.atoms.map((atom) => atom.position);
-  const labelPosition = valueLabelPosition(resolved.kind, points);
+  const ready = resolved.status === 'ready';
+  const labelPosition = ready ? valueLabelPosition(resolved.kind, points) : points[0];
   const span = points.slice(1).reduce(
     (largest, point, index) => Math.max(largest, pointDistance(points[index], point)),
     0,
   );
-  const labelSize = Math.max(0.16, Math.min(1.2, span * 0.085));
+  const labelSize = Math.max(0.30, Math.min(0.75, span * 0.085));
 
   const rest = useMemo(() => Float64Array.from(resolved.atoms.flatMap((atom) => atom.position)), [resolved]);
   const lineRef = useRef<LineObject>(null);
@@ -116,25 +117,34 @@ function MeasurementShape({ frame, resolved }: { frame: Frame; resolved: Resolve
         return;
       }
       const moved = points.map((p, i): Vec3 => [p[0] + offsets[i * 3], p[1] + offsets[i * 3 + 1], p[2] + offsets[i * 3 + 2]]);
-      const at = valueLabelPosition(resolved.kind, moved);
+      const at = ready ? valueLabelPosition(resolved.kind, moved) : moved[0];
       group.position.set(at[0] - labelPosition[0], at[1] - labelPosition[1], at[2] - labelPosition[2]);
     },
   });
 
   return (
     <group name="lupi-coordinate-measurement">
-      <Line
+      {points.length > 1 && <Line
         ref={lineRef}
         points={points}
         color="#fbbf24"
         lineWidth={2.2}
         {...MEASUREMENT_LINE_MATERIAL}
-      />
+        renderOrder={98}
+      />}
       {resolved.atoms.map((atom, index) => (
         <FollowAtom key={`${atom.id}-${index}`} frame={frame} atom={atom.index} steady>
-          <Billboard position={[atom.position[0], atom.position[1] + labelSize * 1.3, atom.position[2]]}>
+          <Billboard position={atom.position}>
+            <mesh renderOrder={99}>
+              <ringGeometry args={[labelSize * 0.65, labelSize * 0.82, 48]} />
+              <meshBasicMaterial color="#fbbf24" depthTest={false} depthWrite={false} transparent opacity={0.95} toneMapped={false} />
+            </mesh>
             <LupiText
-              fontSize={labelSize * 0.7}
+              position={[labelSize * 1.05, labelSize * 1.05, 0]}
+              fontSize={labelSize}
+              fontWeight="bold"
+              depthTest={false}
+              depthWrite={false}
               color="#fbbf24"
               anchorX="center"
               anchorY="middle"
@@ -147,9 +157,17 @@ function MeasurementShape({ frame, resolved }: { frame: Frame; resolved: Resolve
           </Billboard>
         </FollowAtom>
       ))}
-      <group ref={valueRef}>
+      {ready && <group ref={valueRef}>
         <Billboard position={labelPosition}>
+          <mesh position={[0, labelSize * 0.85, 0]} renderOrder={100}>
+            <planeGeometry args={[labelSize * (measurementValueLabel(resolved).length * 0.66 + 1.1), labelSize * 1.55]} />
+            <meshBasicMaterial color="#101b23" depthTest={false} depthWrite={false} transparent opacity={0.94} toneMapped={false} />
+          </mesh>
           <LupiText
+            position={[0, labelSize * 0.85, 0]}
+            fontWeight="bold"
+            depthTest={false}
+            depthWrite={false}
             fontSize={labelSize}
             color="#fff7d6"
             anchorX="center"
@@ -161,7 +179,7 @@ function MeasurementShape({ frame, resolved }: { frame: Frame; resolved: Resolve
             {measurementValueLabel(resolved)}
           </LupiText>
         </Billboard>
-      </group>
+      </group>}
     </group>
   );
 }
