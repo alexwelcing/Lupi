@@ -3,10 +3,9 @@ import { hasUsableSourceIds, resolveTypeLabel } from '@atlas/core';
 import type { Frame } from '@atlas/core/types';
 import { useStore } from './store';
 import { playStore } from './play/playStore';
-import { useViewOccluder } from './camera/useViewOccluder';
 import { captureMeasurement, measurementValueLabel, resolveMeasurementAtomIndices, resolveMolecularMeasurement, requiredMeasurementAtoms, type MeasurementKind } from './measurements';
 
-/** A small persistent workspace: the molecule stays touchable while a pair is built. */
+/** Measurement controls live in Data; the unoccluded molecule remains touchable. */
 export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | undefined; frameIndex: number }) {
   const measurement = useStore(s => s.measurement);
   const tool = useStore(s => s.measurementTool);
@@ -17,6 +16,12 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
   const [finding, setFinding] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   useEffect(() => { setFinding(null); }, [measurement]);
+  // Leaving Data disarms picking, but preserves the ruler and its source references.
+  useEffect(() => () => {
+    if (useStore.getState().measurementTool !== null) {
+      useStore.setState({ measurementTool: null, measurementTarget: null, selectedAtoms: [] });
+    }
+  }, []);
   const resolved = useMemo(() => frame && !playing ? resolveMolecularMeasurement(frame, frameIndex, measurement) : null, [frame, frameIndex, measurement, playing]);
   const baseline = useMemo(() => {
     const source = measurement && file?.trajectory.frames[measurement.capturedFrame];
@@ -31,7 +36,7 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
     if (!frame) return;
     playStore.getState().setVerb('orbit');
     playStore.getState().setTrayOpen(false);
-    useStore.setState({ playing: false, selectedAtoms: [], measurement: captureMeasurement(frame, frameIndex, kind, []), measurementTool: kind, measurementTarget: 0, activePanel: null });
+    useStore.setState({ playing: false, selectedAtoms: [], measurement: captureMeasurement(frame, frameIndex, kind, []), measurementTool: kind, measurementTarget: 0 });
     useStore.getState().fitCameraView();
     setFinding(null);
   };
@@ -91,10 +96,10 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
         <b style={{ color: '#fbbf24' }}>{String.fromCharCode(65 + slot)}</b> {resolved?.atoms[slot]?.label ?? 'Choose atom'}
       </button>)}
     </div>
-    <p role="status" style={hint}>{playing ? 'Readouts use paused source frames, not interpolated playback.' : tool ? `Tap atom ${String.fromCharCode(65 + Math.min(nextSlot, requiredMeasurementAtoms(measurement.kind) - 1))} in the scene. Drag to rotate. Tap a slot for exact selection.` : !frame ? 'This source frame is not loaded yet.' : resolved?.status === 'unavailable' ? resolved.message : 'Tap an endpoint to replace it. Gold line is a ruler, not a bond.'}</p>
+    <p role="status" style={hint}>{playing ? 'Readouts use paused source frames, not interpolated playback.' : tool ? `Tap atom ${String.fromCharCode(65 + Math.min(nextSlot, requiredMeasurementAtoms(measurement.kind) - 1))} in the scene. Drag to rotate. Tap a slot for exact selection.` : !frame ? 'This source frame is not loaded yet.' : resolved?.status === 'unavailable' ? resolved.message : (resolved?.atoms.length ?? 0) < requiredMeasurementAtoms(measurement.kind) ? 'Choose an empty endpoint to continue measuring.' : 'Tap an endpoint to replace it. Gold line is a ruler, not a bond.'}</p>
     {finding !== null && <div style={{ marginTop: 8 }}>
       <label style={hint}>Exact atom for {String.fromCharCode(65 + finding)}<input aria-label="Find atom" value={query} onChange={e => setQuery(e.target.value)} placeholder="Element, ID or row" style={{ ...button, display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 4, fontSize: 16 }} /></label>
-      <div style={{ maxHeight: 144, overflowY: 'auto', display: 'grid', gap: 4, marginTop: 4 }}>
+      <div style={{ display: 'grid', gap: 4, marginTop: 4 }}>
         {candidates.map(atom => <button key={atom.index} style={{ ...button, textAlign: 'left' }} disabled={resolved?.atoms.some((a, slot) => a.index === atom.index && slot !== finding)} onClick={() => choose(atom.index)}>{atom.label}{hiddenAtomTypes.has(frame!.types[atom.index]) ? ' · hidden: reveal' : ''}</button>)}
         {!candidates.length && <p style={hint}>No matching atoms.</p>}
       </div><p style={hint}>Showing up to 30 matches. Refine to find a hidden or crowded atom.</p>
@@ -123,26 +128,6 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
   </section>;
 }
 
-export function MeasurementDock() {
-  const file = useStore(s => s.file);
-  const frame = useStore(s => s.frame);
-  const measurement = useStore(s => s.measurement);
-  const activePanel = useStore(s => s.activePanel);
-  const visible = Boolean(file && measurement && !activePanel);
-  const occluder = useViewOccluder('measurement-workbench', visible);
-  if (!visible) {
-    if (!file || activePanel || measurement) return null;
-    return <button aria-label="Measure" style={{ ...button, position: 'absolute', zIndex: 270, right: 14, bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', borderColor: '#fbbf24', borderRadius: 24 }} onClick={() => {
-      const source = file.trajectory.frames[frame];
-      if (!source) return;
-      playStore.getState().setVerb('orbit');
-      playStore.getState().setTrayOpen(false);
-      useStore.setState({ playing: false, selectedAtoms: [], measurement: captureMeasurement(source, frame, 'distance', []), measurementTool: 'distance', measurementTarget: 0 });
-      useStore.getState().fitCameraView();
-    }}>↔ Measure</button>;
-  }
-  return <aside ref={occluder.ref} style={{ position: 'absolute', zIndex: 45, right: 12, bottom: 'calc(132px + env(safe-area-inset-bottom, 0px))', width: 'min(360px, calc(100% - 24px))', maxHeight: 'min(48dvh, 460px)', overflowY: 'auto', border: '1px solid #586967', borderRadius: 18, boxShadow: '0 8px 30px #0006' }}><MeasurementWorkbench frame={file?.trajectory.frames[frame]} frameIndex={frame} /></aside>;
-}
 const panel: CSSProperties = { padding: 14, background: '#10201f', color: '#f2f8f6', borderRadius: 16, fontFamily: 'var(--font-sans, sans-serif)' };
 const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 };
 const hint: CSSProperties = { color: '#bdceca', fontSize: 12, lineHeight: 1.45, margin: '7px 0' };

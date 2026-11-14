@@ -505,7 +505,9 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames, embedded = f
   }, [currentPotentialName]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, height: embedded ? 'auto' : '100%', overflow: embedded ? 'visible' : 'hidden' }}>
+      <MeasurementWorkbench frame={currentFrame} frameIndex={frame} />
+
       {/* Header stats */}
       {(thermoStats.length > 0 || isResearch) && <div aria-label="Telemetry summary" style={{
         padding: embedded ? '8px 12px' : '12px 16px',
@@ -569,8 +571,6 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames, embedded = f
           </button>
         )}
       </div>}
-
-      <MeasurementWorkbench frame={currentFrame} frameIndex={frame} />
 
       {/* Streaming Telemetry */}
       {streamingTelemetry && (
@@ -881,7 +881,7 @@ export function TelemetryPanel({ thermo, currentFrame, totalFrames, embedded = f
 
       {/* Thermo channels list */}
       {thermoStats.length > 0 && (
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <div style={{ flex: 1, overflowY: embedded ? 'visible' : 'auto', overflowX: embedded ? 'visible' : 'hidden' }}>
           {thermoStats.map(stat => {
             const info = THERMO_PROPERTY_INFO[stat.column];
             const isExpanded = expandedProp === stat.column;
