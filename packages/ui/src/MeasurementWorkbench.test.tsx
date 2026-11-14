@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, cleanup } from '@testing-library/react';
 import { MeasurementDock } from './MeasurementWorkbench';
 import { useStore } from './store';
+import { playStore } from './play/playStore';
 import { resetStore } from './test-utils';
 import { createMockTrajectory } from '@atlas/core/test-utils';
 
@@ -67,6 +68,20 @@ describe('mobile measurement workspace', () => {
     expect(screen.getByText(/cannot be matched honestly/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Capture frame' }));
     expect(screen.getByText('5.000 source units')).toBeTruthy();
+  });
+
+  it('reveals an explicitly chosen hidden atom and restores picking when rearming', () => {
+    load(); useStore.setState({ hiddenAtomTypes: new Set([7, 8]) });
+    render(<MeasurementDock />);
+    fireEvent.click(screen.getByRole('button', { name: 'Measure', exact: true }));
+    choose('A', /C · ID 10/);
+    choose('B', /N · ID 20.*hidden: reveal/);
+    expect([...useStore.getState().hiddenAtomTypes]).toEqual([8]);
+    playStore.getState().setVerb('tug');
+    playStore.getState().setTrayOpen(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose atom A' }));
+    expect(playStore.getState()).toMatchObject({ verb: 'orbit', trayOpen: false });
+    expect(screen.getByRole('textbox', { name: 'Find atom' })).toBeTruthy();
   });
 
 });

@@ -13,6 +13,7 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
   const target = useStore(s => s.measurementTarget);
   const playing = useStore(s => s.playing);
   const file = useStore(s => s.file);
+  const hiddenAtomTypes = useStore(s => s.hiddenAtomTypes);
   const [finding, setFinding] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   useEffect(() => { setFinding(null); }, [measurement]);
@@ -40,6 +41,8 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
   };
   const arm = (slot: number) => {
     if (!measurement) return;
+    playStore.getState().setVerb('orbit');
+    playStore.getState().setTrayOpen(false);
     useStore.setState({ playing: false, measurementTool: measurement.kind, measurementTarget: slot, selectedAtoms: [] });
     setFinding(finding === slot ? null : slot);
     setQuery('');
@@ -51,7 +54,9 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
     indices[Math.min(finding, indices.length)] = index;
     const next = captureMeasurement(frame, frameIndex, measurement.kind, indices);
     const done = next.atoms.length === requiredMeasurementAtoms(measurement.kind);
-    useStore.setState({ playing: false, measurement: next, measurementTool: done ? null : next.kind, measurementTarget: done ? null : next.atoms.length, selectedAtoms: [] });
+    const visibleTypes = new Set(useStore.getState().hiddenAtomTypes);
+    visibleTypes.delete(frame.types[index]);
+    useStore.setState({ hiddenAtomTypes: visibleTypes, playing: false, measurement: next, measurementTool: done ? null : next.kind, measurementTarget: done ? null : next.atoms.length, selectedAtoms: [] });
     setFinding(null);
   };
   const candidates = useMemo(() => {
@@ -90,10 +95,17 @@ export function MeasurementWorkbench({ frame, frameIndex }: { frame: Frame | und
     {finding !== null && <div style={{ marginTop: 8 }}>
       <label style={hint}>Exact atom for {String.fromCharCode(65 + finding)}<input aria-label="Find atom" value={query} onChange={e => setQuery(e.target.value)} placeholder="Element, ID or row" style={{ ...button, display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 4, fontSize: 16 }} /></label>
       <div style={{ maxHeight: 144, overflowY: 'auto', display: 'grid', gap: 4, marginTop: 4 }}>
-        {candidates.map(atom => <button key={atom.index} style={{ ...button, textAlign: 'left' }} disabled={resolved?.atoms.some((a, slot) => a.index === atom.index && slot !== finding)} onClick={() => choose(atom.index)}>{atom.label}</button>)}
+        {candidates.map(atom => <button key={atom.index} style={{ ...button, textAlign: 'left' }} disabled={resolved?.atoms.some((a, slot) => a.index === atom.index && slot !== finding)} onClick={() => choose(atom.index)}>{atom.label}{hiddenAtomTypes.has(frame!.types[atom.index]) ? ' · hidden: reveal' : ''}</button>)}
         {!candidates.length && <p style={hint}>No matching atoms.</p>}
       </div><p style={hint}>Showing up to 30 matches. Refine to find a hidden or crowded atom.</p>
     </div>}
+    {frame && resolved?.atoms.some(atom => hiddenAtomTypes.has(frame.types[atom.index])) && <p role="status" style={hint}>
+      A measured atom is hidden by the element filter. <button style={button} onClick={() => {
+        const visibleTypes = new Set(hiddenAtomTypes);
+        for (const atom of resolved.atoms) visibleTypes.delete(frame.types[atom.index]);
+        useStore.setState({ hiddenAtomTypes: visibleTypes });
+      }}>Show measured atoms</button>
+    </p>}
     <div style={{ ...row, flexWrap: 'wrap' }}>
       <button style={button} onClick={() => useStore.getState().fitCameraView()}>Fit molecule</button>
       <button style={button} onClick={() => start(measurement.kind === 'distance' ? 'angle' : 'distance')}>{measurement.kind === 'distance' ? 'Angle…' : 'Distance…'}</button>

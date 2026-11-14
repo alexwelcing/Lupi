@@ -72,7 +72,7 @@ describe('<AtomPicker /> on the intent bus', () => {
     reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousAct;
   });
 
-  async function mount(frame: Frame) {
+  async function mount(frame: Frame, selectionMode: 'single' | 'measure' = 'single') {
     const hash = new SpatialHash3D(3.0);
     hash.build(frame.positions, frame.natoms);
     let live: Live | null = null;
@@ -80,7 +80,7 @@ describe('<AtomPicker /> on the intent bus', () => {
     const renderer = await ReactThreeTestRenderer.create(
       <>
         <Probe onLive={(value) => { live = value; }} />
-        <AtomPicker frame={frame} spatialHash={hash} onSelect={(indices) => selections.push(indices)} />
+        <AtomPicker frame={frame} spatialHash={hash} selectionMode={selectionMode} maxMeasureAtoms={2} onSelect={(indices) => selections.push(indices)} />
       </>,
       { width: WIDTH, height: HEIGHT },
     );
@@ -131,6 +131,28 @@ describe('<AtomPicker /> on the intent bus', () => {
     });
     expect(selections.at(-1)).toEqual([1]);
     expect(focused).toEqual([0]);
+    off();
+    await renderer.unmount();
+  });
+
+  it('rapid adjacent measurement taps select A and B without affinity or camera focus', async () => {
+    const frame = frameOf([[-0.5, 0, 0], [0.5, 0, 0]], [SI, SI]);
+    const { renderer, live, selections } = await mount(frame, 'measure');
+    const focused: number[] = [];
+    const off = onIntent('camera.focusAtom', ({ atomIndex }) => focused.push(atomIndex));
+    const rho = ELEMENT_DATA[SI].displayRadius * Math.abs(live.camera.projectionMatrix.elements[5]) * HEIGHT / 20;
+    const [ax, ay] = clientOf(live.camera, [-0.5, 0, 0]);
+    await ReactThreeTestRenderer.act(async () => {
+      emitIntent({ type: 'canvas.tap', clientX: ax, clientY: ay, pointerType: 'touch', shiftKey: false });
+      emitIntent({ type: 'canvas.doubleTap', clientX: ax + rho + 2, clientY: ay, pointerType: 'touch' });
+    });
+    expect(selections).toEqual([[0], [0, 1]]);
+    expect(focused).toEqual([]);
+    await ReactThreeTestRenderer.act(async () => {
+      emitIntent({ type: 'canvas.doubleTap', clientX: ax + rho + 2, clientY: ay, pointerType: 'touch' });
+    });
+    expect(selections).toEqual([[0], [0, 1]]); // repeated endpoint is not duplicated
+    expect(focused).toEqual([]);
     off();
     await renderer.unmount();
   });
