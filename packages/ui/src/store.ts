@@ -635,6 +635,8 @@ export interface AppState {
   /** Active click tool. The completed measurement remains visible when the
    * tool is turned off so inspection does not destroy evidence. */
   measurementTool: MeasurementTool;
+  /** Endpoint armed for the next canvas tap; not persisted. */
+  measurementTarget: number | null;
   /** Atom references plus capture-frame provenance. Values are recomputed
    * from the active frame; measured numbers are never stored as source data. */
   measurement: MolecularMeasurement | null;
@@ -1086,6 +1088,7 @@ const DEFAULTS = {
   hoveredAtom: null as number | null,
   selectedAtoms: [] as number[],
   measurementTool: null as MeasurementTool,
+  measurementTarget: null as number | null,
   measurement: null as MolecularMeasurement | null,
   annotations: [] as Annotation[],
   labelStyle: 'tag' as LabelStyle,
@@ -1430,6 +1433,7 @@ export const useStore = create<AppState>()(
         hoveredAtom: null,
         selectedAtoms: [],
         measurementTool: null,
+        measurementTarget: null,
         measurement: null,
         rendererWarning: null,
         ...(options?.preserveStreamingTelemetry ? {} : { streamingTelemetry: null }),
@@ -1738,6 +1742,7 @@ export const useStore = create<AppState>()(
       hoveredAtom: null,
       selectedAtoms: [],
       measurementTool: null,
+      measurementTarget: null,
       measurement: null,
       exportRequest: { type: null },
       loadedAtomCount: 0,
@@ -1801,7 +1806,7 @@ export const useStore = create<AppState>()(
         ? nextSelectedAtoms(s.selectedAtoms)
         : nextSelectedAtoms,
     })),
-    setMeasurementTool: (measurementTool) => set({ measurementTool }),
+    setMeasurementTool: (measurementTool) => set({ measurementTool, measurementTarget: null }),
     setMeasurement: (measurement) => set({ measurement }),
 
     addAnnotation: (atomIndex, text) => set((s) => ({

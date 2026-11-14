@@ -42,6 +42,7 @@ import { AtomInfoHUD } from '../AtomInfoHUD';
 import { MeasurementLayer } from '../MeasurementLayer';
 import {
   captureMeasurement,
+  resolveMeasurementAtomIndices,
   requiredMeasurementAtoms,
 } from '../measurements';
 import { CameraFocus } from '../CameraFocus';
@@ -876,6 +877,20 @@ export function ViewerScene({
               enabled={!measurementTool || Boolean(measurementFrame)}
               onClick={(atomIndex, info?: { shiftKey: boolean }) => {
                 if (atomIndex == null) return;
+                if (measurementTool) {
+                  const state = useStore.getState();
+                  const source = state.file?.trajectory.frames[state.frame];
+                  if (!source) return;
+                  const indices = resolveMeasurementAtomIndices(source, state.frame, state.measurement);
+                  const slot = state.measurementTarget ?? indices.length;
+                  if (indices.some((value, i) => value === atomIndex && i !== slot)) return;
+                  indices[Math.min(slot, indices.length)] = atomIndex;
+                  const next = captureMeasurement(source, state.frame, measurementTool, indices);
+                  const done = next.atoms.length === requiredMeasurementAtoms(measurementTool);
+                  useStore.setState({ measurement: next, measurementTarget: null,
+                    measurementTool: done ? null : measurementTool, selectedAtoms: [] });
+                  return;
+                }
                 const isAnnotate = !measurementTool
                   && (info?.shiftKey ?? (window as any).__atlasShiftHeld === true);
                 if (isAnnotate) {
@@ -896,21 +911,7 @@ export function ViewerScene({
                   state.setSelectedAtoms(indices);
                   return;
                 }
-                const required = requiredMeasurementAtoms(measurementTool);
-                const selected = indices.slice(-required);
-                const nextMeasurement = captureMeasurement(
-                  currentFrame,
-                  frameIndex,
-                  measurementTool,
-                  selected,
-                );
-                state.setMeasurement(nextMeasurement);
-                if (nextMeasurement.atoms.length === required) {
-                  state.setSelectedAtoms([]);
-                  state.setMeasurementTool(null);
-                } else {
-                  state.setSelectedAtoms(selected);
-                }
+                // Measurement taps are handled above; blank taps preserve the pair.
               }}
             />
           )}
