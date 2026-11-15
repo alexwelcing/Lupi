@@ -29,8 +29,9 @@ z.config({ jitless: true });
 export const CHATGPT_MCP_PATH = '/chatgpt/mcp';
 export const CHATGPT_UI_URI = 'ui://lupi/molecule-v3.html';
 export const CHATGPT_WIDGET_PATH = '/chatgpt-widget/index.html';
-export const CHATGPT_VERSION = '0.4.0';
+export const CHATGPT_VERSION = '0.5.0';
 export const MAX_PLUGIN_ATOMS = 1_000;
+const MAX_SELECTED_ATOM_RECORDS = 32;
 export const MAX_PENDING_PLUGIN_LOOKUPS = 4;
 const MAX_REQUEST_BYTES = 8192;
 const MAX_WIDGET_BYTES = 5 * 1024 * 1024;
@@ -50,6 +51,7 @@ export interface MoleculeView {
   highlightElements: string[];
   highlightAtomIds: number[];
   showContacts?: boolean;
+  measureAtomIds?: [number, number];
 }
 
 type ViewInput = Partial<MoleculeView>;
@@ -161,12 +163,47 @@ export function resolveMoleculeView(molecule: PubChemMolecule | Omol25Molecule, 
     if (!sourceIds.has(id)) throw new PluginError('invalid_view', `Atom ID ${id} is absent from this structure.`);
     selected.add(id);
   }
+  if (input.measureAtomIds) {
+    const [a, b] = input.measureAtomIds;
+    if (a === b) throw new PluginError('invalid_view', 'Choose two distinct atom IDs for a distance.');
+    if (!sourceIds.has(a) || !sourceIds.has(b)) throw new PluginError('invalid_view', 'Both measurement atom IDs must exist in this pinned structure.');
+  }
   return {
+    ...(input.measureAtomIds ? { measureAtomIds: input.measureAtomIds } : {}),
     style: input.style ?? 'ball-and-stick',
     ...(input.showContacts !== undefined ? { showContacts: input.showContacts } : {}),
     highlightElements: elements,
     highlightAtomIds: [...selected].sort((a, b) => a - b),
   };
+}
+
+/** Model-visible facts are derived only from the pinned source geometry, not display transforms. */
+function moleculeInspection(molecule: PubChemMolecule | Omol25Molecule, view: MoleculeView) {
+  const atomIdKind = 'atomIdKind' in molecule ? molecule.atomIdKind : 'source-id' as const;
+  const atom = (id: number) => {
+    const index = molecule.atoms.ids.indexOf(id);
+    const atomicNumber = molecule.atoms.elements[index];
+    return {
+      id, atomIdKind, rowNumber: index + 1, atomicNumber,
+      element: getElementSpec(atomicNumber).symbol,
+      position: molecule.atoms.positions.slice(index * 3, index * 3 + 3),
+      coordinateUnits: molecule.coordinateUnits,
+    };
+  };
+  const selection = {
+    selectedAtoms: view.highlightAtomIds.slice(0, MAX_SELECTED_ATOM_RECORDS).map(atom),
+    selectedAtomCount: view.highlightAtomIds.length,
+    selectedAtomsTruncated: view.highlightAtomIds.length > MAX_SELECTED_ATOM_RECORDS,
+  };
+  if (!view.measureAtomIds) return { ...selection, measurement: null };
+  const endpointAtoms = view.measureAtomIds.map(atom);
+  const common = { atomIds: view.measureAtomIds, endpointAtoms, convention: 'direct-cartesian' as const, periodicCorrection: 'none' as const };
+  if (molecule.dimension !== '3d' || molecule.coordinateUnits !== 'angstrom') {
+    return { ...selection, measurement: { ...common, status: 'unavailable' as const, value: null, unit: null, reason: '2D depiction coordinates are not physical distances.' } };
+  }
+  const [a, b] = endpointAtoms;
+  const value = Math.hypot(...a.position.map((coordinate, axis) => coordinate - b.position[axis]));
+  return { ...selection, measurement: { ...common, status: 'ready' as const, value, unit: 'angstrom' as const } };
 }
 
 function textContent(text: string) { return [{ type: 'text' as const, text }]; }
@@ -296,9 +333,8 @@ export class MoleculeService {
       const view = resolveMoleculeView(molecule, input);
       return {
         content: textContent(`Prepared an interactive view of ${molecule.name}, PubChem CID ${molecule.cid}; ${molecule.atoms.ids.length} source atoms and ${molecule.bonds.aid1.length} source bonds. ${view.highlightAtomIds.length ? `Highlighted source atom IDs: ${view.highlightAtomIds.join(', ')}.` : 'No atoms highlighted.'}`),
-        structuredContent: { status: 'shown' as const, ...moleculeSummary(molecule, structureRef, cacheHit), renderStatus: 'awaiting-component', view },
-        // Geometry is for the component. The model receives identity, source,
-        // dimensionality, counts, and selected source IDs in the summary.
+        structuredContent: { status: 'shown' as const, ...moleculeSummary(molecule, structureRef, cacheHit), renderStatus: 'awaiting-component', view, ...moleculeInspection(molecule, view) },
+        // Full geometry stays component-only; selected records and requested distance are model-visible.
         _meta: { molecule, view },
       };
     } catch (error) { return toolFailure(error); }
@@ -318,6 +354,7 @@ function shownOmol(loaded: Awaited<ReturnType<OmolService['load']>>, input: View
       ...omolSummary(molecule, structureRef, cacheHit),
       renderStatus: 'awaiting-component' as const,
       view,
+      ...moleculeInspection(molecule, view),
     },
     _meta: { molecule, view },
   };
@@ -386,6 +423,7 @@ const viewOutputSchema = z.object({
   highlightElements: z.array(z.string()),
   highlightAtomIds: z.array(z.number().int().positive()),
   showContacts: z.boolean().optional(),
+  measureAtomIds: z.tuple([z.number().int().positive(), z.number().int().positive()]).optional(),
 }).strict();
 const discoveryOutputSchema = z.object({
   schema: z.literal(DISCOVERY_SCHEMA), catalogVersion: z.literal(DISCOVERY_CATALOG_VERSION),
@@ -407,9 +445,28 @@ const resolveOutputSchema = z.discriminatedUnion('status', [
   }).strict(),
   errorOutputSchema,
 ]);
+const selectedAtomSchema = z.object({
+  id: z.number().int().positive(), atomIdKind: z.enum(['source-id', 'synthetic-row']),
+  rowNumber: z.number().int().positive(), atomicNumber: z.number().int().min(1).max(118),
+  element: z.string(), position: z.array(z.number()).length(3), coordinateUnits: z.enum(['angstrom', 'depiction']),
+}).strict();
+const measurementCommonSchema = z.object({
+  atomIds: z.tuple([z.number().int().positive(), z.number().int().positive()]),
+  endpointAtoms: z.array(selectedAtomSchema).length(2),
+  convention: z.literal('direct-cartesian'), periodicCorrection: z.literal('none'),
+});
+const inspectionOutput = {
+  selectedAtoms: z.array(selectedAtomSchema).max(MAX_SELECTED_ATOM_RECORDS),
+  selectedAtomCount: z.number().int().nonnegative().max(MAX_PLUGIN_ATOMS),
+  selectedAtomsTruncated: z.boolean(),
+  measurement: z.union([
+    measurementCommonSchema.extend({ status: z.literal('ready'), value: z.number().nonnegative(), unit: z.literal('angstrom') }).strict(),
+    measurementCommonSchema.extend({ status: z.literal('unavailable'), value: z.null(), unit: z.null(), reason: z.string() }).strict(),
+  ]).nullable(),
+};
 const showOutputSchema = z.union([
-  identityOutputSchema.extend({ status: z.literal('shown'), renderStatus: z.literal('awaiting-component'), view: viewOutputSchema }),
-  omolIdentityOutputSchema.extend({ status: z.literal('shown'), renderStatus: z.literal('awaiting-component'), view: viewOutputSchema }),
+  identityOutputSchema.extend({ status: z.literal('shown'), renderStatus: z.literal('awaiting-component'), view: viewOutputSchema, ...inspectionOutput }),
+  omolIdentityOutputSchema.extend({ status: z.literal('shown'), renderStatus: z.literal('awaiting-component'), view: viewOutputSchema, ...inspectionOutput }),
   errorOutputSchema,
 ]);
 
@@ -469,6 +526,7 @@ export function createPluginServer({ service = defaultService, omolService = def
       rowIndex: z.number().int().nonnegative(),
       view: z.object({
         style: z.enum(['ball-and-stick', 'spacefill']).optional(),
+        measureAtomIds: z.tuple([z.number().int().positive().max(2_147_483_647), z.number().int().positive().max(2_147_483_647)]).optional().describe('Two distinct IDs from this pinned structure. Returns direct Cartesian distance in angstroms only for source 3D coordinates; no periodic correction or bond assignment. Omit to clear.'),
         showContacts: z.boolean().optional().describe('Show dotted ionic contacts for OMol25 estimates; defaults to true. Contacts are not covalent bonds.'),
         highlightElements: z.array(z.string().regex(/^[A-Z][a-z]?$/)).max(12).optional(),
         highlightAtomIds: z.array(z.number().int().positive()).max(MAX_PLUGIN_ATOMS).optional(),
@@ -495,11 +553,12 @@ export function createPluginServer({ service = defaultService, omolService = def
 
   registerAppTool(server, 'show_molecule', {
     title: 'Show an interactive molecule',
-    description: 'Display an exact pinned OMol25 or PubChem structure in Lupi Live. Reuse the structureRef returned by open_omol25 or resolve_molecule for follow-up highlights and styles. OMol25 atom IDs are generated from row order; bonds and ionic contacts are explicitly inferred with lupi-bonds.molecular.v1, with no bond-order prediction. PubChem IDs and bonds remain source supplied. view.showContacts controls OMol25 ionic contacts. Each result is a complete view.',
+    description: 'Display an exact pinned OMol25 or PubChem structure in Lupi Live. Reuse the structureRef returned by open_omol25 or resolve_molecule for follow-up highlights and styles. OMol25 atom IDs are generated from row order; bonds and ionic contacts are explicitly inferred with lupi-bonds.molecular.v1, with no bond-order prediction. PubChem IDs and bonds remain source supplied. view.showContacts controls OMol25 ionic contacts. Each result is a complete view. Highlighted atoms return up to 32 selected source-coordinate records with total count and truncation flag; view.measureAtomIds requests one direct Cartesian distance in angstroms for a 3D structure, without periodic correction or a bond assignment. 2D depiction distances are unavailable. No trajectory is implied.',
     inputSchema: z.object({
       structureRef: z.string().regex(/^(?:pubchem:[1-9]\d{0,9}:(?:3d|2d):[a-f0-9]{64}|omol25:[a-z0-9-]+:\d+:[a-f0-9]{64})$/).max(160),
       view: z.object({
         style: z.enum(['ball-and-stick', 'spacefill']).optional(),
+        measureAtomIds: z.tuple([z.number().int().positive().max(2_147_483_647), z.number().int().positive().max(2_147_483_647)]).optional().describe('Two distinct IDs from this pinned structure. Returns direct Cartesian distance in angstroms only for source 3D coordinates; no periodic correction or bond assignment. Omit to clear.'),
         showContacts: z.boolean().optional().describe('Show dotted ionic contacts for OMol25 estimates; defaults to true. Contacts are not covalent bonds.'),
         highlightElements: z.array(z.string().regex(/^[A-Z][a-z]?$/)).max(12).optional(),
         highlightAtomIds: z.array(z.number().int().positive().max(2_147_483_647)).max(MAX_PLUGIN_ATOMS).optional(),

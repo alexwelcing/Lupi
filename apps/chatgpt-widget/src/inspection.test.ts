@@ -3,7 +3,7 @@ import { estimateOmol25Bonds, moleculeFromOmol25Xyz, omol25BondSummary } from '@
 import { perceiveBonds, MOLECULAR_RECIPE_ID } from '@atlas/core/bonds';
 import { frameFromPubChemMolecule, parsePubChemRecord } from '@atlas/core/pubchem';
 import { displayedPairCount, readMoleculeToolResult, type MoleculeCard } from './toolResult';
-import { inspectionDetails, inspectionPairs, sameTarget, type InspectionPair } from './inspection';
+import { inspectionDetails, measurementDetails, inspectionPairs, sameTarget, type InspectionPair } from './inspection';
 import { cylinderHit, isInspectionTap, pickMolecule, sphereHit } from './pickMolecule';
 import source2d from '../../mcp-worker/test-fixtures/chatgpt/cid-439378-2d.json';
 
@@ -124,5 +124,21 @@ describe('sphere and bond surface picking', () => {
     expect(isInspectionTap(0, 1, true)).toBe(false);
     expect(sameTarget({ kind: 'atom', index: 1 }, { kind: 'atom', index: 1 })).toBe(true);
     expect(sameTarget({ kind: 'atom', index: 1 }, { kind: 'bond', index: 1 })).toBe(false);
+  });
+});
+
+describe('explicit source-coordinate measurement', () => {
+  it('measures a nonbonded source pair without inventing topology', () => {
+    const card = readMoleculeToolResult(payload(['C 0 0 0', 'O 3 4 0']));
+    card.view.measureAtomIds = [1, 2];
+    expect(measurementDetails(card)).toMatchObject({ status: 'ready', atomIds: [1, 2], value: 5, unit: 'angstrom', convention: 'direct-cartesian', periodicCorrection: 'none' });
+    expect(card.molecule.bonds.aid1).toEqual([]);
+    delete card.view.measureAtomIds;
+    expect(measurementDetails(card)).toBeNull();
+  });
+  it('does not measure a physical distance from a 2D depiction', () => {
+    const molecule = parsePubChemRecord(source2d);
+    const card: MoleculeCard = { molecule, frame: frameFromPubChemMolecule(molecule), structureRef: 'fixture', perceivedBonds: null, view: { style: 'ball-and-stick', highlightAtomIds: [], highlightElements: [], measureAtomIds: [molecule.atoms.ids[0], molecule.atoms.ids[1]] } };
+    expect(measurementDetails(card)).toMatchObject({ status: 'unavailable', value: null, unit: null });
   });
 });

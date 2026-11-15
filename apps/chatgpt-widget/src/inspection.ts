@@ -79,3 +79,28 @@ export function inspectionDetails(card: MoleculeCard, target: InspectionTarget |
     coordinateUnits: m.coordinateUnits, provenance, neighbors,
   };
 }
+
+export function selectedAtomRecords(card: MoleculeCard, ids = card.view.highlightAtomIds) {
+  const m = card.molecule;
+  return ids.slice(0, 32).map(id => {
+    const index = m.atoms.ids.indexOf(id);
+    return { id, atomIdKind: m.schemaVersion === 'lupi.omol25.v1' ? 'synthetic-row' : 'source-id', rowNumber: index + 1,
+      atomicNumber: m.atoms.elements[index], element: getElementSpec(m.atoms.elements[index]).symbol,
+      position: m.atoms.positions.slice(index * 3, index * 3 + 3), coordinateUnits: m.coordinateUnits };
+  });
+}
+
+/** Physical separation of explicitly chosen source coordinates, not a bond assignment. */
+export function measurementDetails(card: MoleculeCard) {
+  const atomIds = card.view.measureAtomIds;
+  if (!atomIds) return null;
+  const m = card.molecule;
+  const indices = atomIds.map(id => m.atoms.ids.indexOf(id));
+  if (indices.some(i => i < 0) || atomIds[0] === atomIds[1]) return null;
+  const base = { atomIds, endpointAtoms: selectedAtomRecords(card, atomIds), convention: 'direct-cartesian', periodicCorrection: 'none', structureRef: card.structureRef };
+  if (m.dimension !== '3d' || m.coordinateUnits !== 'angstrom') {
+    return { ...base, status: 'unavailable', value: null, unit: null };
+  }
+  const [a, b] = indices, p = m.atoms.positions;
+  return { ...base, status: 'ready', value: Math.hypot(p[3*a]-p[3*b], p[3*a+1]-p[3*b+1], p[3*a+2]-p[3*b+2]), unit: 'angstrom' };
+}

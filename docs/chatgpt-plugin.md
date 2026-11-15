@@ -16,7 +16,17 @@ Use **PubChem** when the user names a specific compound or CID. `resolve_molecul
 
 Hover over an atom or connection on desktop to inspect it locally. Click or tap to pin details, or use the accessible **Inspect atom** selector and neighboring-atom controls. Explicit pins send inspection context tied to that card's structure reference; ordinary hovering does not. Orbit drags and multi-touch must not pin. **Close details** and Escape clear inspection. Distances are shown only where the source coordinate units support them, and inferred connections never acquire invented source bond orders.
 
-The public ChatGPT route is separate from Lupi's existing `/mcp` control plane. All six plugin tools are read-only. They do not run simulations, access private files, or change saved molecules.
+The public ChatGPT route is separate from Lupi's existing `/mcp` control plane. All seven plugin tools are read-only. They do not run simulations, access private files, or change saved molecules.
+
+## Atom records and explicit distance (0.5)
+
+`show_molecule` (and `open_omol25`) accept an optional `view.measureAtomIds: [A, B]` using IDs from that exact pinned structure. Two distinct valid IDs are required. Highlighting does not implicitly request a measurement. Each view is complete: omit the pair to clear it.
+
+Model-readable results now include `selectedAtoms` for up to 32 highlighted atoms (`selectedAtomCount` is the full count and `selectedAtomsTruncated` explicitly reports truncation), with unchanged source coordinates, units, element, row number and explicit ID provenance. `measurement` includes endpoint records and direct Cartesian separation only for 3D angstrom coordinates. A 2D depiction returns `status: "unavailable"` with null distance/unit. This is not a bond assignment, periodic minimum-image distance, unwrapped trajectory measurement, or simulation time series.
+
+The existing atom/bond inspector has a **Measure distance** disclosure with precise A/B selectors and Clear distance. Explicit changes publish context tied to the card's structure reference; no floating measurement panel or cross-card global selection is introduced.
+
+Shipping server/widget code updates the MCP endpoint and bundled resource. The portable package version and onboarding skill also change; an installed ChatGPT app may need its tool schemas refreshed/reconnected, and marketplace/listing changes require a separate release/submission. A repository PR does not perform those actions.
 
 ## Source locations
 

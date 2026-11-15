@@ -1,12 +1,20 @@
+import { useEffect, useState } from 'react';
 import { getElementSpec } from '@atlas/core/elements';
 import type { MoleculeCard } from './toolResult';
-import { inspectionDetails, PAIR_LABEL, type InspectionTarget } from './inspection';
+import { inspectionDetails, measurementDetails, PAIR_LABEL, type InspectionTarget } from './inspection';
 
-export function InspectionPanel({ card, target, pinned, onPin }: {
+export function InspectionPanel({ card, target, pinned, onPin, onMeasure }: {
   card: MoleculeCard; target: InspectionTarget | null; pinned: boolean;
+  onMeasure: (pair: [number, number] | undefined) => void;
   onPin: (target: InspectionTarget | null) => void;
 }) {
   const details = inspectionDetails(card, target);
+  const measurement = measurementDetails(card);
+  const pairKey = card.view.measureAtomIds?.join(',') ?? '';
+  const [measureOpen, setMeasureOpen] = useState(Boolean(pairKey));
+  useEffect(() => { if (pairKey) setMeasureOpen(true); }, [pairKey]);
+  const [endpoints, setEndpoints] = useState<string[]>(['', '']);
+  useEffect(() => { setEndpoints(pairKey ? pairKey.split(',') : ['', '']); }, [card.structureRef, pairKey]);
   return <section className="inspection-panel" aria-label="Atom and bond inspection" data-inspected-kind={details?.kind ?? ''} data-inspected-id={details?.kind === 'atom' ? details.atomId : ''} data-pinned={pinned}>
     <div className="inspection-toolbar">
       <label>Inspect atom <select aria-label="Inspect atom" value={pinned && target?.kind === 'atom' ? target.index : ''} onChange={(e) => onPin(e.target.value === '' ? null : { kind: 'atom', index: Number(e.target.value) })}>
@@ -15,6 +23,19 @@ export function InspectionPanel({ card, target, pinned, onPin }: {
       </select></label>
       {pinned && <button type="button" onClick={() => onPin(null)}>Close details</button>}
     </div>
+    <details open={measureOpen} onToggle={e => setMeasureOpen(e.currentTarget.open)}>
+      <summary>Measure distance</summary>
+      <div className="inspection-toolbar">
+        {['A', 'B'].map((label, slot) => <label key={label}>Atom {label}<select aria-label={`Measure atom ${label}`} value={endpoints[slot]} onChange={e => {
+          const next = endpoints.slice(); next[slot] = e.target.value; setEndpoints(next);
+          if (next.every(Boolean)) onMeasure([Number(next[0]), Number(next[1])]);
+
+        }}><option value="" disabled={Boolean(endpoints[slot])}>Choose atom</option>{card.molecule.atoms.ids.map((id, index) => <option key={id} value={id} disabled={String(id) === endpoints[1-slot]}>{getElementSpec(card.molecule.atoms.elements[index]).symbol} · {id}</option>)}</select></label>)}
+        <button type="button" onClick={() => { setEndpoints(['', '']); onMeasure(undefined); }}>Clear distance</button>
+      </div>
+      <p role="status">{measurement?.value != null ? `A ${measurement.atomIds[0]} → B ${measurement.atomIds[1]}: ${measurement.value.toFixed(3)} Å` : measurement ? '2D depiction: no physical distance available.' : 'Choose two distinct atoms. IDs follow this source record.'}</p>
+      <p>Direct Cartesian separation · no periodic correction · not a bond assignment.</p>
+    </details>
     <div className="inspection-body" aria-live={pinned ? 'polite' : 'off'}>
       {!details ? <p>Hover over an atom or bond for details. Tap to pin, or choose an atom above.</p> : <>
         <strong>{details.title}</strong><span className="inspection-label">{details.label}{pinned ? ' · pinned' : ' · tap the object to pin'}</span>

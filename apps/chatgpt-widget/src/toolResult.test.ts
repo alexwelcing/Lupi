@@ -138,3 +138,27 @@ describe('MCP molecule result boundary', () => {
     expect(() => readMoleculeToolResult({ isError: true })).toThrow(/did not return/);
   });
 });
+
+describe('measurement endpoint boundary', () => {
+  it('rejects a measurement value that disagrees with source coordinates', () => {
+    const p = result();
+    Object.assign(p.structuredContent.view, { measureAtomIds: [1, 2] });
+    Object.assign(p._meta.view, { measureAtomIds: [1, 2] });
+    Object.assign(p.structuredContent, { measurement: { status: 'ready', atomIds: [1, 2], value: 999, unit: 'angstrom', convention: 'direct-cartesian', periodicCorrection: 'none' } });
+    expect(() => readMoleculeToolResult(p)).toThrow(/measurement.*disagree/);
+  });
+  it('accepts matching complete pair and rejects model/component mismatch', () => {
+    const p = result();
+    Object.assign(p.structuredContent.view, { measureAtomIds: [1, 2] });
+    Object.assign(p._meta.view, { measureAtomIds: [1, 2] });
+    expect(readMoleculeToolResult(p).view.measureAtomIds).toEqual([1, 2]);
+    Object.assign(p._meta.view, { measureAtomIds: [1, 3] });
+    expect(() => readMoleculeToolResult(p)).toThrow(/disagree/);
+  });
+  it.each([[1, 1], [1, 999], [1], [1, 2, 3], [1, '2']])('rejects invalid pair %j', (...pair) => {
+    const p = result();
+    Object.assign(p.structuredContent.view, { measureAtomIds: pair });
+    Object.assign(p._meta.view, { measureAtomIds: pair });
+    expect(() => readMoleculeToolResult(p)).toThrow(/measurement endpoints/);
+  });
+});

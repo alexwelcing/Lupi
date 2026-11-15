@@ -4,6 +4,7 @@ import {
   validatePubChemMolecule,
   type PubChemMolecule,
 } from '@atlas/core/pubchem';
+import { measurementDetails } from './inspection';
 import type { PerceivedBonds } from '@atlas/core/bonds';
 import { estimateOmol25Bonds, omol25BondSummary, frameFromOmol25Molecule, validateOmol25Molecule, type Omol25Molecule } from '@atlas/core/omol25/widget';
 
@@ -14,6 +15,7 @@ export interface MoleculeView {
   highlightAtomIds: number[];
   highlightElements: string[];
   showContacts?: boolean;
+  measureAtomIds?: [number, number];
 }
 
 export interface MoleculeCard {
@@ -54,7 +56,12 @@ function parseView(value: unknown, molecule: LupiMolecule): MoleculeView {
     throw new Error('The named element selection and selected source atom IDs disagree.');
   }
   if (data.showContacts !== undefined && typeof data.showContacts !== 'boolean') throw new Error('Invalid contact display option.');
+  const pair = data.measureAtomIds;
+  if (pair !== undefined && (!Array.isArray(pair) || pair.length !== 2 || pair[0] === pair[1] || !pair.every(id => Number.isInteger(id) && sourceIds.has(id)))) {
+    throw new Error('The measurement endpoints must be two distinct atoms in this structure.');
+  }
   return {
+    ...(pair !== undefined ? { measureAtomIds: [...pair as [number, number]] as [number, number] } : {}),
     style: data.style,
     ...(data.showContacts !== undefined ? { showContacts: data.showContacts as boolean } : {}),
     highlightAtomIds: [...new Set(selected)].sort((a, b) => a - b),
@@ -122,12 +129,23 @@ export function readMoleculeToolResult(value: unknown): MoleculeCard {
   if (JSON.stringify(view) !== JSON.stringify(modelView)) {
     throw new Error('The visible atom selection and tool summary disagree. Ask Lupi to show the molecule again.');
   }
-  return {
+  const card: MoleculeCard = {
     molecule, perceivedBonds,
     frame: molecule.schemaVersion === 'lupi.omol25.v1' ? frameFromOmol25Molecule(molecule) : frameFromPubChemMolecule(molecule),
     structureRef: structureRef as string,
     view,
   };
+  if (summary.measurement !== undefined) {
+    const expected = measurementDetails(card);
+    const received = object(summary.measurement);
+    if (expected === null ? summary.measurement !== null : !received ||
+      received.status !== expected.status || received.value !== expected.value || received.unit !== expected.unit ||
+      received.convention !== expected.convention || received.periodicCorrection !== expected.periodicCorrection ||
+      JSON.stringify(received.atomIds) !== JSON.stringify(expected.atomIds)) {
+      throw new Error('The measurement and source coordinates disagree.');
+    }
+  }
+  return card;
 }
 
 export function elementAtomIds(molecule: LupiMolecule, atomicNumber: number): number[] {
