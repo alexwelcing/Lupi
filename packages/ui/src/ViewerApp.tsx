@@ -58,7 +58,6 @@ import { decodeFlythrough } from './flythrough';
 import { track, ANALYTICS_EVENTS, ensureAnalyticsSession } from './analytics';
 import { detectRenderCapability } from './renderCapability';
 import { PanelHost } from './PanelHost';
-import { MeasurementDock } from './MeasurementWorkbench';
 import { StudyLensPanel } from './StudyLensPanel';
 
 import {
@@ -793,7 +792,6 @@ export function ViewerApp() {
 
         {file && !isEmbeddedMobileViewer && <ViewerCommandDeck compact={isMobile} />}
         {file && !isEmbeddedMobileViewer && <PanelHost stowed={uiStowed} />}
-        {file && !isEmbeddedMobileViewer && !uiStowed && <MeasurementDock />}
 
         {file && !isEmbeddedMobileViewer && (
           <PlayPill uiStowed={uiStowed} setUiStowed={setUiStowed} />
