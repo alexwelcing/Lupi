@@ -130,6 +130,15 @@ try {
     assert.equal((await state()).inspection, null);
     checks.push(`${lane}: Escape clears pinned details`);
     await frame.getByRole('combobox', { name: 'Inspect atom' }).selectOption('1');
+    await frame.getByText('Measure distance', { exact: true }).click();
+    await frame.getByLabel('Measure atom A', { exact: true }).selectOption('2');
+    await frame.getByLabel('Measure atom B', { exact: true }).selectOption('3');
+    assert.match(await frame.locator('.inspection-panel [role="status"]').innerText(), /0.901 Å/);
+    await frame.getByLabel('Measure atom B', { exact: true }).selectOption('4');
+    assert.deepEqual((await state()).view.measureAtomIds, [2, 4]);
+    await frame.getByRole('button', { name: 'Clear distance' }).click();
+    assert.equal((await state()).view.measureAtomIds, undefined);
+    checks.push(`${lane}: exact distance selection, replacement and clear in existing inspector`);
     await locator.screenshot({ path: join(output, `${lane}-inspection.png`) });
     await writeFile(join(output, `${lane}-state.json`), JSON.stringify(await state(), null, 2));
     assert.deepEqual(errors, []);

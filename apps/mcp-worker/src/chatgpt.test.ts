@@ -5,6 +5,7 @@
  * name lookup and error replies are synthetic. The fixtures are not bundled
  * launch assets. This suite does not claim rendering in ChatGPT.
  */
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import type { PubChemMolecule } from '@atlas/core/pubchem';
@@ -165,7 +166,7 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     expect(initialize.status).toBe(200);
     expect(initialize.result?.result).toMatchObject({
       protocolVersion: initializeVersion,
-      serverInfo: { name: 'lupi-live', version: '0.4.0' },
+      serverInfo: { name: 'lupi-live', version: '0.5.0' },
       capabilities: { tools: {}, resources: {} },
     });
     expect(exchanges).toContainEqual(expect.objectContaining({ rpc: expect.objectContaining({ method: 'notifications/initialized' }), status: 202 }));
@@ -249,6 +250,77 @@ describe('ChatGPT MCP Streamable HTTP integration', () => {
     expect(shown.isError).not.toBe(true);
     expect(summary(shown)).toMatchObject({ source: 'OMol25', structureRef: identity.structureRef, bondCount: 2, bondRecipe: 'lupi-bonds.molecular.v1', view: { highlightAtomIds: [1], highlightElements: ['O'], showContacts: false } });
     expect(route).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns highlighted source atoms and an opt-in physical distance without changing bond provenance', async () => {
+    const { client } = await connected();
+    const found = await resolve(client);
+    const result = await show(client, summary(found).structureRef, { highlightAtomIds: [4], measureAtomIds: [4, 5] });
+    expect(result.isError).not.toBe(true);
+    const molecule = sourceMolecule(result);
+    const a = molecule.atoms.ids.indexOf(4), b = molecule.atoms.ids.indexOf(5);
+    const expected = Math.hypot(...[0, 1, 2].map(axis => molecule.atoms.positions[a * 3 + axis] - molecule.atoms.positions[b * 3 + axis]));
+    expect(summary(result)).toMatchObject({
+      bondSource: 'source-connection-table',
+      selectedAtoms: [{ id: 4, atomIdKind: 'source-id', rowNumber: a + 1, element: 'N', coordinateUnits: 'angstrom', position: molecule.atoms.positions.slice(a * 3, a * 3 + 3) }],
+      view: { measureAtomIds: [4, 5] },
+      measurement: { status: 'ready', atomIds: [4, 5], value: expected, unit: 'angstrom', convention: 'direct-cartesian', periodicCorrection: 'none' },
+    });
+    const cleared = await show(client, summary(found).structureRef);
+    expect(summary(cleared)).toMatchObject({ selectedAtoms: [], measurement: null });
+    expect(summary(cleared).view).not.toHaveProperty('measureAtomIds');
+  });
+
+  it('measures the bundled OMol25 row 18958 using generated row IDs, never source bond orders', async () => {
+    const xyz = readFileSync(new URL('../../web/public/datasets/omol25/featured/omol25_nv_18958.xyz', import.meta.url), 'utf8');
+    const route = vi.fn(async (request: Request) => new URL(request.url).pathname.endsWith('/rows')
+      ? jsonResponse({ dataset: 'neutral-validation', partial: false, matchedRows: 1, rows: [{ rowIndex: 18958, formula: 'C18H17N2OP', name: 'OMol25 18958', atomCount: 39 }] })
+      : new Response(xyz));
+    const { client } = await connected({ omolService: new OmolService(route) });
+    const result = await client.callTool({ name: 'open_omol25', arguments: { collection: 'neutral-validation', rowIndex: 18958, view: { highlightAtomIds: [1], measureAtomIds: [1, 2] } } });
+    expect(result.isError).not.toBe(true);
+    expect(summary(result)).toMatchObject({ formula: 'C18H17N2OP', atomIdKind: 'synthetic-row', bondSource: 'inferred', bondOrders: 'not-estimated', selectedAtoms: [{ id: 1, atomIdKind: 'synthetic-row', rowNumber: 1 }], measurement: { status: 'ready', atomIds: [1, 2], unit: 'angstrom' } });
+    expect((summary(result).measurement as { value: number }).value).toBeCloseTo(1.3802632264, 8);
+  });
+
+  it('caps model-visible element highlight records while preserving full view IDs and requested endpoints', async () => {
+    const xyz = `40\nOMol25 neutral-train row=7 | bonds=not-provided\n${Array.from({ length: 40 }, (_, i) => `C ${i * 4} 0 0`).join('\n')}\n`;
+    const route = vi.fn(async (request: Request) => new URL(request.url).pathname.endsWith('/rows')
+      ? jsonResponse({ dataset: 'neutral-train', partial: false, matchedRows: 1, rows: [{ rowIndex: 7, formula: 'C40', name: 'Selection bound fixture', atomCount: 40 }] })
+      : new Response(xyz));
+    const { client } = await connected({ omolService: new OmolService(route) });
+    const result = await client.callTool({ name: 'open_omol25', arguments: { collection: 'neutral-train', rowIndex: 7, view: { highlightElements: ['C'], measureAtomIds: [39, 40] } } });
+    expect(result.isError).not.toBe(true);
+    expect(summary(result)).toMatchObject({ selectedAtomCount: 40, selectedAtomsTruncated: true, measurement: { status: 'ready', value: 4, endpointAtoms: [{ id: 39 }, { id: 40 }] } });
+    expect(summary(result).selectedAtoms).toHaveLength(32);
+    expect((summary(result).view as { highlightAtomIds: number[] }).highlightAtomIds).toHaveLength(40);
+    expect(sourceMolecule(result).atoms.ids).toHaveLength(40);
+    const single = await show(client, summary(result).structureRef, { highlightAtomIds: [40] });
+    expect(summary(single)).toMatchObject({ selectedAtomCount: 1, selectedAtomsTruncated: false, selectedAtoms: [{ id: 40 }] });
+  });
+
+  it('withholds physical distance for 2D depiction coordinates', async () => {
+    const upstream = pubchemBoundary(); upstream.state.no3d = true;
+    const { client } = await connected({ upstream });
+    const found = await resolve(client);
+    const result = await show(client, summary(found).structureRef, { highlightAtomIds: [4], measureAtomIds: [4, 5] });
+    expect(result.isError).not.toBe(true);
+    expect(summary(result)).toMatchObject({ selectedAtoms: [{ coordinateUnits: 'depiction' }], measurement: { status: 'unavailable', value: null, unit: null, reason: '2D depiction coordinates are not physical distances.' } });
+  });
+
+  it.each([[4, 4], [4, 999]])('rejects duplicate or absent measurement endpoints %j', async (a, b) => {
+    const { client } = await connected();
+    const found = await resolve(client);
+    const result = await show(client, summary(found).structureRef, { measureAtomIds: [a, b] });
+    expect(result.isError).toBe(true);
+    expect(summary(result)).toMatchObject({ status: 'error', code: 'invalid_view' });
+  });
+
+  it.each([[0, 1], [1], [1, 2, 3], [1.5, 2]])('rejects malformed measurement IDs %j at the schema boundary', async (...ids) => {
+    const { client } = await connected();
+    const found = await resolve(client);
+    const result = await show(client, summary(found).structureRef, { measureAtomIds: ids });
+    expect(result.isError).toBe(true);
   });
 
   it('rejects the generic website HTML when the dedicated widget marker is missing', async () => {

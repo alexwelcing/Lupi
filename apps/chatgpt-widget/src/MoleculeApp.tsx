@@ -8,7 +8,7 @@ import { bondMethodParagraph } from '@atlas/core/bonds';
 import { omol25BondSummary } from '@atlas/core/omol25/widget';
 import { InspectionPanel } from './InspectionPanel';
 import './inspection.css';
-import { inspectionDetails, sameTarget, type InspectionTarget } from './inspection';
+import { inspectionDetails, measurementDetails, selectedAtomRecords, sameTarget, type InspectionTarget } from './inspection';
 import { displayedPairCount, elementAtomIds, readMoleculeToolResult, type MoleculeCard, type MoleculeView } from './toolResult';
 
 declare global {
@@ -120,7 +120,7 @@ export function MoleculeApp() {
       setHostState('unavailable');
       return;
     }
-    const app = new App({ name: 'Lupi Live', version: '0.3.0' }, {}, { autoResize: true });
+    const app = new App({ name: 'Lupi Live', version: '0.5.0' }, {}, { autoResize: true });
     appRef.current = app;
     let active = true;
     // Register before connect: the host may replay the initial result during
@@ -203,6 +203,10 @@ export function MoleculeApp() {
           sourceUrl: current.molecule.sourceUrl,
           dimension: current.molecule.dimension,
           view: next,
+          measurement: measurementDetails(updated),
+          selectedAtoms: selectedAtomRecords(updated),
+          selectedAtomCount: next.highlightAtomIds.length,
+          selectedAtomsTruncated: next.highlightAtomIds.length > 32,
           ...(current.perceivedBonds ? omol25BondSummary(current.perceivedBonds) : {}),
           inspection: inspectionRef.current.pinned ? inspectionDetails(updated, inspectionRef.current.target) : null,
         },
@@ -345,7 +349,7 @@ export function MoleculeApp() {
               publishView({ ...card.view, showContacts: event.target.checked });
             }} /><i className="bond-swatch ionic" />Ionic contacts {card.perceivedBonds.counts.ionicContact}</label>
           </div>}
-          {!unavailable && <InspectionPanel card={card} target={inspection.target} pinned={inspection.pinned} onPin={pinInspection} />}
+          {!unavailable && <InspectionPanel card={card} target={inspection.target} pinned={inspection.pinned} onPin={pinInspection} onMeasure={(pair) => { const { measureAtomIds: _previous, ...view } = card.view; publishView({ ...view, ...(pair ? { measureAtomIds: pair } : {}) }); }} />}
 
           <div className="selection-status" aria-live="polite">{unavailable ? <span>Source data is available; interactive controls need graphics.</span> : selectedIds.size ? <><span className="selection-dot" /><span>{selectedNames.length ? `${selectedNames.join(', ')} highlighted` : 'Atoms highlighted'}<span className="selection-count"> · {selectedIds.size} {selectedIds.size === 1 ? 'atom' : 'atoms'}</span></span><button type="button" onClick={() => publishView({ ...card.view, highlightAtomIds: [], highlightElements: [] })}>Clear</button></> : <span>Choose an element to highlight its atoms.</span>}</div>
 
