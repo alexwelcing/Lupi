@@ -201,8 +201,13 @@ public enum CollisionEvents {
     }
 }
 public enum RealityViewCamera { case spatialTracking, virtual }
+// Apple docs and iOS 26.5 SDK: CameraControls.orbit and RealityViewCameraContent.cameraTarget.
+public struct CameraControls: Hashable, Sendable {
+    public static var orbit: CameraControls { CameraControls() }
+}
 @MainActor public struct RealityViewCameraContent {
     public var camera = RealityViewCamera.virtual
+    public var cameraTarget: Entity?
     public func add(_ entity: Entity) {}
     public func subscribe<E: Event>(to event: E.Type, on sourceObject: (any EventSource)?, componentType: (any Component.Type)?, _ handler: @escaping (E) -> Void) -> EventSubscription { EventSubscription() }
 }
@@ -231,6 +236,9 @@ public struct RealityView: View {
     public init(make: @escaping @MainActor @Sendable (inout RealityViewCameraContent) async -> Void,
                 update: (@MainActor (inout RealityViewCameraContent) -> Void)? = nil) {}
     public var body: Never { fatalError() }
+}
+extension View {
+    @MainActor public func realityViewCameraControls(_ controls: CameraControls) -> some View { self }
 }
 
 // iOS 18 joints and pins, as developer.apple.com documents them.

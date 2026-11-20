@@ -38,6 +38,9 @@ jobs:
       - name: Parse the app sources
         run: sh tools/apple/parse-app.sh
 
+      - name: Test native build identity and diagnostics
+        run: sh tools/apple/test-build-diagnostics.sh
+
       # Every package under apps/apple is tested, so a new one is covered
       # without editing this file.
       - name: Test every package

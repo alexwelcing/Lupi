@@ -155,6 +155,25 @@ public enum SyncError: Error, Sendable, Equatable {
   /// Re-authentication signed in as a different account than the one being
   /// deleted.
   case reauthenticatedAsDifferentAccount
+  /// A prepared edit refers to a collection record that changed or left the
+  /// active account before its local write could commit.
+  case localRecordChanged(id: String)
+}
+
+/// An opaque condition for a prepared local edit. Capture it before preparing
+/// the edit, then pass it to `save(_:ifUnchanged:)`. It is valid only for this
+/// engine and record, including a record that does not exist yet. A failed
+/// disk write does not consume it, so the same edit can be retried safely.
+public struct LocalSaveCondition: Sendable {
+  /// True only for a live record visible to the active account. An existing
+  /// trophy must still exist at capture; a new trophy may start absent.
+  public let recordExists: Bool
+  let engine: UUID
+  let id: String
+  let generation: UInt64
+  let activeOwner: String?
+  let accountUID: String?
+  let accountGeneration: UInt64
 }
 
 public enum OutboxKind: String, Sendable, Equatable {

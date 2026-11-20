@@ -74,17 +74,49 @@ public struct ShelfStore: Sendable {
         return try LupiJSON.decoder().decode(ShelfRecord.self, from: data)
     }
 
+    /// Replaces an existing record. Only `create` may make a room directory; a
+    /// delayed update must never recreate a room that the player deleted.
     public func save(_ shelf: ShelfRecord) throws {
+        _ = try existing(shelf.id)
+        try writeRecord(shelf, creatingDirectory: false)
+    }
+
+    private func writeRecord(_ shelf: ShelfRecord, creatingDirectory: Bool) throws {
         let issues = shelf.validate()
         guard issues.isEmpty else { throw ShelfStoreError.invalid(issues) }
-        try write(LupiJSON.encoder().encode(shelf), to: folder(shelf.id).appendingPathComponent(Self.recordFileName))
+        try write(LupiJSON.encoder().encode(shelf), to: folder(shelf.id).appendingPathComponent(Self.recordFileName),
+                  creatingDirectory: creatingDirectory)
+    }
+
+    /// Read the durable record before updating its metadata. The host serializes its
+    /// calls and performs no await between this read and its writes.
+    private func existing(_ id: UUID, rootAnchorID: UUID? = nil) throws -> ShelfRecord {
+        let recordURL = folder(id).appendingPathComponent(Self.recordFileName)
+        guard FileManager.default.fileExists(atPath: recordURL.path) else { throw ShelfStoreError.missing(id) }
+        let shelf = try load(id)
+        guard shelf.id == id else { throw ShelfStoreError.invalid(["record id does not match its room directory"]) }
+        let issues = shelf.validate()
+        guard issues.isEmpty else { throw ShelfStoreError.invalid(issues) }
+        if let rootAnchorID, shelf.rootAnchorId != rootAnchorID { throw ShelfStoreError.rootChanged(id) }
+        return shelf
     }
 
     /// A new room: its root anchor is the one the app just added (plan §6.3).
     public func create(name: String? = nil, rootAnchorId: UUID, at date: Date) throws -> ShelfRecord {
         let shelf = ShelfRecord(name: name ?? "Room \(list().count + 1)", rootAnchorId: rootAnchorId, createdAt: Keep.millisecond(date))
-        try save(shelf)
+        try writeRecord(shelf, creatingDirectory: true)
         try setLastUsed(shelf.id)
+        return shelf
+    }
+
+    /// Persist a relocated root without replacing newer placements or the room's name.
+    /// The app keeps its old AR anchor and recovery state until this succeeds.
+    public func updateRoot(on shelfID: UUID, to rootAnchorID: UUID, expecting previousRootAnchorID: UUID,
+                           at date: Date) throws -> ShelfRecord {
+        var shelf = try existing(shelfID, rootAnchorID: previousRootAnchorID)
+        shelf.rootAnchorId = rootAnchorID
+        shelf.updatedAt = max(shelf.updatedAt, Keep.millisecond(date))
+        try save(shelf)
         return shelf
     }
 
@@ -120,11 +152,13 @@ public struct ShelfStore: Sendable {
     /// Saves the archived ARWorldMap and records when and at which mapping status.
     public func saveMap(_ data: Data, shelf: inout ShelfRecord, status: String, at date: Date) throws {
         guard ShelfRecord.savableMapStatuses.contains(status) else { throw ShelfStoreError.mapNotReady(status) }
-        try write(data, to: folder(shelf.id).appendingPathComponent(shelf.worldMapFile))
-        shelf.mapSavedAt = Keep.millisecond(date)
-        shelf.mapStatusAtSave = status
-        shelf.updatedAt = max(shelf.updatedAt, shelf.mapSavedAt!)
-        try save(shelf)
+        var updated = try existing(shelf.id, rootAnchorID: shelf.rootAnchorId)
+        try write(data, to: folder(updated.id).appendingPathComponent(updated.worldMapFile), creatingDirectory: false)
+        updated.mapSavedAt = Keep.millisecond(date)
+        updated.mapStatusAtSave = status
+        updated.updatedAt = max(updated.updatedAt, updated.mapSavedAt!)
+        try save(updated)
+        shelf = updated
     }
 
     public func map(of shelf: ShelfRecord) -> Data? {
@@ -132,10 +166,12 @@ public struct ShelfStore: Sendable {
     }
 
     public func saveSnapshot(_ jpeg: Data, shelf: inout ShelfRecord) throws {
+        var updated = try existing(shelf.id, rootAnchorID: shelf.rootAnchorId)
         let name = ShelfRecord.snapshotFileName
-        try write(jpeg, to: folder(shelf.id).appendingPathComponent(name))
-        shelf.snapshotFile = name
-        try save(shelf)
+        try write(jpeg, to: folder(updated.id).appendingPathComponent(name), creatingDirectory: false)
+        updated.snapshotFile = name
+        try save(updated)
+        shelf = updated
     }
 
     public func snapshot(of shelf: ShelfRecord) -> Data? {
@@ -167,8 +203,10 @@ public struct ShelfStore: Sendable {
         try write(Data(id.uuidString.utf8), to: directory.appendingPathComponent(Self.lastUsedFileName))
     }
 
-    func write(_ data: Data, to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    func write(_ data: Data, to url: URL, creatingDirectory: Bool = true) throws {
+        if creatingDirectory {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
         var options: Data.WritingOptions = [.atomic]
         #if os(iOS)
         // Room data is only read while the app is open in front of the player.
@@ -180,6 +218,10 @@ public struct ShelfStore: Sendable {
 
 public enum ShelfStoreError: Error, Equatable, Sendable {
     case invalid([String])
+    /// An update cannot recreate a deleted room or a missing room record.
+    case missing(UUID)
+    /// A map or relocation was requested for an older root anchor.
+    case rootChanged(UUID)
     /// Maps are saved only at `mapped` or `extending` (apple-ar-platform.md §2.1).
     case mapNotReady(String)
 }

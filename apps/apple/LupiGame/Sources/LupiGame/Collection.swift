@@ -96,22 +96,33 @@ public struct TrophyCase: Sendable {
         try await sync.save(trophy)
     }
 
+    public func saveCondition(for id: UUID) async throws -> LocalSaveCondition {
+        try await sync.saveCondition(for: id.uuidString)
+    }
+
+    /// A prepared edit is valid only while the durable record and account are unchanged.
+    public func keep(_ trophy: TrophyRecord, ifUnchanged condition: LocalSaveCondition) async throws {
+        let issues = trophy.validate()
+        guard issues.isEmpty else { throw KeepError.corrupt(issues.joined(separator: "; ")) }
+        try await sync.save(trophy, ifUnchanged: condition)
+    }
+
     /// Renames a trophy; nil when it is not in the collection.
     @discardableResult
     public func rename(_ id: UUID, to name: String, at now: Date) async throws -> TrophyRecord? {
+        let condition = try await saveCondition(for: id)
         guard var trophy = try await trophy(id) else { return nil }
         let clean = TrophyRecord.cleanName(name, fallback: trophy.name)
         guard clean != trophy.name else { return trophy }
         trophy.name = clean
         trophy.updatedAt = max(trophy.updatedAt, Keep.millisecond(now))
-        try await keep(trophy)
+        try await keep(trophy, ifUnchanged: condition)
         return trophy
     }
 
     /// Deletes a trophy everywhere: a tombstone tells the owner's other devices (account-and-sync.md §4).
     public func delete(_ id: UUID, at now: Date) async throws {
-        guard let trophy = try await trophy(id) else { return }
-        try await sync.save(trophy.tombstone(at: Keep.millisecond(now)))
+        try await sync.delete(id: id.uuidString)
     }
 
     // MARK: The account
